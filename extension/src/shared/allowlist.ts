@@ -29,3 +29,13 @@ export function isAllowlisted(list: Allowlist, siteKey: string, destHost: string
   const host = destHost.toLowerCase();
   return (list[key] ?? []).includes(host);
 }
+
+export function onAllowlistChange(cb: (list: Allowlist) => void): void {
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName !== "local") return;
+    const change = changes[ALLOWLIST_KEY];
+    if (!change) return;
+    const next = (change.newValue as Allowlist | undefined) ?? {};
+    cb(next);
+  });
+}
