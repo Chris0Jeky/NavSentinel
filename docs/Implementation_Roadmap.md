@@ -1,5 +1,11 @@
 # Implementation Roadmap
 
+## Current status
+- Stage 0: complete (Gym Levels 1-9 + index page).
+- Stage 1: complete (capture, gesture token, CDS context logging).
+- Stage 2: complete (CDS v1 + overlay blocking + debug overlay).
+- Stage 3: not started.
+
 ## Staged plan (each stage testable)
 
 Stage 0 - Gym baseline

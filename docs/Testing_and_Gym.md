@@ -14,6 +14,12 @@ The Gym is a deterministic set of local HTML pages that simulate common maliciou
 - Level 8: legit OAuth popup (should prompt or allow).
 - Level 9: legit video overlay controls (should allow).
 
+## Quick demo
+1. Run the Gym server: `cd gym` then `python -m http.server 5173`.
+2. Open `http://localhost:5173/index.html` and choose a level.
+3. Load the unpacked extension and enable the debug overlay in Options.
+4. Click the page elements and watch CDS, reasons, and decisions live.
+
 ## Automated tests
 - Unit tests: CDS scoring and reason codes (Vitest + JSDOM).
 - E2E tests: Playwright against Gym (assert no unwanted new tabs).
