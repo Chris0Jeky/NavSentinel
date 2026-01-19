@@ -5,6 +5,7 @@
 - Stage 1: complete (capture, gesture token, CDS context logging).
 - Stage 2: complete (CDS v1 + overlay blocking + debug overlay).
 - Stage 3: in progress (window.open patch + prompt UI; allowlist UI pending).
+- Stage 4: in progress (location and form submit gating; history.pushState pending).
 
 ## Staged plan (each stage testable)
 
