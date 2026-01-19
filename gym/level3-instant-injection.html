@@ -1,0 +1,37 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Level 3 - Instant Injection</title>
+  <style>
+    body { font-family: sans-serif; padding: 24px; }
+    #target { padding: 16px 20px; font-size: 18px; }
+    .trap {
+      position: fixed; inset: 0;
+      opacity: 0.01;
+      z-index: 999999;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>Level 3: Trap injected right before click</h1>
+  <button id="target">Click me</button>
+
+  <script>
+    const btn = document.getElementById('target');
+
+    btn.addEventListener('pointerdown', () => {
+      const a = document.createElement('a');
+      a.className = 'trap';
+      a.href = 'https://example.net';
+      a.target = '_blank';
+      a.rel = 'noreferrer';
+      document.body.appendChild(a);
+
+      // remove shortly after to evade naive scanners
+      setTimeout(() => a.remove(), 150);
+    });
+  </script>
+</body>
+</html>
