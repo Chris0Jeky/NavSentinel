@@ -15,8 +15,9 @@ The Gym is a deterministic set of local HTML pages that simulate common maliciou
 - Level 9: legit video overlay controls (should allow).
 
 ## Automated tests
-- Unit tests: CDS scoring and reason codes (Vitest).
+- Unit tests: CDS scoring and reason codes (Vitest + JSDOM).
 - E2E tests: Playwright against Gym (assert no unwanted new tabs).
+- Multi-popup test: one click -> multiple opens (auto-block extras).
 - Performance: basic click budget checks (no DOM polling, minimal style reads).
 
 ## Debug workflow
