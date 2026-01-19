@@ -1,0 +1,50 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Level 7 - Legit Modal Backdrop</title>
+  <style>
+    body { font-family: sans-serif; padding: 24px; }
+    #open { padding: 14px 18px; font-size: 18px; }
+    #backdrop {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.4);
+      display: none;
+    }
+    #modal {
+      position: fixed; left: 50%; top: 50%;
+      transform: translate(-50%, -50%);
+      background: white; padding: 18px; border-radius: 12px;
+      width: 420px;
+      display: none;
+    }
+    #close { padding: 10px 14px; }
+  </style>
+</head>
+<body>
+  <h1>Level 7: Legit modal overlay</h1>
+  <button id="open">Open modal</button>
+
+  <div id="backdrop"></div>
+  <div id="modal">
+    <h2>Modal</h2>
+    <p>This overlay is legitimate. Clicking backdrop closes.</p>
+    <button id="close">Close</button>
+  </div>
+
+  <script>
+    const open = document.getElementById('open');
+    const backdrop = document.getElementById('backdrop');
+    const modal = document.getElementById('modal');
+    const close = document.getElementById('close');
+
+    function show(v) {
+      backdrop.style.display = v ? 'block' : 'none';
+      modal.style.display = v ? 'block' : 'none';
+    }
+    open.onclick = () => show(true);
+    close.onclick = () => show(false);
+    backdrop.onclick = () => show(false);
+  </script>
+</body>
+</html>
