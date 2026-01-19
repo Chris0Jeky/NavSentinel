@@ -1,0 +1,34 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NavSentinel Gym</title>
+  <style>
+    body { font-family: sans-serif; padding: 24px; max-width: 820px; }
+    h1 { margin-top: 0; }
+    ol { line-height: 1.6; }
+    code { background: #f4f4f4; padding: 2px 4px; }
+    .note { font-size: 13px; color: #444; }
+  </style>
+</head>
+<body>
+  <h1>NavSentinel Gym</h1>
+  <p>Use these pages to validate click detection and overlay blocking.</p>
+  <p class="note">Tip: Enable the debug overlay in the extension Options page to see CDS and reason codes.</p>
+
+  <ol>
+    <li><a href="level1-basic-opacity.html">Level 1 - basic invisible overlay</a></li>
+    <li><a href="level2-moving-target.html">Level 2 - moving overlay follows mouse</a></li>
+    <li><a href="level3-instant-injection.html">Level 3 - instant injection on pointerdown</a></li>
+    <li><a href="level4-visual-mimicry.html">Level 4 - visual mimicry</a></li>
+    <li><a href="level5-window-open-popunder.html">Level 5 - window.open popunder</a></li>
+    <li><a href="level6-programmatic-click.html">Level 6 - programmatic click chain</a></li>
+    <li><a href="level7-legit-modal-backdrop.html">Level 7 - legit modal backdrop</a></li>
+    <li><a href="level8-legit-oauth-popup.html">Level 8 - legit OAuth popup</a></li>
+    <li><a href="level9-legit-video-overlay.html">Level 9 - legit video overlay controls</a></li>
+  </ol>
+
+  <p class="note">Run with: <code>python -m http.server 5173</code> from the <code>gym</code> folder.</p>
+</body>
+</html>
