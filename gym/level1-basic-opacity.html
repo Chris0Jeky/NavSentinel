@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Level 1 - Basic Opacity Overlay</title>
+  <style>
+    body { font-family: sans-serif; padding: 24px; }
+    #play { padding: 16px 20px; font-size: 18px; }
+    #trap {
+      position: fixed; inset: 0;
+      opacity: 0.01; /* visually imperceptible */
+      z-index: 999999;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>Level 1: Invisible overlay anchor</h1>
+  <p>Click the Play button. A trap anchor covers the whole page.</p>
+
+  <button id="play">Play</button>
+
+  <a id="trap" href="https://example.com" target="_blank" rel="noreferrer"></a>
+</body>
+</html>
