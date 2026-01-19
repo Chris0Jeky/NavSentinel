@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Level 6 - Programmatic Click</title>
+  <style>
+    body { font-family: sans-serif; padding: 24px; }
+    #real { padding: 16px 20px; font-size: 18px; }
+    #hiddenLink { position: fixed; left: -9999px; top: -9999px; }
+  </style>
+</head>
+<body>
+  <h1>Level 6: Programmatic element.click()</h1>
+  <p>Click "Continue". The site triggers a hidden link click.</p>
+
+  <button id="real">Continue</button>
+  <a id="hiddenLink" href="https://example.org/?forced=1" target="_blank" rel="noreferrer">Hidden</a>
+
+  <script>
+    document.getElementById('real').addEventListener('click', () => {
+      // abuse: programmatic click on a hidden link
+      document.getElementById('hiddenLink').click();
+    });
+  </script>
+</body>
+</html>
