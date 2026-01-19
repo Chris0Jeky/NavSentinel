@@ -12,6 +12,7 @@
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.3.0",
+    "@playwright/test": "^1.49.0",
     "@types/chrome": "^0.0.260",
     "playwright": "^1.49.0",
     "typescript": "^5.6.0",
