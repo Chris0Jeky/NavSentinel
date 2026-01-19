@@ -2,7 +2,13 @@ import { computeCDS } from "../shared/scoring";
 import { getSettings, onSettingsChange } from "../shared/storage";
 import { makeToken, setActiveToken } from "../shared/stateMachine";
 import type { Mode } from "../shared/types";
-import { addAllowlistEntry, getAllowlist, isAllowlisted, type Allowlist } from "../shared/allowlist";
+import {
+  addAllowlistEntry,
+  getAllowlist,
+  isAllowlisted,
+  onAllowlistChange,
+  type Allowlist
+} from "../shared/allowlist";
 import { showToast } from "./ui_toast";
 import {
   capturePointerDown,
@@ -32,12 +38,20 @@ onSettingsChange((s) => {
   setDebugEnabled(s.debug);
 });
 
+onAllowlistChange((list) => {
+  allowlist = list;
+});
+
 function siteKeyFromLocation(): string {
   return location.hostname.toLowerCase();
 }
 
 function frameKey(): string {
   return window.top === window ? "top" : "frame";
+}
+
+function postToMain(type: string): void {
+  window.postMessage({ source: NS_SOURCE, type }, "*");
 }
 
 function parseDestination(rawUrl: string | null | undefined): { href: string | null; host: string | null } {
@@ -61,11 +75,14 @@ function findAnchorFromEvent(e: MouseEvent): HTMLAnchorElement | null {
 }
 
 function allowOnce(url: string, target?: string, features?: string): void {
-  try {
-    window.open(url, target ?? "_blank", features);
-  } catch {
-    showToast({ message: "NavSentinel could not open the allowed navigation." });
-  }
+  postToMain("ns-allow-once");
+  window.setTimeout(() => {
+    try {
+      window.open(url, target ?? "_blank", features);
+    } catch {
+      showToast({ message: "NavSentinel could not open the allowed navigation." });
+    }
+  }, 0);
 }
 
 async function allowAlways(siteKey: string, host: string, url: string, target?: string, features?: string) {
@@ -115,6 +132,11 @@ window.addEventListener(
       const url = parsed.href ?? data.url ?? "";
 
       if (!url) return;
+
+      if (parsed.host && isAllowlisted(allowlist, siteKeyFromLocation(), parsed.host)) {
+        allowOnce(url, data.target || "_blank", data.features);
+        return;
+      }
 
       showAllowPrompt({
         title: "Blocked popup",
@@ -197,6 +219,11 @@ window.addEventListener(
 
     setActiveToken(token);
 
+    const explicitNewTab = !!ctx.explicitNewTabIntent;
+    if (mode === "off" || explicitNewTab) {
+      postToMain("ns-gesture-allow");
+    }
+
     const anchor = findAnchorFromEvent(e);
     const isBlankAnchor = !!(anchor && anchor.target === "_blank");
     const parsed = isBlankAnchor ? parseDestination(anchor?.getAttribute("href") ?? anchor?.href) : null;
@@ -207,7 +234,7 @@ window.addEventListener(
     let decision: "allow" | "block" = "allow";
 
     if (mode !== "off") {
-      if (isBlankAnchor && !isAllowed && (mode === "strict" || cds >= CDS_BLOCK_THRESHOLD)) {
+      if (isBlankAnchor && !isAllowed && !explicitNewTab) {
         decision = "block";
         e.preventDefault();
         e.stopImmediatePropagation();
