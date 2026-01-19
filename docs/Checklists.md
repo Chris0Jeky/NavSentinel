@@ -10,7 +10,7 @@
 - [ ] Build Options UI with modes and allowlist.
 - [ ] Add unit tests for CDS and edge cases.
 - [x] Add at least one Playwright e2e test against the Gym.
-- [ ] Implement same-tab redirect gating (Stage 4).
+- [x] Implement same-tab redirect gating (Stage 4).
 - [ ] Add DNR backstop ruleset (Stage 5, optional).
 - [ ] Harden patch integrity and fallback behavior (Stage 7).
 - [ ] Add a decision log page in Options UI (future).
@@ -47,7 +47,7 @@
 - [x] Invalidate token after first allowed open and auto-block extra attempts.
 
 ## Stage 4+ checklist (redirects and backstop)
-- [ ] Patch location.assign/replace and form submits.
+- [x] Patch location.assign/replace and form submits.
 - [ ] Add navigation attempt logging and correlation.
 - [ ] Consider short-window history.pushState gating.
 - [ ] Implement DNR ruleset and baseline rules.
