@@ -4,7 +4,7 @@
 - Stage 0: complete (Gym Levels 1-9 + index page).
 - Stage 1: complete (capture, gesture token, CDS context logging).
 - Stage 2: complete (CDS v1 + overlay blocking + debug overlay).
-- Stage 3: not started.
+- Stage 3: in progress (window.open patch + prompt UI; allowlist UI pending).
 
 ## Staged plan (each stage testable)
 
@@ -58,7 +58,6 @@ Stage 7 - Robustness hardening
 
 ## Long-term focus
 - Stage 4-7, network backstop, and policy learning.
-- Improve diagnostics (decision log export, DevTools panel).
 
 ## Dependencies and risks
 - Main world patching can fail under strict CSP; design isolated-only fallback.
