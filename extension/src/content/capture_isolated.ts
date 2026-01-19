@@ -50,8 +50,8 @@ function frameKey(): string {
   return window.top === window ? "top" : "frame";
 }
 
-function postToMain(type: string): void {
-  window.postMessage({ source: NS_SOURCE, type }, "*");
+function postToMain(type: string, payload?: Record<string, unknown>): void {
+  window.postMessage({ source: NS_SOURCE, type, ...(payload ?? {}) }, "*");
 }
 
 function parseDestination(rawUrl: string | null | undefined): { href: string | null; host: string | null } {
@@ -85,9 +85,23 @@ function allowOnce(url: string, target?: string, features?: string): void {
   }, 0);
 }
 
-async function allowAlways(siteKey: string, host: string, url: string, target?: string, features?: string) {
+function allowActionOnce(actionId?: string | null, url?: string, target?: string, features?: string): void {
+  if (actionId) {
+    postToMain("ns-allow-action", { id: actionId });
+    return;
+  }
+  if (url) {
+    allowOnce(url, target, features);
+  }
+}
+
+async function allowAlways(
+  siteKey: string,
+  host: string,
+  params: { actionId?: string | null; url?: string; target?: string; features?: string }
+) {
   allowlist = await addAllowlistEntry(siteKey, host);
-  allowOnce(url, target, features);
+  allowActionOnce(params.actionId, params.url, params.target, params.features);
 }
 
 function showAllowPrompt(params: {
@@ -96,11 +110,12 @@ function showAllowPrompt(params: {
   host: string | null;
   target?: string;
   features?: string;
+  actionId?: string | null;
 }) {
   const actions = [
     {
       label: "Allow once",
-      onClick: () => allowOnce(params.url, params.target, params.features)
+      onClick: () => allowActionOnce(params.actionId, params.url, params.target, params.features)
     }
   ];
 
@@ -108,7 +123,12 @@ function showAllowPrompt(params: {
     actions.push({
       label: "Always allow",
       onClick: () => {
-        void allowAlways(siteKeyFromLocation(), params.host as string, params.url, params.target, params.features);
+        void allowAlways(siteKeyFromLocation(), params.host as string, {
+          actionId: params.actionId,
+          url: params.url,
+          target: params.target,
+          features: params.features
+        });
       }
     });
   }
@@ -123,8 +143,44 @@ window.addEventListener(
   "message",
   (event) => {
     if (event.source !== window) return;
-    const data = event.data as { source?: string; type?: string; url?: string; target?: string; features?: string };
+    const data = event.data as {
+      source?: string;
+      type?: string;
+      id?: string;
+      kind?: string;
+      url?: string;
+      target?: string;
+      features?: string;
+    };
     if (!data || data.source !== NS_SOURCE) return;
+
+    if (data.type === "ns-nav-blocked") {
+      if (settings.defaultMode === "off") return;
+      const parsed = parseDestination(data.url);
+      const url = parsed.href ?? data.url ?? "";
+      if (!url) return;
+
+      if (parsed.host && isAllowlisted(allowlist, siteKeyFromLocation(), parsed.host)) {
+        allowActionOnce(data.id, url, data.target || "_blank", data.features);
+        return;
+      }
+
+      const title =
+        data.kind === "location_assign" || data.kind === "location_replace"
+          ? "Blocked redirect"
+          : data.kind === "form_submit" || data.kind === "form_request_submit"
+            ? "Blocked form submit"
+            : "Blocked popup";
+
+      showAllowPrompt({
+        title,
+        url,
+        host: parsed.host,
+        target: data.target || "_blank",
+        features: data.features,
+        actionId: data.id
+      });
+    }
 
     if (data.type === "ns-window-open-blocked") {
       if (settings.defaultMode === "off") return;
