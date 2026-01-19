@@ -1,7 +1,7 @@
 # Intent Model and Scoring
 
 ## Terminology
-- GestureToken: short-lived token representing user intent (`trusted`, `suspicious`, `unknown`).
+- GestureToken: short-lived token representing user intent (trusted, suspicious, unknown).
 - CDS: Click Deception Score computed from click context.
 - NRS: Navigation Risk Score computed at navigation time.
 - Reason codes: labels that explain why a score changed.
@@ -13,7 +13,10 @@
 
 ## Gesture token gating
 - Each real user gesture creates a token with TTL around 800ms (tunable).
-- Patched navigation primitives require an active `trusted` token.
+- Tokens should carry context (coords and element signature) to verify intent.
+- Cache CDS in the token to avoid recomputation.
+- Patched navigation primitives require an active trusted token.
+- Invalidate the token after a successful open or when multiple attempts occur.
 
 ## CDS (Click Deception Score) features
 
@@ -21,7 +24,7 @@
 | --- | --- | --- |
 | Target is interactive but has no accessible name (no text, aria-label, title) | +15 | Empty click targets are common for overlays. |
 | Target bounding box covers >35% of viewport and is interactive | +30 | Fullscreen interactive layers are rarely legitimate. |
-| `elementsFromPoint` shows a more intentful interactive element underneath | +35 | High-signal intent mismatch. |
+| elementsFromPoint shows a more intentful interactive element underneath | +35 | High-signal intent mismatch. |
 | pointerdown top element differs from click top element | +20 | Retargeting is a classic overlay technique. |
 | Target has position fixed/absolute with very high z-index (>= 9999) | +15 | Overlays use extreme stacking. |
 | Cursor pointer but no visible affordance | +10 | Weak signal; do not over-weight. |
@@ -36,14 +39,14 @@ CDS bands:
 
 ## NRS (Navigation Risk Score) features
 
-Start with `NRS = CDS` and add:
+Start with NRS = CDS and add:
 
 | Feature | Weight | Rationale |
 | --- | --- | --- |
-| New tab/window (`window.open` or `target=_blank`) | +20 | Primary abuse case. |
+| New tab/window (window.open or target=_blank) | +20 | Primary abuse case. |
 | Cross-site destination (different registrable domain) | +20 | Monetization redirects are often cross-site. |
 | Attempt within 0-250ms of pointerdown | +10 | Typical click-handler timing. |
-| `navigator.userActivation.isActive` is true | +5 | Confirms user activation. |
+| navigator.userActivation.isActive is true | +5 | Confirms user activation. |
 | Multiple attempts within one gesture | +25 | Legit flows rarely do this. |
 | Destination matches allowlist | -100 | Hard allow. |
 | Explicit new-tab intent (middle click or ctrl/cmd click) | -30 | Respect user intent. |
@@ -56,4 +59,8 @@ Decision thresholds:
 
 ## Explainability
 - Each score contribution produces a reason code.
-- The UI should surface the reason codes and allow quick allow-once or allow-always actions.
+- Prompt UI should show destination URL with allow-once and always-allow actions.
+
+## Future extensions (plan for, do not overfit)
+- Short redirect-chain correlation tied to a single gesture token.
+- Same-tab history.pushState gating within a short window after a gesture.
