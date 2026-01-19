@@ -1,5 +1,6 @@
 import { test, expect, chromium } from "@playwright/test";
 import fs from "fs";
+import os from "os";
 import path from "path";
 
 const extensionPath = process.env.EXTENSION_PATH
@@ -11,7 +12,9 @@ const baseUrl = process.env.GYM_BASE_URL ?? "http://localhost:5173";
 test("Level 1 blocks new tabs", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
-  const context = await chromium.launchPersistentContext("", {
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  const context = await chromium.launchPersistentContext(userDataDir, {
     headless: false,
     args: [
       `--disable-extensions-except=${extensionPath}`,
@@ -29,4 +32,5 @@ test("Level 1 blocks new tabs", async () => {
   expect(popup).toBeNull();
 
   await context.close();
+  fs.rmSync(userDataDir, { recursive: true, force: true });
 });
