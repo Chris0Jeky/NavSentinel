@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Level 4 - Visual Mimicry</title>
+  <style>
+    body { font-family: sans-serif; padding: 24px; }
+    .card { border: 1px solid #ccc; padding: 18px; width: 420px; }
+    .download {
+      display: inline-block;
+      padding: 14px 18px;
+      background: #2a6;
+      color: white;
+      border-radius: 10px;
+      font-size: 18px;
+      user-select: none;
+      position: relative;
+    }
+    /* trap anchor is positioned over the "download" */
+    #trap {
+      position: absolute;
+      inset: 0;
+      opacity: 0.01;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>Level 4: Fake download button</h1>
+  <div class="card">
+    <p>Click "Download". The visual button is a div; the anchor on top goes elsewhere.</p>
+    <div class="download">
+      Download
+      <a id="trap" href="https://example.edu" target="_blank" rel="noreferrer"></a>
+    </div>
+  </div>
+</body>
+</html>
