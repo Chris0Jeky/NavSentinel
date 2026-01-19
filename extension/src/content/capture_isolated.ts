@@ -2,17 +2,26 @@ import { computeCDS } from "../shared/scoring";
 import { getSettings, onSettingsChange } from "../shared/storage";
 import { makeToken, setActiveToken } from "../shared/stateMachine";
 import type { Mode } from "../shared/types";
+import { addAllowlistEntry, getAllowlist, isAllowlisted, type Allowlist } from "../shared/allowlist";
 import { showToast } from "./ui_toast";
-import { capturePointerDown, captureClick, buildClickContextFromEvents, type DownCapture } from "./dom_builder";
+import {
+  capturePointerDown,
+  captureClick,
+  buildClickContextFromEvents,
+  type DownCapture
+} from "./dom_builder";
 import { setDebugEnabled, updateDebugOverlay } from "./debug_overlay";
 
 const CDS_BLOCK_THRESHOLD = 70;
+const NS_SOURCE = "__navsentinel__";
 
 let lastDown: DownCapture | null = null;
 let settings = { defaultMode: "smart", debug: false };
+let allowlist: Allowlist = {};
 
 async function initSettings() {
   settings = await getSettings();
+  allowlist = await getAllowlist();
   setDebugEnabled(settings.debug);
 }
 
@@ -24,12 +33,100 @@ onSettingsChange((s) => {
 });
 
 function siteKeyFromLocation(): string {
-  return location.hostname;
+  return location.hostname.toLowerCase();
 }
 
 function frameKey(): string {
   return window.top === window ? "top" : "frame";
 }
+
+function parseDestination(rawUrl: string | null | undefined): { href: string | null; host: string | null } {
+  if (!rawUrl) return { href: null, host: null };
+  try {
+    const u = new URL(rawUrl, location.href);
+    return { href: u.toString(), host: u.hostname.toLowerCase() };
+  } catch {
+    return { href: null, host: null };
+  }
+}
+
+function findAnchorFromEvent(e: MouseEvent): HTMLAnchorElement | null {
+  const path = e.composedPath?.() ?? [];
+  for (const el of path) {
+    if (el instanceof HTMLAnchorElement) return el;
+    if (el instanceof Element && el.tagName === "A") return el as HTMLAnchorElement;
+  }
+  const target = e.target as Element | null;
+  return (target?.closest("a") as HTMLAnchorElement | null) ?? null;
+}
+
+function allowOnce(url: string, target?: string, features?: string): void {
+  try {
+    window.open(url, target ?? "_blank", features);
+  } catch {
+    showToast({ message: "NavSentinel could not open the allowed navigation." });
+  }
+}
+
+async function allowAlways(siteKey: string, host: string, url: string, target?: string, features?: string) {
+  allowlist = await addAllowlistEntry(siteKey, host);
+  allowOnce(url, target, features);
+}
+
+function showAllowPrompt(params: {
+  title: string;
+  url: string;
+  host: string | null;
+  target?: string;
+  features?: string;
+}) {
+  const actions = [
+    {
+      label: "Allow once",
+      onClick: () => allowOnce(params.url, params.target, params.features)
+    }
+  ];
+
+  if (params.host) {
+    actions.push({
+      label: "Always allow",
+      onClick: () => {
+        void allowAlways(siteKeyFromLocation(), params.host as string, params.url, params.target, params.features);
+      }
+    });
+  }
+
+  showToast({
+    message: `${params.title}: ${params.host ?? params.url}`,
+    actions
+  });
+}
+
+window.addEventListener(
+  "message",
+  (event) => {
+    if (event.source !== window) return;
+    const data = event.data as { source?: string; type?: string; url?: string; target?: string; features?: string };
+    if (!data || data.source !== NS_SOURCE) return;
+
+    if (data.type === "ns-window-open-blocked") {
+      if (settings.defaultMode === "off") return;
+      const parsed = parseDestination(data.url);
+      const url = parsed.href ?? data.url ?? "";
+
+      if (!url) return;
+
+      showAllowPrompt({
+        title: "Blocked popup",
+        url,
+        host: parsed.host,
+        target: data.target || "_blank",
+        features: data.features
+      });
+    }
+  },
+  true
+);
 
 window.addEventListener(
   "pointerdown",
@@ -100,14 +197,38 @@ window.addEventListener(
 
     setActiveToken(token);
 
+    const anchor = findAnchorFromEvent(e);
+    const isBlankAnchor = !!(anchor && anchor.target === "_blank");
+    const parsed = isBlankAnchor ? parseDestination(anchor?.getAttribute("href") ?? anchor?.href) : null;
+    const isAllowed = parsed?.host
+      ? isAllowlisted(allowlist, siteKeyFromLocation(), parsed.host)
+      : false;
+
     let decision: "allow" | "block" = "allow";
-    if (mode !== "off" && cds >= CDS_BLOCK_THRESHOLD) {
-      decision = "block";
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      showToast({
-        message: `NavSentinel blocked deceptive click (CDS=${cds}).`
-      });
+
+    if (mode !== "off") {
+      if (isBlankAnchor && !isAllowed && (mode === "strict" || cds >= CDS_BLOCK_THRESHOLD)) {
+        decision = "block";
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (parsed?.href) {
+          showAllowPrompt({
+            title: "Blocked new tab",
+            url: parsed.href,
+            host: parsed.host,
+            target: "_blank"
+          });
+        } else {
+          showToast({ message: "NavSentinel blocked a new tab navigation." });
+        }
+      } else if (!isBlankAnchor && cds >= CDS_BLOCK_THRESHOLD) {
+        decision = "block";
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        showToast({
+          message: `NavSentinel blocked deceptive click (CDS=${cds}).`
+        });
+      }
     }
 
     updateDebugOverlay({ mode, decision, cds, reasonCodes, ctx });
