@@ -1,0 +1,34 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Level 2 - Moving Target Overlay</title>
+  <style>
+    body { font-family: sans-serif; padding: 24px; height: 200vh; }
+    #realBtn { padding: 16px 20px; font-size: 18px; }
+    #trap {
+      position: fixed;
+      width: 220px; height: 80px;
+      opacity: 0.01;
+      z-index: 999999;
+      cursor: pointer;
+      transform: translate(-9999px, -9999px);
+    }
+  </style>
+</head>
+<body>
+  <h1>Level 2: Overlay follows mouse</h1>
+  <p>Move your mouse, then click the real button.</p>
+
+  <button id="realBtn">Real Button</button>
+
+  <a id="trap" href="https://example.org" target="_blank" rel="noreferrer"></a>
+
+  <script>
+    const trap = document.getElementById('trap');
+    window.addEventListener('mousemove', (e) => {
+      trap.style.transform = `translate(${e.clientX - 110}px, ${e.clientY - 40}px)`;
+    });
+  </script>
+</body>
+</html>
