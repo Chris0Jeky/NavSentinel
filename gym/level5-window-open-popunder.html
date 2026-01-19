@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Level 5 - window.open Abuse</title>
+  <style>
+    body { font-family: sans-serif; padding: 24px; }
+    #area { border: 2px dashed #999; padding: 28px; margin-top: 14px; }
+  </style>
+</head>
+<body>
+  <h1>Level 5: Any click triggers window.open</h1>
+  <p>Click inside the box. A new tab opens.</p>
+
+  <div id="area">Click area</div>
+
+  <script>
+    document.getElementById('area').addEventListener('click', () => {
+      const w = window.open('https://example.com/?ad=1', '_blank', 'noopener,noreferrer');
+      // popunder-ish behavior: try to refocus this page
+      window.focus();
+      if (w) { try { w.blur(); } catch (e) {} }
+    });
+  </script>
+</body>
+</html>
