@@ -1,2 +1,6 @@
-/.idea
-HistoryDump.txt
+node_modules/
+dist/
+extension/dist/
+.vite/
+*.log
+.DS_Store
