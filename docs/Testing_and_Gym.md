@@ -20,6 +20,15 @@ The Gym is a deterministic set of local HTML pages that simulate common maliciou
 3. Load the unpacked extension and enable the debug overlay in Options.
 4. Click the page elements and watch CDS, reasons, and decisions live.
 
+## E2E test (Playwright)
+1. Build the extension: `npm run build`.
+2. Start the Gym server: `cd gym` then `python -m http.server 5173`.
+3. Run: `npm run test:e2e`.
+
+Optional env vars:
+- `EXTENSION_PATH` (defaults to `extension/dist`)
+- `GYM_BASE_URL` (defaults to `http://localhost:5173`)
+
 ## Automated tests
 - Unit tests: CDS scoring and reason codes (Vitest + JSDOM).
 - E2E tests: Playwright against Gym (assert no unwanted new tabs).
