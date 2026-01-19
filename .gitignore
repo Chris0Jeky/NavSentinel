@@ -4,3 +4,4 @@ extension/dist/
 .vite/
 *.log
 .DS_Store
+/.idea
