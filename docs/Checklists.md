@@ -6,10 +6,10 @@
 - [x] Implement isolated capture and gesture token logging.
 - [x] Implement CDS v1 with reason codes.
 - [x] Implement overlay blocking (Stage 2).
-- [ ] Implement window.open and target=_blank gating (Stage 3).
+- [x] Implement window.open and target=_blank gating (Stage 3).
 - [ ] Build Options UI with modes and allowlist.
 - [ ] Add unit tests for CDS and edge cases.
-- [ ] Add at least one Playwright e2e test against the Gym.
+- [x] Add at least one Playwright e2e test against the Gym.
 - [ ] Implement same-tab redirect gating (Stage 4).
 - [ ] Add DNR backstop ruleset (Stage 5, optional).
 - [ ] Harden patch integrity and fallback behavior (Stage 7).
@@ -40,11 +40,11 @@
 - [x] Validate against Levels 1-3.
 
 ## Stage 3 checklist (new tab and popup gating)
-- [ ] Patch window.open and Window.prototype.open in main world (best effort).
-- [ ] Gate target=_blank at capture phase.
-- [ ] Add in-page prompt with destination URL, allow-once, always allow.
+- [x] Patch window.open and Window.prototype.open in main world (best effort).
+- [x] Gate target=_blank at capture phase.
+- [x] Add in-page prompt with destination URL, allow-once, always allow.
 - [ ] Define content script <-> service worker messaging for allowlist updates.
-- [ ] Invalidate token after first allowed open and auto-block extra attempts.
+- [x] Invalidate token after first allowed open and auto-block extra attempts.
 
 ## Stage 4+ checklist (redirects and backstop)
 - [ ] Patch location.assign/replace and form submits.
@@ -55,7 +55,7 @@
 
 ## Testing checklist
 - [ ] Unit tests for CDS edge cases (Vitest + JSDOM).
-- [ ] E2E tests for Gym Level 1 at minimum (Playwright).
+- [x] E2E tests for Gym Level 1 at minimum (Playwright).
 - [ ] Regression tests for Levels 7-9 (legit UI cases).
 - [ ] Add a multi-popup test case for auto-block behavior.
 
