@@ -8,14 +8,29 @@
   </head>
   <body>
     <h1>NavSentinel</h1>
-    <p>Default mode:</p>
-    <select id="mode">
-      <option value="off">Off</option>
-      <option value="smart">Smart</option>
-      <option value="strict">Strict</option>
-    </select>
-    <button id="save">Save</button>
-    <p id="status"></p>
+
+    <div class="row">
+      <label for="mode">Default mode</label>
+      <select id="mode">
+        <option value="off">Off</option>
+        <option value="smart">Smart</option>
+        <option value="strict">Strict</option>
+      </select>
+    </div>
+
+    <div class="row">
+      <label class="checkbox">
+        <input type="checkbox" id="debug" />
+        Show debug overlay on pages
+      </label>
+    </div>
+
+    <div class="row">
+      <button id="save">Save</button>
+      <span id="status"></span>
+    </div>
+
+    <p class="hint">Use the Gym pages for testing. Enable debug to see CDS and reasons live.</p>
 
     <script type="module" src="./options.ts"></script>
   </body>

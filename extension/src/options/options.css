@@ -3,11 +3,33 @@ body {
   margin: 24px;
   max-width: 720px;
 }
+
 h1 {
-  margin: 0 0 12px 0;
+  margin: 0 0 16px 0;
 }
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+label {
+  font-weight: 600;
+}
+
 select,
 button {
   padding: 8px 10px;
-  margin-right: 8px;
+}
+
+.checkbox {
+  font-weight: 400;
+}
+
+.hint {
+  margin-top: 10px;
+  color: #444;
+  font-size: 13px;
 }
