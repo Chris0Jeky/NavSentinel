@@ -1,13 +1,21 @@
 const NS_SOURCE = "__navsentinel__";
 const GESTURE_TTL_MS = 800;
 const MAX_OPENS_PER_GESTURE = 1;
+const ALLOW_ONCE_TTL_MS = 1200;
 
 let lastGestureTs = 0;
 let openCount = 0;
+let allowOnceRemaining = 0;
+let allowOnceUntil = 0;
 
 function markGesture(): void {
   lastGestureTs = performance.now();
   openCount = 0;
+}
+
+function setAllowOnce(): void {
+  allowOnceRemaining = 1;
+  allowOnceUntil = performance.now() + ALLOW_ONCE_TTL_MS;
 }
 
 function hasActiveGesture(): boolean {
@@ -15,7 +23,22 @@ function hasActiveGesture(): boolean {
 }
 
 function canOpenNow(): boolean {
+  const now = performance.now();
+  if (allowOnceRemaining > 0 && now <= allowOnceUntil) return true;
   return hasActiveGesture() && openCount < MAX_OPENS_PER_GESTURE;
+}
+
+function consumeAllowance(): "allow_once" | "gesture" | "none" {
+  const now = performance.now();
+  if (allowOnceRemaining > 0 && now <= allowOnceUntil) {
+    allowOnceRemaining -= 1;
+    return "allow_once";
+  }
+  if (hasActiveGesture() && openCount < MAX_OPENS_PER_GESTURE) {
+    openCount += 1;
+    return "gesture";
+  }
+  return "none";
 }
 
 function postBlocked(params: {
@@ -47,8 +70,8 @@ function callNativeOpen(thisArg: Window, url?: string | URL, target?: string, fe
 }
 
 function patchedOpen(this: Window, url?: string | URL, target?: string, features?: string): Window | null {
-  if (canOpenNow()) {
-    openCount += 1;
+  const allowance = consumeAllowance();
+  if (allowance !== "none") {
     return callNativeOpen(this, url, target, features);
   }
 
@@ -79,15 +102,23 @@ function patchOpen(): void {
   }
 }
 
-window.addEventListener("pointerdown", () => {
-  markGesture();
-}, true);
+window.addEventListener(
+  "message",
+  (event) => {
+    if (event.source !== window) return;
+    const data = event.data as { source?: string; type?: string };
+    if (!data || data.source !== NS_SOURCE) return;
 
-window.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" || e.key === " ") {
-    markGesture();
-  }
-}, true);
+    if (data.type === "ns-gesture-allow") {
+      markGesture();
+    }
+
+    if (data.type === "ns-allow-once") {
+      setAllowOnce();
+    }
+  },
+  true
+);
 
 patchOpen();
 
