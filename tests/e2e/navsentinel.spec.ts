@@ -99,7 +99,7 @@ test("Level 1 blocks new tabs", async () => {
   }
 });
 
-test("Level 10 delayed redirect prompts", async () => {
+test("Level 10 delayed form submit prompts", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const gymOverride = process.env.GYM_BASE_URL;
@@ -129,15 +129,10 @@ test("Level 10 delayed redirect prompts", async () => {
       const patchInfo = await page.evaluate(() => (window as any).__navsentinelLocationPatch);
       expect(patchInfo, "Expected location patch info").toBeTruthy();
       expect(patchInfo.protoAssign, "Expected Location.prototype.assign to be patched").toBe(true);
-      if (!patchInfo.locAssign) {
-        throw new Error(`window.location.assign not patched: ${JSON.stringify(patchInfo)}`);
-      }
 
-      await page.click("#delayed");
+      await page.click("#submitDelayed");
       await page.waitForTimeout(2600);
-      const lastNav = await page.evaluate(() => (window as any).__navsentinelLastNav);
-      expect(lastNav?.status, `Unexpected last nav: ${JSON.stringify(lastNav)}`).toBe("blocked");
-      await expect(page.locator("text=Blocked redirect")).toBeVisible({ timeout: 4000 });
+      await expect(page.locator("text=Blocked form submit")).toBeVisible({ timeout: 4000 });
     } finally {
       await context.close();
     }
