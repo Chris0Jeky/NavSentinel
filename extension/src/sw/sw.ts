@@ -8,6 +8,16 @@ const allowUntilByTab = new Map<number, number>();
 const suppressUntilByTab = new Map<number, number>();
 const readyTabs = new Set<number>();
 const pendingRollbackByTab = new Map<number, { url: string; qualifiers: string[] }>();
+const lastCommittedByTab = new Map<
+  number,
+  {
+    url: string;
+    transitionType: string;
+    qualifiers: string[];
+    ts: number;
+    allowedAtCommit: boolean;
+  }
+>();
 
 async function syncDnrRulesets(): Promise<void> {
   try {
@@ -64,6 +74,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
     }
   }
+
+  if (message.type === "ns-check-rollback") {
+    const tabId = sender.tab?.id;
+    if (typeof tabId === "number") {
+      const entry = lastCommittedByTab.get(tabId);
+      sendResponse?.({
+        shouldRollback: !!entry && !entry.allowedAtCommit,
+        entry
+      });
+    }
+  }
 });
 
 chrome.webNavigation.onCommitted.addListener((details) => {
@@ -81,7 +102,15 @@ chrome.webNavigation.onCommitted.addListener((details) => {
 
   const now = Date.now();
   const allowUntil = allowUntilByTab.get(details.tabId) ?? 0;
-  if (now <= allowUntil) return;
+  const allowedAtCommit = now <= allowUntil;
+  lastCommittedByTab.set(details.tabId, {
+    url: details.url,
+    transitionType: details.transitionType,
+    qualifiers,
+    ts: now,
+    allowedAtCommit
+  });
+  if (allowedAtCommit) return;
 
   const suppressUntil = suppressUntilByTab.get(details.tabId) ?? 0;
   if (now <= suppressUntil) return;
@@ -103,4 +132,5 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   suppressUntilByTab.delete(tabId);
   readyTabs.delete(tabId);
   pendingRollbackByTab.delete(tabId);
+  lastCommittedByTab.delete(tabId);
 });
