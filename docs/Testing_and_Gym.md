@@ -72,6 +72,8 @@ Explicit intent checks:
 Optional env vars:
 - `EXTENSION_PATH` (defaults to `extension/dist`)
 - `GYM_BASE_URL` (if set, uses your running Gym server instead)
+- `ROLLBACK_E2E=1` (enables the Level 10 redirect rollback test)
+- `LIVE_E2E=1` (enables live-web test against Google search results)
 
 ## Automated tests
 - Unit tests: CDS scoring and reason codes (Vitest + JSDOM).
