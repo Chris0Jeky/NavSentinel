@@ -60,6 +60,7 @@
 - [x] E2E tests for Gym Level 1 at minimum (Playwright).
 - [x] E2E test for Level 10 delayed form submit prompt (Playwright).
 - [x] E2E tests for Levels 5 and 6 (Playwright).
+- [x] E2E test for Level 10 delayed redirect rollback (Playwright).
 - [ ] Regression tests for Levels 7-9 (legit UI cases).
 - [ ] Add a multi-popup test case for auto-block behavior.
 - [ ] Investigate Level 2 moving target inconsistencies (no prompt).
