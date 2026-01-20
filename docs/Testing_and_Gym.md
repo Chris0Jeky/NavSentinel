@@ -50,12 +50,11 @@ Explicit intent checks:
 
 ## E2E test (Playwright)
 1. Build the extension: `npm run build`.
-2. Start the Gym server: `cd gym` then `python -m http.server 5173`.
-3. Run: `npm run test:e2e`.
+2. Run: `npm run test:e2e` (starts a temporary local Gym server automatically).
 
 Optional env vars:
 - `EXTENSION_PATH` (defaults to `extension/dist`)
-- `GYM_BASE_URL` (defaults to `http://localhost:5173`)
+- `GYM_BASE_URL` (if set, uses your running Gym server instead)
 
 ## Automated tests
 - Unit tests: CDS scoring and reason codes (Vitest + JSDOM).
