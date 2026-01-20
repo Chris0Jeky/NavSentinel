@@ -3,17 +3,14 @@
 ## Gym purpose
 The Gym is a deterministic set of local HTML pages that simulate common malicious and legitimate patterns. It provides a stable target for manual testing and automated E2E tests.
 
-## Gym levels and expected outcomes
-- Level 1: invisible overlay anchor (should block with a prompt).
-- Level 2: overlay follows mouse (should block with a prompt).
-- Level 3: instant injection on pointerdown (should block with a prompt).
-- Level 4: visual mimicry (should block with a prompt).
-- Level 5: window.open popunder handler (should block with a prompt).
-- Level 6: programmatic click chain (should block with a prompt).
-- Level 7: legit modal backdrop (should allow).
-- Level 8: legit OAuth popup (should prompt or allow).
-- Level 9: legit video overlay controls (should allow).
-- Level 10: same-tab redirects and form submits (immediate allowed; delayed should prompt).
+## What NavSentinel currently enforces
+- `_blank` links: blocked (toast prompt) unless user shows explicit intent (Ctrl/Cmd+click, middle click) or the destination is allowlisted.
+- `window.open`: blocked (toast prompt) unless the click was explicitly “new tab intent” (Ctrl/Cmd/middle) or the destination is allowlisted.
+- Same-tab redirects (`location.assign/replace`) + form submits: allowed only shortly after an allowed click; delayed attempts prompt.
+
+Modes:
+- `Off`: should not block (use this to sanity-check the Gym without NavSentinel).
+- `Smart` / `Strict`: currently similar; both should block Levels 1–6 and prompt as needed.
 
 ## What "block" means in the Gym
 - For `_blank` links: NavSentinel calls `preventDefault()` and shows an in-page prompt (toast) with `Allow once` / `Always allow`.
@@ -30,14 +27,20 @@ If the Options link is missing in `chrome://extensions`, open it directly:
 1. Go to `chrome://extensions` and copy the extension ID.
 2. Open `chrome-extension://<ID>/src/options/options.html`.
 
-## Per-level walkthrough
-- Level 1: click `Play`. Expected: prompt "Blocked new tab" for `example.com`.
-- Level 2: move the mouse so the invisible overlay follows it, then click `Real Button`. Expected: prompt "Blocked new tab" for `example.org`.
-- Level 3: click `Click me` quickly (the trap exists for ~150ms). Expected: prompt "Blocked new tab" for `example.net`.
-- Level 4: click `Download`. Expected: prompt "Blocked new tab" for `example.edu`.
-- Level 5: click inside the box. Expected: prompt "Blocked popup" for `example.com/?ad=1`.
-- Level 6: click `Continue`. Expected: prompt "Blocked new tab" for `example.org/?forced=1`.
-- Level 10: click `Immediate redirect` (should navigate), then click `Delayed redirect (2s)` (should prompt), then `Programmatic form submit (2s)` (should prompt).
+## Gym levels and expected outcomes (manual)
+- Level 1 (invisible overlay anchor): click `Play`. Expected (Smart/Strict): prompt "Blocked new tab" for `example.com`.
+- Level 2 (overlay follows mouse): move your mouse onto `Real Button` (so the invisible trap is positioned over it), then click. Expected (Smart/Strict): prompt "Blocked new tab" for `example.org`.
+- Level 3 (instant injection on pointerdown): click `Click me` normally. Expected (Smart/Strict): blocked deceptive click (high CDS) and no navigation.
+- Level 4 (visual mimicry): click `Download`. Expected (Smart/Strict): prompt or block (depending on CDS); no surprise tab.
+- Level 5 (any click triggers `window.open`): click inside the box. Expected (Smart/Strict): prompt "Blocked popup" for `example.com/?ad=1`.
+- Level 6 (programmatic click chain): click `Continue`. Expected (Smart/Strict): prompt "Blocked new tab" for `example.org/?forced=1`.
+- Level 7 (legit modal backdrop): should not be blocked; debug overlay should show low CDS.
+- Level 8 (legit OAuth popup): likely prompts (NavSentinel can’t know it’s OAuth yet); allow once should open it.
+- Level 9 (legit video overlay controls): should not be blocked.
+- Level 10 (redirects/forms): `Immediate redirect` should navigate; delayed redirect and delayed submit should prompt.
+
+Explicit intent checks:
+- Ctrl/Cmd+click or middle-click should set `ExplicitNewTab: yes` in the debug overlay and allow the open without prompting.
 
 ## Debugging tips
 - After rebuilding, click `Reload` for the extension in `chrome://extensions`.
