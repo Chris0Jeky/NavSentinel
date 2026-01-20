@@ -36,6 +36,7 @@ Stage 4 - Same-tab redirects and forms
 - Add navigation attempt logging.
 - Consider short-window history.pushState gating (careful with false positives).
 - Note: Chrome makes window.location.assign non-writable; add a fallback (DNR or post-nav rollback) if needed.
+ - Post-navigation rollback prompt for client redirects when no recent allow gesture is seen.
 
 Stage 5 - DNR backstop (optional)
 - Add DNR ruleset generator and baseline rules (toggleable).
