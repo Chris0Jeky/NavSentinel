@@ -49,6 +49,13 @@ async function initSettings() {
   setDebugEnabled(settings.debug);
   postToMain("ns-config", { mode: settings.defaultMode, debug: settings.debug });
   postToMain("ns-ping");
+  if (window.top === window) {
+    try {
+      chrome.runtime.sendMessage({ type: "ns-ready" });
+    } catch {
+      // ignore
+    }
+  }
   window.setTimeout(() => {
     if (mainGuard === "unknown") {
       mainGuard = "no";
