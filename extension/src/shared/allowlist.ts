@@ -24,6 +24,26 @@ export async function addAllowlistEntry(siteKey: string, destHost: string): Prom
   return list;
 }
 
+export async function removeAllowlistEntry(siteKey: string, destHost: string): Promise<Allowlist> {
+  const list = await getAllowlist();
+  const key = siteKey.toLowerCase();
+  const host = destHost.toLowerCase();
+  const existing = list[key];
+  if (!existing) return list;
+  const next = existing.filter((entry) => entry !== host);
+  if (next.length === 0) {
+    delete list[key];
+  } else {
+    list[key] = next;
+  }
+  await setAllowlist(list);
+  return list;
+}
+
+export async function clearAllowlist(): Promise<void> {
+  await setAllowlist({});
+}
+
 export function isAllowlisted(list: Allowlist, siteKey: string, destHost: string): boolean {
   const key = siteKey.toLowerCase();
   const host = destHost.toLowerCase();
