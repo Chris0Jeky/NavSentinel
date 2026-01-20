@@ -51,6 +51,7 @@ Explicit intent checks:
 
 ## Known gaps
 - Level 2 can be inconsistent on some machines (no prompt, no navigation). If you see this, try moving the mouse after page load before clicking. If it still does nothing, log it as a known issue.
+- Same-tab redirects via `location.assign/replace` are not reliably interceptable in Chrome because `window.location.assign` is non-writable/non-configurable. Level 10 delayed redirect may navigate; delayed form submit should still prompt.
 
 ## Debugging tips
 - After rebuilding, click `Reload` for the extension in `chrome://extensions`.
