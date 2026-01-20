@@ -35,6 +35,7 @@ Stage 4 - Same-tab redirects and forms
 - Patch location.assign/replace and form.submit.
 - Add navigation attempt logging.
 - Consider short-window history.pushState gating (careful with false positives).
+- Note: Chrome makes window.location.assign non-writable; add a fallback (DNR or post-nav rollback) if needed.
 
 Stage 5 - DNR backstop (optional)
 - Add DNR ruleset generator and baseline rules.
