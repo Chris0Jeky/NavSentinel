@@ -14,6 +14,7 @@ const lastCommittedByTab = new Map<
   number,
   {
     url: string;
+    prevUrl?: string;
     transitionType: string;
     qualifiers: string[];
     ts: number;
@@ -85,7 +86,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse?.({
         shouldRollback: !!entry && !entry.allowedAtCommit,
         entry,
-        prevUrl: lastUrlByTab.get(tabId)
+        prevUrl: entry?.prevUrl
       });
     }
   }
@@ -132,6 +133,7 @@ chrome.webNavigation.onCommitted.addListener((details) => {
   lastUrlByTab.set(details.tabId, details.url);
   lastCommittedByTab.set(details.tabId, {
     url: details.url,
+    prevUrl,
     transitionType: details.transitionType,
     qualifiers,
     ts: now,
