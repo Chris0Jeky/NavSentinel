@@ -105,6 +105,20 @@ function postBlocked(params: {
   );
 }
 
+function postAllowed(params: { kind: string; url?: string }): void {
+  if (!debug) return;
+  window.postMessage(
+    {
+      source: NS_SOURCE,
+      type: "ns-nav-allowed",
+      kind: params.kind,
+      url: params.url ?? "",
+      ts: performance.now()
+    },
+    "*"
+  );
+}
+
 function registerBlockedAction(params: {
   kind: string;
   url?: string;
@@ -141,10 +155,12 @@ function callNativeOpen(thisArg: Window, url?: string | URL, target?: string, fe
 
 function patchedOpen(this: Window, url?: string | URL, target?: string, features?: string): Window | null {
   if (isOff()) {
+    postAllowed({ kind: "window_open", url: url ? String(url) : "" });
     return callNativeOpen(this, url, target, features);
   }
   const allowance = consumeOpenAllowance();
   if (allowance !== "none") {
+    postAllowed({ kind: "window_open", url: url ? String(url) : "" });
     return callNativeOpen(this, url, target, features);
   }
 
@@ -174,11 +190,13 @@ function resolveFormAction(form: HTMLFormElement): string | undefined {
 function patchLocation(): void {
   Location.prototype.assign = function (url: string | URL): void {
     if (isOff()) {
+      postAllowed({ kind: "location_assign", url: String(url) });
       nativeAssign.call(this, url);
       return;
     }
     const allowance = consumeRedirectAllowance();
     if (allowance !== "none") {
+      postAllowed({ kind: "location_assign", url: String(url) });
       nativeAssign.call(this, url);
       return;
     }
@@ -191,11 +209,13 @@ function patchLocation(): void {
 
   Location.prototype.replace = function (url: string | URL): void {
     if (isOff()) {
+      postAllowed({ kind: "location_replace", url: String(url) });
       nativeReplace.call(this, url);
       return;
     }
     const allowance = consumeRedirectAllowance();
     if (allowance !== "none") {
+      postAllowed({ kind: "location_replace", url: String(url) });
       nativeReplace.call(this, url);
       return;
     }
@@ -210,11 +230,15 @@ function patchLocation(): void {
 function patchForms(): void {
   HTMLFormElement.prototype.submit = function (): void {
     if (isOff()) {
+      const actionUrl = resolveFormAction(this);
+      postAllowed({ kind: "form_submit", url: actionUrl });
       nativeFormSubmit.call(this);
       return;
     }
     const allowance = consumeRedirectAllowance();
     if (allowance !== "none") {
+      const actionUrl = resolveFormAction(this);
+      postAllowed({ kind: "form_submit", url: actionUrl });
       nativeFormSubmit.call(this);
       return;
     }
@@ -229,11 +253,15 @@ function patchForms(): void {
   if (nativeFormRequestSubmit) {
     HTMLFormElement.prototype.requestSubmit = function (submitter?: HTMLElement | null): void {
       if (isOff()) {
+        const actionUrl = resolveFormAction(this);
+        postAllowed({ kind: "form_request_submit", url: actionUrl });
         nativeFormRequestSubmit.call(this, submitter as any);
         return;
       }
       const allowance = consumeRedirectAllowance();
       if (allowance !== "none") {
+        const actionUrl = resolveFormAction(this);
+        postAllowed({ kind: "form_request_submit", url: actionUrl });
         nativeFormRequestSubmit.call(this, submitter as any);
         return;
       }
