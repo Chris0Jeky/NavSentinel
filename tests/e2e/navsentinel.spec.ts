@@ -168,9 +168,12 @@ test("Level 10 delayed redirect auto-rolls back and offers proceed", async () =>
       await page.click("#delayed");
       await page.waitForURL(/level4-visual-mimicry\.html/, { timeout: 7000 });
       await page.waitForURL(/level10-redirects-and-forms\.html/, { timeout: 7000 });
-      await expect(
-        page.locator("text=NavSentinel rolled back a redirect")
-      ).toBeVisible({ timeout: 4000 });
+      await page.waitForFunction(() => (window as any).__navsentinelRollbackPrompt, null, {
+        timeout: 7000
+      });
+      await expect(page.locator("text=NavSentinel rolled back a redirect")).toBeVisible({
+        timeout: 4000
+      });
     } finally {
       await context.close();
     }
