@@ -26,7 +26,7 @@
 - [x] Add Gym index page for quick navigation.
 - [x] Add Gym Level 10 for Stage 4.
 - [x] Verify each level manually with no extension installed.
-- [ ] Document expected outcomes for each level.
+- [x] Document expected outcomes for each level.
 
 ## Stage 1 checklist (capture and logging)
 - [x] Capture pointerdown and click in isolated world.
@@ -49,7 +49,7 @@
 
 ## Stage 4+ checklist (redirects and backstop)
 - [x] Patch location.assign/replace and form submits.
-- [ ] Add navigation attempt logging and correlation.
+- [x] Add navigation attempt logging and correlation.
 - [ ] Consider short-window history.pushState gating.
 - [ ] Implement DNR ruleset and baseline rules.
 - [ ] Optional: dynamic DNR block for known-bad destinations.
