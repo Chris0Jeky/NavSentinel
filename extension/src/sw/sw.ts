@@ -7,8 +7,9 @@ const ROLLBACK_SUPPRESS_MS = 6000;
 const allowUntilByTab = new Map<number, number>();
 const suppressUntilByTab = new Map<number, number>();
 const readyTabs = new Set<number>();
-const pendingRollbackByTab = new Map<number, { url: string; qualifiers: string[] }>();
+const pendingRollbackByTab = new Map<number, { url: string; prevUrl?: string; qualifiers: string[] }>();
 const pendingForwardByTab = new Map<number, { url: string; ts: number }>();
+const lastUrlByTab = new Map<number, string>();
 const lastCommittedByTab = new Map<
   number,
   {
@@ -70,6 +71,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         chrome.tabs.sendMessage(tabId, {
           type: "ns-rollback",
           url: pending.url,
+          prevUrl: pending.prevUrl,
           qualifiers: pending.qualifiers
         });
       }
@@ -82,7 +84,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const entry = lastCommittedByTab.get(tabId);
       sendResponse?.({
         shouldRollback: !!entry && !entry.allowedAtCommit,
-        entry
+        entry,
+        prevUrl: lastUrlByTab.get(tabId)
       });
     }
   }
@@ -125,6 +128,8 @@ chrome.webNavigation.onCommitted.addListener((details) => {
   const now = Date.now();
   const allowUntil = allowUntilByTab.get(details.tabId) ?? 0;
   const allowedAtCommit = now <= allowUntil;
+  const prevUrl = lastUrlByTab.get(details.tabId);
+  lastUrlByTab.set(details.tabId, details.url);
   lastCommittedByTab.set(details.tabId, {
     url: details.url,
     transitionType: details.transitionType,
@@ -143,10 +148,11 @@ chrome.webNavigation.onCommitted.addListener((details) => {
     chrome.tabs.sendMessage(details.tabId, {
       type: "ns-rollback",
       url: details.url,
+      prevUrl,
       qualifiers
     });
   } else {
-    pendingRollbackByTab.set(details.tabId, { url: details.url, qualifiers });
+    pendingRollbackByTab.set(details.tabId, { url: details.url, prevUrl, qualifiers });
   }
 });
 
@@ -157,6 +163,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   pendingRollbackByTab.delete(tabId);
   pendingForwardByTab.delete(tabId);
   lastCommittedByTab.delete(tabId);
+  lastUrlByTab.delete(tabId);
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
