@@ -18,14 +18,23 @@ import {
 } from "./dom_builder";
 import { setDebugEnabled, updateDebugOverlay, type DebugInfo } from "./debug_overlay";
 
-const CDS_BLOCK_THRESHOLD = 70;
+const CDS_SMART_BLOCK_THRESHOLD = 70;
+const CDS_STRICT_BLOCK_THRESHOLD = 50;
 const NS_SOURCE = "__navsentinel__";
+const RISKY_BLANK_REASONS = new Set([
+  "intent_mismatch_under_interactive",
+  "invisible_but_clickable",
+  "overlay_large_interactive",
+  "overlay_high_zindex",
+  "retargeted_target_mismatch",
+  "cursor_pointer_no_affordance"
+]);
 
 let lastDown: DownCapture | null = null;
 let settings = { defaultMode: "smart", debug: false };
 let allowlist: Allowlist = {};
 let mainGuard: "unknown" | "yes" | "no" = "unknown";
-let lastNav: { kind: string; url: string } | null = null;
+let lastNav: { kind: string; url: string; status: "allowed" | "blocked" } | null = null;
 let lastDebug: Omit<DebugInfo, "mainGuard" | "lastNav"> | null = null;
 
 function refreshDebug(): void {
@@ -80,6 +89,32 @@ function parseDestination(rawUrl: string | null | undefined): { href: string | n
   } catch {
     return { href: null, host: null };
   }
+}
+
+function nameLength(h: { textLength?: number; ariaLabelLength?: number; titleLength?: number }): number {
+  return (h.textLength ?? 0) + (h.ariaLabelLength ?? 0) + (h.titleLength ?? 0);
+}
+
+function isInteractive(h: { tag: string; role?: string; hasOnClick?: boolean }): boolean {
+  if (h.tag === "A" || h.tag === "BUTTON") return true;
+  const role = (h.role ?? "").toLowerCase();
+  if (role === "link" || role === "button") return true;
+  return !!h.hasOnClick;
+}
+
+function isLegitBlankAnchor(ctx: { top: { tag: string; role?: string; hasOnClick?: boolean; textLength?: number; ariaLabelLength?: number; titleLength?: number }; retargeted?: boolean }, cds: number, reasonCodes: string[]): boolean {
+  if (cds >= CDS_SMART_BLOCK_THRESHOLD) return false;
+  if (ctx.retargeted) return false;
+  if (!isInteractive(ctx.top)) return false;
+  if (nameLength(ctx.top) === 0) return false;
+  for (const reason of reasonCodes) {
+    if (RISKY_BLANK_REASONS.has(reason)) return false;
+  }
+  return true;
+}
+
+function getBlockThreshold(mode: Mode): number {
+  return mode === "strict" ? CDS_STRICT_BLOCK_THRESHOLD : CDS_SMART_BLOCK_THRESHOLD;
 }
 
 function findAnchorFromEvent(e: MouseEvent): HTMLAnchorElement | null {
@@ -180,7 +215,7 @@ window.addEventListener(
     }
 
     if (data.type === "ns-nav-blocked") {
-      lastNav = { kind: data.kind ?? "unknown", url: data.url ?? "" };
+      lastNav = { kind: data.kind ?? "unknown", url: data.url ?? "", status: "blocked" };
       refreshDebug();
 
       if (settings.defaultMode === "off") {
@@ -211,6 +246,12 @@ window.addEventListener(
         features: data.features,
         actionId: data.id
       });
+    }
+
+    if (data.type === "ns-nav-allowed") {
+      lastNav = { kind: data.kind ?? "unknown", url: data.url ?? "", status: "allowed" };
+      refreshDebug();
+      return;
     }
   },
   true
@@ -294,11 +335,13 @@ window.addEventListener(
       ? isAllowlisted(allowlist, siteKeyFromLocation(), parsed.host)
       : false;
 
-    let decision: "allow" | "block" = "allow";
+    let decision: "allow" | "prompt" | "block" = "allow";
+    const blockThreshold = getBlockThreshold(mode);
 
     if (mode !== "off") {
-      if (isBlankAnchor && !isAllowed && !explicitNewTab) {
-        decision = "block";
+      const smartAllowsBlank = mode === "smart" && isLegitBlankAnchor(ctx, cds, reasonCodes);
+      if (isBlankAnchor && !isAllowed && !explicitNewTab && !smartAllowsBlank) {
+        decision = "prompt";
         e.preventDefault();
         e.stopImmediatePropagation();
         if (parsed?.href) {
@@ -311,7 +354,7 @@ window.addEventListener(
         } else {
           showToast({ message: "NavSentinel blocked a new tab navigation." });
         }
-      } else if (!isBlankAnchor && cds >= CDS_BLOCK_THRESHOLD) {
+      } else if (!isBlankAnchor && cds >= blockThreshold) {
         decision = "block";
         e.preventDefault();
         e.stopImmediatePropagation();
