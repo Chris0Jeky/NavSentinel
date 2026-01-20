@@ -11,7 +11,7 @@
 - [ ] Add unit tests for CDS and edge cases.
 - [x] Add at least one Playwright e2e test against the Gym.
 - [x] Implement same-tab redirect gating (Stage 4).
-- [ ] Add DNR backstop ruleset (Stage 5, optional).
+- [x] Add DNR backstop ruleset (Stage 5, optional).
 - [ ] Harden patch integrity and fallback behavior (Stage 7).
 - [ ] Add a decision log page in Options UI (future).
 
@@ -52,7 +52,7 @@
 - [ ] Add fallback for unpatchable window.location.assign/replace (Chrome limitation).
 - [x] Add navigation attempt logging and correlation.
 - [ ] Consider short-window history.pushState gating.
-- [ ] Implement DNR ruleset and baseline rules.
+- [x] Implement DNR ruleset and baseline rules.
 - [ ] Optional: dynamic DNR block for known-bad destinations.
 
 ## Testing checklist
