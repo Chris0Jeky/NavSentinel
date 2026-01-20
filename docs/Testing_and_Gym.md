@@ -45,7 +45,8 @@ Explicit intent checks:
 ## Debugging tips
 - After rebuilding, click `Reload` for the extension in `chrome://extensions`.
 - Confirm the main-world patch is running: open DevTools Console on a Gym page and check `window.__navsentinelMainGuard === true`.
-- With debug enabled, inspect the page console for `[NavSentinel] click` logs and the live overlay for `Decision`, `CDS`, and `Reasons`.
+- With debug enabled, use the live overlay (`MainGuard`, `Decision`, `CDS`, `Reasons`) and the page console logs (`[NavSentinel] click`, `[NavSentinel] blocked`, `[NavSentinel] allowance`).
+- If `MainGuard: no`, `window.open` / redirects cannot be reliably blocked (only `_blank` click capture will work).
 
 ## E2E test (Playwright)
 1. Build the extension: `npm run build`.
