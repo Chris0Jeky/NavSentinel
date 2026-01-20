@@ -69,10 +69,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 chrome.webNavigation.onCommitted.addListener((details) => {
   if (details.frameId !== 0) return;
   const qualifiers = details.transitionQualifiers ?? [];
-  const isRedirect =
-    qualifiers.includes("client_redirect") || qualifiers.includes("server_redirect");
+  const isRedirect = qualifiers.includes("client_redirect") || qualifiers.includes("server_redirect");
+  const isUserTyped =
+    details.transitionType === "typed" ||
+    details.transitionType === "auto_bookmark" ||
+    qualifiers.includes("from_address_bar");
+  const isLinkish = details.transitionType === "link";
 
-  if (!isRedirect) return;
+  if (isUserTyped) return;
+  if (!isRedirect && !isLinkish) return;
 
   const now = Date.now();
   const allowUntil = allowUntilByTab.get(details.tabId) ?? 0;
