@@ -388,6 +388,23 @@ if (chrome?.runtime?.sendMessage && window.top === window) {
   }
 }
 
+if (chrome?.runtime?.sendMessage && window.top === window) {
+  const runForward = () => {
+    chrome.runtime.sendMessage({ type: "ns-check-forward" }, (resp) => {
+      const url = typeof resp?.url === "string" ? resp.url : "";
+      if (!url) return;
+      if (settings.defaultMode === "off") return;
+      showRollbackPrompt(url);
+    });
+  };
+  window.addEventListener("pageshow", runForward);
+  if (document.readyState === "loading") {
+    window.addEventListener("DOMContentLoaded", runForward, { once: true });
+  } else {
+    runForward();
+  }
+}
+
 window.addEventListener(
   "pointerdown",
   (e) => {
