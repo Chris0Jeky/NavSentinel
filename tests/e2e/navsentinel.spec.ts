@@ -129,6 +129,7 @@ test("Level 10 delayed redirect prompts", async () => {
       const patchInfo = await page.evaluate(() => (window as any).__navsentinelLocationPatch);
       expect(patchInfo, "Expected location patch info").toBeTruthy();
       expect(patchInfo.protoAssign, "Expected Location.prototype.assign to be patched").toBe(true);
+      expect(patchInfo.locAssign, "Expected window.location.assign to be patched").toBe(true);
 
       await page.click("#delayed");
       await page.waitForTimeout(2600);
