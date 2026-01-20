@@ -7,3 +7,4 @@ extension/dist/
 /.idea
 HistoryDump.txt
 AGENTS.md
+test-results/.last-run.json
