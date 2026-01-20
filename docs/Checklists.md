@@ -51,6 +51,7 @@
 - [x] Patch location.assign/replace (prototype) and form submits.
 - [ ] Add fallback for unpatchable window.location.assign/replace (Chrome limitation).
 - [x] Add navigation attempt logging and correlation.
+- [x] Add post-navigation rollback prompt for client redirects.
 - [ ] Consider short-window history.pushState gating.
 - [x] Implement DNR ruleset and baseline rules.
 - [ ] Optional: dynamic DNR block for known-bad destinations.
