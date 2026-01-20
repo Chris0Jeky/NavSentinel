@@ -126,7 +126,14 @@ test("Level 10 delayed redirect prompts", async () => {
         page.evaluate(() => (window as any).__navsentinelMainGuard === true)
       ).resolves.toBe(true);
 
+      const patchInfo = await page.evaluate(() => (window as any).__navsentinelLocationPatch);
+      expect(patchInfo, "Expected location patch info").toBeTruthy();
+      expect(patchInfo.protoAssign, "Expected Location.prototype.assign to be patched").toBe(true);
+
       await page.click("#delayed");
+      await page.waitForTimeout(2600);
+      const lastNav = await page.evaluate(() => (window as any).__navsentinelLastNav);
+      expect(lastNav?.status, `Unexpected last nav: ${JSON.stringify(lastNav)}`).toBe("blocked");
       await expect(page.locator("text=Blocked redirect")).toBeVisible({ timeout: 4000 });
     } finally {
       await context.close();
