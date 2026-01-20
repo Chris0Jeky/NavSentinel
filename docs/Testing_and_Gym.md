@@ -13,7 +13,7 @@ Modes:
 - `Smart`: allows clean `_blank` links (named, visible, low CDS) and prompts on suspicious ones.
 - `Strict`: blocks `_blank` links unless explicit new-tab intent or allowlisted.
   - Deceptive click block threshold is lower (CDS >= 50 in Strict, CDS >= 70 in Smart).
- - `DNR backstop` (Options): optional hard blocklist using MV3 DNR rules. If enabled, matching destinations are blocked without a prompt.
+- `DNR backstop` (Options): optional hard blocklist using MV3 DNR rules. If enabled, matching destinations are blocked without a prompt.
 
 Prompt vs block:
 - Prompt = a toast with `Allow once` / `Always allow` (used for navigations).
