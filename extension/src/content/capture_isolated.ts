@@ -384,13 +384,18 @@ if (chrome?.runtime?.onMessage) {
 }
 
 if (chrome?.runtime?.sendMessage && window.top === window) {
-  const run = () => {
+  const run = (retries = 4) => {
     chrome.runtime.sendMessage({ type: "ns-check-rollback" }, (resp) => {
-      if (!resp || !resp.shouldRollback) return;
-      if (settings.defaultMode === "off") return;
-      const url = typeof resp.entry?.url === "string" ? resp.entry.url : "";
-      const prevUrl = typeof resp.prevUrl === "string" ? resp.prevUrl : "";
-      handleRollback(url, prevUrl);
+      if (resp?.shouldRollback) {
+        if (settings.defaultMode === "off") return;
+        const url = typeof resp.entry?.url === "string" ? resp.entry.url : "";
+        const prevUrl = typeof resp.prevUrl === "string" ? resp.prevUrl : "";
+        handleRollback(url, prevUrl);
+        return;
+      }
+      if (retries > 0) {
+        window.setTimeout(() => run(retries - 1), 200);
+      }
     });
   };
   if (document.readyState === "loading") {
