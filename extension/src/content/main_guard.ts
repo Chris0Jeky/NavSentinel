@@ -27,8 +27,12 @@ const blockedActions = new Map<
   }
 >();
 
+function nowMs(): number {
+  return Date.now();
+}
+
 function markAllowance(params: { allowOpen: boolean; allowRedirect: boolean }): void {
-  const now = performance.now();
+  const now = nowMs();
   openCount = 0;
   redirectCount = 0;
   allowOpenUntil = params.allowOpen ? now + OPEN_TTL_MS : 0;
@@ -41,11 +45,11 @@ function isOff(): boolean {
 
 function setAllowOnce(): void {
   allowOnceRemaining = 1;
-  allowOnceUntil = performance.now() + ALLOW_ONCE_TTL_MS;
+  allowOnceUntil = nowMs() + ALLOW_ONCE_TTL_MS;
 }
 
 function consumeOpenAllowance(): "allow_once" | "allowed" | "none" {
-  const now = performance.now();
+  const now = nowMs();
   if (allowOnceRemaining > 0 && now <= allowOnceUntil) {
     allowOnceRemaining -= 1;
     return "allow_once";
@@ -58,7 +62,7 @@ function consumeOpenAllowance(): "allow_once" | "allowed" | "none" {
 }
 
 function consumeRedirectAllowance(): "allowed" | "none" {
-  const now = performance.now();
+  const now = nowMs();
   if (allowRedirectUntil > 0 && now <= allowRedirectUntil && redirectCount < MAX_REDIRECTS_PER_GESTURE) {
     redirectCount += 1;
     return "allowed";
@@ -67,11 +71,11 @@ function consumeRedirectAllowance(): "allowed" | "none" {
 }
 
 function makeId(): string {
-  return `${Math.floor(performance.now())}-${Math.random().toString(16).slice(2)}`;
+  return `${Math.floor(nowMs())}-${Math.random().toString(16).slice(2)}`;
 }
 
 function pruneBlockedActions(): void {
-  const now = performance.now();
+  const now = nowMs();
   for (const [id, entry] of blockedActions) {
     if (entry.expiresAt <= now) {
       blockedActions.delete(id);
@@ -88,7 +92,7 @@ function postBlocked(params: {
 }): void {
   if (debug) {
     // eslint-disable-next-line no-console
-    console.debug("[NavSentinel] blocked", { ...params, mode, ts: performance.now() });
+    console.debug("[NavSentinel] blocked", { ...params, mode, ts: nowMs() });
   }
   window.postMessage(
     {
@@ -99,7 +103,7 @@ function postBlocked(params: {
       url: params.url ?? "",
       target: params.target ?? "",
       features: params.features ?? "",
-      ts: performance.now()
+      ts: nowMs()
     },
     "*"
   );
@@ -113,7 +117,7 @@ function postAllowed(params: { kind: string; url?: string }): void {
       type: "ns-nav-allowed",
       kind: params.kind,
       url: params.url ?? "",
-      ts: performance.now()
+      ts: nowMs()
     },
     "*"
   );
@@ -130,7 +134,7 @@ function registerBlockedAction(params: {
   const id = makeId();
   blockedActions.set(id, {
     action: params.action,
-    expiresAt: performance.now() + BLOCKED_ACTION_TTL_MS,
+    expiresAt: nowMs() + BLOCKED_ACTION_TTL_MS,
     kind: params.kind,
     url: params.url,
     target: params.target,
@@ -344,7 +348,7 @@ window.addEventListener(
     if (data.type === "ns-allow-action" && data.id) {
       const entry = blockedActions.get(data.id);
       if (!entry) return;
-      if (entry.expiresAt <= performance.now()) {
+      if (entry.expiresAt <= nowMs()) {
         blockedActions.delete(data.id);
         return;
       }
