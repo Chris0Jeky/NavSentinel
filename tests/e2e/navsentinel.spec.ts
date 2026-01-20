@@ -14,12 +14,14 @@ const extensionPath = process.env.EXTENSION_PATH
 const baseUrl = process.env.GYM_BASE_URL ?? "http://localhost:5173";
 
 test("Level 1 blocks new tabs", async () => {
+  test.setTimeout(120_000);
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
 
   const context = await chromium.launchPersistentContext(userDataDir, {
     headless: false,
+    timeout: 60_000,
     args: [
       `--disable-extensions-except=${extensionPath}`,
       `--load-extension=${extensionPath}`
@@ -27,7 +29,13 @@ test("Level 1 blocks new tabs", async () => {
   });
 
   const page = await context.newPage();
-  await page.goto(`${baseUrl}/level1-basic-opacity.html`);
+  try {
+    await page.goto(`${baseUrl}/level1-basic-opacity.html`, { waitUntil: "domcontentloaded", timeout: 10_000 });
+  } catch (err) {
+    throw new Error(
+      `Gym server not reachable at ${baseUrl}. Start it with: cd gym && python -m http.server 5173. (${String(err)})`
+    );
+  }
 
   const popupPromise = page.waitForEvent("popup", { timeout: 1500 }).catch(() => null);
   await page.click("#play");
