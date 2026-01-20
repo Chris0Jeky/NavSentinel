@@ -111,6 +111,7 @@ function showRollbackPrompt(url: string): void {
       return url || "destination";
     }
   })();
+  (window as any).__navsentinelRollbackPrompt = { url, ts: now };
   showToast({
     message: `NavSentinel rolled back a redirect to ${host}.`,
     actions: [
