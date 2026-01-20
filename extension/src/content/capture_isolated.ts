@@ -137,18 +137,21 @@ function showRollbackPrompt(url: string): void {
   });
 }
 
-function handleRollback(url: string): void {
+function handleRollback(url: string, prevUrl?: string): void {
   if (settings.defaultMode === "off") return;
   if (window.top !== window) return;
   if (!url) return;
-  try {
-    if (history.length > 1) {
+  const target = prevUrl && prevUrl !== url ? prevUrl : "";
+  if (target) {
+    try {
       chrome.runtime.sendMessage({ type: "ns-store-forward", url });
-      history.back();
+      notifyNavAllow();
+      postToMain("ns-allow", { allowOpen: false, allowRedirect: true });
+      location.replace(target);
       return;
+    } catch {
+      // ignore
     }
-  } catch {
-    // ignore
   }
   showRollbackPrompt(url);
 }
@@ -360,7 +363,8 @@ if (chrome?.runtime?.onMessage) {
     if (window.top !== window) return;
     if (settings.defaultMode === "off") return;
     const url = typeof message.url === "string" ? message.url : "";
-    handleRollback(url);
+    const prevUrl = typeof (message as any).prevUrl === "string" ? (message as any).prevUrl : "";
+    handleRollback(url, prevUrl);
   });
 
   chrome.runtime.onMessage.addListener((message) => {
@@ -379,7 +383,8 @@ if (chrome?.runtime?.sendMessage && window.top === window) {
       if (!resp || !resp.shouldRollback) return;
       if (settings.defaultMode === "off") return;
       const url = typeof resp.entry?.url === "string" ? resp.entry.url : "";
-      handleRollback(url);
+      const prevUrl = typeof resp.prevUrl === "string" ? resp.prevUrl : "";
+      handleRollback(url, prevUrl);
     });
   };
   if (document.readyState === "loading") {
