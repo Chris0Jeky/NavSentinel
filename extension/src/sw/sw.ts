@@ -1,6 +1,11 @@
 import { getSettings, SETTINGS_KEY } from "../shared/storage";
 
 const BASELINE_RULESET_ID = "baseline";
+const NAV_ALLOW_TTL_MS = 1500;
+const ROLLBACK_SUPPRESS_MS = 6000;
+
+const allowUntilByTab = new Map<number, number>();
+const suppressUntilByTab = new Map<number, number>();
 
 async function syncDnrRulesets(): Promise<void> {
   try {
@@ -29,4 +34,44 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== "local") return;
   if (!changes[SETTINGS_KEY]) return;
   void syncDnrRulesets();
+});
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (!message || typeof message !== "object") return;
+  if (message.type === "ns-allow-nav") {
+    const tabId = sender.tab?.id;
+    if (typeof tabId === "number") {
+      const ttl = typeof message.ttlMs === "number" ? message.ttlMs : NAV_ALLOW_TTL_MS;
+      allowUntilByTab.set(tabId, Date.now() + ttl);
+    }
+    sendResponse?.({ ok: true });
+  }
+});
+
+chrome.webNavigation.onCommitted.addListener((details) => {
+  if (details.frameId !== 0) return;
+  const qualifiers = details.transitionQualifiers ?? [];
+  const isRedirect =
+    qualifiers.includes("client_redirect") || qualifiers.includes("server_redirect");
+
+  if (!isRedirect) return;
+
+  const now = Date.now();
+  const allowUntil = allowUntilByTab.get(details.tabId) ?? 0;
+  if (now <= allowUntil) return;
+
+  const suppressUntil = suppressUntilByTab.get(details.tabId) ?? 0;
+  if (now <= suppressUntil) return;
+
+  suppressUntilByTab.set(details.tabId, now + ROLLBACK_SUPPRESS_MS);
+  chrome.tabs.sendMessage(details.tabId, {
+    type: "ns-rollback",
+    url: details.url,
+    qualifiers
+  });
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  allowUntilByTab.delete(tabId);
+  suppressUntilByTab.delete(tabId);
 });
