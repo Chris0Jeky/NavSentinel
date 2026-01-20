@@ -38,7 +38,7 @@ Stage 4 - Same-tab redirects and forms
 - Note: Chrome makes window.location.assign non-writable; add a fallback (DNR or post-nav rollback) if needed.
 
 Stage 5 - DNR backstop (optional)
-- Add DNR ruleset generator and baseline rules.
+- Add DNR ruleset generator and baseline rules (toggleable).
 - Consider dynamic DNR blocks for known-bad destinations (temporary).
 - Optional: allow advanced users to import a small known-bad list.
 
