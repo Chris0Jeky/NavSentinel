@@ -42,6 +42,9 @@ If the Options link is missing in `chrome://extensions`, open it directly:
 Explicit intent checks:
 - Ctrl/Cmd+click or middle-click should set `ExplicitNewTab: yes` in the debug overlay and allow the open without prompting.
 
+## Known gaps
+- Level 2 can be inconsistent on some machines (no prompt, no navigation). If you see this, try moving the mouse after page load before clicking. If it still does nothing, log it as a known issue.
+
 ## Debugging tips
 - After rebuilding, click `Reload` for the extension in `chrome://extensions`.
 - Confirm the main-world patch is running: open DevTools Console on a Gym page and check `window.__navsentinelMainGuard === true`.
