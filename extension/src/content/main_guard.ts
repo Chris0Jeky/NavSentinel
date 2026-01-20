@@ -27,8 +27,21 @@ const blockedActions = new Map<
   }
 >();
 
+type NavStatus = "allowed" | "blocked";
+
 function nowMs(): number {
   return Date.now();
+}
+
+function recordNav(status: NavStatus, params: { kind: string; url?: string }): void {
+  (window as any).__navsentinelLastNav = {
+    status,
+    kind: params.kind,
+    url: params.url ?? "",
+    ts: nowMs(),
+    allowOpenUntil,
+    allowRedirectUntil
+  };
 }
 
 function markAllowance(params: { allowOpen: boolean; allowRedirect: boolean }): void {
@@ -90,6 +103,7 @@ function postBlocked(params: {
   target?: string;
   features?: string;
 }): void {
+  recordNav("blocked", { kind: params.kind, url: params.url });
   if (debug) {
     // eslint-disable-next-line no-console
     console.debug("[NavSentinel] blocked", { ...params, mode, ts: nowMs() });
@@ -110,6 +124,7 @@ function postBlocked(params: {
 }
 
 function postAllowed(params: { kind: string; url?: string }): void {
+  recordNav("allowed", params);
   if (!debug) return;
   window.postMessage(
     {
@@ -260,6 +275,13 @@ function patchLocation(): void {
       // ignore
     }
   }
+
+  (window as any).__navsentinelLocationPatch = {
+    protoAssign: Location.prototype.assign === patchedAssign,
+    protoReplace: Location.prototype.replace === patchedReplace,
+    locAssign: window.location.assign === patchedAssign,
+    locReplace: window.location.replace === patchedReplace
+  };
 }
 
 function patchForms(): void {
