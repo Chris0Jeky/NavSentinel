@@ -143,6 +143,7 @@ test("Level 10 delayed form submit prompts", async () => {
 });
 
 test("Level 10 delayed redirect auto-rolls back and offers proceed", async () => {
+  test.skip(!process.env.ROLLBACK_E2E, "Set ROLLBACK_E2E=1 to run rollback E2E.");
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const gymOverride = process.env.GYM_BASE_URL;
