@@ -16,7 +16,7 @@ import {
   buildClickContextFromEvents,
   type DownCapture
 } from "./dom_builder";
-import { setDebugEnabled, updateDebugOverlay } from "./debug_overlay";
+import { setDebugEnabled, updateDebugOverlay, type DebugInfo } from "./debug_overlay";
 
 const CDS_BLOCK_THRESHOLD = 70;
 const NS_SOURCE = "__navsentinel__";
@@ -24,11 +24,27 @@ const NS_SOURCE = "__navsentinel__";
 let lastDown: DownCapture | null = null;
 let settings = { defaultMode: "smart", debug: false };
 let allowlist: Allowlist = {};
+let mainGuard: "unknown" | "yes" | "no" = "unknown";
+let lastNav: { kind: string; url: string } | null = null;
+let lastDebug: Omit<DebugInfo, "mainGuard" | "lastNav"> | null = null;
+
+function refreshDebug(): void {
+  if (!lastDebug) return;
+  updateDebugOverlay({ ...lastDebug, mainGuard, lastNav: lastNav ?? undefined });
+}
 
 async function initSettings() {
   settings = await getSettings();
   allowlist = await getAllowlist();
   setDebugEnabled(settings.debug);
+  postToMain("ns-config", { mode: settings.defaultMode, debug: settings.debug });
+  postToMain("ns-ping");
+  window.setTimeout(() => {
+    if (mainGuard === "unknown") {
+      mainGuard = "no";
+      refreshDebug();
+    }
+  }, 750);
 }
 
 initSettings();
@@ -36,6 +52,8 @@ initSettings();
 onSettingsChange((s) => {
   settings = s;
   setDebugEnabled(s.debug);
+  postToMain("ns-config", { mode: s.defaultMode, debug: s.debug });
+  refreshDebug();
 });
 
 onAllowlistChange((list) => {
@@ -151,11 +169,24 @@ window.addEventListener(
       url?: string;
       target?: string;
       features?: string;
+      mode?: "off" | "smart" | "strict";
     };
     if (!data || data.source !== NS_SOURCE) return;
 
+    if (data.type === "ns-pong" || data.type === "ns-config-ack") {
+      mainGuard = "yes";
+      refreshDebug();
+      return;
+    }
+
     if (data.type === "ns-nav-blocked") {
-      if (settings.defaultMode === "off") return;
+      lastNav = { kind: data.kind ?? "unknown", url: data.url ?? "" };
+      refreshDebug();
+
+      if (settings.defaultMode === "off") {
+        allowActionOnce(data.id, data.url, data.target, data.features);
+        return;
+      }
       const parsed = parseDestination(data.url);
       const url = parsed.href ?? data.url ?? "";
       if (!url) return;
@@ -179,27 +210,6 @@ window.addEventListener(
         target: data.target || "_blank",
         features: data.features,
         actionId: data.id
-      });
-    }
-
-    if (data.type === "ns-window-open-blocked") {
-      if (settings.defaultMode === "off") return;
-      const parsed = parseDestination(data.url);
-      const url = parsed.href ?? data.url ?? "";
-
-      if (!url) return;
-
-      if (parsed.host && isAllowlisted(allowlist, siteKeyFromLocation(), parsed.host)) {
-        allowOnce(url, data.target || "_blank", data.features);
-        return;
-      }
-
-      showAllowPrompt({
-        title: "Blocked popup",
-        url,
-        host: parsed.host,
-        target: data.target || "_blank",
-        features: data.features
       });
     }
   },
@@ -318,7 +328,8 @@ window.addEventListener(
       });
     }
 
-    updateDebugOverlay({ mode, decision, cds, reasonCodes, ctx });
+    lastDebug = { mode, decision, cds, reasonCodes, ctx };
+    refreshDebug();
 
     if (settings.debug) {
       // eslint-disable-next-line no-console
