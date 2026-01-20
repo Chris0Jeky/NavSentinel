@@ -79,6 +79,10 @@ test("Level 1 blocks new tabs", async () => {
       const page = await context.newPage();
       await page.goto(`${baseUrl}/level1-basic-opacity.html`, { waitUntil: "domcontentloaded", timeout: 20_000 });
 
+      await expect(
+        page.evaluate(() => (window as any).__navsentinelMainGuard === true)
+      ).resolves.toBe(true);
+
       const play = page.locator("#play");
       const box = await play.boundingBox();
       expect(box, "#play button should be visible").toBeTruthy();
@@ -91,6 +95,44 @@ test("Level 1 blocks new tabs", async () => {
   } finally {
     if (gym) await gym.close();
 
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("Level 10 delayed redirect prompts", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const gymOverride = process.env.GYM_BASE_URL;
+  const gym = gymOverride ? null : await startGymServer();
+  const baseUrl = gymOverride ?? gym!.baseUrl;
+
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/level10-redirects-and-forms.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await expect(
+        page.evaluate(() => (window as any).__navsentinelMainGuard === true)
+      ).resolves.toBe(true);
+
+      await page.click("#delayed");
+      await expect(page.locator("text=Blocked redirect")).toBeVisible({ timeout: 4000 });
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
     fs.rmSync(userDataDir, { recursive: true, force: true });
   }
 });
