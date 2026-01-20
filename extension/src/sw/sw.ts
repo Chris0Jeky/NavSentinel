@@ -98,6 +98,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const tabId = sender.tab?.id;
     if (typeof tabId === "number") {
       const forward = pendingForwardByTab.get(tabId);
+      const currentUrl = typeof message.currentUrl === "string" ? message.currentUrl : "";
+      if (forward && currentUrl && forward.url === currentUrl) {
+        sendResponse?.({ url: "" });
+        return;
+      }
       if (forward) pendingForwardByTab.delete(tabId);
       sendResponse?.({ url: forward?.url });
     }
