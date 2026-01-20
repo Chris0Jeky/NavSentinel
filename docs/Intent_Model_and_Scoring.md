@@ -57,6 +57,9 @@ Decision thresholds:
 - Block: >= 70
 - Strict mode: block >= 50
 
+Note:
+- NRS is not implemented yet. Current behavior uses CDS for deceptive click blocking and separate new-tab gating rules.
+
 ## Explainability
 - Each score contribution produces a reason code.
 - Prompt UI should show destination URL with allow-once and always-allow actions.
