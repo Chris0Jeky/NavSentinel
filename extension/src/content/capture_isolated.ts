@@ -21,6 +21,7 @@ import { setDebugEnabled, updateDebugOverlay, type DebugInfo } from "./debug_ove
 const CDS_SMART_BLOCK_THRESHOLD = 70;
 const CDS_STRICT_BLOCK_THRESHOLD = 50;
 const NS_SOURCE = "__navsentinel__";
+const NAV_ALLOW_TTL_MS = 1500;
 const RISKY_BLANK_REASONS = new Set([
   "intent_mismatch_under_interactive",
   "invisible_but_clickable",
@@ -81,6 +82,14 @@ function postToMain(type: string, payload?: Record<string, unknown>): void {
   window.postMessage({ source: NS_SOURCE, type, ...(payload ?? {}) }, "*");
 }
 
+function notifyNavAllow(ttlMs = NAV_ALLOW_TTL_MS): void {
+  try {
+    chrome.runtime.sendMessage({ type: "ns-allow-nav", ttlMs });
+  } catch {
+    // ignore
+  }
+}
+
 function parseDestination(rawUrl: string | null | undefined): { href: string | null; host: string | null } {
   if (!rawUrl) return { href: null, host: null };
   try {
@@ -128,6 +137,7 @@ function findAnchorFromEvent(e: MouseEvent): HTMLAnchorElement | null {
 }
 
 function allowOnce(url: string, target?: string, features?: string): void {
+  notifyNavAllow();
   postToMain("ns-allow-once");
   window.setTimeout(() => {
     try {
@@ -140,6 +150,7 @@ function allowOnce(url: string, target?: string, features?: string): void {
 
 function allowActionOnce(actionId?: string | null, url?: string, target?: string, features?: string): void {
   if (actionId) {
+    notifyNavAllow();
     postToMain("ns-allow-action", { id: actionId });
     return;
   }
@@ -257,6 +268,39 @@ window.addEventListener(
   true
 );
 
+if (chrome?.runtime?.onMessage) {
+  chrome.runtime.onMessage.addListener((message) => {
+    if (!message || message.type !== "ns-rollback") return;
+    if (window.top !== window) return;
+    if (settings.defaultMode === "off") return;
+    const url = typeof message.url === "string" ? message.url : "";
+    lastNav = { kind: "rollback", url, status: "blocked" };
+    refreshDebug();
+    showToast({
+      message: "NavSentinel detected a redirect without recent user intent.",
+      actions: [
+        {
+          label: "Go back",
+          onClick: () => {
+            try {
+              history.back();
+            } catch {
+              // ignore
+            }
+          }
+        },
+        {
+          label: "Stay",
+          onClick: () => {
+            // no-op
+          }
+        }
+      ],
+      timeoutMs: 0
+    });
+  });
+}
+
 window.addEventListener(
   "pointerdown",
   (e) => {
@@ -365,6 +409,7 @@ window.addEventListener(
     }
 
     if (decision === "allow") {
+      notifyNavAllow();
       postToMain("ns-allow", {
         allowOpen: mode === "off" || explicitNewTab,
         allowRedirect: true
