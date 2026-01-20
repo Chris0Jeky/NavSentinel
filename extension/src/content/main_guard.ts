@@ -192,7 +192,7 @@ function resolveFormAction(form: HTMLFormElement): string | undefined {
 }
 
 function patchLocation(): void {
-  Location.prototype.assign = function (url: string | URL): void {
+  const patchedAssign = function (this: Location, url: string | URL): void {
     if (isOff()) {
       postAllowed({ kind: "location_assign", url: String(url) });
       nativeAssign.call(this, url);
@@ -211,7 +211,7 @@ function patchLocation(): void {
     });
   };
 
-  Location.prototype.replace = function (url: string | URL): void {
+  const patchedReplace = function (this: Location, url: string | URL): void {
     if (isOff()) {
       postAllowed({ kind: "location_replace", url: String(url) });
       nativeReplace.call(this, url);
@@ -229,6 +229,37 @@ function patchLocation(): void {
       action: () => nativeReplace.call(this, url)
     });
   };
+
+  Location.prototype.assign = patchedAssign;
+  Location.prototype.replace = patchedReplace;
+
+  try {
+    Object.defineProperty(window.location, "assign", {
+      value: patchedAssign,
+      writable: true,
+      configurable: true
+    });
+  } catch {
+    try {
+      (window.location as any).assign = patchedAssign;
+    } catch {
+      // ignore
+    }
+  }
+
+  try {
+    Object.defineProperty(window.location, "replace", {
+      value: patchedReplace,
+      writable: true,
+      configurable: true
+    });
+  } catch {
+    try {
+      (window.location as any).replace = patchedReplace;
+    } catch {
+      // ignore
+    }
+  }
 }
 
 function patchForms(): void {
