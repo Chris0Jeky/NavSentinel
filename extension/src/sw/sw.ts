@@ -158,3 +158,13 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   pendingForwardByTab.delete(tabId);
   lastCommittedByTab.delete(tabId);
 });
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  const forward = pendingForwardByTab.get(tabId);
+  if (!forward) return;
+  if (changeInfo.status !== "complete" && !changeInfo.url) return;
+  const currentUrl = tab.url ?? changeInfo.url ?? "";
+  if (!currentUrl || currentUrl === forward.url) return;
+  pendingForwardByTab.delete(tabId);
+  chrome.tabs.sendMessage(tabId, { type: "ns-forward-offer", url: forward.url });
+});
