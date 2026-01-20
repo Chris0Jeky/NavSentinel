@@ -6,6 +6,9 @@ const MAX_REDIRECTS_PER_GESTURE = 2;
 const ALLOW_ONCE_TTL_MS = 1200;
 const BLOCKED_ACTION_TTL_MS = 5000;
 
+let mode: "off" | "smart" | "strict" = "smart";
+let debug = false;
+
 let openCount = 0;
 let redirectCount = 0;
 let allowOnceRemaining = 0;
@@ -32,6 +35,10 @@ function markAllowance(params: { allowOpen: boolean; allowRedirect: boolean }): 
   allowRedirectUntil = params.allowRedirect ? now + REDIRECT_TTL_MS : 0;
 }
 
+function isOff(): boolean {
+  return mode === "off";
+}
+
 function setAllowOnce(): void {
   allowOnceRemaining = 1;
   allowOnceUntil = performance.now() + ALLOW_ONCE_TTL_MS;
@@ -41,7 +48,7 @@ function consumeOpenAllowance(): "allow_once" | "allowed" | "none" {
   const now = performance.now();
   if (allowOnceRemaining > 0 && now <= allowOnceUntil) {
     allowOnceRemaining -= 1;
-      return "allow_once";
+    return "allow_once";
   }
   if (allowOpenUntil > 0 && now <= allowOpenUntil && openCount < MAX_OPENS_PER_GESTURE) {
     openCount += 1;
@@ -79,6 +86,10 @@ function postBlocked(params: {
   target?: string;
   features?: string;
 }): void {
+  if (debug) {
+    // eslint-disable-next-line no-console
+    console.debug("[NavSentinel] blocked", { ...params, mode, ts: performance.now() });
+  }
   window.postMessage(
     {
       source: NS_SOURCE,
@@ -129,6 +140,9 @@ function callNativeOpen(thisArg: Window, url?: string | URL, target?: string, fe
 }
 
 function patchedOpen(this: Window, url?: string | URL, target?: string, features?: string): Window | null {
+  if (isOff()) {
+    return callNativeOpen(this, url, target, features);
+  }
   const allowance = consumeOpenAllowance();
   if (allowance !== "none") {
     return callNativeOpen(this, url, target, features);
@@ -159,6 +173,10 @@ function resolveFormAction(form: HTMLFormElement): string | undefined {
 
 function patchLocation(): void {
   Location.prototype.assign = function (url: string | URL): void {
+    if (isOff()) {
+      nativeAssign.call(this, url);
+      return;
+    }
     const allowance = consumeRedirectAllowance();
     if (allowance !== "none") {
       nativeAssign.call(this, url);
@@ -172,6 +190,10 @@ function patchLocation(): void {
   };
 
   Location.prototype.replace = function (url: string | URL): void {
+    if (isOff()) {
+      nativeReplace.call(this, url);
+      return;
+    }
     const allowance = consumeRedirectAllowance();
     if (allowance !== "none") {
       nativeReplace.call(this, url);
@@ -187,6 +209,10 @@ function patchLocation(): void {
 
 function patchForms(): void {
   HTMLFormElement.prototype.submit = function (): void {
+    if (isOff()) {
+      nativeFormSubmit.call(this);
+      return;
+    }
     const allowance = consumeRedirectAllowance();
     if (allowance !== "none") {
       nativeFormSubmit.call(this);
@@ -202,6 +228,10 @@ function patchForms(): void {
 
   if (nativeFormRequestSubmit) {
     HTMLFormElement.prototype.requestSubmit = function (submitter?: HTMLElement | null): void {
+      if (isOff()) {
+        nativeFormRequestSubmit.call(this, submitter as any);
+        return;
+      }
       const allowance = consumeRedirectAllowance();
       if (allowance !== "none") {
         nativeFormRequestSubmit.call(this, submitter as any);
@@ -239,11 +269,29 @@ window.addEventListener(
   "message",
   (event) => {
     if (event.source !== window) return;
-    const data = event.data as { source?: string; type?: string; id?: string };
+    const data = event.data as {
+      source?: string;
+      type?: string;
+      id?: string;
+      mode?: "off" | "smart" | "strict";
+      debug?: boolean;
+      allowOpen?: boolean;
+      allowRedirect?: boolean;
+    };
     if (!data || data.source !== NS_SOURCE) return;
 
     if (data.type === "ns-gesture-allow") {
       markAllowance({ allowOpen: true, allowRedirect: true });
+    }
+
+    if (data.type === "ns-config") {
+      if (data.mode) mode = data.mode;
+      if (typeof data.debug === "boolean") debug = data.debug;
+      window.postMessage({ source: NS_SOURCE, type: "ns-config-ack", mode, debug }, "*");
+    }
+
+    if (data.type === "ns-ping") {
+      window.postMessage({ source: NS_SOURCE, type: "ns-pong", mode, debug }, "*");
     }
 
     if (data.type === "ns-allow-once") {
@@ -251,9 +299,18 @@ window.addEventListener(
     }
 
     if (data.type === "ns-allow") {
-      const allowOpen = (event.data as any).allowOpen === true;
-      const allowRedirect = (event.data as any).allowRedirect === true;
+      const allowOpen = data.allowOpen === true;
+      const allowRedirect = data.allowRedirect === true;
       markAllowance({ allowOpen, allowRedirect });
+      if (debug) {
+        // eslint-disable-next-line no-console
+        console.debug("[NavSentinel] allowance", {
+          allowOpen,
+          allowRedirect,
+          openUntil: allowOpenUntil,
+          redirectUntil: allowRedirectUntil
+        });
+      }
     }
 
     if (data.type === "ns-allow-action" && data.id) {
