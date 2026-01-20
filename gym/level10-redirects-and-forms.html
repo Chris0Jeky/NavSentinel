@@ -1,0 +1,53 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Level 10 - Redirects and Forms</title>
+  <style>
+    body { font-family: sans-serif; padding: 24px; }
+    button { padding: 12px 14px; font-size: 16px; margin-right: 10px; }
+    #box { border: 2px dashed #999; padding: 16px; margin-top: 18px; }
+    code { background: #f4f4f4; padding: 2px 4px; }
+  </style>
+</head>
+<body>
+  <h1>Level 10: Same-tab redirects and form submits</h1>
+  <p>This level demonstrates same-tab navigation primitives.</p>
+  <ul>
+    <li><strong>Immediate redirect</strong> should usually be allowed (it is tightly coupled to the click).</li>
+    <li><strong>Delayed redirect</strong> should be blocked and prompt (it fires after the gesture window).</li>
+    <li><strong>Programmatic form submit</strong> should be blocked and prompt when triggered outside the gesture window.</li>
+  </ul>
+
+  <div id="box">
+    <button id="immediate">Immediate redirect</button>
+    <button id="delayed">Delayed redirect (2s)</button>
+    <button id="submitDelayed">Programmatic form submit (2s)</button>
+
+    <form id="f" action="level1-basic-opacity.html" method="GET">
+      <input type="hidden" name="from" value="level10" />
+    </form>
+  </div>
+
+  <p>Note: if you click <code>Allow once</code> the extension should execute the exact blocked navigation.</p>
+
+  <script>
+    const immediate = document.getElementById('immediate');
+    const delayed = document.getElementById('delayed');
+    const submitDelayed = document.getElementById('submitDelayed');
+    const form = document.getElementById('f');
+
+    immediate.addEventListener('click', () => {
+      location.assign('level4-visual-mimicry.html');
+    });
+
+    delayed.addEventListener('click', () => {
+      setTimeout(() => location.assign('level4-visual-mimicry.html'), 2000);
+    });
+
+    submitDelayed.addEventListener('click', () => {
+      setTimeout(() => form.submit(), 2000);
+    });
+  </script>
+</body>
+</html>
