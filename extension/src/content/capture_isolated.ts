@@ -399,6 +399,11 @@ if (chrome?.runtime?.sendMessage && window.top === window) {
     });
   };
   window.addEventListener("pageshow", runForward);
+  window.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      runForward();
+    }
+  });
   if (document.readyState === "loading") {
     window.addEventListener("DOMContentLoaded", runForward, { once: true });
   } else {
