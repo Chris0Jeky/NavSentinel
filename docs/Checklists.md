@@ -7,7 +7,7 @@
 - [x] Implement CDS v1 with reason codes.
 - [x] Implement overlay blocking (Stage 2).
 - [x] Implement window.open and target=_blank gating (Stage 3).
-- [ ] Build Options UI with modes and allowlist.
+- [x] Build Options UI with modes and allowlist.
 - [ ] Add unit tests for CDS and edge cases.
 - [x] Add at least one Playwright e2e test against the Gym.
 - [x] Implement same-tab redirect gating (Stage 4).
@@ -57,6 +57,7 @@
 ## Testing checklist
 - [ ] Unit tests for CDS edge cases (Vitest + JSDOM).
 - [x] E2E tests for Gym Level 1 at minimum (Playwright).
+- [x] E2E test for Level 10 delayed redirect prompt (Playwright).
 - [ ] Regression tests for Levels 7-9 (legit UI cases).
 - [ ] Add a multi-popup test case for auto-block behavior.
 - [ ] Investigate Level 2 moving target inconsistencies (no prompt).
