@@ -18,6 +18,7 @@ Modes:
 Prompt vs block:
 - Prompt = a toast with `Allow once` / `Always allow` (used for navigations).
 - Block = toast with only `Dismiss` (used for deceptive clicks with no safe replay).
+- Rollback prompt = a toast with `Go back` / `Stay` shown after a client-side redirect without recent user intent.
 
 ## What "block" means in the Gym
 - For `_blank` links: NavSentinel calls `preventDefault()` and shows an in-page prompt (toast) with `Allow once` / `Always allow`.
