@@ -37,6 +37,7 @@ let allowlist: Allowlist = {};
 let mainGuard: "unknown" | "yes" | "no" = "unknown";
 let lastNav: { kind: string; url: string; status: "allowed" | "blocked" } | null = null;
 let lastDebug: Omit<DebugInfo, "mainGuard" | "lastNav"> | null = null;
+let rollbackShownAt = 0;
 
 function refreshDebug(): void {
   if (!lastDebug) return;
@@ -98,6 +99,9 @@ function notifyNavAllow(ttlMs = NAV_ALLOW_TTL_MS): void {
 }
 
 function showRollbackPrompt(url: string): void {
+  const now = Date.now();
+  if (now - rollbackShownAt < 750) return;
+  rollbackShownAt = now;
   lastNav = { kind: "rollback", url, status: "blocked" };
   refreshDebug();
   showToast({
