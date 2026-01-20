@@ -101,6 +101,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       pendingForwardByTab.set(tabId, { url: message.url, ts: Date.now() });
     }
   }
+
+  if (message.type === "ns-check-forward") {
+    const tabId = sender.tab?.id;
+    if (typeof tabId === "number") {
+      const forward = pendingForwardByTab.get(tabId);
+      if (forward) pendingForwardByTab.delete(tabId);
+      sendResponse?.({ url: forward?.url });
+    }
+  }
 });
 
 chrome.webNavigation.onCommitted.addListener((details) => {
