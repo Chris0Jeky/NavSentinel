@@ -142,7 +142,7 @@ test("Level 10 delayed form submit prompts", async () => {
   }
 });
 
-test("Level 10 delayed redirect triggers rollback prompt", async () => {
+test("Level 10 delayed redirect auto-rolls back and offers proceed", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const gymOverride = process.env.GYM_BASE_URL;
@@ -167,14 +167,59 @@ test("Level 10 delayed redirect triggers rollback prompt", async () => {
 
       await page.click("#delayed");
       await page.waitForURL(/level4-visual-mimicry\.html/, { timeout: 7000 });
+      await page.waitForURL(/level10-redirects-and-forms\.html/, { timeout: 7000 });
       await expect(
-        page.locator("text=NavSentinel detected a redirect without recent user intent.")
+        page.locator("text=NavSentinel rolled back a redirect")
       ).toBeVisible({ timeout: 4000 });
     } finally {
       await context.close();
     }
   } finally {
     if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("Live: Google first result opens with no prompt", async () => {
+  test.skip(!process.env.LIVE_E2E, "Set LIVE_E2E=1 to run live web tests.");
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto("https://www.google.com/search?q=google", {
+        waitUntil: "domcontentloaded",
+        timeout: 30_000
+      });
+
+      const consent = page.getByRole("button", { name: /I agree|Accept all|Accept/i });
+      if (await consent.count()) {
+        await consent.first().click().catch(() => {});
+      }
+
+      const firstResult = page.locator("a h3").first();
+      await expect(firstResult).toBeVisible({ timeout: 10_000 });
+
+      const popupPromise = context.waitForEvent("page", { timeout: 10_000 }).catch(() => null);
+      await page.keyboard.down("Control");
+      await firstResult.click();
+      await page.keyboard.up("Control");
+
+      const popup = await popupPromise;
+      expect(popup, "Expected a new tab from ctrl+click").not.toBeNull();
+      await expect(page.locator("text=Blocked new tab")).toHaveCount(0);
+    } finally {
+      await context.close();
+    }
+  } finally {
     fs.rmSync(userDataDir, { recursive: true, force: true });
   }
 });
