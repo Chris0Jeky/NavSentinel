@@ -73,14 +73,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           qualifiers: pending.qualifiers
         });
       }
-      const forward = pendingForwardByTab.get(tabId);
-      if (forward) {
-        pendingForwardByTab.delete(tabId);
-        chrome.tabs.sendMessage(tabId, {
-          type: "ns-forward-offer",
-          url: forward.url
-        });
-      }
     }
   }
 
@@ -140,6 +132,7 @@ chrome.webNavigation.onCommitted.addListener((details) => {
   const suppressUntil = suppressUntilByTab.get(details.tabId) ?? 0;
   if (now <= suppressUntil) return;
 
+  pendingForwardByTab.set(details.tabId, { url: details.url, ts: now });
   suppressUntilByTab.set(details.tabId, now + ROLLBACK_SUPPRESS_MS);
   if (readyTabs.has(details.tabId)) {
     chrome.tabs.sendMessage(details.tabId, {
