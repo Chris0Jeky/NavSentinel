@@ -3,13 +3,15 @@ import type { Mode } from "./types";
 export interface Settings {
   defaultMode: Mode;
   debug: boolean;
+  dnrEnabled: boolean;
 }
 
 export const SETTINGS_KEY = "navsentinel:settings";
 
 const DEFAULT_SETTINGS: Settings = {
   defaultMode: "smart",
-  debug: false
+  debug: false,
+  dnrEnabled: false
 };
 
 export async function getSettings(): Promise<Settings> {
