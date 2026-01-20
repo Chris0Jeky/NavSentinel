@@ -24,6 +24,7 @@
 ## Gym checklist
 - [x] Create Levels 1-9 HTML pages.
 - [x] Add Gym index page for quick navigation.
+- [x] Add Gym Level 10 for Stage 4.
 - [x] Verify each level manually with no extension installed.
 - [ ] Document expected outcomes for each level.
 
