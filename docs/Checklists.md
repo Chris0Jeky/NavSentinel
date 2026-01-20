@@ -48,7 +48,8 @@
 - [x] Invalidate token after first allowed open and auto-block extra attempts.
 
 ## Stage 4+ checklist (redirects and backstop)
-- [x] Patch location.assign/replace and form submits.
+- [x] Patch location.assign/replace (prototype) and form submits.
+- [ ] Add fallback for unpatchable window.location.assign/replace (Chrome limitation).
 - [x] Add navigation attempt logging and correlation.
 - [ ] Consider short-window history.pushState gating.
 - [ ] Implement DNR ruleset and baseline rules.
