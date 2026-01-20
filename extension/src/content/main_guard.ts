@@ -280,7 +280,15 @@ function patchLocation(): void {
     protoAssign: Location.prototype.assign === patchedAssign,
     protoReplace: Location.prototype.replace === patchedReplace,
     locAssign: window.location.assign === patchedAssign,
-    locReplace: window.location.replace === patchedReplace
+    locReplace: window.location.replace === patchedReplace,
+    locAssignDesc: (() => {
+      const desc = Object.getOwnPropertyDescriptor(window.location, "assign");
+      return desc ? { configurable: !!desc.configurable, writable: !!(desc as any).writable } : null;
+    })(),
+    locReplaceDesc: (() => {
+      const desc = Object.getOwnPropertyDescriptor(window.location, "replace");
+      return desc ? { configurable: !!desc.configurable, writable: !!(desc as any).writable } : null;
+    })()
   };
 }
 
