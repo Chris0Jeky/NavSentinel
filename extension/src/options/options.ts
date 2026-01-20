@@ -4,6 +4,7 @@ import type { Mode } from "../shared/types";
 
 const modeEl = document.getElementById("mode") as HTMLSelectElement;
 const debugEl = document.getElementById("debug") as HTMLInputElement;
+const dnrEl = document.getElementById("dnrEnabled") as HTMLInputElement;
 const statusEl = document.getElementById("status") as HTMLSpanElement;
 const saveBtn = document.getElementById("save") as HTMLButtonElement;
 const allowlistEl = document.getElementById("allowlist") as HTMLDivElement;
@@ -74,12 +75,13 @@ async function init() {
   const s = await getSettings();
   modeEl.value = s.defaultMode;
   debugEl.checked = s.debug;
+  dnrEl.checked = s.dnrEnabled;
   await refreshAllowlist();
 }
 
 saveBtn.addEventListener("click", async () => {
   const m = modeEl.value as Mode;
-  await setSettings({ defaultMode: m, debug: debugEl.checked });
+  await setSettings({ defaultMode: m, debug: debugEl.checked, dnrEnabled: dnrEl.checked });
   setStatus("Saved.");
 });
 
