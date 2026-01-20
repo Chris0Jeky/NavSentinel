@@ -3,7 +3,7 @@
   "name": "NavSentinel (Dev)",
   "version": "0.1.0",
   "description": "Navigation Intent Firewall: blocks deceptive click overlays and unwanted user-gesture popups.",
-  "permissions": ["storage"],
+  "permissions": ["storage", "declarativeNetRequest", "declarativeNetRequestWithHostAccess"],
   "host_permissions": ["<all_urls>"],
 
   "background": {
@@ -31,5 +31,15 @@
   "options_ui": {
     "page": "src/options/options.html",
     "open_in_tab": true
+  },
+
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "baseline",
+        "enabled": false,
+        "path": "rules/dnr_static.json"
+      }
+    ]
   }
 }
