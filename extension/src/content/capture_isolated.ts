@@ -97,6 +97,33 @@ function notifyNavAllow(ttlMs = NAV_ALLOW_TTL_MS): void {
   }
 }
 
+function showRollbackPrompt(url: string): void {
+  lastNav = { kind: "rollback", url, status: "blocked" };
+  refreshDebug();
+  showToast({
+    message: "NavSentinel detected a redirect without recent user intent.",
+    actions: [
+      {
+        label: "Go back",
+        onClick: () => {
+          try {
+            history.back();
+          } catch {
+            // ignore
+          }
+        }
+      },
+      {
+        label: "Stay",
+        onClick: () => {
+          // no-op
+        }
+      }
+    ],
+    timeoutMs: 0
+  });
+}
+
 function parseDestination(rawUrl: string | null | undefined): { href: string | null; host: string | null } {
   if (!rawUrl) return { href: null, host: null };
   try {
