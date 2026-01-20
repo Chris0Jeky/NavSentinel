@@ -7,6 +7,8 @@ export type DebugInfo = {
   cds: number;
   reasonCodes: string[];
   ctx: ClickContext;
+  mainGuard?: "unknown" | "yes" | "no";
+  lastNav?: { kind: string; url: string };
 };
 
 let enabled = false;
@@ -90,9 +92,11 @@ export function updateDebugOverlay(info: DebugInfo): void {
   const lines = [
     "NavSentinel Debug",
     `Mode: ${info.mode}`,
+    `MainGuard: ${info.mainGuard ?? "unknown"}`,
     `Decision: ${info.decision}`,
     `CDS: ${info.cds}`,
     `Reasons: ${formatReasons(info.reasonCodes)}`,
+    `LastNav: ${info.lastNav ? `${info.lastNav.kind} ${info.lastNav.url}` : "none"}`,
     `Top: ${formatElement(top)} (${formatRect(top)})`,
     `Under: ${under ? `${formatElement(under)} (${formatRect(under)})` : "none"}`,
     `Retargeted: ${info.ctx.retargeted ? "yes" : "no"}`,
