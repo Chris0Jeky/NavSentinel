@@ -5,7 +5,7 @@ The Gym is a deterministic set of local HTML pages that simulate common maliciou
 
 ## What NavSentinel currently enforces
 - `_blank` links: blocked (toast prompt) unless user shows explicit intent (Ctrl/Cmd+click, middle click) or the destination is allowlisted.
-- `window.open`: blocked (toast prompt) unless the click was explicitly “new tab intent” (Ctrl/Cmd/middle) or the destination is allowlisted.
+- `window.open`: blocked (toast prompt) unless the click was explicitly "new tab intent" (Ctrl/Cmd/middle) or the destination is allowlisted.
 - Same-tab redirects (`location.assign/replace`) + form submits: allowed only shortly after an allowed click; delayed attempts prompt.
 
 Modes:
@@ -43,7 +43,7 @@ If the Options link is missing in `chrome://extensions`, open it directly:
 - Level 5 (any click triggers `window.open`): click inside the box. Expected (Smart/Strict): prompt "Blocked popup" for `example.com/?ad=1`.
 - Level 6 (programmatic click chain): click `Continue`. Expected (Smart/Strict): prompt "Blocked new tab" for `example.org/?forced=1`.
 - Level 7 (legit modal backdrop): should not be blocked; debug overlay should show low CDS.
-- Level 8 (legit OAuth popup): likely prompts (NavSentinel can’t know it’s OAuth yet); allow once should open it.
+- Level 8 (legit OAuth popup): likely prompts (NavSentinel can't know it's OAuth yet); allow once should open it.
 - Level 9 (legit video overlay controls): should not be blocked.
 - Level 10 (redirects/forms): `Immediate redirect` should navigate; delayed redirect should navigate then show a rollback prompt; delayed submit should prompt.
 
