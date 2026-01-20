@@ -276,9 +276,6 @@ window.addEventListener(
     setActiveToken(token);
 
     const explicitNewTab = !!ctx.explicitNewTabIntent;
-    if (mode === "off" || explicitNewTab) {
-      postToMain("ns-gesture-allow");
-    }
 
     const anchor = findAnchorFromEvent(e);
     const isBlankAnchor = !!(anchor && anchor.target === "_blank");
@@ -312,6 +309,13 @@ window.addEventListener(
           message: `NavSentinel blocked deceptive click (CDS=${cds}).`
         });
       }
+    }
+
+    if (decision === "allow") {
+      postToMain("ns-allow", {
+        allowOpen: mode === "off" || explicitNewTab,
+        allowRedirect: true
+      });
     }
 
     updateDebugOverlay({ mode, decision, cds, reasonCodes, ctx });
