@@ -31,7 +31,7 @@ const RISKY_BLANK_REASONS = new Set([
 ]);
 
 let lastDown: DownCapture | null = null;
-let settings = { defaultMode: "smart", debug: false };
+let settings = { defaultMode: "smart", debug: false, dnrEnabled: false };
 let allowlist: Allowlist = {};
 let mainGuard: "unknown" | "yes" | "no" = "unknown";
 let lastNav: { kind: string; url: string; status: "allowed" | "blocked" } | null = null;
