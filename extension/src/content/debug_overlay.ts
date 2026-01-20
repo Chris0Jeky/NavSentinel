@@ -3,12 +3,12 @@ import type { Mode } from "../shared/types";
 
 export type DebugInfo = {
   mode: Mode;
-  decision: "allow" | "block";
+  decision: "allow" | "prompt" | "block";
   cds: number;
   reasonCodes: string[];
   ctx: ClickContext;
   mainGuard?: "unknown" | "yes" | "no";
-  lastNav?: { kind: string; url: string };
+  lastNav?: { kind: string; url: string; status: "allowed" | "blocked" };
 };
 
 let enabled = false;
@@ -96,7 +96,7 @@ export function updateDebugOverlay(info: DebugInfo): void {
     `Decision: ${info.decision}`,
     `CDS: ${info.cds}`,
     `Reasons: ${formatReasons(info.reasonCodes)}`,
-    `LastNav: ${info.lastNav ? `${info.lastNav.kind} ${info.lastNav.url}` : "none"}`,
+    `LastNav: ${info.lastNav ? `${info.lastNav.status} ${info.lastNav.kind} ${info.lastNav.url}` : "none"}`,
     `Top: ${formatElement(top)} (${formatRect(top)})`,
     `Under: ${under ? `${formatElement(under)} (${formatRect(under)})` : "none"}`,
     `Retargeted: ${info.ctx.retargeted ? "yes" : "no"}`,
