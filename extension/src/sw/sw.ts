@@ -8,6 +8,7 @@ const allowUntilByTab = new Map<number, number>();
 const suppressUntilByTab = new Map<number, number>();
 const readyTabs = new Set<number>();
 const pendingRollbackByTab = new Map<number, { url: string; qualifiers: string[] }>();
+const pendingForwardByTab = new Map<number, { url: string; ts: number }>();
 const lastCommittedByTab = new Map<
   number,
   {
@@ -72,6 +73,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           qualifiers: pending.qualifiers
         });
       }
+      const forward = pendingForwardByTab.get(tabId);
+      if (forward) {
+        pendingForwardByTab.delete(tabId);
+        chrome.tabs.sendMessage(tabId, {
+          type: "ns-forward-offer",
+          url: forward.url
+        });
+      }
     }
   }
 
@@ -83,6 +92,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         shouldRollback: !!entry && !entry.allowedAtCommit,
         entry
       });
+    }
+  }
+
+  if (message.type === "ns-store-forward") {
+    const tabId = sender.tab?.id;
+    if (typeof tabId === "number" && typeof message.url === "string") {
+      pendingForwardByTab.set(tabId, { url: message.url, ts: Date.now() });
     }
   }
 });
@@ -132,5 +148,6 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   suppressUntilByTab.delete(tabId);
   readyTabs.delete(tabId);
   pendingRollbackByTab.delete(tabId);
+  pendingForwardByTab.delete(tabId);
   lastCommittedByTab.delete(tabId);
 });
