@@ -141,3 +141,71 @@ test("Level 10 delayed form submit prompts", async () => {
     fs.rmSync(userDataDir, { recursive: true, force: true });
   }
 });
+
+test("Level 5 blocks window.open popunder", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const gymOverride = process.env.GYM_BASE_URL;
+  const gym = gymOverride ? null : await startGymServer();
+  const baseUrl = gymOverride ?? gym!.baseUrl;
+
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/level5-window-open-popunder.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await page.click("#area");
+      await expect(page.locator("text=Blocked popup")).toBeVisible({ timeout: 3000 });
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("Level 6 blocks programmatic click new tab", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const gymOverride = process.env.GYM_BASE_URL;
+  const gym = gymOverride ? null : await startGymServer();
+  const baseUrl = gymOverride ?? gym!.baseUrl;
+
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/level6-programmatic-click.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await page.click("#real");
+      await expect(page.locator("text=Blocked new tab")).toBeVisible({ timeout: 3000 });
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
