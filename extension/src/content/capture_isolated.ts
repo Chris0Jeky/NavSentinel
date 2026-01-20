@@ -104,21 +104,29 @@ function showRollbackPrompt(url: string): void {
   rollbackShownAt = now;
   lastNav = { kind: "rollback", url, status: "blocked" };
   refreshDebug();
+  const host = (() => {
+    try {
+      return new URL(url).hostname;
+    } catch {
+      return url || "destination";
+    }
+  })();
   showToast({
-    message: "NavSentinel detected a redirect without recent user intent.",
+    message: `NavSentinel rolled back a redirect to ${host}.`,
     actions: [
       {
-        label: "Go back",
+        label: "Proceed",
         onClick: () => {
           try {
-            history.back();
+            notifyNavAllow();
+            location.assign(url);
           } catch {
             // ignore
           }
         }
       },
       {
-        label: "Stay",
+        label: "Dismiss",
         onClick: () => {
           // no-op
         }
@@ -126,6 +134,22 @@ function showRollbackPrompt(url: string): void {
     ],
     timeoutMs: 0
   });
+}
+
+function handleRollback(url: string): void {
+  if (settings.defaultMode === "off") return;
+  if (window.top !== window) return;
+  if (!url) return;
+  try {
+    if (history.length > 1) {
+      chrome.runtime.sendMessage({ type: "ns-store-forward", url });
+      history.back();
+      return;
+    }
+  } catch {
+    // ignore
+  }
+  showRollbackPrompt(url);
 }
 
 function parseDestination(rawUrl: string | null | undefined): { href: string | null; host: string | null } {
@@ -149,11 +173,34 @@ function isInteractive(h: { tag: string; role?: string; hasOnClick?: boolean }):
   return !!h.hasOnClick;
 }
 
-function isLegitBlankAnchor(ctx: { top: { tag: string; role?: string; hasOnClick?: boolean; textLength?: number; ariaLabelLength?: number; titleLength?: number }; retargeted?: boolean }, cds: number, reasonCodes: string[]): boolean {
+function elementNameLength(el: Element): number {
+  const text = (el.textContent ?? "").replace(/\s+/g, "");
+  const aria = el.getAttribute("aria-label") ?? "";
+  const title = el.getAttribute("title") ?? "";
+  return Math.min(120, text.length + aria.length + title.length);
+}
+
+function isVisibleElement(el: Element): boolean {
+  const rect = (el as HTMLElement).getBoundingClientRect?.();
+  if (!rect || rect.width <= 0 || rect.height <= 0) return false;
+  const cs = window.getComputedStyle(el);
+  if (cs.display === "none" || cs.visibility === "hidden" || cs.visibility === "collapse") return false;
+  const opacity = Number.parseFloat(cs.opacity);
+  if (Number.isFinite(opacity) && opacity < 0.08) return false;
+  return true;
+}
+
+function isLegitBlankAnchor(
+  anchor: HTMLAnchorElement,
+  ctx: { top: { tag: string; role?: string; hasOnClick?: boolean }; retargeted?: boolean },
+  cds: number,
+  reasonCodes: string[]
+): boolean {
   if (cds >= CDS_SMART_BLOCK_THRESHOLD) return false;
   if (ctx.retargeted) return false;
-  if (!isInteractive(ctx.top)) return false;
-  if (nameLength(ctx.top) === 0) return false;
+  if (!isVisibleElement(anchor)) return false;
+  if (elementNameLength(anchor) === 0) return false;
+  if (!isInteractive(ctx.top) && !isInteractive(anchor)) return false;
   for (const reason of reasonCodes) {
     if (RISKY_BLANK_REASONS.has(reason)) return false;
   }
@@ -312,6 +359,15 @@ if (chrome?.runtime?.onMessage) {
     if (window.top !== window) return;
     if (settings.defaultMode === "off") return;
     const url = typeof message.url === "string" ? message.url : "";
+    handleRollback(url);
+  });
+
+  chrome.runtime.onMessage.addListener((message) => {
+    if (!message || message.type !== "ns-forward-offer") return;
+    if (window.top !== window) return;
+    if (settings.defaultMode === "off") return;
+    const url = typeof message.url === "string" ? message.url : "";
+    if (!url) return;
     showRollbackPrompt(url);
   });
 }
@@ -322,7 +378,7 @@ if (chrome?.runtime?.sendMessage && window.top === window) {
       if (!resp || !resp.shouldRollback) return;
       if (settings.defaultMode === "off") return;
       const url = typeof resp.entry?.url === "string" ? resp.entry.url : "";
-      showRollbackPrompt(url);
+      handleRollback(url);
     });
   };
   if (document.readyState === "loading") {
@@ -414,7 +470,8 @@ window.addEventListener(
     const blockThreshold = getBlockThreshold(mode);
 
     if (mode !== "off") {
-      const smartAllowsBlank = mode === "smart" && isLegitBlankAnchor(ctx, cds, reasonCodes);
+      const smartAllowsBlank =
+        mode === "smart" && !!anchor && isLegitBlankAnchor(anchor, ctx, cds, reasonCodes);
       if (isBlankAnchor && !isAllowed && !explicitNewTab && !smartAllowsBlank) {
         decision = "prompt";
         e.preventDefault();
