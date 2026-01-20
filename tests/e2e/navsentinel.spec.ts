@@ -142,6 +142,43 @@ test("Level 10 delayed form submit prompts", async () => {
   }
 });
 
+test("Level 10 delayed redirect triggers rollback prompt", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const gymOverride = process.env.GYM_BASE_URL;
+  const gym = gymOverride ? null : await startGymServer();
+  const baseUrl = gymOverride ?? gym!.baseUrl;
+
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/level10-redirects-and-forms.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await page.click("#delayed");
+      await page.waitForURL(/level4-visual-mimicry\.html/, { timeout: 7000 });
+      await expect(
+        page.locator("text=NavSentinel detected a redirect without recent user intent.")
+      ).toBeVisible({ timeout: 4000 });
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
 test("Level 5 blocks window.open popunder", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
