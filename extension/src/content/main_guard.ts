@@ -1,13 +1,17 @@
 const NS_SOURCE = "__navsentinel__";
-const GESTURE_TTL_MS = 800;
+const OPEN_TTL_MS = 800;
+const REDIRECT_TTL_MS = 1500;
 const MAX_OPENS_PER_GESTURE = 1;
+const MAX_REDIRECTS_PER_GESTURE = 2;
 const ALLOW_ONCE_TTL_MS = 1200;
 const BLOCKED_ACTION_TTL_MS = 5000;
 
-let lastGestureTs = 0;
 let openCount = 0;
+let redirectCount = 0;
 let allowOnceRemaining = 0;
 let allowOnceUntil = 0;
+let allowOpenUntil = 0;
+let allowRedirectUntil = 0;
 const blockedActions = new Map<
   string,
   {
@@ -20,9 +24,12 @@ const blockedActions = new Map<
   }
 >();
 
-function markGesture(): void {
-  lastGestureTs = performance.now();
+function markAllowance(params: { allowOpen: boolean; allowRedirect: boolean }): void {
+  const now = performance.now();
   openCount = 0;
+  redirectCount = 0;
+  allowOpenUntil = params.allowOpen ? now + OPEN_TTL_MS : 0;
+  allowRedirectUntil = params.allowRedirect ? now + REDIRECT_TTL_MS : 0;
 }
 
 function setAllowOnce(): void {
@@ -30,19 +37,24 @@ function setAllowOnce(): void {
   allowOnceUntil = performance.now() + ALLOW_ONCE_TTL_MS;
 }
 
-function hasActiveGesture(): boolean {
-  return performance.now() - lastGestureTs <= GESTURE_TTL_MS;
-}
-
-function consumeAllowance(): "allow_once" | "gesture" | "none" {
+function consumeOpenAllowance(): "allow_once" | "allowed" | "none" {
   const now = performance.now();
   if (allowOnceRemaining > 0 && now <= allowOnceUntil) {
     allowOnceRemaining -= 1;
-    return "allow_once";
+      return "allow_once";
   }
-  if (hasActiveGesture() && openCount < MAX_OPENS_PER_GESTURE) {
+  if (allowOpenUntil > 0 && now <= allowOpenUntil && openCount < MAX_OPENS_PER_GESTURE) {
     openCount += 1;
-    return "gesture";
+    return "allowed";
+  }
+  return "none";
+}
+
+function consumeRedirectAllowance(): "allowed" | "none" {
+  const now = performance.now();
+  if (allowRedirectUntil > 0 && now <= allowRedirectUntil && redirectCount < MAX_REDIRECTS_PER_GESTURE) {
+    redirectCount += 1;
+    return "allowed";
   }
   return "none";
 }
@@ -117,7 +129,7 @@ function callNativeOpen(thisArg: Window, url?: string | URL, target?: string, fe
 }
 
 function patchedOpen(this: Window, url?: string | URL, target?: string, features?: string): Window | null {
-  const allowance = consumeAllowance();
+  const allowance = consumeOpenAllowance();
   if (allowance !== "none") {
     return callNativeOpen(this, url, target, features);
   }
@@ -147,7 +159,7 @@ function resolveFormAction(form: HTMLFormElement): string | undefined {
 
 function patchLocation(): void {
   Location.prototype.assign = function (url: string | URL): void {
-    const allowance = consumeAllowance();
+    const allowance = consumeRedirectAllowance();
     if (allowance !== "none") {
       nativeAssign.call(this, url);
       return;
@@ -160,7 +172,7 @@ function patchLocation(): void {
   };
 
   Location.prototype.replace = function (url: string | URL): void {
-    const allowance = consumeAllowance();
+    const allowance = consumeRedirectAllowance();
     if (allowance !== "none") {
       nativeReplace.call(this, url);
       return;
@@ -175,7 +187,7 @@ function patchLocation(): void {
 
 function patchForms(): void {
   HTMLFormElement.prototype.submit = function (): void {
-    const allowance = consumeAllowance();
+    const allowance = consumeRedirectAllowance();
     if (allowance !== "none") {
       nativeFormSubmit.call(this);
       return;
@@ -190,7 +202,7 @@ function patchForms(): void {
 
   if (nativeFormRequestSubmit) {
     HTMLFormElement.prototype.requestSubmit = function (submitter?: HTMLElement | null): void {
-      const allowance = consumeAllowance();
+      const allowance = consumeRedirectAllowance();
       if (allowance !== "none") {
         nativeFormRequestSubmit.call(this, submitter as any);
         return;
@@ -231,11 +243,17 @@ window.addEventListener(
     if (!data || data.source !== NS_SOURCE) return;
 
     if (data.type === "ns-gesture-allow") {
-      markGesture();
+      markAllowance({ allowOpen: true, allowRedirect: true });
     }
 
     if (data.type === "ns-allow-once") {
       setAllowOnce();
+    }
+
+    if (data.type === "ns-allow") {
+      const allowOpen = (event.data as any).allowOpen === true;
+      const allowRedirect = (event.data as any).allowRedirect === true;
+      markAllowance({ allowOpen, allowRedirect });
     }
 
     if (data.type === "ns-allow-action" && data.id) {
@@ -247,24 +265,6 @@ window.addEventListener(
       }
       blockedActions.delete(data.id);
       entry.action();
-    }
-  },
-  true
-);
-
-window.addEventListener(
-  "pointerdown",
-  () => {
-    markGesture();
-  },
-  true
-);
-
-window.addEventListener(
-  "keydown",
-  (e) => {
-    if (e.key === "Enter" || e.key === " ") {
-      markGesture();
     }
   },
   true
