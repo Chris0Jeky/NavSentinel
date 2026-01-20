@@ -147,7 +147,13 @@ function handleRollback(url: string, prevUrl?: string): void {
       chrome.runtime.sendMessage({ type: "ns-store-forward", url });
       notifyNavAllow();
       postToMain("ns-allow", { allowOpen: false, allowRedirect: true });
-      location.replace(target);
+      window.setTimeout(() => {
+        try {
+          location.replace(target);
+        } catch {
+          // ignore
+        }
+      }, 0);
       return;
     } catch {
       // ignore
