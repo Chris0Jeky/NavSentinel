@@ -10,7 +10,13 @@ The Gym is a deterministic set of local HTML pages that simulate common maliciou
 
 Modes:
 - `Off`: should not block (use this to sanity-check the Gym without NavSentinel).
-- `Smart` / `Strict`: currently similar; both should block Levels 1–6 and prompt as needed.
+- `Smart`: allows clean `_blank` links (named, visible, low CDS) and prompts on suspicious ones.
+- `Strict`: blocks `_blank` links unless explicit new-tab intent or allowlisted.
+  - Deceptive click block threshold is lower (CDS >= 50 in Strict, CDS >= 70 in Smart).
+
+Prompt vs block:
+- Prompt = a toast with `Allow once` / `Always allow` (used for navigations).
+- Block = toast with only `Dismiss` (used for deceptive clicks with no safe replay).
 
 ## What "block" means in the Gym
 - For `_blank` links: NavSentinel calls `preventDefault()` and shows an in-page prompt (toast) with `Allow once` / `Always allow`.
@@ -26,6 +32,7 @@ Modes:
 If the Options link is missing in `chrome://extensions`, open it directly:
 1. Go to `chrome://extensions` and copy the extension ID.
 2. Open `chrome-extension://<ID>/src/options/options.html`.
+3. Use the Allowlist section to remove hosts or clear all entries.
 
 ## Gym levels and expected outcomes (manual)
 - Level 1 (invisible overlay anchor): click `Play`. Expected (Smart/Strict): prompt "Blocked new tab" for `example.com`.
@@ -49,6 +56,7 @@ Explicit intent checks:
 - After rebuilding, click `Reload` for the extension in `chrome://extensions`.
 - Confirm the main-world patch is running: open DevTools Console on a Gym page and check `window.__navsentinelMainGuard === true`.
 - With debug enabled, use the live overlay (`MainGuard`, `Decision`, `CDS`, `Reasons`) and the page console logs (`[NavSentinel] click`, `[NavSentinel] blocked`, `[NavSentinel] allowance`).
+- `Decision: prompt` indicates a navigation prompt, while `Decision: block` indicates a hard block.
 - If `MainGuard: no`, `window.open` / redirects cannot be reliably blocked (only `_blank` click capture will work).
 
 ## E2E test (Playwright)
