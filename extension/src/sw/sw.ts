@@ -6,6 +6,8 @@ const ROLLBACK_SUPPRESS_MS = 6000;
 
 const allowUntilByTab = new Map<number, number>();
 const suppressUntilByTab = new Map<number, number>();
+const readyTabs = new Set<number>();
+const pendingRollbackByTab = new Map<number, { url: string; qualifiers: string[] }>();
 
 async function syncDnrRulesets(): Promise<void> {
   try {
@@ -46,6 +48,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     sendResponse?.({ ok: true });
   }
+
+  if (message.type === "ns-ready") {
+    const tabId = sender.tab?.id;
+    if (typeof tabId === "number") {
+      readyTabs.add(tabId);
+      const pending = pendingRollbackByTab.get(tabId);
+      if (pending) {
+        pendingRollbackByTab.delete(tabId);
+        chrome.tabs.sendMessage(tabId, {
+          type: "ns-rollback",
+          url: pending.url,
+          qualifiers: pending.qualifiers
+        });
+      }
+    }
+  }
 });
 
 chrome.webNavigation.onCommitted.addListener((details) => {
@@ -64,14 +82,20 @@ chrome.webNavigation.onCommitted.addListener((details) => {
   if (now <= suppressUntil) return;
 
   suppressUntilByTab.set(details.tabId, now + ROLLBACK_SUPPRESS_MS);
-  chrome.tabs.sendMessage(details.tabId, {
-    type: "ns-rollback",
-    url: details.url,
-    qualifiers
-  });
+  if (readyTabs.has(details.tabId)) {
+    chrome.tabs.sendMessage(details.tabId, {
+      type: "ns-rollback",
+      url: details.url,
+      qualifiers
+    });
+  } else {
+    pendingRollbackByTab.set(details.tabId, { url: details.url, qualifiers });
+  }
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   allowUntilByTab.delete(tabId);
   suppressUntilByTab.delete(tabId);
+  readyTabs.delete(tabId);
+  pendingRollbackByTab.delete(tabId);
 });
