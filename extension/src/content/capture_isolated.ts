@@ -308,31 +308,24 @@ if (chrome?.runtime?.onMessage) {
     if (window.top !== window) return;
     if (settings.defaultMode === "off") return;
     const url = typeof message.url === "string" ? message.url : "";
-    lastNav = { kind: "rollback", url, status: "blocked" };
-    refreshDebug();
-    showToast({
-      message: "NavSentinel detected a redirect without recent user intent.",
-      actions: [
-        {
-          label: "Go back",
-          onClick: () => {
-            try {
-              history.back();
-            } catch {
-              // ignore
-            }
-          }
-        },
-        {
-          label: "Stay",
-          onClick: () => {
-            // no-op
-          }
-        }
-      ],
-      timeoutMs: 0
-    });
+    showRollbackPrompt(url);
   });
+}
+
+if (chrome?.runtime?.sendMessage && window.top === window) {
+  const run = () => {
+    chrome.runtime.sendMessage({ type: "ns-check-rollback" }, (resp) => {
+      if (!resp || !resp.shouldRollback) return;
+      if (settings.defaultMode === "off") return;
+      const url = typeof resp.entry?.url === "string" ? resp.entry.url : "";
+      showRollbackPrompt(url);
+    });
+  };
+  if (document.readyState === "loading") {
+    window.addEventListener("DOMContentLoaded", run, { once: true });
+  } else {
+    run();
+  }
 }
 
 window.addEventListener(
