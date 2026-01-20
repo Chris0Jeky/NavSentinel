@@ -1,0 +1,22 @@
+[
+  {
+    "id": 1,
+    "priority": 1,
+    "action": { "type": "block" },
+    "condition": {
+      "urlFilter": "example.com/?ad=1",
+      "resourceTypes": ["main_frame"],
+      "initiatorDomains": ["localhost", "127.0.0.1"]
+    }
+  },
+  {
+    "id": 2,
+    "priority": 1,
+    "action": { "type": "block" },
+    "condition": {
+      "urlFilter": "example.org/?forced=1",
+      "resourceTypes": ["main_frame"],
+      "initiatorDomains": ["localhost", "127.0.0.1"]
+    }
+  }
+]
