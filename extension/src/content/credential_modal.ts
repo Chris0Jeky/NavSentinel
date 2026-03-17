@@ -184,7 +184,10 @@ export function showCredentialModal(spec: ModalSpec): Promise<string> {
           card.focus();
           return;
         }
-        const active = document.activeElement;
+        const active =
+          activeRoot.activeElement instanceof HTMLElement
+            ? activeRoot.activeElement
+            : document.activeElement;
         if (e.shiftKey && active === first) {
           e.preventDefault();
           last.focus();
