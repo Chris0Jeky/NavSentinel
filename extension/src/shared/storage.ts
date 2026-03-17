@@ -1,5 +1,5 @@
 import type { Mode } from "./types";
-import { ALLOWLIST_KEY, type Allowlist } from "./allowlist";
+import { ALLOWLIST_KEY, normalizeAllowlist, type Allowlist } from "./allowlist";
 
 export type CredMode = "off" | "smart" | "strict";
 
@@ -38,6 +38,7 @@ export type SuiteSettingsPatch = Partial<Omit<SuiteSettings, "nav" | "credential
 export const SUITE_SETTINGS_KEY = "sentinelsuite:settings_v1";
 export const TRUSTED_DOMAINS_KEY = "sentinelsuite:trusted_domains_v1";
 export const EVENT_LOG_KEY = "sentinelsuite:event_log_v1";
+const LEGACY_SETTINGS_KEY = "navsentinel:settings";
 
 const DEFAULT_SUITE_SETTINGS: SuiteSettings = {
   nav: {
@@ -95,9 +96,18 @@ function mergeSuiteSettings(cur: SuiteSettings, partial: SuiteSettingsPatch): Su
 }
 
 export async function getSuiteSettings(): Promise<SuiteSettings> {
-  const res = await chrome.storage.local.get(SUITE_SETTINGS_KEY);
+  const res = await chrome.storage.local.get([SUITE_SETTINGS_KEY, LEGACY_SETTINGS_KEY]);
   const stored = res[SUITE_SETTINGS_KEY] as SuiteSettings | undefined;
-  if (!stored || typeof stored !== "object") return structuredClone(DEFAULT_SUITE_SETTINGS);
+  if (!stored || typeof stored !== "object") {
+    const legacy = res[LEGACY_SETTINGS_KEY] as Partial<NavSettings> | undefined;
+    if (legacy && typeof legacy === "object") {
+      const migrated = mergeSuiteSettings(structuredClone(DEFAULT_SUITE_SETTINGS), { nav: legacy });
+      await chrome.storage.local.set({ [SUITE_SETTINGS_KEY]: migrated });
+      await chrome.storage.local.remove(LEGACY_SETTINGS_KEY);
+      return migrated;
+    }
+    return structuredClone(DEFAULT_SUITE_SETTINGS);
+  }
   return mergeSuiteSettings(structuredClone(DEFAULT_SUITE_SETTINGS), stored);
 }
 
@@ -231,9 +241,6 @@ export async function appendEvent(
 ): Promise<void> {
   const settings = await getSuiteSettings();
   const limit = clampInt(settings.logLimit, 50, 5000, DEFAULT_SUITE_SETTINGS.logLimit);
-  const res = await chrome.storage.local.get(EVENT_LOG_KEY);
-  const cur = Array.isArray(res[EVENT_LOG_KEY]) ? (res[EVENT_LOG_KEY] as EventLogEntry[]) : [];
-
   const entry: EventLogEntry = {
     id: partial.id ?? makeId(),
     ts: partial.ts ?? Date.now(),
@@ -246,8 +253,20 @@ export async function appendEvent(
     ...(partial.extra !== undefined ? { extra: partial.extra } : {})
   };
 
-  const next = [...cur, entry].slice(-limit);
-  await chrome.storage.local.set({ [EVENT_LOG_KEY]: next });
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await chrome.storage.local.get(EVENT_LOG_KEY);
+    const cur = Array.isArray(res[EVENT_LOG_KEY]) ? (res[EVENT_LOG_KEY] as EventLogEntry[]) : [];
+    const next = [...cur.filter((item) => item?.id !== entry.id), entry].slice(-limit);
+    await chrome.storage.local.set({ [EVENT_LOG_KEY]: next });
+
+    const verify = await chrome.storage.local.get(EVENT_LOG_KEY);
+    const verifyLog = Array.isArray(verify[EVENT_LOG_KEY])
+      ? (verify[EVENT_LOG_KEY] as EventLogEntry[])
+      : [];
+    if (verifyLog.some((item) => item?.id === entry.id)) {
+      return;
+    }
+  }
 }
 
 export async function clearEventLog(): Promise<void> {
@@ -288,7 +307,7 @@ export async function importAll(payload: unknown): Promise<void> {
   }
 
   if (p.allowlist && typeof p.allowlist === "object") {
-    await chrome.storage.local.set({ [ALLOWLIST_KEY]: p.allowlist });
+    await chrome.storage.local.set({ [ALLOWLIST_KEY]: normalizeAllowlist(p.allowlist) });
   }
 
   if (Array.isArray(p.trustedDomains)) {

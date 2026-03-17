@@ -12,6 +12,11 @@ const extensionPath = process.env.EXTENSION_PATH
   ? path.resolve(process.env.EXTENSION_PATH)
   : path.resolve(__dirname, "..", "..", "extension", "dist");
 
+function isWithinRoot(root: string, target: string): boolean {
+  const relative = path.relative(root, target);
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
 async function startGymServer(): Promise<{ baseUrl: string; close: () => Promise<void> }> {
   const gymRoot = path.resolve(__dirname, "..", "..", "gym");
 
@@ -21,7 +26,7 @@ async function startGymServer(): Promise<{ baseUrl: string; close: () => Promise
       const pathname = decodeURIComponent(reqUrl.pathname);
       const rel = pathname === "/" ? "/index.html" : pathname;
       const resolved = path.resolve(gymRoot, `.${rel}`);
-      if (!resolved.startsWith(gymRoot)) {
+      if (!isWithinRoot(gymRoot, resolved)) {
         res.statusCode = 400;
         res.end("Bad request");
         return;

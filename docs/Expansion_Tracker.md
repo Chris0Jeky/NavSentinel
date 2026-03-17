@@ -7,8 +7,8 @@
 - Treat `RESOURCES/link` and `RESOURCES/hardened` as optional companion-project inputs, not phase-one merge targets.
 
 ## Worktree
-- Main integration worktree: `C:\Users\jekyt\Desktop\Printer Config\Others\Git\NavSentinel-codex-expansion`
-- Source repo with untracked resources: `C:\Users\jekyt\Desktop\Printer Config\Others\Git\NavSentinel`
+- Main integration worktree: `../NavSentinel-codex-expansion`
+- Source repo with `RESOURCES/`: `../NavSentinel`
 - Branch: `codex/resource-expansion`
 
 ## Resource Map

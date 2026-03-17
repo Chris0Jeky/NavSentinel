@@ -18,6 +18,14 @@ export type ModalSpec = {
 let host: HTMLElement | null = null;
 let root: ShadowRoot | null = null;
 
+function listFocusable(rootNode: ParentNode): HTMLElement[] {
+  return Array.from(
+    rootNode.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    )
+  ).filter((el) => !el.hasAttribute("disabled") && el.tabIndex >= 0);
+}
+
 function ensureHost(): void {
   if (host && root) return;
   host = document.createElement("div");
@@ -70,16 +78,27 @@ export function showCredentialModal(spec: ModalSpec): Promise<string> {
   removeModal();
 
   return new Promise((resolve) => {
+    const previouslyFocused =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const overlay = document.createElement("div");
     overlay.className = "overlay";
 
     const card = document.createElement("div");
     card.className = "card";
+    card.setAttribute("role", "dialog");
+    card.setAttribute("aria-modal", "true");
+    card.tabIndex = -1;
+
+    const titleId = "__sentinelsuite_cred_modal_title__";
+    const bodyId = "__sentinelsuite_cred_modal_body__";
+    card.setAttribute("aria-labelledby", titleId);
+    card.setAttribute("aria-describedby", bodyId);
 
     const header = document.createElement("div");
     header.className = "header";
     const title = document.createElement("div");
     title.className = "title";
+    title.id = titleId;
     title.textContent = spec.title;
     header.appendChild(title);
 
@@ -92,6 +111,7 @@ export function showCredentialModal(spec: ModalSpec): Promise<string> {
 
     const body = document.createElement("div");
     body.className = "body";
+    body.id = bodyId;
 
     if (spec.kv?.length) {
       const kv = document.createElement("div");
@@ -133,6 +153,7 @@ export function showCredentialModal(spec: ModalSpec): Promise<string> {
 
     function cleanup(): void {
       window.removeEventListener("keydown", onKeyDown, true);
+      previouslyFocused?.focus();
     }
 
     function done(actionId: string): void {
@@ -145,6 +166,32 @@ export function showCredentialModal(spec: ModalSpec): Promise<string> {
       if (e.key === "Escape") {
         e.preventDefault();
         done(outside);
+        return;
+      }
+
+      if (e.key === "Tab") {
+        const focusable = listFocusable(card);
+        if (focusable.length === 0) {
+          e.preventDefault();
+          card.focus();
+          return;
+        }
+
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (!first || !last) {
+          e.preventDefault();
+          card.focus();
+          return;
+        }
+        const active = document.activeElement;
+        if (e.shiftKey && active === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && active === last) {
+          e.preventDefault();
+          first.focus();
+        }
       }
     }
 
@@ -170,8 +217,12 @@ export function showCredentialModal(spec: ModalSpec): Promise<string> {
     activeRoot.appendChild(overlay);
 
     window.setTimeout(() => {
-      const firstBtn = footer.querySelector("button") as HTMLButtonElement | null;
-      firstBtn?.focus();
+      const firstFocusable = listFocusable(card)[0];
+      if (firstFocusable) {
+        firstFocusable.focus();
+      } else {
+        card.focus();
+      }
     }, 0);
   });
 }

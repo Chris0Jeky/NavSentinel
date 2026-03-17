@@ -4,7 +4,7 @@ This repository is optimized for iterative browser-extension work and Gym-driven
 
 ## Environment
 
-- Node.js 18+ recommended
+- Node.js 20.18.1+ recommended
 - Chrome or Chromium for MV3 testing
 
 ## Install and build

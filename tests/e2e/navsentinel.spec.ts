@@ -12,6 +12,11 @@ const extensionPath = process.env.EXTENSION_PATH
   ? path.resolve(process.env.EXTENSION_PATH)
   : path.resolve(__dirname, "..", "..", "extension", "dist");
 
+function isWithinRoot(root: string, target: string): boolean {
+  const relative = path.relative(root, target);
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
 async function startGymServer(): Promise<{ baseUrl: string; close: () => Promise<void> }> {
   const gymRoot = path.resolve(__dirname, "..", "..", "gym");
 
@@ -22,7 +27,7 @@ async function startGymServer(): Promise<{ baseUrl: string; close: () => Promise
       const rel = pathname === "/" ? "/index.html" : pathname;
 
       const resolved = path.resolve(gymRoot, `.${rel}`);
-      if (!resolved.startsWith(gymRoot)) {
+      if (!isWithinRoot(gymRoot, resolved)) {
         res.statusCode = 400;
         res.end("Bad request");
         return;
@@ -79,9 +84,9 @@ test("Level 1 blocks new tabs", async () => {
       const page = await context.newPage();
       await page.goto(`${baseUrl}/level1-basic-opacity.html`, { waitUntil: "domcontentloaded", timeout: 20_000 });
 
-      await expect(
-        page.evaluate(() => (window as any).__navsentinelMainGuard === true)
-      ).resolves.toBe(true);
+      await page.waitForFunction(() => (window as any).__navsentinelMainGuard === true, null, {
+        timeout: 5_000
+      });
 
       const play = page.locator("#play");
       const box = await play.boundingBox();
@@ -122,9 +127,9 @@ test("Level 10 delayed form submit prompts", async () => {
         timeout: 20_000
       });
 
-      await expect(
-        page.evaluate(() => (window as any).__navsentinelMainGuard === true)
-      ).resolves.toBe(true);
+      await page.waitForFunction(() => (window as any).__navsentinelMainGuard === true, null, {
+        timeout: 5_000
+      });
 
       const patchInfo = await page.evaluate(() => (window as any).__navsentinelLocationPatch);
       expect(patchInfo, "Expected location patch info").toBeTruthy();

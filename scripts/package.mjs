@@ -52,13 +52,15 @@ function packageWithPowerShell() {
       "-Command",
       `
         $ErrorActionPreference = 'Stop'
-        $dest = [System.IO.Path]::GetFullPath('${archivePath.replace(/'/g, "''")}')
-        $items = Get-ChildItem -Force | ForEach-Object { $_.FullName }
-        if (-not $items -or $items.Count -eq 0) { throw 'No files found to package.' }
-        Compress-Archive -Path $items -DestinationPath $dest -CompressionLevel Optimal
+        Add-Type -AssemblyName System.IO.Compression
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        $source = [System.IO.Path]::GetFullPath(${JSON.stringify(distDir)})
+        $dest = [System.IO.Path]::GetFullPath(${JSON.stringify(archivePath)})
+        if (Test-Path $dest) { Remove-Item -Force $dest }
+        [System.IO.Compression.ZipFile]::CreateFromDirectory($source, $dest, [System.IO.Compression.CompressionLevel]::Optimal, $false)
       `
     ],
-    { cwd: distDir, stdio: "inherit" }
+    { stdio: "inherit" }
   );
 }
 
