@@ -28,7 +28,9 @@ export function normalizeAllowlist(value: unknown): Allowlist {
 export async function getAllowlist(): Promise<Allowlist> {
   const res = await chrome.storage.local.get([ALLOWLIST_KEY, LEGACY_ALLOWLIST_KEY]);
   const current = normalizeAllowlist(res[ALLOWLIST_KEY]);
-  if (Object.keys(current).length > 0) return current;
+  if (Object.prototype.hasOwnProperty.call(res, ALLOWLIST_KEY)) {
+    return current;
+  }
 
   const legacy = normalizeAllowlist(res[LEGACY_ALLOWLIST_KEY]);
   if (Object.keys(legacy).length > 0) {
@@ -42,6 +44,7 @@ export async function getAllowlist(): Promise<Allowlist> {
 
 export async function setAllowlist(list: Allowlist): Promise<void> {
   await chrome.storage.local.set({ [ALLOWLIST_KEY]: normalizeAllowlist(list) });
+  await chrome.storage.local.remove(LEGACY_ALLOWLIST_KEY);
 }
 
 export async function addAllowlistEntry(siteKey: string, destHost: string): Promise<Allowlist> {
@@ -74,7 +77,8 @@ export async function removeAllowlistEntry(siteKey: string, destHost: string): P
 }
 
 export async function clearAllowlist(): Promise<void> {
-  await setAllowlist({});
+  await chrome.storage.local.set({ [ALLOWLIST_KEY]: {} });
+  await chrome.storage.local.remove(LEGACY_ALLOWLIST_KEY);
 }
 
 export function isAllowlisted(list: Allowlist, siteKey: string, destHost: string): boolean {

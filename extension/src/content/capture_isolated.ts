@@ -22,6 +22,8 @@ import { setDebugEnabled, updateDebugOverlay, type DebugInfo } from "./debug_ove
 const CDS_SMART_BLOCK_THRESHOLD = 70;
 const CDS_STRICT_BLOCK_THRESHOLD = 50;
 const NS_SOURCE = "__navsentinel__";
+const BRIDGE_INIT_TYPE = "ns-port-init";
+const PROTOCOL_VERSION = 1;
 const NAV_ALLOW_TTL_MS = 1500;
 const RISKY_BLANK_REASONS = new Set([
   "intent_mismatch_under_interactive",
@@ -35,7 +37,9 @@ const RISKY_BLANK_REASONS = new Set([
 let lastDown: DownCapture | null = null;
 let settings: NavSettings = { defaultMode: "smart", debug: false, dnrEnabled: false };
 let allowlist: Allowlist = {};
-let sessionKey: string | null = null;
+let bridgePort: MessagePort | null = null;
+let bridgeReady = false;
+const pendingBridgeMessages: Array<{ type: string; payload?: Record<string, unknown> }> = [];
 let mainGuard: "unknown" | "yes" | "no" = "unknown";
 let lastNav: { kind: string; url: string; status: "allowed" | "blocked" } | null = null;
 let lastDebug: Omit<DebugInfo, "mainGuard" | "lastNav"> | null = null;
@@ -51,7 +55,7 @@ function refreshDebug(): void {
 }
 
 async function initSettings() {
-  postToMain("ns-session-request");
+  ensureBridge();
   settings = await getNavSettings();
   allowlist = await getAllowlist();
   setDebugEnabled(settings.debug);
@@ -94,11 +98,128 @@ function frameKey(): string {
 }
 
 function postToMain(type: string, payload?: Record<string, unknown>): void {
-  const msg: Record<string, unknown> = { source: NS_SOURCE, type, ...(payload ?? {}) };
-  if (type !== "ns-session-request" && sessionKey) {
-    (msg as any).key = sessionKey;
+  if (!bridgePort || !bridgeReady) {
+    pendingBridgeMessages.push(
+      payload !== undefined
+        ? { type, payload }
+        : { type }
+    );
+    ensureBridge();
+    return;
   }
-  window.postMessage(msg, "*");
+  bridgePort.postMessage({ source: NS_SOURCE, type, v: PROTOCOL_VERSION, ...(payload ?? {}) });
+}
+
+function flushBridgeMessages(): void {
+  if (!bridgePort || !bridgeReady) return;
+  while (pendingBridgeMessages.length > 0) {
+    const next = pendingBridgeMessages.shift();
+    if (!next) break;
+    bridgePort.postMessage({
+      source: NS_SOURCE,
+      type: next.type,
+      v: PROTOCOL_VERSION,
+      ...(next.payload ?? {})
+    });
+  }
+}
+
+function handleBridgeMessage(message: unknown): void {
+  const data = message as {
+    source?: string;
+    type?: string;
+    id?: string;
+    kind?: string;
+    url?: string;
+    target?: string;
+    features?: string;
+    mode?: "off" | "smart" | "strict";
+    debug?: boolean;
+    v?: number;
+  };
+  if (!data || data.source !== NS_SOURCE || data.v !== PROTOCOL_VERSION) return;
+
+  if (data.type === "ns-bridge-ready") {
+    bridgeReady = true;
+    mainGuard = "yes";
+    flushBridgeMessages();
+    refreshDebug();
+    return;
+  }
+
+  if (data.type === "ns-pong" || data.type === "ns-config-ack") {
+    mainGuard = "yes";
+    refreshDebug();
+    return;
+  }
+
+  if (data.type === "ns-nav-blocked") {
+    lastNav = { kind: data.kind ?? "unknown", url: data.url ?? "", status: "blocked" };
+    refreshDebug();
+
+    if (settings.defaultMode === "off") {
+      allowActionOnce(data.id, data.url, data.target, data.features);
+      return;
+    }
+
+    const parsed = parseDestination(data.url);
+    const url = parsed.href ?? data.url ?? "";
+    if (!url) return;
+
+    if (parsed.host && isAllowlisted(allowlist, siteKeyFromLocation(), parsed.host)) {
+      allowActionOnce(data.id, url, data.target || "_blank", data.features);
+      return;
+    }
+
+    const title =
+      data.kind === "location_assign" || data.kind === "location_replace"
+        ? "Blocked redirect"
+        : data.kind === "form_submit" || data.kind === "form_request_submit"
+          ? "Blocked form submit"
+          : "Blocked popup";
+
+    showAllowPrompt({
+      title,
+      url,
+      host: parsed.host,
+      target: data.target || "_blank",
+      ...(data.features ? { features: data.features } : {}),
+      ...(data.id !== undefined ? { actionId: data.id } : {})
+    });
+    return;
+  }
+
+  if (data.type === "ns-nav-allowed") {
+    lastNav = { kind: data.kind ?? "unknown", url: data.url ?? "", status: "allowed" };
+    refreshDebug();
+  }
+}
+
+function ensureBridge(): void {
+  if (bridgePort) return;
+
+  const channel = new MessageChannel();
+  bridgePort = channel.port1;
+  bridgePort.onmessage = (event) => handleBridgeMessage(event.data);
+  bridgePort.start?.();
+  channel.port2.start?.();
+  window.postMessage(
+    {
+      source: NS_SOURCE,
+      type: BRIDGE_INIT_TYPE,
+      v: PROTOCOL_VERSION
+    },
+    "*",
+    [channel.port2]
+  );
+}
+
+function appendEventSafely(
+  partial: Parameters<typeof appendEvent>[0]
+): void {
+  void appendEvent(partial).catch(() => {
+    // ignore
+  });
 }
 
 function notifyNavAllow(ttlMs = NAV_ALLOW_TTL_MS): void {
@@ -123,11 +244,7 @@ function showRollbackPrompt(url: string): void {
     }
   })();
   (window as any).__navsentinelRollbackPrompt = { url, ts: now };
-  try {
-    void appendEvent({ kind: "nav_rollback", site: siteKeyFromLocation(), url, destHost: host });
-  } catch {
-    // ignore
-  }
+  appendEventSafely({ kind: "nav_rollback", site: siteKeyFromLocation(), url, destHost: host });
   showToast({
     message: `NavSentinel rolled back a redirect to ${host}.`,
     actions: [
@@ -282,11 +399,7 @@ async function allowAlways(
   params: { actionId?: string | null; url?: string; target?: string; features?: string }
 ): Promise<void> {
   allowlist = await addAllowlistEntry(siteKey, host);
-  try {
-    void appendEvent({ kind: "nav_allowlist_add", site: siteKey, destHost: host, url: location.href });
-  } catch {
-    // ignore
-  }
+  appendEventSafely({ kind: "nav_allowlist_add", site: siteKey, destHost: host, url: location.href });
   allowActionOnce(params.actionId ?? null, params.url, params.target, params.features);
 }
 
@@ -319,115 +432,18 @@ function showAllowPrompt(params: {
     });
   }
 
-  try {
-    void appendEvent({
-      kind: "nav_blank_prompt",
-      site: siteKeyFromLocation(),
-      url: params.url,
-      ...(params.host ? { destHost: params.host } : {})
-    });
-  } catch {
-    // ignore
-  }
+  appendEventSafely({
+    kind: "nav_blank_prompt",
+    site: siteKeyFromLocation(),
+    url: params.url,
+    ...(params.host ? { destHost: params.host } : {})
+  });
 
   showToast({
     message: `${params.title}: ${params.host ?? params.url}`,
     actions
   });
 }
-
-window.addEventListener(
-  "message",
-  (event) => {
-    if (event.source !== window) return;
-    const data = event.data as {
-      source?: string;
-      type?: string;
-      key?: string;
-      id?: string;
-      kind?: string;
-      url?: string;
-      target?: string;
-      features?: string;
-      mode?: "off" | "smart" | "strict";
-      debug?: boolean;
-      v?: number;
-    };
-    if (!data || data.source !== NS_SOURCE) return;
-
-    const inboundTypes = new Set([
-      "ns-session",
-      "ns-pong",
-      "ns-config-ack",
-      "ns-nav-blocked",
-      "ns-nav-allowed"
-    ]);
-    if (data.type && inboundTypes.has(data.type)) {
-      event.stopImmediatePropagation();
-      event.stopPropagation();
-    }
-
-    if (data.type === "ns-session") {
-      if (!sessionKey && typeof data.key === "string" && data.key.length >= 16) {
-        sessionKey = data.key;
-        postToMain("ns-session-ack");
-        postToMain("ns-config", { mode: settings.defaultMode, debug: settings.debug });
-        postToMain("ns-ping");
-      }
-      return;
-    }
-
-    if (!sessionKey || data.key !== sessionKey) return;
-
-    if (data.type === "ns-pong" || data.type === "ns-config-ack") {
-      mainGuard = "yes";
-      refreshDebug();
-      return;
-    }
-
-    if (data.type === "ns-nav-blocked") {
-      lastNav = { kind: data.kind ?? "unknown", url: data.url ?? "", status: "blocked" };
-      refreshDebug();
-
-      if (settings.defaultMode === "off") {
-        allowActionOnce(data.id, data.url, data.target, data.features);
-        return;
-      }
-
-      const parsed = parseDestination(data.url);
-      const url = parsed.href ?? data.url ?? "";
-      if (!url) return;
-
-      if (parsed.host && isAllowlisted(allowlist, siteKeyFromLocation(), parsed.host)) {
-        allowActionOnce(data.id, url, data.target || "_blank", data.features);
-        return;
-      }
-
-      const title =
-        data.kind === "location_assign" || data.kind === "location_replace"
-          ? "Blocked redirect"
-          : data.kind === "form_submit" || data.kind === "form_request_submit"
-            ? "Blocked form submit"
-            : "Blocked popup";
-
-      showAllowPrompt({
-        title,
-        url,
-        host: parsed.host,
-        target: data.target || "_blank",
-        ...(data.features ? { features: data.features } : {}),
-        ...(data.id !== undefined ? { actionId: data.id } : {})
-      });
-      return;
-    }
-
-    if (data.type === "ns-nav-allowed") {
-      lastNav = { kind: data.kind ?? "unknown", url: data.url ?? "", status: "allowed" };
-      refreshDebug();
-    }
-  },
-  true
-);
 
 if (chrome?.runtime?.onMessage) {
   chrome.runtime.onMessage.addListener((message) => {
@@ -608,17 +624,13 @@ window.addEventListener(
         decision = "block";
         e.preventDefault();
         e.stopImmediatePropagation();
-        try {
-          void appendEvent({
-            kind: "nav_click_block",
-            site: siteKeyFromLocation(),
-            url: location.href,
-            score: cds,
-            reasons: reasonCodes
-          });
-        } catch {
-          // ignore
-        }
+        appendEventSafely({
+          kind: "nav_click_block",
+          site: siteKeyFromLocation(),
+          url: location.href,
+          score: cds,
+          reasons: reasonCodes
+        });
         showToast({ message: `NavSentinel blocked deceptive click (CDS=${cds}).` });
       }
     }

@@ -19,6 +19,7 @@ import {
   removeAllowlistEntry,
   type Allowlist
 } from "../shared/allowlist";
+import { getRegistrableDomain, normalizeHost, safeUrlParse } from "../shared/domain";
 
 const navModeEl = document.getElementById("navMode") as HTMLSelectElement;
 const navDebugEl = document.getElementById("navDebug") as HTMLInputElement;
@@ -228,6 +229,19 @@ function getInt(el: HTMLInputElement, fallback: number): number {
   return Number.isFinite(n) ? Math.trunc(n) : fallback;
 }
 
+function normalizeTrustedDomainInput(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+
+  const parsed =
+    safeUrlParse(trimmed) ??
+    (trimmed.includes("://") ? null : safeUrlParse(`https://${trimmed}`));
+  const host = parsed?.hostname ?? trimmed;
+  const normalized = normalizeHost(host);
+  if (!normalized) return "";
+  return getRegistrableDomain(normalized);
+}
+
 async function init(): Promise<void> {
   const s = await getSuiteSettings();
   navModeEl.value = s.nav.defaultMode;
@@ -292,12 +306,15 @@ clearAllowlistBtn.addEventListener("click", async () => {
 });
 
 addTrustedBtn.addEventListener("click", async () => {
-  const raw = trustedInputEl.value.trim().toLowerCase();
-  if (!raw) return;
-  await addTrustedDomain(raw);
+  const normalized = normalizeTrustedDomainInput(trustedInputEl.value);
+  if (!normalized) {
+    flashStatus(saveStatusEl, "Enter a valid domain.");
+    return;
+  }
+  await addTrustedDomain(normalized);
   trustedInputEl.value = "";
   try {
-    await appendEvent({ kind: "cred_trust_domain", site: raw });
+    await appendEvent({ kind: "cred_trust_domain", site: normalized });
   } catch {
     // ignore
   }

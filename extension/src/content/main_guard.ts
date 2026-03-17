@@ -1,4 +1,5 @@
 const NS_SOURCE = "__navsentinel__";
+const BRIDGE_INIT_TYPE = "ns-port-init";
 const OPEN_TTL_MS = 800;
 const REDIRECT_TTL_MS = 1500;
 const MAX_OPENS_PER_GESTURE = 1;
@@ -7,25 +8,15 @@ const ALLOW_ONCE_TTL_MS = 1200;
 const BLOCKED_ACTION_TTL_MS = 5000;
 const PROTOCOL_VERSION = 1;
 
-function randomSessionKey(): string {
-  const buf = new Uint8Array(16);
-  crypto.getRandomValues(buf);
-  return Array.from(buf, (b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-const SESSION_KEY = randomSessionKey();
+let bridgePort: MessagePort | null = null;
 
 function postToIsolated(type: string, payload?: Record<string, unknown>): void {
-  window.postMessage(
-    {
-      source: NS_SOURCE,
-      type,
-      key: SESSION_KEY,
-      v: PROTOCOL_VERSION,
-      ...(payload ?? {})
-    },
-    "*"
-  );
+  bridgePort?.postMessage({
+    source: NS_SOURCE,
+    type,
+    v: PROTOCOL_VERSION,
+    ...(payload ?? {})
+  });
 }
 
 let mode: "off" | "smart" | "strict" = "smart";
@@ -414,6 +405,68 @@ function patchOpen(): void {
   }
 }
 
+function handleBridgeMessage(message: unknown): void {
+  const data = message as {
+    source?: string;
+    type?: string;
+    v?: number;
+    id?: string;
+    mode?: "off" | "smart" | "strict";
+    debug?: boolean;
+    allowOpen?: boolean;
+    allowRedirect?: boolean;
+  };
+  if (!data || data.source !== NS_SOURCE || data.v !== PROTOCOL_VERSION) return;
+
+  if (data.type === "ns-gesture-allow") {
+    markAllowance({ allowOpen: true, allowRedirect: true });
+    return;
+  }
+
+  if (data.type === "ns-config") {
+    if (data.mode) mode = data.mode;
+    if (typeof data.debug === "boolean") debug = data.debug;
+    postToIsolated("ns-config-ack", { mode, debug });
+    return;
+  }
+
+  if (data.type === "ns-ping") {
+    postToIsolated("ns-pong", { mode, debug });
+    return;
+  }
+
+  if (data.type === "ns-allow-once") {
+    setAllowOnce();
+    return;
+  }
+
+  if (data.type === "ns-allow") {
+    const allowOpen = data.allowOpen === true;
+    const allowRedirect = data.allowRedirect === true;
+    markAllowance({ allowOpen, allowRedirect });
+    if (debug) {
+      console.debug("[NavSentinel] allowance", {
+        allowOpen,
+        allowRedirect,
+        openUntil: allowOpenUntil,
+        redirectUntil: allowRedirectUntil
+      });
+    }
+    return;
+  }
+
+  if (data.type === "ns-allow-action" && data.id) {
+    const entry = blockedActions.get(data.id);
+    if (!entry) return;
+    if (entry.expiresAt <= nowMs()) {
+      blockedActions.delete(data.id);
+      return;
+    }
+    blockedActions.delete(data.id);
+    entry.action();
+  }
+}
+
 window.addEventListener(
   "message",
   (event) => {
@@ -421,87 +474,25 @@ window.addEventListener(
     const data = event.data as {
       source?: string;
       type?: string;
-      key?: string;
       v?: number;
-      id?: string;
-      mode?: "off" | "smart" | "strict";
-      debug?: boolean;
-      allowOpen?: boolean;
-      allowRedirect?: boolean;
     };
-    if (!data || data.source !== NS_SOURCE) return;
-
-    const inboundTypes = new Set([
-      "ns-session-request",
-      "ns-session-ack",
-      "ns-gesture-allow",
-      "ns-config",
-      "ns-ping",
-      "ns-allow-once",
-      "ns-allow",
-      "ns-allow-action"
-    ]);
-    if (!data.type || !inboundTypes.has(data.type)) return;
+    if (!data || data.source !== NS_SOURCE || data.type !== BRIDGE_INIT_TYPE) return;
 
     event.stopImmediatePropagation();
     event.stopPropagation();
 
-    if (data.type === "ns-session-request") {
-      postToIsolated("ns-session");
+    const nextPort = event.ports?.[0];
+    if (!(nextPort instanceof MessagePort)) return;
+
+    if (bridgePort) {
+      nextPort.close();
       return;
     }
 
-    if (data.key !== SESSION_KEY) return;
-
-    if (data.type === "ns-session-ack") return;
-
-    if (data.type === "ns-gesture-allow") {
-      markAllowance({ allowOpen: true, allowRedirect: true });
-      return;
-    }
-
-    if (data.type === "ns-config") {
-      if (data.mode) mode = data.mode;
-      if (typeof data.debug === "boolean") debug = data.debug;
-      postToIsolated("ns-config-ack", { mode, debug });
-      return;
-    }
-
-    if (data.type === "ns-ping") {
-      postToIsolated("ns-pong", { mode, debug });
-      return;
-    }
-
-    if (data.type === "ns-allow-once") {
-      setAllowOnce();
-      return;
-    }
-
-    if (data.type === "ns-allow") {
-      const allowOpen = data.allowOpen === true;
-      const allowRedirect = data.allowRedirect === true;
-      markAllowance({ allowOpen, allowRedirect });
-      if (debug) {
-        console.debug("[NavSentinel] allowance", {
-          allowOpen,
-          allowRedirect,
-          openUntil: allowOpenUntil,
-          redirectUntil: allowRedirectUntil
-        });
-      }
-      return;
-    }
-
-    if (data.type === "ns-allow-action" && data.id) {
-      const entry = blockedActions.get(data.id);
-      if (!entry) return;
-      if (entry.expiresAt <= nowMs()) {
-        blockedActions.delete(data.id);
-        return;
-      }
-      blockedActions.delete(data.id);
-      entry.action();
-    }
+    bridgePort = nextPort;
+    bridgePort.onmessage = (bridgeEvent) => handleBridgeMessage(bridgeEvent.data);
+    bridgePort.start?.();
+    postToIsolated("ns-bridge-ready");
   },
   true
 );
