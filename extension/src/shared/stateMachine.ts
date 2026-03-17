@@ -33,7 +33,7 @@ export function makeToken(params: {
     siteKey: params.siteKey,
     frameKey: params.frameKey,
     mode: params.mode,
-    pointer: params.pointer,
+    ...(params.pointer ? { pointer: params.pointer } : {}),
     cds: params.cds,
     reasonCodes: params.reasonCodes
   };

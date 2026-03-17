@@ -5,6 +5,9 @@ import manifest from "./extension/manifest.json";
 export default defineConfig({
   root: "extension",
   plugins: [crx({ manifest })],
+  test: {
+    include: ["src/**/*.test.ts", "../tests/**/*.test.ts"]
+  },
   build: {
     outDir: "dist",
     emptyOutDir: true

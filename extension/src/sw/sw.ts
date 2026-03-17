@@ -1,4 +1,4 @@
-import { getSettings, SETTINGS_KEY } from "../shared/storage";
+import { getNavSettings, SUITE_SETTINGS_KEY } from "../shared/storage";
 
 const BASELINE_RULESET_ID = "baseline";
 const NAV_ALLOW_TTL_MS = 1500;
@@ -24,7 +24,7 @@ const lastCommittedByTab = new Map<
 
 async function syncDnrRulesets(): Promise<void> {
   try {
-    const settings = await getSettings();
+    const settings = await getNavSettings();
     const enable = settings.dnrEnabled ? [BASELINE_RULESET_ID] : [];
     const disable = settings.dnrEnabled ? [] : [BASELINE_RULESET_ID];
     await chrome.declarativeNetRequest.updateEnabledRulesets({
@@ -32,7 +32,6 @@ async function syncDnrRulesets(): Promise<void> {
       disableRulesetIds: disable
     });
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.warn("[NavSentinel] Failed to sync DNR rulesets", err);
   }
 }
@@ -47,12 +46,13 @@ chrome.runtime.onStartup.addListener(() => {
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== "local") return;
-  if (!changes[SETTINGS_KEY]) return;
+  if (!changes[SUITE_SETTINGS_KEY]) return;
   void syncDnrRulesets();
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message !== "object") return;
+
   if (message.type === "ns-allow-nav") {
     const tabId = sender.tab?.id;
     if (typeof tabId === "number") {
@@ -72,7 +72,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         chrome.tabs.sendMessage(tabId, {
           type: "ns-rollback",
           url: pending.url,
-          prevUrl: pending.prevUrl,
+          ...(pending.prevUrl !== undefined ? { prevUrl: pending.prevUrl } : {}),
           qualifiers: pending.qualifiers
         });
       }
@@ -116,7 +116,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 chrome.webNavigation.onCommitted.addListener((details) => {
   if (details.frameId !== 0) return;
   const qualifiers = details.transitionQualifiers ?? [];
-  const isRedirect = qualifiers.includes("client_redirect") || qualifiers.includes("server_redirect");
+  const isRedirect =
+    qualifiers.includes("client_redirect") || qualifiers.includes("server_redirect");
   const isUserTyped =
     details.transitionType === "typed" ||
     details.transitionType === "auto_bookmark" ||
@@ -130,15 +131,17 @@ chrome.webNavigation.onCommitted.addListener((details) => {
   const allowUntil = allowUntilByTab.get(details.tabId) ?? 0;
   const allowedAtCommit = now <= allowUntil;
   const prevUrl = lastUrlByTab.get(details.tabId);
+
   lastUrlByTab.set(details.tabId, details.url);
   lastCommittedByTab.set(details.tabId, {
     url: details.url,
-    prevUrl,
+    ...(prevUrl !== undefined ? { prevUrl } : {}),
     transitionType: details.transitionType,
     qualifiers,
     ts: now,
     allowedAtCommit
   });
+
   if (allowedAtCommit) return;
 
   const suppressUntil = suppressUntilByTab.get(details.tabId) ?? 0;
@@ -146,15 +149,20 @@ chrome.webNavigation.onCommitted.addListener((details) => {
 
   pendingForwardByTab.set(details.tabId, { url: details.url, ts: now });
   suppressUntilByTab.set(details.tabId, now + ROLLBACK_SUPPRESS_MS);
+
   if (readyTabs.has(details.tabId)) {
     chrome.tabs.sendMessage(details.tabId, {
       type: "ns-rollback",
       url: details.url,
-      prevUrl,
+      ...(prevUrl !== undefined ? { prevUrl } : {}),
       qualifiers
     });
   } else {
-    pendingRollbackByTab.set(details.tabId, { url: details.url, prevUrl, qualifiers });
+    pendingRollbackByTab.set(details.tabId, {
+      url: details.url,
+      ...(prevUrl !== undefined ? { prevUrl } : {}),
+      qualifiers
+    });
   }
 });
 

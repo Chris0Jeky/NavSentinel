@@ -2,9 +2,11 @@ node_modules/
 dist/
 extension/dist/
 .vite/
+artifacts/
 *.log
 .DS_Store
 /.idea
 HistoryDump.txt
 AGENTS.md
 test-results/.last-run.json
+playwright-report/

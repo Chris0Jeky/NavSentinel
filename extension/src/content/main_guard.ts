@@ -5,6 +5,28 @@ const MAX_OPENS_PER_GESTURE = 1;
 const MAX_REDIRECTS_PER_GESTURE = 2;
 const ALLOW_ONCE_TTL_MS = 1200;
 const BLOCKED_ACTION_TTL_MS = 5000;
+const PROTOCOL_VERSION = 1;
+
+function randomSessionKey(): string {
+  const buf = new Uint8Array(16);
+  crypto.getRandomValues(buf);
+  return Array.from(buf, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+const SESSION_KEY = randomSessionKey();
+
+function postToIsolated(type: string, payload?: Record<string, unknown>): void {
+  window.postMessage(
+    {
+      source: NS_SOURCE,
+      type,
+      key: SESSION_KEY,
+      v: PROTOCOL_VERSION,
+      ...(payload ?? {})
+    },
+    "*"
+  );
+}
 
 let mode: "off" | "smart" | "strict" = "smart";
 let debug = false;
@@ -15,6 +37,7 @@ let allowOnceRemaining = 0;
 let allowOnceUntil = 0;
 let allowOpenUntil = 0;
 let allowRedirectUntil = 0;
+
 const blockedActions = new Map<
   string,
   {
@@ -34,6 +57,7 @@ function nowMs(): number {
 }
 
 function recordNav(status: NavStatus, params: { kind: string; url?: string }): void {
+  if (!debug) return;
   (window as any).__navsentinelLastNav = {
     status,
     kind: params.kind,
@@ -76,7 +100,11 @@ function consumeOpenAllowance(): "allow_once" | "allowed" | "none" {
 
 function consumeRedirectAllowance(): "allowed" | "none" {
   const now = nowMs();
-  if (allowRedirectUntil > 0 && now <= allowRedirectUntil && redirectCount < MAX_REDIRECTS_PER_GESTURE) {
+  if (
+    allowRedirectUntil > 0 &&
+    now <= allowRedirectUntil &&
+    redirectCount < MAX_REDIRECTS_PER_GESTURE
+  ) {
     redirectCount += 1;
     return "allowed";
   }
@@ -103,39 +131,31 @@ function postBlocked(params: {
   target?: string;
   features?: string;
 }): void {
-  recordNav("blocked", { kind: params.kind, url: params.url });
+  recordNav("blocked", {
+    kind: params.kind,
+    ...(params.url !== undefined ? { url: params.url } : {})
+  });
   if (debug) {
-    // eslint-disable-next-line no-console
     console.debug("[NavSentinel] blocked", { ...params, mode, ts: nowMs() });
   }
-  window.postMessage(
-    {
-      source: NS_SOURCE,
-      type: "ns-nav-blocked",
-      id: params.id,
-      kind: params.kind,
-      url: params.url ?? "",
-      target: params.target ?? "",
-      features: params.features ?? "",
-      ts: nowMs()
-    },
-    "*"
-  );
+  postToIsolated("ns-nav-blocked", {
+    id: params.id,
+    kind: params.kind,
+    ...(params.url !== undefined ? { url: params.url } : {}),
+    ...(params.target !== undefined ? { target: params.target } : {}),
+    ...(params.features !== undefined ? { features: params.features } : {}),
+    ts: nowMs()
+  });
 }
 
 function postAllowed(params: { kind: string; url?: string }): void {
   recordNav("allowed", params);
   if (!debug) return;
-  window.postMessage(
-    {
-      source: NS_SOURCE,
-      type: "ns-nav-allowed",
-      kind: params.kind,
-      url: params.url ?? "",
-      ts: nowMs()
-    },
-    "*"
-  );
+  postToIsolated("ns-nav-allowed", {
+    kind: params.kind,
+    url: params.url ?? "",
+    ts: nowMs()
+  });
 }
 
 function registerBlockedAction(params: {
@@ -151,11 +171,17 @@ function registerBlockedAction(params: {
     action: params.action,
     expiresAt: nowMs() + BLOCKED_ACTION_TTL_MS,
     kind: params.kind,
-    url: params.url,
-    target: params.target,
-    features: params.features
+    ...(params.url !== undefined ? { url: params.url } : {}),
+    ...(params.target !== undefined ? { target: params.target } : {}),
+    ...(params.features !== undefined ? { features: params.features } : {})
   });
-  postBlocked({ id, kind: params.kind, url: params.url, target: params.target, features: params.features });
+  postBlocked({
+    id,
+    kind: params.kind,
+    ...(params.url !== undefined ? { url: params.url } : {}),
+    ...(params.target !== undefined ? { target: params.target } : {}),
+    ...(params.features !== undefined ? { features: params.features } : {})
+  });
 }
 
 const nativeProtoOpen = Window.prototype.open;
@@ -165,29 +191,40 @@ const nativeReplace = Location.prototype.replace;
 const nativeFormSubmit = HTMLFormElement.prototype.submit;
 const nativeFormRequestSubmit = HTMLFormElement.prototype.requestSubmit;
 
-function callNativeOpen(thisArg: Window, url?: string | URL, target?: string, features?: string): Window | null {
+function callNativeOpen(
+  thisArg: Window,
+  url?: string | URL,
+  target?: string,
+  features?: string
+): Window | null {
   if (nativeProtoOpen) {
     return nativeProtoOpen.call(thisArg, url as any, target, features);
   }
   return nativeOpen.call(thisArg, url as any, target, features);
 }
 
-function patchedOpen(this: Window, url?: string | URL, target?: string, features?: string): Window | null {
+function patchedOpen(
+  this: Window,
+  url?: string | URL,
+  target?: string,
+  features?: string
+): Window | null {
   if (isOff()) {
-    postAllowed({ kind: "window_open", url: url ? String(url) : "" });
+    postAllowed({ kind: "window_open", ...(url !== undefined ? { url: String(url) } : {}) });
     return callNativeOpen(this, url, target, features);
   }
+
   const allowance = consumeOpenAllowance();
   if (allowance !== "none") {
-    postAllowed({ kind: "window_open", url: url ? String(url) : "" });
+    postAllowed({ kind: "window_open", ...(url !== undefined ? { url: String(url) } : {}) });
     return callNativeOpen(this, url, target, features);
   }
 
   registerBlockedAction({
     kind: "window_open",
-    url: url ? String(url) : "",
-    target,
-    features,
+    ...(url !== undefined ? { url: String(url) } : {}),
+    ...(target !== undefined ? { target } : {}),
+    ...(features !== undefined ? { features } : {}),
     action: () => {
       callNativeOpen(this, url, target, features);
     }
@@ -213,12 +250,14 @@ function patchLocation(): void {
       nativeAssign.call(this, url);
       return;
     }
+
     const allowance = consumeRedirectAllowance();
     if (allowance !== "none") {
       postAllowed({ kind: "location_assign", url: String(url) });
       nativeAssign.call(this, url);
       return;
     }
+
     registerBlockedAction({
       kind: "location_assign",
       url: String(url),
@@ -232,12 +271,14 @@ function patchLocation(): void {
       nativeReplace.call(this, url);
       return;
     }
+
     const allowance = consumeRedirectAllowance();
     if (allowance !== "none") {
       postAllowed({ kind: "location_replace", url: String(url) });
       nativeReplace.call(this, url);
       return;
     }
+
     registerBlockedAction({
       kind: "location_replace",
       url: String(url),
@@ -283,57 +324,67 @@ function patchLocation(): void {
     locReplace: window.location.replace === patchedReplace,
     locAssignDesc: (() => {
       const desc = Object.getOwnPropertyDescriptor(window.location, "assign");
-      return desc ? { configurable: !!desc.configurable, writable: !!(desc as any).writable } : null;
+      return desc
+        ? { configurable: !!desc.configurable, writable: !!(desc as any).writable }
+        : null;
     })(),
     locReplaceDesc: (() => {
       const desc = Object.getOwnPropertyDescriptor(window.location, "replace");
-      return desc ? { configurable: !!desc.configurable, writable: !!(desc as any).writable } : null;
+      return desc
+        ? { configurable: !!desc.configurable, writable: !!(desc as any).writable }
+        : null;
     })()
   };
 }
 
 function patchForms(): void {
   HTMLFormElement.prototype.submit = function (): void {
+    const actionUrl = resolveFormAction(this);
     if (isOff()) {
-      const actionUrl = resolveFormAction(this);
-      postAllowed({ kind: "form_submit", url: actionUrl });
+      postAllowed({ kind: "form_submit", ...(actionUrl !== undefined ? { url: actionUrl } : {}) });
       nativeFormSubmit.call(this);
       return;
     }
+
     const allowance = consumeRedirectAllowance();
     if (allowance !== "none") {
-      const actionUrl = resolveFormAction(this);
-      postAllowed({ kind: "form_submit", url: actionUrl });
+      postAllowed({ kind: "form_submit", ...(actionUrl !== undefined ? { url: actionUrl } : {}) });
       nativeFormSubmit.call(this);
       return;
     }
-    const actionUrl = resolveFormAction(this);
+
     registerBlockedAction({
       kind: "form_submit",
-      url: actionUrl,
+      ...(actionUrl !== undefined ? { url: actionUrl } : {}),
       action: () => nativeFormSubmit.call(this)
     });
   };
 
   if (nativeFormRequestSubmit) {
     HTMLFormElement.prototype.requestSubmit = function (submitter?: HTMLElement | null): void {
+      const actionUrl = resolveFormAction(this);
       if (isOff()) {
-        const actionUrl = resolveFormAction(this);
-        postAllowed({ kind: "form_request_submit", url: actionUrl });
+        postAllowed({
+          kind: "form_request_submit",
+          ...(actionUrl !== undefined ? { url: actionUrl } : {})
+        });
         nativeFormRequestSubmit.call(this, submitter as any);
         return;
       }
+
       const allowance = consumeRedirectAllowance();
       if (allowance !== "none") {
-        const actionUrl = resolveFormAction(this);
-        postAllowed({ kind: "form_request_submit", url: actionUrl });
+        postAllowed({
+          kind: "form_request_submit",
+          ...(actionUrl !== undefined ? { url: actionUrl } : {})
+        });
         nativeFormRequestSubmit.call(this, submitter as any);
         return;
       }
-      const actionUrl = resolveFormAction(this);
+
       registerBlockedAction({
         kind: "form_request_submit",
-        url: actionUrl,
+        ...(actionUrl !== undefined ? { url: actionUrl } : {}),
         action: () => nativeFormRequestSubmit.call(this, submitter as any)
       });
     };
@@ -352,7 +403,12 @@ function patchOpen(): void {
   }
 
   if (Window.prototype.open !== patchedOpen) {
-    Window.prototype.open = function (url?: string | URL, target?: string, features?: string): Window | null {
+    Window.prototype.open = function (
+      this: Window,
+      url?: string | URL,
+      target?: string,
+      features?: string
+    ): Window | null {
       return patchedOpen.call(this, url, target, features);
     } as any;
   }
@@ -365,6 +421,8 @@ window.addEventListener(
     const data = event.data as {
       source?: string;
       type?: string;
+      key?: string;
+      v?: number;
       id?: string;
       mode?: "off" | "smart" | "strict";
       debug?: boolean;
@@ -373,22 +431,50 @@ window.addEventListener(
     };
     if (!data || data.source !== NS_SOURCE) return;
 
+    const inboundTypes = new Set([
+      "ns-session-request",
+      "ns-session-ack",
+      "ns-gesture-allow",
+      "ns-config",
+      "ns-ping",
+      "ns-allow-once",
+      "ns-allow",
+      "ns-allow-action"
+    ]);
+    if (!data.type || !inboundTypes.has(data.type)) return;
+
+    event.stopImmediatePropagation();
+    event.stopPropagation();
+
+    if (data.type === "ns-session-request") {
+      postToIsolated("ns-session");
+      return;
+    }
+
+    if (data.key !== SESSION_KEY) return;
+
+    if (data.type === "ns-session-ack") return;
+
     if (data.type === "ns-gesture-allow") {
       markAllowance({ allowOpen: true, allowRedirect: true });
+      return;
     }
 
     if (data.type === "ns-config") {
       if (data.mode) mode = data.mode;
       if (typeof data.debug === "boolean") debug = data.debug;
-      window.postMessage({ source: NS_SOURCE, type: "ns-config-ack", mode, debug }, "*");
+      postToIsolated("ns-config-ack", { mode, debug });
+      return;
     }
 
     if (data.type === "ns-ping") {
-      window.postMessage({ source: NS_SOURCE, type: "ns-pong", mode, debug }, "*");
+      postToIsolated("ns-pong", { mode, debug });
+      return;
     }
 
     if (data.type === "ns-allow-once") {
       setAllowOnce();
+      return;
     }
 
     if (data.type === "ns-allow") {
@@ -396,7 +482,6 @@ window.addEventListener(
       const allowRedirect = data.allowRedirect === true;
       markAllowance({ allowOpen, allowRedirect });
       if (debug) {
-        // eslint-disable-next-line no-console
         console.debug("[NavSentinel] allowance", {
           allowOpen,
           allowRedirect,
@@ -404,6 +489,7 @@ window.addEventListener(
           redirectUntil: allowRedirectUntil
         });
       }
+      return;
     }
 
     if (data.type === "ns-allow-action" && data.id) {
@@ -423,5 +509,4 @@ window.addEventListener(
 patchOpen();
 patchLocation();
 patchForms();
-
 (window as any).__navsentinelMainGuard = true;

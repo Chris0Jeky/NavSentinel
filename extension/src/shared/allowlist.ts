@@ -1,6 +1,6 @@
 export type Allowlist = Record<string, string[]>;
 
-const ALLOWLIST_KEY = "navsentinel:allowlist";
+export const ALLOWLIST_KEY = "sentinelsuite:nav_allowlist_v1";
 
 export async function getAllowlist(): Promise<Allowlist> {
   const res = await chrome.storage.local.get(ALLOWLIST_KEY);

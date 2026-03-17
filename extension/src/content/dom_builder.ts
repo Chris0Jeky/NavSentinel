@@ -9,7 +9,6 @@ export interface DownCapture {
   shift: boolean;
   alt: boolean;
   meta: boolean;
-
   stack: Element[];
   top: Element | null;
 }
@@ -18,7 +17,6 @@ export interface ClickCapture {
   ts: number;
   x: number;
   y: number;
-
   stack: Element[];
   top: Element | null;
 }
@@ -30,7 +28,8 @@ function approxNonWhitespaceTextLen(el: Element, cap = 80): number {
   if (!s) return 0;
   let count = 0;
   for (let i = 0; i < s.length && count < cap; i++) {
-    if (!WS_RE.test(s[i])) count++;
+    const ch = s.charAt(i);
+    if (!WS_RE.test(ch)) count++;
   }
   return count;
 }
@@ -46,8 +45,7 @@ function isInteractiveCheap(el: Element): boolean {
   if (tag === "A" || tag === "BUTTON") return true;
   const role = (el.getAttribute("role") ?? "").toLowerCase();
   if (role === "button" || role === "link") return true;
-  if (el.getAttribute("onclick")) return true;
-  return false;
+  return !!el.getAttribute("onclick");
 }
 
 function firstUnderlyingCandidate(stack: Element[], top: Element | null): Element | null {
@@ -66,9 +64,8 @@ function readRect(el: Element): { w: number; h: number } | undefined {
 }
 
 function readStyleHints(el: Element): Partial<ElementHint> {
-  const cs = window.getComputedStyle(el as Element);
+  const cs = window.getComputedStyle(el);
   const z = cs.zIndex === "auto" ? 0 : Number.parseInt(cs.zIndex, 10);
-
   return {
     opacity: Number.parseFloat(cs.opacity),
     display: cs.display,
@@ -82,38 +79,38 @@ function readStyleHints(el: Element): Partial<ElementHint> {
 
 function buildElementHint(el: Element, opts: { wantStyle: boolean; wantRect: boolean }): ElementHint {
   const tag = el.tagName;
-  const role = el.getAttribute("role") ?? undefined;
-
   const hint: ElementHint = {
     tag,
-    role,
     hasOnClick: !!el.getAttribute("onclick"),
     textLength: approxNonWhitespaceTextLen(el),
     ariaLabelLength: attrLen(el, "aria-label"),
     titleLength: attrLen(el, "title")
   };
+  const role = el.getAttribute("role");
+  if (role) hint.role = role;
 
   if (tag === "A") {
-    const t = (el as HTMLAnchorElement).target;
-    hint.targetBlank = t === "_blank";
+    hint.targetBlank = (el as HTMLAnchorElement).target === "_blank";
   }
 
-  if (opts.wantRect) hint.rect = readRect(el);
+  if (opts.wantRect) {
+    const rect = readRect(el);
+    if (rect) hint.rect = rect;
+  }
   if (opts.wantStyle) Object.assign(hint, readStyleHints(el));
-
   return hint;
 }
 
-function detectLegitModalBackdrop(top: Element | null, stack: Element[], viewport: { w: number; h: number }): boolean {
+function detectLegitModalBackdrop(
+  top: Element | null,
+  stack: Element[],
+  viewport: { w: number; h: number }
+): boolean {
   if (!top) return false;
-
   const topRect = readRect(top);
   if (!topRect) return false;
-
   const ratio = (topRect.w * topRect.h) / (viewport.w * viewport.h);
-  if (ratio < 0.35) return false;
-
-  if (isInteractiveCheap(top)) return false;
+  if (ratio < 0.35 || isInteractiveCheap(top)) return false;
 
   for (const el of stack) {
     if (el === top) continue;
@@ -128,7 +125,6 @@ export function capturePointerDown(e: PointerEvent): DownCapture {
   const x = e.clientX;
   const y = e.clientY;
   const stack = document.elementsFromPoint(x, y);
-
   return {
     ts: performance.now(),
     x,
@@ -147,7 +143,6 @@ export function captureClick(e: MouseEvent): ClickCapture {
   const x = e.clientX;
   const y = e.clientY;
   const stack = document.elementsFromPoint(x, y);
-
   return {
     ts: performance.now(),
     x,
@@ -162,34 +157,39 @@ export function buildClickContextFromEvents(params: {
   click: ClickCapture;
 }): ClickContext {
   const viewport = { w: window.innerWidth, h: window.innerHeight };
-
   const downTop = params.down?.top ?? null;
   const clickTop = params.click.top ?? null;
-
   const retargeted = !!(downTop && clickTop && downTop !== clickTop);
-
-  const explicitNewTabIntent = (params.down?.button === 1) || !!(params.down?.ctrl || params.down?.meta);
-
+  const explicitNewTabIntent =
+    params.down?.button === 1 || !!(params.down?.ctrl || params.down?.meta);
   const topEl = clickTop ?? downTop ?? params.click.stack[0] ?? document.documentElement;
   const underEl = firstUnderlyingCandidate(params.click.stack, topEl);
-
   const top = buildElementHint(topEl, { wantRect: true, wantStyle: true });
-
-  const underlying = underEl
-    ? buildElementHint(underEl, { wantRect: true, wantStyle: false })
-    : undefined;
-
   const isLegitModalBackdrop = detectLegitModalBackdrop(topEl, params.click.stack, viewport);
 
-  const ctx: ClickContext = {
+  return {
     viewport,
     top,
-    underlying,
+    ...(underEl ? { underlying: buildElementHint(underEl, { wantRect: true, wantStyle: false }) } : {}),
     retargeted,
     input: "pointer",
     explicitNewTabIntent,
     isLegitModalBackdrop
   };
+}
 
-  return ctx;
+export function buildKeyboardClickContext(target: Element | null): ClickContext {
+  const viewport = { w: window.innerWidth, h: window.innerHeight };
+  const active = document.activeElement;
+  const topEl = target ?? (active instanceof Element ? active : null) ?? document.documentElement;
+  const top = buildElementHint(topEl, { wantRect: true, wantStyle: true });
+
+  return {
+    viewport,
+    top,
+    retargeted: false,
+    input: "keyboard",
+    explicitNewTabIntent: false,
+    isLegitModalBackdrop: false
+  };
 }

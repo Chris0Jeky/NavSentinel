@@ -1,8 +1,14 @@
 {
   "manifest_version": 3,
-  "name": "NavSentinel (Dev)",
-  "version": "0.1.0",
-  "description": "Navigation Intent Firewall: blocks deceptive click overlays and unwanted user-gesture popups.",
+  "name": "NavSentinel Suite (Dev)",
+  "version": "0.2.0",
+  "description": "Navigation intent firewall plus local-first credential submission guardrails.",
+  "icons": {
+    "16": "assets/icon16.png",
+    "32": "assets/icon32.png",
+    "48": "assets/icon48.png",
+    "128": "assets/icon128.png"
+  },
   "permissions": [
     "storage",
     "declarativeNetRequest",
@@ -11,12 +17,10 @@
     "tabs"
   ],
   "host_permissions": ["<all_urls>"],
-
   "background": {
     "service_worker": "src/sw/sw.ts",
     "type": "module"
   },
-
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
@@ -31,14 +35,27 @@
       "run_at": "document_start",
       "world": "MAIN",
       "all_frames": true
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content/credential_guard.ts"],
+      "run_at": "document_start",
+      "world": "ISOLATED",
+      "all_frames": true
     }
   ],
-
   "options_ui": {
     "page": "src/options/options.html",
     "open_in_tab": true
   },
-
+  "action": {
+    "default_icon": {
+      "16": "assets/icon16.png",
+      "32": "assets/icon32.png"
+    },
+    "default_popup": "src/popup/popup.html",
+    "default_title": "NavSentinel Suite"
+  },
   "declarative_net_request": {
     "rule_resources": [
       {

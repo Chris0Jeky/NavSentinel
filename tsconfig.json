@@ -8,7 +8,7 @@
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
     "resolveJsonModule": true,
-    "types": ["chrome"],
+    "types": ["chrome", "node"],
     "skipLibCheck": true
   },
   "include": ["extension/src", "tests", "vite.config.ts"]

@@ -1,5 +1,5 @@
 import { computeCDS } from "../shared/scoring";
-import { getSettings, onSettingsChange } from "../shared/storage";
+import { appendEvent, getNavSettings, onNavSettingsChange, type NavSettings } from "../shared/storage";
 import { makeToken, setActiveToken } from "../shared/stateMachine";
 import type { Mode } from "../shared/types";
 import {
@@ -11,9 +11,10 @@ import {
 } from "../shared/allowlist";
 import { showToast } from "./ui_toast";
 import {
-  capturePointerDown,
-  captureClick,
   buildClickContextFromEvents,
+  buildKeyboardClickContext,
+  captureClick,
+  capturePointerDown,
   type DownCapture
 } from "./dom_builder";
 import { setDebugEnabled, updateDebugOverlay, type DebugInfo } from "./debug_overlay";
@@ -32,8 +33,9 @@ const RISKY_BLANK_REASONS = new Set([
 ]);
 
 let lastDown: DownCapture | null = null;
-let settings = { defaultMode: "smart", debug: false, dnrEnabled: false };
+let settings: NavSettings = { defaultMode: "smart", debug: false, dnrEnabled: false };
 let allowlist: Allowlist = {};
+let sessionKey: string | null = null;
 let mainGuard: "unknown" | "yes" | "no" = "unknown";
 let lastNav: { kind: string; url: string; status: "allowed" | "blocked" } | null = null;
 let lastDebug: Omit<DebugInfo, "mainGuard" | "lastNav"> | null = null;
@@ -41,11 +43,16 @@ let rollbackShownAt = 0;
 
 function refreshDebug(): void {
   if (!lastDebug) return;
-  updateDebugOverlay({ ...lastDebug, mainGuard, lastNav: lastNav ?? undefined });
+  updateDebugOverlay({
+    ...lastDebug,
+    mainGuard,
+    ...(lastNav ? { lastNav } : {})
+  });
 }
 
 async function initSettings() {
-  settings = await getSettings();
+  postToMain("ns-session-request");
+  settings = await getNavSettings();
   allowlist = await getAllowlist();
   setDebugEnabled(settings.debug);
   postToMain("ns-config", { mode: settings.defaultMode, debug: settings.debug });
@@ -65,9 +72,9 @@ async function initSettings() {
   }, 750);
 }
 
-initSettings();
+void initSettings();
 
-onSettingsChange((s) => {
+onNavSettingsChange((s) => {
   settings = s;
   setDebugEnabled(s.debug);
   postToMain("ns-config", { mode: s.defaultMode, debug: s.debug });
@@ -87,7 +94,11 @@ function frameKey(): string {
 }
 
 function postToMain(type: string, payload?: Record<string, unknown>): void {
-  window.postMessage({ source: NS_SOURCE, type, ...(payload ?? {}) }, "*");
+  const msg: Record<string, unknown> = { source: NS_SOURCE, type, ...(payload ?? {}) };
+  if (type !== "ns-session-request" && sessionKey) {
+    (msg as any).key = sessionKey;
+  }
+  window.postMessage(msg, "*");
 }
 
 function notifyNavAllow(ttlMs = NAV_ALLOW_TTL_MS): void {
@@ -112,6 +123,11 @@ function showRollbackPrompt(url: string): void {
     }
   })();
   (window as any).__navsentinelRollbackPrompt = { url, ts: now };
+  try {
+    void appendEvent({ kind: "nav_rollback", site: siteKeyFromLocation(), url, destHost: host });
+  } catch {
+    // ignore
+  }
   showToast({
     message: `NavSentinel rolled back a redirect to ${host}.`,
     actions: [
@@ -172,15 +188,19 @@ function parseDestination(rawUrl: string | null | undefined): { href: string | n
   }
 }
 
-function nameLength(h: { textLength?: number; ariaLabelLength?: number; titleLength?: number }): number {
-  return (h.textLength ?? 0) + (h.ariaLabelLength ?? 0) + (h.titleLength ?? 0);
-}
-
 function isInteractive(h: { tag: string; role?: string; hasOnClick?: boolean }): boolean {
   if (h.tag === "A" || h.tag === "BUTTON") return true;
   const role = (h.role ?? "").toLowerCase();
   if (role === "link" || role === "button") return true;
   return !!h.hasOnClick;
+}
+
+function isInteractiveElement(el: Element): boolean {
+  const tag = el.tagName;
+  if (tag === "A" || tag === "BUTTON") return true;
+  const role = (el.getAttribute("role") ?? "").toLowerCase();
+  if (role === "link" || role === "button") return true;
+  return !!el.getAttribute("onclick");
 }
 
 function elementNameLength(el: Element): number {
@@ -194,7 +214,9 @@ function isVisibleElement(el: Element): boolean {
   const rect = (el as HTMLElement).getBoundingClientRect?.();
   if (!rect || rect.width <= 0 || rect.height <= 0) return false;
   const cs = window.getComputedStyle(el);
-  if (cs.display === "none" || cs.visibility === "hidden" || cs.visibility === "collapse") return false;
+  if (cs.display === "none" || cs.visibility === "hidden" || cs.visibility === "collapse") {
+    return false;
+  }
   const opacity = Number.parseFloat(cs.opacity);
   if (Number.isFinite(opacity) && opacity < 0.08) return false;
   return true;
@@ -210,7 +232,7 @@ function isLegitBlankAnchor(
   if (ctx.retargeted) return false;
   if (!isVisibleElement(anchor)) return false;
   if (elementNameLength(anchor) === 0) return false;
-  if (!isInteractive(ctx.top) && !isInteractive(anchor)) return false;
+  if (!isInteractive(ctx.top) && !isInteractiveElement(anchor)) return false;
   for (const reason of reasonCodes) {
     if (RISKY_BLANK_REASONS.has(reason)) return false;
   }
@@ -258,9 +280,14 @@ async function allowAlways(
   siteKey: string,
   host: string,
   params: { actionId?: string | null; url?: string; target?: string; features?: string }
-) {
+): Promise<void> {
   allowlist = await addAllowlistEntry(siteKey, host);
-  allowActionOnce(params.actionId, params.url, params.target, params.features);
+  try {
+    void appendEvent({ kind: "nav_allowlist_add", site: siteKey, destHost: host, url: location.href });
+  } catch {
+    // ignore
+  }
+  allowActionOnce(params.actionId ?? null, params.url, params.target, params.features);
 }
 
 function showAllowPrompt(params: {
@@ -270,7 +297,7 @@ function showAllowPrompt(params: {
   target?: string;
   features?: string;
   actionId?: string | null;
-}) {
+}): void {
   const actions = [
     {
       label: "Allow once",
@@ -283,13 +310,24 @@ function showAllowPrompt(params: {
       label: "Always allow",
       onClick: () => {
         void allowAlways(siteKeyFromLocation(), params.host as string, {
-          actionId: params.actionId,
-          url: params.url,
-          target: params.target,
-          features: params.features
+          ...(params.actionId !== undefined ? { actionId: params.actionId } : {}),
+          ...(params.url !== undefined ? { url: params.url } : {}),
+          ...(params.target !== undefined ? { target: params.target } : {}),
+          ...(params.features !== undefined ? { features: params.features } : {})
         });
       }
     });
+  }
+
+  try {
+    void appendEvent({
+      kind: "nav_blank_prompt",
+      site: siteKeyFromLocation(),
+      url: params.url,
+      ...(params.host ? { destHost: params.host } : {})
+    });
+  } catch {
+    // ignore
   }
 
   showToast({
@@ -305,14 +343,41 @@ window.addEventListener(
     const data = event.data as {
       source?: string;
       type?: string;
+      key?: string;
       id?: string;
       kind?: string;
       url?: string;
       target?: string;
       features?: string;
       mode?: "off" | "smart" | "strict";
+      debug?: boolean;
+      v?: number;
     };
     if (!data || data.source !== NS_SOURCE) return;
+
+    const inboundTypes = new Set([
+      "ns-session",
+      "ns-pong",
+      "ns-config-ack",
+      "ns-nav-blocked",
+      "ns-nav-allowed"
+    ]);
+    if (data.type && inboundTypes.has(data.type)) {
+      event.stopImmediatePropagation();
+      event.stopPropagation();
+    }
+
+    if (data.type === "ns-session") {
+      if (!sessionKey && typeof data.key === "string" && data.key.length >= 16) {
+        sessionKey = data.key;
+        postToMain("ns-session-ack");
+        postToMain("ns-config", { mode: settings.defaultMode, debug: settings.debug });
+        postToMain("ns-ping");
+      }
+      return;
+    }
+
+    if (!sessionKey || data.key !== sessionKey) return;
 
     if (data.type === "ns-pong" || data.type === "ns-config-ack") {
       mainGuard = "yes";
@@ -328,6 +393,7 @@ window.addEventListener(
         allowActionOnce(data.id, data.url, data.target, data.features);
         return;
       }
+
       const parsed = parseDestination(data.url);
       const url = parsed.href ?? data.url ?? "";
       if (!url) return;
@@ -349,15 +415,15 @@ window.addEventListener(
         url,
         host: parsed.host,
         target: data.target || "_blank",
-        features: data.features,
-        actionId: data.id
+        ...(data.features ? { features: data.features } : {}),
+        ...(data.id !== undefined ? { actionId: data.id } : {})
       });
+      return;
     }
 
     if (data.type === "ns-nav-allowed") {
       lastNav = { kind: data.kind ?? "unknown", url: data.url ?? "", status: "allowed" };
       refreshDebug();
-      return;
     }
   },
   true
@@ -369,7 +435,7 @@ if (chrome?.runtime?.onMessage) {
     if (window.top !== window) return;
     if (settings.defaultMode === "off") return;
     const url = typeof message.url === "string" ? message.url : "";
-    const prevUrl = typeof (message as any).prevUrl === "string" ? (message as any).prevUrl : "";
+    const prevUrl = typeof message.prevUrl === "string" ? message.prevUrl : "";
     handleRollback(url, prevUrl);
   });
 
@@ -398,8 +464,9 @@ if (chrome?.runtime?.sendMessage && window.top === window) {
       }
     });
   };
+
   if (document.readyState === "loading") {
-    window.addEventListener("DOMContentLoaded", run, { once: true });
+    window.addEventListener("DOMContentLoaded", () => run(), { once: true });
   } else {
     run();
   }
@@ -409,17 +476,18 @@ if (chrome?.runtime?.sendMessage && window.top === window) {
   const runForward = () => {
     chrome.runtime.sendMessage({ type: "ns-check-forward", currentUrl: location.href }, (resp) => {
       const url = typeof resp?.url === "string" ? resp.url : "";
-      if (!url) return;
-      if (settings.defaultMode === "off") return;
+      if (!url || settings.defaultMode === "off") return;
       showRollbackPrompt(url);
     });
   };
+
   window.addEventListener("pageshow", runForward);
   window.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
       runForward();
     }
   });
+
   if (document.readyState === "loading") {
     window.addEventListener("DOMContentLoaded", runForward, { once: true });
   } else {
@@ -431,9 +499,7 @@ window.addEventListener(
   "pointerdown",
   (e) => {
     if (!(e instanceof PointerEvent)) return;
-
     lastDown = capturePointerDown(e);
-
     const token = makeToken({
       siteKey: siteKeyFromLocation(),
       frameKey: frameKey(),
@@ -450,7 +516,6 @@ window.addEventListener(
       cds: 0,
       reasonCodes: []
     });
-
     setActiveToken(token);
   },
   true
@@ -461,25 +526,33 @@ window.addEventListener(
   (e) => {
     if (!(e instanceof MouseEvent)) return;
 
-    const click = captureClick(e);
-    const ctx = buildClickContextFromEvents({ down: lastDown, click });
+    const isKeyboardActivation = e.isTrusted && e.detail === 0;
+    const downForClick =
+      !isKeyboardActivation && lastDown && performance.now() - lastDown.ts < 1500 ? lastDown : null;
+
+    const ctx = (() => {
+      if (isKeyboardActivation) {
+        const path = e.composedPath?.() ?? [];
+        const firstEl = path.find((p) => p instanceof Element) as Element | undefined;
+        return buildKeyboardClickContext(firstEl ?? (e.target instanceof Element ? e.target : null));
+      }
+      const click = captureClick(e);
+      return buildClickContextFromEvents({ down: downForClick, click });
+    })();
+
     const { cds, reasonCodes } = computeCDS(ctx);
-
     const mode: Mode = settings.defaultMode;
-
-    const token = makeToken({
-      siteKey: siteKeyFromLocation(),
-      frameKey: frameKey(),
-      mode,
-      pointer: lastDown
+    const pointer = isKeyboardActivation
+      ? undefined
+      : downForClick
         ? {
-            x: lastDown.x,
-            y: lastDown.y,
-            button: lastDown.button,
-            ctrl: lastDown.ctrl,
-            shift: lastDown.shift,
-            alt: lastDown.alt,
-            meta: lastDown.meta
+            x: downForClick.x,
+            y: downForClick.y,
+            button: downForClick.button,
+            ctrl: downForClick.ctrl,
+            shift: downForClick.shift,
+            alt: downForClick.alt,
+            meta: downForClick.meta
           }
         : {
             x: e.clientX,
@@ -489,18 +562,24 @@ window.addEventListener(
             shift: e.shiftKey,
             alt: e.altKey,
             meta: e.metaKey
-          },
+          };
+
+    const token = makeToken({
+      siteKey: siteKeyFromLocation(),
+      frameKey: frameKey(),
+      mode,
+      pointer,
       cds,
       reasonCodes
     });
-
     setActiveToken(token);
 
     const explicitNewTab = !!ctx.explicitNewTabIntent;
-
     const anchor = findAnchorFromEvent(e);
     const isBlankAnchor = !!(anchor && anchor.target === "_blank");
-    const parsed = isBlankAnchor ? parseDestination(anchor?.getAttribute("href") ?? anchor?.href) : null;
+    const parsed = isBlankAnchor
+      ? parseDestination(anchor?.getAttribute("href") ?? anchor?.href)
+      : null;
     const isAllowed = parsed?.host
       ? isAllowlisted(allowlist, siteKeyFromLocation(), parsed.host)
       : false;
@@ -529,9 +608,18 @@ window.addEventListener(
         decision = "block";
         e.preventDefault();
         e.stopImmediatePropagation();
-        showToast({
-          message: `NavSentinel blocked deceptive click (CDS=${cds}).`
-        });
+        try {
+          void appendEvent({
+            kind: "nav_click_block",
+            site: siteKeyFromLocation(),
+            url: location.href,
+            score: cds,
+            reasons: reasonCodes
+          });
+        } catch {
+          // ignore
+        }
+        showToast({ message: `NavSentinel blocked deceptive click (CDS=${cds}).` });
       }
     }
 
@@ -547,7 +635,6 @@ window.addEventListener(
     refreshDebug();
 
     if (settings.debug) {
-      // eslint-disable-next-line no-console
       console.debug("[NavSentinel] click", { decision, cds, reasonCodes, ctx });
     }
   },

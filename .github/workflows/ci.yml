@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-and-unit:
+    name: Build / Unit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify versions
+        run: npm run verify:versions
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Build extension
+        run: npm run build
+
+      - name: Package extension
+        run: npm run package:ext
+
+      - name: Upload packaged extension
+        uses: actions/upload-artifact@v4
+        with:
+          name: navsentinel-extension
+          path: artifacts/*.zip
+          if-no-files-found: error
+
+  e2e:
+    name: E2E
+    runs-on: ubuntu-latest
+    needs: build-and-unit
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify versions
+        run: npm run verify:versions
+
+      - name: Build extension
+        run: npm run build
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Install Xvfb
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+
+      - name: Run E2E tests
+        run: xvfb-run -a npm run test:e2e
