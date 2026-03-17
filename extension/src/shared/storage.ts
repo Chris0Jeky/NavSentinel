@@ -1,5 +1,5 @@
 import type { Mode } from "./types";
-import { ALLOWLIST_KEY, normalizeAllowlist, type Allowlist } from "./allowlist";
+import { ALLOWLIST_KEY, getAllowlist, normalizeAllowlist, type Allowlist } from "./allowlist";
 
 export type CredMode = "off" | "smart" | "strict";
 
@@ -281,8 +281,7 @@ export async function exportAll(): Promise<{
   eventLog: EventLogEntry[];
 }> {
   const settings = await getSuiteSettings();
-  const allowRes = await chrome.storage.local.get(ALLOWLIST_KEY);
-  const allowlist = (allowRes[ALLOWLIST_KEY] as Allowlist | undefined) ?? {};
+  const allowlist = await getAllowlist();
   const trustedDomains = await getTrustedDomains();
   const eventLog = await getEventLog();
   return {

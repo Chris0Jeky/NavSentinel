@@ -20,7 +20,7 @@ function isWithinRoot(root: string, target: string): boolean {
 async function startGymServer(): Promise<{ baseUrl: string; close: () => Promise<void> }> {
   const gymRoot = path.resolve(__dirname, "..", "..", "gym");
 
-  const server = http.createServer((req, res) => {
+  const server = http.createServer(async (req, res) => {
     try {
       const reqUrl = new URL(req.url ?? "/", "http://127.0.0.1");
       const pathname = decodeURIComponent(reqUrl.pathname);
@@ -43,6 +43,11 @@ async function startGymServer(): Promise<{ baseUrl: string; close: () => Promise
       if (ext === ".css") res.setHeader("content-type", "text/css; charset=utf-8");
       else if (ext === ".js") res.setHeader("content-type", "text/javascript; charset=utf-8");
       else res.setHeader("content-type", "text/html; charset=utf-8");
+
+      const delayMs = Number(reqUrl.searchParams.get("delayMs") ?? "0");
+      if (Number.isFinite(delayMs) && delayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
 
       res.statusCode = 200;
       res.end(fs.readFileSync(resolved));
@@ -138,6 +143,47 @@ test("Level 10 delayed form submit prompts", async () => {
       await page.click("#submitDelayed");
       await page.waitForTimeout(2600);
       await expect(page.locator("text=Blocked form submit")).toBeVisible({ timeout: 4000 });
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("Level 12 delayed same-tab navigation does not roll back a legitimate click", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const gymOverride = process.env.GYM_BASE_URL;
+  const gym = gymOverride ? null : await startGymServer();
+  const baseUrl = gymOverride ?? gym!.baseUrl;
+
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/level12-slow-same-tab-link.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await page.waitForFunction(() => (window as any).__navsentinelMainGuard === true, null, {
+        timeout: 5_000
+      });
+
+      await page.click("#slowLink");
+      await page.waitForURL(/level4-visual-mimicry\.html\?delayMs=2500/, { timeout: 10_000 });
+      await page.waitForTimeout(1200);
+      await expect(page.locator("text=NavSentinel rolled back a redirect")).toHaveCount(0);
+      await expect(page).toHaveURL(/level4-visual-mimicry\.html\?delayMs=2500/);
     } finally {
       await context.close();
     }

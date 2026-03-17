@@ -39,7 +39,7 @@
 
 - `MasterPlan.md`
   - original design intent and early scope framing
-- [Expansion_Tracker.md](C:\Users\jekyt\Desktop\Printer Config\Others\Git\NavSentinel-codex-expansion\docs\Expansion_Tracker.md)
+- [Expansion_Tracker.md](./Expansion_Tracker.md)
   - durable summary of the later suite-expansion merge and follow-up work
 
 ## Where To Look First

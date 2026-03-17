@@ -2,6 +2,7 @@ const NS_SOURCE = "__navsentinel__";
 const BRIDGE_INIT_TYPE = "ns-port-init";
 const OPEN_TTL_MS = 800;
 const REDIRECT_TTL_MS = 1500;
+const TARGET_NAV_TTL_MS = 10000;
 const MAX_OPENS_PER_GESTURE = 1;
 const MAX_REDIRECTS_PER_GESTURE = 2;
 const ALLOW_ONCE_TTL_MS = 1200;
@@ -149,6 +150,16 @@ function postAllowed(params: { kind: string; url?: string }): void {
   });
 }
 
+function notifyAllowedTarget(url: string | URL | undefined): void {
+  if (url === undefined) return;
+  try {
+    const href = new URL(String(url), location.href).toString();
+    chrome.runtime.sendMessage({ type: "ns-allow-target-nav", url: href, ttlMs: TARGET_NAV_TTL_MS });
+  } catch {
+    // ignore
+  }
+}
+
 function registerBlockedAction(params: {
   kind: string;
   url?: string;
@@ -238,6 +249,7 @@ function patchLocation(): void {
   const patchedAssign = function (this: Location, url: string | URL): void {
     if (isOff()) {
       postAllowed({ kind: "location_assign", url: String(url) });
+      notifyAllowedTarget(url);
       nativeAssign.call(this, url);
       return;
     }
@@ -245,6 +257,7 @@ function patchLocation(): void {
     const allowance = consumeRedirectAllowance();
     if (allowance !== "none") {
       postAllowed({ kind: "location_assign", url: String(url) });
+      notifyAllowedTarget(url);
       nativeAssign.call(this, url);
       return;
     }
@@ -259,6 +272,7 @@ function patchLocation(): void {
   const patchedReplace = function (this: Location, url: string | URL): void {
     if (isOff()) {
       postAllowed({ kind: "location_replace", url: String(url) });
+      notifyAllowedTarget(url);
       nativeReplace.call(this, url);
       return;
     }
@@ -266,6 +280,7 @@ function patchLocation(): void {
     const allowance = consumeRedirectAllowance();
     if (allowance !== "none") {
       postAllowed({ kind: "location_replace", url: String(url) });
+      notifyAllowedTarget(url);
       nativeReplace.call(this, url);
       return;
     }
@@ -333,6 +348,7 @@ function patchForms(): void {
     const actionUrl = resolveFormAction(this);
     if (isOff()) {
       postAllowed({ kind: "form_submit", ...(actionUrl !== undefined ? { url: actionUrl } : {}) });
+      notifyAllowedTarget(actionUrl);
       nativeFormSubmit.call(this);
       return;
     }
@@ -340,6 +356,7 @@ function patchForms(): void {
     const allowance = consumeRedirectAllowance();
     if (allowance !== "none") {
       postAllowed({ kind: "form_submit", ...(actionUrl !== undefined ? { url: actionUrl } : {}) });
+      notifyAllowedTarget(actionUrl);
       nativeFormSubmit.call(this);
       return;
     }
@@ -359,6 +376,7 @@ function patchForms(): void {
           kind: "form_request_submit",
           ...(actionUrl !== undefined ? { url: actionUrl } : {})
         });
+        notifyAllowedTarget(actionUrl);
         nativeFormRequestSubmit.call(this, submitter as any);
         return;
       }
@@ -369,6 +387,7 @@ function patchForms(): void {
           kind: "form_request_submit",
           ...(actionUrl !== undefined ? { url: actionUrl } : {})
         });
+        notifyAllowedTarget(actionUrl);
         nativeFormRequestSubmit.call(this, submitter as any);
         return;
       }

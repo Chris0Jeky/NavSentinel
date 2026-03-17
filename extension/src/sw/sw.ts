@@ -2,9 +2,14 @@ import { getNavSettings, SUITE_SETTINGS_KEY } from "../shared/storage";
 
 const BASELINE_RULESET_ID = "baseline";
 const NAV_ALLOW_TTL_MS = 1500;
+const NAV_GESTURE_TTL_MS = 1500;
+const NAV_TARGET_ALLOW_TTL_MS = 10000;
 const ROLLBACK_SUPPRESS_MS = 6000;
 
 const allowUntilByTab = new Map<number, number>();
+const gestureUntilByTab = new Map<number, number>();
+const allowStartedByTab = new Map<number, { startedAt: number; url: string }>();
+const allowTargetByTab = new Map<number, { url: string; expiresAt: number }>();
 const suppressUntilByTab = new Map<number, number>();
 const readyTabs = new Set<number>();
 const pendingRollbackByTab = new Map<number, { url: string; prevUrl?: string; qualifiers: string[] }>();
@@ -62,6 +67,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse?.({ ok: true });
   }
 
+  if (message.type === "ns-nav-gesture") {
+    const tabId = sender.tab?.id;
+    if (typeof tabId === "number") {
+      const ttl = typeof message.ttlMs === "number" ? message.ttlMs : NAV_GESTURE_TTL_MS;
+      gestureUntilByTab.set(tabId, Date.now() + ttl);
+    }
+    sendResponse?.({ ok: true });
+  }
+
+  if (message.type === "ns-allow-target-nav") {
+    const tabId = sender.tab?.id;
+    if (typeof tabId === "number" && typeof message.url === "string" && message.url) {
+      const ttl = typeof message.ttlMs === "number" ? message.ttlMs : NAV_TARGET_ALLOW_TTL_MS;
+      allowTargetByTab.set(tabId, {
+        url: message.url,
+        expiresAt: Date.now() + ttl
+      });
+    }
+    sendResponse?.({ ok: true });
+  }
+
   if (message.type === "ns-ready") {
     const tabId = sender.tab?.id;
     if (typeof tabId === "number") {
@@ -113,6 +139,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
+chrome.webNavigation.onBeforeNavigate.addListener((details) => {
+  if (details.frameId !== 0) return;
+  const now = Date.now();
+  const allowUntil = allowUntilByTab.get(details.tabId) ?? 0;
+  const gestureUntil = gestureUntilByTab.get(details.tabId) ?? 0;
+  if (now > allowUntil && now > gestureUntil) return;
+  allowStartedByTab.set(details.tabId, { startedAt: now, url: details.url });
+  if (now <= gestureUntil) {
+    gestureUntilByTab.delete(details.tabId);
+  }
+});
+
 chrome.webNavigation.onCommitted.addListener((details) => {
   if (details.frameId !== 0) return;
   const qualifiers = details.transitionQualifiers ?? [];
@@ -129,8 +167,18 @@ chrome.webNavigation.onCommitted.addListener((details) => {
 
   const now = Date.now();
   const allowUntil = allowUntilByTab.get(details.tabId) ?? 0;
-  const allowedAtCommit = now <= allowUntil;
+  const startedAllowed = allowStartedByTab.has(details.tabId);
+  const targetAllowance = allowTargetByTab.get(details.tabId);
+  const targetAllowed =
+    !!targetAllowance &&
+    now <= targetAllowance.expiresAt &&
+    targetAllowance.url === details.url;
+  const allowedAtCommit = now <= allowUntil || startedAllowed || targetAllowed;
   const prevUrl = lastUrlByTab.get(details.tabId);
+  allowStartedByTab.delete(details.tabId);
+  if (targetAllowed || (targetAllowance && now > targetAllowance.expiresAt)) {
+    allowTargetByTab.delete(details.tabId);
+  }
 
   lastUrlByTab.set(details.tabId, details.url);
   lastCommittedByTab.set(details.tabId, {
@@ -168,6 +216,9 @@ chrome.webNavigation.onCommitted.addListener((details) => {
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   allowUntilByTab.delete(tabId);
+  gestureUntilByTab.delete(tabId);
+  allowStartedByTab.delete(tabId);
+  allowTargetByTab.delete(tabId);
   suppressUntilByTab.delete(tabId);
   readyTabs.delete(tabId);
   pendingRollbackByTab.delete(tabId);

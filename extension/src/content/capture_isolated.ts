@@ -25,6 +25,9 @@ const NS_SOURCE = "__navsentinel__";
 const BRIDGE_INIT_TYPE = "ns-port-init";
 const PROTOCOL_VERSION = 1;
 const NAV_ALLOW_TTL_MS = 1500;
+const NAV_GESTURE_TTL_MS = 1500;
+const NAV_TARGET_ALLOW_TTL_MS = 10000;
+const MAX_PENDING_BRIDGE_MESSAGES = 32;
 const RISKY_BLANK_REASONS = new Set([
   "intent_mismatch_under_interactive",
   "invisible_but_clickable",
@@ -71,6 +74,9 @@ async function initSettings() {
   window.setTimeout(() => {
     if (mainGuard === "unknown") {
       mainGuard = "no";
+      pendingBridgeMessages.length = 0;
+      bridgePort?.close();
+      bridgePort = null;
       refreshDebug();
     }
   }, 750);
@@ -98,12 +104,16 @@ function frameKey(): string {
 }
 
 function postToMain(type: string, payload?: Record<string, unknown>): void {
+  if (mainGuard === "no") return;
   if (!bridgePort || !bridgeReady) {
     pendingBridgeMessages.push(
       payload !== undefined
         ? { type, payload }
         : { type }
     );
+    if (pendingBridgeMessages.length > MAX_PENDING_BRIDGE_MESSAGES) {
+      pendingBridgeMessages.splice(0, pendingBridgeMessages.length - MAX_PENDING_BRIDGE_MESSAGES);
+    }
     ensureBridge();
     return;
   }
@@ -225,6 +235,23 @@ function appendEventSafely(
 function notifyNavAllow(ttlMs = NAV_ALLOW_TTL_MS): void {
   try {
     chrome.runtime.sendMessage({ type: "ns-allow-nav", ttlMs });
+  } catch {
+    // ignore
+  }
+}
+
+function notifyNavGesture(ttlMs = NAV_GESTURE_TTL_MS): void {
+  try {
+    chrome.runtime.sendMessage({ type: "ns-nav-gesture", ttlMs });
+  } catch {
+    // ignore
+  }
+}
+
+function notifyAllowedTarget(url: string, ttlMs = NAV_TARGET_ALLOW_TTL_MS): void {
+  if (!url) return;
+  try {
+    chrome.runtime.sendMessage({ type: "ns-allow-target-nav", url, ttlMs });
   } catch {
     // ignore
   }
@@ -515,6 +542,7 @@ window.addEventListener(
   "pointerdown",
   (e) => {
     if (!(e instanceof PointerEvent)) return;
+    notifyNavGesture();
     lastDown = capturePointerDown(e);
     const token = makeToken({
       siteKey: siteKeyFromLocation(),
@@ -592,10 +620,10 @@ window.addEventListener(
 
     const explicitNewTab = !!ctx.explicitNewTabIntent;
     const anchor = findAnchorFromEvent(e);
-    const isBlankAnchor = !!(anchor && anchor.target === "_blank");
-    const parsed = isBlankAnchor
-      ? parseDestination(anchor?.getAttribute("href") ?? anchor?.href)
-      : null;
+    const anchorTarget = (anchor?.target ?? "").toLowerCase();
+    const isBlankAnchor = !!(anchor && anchorTarget === "_blank");
+    const isSameTabAnchor = !!(anchor && (!anchorTarget || anchorTarget === "_self"));
+    const parsed = anchor ? parseDestination(anchor.getAttribute("href") ?? anchor.href) : null;
     const isAllowed = parsed?.host
       ? isAllowlisted(allowlist, siteKeyFromLocation(), parsed.host)
       : false;
@@ -636,6 +664,10 @@ window.addEventListener(
     }
 
     if (decision === "allow") {
+      if (isSameTabAnchor && parsed?.href) {
+        notifyAllowedTarget(parsed.href);
+      }
+      notifyNavGesture();
       notifyNavAllow();
       postToMain("ns-allow", {
         allowOpen: mode === "off" || explicitNewTab,
