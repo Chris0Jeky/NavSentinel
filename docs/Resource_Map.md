@@ -1,36 +1,74 @@
 # Resource Map
 
-## Source material
-- `MasterPlan.md`: initial proposal, scope, architecture.
-- `HistoryDump.txt`: detailed design notes, staging plan, code snippets.
-- `NavSentinel_ Enhancing Navigation Intent Filtering.pdf`: background material.
+## Current Repository
 
-## Working documentation (this repo)
-- `docs/README.md`: entry point and doc map.
-- `docs/Project_Overview.md`: problem, goals, scope.
-- `docs/Architecture_and_Data_Flow.md`: components and data flow.
-- `docs/Threat_Model_and_Cases.md`: threats and mitigations.
-- `docs/Intent_Model_and_Scoring.md`: gesture tokens and scoring.
-- `docs/Implementation_Roadmap.md`: short and long term plan.
-- `docs/Testing_and_Gym.md`: Gym and test strategy.
-- `docs/Checklists.md`: master and stage checklists.
-- `docs/Snippets_By_Topic.md`: all code snippets grouped by topic.
+### Runtime code
 
-## Proposed repo layout (planned)
-```text
-navsentinel/
-  extension/
-    src/
-      content/
-      shared/
-      sw/
-      options/
-  gym/
-  tests/
-  docs/
-```
+- `extension/src/content/`
+  - gesture capture, main-world guard, credential guard, toast, modal, debug overlay
+- `extension/src/shared/`
+  - storage, allowlist, domain analysis, CDS scoring, common types, state helpers
+- `extension/src/sw/`
+  - service worker rollback and DNR sync
+- `extension/src/popup/`
+  - quick operator controls
+- `extension/src/options/`
+  - full settings and state-management UI
 
-## How to use these resources
-- Start with `docs/README.md` and `docs/Project_Overview.md` if you are new.
-- Use `docs/Implementation_Roadmap.md` and `docs/Checklists.md` for planning.
-- Use `docs/Snippets_By_Topic.md` when scaffolding the repo or writing code.
+### Test surfaces
+
+- `gym/`
+  - deterministic local HTML scenarios
+- `tests/credential-domain.test.ts`
+  - unit coverage for credential/domain heuristics
+- `tests/e2e/`
+  - Playwright specs for Gym-backed flows
+
+### Release and process
+
+- `scripts/check_versions.mjs`
+  - enforces package and manifest version alignment
+- `scripts/package.mjs`
+  - builds the zip artifact
+- `.github/workflows/ci.yml`
+  - build, unit, package, and E2E CI
+- `playwright.config.ts`
+  - keeps Playwright scoped to true E2E specs
+
+## Planning And Historical Inputs
+
+- `MasterPlan.md`
+  - original design intent and early scope framing
+- [Expansion_Tracker.md](C:\Users\jekyt\Desktop\Printer Config\Others\Git\NavSentinel-codex-expansion\docs\Expansion_Tracker.md)
+  - durable summary of the later suite-expansion merge and follow-up work
+
+## Where To Look First
+
+### If a popup or redirect is misbehaving
+
+- `extension/src/content/capture_isolated.ts`
+- `extension/src/content/main_guard.ts`
+- `extension/src/shared/scoring.ts`
+- `extension/src/sw/sw.ts`
+
+### If a password form prompt is wrong
+
+- `extension/src/content/credential_guard.ts`
+- `extension/src/content/credential_modal.ts`
+- `extension/src/shared/domain.ts`
+- `extension/src/shared/storage.ts`
+
+### If settings or trust state look wrong
+
+- `extension/src/shared/storage.ts`
+- `extension/src/shared/allowlist.ts`
+- `extension/src/popup/popup.ts`
+- `extension/src/options/options.ts`
+
+### If CI or packaging is wrong
+
+- `playwright.config.ts`
+- `vite.config.ts`
+- `.github/workflows/ci.yml`
+- `scripts/check_versions.mjs`
+- `scripts/package.mjs`

@@ -1,72 +1,53 @@
 # Checklists
 
-## Master checklist
-- [x] Create repo skeleton with extension/, gym/, docs/, tests/.
-- [x] Add MV3 manifest, build tooling, and extension scaffold.
-- [x] Implement isolated capture and gesture token logging.
-- [x] Implement CDS v1 with reason codes.
-- [x] Implement overlay blocking (Stage 2).
-- [x] Implement window.open and target=_blank gating (Stage 3).
-- [x] Build Options UI with modes and allowlist.
-- [ ] Add unit tests for CDS and edge cases.
-- [x] Add at least one Playwright e2e test against the Gym.
-- [x] Implement same-tab redirect gating (Stage 4).
-- [x] Add DNR backstop ruleset (Stage 5, optional).
-- [ ] Harden patch integrity and fallback behavior (Stage 7).
-- [ ] Add a decision log page in Options UI (future).
+## Daily Change Checklist
 
-## Setup and tooling checklist
-- [x] Choose repo structure (extension/gym/docs/tests).
-- [x] Install Vite + CRXJS + TypeScript.
-- [x] Configure scripts for build, watch, test, e2e.
-- [x] Create minimal MV3 manifest with all_frames content scripts.
+- [ ] build the extension with `npm run build`
+- [ ] run `npm run test`
+- [ ] run `npm run test:e2e` if the change touches behavior, messaging, storage, UI, or service-worker flow
+- [ ] inspect the relevant Gym level manually if the change affects prompts or user-visible decisions
+- [ ] update docs when changing settings, workflow, or threat assumptions
 
-## Gym checklist
-- [x] Create Levels 1-9 HTML pages.
-- [x] Add Gym index page for quick navigation.
-- [x] Add Gym Level 10 for Stage 4.
-- [x] Verify each level manually with no extension installed.
-- [x] Document expected outcomes for each level.
+## Navigation Change Checklist
 
-## Stage 1 checklist (capture and logging)
-- [x] Capture pointerdown and click in isolated world.
-- [x] Build click context from elementsFromPoint.
-- [x] Create gesture token with TTL and cached CDS.
-- [x] Log decisions and reason codes (console + debug overlay).
+- [ ] verify `smart` mode behavior
+- [ ] verify `strict` mode behavior
+- [ ] verify `_blank` prompt behavior if links are involved
+- [ ] verify delayed redirect and form-submit behavior if main-world patches are involved
+- [ ] verify rollback behavior if top-level committed navigations are involved
+- [ ] confirm allowlist flows still work
 
-## Stage 2 checklist (overlay blocking)
-- [x] Implement CDS v1 with reason codes.
-- [x] Block or prompt at CDS threshold.
-- [ ] Optional: pointer-events: none on suspect overlays during hit-testing (after capture).
-- [x] Validate against Levels 1-3.
+## Credential Change Checklist
 
-## Stage 3 checklist (new tab and popup gating)
-- [x] Patch window.open and Window.prototype.open in main world (best effort).
-- [x] Gate target=_blank at capture phase.
-- [x] Add in-page prompt with destination URL, allow-once, always allow.
-- [ ] Define content script <-> service worker messaging for allowlist updates.
-- [x] Invalidate token after first allowed open and auto-block extra attempts.
+- [ ] run `tests/credential-domain.test.ts`
+- [ ] verify Level 11 manually
+- [ ] verify trusted-domain add/remove behavior
+- [ ] verify non-HTTPS and cross-site action behavior
+- [ ] verify paste warning behavior if password-field event handling changed
 
-## Stage 4+ checklist (redirects and backstop)
-- [x] Patch location.assign/replace (prototype) and form submits.
-- [x] Add fallback for unpatchable window.location.assign/replace (Chrome limitation).
-- [x] Add navigation attempt logging and correlation.
-- [x] Add post-navigation rollback prompt for client redirects.
-- [ ] Consider short-window history.pushState gating.
-- [x] Implement DNR ruleset and baseline rules.
-- [ ] Optional: dynamic DNR block for known-bad destinations.
+## Popup And Options Checklist
 
-## Testing checklist
-- [ ] Unit tests for CDS edge cases (Vitest + JSDOM).
-- [x] E2E tests for Gym Level 1 at minimum (Playwright).
-- [x] E2E test for Level 10 delayed form submit prompt (Playwright).
-- [x] E2E tests for Levels 5 and 6 (Playwright).
-- [x] E2E test for Level 10 delayed redirect rollback (Playwright).
-- [ ] Regression tests for Levels 7-9 (legit UI cases).
-- [ ] Add a multi-popup test case for auto-block behavior.
-- [ ] Investigate Level 2 moving target inconsistencies (no prompt).
+- [ ] confirm mode selectors persist
+- [ ] confirm trusted-domain actions update storage
+- [ ] confirm event log renders without exceptions
+- [ ] confirm import/export round trip still works
+- [ ] confirm allowlist removal and clearing still work
 
-## Release readiness checklist
-- [ ] Reason codes visible in UI.
-- [ ] Per-site mode defaults set to smart.
-- [ ] Documentation updated (docs/README and checklists).
+## Release Checklist
+
+- [ ] `npm run verify:versions`
+- [ ] `npx tsc -p tsconfig.json --noEmit`
+- [ ] `npm run build`
+- [ ] `npm run test`
+- [ ] `npm run test:e2e`
+- [ ] `npm run package:ext`
+- [ ] verify the artifact exists in `artifacts/`
+- [ ] update release notes and docs if operator workflow changed
+
+## PR Checklist
+
+- [ ] keep commits scoped and readable
+- [ ] summarize user-visible behavior changes
+- [ ] include test results
+- [ ] mention any skipped or env-gated tests
+- [ ] call out residual risk honestly

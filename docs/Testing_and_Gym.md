@@ -1,86 +1,129 @@
 # Testing and Gym
 
-## Gym purpose
-The Gym is a deterministic set of local HTML pages that simulate common malicious and legitimate patterns. It provides a stable target for manual testing and automated E2E tests.
+## Goals
 
-## What NavSentinel currently enforces
-- `_blank` links: blocked (toast prompt) unless user shows explicit intent (Ctrl/Cmd+click, middle click) or the destination is allowlisted.
-- `window.open`: blocked (toast prompt) unless the click was explicitly "new tab intent" (Ctrl/Cmd/middle) or the destination is allowlisted.
-- Same-tab redirects (`location.assign/replace`) + form submits: allowed only shortly after an allowed click; delayed redirects auto-roll back then offer a proceed prompt; delayed submits prompt.
-Note:
-- CDS < 40 does not automatically allow new-tab navigations. New-tab gating is separate from CDS and is stricter by design.
+Testing in this repo is meant to answer two questions:
 
-Modes:
-- `Off`: should not block (use this to sanity-check the Gym without NavSentinel).
-- `Smart`: allows clean `_blank` links (named, visible, low CDS) and prompts on suspicious ones.
-- `Strict`: blocks `_blank` links unless explicit new-tab intent or allowlisted.
-  - Deceptive click block threshold is lower (CDS >= 50 in Strict, CDS >= 70 in Smart).
-- `DNR backstop` (Options): optional hard blocklist using MV3 DNR rules. If enabled, matching destinations are blocked without a prompt.
+1. Does the extension still catch the behaviors it claims to catch?
+2. Did a change accidentally make the extension too noisy or too permissive?
 
-Prompt vs block:
-- Prompt = a toast with `Allow once` / `Always allow` (used for navigations).
-- Block = toast with only `Dismiss` (used for deceptive clicks with no safe replay).
-- Rollback prompt = a toast with `Proceed` / `Dismiss` shown after an auto-rollback from a client-side redirect.
+The project uses a mix of deterministic Gym pages, unit tests, and Playwright-driven browser tests.
 
-## What "block" means in the Gym
-- For `_blank` links: NavSentinel calls `preventDefault()` and shows an in-page prompt (toast) with `Allow once` / `Always allow`.
-- For `window.open`, `location.assign/replace`, and `form.submit/requestSubmit`: NavSentinel patches these in the page's main world and blocks the call, then shows a prompt. Clicking `Allow once` replays the exact blocked action.
+## Local commands
 
-## Quick demo
-1. Run the Gym server: `cd gym` then `python -m http.server 5173`.
-2. Open `http://localhost:5173/index.html` and choose a level.
-3. Load the unpacked extension and enable the debug overlay in Options.
-4. Click the page elements and watch CDS, reasons, and decisions live.
+```bash
+npm install
+npm run build
+npm run test
+npm run test:e2e
+npx tsc -p tsconfig.json --noEmit
+```
 
-## Options page (Chrome)
-If the Options link is missing in `chrome://extensions`, open it directly:
-1. Go to `chrome://extensions` and copy the extension ID.
-2. Open `chrome-extension://<ID>/src/options/options.html`.
-3. Use the Allowlist section to remove hosts or clear all entries.
+To run the local Gym server:
 
-## Gym levels and expected outcomes (manual)
-- Level 1 (invisible overlay anchor): click `Play`. Expected (Smart/Strict): prompt "Blocked new tab" for `example.com`.
-- Level 2 (overlay follows mouse): move your mouse onto `Real Button` (so the invisible trap is positioned over it), then click. Expected (Smart/Strict): prompt "Blocked new tab" for `example.org`.
-- Level 3 (instant injection on pointerdown): click `Click me` normally. Expected (Smart/Strict): blocked deceptive click (high CDS) and no navigation.
-- Level 4 (visual mimicry): click `Download`. Expected (Smart/Strict): prompt or block (depending on CDS); no surprise tab.
-- Level 5 (any click triggers `window.open`): click inside the box. Expected (Smart/Strict): prompt "Blocked popup" for `example.com/?ad=1`.
-- Level 6 (programmatic click chain): click `Continue`. Expected (Smart/Strict): prompt "Blocked new tab" for `example.org/?forced=1`.
-- Level 7 (legit modal backdrop): should not be blocked; debug overlay should show low CDS.
-- Level 8 (legit OAuth popup): likely prompts (NavSentinel can't know it's OAuth yet); allow once should open it.
-- Level 9 (legit video overlay controls): should not be blocked.
-- Level 10 (redirects/forms): `Immediate redirect` should navigate; delayed redirect should auto-roll back and offer a proceed prompt; delayed submit should prompt.
+```bash
+npm run gym:serve
+```
 
-Explicit intent checks:
-- Ctrl/Cmd+click or middle-click should set `ExplicitNewTab: yes` in the debug overlay and allow the open without prompting.
+The older Python flow still works when needed:
 
-## Known gaps
-- Level 2 can be inconsistent on some machines (no prompt, no navigation). If you see this, try moving the mouse after page load before clicking. If it still does nothing, log it as a known issue.
-- Same-tab redirects via `location.assign/replace` are not reliably interceptable in Chrome because `window.location.assign` is non-writable/non-configurable. Level 10 delayed redirect will navigate; the rollback auto-back + prompt is the backstop.
-- The baseline DNR ruleset is conservative and Gym-focused (matches only a couple of demo URLs). Expand carefully if you need real-world coverage.
+```bash
+cd gym
+python -m http.server 5173
+```
 
-## Debugging tips
-- After rebuilding, click `Reload` for the extension in `chrome://extensions`.
-- Confirm the main-world patch is running: open DevTools Console on a Gym page and check `window.__navsentinelMainGuard === true`.
-- With debug enabled, use the live overlay (`MainGuard`, `Decision`, `CDS`, `Reasons`) and the page console logs (`[NavSentinel] click`, `[NavSentinel] blocked`, `[NavSentinel] allowance`).
-- `Decision: prompt` indicates a navigation prompt, while `Decision: block` indicates a hard block.
-- If `MainGuard: no`, `window.open` / redirects cannot be reliably blocked (only `_blank` click capture will work).
+## Test layers
 
-## E2E test (Playwright)
-1. Build the extension: `npm run build`.
-2. Run: `npm run test:e2e` (starts a temporary local Gym server automatically).
+### Unit tests
 
-Optional env vars:
-- `EXTENSION_PATH` (defaults to `extension/dist`)
-- `GYM_BASE_URL` (if set, uses your running Gym server instead)
-- `ROLLBACK_E2E=1` (enables the Level 10 redirect rollback test)
-- `LIVE_E2E=1` (enables live-web test against Google search results)
+Current unit coverage lives in:
 
-## Automated tests
-- Unit tests: CDS scoring and reason codes (Vitest + JSDOM).
-- E2E tests: Playwright against Gym (assert no unwanted new tabs).
-- Multi-popup test: one click -> multiple opens (auto-block extras).
-- Performance: basic click budget checks (no DOM polling, minimal style reads).
+- `tests/credential-domain.test.ts`
 
-## Debug workflow
-- Use DevTools event listener breakpoints for click handlers.
-- Log reason codes and last gesture context for each decision.
+It verifies core credential heuristics such as:
+
+- multipart public suffix handling
+- mixed-script hostname detection
+- lookalike-domain comparison
+- high-severity scoring for clearly risky submits
+
+### Playwright E2E
+
+Current E2E coverage lives in:
+
+- `tests/e2e/navsentinel.spec.ts`
+- `tests/e2e/credential-guard.spec.ts`
+
+It covers:
+
+- Level 1 new-tab blocking
+- Level 5 popunder blocking
+- Level 6 programmatic click blocking
+- Level 10 delayed form submit prompt
+- Level 10 rollback flow behind an env gate
+- Level 11 credential-submit prompt
+- an optional live-web sanity check behind an env gate
+
+`playwright.config.ts` intentionally scopes Playwright discovery to `tests/e2e/**/*.spec.ts`. This avoids loading Vitest unit files during E2E runs.
+
+## Gym map
+
+The Gym index is at `gym/index.html`.
+
+Important current pages:
+
+- `gym/level1-basic-opacity.html`
+  - basic deceptive overlay/new-tab case
+- `gym/level5-window-open-popunder.html`
+  - scripted popup/popunder case
+- `gym/level6-programmatic-click.html`
+  - programmatic click / retargeted navigation case
+- `gym/level10-redirects-and-forms.html`
+  - delayed redirect and delayed submit cases
+- `gym/level11-credential-guard.html`
+  - risky password-submit prompt case
+
+## Effective manual testing workflow
+
+1. Run `npm run build`.
+2. Load `extension/dist` into Chromium.
+3. Start `npm run gym:serve`.
+4. Open the Gym index page.
+5. Run the relevant level in `smart` mode first.
+6. Repeat in `strict` mode if you are tuning heuristics.
+7. Review the popup and options-page event log after each run.
+8. Clear logs between scenarios when you want clean comparisons.
+
+## What to verify after changes
+
+### For navigation changes
+
+- no unexpected new tabs open
+- prompt text remains actionable
+- allow-once replays the blocked action only once
+- always-allow stores the correct site/destination pair
+- rollback still returns to the prior page and offers explicit proceed
+
+### For credential changes
+
+- password submits on trusted HTTPS domains do not prompt unnecessarily
+- risky HTTP or lookalike submits prompt
+- trust actions add the correct registrable domain
+- paste warnings do not expose clipboard contents
+- event logs contain score and reason codes
+
+## CI expectations
+
+CI currently runs:
+
+- version verification
+- unit tests
+- build
+- packaging
+- Playwright E2E under `xvfb-run`
+
+If E2E fails in CI, check these first:
+
+- `npm run build` actually produced `extension/dist`
+- Playwright discovery is still limited to `tests/e2e`
+- the E2E specs do not import Vitest globals or non-E2E helpers unintentionally

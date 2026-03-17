@@ -1,38 +1,63 @@
-# Releasing NavSentinel
+# Releasing
 
-This repository can build and package the MV3 extension as a zip artifact with `manifest.json` at the archive root.
+## Preconditions
 
-## Versioning
+- Node `20.18.1` or newer
+- clean working tree on the release branch
+- package version and manifest version aligned
 
-Keep these versions identical:
+## Release Verification
 
-- `package.json`
-- `extension/manifest.json`
-
-Use `npm run verify:versions` before packaging or CI changes.
-
-## Local release checklist
-
-1. Update `package.json` and `extension/manifest.json`.
-2. Run:
+Run all of these before treating a branch as releasable:
 
 ```bash
-npm ci
 npm run verify:versions
-npm test
+npx tsc -p tsconfig.json --noEmit
 npm run build
+npm run test
+npm run test:e2e
 npm run package:ext
 ```
 
-3. Confirm the archive exists under `artifacts/`.
-4. Tag and publish using your normal git/release workflow.
+## What CI Covers
 
-## Packaging output
+CI currently runs:
 
-`npm run package:ext` produces:
+- `npm run verify:versions`
+- `npm test`
+- `npm run build`
+- `npm run package:ext`
+- `xvfb-run -a npm run test:e2e`
 
-- `artifacts/navsentinel-vX.Y.Z.zip`
+Playwright uses `playwright.config.ts`, which is intentionally scoped to `tests/e2e/**/*.spec.ts`.
 
-## CI
+## Packaging
 
-The CI workflow verifies version parity, runs unit tests, builds the extension, packages it, and runs Playwright E2E coverage.
+```bash
+npm run package:ext
+```
+
+Expected artifact:
+
+```text
+artifacts/navsentinel-v<version>.zip
+```
+
+## Suggested Release Flow
+
+1. Merge the PR with green CI.
+2. Pull the merged branch locally.
+3. Re-run the full verification set if anything changed since the last green CI run.
+4. Produce the artifact with `npm run package:ext`.
+5. Record:
+- version
+- key behavior changes
+- tests run
+- known residual risks
+
+## When Not To Release
+
+- E2E failures in Gym-backed tests
+- version mismatch between `package.json` and `extension/manifest.json`
+- unreviewed changes to `main_guard.ts`, `credential_guard.ts`, `storage.ts`, or `sw.ts`
+- docs that still describe an old workflow or missing feature

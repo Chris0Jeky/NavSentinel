@@ -53,6 +53,8 @@
 - [x] Slice 7 merged.
 - [~] Slice 8 partially merged.
 - [x] Verification run completed.
+- [x] Slice 8 CI test-discovery fix landed.
+- [x] Documentation sweep aligned with the merged suite behavior.
 
 ## Landed Changes
 - Slice 2
@@ -85,6 +87,8 @@
   - Passes and emits `artifacts/navsentinel-v0.2.0.zip`.
 - `npm exec playwright test tests/e2e/navsentinel.spec.ts tests/e2e/credential-guard.spec.ts`
   - Passes for the local Gym suite, with two intentionally env-gated skips (`ROLLBACK_E2E`, `LIVE_E2E`).
+- `npm run test:e2e`
+  - Passes after adding `playwright.config.ts` so Playwright only discovers `tests/e2e/**/*.spec.ts` and does not load Vitest unit files.
 
 ## Resume State
 - The merged extension is now functionally ahead of the original NavSentinel baseline and aligned with the main `SentinelSuite` product direction.

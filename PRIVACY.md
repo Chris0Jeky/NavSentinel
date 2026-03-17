@@ -1,43 +1,54 @@
 # Privacy
 
-NavSentinel is designed to stay local-first and avoid data exfiltration.
+NavSentinel is designed to be local-first.
 
-## What the extension does
+## What The Extension Stores
 
-- Intercepts selected user interactions such as clicks, popup attempts, navigations, and password-form submits.
-- Scores risky behavior locally and shows prompts, toasts, or modal warnings inside the page.
-- Stores local trust decisions so repeated prompts are reduced over time.
+In `chrome.storage.local`, the extension stores:
 
-## What is stored locally
+- suite settings
+- navigation allowlist entries
+- trusted credential domains
+- a bounded local event log
 
-Stored in `chrome.storage.local`:
+The event log can include:
 
-- Suite settings for navigation and credential-guard behavior
-- Navigation allowlist entries
-- Trusted domains for credential-submit protection
-- A bounded event log containing timestamps, sites, destination hosts, decisions, and reason codes
+- event kind
+- timestamp
+- current site
+- destination host
+- risk score and reason codes
+- small metadata fields related to the decision
 
-The event log can be cleared or exported from the options page.
+## What The Extension Does Not Do
 
-## What is not collected
+- no telemetry upload
+- no background sync
+- no cloud scoring
+- no credential exfiltration
+- no remote allowlist or reputation lookups
 
-NavSentinel does not:
+## Import And Export
 
-- send telemetry
-- call remote reputation services
-- upload browsing history
-- store password values
-- inspect clipboard contents
-- capture page text or screenshots
+The options page supports local JSON export and import of:
 
-## Import and export
+- settings
+- allowlist
+- trusted domains
+- event log
 
-The options page supports manual JSON export and import of settings, allowlists, trusted domains, and the local event log.
+This is for operator convenience and reproducibility. Treat exported files as local security artifacts because they can reveal browsing-related decision history.
 
-Nothing is exported automatically.
+## Effective Privacy Practice
 
-## Network behavior
+- clear the event log before recording demos if you do not want earlier decisions preserved
+- export state only when you actually need to reproduce or share a configuration
+- avoid trusting domains casually; trusted-domain state affects credential prompts
 
-The protection logic makes no external network calls.
+## Data Retention
 
-Local development/demo utilities may start local servers for Gym testing only.
+The local event log is bounded by the configured log limit. Old entries are dropped when the limit is exceeded.
+
+## Scope
+
+This document describes the repository's current local behavior. If future work introduces remote services, this document must be updated before release.
