@@ -59,6 +59,135 @@ test("Level 1 blocks new tabs @smoke", async () => {
   }
 });
 
+test("Level 2 moving target overlay blocks the hidden new tab @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const gymOverride = process.env.GYM_BASE_URL;
+  const gym = gymOverride ? null : await startGymServer(gymRoot);
+  const baseUrl = gymOverride ?? gym!.baseUrl;
+
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/level2-moving-target.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await waitForNavSentinelBridge(page);
+
+      const realBtn = page.locator("#realBtn");
+      const box = await realBtn.boundingBox();
+      expect(box, "#realBtn should be visible").toBeTruthy();
+
+      const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
+      await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+      await page.waitForTimeout(100);
+      await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+
+      const popup = await popupPromise;
+      expect(popup, "Expected the hidden overlay new tab to be blocked").toBeNull();
+      await waitForToastText(page, "Blocked new tab", 3000);
+      await expect(page).toHaveURL(/level2-moving-target\.html/);
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("Level 3 instant injection blocks the deceptive click path @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const gymOverride = process.env.GYM_BASE_URL;
+  const gym = gymOverride ? null : await startGymServer(gymRoot);
+  const baseUrl = gymOverride ?? gym!.baseUrl;
+
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/level3-instant-injection.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await waitForNavSentinelBridge(page);
+
+      const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
+      await page.click("#target");
+
+      const popup = await popupPromise;
+      expect(popup, "Expected the injected trap new tab to be blocked").toBeNull();
+      await waitForToastText(page, "NavSentinel blocked deceptive click", 3000);
+      await expect(page).toHaveURL(/level3-instant-injection\.html/);
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("Level 4 visual mimicry blocks the disguised download new tab @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const gymOverride = process.env.GYM_BASE_URL;
+  const gym = gymOverride ? null : await startGymServer(gymRoot);
+  const baseUrl = gymOverride ?? gym!.baseUrl;
+
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/level4-visual-mimicry.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await waitForNavSentinelBridge(page);
+
+      const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
+      await page.click(".download");
+
+      const popup = await popupPromise;
+      expect(popup, "Expected the disguised download new tab to be blocked").toBeNull();
+      await waitForToastText(page, "Blocked new tab", 3000);
+      await expect(page).toHaveURL(/level4-visual-mimicry\.html/);
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
 test("Level 10 delayed form submit prompts @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 

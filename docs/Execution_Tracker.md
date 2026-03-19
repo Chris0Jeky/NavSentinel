@@ -149,7 +149,7 @@ Why last:
 | --- | --- | --- |
 | 1 | Tracker and CI alignment | open in PR #5 |
 | 2 | E2E lane split and rollback formalization | in progress |
-| 3 | Adversarial Gym coverage | planned |
+| 3 | Adversarial Gym coverage | in progress |
 | 4 | Legitimate-flow Gym coverage | planned |
 | 5 | Popup and operator-surface coverage | planned |
 | 6 | Release and repo hygiene | planned |

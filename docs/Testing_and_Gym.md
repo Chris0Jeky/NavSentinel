@@ -67,6 +67,9 @@ Current E2E coverage lives in:
 It currently covers:
 
 - Level 1 new-tab blocking
+- Level 2 moving-target overlay blocking
+- Level 3 instant injection deceptive-click blocking
+- Level 4 visual-mimicry disguised new-tab blocking
 - Level 5 popunder blocking
 - Level 6 programmatic click blocking
 - Level 10 delayed form-submit prompt
