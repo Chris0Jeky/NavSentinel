@@ -9,7 +9,11 @@ import {
   removeTrustedDomain,
   updateSuiteSettings
 } from "../shared/storage";
-import { getRegistrableDomain, normalizeHost } from "../shared/domain";
+import {
+  derivePopupSiteState,
+  formatPopupEventLine,
+  getRecentPopupEvents
+} from "./popup_model";
 
 const siteEl = document.getElementById("site") as HTMLDivElement;
 const trustStatusEl = document.getElementById("trustStatus") as HTMLDivElement;
@@ -35,7 +39,7 @@ function fmtTime(ts: number): string {
 }
 
 function renderEvents(log: EventLogEntry[]): void {
-  const list = (log ?? []).slice(-8).reverse();
+  const list = getRecentPopupEvents(log);
   if (list.length === 0) {
     eventsEl.textContent = "No events yet.";
     return;
@@ -45,9 +49,7 @@ function renderEvents(log: EventLogEntry[]): void {
   for (const event of list) {
     const row = document.createElement("div");
     row.className = "event";
-    const site = event.site ? ` | ${event.site}` : "";
-    const score = typeof event.score === "number" ? ` | score=${event.score}` : "";
-    row.textContent = `${fmtTime(event.ts)} | ${event.kind}${site}${score}`;
+    row.textContent = formatPopupEventLine(event, fmtTime);
     eventsEl.appendChild(row);
   }
 }
@@ -58,25 +60,12 @@ async function refreshUi(): Promise<void> {
   credModeEl.value = settings.credential.mode;
 
   const url = await getActiveTabUrl();
-  let host = "";
-  try {
-    host = url ? new URL(url).hostname : "";
-  } catch {
-    host = "";
-  }
-
-  host = normalizeHost(host);
-  const reg = host ? getRegistrableDomain(host) : "";
-  siteEl.textContent = reg || host || "(no host)";
-
   const trusted = await getTrustedDomains();
-  const isTrusted = !!(reg && trusted.includes(reg));
-  trustStatusEl.textContent = isTrusted
-    ? "Trusted for credential submits."
-    : "Not trusted (credential prompts may appear).";
-
-  trustBtn.disabled = isTrusted || !reg;
-  untrustBtn.disabled = !isTrusted || !reg;
+  const siteState = derivePopupSiteState(url, trusted);
+  siteEl.textContent = siteState.siteLabel;
+  trustStatusEl.textContent = siteState.trustStatus;
+  trustBtn.disabled = !siteState.canTrust;
+  untrustBtn.disabled = !siteState.canUntrust;
 
   renderEvents(await getEventLog());
 }
@@ -105,14 +94,7 @@ credModeEl.addEventListener("change", async () => {
 
 trustBtn.addEventListener("click", async () => {
   const url = await getActiveTabUrl();
-  let host = "";
-  try {
-    host = url ? new URL(url).hostname : "";
-  } catch {
-    host = "";
-  }
-  host = normalizeHost(host);
-  const reg = host ? getRegistrableDomain(host) : "";
+  const reg = derivePopupSiteState(url, []).registrableDomain;
   if (!reg) return;
 
   await addTrustedDomain(reg);
@@ -126,14 +108,7 @@ trustBtn.addEventListener("click", async () => {
 
 untrustBtn.addEventListener("click", async () => {
   const url = await getActiveTabUrl();
-  let host = "";
-  try {
-    host = url ? new URL(url).hostname : "";
-  } catch {
-    host = "";
-  }
-  host = normalizeHost(host);
-  const reg = host ? getRegistrableDomain(host) : "";
+  const reg = derivePopupSiteState(url, []).registrableDomain;
   if (!reg) return;
 
   await removeTrustedDomain(reg);
