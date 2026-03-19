@@ -9,12 +9,8 @@ export default defineConfig({
   reporter: "list",
   projects: [
     {
-      name: "smoke",
-      grep: /@smoke/
-    },
-    {
-      name: "regression",
-      grep: /@regression/
+      name: "live",
+      grep: /@live/
     }
   ]
 });

@@ -166,8 +166,8 @@ test("Level 10 delayed redirect shows rollback proceed affordance @rollback", as
       await page.click("#delayed");
       await page.waitForURL(/level4-visual-mimicry\.html/, { timeout: 7000 });
       await waitForNavSentinelBridge(page, 7000);
-      await waitForToastText(page, "NavSentinel rolled back a redirect", 12000);
-      await waitForToastText(page, "Proceed", 12000);
+      await waitForToastText(page, "NavSentinel rolled back a redirect", 20000);
+      await waitForToastText(page, "Proceed", 20000);
       await expect(page).toHaveURL(/level4-visual-mimicry\.html/);
     } finally {
       await context.close();

@@ -30,7 +30,6 @@ Historical merge-tracking material lives under `docs/archive/`.
 
 ### CI and release-process alignment
 
-- docs require explicit typechecking but CI does not run it
 - there is still no dedicated stress lane for worker churn and bursty redirect sequences
 
 ### Repo and release hygiene
