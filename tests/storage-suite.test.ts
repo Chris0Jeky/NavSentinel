@@ -139,7 +139,7 @@ describe("suite storage and allowlist migration", () => {
       "127.0.0.1",
       "example.co.uk",
       "example.com"
-    ]);
+    ].sort());
   });
 
   it("normalizes trusted domain additions before storage", async () => {
@@ -153,5 +153,22 @@ describe("suite storage and allowlist migration", () => {
 
     expect(await getTrustedDomains()).toEqual(["127.0.0.1", "example.com"]);
     expect(store["sentinelsuite:trusted_domains_v1"]).toEqual(["127.0.0.1", "example.com"]);
+  });
+
+  it("rejects invalid trusted domain inputs during import and add", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+
+    const { addTrustedDomain, getTrustedDomains, importAll } = await import(
+      "../extension/src/shared/storage"
+    );
+
+    await importAll({
+      trustedDomains: ["nota host/path", "still not a host", "https://login.example.com/account"]
+    });
+    await addTrustedDomain("definitely not a host/path");
+
+    expect(await getTrustedDomains()).toEqual(["example.com"]);
+    expect(store["sentinelsuite:trusted_domains_v1"]).toEqual(["example.com"]);
   });
 });

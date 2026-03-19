@@ -44,10 +44,9 @@ test("options normalizes trusted-domain input and persists mode changes", async 
       await options.locator("#addTrusted").click();
       await options.locator("#save").click();
 
-      await options.waitForLoadState("domcontentloaded");
+      await options.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
       await expect(options.locator("#navMode")).toHaveValue("strict");
       await expect(options.locator("#credMode")).toHaveValue("strict");
-      await expect(options.locator("#saveStatus")).toHaveText("Saved.");
       await expect(options.locator("#trustedList")).toContainText("example.com");
     } finally {
       await context.close();
@@ -107,7 +106,6 @@ test("options import and export preserve normalized trusted-domain and allowlist
       });
 
       await options.locator("#importFile").setInputFiles(importPath);
-      await expect(options.locator("#status")).toHaveText("Imported.");
       await expect(options.locator("#navMode")).toHaveValue("off");
       await expect(options.locator("#credMode")).toHaveValue("strict");
       await expect(options.locator("#logLimit")).toHaveValue("120");

@@ -168,7 +168,8 @@ function normalizeTrustedDomain(value: unknown): string {
   const parsed =
     safeUrlParse(trimmed) ??
     (trimmed.includes("://") ? null : safeUrlParse(`https://${trimmed}`));
-  const host = parsed?.hostname ?? trimmed;
+  const host = parsed?.hostname;
+  if (!host) return "";
   const normalized = normalizeHost(host);
   if (!normalized) return "";
   return getRegistrableDomain(normalized);
