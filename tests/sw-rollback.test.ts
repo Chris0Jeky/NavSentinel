@@ -269,36 +269,4 @@ describe("service worker rollback gating", () => {
     expect(response.entry?.url).toBe("https://example.test/late");
   });
 
-  it("relays bridge messages back to the same frame", async () => {
-    const mock = createChromeMock();
-    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
-    await import("../extension/src/sw/sw");
-
-    mock.dispatchRuntimeMessage(
-      {
-        type: "ns-bridge-to-main",
-        payload: {
-          source: "__navsentinel__",
-          type: "ns-ping",
-          v: 1
-        }
-      },
-      { tab: { id: 21 }, frameId: 3 }
-    );
-
-    expect(mock.sentMessages).toEqual([
-      {
-        tabId: 21,
-        message: {
-          type: "ns-bridge-main",
-          payload: {
-            source: "__navsentinel__",
-            type: "ns-ping",
-            v: 1
-          }
-        },
-        options: { frameId: 3 }
-      }
-    ]);
-  });
 });

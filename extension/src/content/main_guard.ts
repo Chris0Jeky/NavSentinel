@@ -1,6 +1,5 @@
 const NS_SOURCE = "__navsentinel__";
-const BRIDGE_MAIN_MESSAGE_TYPE = "ns-bridge-main";
-const BRIDGE_TO_ISOLATED_TYPE = "ns-bridge-to-isolated";
+const BRIDGE_INIT_TYPE = "ns-port-init";
 const OPEN_TTL_MS = 800;
 const REDIRECT_TTL_MS = 1500;
 const TARGET_NAV_TTL_MS = 10000;
@@ -9,68 +8,19 @@ const MAX_REDIRECTS_PER_GESTURE = 2;
 const ALLOW_ONCE_TTL_MS = 1200;
 const BLOCKED_ACTION_TTL_MS = 5000;
 const PROTOCOL_VERSION = 1;
-const BRIDGE_SESSION_RETRY_MS = 100;
-const MAX_BRIDGE_SESSION_OFFERS = 40;
 
-function makeBridgeSession(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(16));
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-const bridgeSession = makeBridgeSession();
-let bridgeSessionAcked = false;
-let bridgeSessionTimer = 0;
-let bridgeSessionOffers = 0;
-
-function clearBridgeSessionRetry(): void {
-  if (!bridgeSessionTimer) return;
-  window.clearTimeout(bridgeSessionTimer);
-  bridgeSessionTimer = 0;
-}
-
-function postBridgeMessage(type: string, payload?: Record<string, unknown>): void {
-  window.postMessage(
-    {
-      source: NS_SOURCE,
-      type,
-      v: PROTOCOL_VERSION,
-      session: bridgeSession,
-      ...(payload ?? {})
-    },
-    "*"
-  );
-}
-
-function scheduleBridgeSessionOffer(): void {
-  if (bridgeSessionAcked || bridgeSessionOffers >= MAX_BRIDGE_SESSION_OFFERS) return;
-  postBridgeMessage("ns-session");
-  bridgeSessionOffers += 1;
-  bridgeSessionTimer = window.setTimeout(() => {
-    bridgeSessionTimer = 0;
-    scheduleBridgeSessionOffer();
-  }, BRIDGE_SESSION_RETRY_MS);
-}
+let bridgePort: MessagePort | null = null;
+let bridgeSession: string | null = null;
 
 function postToIsolated(type: string, payload?: Record<string, unknown>): void {
-  postBridgeMessage(type, payload);
-  try {
-    chrome.runtime.sendMessage(
-      {
-        type: BRIDGE_TO_ISOLATED_TYPE,
-        payload: {
-          source: NS_SOURCE,
-          type,
-          v: PROTOCOL_VERSION,
-          ...(payload ?? {})
-        }
-      },
-      () => {
-        void chrome.runtime.lastError;
-      }
-    );
-  } catch {
-    // ignore runtime bridge failures; do not fall back to spoofable window messages
-  }
+  if (!bridgePort || !bridgeSession) return;
+  bridgePort.postMessage({
+    source: NS_SOURCE,
+    type,
+    v: PROTOCOL_VERSION,
+    session: bridgeSession,
+    ...(payload ?? {})
+  });
 }
 
 let mode: "off" | "smart" | "strict" = "smart";
@@ -490,6 +440,7 @@ function handleBridgeMessage(message: unknown): void {
     allowRedirect?: boolean;
   };
   if (!data || data.source !== NS_SOURCE || data.v !== PROTOCOL_VERSION) return;
+  if (!bridgeSession || data.session !== bridgeSession) return;
 
   if (data.type === "ns-gesture-allow") {
     markAllowance({ allowOpen: true, allowRedirect: true });
@@ -544,45 +495,33 @@ window.addEventListener(
   "message",
   (event) => {
     if (event.source !== window) return;
-    const data = event.data as { source?: string; type?: string; v?: number; session?: string };
+    const data = event.data as {
+      source?: string;
+      type?: string;
+      v?: number;
+      session?: string;
+    };
     if (!data || data.source !== NS_SOURCE || data.v !== PROTOCOL_VERSION) return;
-    if (data.session !== bridgeSession) return;
-    if (
-      data.type !== "ns-session-ack" &&
-      data.type !== "ns-gesture-allow" &&
-      data.type !== "ns-config" &&
-      data.type !== "ns-ping" &&
-      data.type !== "ns-allow-once" &&
-      data.type !== "ns-allow" &&
-      data.type !== "ns-allow-action"
-    ) {
-      return;
-    }
+    if (data.type !== BRIDGE_INIT_TYPE || typeof data.session !== "string" || !data.session) return;
+    if (bridgeSession && data.session !== bridgeSession) return;
+
+    const nextPort = event.ports?.[0];
+    if (!(nextPort instanceof MessagePort)) return;
 
     event.stopImmediatePropagation();
+    event.stopPropagation();
 
-    if (data.type === "ns-session-ack") {
-      bridgeSessionAcked = true;
-      clearBridgeSessionRetry();
-      postToIsolated("ns-bridge-ready");
-      return;
-    }
-
-    handleBridgeMessage(data);
+    bridgePort?.close();
+    bridgePort = nextPort;
+    bridgeSession = data.session;
+    bridgePort.onmessage = (bridgeEvent) => handleBridgeMessage(bridgeEvent.data);
+    bridgePort.start?.();
+    postToIsolated("ns-bridge-ready");
   },
   true
 );
-
-if (chrome?.runtime?.onMessage) {
-  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (!message || message.type !== BRIDGE_MAIN_MESSAGE_TYPE) return;
-    handleBridgeMessage(message.payload);
-    sendResponse?.({ ok: true });
-  });
-}
 
 patchOpen();
 patchLocation();
 patchForms();
 (window as any).__navsentinelMainGuard = true;
-scheduleBridgeSessionOffer();

@@ -1,13 +1,12 @@
 import type { Mode } from "../shared/types";
 import type { CredMode, EventLogEntry, SuiteSettings } from "../shared/storage";
 import {
-  addTrustedDomain,
+  addTrustedDomainWithResult,
   appendEvent,
   clearEventLog,
   clearTrustedDomains,
   exportAll,
   getEventLog,
-  normalizeTrustedDomain,
   getSuiteSettings,
   getTrustedDomains,
   importAll,
@@ -292,12 +291,12 @@ clearAllowlistBtn.addEventListener("click", async () => {
 });
 
 addTrustedBtn.addEventListener("click", async () => {
-  const normalized = normalizeTrustedDomain(trustedInputEl.value);
-  if (!normalized) {
+  const result = await addTrustedDomainWithResult(trustedInputEl.value);
+  if (!result) {
     flashStatus(saveStatusEl, "Enter a valid domain.");
     return;
   }
-  await addTrustedDomain(normalized);
+  const { normalized } = result;
   trustedInputEl.value = "";
   try {
     await appendEvent({ kind: "cred_trust_domain", site: normalized });

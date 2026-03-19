@@ -193,14 +193,29 @@ export async function getTrustedDomains(): Promise<string[]> {
   return normalizeDomainList(res[TRUSTED_DOMAINS_KEY] ?? []);
 }
 
-export async function addTrustedDomain(domain: string): Promise<string[]> {
+export interface TrustedDomainAddResult {
+  domains: string[];
+  normalized: string;
+  added: boolean;
+}
+
+export async function addTrustedDomainWithResult(
+  domain: string
+): Promise<TrustedDomainAddResult | null> {
   const d = normalizeTrustedDomain(domain);
-  if (!d) return getTrustedDomains();
+  if (!d) return null;
   const cur = await getTrustedDomains();
-  if (cur.includes(d)) return cur;
+  if (cur.includes(d)) {
+    return { domains: cur, normalized: d, added: false };
+  }
   const next = [...cur, d].sort();
   await chrome.storage.local.set({ [TRUSTED_DOMAINS_KEY]: next });
-  return next;
+  return { domains: next, normalized: d, added: true };
+}
+
+export async function addTrustedDomain(domain: string): Promise<string[]> {
+  const result = await addTrustedDomainWithResult(domain);
+  return result ? result.domains : getTrustedDomains();
 }
 
 export async function removeTrustedDomain(domain: string): Promise<string[]> {

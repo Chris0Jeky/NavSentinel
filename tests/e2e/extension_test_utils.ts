@@ -14,7 +14,7 @@ export async function getExtensionId(context: BrowserContext): Promise<string> {
 export async function waitForNavSentinelBridge(page: Page, timeout = 5000): Promise<void> {
   await page.waitForFunction(
     () =>
-      (window as { __navsentinelMainGuard?: boolean }).__navsentinelMainGuard === true ||
+      document.documentElement.getAttribute("data-navsentinel-capture-ready") === "1" &&
       document.documentElement.getAttribute("data-navsentinel-bridge-ready") === "1",
     null,
     { timeout }

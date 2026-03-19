@@ -22,8 +22,7 @@ import { setDebugEnabled, updateDebugOverlay, type DebugInfo } from "./debug_ove
 const CDS_SMART_BLOCK_THRESHOLD = 70;
 const CDS_STRICT_BLOCK_THRESHOLD = 50;
 const NS_SOURCE = "__navsentinel__";
-const BRIDGE_ISOLATED_MESSAGE_TYPE = "ns-bridge-isolated";
-const BRIDGE_TO_MAIN_TYPE = "ns-bridge-to-main";
+const BRIDGE_INIT_TYPE = "ns-port-init";
 const PROTOCOL_VERSION = 1;
 const NAV_ALLOW_TTL_MS = 1500;
 const NAV_GESTURE_TTL_MS = 1500;
@@ -39,11 +38,17 @@ const RISKY_BLANK_REASONS = new Set([
   "cursor_pointer_no_affordance"
 ]);
 
+function makeBridgeSession(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 let lastDown: DownCapture | null = null;
 let settings: NavSettings = { defaultMode: "smart", debug: false, dnrEnabled: false };
 let allowlist: Allowlist = {};
+let bridgePort: MessagePort | null = null;
 let bridgeReady = false;
-let bridgeSession: string | null = null;
+const bridgeSession = makeBridgeSession();
 const pendingBridgeMessages: Array<{ type: string; payload?: Record<string, unknown> }> = [];
 let mainGuard: "unknown" | "yes" | "no" = "unknown";
 let lastNav: { kind: string; url: string; status: "allowed" | "blocked" } | null = null;
@@ -52,6 +57,10 @@ let rollbackShownAt = 0;
 let bridgeRetryTimer = 0;
 
 function markMainGuardReady(): void {
+  if (bridgeRetryTimer) {
+    window.clearTimeout(bridgeRetryTimer);
+    bridgeRetryTimer = 0;
+  }
   bridgeReady = true;
   document.documentElement.setAttribute("data-navsentinel-bridge-ready", "1");
   mainGuard = "yes";
@@ -90,6 +99,8 @@ async function initSettings() {
         window.clearTimeout(bridgeRetryTimer);
         bridgeRetryTimer = 0;
       }
+      bridgePort?.close();
+      bridgePort = null;
       pendingBridgeMessages.length = 0;
       refreshDebug();
     }
@@ -135,34 +146,33 @@ function postToMain(type: string, payload?: Record<string, unknown>): void {
 }
 
 function flushBridgeMessages(): void {
-  if (!bridgeReady) return;
+  if (!bridgeReady || !bridgePort) return;
   while (pendingBridgeMessages.length > 0) {
     const next = pendingBridgeMessages.shift();
     if (!next) break;
-    sendBridgeMessageToMain({
+    bridgePort.postMessage({
       source: NS_SOURCE,
       type: next.type,
       v: PROTOCOL_VERSION,
+      session: bridgeSession,
       ...(next.payload ?? {})
     });
   }
 }
 
 function sendBridgeMessageToMain(payload: Record<string, unknown>): void {
-  if (!bridgeSession) return;
-  window.postMessage(
-    {
-      ...payload,
-      session: bridgeSession
-    },
-    "*"
-  );
+  if (!bridgePort) return;
+  bridgePort.postMessage({
+    ...payload,
+    session: bridgeSession
+  });
 }
 
 function handleBridgeMessage(message: unknown): void {
   const data = message as {
     source?: string;
     type?: string;
+    session?: string;
     id?: string;
     kind?: string;
     url?: string;
@@ -173,6 +183,7 @@ function handleBridgeMessage(message: unknown): void {
     v?: number;
   };
   if (!data || data.source !== NS_SOURCE || data.v !== PROTOCOL_VERSION) return;
+  if (data.session !== bridgeSession) return;
 
   if (data.type === "ns-bridge-ready") {
     markMainGuardReady();
@@ -232,15 +243,25 @@ function ensureBridge(): void {
   const attempt = () => {
     bridgeRetryTimer = 0;
     if (bridgeReady || mainGuard === "no") return;
-    if ((window as any).__navsentinelMainGuard === true) {
-      markMainGuardReady();
-      return;
-    }
-    sendBridgeMessageToMain({
-      source: NS_SOURCE,
-      type: "ns-ping",
-      v: PROTOCOL_VERSION
-    });
+    bridgePort?.close();
+
+    const channel = new MessageChannel();
+    bridgePort = channel.port1;
+    bridgePort.onmessage = (event) => handleBridgeMessage(event.data);
+    bridgePort.start?.();
+    channel.port2.start?.();
+
+    window.postMessage(
+      {
+        source: NS_SOURCE,
+        type: BRIDGE_INIT_TYPE,
+        v: PROTOCOL_VERSION,
+        session: bridgeSession
+      },
+      "*",
+      [channel.port2]
+    );
+
     if (!bridgeReady && mainGuard === "unknown") {
       bridgeRetryTimer = window.setTimeout(attempt, BRIDGE_RETRY_MS);
     }
@@ -498,12 +519,6 @@ function showAllowPrompt(params: {
 }
 
 if (chrome?.runtime?.onMessage) {
-  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (!message || message.type !== BRIDGE_ISOLATED_MESSAGE_TYPE) return;
-    handleBridgeMessage(message.payload);
-    sendResponse?.({ ok: true });
-  });
-
   chrome.runtime.onMessage.addListener((message) => {
     if (!message || message.type !== "ns-rollback") return;
     if (window.top !== window) return;
@@ -522,41 +537,6 @@ if (chrome?.runtime?.onMessage) {
     showRollbackPrompt(url);
   });
 }
-
-window.addEventListener(
-  "message",
-  (event) => {
-    if (event.source !== window) return;
-    const data = event.data as { source?: string; type?: string; v?: number; session?: string };
-    if (!data || data.source !== NS_SOURCE || data.v !== PROTOCOL_VERSION) return;
-
-    if (data.type === "ns-session" && typeof data.session === "string") {
-      bridgeSession = data.session;
-      event.stopImmediatePropagation();
-      sendBridgeMessageToMain({
-        source: NS_SOURCE,
-        type: "ns-session-ack",
-        v: PROTOCOL_VERSION
-      });
-      markMainGuardReady();
-      return;
-    }
-
-    if (!bridgeSession || data.session !== bridgeSession) return;
-    if (
-      data.type !== "ns-bridge-ready" &&
-      data.type !== "ns-pong" &&
-      data.type !== "ns-config-ack" &&
-      data.type !== "ns-nav-blocked" &&
-      data.type !== "ns-nav-allowed"
-    ) {
-      return;
-    }
-    event.stopImmediatePropagation();
-    handleBridgeMessage(data);
-  },
-  true
-);
 
 if (chrome?.runtime?.sendMessage && window.top === window) {
   const run = (retries = 4) => {
