@@ -1,9 +1,11 @@
-import { expect, test, chromium, type BrowserContext, type Worker } from "@playwright/test";
+import { expect, test, chromium } from "@playwright/test";
 import fs from "fs";
 import * as http from "node:http";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
+import { EVENT_LOG_KEY, TRUSTED_DOMAINS_KEY } from "../../extension/src/shared/storage";
+import { getExtensionId, getServiceWorker } from "./extension_test_utils";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -11,17 +13,6 @@ const __dirname = path.dirname(__filename);
 const extensionPath = process.env.EXTENSION_PATH
   ? path.resolve(process.env.EXTENSION_PATH)
   : path.resolve(__dirname, "..", "..", "extension", "dist");
-
-async function getServiceWorker(context: BrowserContext): Promise<Worker> {
-  const existing = context.serviceWorkers()[0];
-  if (existing) return existing;
-  return context.waitForEvent("serviceworker");
-}
-
-async function getExtensionId(context: BrowserContext): Promise<string> {
-  const worker = await getServiceWorker(context);
-  return new URL(worker.url()).host;
-}
 
 function isWithinRoot(root: string, target: string): boolean {
   const relative = path.relative(root, target);
@@ -132,21 +123,39 @@ test("credential guard warns on password paste and trust action persists", async
         input.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, composed: true }));
       });
 
-      await page.waitForFunction(() => {
-        const host = document.querySelector("#__navsentinel_toast_host");
-        const root = host?.shadowRoot;
-        return !!root?.textContent?.includes("You pasted into a password field on an untrusted domain");
-      });
+      const toast = page.locator("#__navsentinel_toast_host");
+      await expect(toast).toContainText(
+        "You pasted into a password field on an untrusted domain",
+        { timeout: 4000 }
+      );
 
-      await page.evaluate(() => {
-        const host = document.querySelector("#__navsentinel_toast_host");
-        const root = host?.shadowRoot;
-        const buttons = Array.from(root?.querySelectorAll("button") ?? []);
-        const trust = buttons.find((button) => button.textContent?.includes("Trust 127.0.0.1"));
-        if (trust instanceof HTMLButtonElement) {
-          trust.click();
-        }
-      });
+      const trustButton = toast.getByRole("button", { name: "Trust 127.0.0.1" });
+      await expect(trustButton).toBeVisible();
+      await trustButton.click();
+
+      const serviceWorker = await getServiceWorker(context);
+      await expect
+        .poll(async () => {
+          return serviceWorker.evaluate(
+            async ({ trustedDomainsKey, eventLogKey }) => {
+              const stored = await chrome.storage.local.get([trustedDomainsKey, eventLogKey]);
+              const trustedDomains = Array.isArray(stored[trustedDomainsKey])
+                ? (stored[trustedDomainsKey] as string[])
+                : [];
+              const eventKinds = Array.isArray(stored[eventLogKey])
+                ? (stored[eventLogKey] as Array<{ kind?: unknown }>)
+                    .map((entry) => entry?.kind)
+                    .filter((kind): kind is string => typeof kind === "string")
+                : [];
+              return { trustedDomains, eventKinds };
+            },
+            { trustedDomainsKey: TRUSTED_DOMAINS_KEY, eventLogKey: EVENT_LOG_KEY }
+          );
+        })
+        .toEqual({
+          trustedDomains: ["127.0.0.1"],
+          eventKinds: expect.arrayContaining(["cred_paste_warn", "cred_trust_domain"])
+        });
 
       const extensionId = await getExtensionId(context);
       const options = await context.newPage();
