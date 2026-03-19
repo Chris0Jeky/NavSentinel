@@ -24,7 +24,7 @@ Historical merge-tracking material lives under `docs/archive/`.
 
 ### Test coverage
 
-- missing Playwright coverage for Gym Levels 2, 3, 4, 7, 8, and 9
+- missing Playwright coverage for Gym Levels 7, 8, and 9
 - popup/operator-surface browser coverage is still light
 - no dedicated stress lane for worker churn or bursty popup/redirect sequences
 
@@ -148,7 +148,7 @@ Why last:
 | Batch | Title | Status |
 | --- | --- | --- |
 | 1 | Tracker and CI alignment | open in PR #5 |
-| 2 | E2E lane split and rollback formalization | in progress |
+| 2 | E2E lane split and rollback formalization | open in PR #6 |
 | 3 | Adversarial Gym coverage | in progress |
 | 4 | Legitimate-flow Gym coverage | planned |
 | 5 | Popup and operator-surface coverage | planned |

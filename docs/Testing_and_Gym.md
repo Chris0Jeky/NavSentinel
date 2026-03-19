@@ -115,7 +115,7 @@ Current pages:
 - `gym/level11-credential-guard.html`
 - `gym/level12-slow-same-tab-link.html`
 
-The biggest current automation gap is that Levels 2, 3, 4, 7, 8, and 9 exist but do not yet have dedicated Playwright coverage.
+The biggest current automation gap is that Levels 7, 8, and 9 exist but do not yet have dedicated Playwright coverage.
 
 ## Effective manual testing workflow
 
