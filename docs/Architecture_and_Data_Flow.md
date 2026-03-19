@@ -47,7 +47,7 @@ It enforces short-lived gesture allowances and captures blocked actions so the i
 
 The bridge uses:
 
-- a per-document random session key
+- extension-runtime relaying scoped to the current tab/frame
 - a protocol version
 - an allowlist of accepted message types
 
@@ -56,7 +56,7 @@ This is implemented in:
 - `extension/src/content/main_guard.ts`
 - `extension/src/content/capture_isolated.ts`
 
-The point is to avoid trusting arbitrary `window.postMessage` traffic from the page itself.
+The point is to avoid trusting arbitrary page-observable `window.postMessage` traffic from the page itself.
 
 ### Credential guard
 

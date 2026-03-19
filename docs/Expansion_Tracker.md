@@ -58,7 +58,7 @@
 
 ## Landed Changes
 - Slice 2
-  - Main-world and isolated-world bridge now uses a per-document session key instead of trusting arbitrary page messages.
+  - Main-world and isolated-world control messages now relay through the extension runtime, with a one-way fallback for passive main-world notifications.
 - Slice 3
   - Keyboard-triggered clicks now produce explicit click context and feed the existing navigation decision path.
 - Slice 4

@@ -1,5 +1,6 @@
 const NS_SOURCE = "__navsentinel__";
-const BRIDGE_INIT_TYPE = "ns-port-init";
+const BRIDGE_MAIN_MESSAGE_TYPE = "ns-bridge-main";
+const BRIDGE_TO_ISOLATED_TYPE = "ns-bridge-to-isolated";
 const OPEN_TTL_MS = 800;
 const REDIRECT_TTL_MS = 1500;
 const TARGET_NAV_TTL_MS = 10000;
@@ -9,15 +10,39 @@ const ALLOW_ONCE_TTL_MS = 1200;
 const BLOCKED_ACTION_TTL_MS = 5000;
 const PROTOCOL_VERSION = 1;
 
-let bridgePort: MessagePort | null = null;
+function postToIsolatedFallback(type: string, payload?: Record<string, unknown>): void {
+  window.postMessage(
+    {
+      source: NS_SOURCE,
+      type,
+      v: PROTOCOL_VERSION,
+      ...(payload ?? {})
+    },
+    "*"
+  );
+}
 
 function postToIsolated(type: string, payload?: Record<string, unknown>): void {
-  bridgePort?.postMessage({
-    source: NS_SOURCE,
-    type,
-    v: PROTOCOL_VERSION,
-    ...(payload ?? {})
-  });
+  try {
+    chrome.runtime.sendMessage(
+      {
+        type: BRIDGE_TO_ISOLATED_TYPE,
+        payload: {
+          source: NS_SOURCE,
+          type,
+          v: PROTOCOL_VERSION,
+          ...(payload ?? {})
+        }
+      },
+      () => {
+        if (chrome.runtime.lastError) {
+          postToIsolatedFallback(type, payload);
+        }
+      }
+    );
+  } catch {
+    postToIsolatedFallback(type, payload);
+  }
 }
 
 let mode: "off" | "smart" | "strict" = "smart";
@@ -486,37 +511,16 @@ function handleBridgeMessage(message: unknown): void {
   }
 }
 
-window.addEventListener(
-  "message",
-  (event) => {
-    if (event.source !== window) return;
-    const data = event.data as {
-      source?: string;
-      type?: string;
-      v?: number;
-    };
-    if (!data || data.source !== NS_SOURCE || data.type !== BRIDGE_INIT_TYPE) return;
-
-    event.stopImmediatePropagation();
-    event.stopPropagation();
-
-    const nextPort = event.ports?.[0];
-    if (!(nextPort instanceof MessagePort)) return;
-
-    if (bridgePort) {
-      nextPort.close();
-      return;
-    }
-
-    bridgePort = nextPort;
-    bridgePort.onmessage = (bridgeEvent) => handleBridgeMessage(bridgeEvent.data);
-    bridgePort.start?.();
-    postToIsolated("ns-bridge-ready");
-  },
-  true
-);
+if (chrome?.runtime?.onMessage) {
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (!message || message.type !== BRIDGE_MAIN_MESSAGE_TYPE) return;
+    handleBridgeMessage(message.payload);
+    sendResponse?.({ ok: true });
+  });
+}
 
 patchOpen();
 patchLocation();
 patchForms();
 (window as any).__navsentinelMainGuard = true;
+postToIsolated("ns-bridge-ready");

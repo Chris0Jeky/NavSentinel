@@ -11,7 +11,7 @@ The current branch ships the merged "suite" version of the project. That means t
 
 - Scores clicks with a Click Deception Score (CDS) before allowing navigation side effects.
 - Patches `window.open`, `location.assign`, `location.replace`, and form submission in the main world to catch script-driven navigation.
-- Uses a session-key handshake between isolated-world and main-world scripts so page code cannot trivially spoof extension control messages.
+- Relays isolated-world and main-world control messages through the extension runtime instead of page-visible `window.postMessage` traffic.
 - Intercepts password-form submission and computes local credential risk before allowing the submit.
 - Stores only local settings, allowlists, trusted domains, and a bounded event log in `chrome.storage.local`.
 - Provides a popup for the current tab and an options page for persistent configuration, import/export, and log review.

@@ -5,6 +5,10 @@ const NAV_ALLOW_TTL_MS = 1500;
 const NAV_GESTURE_TTL_MS = 1500;
 const NAV_TARGET_ALLOW_TTL_MS = 10000;
 const ROLLBACK_SUPPRESS_MS = 6000;
+const BRIDGE_TO_MAIN_TYPE = "ns-bridge-to-main";
+const BRIDGE_TO_ISOLATED_TYPE = "ns-bridge-to-isolated";
+const BRIDGE_MAIN_MESSAGE_TYPE = "ns-bridge-main";
+const BRIDGE_ISOLATED_MESSAGE_TYPE = "ns-bridge-isolated";
 
 const allowUntilByTab = new Map<number, number>();
 const gestureUntilByTab = new Map<number, number>();
@@ -26,6 +30,28 @@ const lastCommittedByTab = new Map<
     allowedAtCommit: boolean;
   }
 >();
+
+function relayBridgeMessage(
+  sender: chrome.runtime.MessageSender,
+  type: typeof BRIDGE_MAIN_MESSAGE_TYPE | typeof BRIDGE_ISOLATED_MESSAGE_TYPE,
+  payload: unknown
+): void {
+  const tabId = sender.tab?.id;
+  if (typeof tabId !== "number") return;
+
+  const options =
+    typeof sender.frameId === "number"
+      ? { frameId: sender.frameId }
+      : undefined;
+
+  void Promise.resolve(
+    options
+      ? chrome.tabs.sendMessage(tabId, { type, payload }, options)
+      : chrome.tabs.sendMessage(tabId, { type, payload })
+  ).catch(() => {
+    // ignore missing receivers during document startup/teardown
+  });
+}
 
 async function syncDnrRulesets(): Promise<void> {
   try {
@@ -57,6 +83,16 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message !== "object") return;
+
+  if (message.type === BRIDGE_TO_MAIN_TYPE) {
+    relayBridgeMessage(sender, BRIDGE_MAIN_MESSAGE_TYPE, message.payload);
+    sendResponse?.({ ok: true });
+  }
+
+  if (message.type === BRIDGE_TO_ISOLATED_TYPE) {
+    relayBridgeMessage(sender, BRIDGE_ISOLATED_MESSAGE_TYPE, message.payload);
+    sendResponse?.({ ok: true });
+  }
 
   if (message.type === "ns-allow-nav") {
     const tabId = sender.tab?.id;
@@ -141,6 +177,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 chrome.webNavigation.onBeforeNavigate.addListener((details) => {
   if (details.frameId !== 0) return;
+  allowStartedByTab.delete(details.tabId);
   const now = Date.now();
   const allowUntil = allowUntilByTab.get(details.tabId) ?? 0;
   const gestureUntil = gestureUntilByTab.get(details.tabId) ?? 0;
@@ -167,7 +204,8 @@ chrome.webNavigation.onCommitted.addListener((details) => {
 
   const now = Date.now();
   const allowUntil = allowUntilByTab.get(details.tabId) ?? 0;
-  const startedAllowed = allowStartedByTab.has(details.tabId);
+  const startedAllowance = allowStartedByTab.get(details.tabId);
+  const startedAllowed = startedAllowance?.url === details.url;
   const targetAllowance = allowTargetByTab.get(details.tabId);
   const targetAllowed =
     !!targetAllowance &&
@@ -212,6 +250,11 @@ chrome.webNavigation.onCommitted.addListener((details) => {
       qualifiers
     });
   }
+});
+
+chrome.webNavigation.onErrorOccurred?.addListener((details) => {
+  if (details.frameId !== 0) return;
+  allowStartedByTab.delete(details.tabId);
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {

@@ -46,14 +46,14 @@ This roadmap is therefore no longer about landing the core suite. It is about di
 - credential capture beyond destination-risk analysis
 - broad browser-porting work before Chrome behavior is fully stabilized
 
-## Current status
-- Stage 0: complete (Gym Levels 1-9 + index page).
-- Stage 1: complete (capture, gesture token, CDS context logging).
-- Stage 2: complete (CDS v1 + overlay blocking + debug overlay).
-- Stage 3: in progress (window.open patch + prompt UI; allowlist UI pending).
-- Stage 4: in progress (location and form submit gating; history.pushState pending).
+## Merge status
 
-## Staged plan (each stage testable)
+- Stage 0-2: complete.
+- Stage 3-4: complete in the current suite branch, including popup/new-tab gating, redirect and form-submit interception, allowlist UI, and rollback behavior.
+- Stage 5: partially implemented via the optional DNR backstop toggle; still not the primary enforcement path.
+- Stage 6-7: partially implemented through suite settings, event logging, trusted domains, credential protection, and bridge hardening, with additional ergonomics and tamper-resilience work still optional follow-up.
+
+## Historical staged plan (baseline reference)
 
 Stage 0 - Gym baseline
 - Build Levels 1-9 demo pages.
@@ -100,13 +100,9 @@ Stage 7 - Robustness hardening
 - Performance tuning and reentrancy safeguards.
 - WebNavigation fallback for cross-origin frames (last resort).
 
-## Short-term focus (next 4-6 weeks)
-- Finish Stage 0-3 with unit tests and at least one Playwright e2e spec.
-- Build Options UI with modes and allowlist.
-- Document reason codes and debug steps.
+## Historical focus notes
 
-## Long-term focus
-- Stage 4-7, network backstop, and policy learning.
+The sections below were the pre-merge planning baseline. They remain useful as historical context, but the actionable work for the current branch is the follow-up list near the top of this document.
 
 ## Dependencies and risks
 - Main world patching can fail under strict CSP; design isolated-only fallback.

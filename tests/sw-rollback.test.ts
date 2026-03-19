@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 type RuntimeMessage = Record<string, unknown>;
-type RuntimeSender = { tab?: { id?: number } };
+type RuntimeSender = { tab?: { id?: number }; frameId?: number };
 type SendResponse = (response?: unknown) => void;
 
 type ChromeMock = ReturnType<typeof createChromeMock>;
@@ -32,6 +32,9 @@ function createChromeMock() {
   const beforeNavigate = createEvent<
     (details: { tabId: number; frameId: number; url: string }) => void
   >();
+  const errorOccurred = createEvent<
+    (details: { tabId: number; frameId: number; url?: string }) => void
+  >();
   const committed = createEvent<
     (details: {
       tabId: number;
@@ -45,7 +48,11 @@ function createChromeMock() {
   const tabUpdated = createEvent<
     (tabId: number, changeInfo: { status?: string; url?: string }, tab: { url?: string }) => void
   >();
-  const sentMessages: Array<{ tabId: number; message: unknown }> = [];
+  const sentMessages: Array<{
+    tabId: number;
+    message: unknown;
+    options?: { frameId?: number };
+  }> = [];
 
   return {
     chrome: {
@@ -75,13 +82,18 @@ function createChromeMock() {
       },
       webNavigation: {
         onBeforeNavigate: beforeNavigate,
-        onCommitted: committed
+        onCommitted: committed,
+        onErrorOccurred: errorOccurred
       },
       tabs: {
         onRemoved: tabRemoved,
         onUpdated: tabUpdated,
-        sendMessage: vi.fn((tabId: number, message: unknown) => {
-          sentMessages.push({ tabId, message });
+        sendMessage: vi.fn((tabId: number, message: unknown, options?: { frameId?: number }) => {
+          sentMessages.push({
+            tabId,
+            message,
+            ...(options ? { options } : {})
+          });
         })
       }
     },
@@ -96,6 +108,9 @@ function createChromeMock() {
       transitionQualifiers?: string[];
     }) {
       committed.emit(details);
+    },
+    emitErrorOccurred(details: { tabId: number; frameId: number; url?: string }) {
+      errorOccurred.emit(details);
     },
     emitTabRemoved(tabId: number) {
       tabRemoved.emit(tabId);
@@ -215,5 +230,75 @@ describe("service worker rollback gating", () => {
 
     expect(response.shouldRollback).toBe(false);
     expect(response.entry?.allowedAtCommit).toBe(true);
+  });
+
+  it("clears a stale allowed-start entry when a later navigation begins outside the gesture window", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+
+    mock.dispatchRuntimeMessage({ type: "ns-nav-gesture", ttlMs: 800 }, { tab: { id: 17 } });
+    vi.setSystemTime(new Date("2026-03-17T12:00:00.300Z"));
+    mock.emitBeforeNavigate({
+      tabId: 17,
+      frameId: 0,
+      url: "https://example.test/allowed-start"
+    });
+
+    vi.setSystemTime(new Date("2026-03-17T12:00:02.500Z"));
+    mock.emitBeforeNavigate({
+      tabId: 17,
+      frameId: 0,
+      url: "https://example.test/late"
+    });
+    mock.emitCommitted({
+      tabId: 17,
+      frameId: 0,
+      url: "https://example.test/late",
+      transitionType: "link",
+      transitionQualifiers: []
+    });
+
+    const response = mock.dispatchRuntimeMessage({ type: "ns-check-rollback" }, { tab: { id: 17 } }) as {
+      shouldRollback: boolean;
+      entry?: { allowedAtCommit?: boolean; url?: string };
+    };
+
+    expect(response.shouldRollback).toBe(true);
+    expect(response.entry?.allowedAtCommit).toBe(false);
+    expect(response.entry?.url).toBe("https://example.test/late");
+  });
+
+  it("relays bridge messages back to the same frame", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+
+    mock.dispatchRuntimeMessage(
+      {
+        type: "ns-bridge-to-main",
+        payload: {
+          source: "__navsentinel__",
+          type: "ns-ping",
+          v: 1
+        }
+      },
+      { tab: { id: 21 }, frameId: 3 }
+    );
+
+    expect(mock.sentMessages).toEqual([
+      {
+        tabId: 21,
+        message: {
+          type: "ns-bridge-main",
+          payload: {
+            source: "__navsentinel__",
+            type: "ns-ping",
+            v: 1
+          }
+        },
+        options: { frameId: 3 }
+      }
+    ]);
   });
 });

@@ -17,10 +17,10 @@ The most security-sensitive code lives in:
 
 ### Main-world and isolated-world bridge
 
-- per-document random session key
+- extension-runtime relaying scoped to the current tab/frame
 - explicit inbound message-type allowlists
 - replayable blocked actions with short-lived ids
-- no trust in arbitrary page-originated messages without the session key
+- no trust in arbitrary page-originated messages
 
 ### Navigation controls
 
