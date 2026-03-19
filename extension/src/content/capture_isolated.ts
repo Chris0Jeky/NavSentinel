@@ -350,11 +350,19 @@ function handleRollback(url: string, prevUrl?: string): void {
   const target = prevUrl && prevUrl !== url ? prevUrl : "";
   if (target) {
     try {
-      chrome.runtime.sendMessage({ type: "ns-store-forward", url });
+      chrome.runtime.sendMessage({ type: "ns-store-forward", url, returnUrl: target });
       notifyNavAllow();
-      postToMain("ns-allow", { allowOpen: false, allowRedirect: true });
       window.setTimeout(() => {
         try {
+          if (history.length > 1) {
+            history.back();
+            return;
+          }
+        } catch {
+          // ignore
+        }
+        try {
+          postToMain("ns-allow", { allowOpen: false, allowRedirect: true });
           location.replace(target);
         } catch {
           // ignore
@@ -562,15 +570,21 @@ if (chrome?.runtime?.sendMessage && window.top === window) {
 }
 
 if (chrome?.runtime?.sendMessage && window.top === window) {
-  const runForward = () => {
+  const runForward = (retries = 25) => {
     chrome.runtime.sendMessage({ type: "ns-check-forward", currentUrl: location.href }, (resp) => {
       const url = typeof resp?.url === "string" ? resp.url : "";
-      if (!url || settings.defaultMode === "off") return;
-      showRollbackPrompt(url);
+      if (url) {
+        if (settings.defaultMode === "off") return;
+        showRollbackPrompt(url);
+        return;
+      }
+      if (retries > 0) {
+        window.setTimeout(() => runForward(retries - 1), 200);
+      }
     });
   };
 
-  window.addEventListener("pageshow", runForward);
+  window.addEventListener("pageshow", () => runForward());
   window.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
       runForward();
@@ -578,7 +592,7 @@ if (chrome?.runtime?.sendMessage && window.top === window) {
   });
 
   if (document.readyState === "loading") {
-    window.addEventListener("DOMContentLoaded", runForward, { once: true });
+    window.addEventListener("DOMContentLoaded", () => runForward(), { once: true });
   } else {
     runForward();
   }
