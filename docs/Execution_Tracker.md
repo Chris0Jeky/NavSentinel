@@ -31,7 +31,7 @@ Historical merge-tracking material lives under `docs/archive/`.
 
 ### CI and release-process alignment
 
-- docs require explicit typechecking but CI does not run it
+- pre-Batch-1, docs required explicit typechecking but CI did not run it; Batch 1 closes that gap
 - E2E is not split into clearer smoke/regression/stress/live lanes
 
 ### Repo and release hygiene

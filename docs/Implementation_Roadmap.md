@@ -13,7 +13,7 @@ The shipped baseline now includes:
 - unified local storage, import/export, and bounded event logging
 - build, packaging, CI, and strict type verification
 
-As of 2026-03-19 there are no open GitHub PRs and no open GitHub issues. The remaining work is follow-up backlog, not in-flight merge work.
+Refer to the GitHub repository for the current state of open pull requests and issues. The remaining work is follow-up backlog, not in-flight merge work.
 
 The detailed execution order for that follow-up work now lives in:
 

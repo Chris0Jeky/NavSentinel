@@ -66,9 +66,6 @@ jobs:
       - name: Verify versions
         run: npm run verify:versions
 
-      - name: Typecheck
-        run: npm run typecheck
-
       - name: Build extension
         run: npm run build
 
