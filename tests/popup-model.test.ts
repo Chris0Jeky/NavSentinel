@@ -50,6 +50,17 @@ describe("popup model", () => {
     expect(recent[7]?.id).toBe("evt-2");
   });
 
+  it("returns no popup events when the requested limit is zero or negative", () => {
+    const events = Array.from({ length: 3 }, (_, index) => ({
+      id: `evt-${index}`,
+      ts: index,
+      kind: "suite_config_update"
+    })) as EventLogEntry[];
+
+    expect(getRecentPopupEvents(events, 0)).toEqual([]);
+    expect(getRecentPopupEvents(events, -4)).toEqual([]);
+  });
+
   it("formats popup event lines with optional site and score fields", () => {
     const line = formatPopupEventLine(
       {

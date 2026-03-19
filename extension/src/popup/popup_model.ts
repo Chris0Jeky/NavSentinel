@@ -36,7 +36,9 @@ export function derivePopupSiteState(activeTabUrl: string, trustedDomains: strin
 }
 
 export function getRecentPopupEvents(log: EventLogEntry[], limit = 8): EventLogEntry[] {
-  return (log ?? []).slice(-limit).reverse();
+  const cappedLimit = Number.isFinite(limit) ? Math.max(0, Math.trunc(limit)) : 8;
+  if (cappedLimit === 0) return [];
+  return (log ?? []).slice(-cappedLimit).reverse();
 }
 
 export function formatPopupEventLine(
