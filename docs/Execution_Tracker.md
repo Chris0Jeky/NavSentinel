@@ -16,8 +16,7 @@ Historical merge-tracking material lives under `docs/archive/`.
 ## Current baseline
 
 - SentinelSuite merge is complete on `main`
-- no open GitHub PRs
-- no open GitHub issues
+- refer to the GitHub repository for the current state of open PRs and issues
 - current repo gaps are follow-up work, not merge work
 
 ## Outstanding inventory

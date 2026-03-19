@@ -118,7 +118,7 @@ Then open `gym/index.html` through the local server.
 
 - `npm run test`: unit tests for local heuristics and shared logic
 - `npm run test:e2e`: Playwright suite scoped to `tests/e2e/**/*.spec.ts`
-- `npx tsc -p tsconfig.json --noEmit`: strict type verification
+- `npm run typecheck`: strict type verification
 
 The Playwright config intentionally limits discovery to E2E specs so Vitest files are not loaded by the Playwright runner.
 
