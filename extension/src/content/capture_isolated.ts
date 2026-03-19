@@ -743,7 +743,7 @@ window.addEventListener(
 
     if (decision === "allow") {
       if (isSameTabAnchor && parsed?.href) {
-      notifyAllowedTarget(parsed.href);
+        notifyAllowedTarget(parsed.href);
       }
       notifyNavGesture();
       notifyNavAllow();

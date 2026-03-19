@@ -39,7 +39,9 @@ export async function waitForToastText(page: Page, text: string, timeout = 4000)
 export async function readToastText(page: Page): Promise<string | null> {
   return page.evaluate(() => {
     const host = document.querySelector("#__navsentinel_toast_host");
-    return host?.shadowRoot?.textContent ?? null;
+    const body = host?.shadowRoot?.querySelector(".body");
+    const text = body?.textContent?.trim();
+    return text ? text : null;
   });
 }
 

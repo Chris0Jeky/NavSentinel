@@ -119,10 +119,11 @@ function hasMeaningfulName(el: Element): boolean {
 function looksLikePopupOpen(target?: string, features?: string): boolean {
   const normalizedTarget = (target ?? "").toLowerCase();
   const targetCreatesNewContext =
-    normalizedTarget !== "" &&
-    normalizedTarget !== "_self" &&
+    normalizedTarget === "" ||
+    normalizedTarget === "_blank" ||
+    (normalizedTarget !== "_self" &&
     normalizedTarget !== "_top" &&
-    normalizedTarget !== "_parent";
+    normalizedTarget !== "_parent");
   const normalizedFeatures = (features ?? "").toLowerCase();
   const popupFeatures =
     normalizedFeatures.includes("popup") ||
