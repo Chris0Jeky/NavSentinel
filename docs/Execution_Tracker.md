@@ -21,7 +21,7 @@ Historical merge-tracking material lives under `docs/archive/`.
   - PR #6: E2E lanes and rollback formalization
   - PR #7: adversarial Gym coverage
   - PR #8: legitimate Gym coverage
-- no open GitHub issues
+- refer to the GitHub repository for the current state of open PRs and issues
 - current repo gaps are follow-up work beyond the merge and core Gym coverage
 
 ## Outstanding inventory
