@@ -14,8 +14,22 @@
   <button id="signin">Sign in</button>
 
   <script>
+    const params = new URLSearchParams(window.location.search);
+    const usePopupFeatures = params.get('plain') !== '1';
+    const burst = params.get('burst') === '1';
+
     document.getElementById('signin').addEventListener('click', () => {
-      window.open('https://example.com/?oauth=1', 'oauth', 'popup,width=520,height=640');
+      window.open(
+        'https://example.com/?oauth=1',
+        usePopupFeatures ? 'oauth' : '',
+        usePopupFeatures ? 'popup,width=520,height=640' : undefined
+      );
+
+      if (burst) {
+        window.setTimeout(() => {
+          window.open('https://example.com/?oauth=2', 'oauth-burst', 'popup,width=520,height=640');
+        }, 50);
+      }
     });
   </script>
 </body>

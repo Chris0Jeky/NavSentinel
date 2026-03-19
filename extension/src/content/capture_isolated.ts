@@ -429,36 +429,6 @@ function isLegitBlankAnchor(
   return true;
 }
 
-function isLegitPopupIntent(
-  ctx: {
-    top: {
-      tag: string;
-      role?: string;
-      textLength?: number;
-      ariaLabelLength?: number;
-      titleLength?: number;
-    };
-    retargeted?: boolean;
-  },
-  cds: number,
-  reasonCodes: string[]
-): boolean {
-  if (cds >= CDS_SMART_BLOCK_THRESHOLD) return false;
-  if (ctx.retargeted) return false;
-  const role = (ctx.top.role ?? "").toLowerCase();
-  const isButtonLike = ctx.top.tag === "BUTTON" || role === "button";
-  if (!isButtonLike) return false;
-  const nameLength =
-    (ctx.top.textLength ?? 0) +
-    (ctx.top.ariaLabelLength ?? 0) +
-    (ctx.top.titleLength ?? 0);
-  if (nameLength === 0) return false;
-  for (const reason of reasonCodes) {
-    if (RISKY_BLANK_REASONS.has(reason)) return false;
-  }
-  return true;
-}
-
 function getBlockThreshold(mode: Mode): number {
   return mode === "strict" ? CDS_STRICT_BLOCK_THRESHOLD : CDS_SMART_BLOCK_THRESHOLD;
 }
@@ -708,8 +678,6 @@ window.addEventListener(
     const blockThreshold = getBlockThreshold(mode);
     const smartAllowsBlank =
       mode === "smart" && !!anchor && isLegitBlankAnchor(anchor, ctx, cds, reasonCodes);
-    const smartAllowsPopup =
-      mode === "smart" && !anchor && isLegitPopupIntent(ctx, cds, reasonCodes);
 
     if (mode !== "off") {
       if (isBlankAnchor && !isAllowed && !explicitNewTab && !smartAllowsBlank) {
@@ -748,7 +716,7 @@ window.addEventListener(
       notifyNavGesture();
       notifyNavAllow();
       postToMain("ns-allow", {
-        allowOpen: mode === "off" || explicitNewTab || smartAllowsPopup,
+        allowOpen: mode === "off" || explicitNewTab,
         allowRedirect: true
       });
     }
