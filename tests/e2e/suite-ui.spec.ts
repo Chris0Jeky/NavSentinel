@@ -1,8 +1,9 @@
-import { test, expect, chromium, type BrowserContext, type Worker } from "@playwright/test";
+import { test, expect, chromium } from "@playwright/test";
 import fs from "fs";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
+import { getExtensionId } from "./extension_test_utils";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -10,17 +11,6 @@ const __dirname = path.dirname(__filename);
 const extensionPath = process.env.EXTENSION_PATH
   ? path.resolve(process.env.EXTENSION_PATH)
   : path.resolve(__dirname, "..", "..", "extension", "dist");
-
-async function getServiceWorker(context: BrowserContext): Promise<Worker> {
-  const existing = context.serviceWorkers()[0];
-  if (existing) return existing;
-  return context.waitForEvent("serviceworker");
-}
-
-async function getExtensionId(context: BrowserContext): Promise<string> {
-  const worker = await getServiceWorker(context);
-  return new URL(worker.url()).host;
-}
 
 test.setTimeout(120_000);
 

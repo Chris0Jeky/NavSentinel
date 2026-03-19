@@ -2,12 +2,17 @@ import {
   addTrustedDomain,
   appendEvent,
   getCredentialSettings,
-  getTrustedDomains,
-  type CredMode
+  getTrustedDomains
 } from "../shared/storage";
 import { computeCredentialRisk, getRegistrableDomain, normalizeHost } from "../shared/domain";
 import { showToast } from "./ui_toast";
 import { showCredentialModal } from "./credential_modal";
+import {
+  deriveCredentialPasteState,
+  getCredentialReasonLines,
+  isCrossSiteCredentialAction,
+  shouldPromptCredentialSubmit
+} from "./credential_guard_model";
 
 const allowNextSubmitUntil = new WeakMap<HTMLFormElement, number>();
 
@@ -43,34 +48,6 @@ function resolveActionUrl(form: HTMLFormElement): string {
   } catch {
     return location.href;
   }
-}
-
-function shouldPrompt(
-  mode: CredMode,
-  riskScore: number,
-  pageTrusted: boolean,
-  actionTrusted: boolean,
-  isHttpsOk: boolean,
-  crossSite: boolean,
-  cfg: Awaited<ReturnType<typeof getCredentialSettings>>
-): boolean {
-  const threshold = Number.isFinite(cfg.mediumRiskThreshold) ? cfg.mediumRiskThreshold : 40;
-  if (mode === "off") return false;
-  if (cfg.blockHttpPasswordSubmit && !isHttpsOk) return true;
-  if (crossSite && !actionTrusted && riskScore >= 15) return true;
-
-  if (mode === "strict") {
-    return !pageTrusted || riskScore >= threshold;
-  }
-
-  return (
-    (cfg.promptOnUntrustedDomain && !pageTrusted) ||
-    (cfg.promptOnMediumRisk && riskScore >= threshold)
-  );
-}
-
-function reasonLines(risk: ReturnType<typeof computeCredentialRisk>): string[] {
-  return risk.reasons.map((r) => r.label).slice(0, 10);
 }
 
 function resumeSubmit(form: HTMLFormElement, submitter: HTMLElement | null): void {
@@ -116,23 +93,19 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
       config: cfg
     });
 
-    const crossSite = !!(
-      risk.page.host &&
-      risk.action.host &&
-      risk.page.host !== risk.action.host
-    );
+    const crossSite = isCrossSiteCredentialAction(risk);
     const isHttpsOk = risk.page.isHttps && risk.action.isHttps;
 
     if (
-      !shouldPrompt(
-        cfg.mode,
-        risk.score,
-        risk.page.isTrusted,
-        risk.action.isTrusted,
+      !shouldPromptCredentialSubmit({
+        mode: cfg.mode,
+        riskScore: risk.score,
+        pageTrusted: risk.page.isTrusted,
+        actionTrusted: risk.action.isTrusted,
         isHttpsOk,
         crossSite,
-        cfg
-      )
+        config: cfg
+      })
     ) {
       resumeSubmit(form, submitter);
       return;
@@ -156,7 +129,7 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
         { k: "Destination", v: risk.action.registrableDomain || risk.action.host || "(unknown)" },
         { k: "Risk score", v: `${risk.score} (${risk.severity})` }
       ],
-      reasons: reasonLines(risk),
+      reasons: getCredentialReasonLines(risk.reasons),
       actions: [
         { id: "cancel", label: "Cancel", kind: "danger" },
         { id: "proceed_once", label: "Proceed once", kind: "primary" },
@@ -236,11 +209,11 @@ async function handlePaste(evt: ClipboardEvent): Promise<void> {
     const trusted = await getTrustedDomains();
     const host = normalizeHost(location.hostname);
     const reg = getRegistrableDomain(host);
-    const isTrusted = !!(reg && trusted.includes(reg));
-    if (isTrusted) return;
+    const pasteState = deriveCredentialPasteState(location.href, trusted);
+    if (!pasteState.shouldWarn) return;
 
     showToast({
-      message: `You pasted into a password field on an untrusted domain: ${reg || host || "(unknown)"}.`,
+      message: `You pasted into a password field on an untrusted domain: ${pasteState.siteLabel}.`,
       timeoutMs: 10000,
       actions: [
         {
@@ -257,7 +230,7 @@ async function handlePaste(evt: ClipboardEvent): Promise<void> {
       ]
     });
 
-    await appendEvent({ kind: "cred_paste_warn", site: reg || host, url: location.href });
+    await appendEvent({ kind: "cred_paste_warn", site: pasteState.siteLabel, url: location.href });
   } catch {
     // ignore
   }
