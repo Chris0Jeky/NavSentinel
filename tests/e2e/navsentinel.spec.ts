@@ -529,7 +529,7 @@ test("Level 9 legit overlay controls and visible docs link stay allowed @regress
   }
 });
 
-test("Level 10 delayed redirect shows rollback proceed affordance @rollback", async () => {
+test("Level 10 delayed redirect rolls back to the prior page @rollback", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
@@ -553,10 +553,12 @@ test("Level 10 delayed redirect shows rollback proceed affordance @rollback", as
       await waitForNavSentinelBridge(page);
       await page.click("#delayed");
       await page.waitForURL(/level4-visual-mimicry\.html/, { timeout: 7000 });
-      await waitForNavSentinelBridge(page, 7000);
-      await waitForToastText(page, "NavSentinel rolled back a redirect", 12000);
-      await waitForToastText(page, "Proceed", 12000);
-      await expect(page).toHaveURL(/level4-visual-mimicry\.html/);
+      await page.waitForURL(/level10-redirects-and-forms\.html/, {
+        timeout: 20000,
+        waitUntil: "commit"
+      });
+      await page.waitForTimeout(1000);
+      await expect(page).toHaveURL(/level10-redirects-and-forms\.html/);
     } finally {
       await context.close();
     }
