@@ -3,6 +3,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
+import { SUITE_SETTINGS_KEY } from "../../extension/src/shared/storage";
 import { getExtensionId } from "./extension_test_utils";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -43,14 +44,14 @@ test("options normalizes trusted-domain input and persists mode changes @smoke",
       await options.locator("#trustedInput").fill("https://login.example.com/account");
       await options.locator("#addTrusted").click();
       await options.locator("#save").click();
-      await options.waitForFunction(async () => {
-        const result = await chrome.storage.local.get("sentinelsuite:settings_v1");
-        const settings = result["sentinelsuite:settings_v1"];
+      await options.waitForFunction(async (settingsKey) => {
+        const result = await chrome.storage.local.get(settingsKey);
+        const settings = result[settingsKey];
         return (
           settings?.nav?.defaultMode === "strict" &&
           settings?.credential?.mode === "strict"
         );
-      });
+      }, SUITE_SETTINGS_KEY);
 
       await options.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
       await expect(options.locator("#navMode")).toHaveValue("strict");

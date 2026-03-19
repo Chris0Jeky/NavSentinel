@@ -160,6 +160,7 @@ The biggest current automation gap is that Levels 7, 8, and 9 exist but do not y
 CI currently runs:
 
 - `npm run verify:versions`
+- `npm run typecheck`
 - `npm test`
 - `npm run build`
 - `npm run package:ext`
