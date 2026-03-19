@@ -5,7 +5,7 @@ NavSentinel is a local-first Chrome MV3 extension that hardens two abuse-heavy b
 - deceptive navigation flows such as hidden overlays, popunders, retargeted clicks, delayed redirects, and synthetic popup attempts
 - risky credential submissions such as HTTP password posts, lookalike domains, untrusted domains, and suspicious cross-site form actions
 
-The current branch ships the merged "suite" version of the project. That means the extension now includes the navigation firewall, the credential guard, a popup, a full options page, trusted-domain management, and a bounded local event log.
+The current `main` branch ships the merged suite baseline. That means the extension now includes the navigation firewall, the credential guard, a popup, a full options page, trusted-domain management, and a bounded local event log.
 
 ## What it does
 
@@ -67,7 +67,7 @@ Useful commands:
 npm run watch
 npm run test
 npm run test:e2e
-npx tsc -p tsconfig.json --noEmit
+npm run typecheck
 npm run verify:versions
 npm run package:ext
 npm run gym:serve
@@ -104,6 +104,7 @@ The Gym gives you deterministic fixtures for common attack and edge-case pattern
 - Levels 1-9: overlay, retargeting, popunder, programmatic click, and legitimacy edge cases
 - Level 10: delayed redirects and form submits
 - Level 11: risky password-submit prompt coverage
+- Level 12: slow same-tab navigation legitimacy coverage
 
 Start it with:
 
@@ -144,3 +145,7 @@ Start with `docs/README.md`. The most useful follow-on docs are:
 - `docs/Intent_Model_and_Scoring.md`
 - `docs/Testing_and_Gym.md`
 - `docs/RELEASING.md`
+
+Historical merge-era context lives under:
+
+- `docs/archive/README.md`

@@ -1,6 +1,6 @@
 # MasterPlan
 
-This file is now a historical baseline for the original NavSentinel proposal. It is still useful for understanding the initial product intent, but it no longer describes the full current branch by itself.
+This file is now a historical baseline for the original NavSentinel proposal. It is still useful for understanding the initial product intent, but it no longer describes the full current implementation by itself.
 
 For the current implementation, start with:
 
@@ -8,6 +8,11 @@ For the current implementation, start with:
 - `docs/README.md`
 - `docs/Project_Overview.md`
 - `docs/Architecture_and_Data_Flow.md`
+
+Related archived merge-era context now lives in:
+
+- `docs/archive/Expansion_Tracker.md`
+- `docs/archive/Resource_Map.md`
 
 ## Original product intent
 
@@ -27,7 +32,7 @@ The design principles from the original proposal are still valid:
 
 ## What changed since the initial plan
 
-The current branch now goes beyond the original navigation-only baseline and includes:
+The current implementation now goes beyond the original navigation-only baseline and includes:
 
 - a hardened main-world / isolated-world bridge
 - password-submit protection
@@ -41,4 +46,4 @@ The current branch now goes beyond the original navigation-only baseline and inc
 The original staged roadmap has effectively been overtaken by the merged SentinelSuite work. The practical follow-up roadmap now lives in:
 
 - `docs/Implementation_Roadmap.md`
-- `docs/Expansion_Tracker.md`
+- `docs/Testing_Expansion_Strategy.md`

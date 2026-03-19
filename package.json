@@ -8,6 +8,7 @@
     "build": "vite build",
     "watch": "vite build --watch",
     "verify:versions": "node scripts/check_versions.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test",
     "package:ext": "node scripts/package.mjs",

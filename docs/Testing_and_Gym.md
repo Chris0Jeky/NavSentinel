@@ -5,21 +5,21 @@
 Testing in this repo is meant to answer two questions:
 
 1. Does the extension still catch the behaviors it claims to catch?
-2. Did a change accidentally make the extension too noisy or too permissive?
+2. Did a change accidentally make the extension too noisy, too permissive, or too stateful under churn?
 
-The project uses a mix of deterministic Gym pages, unit tests, and Playwright-driven browser tests.
+The project uses a mix of deterministic Gym pages, Vitest unit tests, and Playwright-driven browser tests.
 
 ## Local commands
 
 ```bash
 npm install
+npm run typecheck
 npm run build
 npm run test
 npm run test:e2e
-npx tsc -p tsconfig.json --noEmit
 ```
 
-To run the local Gym server:
+To run the Gym locally:
 
 ```bash
 npm run gym:serve
@@ -39,13 +39,18 @@ python -m http.server 5173
 Current unit coverage lives in:
 
 - `tests/credential-domain.test.ts`
+- `tests/credential-guard-model.test.ts`
+- `tests/popup-model.test.ts`
+- `tests/storage-suite.test.ts`
+- `tests/sw-rollback.test.ts`
 
-It verifies core credential heuristics such as:
+These currently cover:
 
-- multipart public suffix handling
-- mixed-script hostname detection
-- lookalike-domain comparison
-- high-severity scoring for clearly risky submits
+- trusted-domain normalization and registrable-domain handling
+- credential-risk heuristics and model behavior
+- popup event formatting and limit handling
+- storage import/export, settings migration, and normalization paths
+- service-worker rollback, gesture-window, and target-allowance behavior
 
 ### Playwright E2E
 
@@ -53,35 +58,44 @@ Current E2E coverage lives in:
 
 - `tests/e2e/navsentinel.spec.ts`
 - `tests/e2e/credential-guard.spec.ts`
+- `tests/e2e/suite-ui.spec.ts`
 
-It covers:
+It currently covers:
 
 - Level 1 new-tab blocking
 - Level 5 popunder blocking
 - Level 6 programmatic click blocking
-- Level 10 delayed form submit prompt
-- Level 10 rollback flow behind an env gate
+- Level 10 delayed form-submit prompt
+- Level 12 slow same-tab navigation legitimacy
 - Level 11 credential-submit prompt
-- an optional live-web sanity check behind an env gate
+- password-paste warning and trusted-domain persistence
+- options-page trusted-domain normalization
+- options import/export round-trip behavior
+- an env-gated rollback flow (`ROLLBACK_E2E`)
+- an env-gated live-web sanity check (`LIVE_E2E`)
 
-`playwright.config.ts` intentionally scopes Playwright discovery to `tests/e2e/**/*.spec.ts`. This avoids loading Vitest unit files during E2E runs.
+`playwright.config.ts` intentionally scopes Playwright discovery to `tests/e2e/**/*.spec.ts`. This keeps Vitest files out of the Playwright runner.
 
 ## Gym map
 
 The Gym index is at `gym/index.html`.
 
-Important current pages:
+Current pages:
 
 - `gym/level1-basic-opacity.html`
-  - basic deceptive overlay/new-tab case
+- `gym/level2-moving-target.html`
+- `gym/level3-instant-injection.html`
+- `gym/level4-visual-mimicry.html`
 - `gym/level5-window-open-popunder.html`
-  - scripted popup/popunder case
 - `gym/level6-programmatic-click.html`
-  - programmatic click / retargeted navigation case
+- `gym/level7-legit-modal-backdrop.html`
+- `gym/level8-legit-oauth-popup.html`
+- `gym/level9-legit-video-overlay.html`
 - `gym/level10-redirects-and-forms.html`
-  - delayed redirect and delayed submit cases
 - `gym/level11-credential-guard.html`
-  - risky password-submit prompt case
+- `gym/level12-slow-same-tab-link.html`
+
+The biggest current automation gap is that Levels 2, 3, 4, 7, 8, and 9 exist but do not yet have dedicated Playwright coverage.
 
 ## Effective manual testing workflow
 
@@ -91,39 +105,57 @@ Important current pages:
 4. Open the Gym index page.
 5. Run the relevant level in `smart` mode first.
 6. Repeat in `strict` mode if you are tuning heuristics.
-7. Review the popup and options-page event log after each run.
-8. Clear logs between scenarios when you want clean comparisons.
+7. Review popup and options-page state after the scenario.
+8. Clear the event log between scenarios when you want clean comparisons.
 
 ## What to verify after changes
 
 ### For navigation changes
 
-- no unexpected new tabs open
+- no unexpected new tabs survive
 - prompt text remains actionable
 - allow-once replays the blocked action only once
 - always-allow stores the correct site/destination pair
 - rollback still returns to the prior page and offers explicit proceed
+- stale per-tab allowances do not leak into later navigations
 
 ### For credential changes
 
-- password submits on trusted HTTPS domains do not prompt unnecessarily
-- risky HTTP or lookalike submits prompt
+- trusted HTTPS submits do not prompt unnecessarily
+- risky HTTP, cross-site, or lookalike submits prompt
 - trust actions add the correct registrable domain
 - paste warnings do not expose clipboard contents
 - event logs contain score and reason codes
+
+### For popup and options changes
+
+- mode selectors persist after reload
+- trusted-domain actions update storage correctly
+- event-log rendering still works
+- import/export preserves normalized state
+- allowlist removal and clearing still work
 
 ## CI expectations
 
 CI currently runs:
 
-- version verification
-- unit tests
-- build
-- packaging
-- Playwright E2E under `xvfb-run`
+- `npm run verify:versions`
+- `npm test`
+- `npm run build`
+- `npm run package:ext`
+- `xvfb-run -a npm run test:e2e`
 
 If E2E fails in CI, check these first:
 
 - `npm run build` actually produced `extension/dist`
 - Playwright discovery is still limited to `tests/e2e`
-- the E2E specs do not import Vitest globals or non-E2E helpers unintentionally
+- the E2E specs are still using the shared extension helpers
+- the change did not break DOM readiness markers or shadow-root toast assertions
+
+## What is still outstanding
+
+From the testing perspective, the clearest next steps are:
+
+- automate the remaining Gym levels
+- add a heavier stress lane for worker churn, repeated popup bursts, and delayed navigation chains
+- add lower-cost property/state tests for scoring, DOM hint building, and tab-scoped worker policy
