@@ -4,6 +4,7 @@ import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 import {
+  getGymBaseUrl,
   startGymServer,
   waitForNavSentinelBridge,
   waitForToastText
@@ -22,9 +23,7 @@ test.setTimeout(120_000);
 test("Level 1 blocks new tabs @smoke", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
-  const gymOverride = process.env.GYM_BASE_URL;
-  const gym = gymOverride ? null : await startGymServer(gymRoot);
-  const baseUrl = gymOverride ?? gym!.baseUrl;
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
 
@@ -62,9 +61,7 @@ test("Level 1 blocks new tabs @smoke", async () => {
 test("Level 2 moving target overlay blocks the hidden new tab @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
-  const gymOverride = process.env.GYM_BASE_URL;
-  const gym = gymOverride ? null : await startGymServer(gymRoot);
-  const baseUrl = gymOverride ?? gym!.baseUrl;
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
 
@@ -106,12 +103,10 @@ test("Level 2 moving target overlay blocks the hidden new tab @regression", asyn
   }
 });
 
-test("Level 3 instant injection blocks the injected trap click path @regression", async () => {
+test("Level 3 instant injection blocks the injected trap path @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
-  const gymOverride = process.env.GYM_BASE_URL;
-  const gym = gymOverride ? null : await startGymServer(gymRoot);
-  const baseUrl = gymOverride ?? gym!.baseUrl;
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
 
@@ -139,10 +134,10 @@ test("Level 3 instant injection blocks the injected trap click path @regression"
       await page.waitForFunction(
         () => {
           const host = document.querySelector("#__navsentinel_toast_host");
-          const text = host?.shadowRoot?.textContent ?? "";
+          const text = host?.shadowRoot?.querySelector(".body")?.textContent ?? "";
           return (
-            text.includes("NavSentinel blocked deceptive click") ||
-            text.includes("Blocked new tab")
+            text.includes("Blocked new tab") ||
+            text.includes("NavSentinel blocked deceptive click")
           );
         },
         null,
@@ -161,9 +156,7 @@ test("Level 3 instant injection blocks the injected trap click path @regression"
 test("Level 4 visual mimicry blocks the disguised download new tab @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
-  const gymOverride = process.env.GYM_BASE_URL;
-  const gym = gymOverride ? null : await startGymServer(gymRoot);
-  const baseUrl = gymOverride ?? gym!.baseUrl;
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
 
@@ -202,9 +195,7 @@ test("Level 4 visual mimicry blocks the disguised download new tab @regression",
 test("Level 10 delayed form submit prompts @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
-  const gymOverride = process.env.GYM_BASE_URL;
-  const gym = gymOverride ? null : await startGymServer(gymRoot);
-  const baseUrl = gymOverride ?? gym!.baseUrl;
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
 
@@ -243,9 +234,7 @@ test("Level 10 delayed form submit prompts @regression", async () => {
 test("Level 12 delayed same-tab navigation does not roll back a legitimate click @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
-  const gymOverride = process.env.GYM_BASE_URL;
-  const gym = gymOverride ? null : await startGymServer(gymRoot);
-  const baseUrl = gymOverride ?? gym!.baseUrl;
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
 
@@ -282,9 +271,7 @@ test("Level 12 delayed same-tab navigation does not roll back a legitimate click
 test("Level 10 delayed redirect shows rollback proceed affordance @rollback", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
-  const gymOverride = process.env.GYM_BASE_URL;
-  const gym = gymOverride ? null : await startGymServer(gymRoot);
-  const baseUrl = gymOverride ?? gym!.baseUrl;
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
 
@@ -368,9 +355,7 @@ test("Live: Google first result opens with no prompt @live", async () => {
 test("Level 5 blocks window.open popunder @smoke", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
-  const gymOverride = process.env.GYM_BASE_URL;
-  const gym = gymOverride ? null : await startGymServer(gymRoot);
-  const baseUrl = gymOverride ?? gym!.baseUrl;
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
 
@@ -403,9 +388,7 @@ test("Level 5 blocks window.open popunder @smoke", async () => {
 test("Level 6 blocks programmatic click new tab @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
-  const gymOverride = process.env.GYM_BASE_URL;
-  const gym = gymOverride ? null : await startGymServer(gymRoot);
-  const baseUrl = gymOverride ?? gym!.baseUrl;
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
 

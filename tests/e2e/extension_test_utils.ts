@@ -3,6 +3,8 @@ import * as http from "node:http";
 import path from "path";
 import type { BrowserContext, Page, Worker } from "@playwright/test";
 
+type GymServerHandle = { baseUrl: string; close: () => Promise<void> };
+
 export async function getServiceWorker(context: BrowserContext): Promise<Worker> {
   const existing = context.serviceWorkers()[0];
   if (existing) return existing;
@@ -36,14 +38,17 @@ export async function waitForToastText(page: Page, text: string, timeout = 4000)
   );
 }
 
+export function getGymBaseUrlOverride(): string | undefined {
+  const raw = process.env.GYM_BASE_URL?.trim();
+  return raw ? raw : undefined;
+}
+
 function isWithinRoot(root: string, target: string): boolean {
   const relative = path.relative(root, target);
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
-export async function startGymServer(
-  gymRoot: string
-): Promise<{ baseUrl: string; close: () => Promise<void> }> {
+export async function startGymServer(gymRoot: string): Promise<GymServerHandle> {
   const server = http.createServer(async (req, res) => {
     try {
       const reqUrl = new URL(req.url ?? "/", "http://127.0.0.1");
@@ -89,4 +94,16 @@ export async function startGymServer(
     baseUrl: `http://127.0.0.1:${addr.port}`,
     close: () => new Promise<void>((resolve) => server.close(() => resolve()))
   };
+}
+
+export async function getGymBaseUrl(
+  gymRoot: string
+): Promise<{ baseUrl: string; gym: GymServerHandle | null }> {
+  const override = getGymBaseUrlOverride();
+  if (override) {
+    return { baseUrl: override, gym: null };
+  }
+
+  const gym = await startGymServer(gymRoot);
+  return { baseUrl: gym.baseUrl, gym };
 }
