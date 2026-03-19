@@ -232,6 +232,48 @@ describe("service worker rollback gating", () => {
     expect(response.entry?.allowedAtCommit).toBe(true);
   });
 
+  it("consumes a target allowance after a different top-frame commit", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+
+    mock.dispatchRuntimeMessage(
+      {
+        type: "ns-allow-target-nav",
+        url: "https://example.test/allowed-target",
+        ttlMs: 10_000
+      },
+      { tab: { id: 15 } }
+    );
+
+    vi.setSystemTime(new Date("2026-03-17T12:00:01.000Z"));
+    mock.emitCommitted({
+      tabId: 15,
+      frameId: 0,
+      url: "https://example.test/other",
+      transitionType: "link",
+      transitionQualifiers: []
+    });
+
+    vi.setSystemTime(new Date("2026-03-17T12:00:02.000Z"));
+    mock.emitCommitted({
+      tabId: 15,
+      frameId: 0,
+      url: "https://example.test/allowed-target",
+      transitionType: "link",
+      transitionQualifiers: []
+    });
+
+    const response = mock.dispatchRuntimeMessage({ type: "ns-check-rollback" }, { tab: { id: 15 } }) as {
+      shouldRollback: boolean;
+      entry?: { allowedAtCommit?: boolean; url?: string };
+    };
+
+    expect(response.shouldRollback).toBe(true);
+    expect(response.entry?.allowedAtCommit).toBe(false);
+    expect(response.entry?.url).toBe("https://example.test/allowed-target");
+  });
+
   it("clears a stale allowed-start entry when a later navigation begins outside the gesture window", async () => {
     const mock = createChromeMock();
     vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
@@ -268,5 +310,4 @@ describe("service worker rollback gating", () => {
     expect(response.entry?.allowedAtCommit).toBe(false);
     expect(response.entry?.url).toBe("https://example.test/late");
   });
-
 });

@@ -154,6 +154,16 @@ chrome.webNavigation.onBeforeNavigate.addListener((details) => {
 
 chrome.webNavigation.onCommitted.addListener((details) => {
   if (details.frameId !== 0) return;
+  const now = Date.now();
+  const targetAllowance = allowTargetByTab.get(details.tabId);
+  const targetAllowed =
+    !!targetAllowance &&
+    now <= targetAllowance.expiresAt &&
+    targetAllowance.url === details.url;
+  if (targetAllowance) {
+    allowTargetByTab.delete(details.tabId);
+  }
+
   const qualifiers = details.transitionQualifiers ?? [];
   const isRedirect =
     qualifiers.includes("client_redirect") || qualifiers.includes("server_redirect");
@@ -166,21 +176,12 @@ chrome.webNavigation.onCommitted.addListener((details) => {
   if (isUserTyped) return;
   if (!isRedirect && !isLinkish) return;
 
-  const now = Date.now();
   const allowUntil = allowUntilByTab.get(details.tabId) ?? 0;
   const startedUrl = allowStartedByTab.get(details.tabId);
   const startedAllowed = startedUrl === details.url;
-  const targetAllowance = allowTargetByTab.get(details.tabId);
-  const targetAllowed =
-    !!targetAllowance &&
-    now <= targetAllowance.expiresAt &&
-    targetAllowance.url === details.url;
   const allowedAtCommit = now <= allowUntil || startedAllowed || targetAllowed;
   const prevUrl = lastUrlByTab.get(details.tabId);
   allowStartedByTab.delete(details.tabId);
-  if (targetAllowed || (targetAllowance && now > targetAllowance.expiresAt)) {
-    allowTargetByTab.delete(details.tabId);
-  }
 
   lastUrlByTab.set(details.tabId, details.url);
   lastCommittedByTab.set(details.tabId, {
