@@ -352,18 +352,21 @@ function handleRollback(url: string, prevUrl?: string): void {
     try {
       chrome.runtime.sendMessage({ type: "ns-store-forward", url, returnUrl: target });
       notifyNavAllow();
+      notifyAllowedTarget(target);
       window.setTimeout(() => {
         try {
-          if (history.length > 1) {
-            history.back();
-            return;
-          }
-        } catch {
-          // ignore
-        }
-        try {
-          postToMain("ns-allow", { allowOpen: false, allowRedirect: true });
-          location.replace(target);
+          const anchor = document.createElement("a");
+          anchor.href = target;
+          anchor.target = "_self";
+          anchor.textContent = "NavSentinel return";
+          anchor.style.position = "fixed";
+          anchor.style.top = "0";
+          anchor.style.left = "0";
+          anchor.style.opacity = "0.01";
+          anchor.style.padding = "1px";
+          document.body.appendChild(anchor);
+          anchor.click();
+          anchor.remove();
         } catch {
           // ignore
         }

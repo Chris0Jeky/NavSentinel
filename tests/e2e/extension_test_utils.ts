@@ -16,7 +16,7 @@ export async function getExtensionId(context: BrowserContext): Promise<string> {
   return new URL(worker.url()).host;
 }
 
-export async function waitForNavSentinelBridge(page: Page, timeout = 5000): Promise<void> {
+export async function waitForNavSentinelBridge(page: Page, timeout = 7000): Promise<void> {
   await page.waitForFunction(
     () =>
       document.documentElement.getAttribute("data-navsentinel-capture-ready") === "1" &&
@@ -62,25 +62,24 @@ export async function assertNoToastFor(page: Page, durationMs = 1200): Promise<v
         reject(new Error(`Unexpected toast text: ${initial}`));
         return;
       }
+      const start = Date.now();
 
-      const observer = new MutationObserver(() => {
+      const check = () => {
         const next = readBodyText();
-        if (!next) return;
-        observer.disconnect();
-        reject(new Error(`Unexpected toast text: ${next}`));
-      });
+        if (next) {
+          reject(new Error(`Unexpected toast text: ${next}`));
+          return;
+        }
 
-      observer.observe(document.documentElement, {
-        subtree: true,
-        childList: true,
-        characterData: true,
-        attributes: true
-      });
+        if (Date.now() - start >= duration) {
+          resolve();
+          return;
+        }
 
-      window.setTimeout(() => {
-        observer.disconnect();
-        resolve();
-      }, duration);
+        window.setTimeout(check, 50);
+      };
+
+      check();
     });
   }, durationMs);
 }

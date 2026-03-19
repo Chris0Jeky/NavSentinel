@@ -123,7 +123,14 @@ function findPopupIntentSource(target: EventTarget | null): Element | null {
 }
 
 function hasMeaningfulName(el: Element): boolean {
-  return textLength(el) + attrLength(el, "aria-label") + attrLength(el, "title") > 0;
+  return (
+    textLength(el) +
+      attrLength(el, "aria-label") +
+      attrLength(el, "title") +
+      attrLength(el, "value") +
+      attrLength(el, "alt") >
+    0
+  );
 }
 
 function looksLikePopupOpen(target?: string, features?: string): boolean {

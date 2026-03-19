@@ -17,12 +17,24 @@
     const params = new URLSearchParams(window.location.search);
     const usePopupFeatures = params.get('plain') !== '1';
     const burst = params.get('burst') === '1';
+    const useInputButton = params.get('input') === '1';
+    const trigger = document.getElementById('signin');
+
+    if (useInputButton && trigger instanceof HTMLButtonElement) {
+      const input = document.createElement('input');
+      input.type = 'submit';
+      input.id = trigger.id;
+      input.value = trigger.textContent || 'Sign in';
+      input.style.padding = trigger.style.padding;
+      input.style.fontSize = trigger.style.fontSize;
+      trigger.replaceWith(input);
+    }
 
     document.getElementById('signin').addEventListener('click', () => {
       window.open(
         'https://example.com/?oauth=1',
         usePopupFeatures ? 'oauth' : '',
-        usePopupFeatures ? 'popup,width=520,height=640' : undefined
+        usePopupFeatures ? 'popup,width=520,height=640' : ''
       );
 
       if (burst) {
