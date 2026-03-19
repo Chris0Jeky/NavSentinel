@@ -1,5 +1,6 @@
 import type { Mode } from "./types";
 import { ALLOWLIST_KEY, getAllowlist, normalizeAllowlist, type Allowlist } from "./allowlist";
+import { getRegistrableDomain, normalizeHost, safeUrlParse } from "./domain";
 
 export type CredMode = "off" | "smart" | "strict";
 
@@ -159,13 +160,26 @@ export function onCredentialSettingsChange(cb: (s: CredentialSettings) => void):
   onSuiteSettingsChange((s) => cb(s.credential));
 }
 
+function normalizeTrustedDomain(value: unknown): string {
+  if (typeof value !== "string") return "";
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+
+  const parsed =
+    safeUrlParse(trimmed) ??
+    (trimmed.includes("://") ? null : safeUrlParse(`https://${trimmed}`));
+  const host = parsed?.hostname ?? trimmed;
+  const normalized = normalizeHost(host);
+  if (!normalized) return "";
+  return getRegistrableDomain(normalized);
+}
+
 function normalizeDomainList(list: unknown): string[] {
   if (!Array.isArray(list)) return [];
   const out: string[] = [];
   const seen = new Set<string>();
   for (const x of list) {
-    if (typeof x !== "string") continue;
-    const d = x.trim().toLowerCase();
+    const d = normalizeTrustedDomain(x);
     if (!d || seen.has(d)) continue;
     seen.add(d);
     out.push(d);
@@ -179,7 +193,7 @@ export async function getTrustedDomains(): Promise<string[]> {
 }
 
 export async function addTrustedDomain(domain: string): Promise<string[]> {
-  const d = (domain ?? "").trim().toLowerCase();
+  const d = normalizeTrustedDomain(domain);
   if (!d) return getTrustedDomains();
   const cur = await getTrustedDomains();
   if (cur.includes(d)) return cur;
@@ -189,7 +203,7 @@ export async function addTrustedDomain(domain: string): Promise<string[]> {
 }
 
 export async function removeTrustedDomain(domain: string): Promise<string[]> {
-  const d = (domain ?? "").trim().toLowerCase();
+  const d = normalizeTrustedDomain(domain);
   const cur = await getTrustedDomains();
   const next = cur.filter((x) => x !== d);
   await chrome.storage.local.set({ [TRUSTED_DOMAINS_KEY]: next });
