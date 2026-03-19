@@ -91,7 +91,7 @@ Current lane intent:
 - `npm run test:e2e:smoke`
   - shortest deterministic browser checks
 - `npm run test:e2e`
-  - default regression lane for local deterministic browser coverage
+  - default deterministic browser coverage via the regression lane, including smoke-tagged checks
 - `npm run test:e2e:regression`
   - explicit alias for the same regression lane
 - `npm run test:e2e:rollback`
@@ -163,6 +163,7 @@ Every current Gym level now has a dedicated automated path on the active stacked
 CI currently runs:
 
 - `npm run verify:versions`
+- `npm run typecheck`
 - `npm test`
 - `npm run build`
 - `npm run package:ext`

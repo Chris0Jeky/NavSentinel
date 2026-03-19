@@ -45,6 +45,44 @@ export async function readToastText(page: Page): Promise<string | null> {
   });
 }
 
+export async function assertNoToastFor(page: Page, durationMs = 1200): Promise<void> {
+  await page.evaluate(async (duration) => {
+    const readBodyText = (): string | null => {
+      const host = document.querySelector("#__navsentinel_toast_host");
+      const body = host?.shadowRoot?.querySelector(".body");
+      const text = body?.textContent?.trim();
+      return text ? text : null;
+    };
+
+    return await new Promise<void>((resolve, reject) => {
+      const initial = readBodyText();
+      if (initial) {
+        reject(new Error(`Unexpected toast text: ${initial}`));
+        return;
+      }
+
+      const observer = new MutationObserver(() => {
+        const next = readBodyText();
+        if (!next) return;
+        observer.disconnect();
+        reject(new Error(`Unexpected toast text: ${next}`));
+      });
+
+      observer.observe(document.documentElement, {
+        subtree: true,
+        childList: true,
+        characterData: true,
+        attributes: true
+      });
+
+      window.setTimeout(() => {
+        observer.disconnect();
+        resolve();
+      }, duration);
+    });
+  }, durationMs);
+}
+
 function isWithinRoot(root: string, target: string): boolean {
   const relative = path.relative(root, target);
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));

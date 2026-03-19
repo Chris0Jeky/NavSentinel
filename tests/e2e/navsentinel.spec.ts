@@ -4,7 +4,7 @@ import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 import {
-  readToastText,
+  assertNoToastFor,
   startGymServer,
   waitForNavSentinelBridge,
   waitForToastText
@@ -50,7 +50,7 @@ test("Level 1 blocks new tabs @smoke", async () => {
       expect(box, "#play button should be visible").toBeTruthy();
       await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
 
-      await expect(page.locator("text=Blocked new tab")).toBeVisible({ timeout: 3000 });
+      await waitForToastText(page, "Blocked new tab", 3000);
     } finally {
       await context.close();
     }
@@ -268,8 +268,7 @@ test("Level 12 delayed same-tab navigation does not roll back a legitimate click
 
       await page.click("#slowLink");
       await page.waitForURL(/level4-visual-mimicry\.html\?delayMs=2500/, { timeout: 10_000 });
-      await page.waitForTimeout(1200);
-      await expect(page.locator("text=NavSentinel rolled back a redirect")).toHaveCount(0);
+      await assertNoToastFor(page, 1200);
       await expect(page).toHaveURL(/level4-visual-mimicry\.html\?delayMs=2500/);
     } finally {
       await context.close();
@@ -309,7 +308,7 @@ test("Level 7 legit modal backdrop closes without a false positive @regression",
       await expect(page.locator("#modal")).toBeVisible();
       await page.mouse.click(20, 20);
       await expect(page.locator("#modal")).toBeHidden();
-      expect(await readToastText(page)).toBeNull();
+      await assertNoToastFor(page);
     } finally {
       await context.close();
     }
@@ -353,7 +352,7 @@ test("Level 8 legit OAuth popup opens without prompting @regression", async () =
       await popup?.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
       expect(popup?.url()).toContain("example.com");
       expect(context.pages().length).toBeGreaterThan(beforePages);
-      expect(await readToastText(page)).toBeNull();
+      await assertNoToastFor(page);
     } finally {
       await context.close();
     }
@@ -390,7 +389,7 @@ test("Level 9 legit overlay controls and visible docs link stay allowed @regress
 
       await page.click("#overlayBtn");
       await expect(page.locator("#status")).toHaveText("Status: playing");
-      expect(await readToastText(page)).toBeNull();
+      await assertNoToastFor(page);
 
       const beforePages = context.pages().length;
       const popupPromise = context.waitForEvent("page", { timeout: 5000 }).catch(() => null);
@@ -401,7 +400,7 @@ test("Level 9 legit overlay controls and visible docs link stay allowed @regress
       await popup?.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
       expect(popup?.url()).toContain("example.org");
       expect(context.pages().length).toBeGreaterThan(beforePages);
-      expect(await readToastText(page)).toBeNull();
+      await assertNoToastFor(page);
     } finally {
       await context.close();
     }

@@ -20,6 +20,7 @@ Historical merge-tracking material lives under `docs/archive/`.
   - PR #5: tracker and CI alignment
   - PR #6: E2E lanes and rollback formalization
   - PR #7: adversarial Gym coverage
+  - PR #8: legitimate Gym coverage
 - no open GitHub issues
 - current repo gaps are follow-up work beyond the merge and core Gym coverage
 
@@ -151,6 +152,6 @@ Why last:
 | 1 | Tracker and CI alignment | open in PR #5 |
 | 2 | E2E lane split and rollback formalization | open in PR #6 |
 | 3 | Adversarial Gym coverage | open in PR #7 |
-| 4 | Legitimate-flow Gym coverage | in progress |
+| 4 | Legitimate-flow Gym coverage | open in PR #8 |
 | 5 | Popup and operator-surface coverage | planned |
 | 6 | Release and repo hygiene | planned |
