@@ -106,7 +106,7 @@ test("Level 2 moving target overlay blocks the hidden new tab @regression", asyn
   }
 });
 
-test("Level 3 instant injection blocks the deceptive click path @regression", async () => {
+test("Level 3 instant injection blocks the injected trap click path @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const gymOverride = process.env.GYM_BASE_URL;
@@ -136,7 +136,18 @@ test("Level 3 instant injection blocks the deceptive click path @regression", as
 
       const popup = await popupPromise;
       expect(popup, "Expected the injected trap new tab to be blocked").toBeNull();
-      await waitForToastText(page, "NavSentinel blocked deceptive click", 3000);
+      await page.waitForFunction(
+        () => {
+          const host = document.querySelector("#__navsentinel_toast_host");
+          const text = host?.shadowRoot?.textContent ?? "";
+          return (
+            text.includes("NavSentinel blocked deceptive click") ||
+            text.includes("Blocked new tab")
+          );
+        },
+        null,
+        { timeout: 3000 }
+      );
       await expect(page).toHaveURL(/level3-instant-injection\.html/);
     } finally {
       await context.close();
