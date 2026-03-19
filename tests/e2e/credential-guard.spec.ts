@@ -1,11 +1,10 @@
 import { expect, test, chromium } from "@playwright/test";
 import fs from "fs";
-import * as http from "node:http";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 import { EVENT_LOG_KEY, TRUSTED_DOMAINS_KEY } from "../../extension/src/shared/storage";
-import { getExtensionId, getServiceWorker } from "./extension_test_utils";
+import { getExtensionId, getServiceWorker, startGymServer } from "./extension_test_utils";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,60 +12,12 @@ const __dirname = path.dirname(__filename);
 const extensionPath = process.env.EXTENSION_PATH
   ? path.resolve(process.env.EXTENSION_PATH)
   : path.resolve(__dirname, "..", "..", "extension", "dist");
-
-function isWithinRoot(root: string, target: string): boolean {
-  const relative = path.relative(root, target);
-  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
-}
-
-async function startGymServer(): Promise<{ baseUrl: string; close: () => Promise<void> }> {
-  const gymRoot = path.resolve(__dirname, "..", "..", "gym");
-
-  const server = http.createServer((req, res) => {
-    try {
-      const reqUrl = new URL(req.url ?? "/", "http://127.0.0.1");
-      const pathname = decodeURIComponent(reqUrl.pathname);
-      const rel = pathname === "/" ? "/index.html" : pathname;
-      const resolved = path.resolve(gymRoot, `.${rel}`);
-      if (!isWithinRoot(gymRoot, resolved)) {
-        res.statusCode = 400;
-        res.end("Bad request");
-        return;
-      }
-
-      if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {
-        res.statusCode = 404;
-        res.end("Not found");
-        return;
-      }
-
-      const ext = path.extname(resolved).toLowerCase();
-      if (ext === ".css") res.setHeader("content-type", "text/css; charset=utf-8");
-      else if (ext === ".js") res.setHeader("content-type", "text/javascript; charset=utf-8");
-      else res.setHeader("content-type", "text/html; charset=utf-8");
-
-      res.statusCode = 200;
-      res.end(fs.readFileSync(resolved));
-    } catch {
-      res.statusCode = 500;
-      res.end("Server error");
-    }
-  });
-
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const addr = server.address();
-  if (!addr || typeof addr === "string") throw new Error("Failed to bind Gym server");
-
-  return {
-    baseUrl: `http://127.0.0.1:${addr.port}`,
-    close: () => new Promise<void>((resolve) => server.close(() => resolve()))
-  };
-}
+const gymRoot = path.resolve(__dirname, "..", "..", "gym");
 
 test("credential guard prompts before risky password submit", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
-  const gym = await startGymServer();
+  const gym = await startGymServer(gymRoot);
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-cred-e2e-"));
 
   try {
@@ -99,7 +50,7 @@ test("credential guard prompts before risky password submit", async () => {
 test("credential guard warns on password paste and trust action persists", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
-  const gym = await startGymServer();
+  const gym = await startGymServer(gymRoot);
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-cred-e2e-"));
 
   try {

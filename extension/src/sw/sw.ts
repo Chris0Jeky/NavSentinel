@@ -8,7 +8,7 @@ const ROLLBACK_SUPPRESS_MS = 6000;
 
 const allowUntilByTab = new Map<number, number>();
 const gestureUntilByTab = new Map<number, number>();
-const allowStartedByTab = new Map<number, { startedAt: number; url: string }>();
+const allowStartedByTab = new Map<number, string>();
 const allowTargetByTab = new Map<number, { url: string; expiresAt: number }>();
 const suppressUntilByTab = new Map<number, number>();
 const readyTabs = new Set<number>();
@@ -146,7 +146,7 @@ chrome.webNavigation.onBeforeNavigate.addListener((details) => {
   const allowUntil = allowUntilByTab.get(details.tabId) ?? 0;
   const gestureUntil = gestureUntilByTab.get(details.tabId) ?? 0;
   if (now > allowUntil && now > gestureUntil) return;
-  allowStartedByTab.set(details.tabId, { startedAt: now, url: details.url });
+  allowStartedByTab.set(details.tabId, details.url);
   if (now <= gestureUntil) {
     gestureUntilByTab.delete(details.tabId);
   }
@@ -168,8 +168,8 @@ chrome.webNavigation.onCommitted.addListener((details) => {
 
   const now = Date.now();
   const allowUntil = allowUntilByTab.get(details.tabId) ?? 0;
-  const startedAllowance = allowStartedByTab.get(details.tabId);
-  const startedAllowed = startedAllowance?.url === details.url;
+  const startedUrl = allowStartedByTab.get(details.tabId);
+  const startedAllowed = startedUrl === details.url;
   const targetAllowance = allowTargetByTab.get(details.tabId);
   const targetAllowed =
     !!targetAllowance &&

@@ -1,10 +1,13 @@
 import { test, expect, chromium } from "@playwright/test";
 import fs from "fs";
-import * as http from "node:http";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
-import { waitForNavSentinelBridge, waitForToastText } from "./extension_test_utils";
+import {
+  startGymServer,
+  waitForNavSentinelBridge,
+  waitForToastText
+} from "./extension_test_utils";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -12,61 +15,7 @@ const __dirname = path.dirname(__filename);
 const extensionPath = process.env.EXTENSION_PATH
   ? path.resolve(process.env.EXTENSION_PATH)
   : path.resolve(__dirname, "..", "..", "extension", "dist");
-
-function isWithinRoot(root: string, target: string): boolean {
-  const relative = path.relative(root, target);
-  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
-}
-
-async function startGymServer(): Promise<{ baseUrl: string; close: () => Promise<void> }> {
-  const gymRoot = path.resolve(__dirname, "..", "..", "gym");
-
-  const server = http.createServer(async (req, res) => {
-    try {
-      const reqUrl = new URL(req.url ?? "/", "http://127.0.0.1");
-      const pathname = decodeURIComponent(reqUrl.pathname);
-      const rel = pathname === "/" ? "/index.html" : pathname;
-
-      const resolved = path.resolve(gymRoot, `.${rel}`);
-      if (!isWithinRoot(gymRoot, resolved)) {
-        res.statusCode = 400;
-        res.end("Bad request");
-        return;
-      }
-
-      if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {
-        res.statusCode = 404;
-        res.end("Not found");
-        return;
-      }
-
-      const ext = path.extname(resolved).toLowerCase();
-      if (ext === ".css") res.setHeader("content-type", "text/css; charset=utf-8");
-      else if (ext === ".js") res.setHeader("content-type", "text/javascript; charset=utf-8");
-      else res.setHeader("content-type", "text/html; charset=utf-8");
-
-      const delayMs = Number(reqUrl.searchParams.get("delayMs") ?? "0");
-      if (Number.isFinite(delayMs) && delayMs > 0) {
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
-      }
-
-      res.statusCode = 200;
-      res.end(fs.readFileSync(resolved));
-    } catch {
-      res.statusCode = 500;
-      res.end("Server error");
-    }
-  });
-
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const addr = server.address();
-  if (!addr || typeof addr === "string") throw new Error("Failed to bind Gym server");
-
-  return {
-    baseUrl: `http://127.0.0.1:${addr.port}`,
-    close: () => new Promise<void>((resolve) => server.close(() => resolve()))
-  };
-}
+const gymRoot = path.resolve(__dirname, "..", "..", "gym");
 
 test.setTimeout(120_000);
 
@@ -74,7 +23,7 @@ test("Level 1 blocks new tabs", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const gymOverride = process.env.GYM_BASE_URL;
-  const gym = gymOverride ? null : await startGymServer();
+  const gym = gymOverride ? null : await startGymServer(gymRoot);
   const baseUrl = gymOverride ?? gym!.baseUrl;
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
@@ -88,7 +37,10 @@ test("Level 1 blocks new tabs", async () => {
 
     try {
       const page = await context.newPage();
-      await page.goto(`${baseUrl}/level1-basic-opacity.html`, { waitUntil: "domcontentloaded", timeout: 20_000 });
+      await page.goto(`${baseUrl}/level1-basic-opacity.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
 
       await waitForNavSentinelBridge(page);
 
@@ -103,7 +55,6 @@ test("Level 1 blocks new tabs", async () => {
     }
   } finally {
     if (gym) await gym.close();
-
     fs.rmSync(userDataDir, { recursive: true, force: true });
   }
 });
@@ -112,7 +63,7 @@ test("Level 10 delayed form submit prompts", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const gymOverride = process.env.GYM_BASE_URL;
-  const gym = gymOverride ? null : await startGymServer();
+  const gym = gymOverride ? null : await startGymServer(gymRoot);
   const baseUrl = gymOverride ?? gym!.baseUrl;
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
@@ -153,7 +104,7 @@ test("Level 12 delayed same-tab navigation does not roll back a legitimate click
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const gymOverride = process.env.GYM_BASE_URL;
-  const gym = gymOverride ? null : await startGymServer();
+  const gym = gymOverride ? null : await startGymServer(gymRoot);
   const baseUrl = gymOverride ?? gym!.baseUrl;
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
@@ -193,7 +144,7 @@ test("Level 10 delayed redirect auto-rolls back and offers proceed", async () =>
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const gymOverride = process.env.GYM_BASE_URL;
-  const gym = gymOverride ? null : await startGymServer();
+  const gym = gymOverride ? null : await startGymServer(gymRoot);
   const baseUrl = gymOverride ?? gym!.baseUrl;
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
@@ -277,7 +228,7 @@ test("Level 5 blocks window.open popunder", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const gymOverride = process.env.GYM_BASE_URL;
-  const gym = gymOverride ? null : await startGymServer();
+  const gym = gymOverride ? null : await startGymServer(gymRoot);
   const baseUrl = gymOverride ?? gym!.baseUrl;
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
@@ -312,7 +263,7 @@ test("Level 6 blocks programmatic click new tab", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const gymOverride = process.env.GYM_BASE_URL;
-  const gym = gymOverride ? null : await startGymServer();
+  const gym = gymOverride ? null : await startGymServer(gymRoot);
   const baseUrl = gymOverride ?? gym!.baseUrl;
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
