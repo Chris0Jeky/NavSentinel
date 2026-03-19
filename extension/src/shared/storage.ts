@@ -160,7 +160,7 @@ export function onCredentialSettingsChange(cb: (s: CredentialSettings) => void):
   onSuiteSettingsChange((s) => cb(s.credential));
 }
 
-function normalizeTrustedDomain(value: unknown): string {
+export function normalizeTrustedDomain(value: unknown): string {
   if (typeof value !== "string") return "";
   const trimmed = value.trim();
   if (!trimmed) return "";
@@ -311,12 +311,14 @@ export async function exportAll(): Promise<{
 export async function importAll(payload: unknown): Promise<void> {
   if (!payload || typeof payload !== "object") throw new Error("Invalid import payload");
   const p = payload as Record<string, unknown>;
+  let importLogLimit = DEFAULT_SUITE_SETTINGS.logLimit;
 
   if (p.settings && typeof p.settings === "object") {
     const merged = mergeSuiteSettings(
       structuredClone(DEFAULT_SUITE_SETTINGS),
       p.settings as SuiteSettingsPatch
     );
+    importLogLimit = merged.logLimit;
     await chrome.storage.local.set({ [SUITE_SETTINGS_KEY]: merged });
   }
 
@@ -331,8 +333,9 @@ export async function importAll(payload: unknown): Promise<void> {
   }
 
   if (Array.isArray(p.eventLog)) {
+    const boundedLogLimit = Math.max(0, Math.min(importLogLimit, 5000));
     await chrome.storage.local.set({
-      [EVENT_LOG_KEY]: (p.eventLog as EventLogEntry[]).slice(-5000)
+      [EVENT_LOG_KEY]: (p.eventLog as EventLogEntry[]).slice(-boundedLogLimit)
     });
   }
 }

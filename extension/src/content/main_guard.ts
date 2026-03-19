@@ -9,8 +9,50 @@ const MAX_REDIRECTS_PER_GESTURE = 2;
 const ALLOW_ONCE_TTL_MS = 1200;
 const BLOCKED_ACTION_TTL_MS = 5000;
 const PROTOCOL_VERSION = 1;
+const BRIDGE_SESSION_RETRY_MS = 100;
+const MAX_BRIDGE_SESSION_OFFERS = 40;
+
+function makeBridgeSession(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+const bridgeSession = makeBridgeSession();
+let bridgeSessionAcked = false;
+let bridgeSessionTimer = 0;
+let bridgeSessionOffers = 0;
+
+function clearBridgeSessionRetry(): void {
+  if (!bridgeSessionTimer) return;
+  window.clearTimeout(bridgeSessionTimer);
+  bridgeSessionTimer = 0;
+}
+
+function postBridgeMessage(type: string, payload?: Record<string, unknown>): void {
+  window.postMessage(
+    {
+      source: NS_SOURCE,
+      type,
+      v: PROTOCOL_VERSION,
+      session: bridgeSession,
+      ...(payload ?? {})
+    },
+    "*"
+  );
+}
+
+function scheduleBridgeSessionOffer(): void {
+  if (bridgeSessionAcked || bridgeSessionOffers >= MAX_BRIDGE_SESSION_OFFERS) return;
+  postBridgeMessage("ns-session");
+  bridgeSessionOffers += 1;
+  bridgeSessionTimer = window.setTimeout(() => {
+    bridgeSessionTimer = 0;
+    scheduleBridgeSessionOffer();
+  }, BRIDGE_SESSION_RETRY_MS);
+}
 
 function postToIsolated(type: string, payload?: Record<string, unknown>): void {
+  postBridgeMessage(type, payload);
   try {
     chrome.runtime.sendMessage(
       {
@@ -440,6 +482,7 @@ function handleBridgeMessage(message: unknown): void {
     source?: string;
     type?: string;
     v?: number;
+    session?: string;
     id?: string;
     mode?: "off" | "smart" | "strict";
     debug?: boolean;
@@ -497,6 +540,39 @@ function handleBridgeMessage(message: unknown): void {
   }
 }
 
+window.addEventListener(
+  "message",
+  (event) => {
+    if (event.source !== window) return;
+    const data = event.data as { source?: string; type?: string; v?: number; session?: string };
+    if (!data || data.source !== NS_SOURCE || data.v !== PROTOCOL_VERSION) return;
+    if (data.session !== bridgeSession) return;
+    if (
+      data.type !== "ns-session-ack" &&
+      data.type !== "ns-gesture-allow" &&
+      data.type !== "ns-config" &&
+      data.type !== "ns-ping" &&
+      data.type !== "ns-allow-once" &&
+      data.type !== "ns-allow" &&
+      data.type !== "ns-allow-action"
+    ) {
+      return;
+    }
+
+    event.stopImmediatePropagation();
+
+    if (data.type === "ns-session-ack") {
+      bridgeSessionAcked = true;
+      clearBridgeSessionRetry();
+      postToIsolated("ns-bridge-ready");
+      return;
+    }
+
+    handleBridgeMessage(data);
+  },
+  true
+);
+
 if (chrome?.runtime?.onMessage) {
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (!message || message.type !== BRIDGE_MAIN_MESSAGE_TYPE) return;
@@ -509,4 +585,4 @@ patchOpen();
 patchLocation();
 patchForms();
 (window as any).__navsentinelMainGuard = true;
-postToIsolated("ns-bridge-ready");
+scheduleBridgeSessionOffer();

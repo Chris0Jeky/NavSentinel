@@ -7,6 +7,7 @@ import {
   clearTrustedDomains,
   exportAll,
   getEventLog,
+  normalizeTrustedDomain,
   getSuiteSettings,
   getTrustedDomains,
   importAll,
@@ -19,8 +20,6 @@ import {
   removeAllowlistEntry,
   type Allowlist
 } from "../shared/allowlist";
-import { getRegistrableDomain, normalizeHost, safeUrlParse } from "../shared/domain";
-
 const navModeEl = document.getElementById("navMode") as HTMLSelectElement;
 const navDebugEl = document.getElementById("navDebug") as HTMLInputElement;
 const navDnrEl = document.getElementById("navDnrEnabled") as HTMLInputElement;
@@ -229,20 +228,6 @@ function getInt(el: HTMLInputElement, fallback: number): number {
   return Number.isFinite(n) ? Math.trunc(n) : fallback;
 }
 
-function normalizeTrustedDomainInput(raw: string): string {
-  const trimmed = raw.trim();
-  if (!trimmed) return "";
-
-  const parsed =
-    safeUrlParse(trimmed) ??
-    (trimmed.includes("://") ? null : safeUrlParse(`https://${trimmed}`));
-  const host = parsed?.hostname;
-  if (!host) return "";
-  const normalized = normalizeHost(host);
-  if (!normalized) return "";
-  return getRegistrableDomain(normalized);
-}
-
 async function init(): Promise<void> {
   const s = await getSuiteSettings();
   navModeEl.value = s.nav.defaultMode;
@@ -307,7 +292,7 @@ clearAllowlistBtn.addEventListener("click", async () => {
 });
 
 addTrustedBtn.addEventListener("click", async () => {
-  const normalized = normalizeTrustedDomainInput(trustedInputEl.value);
+  const normalized = normalizeTrustedDomain(trustedInputEl.value);
   if (!normalized) {
     flashStatus(saveStatusEl, "Enter a valid domain.");
     return;

@@ -4,6 +4,7 @@ import * as http from "node:http";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
+import { waitForNavSentinelBridge, waitForToastText } from "./extension_test_utils";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -89,9 +90,7 @@ test("Level 1 blocks new tabs", async () => {
       const page = await context.newPage();
       await page.goto(`${baseUrl}/level1-basic-opacity.html`, { waitUntil: "domcontentloaded", timeout: 20_000 });
 
-      await page.waitForFunction(() => (window as any).__navsentinelMainGuard === true, null, {
-        timeout: 5_000
-      });
+      await waitForNavSentinelBridge(page);
 
       const play = page.locator("#play");
       const box = await play.boundingBox();
@@ -132,9 +131,7 @@ test("Level 10 delayed form submit prompts", async () => {
         timeout: 20_000
       });
 
-      await page.waitForFunction(() => (window as any).__navsentinelMainGuard === true, null, {
-        timeout: 5_000
-      });
+      await waitForNavSentinelBridge(page);
 
       const patchInfo = await page.evaluate(() => (window as any).__navsentinelLocationPatch);
       expect(patchInfo, "Expected location patch info").toBeTruthy();
@@ -142,7 +139,7 @@ test("Level 10 delayed form submit prompts", async () => {
 
       await page.click("#submitDelayed");
       await page.waitForTimeout(2600);
-      await expect(page.locator("text=Blocked form submit")).toBeVisible({ timeout: 4000 });
+      await waitForToastText(page, "Blocked form submit", 4000);
     } finally {
       await context.close();
     }
@@ -175,9 +172,7 @@ test("Level 12 delayed same-tab navigation does not roll back a legitimate click
         timeout: 20_000
       });
 
-      await page.waitForFunction(() => (window as any).__navsentinelMainGuard === true, null, {
-        timeout: 5_000
-      });
+      await waitForNavSentinelBridge(page);
 
       await page.click("#slowLink");
       await page.waitForURL(/level4-visual-mimicry\.html\?delayMs=2500/, { timeout: 10_000 });
@@ -217,15 +212,14 @@ test("Level 10 delayed redirect auto-rolls back and offers proceed", async () =>
         timeout: 20_000
       });
 
+      await waitForNavSentinelBridge(page);
       await page.click("#delayed");
       await page.waitForURL(/level4-visual-mimicry\.html/, { timeout: 7000 });
       await page.waitForURL(/level10-redirects-and-forms\.html/, { timeout: 7000 });
       await page.waitForFunction(() => (window as any).__navsentinelRollbackPrompt, null, {
         timeout: 7000
       });
-      await expect(page.locator("text=NavSentinel rolled back a redirect")).toBeVisible({
-        timeout: 4000
-      });
+      await waitForToastText(page, "NavSentinel rolled back a redirect", 4000);
     } finally {
       await context.close();
     }
@@ -302,8 +296,9 @@ test("Level 5 blocks window.open popunder", async () => {
         timeout: 20_000
       });
 
+      await waitForNavSentinelBridge(page);
       await page.click("#area");
-      await expect(page.locator("text=Blocked popup")).toBeVisible({ timeout: 3000 });
+      await waitForToastText(page, "Blocked popup", 3000);
     } finally {
       await context.close();
     }
@@ -336,8 +331,9 @@ test("Level 6 blocks programmatic click new tab", async () => {
         timeout: 20_000
       });
 
+      await waitForNavSentinelBridge(page);
       await page.click("#real");
-      await expect(page.locator("text=Blocked new tab")).toBeVisible({ timeout: 3000 });
+      await waitForToastText(page, "Blocked new tab", 3000);
     } finally {
       await context.close();
     }

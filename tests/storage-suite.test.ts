@@ -171,4 +171,24 @@ describe("suite storage and allowlist migration", () => {
     expect(await getTrustedDomains()).toEqual(["example.com"]);
     expect(store["sentinelsuite:trusted_domains_v1"]).toEqual(["example.com"]);
   });
+
+  it("clamps imported event logs to the configured log limit", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+
+    const { importAll } = await import("../extension/src/shared/storage");
+    await importAll({
+      settings: { logLimit: 50 },
+      eventLog: Array.from({ length: 120 }, (_, index) => ({
+        id: `evt-${index}`,
+        ts: index,
+        kind: "suite_config_update"
+      }))
+    });
+
+    const storedLog = store["sentinelsuite:event_log_v1"] as Array<{ id: string }>;
+    expect(storedLog).toHaveLength(50);
+    expect(storedLog[0]?.id).toBe("evt-70");
+    expect(storedLog[49]?.id).toBe("evt-119");
+  });
 });

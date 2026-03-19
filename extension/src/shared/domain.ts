@@ -320,16 +320,19 @@ export function computeCredentialRisk(params: {
     }
   }
 
+  const maxDistance = Number.isFinite(cfg.similarity.maxDistance)
+    ? cfg.similarity.maxDistance
+    : 2;
+  const lookalike = cfg.similarity.enabled && pageReg
+    ? findClosestLookalike(pageReg, trusted)
+    : null;
+
   if (cfg.similarity.enabled) {
-    const look = pageReg ? findClosestLookalike(pageReg, trusted) : null;
-    const maxDistance = Number.isFinite(cfg.similarity.maxDistance)
-      ? cfg.similarity.maxDistance
-      : 2;
-    if (look && look.distance <= maxDistance) {
+    if (lookalike && lookalike.distance <= maxDistance) {
       score += 45;
       reasons.push({
         code: "LOOKALIKE_DOMAIN",
-        label: `Domain is similar to trusted domain "${look.target}" (edit distance ${look.distance}).`
+        label: `Domain is similar to trusted domain "${lookalike.target}" (edit distance ${lookalike.distance}).`
       });
     }
   }
@@ -348,10 +351,6 @@ export function computeCredentialRisk(params: {
   if (score >= 70) severity = "high";
   else if (score >= 40) severity = "medium";
   else if (score >= 15) severity = "low";
-
-  const lookalike = cfg.similarity.enabled && pageReg
-    ? findClosestLookalike(pageReg, trusted)
-    : null;
 
   return {
     score,

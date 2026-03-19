@@ -43,6 +43,7 @@ let lastDown: DownCapture | null = null;
 let settings: NavSettings = { defaultMode: "smart", debug: false, dnrEnabled: false };
 let allowlist: Allowlist = {};
 let bridgeReady = false;
+let bridgeSession: string | null = null;
 const pendingBridgeMessages: Array<{ type: string; payload?: Record<string, unknown> }> = [];
 let mainGuard: "unknown" | "yes" | "no" = "unknown";
 let lastNav: { kind: string; url: string; status: "allowed" | "blocked" } | null = null;
@@ -52,6 +53,7 @@ let bridgeRetryTimer = 0;
 
 function markMainGuardReady(): void {
   bridgeReady = true;
+  document.documentElement.setAttribute("data-navsentinel-bridge-ready", "1");
   mainGuard = "yes";
   flushBridgeMessages();
   refreshDebug();
@@ -70,6 +72,7 @@ async function initSettings() {
   ensureBridge();
   settings = await getNavSettings();
   allowlist = await getAllowlist();
+  document.documentElement.setAttribute("data-navsentinel-capture-ready", "1");
   setDebugEnabled(settings.debug);
   postToMain("ns-config", { mode: settings.defaultMode, debug: settings.debug });
   postToMain("ns-ping");
@@ -146,19 +149,14 @@ function flushBridgeMessages(): void {
 }
 
 function sendBridgeMessageToMain(payload: Record<string, unknown>): void {
-  try {
-    chrome.runtime.sendMessage(
-      {
-        type: BRIDGE_TO_MAIN_TYPE,
-        payload
-      },
-      () => {
-        void chrome.runtime.lastError;
-      }
-    );
-  } catch {
-    // ignore
-  }
+  if (!bridgeSession) return;
+  window.postMessage(
+    {
+      ...payload,
+      session: bridgeSession
+    },
+    "*"
+  );
 }
 
 function handleBridgeMessage(message: unknown): void {
@@ -524,6 +522,41 @@ if (chrome?.runtime?.onMessage) {
     showRollbackPrompt(url);
   });
 }
+
+window.addEventListener(
+  "message",
+  (event) => {
+    if (event.source !== window) return;
+    const data = event.data as { source?: string; type?: string; v?: number; session?: string };
+    if (!data || data.source !== NS_SOURCE || data.v !== PROTOCOL_VERSION) return;
+
+    if (data.type === "ns-session" && typeof data.session === "string") {
+      bridgeSession = data.session;
+      event.stopImmediatePropagation();
+      sendBridgeMessageToMain({
+        source: NS_SOURCE,
+        type: "ns-session-ack",
+        v: PROTOCOL_VERSION
+      });
+      markMainGuardReady();
+      return;
+    }
+
+    if (!bridgeSession || data.session !== bridgeSession) return;
+    if (
+      data.type !== "ns-bridge-ready" &&
+      data.type !== "ns-pong" &&
+      data.type !== "ns-config-ack" &&
+      data.type !== "ns-nav-blocked" &&
+      data.type !== "ns-nav-allowed"
+    ) {
+      return;
+    }
+    event.stopImmediatePropagation();
+    handleBridgeMessage(data);
+  },
+  true
+);
 
 if (chrome?.runtime?.sendMessage && window.top === window) {
   const run = (retries = 4) => {

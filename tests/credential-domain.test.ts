@@ -51,4 +51,18 @@ describe("credential domain heuristics", () => {
       expect.arrayContaining(["NON_HTTPS_PAGE", "NON_HTTPS_ACTION", "LOOKALIKE_DOMAIN"])
     );
   });
+
+  it("reuses the closest lookalike result in the returned risk payload", () => {
+    const risk = computeCredentialRisk({
+      pageUrl: "https://paypa1.com/login",
+      actionUrl: "https://paypa1.com/post",
+      trustedDomains: ["paypal.com"],
+      config: baseConfig
+    });
+
+    expect(risk.lookalike).toEqual({
+      target: "paypal.com",
+      distance: 1
+    });
+  });
 });
