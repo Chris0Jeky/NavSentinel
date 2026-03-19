@@ -16,21 +16,22 @@ Historical merge-tracking material lives under `docs/archive/`.
 ## Current baseline
 
 - SentinelSuite merge is complete on `main`
-- no open GitHub PRs
+- active stacked PRs are:
+  - PR #5: tracker and CI alignment
+  - PR #6: E2E lanes and rollback formalization
+  - PR #7: adversarial Gym coverage
 - no open GitHub issues
-- current repo gaps are follow-up work, not merge work
+- current repo gaps are follow-up work beyond the merge and core Gym coverage
 
 ## Outstanding inventory
 
 ### Test coverage
 
-- missing Playwright coverage for Gym Levels 7, 8, and 9
 - popup/operator-surface browser coverage is still light
 - no dedicated stress lane for worker churn or bursty popup/redirect sequences
 
 ### CI and release-process alignment
 
-- docs require explicit typechecking but CI does not run it
 - there is still no dedicated stress lane for worker churn and bursty redirect sequences
 
 ### Repo and release hygiene
@@ -149,7 +150,7 @@ Why last:
 | --- | --- | --- |
 | 1 | Tracker and CI alignment | open in PR #5 |
 | 2 | E2E lane split and rollback formalization | open in PR #6 |
-| 3 | Adversarial Gym coverage | in progress |
-| 4 | Legitimate-flow Gym coverage | planned |
+| 3 | Adversarial Gym coverage | open in PR #7 |
+| 4 | Legitimate-flow Gym coverage | in progress |
 | 5 | Popup and operator-surface coverage | planned |
 | 6 | Release and repo hygiene | planned |

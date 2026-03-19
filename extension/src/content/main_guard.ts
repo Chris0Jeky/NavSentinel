@@ -32,6 +32,7 @@ let allowOnceRemaining = 0;
 let allowOnceUntil = 0;
 let allowOpenUntil = 0;
 let allowRedirectUntil = 0;
+let popupIntentUntil = 0;
 
 const blockedActions = new Map<
   string,
@@ -80,6 +81,56 @@ function setAllowOnce(): void {
   allowOnceUntil = nowMs() + ALLOW_ONCE_TTL_MS;
 }
 
+function textLength(el: Element): number {
+  const text = (el.textContent ?? "").replace(/\s+/g, "");
+  return Math.min(text.length, 80);
+}
+
+function attrLength(el: Element, name: string): number {
+  const value = el.getAttribute(name);
+  if (!value) return 0;
+  return Math.min(value.length, 80);
+}
+
+function hasVisibleBox(el: Element): boolean {
+  const rect = (el as HTMLElement).getBoundingClientRect?.();
+  if (!rect || rect.width <= 0 || rect.height <= 0) return false;
+  const cs = window.getComputedStyle(el);
+  if (cs.display === "none" || cs.visibility === "hidden" || cs.visibility === "collapse") {
+    return false;
+  }
+  const opacity = Number.parseFloat(cs.opacity);
+  if (Number.isFinite(opacity) && opacity < 0.2) return false;
+  return true;
+}
+
+function findPopupIntentSource(target: EventTarget | null): Element | null {
+  if (!(target instanceof Element)) return null;
+  if (target.closest("a")) return null;
+  return target.closest(
+    "button, [role='button'], input[type='button'], input[type='submit']"
+  ) as Element | null;
+}
+
+function hasMeaningfulName(el: Element): boolean {
+  return textLength(el) + attrLength(el, "aria-label") + attrLength(el, "title") > 0;
+}
+
+function looksLikePopupOpen(target?: string, features?: string): boolean {
+  const normalizedTarget = (target ?? "").toLowerCase();
+  const targetCreatesNewContext =
+    normalizedTarget !== "" &&
+    normalizedTarget !== "_self" &&
+    normalizedTarget !== "_top" &&
+    normalizedTarget !== "_parent";
+  const normalizedFeatures = (features ?? "").toLowerCase();
+  const popupFeatures =
+    normalizedFeatures.includes("popup") ||
+    normalizedFeatures.includes("width=") ||
+    normalizedFeatures.includes("height=");
+  return targetCreatesNewContext || popupFeatures;
+}
+
 function consumeOpenAllowance(): "allow_once" | "allowed" | "none" {
   const now = nowMs();
   if (allowOnceRemaining > 0 && now <= allowOnceUntil) {
@@ -91,6 +142,17 @@ function consumeOpenAllowance(): "allow_once" | "allowed" | "none" {
     return "allowed";
   }
   return "none";
+}
+
+function consumePopupIntentAllowance(target?: string, features?: string): boolean {
+  if (mode !== "smart") return false;
+  if (nowMs() > popupIntentUntil) return false;
+  if (!looksLikePopupOpen(target, features)) return false;
+  if (openCount >= MAX_OPENS_PER_GESTURE) return false;
+
+  popupIntentUntil = 0;
+  openCount += 1;
+  return true;
 }
 
 function consumeRedirectAllowance(): "allowed" | "none" {
@@ -221,6 +283,11 @@ function patchedOpen(
 
   const allowance = consumeOpenAllowance();
   if (allowance !== "none") {
+    postAllowed({ kind: "window_open", ...(url !== undefined ? { url: String(url) } : {}) });
+    return callNativeOpen(this, url, target, features);
+  }
+
+  if (consumePopupIntentAllowance(target, features)) {
     postAllowed({ kind: "window_open", ...(url !== undefined ? { url: String(url) } : {}) });
     return callNativeOpen(this, url, target, features);
   }
@@ -490,6 +557,23 @@ function handleBridgeMessage(message: unknown): void {
     entry.action();
   }
 }
+
+window.addEventListener(
+  "click",
+  (event) => {
+    if (!(event instanceof MouseEvent)) return;
+    if (mode !== "smart" || !event.isTrusted) return;
+    if (event.button !== 0) return;
+    if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+
+    const source = findPopupIntentSource(event.target);
+    if (!source) return;
+    if (!hasVisibleBox(source) || !hasMeaningfulName(source)) return;
+
+    popupIntentUntil = nowMs() + OPEN_TTL_MS;
+  },
+  true
+);
 
 window.addEventListener(
   "message",

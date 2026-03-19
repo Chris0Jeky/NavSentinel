@@ -4,6 +4,7 @@ import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 import {
+  readToastText,
   startGymServer,
   waitForNavSentinelBridge,
   waitForToastText
@@ -259,6 +260,137 @@ test("Level 12 delayed same-tab navigation does not roll back a legitimate click
       await page.waitForTimeout(1200);
       await expect(page.locator("text=NavSentinel rolled back a redirect")).toHaveCount(0);
       await expect(page).toHaveURL(/level4-visual-mimicry\.html\?delayMs=2500/);
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("Level 7 legit modal backdrop closes without a false positive @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const gymOverride = process.env.GYM_BASE_URL;
+  const gym = gymOverride ? null : await startGymServer(gymRoot);
+  const baseUrl = gymOverride ?? gym!.baseUrl;
+
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/level7-legit-modal-backdrop.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await waitForNavSentinelBridge(page);
+
+      await page.click("#open");
+      await expect(page.locator("#modal")).toBeVisible();
+      await page.mouse.click(20, 20);
+      await expect(page.locator("#modal")).toBeHidden();
+      expect(await readToastText(page)).toBeNull();
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("Level 8 legit OAuth popup opens without prompting @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const gymOverride = process.env.GYM_BASE_URL;
+  const gym = gymOverride ? null : await startGymServer(gymRoot);
+  const baseUrl = gymOverride ?? gym!.baseUrl;
+
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/level8-legit-oauth-popup.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await waitForNavSentinelBridge(page);
+
+      const beforePages = context.pages().length;
+      const popupPromise = context.waitForEvent("page", { timeout: 5000 }).catch(() => null);
+      await page.click("#signin");
+
+      const popup = await popupPromise;
+      expect(popup, "Expected the legit OAuth popup to open").not.toBeNull();
+      await popup?.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
+      expect(popup?.url()).toContain("example.com");
+      expect(context.pages().length).toBeGreaterThan(beforePages);
+      expect(await readToastText(page)).toBeNull();
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("Level 9 legit overlay controls and visible docs link stay allowed @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const gymOverride = process.env.GYM_BASE_URL;
+  const gym = gymOverride ? null : await startGymServer(gymRoot);
+  const baseUrl = gymOverride ?? gym!.baseUrl;
+
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/level9-legit-video-overlay.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await waitForNavSentinelBridge(page);
+
+      await page.click("#overlayBtn");
+      await expect(page.locator("#status")).toHaveText("Status: playing");
+      expect(await readToastText(page)).toBeNull();
+
+      const beforePages = context.pages().length;
+      const popupPromise = context.waitForEvent("page", { timeout: 5000 }).catch(() => null);
+      await page.getByRole("link", { name: "Open docs" }).click();
+
+      const popup = await popupPromise;
+      expect(popup, "Expected the visible docs link to open").not.toBeNull();
+      await popup?.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
+      expect(popup?.url()).toContain("example.org");
+      expect(context.pages().length).toBeGreaterThan(beforePages);
+      expect(await readToastText(page)).toBeNull();
     } finally {
       await context.close();
     }
