@@ -14,7 +14,7 @@ const extensionPath = process.env.EXTENSION_PATH
 
 test.setTimeout(120_000);
 
-test("options normalizes trusted-domain input and persists mode changes", async () => {
+test("options normalizes trusted-domain input and persists mode changes @smoke", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-ui-e2e-"));
@@ -43,6 +43,14 @@ test("options normalizes trusted-domain input and persists mode changes", async 
       await options.locator("#trustedInput").fill("https://login.example.com/account");
       await options.locator("#addTrusted").click();
       await options.locator("#save").click();
+      await options.waitForFunction(async () => {
+        const result = await chrome.storage.local.get("sentinelsuite:settings_v1");
+        const settings = result["sentinelsuite:settings_v1"];
+        return (
+          settings?.nav?.defaultMode === "strict" &&
+          settings?.credential?.mode === "strict"
+        );
+      });
 
       await options.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
       await expect(options.locator("#navMode")).toHaveValue("strict");
@@ -56,7 +64,7 @@ test("options normalizes trusted-domain input and persists mode changes", async 
   }
 });
 
-test("options import and export preserve normalized trusted-domain and allowlist state", async () => {
+test("options import and export preserve normalized trusted-domain and allowlist state @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-ui-e2e-"));

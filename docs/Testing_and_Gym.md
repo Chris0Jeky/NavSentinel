@@ -17,6 +17,10 @@ npm run typecheck
 npm run build
 npm run test
 npm run test:e2e
+npm run test:e2e:smoke
+npm run test:e2e:regression
+npm run test:e2e:rollback
+npm run test:e2e:live
 ```
 
 To run the Gym locally:
@@ -71,10 +75,23 @@ It currently covers:
 - password-paste warning and trusted-domain persistence
 - options-page trusted-domain normalization
 - options import/export round-trip behavior
-- an env-gated rollback flow (`ROLLBACK_E2E`)
-- an env-gated live-web sanity check (`LIVE_E2E`)
+- a dedicated rollback lane for redirect recovery affordances
+- a dedicated live-web sanity lane
 
 `playwright.config.ts` intentionally scopes Playwright discovery to `tests/e2e/**/*.spec.ts`. This keeps Vitest files out of the Playwright runner.
+
+Current lane intent:
+
+- `npm run test:e2e:smoke`
+  - shortest deterministic browser checks
+- `npm run test:e2e`
+  - default regression lane for local deterministic browser coverage
+- `npm run test:e2e:regression`
+  - explicit alias for the same regression lane
+- `npm run test:e2e:rollback`
+  - rollback/recovery behavior that is deterministic enough to run regularly but still separate from the default lane
+- `npm run test:e2e:live`
+  - live-web sanity checks only
 
 ## Gym map
 
@@ -116,7 +133,7 @@ The biggest current automation gap is that Levels 2, 3, 4, 7, 8, and 9 exist but
 - prompt text remains actionable
 - allow-once replays the blocked action only once
 - always-allow stores the correct site/destination pair
-- rollback still returns to the prior page and offers explicit proceed
+- rollback affordances still appear for suspicious redirects, and explicit proceed remains available
 - stale per-tab allowances do not leak into later navigations
 
 ### For credential changes

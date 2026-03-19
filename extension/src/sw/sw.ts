@@ -141,6 +141,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 chrome.webNavigation.onBeforeNavigate.addListener((details) => {
   if (details.frameId !== 0) return;
+  readyTabs.delete(details.tabId);
   allowStartedByTab.delete(details.tabId);
   const now = Date.now();
   const allowUntil = allowUntilByTab.get(details.tabId) ?? 0;
@@ -163,6 +164,8 @@ chrome.webNavigation.onCommitted.addListener((details) => {
   if (targetAllowance) {
     allowTargetByTab.delete(details.tabId);
   }
+  const prevUrl = lastUrlByTab.get(details.tabId);
+  lastUrlByTab.set(details.tabId, details.url);
 
   const qualifiers = details.transitionQualifiers ?? [];
   const isRedirect =
@@ -180,10 +183,7 @@ chrome.webNavigation.onCommitted.addListener((details) => {
   const startedUrl = allowStartedByTab.get(details.tabId);
   const startedAllowed = startedUrl === details.url;
   const allowedAtCommit = now <= allowUntil || startedAllowed || targetAllowed;
-  const prevUrl = lastUrlByTab.get(details.tabId);
   allowStartedByTab.delete(details.tabId);
-
-  lastUrlByTab.set(details.tabId, details.url);
   lastCommittedByTab.set(details.tabId, {
     url: details.url,
     ...(prevUrl !== undefined ? { prevUrl } : {}),
@@ -219,6 +219,7 @@ chrome.webNavigation.onCommitted.addListener((details) => {
 
 chrome.webNavigation.onErrorOccurred?.addListener((details) => {
   if (details.frameId !== 0) return;
+  readyTabs.delete(details.tabId);
   allowStartedByTab.delete(details.tabId);
 });
 

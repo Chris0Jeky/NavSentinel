@@ -10,7 +10,11 @@
     "verify:versions": "node scripts/check_versions.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:e2e": "playwright test",
+    "test:e2e": "playwright test --project=regression",
+    "test:e2e:smoke": "playwright test --project=smoke",
+    "test:e2e:regression": "playwright test --project=regression",
+    "test:e2e:rollback": "playwright test --project=rollback",
+    "test:e2e:live": "playwright test --project=live",
     "package:ext": "node scripts/package.mjs",
     "gym:serve": "vite --root gym --port 5173 --strictPort"
   },

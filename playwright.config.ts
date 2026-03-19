@@ -6,5 +6,23 @@ export default defineConfig({
   fullyParallel: !process.env.CI,
   workers: process.env.CI ? 1 : undefined,
   retries: process.env.CI ? 1 : 0,
-  reporter: "list"
+  reporter: "list",
+  projects: [
+    {
+      name: "smoke",
+      grep: /@smoke/
+    },
+    {
+      name: "regression",
+      grep: /@smoke|@regression/
+    },
+    {
+      name: "rollback",
+      grep: /@rollback/
+    },
+    {
+      name: "live",
+      grep: /@live/
+    }
+  ]
 });

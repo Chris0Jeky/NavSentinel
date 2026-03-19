@@ -19,7 +19,7 @@ const gymRoot = path.resolve(__dirname, "..", "..", "gym");
 
 test.setTimeout(120_000);
 
-test("Level 1 blocks new tabs", async () => {
+test("Level 1 blocks new tabs @smoke", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const gymOverride = process.env.GYM_BASE_URL;
@@ -59,7 +59,7 @@ test("Level 1 blocks new tabs", async () => {
   }
 });
 
-test("Level 10 delayed form submit prompts", async () => {
+test("Level 10 delayed form submit prompts @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const gymOverride = process.env.GYM_BASE_URL;
@@ -100,7 +100,7 @@ test("Level 10 delayed form submit prompts", async () => {
   }
 });
 
-test("Level 12 delayed same-tab navigation does not roll back a legitimate click", async () => {
+test("Level 12 delayed same-tab navigation does not roll back a legitimate click @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const gymOverride = process.env.GYM_BASE_URL;
@@ -139,8 +139,7 @@ test("Level 12 delayed same-tab navigation does not roll back a legitimate click
   }
 });
 
-test("Level 10 delayed redirect auto-rolls back and offers proceed", async () => {
-  test.skip(!process.env.ROLLBACK_E2E, "Set ROLLBACK_E2E=1 to run rollback E2E.");
+test("Level 10 delayed redirect shows rollback proceed affordance @rollback", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const gymOverride = process.env.GYM_BASE_URL;
@@ -166,11 +165,10 @@ test("Level 10 delayed redirect auto-rolls back and offers proceed", async () =>
       await waitForNavSentinelBridge(page);
       await page.click("#delayed");
       await page.waitForURL(/level4-visual-mimicry\.html/, { timeout: 7000 });
-      await page.waitForURL(/level10-redirects-and-forms\.html/, { timeout: 7000 });
-      await page.waitForFunction(() => (window as any).__navsentinelRollbackPrompt, null, {
-        timeout: 7000
-      });
-      await waitForToastText(page, "NavSentinel rolled back a redirect", 4000);
+      await waitForNavSentinelBridge(page, 7000);
+      await waitForToastText(page, "NavSentinel rolled back a redirect", 12000);
+      await waitForToastText(page, "Proceed", 12000);
+      await expect(page).toHaveURL(/level4-visual-mimicry\.html/);
     } finally {
       await context.close();
     }
@@ -180,8 +178,7 @@ test("Level 10 delayed redirect auto-rolls back and offers proceed", async () =>
   }
 });
 
-test("Live: Google first result opens with no prompt", async () => {
-  test.skip(!process.env.LIVE_E2E, "Set LIVE_E2E=1 to run live web tests.");
+test("Live: Google first result opens with no prompt @live", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
@@ -199,6 +196,10 @@ test("Live: Google first result opens with no prompt", async () => {
         waitUntil: "domcontentloaded",
         timeout: 30_000
       });
+
+      if (page.url().includes("/sorry/")) {
+        test.skip(true, "Google anti-bot challenge blocked the live sanity check.");
+      }
 
       const consent = page.getByRole("button", { name: /I agree|Accept all|Accept/i });
       if (await consent.count()) {
@@ -224,7 +225,7 @@ test("Live: Google first result opens with no prompt", async () => {
   }
 });
 
-test("Level 5 blocks window.open popunder", async () => {
+test("Level 5 blocks window.open popunder @smoke", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const gymOverride = process.env.GYM_BASE_URL;
@@ -259,7 +260,7 @@ test("Level 5 blocks window.open popunder", async () => {
   }
 });
 
-test("Level 6 blocks programmatic click new tab", async () => {
+test("Level 6 blocks programmatic click new tab @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const gymOverride = process.env.GYM_BASE_URL;

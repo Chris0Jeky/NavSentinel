@@ -274,6 +274,84 @@ describe("service worker rollback gating", () => {
     expect(response.entry?.url).toBe("https://example.test/allowed-target");
   });
 
+  it("retains the previous top-frame URL from a typed commit for later rollback", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+
+    mock.emitCommitted({
+      tabId: 19,
+      frameId: 0,
+      url: "https://example.test/origin",
+      transitionType: "typed",
+      transitionQualifiers: []
+    });
+
+    vi.setSystemTime(new Date("2026-03-17T12:00:02.000Z"));
+    mock.emitCommitted({
+      tabId: 19,
+      frameId: 0,
+      url: "https://example.test/redirected",
+      transitionType: "link",
+      transitionQualifiers: ["client_redirect"]
+    });
+
+    const response = mock.dispatchRuntimeMessage({ type: "ns-check-rollback" }, { tab: { id: 19 } }) as {
+      shouldRollback: boolean;
+      prevUrl?: string;
+      entry?: { prevUrl?: string; allowedAtCommit?: boolean };
+    };
+
+    expect(response.shouldRollback).toBe(true);
+    expect(response.prevUrl).toBe("https://example.test/origin");
+    expect(response.entry?.prevUrl).toBe("https://example.test/origin");
+    expect(response.entry?.allowedAtCommit).toBe(false);
+  });
+
+  it("clears stale ready state on a new top-frame navigation and waits for the next ready signal", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+
+    mock.dispatchRuntimeMessage({ type: "ns-ready" }, { tab: { id: 23 } });
+    mock.emitCommitted({
+      tabId: 23,
+      frameId: 0,
+      url: "https://example.test/origin",
+      transitionType: "typed",
+      transitionQualifiers: []
+    });
+
+    mock.emitBeforeNavigate({
+      tabId: 23,
+      frameId: 0,
+      url: "https://example.test/redirected"
+    });
+    mock.emitCommitted({
+      tabId: 23,
+      frameId: 0,
+      url: "https://example.test/redirected",
+      transitionType: "link",
+      transitionQualifiers: ["client_redirect"]
+    });
+
+    expect(mock.sentMessages).toEqual([]);
+
+    mock.dispatchRuntimeMessage({ type: "ns-ready" }, { tab: { id: 23 } });
+
+    expect(mock.sentMessages).toEqual([
+      {
+        tabId: 23,
+        message: {
+          type: "ns-rollback",
+          url: "https://example.test/redirected",
+          prevUrl: "https://example.test/origin",
+          qualifiers: ["client_redirect"]
+        }
+      }
+    ]);
+  });
+
   it("clears a stale allowed-start entry when a later navigation begins outside the gesture window", async () => {
     const mock = createChromeMock();
     vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);

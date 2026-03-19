@@ -14,7 +14,7 @@ const extensionPath = process.env.EXTENSION_PATH
   : path.resolve(__dirname, "..", "..", "extension", "dist");
 const gymRoot = path.resolve(__dirname, "..", "..", "gym");
 
-test("credential guard prompts before risky password submit", async () => {
+test("credential guard prompts before risky password submit @smoke", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const gym = await startGymServer(gymRoot);
@@ -47,7 +47,7 @@ test("credential guard prompts before risky password submit", async () => {
   }
 });
 
-test("credential guard warns on password paste and trust action persists", async () => {
+test("credential guard warns on password paste and trust action persists @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const gym = await startGymServer(gymRoot);
