@@ -1,4 +1,4 @@
-import { expect, test, chromium } from "@playwright/test";
+import { expect, test, chromium, type BrowserContext, type Worker } from "@playwright/test";
 import fs from "fs";
 import * as http from "node:http";
 import os from "os";
@@ -11,6 +11,17 @@ const __dirname = path.dirname(__filename);
 const extensionPath = process.env.EXTENSION_PATH
   ? path.resolve(process.env.EXTENSION_PATH)
   : path.resolve(__dirname, "..", "..", "extension", "dist");
+
+async function getServiceWorker(context: BrowserContext): Promise<Worker> {
+  const existing = context.serviceWorkers()[0];
+  if (existing) return existing;
+  return context.waitForEvent("serviceworker");
+}
+
+async function getExtensionId(context: BrowserContext): Promise<string> {
+  const worker = await getServiceWorker(context);
+  return new URL(worker.url()).host;
+}
 
 function isWithinRoot(root: string, target: string): boolean {
   const relative = path.relative(root, target);
@@ -85,6 +96,68 @@ test("credential guard prompts before risky password submit", async () => {
 
       await expect(page.locator("text=Credential submit blocked")).toBeVisible({ timeout: 4000 });
       await expect(page).toHaveURL(/level11-credential-guard\.html/);
+    } finally {
+      await context.close();
+    }
+  } finally {
+    await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("credential guard warns on password paste and trust action persists", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const gym = await startGymServer();
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-cred-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${gym.baseUrl}/level11-credential-guard.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await page.focus("#password");
+      await page.evaluate(() => {
+        const input = document.getElementById("password");
+        if (!(input instanceof HTMLInputElement)) return;
+        input.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, composed: true }));
+      });
+
+      await page.waitForFunction(() => {
+        const host = document.querySelector("#__navsentinel_toast_host");
+        const root = host?.shadowRoot;
+        return !!root?.textContent?.includes("You pasted into a password field on an untrusted domain");
+      });
+
+      await page.evaluate(() => {
+        const host = document.querySelector("#__navsentinel_toast_host");
+        const root = host?.shadowRoot;
+        const buttons = Array.from(root?.querySelectorAll("button") ?? []);
+        const trust = buttons.find((button) => button.textContent?.includes("Trust 127.0.0.1"));
+        if (trust instanceof HTMLButtonElement) {
+          trust.click();
+        }
+      });
+
+      const extensionId = await getExtensionId(context);
+      const options = await context.newPage();
+      await options.goto(`chrome-extension://${extensionId}/src/options/options.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await expect(options.locator("#trustedList")).toContainText("127.0.0.1");
+      await expect(options.locator("#eventLog")).toContainText("cred_paste_warn");
+      await expect(options.locator("#eventLog")).toContainText("cred_trust_domain");
     } finally {
       await context.close();
     }
