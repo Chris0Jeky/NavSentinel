@@ -525,18 +525,6 @@ if (chrome?.runtime?.onMessage) {
   });
 }
 
-window.addEventListener(
-  "message",
-  (event) => {
-    if (event.source !== window) return;
-    const data = event.data as { source?: string; type?: string; v?: number };
-    if (!data || data.source !== NS_SOURCE) return;
-    if (data.type !== "ns-nav-blocked" && data.type !== "ns-nav-allowed") return;
-    handleBridgeMessage(data);
-  },
-  true
-);
-
 if (chrome?.runtime?.sendMessage && window.top === window) {
   const run = (retries = 4) => {
     chrome.runtime.sendMessage({ type: "ns-check-rollback" }, (resp) => {

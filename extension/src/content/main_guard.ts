@@ -10,18 +10,6 @@ const ALLOW_ONCE_TTL_MS = 1200;
 const BLOCKED_ACTION_TTL_MS = 5000;
 const PROTOCOL_VERSION = 1;
 
-function postToIsolatedFallback(type: string, payload?: Record<string, unknown>): void {
-  window.postMessage(
-    {
-      source: NS_SOURCE,
-      type,
-      v: PROTOCOL_VERSION,
-      ...(payload ?? {})
-    },
-    "*"
-  );
-}
-
 function postToIsolated(type: string, payload?: Record<string, unknown>): void {
   try {
     chrome.runtime.sendMessage(
@@ -35,13 +23,11 @@ function postToIsolated(type: string, payload?: Record<string, unknown>): void {
         }
       },
       () => {
-        if (chrome.runtime.lastError) {
-          postToIsolatedFallback(type, payload);
-        }
+        void chrome.runtime.lastError;
       }
     );
   } catch {
-    postToIsolatedFallback(type, payload);
+    // ignore runtime bridge failures; do not fall back to spoofable window messages
   }
 }
 
