@@ -1,10 +1,27 @@
 const NS_SOURCE = "__navsentinel__";
+const BRIDGE_INIT_TYPE = "ns-port-init";
 const OPEN_TTL_MS = 800;
 const REDIRECT_TTL_MS = 1500;
+const TARGET_NAV_TTL_MS = 10000;
 const MAX_OPENS_PER_GESTURE = 1;
 const MAX_REDIRECTS_PER_GESTURE = 2;
 const ALLOW_ONCE_TTL_MS = 1200;
 const BLOCKED_ACTION_TTL_MS = 5000;
+const PROTOCOL_VERSION = 1;
+
+let bridgePort: MessagePort | null = null;
+let bridgeSession: string | null = null;
+
+function postToIsolated(type: string, payload?: Record<string, unknown>): void {
+  if (!bridgePort || !bridgeSession) return;
+  bridgePort.postMessage({
+    source: NS_SOURCE,
+    type,
+    v: PROTOCOL_VERSION,
+    session: bridgeSession,
+    ...(payload ?? {})
+  });
+}
 
 let mode: "off" | "smart" | "strict" = "smart";
 let debug = false;
@@ -15,6 +32,7 @@ let allowOnceRemaining = 0;
 let allowOnceUntil = 0;
 let allowOpenUntil = 0;
 let allowRedirectUntil = 0;
+
 const blockedActions = new Map<
   string,
   {
@@ -34,6 +52,7 @@ function nowMs(): number {
 }
 
 function recordNav(status: NavStatus, params: { kind: string; url?: string }): void {
+  if (!debug) return;
   (window as any).__navsentinelLastNav = {
     status,
     kind: params.kind,
@@ -76,7 +95,11 @@ function consumeOpenAllowance(): "allow_once" | "allowed" | "none" {
 
 function consumeRedirectAllowance(): "allowed" | "none" {
   const now = nowMs();
-  if (allowRedirectUntil > 0 && now <= allowRedirectUntil && redirectCount < MAX_REDIRECTS_PER_GESTURE) {
+  if (
+    allowRedirectUntil > 0 &&
+    now <= allowRedirectUntil &&
+    redirectCount < MAX_REDIRECTS_PER_GESTURE
+  ) {
     redirectCount += 1;
     return "allowed";
   }
@@ -103,39 +126,41 @@ function postBlocked(params: {
   target?: string;
   features?: string;
 }): void {
-  recordNav("blocked", { kind: params.kind, url: params.url });
+  recordNav("blocked", {
+    kind: params.kind,
+    ...(params.url !== undefined ? { url: params.url } : {})
+  });
   if (debug) {
-    // eslint-disable-next-line no-console
     console.debug("[NavSentinel] blocked", { ...params, mode, ts: nowMs() });
   }
-  window.postMessage(
-    {
-      source: NS_SOURCE,
-      type: "ns-nav-blocked",
-      id: params.id,
-      kind: params.kind,
-      url: params.url ?? "",
-      target: params.target ?? "",
-      features: params.features ?? "",
-      ts: nowMs()
-    },
-    "*"
-  );
+  postToIsolated("ns-nav-blocked", {
+    id: params.id,
+    kind: params.kind,
+    ...(params.url !== undefined ? { url: params.url } : {}),
+    ...(params.target !== undefined ? { target: params.target } : {}),
+    ...(params.features !== undefined ? { features: params.features } : {}),
+    ts: nowMs()
+  });
 }
 
 function postAllowed(params: { kind: string; url?: string }): void {
   recordNav("allowed", params);
   if (!debug) return;
-  window.postMessage(
-    {
-      source: NS_SOURCE,
-      type: "ns-nav-allowed",
-      kind: params.kind,
-      url: params.url ?? "",
-      ts: nowMs()
-    },
-    "*"
-  );
+  postToIsolated("ns-nav-allowed", {
+    kind: params.kind,
+    url: params.url ?? "",
+    ts: nowMs()
+  });
+}
+
+function notifyAllowedTarget(url: string | URL | undefined): void {
+  if (url === undefined) return;
+  try {
+    const href = new URL(String(url), location.href).toString();
+    chrome.runtime.sendMessage({ type: "ns-allow-target-nav", url: href, ttlMs: TARGET_NAV_TTL_MS });
+  } catch {
+    // ignore
+  }
 }
 
 function registerBlockedAction(params: {
@@ -151,11 +176,17 @@ function registerBlockedAction(params: {
     action: params.action,
     expiresAt: nowMs() + BLOCKED_ACTION_TTL_MS,
     kind: params.kind,
-    url: params.url,
-    target: params.target,
-    features: params.features
+    ...(params.url !== undefined ? { url: params.url } : {}),
+    ...(params.target !== undefined ? { target: params.target } : {}),
+    ...(params.features !== undefined ? { features: params.features } : {})
   });
-  postBlocked({ id, kind: params.kind, url: params.url, target: params.target, features: params.features });
+  postBlocked({
+    id,
+    kind: params.kind,
+    ...(params.url !== undefined ? { url: params.url } : {}),
+    ...(params.target !== undefined ? { target: params.target } : {}),
+    ...(params.features !== undefined ? { features: params.features } : {})
+  });
 }
 
 const nativeProtoOpen = Window.prototype.open;
@@ -165,29 +196,40 @@ const nativeReplace = Location.prototype.replace;
 const nativeFormSubmit = HTMLFormElement.prototype.submit;
 const nativeFormRequestSubmit = HTMLFormElement.prototype.requestSubmit;
 
-function callNativeOpen(thisArg: Window, url?: string | URL, target?: string, features?: string): Window | null {
+function callNativeOpen(
+  thisArg: Window,
+  url?: string | URL,
+  target?: string,
+  features?: string
+): Window | null {
   if (nativeProtoOpen) {
     return nativeProtoOpen.call(thisArg, url as any, target, features);
   }
   return nativeOpen.call(thisArg, url as any, target, features);
 }
 
-function patchedOpen(this: Window, url?: string | URL, target?: string, features?: string): Window | null {
+function patchedOpen(
+  this: Window,
+  url?: string | URL,
+  target?: string,
+  features?: string
+): Window | null {
   if (isOff()) {
-    postAllowed({ kind: "window_open", url: url ? String(url) : "" });
+    postAllowed({ kind: "window_open", ...(url !== undefined ? { url: String(url) } : {}) });
     return callNativeOpen(this, url, target, features);
   }
+
   const allowance = consumeOpenAllowance();
   if (allowance !== "none") {
-    postAllowed({ kind: "window_open", url: url ? String(url) : "" });
+    postAllowed({ kind: "window_open", ...(url !== undefined ? { url: String(url) } : {}) });
     return callNativeOpen(this, url, target, features);
   }
 
   registerBlockedAction({
     kind: "window_open",
-    url: url ? String(url) : "",
-    target,
-    features,
+    ...(url !== undefined ? { url: String(url) } : {}),
+    ...(target !== undefined ? { target } : {}),
+    ...(features !== undefined ? { features } : {}),
     action: () => {
       callNativeOpen(this, url, target, features);
     }
@@ -210,15 +252,19 @@ function patchLocation(): void {
   const patchedAssign = function (this: Location, url: string | URL): void {
     if (isOff()) {
       postAllowed({ kind: "location_assign", url: String(url) });
+      notifyAllowedTarget(url);
       nativeAssign.call(this, url);
       return;
     }
+
     const allowance = consumeRedirectAllowance();
     if (allowance !== "none") {
       postAllowed({ kind: "location_assign", url: String(url) });
+      notifyAllowedTarget(url);
       nativeAssign.call(this, url);
       return;
     }
+
     registerBlockedAction({
       kind: "location_assign",
       url: String(url),
@@ -229,15 +275,19 @@ function patchLocation(): void {
   const patchedReplace = function (this: Location, url: string | URL): void {
     if (isOff()) {
       postAllowed({ kind: "location_replace", url: String(url) });
+      notifyAllowedTarget(url);
       nativeReplace.call(this, url);
       return;
     }
+
     const allowance = consumeRedirectAllowance();
     if (allowance !== "none") {
       postAllowed({ kind: "location_replace", url: String(url) });
+      notifyAllowedTarget(url);
       nativeReplace.call(this, url);
       return;
     }
+
     registerBlockedAction({
       kind: "location_replace",
       url: String(url),
@@ -283,57 +333,71 @@ function patchLocation(): void {
     locReplace: window.location.replace === patchedReplace,
     locAssignDesc: (() => {
       const desc = Object.getOwnPropertyDescriptor(window.location, "assign");
-      return desc ? { configurable: !!desc.configurable, writable: !!(desc as any).writable } : null;
+      return desc
+        ? { configurable: !!desc.configurable, writable: !!(desc as any).writable }
+        : null;
     })(),
     locReplaceDesc: (() => {
       const desc = Object.getOwnPropertyDescriptor(window.location, "replace");
-      return desc ? { configurable: !!desc.configurable, writable: !!(desc as any).writable } : null;
+      return desc
+        ? { configurable: !!desc.configurable, writable: !!(desc as any).writable }
+        : null;
     })()
   };
 }
 
 function patchForms(): void {
   HTMLFormElement.prototype.submit = function (): void {
+    const actionUrl = resolveFormAction(this);
     if (isOff()) {
-      const actionUrl = resolveFormAction(this);
-      postAllowed({ kind: "form_submit", url: actionUrl });
+      postAllowed({ kind: "form_submit", ...(actionUrl !== undefined ? { url: actionUrl } : {}) });
+      notifyAllowedTarget(actionUrl);
       nativeFormSubmit.call(this);
       return;
     }
+
     const allowance = consumeRedirectAllowance();
     if (allowance !== "none") {
-      const actionUrl = resolveFormAction(this);
-      postAllowed({ kind: "form_submit", url: actionUrl });
+      postAllowed({ kind: "form_submit", ...(actionUrl !== undefined ? { url: actionUrl } : {}) });
+      notifyAllowedTarget(actionUrl);
       nativeFormSubmit.call(this);
       return;
     }
-    const actionUrl = resolveFormAction(this);
+
     registerBlockedAction({
       kind: "form_submit",
-      url: actionUrl,
+      ...(actionUrl !== undefined ? { url: actionUrl } : {}),
       action: () => nativeFormSubmit.call(this)
     });
   };
 
   if (nativeFormRequestSubmit) {
     HTMLFormElement.prototype.requestSubmit = function (submitter?: HTMLElement | null): void {
+      const actionUrl = resolveFormAction(this);
       if (isOff()) {
-        const actionUrl = resolveFormAction(this);
-        postAllowed({ kind: "form_request_submit", url: actionUrl });
+        postAllowed({
+          kind: "form_request_submit",
+          ...(actionUrl !== undefined ? { url: actionUrl } : {})
+        });
+        notifyAllowedTarget(actionUrl);
         nativeFormRequestSubmit.call(this, submitter as any);
         return;
       }
+
       const allowance = consumeRedirectAllowance();
       if (allowance !== "none") {
-        const actionUrl = resolveFormAction(this);
-        postAllowed({ kind: "form_request_submit", url: actionUrl });
+        postAllowed({
+          kind: "form_request_submit",
+          ...(actionUrl !== undefined ? { url: actionUrl } : {})
+        });
+        notifyAllowedTarget(actionUrl);
         nativeFormRequestSubmit.call(this, submitter as any);
         return;
       }
-      const actionUrl = resolveFormAction(this);
+
       registerBlockedAction({
         kind: "form_request_submit",
-        url: actionUrl,
+        ...(actionUrl !== undefined ? { url: actionUrl } : {}),
         action: () => nativeFormRequestSubmit.call(this, submitter as any)
       });
     };
@@ -352,9 +416,78 @@ function patchOpen(): void {
   }
 
   if (Window.prototype.open !== patchedOpen) {
-    Window.prototype.open = function (url?: string | URL, target?: string, features?: string): Window | null {
+    Window.prototype.open = function (
+      this: Window,
+      url?: string | URL,
+      target?: string,
+      features?: string
+    ): Window | null {
       return patchedOpen.call(this, url, target, features);
     } as any;
+  }
+}
+
+function handleBridgeMessage(message: unknown): void {
+  const data = message as {
+    source?: string;
+    type?: string;
+    v?: number;
+    session?: string;
+    id?: string;
+    mode?: "off" | "smart" | "strict";
+    debug?: boolean;
+    allowOpen?: boolean;
+    allowRedirect?: boolean;
+  };
+  if (!data || data.source !== NS_SOURCE || data.v !== PROTOCOL_VERSION) return;
+  if (!bridgeSession || data.session !== bridgeSession) return;
+
+  if (data.type === "ns-gesture-allow") {
+    markAllowance({ allowOpen: true, allowRedirect: true });
+    return;
+  }
+
+  if (data.type === "ns-config") {
+    if (data.mode) mode = data.mode;
+    if (typeof data.debug === "boolean") debug = data.debug;
+    postToIsolated("ns-config-ack", { mode, debug });
+    return;
+  }
+
+  if (data.type === "ns-ping") {
+    postToIsolated("ns-pong", { mode, debug });
+    return;
+  }
+
+  if (data.type === "ns-allow-once") {
+    setAllowOnce();
+    return;
+  }
+
+  if (data.type === "ns-allow") {
+    const allowOpen = data.allowOpen === true;
+    const allowRedirect = data.allowRedirect === true;
+    markAllowance({ allowOpen, allowRedirect });
+    if (debug) {
+      console.debug("[NavSentinel] allowance", {
+        allowOpen,
+        allowRedirect,
+        openUntil: allowOpenUntil,
+        redirectUntil: allowRedirectUntil
+      });
+    }
+    return;
+  }
+
+  if (data.type === "ns-allow-action" && data.id) {
+    const entry = blockedActions.get(data.id);
+    if (!entry) return;
+    if (entry.expiresAt <= nowMs()) {
+      blockedActions.delete(data.id);
+      return;
+    }
+    blockedActions.delete(data.id);
+    entry.action();
   }
 }
 
@@ -365,57 +498,25 @@ window.addEventListener(
     const data = event.data as {
       source?: string;
       type?: string;
-      id?: string;
-      mode?: "off" | "smart" | "strict";
-      debug?: boolean;
-      allowOpen?: boolean;
-      allowRedirect?: boolean;
+      v?: number;
+      session?: string;
     };
-    if (!data || data.source !== NS_SOURCE) return;
+    if (!data || data.source !== NS_SOURCE || data.v !== PROTOCOL_VERSION) return;
+    if (data.type !== BRIDGE_INIT_TYPE || typeof data.session !== "string" || !data.session) return;
+    if (bridgeSession && data.session !== bridgeSession) return;
 
-    if (data.type === "ns-gesture-allow") {
-      markAllowance({ allowOpen: true, allowRedirect: true });
-    }
+    const nextPort = event.ports?.[0];
+    if (!(nextPort instanceof MessagePort)) return;
 
-    if (data.type === "ns-config") {
-      if (data.mode) mode = data.mode;
-      if (typeof data.debug === "boolean") debug = data.debug;
-      window.postMessage({ source: NS_SOURCE, type: "ns-config-ack", mode, debug }, "*");
-    }
+    event.stopImmediatePropagation();
+    event.stopPropagation();
 
-    if (data.type === "ns-ping") {
-      window.postMessage({ source: NS_SOURCE, type: "ns-pong", mode, debug }, "*");
-    }
-
-    if (data.type === "ns-allow-once") {
-      setAllowOnce();
-    }
-
-    if (data.type === "ns-allow") {
-      const allowOpen = data.allowOpen === true;
-      const allowRedirect = data.allowRedirect === true;
-      markAllowance({ allowOpen, allowRedirect });
-      if (debug) {
-        // eslint-disable-next-line no-console
-        console.debug("[NavSentinel] allowance", {
-          allowOpen,
-          allowRedirect,
-          openUntil: allowOpenUntil,
-          redirectUntil: allowRedirectUntil
-        });
-      }
-    }
-
-    if (data.type === "ns-allow-action" && data.id) {
-      const entry = blockedActions.get(data.id);
-      if (!entry) return;
-      if (entry.expiresAt <= nowMs()) {
-        blockedActions.delete(data.id);
-        return;
-      }
-      blockedActions.delete(data.id);
-      entry.action();
-    }
+    bridgePort?.close();
+    bridgePort = nextPort;
+    bridgeSession = data.session;
+    bridgePort.onmessage = (bridgeEvent) => handleBridgeMessage(bridgeEvent.data);
+    bridgePort.start?.();
+    postToIsolated("ns-bridge-ready");
   },
   true
 );
@@ -423,5 +524,4 @@ window.addEventListener(
 patchOpen();
 patchLocation();
 patchForms();
-
 (window as any).__navsentinelMainGuard = true;

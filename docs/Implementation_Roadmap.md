@@ -1,13 +1,59 @@
 # Implementation Roadmap
 
-## Current status
-- Stage 0: complete (Gym Levels 1-9 + index page).
-- Stage 1: complete (capture, gesture token, CDS context logging).
-- Stage 2: complete (CDS v1 + overlay blocking + debug overlay).
-- Stage 3: in progress (window.open patch + prompt UI; allowlist UI pending).
-- Stage 4: in progress (location and form submit gating; history.pushState pending).
+## Current state
 
-## Staged plan (each stage testable)
+The original SentinelSuite merge is effectively complete on this branch. The core product now includes:
+
+- hardened main/isolated navigation enforcement
+- popup and options UX
+- unified local storage
+- trusted domains and event logging
+- credential-submit protection
+- build, packaging, CI, and strict type verification
+
+This roadmap is therefore no longer about landing the core suite. It is about disciplined follow-up work.
+
+## Near-term follow-up
+
+### 1. Broaden test coverage
+
+- add Playwright coverage for popup workflows
+- add Playwright coverage for options-page import/export
+- add trusted-domain decision-path tests
+- cover more rollback edge cases without relying on manual env gates
+
+### 2. Tighten operator ergonomics
+
+- better event-log filtering/searching
+- clearer differentiation between navigation allowlist and trusted domains
+- possible per-entry timestamps or notes for trust decisions
+
+### 3. Release workflow polish
+
+- issue templates
+- changelog or release-notes workflow
+- optional release-tag automation
+- clearer screenshot coverage for the GitHub README and PR templates
+
+### 4. Optional future integration
+
+`RESOURCES/link` and `RESOURCES/hardened` remain deliberately out of the first merge tranche. If revisited later, they should be treated as separate, explicitly-scoped efforts rather than folded in opportunistically.
+
+## Non-goals for now
+
+- cloud telemetry
+- remote reputation lookups
+- credential capture beyond destination-risk analysis
+- broad browser-porting work before Chrome behavior is fully stabilized
+
+## Merge status
+
+- Stage 0-2: complete.
+- Stage 3-4: complete in the current suite branch, including popup/new-tab gating, redirect and form-submit interception, allowlist UI, and rollback behavior.
+- Stage 5: partially implemented via the optional DNR backstop toggle; still not the primary enforcement path.
+- Stage 6-7: partially implemented through suite settings, event logging, trusted domains, credential protection, and bridge hardening, with additional ergonomics and tamper-resilience work still optional follow-up.
+
+## Historical staged plan (baseline reference)
 
 Stage 0 - Gym baseline
 - Build Levels 1-9 demo pages.
@@ -54,13 +100,9 @@ Stage 7 - Robustness hardening
 - Performance tuning and reentrancy safeguards.
 - WebNavigation fallback for cross-origin frames (last resort).
 
-## Short-term focus (next 4-6 weeks)
-- Finish Stage 0-3 with unit tests and at least one Playwright e2e spec.
-- Build Options UI with modes and allowlist.
-- Document reason codes and debug steps.
+## Historical focus notes
 
-## Long-term focus
-- Stage 4-7, network backstop, and policy learning.
+The sections below were the pre-merge planning baseline. They remain useful as historical context, but the actionable work for the current branch is the follow-up list near the top of this document.
 
 ## Dependencies and risks
 - Main world patching can fail under strict CSP; design isolated-only fallback.

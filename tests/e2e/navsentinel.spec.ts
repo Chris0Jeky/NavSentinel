@@ -1,9 +1,13 @@
 import { test, expect, chromium } from "@playwright/test";
 import fs from "fs";
-import * as http from "node:http";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
+import {
+  startGymServer,
+  waitForNavSentinelBridge,
+  waitForToastText
+} from "./extension_test_utils";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -11,51 +15,7 @@ const __dirname = path.dirname(__filename);
 const extensionPath = process.env.EXTENSION_PATH
   ? path.resolve(process.env.EXTENSION_PATH)
   : path.resolve(__dirname, "..", "..", "extension", "dist");
-
-async function startGymServer(): Promise<{ baseUrl: string; close: () => Promise<void> }> {
-  const gymRoot = path.resolve(__dirname, "..", "..", "gym");
-
-  const server = http.createServer((req, res) => {
-    try {
-      const reqUrl = new URL(req.url ?? "/", "http://127.0.0.1");
-      const pathname = decodeURIComponent(reqUrl.pathname);
-      const rel = pathname === "/" ? "/index.html" : pathname;
-
-      const resolved = path.resolve(gymRoot, `.${rel}`);
-      if (!resolved.startsWith(gymRoot)) {
-        res.statusCode = 400;
-        res.end("Bad request");
-        return;
-      }
-
-      if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {
-        res.statusCode = 404;
-        res.end("Not found");
-        return;
-      }
-
-      const ext = path.extname(resolved).toLowerCase();
-      if (ext === ".css") res.setHeader("content-type", "text/css; charset=utf-8");
-      else if (ext === ".js") res.setHeader("content-type", "text/javascript; charset=utf-8");
-      else res.setHeader("content-type", "text/html; charset=utf-8");
-
-      res.statusCode = 200;
-      res.end(fs.readFileSync(resolved));
-    } catch {
-      res.statusCode = 500;
-      res.end("Server error");
-    }
-  });
-
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const addr = server.address();
-  if (!addr || typeof addr === "string") throw new Error("Failed to bind Gym server");
-
-  return {
-    baseUrl: `http://127.0.0.1:${addr.port}`,
-    close: () => new Promise<void>((resolve) => server.close(() => resolve()))
-  };
-}
+const gymRoot = path.resolve(__dirname, "..", "..", "gym");
 
 test.setTimeout(120_000);
 
@@ -63,7 +23,7 @@ test("Level 1 blocks new tabs", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const gymOverride = process.env.GYM_BASE_URL;
-  const gym = gymOverride ? null : await startGymServer();
+  const gym = gymOverride ? null : await startGymServer(gymRoot);
   const baseUrl = gymOverride ?? gym!.baseUrl;
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
@@ -77,11 +37,12 @@ test("Level 1 blocks new tabs", async () => {
 
     try {
       const page = await context.newPage();
-      await page.goto(`${baseUrl}/level1-basic-opacity.html`, { waitUntil: "domcontentloaded", timeout: 20_000 });
+      await page.goto(`${baseUrl}/level1-basic-opacity.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
 
-      await expect(
-        page.evaluate(() => (window as any).__navsentinelMainGuard === true)
-      ).resolves.toBe(true);
+      await waitForNavSentinelBridge(page);
 
       const play = page.locator("#play");
       const box = await play.boundingBox();
@@ -94,7 +55,6 @@ test("Level 1 blocks new tabs", async () => {
     }
   } finally {
     if (gym) await gym.close();
-
     fs.rmSync(userDataDir, { recursive: true, force: true });
   }
 });
@@ -103,7 +63,7 @@ test("Level 10 delayed form submit prompts", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const gymOverride = process.env.GYM_BASE_URL;
-  const gym = gymOverride ? null : await startGymServer();
+  const gym = gymOverride ? null : await startGymServer(gymRoot);
   const baseUrl = gymOverride ?? gym!.baseUrl;
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
@@ -122,9 +82,7 @@ test("Level 10 delayed form submit prompts", async () => {
         timeout: 20_000
       });
 
-      await expect(
-        page.evaluate(() => (window as any).__navsentinelMainGuard === true)
-      ).resolves.toBe(true);
+      await waitForNavSentinelBridge(page);
 
       const patchInfo = await page.evaluate(() => (window as any).__navsentinelLocationPatch);
       expect(patchInfo, "Expected location patch info").toBeTruthy();
@@ -132,7 +90,46 @@ test("Level 10 delayed form submit prompts", async () => {
 
       await page.click("#submitDelayed");
       await page.waitForTimeout(2600);
-      await expect(page.locator("text=Blocked form submit")).toBeVisible({ timeout: 4000 });
+      await waitForToastText(page, "Blocked form submit", 4000);
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("Level 12 delayed same-tab navigation does not roll back a legitimate click", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const gymOverride = process.env.GYM_BASE_URL;
+  const gym = gymOverride ? null : await startGymServer(gymRoot);
+  const baseUrl = gymOverride ?? gym!.baseUrl;
+
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/level12-slow-same-tab-link.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await waitForNavSentinelBridge(page);
+
+      await page.click("#slowLink");
+      await page.waitForURL(/level4-visual-mimicry\.html\?delayMs=2500/, { timeout: 10_000 });
+      await page.waitForTimeout(1200);
+      await expect(page.locator("text=NavSentinel rolled back a redirect")).toHaveCount(0);
+      await expect(page).toHaveURL(/level4-visual-mimicry\.html\?delayMs=2500/);
     } finally {
       await context.close();
     }
@@ -147,7 +144,7 @@ test("Level 10 delayed redirect auto-rolls back and offers proceed", async () =>
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const gymOverride = process.env.GYM_BASE_URL;
-  const gym = gymOverride ? null : await startGymServer();
+  const gym = gymOverride ? null : await startGymServer(gymRoot);
   const baseUrl = gymOverride ?? gym!.baseUrl;
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
@@ -166,15 +163,14 @@ test("Level 10 delayed redirect auto-rolls back and offers proceed", async () =>
         timeout: 20_000
       });
 
+      await waitForNavSentinelBridge(page);
       await page.click("#delayed");
       await page.waitForURL(/level4-visual-mimicry\.html/, { timeout: 7000 });
       await page.waitForURL(/level10-redirects-and-forms\.html/, { timeout: 7000 });
       await page.waitForFunction(() => (window as any).__navsentinelRollbackPrompt, null, {
         timeout: 7000
       });
-      await expect(page.locator("text=NavSentinel rolled back a redirect")).toBeVisible({
-        timeout: 4000
-      });
+      await waitForToastText(page, "NavSentinel rolled back a redirect", 4000);
     } finally {
       await context.close();
     }
@@ -232,7 +228,7 @@ test("Level 5 blocks window.open popunder", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const gymOverride = process.env.GYM_BASE_URL;
-  const gym = gymOverride ? null : await startGymServer();
+  const gym = gymOverride ? null : await startGymServer(gymRoot);
   const baseUrl = gymOverride ?? gym!.baseUrl;
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
@@ -251,8 +247,9 @@ test("Level 5 blocks window.open popunder", async () => {
         timeout: 20_000
       });
 
+      await waitForNavSentinelBridge(page);
       await page.click("#area");
-      await expect(page.locator("text=Blocked popup")).toBeVisible({ timeout: 3000 });
+      await waitForToastText(page, "Blocked popup", 3000);
     } finally {
       await context.close();
     }
@@ -266,7 +263,7 @@ test("Level 6 blocks programmatic click new tab", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const gymOverride = process.env.GYM_BASE_URL;
-  const gym = gymOverride ? null : await startGymServer();
+  const gym = gymOverride ? null : await startGymServer(gymRoot);
   const baseUrl = gymOverride ?? gym!.baseUrl;
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
@@ -285,8 +282,9 @@ test("Level 6 blocks programmatic click new tab", async () => {
         timeout: 20_000
       });
 
+      await waitForNavSentinelBridge(page);
       await page.click("#real");
-      await expect(page.locator("text=Blocked new tab")).toBeVisible({ timeout: 3000 });
+      await waitForToastText(page, "Blocked new tab", 3000);
     } finally {
       await context.close();
     }

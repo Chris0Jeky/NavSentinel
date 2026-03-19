@@ -1,19 +1,23 @@
 {
   "name": "navsentinel",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "watch": "vite build --watch",
+    "verify:versions": "node scripts/check_versions.mjs",
     "test": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "package:ext": "node scripts/package.mjs",
+    "gym:serve": "vite --root gym --port 5173 --strictPort"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.3.0",
     "@playwright/test": "^1.49.0",
     "@types/chrome": "^0.0.260",
+    "@types/node": "^20.19.37",
     "playwright": "^1.49.0",
     "typescript": "^5.6.0",
     "vite": "^5.4.0",

@@ -1,5 +1,5 @@
 import { computeCDS } from "../shared/scoring";
-import { getSettings, onSettingsChange } from "../shared/storage";
+import { appendEvent, getNavSettings, onNavSettingsChange, type NavSettings } from "../shared/storage";
 import { makeToken, setActiveToken } from "../shared/stateMachine";
 import type { Mode } from "../shared/types";
 import {
@@ -11,9 +11,10 @@ import {
 } from "../shared/allowlist";
 import { showToast } from "./ui_toast";
 import {
-  capturePointerDown,
-  captureClick,
   buildClickContextFromEvents,
+  buildKeyboardClickContext,
+  captureClick,
+  capturePointerDown,
   type DownCapture
 } from "./dom_builder";
 import { setDebugEnabled, updateDebugOverlay, type DebugInfo } from "./debug_overlay";
@@ -21,7 +22,13 @@ import { setDebugEnabled, updateDebugOverlay, type DebugInfo } from "./debug_ove
 const CDS_SMART_BLOCK_THRESHOLD = 70;
 const CDS_STRICT_BLOCK_THRESHOLD = 50;
 const NS_SOURCE = "__navsentinel__";
+const BRIDGE_INIT_TYPE = "ns-port-init";
+const PROTOCOL_VERSION = 1;
 const NAV_ALLOW_TTL_MS = 1500;
+const NAV_GESTURE_TTL_MS = 1500;
+const NAV_TARGET_ALLOW_TTL_MS = 10000;
+const MAX_PENDING_BRIDGE_MESSAGES = 32;
+const BRIDGE_RETRY_MS = 100;
 const RISKY_BLANK_REASONS = new Set([
   "intent_mismatch_under_interactive",
   "invisible_but_clickable",
@@ -31,22 +38,50 @@ const RISKY_BLANK_REASONS = new Set([
   "cursor_pointer_no_affordance"
 ]);
 
+function makeBridgeSession(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 let lastDown: DownCapture | null = null;
-let settings = { defaultMode: "smart", debug: false, dnrEnabled: false };
+let settings: NavSettings = { defaultMode: "smart", debug: false, dnrEnabled: false };
 let allowlist: Allowlist = {};
+let bridgePort: MessagePort | null = null;
+let bridgeReady = false;
+const bridgeSession = makeBridgeSession();
+const pendingBridgeMessages: Array<{ type: string; payload?: Record<string, unknown> }> = [];
 let mainGuard: "unknown" | "yes" | "no" = "unknown";
 let lastNav: { kind: string; url: string; status: "allowed" | "blocked" } | null = null;
 let lastDebug: Omit<DebugInfo, "mainGuard" | "lastNav"> | null = null;
 let rollbackShownAt = 0;
+let bridgeRetryTimer = 0;
+
+function markMainGuardReady(): void {
+  if (bridgeRetryTimer) {
+    window.clearTimeout(bridgeRetryTimer);
+    bridgeRetryTimer = 0;
+  }
+  bridgeReady = true;
+  document.documentElement.setAttribute("data-navsentinel-bridge-ready", "1");
+  mainGuard = "yes";
+  flushBridgeMessages();
+  refreshDebug();
+}
 
 function refreshDebug(): void {
   if (!lastDebug) return;
-  updateDebugOverlay({ ...lastDebug, mainGuard, lastNav: lastNav ?? undefined });
+  updateDebugOverlay({
+    ...lastDebug,
+    mainGuard,
+    ...(lastNav ? { lastNav } : {})
+  });
 }
 
 async function initSettings() {
-  settings = await getSettings();
+  ensureBridge();
+  settings = await getNavSettings();
   allowlist = await getAllowlist();
+  document.documentElement.setAttribute("data-navsentinel-capture-ready", "1");
   setDebugEnabled(settings.debug);
   postToMain("ns-config", { mode: settings.defaultMode, debug: settings.debug });
   postToMain("ns-ping");
@@ -60,14 +95,21 @@ async function initSettings() {
   window.setTimeout(() => {
     if (mainGuard === "unknown") {
       mainGuard = "no";
+      if (bridgeRetryTimer) {
+        window.clearTimeout(bridgeRetryTimer);
+        bridgeRetryTimer = 0;
+      }
+      bridgePort?.close();
+      bridgePort = null;
+      pendingBridgeMessages.length = 0;
       refreshDebug();
     }
   }, 750);
 }
 
-initSettings();
+void initSettings();
 
-onSettingsChange((s) => {
+onNavSettingsChange((s) => {
   settings = s;
   setDebugEnabled(s.debug);
   postToMain("ns-config", { mode: s.defaultMode, debug: s.debug });
@@ -87,12 +129,175 @@ function frameKey(): string {
 }
 
 function postToMain(type: string, payload?: Record<string, unknown>): void {
-  window.postMessage({ source: NS_SOURCE, type, ...(payload ?? {}) }, "*");
+  if (mainGuard === "no") return;
+  if (!bridgeReady) {
+    pendingBridgeMessages.push(
+      payload !== undefined
+        ? { type, payload }
+        : { type }
+    );
+    if (pendingBridgeMessages.length > MAX_PENDING_BRIDGE_MESSAGES) {
+      pendingBridgeMessages.splice(0, pendingBridgeMessages.length - MAX_PENDING_BRIDGE_MESSAGES);
+    }
+    ensureBridge();
+    return;
+  }
+  sendBridgeMessageToMain({ source: NS_SOURCE, type, v: PROTOCOL_VERSION, ...(payload ?? {}) });
+}
+
+function flushBridgeMessages(): void {
+  if (!bridgeReady || !bridgePort) return;
+  while (pendingBridgeMessages.length > 0) {
+    const next = pendingBridgeMessages.shift();
+    if (!next) break;
+    bridgePort.postMessage({
+      source: NS_SOURCE,
+      type: next.type,
+      v: PROTOCOL_VERSION,
+      session: bridgeSession,
+      ...(next.payload ?? {})
+    });
+  }
+}
+
+function sendBridgeMessageToMain(payload: Record<string, unknown>): void {
+  if (!bridgePort) return;
+  bridgePort.postMessage({
+    ...payload,
+    session: bridgeSession
+  });
+}
+
+function handleBridgeMessage(message: unknown): void {
+  const data = message as {
+    source?: string;
+    type?: string;
+    session?: string;
+    id?: string;
+    kind?: string;
+    url?: string;
+    target?: string;
+    features?: string;
+    mode?: "off" | "smart" | "strict";
+    debug?: boolean;
+    v?: number;
+  };
+  if (!data || data.source !== NS_SOURCE || data.v !== PROTOCOL_VERSION) return;
+  if (data.session !== bridgeSession) return;
+
+  if (data.type === "ns-bridge-ready") {
+    markMainGuardReady();
+    return;
+  }
+
+  if (data.type === "ns-pong" || data.type === "ns-config-ack") {
+    markMainGuardReady();
+    return;
+  }
+
+  if (data.type === "ns-nav-blocked") {
+    lastNav = { kind: data.kind ?? "unknown", url: data.url ?? "", status: "blocked" };
+    refreshDebug();
+
+    if (settings.defaultMode === "off") {
+      allowActionOnce(data.id, data.url, data.target, data.features);
+      return;
+    }
+
+    const parsed = parseDestination(data.url);
+    const url = parsed.href ?? data.url ?? "";
+    if (!url) return;
+
+    if (parsed.host && isAllowlisted(allowlist, siteKeyFromLocation(), parsed.host)) {
+      allowActionOnce(data.id, url, data.target || "_blank", data.features);
+      return;
+    }
+
+    const title =
+      data.kind === "location_assign" || data.kind === "location_replace"
+        ? "Blocked redirect"
+        : data.kind === "form_submit" || data.kind === "form_request_submit"
+          ? "Blocked form submit"
+          : "Blocked popup";
+
+    showAllowPrompt({
+      title,
+      url,
+      host: parsed.host,
+      target: data.target || "_blank",
+      ...(data.features ? { features: data.features } : {}),
+      ...(data.id !== undefined ? { actionId: data.id } : {})
+    });
+    return;
+  }
+
+  if (data.type === "ns-nav-allowed") {
+    lastNav = { kind: data.kind ?? "unknown", url: data.url ?? "", status: "allowed" };
+    refreshDebug();
+  }
+}
+
+function ensureBridge(): void {
+  if (bridgeReady || mainGuard === "no" || bridgeRetryTimer) return;
+
+  const attempt = () => {
+    bridgeRetryTimer = 0;
+    if (bridgeReady || mainGuard === "no") return;
+    bridgePort?.close();
+
+    const channel = new MessageChannel();
+    bridgePort = channel.port1;
+    bridgePort.onmessage = (event) => handleBridgeMessage(event.data);
+    bridgePort.start?.();
+    channel.port2.start?.();
+
+    window.postMessage(
+      {
+        source: NS_SOURCE,
+        type: BRIDGE_INIT_TYPE,
+        v: PROTOCOL_VERSION,
+        session: bridgeSession
+      },
+      "*",
+      [channel.port2]
+    );
+
+    if (!bridgeReady && mainGuard === "unknown") {
+      bridgeRetryTimer = window.setTimeout(attempt, BRIDGE_RETRY_MS);
+    }
+  };
+
+  attempt();
+}
+
+function appendEventSafely(
+  partial: Parameters<typeof appendEvent>[0]
+): void {
+  void appendEvent(partial).catch(() => {
+    // ignore
+  });
 }
 
 function notifyNavAllow(ttlMs = NAV_ALLOW_TTL_MS): void {
   try {
     chrome.runtime.sendMessage({ type: "ns-allow-nav", ttlMs });
+  } catch {
+    // ignore
+  }
+}
+
+function notifyNavGesture(ttlMs = NAV_GESTURE_TTL_MS): void {
+  try {
+    chrome.runtime.sendMessage({ type: "ns-nav-gesture", ttlMs });
+  } catch {
+    // ignore
+  }
+}
+
+function notifyAllowedTarget(url: string, ttlMs = NAV_TARGET_ALLOW_TTL_MS): void {
+  if (!url) return;
+  try {
+    chrome.runtime.sendMessage({ type: "ns-allow-target-nav", url, ttlMs });
   } catch {
     // ignore
   }
@@ -112,6 +317,7 @@ function showRollbackPrompt(url: string): void {
     }
   })();
   (window as any).__navsentinelRollbackPrompt = { url, ts: now };
+  appendEventSafely({ kind: "nav_rollback", site: siteKeyFromLocation(), url, destHost: host });
   showToast({
     message: `NavSentinel rolled back a redirect to ${host}.`,
     actions: [
@@ -172,15 +378,19 @@ function parseDestination(rawUrl: string | null | undefined): { href: string | n
   }
 }
 
-function nameLength(h: { textLength?: number; ariaLabelLength?: number; titleLength?: number }): number {
-  return (h.textLength ?? 0) + (h.ariaLabelLength ?? 0) + (h.titleLength ?? 0);
-}
-
 function isInteractive(h: { tag: string; role?: string; hasOnClick?: boolean }): boolean {
   if (h.tag === "A" || h.tag === "BUTTON") return true;
   const role = (h.role ?? "").toLowerCase();
   if (role === "link" || role === "button") return true;
   return !!h.hasOnClick;
+}
+
+function isInteractiveElement(el: Element): boolean {
+  const tag = el.tagName;
+  if (tag === "A" || tag === "BUTTON") return true;
+  const role = (el.getAttribute("role") ?? "").toLowerCase();
+  if (role === "link" || role === "button") return true;
+  return !!el.getAttribute("onclick");
 }
 
 function elementNameLength(el: Element): number {
@@ -194,7 +404,9 @@ function isVisibleElement(el: Element): boolean {
   const rect = (el as HTMLElement).getBoundingClientRect?.();
   if (!rect || rect.width <= 0 || rect.height <= 0) return false;
   const cs = window.getComputedStyle(el);
-  if (cs.display === "none" || cs.visibility === "hidden" || cs.visibility === "collapse") return false;
+  if (cs.display === "none" || cs.visibility === "hidden" || cs.visibility === "collapse") {
+    return false;
+  }
   const opacity = Number.parseFloat(cs.opacity);
   if (Number.isFinite(opacity) && opacity < 0.08) return false;
   return true;
@@ -210,7 +422,7 @@ function isLegitBlankAnchor(
   if (ctx.retargeted) return false;
   if (!isVisibleElement(anchor)) return false;
   if (elementNameLength(anchor) === 0) return false;
-  if (!isInteractive(ctx.top) && !isInteractive(anchor)) return false;
+  if (!isInteractive(ctx.top) && !isInteractiveElement(anchor)) return false;
   for (const reason of reasonCodes) {
     if (RISKY_BLANK_REASONS.has(reason)) return false;
   }
@@ -258,9 +470,10 @@ async function allowAlways(
   siteKey: string,
   host: string,
   params: { actionId?: string | null; url?: string; target?: string; features?: string }
-) {
+): Promise<void> {
   allowlist = await addAllowlistEntry(siteKey, host);
-  allowActionOnce(params.actionId, params.url, params.target, params.features);
+  appendEventSafely({ kind: "nav_allowlist_add", site: siteKey, destHost: host, url: location.href });
+  allowActionOnce(params.actionId ?? null, params.url, params.target, params.features);
 }
 
 function showAllowPrompt(params: {
@@ -270,7 +483,7 @@ function showAllowPrompt(params: {
   target?: string;
   features?: string;
   actionId?: string | null;
-}) {
+}): void {
   const actions = [
     {
       label: "Allow once",
@@ -283,14 +496,21 @@ function showAllowPrompt(params: {
       label: "Always allow",
       onClick: () => {
         void allowAlways(siteKeyFromLocation(), params.host as string, {
-          actionId: params.actionId,
-          url: params.url,
-          target: params.target,
-          features: params.features
+          ...(params.actionId !== undefined ? { actionId: params.actionId } : {}),
+          ...(params.url !== undefined ? { url: params.url } : {}),
+          ...(params.target !== undefined ? { target: params.target } : {}),
+          ...(params.features !== undefined ? { features: params.features } : {})
         });
       }
     });
   }
+
+  appendEventSafely({
+    kind: "nav_blank_prompt",
+    site: siteKeyFromLocation(),
+    url: params.url,
+    ...(params.host ? { destHost: params.host } : {})
+  });
 
   showToast({
     message: `${params.title}: ${params.host ?? params.url}`,
@@ -298,78 +518,13 @@ function showAllowPrompt(params: {
   });
 }
 
-window.addEventListener(
-  "message",
-  (event) => {
-    if (event.source !== window) return;
-    const data = event.data as {
-      source?: string;
-      type?: string;
-      id?: string;
-      kind?: string;
-      url?: string;
-      target?: string;
-      features?: string;
-      mode?: "off" | "smart" | "strict";
-    };
-    if (!data || data.source !== NS_SOURCE) return;
-
-    if (data.type === "ns-pong" || data.type === "ns-config-ack") {
-      mainGuard = "yes";
-      refreshDebug();
-      return;
-    }
-
-    if (data.type === "ns-nav-blocked") {
-      lastNav = { kind: data.kind ?? "unknown", url: data.url ?? "", status: "blocked" };
-      refreshDebug();
-
-      if (settings.defaultMode === "off") {
-        allowActionOnce(data.id, data.url, data.target, data.features);
-        return;
-      }
-      const parsed = parseDestination(data.url);
-      const url = parsed.href ?? data.url ?? "";
-      if (!url) return;
-
-      if (parsed.host && isAllowlisted(allowlist, siteKeyFromLocation(), parsed.host)) {
-        allowActionOnce(data.id, url, data.target || "_blank", data.features);
-        return;
-      }
-
-      const title =
-        data.kind === "location_assign" || data.kind === "location_replace"
-          ? "Blocked redirect"
-          : data.kind === "form_submit" || data.kind === "form_request_submit"
-            ? "Blocked form submit"
-            : "Blocked popup";
-
-      showAllowPrompt({
-        title,
-        url,
-        host: parsed.host,
-        target: data.target || "_blank",
-        features: data.features,
-        actionId: data.id
-      });
-    }
-
-    if (data.type === "ns-nav-allowed") {
-      lastNav = { kind: data.kind ?? "unknown", url: data.url ?? "", status: "allowed" };
-      refreshDebug();
-      return;
-    }
-  },
-  true
-);
-
 if (chrome?.runtime?.onMessage) {
   chrome.runtime.onMessage.addListener((message) => {
     if (!message || message.type !== "ns-rollback") return;
     if (window.top !== window) return;
     if (settings.defaultMode === "off") return;
     const url = typeof message.url === "string" ? message.url : "";
-    const prevUrl = typeof (message as any).prevUrl === "string" ? (message as any).prevUrl : "";
+    const prevUrl = typeof message.prevUrl === "string" ? message.prevUrl : "";
     handleRollback(url, prevUrl);
   });
 
@@ -398,8 +553,9 @@ if (chrome?.runtime?.sendMessage && window.top === window) {
       }
     });
   };
+
   if (document.readyState === "loading") {
-    window.addEventListener("DOMContentLoaded", run, { once: true });
+    window.addEventListener("DOMContentLoaded", () => run(), { once: true });
   } else {
     run();
   }
@@ -409,17 +565,18 @@ if (chrome?.runtime?.sendMessage && window.top === window) {
   const runForward = () => {
     chrome.runtime.sendMessage({ type: "ns-check-forward", currentUrl: location.href }, (resp) => {
       const url = typeof resp?.url === "string" ? resp.url : "";
-      if (!url) return;
-      if (settings.defaultMode === "off") return;
+      if (!url || settings.defaultMode === "off") return;
       showRollbackPrompt(url);
     });
   };
+
   window.addEventListener("pageshow", runForward);
   window.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
       runForward();
     }
   });
+
   if (document.readyState === "loading") {
     window.addEventListener("DOMContentLoaded", runForward, { once: true });
   } else {
@@ -431,9 +588,8 @@ window.addEventListener(
   "pointerdown",
   (e) => {
     if (!(e instanceof PointerEvent)) return;
-
+    notifyNavGesture();
     lastDown = capturePointerDown(e);
-
     const token = makeToken({
       siteKey: siteKeyFromLocation(),
       frameKey: frameKey(),
@@ -450,7 +606,6 @@ window.addEventListener(
       cds: 0,
       reasonCodes: []
     });
-
     setActiveToken(token);
   },
   true
@@ -461,25 +616,33 @@ window.addEventListener(
   (e) => {
     if (!(e instanceof MouseEvent)) return;
 
-    const click = captureClick(e);
-    const ctx = buildClickContextFromEvents({ down: lastDown, click });
+    const isKeyboardActivation = e.isTrusted && e.detail === 0;
+    const downForClick =
+      !isKeyboardActivation && lastDown && performance.now() - lastDown.ts < 1500 ? lastDown : null;
+
+    const ctx = (() => {
+      if (isKeyboardActivation) {
+        const path = e.composedPath?.() ?? [];
+        const firstEl = path.find((p) => p instanceof Element) as Element | undefined;
+        return buildKeyboardClickContext(firstEl ?? (e.target instanceof Element ? e.target : null));
+      }
+      const click = captureClick(e);
+      return buildClickContextFromEvents({ down: downForClick, click });
+    })();
+
     const { cds, reasonCodes } = computeCDS(ctx);
-
     const mode: Mode = settings.defaultMode;
-
-    const token = makeToken({
-      siteKey: siteKeyFromLocation(),
-      frameKey: frameKey(),
-      mode,
-      pointer: lastDown
+    const pointer = isKeyboardActivation
+      ? undefined
+      : downForClick
         ? {
-            x: lastDown.x,
-            y: lastDown.y,
-            button: lastDown.button,
-            ctrl: lastDown.ctrl,
-            shift: lastDown.shift,
-            alt: lastDown.alt,
-            meta: lastDown.meta
+            x: downForClick.x,
+            y: downForClick.y,
+            button: downForClick.button,
+            ctrl: downForClick.ctrl,
+            shift: downForClick.shift,
+            alt: downForClick.alt,
+            meta: downForClick.meta
           }
         : {
             x: e.clientX,
@@ -489,18 +652,24 @@ window.addEventListener(
             shift: e.shiftKey,
             alt: e.altKey,
             meta: e.metaKey
-          },
+          };
+
+    const token = makeToken({
+      siteKey: siteKeyFromLocation(),
+      frameKey: frameKey(),
+      mode,
+      pointer,
       cds,
       reasonCodes
     });
-
     setActiveToken(token);
 
     const explicitNewTab = !!ctx.explicitNewTabIntent;
-
     const anchor = findAnchorFromEvent(e);
-    const isBlankAnchor = !!(anchor && anchor.target === "_blank");
-    const parsed = isBlankAnchor ? parseDestination(anchor?.getAttribute("href") ?? anchor?.href) : null;
+    const anchorTarget = (anchor?.target ?? "").toLowerCase();
+    const isBlankAnchor = !!(anchor && anchorTarget === "_blank");
+    const isSameTabAnchor = !!(anchor && (!anchorTarget || anchorTarget === "_self"));
+    const parsed = anchor ? parseDestination(anchor.getAttribute("href") ?? anchor.href) : null;
     const isAllowed = parsed?.host
       ? isAllowlisted(allowlist, siteKeyFromLocation(), parsed.host)
       : false;
@@ -529,13 +698,22 @@ window.addEventListener(
         decision = "block";
         e.preventDefault();
         e.stopImmediatePropagation();
-        showToast({
-          message: `NavSentinel blocked deceptive click (CDS=${cds}).`
+        appendEventSafely({
+          kind: "nav_click_block",
+          site: siteKeyFromLocation(),
+          url: location.href,
+          score: cds,
+          reasons: reasonCodes
         });
+        showToast({ message: `NavSentinel blocked deceptive click (CDS=${cds}).` });
       }
     }
 
     if (decision === "allow") {
+      if (isSameTabAnchor && parsed?.href) {
+        notifyAllowedTarget(parsed.href);
+      }
+      notifyNavGesture();
       notifyNavAllow();
       postToMain("ns-allow", {
         allowOpen: mode === "off" || explicitNewTab,
@@ -547,7 +725,6 @@ window.addEventListener(
     refreshDebug();
 
     if (settings.debug) {
-      // eslint-disable-next-line no-console
       console.debug("[NavSentinel] click", { decision, cds, reasonCodes, ctx });
     }
   },

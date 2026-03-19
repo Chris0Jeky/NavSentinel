@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NavSentinel Suite</title>
+    <link rel="stylesheet" href="./popup.css" />
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="title">NavSentinel Suite</div>
+
+      <div class="section">
+        <div class="label">Current site</div>
+        <div id="site" class="mono">-</div>
+        <div id="trustStatus" class="status">-</div>
+        <div class="row">
+          <button id="trustBtn" class="btn primary">Trust</button>
+          <button id="untrustBtn" class="btn danger">Untrust</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">Navigation mode</div>
+        <select id="navMode" class="select">
+          <option value="off">Off</option>
+          <option value="smart">Smart</option>
+          <option value="strict">Strict</option>
+        </select>
+        <div class="hint">Controls click deception gating, popup/new-tab prompts, and redirect rollback.</div>
+      </div>
+
+      <div class="section">
+        <div class="label">Credential mode</div>
+        <select id="credMode" class="select">
+          <option value="off">Off</option>
+          <option value="smart">Smart</option>
+          <option value="strict">Strict</option>
+        </select>
+        <div class="hint">Prompts before password-form submits on untrusted or risky domains.</div>
+      </div>
+
+      <div class="section">
+        <div class="label">Recent events</div>
+        <div id="events" class="events">Loading...</div>
+        <div class="row">
+          <button id="refreshBtn" class="btn">Refresh</button>
+          <a class="link" href="#" id="openOptions">Options</a>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="./popup.ts"></script>
+  </body>
+</html>

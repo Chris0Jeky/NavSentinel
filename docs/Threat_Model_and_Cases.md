@@ -1,25 +1,84 @@
-# Threat Model and Cases
+# Threat Model And Cases
 
-## Primary threats
-- New tab/window via JS: window.open in a click handler (user activation abuse).
-- New tab via default link behavior: <a target=_blank>.
-- Invisible overlay link: hidden or fullscreen anchor intercepts clicks.
-- Script-triggered fake click: element.click() or dispatched events.
-- Same-tab forced navigation: location.assign, location.replace, location.href, form submit.
-- Server-side or meta refresh redirects (JS-level cannot always stop).
-- Rapid multi-popups: multiple window.open calls per gesture.
-- Cross-origin iframes: limited injection coverage and popup abuse.
+## Primary Threats
 
-## Hard cases and intended handling
-- Overlay hijack: block the overlay click, reroute to the intended underlying element, keep token gating active.
-- Optional improvement: temporarily set pointer-events: none on suspect overlays during hit-testing (after capture) to reveal underlying intent.
-- Popunder focus tricks: block window.open unless a trusted token exists; offer allow-once UI.
-- Rapid multi-popups: invalidate token after first allowed open and auto-block extra attempts.
-- Legit OAuth/payment popups: lower risk when the clicked element is visible and clearly intentful; allowlist and prompt for safety.
-- Same-tab redirects: patch what is feasible in page world and use DNR as a backstop for known bad destinations.
-- Cross-origin frames: use a background fallback (webNavigation) to detect new tabs without a valid token.
+### 1. Deceptive navigation initiation
 
-## Assumptions and non-goals
-- Not all same-tab redirects are preventable in MV3.
-- This is not a general ad blocker.
-- No remote classification; privacy-first by design.
+The attacker wants a user gesture on one element to produce navigation through a different surface:
+
+- transparent overlays
+- giant high-z-index click targets
+- retargeted click paths
+- synthetic clicks
+- delayed popups after a real click
+- delayed redirects after a real click
+
+### 2. Deceptive credential submission
+
+The attacker wants the page to look normal enough that a user submits a password before noticing the destination is wrong:
+
+- cross-site form actions
+- non-HTTPS password submits
+- lookalike or mixed-script domains
+- punycode hosts
+- IP-literal hosts
+- suspicious deep subdomains
+
+## Defensive Strategy
+
+NavSentinel applies local heuristics before or around the browser primitives that attackers commonly exploit:
+
+- content-script capture of click context
+- main-world patching of popup and redirect primitives
+- service-worker rollback when a bad navigation still commits
+- capture-phase interception of password form submits
+- explicit user prompts with scoped trust decisions
+
+## Important Cases
+
+### Case: deceptive `_blank` link
+
+- expected outcome: block and prompt unless the gesture is clearly explicit or the destination is already allowlisted
+
+### Case: delayed script popup
+
+- expected outcome: block because the popup is outside the allowed gesture window
+
+### Case: delayed redirect after click
+
+- expected outcome: rollback and offer a deliberate proceed action
+
+### Case: password form on untrusted domain
+
+- expected outcome: prompt with the current domain, destination domain, and risk reasons
+
+### Case: password submit to HTTP
+
+- expected outcome: prompt aggressively or block by policy because credentials would travel over cleartext
+
+### Case: legitimate OAuth or modal flow
+
+- expected outcome: avoid spurious blocking when the visual and behavioral signals look like legitimate UI
+
+## Non-Goals
+
+- defending against a fully compromised browser
+- full page-content phishing classification
+- remote reputation or anti-abuse intelligence
+- complete public-suffix-list coverage
+
+## Residual Risks
+
+- `chrome.storage.local` writes are not transactional, so event logging is best-effort
+- registrable-domain logic is heuristic, not PSL-complete
+- legitimate but unusual enterprise SSO flows can still prompt until trusted domains are configured
+- live-web behavior can still vary in ways the Gym does not model
+
+## Design Constraint
+
+False negatives matter, but false positives also matter because the extension lives in the user's browser loop. That is why the project has:
+
+- separate navigation and credential trust models
+- explicit `smart` and `strict` modes
+- allow-once and allow-always decisions
+- local event history to explain what happened

@@ -1,5 +1,146 @@
 # Architecture and Data Flow
 
+## Extension shape
+
+NavSentinel is a Manifest V3 extension with three main runtime layers:
+
+1. Isolated-world content logic
+2. Main-world navigation patching
+3. Service-worker state for rollback and DNR synchronization
+
+The manifest wires these together from:
+
+- `extension/manifest.json`
+- `extension/src/content/capture_isolated.ts`
+- `extension/src/content/main_guard.ts`
+- `extension/src/content/credential_guard.ts`
+- `extension/src/sw/sw.ts`
+
+## Content-script split
+
+### Isolated-world navigation controller
+
+`extension/src/content/capture_isolated.ts` is responsible for:
+
+- reading settings and allowlist state
+- capturing pointer and keyboard click context
+- computing the Click Deception Score
+- deciding whether to allow, block, or prompt
+- showing toasts for blocked or prompted navigation
+- coordinating rollback and forward-offer messages with the service worker
+
+This script is where most user-facing navigation decisions are explained.
+
+### Main-world navigation patch layer
+
+`extension/src/content/main_guard.ts` runs in the page's main world so it can patch:
+
+- `window.open`
+- `Location.prototype.assign`
+- `Location.prototype.replace`
+- `HTMLFormElement.prototype.submit`
+- `HTMLFormElement.prototype.requestSubmit`
+
+It enforces short-lived gesture allowances and captures blocked actions so the isolated-world script can later allow them explicitly.
+
+### Main/isolated bridge hardening
+
+The bridge uses:
+
+- extension-runtime relaying scoped to the current tab/frame
+- a protocol version
+- an allowlist of accepted message types
+
+This is implemented in:
+
+- `extension/src/content/main_guard.ts`
+- `extension/src/content/capture_isolated.ts`
+
+The point is to avoid trusting arbitrary page-observable `window.postMessage` traffic from the page itself.
+
+### Credential guard
+
+`extension/src/content/credential_guard.ts` runs in the isolated world and listens for:
+
+- `submit` on forms containing a password field
+- `paste` into password inputs
+
+It computes risk through `extension/src/shared/domain.ts` and uses `extension/src/content/credential_modal.ts` to block-and-prompt risky submits.
+
+## Shared state and storage
+
+`extension/src/shared/storage.ts` is the local persistence backbone. It stores:
+
+- suite settings under `sentinelsuite:settings_v1`
+- trusted domains under `sentinelsuite:trusted_domains_v1`
+- event log under `sentinelsuite:event_log_v1`
+
+It also provides:
+
+- legacy key migration for older NavSentinel settings
+- import/export helpers
+- bounded event-log append behavior
+
+`extension/src/shared/allowlist.ts` manages the per-site navigation allowlist and migrates the legacy allowlist key when needed.
+
+## Popup and options page
+
+### Popup
+
+`extension/src/popup/popup.ts` is the fast per-tab control surface:
+
+- shows the current registrable domain
+- shows whether the current domain is trusted
+- allows trusting/untrusting the current domain
+- allows switching nav mode and credential mode
+- shows the most recent event entries
+
+### Options page
+
+`extension/src/options/options.ts` is the full operator surface:
+
+- save settings for nav mode, debug overlay, and DNR backstop
+- save credential-guard thresholds and similarity rules
+- inspect and clear the navigation allowlist
+- manage trusted domains
+- refresh, clear, export, and import event-log state
+
+## Service worker responsibilities
+
+`extension/src/sw/sw.ts` maintains short-lived browser state that cannot live in the page:
+
+- tab-scoped allowance TTLs
+- rollback suppression windows
+- pending rollback and forward-offer state
+- DNR ruleset enable/disable sync
+
+It listens to `chrome.webNavigation.onCommitted` to detect redirect-like navigations that were not allowed by an explicit user gesture.
+
+## Data flow examples
+
+### Deceptive click to new tab
+
+1. `capture_isolated.ts` captures the click context and computes CDS.
+2. The main-world patch layer traps the actual popup/navigation side effect.
+3. If the destination is suspicious and not allowlisted, the isolated-world script shows a toast prompt.
+4. "Allow once" sends a short-lived allowance and replays the blocked action.
+5. "Always allow" records the destination host in the per-site allowlist, then replays it.
+
+### Risky credential submit
+
+1. `credential_guard.ts` intercepts the form submit before it completes.
+2. `domain.ts` computes risk and reason codes.
+3. `credential_modal.ts` displays a blocking modal with the page domain, destination domain, score, and reasons.
+4. The user can cancel, proceed once, or trust a relevant domain.
+5. `storage.ts` records the event locally.
+
+### Auto-rollback of redirect
+
+1. `sw.ts` sees a committed redirect-like navigation without an active allowance.
+2. It stores rollback metadata per tab.
+3. `capture_isolated.ts` receives or polls the rollback state.
+4. It returns the tab to the previous page when possible and shows a "Proceed" prompt for the original destination.
+
 ## Components
 - Content script (isolated world): capture-phase event interception, gesture token creation, CDS calculation, and default click blocking.
 - Content script (main world, optional): patch navigation primitives before page scripts cache them.

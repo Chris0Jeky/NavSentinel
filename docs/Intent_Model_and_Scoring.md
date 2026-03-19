@@ -1,5 +1,120 @@
 # Intent Model and Scoring
 
+## Navigation scoring
+
+Navigation protection is built around the Click Deception Score (CDS) in:
+
+- `extension/src/shared/scoring.ts`
+
+The input model is a `ClickContext` describing:
+
+- viewport
+- input source (`pointer` or `keyboard`)
+- top clicked element
+- underlying element
+- retargeting signal
+- explicit new-tab intent
+- legitimacy hints such as modal backdrops
+
+### CDS factors
+
+The score rises when the clicked target looks deceptive, including:
+
+- interactive element with no accessible name
+- large interactive overlays
+- mismatch between visible/underlying interactive targets
+- target retargeting
+- extremely high-z overlay behavior
+- invisible but clickable elements
+- pointer affordance without real visible affordance
+
+The score is reduced when the signal looks legitimate, including:
+
+- keyboard activation
+- legitimate modal backdrop behavior
+
+### Thresholds
+
+Navigation mode determines how aggressively CDS is enforced:
+
+- `smart`: blocks at `70`
+- `strict`: blocks at `50`
+
+These values live in `extension/src/content/capture_isolated.ts`.
+
+### Special-case `_blank` handling
+
+Not every `_blank` link is suspicious. The isolated-world controller tries to allow ordinary visible, meaningful `_blank` anchors when:
+
+- the click does not look retargeted
+- the link is visible and has a meaningful accessible name
+- the CDS is below the smart block threshold
+- the reason codes do not match known risky blank-link patterns
+
+This keeps legitimate documentation and OAuth-style flows from turning into constant prompts.
+
+## Credential-risk scoring
+
+Credential-submit scoring lives in:
+
+- `extension/src/shared/domain.ts`
+
+The result includes:
+
+- score from `0-100`
+- severity (`none`, `low`, `medium`, `high`)
+- structured reason codes
+- page-domain facts
+- action-domain facts
+- optional lookalike match against trusted domains
+
+### Risk factors
+
+The risk model adds weight for:
+
+- non-HTTPS page
+- non-HTTPS form action
+- `user@host` style URL userinfo
+- IP-address hostnames
+- punycode hostnames
+- mixed-script hostnames
+- deep subdomain depth
+- cross-site form action
+- domain similarity to a trusted domain
+- absence from the trusted-domain list
+
+### Trusted-domain model
+
+Trusted domains are not a generic "good site" list. They are a list of registrable domains that the user is willing to submit credentials to. The model compares:
+
+- page registrable domain
+- action registrable domain
+- trusted registrable domains
+
+This is why `getRegistrableDomain(...)` is central to the implementation.
+
+### Prompt behavior
+
+The credential guard prompts based on:
+
+- extension mode (`off`, `smart`, `strict`)
+- medium-risk threshold
+- whether the page is trusted
+- whether the destination is trusted
+- whether the submit is cross-site
+- whether HTTP submits are configured to prompt
+
+This logic is in `shouldPrompt(...)` inside `extension/src/content/credential_guard.ts`.
+
+## Explainability
+
+Both navigation and credential decisions are designed to be inspectable:
+
+- navigation decisions expose CDS and reason codes through the debug overlay and blocked-event logging
+- credential decisions surface risk score, severity, and reason labels in the modal and event log
+
+That is deliberate. The project is easier to tune and safer to review when decisions are explainable instead of purely implicit.
+
 ## Terminology
 - GestureToken: short-lived token representing user intent (trusted, suspicious, unknown).
 - CDS: Click Deception Score computed from click context.

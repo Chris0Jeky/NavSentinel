@@ -1,10 +1,15 @@
-import { getSettings, SETTINGS_KEY } from "../shared/storage";
+import { getNavSettings, SUITE_SETTINGS_KEY } from "../shared/storage";
 
 const BASELINE_RULESET_ID = "baseline";
 const NAV_ALLOW_TTL_MS = 1500;
+const NAV_GESTURE_TTL_MS = 1500;
+const NAV_TARGET_ALLOW_TTL_MS = 10000;
 const ROLLBACK_SUPPRESS_MS = 6000;
 
 const allowUntilByTab = new Map<number, number>();
+const gestureUntilByTab = new Map<number, number>();
+const allowStartedByTab = new Map<number, string>();
+const allowTargetByTab = new Map<number, { url: string; expiresAt: number }>();
 const suppressUntilByTab = new Map<number, number>();
 const readyTabs = new Set<number>();
 const pendingRollbackByTab = new Map<number, { url: string; prevUrl?: string; qualifiers: string[] }>();
@@ -24,7 +29,7 @@ const lastCommittedByTab = new Map<
 
 async function syncDnrRulesets(): Promise<void> {
   try {
-    const settings = await getSettings();
+    const settings = await getNavSettings();
     const enable = settings.dnrEnabled ? [BASELINE_RULESET_ID] : [];
     const disable = settings.dnrEnabled ? [] : [BASELINE_RULESET_ID];
     await chrome.declarativeNetRequest.updateEnabledRulesets({
@@ -32,7 +37,6 @@ async function syncDnrRulesets(): Promise<void> {
       disableRulesetIds: disable
     });
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.warn("[NavSentinel] Failed to sync DNR rulesets", err);
   }
 }
@@ -47,17 +51,39 @@ chrome.runtime.onStartup.addListener(() => {
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== "local") return;
-  if (!changes[SETTINGS_KEY]) return;
+  if (!changes[SUITE_SETTINGS_KEY]) return;
   void syncDnrRulesets();
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message !== "object") return;
+
   if (message.type === "ns-allow-nav") {
     const tabId = sender.tab?.id;
     if (typeof tabId === "number") {
       const ttl = typeof message.ttlMs === "number" ? message.ttlMs : NAV_ALLOW_TTL_MS;
       allowUntilByTab.set(tabId, Date.now() + ttl);
+    }
+    sendResponse?.({ ok: true });
+  }
+
+  if (message.type === "ns-nav-gesture") {
+    const tabId = sender.tab?.id;
+    if (typeof tabId === "number") {
+      const ttl = typeof message.ttlMs === "number" ? message.ttlMs : NAV_GESTURE_TTL_MS;
+      gestureUntilByTab.set(tabId, Date.now() + ttl);
+    }
+    sendResponse?.({ ok: true });
+  }
+
+  if (message.type === "ns-allow-target-nav") {
+    const tabId = sender.tab?.id;
+    if (typeof tabId === "number" && typeof message.url === "string" && message.url) {
+      const ttl = typeof message.ttlMs === "number" ? message.ttlMs : NAV_TARGET_ALLOW_TTL_MS;
+      allowTargetByTab.set(tabId, {
+        url: message.url,
+        expiresAt: Date.now() + ttl
+      });
     }
     sendResponse?.({ ok: true });
   }
@@ -72,7 +98,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         chrome.tabs.sendMessage(tabId, {
           type: "ns-rollback",
           url: pending.url,
-          prevUrl: pending.prevUrl,
+          ...(pending.prevUrl !== undefined ? { prevUrl: pending.prevUrl } : {}),
           qualifiers: pending.qualifiers
         });
       }
@@ -113,10 +139,34 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
+chrome.webNavigation.onBeforeNavigate.addListener((details) => {
+  if (details.frameId !== 0) return;
+  allowStartedByTab.delete(details.tabId);
+  const now = Date.now();
+  const allowUntil = allowUntilByTab.get(details.tabId) ?? 0;
+  const gestureUntil = gestureUntilByTab.get(details.tabId) ?? 0;
+  if (now > allowUntil && now > gestureUntil) return;
+  allowStartedByTab.set(details.tabId, details.url);
+  if (now <= gestureUntil) {
+    gestureUntilByTab.delete(details.tabId);
+  }
+});
+
 chrome.webNavigation.onCommitted.addListener((details) => {
   if (details.frameId !== 0) return;
+  const now = Date.now();
+  const targetAllowance = allowTargetByTab.get(details.tabId);
+  const targetAllowed =
+    !!targetAllowance &&
+    now <= targetAllowance.expiresAt &&
+    targetAllowance.url === details.url;
+  if (targetAllowance) {
+    allowTargetByTab.delete(details.tabId);
+  }
+
   const qualifiers = details.transitionQualifiers ?? [];
-  const isRedirect = qualifiers.includes("client_redirect") || qualifiers.includes("server_redirect");
+  const isRedirect =
+    qualifiers.includes("client_redirect") || qualifiers.includes("server_redirect");
   const isUserTyped =
     details.transitionType === "typed" ||
     details.transitionType === "auto_bookmark" ||
@@ -126,19 +176,23 @@ chrome.webNavigation.onCommitted.addListener((details) => {
   if (isUserTyped) return;
   if (!isRedirect && !isLinkish) return;
 
-  const now = Date.now();
   const allowUntil = allowUntilByTab.get(details.tabId) ?? 0;
-  const allowedAtCommit = now <= allowUntil;
+  const startedUrl = allowStartedByTab.get(details.tabId);
+  const startedAllowed = startedUrl === details.url;
+  const allowedAtCommit = now <= allowUntil || startedAllowed || targetAllowed;
   const prevUrl = lastUrlByTab.get(details.tabId);
+  allowStartedByTab.delete(details.tabId);
+
   lastUrlByTab.set(details.tabId, details.url);
   lastCommittedByTab.set(details.tabId, {
     url: details.url,
-    prevUrl,
+    ...(prevUrl !== undefined ? { prevUrl } : {}),
     transitionType: details.transitionType,
     qualifiers,
     ts: now,
     allowedAtCommit
   });
+
   if (allowedAtCommit) return;
 
   const suppressUntil = suppressUntilByTab.get(details.tabId) ?? 0;
@@ -146,20 +200,33 @@ chrome.webNavigation.onCommitted.addListener((details) => {
 
   pendingForwardByTab.set(details.tabId, { url: details.url, ts: now });
   suppressUntilByTab.set(details.tabId, now + ROLLBACK_SUPPRESS_MS);
+
   if (readyTabs.has(details.tabId)) {
     chrome.tabs.sendMessage(details.tabId, {
       type: "ns-rollback",
       url: details.url,
-      prevUrl,
+      ...(prevUrl !== undefined ? { prevUrl } : {}),
       qualifiers
     });
   } else {
-    pendingRollbackByTab.set(details.tabId, { url: details.url, prevUrl, qualifiers });
+    pendingRollbackByTab.set(details.tabId, {
+      url: details.url,
+      ...(prevUrl !== undefined ? { prevUrl } : {}),
+      qualifiers
+    });
   }
+});
+
+chrome.webNavigation.onErrorOccurred?.addListener((details) => {
+  if (details.frameId !== 0) return;
+  allowStartedByTab.delete(details.tabId);
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   allowUntilByTab.delete(tabId);
+  gestureUntilByTab.delete(tabId);
+  allowStartedByTab.delete(tabId);
+  allowTargetByTab.delete(tabId);
   suppressUntilByTab.delete(tabId);
   readyTabs.delete(tabId);
   pendingRollbackByTab.delete(tabId);

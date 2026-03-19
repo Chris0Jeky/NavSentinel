@@ -1,83 +1,44 @@
-# NavSentinel — Proposal (Initial Stage)
+# MasterPlan
 
-## Summary
-NavSentinel is a Manifest V3 browser extension that reduces “malicious-by-design” navigations that exploit real user clicks: deceptive overlay clickjacking, forced popunders, and unwanted new tabs triggered by click handlers. It does this by correlating each navigation attempt with a short-lived “gesture token” representing user intent, and then allowing, blocking, or prompting based on a transparent risk model.
+This file is now a historical baseline for the original NavSentinel proposal. It is still useful for understanding the initial product intent, but it no longer describes the full current branch by itself.
 
-## Problem Statement (Why)
-Many sites monetize by forcing navigation on user interaction in ways that are not classified as “popups” by the browser:
-- New tabs/windows triggered inside a real click handler (allowed due to user activation)
-- Invisible or near-invisible overlays that steal clicks (UI redressing/clickjacking)
-- Programmatic clicks on hidden anchors
-- Aggressive redirect chains
+For the current implementation, start with:
 
-The browser’s popup blocker often allows these because they appear user-initiated. NavSentinel adds a second layer of intent verification.
+- `README.md`
+- `docs/README.md`
+- `docs/Project_Overview.md`
+- `docs/Architecture_and_Data_Flow.md`
 
-## Goals (Scope)
-### In scope (initial releases)
-- Detect deceptive click targets (overlay traps) using just-in-time hit-testing (`elementsFromPoint`) at the exact click coordinate.
-- Gate disruptive navigation primitives (new tabs/windows, target=_blank) by correlating navigation attempts to trusted gestures.
-- Provide low-breakage UX: prompt on uncertainty, allow-once, allowlist per-site.
-- Maintain performance: O(1) work per interaction, no DOM polling.
+## Original product intent
 
-### Out of scope (initial stage)
-- “Perfect” prevention of all same-tab redirects across every technique.
-- Adblocking/tracker blocking as a general purpose replacement for uBlock.
-- Deep content inspection or remote classification (privacy-first).
+The original project aimed to reduce malicious-by-design navigations that abuse real user interaction, especially:
 
-## Approach (How)
-NavSentinel implements a Navigation Intent Firewall (NIF):
+- deceptive overlays and clickjacking
+- forced new tabs or popunders
+- programmatic clicks
+- redirect-style navigation abuse
 
-1) Gesture Tokenization:
-- On capture-phase pointerdown/click, record click context (coords, element stack, accessibility cues).
-- Create a short-lived GestureToken (default TTL ~800ms).
+The design principles from the original proposal are still valid:
 
-2) Deception Scoring:
-- Compute a Click Deception Score (CDS) based on intent mismatch features:
-    - Top target vs plausible underlying intended element
-    - Fullscreen interactive overlays
-    - Retargeting between pointerdown and click
+- use short-lived user-intent signals
+- keep the decision model explainable
+- avoid remote classification and telemetry
+- prefer bounded prompts over silent breakage when intent is ambiguous
 
-3) Navigation Risk Scoring:
-- When a navigation attempt occurs (window.open, target=_blank, etc.), compute NRS = CDS + navigation features:
-    - New tab/window
-    - Cross-site destination
-    - Multi-attempt per gesture
+## What changed since the initial plan
 
-4) Decision:
-- Allow / Block / Prompt based on thresholds.
-- Prompt includes Allow once / Always allow destination.
+The current branch now goes beyond the original navigation-only baseline and includes:
 
-## Architecture
-### Components
-- Content Script (ISOLATED world): capture-phase event interception, token creation, default navigation blocking.
-- Content Script (MAIN world): best-effort patching of navigation primitives (window.open, later location/form).
-- Service Worker: settings persistence, site modes, allowlists, optional network backstop.
-- Options UI: configure mode, allowlists, view decision reasons.
+- a hardened main-world / isolated-world bridge
+- password-submit protection
+- trusted-domain management
+- a popup and expanded options page
+- a bounded local event log
+- packaging and CI support
 
-### Execution Worlds
-Chrome runs content scripts in isolated worlds by default. NavSentinel uses ISOLATED for safe observation and MAIN world when patching page JS is required.
+## Historical roadmap status
 
-## Testability
-NavSentinel ships with a deterministic “Gym”:
-- Levels 1–6: adversarial patterns (overlay traps, window.open abuse, programmatic clicks)
-- Levels 7–9: legitimate UI patterns (modal overlay, auth popup, video overlay controls)
+The original staged roadmap has effectively been overtaken by the merged SentinelSuite work. The practical follow-up roadmap now lives in:
 
-Automated E2E tests use Playwright against the Gym to prevent regressions.
-
-## Performance
-- No background scanning or polling.
-- Computation happens only on user gestures and navigation attempts.
-- Expensive operations are bounded and just-in-time (hit-testing, small style checks).
-
-## Privacy and Security
-- No network calls.
-- No page content exfiltration.
-- Decisions are explainable via local reason codes.
-- Per-site configuration lives in local extension storage.
-
-## Roadmap (Initial)
-1) Stage 1: token logging + Gym repro
-2) Stage 2: overlay blocking + CDS tests
-3) Stage 3: new-tab gating (target=_blank + window.open)
-4) Stage 4: same-tab redirect vectors (location/form)
-5) Stage 5: optional MV3 network backstop via declarativeNetRequest
+- `docs/Implementation_Roadmap.md`
+- `docs/Expansion_Tracker.md`

@@ -1,14 +1,50 @@
 export type Allowlist = Record<string, string[]>;
 
-const ALLOWLIST_KEY = "navsentinel:allowlist";
+const LEGACY_ALLOWLIST_KEY = "navsentinel:allowlist";
+export const ALLOWLIST_KEY = "sentinelsuite:nav_allowlist_v1";
+
+export function normalizeAllowlist(value: unknown): Allowlist {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const input = value as Record<string, unknown>;
+  const out: Allowlist = {};
+  for (const [rawSiteKey, rawHosts] of Object.entries(input)) {
+    const siteKey = rawSiteKey.trim().toLowerCase();
+    if (!siteKey || !Array.isArray(rawHosts)) continue;
+    const hosts = Array.from(
+      new Set(
+        rawHosts
+          .filter((entry): entry is string => typeof entry === "string")
+          .map((entry) => entry.trim().toLowerCase())
+          .filter(Boolean)
+      )
+    ).sort();
+    if (hosts.length > 0) {
+      out[siteKey] = hosts;
+    }
+  }
+  return out;
+}
 
 export async function getAllowlist(): Promise<Allowlist> {
-  const res = await chrome.storage.local.get(ALLOWLIST_KEY);
-  return (res[ALLOWLIST_KEY] as Allowlist) ?? {};
+  const res = await chrome.storage.local.get([ALLOWLIST_KEY, LEGACY_ALLOWLIST_KEY]);
+  const current = normalizeAllowlist(res[ALLOWLIST_KEY]);
+  if (Object.prototype.hasOwnProperty.call(res, ALLOWLIST_KEY)) {
+    return current;
+  }
+
+  const legacy = normalizeAllowlist(res[LEGACY_ALLOWLIST_KEY]);
+  if (Object.keys(legacy).length > 0) {
+    await chrome.storage.local.set({ [ALLOWLIST_KEY]: legacy });
+    await chrome.storage.local.remove(LEGACY_ALLOWLIST_KEY);
+    return legacy;
+  }
+
+  return {};
 }
 
 export async function setAllowlist(list: Allowlist): Promise<void> {
-  await chrome.storage.local.set({ [ALLOWLIST_KEY]: list });
+  await chrome.storage.local.set({ [ALLOWLIST_KEY]: normalizeAllowlist(list) });
+  await chrome.storage.local.remove(LEGACY_ALLOWLIST_KEY);
 }
 
 export async function addAllowlistEntry(siteKey: string, destHost: string): Promise<Allowlist> {
@@ -41,7 +77,8 @@ export async function removeAllowlistEntry(siteKey: string, destHost: string): P
 }
 
 export async function clearAllowlist(): Promise<void> {
-  await setAllowlist({});
+  await chrome.storage.local.set({ [ALLOWLIST_KEY]: {} });
+  await chrome.storage.local.remove(LEGACY_ALLOWLIST_KEY);
 }
 
 export function isAllowlisted(list: Allowlist, siteKey: string, destHost: string): boolean {
@@ -55,7 +92,7 @@ export function onAllowlistChange(cb: (list: Allowlist) => void): void {
     if (areaName !== "local") return;
     const change = changes[ALLOWLIST_KEY];
     if (!change) return;
-    const next = (change.newValue as Allowlist | undefined) ?? {};
+    const next = normalizeAllowlist(change.newValue);
     cb(next);
   });
 }
