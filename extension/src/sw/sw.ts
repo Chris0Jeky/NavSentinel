@@ -27,6 +27,13 @@ const lastCommittedByTab = new Map<
   }
 >();
 
+function clearPendingTabState(tabId: number): void {
+  readyTabs.delete(tabId);
+  pendingRollbackByTab.delete(tabId);
+  pendingForwardByTab.delete(tabId);
+  lastCommittedByTab.delete(tabId);
+}
+
 async function syncDnrRulesets(): Promise<void> {
   try {
     const settings = await getNavSettings();
@@ -141,7 +148,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 chrome.webNavigation.onBeforeNavigate.addListener((details) => {
   if (details.frameId !== 0) return;
-  readyTabs.delete(details.tabId);
+  clearPendingTabState(details.tabId);
   allowStartedByTab.delete(details.tabId);
   const now = Date.now();
   const allowUntil = allowUntilByTab.get(details.tabId) ?? 0;
@@ -219,7 +226,7 @@ chrome.webNavigation.onCommitted.addListener((details) => {
 
 chrome.webNavigation.onErrorOccurred?.addListener((details) => {
   if (details.frameId !== 0) return;
-  readyTabs.delete(details.tabId);
+  clearPendingTabState(details.tabId);
   allowStartedByTab.delete(details.tabId);
 });
 
@@ -229,10 +236,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   allowStartedByTab.delete(tabId);
   allowTargetByTab.delete(tabId);
   suppressUntilByTab.delete(tabId);
-  readyTabs.delete(tabId);
-  pendingRollbackByTab.delete(tabId);
-  pendingForwardByTab.delete(tabId);
-  lastCommittedByTab.delete(tabId);
+  clearPendingTabState(tabId);
   lastUrlByTab.delete(tabId);
 });
 
