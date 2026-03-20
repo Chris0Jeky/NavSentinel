@@ -3,6 +3,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
+import { SUITE_SETTINGS_KEY, TRUSTED_DOMAINS_KEY } from "../../extension/src/shared/storage";
 import { getExtensionId } from "./extension_test_utils";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -14,7 +15,7 @@ const extensionPath = process.env.EXTENSION_PATH
 
 test.setTimeout(120_000);
 
-test("options normalizes trusted-domain input and persists mode changes", async () => {
+test("options normalizes trusted-domain input and persists mode changes @smoke", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-ui-e2e-"));
@@ -43,6 +44,18 @@ test("options normalizes trusted-domain input and persists mode changes", async 
       await options.locator("#trustedInput").fill("https://login.example.com/account");
       await options.locator("#addTrusted").click();
       await options.locator("#save").click();
+      await options.waitForFunction(async ({ settingsKey, trustedDomainsKey }) => {
+        const result = await chrome.storage.local.get([settingsKey, trustedDomainsKey]);
+        const settings = result[settingsKey];
+        const trustedDomains = Array.isArray(result[trustedDomainsKey])
+          ? (result[trustedDomainsKey] as string[])
+          : [];
+        return (
+          settings?.nav?.defaultMode === "strict" &&
+          settings?.credential?.mode === "strict" &&
+          trustedDomains.includes("example.com")
+        );
+      }, { settingsKey: SUITE_SETTINGS_KEY, trustedDomainsKey: TRUSTED_DOMAINS_KEY });
 
       await options.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
       await expect(options.locator("#navMode")).toHaveValue("strict");
@@ -56,7 +69,7 @@ test("options normalizes trusted-domain input and persists mode changes", async 
   }
 });
 
-test("options import and export preserve normalized trusted-domain and allowlist state", async () => {
+test("options import and export preserve normalized trusted-domain and allowlist state @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-ui-e2e-"));

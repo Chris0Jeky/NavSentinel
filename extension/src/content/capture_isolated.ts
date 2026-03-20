@@ -29,6 +29,8 @@ const NAV_GESTURE_TTL_MS = 1500;
 const NAV_TARGET_ALLOW_TTL_MS = 10000;
 const MAX_PENDING_BRIDGE_MESSAGES = 32;
 const BRIDGE_RETRY_MS = 100;
+const MAX_BRIDGE_RETRY_MS = 1000;
+const MAX_BRIDGE_INIT_MS = 10000;
 const RISKY_BLANK_REASONS = new Set([
   "intent_mismatch_under_interactive",
   "invisible_but_clickable",
@@ -55,12 +57,18 @@ let lastNav: { kind: string; url: string; status: "allowed" | "blocked" } | null
 let lastDebug: Omit<DebugInfo, "mainGuard" | "lastNav"> | null = null;
 let rollbackShownAt = 0;
 let bridgeRetryTimer = 0;
+let bridgeRetryDelayMs = BRIDGE_RETRY_MS;
+let bridgeInitStartedAt = 0;
+let forwardCheckInFlight = false;
+let forwardCheckTimer = 0;
 
 function markMainGuardReady(): void {
   if (bridgeRetryTimer) {
     window.clearTimeout(bridgeRetryTimer);
     bridgeRetryTimer = 0;
   }
+  bridgeRetryDelayMs = BRIDGE_RETRY_MS;
+  bridgeInitStartedAt = 0;
   bridgeReady = true;
   document.documentElement.setAttribute("data-navsentinel-bridge-ready", "1");
   mainGuard = "yes";
@@ -92,19 +100,6 @@ async function initSettings() {
       // ignore
     }
   }
-  window.setTimeout(() => {
-    if (mainGuard === "unknown") {
-      mainGuard = "no";
-      if (bridgeRetryTimer) {
-        window.clearTimeout(bridgeRetryTimer);
-        bridgeRetryTimer = 0;
-      }
-      bridgePort?.close();
-      bridgePort = null;
-      pendingBridgeMessages.length = 0;
-      refreshDebug();
-    }
-  }, 750);
 }
 
 void initSettings();
@@ -240,9 +235,24 @@ function handleBridgeMessage(message: unknown): void {
 function ensureBridge(): void {
   if (bridgeReady || mainGuard === "no" || bridgeRetryTimer) return;
 
+  if (!bridgeInitStartedAt) {
+    bridgeInitStartedAt = Date.now();
+  }
+
   const attempt = () => {
     bridgeRetryTimer = 0;
     if (bridgeReady || mainGuard === "no") return;
+    if (Date.now() - bridgeInitStartedAt >= MAX_BRIDGE_INIT_MS) {
+      bridgePort?.close();
+      bridgePort = null;
+      bridgeReady = false;
+      mainGuard = "no";
+      bridgeRetryDelayMs = BRIDGE_RETRY_MS;
+      bridgeInitStartedAt = 0;
+      pendingBridgeMessages.length = 0;
+      refreshDebug();
+      return;
+    }
     bridgePort?.close();
 
     const channel = new MessageChannel();
@@ -263,7 +273,8 @@ function ensureBridge(): void {
     );
 
     if (!bridgeReady && mainGuard === "unknown") {
-      bridgeRetryTimer = window.setTimeout(attempt, BRIDGE_RETRY_MS);
+      bridgeRetryTimer = window.setTimeout(attempt, bridgeRetryDelayMs);
+      bridgeRetryDelayMs = Math.min(bridgeRetryDelayMs * 2, MAX_BRIDGE_RETRY_MS);
     }
   };
 
@@ -350,11 +361,21 @@ function handleRollback(url: string, prevUrl?: string): void {
   const target = prevUrl && prevUrl !== url ? prevUrl : "";
   if (target) {
     try {
-      chrome.runtime.sendMessage({ type: "ns-store-forward", url });
+      chrome.runtime.sendMessage({ type: "ns-begin-rollback", returnUrl: target });
+      chrome.runtime.sendMessage({ type: "ns-store-forward", url, returnUrl: target });
       notifyNavAllow();
-      postToMain("ns-allow", { allowOpen: false, allowRedirect: true });
+      notifyAllowedTarget(target);
       window.setTimeout(() => {
         try {
+          if (history.length > 1) {
+            history.back();
+            return;
+          }
+        } catch {
+          // ignore
+        }
+        try {
+          postToMain("ns-allow", { allowOpen: false, allowRedirect: true });
           location.replace(target);
         } catch {
           // ignore
@@ -562,15 +583,29 @@ if (chrome?.runtime?.sendMessage && window.top === window) {
 }
 
 if (chrome?.runtime?.sendMessage && window.top === window) {
-  const runForward = () => {
+  const runForward = (retries = 1) => {
+    if (forwardCheckInFlight) return;
+    if (forwardCheckTimer) {
+      window.clearTimeout(forwardCheckTimer);
+      forwardCheckTimer = 0;
+    }
+    forwardCheckInFlight = true;
     chrome.runtime.sendMessage({ type: "ns-check-forward", currentUrl: location.href }, (resp) => {
+      forwardCheckInFlight = false;
+      const status = typeof resp?.status === "string" ? resp.status : "";
       const url = typeof resp?.url === "string" ? resp.url : "";
-      if (!url || settings.defaultMode === "off") return;
-      showRollbackPrompt(url);
+      if (status === "offer" && url) {
+        if (settings.defaultMode === "off") return;
+        showRollbackPrompt(url);
+        return;
+      }
+      if (!resp && retries > 0) {
+        forwardCheckTimer = window.setTimeout(() => runForward(retries - 1), 200);
+      }
     });
   };
 
-  window.addEventListener("pageshow", runForward);
+  window.addEventListener("pageshow", () => runForward());
   window.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
       runForward();
@@ -578,7 +613,7 @@ if (chrome?.runtime?.sendMessage && window.top === window) {
   });
 
   if (document.readyState === "loading") {
-    window.addEventListener("DOMContentLoaded", runForward, { once: true });
+    window.addEventListener("DOMContentLoaded", () => runForward(), { once: true });
   } else {
     runForward();
   }
@@ -676,10 +711,10 @@ window.addEventListener(
 
     let decision: "allow" | "prompt" | "block" = "allow";
     const blockThreshold = getBlockThreshold(mode);
+    const smartAllowsBlank =
+      mode === "smart" && !!anchor && isLegitBlankAnchor(anchor, ctx, cds, reasonCodes);
 
     if (mode !== "off") {
-      const smartAllowsBlank =
-        mode === "smart" && !!anchor && isLegitBlankAnchor(anchor, ctx, cds, reasonCodes);
       if (isBlankAnchor && !isAllowed && !explicitNewTab && !smartAllowsBlank) {
         decision = "prompt";
         e.preventDefault();

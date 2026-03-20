@@ -1,5 +1,10 @@
 # Resource Map
 
+Archived on 2026-03-19 after the SentinelSuite merge landed on `main`.
+
+This file remains useful for historical provenance, but the active documentation set now
+starts from the merged repository rather than the pre-merge resource inputs.
+
 ## Current Repository
 
 ### Runtime code

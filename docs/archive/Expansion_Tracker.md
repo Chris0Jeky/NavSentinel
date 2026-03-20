@@ -1,5 +1,13 @@
 # Expansion Tracker
 
+Archived on 2026-03-19 after PR #1 merged to `main`.
+
+This file captures the merger-era worktree, slice tracking, and resume notes that were
+useful during the SentinelSuite integration. It is preserved for historical context only.
+
+The worktree, branch, resume, and decision notes below are intentionally retained as history.
+They are not current operational guidance for the merged `main` branch.
+
 ## Purpose
 - Keep a compact, durable record of what was discovered in `RESOURCES/`, what has been integrated, what is pending, and what should be carried forward if context is compacted.
 - Treat `RESOURCES/suite/SentinelSuite` as the primary code integration source.

@@ -36,7 +36,7 @@
 ## Release Checklist
 
 - [ ] `npm run verify:versions`
-- [ ] `npx tsc -p tsconfig.json --noEmit`
+- [ ] `npm run typecheck`
 - [ ] `npm run build`
 - [ ] `npm run test`
 - [ ] `npm run test:e2e`

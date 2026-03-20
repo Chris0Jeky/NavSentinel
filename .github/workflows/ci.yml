@@ -27,6 +27,9 @@ jobs:
       - name: Verify versions
         run: npm run verify:versions
 
+      - name: Typecheck
+        run: npm run typecheck
+
       - name: Run unit tests
         run: npm test
 

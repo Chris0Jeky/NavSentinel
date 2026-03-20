@@ -7,6 +7,7 @@ const MAX_OPENS_PER_GESTURE = 1;
 const MAX_REDIRECTS_PER_GESTURE = 2;
 const ALLOW_ONCE_TTL_MS = 1200;
 const BLOCKED_ACTION_TTL_MS = 5000;
+const MAX_POPUP_INTENT_VIEWPORT_SHARE = 0.35;
 const PROTOCOL_VERSION = 1;
 
 let bridgePort: MessagePort | null = null;
@@ -32,6 +33,8 @@ let allowOnceRemaining = 0;
 let allowOnceUntil = 0;
 let allowOpenUntil = 0;
 let allowRedirectUntil = 0;
+let popupIntentArmed = false;
+let popupIntentClearTimer = 0;
 
 const blockedActions = new Map<
   string,
@@ -80,6 +83,80 @@ function setAllowOnce(): void {
   allowOnceUntil = nowMs() + ALLOW_ONCE_TTL_MS;
 }
 
+function textLength(el: Element): number {
+  const text = (el.textContent ?? "").replace(/\s+/g, "");
+  return Math.min(text.length, 80);
+}
+
+function attrLength(el: Element, name: string): number {
+  const value = el.getAttribute(name);
+  if (!value) return 0;
+  return Math.min(value.length, 80);
+}
+
+function hasVisibleBox(el: Element): boolean {
+  const rect = (el as HTMLElement).getBoundingClientRect?.();
+  if (!rect || rect.width <= 0 || rect.height <= 0) return false;
+  const cs = window.getComputedStyle(el);
+  if (cs.display === "none" || cs.visibility === "hidden" || cs.visibility === "collapse") {
+    return false;
+  }
+  const opacity = Number.parseFloat(cs.opacity);
+  if (Number.isFinite(opacity) && opacity < 0.2) return false;
+  return true;
+}
+
+function looksLikeLargeOverlay(el: Element): boolean {
+  const rect = (el as HTMLElement).getBoundingClientRect?.();
+  if (!rect || rect.width <= 0 || rect.height <= 0) return false;
+  const viewportArea = Math.max(window.innerWidth, 1) * Math.max(window.innerHeight, 1);
+  const elementArea = rect.width * rect.height;
+  return elementArea / viewportArea >= MAX_POPUP_INTENT_VIEWPORT_SHARE;
+}
+
+function findPopupIntentSource(target: EventTarget | null): Element | null {
+  if (!target || typeof (target as Node).nodeType !== "number") return null;
+  if ((target as Node).nodeType !== Node.ELEMENT_NODE) return null;
+  const el = target as Element;
+  if (el.closest("a")) return null;
+  return el.closest("button, input[type='button'], input[type='submit']") as Element | null;
+}
+
+function hasMeaningfulName(el: Element): boolean {
+  return (
+    textLength(el) +
+      attrLength(el, "aria-label") +
+      attrLength(el, "title") +
+      attrLength(el, "value") +
+      attrLength(el, "alt") >
+    0
+  );
+}
+
+function looksLikePopupOpen(target?: string, features?: string): boolean {
+  const normalizedTarget = (target ?? "").trim().toLowerCase();
+  const normalizedFeatures = (features ?? "").toLowerCase();
+  if (
+    normalizedTarget === "" ||
+    (normalizedTarget !== "_self" &&
+      normalizedTarget !== "_top" &&
+      normalizedTarget !== "_parent")
+  ) {
+    return true;
+  }
+  return (
+    normalizedFeatures.includes("popup") ||
+    normalizedFeatures.includes("width=") ||
+    normalizedFeatures.includes("height=")
+  );
+}
+
+function isSafePopupIntentSource(el: Element): boolean {
+  if (!hasVisibleBox(el) || !hasMeaningfulName(el)) return false;
+  if (looksLikeLargeOverlay(el)) return false;
+  return true;
+}
+
 function consumeOpenAllowance(): "allow_once" | "allowed" | "none" {
   const now = nowMs();
   if (allowOnceRemaining > 0 && now <= allowOnceUntil) {
@@ -91,6 +168,51 @@ function consumeOpenAllowance(): "allow_once" | "allowed" | "none" {
     return "allowed";
   }
   return "none";
+}
+
+function consumePopupIntentAllowance(target?: string, features?: string): boolean {
+  if (mode !== "smart") return false;
+  if (!popupIntentArmed) return false;
+  if (!looksLikePopupOpen(target, features)) return false;
+  if (openCount >= MAX_OPENS_PER_GESTURE) return false;
+
+  popupIntentArmed = false;
+  if (popupIntentClearTimer) {
+    window.clearTimeout(popupIntentClearTimer);
+    popupIntentClearTimer = 0;
+  }
+  openCount += 1;
+  return true;
+}
+
+function armPopupIntent(): void {
+  popupIntentArmed = true;
+  if (popupIntentClearTimer) {
+    window.clearTimeout(popupIntentClearTimer);
+  }
+  popupIntentClearTimer = window.setTimeout(() => {
+    popupIntentArmed = false;
+    popupIntentClearTimer = 0;
+  }, 0);
+}
+
+function maybeArmPopupIntent(
+  event: MouseEvent | PointerEvent,
+  options?: { keyboardOnly?: boolean }
+): void {
+  if (mode !== "smart" || !event.isTrusted) return;
+  if (options?.keyboardOnly) {
+    if (!(event instanceof MouseEvent) || event.detail !== 0) return;
+  } else {
+    if (event.button !== 0) return;
+  }
+  if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+
+  const source = findPopupIntentSource(event.target);
+  if (!source) return;
+  if (!isSafePopupIntentSource(source)) return;
+
+  armPopupIntent();
 }
 
 function consumeRedirectAllowance(): "allowed" | "none" {
@@ -221,6 +343,11 @@ function patchedOpen(
 
   const allowance = consumeOpenAllowance();
   if (allowance !== "none") {
+    postAllowed({ kind: "window_open", ...(url !== undefined ? { url: String(url) } : {}) });
+    return callNativeOpen(this, url, target, features);
+  }
+
+  if (consumePopupIntentAllowance(target, features)) {
     postAllowed({ kind: "window_open", ...(url !== undefined ? { url: String(url) } : {}) });
     return callNativeOpen(this, url, target, features);
   }
@@ -490,6 +617,34 @@ function handleBridgeMessage(message: unknown): void {
     entry.action();
   }
 }
+
+window.addEventListener(
+  "pointerdown",
+  (event) => {
+    if (!(event instanceof PointerEvent)) return;
+    maybeArmPopupIntent(event);
+  },
+  true
+);
+
+window.addEventListener(
+  "mousedown",
+  (event) => {
+    if (!(event instanceof MouseEvent)) return;
+    maybeArmPopupIntent(event);
+  },
+  true
+);
+
+window.addEventListener(
+  "click",
+  (event) => {
+    if (!(event instanceof MouseEvent)) return;
+    maybeArmPopupIntent(event);
+    maybeArmPopupIntent(event, { keyboardOnly: true });
+  },
+  true
+);
 
 window.addEventListener(
   "message",
