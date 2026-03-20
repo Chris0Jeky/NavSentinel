@@ -445,6 +445,195 @@ test("RW-06 legit auth popup allows the first window and blocks the second @regr
   }
 });
 
+test("RW-08 window reuse laundering keeps the consent popup in place until explicitly allowed @regression @stress", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/rw08-window-reuse-laundering.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await waitForNavSentinelBridge(page);
+
+      const beforePages = context.pages().length;
+      const popupPromise = context.waitForEvent("page", { timeout: 5000 }).catch(() => null);
+      await page.click("#rw08Launch");
+
+      const popup = await popupPromise;
+      expect(popup, "Expected the initial consent popup to open").not.toBeNull();
+      await popup?.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
+      expect(popup?.url()).toContain("rw08-consent-popup.html?step=consent");
+      await expect.poll(() => context.pages().length, { timeout: 5000 }).toBe(beforePages + 1);
+
+      await waitForToastText(page, "Blocked popup", 4000);
+      await page.waitForTimeout(300);
+      expect(popup?.url()).toContain("rw08-consent-popup.html?step=consent");
+      expect(context.pages().length).toBe(beforePages + 1);
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("RW-09 ambiguous popup targets allow user-driven auth steps and block delayed named reuse @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/rw09-target-ambiguity.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await waitForNavSentinelBridge(page);
+
+      const beforeStartPages = context.pages().length;
+      const firstPopupPromise = context.waitForEvent("page", { timeout: 5000 }).catch(() => null);
+      await page.click("#rw09Start");
+
+      const firstPopup = await firstPopupPromise;
+      expect(firstPopup, "Expected the plain helper window to open").not.toBeNull();
+      await firstPopup?.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
+      expect(firstPopup?.url()).toContain("rw09-consent-step1.html?launch=plain");
+      await expect.poll(() => context.pages().length, { timeout: 5000 }).toBe(beforeStartPages + 1);
+      await assertNoToastFor(page, 800);
+
+      const beforeResumePages = context.pages().length;
+      const secondPopupPromise = context.waitForEvent("page", { timeout: 5000 }).catch(() => null);
+      await page.click("#rw09Resume");
+
+      const secondPopup = await secondPopupPromise;
+      expect(secondPopup, "Expected the named auth window to open").not.toBeNull();
+      await secondPopup?.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
+      expect(secondPopup?.url()).toContain("rw09-consent-step2.html?launch=named");
+      await expect.poll(() => context.pages().length, { timeout: 5000 }).toBe(beforeResumePages + 1);
+
+      await waitForToastText(page, "Blocked popup", 4000);
+      await page.waitForTimeout(300);
+      expect(secondPopup?.url()).toContain("rw09-consent-step2.html?launch=named");
+      expect(context.pages().length).toBe(beforeResumePages + 1);
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("RW-10 Space-triggered auth button opens without prompting @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/rw10-keyboard-auth-launch.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await waitForNavSentinelBridge(page);
+
+      const beforePages = context.pages().length;
+      const popupPromise = context.waitForEvent("page", { timeout: 5000 }).catch(() => null);
+      await page.focus("#rw10Button");
+      await page.keyboard.press("Space");
+
+      const popup = await popupPromise;
+      expect(popup, "Expected the keyboard-triggered auth popup to open").not.toBeNull();
+      await popup?.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
+      expect(popup?.url()).toContain("rw10-consent-popup.html?launcher=button");
+      expect(context.pages().length).toBeGreaterThan(beforePages);
+      await assertNoToastFor(page);
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("RW-10 Enter-triggered submit input opens without prompting @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/rw10-keyboard-auth-launch.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await waitForNavSentinelBridge(page);
+
+      const beforePages = context.pages().length;
+      const popupPromise = context.waitForEvent("page", { timeout: 5000 }).catch(() => null);
+      await page.focus("#rw10Submit");
+      await page.keyboard.press("Enter");
+
+      const popup = await popupPromise;
+      expect(popup, "Expected the keyboard-triggered submit input popup to open").not.toBeNull();
+      await popup?.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
+      expect(popup?.url()).toContain("rw10-consent-popup.html?launcher=input");
+      expect(context.pages().length).toBeGreaterThan(beforePages);
+      await assertNoToastFor(page);
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
 test("Level 7 legit modal backdrop closes without a false positive @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 

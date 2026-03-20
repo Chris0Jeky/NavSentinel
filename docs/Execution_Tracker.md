@@ -130,6 +130,8 @@ Why next:
 Current status:
 - Wave 1 has started on `codex/realworld-wave1-search-and-redirects`
 - the first landed scenarios are RW-01, RW-03, RW-04, RW-06, and RW-07
+- Wave 2 is now underway on `codex/realworld-wave2-auth-and-identity`
+- the current Wave 2 focus is RW-08, RW-09, and RW-10
 
 ### Batch 7: Release and repo hygiene
 
@@ -171,5 +173,5 @@ Why last:
 | 3 | Adversarial Gym coverage | folded into PR #5 |
 | 4 | Legitimate-flow Gym coverage | folded into PR #5 |
 | 5 | Premium operator surfaces and popup coverage | in progress |
-| 6 | Real-world adversarial simulation program | in progress (Wave 1 started) |
+| 6 | Real-world adversarial simulation program | in progress (Waves 1 and 2 underway) |
 | 7 | Release and repo hygiene | planned |

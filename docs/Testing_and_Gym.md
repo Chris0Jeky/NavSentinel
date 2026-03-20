@@ -81,6 +81,9 @@ It currently covers:
 - RW-03 delayed redirect landing with explicit allow-once replay
 - RW-04 open-redirect laundering via benign intermediary
 - RW-06 legit auth popup followed by a blocked second popup
+- RW-08 popup-window reuse laundering with the original consent popup kept in place
+- RW-09 mixed empty-target and named-target auth launches with delayed reuse blocking
+- RW-10 keyboard-only auth popup launch from Space and Enter activation
 - Level 11 credential-submit prompt
 - RW-07 fake re-auth interstitial prompt
 - password-paste warning and trusted-domain persistence
@@ -130,9 +133,18 @@ Current pages:
 - `gym/rw04-final-offer.html`
 - `gym/rw06-legit-auth-second-popup.html`
 - `gym/rw07-fake-reauth-interstitial.html`
+- `gym/rw08-window-reuse-laundering.html`
+- `gym/rw08-consent-popup.html`
+- `gym/rw08-laundered-destination.html`
+- `gym/rw09-target-ambiguity.html`
+- `gym/rw09-consent-step1.html`
+- `gym/rw09-consent-step2.html`
+- `gym/rw09-phish-target.html`
+- `gym/rw10-keyboard-auth-launch.html`
+- `gym/rw10-consent-popup.html`
 
 Every current primitive Gym level has a dedicated automated path, and the first real-world scenario
-wave is starting to land alongside those primitives.
+waves are continuing to land alongside those primitives.
 
 ## Effective manual testing workflow
 

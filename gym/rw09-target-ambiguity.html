@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RW-09 - Target Ambiguity</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 820px;
+        margin: 0 auto;
+        padding: 40px 18px 56px;
+        background: #f4f7fb;
+        color: #172230;
+      }
+      .shell {
+        display: grid;
+        gap: 18px;
+      }
+      .card {
+        padding: 24px;
+        border-radius: 20px;
+        border: 1px solid #d6dfeb;
+        background: #fff;
+        box-shadow: 0 10px 26px rgba(20, 34, 52, 0.08);
+      }
+      .row {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      button {
+        min-height: 46px;
+        padding: 0 18px;
+        border: none;
+        border-radius: 12px;
+        background: #175d9c;
+        color: white;
+        font-size: 15px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      button[hidden] {
+        display: none;
+      }
+      .eyebrow {
+        margin: 0 0 10px;
+        font-size: 11px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: #53657a;
+      }
+      #status {
+        margin-top: 12px;
+        color: #46596d;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="card">
+        <p class="eyebrow">Account verification</p>
+        <h1>RW-09: Empty-target or named-target popup ambiguity</h1>
+        <p>
+          Real sites mix plain <code>window.open(url)</code> calls with named popup reuse. The
+          user-driven paths should stay allowed, but delayed reuse should still be blocked.
+        </p>
+        <div class="row">
+          <button id="rw09Start" type="button">Open quick sign-in helper</button>
+          <button id="rw09Resume" type="button" hidden>Resume in auth window</button>
+        </div>
+        <p id="status">Status: waiting for auth launch</p>
+      </section>
+    </main>
+
+    <script>
+      const status = document.getElementById('status');
+      const resume = document.getElementById('rw09Resume');
+
+      document.getElementById('rw09Start').addEventListener('click', () => {
+        window.open('rw09-consent-step1.html?launch=plain');
+        status.textContent = 'Status: plain helper window opened';
+        resume.hidden = false;
+        resume.focus();
+      });
+
+      resume.addEventListener('click', () => {
+        window.open(
+          'rw09-consent-step2.html?launch=named',
+          'workspace-auth',
+          'popup,width=520,height=640'
+        );
+        status.textContent = 'Status: named auth window resumed';
+
+        window.setTimeout(() => {
+          status.textContent = 'Status: delayed named-target reuse fired';
+          window.open(
+            'rw09-phish-target.html?via=late-reuse',
+            'workspace-auth',
+            'popup,width=520,height=640'
+          );
+        }, 150);
+      });
+    </script>
+  </body>
+</html>

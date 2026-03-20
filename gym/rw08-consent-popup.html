@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RW-08 - Consent Popup</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 560px;
+        margin: 0 auto;
+        padding: 28px 18px 42px;
+        color: #1a2736;
+      }
+      .card {
+        padding: 24px;
+        border-radius: 18px;
+        border: 1px solid #d6dfeb;
+        background: #fff;
+        box-shadow: 0 8px 24px rgba(16, 31, 48, 0.08);
+      }
+      .chip {
+        display: inline-block;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: #ebf3fb;
+        color: #1e5d93;
+        font-size: 12px;
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <span class="chip">Consent step</span>
+      <h1>Workspace OAuth approval</h1>
+      <p>
+        This popup is the legitimate first step. If the opener later tries to launder this same
+        window to a different destination, NavSentinel should inspect it again.
+      </p>
+    </div>
+  </body>
+</html>

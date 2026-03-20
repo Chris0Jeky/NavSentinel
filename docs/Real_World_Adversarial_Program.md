@@ -55,7 +55,7 @@ This program is grounded in the kinds of browser abuse called out in official se
 
 ### Current landing status
 
-Wave 1 is now underway on top of the operator-surface seed branch.
+Waves 1 and 2 are now underway on top of the operator-surface seed branch.
 
 The first implemented scenarios are:
 
@@ -64,6 +64,9 @@ The first implemented scenarios are:
 - RW-04 open-redirect laundering via intermediary page
 - RW-06 legit auth popup followed by a blocked second popup
 - RW-07 fake re-auth interstitial
+- RW-08 OAuth consent laundering through window reuse
+- RW-09 empty-target and named-target popup ambiguity
+- RW-10 keyboard-only auth launch
 
 ### Lane mapping
 
