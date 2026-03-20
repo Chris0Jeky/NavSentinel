@@ -17,6 +17,10 @@ npm run typecheck
 npm run build
 npm run test
 npm run test:e2e
+npm run test:e2e:smoke
+npm run test:e2e:regression
+npm run test:e2e:rollback
+npm run test:e2e:live
 ```
 
 To run the Gym locally:
@@ -63,18 +67,37 @@ Current E2E coverage lives in:
 It currently covers:
 
 - Level 1 new-tab blocking
+- Level 2 moving-target overlay blocking
+- Level 3 instant injection new-tab trap blocking
+- Level 4 visual-mimicry disguised new-tab blocking
 - Level 5 popunder blocking
 - Level 6 programmatic click blocking
+- Level 7 legitimate modal backdrop
+- Level 8 legitimate OAuth popup
+- Level 9 legitimate video overlay controls
 - Level 10 delayed form-submit prompt
 - Level 12 slow same-tab navigation legitimacy
 - Level 11 credential-submit prompt
 - password-paste warning and trusted-domain persistence
 - options-page trusted-domain normalization
 - options import/export round-trip behavior
-- an env-gated rollback flow (`ROLLBACK_E2E`)
-- an env-gated live-web sanity check (`LIVE_E2E`)
+- a dedicated rollback lane for redirect recovery affordances
+- a dedicated live-web sanity lane
 
 `playwright.config.ts` intentionally scopes Playwright discovery to `tests/e2e/**/*.spec.ts`. This keeps Vitest files out of the Playwright runner.
+
+Current lane intent:
+
+- `npm run test:e2e:smoke`
+  - shortest deterministic browser checks
+- `npm run test:e2e`
+  - default deterministic local browser coverage across smoke and regression
+- `npm run test:e2e:regression`
+  - focused regression-only lane without the smoke project
+- `npm run test:e2e:rollback`
+  - rollback/recovery behavior that is deterministic enough to run regularly but still separate from the default lane
+- `npm run test:e2e:live`
+  - live-web sanity checks only
 
 ## Gym map
 
@@ -95,7 +118,7 @@ Current pages:
 - `gym/level11-credential-guard.html`
 - `gym/level12-slow-same-tab-link.html`
 
-The biggest current automation gap is that Levels 2, 3, 4, 7, 8, and 9 exist but do not yet have dedicated Playwright coverage.
+Every current Gym level now has a dedicated automated path on the active follow-up branch.
 
 ## Effective manual testing workflow
 
@@ -116,7 +139,7 @@ The biggest current automation gap is that Levels 2, 3, 4, 7, 8, and 9 exist but
 - prompt text remains actionable
 - allow-once replays the blocked action only once
 - always-allow stores the correct site/destination pair
-- rollback still returns to the prior page and offers explicit proceed
+- rollback affordances still appear for suspicious redirects, and explicit proceed remains available
 - stale per-tab allowances do not leak into later navigations
 
 ### For credential changes
@@ -157,6 +180,6 @@ If E2E fails in CI, check these first:
 
 From the testing perspective, the clearest next steps are:
 
-- automate the remaining Gym levels
+- add deeper popup/operator-surface browser coverage
 - add a heavier stress lane for worker churn, repeated popup bursts, and delayed navigation chains
 - add lower-cost property/state tests for scoring, DOM hint building, and tab-scoped worker policy

@@ -16,22 +16,20 @@ Historical merge-tracking material lives under `docs/archive/`.
 ## Current baseline
 
 - SentinelSuite merge is complete on `main`
+- active follow-up work is currently consolidated into PR #5 for review
 - refer to the GitHub repository for the current state of open PRs and issues
-- current repo gaps are follow-up work, not merge work
+- current repo gaps are follow-up work beyond the merge and core Gym coverage
 
 ## Outstanding inventory
 
 ### Test coverage
 
-- missing Playwright coverage for Gym Levels 2, 3, 4, 7, 8, and 9
-- rollback E2E still sits behind `ROLLBACK_E2E`
 - popup/operator-surface browser coverage is still light
 - no dedicated stress lane for worker churn or bursty popup/redirect sequences
 
 ### CI and release-process alignment
 
-- pre-Batch-1, docs required explicit typechecking but CI did not run it; Batch 1 closes that gap
-- E2E is not split into clearer smoke/regression/stress/live lanes
+- there is still no dedicated stress lane for worker churn and bursty redirect sequences
 
 ### Repo and release hygiene
 
@@ -59,14 +57,15 @@ Why first:
 - immediately closes one concrete release-process gap
 - creates the document that the rest of the stack can use
 
-### Batch 2: E2E lane split and rollback promotion
+### Batch 2: E2E lane split and rollback formalization
 
 Planned branch:
 - `codex/post-merge-e2e-lanes`
 
 Scope:
 - split E2E into clearer scripts/lane intent
-- decide which rollback coverage should become part of normal regression
+- move rollback coverage out of ad hoc gating into a dedicated named lane
+- align rollback assertions with the affordances the product currently guarantees
 - reserve live-web checks as non-blocking
 - add any helper/config cleanup needed to support the next coverage batches
 
@@ -146,9 +145,9 @@ Why last:
 
 | Batch | Title | Status |
 | --- | --- | --- |
-| 1 | Tracker and CI alignment | in progress |
-| 2 | E2E lane split and rollback promotion | planned |
-| 3 | Adversarial Gym coverage | planned |
-| 4 | Legitimate-flow Gym coverage | planned |
-| 5 | Popup and operator-surface coverage | planned |
+| 1 | Tracker and CI alignment | folded into PR #5 |
+| 2 | E2E lane split and rollback formalization | folded into PR #5 |
+| 3 | Adversarial Gym coverage | folded into PR #5 |
+| 4 | Legitimate-flow Gym coverage | folded into PR #5 |
+| 5 | Popup and operator-surface coverage | next |
 | 6 | Release and repo hygiene | planned |

@@ -4,7 +4,7 @@ import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 import { EVENT_LOG_KEY, TRUSTED_DOMAINS_KEY } from "../../extension/src/shared/storage";
-import { getExtensionId, getServiceWorker, startGymServer } from "./extension_test_utils";
+import { getExtensionId, getGymBaseUrl, getServiceWorker } from "./extension_test_utils";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -14,10 +14,10 @@ const extensionPath = process.env.EXTENSION_PATH
   : path.resolve(__dirname, "..", "..", "extension", "dist");
 const gymRoot = path.resolve(__dirname, "..", "..", "gym");
 
-test("credential guard prompts before risky password submit", async () => {
+test("credential guard prompts before risky password submit @smoke", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
-  const gym = await startGymServer(gymRoot);
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-cred-e2e-"));
 
   try {
@@ -29,7 +29,7 @@ test("credential guard prompts before risky password submit", async () => {
 
     try {
       const page = await context.newPage();
-      await page.goto(`${gym.baseUrl}/level11-credential-guard.html`, {
+      await page.goto(`${baseUrl}/level11-credential-guard.html`, {
         waitUntil: "domcontentloaded",
         timeout: 20_000
       });
@@ -42,15 +42,15 @@ test("credential guard prompts before risky password submit", async () => {
       await context.close();
     }
   } finally {
-    await gym.close();
+    if (gym) await gym.close();
     fs.rmSync(userDataDir, { recursive: true, force: true });
   }
 });
 
-test("credential guard warns on password paste and trust action persists", async () => {
+test("credential guard warns on password paste and trust action persists @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
-  const gym = await startGymServer(gymRoot);
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-cred-e2e-"));
 
   try {
@@ -62,7 +62,7 @@ test("credential guard warns on password paste and trust action persists", async
 
     try {
       const page = await context.newPage();
-      await page.goto(`${gym.baseUrl}/level11-credential-guard.html`, {
+      await page.goto(`${baseUrl}/level11-credential-guard.html`, {
         waitUntil: "domcontentloaded",
         timeout: 20_000
       });
@@ -122,7 +122,7 @@ test("credential guard warns on password paste and trust action persists", async
       await context.close();
     }
   } finally {
-    await gym.close();
+    if (gym) await gym.close();
     fs.rmSync(userDataDir, { recursive: true, force: true });
   }
 });

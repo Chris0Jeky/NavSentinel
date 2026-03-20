@@ -13,7 +13,7 @@ const allowTargetByTab = new Map<number, { url: string; expiresAt: number }>();
 const suppressUntilByTab = new Map<number, number>();
 const readyTabs = new Set<number>();
 const pendingRollbackByTab = new Map<number, { url: string; prevUrl?: string; qualifiers: string[] }>();
-const pendingForwardByTab = new Map<number, { url: string; ts: number }>();
+const pendingForwardByTab = new Map<number, { url: string; ts: number; returnUrl?: string }>();
 const lastUrlByTab = new Map<number, string>();
 const lastCommittedByTab = new Map<
   number,
@@ -27,6 +27,54 @@ const lastCommittedByTab = new Map<
   }
 >();
 
+function clearPendingTabState(
+  tabId: number,
+  options: { preserveForwardOffer?: boolean } = {}
+): void {
+  readyTabs.delete(tabId);
+  pendingRollbackByTab.delete(tabId);
+  if (!options.preserveForwardOffer) {
+    pendingForwardByTab.delete(tabId);
+  }
+  lastCommittedByTab.delete(tabId);
+}
+
+function trySendRollback(
+  tabId: number,
+  pending: { url: string; prevUrl?: string; qualifiers: string[] }
+): void {
+  chrome.tabs.sendMessage(
+    tabId,
+    {
+      type: "ns-rollback",
+      url: pending.url,
+      ...(pending.prevUrl !== undefined ? { prevUrl: pending.prevUrl } : {}),
+      qualifiers: pending.qualifiers
+    },
+    () => {
+      if (chrome.runtime.lastError) {
+        pendingRollbackByTab.set(tabId, pending);
+        readyTabs.delete(tabId);
+      } else {
+        pendingRollbackByTab.delete(tabId);
+      }
+    }
+  );
+}
+
+function trySendForwardOffer(
+  tabId: number,
+  forward: { url: string; ts: number; returnUrl?: string }
+): void {
+  chrome.tabs.sendMessage(tabId, { type: "ns-forward-offer", url: forward.url }, () => {
+    if (chrome.runtime.lastError) {
+      pendingForwardByTab.set(tabId, forward);
+      readyTabs.delete(tabId);
+    } else {
+      pendingForwardByTab.delete(tabId);
+    }
+  });
+}
 async function syncDnrRulesets(): Promise<void> {
   try {
     const settings = await getNavSettings();
@@ -94,13 +142,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       readyTabs.add(tabId);
       const pending = pendingRollbackByTab.get(tabId);
       if (pending) {
-        pendingRollbackByTab.delete(tabId);
-        chrome.tabs.sendMessage(tabId, {
-          type: "ns-rollback",
-          url: pending.url,
-          ...(pending.prevUrl !== undefined ? { prevUrl: pending.prevUrl } : {}),
-          qualifiers: pending.qualifiers
-        });
+        trySendRollback(tabId, pending);
       }
     }
   }
@@ -120,7 +162,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "ns-store-forward") {
     const tabId = sender.tab?.id;
     if (typeof tabId === "number" && typeof message.url === "string") {
-      pendingForwardByTab.set(tabId, { url: message.url, ts: Date.now() });
+      pendingForwardByTab.set(tabId, {
+        url: message.url,
+        ts: Date.now(),
+        ...(typeof message.returnUrl === "string" && message.returnUrl
+          ? { returnUrl: message.returnUrl }
+          : {})
+      });
     }
   }
 
@@ -130,17 +178,29 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const forward = pendingForwardByTab.get(tabId);
       const currentUrl = typeof message.currentUrl === "string" ? message.currentUrl : "";
       if (forward && currentUrl && forward.url === currentUrl) {
-        sendResponse?.({ url: "" });
+        sendResponse?.({ status: "already_on_forward", url: "" });
         return;
       }
-      if (forward) pendingForwardByTab.delete(tabId);
-      sendResponse?.({ url: forward?.url });
+      if (forward && currentUrl && forward.returnUrl === currentUrl) {
+        pendingForwardByTab.delete(tabId);
+        sendResponse?.({ status: "offer", url: forward.url });
+        return;
+      }
+      if (forward) {
+        pendingForwardByTab.delete(tabId);
+        sendResponse?.({ status: "offer", url: forward.url });
+        return;
+      }
+      sendResponse?.({ status: "none", url: "" });
     }
   }
 });
 
 chrome.webNavigation.onBeforeNavigate.addListener((details) => {
   if (details.frameId !== 0) return;
+  const committed = lastCommittedByTab.get(details.tabId);
+  const preserveForwardOffer = committed?.prevUrl === details.url;
+  clearPendingTabState(details.tabId, { preserveForwardOffer });
   allowStartedByTab.delete(details.tabId);
   const now = Date.now();
   const allowUntil = allowUntilByTab.get(details.tabId) ?? 0;
@@ -163,6 +223,8 @@ chrome.webNavigation.onCommitted.addListener((details) => {
   if (targetAllowance) {
     allowTargetByTab.delete(details.tabId);
   }
+  const prevUrl = lastUrlByTab.get(details.tabId);
+  lastUrlByTab.set(details.tabId, details.url);
 
   const qualifiers = details.transitionQualifiers ?? [];
   const isRedirect =
@@ -180,10 +242,7 @@ chrome.webNavigation.onCommitted.addListener((details) => {
   const startedUrl = allowStartedByTab.get(details.tabId);
   const startedAllowed = startedUrl === details.url;
   const allowedAtCommit = now <= allowUntil || startedAllowed || targetAllowed;
-  const prevUrl = lastUrlByTab.get(details.tabId);
   allowStartedByTab.delete(details.tabId);
-
-  lastUrlByTab.set(details.tabId, details.url);
   lastCommittedByTab.set(details.tabId, {
     url: details.url,
     ...(prevUrl !== undefined ? { prevUrl } : {}),
@@ -202,8 +261,7 @@ chrome.webNavigation.onCommitted.addListener((details) => {
   suppressUntilByTab.set(details.tabId, now + ROLLBACK_SUPPRESS_MS);
 
   if (readyTabs.has(details.tabId)) {
-    chrome.tabs.sendMessage(details.tabId, {
-      type: "ns-rollback",
+    trySendRollback(details.tabId, {
       url: details.url,
       ...(prevUrl !== undefined ? { prevUrl } : {}),
       qualifiers
@@ -219,6 +277,9 @@ chrome.webNavigation.onCommitted.addListener((details) => {
 
 chrome.webNavigation.onErrorOccurred?.addListener((details) => {
   if (details.frameId !== 0) return;
+  const forward = pendingForwardByTab.get(details.tabId);
+  const preserveForwardOffer = !!forward && !!details.url && forward.url === details.url;
+  clearPendingTabState(details.tabId, { preserveForwardOffer });
   allowStartedByTab.delete(details.tabId);
 });
 
@@ -228,10 +289,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   allowStartedByTab.delete(tabId);
   allowTargetByTab.delete(tabId);
   suppressUntilByTab.delete(tabId);
-  readyTabs.delete(tabId);
-  pendingRollbackByTab.delete(tabId);
-  pendingForwardByTab.delete(tabId);
-  lastCommittedByTab.delete(tabId);
+  clearPendingTabState(tabId);
   lastUrlByTab.delete(tabId);
 });
 
@@ -240,7 +298,9 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (!forward) return;
   if (changeInfo.status !== "complete" && !changeInfo.url) return;
   const currentUrl = tab.url ?? changeInfo.url ?? "";
-  if (!currentUrl || currentUrl === forward.url) return;
-  pendingForwardByTab.delete(tabId);
-  chrome.tabs.sendMessage(tabId, { type: "ns-forward-offer", url: forward.url });
+  if (!currentUrl) return;
+  if (currentUrl === forward.url) return;
+  if (forward.returnUrl && currentUrl === forward.returnUrl) return;
+  if (!readyTabs.has(tabId)) return;
+  trySendForwardOffer(tabId, forward);
 });
