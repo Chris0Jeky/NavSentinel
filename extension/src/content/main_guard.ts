@@ -640,6 +640,7 @@ window.addEventListener(
   "click",
   (event) => {
     if (!(event instanceof MouseEvent)) return;
+    maybeArmPopupIntent(event);
     maybeArmPopupIntent(event, { keyboardOnly: true });
   },
   true
