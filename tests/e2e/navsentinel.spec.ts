@@ -652,7 +652,7 @@ test("Live: Google first result opens with no prompt @live", async () => {
 
       const popup = await popupPromise;
       expect(popup, "Expected a new tab from ctrl+click").not.toBeNull();
-      await expect(page.locator("text=Blocked new tab")).toHaveCount(0);
+      await assertNoToastFor(page, 1500);
     } finally {
       await context.close();
     }

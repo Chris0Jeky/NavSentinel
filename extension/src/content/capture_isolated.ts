@@ -30,6 +30,7 @@ const NAV_TARGET_ALLOW_TTL_MS = 10000;
 const MAX_PENDING_BRIDGE_MESSAGES = 32;
 const BRIDGE_RETRY_MS = 100;
 const MAX_BRIDGE_RETRY_MS = 1000;
+const MAX_BRIDGE_INIT_MS = 10000;
 const RISKY_BLANK_REASONS = new Set([
   "intent_mismatch_under_interactive",
   "invisible_but_clickable",
@@ -57,6 +58,7 @@ let lastDebug: Omit<DebugInfo, "mainGuard" | "lastNav"> | null = null;
 let rollbackShownAt = 0;
 let bridgeRetryTimer = 0;
 let bridgeRetryDelayMs = BRIDGE_RETRY_MS;
+let bridgeInitStartedAt = 0;
 let forwardCheckInFlight = false;
 let forwardCheckTimer = 0;
 
@@ -66,6 +68,7 @@ function markMainGuardReady(): void {
     bridgeRetryTimer = 0;
   }
   bridgeRetryDelayMs = BRIDGE_RETRY_MS;
+  bridgeInitStartedAt = 0;
   bridgeReady = true;
   document.documentElement.setAttribute("data-navsentinel-bridge-ready", "1");
   mainGuard = "yes";
@@ -232,9 +235,24 @@ function handleBridgeMessage(message: unknown): void {
 function ensureBridge(): void {
   if (bridgeReady || mainGuard === "no" || bridgeRetryTimer) return;
 
+  if (!bridgeInitStartedAt) {
+    bridgeInitStartedAt = Date.now();
+  }
+
   const attempt = () => {
     bridgeRetryTimer = 0;
     if (bridgeReady || mainGuard === "no") return;
+    if (Date.now() - bridgeInitStartedAt >= MAX_BRIDGE_INIT_MS) {
+      bridgePort?.close();
+      bridgePort = null;
+      bridgeReady = false;
+      mainGuard = "no";
+      bridgeRetryDelayMs = BRIDGE_RETRY_MS;
+      bridgeInitStartedAt = 0;
+      pendingBridgeMessages.length = 0;
+      refreshDebug();
+      return;
+    }
     bridgePort?.close();
 
     const channel = new MessageChannel();
