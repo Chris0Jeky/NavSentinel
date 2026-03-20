@@ -55,6 +55,8 @@ let lastNav: { kind: string; url: string; status: "allowed" | "blocked" } | null
 let lastDebug: Omit<DebugInfo, "mainGuard" | "lastNav"> | null = null;
 let rollbackShownAt = 0;
 let bridgeRetryTimer = 0;
+let forwardCheckInFlight = false;
+let forwardCheckTimer = 0;
 
 function markMainGuardReady(): void {
   if (bridgeRetryTimer) {
@@ -570,16 +572,24 @@ if (chrome?.runtime?.sendMessage && window.top === window) {
 }
 
 if (chrome?.runtime?.sendMessage && window.top === window) {
-  const runForward = (retries = 25) => {
+  const runForward = (retries = 1) => {
+    if (forwardCheckInFlight) return;
+    if (forwardCheckTimer) {
+      window.clearTimeout(forwardCheckTimer);
+      forwardCheckTimer = 0;
+    }
+    forwardCheckInFlight = true;
     chrome.runtime.sendMessage({ type: "ns-check-forward", currentUrl: location.href }, (resp) => {
+      forwardCheckInFlight = false;
+      const status = typeof resp?.status === "string" ? resp.status : "";
       const url = typeof resp?.url === "string" ? resp.url : "";
-      if (url) {
+      if (status === "offer" && url) {
         if (settings.defaultMode === "off") return;
         showRollbackPrompt(url);
         return;
       }
-      if (retries > 0) {
-        window.setTimeout(() => runForward(retries - 1), 200);
+      if (!resp && retries > 0) {
+        forwardCheckTimer = window.setTimeout(() => runForward(retries - 1), 200);
       }
     });
   };

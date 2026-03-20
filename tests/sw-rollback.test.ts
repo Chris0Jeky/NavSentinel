@@ -404,16 +404,18 @@ describe("service worker rollback gating", () => {
     const forward = mock.dispatchRuntimeMessage(
       { type: "ns-check-forward", currentUrl: "https://example.test/origin" },
       { tab: { id: 24 } }
-    ) as { url?: string };
+    ) as { status?: string; url?: string };
 
     expect(rollback.shouldRollback).toBe(false);
+    expect(forward.status).toBe("offer");
     expect(forward.url).toBe("https://example.test/redirected");
 
     const consumedForward = mock.dispatchRuntimeMessage(
       { type: "ns-check-forward", currentUrl: "https://example.test/origin" },
       { tab: { id: 24 } }
-    ) as { url?: string };
-    expect(consumedForward.url).toBeUndefined();
+    ) as { status?: string; url?: string };
+    expect(consumedForward.status).toBe("none");
+    expect(consumedForward.url).toBe("");
   });
 
   it("keeps the forward offer queued until the rolled-back page is ready", async () => {
@@ -449,8 +451,9 @@ describe("service worker rollback gating", () => {
     const queuedForward = mock.dispatchRuntimeMessage(
       { type: "ns-check-forward", currentUrl: "https://example.test/origin" },
       { tab: { id: 27 } }
-    ) as { url?: string };
+    ) as { status?: string; url?: string };
 
+    expect(queuedForward.status).toBe("offer");
     expect(queuedForward.url).toBe("https://example.test/redirected");
     expect(mock.sentMessages).toEqual([]);
   });
@@ -491,8 +494,9 @@ describe("service worker rollback gating", () => {
     const forward = mock.dispatchRuntimeMessage(
       { type: "ns-check-forward", currentUrl: "https://example.test/origin" },
       { tab: { id: 29 } }
-    ) as { url?: string };
+    ) as { status?: string; url?: string };
 
+    expect(forward.status).toBe("offer");
     expect(forward.url).toBe("https://example.test/redirected");
   });
 
@@ -511,15 +515,17 @@ describe("service worker rollback gating", () => {
     const forward = mock.dispatchRuntimeMessage(
       { type: "ns-check-forward", currentUrl: "https://example.test/redirected" },
       { tab: { id: 28 } }
-    ) as { url?: string };
+    ) as { status?: string; url?: string };
 
+    expect(forward.status).toBe("already_on_forward");
     expect(forward.url).toBe("");
 
     const repeatedForward = mock.dispatchRuntimeMessage(
       { type: "ns-check-forward", currentUrl: "https://example.test/redirected" },
       { tab: { id: 28 } }
-    ) as { url?: string };
+    ) as { status?: string; url?: string };
 
+    expect(repeatedForward.status).toBe("already_on_forward");
     expect(repeatedForward.url).toBe("");
   });
 
@@ -557,10 +563,11 @@ describe("service worker rollback gating", () => {
     const forward = mock.dispatchRuntimeMessage(
       { type: "ns-check-forward", currentUrl: "https://example.test/fresh" },
       { tab: { id: 26 } }
-    ) as { url?: string };
+    ) as { status?: string; url?: string };
 
     expect(rollback.shouldRollback).toBe(false);
-    expect(forward.url).toBeUndefined();
+    expect(forward.status).toBe("none");
+    expect(forward.url).toBe("");
 
     mock.dispatchRuntimeMessage({ type: "ns-ready" }, { tab: { id: 26 } });
     expect(mock.sentMessages).toEqual([]);
@@ -600,10 +607,11 @@ describe("service worker rollback gating", () => {
     const forward = mock.dispatchRuntimeMessage(
       { type: "ns-check-forward", currentUrl: "https://example.test/redirected" },
       { tab: { id: 25 } }
-    ) as { url?: string };
+    ) as { status?: string; url?: string };
 
     expect(rollback.shouldRollback).toBe(false);
-    expect(forward.url).toBeUndefined();
+    expect(forward.status).toBe("none");
+    expect(forward.url).toBe("");
 
     mock.dispatchRuntimeMessage({ type: "ns-ready" }, { tab: { id: 25 } });
     expect(mock.sentMessages).toEqual([]);
