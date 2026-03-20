@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RW-06 - Legit Auth Then Second Popup</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 40px 18px;
+      }
+      .card {
+        padding: 24px;
+        border-radius: 18px;
+        border: 1px solid #d7e0ea;
+        background: #fff;
+        box-shadow: 0 10px 30px rgba(19, 34, 53, 0.08);
+      }
+      button {
+        margin-top: 18px;
+        min-height: 46px;
+        padding: 0 18px;
+        border-radius: 12px;
+        border: none;
+        background: #1b5ea7;
+        color: white;
+        font-size: 16px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>RW-06: Legit auth, then malicious second popup</h1>
+      <p>
+        The first popup is a deliberate sign-in step. A second popup is fired immediately after as
+        abuse.
+      </p>
+      <button id="rw06Signin">Continue with Workspace SSO</button>
+    </div>
+
+    <script>
+      document.getElementById('rw06Signin').addEventListener('click', () => {
+        window.open(
+          'https://example.com/?oauth=workspace-auth',
+          'workspace-auth',
+          'popup,width=520,height=640'
+        );
+
+        window.setTimeout(() => {
+          window.open(
+            'https://example.com/?oauth=second-popup',
+            'workspace-followup',
+            'popup,width=520,height=640'
+          );
+        }, 50);
+      });
+    </script>
+  </body>
+</html>

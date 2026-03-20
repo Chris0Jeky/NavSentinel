@@ -77,7 +77,12 @@ It currently covers:
 - Level 9 legitimate video overlay controls
 - Level 10 delayed form-submit prompt
 - Level 12 slow same-tab navigation legitimacy
+- RW-01 search-result overlay swap
+- RW-03 delayed redirect landing with explicit allow-once replay
+- RW-04 open-redirect laundering via benign intermediary
+- RW-06 legit auth popup followed by a blocked second popup
 - Level 11 credential-submit prompt
+- RW-07 fake re-auth interstitial prompt
 - password-paste warning and trusted-domain persistence
 - options-page trusted-domain normalization
 - options import/export round-trip behavior
@@ -117,8 +122,17 @@ Current pages:
 - `gym/level10-redirects-and-forms.html`
 - `gym/level11-credential-guard.html`
 - `gym/level12-slow-same-tab-link.html`
+- `gym/rw01-search-result-overlay-swap.html`
+- `gym/rw03-delayed-redirect-landing.html`
+- `gym/rw03-final-report.html`
+- `gym/rw04-open-redirect-landing.html`
+- `gym/rw04-local-redirector.html`
+- `gym/rw04-final-offer.html`
+- `gym/rw06-legit-auth-second-popup.html`
+- `gym/rw07-fake-reauth-interstitial.html`
 
-Every current Gym level now has a dedicated automated path on the active follow-up branch.
+Every current primitive Gym level has a dedicated automated path, and the first real-world scenario
+wave is starting to land alongside those primitives.
 
 ## Effective manual testing workflow
 
@@ -180,6 +194,6 @@ If E2E fails in CI, check these first:
 
 From the testing perspective, the clearest next steps are:
 
-- add deeper popup/operator-surface browser coverage
+- continue the real-world adversarial program beyond the first seeded scenarios
 - add a heavier stress lane for worker churn, repeated popup bursts, and delayed navigation chains
 - add lower-cost property/state tests for scoring, DOM hint building, and tab-scoped worker policy

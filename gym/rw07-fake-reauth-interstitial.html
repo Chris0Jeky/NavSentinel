@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RW-07 - Fake Re-auth Interstitial</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 860px;
+        margin: 0 auto;
+        padding: 36px 18px 60px;
+        background: #eff4f8;
+        color: #162231;
+      }
+      .shell {
+        display: grid;
+        grid-template-columns: 1.3fr 0.9fr;
+        gap: 18px;
+      }
+      .doc,
+      .reauth {
+        border-radius: 20px;
+        border: 1px solid #d6e0ea;
+        background: #fff;
+        box-shadow: 0 10px 28px rgba(19, 34, 53, 0.08);
+      }
+      .doc {
+        padding: 24px;
+      }
+      .reauth {
+        padding: 20px;
+      }
+      form {
+        display: grid;
+        gap: 12px;
+      }
+      input,
+      button {
+        font: inherit;
+        min-height: 42px;
+        padding: 9px 12px;
+      }
+      button {
+        border: none;
+        border-radius: 12px;
+        background: #185f9f;
+        color: white;
+        cursor: pointer;
+        font-weight: 700;
+      }
+      .eyebrow {
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: #4d6076;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <section class="doc">
+        <div class="eyebrow">Document viewer</div>
+        <h1>Q1 forecast workbook</h1>
+        <p>
+          This simulates a productivity/document flow where the user is told their session expired
+          and they need to sign in again.
+        </p>
+      </section>
+
+      <aside class="reauth">
+        <div class="eyebrow">Session expired</div>
+        <h2>Confirm your account to continue</h2>
+        <p>Re-enter your password to resume access to the workbook.</p>
+
+        <form id="rw07Form" action="http://127.0.0.1:9/reauth" method="post">
+          <label>
+            Email
+            <input
+              id="rw07Username"
+              name="username"
+              autocomplete="username"
+              value="analyst@example.com"
+            />
+          </label>
+
+          <label>
+            Password
+            <input
+              id="rw07Password"
+              type="password"
+              name="password"
+              autocomplete="current-password"
+              value="hunter2"
+            />
+          </label>
+
+          <button id="rw07Submit" type="submit">Continue to document</button>
+        </form>
+      </aside>
+    </div>
+  </body>
+</html>

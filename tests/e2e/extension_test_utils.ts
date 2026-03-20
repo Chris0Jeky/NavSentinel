@@ -47,6 +47,18 @@ export async function readToastText(page: Page): Promise<string | null> {
   });
 }
 
+export async function clickToastButton(page: Page, label: string): Promise<void> {
+  await page.evaluate((expected) => {
+    const host = document.querySelector("#__navsentinel_toast_host");
+    const buttons = Array.from(host?.shadowRoot?.querySelectorAll("button") ?? []);
+    const match = buttons.find((button) => button.textContent?.trim() === expected);
+    if (!(match instanceof HTMLButtonElement)) {
+      throw new Error(`Toast button not found: ${expected}`);
+    }
+    match.click();
+  }, label);
+}
+
 export async function assertNoToastFor(page: Page, durationMs = 1200): Promise<void> {
   await page.evaluate(async (duration) => {
     const readBodyText = (): string | null => {

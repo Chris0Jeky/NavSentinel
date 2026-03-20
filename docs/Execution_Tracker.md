@@ -127,6 +127,10 @@ Why next:
 - this is the highest-value way to turn “more tests” into a realistic security program
 - it gives the repo a shared source of truth for the next large Gym/stress expansion
 
+Current status:
+- Wave 1 has started on `codex/realworld-wave1-search-and-redirects`
+- the first landed scenarios are RW-01, RW-03, RW-04, RW-06, and RW-07
+
 ### Batch 7: Release and repo hygiene
 
 Planned branch:
@@ -167,5 +171,5 @@ Why last:
 | 3 | Adversarial Gym coverage | folded into PR #5 |
 | 4 | Legitimate-flow Gym coverage | folded into PR #5 |
 | 5 | Premium operator surfaces and popup coverage | in progress |
-| 6 | Real-world adversarial simulation program | in progress |
+| 6 | Real-world adversarial simulation program | in progress (Wave 1 started) |
 | 7 | Release and repo hygiene | planned |

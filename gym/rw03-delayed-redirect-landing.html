@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RW-03 - Delayed Redirect Landing</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 40px 18px;
+        line-height: 1.5;
+      }
+      .hero {
+        padding: 22px;
+        border: 1px solid #d7dfe8;
+        border-radius: 18px;
+        background: linear-gradient(180deg, #fff, #f7fafc);
+      }
+      button {
+        margin-top: 18px;
+        padding: 14px 18px;
+        font-size: 16px;
+        border-radius: 12px;
+        border: none;
+        background: #0f6e60;
+        color: white;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="hero">
+      <h1>RW-03: Delayed redirect landing</h1>
+      <p>
+        A landing page promises a briefing, then silently redirects after a delay instead of
+        navigating as part of the original click.
+      </p>
+      <button id="rw03Watch">Watch briefing</button>
+    </div>
+
+    <script>
+      document.getElementById('rw03Watch').addEventListener('click', () => {
+        window.setTimeout(() => {
+          location.assign('rw03-final-report.html?from=briefing');
+        }, 2300);
+      });
+    </script>
+  </body>
+</html>
