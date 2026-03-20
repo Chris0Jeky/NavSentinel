@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RW-12 - Wallet Connect Burst</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 42px 18px;
+        background: #0f1724;
+        color: #eff5ff;
+      }
+      .card {
+        padding: 26px;
+        border-radius: 22px;
+        border: 1px solid rgba(151, 198, 255, 0.16);
+        background: linear-gradient(180deg, rgba(18, 31, 50, 0.96), rgba(14, 22, 34, 0.98));
+        box-shadow: 0 14px 32px rgba(0, 0, 0, 0.35);
+      }
+      .eyebrow {
+        margin: 0 0 10px;
+        font-size: 11px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: #93c4ff;
+      }
+      button {
+        min-height: 48px;
+        margin-top: 18px;
+        padding: 0 20px;
+        border: none;
+        border-radius: 14px;
+        background: linear-gradient(135deg, #28b2ff, #1f7bff);
+        color: white;
+        font-size: 16px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <section class="card">
+      <p class="eyebrow">Wallet action</p>
+      <h1>RW-12: Wallet connect popup burst</h1>
+      <p>
+        A normal wallet-connect popup opens first. A follow-up popup tries to piggyback on the
+        same gesture as abuse.
+      </p>
+      <button id="rw12Connect" type="button">Connect wallet</button>
+    </section>
+
+    <script>
+      document.getElementById('rw12Connect').addEventListener('click', () => {
+        window.open(
+          'rw12-wallet-connect-popup.html?step=connect',
+          'wallet-connect',
+          'popup,width=420,height=680'
+        );
+
+        window.setTimeout(() => {
+          window.open(
+            'rw12-wallet-drain-popup.html?step=approve',
+            'wallet-drain',
+            'popup,width=460,height=700'
+          );
+        }, 60);
+      });
+    </script>
+  </body>
+</html>

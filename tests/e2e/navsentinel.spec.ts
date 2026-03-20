@@ -640,6 +640,178 @@ test("RW-10 Enter-triggered submit input opens without prompting @regression", a
   }
 });
 
+test("RW-11 fake invoice approval button blocks the unrelated payout tab @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/rw11-fake-invoice-approval.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await waitForNavSentinelBridge(page);
+
+      const review = page.locator(".invoice");
+      const box = await review.boundingBox();
+      expect(box, "Expected the invoice card to be visible").toBeTruthy();
+
+      const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
+      await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+
+      const popup = await popupPromise;
+      expect(popup, "Expected the unrelated payout tab to be blocked").toBeNull();
+      await waitForToastText(page, "Blocked new tab", 3000);
+      await expect(page).toHaveURL(/rw11-fake-invoice-approval\.html/);
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("RW-12 wallet connect allows the first popup and blocks the burst follow-up @regression @stress", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/rw12-wallet-connect-burst.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await waitForNavSentinelBridge(page);
+
+      const beforePages = context.pages().length;
+      const popupPromise = context.waitForEvent("page", { timeout: 5000 }).catch(() => null);
+      await page.click("#rw12Connect");
+
+      const popup = await popupPromise;
+      expect(popup, "Expected the first wallet popup to open").not.toBeNull();
+      await popup?.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
+      expect(popup?.url()).toContain("rw12-wallet-connect-popup.html?step=connect");
+
+      await expect.poll(() => context.pages().length, { timeout: 5000 }).toBe(beforePages + 1);
+      await waitForToastText(page, "Blocked popup", 3000);
+      await page.waitForTimeout(300);
+      expect(context.pages().length).toBe(beforePages + 1);
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("RW-14 checkout express-pay overlay blocks the unrelated destination tab @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/rw14-checkout-express-pay-overlay.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await waitForNavSentinelBridge(page);
+
+      const pay = page.locator("#rw14Pay");
+      const box = await pay.boundingBox();
+      expect(box, "Expected the express-pay control to be visible").toBeTruthy();
+
+      const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
+      await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+
+      const popup = await popupPromise;
+      expect(popup, "Expected the express-pay destination tab to be blocked").toBeNull();
+      await waitForToastText(page, "Blocked new tab", 3000);
+      await expect(page).toHaveURL(/rw14-checkout-express-pay-overlay\.html/);
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("RW-15 bank security alert redirect prompts before final navigation @rollback", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/rw15-bank-security-alert.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await waitForNavSentinelBridge(page);
+
+      await page.click("#rw15Verify");
+      await page.waitForURL(/rw15-bank-verify-transaction\.html\?from=alert/, { timeout: 8000 });
+      await expect
+        .poll(async () => (await readToastText(page)) ?? "", { timeout: 6000 })
+        .toMatch(/Blocked redirect|rolled back a redirect/i);
+
+      const rw15Toast = (await readToastText(page)) ?? "";
+      await clickToastButton(page, rw15Toast.includes("Blocked redirect") ? "Allow once" : "Proceed");
+      await page.waitForURL(/rw15-bank-verify-transaction\.html\?from=alert/, { timeout: 5000 });
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
 test("Level 7 legit modal backdrop closes without a false positive @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
@@ -991,7 +1163,7 @@ test("Level 9 legit overlay controls and visible docs link stay allowed @regress
   }
 });
 
-test("Level 10 delayed redirect rolls back to the prior page @rollback", async () => {
+test("Level 10 delayed redirect surfaces recovery on the redirected page @rollback", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
@@ -1015,12 +1187,13 @@ test("Level 10 delayed redirect rolls back to the prior page @rollback", async (
       await waitForNavSentinelBridge(page);
       await page.click("#delayed");
       await page.waitForURL(/level4-visual-mimicry\.html/, { timeout: 7000 });
-      await page.waitForURL(/level10-redirects-and-forms\.html/, {
-        timeout: 20000,
-        waitUntil: "commit"
-      });
-      await page.waitForTimeout(1000);
-      await expect(page).toHaveURL(/level10-redirects-and-forms\.html/);
+      await expect
+        .poll(async () => (await readToastText(page)) ?? "", { timeout: 6000 })
+        .toMatch(/Blocked redirect|rolled back a redirect/i);
+
+      const level10Toast = (await readToastText(page)) ?? "";
+      await clickToastButton(page, level10Toast.includes("Blocked redirect") ? "Allow once" : "Proceed");
+      await expect(page).toHaveURL(/level4-visual-mimicry\.html/);
     } finally {
       await context.close();
     }

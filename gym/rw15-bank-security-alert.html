@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RW-15 - Bank Security Alert Redirect</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 820px;
+        margin: 0 auto;
+        padding: 36px 18px 60px;
+        background: #f4f6fb;
+        color: #172230;
+      }
+      .alert {
+        padding: 26px;
+        border-radius: 22px;
+        border: 1px solid #f1d3c6;
+        background: linear-gradient(180deg, #fff6f2 0%, #ffffff 100%);
+        box-shadow: 0 12px 30px rgba(20, 34, 52, 0.08);
+      }
+      button {
+        min-height: 48px;
+        margin-top: 18px;
+        padding: 0 18px;
+        border: none;
+        border-radius: 14px;
+        background: #b53020;
+        color: white;
+        font-size: 16px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      code {
+        background: rgba(12, 21, 34, 0.05);
+        padding: 2px 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <section class="alert">
+      <h1>RW-15: Bank/security alert redirect</h1>
+      <p>
+        This simulates an urgent transaction-verification banner that looks harmless at click time
+        but redirects later.
+      </p>
+      <ul>
+        <li>Alert type: card-not-present transaction</li>
+        <li>Amount: £2,480.00</li>
+        <li>Requested action: verify this payment immediately</li>
+      </ul>
+      <button id="rw15Verify" type="button">Verify transaction</button>
+      <p>Expected behavior: delayed redirect should trigger a prompt or rollback before continuing.</p>
+    </section>
+
+    <script>
+      document.getElementById('rw15Verify').addEventListener('click', () => {
+        window.setTimeout(() => {
+          location.assign('rw15-bank-verify-transaction.html?from=alert');
+        }, 2200);
+      });
+    </script>
+  </body>
+</html>
