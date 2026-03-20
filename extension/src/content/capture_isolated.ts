@@ -29,6 +29,7 @@ const NAV_GESTURE_TTL_MS = 1500;
 const NAV_TARGET_ALLOW_TTL_MS = 10000;
 const MAX_PENDING_BRIDGE_MESSAGES = 32;
 const BRIDGE_RETRY_MS = 100;
+const MAX_BRIDGE_RETRY_MS = 1000;
 const RISKY_BLANK_REASONS = new Set([
   "intent_mismatch_under_interactive",
   "invisible_but_clickable",
@@ -55,6 +56,7 @@ let lastNav: { kind: string; url: string; status: "allowed" | "blocked" } | null
 let lastDebug: Omit<DebugInfo, "mainGuard" | "lastNav"> | null = null;
 let rollbackShownAt = 0;
 let bridgeRetryTimer = 0;
+let bridgeRetryDelayMs = BRIDGE_RETRY_MS;
 let forwardCheckInFlight = false;
 let forwardCheckTimer = 0;
 
@@ -63,6 +65,7 @@ function markMainGuardReady(): void {
     window.clearTimeout(bridgeRetryTimer);
     bridgeRetryTimer = 0;
   }
+  bridgeRetryDelayMs = BRIDGE_RETRY_MS;
   bridgeReady = true;
   document.documentElement.setAttribute("data-navsentinel-bridge-ready", "1");
   mainGuard = "yes";
@@ -94,19 +97,6 @@ async function initSettings() {
       // ignore
     }
   }
-  window.setTimeout(() => {
-    if (mainGuard === "unknown") {
-      mainGuard = "no";
-      if (bridgeRetryTimer) {
-        window.clearTimeout(bridgeRetryTimer);
-        bridgeRetryTimer = 0;
-      }
-      bridgePort?.close();
-      bridgePort = null;
-      pendingBridgeMessages.length = 0;
-      refreshDebug();
-    }
-  }, 750);
 }
 
 void initSettings();
@@ -265,7 +255,8 @@ function ensureBridge(): void {
     );
 
     if (!bridgeReady && mainGuard === "unknown") {
-      bridgeRetryTimer = window.setTimeout(attempt, BRIDGE_RETRY_MS);
+      bridgeRetryTimer = window.setTimeout(attempt, bridgeRetryDelayMs);
+      bridgeRetryDelayMs = Math.min(bridgeRetryDelayMs * 2, MAX_BRIDGE_RETRY_MS);
     }
   };
 
@@ -352,6 +343,7 @@ function handleRollback(url: string, prevUrl?: string): void {
   const target = prevUrl && prevUrl !== url ? prevUrl : "";
   if (target) {
     try {
+      chrome.runtime.sendMessage({ type: "ns-begin-rollback", returnUrl: target });
       chrome.runtime.sendMessage({ type: "ns-store-forward", url, returnUrl: target });
       notifyNavAllow();
       notifyAllowedTarget(target);

@@ -391,6 +391,10 @@ describe("service worker rollback gating", () => {
       transitionType: "link",
       transitionQualifiers: ["client_redirect"]
     });
+    mock.dispatchRuntimeMessage(
+      { type: "ns-begin-rollback", returnUrl: "https://example.test/origin" },
+      { tab: { id: 24 } }
+    );
 
     mock.emitBeforeNavigate({
       tabId: 24,
@@ -439,6 +443,10 @@ describe("service worker rollback gating", () => {
       transitionType: "link",
       transitionQualifiers: ["client_redirect"]
     });
+    mock.dispatchRuntimeMessage(
+      { type: "ns-begin-rollback", returnUrl: "https://example.test/origin" },
+      { tab: { id: 27 } }
+    );
 
     mock.emitBeforeNavigate({
       tabId: 27,
@@ -479,6 +487,10 @@ describe("service worker rollback gating", () => {
       transitionType: "link",
       transitionQualifiers: ["client_redirect"]
     });
+    mock.dispatchRuntimeMessage(
+      { type: "ns-begin-rollback", returnUrl: "https://example.test/origin" },
+      { tab: { id: 29 } }
+    );
 
     mock.emitBeforeNavigate({
       tabId: 29,
@@ -571,6 +583,47 @@ describe("service worker rollback gating", () => {
 
     mock.dispatchRuntimeMessage({ type: "ns-ready" }, { tab: { id: 26 } });
     expect(mock.sentMessages).toEqual([]);
+  });
+
+  it("does not preserve a forward offer when the user later revisits the prior URL", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+
+    mock.emitCommitted({
+      tabId: 30,
+      frameId: 0,
+      url: "https://example.test/origin",
+      transitionType: "typed",
+      transitionQualifiers: []
+    });
+
+    vi.setSystemTime(new Date("2026-03-17T12:00:02.000Z"));
+    mock.emitCommitted({
+      tabId: 30,
+      frameId: 0,
+      url: "https://example.test/redirected",
+      transitionType: "link",
+      transitionQualifiers: ["client_redirect"]
+    });
+
+    mock.emitBeforeNavigate({
+      tabId: 30,
+      frameId: 0,
+      url: "https://example.test/origin"
+    });
+
+    const rollback = mock.dispatchRuntimeMessage({ type: "ns-check-rollback" }, { tab: { id: 30 } }) as {
+      shouldRollback: boolean;
+    };
+    const forward = mock.dispatchRuntimeMessage(
+      { type: "ns-check-forward", currentUrl: "https://example.test/origin" },
+      { tab: { id: 30 } }
+    ) as { status?: string; url?: string };
+
+    expect(rollback.shouldRollback).toBe(false);
+    expect(forward.status).toBe("none");
+    expect(forward.url).toBe("");
   });
 
   it("clears queued rollback and forward state after a top-frame navigation error", async () => {

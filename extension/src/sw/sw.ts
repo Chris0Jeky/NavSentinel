@@ -5,6 +5,7 @@ const NAV_ALLOW_TTL_MS = 1500;
 const NAV_GESTURE_TTL_MS = 1500;
 const NAV_TARGET_ALLOW_TTL_MS = 10000;
 const ROLLBACK_SUPPRESS_MS = 6000;
+const ROLLBACK_RETURN_TTL_MS = 5000;
 
 const allowUntilByTab = new Map<number, number>();
 const gestureUntilByTab = new Map<number, number>();
@@ -14,6 +15,7 @@ const suppressUntilByTab = new Map<number, number>();
 const readyTabs = new Set<number>();
 const pendingRollbackByTab = new Map<number, { url: string; prevUrl?: string; qualifiers: string[] }>();
 const pendingForwardByTab = new Map<number, { url: string; ts: number; returnUrl?: string }>();
+const rollbackReturnByTab = new Map<number, { url: string; expiresAt: number }>();
 const lastUrlByTab = new Map<number, string>();
 const lastCommittedByTab = new Map<
   number,
@@ -75,6 +77,17 @@ function trySendForwardOffer(
     }
   });
 }
+
+function getActiveRollbackReturn(tabId: number): { url: string; expiresAt: number } | null {
+  const entry = rollbackReturnByTab.get(tabId);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    rollbackReturnByTab.delete(tabId);
+    return null;
+  }
+  return entry;
+}
+
 async function syncDnrRulesets(): Promise<void> {
   try {
     const settings = await getNavSettings();
@@ -172,6 +185,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
   }
 
+  if (message.type === "ns-begin-rollback") {
+    const tabId = sender.tab?.id;
+    if (typeof tabId === "number" && typeof message.returnUrl === "string" && message.returnUrl) {
+      rollbackReturnByTab.set(tabId, {
+        url: message.returnUrl,
+        expiresAt: Date.now() + ROLLBACK_RETURN_TTL_MS
+      });
+    }
+    sendResponse?.({ ok: true });
+  }
+
   if (message.type === "ns-check-forward") {
     const tabId = sender.tab?.id;
     if (typeof tabId === "number") {
@@ -198,9 +222,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 chrome.webNavigation.onBeforeNavigate.addListener((details) => {
   if (details.frameId !== 0) return;
-  const committed = lastCommittedByTab.get(details.tabId);
-  const preserveForwardOffer = committed?.prevUrl === details.url;
+  const forward = pendingForwardByTab.get(details.tabId);
+  const rollbackReturn = getActiveRollbackReturn(details.tabId);
+  const preserveForwardOffer =
+    !!forward && !!rollbackReturn && rollbackReturn.url === details.url;
   clearPendingTabState(details.tabId, { preserveForwardOffer });
+  if (!preserveForwardOffer) {
+    rollbackReturnByTab.delete(details.tabId);
+  }
   allowStartedByTab.delete(details.tabId);
   const now = Date.now();
   const allowUntil = allowUntilByTab.get(details.tabId) ?? 0;
@@ -214,6 +243,7 @@ chrome.webNavigation.onBeforeNavigate.addListener((details) => {
 
 chrome.webNavigation.onCommitted.addListener((details) => {
   if (details.frameId !== 0) return;
+  rollbackReturnByTab.delete(details.tabId);
   const now = Date.now();
   const targetAllowance = allowTargetByTab.get(details.tabId);
   const targetAllowed =
@@ -278,8 +308,11 @@ chrome.webNavigation.onCommitted.addListener((details) => {
 chrome.webNavigation.onErrorOccurred?.addListener((details) => {
   if (details.frameId !== 0) return;
   const forward = pendingForwardByTab.get(details.tabId);
-  const preserveForwardOffer = !!forward && !!details.url && forward.url === details.url;
+  const rollbackReturn = getActiveRollbackReturn(details.tabId);
+  const preserveForwardOffer =
+    !!forward && !!rollbackReturn && !!details.url && forward.url === details.url;
   clearPendingTabState(details.tabId, { preserveForwardOffer });
+  rollbackReturnByTab.delete(details.tabId);
   allowStartedByTab.delete(details.tabId);
 });
 
@@ -289,6 +322,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   allowStartedByTab.delete(tabId);
   allowTargetByTab.delete(tabId);
   suppressUntilByTab.delete(tabId);
+  rollbackReturnByTab.delete(tabId);
   clearPendingTabState(tabId);
   lastUrlByTab.delete(tabId);
 });

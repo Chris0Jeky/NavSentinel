@@ -3,7 +3,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
-import { SUITE_SETTINGS_KEY } from "../../extension/src/shared/storage";
+import { SUITE_SETTINGS_KEY, TRUSTED_DOMAINS_KEY } from "../../extension/src/shared/storage";
 import { getExtensionId } from "./extension_test_utils";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -44,14 +44,18 @@ test("options normalizes trusted-domain input and persists mode changes @smoke",
       await options.locator("#trustedInput").fill("https://login.example.com/account");
       await options.locator("#addTrusted").click();
       await options.locator("#save").click();
-      await options.waitForFunction(async (settingsKey) => {
-        const result = await chrome.storage.local.get(settingsKey);
+      await options.waitForFunction(async ({ settingsKey, trustedDomainsKey }) => {
+        const result = await chrome.storage.local.get([settingsKey, trustedDomainsKey]);
         const settings = result[settingsKey];
+        const trustedDomains = Array.isArray(result[trustedDomainsKey])
+          ? (result[trustedDomainsKey] as string[])
+          : [];
         return (
           settings?.nav?.defaultMode === "strict" &&
-          settings?.credential?.mode === "strict"
+          settings?.credential?.mode === "strict" &&
+          trustedDomains.includes("example.com")
         );
-      }, SUITE_SETTINGS_KEY);
+      }, { settingsKey: SUITE_SETTINGS_KEY, trustedDomainsKey: TRUSTED_DOMAINS_KEY });
 
       await options.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
       await expect(options.locator("#navMode")).toHaveValue("strict");

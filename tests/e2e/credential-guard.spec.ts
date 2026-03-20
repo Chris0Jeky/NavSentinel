@@ -4,7 +4,13 @@ import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 import { EVENT_LOG_KEY, TRUSTED_DOMAINS_KEY } from "../../extension/src/shared/storage";
-import { getExtensionId, getGymBaseUrl, getServiceWorker } from "./extension_test_utils";
+import {
+  assertNoToastFor,
+  getExtensionId,
+  getGymBaseUrl,
+  getServiceWorker,
+  waitForNavSentinelBridge
+} from "./extension_test_utils";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -33,6 +39,7 @@ test("credential guard prompts before risky password submit @smoke", async () =>
         waitUntil: "domcontentloaded",
         timeout: 20_000
       });
+      await waitForNavSentinelBridge(page);
 
       await page.click("#submitBtn");
 
@@ -66,6 +73,7 @@ test("credential guard warns on password paste and trust action persists @regres
         waitUntil: "domcontentloaded",
         timeout: 20_000
       });
+      await waitForNavSentinelBridge(page);
 
       await page.focus("#password");
       await page.evaluate(() => {
@@ -118,6 +126,20 @@ test("credential guard warns on password paste and trust action persists @regres
       await expect(options.locator("#trustedList")).toContainText("127.0.0.1");
       await expect(options.locator("#eventLog")).toContainText("cred_paste_warn");
       await expect(options.locator("#eventLog")).toContainText("cred_trust_domain");
+
+      const revisited = await context.newPage();
+      await revisited.goto(`${baseUrl}/level11-credential-guard.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+      await waitForNavSentinelBridge(revisited);
+      await revisited.focus("#password");
+      await revisited.evaluate(() => {
+        const input = document.getElementById("password");
+        if (!(input instanceof HTMLInputElement)) return;
+        input.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, composed: true }));
+      });
+      await assertNoToastFor(revisited);
     } finally {
       await context.close();
     }
