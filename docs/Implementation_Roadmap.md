@@ -13,7 +13,7 @@ The shipped baseline now includes:
 - unified local storage, import/export, and bounded event logging
 - build, packaging, CI, and strict type verification
 
-As of 2026-03-19 there are no open GitHub PRs and no open GitHub issues. The remaining work is follow-up backlog, not in-flight merge work.
+The active follow-up stack currently lives in open PRs. Refer to GitHub for the live branch/PR state; the remaining work is follow-up backlog, not merge work.
 
 The detailed execution order for that follow-up work now lives in:
 
@@ -25,11 +25,11 @@ The detailed execution order for that follow-up work now lives in:
 
 Highest-value next work:
 
-- automate Gym Levels 2, 3, 4, 7, 8, and 9
+- deepen popup/operator-surface browser coverage
 - add stress coverage for popup bursts, delayed chains, and worker churn
 - add lower-cost property/fake-timer tests for scoring, DOM hints, and state timing
 
-This is the clearest current gap because the infrastructure exists, but several important fixtures and stress paths are still unguarded.
+The biggest remaining gap is no longer baseline Gym coverage; it is depth in popup/operator workflows plus timing-heavy stress behavior.
 
 ### 2. Tighten operator ergonomics
 
@@ -68,6 +68,6 @@ Those materials are kept only as archive/history.
 
 ## Practical next steps
 
-1. Finish Playwright coverage for the remaining Gym levels.
+1. Add the popup/operator coverage tranche.
 2. Add a stress lane for worker-state churn and repeated popup/redirect cases.
-3. After test coverage improves, decide whether the next tranche should be operator UX cleanup or release/repo polish.
+3. After that, decide whether the next tranche should be lower-cost property/state tests or release/repo polish.

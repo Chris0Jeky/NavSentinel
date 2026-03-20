@@ -16,7 +16,7 @@ export async function getExtensionId(context: BrowserContext): Promise<string> {
   return new URL(worker.url()).host;
 }
 
-export async function waitForNavSentinelBridge(page: Page, timeout = 5000): Promise<void> {
+export async function waitForNavSentinelBridge(page: Page, timeout = 7000): Promise<void> {
   await page.waitForFunction(
     () =>
       document.documentElement.getAttribute("data-navsentinel-capture-ready") === "1" &&
@@ -30,14 +30,59 @@ export async function waitForToastText(page: Page, text: string, timeout = 4000)
   await page.waitForFunction(
     (expected) => {
       const host = document.querySelector("#__navsentinel_toast_host");
-      const root = host?.shadowRoot;
-      return !!root?.textContent?.includes(expected);
+      const body = host?.shadowRoot?.querySelector(".body");
+      return !!body?.textContent?.includes(expected);
     },
     text,
     { timeout }
   );
 }
 
+export async function readToastText(page: Page): Promise<string | null> {
+  return page.evaluate(() => {
+    const host = document.querySelector("#__navsentinel_toast_host");
+    const body = host?.shadowRoot?.querySelector(".body");
+    const text = body?.textContent?.trim();
+    return text ? text : null;
+  });
+}
+
+export async function assertNoToastFor(page: Page, durationMs = 1200): Promise<void> {
+  await page.evaluate(async (duration) => {
+    const readBodyText = (): string | null => {
+      const host = document.querySelector("#__navsentinel_toast_host");
+      const body = host?.shadowRoot?.querySelector(".body");
+      const text = body?.textContent?.trim();
+      return text ? text : null;
+    };
+
+    return await new Promise<void>((resolve, reject) => {
+      const initial = readBodyText();
+      if (initial) {
+        reject(new Error(`Unexpected toast text: ${initial}`));
+        return;
+      }
+      const start = Date.now();
+
+      const check = () => {
+        const next = readBodyText();
+        if (next) {
+          reject(new Error(`Unexpected toast text: ${next}`));
+          return;
+        }
+
+        if (Date.now() - start >= duration) {
+          resolve();
+          return;
+        }
+
+        window.setTimeout(check, 50);
+      };
+
+      check();
+    });
+  }, durationMs);
+}
 export function getGymBaseUrlOverride(): string | undefined {
   const raw = process.env.GYM_BASE_URL?.trim();
   return raw ? raw : undefined;

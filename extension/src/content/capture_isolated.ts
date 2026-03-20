@@ -55,6 +55,8 @@ let lastNav: { kind: string; url: string; status: "allowed" | "blocked" } | null
 let lastDebug: Omit<DebugInfo, "mainGuard" | "lastNav"> | null = null;
 let rollbackShownAt = 0;
 let bridgeRetryTimer = 0;
+let forwardCheckInFlight = false;
+let forwardCheckTimer = 0;
 
 function markMainGuardReady(): void {
   if (bridgeRetryTimer) {
@@ -350,12 +352,23 @@ function handleRollback(url: string, prevUrl?: string): void {
   const target = prevUrl && prevUrl !== url ? prevUrl : "";
   if (target) {
     try {
-      chrome.runtime.sendMessage({ type: "ns-store-forward", url });
+      chrome.runtime.sendMessage({ type: "ns-store-forward", url, returnUrl: target });
       notifyNavAllow();
-      postToMain("ns-allow", { allowOpen: false, allowRedirect: true });
+      notifyAllowedTarget(target);
       window.setTimeout(() => {
         try {
-          location.replace(target);
+          const anchor = document.createElement("a");
+          anchor.href = target;
+          anchor.target = "_self";
+          anchor.textContent = "NavSentinel return";
+          anchor.style.position = "fixed";
+          anchor.style.top = "0";
+          anchor.style.left = "0";
+          anchor.style.opacity = "0.01";
+          anchor.style.padding = "1px";
+          document.body.appendChild(anchor);
+          anchor.click();
+          anchor.remove();
         } catch {
           // ignore
         }
@@ -562,15 +575,29 @@ if (chrome?.runtime?.sendMessage && window.top === window) {
 }
 
 if (chrome?.runtime?.sendMessage && window.top === window) {
-  const runForward = () => {
+  const runForward = (retries = 1) => {
+    if (forwardCheckInFlight) return;
+    if (forwardCheckTimer) {
+      window.clearTimeout(forwardCheckTimer);
+      forwardCheckTimer = 0;
+    }
+    forwardCheckInFlight = true;
     chrome.runtime.sendMessage({ type: "ns-check-forward", currentUrl: location.href }, (resp) => {
+      forwardCheckInFlight = false;
+      const status = typeof resp?.status === "string" ? resp.status : "";
       const url = typeof resp?.url === "string" ? resp.url : "";
-      if (!url || settings.defaultMode === "off") return;
-      showRollbackPrompt(url);
+      if (status === "offer" && url) {
+        if (settings.defaultMode === "off") return;
+        showRollbackPrompt(url);
+        return;
+      }
+      if (!resp && retries > 0) {
+        forwardCheckTimer = window.setTimeout(() => runForward(retries - 1), 200);
+      }
     });
   };
 
-  window.addEventListener("pageshow", runForward);
+  window.addEventListener("pageshow", () => runForward());
   window.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
       runForward();
@@ -578,7 +605,7 @@ if (chrome?.runtime?.sendMessage && window.top === window) {
   });
 
   if (document.readyState === "loading") {
-    window.addEventListener("DOMContentLoaded", runForward, { once: true });
+    window.addEventListener("DOMContentLoaded", () => runForward(), { once: true });
   } else {
     runForward();
   }
@@ -676,10 +703,10 @@ window.addEventListener(
 
     let decision: "allow" | "prompt" | "block" = "allow";
     const blockThreshold = getBlockThreshold(mode);
+    const smartAllowsBlank =
+      mode === "smart" && !!anchor && isLegitBlankAnchor(anchor, ctx, cds, reasonCodes);
 
     if (mode !== "off") {
-      const smartAllowsBlank =
-        mode === "smart" && !!anchor && isLegitBlankAnchor(anchor, ctx, cds, reasonCodes);
       if (isBlankAnchor && !isAllowed && !explicitNewTab && !smartAllowsBlank) {
         decision = "prompt";
         e.preventDefault();
