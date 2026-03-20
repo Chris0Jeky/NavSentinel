@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RW-19 - Tech Support Scare Page</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 34px 18px 56px;
+        background: #210d0d;
+        color: #fff5f5;
+      }
+      .shell {
+        padding: 28px;
+        border-radius: 24px;
+        border: 1px solid rgba(255, 173, 173, 0.28);
+        background: linear-gradient(180deg, rgba(82, 16, 16, 0.92), rgba(34, 8, 8, 0.98));
+        box-shadow: 0 18px 36px rgba(0, 0, 0, 0.34);
+      }
+      .alarm {
+        font-size: 36px;
+        font-weight: 900;
+        letter-spacing: 0.04em;
+      }
+      #attempts {
+        margin-top: 18px;
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <section class="shell">
+      <div class="alarm">Security warning detected</div>
+      <p>
+        This page simulates a loud support-scam flow that repeatedly spawns support popups without
+        any valid user gesture.
+      </p>
+      <p id="attempts">Attempts: 0</p>
+    </section>
+
+    <script>
+      const attempts = document.getElementById('attempts');
+      let count = 0;
+      const interval = window.setInterval(() => {
+        count += 1;
+        attempts.textContent = `Attempts: ${count}`;
+        window.open(
+          `rw19-remote-support.html?attempt=${count}`,
+          `rw19-support-${count}`,
+          'popup,width=520,height=640'
+        );
+        if (count >= 4) {
+          window.clearInterval(interval);
+        }
+      }, 250);
+    </script>
+  </body>
+</html>

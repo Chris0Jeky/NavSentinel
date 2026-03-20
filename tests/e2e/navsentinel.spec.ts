@@ -831,6 +831,224 @@ test("RW-15 bank security alert redirect prompts before final navigation @rollba
   }
 });
 
+test("RW-16 fake document preview overlay blocks the deceptive open path @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/rw16-fake-document-preview-overlay.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await waitForNavSentinelBridge(page);
+
+      const open = page.locator("#rw16Open");
+      const box = await open.boundingBox();
+      expect(box, "#rw16Open should be visible").toBeTruthy();
+
+      const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
+      await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+
+      const popup = await popupPromise;
+      expect(popup, "Expected the fake preview tab to be blocked").toBeNull();
+      await waitForToastText(page, "Blocked new tab", 3000);
+      await expect(page).toHaveURL(/rw16-fake-document-preview-overlay\.html/);
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("RW-17 media overlay hijack blocks the drifted ad destination @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/rw17-media-overlay-hijack.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await waitForNavSentinelBridge(page);
+
+      const play = page.locator("#rw17Play");
+      const box = await play.boundingBox();
+      expect(box, "#rw17Play should be visible").toBeTruthy();
+
+      const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
+      await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+      await page.waitForTimeout(160);
+      await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+
+      const popup = await popupPromise;
+      expect(popup, "Expected the hijacked player tab to be blocked").toBeNull();
+      await waitForToastText(page, "Blocked new tab", 3000);
+      await expect(page.locator("#status")).toContainText("active");
+      await expect(page).toHaveURL(/rw17-media-overlay-hijack\.html/);
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("RW-18 fake codec warning blocks the installer or support tab @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/rw18-browser-update-warning.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await waitForNavSentinelBridge(page);
+
+      const install = page.locator("#rw18Install");
+      const box = await install.boundingBox();
+      expect(box, "#rw18Install should be visible").toBeTruthy();
+
+      const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
+      await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+
+      const popup = await popupPromise;
+      expect(popup, "Expected the codec-warning tab to be blocked").toBeNull();
+      await waitForToastText(page, "Blocked new tab", 3000);
+      await expect(page).toHaveURL(/rw18-browser-update-warning\.html/);
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("RW-19 tech-support scare blocks repeated popup bursts @regression @stress", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/rw19-tech-support-scare.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await waitForNavSentinelBridge(page);
+
+      const beforePages = context.pages().length;
+      await page.waitForFunction(
+        () => document.getElementById("attempts")?.textContent?.includes("4"),
+        null,
+        { timeout: 4000 }
+      );
+      await waitForToastText(page, "Blocked popup", 4000);
+      await page.waitForTimeout(300);
+      expect(context.pages().length).toBe(beforePages);
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("RW-20 chat widget allows the first popup and blocks the abusive follow-up @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/rw20-chat-widget-abuse.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await waitForNavSentinelBridge(page);
+
+      const beforePages = context.pages().length;
+      const popupPromise = context.waitForEvent("page", { timeout: 5000 }).catch(() => null);
+      await page.click("#rw20Chat");
+
+      const popup = await popupPromise;
+      expect(popup, "Expected the support chat popup to open").not.toBeNull();
+      await popup?.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
+      expect(popup?.url()).toContain("rw20-chat-popup.html?step=chat");
+
+      await expect.poll(() => context.pages().length, { timeout: 5000 }).toBe(beforePages + 1);
+      await waitForToastText(page, "Blocked popup", 3000);
+      await page.waitForTimeout(300);
+      expect(context.pages().length).toBe(beforePages + 1);
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
 test("Level 7 legit modal backdrop closes without a false positive @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
