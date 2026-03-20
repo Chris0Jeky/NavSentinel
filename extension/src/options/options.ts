@@ -45,12 +45,30 @@ const importFileEl = document.getElementById("importFile") as HTMLInputElement;
 const statusEl = document.getElementById("status") as HTMLSpanElement;
 const saveBtn = document.getElementById("save") as HTMLButtonElement;
 const saveStatusEl = document.getElementById("saveStatus") as HTMLSpanElement;
+const statusTimers = new WeakMap<HTMLElement, number>();
 
-function flashStatus(el: HTMLElement, message: string): void {
+function flashStatus(
+  el: HTMLElement,
+  message: string,
+  tone: "success" | "warning" | "error" = "success"
+): void {
+  const existing = statusTimers.get(el);
+  if (existing) {
+    window.clearTimeout(existing);
+  }
   el.textContent = message;
-  window.setTimeout(() => {
+  el.dataset.tone = tone;
+  const timer = window.setTimeout(() => {
     el.textContent = "";
+    delete el.dataset.tone;
   }, 1400);
+  statusTimers.set(el, timer);
+}
+
+function eventTone(kind: string): "navigation" | "credential" | "config" {
+  if (kind.startsWith("cred_")) return "credential";
+  if (kind.startsWith("suite_")) return "config";
+  return "navigation";
 }
 
 function renderAllowlist(list: Allowlist): void {
@@ -184,6 +202,7 @@ function renderEventLog(log: EventLogEntry[]): void {
   for (const event of list) {
     const row = document.createElement("div");
     row.className = "event";
+    row.dataset.tone = eventTone(event.kind);
 
     const head = document.createElement("div");
     head.className = "event-head";
@@ -275,7 +294,7 @@ saveBtn.addEventListener("click", async () => {
     }
     flashStatus(saveStatusEl, "Saved.");
   } catch {
-    flashStatus(saveStatusEl, "Save failed.");
+    flashStatus(saveStatusEl, "Save failed.", "error");
   }
 });
 
@@ -293,7 +312,7 @@ clearAllowlistBtn.addEventListener("click", async () => {
 addTrustedBtn.addEventListener("click", async () => {
   const result = await addTrustedDomainWithResult(trustedInputEl.value);
   if (!result) {
-    flashStatus(saveStatusEl, "Enter a valid domain.");
+    flashStatus(saveStatusEl, "Enter a valid domain.", "warning");
     return;
   }
   const { normalized } = result;
@@ -351,7 +370,7 @@ importFileEl.addEventListener("change", async () => {
     await init();
     flashStatus(statusEl, "Imported.");
   } catch {
-    flashStatus(statusEl, "Import failed.");
+    flashStatus(statusEl, "Import failed.", "error");
   } finally {
     importFileEl.value = "";
   }

@@ -1,5 +1,5 @@
 <!doctype html>
-<html>
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -7,122 +7,219 @@
     <link rel="stylesheet" href="./options.css" />
   </head>
   <body>
-    <h1>NavSentinel Suite</h1>
-    <p class="subtitle">Navigation Intent Firewall + Credential Submit Guard (local-first).</p>
+    <div class="page-shell">
+      <header class="hero">
+        <div class="eyebrow">Operator Console</div>
+        <div class="hero-row">
+          <div>
+            <h1>NavSentinel Suite</h1>
+            <p class="subtitle">
+              Tune the navigation firewall and credential guard with a local-first control surface
+              built for review, testing, and incident-style inspection.
+            </p>
+          </div>
+          <div class="hero-mark" aria-hidden="true">NS</div>
+        </div>
+        <div class="hero-grid">
+          <div class="hero-stat">
+            <span class="hero-label">Navigation posture</span>
+            <span class="hero-value">Prompt, block, roll back</span>
+          </div>
+          <div class="hero-stat">
+            <span class="hero-label">Credential posture</span>
+            <span class="hero-value">Local risk scoring and trust controls</span>
+          </div>
+          <div class="hero-stat">
+            <span class="hero-label">Operator loop</span>
+            <span class="hero-value">Review events, export state, test in the Gym</span>
+          </div>
+        </div>
+      </header>
 
-    <div class="section">
-      <h2>Navigation protection</h2>
-      <div class="row">
-        <label for="navMode">Default mode</label>
-        <select id="navMode">
-          <option value="off">Off</option>
-          <option value="smart">Smart</option>
-          <option value="strict">Strict</option>
-        </select>
-      </div>
-      <div class="row">
-        <label class="checkbox">
-          <input type="checkbox" id="navDebug" />
-          Show debug overlay on pages
-        </label>
-      </div>
-      <div class="row">
-        <label class="checkbox">
-          <input type="checkbox" id="navDnrEnabled" />
-          Enable DNR backstop (experimental hard blocklist)
-        </label>
+      <main class="layout">
+        <section class="section">
+          <div class="section-head">
+            <div>
+              <div class="section-kicker">Navigation firewall</div>
+              <h2>Navigation protection</h2>
+            </div>
+            <p class="section-copy">
+              Configure how aggressively NavSentinel intervenes when clicks, redirects, and new-tab
+              flows look deceptive.
+            </p>
+          </div>
+
+          <div class="control-grid">
+            <div class="field-card">
+              <label for="navMode">Default mode</label>
+              <select id="navMode">
+                <option value="off">Off</option>
+                <option value="smart">Smart</option>
+                <option value="strict">Strict</option>
+              </select>
+            </div>
+
+            <div class="field-card field-card-wide">
+              <label class="checkbox">
+                <input type="checkbox" id="navDebug" />
+                Show debug overlay on pages
+              </label>
+              <label class="checkbox">
+                <input type="checkbox" id="navDnrEnabled" />
+                Enable DNR backstop (experimental hard blocklist)
+              </label>
+            </div>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-head">
+            <div>
+              <div class="section-kicker">Credential guard</div>
+              <h2>Credential protection</h2>
+            </div>
+            <p class="section-copy">
+              Decide when submits and paste actions should prompt, especially on untrusted or
+              lookalike destinations.
+            </p>
+          </div>
+
+          <div class="control-grid">
+            <div class="field-card">
+              <label for="credMode">Mode</label>
+              <select id="credMode">
+                <option value="off">Off</option>
+                <option value="smart">Smart</option>
+                <option value="strict">Strict</option>
+              </select>
+            </div>
+
+            <div class="field-card">
+              <label for="mediumRiskThreshold">Medium risk threshold</label>
+              <div class="inline-field">
+                <input id="mediumRiskThreshold" type="number" min="0" max="100" step="1" />
+                <span class="hint-inline">0-100</span>
+              </div>
+            </div>
+
+            <div class="field-card field-card-wide">
+              <div class="grid2">
+                <label class="checkbox">
+                  <input type="checkbox" id="blockHttpPasswordSubmit" />
+                  Block non-HTTPS credential submits (prompt)
+                </label>
+                <label class="checkbox">
+                  <input type="checkbox" id="warnOnPaste" />
+                  Warn on paste into password fields (toast)
+                </label>
+                <label class="checkbox">
+                  <input type="checkbox" id="promptOnUntrustedDomain" />
+                  Prompt on untrusted domains
+                </label>
+                <label class="checkbox">
+                  <input type="checkbox" id="promptOnMediumRisk" />
+                  Prompt on medium risk
+                </label>
+              </div>
+            </div>
+
+            <div class="field-card field-card-wide">
+              <label class="checkbox" for="similarityEnabled">
+                <input type="checkbox" id="similarityEnabled" />
+                Lookalike similarity (edit distance)
+              </label>
+              <div class="inline-field">
+                <input id="similarityMaxDistance" type="number" min="0" max="8" step="1" />
+                <span class="hint-inline">0-8</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-head">
+            <div>
+              <div class="section-kicker">Signals</div>
+              <h2>Event log</h2>
+            </div>
+            <p class="section-copy">
+              Review the most recent local decisions, export/import operator state, and keep the log
+              ring buffer sized for your workflow.
+            </p>
+          </div>
+
+          <div class="toolbar">
+            <div class="inline-field">
+              <label for="logLimit">Log limit</label>
+              <input id="logLimit" type="number" min="50" max="5000" step="10" />
+              <span class="hint-inline">ring buffer</span>
+            </div>
+
+            <div class="toolbar-actions">
+              <button id="refreshLog">Refresh</button>
+              <button id="clearLog">Clear</button>
+              <button id="exportBtn">Export JSON</button>
+              <label class="file">
+                Import JSON
+                <input id="importFile" type="file" accept="application/json" />
+              </label>
+              <span id="status" class="status"></span>
+            </div>
+          </div>
+
+          <div id="eventLog" class="events"></div>
+        </section>
+
+        <section class="section">
+          <div class="section-head">
+            <div>
+              <div class="section-kicker">Navigation exceptions</div>
+              <h2>Navigation allowlist</h2>
+            </div>
+            <p class="section-copy">
+              Per-site destination exemptions for flows you intentionally allow after a block.
+            </p>
+          </div>
+
+          <div id="allowlist" class="allowlist"></div>
+          <div class="row">
+            <button id="clearAllowlist">Clear all</button>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-head">
+            <div>
+              <div class="section-kicker">Credential exceptions</div>
+              <h2>Trusted domains</h2>
+            </div>
+            <p class="section-copy">
+              Domains that are allowed to receive credentials without untrusted-domain prompts.
+            </p>
+          </div>
+
+          <div class="toolbar">
+            <div class="toolbar-actions trusted-actions">
+              <input id="trustedInput" class="mono" placeholder="example.com" />
+              <button id="addTrusted">Add</button>
+              <button id="clearTrusted">Clear all</button>
+            </div>
+          </div>
+
+          <div id="trustedList" class="allowlist"></div>
+        </section>
+      </main>
+
+      <div class="row sticky">
+        <div class="hint save-hint">
+          Tip: validate behavior in the Gym after changing protection modes or trust state.
+        </div>
+        <div class="sticky-actions">
+          <span id="saveStatus" class="status"></span>
+          <button id="save" class="primary">Save settings</button>
+        </div>
       </div>
     </div>
-
-    <div class="section">
-      <h2>Credential protection</h2>
-      <div class="row">
-        <label for="credMode">Mode</label>
-        <select id="credMode">
-          <option value="off">Off</option>
-          <option value="smart">Smart</option>
-          <option value="strict">Strict</option>
-        </select>
-      </div>
-      <div class="grid2">
-        <label class="checkbox">
-          <input type="checkbox" id="blockHttpPasswordSubmit" />
-          Block non-HTTPS credential submits (prompt)
-        </label>
-        <label class="checkbox">
-          <input type="checkbox" id="warnOnPaste" />
-          Warn on paste into password fields (toast)
-        </label>
-        <label class="checkbox">
-          <input type="checkbox" id="promptOnUntrustedDomain" />
-          Prompt on untrusted domains
-        </label>
-        <label class="checkbox">
-          <input type="checkbox" id="promptOnMediumRisk" />
-          Prompt on medium risk
-        </label>
-      </div>
-      <div class="row">
-        <label for="mediumRiskThreshold">Medium risk threshold</label>
-        <input id="mediumRiskThreshold" type="number" min="0" max="100" step="1" />
-        <span class="hint-inline">0-100</span>
-      </div>
-      <div class="row">
-        <label class="checkbox">
-          <input type="checkbox" id="similarityEnabled" />
-          Lookalike similarity (edit distance)
-        </label>
-        <input id="similarityMaxDistance" type="number" min="0" max="8" step="1" />
-        <span class="hint-inline">0-8</span>
-      </div>
-    </div>
-
-    <div class="section">
-      <h2>Event log</h2>
-      <div class="row">
-        <label for="logLimit">Log limit</label>
-        <input id="logLimit" type="number" min="50" max="5000" step="10" />
-        <span class="hint-inline">ring buffer</span>
-      </div>
-      <div class="row">
-        <button id="refreshLog">Refresh</button>
-        <button id="clearLog">Clear</button>
-        <button id="exportBtn">Export JSON</button>
-        <label class="file">
-          Import JSON
-          <input id="importFile" type="file" accept="application/json" />
-        </label>
-        <span id="status" class="status"></span>
-      </div>
-      <div id="eventLog" class="events"></div>
-    </div>
-
-    <div class="section">
-      <h2>Navigation allowlist</h2>
-      <div id="allowlist" class="allowlist"></div>
-      <div class="row">
-        <button id="clearAllowlist">Clear all</button>
-      </div>
-    </div>
-
-    <div class="section">
-      <h2>Trusted domains (credential guard)</h2>
-      <div class="row">
-        <input id="trustedInput" class="mono" placeholder="example.com" />
-        <button id="addTrusted">Add</button>
-        <button id="clearTrusted">Clear all</button>
-      </div>
-      <div id="trustedList" class="allowlist"></div>
-    </div>
-
-    <div class="row sticky">
-      <button id="save" class="primary">Save settings</button>
-      <span id="saveStatus" class="status"></span>
-    </div>
-
-    <p class="hint">
-      Tip: Use the NavSentinel gym pages for overlay/popup testing. Credential prompts will trigger on password form submits.
-    </p>
 
     <script type="module" src="./options.ts"></script>
   </body>

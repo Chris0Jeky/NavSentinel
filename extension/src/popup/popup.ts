@@ -11,7 +11,6 @@ import {
 } from "../shared/storage";
 import {
   derivePopupSiteState,
-  formatPopupEventLine,
   getRecentPopupEvents
 } from "./popup_model";
 
@@ -38,19 +37,70 @@ function fmtTime(ts: number): string {
   }
 }
 
+function formatEventKind(kind: string): string {
+  return kind.replace(/_/g, " ");
+}
+
+function getEventTone(kind: string): "navigation" | "credential" | "config" {
+  if (kind.startsWith("cred_")) return "credential";
+  if (kind.startsWith("suite_")) return "config";
+  return "navigation";
+}
+
+function buildEventDetail(event: EventLogEntry): string {
+  const parts: string[] = [];
+  if (event.site) parts.push(`site ${event.site}`);
+  if (event.destHost) parts.push(`dest ${event.destHost}`);
+  if (typeof event.score === "number") parts.push(`score ${event.score}`);
+  if (event.reasons?.length) {
+    parts.push(
+      `signals ${event.reasons.slice(0, 3).join(", ")}${event.reasons.length > 3 ? "..." : ""}`
+    );
+  }
+  return parts.join(" • ");
+}
+
 function renderEvents(log: EventLogEntry[]): void {
-  const list = getRecentPopupEvents(log);
+  const list = getRecentPopupEvents(log, 6);
   if (list.length === 0) {
-    eventsEl.textContent = "No events yet.";
+    eventsEl.innerHTML = "";
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "No events yet.";
+    eventsEl.appendChild(empty);
     return;
   }
 
   eventsEl.innerHTML = "";
   for (const event of list) {
-    const row = document.createElement("div");
-    row.className = "event";
-    row.textContent = formatPopupEventLine(event, fmtTime);
-    eventsEl.appendChild(row);
+    const card = document.createElement("article");
+    card.className = "event-card";
+    card.dataset.tone = getEventTone(event.kind);
+
+    const head = document.createElement("div");
+    head.className = "event-head";
+
+    const kind = document.createElement("div");
+    kind.className = "event-kind";
+    kind.textContent = formatEventKind(event.kind);
+
+    const time = document.createElement("div");
+    time.className = "event-time mono";
+    time.textContent = fmtTime(event.ts);
+
+    head.appendChild(kind);
+    head.appendChild(time);
+    card.appendChild(head);
+
+    const detail = buildEventDetail(event);
+    if (detail) {
+      const body = document.createElement("div");
+      body.className = "event-detail";
+      body.textContent = detail;
+      card.appendChild(body);
+    }
+
+    eventsEl.appendChild(card);
   }
 }
 
@@ -64,6 +114,11 @@ async function refreshUi(): Promise<void> {
   const siteState = derivePopupSiteState(url, trusted);
   siteEl.textContent = siteState.siteLabel;
   trustStatusEl.textContent = siteState.trustStatus;
+  trustStatusEl.dataset.state = siteState.isTrusted
+    ? "trusted"
+    : siteState.registrableDomain
+      ? "caution"
+      : "neutral";
   trustBtn.disabled = !siteState.canTrust;
   untrustBtn.disabled = !siteState.canUntrust;
 

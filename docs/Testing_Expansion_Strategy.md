@@ -55,7 +55,18 @@ The repo does not yet have a separate stress or soak lane for:
 - tab churn and worker-state cleanup
 - idle periods long enough to let MV3 service workers restart
 
-### 3. Scoring/state edge exploration is still shallow
+### 3. No large real-world adversarial program
+
+The repo has deterministic Gym coverage, but it still lacks a broad scenario catalog for:
+
+- search-result and ad-landing deception
+- identity and OAuth laundering flows
+- commerce, invoice, and wallet abuse patterns
+- document-preview, media-player, and support-scam abuse chains
+
+That is now tracked explicitly in `docs/Real_World_Adversarial_Program.md`.
+
+### 4. Scoring/state edge exploration is still shallow
 
 There are useful unit tests today, but we still do not have:
 

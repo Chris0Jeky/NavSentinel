@@ -21,6 +21,8 @@ This folder documents the current merged `main` branch.
   - The active batch tracker for post-merge follow-up work and stacked PR sequencing.
 - `docs/Testing_Expansion_Strategy.md`
   - Longer-horizon plan for broader, deeper, and stress-oriented automated coverage.
+- `docs/Real_World_Adversarial_Program.md`
+  - Scenario backlog for realistic dangerous browser situations and how they should be tested.
 - `docs/Checklists.md`
   - Day-to-day verification and release checklists.
 - `docs/RELEASING.md`
