@@ -75,7 +75,6 @@ function trySendForwardOffer(
     }
   });
 }
-
 async function syncDnrRulesets(): Promise<void> {
   try {
     const settings = await getNavSettings();

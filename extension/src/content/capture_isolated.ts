@@ -354,6 +354,7 @@ function handleRollback(url: string, prevUrl?: string): void {
     try {
       chrome.runtime.sendMessage({ type: "ns-store-forward", url, returnUrl: target });
       notifyNavAllow();
+      notifyAllowedTarget(target);
       window.setTimeout(() => {
         try {
           if (history.length > 1) {
@@ -700,10 +701,10 @@ window.addEventListener(
 
     let decision: "allow" | "prompt" | "block" = "allow";
     const blockThreshold = getBlockThreshold(mode);
+    const smartAllowsBlank =
+      mode === "smart" && !!anchor && isLegitBlankAnchor(anchor, ctx, cds, reasonCodes);
 
     if (mode !== "off") {
-      const smartAllowsBlank =
-        mode === "smart" && !!anchor && isLegitBlankAnchor(anchor, ctx, cds, reasonCodes);
       if (isBlankAnchor && !isAllowed && !explicitNewTab && !smartAllowsBlank) {
         decision = "prompt";
         e.preventDefault();

@@ -67,8 +67,14 @@ Current E2E coverage lives in:
 It currently covers:
 
 - Level 1 new-tab blocking
+- Level 2 moving-target overlay blocking
+- Level 3 instant injection new-tab trap blocking
+- Level 4 visual-mimicry disguised new-tab blocking
 - Level 5 popunder blocking
 - Level 6 programmatic click blocking
+- Level 7 legitimate modal backdrop
+- Level 8 legitimate OAuth popup
+- Level 9 legitimate video overlay controls
 - Level 10 delayed form-submit prompt
 - Level 12 slow same-tab navigation legitimacy
 - Level 11 credential-submit prompt
@@ -112,7 +118,7 @@ Current pages:
 - `gym/level11-credential-guard.html`
 - `gym/level12-slow-same-tab-link.html`
 
-The biggest current automation gap is that Levels 2, 3, 4, 7, 8, and 9 exist but do not yet have dedicated Playwright coverage.
+Every current Gym level now has a dedicated automated path on the active stacked branches.
 
 ## Effective manual testing workflow
 
@@ -174,6 +180,6 @@ If E2E fails in CI, check these first:
 
 From the testing perspective, the clearest next steps are:
 
-- automate the remaining Gym levels
+- add deeper popup/operator-surface browser coverage
 - add a heavier stress lane for worker churn, repeated popup bursts, and delayed navigation chains
 - add lower-cost property/state tests for scoring, DOM hint building, and tab-scoped worker policy

@@ -13,12 +13,12 @@ The goal is not "more tests" in the abstract. The goal is better signal with cle
 
 ## Current baseline
 
-The merged `main` branch already has a solid starter harness:
+The merged `main` branch, plus the active stacked follow-up branches, now has a solid harness:
 
 - `playwright.config.ts` is present and scopes E2E discovery correctly
 - shared Playwright helpers exist in `tests/e2e/extension_test_utils.ts`
 - unit coverage exists for storage, popup modeling, credential-domain logic, credential-guard modeling, and service-worker rollback behavior
-- Playwright coverage exists for navigation Gym levels 1, 5, 6, 10, and 12, credential flows in Level 11, and options import/export workflows
+- Playwright coverage exists for Gym levels 1 through 12, credential flows in Level 11, and options import/export workflows
 - the Gym now contains Levels 1 through 12
 
 That means the repo is no longer missing basic E2E infrastructure. The current problem is coverage breadth and depth.
@@ -38,29 +38,15 @@ The deterministic local Gym should stay the primary truth source. Live-web tests
 
 ## Current gaps
 
-### 1. Missing Gym automation
-
-These pages already exist but do not yet have dedicated Playwright coverage:
-
-- Level 2 moving target
-- Level 3 instant injection
-- Level 4 visual mimicry
-- Level 7 legitimate modal backdrop
-- Level 8 legitimate OAuth popup
-- Level 9 legitimate video overlay
-
-This is the most obvious shortfall because it leaves both attacker and legitimate-flow cases unguarded by automation even though the fixtures are already there.
-
-### 2. Limited false-positive protection
+### 1. Limited popup/operator coverage
 
 Current E2E coverage is stronger on blocking than on proving legitimacy. The biggest missing cases are:
 
-- legitimate modal/backdrop interaction
-- legitimate OAuth popup behavior
-- legitimate video overlay behavior
 - more nuanced trusted-domain and allowlist operator paths
+- more popup-specific rendering and event-log state coverage
+- more explicit browser assertions around the popup’s operator affordances
 
-### 3. No dedicated stress lane
+### 2. No dedicated stress lane
 
 The repo does not yet have a separate stress or soak lane for:
 
@@ -69,7 +55,7 @@ The repo does not yet have a separate stress or soak lane for:
 - tab churn and worker-state cleanup
 - idle periods long enough to let MV3 service workers restart
 
-### 4. Scoring/state edge exploration is still shallow
+### 3. Scoring/state edge exploration is still shallow
 
 There are useful unit tests today, but we still do not have:
 
@@ -97,24 +83,7 @@ The shared E2E helpers that already exist should remain the single place for:
 - shadow-toast assertions
 - future tab-count and stray-page helpers
 
-### 2. Fill the current Gym gaps first
-
-Before inventing new fixtures, automate the pages that already exist:
-
-- Level 2 moving target
-- Level 3 instant injection
-- Level 4 visual mimicry
-- Level 7 legitimate modal backdrop
-- Level 8 legitimate OAuth popup
-- Level 9 legitimate video overlay
-
-Why this comes first:
-
-- the fixtures already exist
-- they cover both attacker behavior and false-positive-sensitive legitimate UX
-- they will expose where scoring or prompt logic is too loose or too aggressive
-
-### 3. Add low-cost edge coverage
+### 2. Add low-cost edge coverage
 
 Primary targets:
 
@@ -130,7 +99,7 @@ Recommended additions:
 - add invariant checks for CDS and credential-risk scoring
 - consider extracting pure policy transitions from `sw.ts` if the current test seam becomes too awkward
 
-### 4. Add stress and soak coverage
+### 3. Add stress and soak coverage
 
 Best initial stress targets:
 
@@ -144,28 +113,19 @@ These should run serially, capture traces on failure, and stay local.
 
 ## Proposed execution order
 
-### Phase 1: close the obvious Gym gaps
-
-- automate Levels 2, 3, 4, 7, 8, and 9
-- add stronger tab-count and no-stray-tab assertions where popup behavior is involved
-
-Definition of done:
-
-- every current Gym level has at least one automated assertion path
-- legitimate modal/video/OAuth flows are explicitly protected from false positives
-
-### Phase 2: strengthen low-cost heuristics coverage
+### Phase 1: strengthen popup/operator and low-cost heuristics coverage
 
 - add property tests for scoring and DOM hint building
 - add fake-timer tests for token expiry and policy TTL boundaries
 - tighten worker-policy tests around cleanup and reuse boundaries
+- expand popup/options browser assertions around event visibility, trust state, and mode changes
 
 Definition of done:
 
 - the highest-risk decision code is covered without needing a browser
 - timing boundaries have deterministic tests
 
-### Phase 3: introduce a real stress lane
+### Phase 2: introduce a real stress lane
 
 - add burst, churn, and idle/resume scenarios
 - separate them from the default PR lane
@@ -188,7 +148,7 @@ Definition of done:
 
 If starting the next tranche now, the first three PRs should be:
 
-1. automate Levels 2, 3, 4, 7, 8, and 9
+1. add deeper popup/operator coverage and any small UX cleanup it exposes
 2. add property/fake-timer tests for scoring, DOM hints, and state timing
 3. split out a stress lane with worker-churn and popup-burst scenarios
 
