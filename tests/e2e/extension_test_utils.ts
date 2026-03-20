@@ -30,8 +30,8 @@ export async function waitForToastText(page: Page, text: string, timeout = 4000)
   await page.waitForFunction(
     (expected) => {
       const host = document.querySelector("#__navsentinel_toast_host");
-      const root = host?.shadowRoot;
-      return !!root?.textContent?.includes(expected);
+      const body = host?.shadowRoot?.querySelector(".body");
+      return !!body?.textContent?.includes(expected);
     },
     text,
     { timeout }

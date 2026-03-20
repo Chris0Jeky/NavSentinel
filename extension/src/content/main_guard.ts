@@ -134,7 +134,16 @@ function hasMeaningfulName(el: Element): boolean {
 }
 
 function looksLikePopupOpen(target?: string, features?: string): boolean {
+  const normalizedTarget = (target ?? "").trim().toLowerCase();
   const normalizedFeatures = (features ?? "").toLowerCase();
+  if (
+    normalizedTarget === "" ||
+    (normalizedTarget !== "_self" &&
+      normalizedTarget !== "_top" &&
+      normalizedTarget !== "_parent")
+  ) {
+    return true;
+  }
   return (
     normalizedFeatures.includes("popup") ||
     normalizedFeatures.includes("width=") ||

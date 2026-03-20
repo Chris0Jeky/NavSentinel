@@ -179,16 +179,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const forward = pendingForwardByTab.get(tabId);
       const currentUrl = typeof message.currentUrl === "string" ? message.currentUrl : "";
       if (forward && currentUrl && forward.url === currentUrl) {
-        sendResponse?.({ url: "" });
+        sendResponse?.({ status: "already_on_forward", url: "" });
         return;
       }
       if (forward && currentUrl && forward.returnUrl === currentUrl) {
         pendingForwardByTab.delete(tabId);
-        sendResponse?.({ url: forward.url });
+        sendResponse?.({ status: "offer", url: forward.url });
         return;
       }
-      if (forward) pendingForwardByTab.delete(tabId);
-      sendResponse?.({ url: forward?.url });
+      if (forward) {
+        pendingForwardByTab.delete(tabId);
+        sendResponse?.({ status: "offer", url: forward.url });
+        return;
+      }
+      sendResponse?.({ status: "none", url: "" });
     }
   }
 });

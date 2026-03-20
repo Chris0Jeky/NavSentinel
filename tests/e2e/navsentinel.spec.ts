@@ -442,7 +442,7 @@ test("Delayed button-triggered popup still blocks in smart mode @regression", as
   }
 });
 
-test("Level 8 plain button-triggered new tab still blocks @regression", async () => {
+test("Level 8 plain button-triggered new tab opens without prompting @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
@@ -465,12 +465,16 @@ test("Level 8 plain button-triggered new tab still blocks @regression", async ()
 
       await waitForNavSentinelBridge(page);
 
-      const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
+      const beforePages = context.pages().length;
+      const popupPromise = context.waitForEvent("page", { timeout: 5000 }).catch(() => null);
       await page.click("#signin");
 
       const popup = await popupPromise;
-      expect(popup, "Expected the plain button-triggered new tab to be blocked").toBeNull();
-      await waitForToastText(page, "Blocked popup", 3000);
+      expect(popup, "Expected the plain button-triggered new tab to open").not.toBeNull();
+      await popup?.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
+      expect(popup?.url()).toContain("oauth=1");
+      expect(context.pages().length).toBeGreaterThan(beforePages);
+      await assertNoToastFor(page);
     } finally {
       await context.close();
     }
