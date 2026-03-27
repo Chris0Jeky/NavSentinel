@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RW-17 - Media Overlay Hijack</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 860px;
+        margin: 0 auto;
+        padding: 40px 18px 56px;
+        background: #101724;
+        color: #eff5ff;
+      }
+      .shell {
+        padding: 28px;
+        border-radius: 22px;
+        border: 1px solid rgba(151, 198, 255, 0.16);
+        background: linear-gradient(180deg, rgba(18, 31, 50, 0.96), rgba(14, 22, 34, 0.98));
+      }
+      #player {
+        position: relative;
+        margin-top: 22px;
+        width: 100%;
+        max-width: 640px;
+        height: 360px;
+        border-radius: 20px;
+        background: radial-gradient(circle at 50% 35%, rgba(82, 113, 173, 0.55), rgba(11, 15, 23, 0.94));
+        overflow: hidden;
+      }
+      #rw17Play {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 2;
+        min-height: 54px;
+        padding: 0 22px;
+        border: none;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.18);
+        color: white;
+        font-size: 18px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      #rw17Trap {
+        position: absolute;
+        width: 180px;
+        height: 64px;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        display: block;
+        opacity: 0.01;
+        z-index: 4;
+        pointer-events: none;
+      }
+      #status {
+        margin-top: 14px;
+        color: #9eb7d6;
+      }
+    </style>
+  </head>
+  <body>
+    <section class="shell">
+      <h1>RW-17: Media-player overlay hijack</h1>
+      <p>
+        The player looks normal, but a malicious overlay drifts over the play control after the
+        user moves toward it.
+      </p>
+
+      <div id="player">
+        <button id="rw17Play" type="button">Play trailer</button>
+        <a
+          id="rw17Trap"
+          href="rw17-ad-landing.html?via=player"
+          target="_blank"
+          rel="noopener"
+        ></a>
+      </div>
+      <p id="status">Status: waiting for playback</p>
+    </section>
+
+    <script>
+      const player = document.getElementById('player');
+      const trap = document.getElementById('rw17Trap');
+      const status = document.getElementById('status');
+      let armed = false;
+
+      player.addEventListener('pointermove', () => {
+        if (armed) return;
+        armed = true;
+        status.textContent = 'Status: ad overlay drift armed';
+        window.setTimeout(() => {
+          trap.style.pointerEvents = 'auto';
+          status.textContent = 'Status: ad overlay drift active';
+        }, 80);
+      }, { once: true });
+    </script>
+  </body>
+</html>

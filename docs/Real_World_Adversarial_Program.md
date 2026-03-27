@@ -55,7 +55,7 @@ This program is grounded in the kinds of browser abuse called out in official se
 
 ### Current landing status
 
-Wave 1 is now underway on top of the operator-surface seed branch.
+Waves 1 through 4 are now underway on top of the operator-surface seed branch.
 
 The first implemented scenarios are:
 
@@ -64,6 +64,19 @@ The first implemented scenarios are:
 - RW-04 open-redirect laundering via intermediary page
 - RW-06 legit auth popup followed by a blocked second popup
 - RW-07 fake re-auth interstitial
+- RW-08 OAuth consent laundering through window reuse
+- RW-09 empty-target and named-target popup ambiguity
+- RW-10 keyboard-only auth launch
+- RW-11 fake invoice approval button
+- RW-12 wallet connect popup burst
+- RW-13 courier tracking login lure
+- RW-14 checkout express-pay overlay
+- RW-15 bank/security alert redirect
+- RW-16 fake document preview overlay
+- RW-17 media-player overlay hijack
+- RW-18 browser update / codec warning
+- RW-19 tech-support scare page
+- RW-20 embedded help/chat widget abuse
 
 ### Lane mapping
 

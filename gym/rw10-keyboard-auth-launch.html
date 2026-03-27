@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RW-10 - Keyboard Auth Launch</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 780px;
+        margin: 0 auto;
+        padding: 40px 18px 56px;
+        background: #f3f7fb;
+        color: #172230;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 18px;
+      }
+      .card {
+        padding: 24px;
+        border-radius: 20px;
+        border: 1px solid #d5dfeb;
+        background: #fff;
+        box-shadow: 0 10px 24px rgba(20, 34, 52, 0.08);
+      }
+      .eyebrow {
+        margin: 0 0 10px;
+        font-size: 11px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: #53657a;
+      }
+      button,
+      input[type="submit"] {
+        min-height: 46px;
+        margin-top: 16px;
+        padding: 0 18px;
+        border: none;
+        border-radius: 12px;
+        background: #185f9f;
+        color: white;
+        font-size: 15px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      button:focus-visible,
+      input[type="submit"]:focus-visible {
+        outline: 3px solid #7fc0ff;
+        outline-offset: 3px;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="grid">
+      <section class="card">
+        <p class="eyebrow">Button path</p>
+        <h1>Continue with Workspace</h1>
+        <p>The focused button should launch the auth popup when activated from the keyboard.</p>
+        <button id="rw10Button" type="button">Open auth popup</button>
+      </section>
+
+      <section class="card">
+        <p class="eyebrow">Submit input path</p>
+        <h2>Keyboard-only recovery</h2>
+        <form id="rw10Form">
+          <input id="rw10Submit" type="submit" value="Continue with saved account" />
+        </form>
+      </section>
+    </main>
+
+    <script>
+      document.getElementById('rw10Button').addEventListener('click', () => {
+        window.open(
+          'rw10-consent-popup.html?launcher=button',
+          'workspace-auth',
+          'popup,width=520,height=640'
+        );
+      });
+
+      document.getElementById('rw10Form').addEventListener('submit', (event) => {
+        event.preventDefault();
+        window.open(
+          'rw10-consent-popup.html?launcher=input',
+          'workspace-auth',
+          'popup,width=520,height=640'
+        );
+      });
+    </script>
+  </body>
+</html>
