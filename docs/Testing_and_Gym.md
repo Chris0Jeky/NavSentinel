@@ -143,8 +143,8 @@ Current pages:
 - `gym/rw10-keyboard-auth-launch.html`
 - `gym/rw10-consent-popup.html`
 
-Every current primitive Gym level has a dedicated automated path, and the first real-world scenario
-waves are continuing to land alongside those primitives.
+Every current primitive Gym level has a dedicated automated path, and the real-world scenario waves
+are continuing to land alongside those primitives.
 
 ## Effective manual testing workflow
 

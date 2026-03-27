@@ -445,7 +445,7 @@ test("RW-06 legit auth popup allows the first window and blocks the second @regr
   }
 });
 
-test("RW-08 window reuse laundering keeps the consent popup in place until explicitly allowed @regression @stress", async () => {
+test("RW-08 window reuse laundering keeps the consent popup in place until explicitly allowed @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
@@ -482,6 +482,12 @@ test("RW-08 window reuse laundering keeps the consent popup in place until expli
       await page.waitForTimeout(300);
       expect(popup?.url()).toContain("rw08-consent-popup.html?step=consent");
       expect(context.pages().length).toBe(beforePages + 1);
+
+      await clickToastButton(page, "Allow once");
+      await popup?.waitForURL(/rw08-laundered-destination\.html\?via=window-reuse/, {
+        timeout: 5000
+      });
+      expect(popup?.url()).toContain("rw08-laundered-destination.html?via=window-reuse");
     } finally {
       await context.close();
     }
@@ -519,9 +525,9 @@ test("RW-09 ambiguous popup targets allow user-driven auth steps and block delay
       await page.click("#rw09Start");
 
       const firstPopup = await firstPopupPromise;
-      expect(firstPopup, "Expected the plain helper window to open").not.toBeNull();
+      expect(firstPopup, "Expected the initial auth popup to open").not.toBeNull();
       await firstPopup?.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
-      expect(firstPopup?.url()).toContain("rw09-consent-step1.html?launch=plain");
+      expect(firstPopup?.url()).toContain("rw09-consent-step1.html?launch=popup");
       await expect.poll(() => context.pages().length, { timeout: 5000 }).toBe(beforeStartPages + 1);
       await assertNoToastFor(page, 800);
 

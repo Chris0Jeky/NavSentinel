@@ -62,8 +62,8 @@
         <p class="eyebrow">Account verification</p>
         <h1>RW-09: Empty-target or named-target popup ambiguity</h1>
         <p>
-          Real sites mix plain <code>window.open(url)</code> calls with named popup reuse. The
-          user-driven paths should stay allowed, but delayed reuse should still be blocked.
+          Real sites mix unnamed popup launches with named popup reuse. The user-driven paths
+          should stay allowed, but delayed reuse should still be blocked.
         </p>
         <div class="row">
           <button id="rw09Start" type="button">Open quick sign-in helper</button>
@@ -78,8 +78,12 @@
       const resume = document.getElementById('rw09Resume');
 
       document.getElementById('rw09Start').addEventListener('click', () => {
-        window.open('rw09-consent-step1.html?launch=plain');
-        status.textContent = 'Status: plain helper window opened';
+        window.open(
+          'rw09-consent-step1.html?launch=popup',
+          '',
+          'popup,width=520,height=640'
+        );
+        status.textContent = 'Status: initial auth popup opened';
         resume.hidden = false;
         resume.focus();
       });
