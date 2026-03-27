@@ -68,16 +68,17 @@ function renderEvents(log: EventLogEntry[]): void {
 
   eventsEl.innerHTML = "";
   for (const event of list) {
+    const eventKind = typeof event.kind === "string" ? event.kind : "unknown";
     const card = document.createElement("article");
     card.className = "event-card";
-    card.dataset.tone = classifyEventTone(event.kind);
+    card.dataset.tone = classifyEventTone(eventKind);
 
     const head = document.createElement("div");
     head.className = "event-head";
 
     const kind = document.createElement("div");
     kind.className = "event-kind";
-    kind.textContent = formatEventKind(event.kind);
+    kind.textContent = formatEventKind(eventKind);
 
     const time = document.createElement("div");
     time.className = "event-time mono";

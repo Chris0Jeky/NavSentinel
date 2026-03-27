@@ -54,7 +54,7 @@ function flashStatus(
   tone: "success" | "warning" | "error" = "success"
 ): void {
   const existing = statusTimers.get(el);
-  if (existing) {
+  if (existing !== undefined) {
     window.clearTimeout(existing);
   }
   el.textContent = message;
@@ -62,6 +62,7 @@ function flashStatus(
   const timer = window.setTimeout(() => {
     el.textContent = "";
     delete el.dataset.tone;
+    statusTimers.delete(el);
   }, 1400);
   statusTimers.set(el, timer);
 }

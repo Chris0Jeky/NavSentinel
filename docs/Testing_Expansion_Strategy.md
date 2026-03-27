@@ -110,7 +110,7 @@ Recommended additions:
 - add invariant checks for CDS and credential-risk scoring
 - consider extracting pure policy transitions from `sw.ts` if the current test seam becomes too awkward
 
-### 4. Add stress and soak coverage
+### 3. Add stress and soak coverage
 
 Best initial stress targets:
 
@@ -145,7 +145,7 @@ Definition of done:
 Definition of done:
 
 - CI has a deliberate place for long-tail timing bugs
-- repeated popup/redirect cases can be exercised many times without stale state leakage
+- repeated popup/redirect cases can be exercised many times without stale-state leakage
 
 ## Suggested new scripts
 
