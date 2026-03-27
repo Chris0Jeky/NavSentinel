@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RW-01 - Search Result Overlay Swap</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 840px;
+        margin: 0 auto;
+        padding: 28px 16px 60px;
+        background: #f6f8fb;
+        color: #1c2430;
+      }
+      .searchbar {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        padding: 14px 16px;
+        border: 1px solid #d5dde7;
+        border-radius: 16px;
+        background: #fff;
+        box-shadow: 0 8px 30px rgba(19, 34, 53, 0.08);
+      }
+      .results {
+        display: grid;
+        gap: 14px;
+        margin-top: 22px;
+      }
+      .result {
+        position: relative;
+        padding: 18px;
+        border-radius: 18px;
+        border: 1px solid #d7e0ea;
+        background: #fff;
+        box-shadow: 0 10px 30px rgba(19, 34, 53, 0.06);
+      }
+      .result h2 {
+        margin: 8px 0 4px;
+        font-size: 22px;
+      }
+      .result-link {
+        display: block;
+        color: inherit;
+        text-decoration: none;
+      }
+      .result-link:hover h2 {
+        text-decoration: underline;
+      }
+      .url {
+        color: #0f6e60;
+        font-size: 13px;
+      }
+      .badge {
+        display: inline-block;
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: #7b5b00;
+        background: #fff1c7;
+        border-radius: 999px;
+        padding: 5px 8px;
+      }
+      .trap {
+        position: absolute;
+        inset: 0;
+        opacity: 0.01;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>RW-01: Search result overlay swap</h1>
+    <p>
+      This simulates a search-style landing page where the visible result looks safe, but an
+      invisible overlay sends the click to a different destination in a new tab.
+    </p>
+
+    <div class="searchbar">
+      <strong>search.example</strong>
+      <span>quarterly earnings deck</span>
+    </div>
+
+    <div class="results">
+      <article class="result">
+        <span class="badge">Sponsored result</span>
+        <a
+          class="result-link"
+          href="https://docs.acme.example/reports/q1-2026"
+          target="_blank"
+          rel="noreferrer"
+          aria-label="Visible Acme earnings deck result"
+        >
+          <div class="url">docs.acme.example/reports/q1-2026</div>
+          <h2 id="rw01Result">Acme Investor Center - Open the Q1 2026 earnings deck</h2>
+          <p>Download the board-ready PDF summary in a new tab.</p>
+        </a>
+        <a
+          id="rw01Trap"
+          class="trap"
+          href="https://example.edu/rw01-sponsored-result"
+          target="_blank"
+          rel="noreferrer"
+          aria-label="Invisible sponsored-result trap"
+        ></a>
+      </article>
+
+      <article class="result">
+        <div class="url">newsroom.acme.example/q1-overview</div>
+        <h2>Acme Newsroom - Press release</h2>
+        <p>Safe filler result for context.</p>
+      </article>
+    </div>
+  </body>
+</html>

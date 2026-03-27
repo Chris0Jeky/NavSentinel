@@ -8,46 +8,81 @@
   </head>
   <body>
     <div class="wrap">
-      <div class="title">NavSentinel Suite</div>
-
-      <div class="section">
-        <div class="label">Current site</div>
-        <div id="site" class="mono">-</div>
-        <div id="trustStatus" class="status">-</div>
-        <div class="row">
-          <button id="trustBtn" class="btn primary">Trust</button>
-          <button id="untrustBtn" class="btn danger">Untrust</button>
+      <header class="hero section">
+        <div class="eyebrow">Local-first browser defense</div>
+        <div class="hero-row">
+          <div>
+            <div class="title">NavSentinel Suite</div>
+            <div class="hero-copy">
+              Current-tab control tower for deceptive navigation and credential risk.
+            </div>
+          </div>
+          <div class="hero-mark" aria-hidden="true">NS</div>
         </div>
-      </div>
 
-      <div class="section">
-        <div class="label">Navigation mode</div>
-        <select id="navMode" class="select">
-          <option value="off">Off</option>
-          <option value="smart">Smart</option>
-          <option value="strict">Strict</option>
-        </select>
-        <div class="hint">Controls click deception gating, popup/new-tab prompts, and redirect rollback.</div>
-      </div>
+        <div class="site-panel">
+          <div class="label">Current site</div>
+          <div id="site" class="site mono">-</div>
+          <div id="trustStatus" class="status-pill">-</div>
+        </div>
+      </header>
 
-      <div class="section">
-        <div class="label">Credential mode</div>
-        <select id="credMode" class="select">
-          <option value="off">Off</option>
-          <option value="smart">Smart</option>
-          <option value="strict">Strict</option>
-        </select>
-        <div class="hint">Prompts before password-form submits on untrusted or risky domains.</div>
-      </div>
+      <section class="section">
+        <div class="section-head">
+          <div>
+            <div class="label">Protection posture</div>
+            <div class="section-title">Quick controls</div>
+          </div>
+        </div>
 
-      <div class="section">
-        <div class="label">Recent events</div>
+        <div class="control-grid">
+          <label class="control-card" for="navMode">
+            <span class="card-kicker">Navigation mode</span>
+            <span class="card-copy">
+              Tunes click-deception gating, popup/new-tab prompts, and rollback behavior.
+            </span>
+            <select id="navMode" class="select">
+              <option value="off">Off</option>
+              <option value="smart">Smart</option>
+              <option value="strict">Strict</option>
+            </select>
+          </label>
+
+          <label class="control-card" for="credMode">
+            <span class="card-kicker">Credential mode</span>
+            <span class="card-copy">
+              Prompts before risky password submits or untrusted password-field activity.
+            </span>
+            <select id="credMode" class="select">
+              <option value="off">Off</option>
+              <option value="smart">Smart</option>
+              <option value="strict">Strict</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="row action-row">
+          <button id="trustBtn" class="btn primary">Trust site</button>
+          <button id="untrustBtn" class="btn danger">Remove trust</button>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <div>
+            <div class="label">Recent events</div>
+            <div class="section-title">Latest signals</div>
+          </div>
+          <a class="link" href="#" id="openOptions">Open options</a>
+        </div>
+
         <div id="events" class="events">Loading...</div>
-        <div class="row">
-          <button id="refreshBtn" class="btn">Refresh</button>
-          <a class="link" href="#" id="openOptions">Options</a>
+
+        <div class="row footer-row">
+          <div class="hint">Local log only. Nothing leaves the browser.</div>
+          <button id="refreshBtn" class="btn subtle">Refresh</button>
         </div>
-      </div>
+      </section>
     </div>
 
     <script type="module" src="./popup.ts"></script>

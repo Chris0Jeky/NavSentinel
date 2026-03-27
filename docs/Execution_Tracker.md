@@ -16,16 +16,17 @@ Historical merge-tracking material lives under `docs/archive/`.
 ## Current baseline
 
 - SentinelSuite merge is complete on `main`
-- active follow-up work is currently consolidated into PR #5 for review
+- PR #5 merged the post-merge test hardening and coverage stack
 - refer to the GitHub repository for the current state of open PRs and issues
-- current repo gaps are follow-up work beyond the merge and core Gym coverage
+- current repo gaps are operator-surface polish, stress coverage, and more realistic attack simulation
 
 ## Outstanding inventory
 
 ### Test coverage
 
-- popup/operator-surface browser coverage is still light
+- popup/operator-surface browser coverage is still lighter than the main Gym regression set
 - no dedicated stress lane for worker churn or bursty popup/redirect sequences
+- no large real-world adversarial scenario program that simulates search, OAuth, document, payments, or support-scam style abuse chains
 
 ### CI and release-process alignment
 
@@ -98,21 +99,45 @@ Why separate:
 - these are false-positive regression cases
 - they need a different review mindset than the attacker cases
 
-### Batch 5: Popup and operator-surface coverage
+### Batch 5: Premium operator surfaces and popup coverage
 
 Planned branch:
-- `codex/post-merge-popup-operator`
+- `codex/premium-ui-adversarial-program`
 
 Scope:
-- add popup browser automation where stable
-- expand options/popup coverage around trust state, event visibility, and mode changes
-- optionally land light operator UX cleanup that falls naturally out of the tests
+- give the popup and options page a more deliberate premium/operator feel
+- expand popup/options browser coverage around trust state, event visibility, and mode changes
+- keep the same IDs and controls so operator workflows stay familiar
 
 Why here:
-- by this point the main E2E harness and Gym coverage should already be stronger
-- popup coverage is important, but less foundational than the missing Gym levels
+- by this point the main E2E harness and Gym coverage are stronger
+- this is the right moment to improve the operator surfaces without mixing that work into the merge-hardening stack
 
-### Batch 6: Release and repo hygiene
+### Batch 6: Real-world adversarial simulation program
+
+Planned branch:
+- `codex/premium-ui-adversarial-program` (combined with Batch 5 in the seed PR)
+
+Scope:
+- create a discoverable scenario backlog grounded in real attack families
+- group scenarios into reviewable waves and implementation priorities
+- map each scenario to the product expectation, Gym fixture shape, and test lane
+
+Why next:
+- this is the highest-value way to turn “more tests” into a realistic security program
+- it gives the repo a shared source of truth for the next large Gym/stress expansion
+
+Current status:
+- Wave 1 has started on `codex/realworld-wave1-search-and-redirects`
+- the first landed scenarios are RW-01, RW-03, RW-04, RW-06, and RW-07
+- Wave 2 is now underway on `codex/realworld-wave2-auth-and-identity`
+- the current Wave 2 focus is RW-08, RW-09, and RW-10
+- Wave 3 is now underway on `codex/realworld-wave3-commerce-and-wallets`
+- the current Wave 3 focus is RW-11, RW-12, RW-13, RW-14, and RW-15
+- Wave 4 is now underway on `codex/realworld-wave4-doc-media-support`
+- the current Wave 4 focus is RW-16, RW-17, RW-18, RW-19, and RW-20
+
+### Batch 7: Release and repo hygiene
 
 Planned branch:
 - `codex/post-merge-release-hygiene`
@@ -130,8 +155,9 @@ Why last:
 
 - Batch 2 should stack on Batch 1
 - Batches 3 and 4 should stack on Batch 2
-- Batch 5 should stack on Batch 4 unless it needs to be split off
-- Batch 6 can stack last, or be split if it stays independent
+- Batch 5 can now start directly on `main`
+- Batch 6 should stack conceptually on Batch 5 because popup/operator clarity helps scenario review and demoing
+- Batch 7 can land after the active product/testing follow-up batches
 
 ## Success criteria
 
@@ -139,6 +165,7 @@ Why last:
 - CI matches the documented release bar for typechecking/build/test/package
 - rollback and worker-state-sensitive paths are no longer hidden behind ad hoc local gates
 - popup/options operator surfaces have meaningful browser coverage
+- there is a realistic scenario program that goes beyond toy clickjacking fixtures
 - release-facing repo polish no longer looks unfinished
 
 ## Status table
@@ -149,5 +176,6 @@ Why last:
 | 2 | E2E lane split and rollback formalization | folded into PR #5 |
 | 3 | Adversarial Gym coverage | folded into PR #5 |
 | 4 | Legitimate-flow Gym coverage | folded into PR #5 |
-| 5 | Popup and operator-surface coverage | next |
-| 6 | Release and repo hygiene | planned |
+| 5 | Premium operator surfaces and popup coverage | in progress |
+| 6 | Real-world adversarial simulation program | in progress (Waves 1 through 4 underway) |
+| 7 | Release and repo hygiene | planned |

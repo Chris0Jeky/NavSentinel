@@ -38,6 +38,26 @@ export async function waitForToastText(page: Page, text: string, timeout = 4000)
   );
 }
 
+export async function waitForToastMatch(page: Page, pattern: RegExp, timeout = 4000): Promise<string> {
+  const handle = await page.waitForFunction(
+    ({ source, flags }) => {
+      const host = document.querySelector("#__navsentinel_toast_host");
+      const body = host?.shadowRoot?.querySelector(".body");
+      const text = body?.textContent?.trim();
+      if (!text) return null;
+      return new RegExp(source, flags).test(text) ? text : null;
+    },
+    { source: pattern.source, flags: pattern.flags },
+    { timeout }
+  );
+
+  const text = (await handle.jsonValue()) as string | null;
+  if (!text) {
+    throw new Error(`Toast matching ${pattern} did not appear`);
+  }
+  return text;
+}
+
 export async function readToastText(page: Page): Promise<string | null> {
   return page.evaluate(() => {
     const host = document.querySelector("#__navsentinel_toast_host");
@@ -45,6 +65,18 @@ export async function readToastText(page: Page): Promise<string | null> {
     const text = body?.textContent?.trim();
     return text ? text : null;
   });
+}
+
+export async function clickToastButton(page: Page, label: string): Promise<void> {
+  await page.evaluate((expected) => {
+    const host = document.querySelector("#__navsentinel_toast_host");
+    const buttons = Array.from(host?.shadowRoot?.querySelectorAll("button") ?? []);
+    const match = buttons.find((button) => button.textContent?.trim() === expected);
+    if (!(match instanceof HTMLButtonElement)) {
+      throw new Error(`Toast button not found: ${expected}`);
+    }
+    match.click();
+  }, label);
 }
 
 export async function assertNoToastFor(page: Page, durationMs = 1200): Promise<void> {

@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RW-20 - Chat Widget Abuse</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 920px;
+        margin: 0 auto;
+        padding: 40px 18px 56px;
+        background: #f2f7fb;
+        color: #182434;
+      }
+      .page {
+        min-height: 520px;
+        padding: 28px;
+        border-radius: 24px;
+        border: 1px solid #d7e0ea;
+        background: white;
+        box-shadow: 0 14px 28px rgba(18, 32, 49, 0.08);
+      }
+      .widget {
+        position: fixed;
+        right: 24px;
+        bottom: 24px;
+        z-index: 3;
+      }
+      #rw20Chat {
+        min-height: 54px;
+        padding: 0 22px;
+        border: none;
+        border-radius: 999px;
+        background: #146a59;
+        color: white;
+        font-size: 15px;
+        font-weight: 700;
+        cursor: pointer;
+        box-shadow: 0 10px 24px rgba(20, 106, 89, 0.28);
+      }
+    </style>
+  </head>
+  <body>
+    <section class="page">
+      <h1>RW-20: Embedded help/chat widget abuse</h1>
+      <p>
+        The support widget starts with a normal chat popup, then tries to piggyback a follow-up
+        remote-diagnostic tab.
+      </p>
+    </section>
+
+    <div class="widget">
+      <button id="rw20Chat" type="button">Chat with support</button>
+    </div>
+
+    <script>
+      document.getElementById('rw20Chat').addEventListener('click', () => {
+        window.open(
+          'rw20-chat-popup.html?step=chat',
+          'rw20-chat',
+          'popup,width=420,height=620'
+        );
+
+        window.setTimeout(() => {
+          window.open(
+            'rw20-remote-tool.html?step=diagnostic',
+            'rw20-tool',
+            'popup,width=460,height=680'
+          );
+        }, 80);
+      });
+    </script>
+  </body>
+</html>

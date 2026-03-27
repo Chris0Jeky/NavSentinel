@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RW-08 - OAuth Window Reuse Laundering</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 42px 18px;
+        background: #f3f7fb;
+        color: #172230;
+      }
+      .card {
+        padding: 26px;
+        border-radius: 20px;
+        border: 1px solid #d5dfeb;
+        background: #fff;
+        box-shadow: 0 12px 28px rgba(21, 35, 53, 0.08);
+      }
+      .eyebrow {
+        margin: 0 0 10px;
+        font-size: 11px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: #53657a;
+      }
+      button {
+        min-height: 46px;
+        margin-top: 18px;
+        padding: 0 18px;
+        border: none;
+        border-radius: 12px;
+        background: #185e9e;
+        color: white;
+        font-size: 16px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      #status {
+        margin-top: 16px;
+        color: #45576d;
+      }
+    </style>
+  </head>
+  <body>
+    <section class="card">
+      <p class="eyebrow">Workspace sign-in</p>
+      <h1>RW-08: OAuth consent laundering through window reuse</h1>
+      <p>
+        The first popup is a deliberate consent step. The opener later reuses that same named
+        window for an unrelated destination.
+      </p>
+      <button id="rw08Launch" type="button">Continue with Workspace</button>
+      <p id="status">Status: waiting for sign-in</p>
+    </section>
+
+    <script>
+      const status = document.getElementById('status');
+      document.getElementById('rw08Launch').addEventListener('click', () => {
+        window.open('rw08-consent-popup.html?step=consent', 'workspace-consent', 'popup,width=520,height=640');
+        status.textContent = 'Status: consent popup opened';
+
+        window.setTimeout(() => {
+          status.textContent = 'Status: laundering existing popup to an unrelated offer';
+          window.open(
+            'rw08-laundered-destination.html?via=window-reuse',
+            'workspace-consent',
+            'popup,width=520,height=640'
+          );
+        }, 700);
+      });
+    </script>
+  </body>
+</html>

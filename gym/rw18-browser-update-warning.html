@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RW-18 - Browser Update Warning</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 840px;
+        margin: 0 auto;
+        padding: 40px 18px 56px;
+        background: #eef3f8;
+        color: #182434;
+      }
+      .dialog {
+        position: relative;
+        padding: 30px;
+        border-radius: 24px;
+        border: 1px solid #d7e0ea;
+        background: white;
+        box-shadow: 0 16px 34px rgba(18, 32, 49, 0.12);
+      }
+      .badge {
+        display: inline-block;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: #fff1e6;
+        color: #b25316;
+        font-size: 12px;
+        font-weight: 700;
+      }
+      #rw18Install {
+        min-height: 48px;
+        margin-top: 18px;
+        padding: 0 20px;
+        border: none;
+        border-radius: 12px;
+        background: #1b6cb0;
+        color: white;
+        font-size: 16px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      #rw18Trap {
+        position: absolute;
+        inset: 0;
+        display: block;
+        opacity: 0.01;
+        z-index: 4;
+      }
+    </style>
+  </head>
+  <body>
+    <section class="dialog">
+      <a
+        id="rw18Trap"
+        href="rw18-installer-download.html?via=codec"
+        target="_blank"
+        rel="noopener"
+      ></a>
+      <span class="badge">Playback blocked</span>
+      <h1>RW-18: Browser update / codec warning</h1>
+      <p>
+        The page claims a browser or codec update is required before the media can play. The
+        visible install control is covered by an invisible support-tab trap.
+      </p>
+      <button id="rw18Install" type="button">Install required codec</button>
+    </section>
+  </body>
+</html>

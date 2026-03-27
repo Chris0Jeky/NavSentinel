@@ -144,6 +144,7 @@ Start with `docs/README.md`. The most useful follow-on docs are:
 - `docs/Architecture_and_Data_Flow.md`
 - `docs/Intent_Model_and_Scoring.md`
 - `docs/Testing_and_Gym.md`
+- `docs/Real_World_Adversarial_Program.md`
 - `docs/RELEASING.md`
 
 Historical merge-era context lives under:
