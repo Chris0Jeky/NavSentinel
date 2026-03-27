@@ -3,9 +3,11 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
+import { EVENT_LOG_KEY } from "../../extension/src/shared/storage";
 import {
   assertNoToastFor,
   clickToastButton,
+  getServiceWorker,
   getGymBaseUrl,
   readToastText,
   waitForNavSentinelBridge,
@@ -793,14 +795,31 @@ test("RW-15 bank security alert redirect prompts before final navigation @rollba
       });
 
       await waitForNavSentinelBridge(page);
+      const serviceWorker = await getServiceWorker(context);
 
       await page.click("#rw15Verify");
-      await page.waitForURL(/rw15-bank-verify-transaction\.html\?from=alert/, { timeout: 8000 });
-      await expect
-        .poll(async () => (await readToastText(page)) ?? "", { timeout: 6000 })
-        .toMatch(/Blocked redirect|rolled back a redirect/i);
-
-      const rw15Toast = (await readToastText(page)) ?? "";
+      const rw15Toast = await waitForToastMatch(
+        page,
+        /Blocked redirect|rolled back a redirect/i,
+        7000
+      );
+      if (rw15Toast.includes("rolled back a redirect")) {
+        await expect
+          .poll(async () => {
+            return serviceWorker.evaluate(
+              async ({ eventLogKey }) => {
+                const stored = await chrome.storage.local.get(eventLogKey);
+                return Array.isArray(stored[eventLogKey])
+                  ? (stored[eventLogKey] as Array<{ kind?: unknown }>)
+                      .map((entry) => entry?.kind)
+                      .filter((kind): kind is string => typeof kind === "string")
+                  : [];
+              },
+              { eventLogKey: EVENT_LOG_KEY }
+            );
+          })
+          .toEqual(expect.arrayContaining(["nav_rollback"]));
+      }
       await clickToastButton(page, rw15Toast.includes("Blocked redirect") ? "Allow once" : "Proceed");
       await page.waitForURL(/rw15-bank-verify-transaction\.html\?from=alert/, { timeout: 5000 });
     } finally {
@@ -1163,7 +1182,7 @@ test("Level 9 legit overlay controls and visible docs link stay allowed @regress
   }
 });
 
-test("Level 10 delayed redirect surfaces recovery on the redirected page @rollback", async () => {
+test("Level 10 delayed redirect rolls back before offering recovery @rollback", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
@@ -1185,15 +1204,26 @@ test("Level 10 delayed redirect surfaces recovery on the redirected page @rollba
       });
 
       await waitForNavSentinelBridge(page);
+      const serviceWorker = await getServiceWorker(context);
       await page.click("#delayed");
-      await page.waitForURL(/level4-visual-mimicry\.html/, { timeout: 7000 });
+      await waitForToastMatch(page, /rolled back a redirect/i, 7000);
       await expect
-        .poll(async () => (await readToastText(page)) ?? "", { timeout: 6000 })
-        .toMatch(/Blocked redirect|rolled back a redirect/i);
-
-      const level10Toast = (await readToastText(page)) ?? "";
-      await clickToastButton(page, level10Toast.includes("Blocked redirect") ? "Allow once" : "Proceed");
-      await expect(page).toHaveURL(/level4-visual-mimicry\.html/);
+        .poll(async () => {
+          return serviceWorker.evaluate(
+            async ({ eventLogKey }) => {
+              const stored = await chrome.storage.local.get(eventLogKey);
+              return Array.isArray(stored[eventLogKey])
+                ? (stored[eventLogKey] as Array<{ kind?: unknown }>)
+                    .map((entry) => entry?.kind)
+                    .filter((kind): kind is string => typeof kind === "string")
+                : [];
+            },
+            { eventLogKey: EVENT_LOG_KEY }
+          );
+        })
+        .toEqual(expect.arrayContaining(["nav_rollback"]));
+      await clickToastButton(page, "Proceed");
+      await page.waitForURL(/level4-visual-mimicry\.html/, { timeout: 5000 });
     } finally {
       await context.close();
     }
