@@ -9,6 +9,7 @@ import {
   getGymBaseUrl,
   readToastText,
   waitForNavSentinelBridge,
+  waitForToastMatch,
   waitForToastText
 } from "./extension_test_utils";
 
@@ -336,12 +337,11 @@ test("RW-03 delayed redirect landing prompts before final navigation @regression
       await waitForNavSentinelBridge(page);
 
       await page.click("#rw03Watch");
-      await page.waitForTimeout(2600);
-      await expect
-        .poll(async () => (await readToastText(page)) ?? "", { timeout: 6000 })
-        .toMatch(/Blocked redirect|rolled back a redirect/i);
-
-      const rw03Toast = (await readToastText(page)) ?? "";
+      const rw03Toast = await waitForToastMatch(
+        page,
+        /Blocked redirect|rolled back a redirect/i,
+        5000
+      );
       await clickToastButton(page, rw03Toast.includes("Blocked redirect") ? "Allow once" : "Proceed");
       await page.waitForURL(/rw03-final-report\.html\?from=briefing/, { timeout: 5000 });
     } finally {
@@ -378,7 +378,7 @@ test("RW-04 open redirect laundering prompts on the intermediary page @regressio
 
       await page.click("#rw04Invoice");
       await page.waitForURL(/rw04-local-redirector\.html/, { timeout: 5000 });
-      const blockedPopup = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
+      const blockedPopup = context.waitForEvent("page", { timeout: 3000 }).catch(() => null);
       await page.waitForTimeout(2500);
       const blockedAttempt = await blockedPopup;
       expect(blockedAttempt, "Expected the laundering popup to be blocked").toBeNull();

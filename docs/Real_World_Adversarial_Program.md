@@ -53,7 +53,7 @@ This program is grounded in the kinds of browser abuse called out in official se
 
 ## Program shape
 
-## Current landing status
+### Current landing status
 
 Wave 1 is now underway on top of the operator-surface seed branch.
 
