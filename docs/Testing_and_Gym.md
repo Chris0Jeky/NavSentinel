@@ -84,12 +84,22 @@ It currently covers:
 - RW-08 popup-window reuse laundering with the original consent popup kept in place
 - RW-09 mixed empty-target and named-target auth launches with delayed reuse blocking
 - RW-10 keyboard-only auth popup launch from Space and Enter activation
+- RW-11 invoice-approval payout trap blocking
+- RW-12 wallet connect first-popup allow with blocked burst follow-up
+- RW-13 courier tracking credential lure prompt
+- RW-14 checkout express-pay overlay blocking
+- RW-16 fake document preview overlay blocking
+- RW-17 media overlay hijack blocking
+- RW-18 fake codec warning blocking
+- RW-19 repeated tech-support popup burst blocking
+- RW-20 support widget first-popup allow with blocked follow-up abuse
 - Level 11 credential-submit prompt
 - RW-07 fake re-auth interstitial prompt
 - password-paste warning and trusted-domain persistence
 - options-page trusted-domain normalization
 - options import/export round-trip behavior
 - a dedicated rollback lane for redirect recovery affordances
+- RW-15 bank/security alert redirect recovery
 - a dedicated live-web sanity lane
 
 `playwright.config.ts` intentionally scopes Playwright discovery to `tests/e2e/**/*.spec.ts`. This keeps Vitest files out of the Playwright runner.
@@ -142,6 +152,27 @@ Current pages:
 - `gym/rw09-phish-target.html`
 - `gym/rw10-keyboard-auth-launch.html`
 - `gym/rw10-consent-popup.html`
+- `gym/rw11-fake-invoice-approval.html`
+- `gym/rw11-unrelated-payout.html`
+- `gym/rw12-wallet-connect-burst.html`
+- `gym/rw12-wallet-connect-popup.html`
+- `gym/rw12-wallet-drain-popup.html`
+- `gym/rw13-courier-tracking-login.html`
+- `gym/rw14-checkout-express-pay-overlay.html`
+- `gym/rw14-membership-upsell.html`
+- `gym/rw15-bank-security-alert.html`
+- `gym/rw15-bank-verify-transaction.html`
+- `gym/rw16-fake-document-preview-overlay.html`
+- `gym/rw16-unrelated-open.html`
+- `gym/rw17-media-overlay-hijack.html`
+- `gym/rw17-ad-landing.html`
+- `gym/rw18-browser-update-warning.html`
+- `gym/rw18-installer-download.html`
+- `gym/rw19-tech-support-scare.html`
+- `gym/rw19-remote-support.html`
+- `gym/rw20-chat-widget-abuse.html`
+- `gym/rw20-chat-popup.html`
+- `gym/rw20-remote-tool.html`
 
 Every current primitive Gym level has a dedicated automated path, and the real-world scenario waves
 are continuing to land alongside those primitives.

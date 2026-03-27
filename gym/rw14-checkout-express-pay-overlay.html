@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RW-14 - Checkout Express Pay Overlay</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 40px 18px 56px;
+        background: #f6f8fb;
+        color: #182434;
+      }
+      .panel {
+        padding: 28px;
+        border-radius: 22px;
+        border: 1px solid #dbe4ed;
+        background: #fff;
+        box-shadow: 0 12px 28px rgba(18, 32, 49, 0.08);
+      }
+      .checkout {
+        position: relative;
+        margin-top: 24px;
+        padding: 22px;
+        border-radius: 18px;
+        border: 1px solid #e1e8f0;
+        background: linear-gradient(180deg, #ffffff, #f7fafc);
+      }
+      .price {
+        font-size: 28px;
+        font-weight: 800;
+      }
+      #rw14Pay {
+        min-height: 48px;
+        padding: 0 22px;
+        border: none;
+        border-radius: 12px;
+        background: #101828;
+        color: white;
+        font-size: 16px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      #rw14Trap {
+        position: absolute;
+        inset: 0;
+        z-index: 4;
+        display: block;
+        opacity: 0.01;
+      }
+    </style>
+  </head>
+  <body>
+    <section class="panel">
+      <h1>RW-14: Checkout express-pay overlay</h1>
+      <p>
+        The checkout drawer looks normal, but the express-pay area is covered by an invisible trap
+        that opens an unrelated destination.
+      </p>
+
+      <div class="checkout">
+        <a id="rw14Trap" href="rw14-membership-upsell.html?via=express-pay" target="_blank" rel="noopener"></a>
+        <p>Annual plan renewal</p>
+        <p class="price">GBP 189.00</p>
+        <button id="rw14Pay" type="button">Pay with Express Wallet</button>
+      </div>
+    </section>
+  </body>
+</html>
