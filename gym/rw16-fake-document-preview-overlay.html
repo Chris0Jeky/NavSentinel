@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RW-16 - Fake Document Preview Overlay</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 920px;
+        margin: 0 auto;
+        padding: 40px 18px 56px;
+        background: #f4f6fb;
+        color: #182434;
+      }
+      .shell {
+        padding: 28px;
+        border-radius: 22px;
+        border: 1px solid #d7e0ea;
+        background: #fff;
+        box-shadow: 0 12px 26px rgba(18, 32, 49, 0.08);
+      }
+      .eyebrow {
+        margin: 0 0 10px;
+        font-size: 11px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: #57697e;
+      }
+      .preview {
+        position: relative;
+        margin-top: 22px;
+        padding: 26px;
+        min-height: 360px;
+        border-radius: 20px;
+        border: 1px solid #dde5ee;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.85), rgba(246, 249, 252, 0.95)),
+          repeating-linear-gradient(180deg, #dfe7f1 0, #dfe7f1 10px, #f6f9fc 10px, #f6f9fc 26px);
+        overflow: hidden;
+      }
+      .blur {
+        position: absolute;
+        inset: 0;
+        backdrop-filter: blur(2px);
+        pointer-events: none;
+      }
+      .toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        position: relative;
+        z-index: 2;
+      }
+      #rw16Open {
+        min-height: 48px;
+        padding: 0 20px;
+        border: none;
+        border-radius: 12px;
+        background: #135d9e;
+        color: white;
+        font-size: 15px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      #rw16Trap {
+        position: absolute;
+        inset: 0;
+        display: block;
+        z-index: 5;
+        opacity: 0.01;
+      }
+    </style>
+  </head>
+  <body>
+    <section class="shell">
+      <p class="eyebrow">Document viewer</p>
+      <h1>RW-16: Fake document preview overlay</h1>
+      <p>
+        The preview looks like a normal document viewer, but the visible open control is covered by
+        an invisible trap that opens an unrelated destination.
+      </p>
+
+      <div class="preview">
+        <a
+          id="rw16Trap"
+          href="rw16-unrelated-open.html?via=preview"
+          target="_blank"
+          rel="noopener"
+        ></a>
+        <div class="blur"></div>
+        <div class="toolbar">
+          <div>
+            <strong>Quarterly-report.pdf</strong><br />
+            <small>Shared internally 12 minutes ago</small>
+          </div>
+          <button id="rw16Open" type="button">Open full document</button>
+        </div>
+      </div>
+    </section>
+  </body>
+</html>

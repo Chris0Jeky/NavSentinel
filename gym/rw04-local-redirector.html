@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RW-04 - Local Redirector</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 42px 18px;
+      }
+      .status {
+        padding: 20px;
+        border-radius: 18px;
+        border: 1px solid #d8e1ea;
+        background: #f6f9fc;
+      }
+      code {
+        background: #eef3f7;
+        padding: 2px 4px;
+        border-radius: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="status">
+      <h1>RW-04 intermediary page</h1>
+      <p>
+        This page simulates a benign-looking redirector. It waits, then tries to open the
+        <code>next</code> destination in a new tab as the laundering step.
+      </p>
+    </div>
+
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const next = params.get('next') || 'rw04-final-offer.html';
+      window.setTimeout(() => {
+        window.open(next, '_blank', 'noopener');
+      }, 2200);
+    </script>
+  </body>
+</html>

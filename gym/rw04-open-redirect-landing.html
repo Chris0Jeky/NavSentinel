@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RW-04 - Open Redirect Landing</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 36px 18px;
+      }
+      .card {
+        padding: 22px;
+        border: 1px solid #d8e1ea;
+        border-radius: 18px;
+        background: #fff;
+        box-shadow: 0 10px 30px rgba(22, 31, 42, 0.08);
+      }
+      .cta {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-top: 18px;
+        min-height: 46px;
+        padding: 0 18px;
+        border-radius: 12px;
+        background: #125ca1;
+        color: #fff;
+        text-decoration: none;
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>RW-04: Open redirect laundering</h1>
+      <p>
+        This page looks harmless and points to a local intermediary page. That intermediary later
+        forwards to a different destination without another user gesture.
+      </p>
+      <a
+        id="rw04Invoice"
+        class="cta"
+        href="rw04-local-redirector.html?next=rw04-final-offer.html%3Ffrom%3Dredirector"
+      >
+        Review invoice
+      </a>
+    </div>
+  </body>
+</html>
