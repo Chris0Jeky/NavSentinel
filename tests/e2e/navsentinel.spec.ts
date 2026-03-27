@@ -903,7 +903,11 @@ test("RW-17 media overlay hijack blocks the drifted ad destination @regression",
 
       const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
       await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
-      await page.waitForTimeout(160);
+      await page.waitForFunction(
+        () => document.getElementById("status")?.textContent?.includes("active") ?? false,
+        null,
+        { timeout: 2000 }
+      );
       await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
 
       const popup = await popupPromise;

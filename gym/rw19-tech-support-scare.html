@@ -44,18 +44,38 @@
     <script>
       const attempts = document.getElementById('attempts');
       let count = 0;
-      const interval = window.setInterval(() => {
-        count += 1;
-        attempts.textContent = `Attempts: ${count}`;
-        window.open(
-          `rw19-remote-support.html?attempt=${count}`,
-          `rw19-support-${count}`,
-          'popup,width=520,height=640'
-        );
-        if (count >= 4) {
-          window.clearInterval(interval);
+      const startedAt = Date.now();
+
+      const beginBurst = () => {
+        const interval = window.setInterval(() => {
+          count += 1;
+          attempts.textContent = `Attempts: ${count}`;
+          window.open(
+            `rw19-remote-support.html?attempt=${count}`,
+            `rw19-support-${count}`,
+            'popup,width=520,height=640'
+          );
+          if (count >= 4) {
+            window.clearInterval(interval);
+          }
+        }, 250);
+      };
+
+      const waitForBridge = () => {
+        const captureReady = document.documentElement.getAttribute('data-navsentinel-capture-ready') === '1';
+        const bridgeReady = document.documentElement.getAttribute('data-navsentinel-bridge-ready') === '1';
+
+        if ((captureReady && bridgeReady) || Date.now() - startedAt > 2000) {
+          attempts.textContent = 'Attempts: 0';
+          beginBurst();
+          return;
         }
-      }, 250);
+
+        attempts.textContent = 'Attempts: waiting for extension bridge';
+        window.setTimeout(waitForBridge, 50);
+      };
+
+      waitForBridge();
     </script>
   </body>
 </html>
