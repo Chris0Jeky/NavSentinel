@@ -116,7 +116,7 @@ Why here:
 ### Batch 6: Real-world adversarial simulation program
 
 Planned branch:
-- `codex/premium-ui-adversarial-program`
+- `codex/premium-ui-adversarial-program` (combined with Batch 5 in the seed PR)
 
 Scope:
 - create a discoverable scenario backlog grounded in real attack families

@@ -1,5 +1,6 @@
 import type { Mode } from "../shared/types";
 import type { CredMode, EventLogEntry, SuiteSettings } from "../shared/storage";
+import { classifyEventTone } from "../shared/event_tone";
 import {
   addTrustedDomainWithResult,
   appendEvent,
@@ -63,12 +64,6 @@ function flashStatus(
     delete el.dataset.tone;
   }, 1400);
   statusTimers.set(el, timer);
-}
-
-function eventTone(kind: string): "navigation" | "credential" | "config" {
-  if (kind.startsWith("cred_")) return "credential";
-  if (kind.startsWith("suite_")) return "config";
-  return "navigation";
 }
 
 function renderAllowlist(list: Allowlist): void {
@@ -202,7 +197,7 @@ function renderEventLog(log: EventLogEntry[]): void {
   for (const event of list) {
     const row = document.createElement("div");
     row.className = "event";
-    row.dataset.tone = eventTone(event.kind);
+    row.dataset.tone = classifyEventTone(event.kind);
 
     const head = document.createElement("div");
     head.className = "event-head";

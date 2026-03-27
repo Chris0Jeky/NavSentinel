@@ -110,7 +110,7 @@ Recommended additions:
 - add invariant checks for CDS and credential-risk scoring
 - consider extracting pure policy transitions from `sw.ts` if the current test seam becomes too awkward
 
-### 3. Add stress and soak coverage
+### 4. Add stress and soak coverage
 
 Best initial stress targets:
 

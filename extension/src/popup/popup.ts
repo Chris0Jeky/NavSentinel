@@ -1,5 +1,6 @@
 import type { CredMode, EventLogEntry } from "../shared/storage";
 import type { Mode } from "../shared/types";
+import { classifyEventTone } from "../shared/event_tone";
 import {
   addTrustedDomain,
   appendEvent,
@@ -41,12 +42,6 @@ function formatEventKind(kind: string): string {
   return kind.replace(/_/g, " ");
 }
 
-function getEventTone(kind: string): "navigation" | "credential" | "config" {
-  if (kind.startsWith("cred_")) return "credential";
-  if (kind.startsWith("suite_")) return "config";
-  return "navigation";
-}
-
 function buildEventDetail(event: EventLogEntry): string {
   const parts: string[] = [];
   if (event.site) parts.push(`site ${event.site}`);
@@ -75,7 +70,7 @@ function renderEvents(log: EventLogEntry[]): void {
   for (const event of list) {
     const card = document.createElement("article");
     card.className = "event-card";
-    card.dataset.tone = getEventTone(event.kind);
+    card.dataset.tone = classifyEventTone(event.kind);
 
     const head = document.createElement("div");
     head.className = "event-head";

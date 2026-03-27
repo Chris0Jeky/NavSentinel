@@ -255,6 +255,13 @@ body::before {
   background: rgba(255, 255, 255, 0.13);
 }
 
+.btn:focus-visible,
+.link:focus-visible {
+  outline: 2px solid rgba(142, 210, 255, 0.78);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px rgba(142, 210, 255, 0.14);
+}
+
 .btn:disabled {
   cursor: not-allowed;
   opacity: 0.45;
