@@ -88,6 +88,11 @@ It currently covers:
 - RW-12 wallet connect first-popup allow with blocked burst follow-up
 - RW-13 courier tracking credential lure prompt
 - RW-14 checkout express-pay overlay blocking
+- RW-16 fake document preview overlay blocking
+- RW-17 media overlay hijack blocking
+- RW-18 fake codec warning blocking
+- RW-19 repeated tech-support popup burst blocking
+- RW-20 support widget first-popup allow with blocked follow-up abuse
 - Level 11 credential-submit prompt
 - RW-07 fake re-auth interstitial prompt
 - password-paste warning and trusted-domain persistence
@@ -157,6 +162,17 @@ Current pages:
 - `gym/rw14-membership-upsell.html`
 - `gym/rw15-bank-security-alert.html`
 - `gym/rw15-bank-verify-transaction.html`
+- `gym/rw16-fake-document-preview-overlay.html`
+- `gym/rw16-unrelated-open.html`
+- `gym/rw17-media-overlay-hijack.html`
+- `gym/rw17-ad-landing.html`
+- `gym/rw18-browser-update-warning.html`
+- `gym/rw18-installer-download.html`
+- `gym/rw19-tech-support-scare.html`
+- `gym/rw19-remote-support.html`
+- `gym/rw20-chat-widget-abuse.html`
+- `gym/rw20-chat-popup.html`
+- `gym/rw20-remote-tool.html`
 
 Every current primitive Gym level has a dedicated automated path, and the real-world scenario waves
 are continuing to land alongside those primitives.

@@ -134,6 +134,8 @@ Current status:
 - the current Wave 2 focus is RW-08, RW-09, and RW-10
 - Wave 3 is now underway on `codex/realworld-wave3-commerce-and-wallets`
 - the current Wave 3 focus is RW-11, RW-12, RW-13, RW-14, and RW-15
+- Wave 4 is now underway on `codex/realworld-wave4-doc-media-support`
+- the current Wave 4 focus is RW-16, RW-17, RW-18, RW-19, and RW-20
 
 ### Batch 7: Release and repo hygiene
 
@@ -175,5 +177,5 @@ Why last:
 | 3 | Adversarial Gym coverage | folded into PR #5 |
 | 4 | Legitimate-flow Gym coverage | folded into PR #5 |
 | 5 | Premium operator surfaces and popup coverage | in progress |
-| 6 | Real-world adversarial simulation program | in progress (Waves 1, 2, and 3 underway) |
+| 6 | Real-world adversarial simulation program | in progress (Waves 1 through 4 underway) |
 | 7 | Release and repo hygiene | planned |

@@ -55,7 +55,7 @@ This program is grounded in the kinds of browser abuse called out in official se
 
 ### Current landing status
 
-Waves 1, 2, and 3 are now underway on top of the operator-surface seed branch.
+Waves 1 through 4 are now underway on top of the operator-surface seed branch.
 
 The first implemented scenarios are:
 
@@ -72,6 +72,11 @@ The first implemented scenarios are:
 - RW-13 courier tracking login lure
 - RW-14 checkout express-pay overlay
 - RW-15 bank/security alert redirect
+- RW-16 fake document preview overlay
+- RW-17 media-player overlay hijack
+- RW-18 browser update / codec warning
+- RW-19 tech-support scare page
+- RW-20 embedded help/chat widget abuse
 
 ### Lane mapping
 
