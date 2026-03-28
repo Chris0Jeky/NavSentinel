@@ -67,6 +67,8 @@ Useful commands:
 npm run watch
 npm run test
 npm run test:e2e
+npm run demo:showcase
+npm run demo:showcase:record
 npm run typecheck
 npm run verify:versions
 npm run package:ext
@@ -118,7 +120,16 @@ Then open `gym/index.html` through the local server.
 
 - `npm run test`: unit tests for local heuristics and shared logic
 - `npm run test:e2e`: Playwright suite scoped to `tests/e2e/**/*.spec.ts`
+- `npm run demo:showcase`: guided headed demo using the stable `core` variant
+- `npm run demo:showcase:record`: same core variant with video/trace capture defaults
 - `npm run typecheck`: strict type verification
+
+For custom demo runs:
+
+- `node scripts/run_demo.mjs core --fast`
+  - shorter waits for editing and dry runs
+- `node scripts/run_demo.mjs core --record --trace`
+  - record mode plus an explicit Playwright trace artifact
 
 The Playwright config intentionally limits discovery to E2E specs so Vitest files are not loaded by the Playwright runner.
 
