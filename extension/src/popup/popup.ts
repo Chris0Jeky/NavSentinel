@@ -277,7 +277,7 @@ chrome.runtime.onMessage.addListener((message: PopupTestMessage, sender, sendRes
             chrome.runtime.openOptionsPage();
             break;
           default:
-            throw new Error(`Unknown popup target: ${message.target}`);
+            throw new Error("Unknown popup target");
         }
         sendResponse({ ok: true, snapshot: getPopupSnapshot() });
         return;
@@ -294,7 +294,7 @@ chrome.runtime.onMessage.addListener((message: PopupTestMessage, sender, sendRes
             );
             break;
           default:
-            throw new Error(`Unknown popup select target: ${message.target}`);
+            throw new Error("Unknown popup select target");
         }
         sendResponse({ ok: true, snapshot: getPopupSnapshot() });
         return;
