@@ -45,12 +45,13 @@ Targets:
 
 ### `recovery`
 
-A focused chapter set for rollback and redirect recovery.
+A focused chapter set for redirect review and recovery prompts.
 
 Targets:
 
 - redirect intervention
-- explicit proceed / allow-once flows
+- rollback-style review prompts where they are currently surfaced
+- explicit allow-once flows
 - bounded replay behavior
 - any recovery-specific follow-up copy that would distract from the `core` cut
 
@@ -73,7 +74,7 @@ The same runner should support:
 | --- | --- | --- |
 | `core` | in progress | stable merged-main chapter set is the first PR |
 | `operator` | planned | depends on the demo framework from `core` |
-| `recovery` | planned | depends on the demo framework from `core` |
+| `recovery` | in progress | redirect and rollback chapter set is the third stacked PR |
 
 ### Work items
 
@@ -83,7 +84,7 @@ The same runner should support:
 | D2 | Add a runner with named variants and record mode | in progress | should own mode/env wiring instead of shell-specific scripts |
 | D3 | Land the stable `core` showcase | in progress | use merged-main fixtures only |
 | D4 | Add real popup-surface automation | planned | belongs to the `operator` PR |
-| D5 | Add redirect/rollback demo variant | planned | belongs to the `recovery` PR |
+| D5 | Add redirect/rollback demo variant | in progress | belongs to the `recovery` PR |
 | D6 | Tighten presenter copy and pacing | in progress | keep the polish small and deliberate |
 
 ## Current `core` shape
