@@ -16,6 +16,7 @@
     "test:e2e:rollback": "playwright test -c playwright.rollback.config.ts",
     "test:e2e:live": "playwright test -c playwright.live.config.ts",
     "demo:showcase": "node scripts/run_demo.mjs core",
+    "demo:showcase:operator": "node scripts/run_demo.mjs operator",
     "demo:showcase:recovery": "node scripts/run_demo.mjs recovery",
     "demo:showcase:record": "node scripts/run_demo.mjs core --record",
     "package:ext": "node scripts/package.mjs",

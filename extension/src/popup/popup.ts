@@ -2,6 +2,12 @@ import type { CredMode, EventLogEntry } from "../shared/storage";
 import type { Mode } from "../shared/types";
 import { classifyEventTone } from "../shared/event_tone";
 import {
+  POPUP_TEST_CRED_MODES,
+  POPUP_TEST_NAV_MODES,
+  type PopupSnapshot,
+  type PopupTestMessage
+} from "../shared/popup_test";
+import {
   addTrustedDomain,
   appendEvent,
   getEventLog,
@@ -121,29 +127,43 @@ async function refreshUi(): Promise<void> {
   renderEvents(await getEventLog());
 }
 
-navModeEl.addEventListener("change", async () => {
-  const m = navModeEl.value as Mode;
-  await updateSuiteSettings({ nav: { defaultMode: m } });
+function getPopupSnapshot(): PopupSnapshot {
+  const events = Array.from(eventsEl.querySelectorAll(".event-card"))
+    .map((node) => node.textContent?.replace(/\s+/g, " ").trim() ?? "")
+    .filter(Boolean);
+
+  return {
+    credMode: credModeEl.value,
+    events,
+    navMode: navModeEl.value,
+    site: siteEl.textContent?.trim() ?? "",
+    trustStatus: trustStatusEl.textContent?.trim() ?? ""
+  };
+}
+
+async function setNavMode(mode: Mode): Promise<void> {
+  navModeEl.value = mode;
+  await updateSuiteSettings({ nav: { defaultMode: mode } });
   try {
-    await appendEvent({ kind: "suite_config_update", extra: { navMode: m } });
+    await appendEvent({ kind: "suite_config_update", extra: { navMode: mode } });
   } catch {
     // ignore
   }
   await refreshUi();
-});
+}
 
-credModeEl.addEventListener("change", async () => {
-  const m = credModeEl.value as CredMode;
-  await updateSuiteSettings({ credential: { mode: m } });
+async function setCredMode(mode: CredMode): Promise<void> {
+  credModeEl.value = mode;
+  await updateSuiteSettings({ credential: { mode } });
   try {
-    await appendEvent({ kind: "suite_config_update", extra: { credMode: m } });
+    await appendEvent({ kind: "suite_config_update", extra: { credMode: mode } });
   } catch {
     // ignore
   }
   await refreshUi();
-});
+}
 
-trustBtn.addEventListener("click", async () => {
+async function trustCurrentSite(): Promise<void> {
   const url = await getActiveTabUrl();
   const reg = derivePopupSiteState(url, []).registrableDomain;
   if (!reg) return;
@@ -155,9 +175,9 @@ trustBtn.addEventListener("click", async () => {
     // ignore
   }
   await refreshUi();
-});
+}
 
-untrustBtn.addEventListener("click", async () => {
+async function untrustCurrentSite(): Promise<void> {
   const url = await getActiveTabUrl();
   const reg = derivePopupSiteState(url, []).registrableDomain;
   if (!reg) return;
@@ -169,6 +189,22 @@ untrustBtn.addEventListener("click", async () => {
     // ignore
   }
   await refreshUi();
+}
+
+navModeEl.addEventListener("change", async () => {
+  await setNavMode(navModeEl.value as Mode);
+});
+
+credModeEl.addEventListener("change", async () => {
+  await setCredMode(credModeEl.value as CredMode);
+});
+
+trustBtn.addEventListener("click", async () => {
+  await trustCurrentSite();
+});
+
+untrustBtn.addEventListener("click", async () => {
+  await untrustCurrentSite();
 });
 
 refreshBtn.addEventListener("click", async () => {
@@ -178,6 +214,102 @@ refreshBtn.addEventListener("click", async () => {
 openOptions.addEventListener("click", (e) => {
   e.preventDefault();
   chrome.runtime.openOptionsPage();
+});
+
+function isTrustedPopupTestSender(sender: chrome.runtime.MessageSender): boolean {
+  if (sender.id !== chrome.runtime.id) {
+    return false;
+  }
+
+  if (sender.tab) {
+    return false;
+  }
+
+  const extensionBaseUrl = chrome.runtime.getURL("");
+  if (typeof sender.url === "string") {
+    return sender.url.startsWith(extensionBaseUrl);
+  }
+
+  if (typeof sender.origin === "string") {
+    return sender.origin === new URL(extensionBaseUrl).origin;
+  }
+
+  return true;
+}
+
+function parsePopupModeValue(
+  value: unknown,
+  validValues: readonly string[],
+  label: string
+): Mode | CredMode {
+  if (typeof value !== "string" || !validValues.includes(value)) {
+    throw new Error(`Invalid ${label} value: ${String(value)}`);
+  }
+
+  return value as Mode | CredMode;
+}
+
+chrome.runtime.onMessage.addListener((message: PopupTestMessage, sender, sendResponse) => {
+  if (!message || message.type !== "ns_popup_test" || !isTrustedPopupTestSender(sender)) {
+    return undefined;
+  }
+
+  void (async () => {
+    try {
+      if (message.action === "snapshot") {
+        await refreshUi();
+        sendResponse({ ok: true, snapshot: getPopupSnapshot() });
+        return;
+      }
+
+      if (message.action === "click") {
+        switch (message.target) {
+          case "trustBtn":
+            await trustCurrentSite();
+            break;
+          case "untrustBtn":
+            await untrustCurrentSite();
+            break;
+          case "refreshBtn":
+            await refreshUi();
+            break;
+          case "openOptions":
+            chrome.runtime.openOptionsPage();
+            break;
+          default:
+            throw new Error(`Unknown popup target: ${message.target}`);
+        }
+        sendResponse({ ok: true, snapshot: getPopupSnapshot() });
+        return;
+      }
+
+      if (message.action === "select") {
+        switch (message.target) {
+          case "navMode":
+            await setNavMode(parsePopupModeValue(message.value, POPUP_TEST_NAV_MODES, "navMode") as Mode);
+            break;
+          case "credMode":
+            await setCredMode(
+              parsePopupModeValue(message.value, POPUP_TEST_CRED_MODES, "credMode") as CredMode
+            );
+            break;
+          default:
+            throw new Error(`Unknown popup select target: ${message.target}`);
+        }
+        sendResponse({ ok: true, snapshot: getPopupSnapshot() });
+        return;
+      }
+
+      throw new Error("Unsupported popup test action");
+    } catch (error) {
+      sendResponse({
+        error: error instanceof Error ? error.message : String(error),
+        ok: false
+      });
+    }
+  })();
+
+  return true;
 });
 
 void refreshUi();
