@@ -145,7 +145,7 @@ test("guided core showcase of merged NavSentinel capabilities @demo @demo-core",
     const allowedPopup = await allowedPopupPromise;
     expect(allowedPopup, "Expected the legitimate OAuth popup to open").not.toBeNull();
     await allowedPopup?.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
-    expect(allowedPopup?.url()).toContain("example.com");
+    expect(allowedPopup?.url()).toContain("level8-oauth-consent.html?oauth=1");
     await demoPause(page, 1600);
     await allowedPopup?.close().catch(() => {});
 

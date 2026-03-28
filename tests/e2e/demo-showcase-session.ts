@@ -76,43 +76,60 @@ export async function launchDemoSession(params: {
     });
   }
 
-  const context = await chromium.launchPersistentContext(userDataDir, launchOptions);
+  let context: BrowserContext | null = null;
+  try {
+    context = await chromium.launchPersistentContext(userDataDir, launchOptions);
 
-  if (settings.captureTrace) {
-    await context.tracing.start({
-      screenshots: true,
-      snapshots: true,
-      title: testInfo.title
-    });
+    if (settings.captureTrace) {
+      await context.tracing.start({
+        screenshots: true,
+        snapshots: true,
+        title: testInfo.title
+      });
+    }
+  } catch (error) {
+    if (context) {
+      await context.close().catch(() => {});
+    }
+    if (gym) {
+      await gym.close().catch(() => {});
+    }
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+    throw error;
   }
 
-  const extensionId = await getExtensionId(context);
+  try {
+    const extensionId = await getExtensionId(context);
 
-  return {
-    baseUrl,
-    close: async () => {
-      try {
-        if (settings.captureTrace) {
-          const tracePath = settings.artifactDir
-            ? path.join(settings.artifactDir, `${slugify(testInfo.title)}.trace.zip`)
-            : testInfo.outputPath("demo.trace.zip");
-          fs.mkdirSync(path.dirname(tracePath), { recursive: true });
-          fs.mkdirSync(
-            path.join(process.cwd(), "test-results", ".playwright-artifacts-0", "traces"),
-            { recursive: true }
-          );
-          await context.tracing.stop({ path: tracePath });
+    return {
+      baseUrl,
+      close: async () => {
+        try {
+          if (settings.captureTrace) {
+            const tracePath = settings.artifactDir
+              ? path.join(settings.artifactDir, `${slugify(testInfo.title)}.trace.zip`)
+              : testInfo.outputPath("demo.trace.zip");
+            fs.mkdirSync(path.dirname(tracePath), { recursive: true });
+            await context.tracing.stop({ path: tracePath });
+          }
+        } finally {
+          await context.close();
+          if (gym) await gym.close();
+          fs.rmSync(userDataDir, { recursive: true, force: true });
         }
-      } finally {
-        await context.close();
-        if (gym) await gym.close();
-        fs.rmSync(userDataDir, { recursive: true, force: true });
-      }
-    },
-    context,
-    extensionId,
-    settings
-  };
+      },
+      context,
+      extensionId,
+      settings
+    };
+  } catch (error) {
+    await context.close().catch(() => {});
+    if (gym) {
+      await gym.close().catch(() => {});
+    }
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+    throw error;
+  }
 }
 
 function slugify(value: string): string {

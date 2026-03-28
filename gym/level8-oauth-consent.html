@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Level 8 - OAuth Consent</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 520px;
+        margin: 0 auto;
+        padding: 36px 20px;
+        line-height: 1.5;
+      }
+
+      .card {
+        border: 1px solid #d8e2ef;
+        border-radius: 18px;
+        padding: 24px;
+        background: linear-gradient(180deg, #ffffff, #f5f9ff);
+        box-shadow: 0 12px 28px rgba(16, 32, 54, 0.08);
+      }
+
+      .pill {
+        display: inline-block;
+        margin-bottom: 12px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: #edf5ff;
+        color: #1557a0;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+    </style>
+  </head>
+  <body>
+    <section class="card">
+      <div class="pill">OAuth</div>
+      <h1>Consent window</h1>
+      <p>This local popup stands in for a legitimate OAuth approval screen.</p>
+      <p id="flow"></p>
+    </section>
+
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      document.getElementById('flow').textContent = `Popup flow: ${params.get('oauth') || 'unknown'}`;
+    </script>
+  </body>
+</html>
