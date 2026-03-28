@@ -55,17 +55,26 @@ test("guided recovery showcase for redirects and one-time recovery @demo @demo-r
     });
     await demoPause(page1, 1700);
     await page1.click("#delayed");
-    await page1.waitForURL(/level4-visual-mimicry\.html/, { timeout: 7000 });
-    await expect(page1.locator("h1")).toContainText("Level 4");
+    await waitForToastText(page1, "NavSentinel rolled back a redirect", 10_000);
+    const rollbackReturnedToOrigin = /level10-redirects-and-forms\.html/.test(page1.url());
     await showDemoOverlay(page1, {
       step: 2,
       total: totalSteps,
       title: "What just happened",
       summary:
-        "The later destination is separated from the original click instead of being hidden inside the broader core walkthrough.",
+        rollbackReturnedToOrigin
+          ? "NavSentinel rolled the delayed redirect back to the original page and required an explicit proceed decision before continuing."
+          : "NavSentinel surfaced a rollback-style recovery prompt on the delayed redirect instead of letting the later navigation blend into the original click.",
       expectation: "inspect"
     });
     await demoPause(page1, 2200);
+    if (rollbackReturnedToOrigin) {
+      await clickToastButton(page1, "Proceed");
+      await page1.waitForURL(/level4-visual-mimicry\.html/, { timeout: 7000 });
+      await page1.waitForLoadState("domcontentloaded");
+    } else {
+      await expect(page1).toHaveURL(/level4-visual-mimicry\.html/);
+    }
     await page1.close();
 
     const page2 = await context.newPage();
@@ -88,7 +97,6 @@ test("guided recovery showcase for redirects and one-time recovery @demo @demo-r
     const blockedPopup = context.waitForEvent("page", { timeout: 5000 }).catch(() => null);
     await waitForToastText(page2, "Blocked popup", 5000);
     expect(await blockedPopup).toBeNull();
-    await demoPause(page2, 1600);
     const allowPopup = context.waitForEvent("page", { timeout: 5000 }).catch(() => null);
     await clickToastButton(page2, "Allow once");
     const finalPopup = await allowPopup;
