@@ -122,6 +122,7 @@ Then open `gym/index.html` through the local server.
 - `npm run test:e2e`: Playwright suite scoped to `tests/e2e/**/*.spec.ts`
 - `npm run demo:showcase`: guided headed demo using the stable `core` variant
 - `npm run demo:showcase:record`: same core variant with video capture by default, plus optional trace capture via `--trace`
+- `npm run demo:showcase:recovery`: redirect/recovery-prompt focused guided variant
 - `npm run typecheck`: strict type verification
 
 For custom demo runs:
