@@ -21,6 +21,8 @@ npm run test:e2e:smoke
 npm run test:e2e:regression
 npm run test:e2e:rollback
 npm run test:e2e:live
+npm run demo:showcase
+npm run demo:showcase:record
 ```
 
 To run the Gym locally:
@@ -116,6 +118,16 @@ Current lane intent:
   - rollback/recovery behavior that is deterministic enough to run regularly but still separate from the default lane
 - `npm run test:e2e:live`
   - live-web sanity checks only
+- `npm run demo:showcase`
+  - stable guided headed walkthrough of the merged-main `core` demo variant
+- `npm run demo:showcase:recovery`
+  - redirect and recovery-prompt focused walkthrough using fresh-page recovery chapters
+- `npm run demo:showcase:record`
+  - the same `core` cut with deterministic video-capture defaults for recording
+- `node scripts/run_demo.mjs core --fast`
+  - faster dry-run pacing while editing demo copy or chapter flow
+- `node scripts/run_demo.mjs core --record --trace`
+  - record mode plus an explicit trace artifact for deeper inspection
 
 ## Gym map
 

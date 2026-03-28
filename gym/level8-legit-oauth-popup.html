@@ -32,14 +32,18 @@
 
     document.getElementById('signin').addEventListener('click', () => {
       window.open(
-        'https://example.com/?oauth=1',
+        'level8-oauth-consent.html?oauth=1',
         usePopupFeatures ? 'oauth' : '',
         usePopupFeatures ? 'popup,width=520,height=640' : ''
       );
 
       if (burst) {
         window.setTimeout(() => {
-          window.open('https://example.com/?oauth=2', 'oauth-burst', 'popup,width=520,height=640');
+          window.open(
+            'level8-oauth-consent.html?oauth=2',
+            'oauth-burst',
+            'popup,width=520,height=640'
+          );
         }, 50);
       }
     });

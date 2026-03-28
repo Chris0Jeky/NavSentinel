@@ -19,6 +19,8 @@ This folder documents the current merged `main` branch.
   - The active follow-up backlog after the merged suite baseline.
 - `docs/Execution_Tracker.md`
   - The active batch tracker for post-merge follow-up work and stacked PR sequencing.
+- `docs/Demo_Showcase_Plan.md`
+  - The active plan for the guided demo variants and record-mode rollout.
 - `docs/Testing_Expansion_Strategy.md`
   - Longer-horizon plan for broader, deeper, and stress-oriented automated coverage.
 - `docs/Real_World_Adversarial_Program.md`

@@ -511,7 +511,7 @@ test("Level 8 legit OAuth popup opens without prompting @regression", async () =
       const popup = await popupPromise;
       expect(popup, "Expected the legit OAuth popup to open").not.toBeNull();
       await popup?.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
-      expect(popup?.url()).toContain("example.com");
+      expect(popup?.url()).toContain("level8-oauth-consent.html?oauth=1");
       expect(context.pages().length).toBeGreaterThan(beforePages);
       await assertNoToastFor(page);
     } finally {
@@ -554,7 +554,7 @@ test("Level 8 keyboard-triggered legit OAuth popup opens without prompting @regr
       const popup = await popupPromise;
       expect(popup, "Expected the legit OAuth popup to open from keyboard activation").not.toBeNull();
       await popup?.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
-      expect(popup?.url()).toContain("example.com");
+      expect(popup?.url()).toContain("level8-oauth-consent.html?oauth=1");
       expect(context.pages().length).toBeGreaterThan(beforePages);
       await assertNoToastFor(page);
     } finally {
