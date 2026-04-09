@@ -1031,6 +1031,9 @@ test("RW-09 mixed empty-target and named-target auth launches with delayed reuse
       expect(secondPopup?.url()).toContain("rw09-consent-step2.html");
 
       await waitForToastText(page, "Blocked popup", 3000);
+
+      expect(secondPopup?.url()).toContain("rw09-consent-step2.html");
+      expect(secondPopup?.url()).not.toContain("rw09-phish-target.html");
     } finally {
       await context.close();
     }
