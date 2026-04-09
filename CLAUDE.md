@@ -6,7 +6,7 @@ This file is local-only. It gives Claude a stable repo-specific entrypoint witho
 
 - Treat `AGENTS.md` as the primary repo contract.
 - Treat this repo as a Chrome MV3 browser extension built with TypeScript and Vite.
-- Treat `docs/Execution_Tracker.md` as the active batch plan for post-merge follow-up work.
+- Treat `docs/Project_Roadmap.md` as the active planning document (phases, tasks, decisions).
 - Keep diffs small and reviewable.
 - For meaningful implementation work, create a branch scoped to the change before editing.
 
@@ -14,7 +14,7 @@ This file is local-only. It gives Claude a stable repo-specific entrypoint witho
 
 1. `AGENTS.md`
 2. `CONTRIBUTING.md` for change-surface guidance and style expectations
-3. `docs/Execution_Tracker.md` for the active work plan
+3. `docs/Project_Roadmap.md` for the active work plan (41 tasks, 5 phases)
 4. `docs/README.md` when deeper orientation into docs is needed
 
 Read when relevant:
@@ -42,7 +42,7 @@ Repo-specific local skills in this checkout:
 
 ## Repo truths
 
-- The active work plan is tracked in `docs/Execution_Tracker.md`, not in a separate control plane.
+- The active work plan is tracked in `docs/Project_Roadmap.md`, not in a separate control plane.
 - The extension is local-first: no remote telemetry, no reputation lookups, no password-value storage.
 - Source lives under `extension/src/`; build output goes to `extension/dist/`. Edit source, not output.
 - Gym fixtures under `gym/` are the primary verification surface for heuristic changes.

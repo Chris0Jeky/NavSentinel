@@ -14,6 +14,10 @@ Archived here:
   - merge-era tracker used during the SentinelSuite integration branch
 - `docs/archive/Resource_Map.md`
   - merge-era map of resource inputs and code-entry points
+- `docs/archive/Execution_Tracker.md`
+  - post-merge batch tracker (Batches 1-7), superseded by `docs/Project_Roadmap.md`
+- `docs/archive/Implementation_Roadmap.md`
+  - post-merge follow-up themes, superseded by `docs/Project_Roadmap.md`
 
 For the current implementation, start with:
 
@@ -21,4 +25,4 @@ For the current implementation, start with:
 - `docs/README.md`
 - `docs/Project_Overview.md`
 - `docs/Architecture_and_Data_Flow.md`
-- `docs/Implementation_Roadmap.md`
+- `docs/Project_Roadmap.md`

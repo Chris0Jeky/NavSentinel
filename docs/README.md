@@ -20,12 +20,13 @@ This folder documents the current merged `main` branch.
 - `docs/Product_Thesis_Review.md`
   - Critical product thesis evaluation: security value, usability, competitive positioning, expansion strategy, testing methodology. Generated 2026-04-09.
 
+## Project planning
+
+- `docs/Project_Roadmap.md`
+  - **The active planning document.** 41 tasks across 5 phases, decision log, phase gates, success criteria. Supersedes `Execution_Tracker.md` and `Implementation_Roadmap.md`.
+
 ## Active operational docs
 
-- `docs/Implementation_Roadmap.md`
-  - The active follow-up backlog after the merged suite baseline.
-- `docs/Execution_Tracker.md`
-  - The active batch tracker for post-merge follow-up work and stacked PR sequencing.
 - `docs/Demo_Showcase_Plan.md`
   - The active plan for the guided demo variants and record-mode rollout.
 - `docs/Testing_Expansion_Strategy.md`
@@ -52,6 +53,10 @@ This folder documents the current merged `main` branch.
   - Merge-era tracker from the SentinelSuite integration branch.
 - `docs/archive/Resource_Map.md`
   - Merge-era map of `RESOURCES/` inputs and entry points.
+- `docs/archive/Execution_Tracker.md`
+  - Post-merge batch tracker (Batches 1-7). Superseded by `Project_Roadmap.md`.
+- `docs/archive/Implementation_Roadmap.md`
+  - Post-merge follow-up themes. Superseded by `Project_Roadmap.md`.
 - `docs/archive/README.md`
   - Archive index and guidance.
 
