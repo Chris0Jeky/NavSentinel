@@ -1,72 +1,90 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Evasion 05 - Composite near-threshold signals</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Evasion 05 - Composite Near-Threshold Signals</title>
   <style>
-    body { font-family: sans-serif; padding: 24px; margin: 0; }
-    .real-link {
-      display: block;
-      padding: 16px 32px;
+    body {
+      font-family: sans-serif;
+      padding: 24px;
+      max-width: 700px;
+    }
+    #legit-link {
+      display: inline-block;
+      padding: 14px 28px;
+      font-size: 18px;
       background: #1a73e8;
       color: #fff;
-      text-align: center;
+      border-radius: 8px;
       text-decoration: none;
-      border-radius: 4px;
-      width: 240px;
-      margin: 80px auto;
+      position: relative;
+      z-index: 1;
     }
     /*
-      Combines ALL near-threshold evasion signals:
-      - opacity: 0.09 (just above old 0.08)
-      - ~34% viewport (just under old 35%)
-      - z-index: 9998 (just under old 9999)
-      - whitespace-only aria-label
-      - position: absolute
-    */
-    .overlay {
-      position: absolute;
-      top: 0; left: 0;
-      width: 58.3vw;
-      height: 58.3vh;
+     * CRITICAL EVASION FIXTURE: Combines ALL near-threshold signals.
+     *
+     * Each signal is individually designed to stay below blocking thresholds,
+     * but together they MUST trigger composite escalation.
+     *
+     * Signal breakdown:
+     *   1. near_invisible_opacity   ~14 (opacity 0.09, gradient 0.08-0.15)
+     *   2. no_accessible_name        15 (no text, no aria-label, no title)
+     *   3. cursor_pointer_no_affordance 10 (pointer cursor + no name + opacity < 0.3)
+     *   4. overlay_elevated_zindex   10 (z-index 9998, fixed position)
+     *   5. overlay_medium_interactive ~13 (30% viewport coverage)
+     *
+     * That is 5 positive reason codes -> composite_escalation (4+) = +15
+     *
+     * Total CDS: ~14 + 15 + 10 + 10 + 13 + 15 = ~77
+     * Smart mode threshold: 70  -> BLOCKED
+     * Strict mode threshold: 50 -> BLOCKED
+     *
+     * If an underlying interactive element is also detected:
+     *   + intent_mismatch_under_interactive = +35
+     *   (would push total to ~112, well above any threshold)
+     *
+     * This fixture validates that the composite escalation rule catches
+     * adversarial overlays that individually evade every single threshold.
+     */
+    #trap {
+      position: fixed;
+      /* ~30% of viewport: sqrt(0.30) ~ 0.548 -> 54.8% of each dimension */
+      top: 10%;
+      left: 10%;
+      width: 54.8vw;
+      height: 54.8vh;
       opacity: 0.09;
-      background: red;
       z-index: 9998;
       cursor: pointer;
-    }
-    .info {
-      max-width: 600px;
-      margin: 0 auto;
-      font-size: 14px;
-      color: #555;
+      background: transparent;
     }
   </style>
 </head>
 <body>
-  <div class="info">
-    <p><a href="index.html">&larr; Back to Gym index</a></p>
-    <h1>Evasion 05 - Composite Near-threshold Signals</h1>
-    <p>
-      This overlay combines every near-threshold evasion in one element:
-      opacity 0.09, ~34% viewport, z-index 9998, whitespace aria-label,
-      positioned absolute. Should trigger multiple gradient factors plus
-      <code>composite_escalation</code> for a high CDS.
-    </p>
-    <p>Expected signals:</p>
-    <ul>
-      <li><code>no_accessible_name</code> (whitespace label ignored)</li>
-      <li><code>overlay_medium_interactive</code> (~34% coverage)</li>
-      <li><code>overlay_elevated_zindex</code> (9998)</li>
-      <li><code>near_invisible_opacity</code> (0.09)</li>
-      <li><code>cursor_pointer_no_affordance</code> (pointer + no name + low opacity)</li>
-      <li><code>composite_escalation</code> (5 factors)</li>
-    </ul>
-  </div>
+  <h1>Evasion 05: Composite near-threshold signals</h1>
+  <p>
+    <strong>This is the critical evasion test.</strong> The overlay combines
+    every near-threshold evasion technique simultaneously:
+  </p>
+  <ul>
+    <li>Opacity 0.09 (just above 0.08 invisible cutoff)</li>
+    <li>No accessible name (no text, no aria-label, no title)</li>
+    <li>z-index 9998 (just below 9999 hard threshold)</li>
+    <li>~30% viewport coverage (below 35% large threshold)</li>
+    <li>Pointer cursor with no affordance</li>
+  </ul>
+  <p>
+    Each signal individually might not trigger blocking. But the composite
+    escalation rule (+15 for 4+ positive signals) must push this over the
+    smart-mode threshold of 70.
+  </p>
 
-  <a class="real-link" href="https://example.com">Real Link</a>
+  <a id="legit-link" href="https://example.com/safe" aria-label="Safe destination link">
+    Click here for safe content
+  </a>
 
-  <!-- Attacker overlay: all near-threshold signals combined -->
-  <a class="overlay" href="https://evil.example.com" aria-label=" "></a>
+  <!-- Composite evasion overlay: all near-threshold signals combined -->
+  <a id="trap" href="https://evil.example/evasion05" target="_blank" rel="noreferrer"></a>
 </body>
 </html>
