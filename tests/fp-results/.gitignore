@@ -1,0 +1,4 @@
+# Ignore all CSV result files (can be large, machine-specific)
+*.csv
+# Ignore cached Tranco list
+.tranco-cache.csv
