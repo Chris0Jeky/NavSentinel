@@ -47,7 +47,8 @@ export function splitLabels(host: string): string[] {
  */
 function pslSuffixLength(labels: string[]): number {
   let node: TrieNode = PSL_ROOT;
-  let matched = 0;
+  let depth = 0;
+  let confirmedSuffix = 0;
 
   for (let i = labels.length - 1; i >= 0; i--) {
     const label = labels[i] as string;
@@ -61,9 +62,11 @@ function pslSuffixLength(labels: string[]): number {
         break;
       }
       node = exactChild as TrieNode;
-      matched++;
-      // If this node is a leaf (has the "" marker), it's a valid suffix endpoint,
-      // but we keep going to find the longest match
+      depth++;
+      // Only confirm this depth if the node is a valid suffix endpoint
+      if (node[""] === 1) {
+        confirmedSuffix = depth;
+      }
       continue;
     }
 
@@ -71,7 +74,9 @@ function pslSuffixLength(labels: string[]): number {
     const wildChild = node["*"];
     if (wildChild !== undefined && typeof wildChild === "object") {
       node = wildChild as TrieNode;
-      matched++;
+      depth++;
+      // Wildcard matches always confirm the suffix
+      confirmedSuffix = depth;
       continue;
     }
 
@@ -79,7 +84,7 @@ function pslSuffixLength(labels: string[]): number {
     break;
   }
 
-  return matched;
+  return confirmedSuffix;
 }
 
 export function getRegistrableDomain(host: string): string {

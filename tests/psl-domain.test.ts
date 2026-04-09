@@ -60,6 +60,16 @@ describe("PSL-based getRegistrableDomain", () => {
     });
   });
 
+  describe("intermediate trie nodes (not public suffixes themselves)", () => {
+    it("bytemark.co.uk is not a public suffix, co.uk is", () => {
+      expect(getRegistrableDomain("example.bytemark.co.uk")).toBe("bytemark.co.uk");
+    });
+
+    it("dh.bytemark.co.uk IS a public suffix", () => {
+      expect(getRegistrableDomain("site.dh.bytemark.co.uk")).toBe("site.dh.bytemark.co.uk");
+    });
+  });
+
   describe("wildcard and exception rules", () => {
     it("wildcard *.ck: any second-level .ck is a public suffix", () => {
       // foo.bar.ck -> bar.ck is public suffix, registrable = foo.bar.ck
