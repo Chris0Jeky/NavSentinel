@@ -13,15 +13,15 @@ know it's done. It synthesizes the findings from
 
 | Phase | Title | Tasks | Done | Status |
 |---|---|---|---|---|
-| 0 | Stabilize | 6 | 3 | **In progress** |
-| 1 | Validate Foundation | 8 | 0 | Blocked on Phase 0 |
+| 0 | Stabilize | 6 | 6 | **Done** |
+| 1 | Validate Foundation | 8 | 0 | **Next up** |
 | 2 | Target 2025-2026 Threats | 10 | 0 | Blocked on Phase 1 |
 | 3 | Productize | 9 | 0 | Blocked on Phase 2 |
 | 4 | Differentiate | 8 | 0 | Future |
 
 Total: **41 tasks** across 5 phases.
 
-Last updated: 2026-04-09
+Last updated: 2026-04-10
 
 ---
 
@@ -101,9 +101,9 @@ Decisions taken during this planning session. Each is final unless explicitly re
 |---|---|---|---|---|---|
 | P0-01 | Recover missing Wave 2-4 E2E tests | M | **done** | -- | `fix/recover-wave2-4-tests` |
 | P0-02 | Land Wave 5 gym fixtures and stress tests | M | **done** | P0-01 | `feat/wave5-stress` |
-| P0-03 | Wire stress lane into CI | S | pending | P0-02 | `infra/stress-ci` |
-| P0-04 | Property tests for scoring and state machine | M | pending | -- | `test/property-tests` |
-| P0-05 | Clean up stale branches | S | pending | -- | (no branch needed) |
+| P0-03 | Wire stress lane into CI | S | **done** | P0-02 | `feat/wave5-stress` |
+| P0-04 | Property tests for scoring and state machine | M | **done** | -- | `feat/wave5-stress` |
+| P0-05 | Clean up stale branches | S | **done** | -- | (no branch needed) |
 | P0-06 | Archive stale docs and refresh navigation | S | **done** | -- | `docs/roadmap-refresh` |
 
 ### Task Details
@@ -201,12 +201,12 @@ No other doc references the old tracker as current.
 ### Phase 0 Gate
 
 Phase 0 is complete when:
-- [ ] All 13 recovered E2E tests pass on main
-- [ ] Wave 5 gym fixtures and stress spec exist on main
-- [ ] Stress lane runs in CI on a schedule
-- [ ] Property tests cover scoring and state machine
-- [ ] Stale branches deleted
-- [ ] Documentation navigation updated
+- [x] All 13 recovered E2E tests pass on main
+- [x] Wave 5 gym fixtures and stress spec exist on main
+- [x] Stress lane runs in CI on a schedule
+- [x] Property tests cover scoring and state machine
+- [x] Stale branches deleted
+- [x] Documentation navigation updated
 
 ---
 
