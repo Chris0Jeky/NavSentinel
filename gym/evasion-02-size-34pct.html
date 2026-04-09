@@ -1,59 +1,68 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Evasion 02 - 34% viewport overlay</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Evasion 02 - 34% Viewport Coverage</title>
   <style>
-    body { font-family: sans-serif; padding: 24px; margin: 0; }
-    .real-link {
-      display: block;
-      padding: 16px 32px;
+    body {
+      font-family: sans-serif;
+      padding: 24px;
+      max-width: 700px;
+      margin: 0;
+    }
+    #legit-btn {
+      padding: 14px 28px;
+      font-size: 18px;
       background: #1a73e8;
       color: #fff;
-      text-align: center;
-      text-decoration: none;
-      border-radius: 4px;
-      width: 240px;
-      margin: 80px auto;
-    }
-    /*
-      34% of viewport — just under the old 35% binary threshold.
-      Using vw/vh units to approximate: sqrt(0.34) ~ 0.583
-      58.3% width * 58.3% height ~ 34% area
-    */
-    .overlay {
-      position: fixed;
-      top: 20%;
-      left: 20%;
-      width: 58.3vw;
-      height: 58.3vh;
-      background: rgba(200, 0, 0, 0.05);
-      z-index: 10000;
+      border: none;
+      border-radius: 8px;
       cursor: pointer;
     }
-    .info {
-      max-width: 600px;
-      margin: 0 auto;
-      font-size: 14px;
-      color: #555;
+    /*
+     * Evasion technique: overlay covering exactly 34% of the viewport.
+     * Just below the 35% large-overlay threshold (which adds +30).
+     * Falls in the medium range (20%-35%), scoring a scaled value.
+     * At 34%, scaled = round(20 * (0.34-0.20)/0.15) = round(20 * 0.933) = 19.
+     *
+     * Expected CDS contributions:
+     *   overlay_medium_interactive  19 (34% coverage)
+     *   no_accessible_name          15 (no text/aria on overlay)
+     * Total ~ 34 -> should NOT block in smart mode (threshold 70)
+     *
+     * This documents that a single near-threshold size signal is not enough
+     * to trigger blocking on its own.
+     */
+    #trap {
+      position: fixed;
+      /* 34% of viewport: sqrt(0.34) ~ 0.583 -> 58.3% of each dimension */
+      top: 0;
+      left: 0;
+      width: 58.3vw;
+      height: 58.3vh;
+      background: rgba(0, 0, 0, 0.02);
+      z-index: 10000;
+      cursor: pointer;
     }
   </style>
 </head>
 <body>
-  <div class="info">
-    <p><a href="index.html">&larr; Back to Gym index</a></p>
-    <h1>Evasion 02 - 34% Viewport Coverage</h1>
-    <p>
-      An interactive overlay covering ~34% of the viewport, just under the old
-      35% binary threshold. With gradient scoring this should trigger
-      <code>overlay_medium_interactive</code>.
-    </p>
-  </div>
+  <h1>Evasion 02: 34% viewport coverage</h1>
+  <p>
+    The overlay covers approximately 34% of the viewport — just below the 35%
+    threshold that triggers the full overlay_large_interactive penalty (+30).
+    It falls in the medium-size gradient range, scoring ~19 points.
+  </p>
+  <p>
+    This tests whether near-threshold sizing alone is sufficient to catch
+    deceptive overlays, or whether composite signals are needed.
+  </p>
 
-  <a class="real-link" href="https://example.com">Real Link</a>
+  <button id="legit-btn">Legitimate button</button>
 
-  <!-- Attacker overlay: ~34% of viewport, just under old 35% threshold -->
-  <a class="overlay" href="https://evil.example.com"></a>
+  <!-- Evasion overlay: just under 35% viewport coverage -->
+  <a id="trap" href="https://evil.example/evasion02" target="_blank" rel="noreferrer"
+     role="link"></a>
 </body>
 </html>

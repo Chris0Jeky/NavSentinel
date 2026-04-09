@@ -1,53 +1,83 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Evasion 03 - Whitespace-only aria-label</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Evasion 03 - Misleading Accessible Label</title>
   <style>
-    body { font-family: sans-serif; padding: 24px; }
-    .real-link {
-      display: block;
-      padding: 16px 32px;
+    body {
+      font-family: sans-serif;
+      padding: 24px;
+      max-width: 700px;
+    }
+    #legit-link {
+      display: inline-block;
+      padding: 14px 28px;
+      font-size: 18px;
       background: #1a73e8;
       color: #fff;
-      text-align: center;
+      border-radius: 8px;
       text-decoration: none;
-      border-radius: 4px;
-      width: 240px;
-      margin: 80px auto;
     }
-    .overlay {
+    /*
+     * Evasion technique: overlay with a single-character aria-label (" ").
+     * The scoring.ts nameLength() function treats ariaLabelLength < 2 as absent.
+     * So aria-label=" " (length 1) is effectively treated as no name.
+     *
+     * Also tests aria-label="x" (length 1, still < 2 threshold).
+     *
+     * Expected CDS contributions (for the whitespace-label trap):
+     *   no_accessible_name               15 (aria-label " " treated as absent)
+     *   near_invisible_opacity           ~14 (opacity 0.09)
+     *   cursor_pointer_no_affordance      10 (pointer + no name + opacity < 0.3)
+     * Total ~ 39 -> may not block alone, but documents label hardening works
+     *
+     * The fixture includes TWO overlays to test both whitespace and single-char.
+     */
+    .trap-overlay {
       position: fixed;
-      top: 0; left: 0;
-      width: 300px; height: 300px;
-      background: rgba(200, 0, 0, 0.03);
+      top: 0;
+      width: 50vw;
+      height: 100vh;
+      opacity: 0.09;
       z-index: 10000;
       cursor: pointer;
     }
-    .info {
-      max-width: 600px;
-      margin: 0 auto;
-      font-size: 14px;
-      color: #555;
+    #trap-whitespace {
+      left: 0;
+    }
+    #trap-singlechar {
+      left: 50vw;
     }
   </style>
 </head>
 <body>
-  <div class="info">
-    <p><a href="index.html">&larr; Back to Gym index</a></p>
-    <h1>Evasion 03 - Whitespace-only aria-label</h1>
-    <p>
-      An attacker overlay uses <code>aria-label=" "</code> (a single space) to
-      pretend it has an accessible name. Previously this counted as having a name
-      (length 1 > 0). With the hardened check, whitespace-only labels shorter than
-      2 chars are treated as absent, so <code>no_accessible_name</code> should fire.
-    </p>
-  </div>
+  <h1>Evasion 03: Misleading accessible label</h1>
+  <p>
+    The overlays use deceptive aria-labels: one with a single whitespace character
+    (<code>aria-label=" "</code>), the other with a single letter
+    (<code>aria-label="x"</code>). The CDS hardening treats labels shorter than
+    2 characters as absent, so both should score as no_accessible_name.
+  </p>
 
-  <a class="real-link" href="https://example.com">Real Link</a>
+  <a id="legit-link" href="https://example.com/safe" aria-label="Safe destination link">
+    Click here for safe content
+  </a>
 
-  <!-- Attacker overlay: whitespace-only aria-label fakes having a name -->
-  <a class="overlay" href="https://evil.example.com" aria-label=" "></a>
+  <!-- Left half: whitespace-only aria-label -->
+  <a id="trap-whitespace"
+     class="trap-overlay"
+     href="https://evil.example/evasion03-ws"
+     target="_blank"
+     rel="noreferrer"
+     aria-label=" "></a>
+
+  <!-- Right half: single character aria-label -->
+  <a id="trap-singlechar"
+     class="trap-overlay"
+     href="https://evil.example/evasion03-char"
+     target="_blank"
+     rel="noreferrer"
+     aria-label="x"></a>
 </body>
 </html>

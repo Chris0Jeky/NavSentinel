@@ -1,52 +1,68 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Evasion 04 - z-index 9998</title>
   <style>
-    body { font-family: sans-serif; padding: 24px; }
-    .real-link {
-      display: block;
-      padding: 16px 32px;
+    body {
+      font-family: sans-serif;
+      padding: 24px;
+      max-width: 700px;
+    }
+    #legit-link {
+      display: inline-block;
+      padding: 14px 28px;
+      font-size: 18px;
       background: #1a73e8;
       color: #fff;
-      text-align: center;
+      border-radius: 8px;
       text-decoration: none;
-      border-radius: 4px;
-      width: 240px;
-      margin: 80px auto;
     }
-    .overlay {
-      position: absolute;
-      top: 60px; left: 0;
-      width: 300px; height: 300px;
-      background: rgba(200, 0, 0, 0.03);
+    /*
+     * Evasion technique: z-index 9998 — just below the 9999 "high z-index"
+     * threshold that adds +15. Falls in the gradient range (5000-9999),
+     * scoring: round(10 * (9998 - 5000) / 4999) = round(10 * 0.9998) = 10.
+     *
+     * Expected CDS contributions:
+     *   overlay_elevated_zindex     10 (z-index 9998, gradient)
+     *   no_accessible_name          15 (no text/aria on overlay)
+     * Total ~ 25 -> should NOT block in smart mode alone
+     *
+     * Tests that the gradient catches high-but-not-maximum z-index values.
+     */
+    #trap {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
       z-index: 9998;
+      opacity: 0.5;
+      background: rgba(0, 0, 0, 0.01);
       cursor: pointer;
-    }
-    .info {
-      max-width: 600px;
-      margin: 0 auto;
-      font-size: 14px;
-      color: #555;
     }
   </style>
 </head>
 <body>
-  <div class="info">
-    <p><a href="index.html">&larr; Back to Gym index</a></p>
-    <h1>Evasion 04 - z-index 9998</h1>
-    <p>
-      An attacker overlay uses <code>z-index: 9998</code>, just below the old
-      binary threshold of 9999. With gradient scoring this should trigger
-      <code>overlay_elevated_zindex</code>.
-    </p>
-  </div>
+  <h1>Evasion 04: z-index 9998</h1>
+  <p>
+    The overlay uses z-index 9998 — one below the hard threshold (9999) that
+    triggers the full overlay_high_zindex penalty (+15). Instead, it falls in
+    the elevated gradient range (5000-9999), scoring approximately 10 points.
+  </p>
+  <p>
+    This documents that a single near-threshold z-index is insufficient to
+    trigger blocking alone. An attacker using only z-index evasion would
+    need additional deceptive signals to be caught.
+  </p>
 
-  <a class="real-link" href="https://example.com">Real Link</a>
+  <a id="legit-link" href="https://example.com/safe" aria-label="Safe destination link">
+    Click here for safe content
+  </a>
 
-  <!-- Attacker overlay: z-index 9998, just under old 9999 threshold -->
-  <a class="overlay" href="https://evil.example.com"></a>
+  <!-- Evasion overlay: z-index 9998, fixed position -->
+  <a id="trap" href="https://evil.example/evasion04" target="_blank" rel="noreferrer"
+     role="link"></a>
 </body>
 </html>
