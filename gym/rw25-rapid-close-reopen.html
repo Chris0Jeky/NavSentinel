@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RW-25 - Rapid Close/Reopen Churn</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 42px 18px;
+        background: #f3f0ff;
+        color: #1a1a1a;
+      }
+      .card {
+        padding: 26px;
+        border-radius: 18px;
+        border: 1px solid #d8d0f0;
+        background: white;
+        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.06);
+      }
+      button {
+        min-height: 48px;
+        margin-top: 18px;
+        padding: 0 22px;
+        border: none;
+        border-radius: 12px;
+        background: #6c5ce7;
+        color: white;
+        font-size: 15px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      #status {
+        margin-top: 14px;
+        font-size: 13px;
+        color: #666;
+        white-space: pre-line;
+      }
+    </style>
+  </head>
+  <body>
+    <section class="card">
+      <h1>RW-25: Rapid close/reopen churn</h1>
+      <p>
+        Opens and closes a popup rapidly, then tries to open a fresh popup
+        expecting the old allow-state to leak through. NavSentinel should treat
+        the final popup as a new action, not inherit stale state.
+      </p>
+      <button id="rw25Churn" type="button">Start churn sequence</button>
+      <div id="status"></div>
+    </section>
+
+    <script>
+      document.getElementById('rw25Churn').addEventListener('click', () => {
+        const statusEl = document.getElementById('status');
+        let step = 0;
+
+        function logStep(msg) {
+          step++;
+          statusEl.textContent += `Step ${step}: ${msg}\n`;
+        }
+
+        // Rapid open-close-open cycle
+        const pop1 = window.open(
+          'rw25-churn-popup.html?round=1',
+          'rw25-churn',
+          'popup,width=420,height=500'
+        );
+        logStep('Opened popup round 1');
+
+        window.setTimeout(() => {
+          if (pop1 && !pop1.closed) pop1.close();
+          logStep('Closed popup round 1');
+
+          window.setTimeout(() => {
+            const pop2 = window.open(
+              'rw25-churn-popup.html?round=2',
+              'rw25-churn',
+              'popup,width=420,height=500'
+            );
+            logStep('Opened popup round 2');
+
+            window.setTimeout(() => {
+              if (pop2 && !pop2.closed) pop2.close();
+              logStep('Closed popup round 2');
+
+              // Final attempt: try to piggyback a different destination
+              window.setTimeout(() => {
+                window.open(
+                  'rw25-exfil-popup.html?round=final',
+                  'rw25-exfil',
+                  'popup,width=420,height=500'
+                );
+                logStep('Opened exfil popup — should be blocked');
+              }, 100);
+            }, 80);
+          }, 80);
+        }, 80);
+      });
+    </script>
+  </body>
+</html>
