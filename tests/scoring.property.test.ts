@@ -1,55 +1,71 @@
 import { describe, expect, it } from "vitest";
 import fc from "fast-check";
-import type { ClickContext, ElementHint } from "../extension/src/shared/types";
 import { computeCDS } from "../extension/src/shared/scoring";
+import type { ClickContext, ElementHint } from "../extension/src/shared/scoring";
 
 /**
  * Arbitrary generators for scoring property tests.
+ *
+ * We use .filter() to strip `undefined` from optional fields so that the
+ * generated objects satisfy `exactOptionalPropertyTypes` — absent keys
+ * are fine, but explicit `undefined` values are not.
  */
+
+function stripUndefined<T extends Record<string, unknown>>(obj: T): T {
+  const out = {} as Record<string, unknown>;
+  for (const [k, v] of Object.entries(obj)) {
+    if (v !== undefined) out[k] = v;
+  }
+  return out as T;
+}
 
 const arbRectHint = fc.record({
   w: fc.integer({ min: 0, max: 4000 }),
   h: fc.integer({ min: 0, max: 4000 })
 });
 
-const arbElementHint: fc.Arbitrary<ElementHint> = fc.record(
-  {
-    tag: fc.constantFrom("DIV", "A", "BUTTON", "SPAN", "INPUT", "IMG", "FORM", "P"),
-    role: fc.option(fc.constantFrom("link", "button", "presentation", "none", ""), { nil: undefined }),
-    hasOnClick: fc.option(fc.boolean(), { nil: undefined }),
-    cursor: fc.option(fc.constantFrom("pointer", "default", "auto", "text"), { nil: undefined }),
-    textLength: fc.option(fc.integer({ min: 0, max: 200 }), { nil: undefined }),
-    ariaLabelLength: fc.option(fc.integer({ min: 0, max: 200 }), { nil: undefined }),
-    titleLength: fc.option(fc.integer({ min: 0, max: 200 }), { nil: undefined }),
-    targetBlank: fc.option(fc.boolean(), { nil: undefined }),
-    rect: fc.option(arbRectHint, { nil: undefined }),
-    opacity: fc.option(fc.double({ min: 0, max: 1, noNaN: true }), { nil: undefined }),
-    visibility: fc.option(fc.constantFrom("visible", "hidden", "collapse", ""), { nil: undefined }),
-    display: fc.option(fc.constantFrom("block", "inline", "none", "flex", ""), { nil: undefined }),
-    pointerEvents: fc.option(fc.constantFrom("auto", "none", ""), { nil: undefined }),
-    position: fc.option(fc.constantFrom("static", "relative", "absolute", "fixed", "sticky"), { nil: undefined }),
-    zIndex: fc.option(fc.integer({ min: -100, max: 100000 }), { nil: undefined })
-  },
-  { requiredKeys: ["tag"] }
-);
+const arbElementHint: fc.Arbitrary<ElementHint> = fc
+  .record(
+    {
+      tag: fc.constantFrom("DIV", "A", "BUTTON", "SPAN", "INPUT", "IMG", "FORM", "P"),
+      role: fc.option(fc.constantFrom("link", "button", "presentation", "none", ""), { nil: undefined }),
+      hasOnClick: fc.option(fc.boolean(), { nil: undefined }),
+      cursor: fc.option(fc.constantFrom("pointer", "default", "auto", "text"), { nil: undefined }),
+      textLength: fc.option(fc.integer({ min: 0, max: 200 }), { nil: undefined }),
+      ariaLabelLength: fc.option(fc.integer({ min: 0, max: 200 }), { nil: undefined }),
+      titleLength: fc.option(fc.integer({ min: 0, max: 200 }), { nil: undefined }),
+      targetBlank: fc.option(fc.boolean(), { nil: undefined }),
+      rect: fc.option(arbRectHint, { nil: undefined }),
+      opacity: fc.option(fc.double({ min: 0, max: 1, noNaN: true }), { nil: undefined }),
+      visibility: fc.option(fc.constantFrom("visible", "hidden", "collapse", ""), { nil: undefined }),
+      display: fc.option(fc.constantFrom("block", "inline", "none", "flex", ""), { nil: undefined }),
+      pointerEvents: fc.option(fc.constantFrom("auto", "none", ""), { nil: undefined }),
+      position: fc.option(fc.constantFrom("static", "relative", "absolute", "fixed", "sticky"), { nil: undefined }),
+      zIndex: fc.option(fc.integer({ min: -100, max: 100000 }), { nil: undefined })
+    },
+    { requiredKeys: ["tag"] }
+  )
+  .map(stripUndefined) as fc.Arbitrary<ElementHint>;
 
 const arbViewport = fc.record({
   w: fc.integer({ min: 1, max: 3840 }),
   h: fc.integer({ min: 1, max: 2160 })
 });
 
-const arbClickContext: fc.Arbitrary<ClickContext> = fc.record(
-  {
-    viewport: arbViewport,
-    input: fc.constantFrom("pointer" as const, "keyboard" as const),
-    top: arbElementHint,
-    underlying: fc.option(arbElementHint, { nil: undefined }),
-    retargeted: fc.option(fc.boolean(), { nil: undefined }),
-    explicitNewTabIntent: fc.option(fc.boolean(), { nil: undefined }),
-    isLegitModalBackdrop: fc.option(fc.boolean(), { nil: undefined })
-  },
-  { requiredKeys: ["viewport", "input", "top"] }
-);
+const arbClickContext: fc.Arbitrary<ClickContext> = fc
+  .record(
+    {
+      viewport: arbViewport,
+      input: fc.constantFrom("pointer" as const, "keyboard" as const),
+      top: arbElementHint,
+      underlying: fc.option(arbElementHint, { nil: undefined }),
+      retargeted: fc.option(fc.boolean(), { nil: undefined }),
+      explicitNewTabIntent: fc.option(fc.boolean(), { nil: undefined }),
+      isLegitModalBackdrop: fc.option(fc.boolean(), { nil: undefined })
+    },
+    { requiredKeys: ["viewport", "input", "top"] }
+  )
+  .map(stripUndefined) as fc.Arbitrary<ClickContext>;
 
 describe("computeCDS property tests", () => {
   it("score is always non-negative", () => {
