@@ -50,7 +50,7 @@ describe("prompt telemetry storage", () => {
 
   it("appendPromptOutcome stores entries correctly", async () => {
     const { chrome } = createChromeMock();
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { appendPromptOutcome, getPromptOutcomes } = await import(
       "../extension/src/shared/storage"
@@ -65,12 +65,12 @@ describe("prompt telemetry storage", () => {
 
     const outcomes = await getPromptOutcomes();
     expect(outcomes).toHaveLength(1);
-    expect(outcomes[0].domain).toBe("example.com");
-    expect(outcomes[0].type).toBe("nav");
-    expect(outcomes[0].score).toBe(45);
-    expect(outcomes[0].outcome).toBe("allow_once");
-    expect(outcomes[0].id).toBeTruthy();
-    expect(outcomes[0].ts).toBeGreaterThan(0);
+    expect(outcomes[0]!.domain).toBe("example.com");
+    expect(outcomes[0]!.type).toBe("nav");
+    expect(outcomes[0]!.score).toBe(45);
+    expect(outcomes[0]!.outcome).toBe("allow_once");
+    expect(outcomes[0]!.id).toBeTruthy();
+    expect(outcomes[0]!.ts).toBeGreaterThan(0);
   });
 
   it("bounds entries to 500", async () => {
@@ -84,7 +84,7 @@ describe("prompt telemetry storage", () => {
       outcome: "block"
     }));
     const { chrome } = createChromeMock({ [key]: existing });
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { appendPromptOutcome, getPromptOutcomes } = await import(
       "../extension/src/shared/storage"
@@ -99,8 +99,8 @@ describe("prompt telemetry storage", () => {
 
     const outcomes = await getPromptOutcomes();
     expect(outcomes).toHaveLength(500);
-    expect(outcomes[outcomes.length - 1].domain).toBe("new.com");
-    expect(outcomes[0].id).toBe("old-1");
+    expect(outcomes[outcomes.length - 1]!.domain).toBe("new.com");
+    expect(outcomes[0]!.id).toBe("old-1");
   });
 
   it("clearPromptOutcomes empties the store", async () => {
@@ -108,7 +108,7 @@ describe("prompt telemetry storage", () => {
     const { chrome } = createChromeMock({
       [key]: [{ id: "x", ts: 1, domain: "a.com", type: "nav", score: 0, outcome: "block" }]
     });
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { clearPromptOutcomes, getPromptOutcomes } = await import(
       "../extension/src/shared/storage"
@@ -123,18 +123,18 @@ describe("prompt telemetry storage", () => {
     const key = "sentinelsuite:prompt_outcomes_v1";
     const entry = { id: "e1", ts: 100, domain: "foo.com", type: "nav", score: 30, outcome: "dismiss" };
     const { chrome } = createChromeMock({ [key]: [entry] });
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { exportAll } = await import("../extension/src/shared/storage");
     const exported = await exportAll();
 
     expect(exported.promptOutcomes).toHaveLength(1);
-    expect(exported.promptOutcomes[0].id).toBe("e1");
+    expect(exported.promptOutcomes[0]!.id).toBe("e1");
   });
 
   it("importAll restores promptOutcomes", async () => {
     const { chrome } = createChromeMock();
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { importAll, getPromptOutcomes } = await import("../extension/src/shared/storage");
 
@@ -146,7 +146,7 @@ describe("prompt telemetry storage", () => {
 
     const outcomes = await getPromptOutcomes();
     expect(outcomes).toHaveLength(1);
-    expect(outcomes[0].domain).toBe("bar.com");
+    expect(outcomes[0]!.domain).toBe("bar.com");
   });
 
   it("importAll without promptOutcomes does not clear existing data", async () => {
@@ -154,19 +154,19 @@ describe("prompt telemetry storage", () => {
     const { chrome } = createChromeMock({
       [key]: [{ id: "keep", ts: 1, domain: "a.com", type: "nav", score: 0, outcome: "block" }]
     });
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { importAll, getPromptOutcomes } = await import("../extension/src/shared/storage");
     await importAll({});
 
     const outcomes = await getPromptOutcomes();
     expect(outcomes).toHaveLength(1);
-    expect(outcomes[0].id).toBe("keep");
+    expect(outcomes[0]!.id).toBe("keep");
   });
 
   it("importAll bounds promptOutcomes to 500", async () => {
     const { chrome } = createChromeMock();
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { importAll, getPromptOutcomes } = await import("../extension/src/shared/storage");
     const big = Array.from({ length: 600 }, (_, i) => ({
@@ -181,6 +181,6 @@ describe("prompt telemetry storage", () => {
     await importAll({ promptOutcomes: big });
     const outcomes = await getPromptOutcomes();
     expect(outcomes).toHaveLength(500);
-    expect(outcomes[0].id).toBe("i-100");
+    expect(outcomes[0]!.id).toBe("i-100");
   });
 });
