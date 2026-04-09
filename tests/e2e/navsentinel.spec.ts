@@ -947,6 +947,27 @@ test("Level 6 blocks programmatic click new tab @regression", async () => {
   }
 });
 
+/** Click a button, assert the resulting new-tab attempt is blocked, and verify the page URL. */
+async function assertClickBlocked(
+  page: import("@playwright/test").Page,
+  context: import("@playwright/test").BrowserContext,
+  selector: string,
+  expectedToast: string,
+  urlPattern: RegExp
+) {
+  const btn = page.locator(selector);
+  const box = await btn.boundingBox();
+  expect(box, `${selector} should be visible`).toBeTruthy();
+
+  const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
+  await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+
+  const popup = await popupPromise;
+  expect(popup, "Expected the trap new tab to be blocked").toBeNull();
+  await waitForToastText(page, expectedToast, 3000);
+  await expect(page).toHaveURL(urlPattern);
+}
+
 test("RW-08 popup window reuse laundering keeps the original consent popup @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
@@ -1142,18 +1163,7 @@ test("RW-11 invoice approval payout trap blocks the deceptive new tab @regressio
       });
 
       await waitForNavSentinelBridge(page);
-
-      const btn = page.locator("#rw11Review");
-      const box = await btn.boundingBox();
-      expect(box, "#rw11Review should be visible").toBeTruthy();
-
-      const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
-      await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
-
-      const popup = await popupPromise;
-      expect(popup, "Expected the trap new tab to be blocked").toBeNull();
-      await waitForToastText(page, "Blocked new tab", 3000);
-      await expect(page).toHaveURL(/rw11-fake-invoice-approval\.html/);
+      await assertClickBlocked(page, context, "#rw11Review", "Blocked new tab", /rw11-fake-invoice-approval\.html/);
     } finally {
       await context.close();
     }
@@ -1226,18 +1236,7 @@ test("RW-14 checkout express-pay overlay blocks the hidden trap @regression", as
       });
 
       await waitForNavSentinelBridge(page);
-
-      const btn = page.locator("#rw14Pay");
-      const box = await btn.boundingBox();
-      expect(box, "#rw14Pay should be visible").toBeTruthy();
-
-      const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
-      await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
-
-      const popup = await popupPromise;
-      expect(popup, "Expected the trap new tab to be blocked").toBeNull();
-      await waitForToastText(page, "Blocked new tab", 3000);
-      await expect(page).toHaveURL(/rw14-checkout-express-pay-overlay\.html/);
+      await assertClickBlocked(page, context, "#rw14Pay", "Blocked new tab", /rw14-checkout-express-pay-overlay\.html/);
     } finally {
       await context.close();
     }
@@ -1275,7 +1274,6 @@ test("RW-15 bank security alert delayed redirect triggers rollback @rollback", a
         timeout: 20000,
         waitUntil: "commit"
       });
-      await page.waitForTimeout(1000);
       await expect(page).toHaveURL(/rw15-bank-security-alert\.html/);
     } finally {
       await context.close();
@@ -1307,18 +1305,7 @@ test("RW-16 fake document preview overlay blocks the hidden trap @regression", a
       });
 
       await waitForNavSentinelBridge(page);
-
-      const openBtn = page.locator("#rw16Open");
-      const box = await openBtn.boundingBox();
-      expect(box, "#rw16Open should be visible").toBeTruthy();
-
-      const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
-      await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
-
-      const popup = await popupPromise;
-      expect(popup, "Expected the trap new tab to be blocked").toBeNull();
-      await waitForToastText(page, "Blocked new tab", 3000);
-      await expect(page).toHaveURL(/rw16-fake-document-preview-overlay\.html/);
+      await assertClickBlocked(page, context, "#rw16Open", "Blocked new tab", /rw16-fake-document-preview-overlay\.html/);
     } finally {
       await context.close();
     }
@@ -1398,18 +1385,7 @@ test("RW-18 fake codec warning blocks the hidden installer trap @regression", as
       });
 
       await waitForNavSentinelBridge(page);
-
-      const installBtn = page.locator("#rw18Install");
-      const box = await installBtn.boundingBox();
-      expect(box, "#rw18Install should be visible").toBeTruthy();
-
-      const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
-      await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
-
-      const popup = await popupPromise;
-      expect(popup, "Expected the trap new tab to be blocked").toBeNull();
-      await waitForToastText(page, "Blocked new tab", 3000);
-      await expect(page).toHaveURL(/rw18-browser-update-warning\.html/);
+      await assertClickBlocked(page, context, "#rw18Install", "Blocked new tab", /rw18-browser-update-warning\.html/);
     } finally {
       await context.close();
     }
@@ -1450,7 +1426,7 @@ test("RW-19 repeated tech-support popup burst is blocked @regression", async () 
       );
 
       await waitForToastText(page, "Blocked popup", 3000);
-      expect(context.pages().length).toBe(beforePages);
+      await expect.poll(() => context.pages().length, { timeout: 3000 }).toBe(beforePages);
     } finally {
       await context.close();
     }
