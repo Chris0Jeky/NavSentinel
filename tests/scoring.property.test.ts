@@ -80,7 +80,9 @@ describe("computeCDS property tests", () => {
 
   it("score has an upper bound (sum of all positive factors)", () => {
     // Positive factors: 15 + 30 + 35 + 20 + 15 + 10 + 25 = 150
-    const MAX_CDS = 150;
+    // Composite escalation (4+ factors): +15
+    // Total max: 165
+    const MAX_CDS = 165;
     fc.assert(
       fc.property(arbClickContext, (ctx) => {
         const result = computeCDS(ctx);
