@@ -5,14 +5,17 @@ import {
   addTrustedDomainWithResult,
   appendEvent,
   clearEventLog,
+  clearPromptOutcomes,
   clearTrustedDomains,
   exportAll,
   getEventLog,
+  getPromptOutcomes,
   getSuiteSettings,
   getTrustedDomains,
   importAll,
   removeTrustedDomain,
-  updateSuiteSettings
+  updateSuiteSettings,
+  type PromptOutcomeEntry
 } from "../shared/storage";
 import {
   clearAllowlist,
@@ -46,6 +49,16 @@ const importFileEl = document.getElementById("importFile") as HTMLInputElement;
 const statusEl = document.getElementById("status") as HTMLSpanElement;
 const saveBtn = document.getElementById("save") as HTMLButtonElement;
 const saveStatusEl = document.getElementById("saveStatus") as HTMLSpanElement;
+const statTotalEl = document.getElementById("statTotal") as HTMLDivElement;
+const statAllowRateEl = document.getElementById("statAllowRate") as HTMLDivElement;
+const statBlockRateEl = document.getElementById("statBlockRate") as HTMLDivElement;
+const statTrustRateEl = document.getElementById("statTrustRate") as HTMLDivElement;
+const statDismissRateEl = document.getElementById("statDismissRate") as HTMLDivElement;
+const statAvgScoreAllowEl = document.getElementById("statAvgScoreAllow") as HTMLDivElement;
+const statAvgScoreBlockEl = document.getElementById("statAvgScoreBlock") as HTMLDivElement;
+const refreshStatsBtn = document.getElementById("refreshStats") as HTMLButtonElement;
+const clearStatsBtn = document.getElementById("clearStats") as HTMLButtonElement;
+const topDomainsEl = document.getElementById("topDomains") as HTMLDivElement;
 const statusTimers = new WeakMap<HTMLElement, number>();
 
 function flashStatus(
@@ -237,6 +250,75 @@ async function refreshEventLog(): Promise<void> {
   renderEventLog(await getEventLog());
 }
 
+function pct(n: number, total: number): string {
+  if (total === 0) return "-- %";
+  return `${((n / total) * 100).toFixed(1)}%`;
+}
+
+function avg(entries: PromptOutcomeEntry[]): string {
+  if (entries.length === 0) return "--";
+  const sum = entries.reduce((a, e) => a + e.score, 0);
+  return (sum / entries.length).toFixed(1);
+}
+
+function renderStats(outcomes: PromptOutcomeEntry[]): void {
+  const total = outcomes.length;
+  const allows = outcomes.filter((e) => e.outcome === "allow_once" || e.outcome === "always_allow");
+  const blocks = outcomes.filter((e) => e.outcome === "block" || e.outcome === "cancel");
+  const trusts = outcomes.filter((e) => e.outcome === "trust");
+  const dismisses = outcomes.filter((e) => e.outcome === "dismiss");
+
+  statTotalEl.textContent = String(total);
+  statAllowRateEl.textContent = pct(allows.length, total);
+  statBlockRateEl.textContent = pct(blocks.length, total);
+  statTrustRateEl.textContent = pct(trusts.length, total);
+  statDismissRateEl.textContent = pct(dismisses.length, total);
+  statAvgScoreAllowEl.textContent = avg(allows);
+  statAvgScoreBlockEl.textContent = avg(blocks);
+
+  // Top 5 domains
+  const domainCounts = new Map<string, number>();
+  for (const e of outcomes) {
+    domainCounts.set(e.domain, (domainCounts.get(e.domain) ?? 0) + 1);
+  }
+  const top5 = [...domainCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
+
+  topDomainsEl.innerHTML = "";
+  if (top5.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "allowlist-empty";
+    empty.textContent = "No prompt outcomes recorded yet.";
+    topDomainsEl.appendChild(empty);
+    return;
+  }
+
+  const heading = document.createElement("div");
+  heading.style.fontWeight = "700";
+  heading.style.marginBottom = "8px";
+  heading.textContent = "Top prompted domains";
+  topDomainsEl.appendChild(heading);
+
+  for (const [domain, count] of top5) {
+    const row = document.createElement("div");
+    row.className = "event-head";
+    const badge = document.createElement("span");
+    badge.className = "badge mono";
+    badge.textContent = domain;
+    const countSpan = document.createElement("span");
+    countSpan.className = "event-time mono";
+    countSpan.textContent = `${count} prompt${count === 1 ? "" : "s"}`;
+    row.appendChild(badge);
+    row.appendChild(countSpan);
+    topDomainsEl.appendChild(row);
+  }
+}
+
+async function refreshStats(): Promise<void> {
+  renderStats(await getPromptOutcomes());
+}
+
 function getInt(el: HTMLInputElement, fallback: number): number {
   const n = Number(el.value);
   return Number.isFinite(n) ? Math.trunc(n) : fallback;
@@ -259,6 +341,7 @@ async function init(): Promise<void> {
   await refreshAllowlist();
   await refreshTrusted();
   await refreshEventLog();
+  await refreshStats();
 }
 
 saveBtn.addEventListener("click", async () => {
@@ -370,6 +453,17 @@ importFileEl.addEventListener("change", async () => {
   } finally {
     importFileEl.value = "";
   }
+});
+
+refreshStatsBtn.addEventListener("click", async () => {
+  await refreshStats();
+  flashStatus(statusEl, "Stats refreshed.");
+});
+
+clearStatsBtn.addEventListener("click", async () => {
+  await clearPromptOutcomes();
+  await refreshStats();
+  flashStatus(statusEl, "Stats cleared.");
 });
 
 void init();
