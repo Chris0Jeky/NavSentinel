@@ -1227,9 +1227,12 @@ test("RW-15 bank security alert delayed redirect triggers rollback @rollback", a
 
       await page.click("#rw15Verify");
       await page.waitForURL(/rw15-bank-verify-transaction\.html/, { timeout: 8000 });
-
-      const toastText = await waitForToastMatch(page, /Blocked redirect|redirect/i, 5000);
-      expect(toastText).toBeTruthy();
+      await page.waitForURL(/rw15-bank-security-alert\.html/, {
+        timeout: 20000,
+        waitUntil: "commit"
+      });
+      await page.waitForTimeout(1000);
+      await expect(page).toHaveURL(/rw15-bank-security-alert\.html/);
     } finally {
       await context.close();
     }
