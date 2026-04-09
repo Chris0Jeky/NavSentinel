@@ -161,6 +161,80 @@ describe("computeCDS property tests", () => {
     );
   });
 
+  it("composite escalation bonus is always non-negative", () => {
+    fc.assert(
+      fc.property(arbClickContext, (ctx) => {
+        const result = computeCDS(ctx);
+        if (result.reasonCodes.includes("composite_escalation")) {
+          // Composite only fires when 3+ positive factors, so cds > 0
+          expect(result.cds).toBeGreaterThan(0);
+        }
+      }),
+      { numRuns: 500 }
+    );
+  });
+
+  it("opacity gradient is monotonic (higher opacity = lower penalty)", () => {
+    // For an interactive element with no name, increasing opacity should
+    // never increase the opacity-related penalty
+    fc.assert(
+      fc.property(
+        fc.double({ min: 0.08, max: 0.3, noNaN: true }),
+        fc.double({ min: 0.08, max: 0.3, noNaN: true }),
+        (opA, opB) => {
+          const lo = Math.min(opA, opB);
+          const hi = Math.max(opA, opB);
+          const base: ClickContext = {
+            viewport: { w: 1920, h: 1080 },
+            input: "pointer",
+            top: { tag: "A", opacity: lo, cursor: "default" },
+          };
+          const rLo = computeCDS(base);
+          const rHi = computeCDS({ ...base, top: { ...base.top, opacity: hi } });
+          expect(rHi.cds).toBeLessThanOrEqual(rLo.cds);
+        }
+      ),
+      { numRuns: 300 }
+    );
+  });
+
+  it("4+ near-threshold factors always exceed single factor CDS", () => {
+    // Single factor: just no_accessible_name
+    const single: ClickContext = {
+      viewport: { w: 1920, h: 1080 },
+      input: "pointer",
+      top: { tag: "A" },  // no name -> +15
+    };
+    // Multi-factor: no name + near-invisible + elevated z + medium coverage
+    const multi: ClickContext = {
+      viewport: { w: 1920, h: 1080 },
+      input: "pointer",
+      top: {
+        tag: "A",
+        opacity: 0.09,
+        position: "absolute",
+        zIndex: 9998,
+        rect: { w: 1120, h: 630 },  // ~34% of 1920x1080
+        cursor: "pointer",
+      },
+    };
+    const singleResult = computeCDS(single);
+    const multiResult = computeCDS(multi);
+    expect(multiResult.cds).toBeGreaterThan(singleResult.cds);
+    expect(multiResult.reasonCodes).toContain("composite_escalation");
+  });
+
+  it("nameLength treats whitespace-only ariaLabel as absent", () => {
+    // An element with ariaLabelLength=1 (e.g. " ") should be treated as no name
+    const ctx: ClickContext = {
+      viewport: { w: 1920, h: 1080 },
+      input: "pointer",
+      top: { tag: "A", ariaLabelLength: 1 },
+    };
+    const result = computeCDS(ctx);
+    expect(result.reasonCodes).toContain("no_accessible_name");
+  });
+
   it("score is deterministic", () => {
     fc.assert(
       fc.property(arbClickContext, (ctx) => {
