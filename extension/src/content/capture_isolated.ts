@@ -1,5 +1,5 @@
 import { computeCDS } from "../shared/scoring";
-import { appendEvent, getNavSettings, onNavSettingsChange, type NavSettings } from "../shared/storage";
+import { appendEvent, appendPromptOutcome, getNavSettings, onNavSettingsChange, type NavSettings } from "../shared/storage";
 import { makeToken, setActiveToken } from "../shared/stateMachine";
 import type { Mode } from "../shared/types";
 import {
@@ -289,6 +289,14 @@ function appendEventSafely(
   });
 }
 
+function appendOutcomeSafely(
+  partial: Parameters<typeof appendPromptOutcome>[0]
+): void {
+  void appendPromptOutcome(partial).catch(() => {
+    // ignore
+  });
+}
+
 function notifyNavAllow(ttlMs = NAV_ALLOW_TTL_MS): void {
   try {
     chrome.runtime.sendMessage({ type: "ns-allow-nav", ttlMs });
@@ -505,10 +513,19 @@ function showAllowPrompt(params: {
   features?: string;
   actionId?: string | null;
 }): void {
+  const promptScore = lastDebug?.cds ?? 0;
   const actions = [
     {
       label: "Allow once",
-      onClick: () => allowActionOnce(params.actionId, params.url, params.target, params.features)
+      onClick: () => {
+        appendOutcomeSafely({
+          domain: siteKeyFromLocation(),
+          type: "nav",
+          score: promptScore,
+          outcome: "allow_once"
+        });
+        allowActionOnce(params.actionId, params.url, params.target, params.features);
+      }
     }
   ];
 
@@ -516,6 +533,12 @@ function showAllowPrompt(params: {
     actions.push({
       label: "Always allow",
       onClick: () => {
+        appendOutcomeSafely({
+          domain: siteKeyFromLocation(),
+          type: "nav",
+          score: promptScore,
+          outcome: "always_allow"
+        });
         void allowAlways(siteKeyFromLocation(), params.host as string, {
           ...(params.actionId !== undefined ? { actionId: params.actionId } : {}),
           ...(params.url !== undefined ? { url: params.url } : {}),
@@ -535,7 +558,15 @@ function showAllowPrompt(params: {
 
   showToast({
     message: `${params.title}: ${params.host ?? params.url}`,
-    actions
+    actions,
+    onDismiss: () => {
+      appendOutcomeSafely({
+        domain: siteKeyFromLocation(),
+        type: "nav",
+        score: 0,
+        outcome: "dismiss"
+      });
+    }
   });
 }
 
@@ -739,6 +770,12 @@ window.addEventListener(
           url: location.href,
           score: cds,
           reasons: reasonCodes
+        });
+        appendOutcomeSafely({
+          domain: siteKeyFromLocation(),
+          type: "nav",
+          score: cds,
+          outcome: "block"
         });
         showToast({ message: `NavSentinel blocked deceptive click (CDS=${cds}).` });
       }

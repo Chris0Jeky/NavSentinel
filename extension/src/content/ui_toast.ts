@@ -9,6 +9,7 @@ type ToastOptions = {
   message: string;
   actions?: ToastAction[];
   timeoutMs?: number; // 0 disables auto-dismiss
+  onDismiss?: () => void;
 };
 
 let host: HTMLElement | null = null;
@@ -81,16 +82,24 @@ export function showToast(opts: ToastOptions) {
   const row = document.createElement("div");
   row.className = "row";
 
+  let actionClicked = false;
+
   const dismiss = document.createElement("button");
   dismiss.className = "danger";
   dismiss.textContent = "Dismiss";
-  dismiss.addEventListener("click", () => wrap.remove());
+  dismiss.addEventListener("click", () => {
+    wrap.remove();
+    if (!actionClicked && opts.onDismiss) {
+      opts.onDismiss();
+    }
+  });
 
   const actions = opts.actions ?? [];
   for (const a of actions) {
     const btn = document.createElement("button");
     btn.textContent = a.label;
     btn.addEventListener("click", () => {
+      actionClicked = true;
       try { a.onClick(); } finally { wrap.remove(); }
     });
     row.appendChild(btn);
@@ -104,6 +113,13 @@ export function showToast(opts: ToastOptions) {
 
   const t = opts.timeoutMs ?? 4000;
   if (t > 0) {
-    window.setTimeout(() => wrap.remove(), t);
+    window.setTimeout(() => {
+      if (wrap.parentNode) {
+        wrap.remove();
+        if (!actionClicked && opts.onDismiss) {
+          opts.onDismiss();
+        }
+      }
+    }, t);
   }
 }
