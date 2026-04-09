@@ -14,7 +14,7 @@ know it's done. It synthesizes the findings from
 | Phase | Title | Tasks | Done | Status |
 |---|---|---|---|---|
 | 0 | Stabilize | 6 | 6 | **Done** |
-| 1 | Validate Foundation | 8 | 0 | **Next up** |
+| 1 | Validate Foundation | 8 | 3 | **In progress** |
 | 2 | Target 2025-2026 Threats | 10 | 0 | Blocked on Phase 1 |
 | 3 | Productize | 9 | 0 | Blocked on Phase 2 |
 | 4 | Differentiate | 8 | 0 | Future |
@@ -216,14 +216,14 @@ Phase 0 is complete when:
 
 | ID | Title | Effort | Status | Depends On | Branch |
 |---|---|---|---|---|---|
-| P1-01 | Public Suffix List integration | L | pending | P0 gate | `feat/psl-integration` |
-| P1-02 | Harden CDS against trivial evasion | L | pending | P0-04 | `feat/cds-hardening` |
+| P1-01 | Public Suffix List integration | L | **done** | P0 gate | `feat/psl-integration` |
+| P1-02 | Harden CDS against trivial evasion | L | **done** | P0-04 | `feat/cds-hardening` |
 | P1-03 | Enhance lookalike detection | M | pending | P1-01 | `feat/lookalike-v2` |
 | P1-04 | Implement NRS | L | pending | P1-02 | `feat/nrs` |
 | P1-05 | False positive measurement on Tranco top-1000 | L | pending | P1-01 | `test/fp-measurement` |
 | P1-06 | Real-world phishing test corpus | L | pending | P1-01 | `test/phishing-corpus` |
 | P1-07 | CDS evasion red-team test suite | M | pending | P1-02 | `test/cds-evasion` |
-| P1-08 | Local prompt telemetry | M | pending | P0 gate | `feat/prompt-telemetry` |
+| P1-08 | Local prompt telemetry | M | **done** | P0 gate | `feat/prompt-telemetry` |
 
 ### Task Details
 
@@ -412,14 +412,14 @@ the machine.
 ### Phase 1 Gate
 
 Phase 1 is complete when:
-- [ ] PSL integration is live and cloud-domain tests pass
-- [ ] CDS resists the 5 specific evasion patterns from the Thesis Review
+- [x] PSL integration is live and cloud-domain tests pass
+- [x] CDS resists the 5 specific evasion patterns from the Thesis Review
 - [ ] Lookalike detection catches subdomain stuffing, homoglyphs, and brand keywords
 - [ ] NRS is implemented per spec and wired into navigation decisions
 - [ ] False positive rate on Tranco top-1000 is measured and below 0.1%
 - [ ] At least 50 real phishing pages tested, TP rate measured
 - [ ] CDS evasion red-team suite exists and composite evasion is caught
-- [ ] Prompt telemetry is recording locally
+- [x] Prompt telemetry is recording locally
 
 ---
 
