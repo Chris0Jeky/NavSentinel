@@ -58,7 +58,10 @@ function pslSuffixLength(labels: string[]): number {
     if (exactChild !== undefined && typeof exactChild === "object") {
       // Check exception marker on the matched child
       if ((exactChild as TrieNode)["!"] === 1) {
-        // This label is an exception — it is NOT part of the public suffix
+        // This label is an exception to a wildcard rule.
+        // The public suffix is everything traversed so far (depth),
+        // because the exception implies the parent path is a valid suffix.
+        confirmedSuffix = depth;
         break;
       }
       node = exactChild as TrieNode;

@@ -81,6 +81,18 @@ describe("PSL-based getRegistrableDomain", () => {
       expect(getRegistrableDomain("www.ck")).toBe("www.ck");
       expect(getRegistrableDomain("sub.www.ck")).toBe("www.ck");
     });
+
+    it("exception !city.kawasaki.jp: city.kawasaki.jp is registrable", () => {
+      // *.kawasaki.jp is a wildcard rule, !city.kawasaki.jp is an exception
+      // So kawasaki.jp is the suffix, city.kawasaki.jp is registrable
+      expect(getRegistrableDomain("city.kawasaki.jp")).toBe("city.kawasaki.jp");
+      expect(getRegistrableDomain("sub.city.kawasaki.jp")).toBe("city.kawasaki.jp");
+    });
+
+    it("non-excepted kawasaki.jp wildcard: foo.kawasaki.jp is public suffix", () => {
+      // foo.kawasaki.jp is a public suffix (wildcard), needs one more label
+      expect(getRegistrableDomain("bar.foo.kawasaki.jp")).toBe("bar.foo.kawasaki.jp");
+    });
   });
 
   describe("IP addresses pass through", () => {
