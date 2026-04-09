@@ -92,6 +92,10 @@ Options:
   }
 
   if (!opts.out) {
+    if (opts.resume) {
+      console.warn("WARN: --resume without --out generates a new filename each run.");
+      console.warn("      Pass --out <path> to resume into a specific file.");
+    }
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     opts.out = path.join(RESULTS_DIR, `report-${stamp}.csv`);
   }
@@ -289,11 +293,25 @@ const CSV_HEADER = csvRow(
 // ── Browser interaction ────────────────────────────────────────────
 
 /**
+ * Get the service worker, waiting for it to appear if needed.
+ * MV3 service workers are ephemeral; this handles the case where the
+ * worker has been recycled during a long measurement run.
+ */
+async function getServiceWorker(context, timeoutMs = 15_000) {
+  const existing = context.serviceWorkers()[0];
+  if (existing) return existing;
+
+  // Service worker may have been recycled; trigger it by opening a page
+  // in the extension context, then wait for it to re-register.
+  return context.waitForEvent("serviceworker", { timeout: timeoutMs });
+}
+
+/**
  * Extract the NavSentinel event log from chrome.storage.local
  * via the service worker.
  */
 async function extractEventLog(context) {
-  const sw = context.serviceWorkers()[0] || await context.waitForEvent("serviceworker", { timeout: 10_000 });
+  const sw = await getServiceWorker(context);
   const log = await sw.evaluate(async (key) => {
     const res = await chrome.storage.local.get(key);
     return Array.isArray(res[key]) ? res[key] : [];
@@ -305,7 +323,7 @@ async function extractEventLog(context) {
  * Clear the NavSentinel event log.
  */
 async function clearEventLog(context) {
-  const sw = context.serviceWorkers()[0] || await context.waitForEvent("serviceworker", { timeout: 10_000 });
+  const sw = await getServiceWorker(context);
   await sw.evaluate(async (key) => {
     await chrome.storage.local.set({ [key]: [] });
   }, EVENT_LOG_KEY);
@@ -315,9 +333,34 @@ async function clearEventLog(context) {
  * Visit a site and perform basic interactions.
  * Returns { events, error } where events is the NavSentinel event log
  * entries that occurred during the visit.
+ *
+ * Wraps the inner logic in an overall timeout (4x the per-navigation
+ * timeout) so a single slow site cannot stall the entire run.
  */
 async function visitSite(context, domain, timeoutMs) {
+  const overallTimeout = timeoutMs * 4; // homepage + up to 3 subpages
   const url = `https://${domain}`;
+
+  const raceTimeout = new Promise((_, reject) => {
+    const id = setTimeout(
+      () => reject(new Error(`Overall site timeout after ${overallTimeout}ms`)),
+      overallTimeout
+    );
+    // Allow the timer to not keep the process alive
+    if (id.unref) id.unref();
+  });
+
+  try {
+    return await Promise.race([visitSiteInner(context, domain, url, timeoutMs), raceTimeout]);
+  } catch (err) {
+    return { url, events: [], error: err.message };
+  }
+}
+
+/**
+ * Inner implementation for visitSite (no overall timeout guard).
+ */
+async function visitSiteInner(context, domain, url, timeoutMs) {
   let page;
 
   try {
@@ -421,9 +464,9 @@ async function findInternalLinks(page, domain) {
           if (!href) continue;
           const url = new URL(href, document.location.href);
 
-          // Must be HTTP(S) and same domain
+          // Must be HTTP(S) and same domain (exact or subdomain match)
           if (url.protocol !== "http:" && url.protocol !== "https:") continue;
-          if (!url.hostname.endsWith(targetDomain) && targetDomain !== url.hostname) continue;
+          if (url.hostname !== targetDomain && !url.hostname.endsWith("." + targetDomain)) continue;
 
           // Skip anchors, javascript, and mailto
           if (url.pathname === document.location.pathname && url.hash) continue;
@@ -517,7 +560,8 @@ async function main() {
   });
 
   if (!appendMode) {
-    csvStream.write(CSV_HEADER + "\n");
+    // UTF-8 BOM for Excel compatibility, then header
+    csvStream.write("\uFEFF" + CSV_HEADER + "\n");
   }
 
   // Launch browser with extension
@@ -564,13 +608,23 @@ async function main() {
   let skipped = 0;
   let errored = 0;
   let fpCount = 0;
+  let interrupted = false;
   const startTime = Date.now();
+
+  // Graceful SIGINT: stop the loop but still produce a partial report
+  process.on("SIGINT", () => {
+    if (interrupted) process.exit(2); // second Ctrl+C forces exit
+    console.log("\n\nInterrupted — finishing current site and writing report...");
+    interrupted = true;
+  });
 
   console.log(`\nStarting false positive measurement...`);
   console.log(`Output: ${opts.out}\n`);
 
   // Process each site
   for (let i = 0; i < sites.length; i++) {
+    if (interrupted) break;
+
     const domain = sites[i];
     const rank = i + 1;
 
@@ -658,22 +712,22 @@ async function main() {
 
   // Final report
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-  const fpRate = tested > 0 ? ((fpCount / tested) * 100).toFixed(3) : "N/A";
+  const testedSuccessfully = tested - errored;
+  const fpRate = testedSuccessfully > 0 ? ((fpCount / testedSuccessfully) * 100).toFixed(3) : "N/A";
 
   console.log(`
-╔══════════════════════════════════════════╗
-║   NavSentinel False Positive Report      ║
-╠══════════════════════════════════════════╣
-║  Sites tested:    ${String(tested).padStart(6)}                 ║
-║  Sites skipped:   ${String(skipped).padStart(6)} (resume)       ║
-║  Errors/timeouts: ${String(errored).padStart(6)}                 ║
-║  False positives: ${String(fpCount).padStart(6)}                 ║
-║  FP rate:         ${fpRate.padStart(6)}%                ║
-║  Time elapsed:    ${elapsed.padStart(6)}s                ║
-║  Target:          < 0.1%                 ║
-╠══════════════════════════════════════════╣
-║  Report: ${opts.out.padEnd(32)}║
-╚══════════════════════════════════════════╝
+════════════════════════════════════════════
+  NavSentinel False Positive Report
+════════════════════════════════════════════
+  Sites tested:      ${tested} (${testedSuccessfully} successful, ${errored} errors)
+  Sites skipped:     ${skipped} (resume)
+  False positives:   ${fpCount}
+  FP rate:           ${fpRate}% (of ${testedSuccessfully} successful visits)
+  Time elapsed:      ${elapsed}s
+  Target:            < 0.1%
+────────────────────────────────────────────
+  Report: ${opts.out}
+════════════════════════════════════════════
 `);
 
   if (fpCount > 0) {
@@ -690,11 +744,14 @@ async function main() {
   }
 
   // Exit with non-zero if FP rate exceeds target
-  const fpRateNum = tested > 0 ? (fpCount / tested) * 100 : 0;
-  if (fpRateNum > 0.1) {
+  const fpRateNum = testedSuccessfully > 0 ? (fpCount / testedSuccessfully) * 100 : 0;
+  if (testedSuccessfully === 0) {
+    console.log("\nWARN: No sites were successfully tested. Cannot compute FP rate.");
+    process.exit(1);
+  } else if (fpRateNum > 0.1) {
     console.log(`\nFAIL: FP rate ${fpRate}% exceeds 0.1% target`);
     process.exit(1);
-  } else if (tested > 0) {
+  } else {
     console.log(`\nPASS: FP rate ${fpRate}% is within 0.1% target`);
   }
 }
