@@ -700,11 +700,18 @@ window.addEventListener(
       ? isAllowlisted(allowlist, siteKeyFromLocation(), parsed.host)
       : false;
 
-    // Track navigation attempts per gesture for NRS multi-attempt factor
-    gestureAttemptCount += 1;
+    // Only count navigation-relevant clicks (blank anchors, cross-site anchors)
+    // toward the NRS multi-attempt factor — not plain same-site clicks
+    const isNavRelevant = isBlankAnchor || (parsed?.host && !isAllowed);
+    if (isNavRelevant) {
+      gestureAttemptCount += 1;
+    }
 
-    // Compute pointerdown delta for NRS fast-timing factor
-    const pointerdownDeltaMs = lastPointerdownTs > 0
+    // Compute pointerdown delta for NRS fast-timing factor.
+    // Only pass to NRS for navigation-relevant clicks; for same-site
+    // clicks the delta is not meaningful since click always follows
+    // pointerdown quickly.
+    const pointerdownDeltaMs = isNavRelevant && lastPointerdownTs > 0
       ? performance.now() - lastPointerdownTs
       : undefined;
 
