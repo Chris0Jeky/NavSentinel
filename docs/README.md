@@ -13,6 +13,11 @@ This folder documents the current merged `main` branch.
 - `docs/Testing_and_Gym.md`
   - Current test surfaces, Gym coverage, and local/CI verification flow.
 
+## Project analysis
+
+- `docs/Comprehensive_Project_Analysis.md`
+  - Full repo analysis with architecture deep dive, metrics, gap analysis, scorecard, and recommended roadmap. Generated 2026-04-09.
+
 ## Active operational docs
 
 - `docs/Implementation_Roadmap.md`

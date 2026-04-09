@@ -176,6 +176,8 @@ Why last:
 | 2 | E2E lane split and rollback formalization | folded into PR #5 |
 | 3 | Adversarial Gym coverage | folded into PR #5 |
 | 4 | Legitimate-flow Gym coverage | folded into PR #5 |
-| 5 | Premium operator surfaces and popup coverage | in progress |
-| 6 | Real-world adversarial simulation program | in progress (Waves 1 through 4 underway) |
+| 5 | Premium operator surfaces and popup coverage | complete (PR #9) |
+| 6 | Real-world adversarial simulation program | Waves 1-4 merged (PRs #10-#13 via #9); Wave 5 not yet merged; **E2E tests for RW-08 through RW-20 lost during stacked merge** |
 | 7 | Release and repo hygiene | planned |
+| -- | Demo showcase system | complete (PRs #14, #15, #16) -- core, operator, recovery variants |
+| -- | Recover missing Wave 2-4 E2E tests | **outstanding** -- highest priority gap |
