@@ -170,14 +170,16 @@ export function computeCDS(ctx: ClickContext): ScoreResult {
     cds += 25;
     reasons.push("invisible_but_clickable");
   } else if (opacity >= 0.08 && opacity < 0.15) {
-    // Near-invisible gradient
-    const scaled = Math.round(15 * (1 - (opacity - 0.08) / 0.07));
+    // Near-invisible gradient: 15 at 0.08, tapering to 8 at 0.15
+    // (continuous with the low_opacity band starting at 8)
+    const t = (opacity - 0.08) / 0.07;
+    const scaled = Math.round(15 - 7 * t);
     if (scaled > 0) {
       cds += scaled;
       reasons.push("near_invisible_opacity");
     }
   } else if (opacity >= 0.15 && opacity < 0.3) {
-    // Low-opacity gradient
+    // Low-opacity gradient: 8 at 0.15, tapering to 0 at 0.3
     const scaled = Math.round(8 * (1 - (opacity - 0.15) / 0.15));
     if (scaled > 0) {
       cds += scaled;
