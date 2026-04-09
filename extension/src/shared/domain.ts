@@ -458,10 +458,7 @@ export const BRAND_LIST: ReadonlyArray<readonly [brand: string, domain: string]>
   ["icloud", "icloud.com"],
   ["microsoft", "microsoft.com"],
   ["outlook", "outlook.com"],
-  ["live", "live.com"],
-  ["office", "office.com"],
   ["amazon", "amazon.com"],
-  ["aws", "aws.amazon.com"],
   ["paypal", "paypal.com"],
   ["netflix", "netflix.com"],
   ["facebook", "facebook.com"],
@@ -472,8 +469,6 @@ export const BRAND_LIST: ReadonlyArray<readonly [brand: string, domain: string]>
   ["dropbox", "dropbox.com"],
   ["adobe", "adobe.com"],
   ["spotify", "spotify.com"],
-  ["steam", "steampowered.com"],
-  ["valve", "valvesoftware.com"],
   ["ebay", "ebay.com"],
   ["chase", "chase.com"],
   ["wellsfargo", "wellsfargo.com"],
@@ -491,10 +486,7 @@ export const BRAND_LIST: ReadonlyArray<readonly [brand: string, domain: string]>
   ["stripe", "stripe.com"],
   ["shopify", "shopify.com"],
   ["walmart", "walmart.com"],
-  ["target", "target.com"],
   ["bestbuy", "bestbuy.com"],
-  ["zoom", "zoom.us"],
-  ["slack", "slack.com"],
   ["github", "github.com"],
   ["gitlab", "gitlab.com"],
   ["discord", "discord.com"],
@@ -502,6 +494,14 @@ export const BRAND_LIST: ReadonlyArray<readonly [brand: string, domain: string]>
   ["yahoo", "yahoo.com"],
   ["docusign", "docusign.com"],
 ] as const;
+
+/**
+ * Minimum brand keyword length for substring matching.
+ * Keywords shorter than this threshold must match the full label exactly
+ * (after separator stripping and homoglyph normalization) to avoid
+ * false positives from common English words like "chase", "ebay", "hsbc".
+ */
+const BRAND_SUBSTRING_MIN_LEN = 6;
 
 /**
  * Static table of visually confusable character replacements.
@@ -513,7 +513,8 @@ const HOMOGLYPH_MAP: ReadonlyArray<readonly [from: string, to: string]> = [
   // Multi-char patterns (must come first)
   ["rn", "m"],
   ["vv", "w"],
-  ["cl", "d"],
+  // Note: "cl" -> "d" was removed due to high false-positive rate
+  // (e.g. "include" -> "indude", "clinic" -> "dinic").
   // Single-char confusables
   ["0", "o"],
   ["1", "l"],
@@ -557,6 +558,43 @@ export interface BrandMatch {
 }
 
 /**
+ * Lazily-initialized cache mapping each brand's canonical domain string
+ * to its registrable domain. Avoids calling getRegistrableDomain(canonical)
+ * on every invocation of detectBrandInDomain / detectSubdomainStuffing.
+ */
+let _brandRegCache: Map<string, string> | null = null;
+function getBrandRegDomain(canonical: string): string {
+  if (!_brandRegCache) {
+    _brandRegCache = new Map();
+    for (const [, c] of BRAND_LIST) {
+      _brandRegCache.set(c, getRegistrableDomain(c));
+    }
+  }
+  return _brandRegCache.get(canonical) ?? getRegistrableDomain(canonical);
+}
+
+/**
+ * Returns true if `label` (after normalization) matches the brand keyword
+ * as a substring (for long keywords) or as the full label (for short keywords).
+ *
+ * Short keywords (< BRAND_SUBSTRING_MIN_LEN) require the stripped label to
+ * exactly equal the brand keyword with extra characters, which means the
+ * stripped label must strictly contain the brand and be longer. But because
+ * short keywords like "chase" or "ebay" are common words, we require the
+ * label to *start with* the brand keyword rather than merely containing it,
+ * reducing false positives from unrelated words that happen to include them.
+ */
+function brandKeywordMatch(strippedLabel: string, brand: string): boolean {
+  if (strippedLabel.length <= brand.length) return false;
+  if (brand.length >= BRAND_SUBSTRING_MIN_LEN) {
+    // Long keywords: substring match anywhere in the label
+    return strippedLabel.includes(brand);
+  }
+  // Short keywords: must start with the brand keyword to reduce false positives
+  return strippedLabel.startsWith(brand);
+}
+
+/**
  * Check whether a registrable domain contains a well-known brand keyword
  * with extra characters appended or prepended (e.g. "paypal-secure.com").
  *
@@ -579,19 +617,13 @@ export function detectBrandInDomain(
   const strippedLabel = stripSeparators(normalizedLabel);
 
   for (const [brand, canonical] of BRAND_LIST) {
-    const canonicalReg = getRegistrableDomain(canonical);
+    const canonicalReg = getBrandRegDomain(canonical);
     // Skip if this IS the brand's own domain
     if (reg === canonicalReg) continue;
 
-    // Check: does the label contain the brand keyword (possibly with extra chars)?
-    if (strippedLabel.length > brand.length && strippedLabel.includes(brand)) {
+    if (brandKeywordMatch(strippedLabel, brand)) {
       return { brand, canonicalDomain: canonicalReg };
     }
-
-    // Also check with homoglyph normalization on the brand side
-    // (brand keywords are already canonical, but the label might match
-    // after normalization even at exact length -- that's a Levenshtein case,
-    // not brand-keyword, so we only flag when there are extra characters)
   }
 
   return null;
@@ -622,7 +654,7 @@ export function detectSubdomainStuffing(
   const subLabels = subdomainPart.split(".");
 
   for (const [brand, canonical] of BRAND_LIST) {
-    const canonicalReg = getRegistrableDomain(canonical);
+    const canonicalReg = getBrandRegDomain(canonical);
     // Skip if the registrable domain IS the brand's domain
     if (reg === canonicalReg) continue;
 
@@ -630,7 +662,8 @@ export function detectSubdomainStuffing(
       const normalizedSub = normalizeHomoglyphs(sub);
       const strippedSub = stripSeparators(normalizedSub);
       // Match if the subdomain label equals the brand or contains it
-      if (strippedSub === brand || (strippedSub.length > brand.length && strippedSub.includes(brand))) {
+      // For subdomain stuffing, exact match is the primary signal
+      if (strippedSub === brand || brandKeywordMatch(strippedSub, brand)) {
         return { brand, canonicalDomain: canonicalReg };
       }
     }
