@@ -5,6 +5,7 @@ export type DebugInfo = {
   mode: Mode;
   decision: "allow" | "prompt" | "block";
   cds: number;
+  nrs?: number | undefined;
   reasonCodes: string[];
   ctx: ClickContext;
   mainGuard?: "unknown" | "yes" | "no";
@@ -89,13 +90,18 @@ export function updateDebugOverlay(info: DebugInfo): void {
   const top = info.ctx.top;
   const under = info.ctx.underlying;
 
+  const nrsReasons = info.reasonCodes.filter(r => r.startsWith("nrs_"));
+  const cdsReasons = info.reasonCodes.filter(r => !r.startsWith("nrs_"));
+
   const lines = [
     "NavSentinel Debug",
     `Mode: ${info.mode}`,
     `MainGuard: ${info.mainGuard ?? "unknown"}`,
     `Decision: ${info.decision}`,
     `CDS: ${info.cds}`,
-    `Reasons: ${formatReasons(info.reasonCodes)}`,
+    `NRS: ${info.nrs ?? "n/a"}`,
+    `CDS Reasons: ${formatReasons(cdsReasons)}`,
+    `NRS Reasons: ${formatReasons(nrsReasons)}`,
     `LastNav: ${info.lastNav ? `${info.lastNav.status} ${info.lastNav.kind} ${info.lastNav.url}` : "none"}`,
     `Top: ${formatElement(top)} (${formatRect(top)})`,
     `Under: ${under ? `${formatElement(under)} (${formatRect(under)})` : "none"}`,
