@@ -73,7 +73,7 @@ The same runner should support:
 | Variant | Status | Notes |
 | --- | --- | --- |
 | `core` | in progress | stable merged-main chapter set is the first PR |
-| `operator` | planned | depends on the demo framework from `core` |
+| `operator` | in progress | real popup-surface automation is the next stacked PR |
 | `recovery` | in progress | redirect and rollback chapter set is the third stacked PR |
 
 ### Work items
@@ -83,7 +83,7 @@ The same runner should support:
 | D1 | Add dedicated demo Playwright config | in progress | foundation for all variants |
 | D2 | Add a runner with named variants and record mode | in progress | should own mode/env wiring instead of shell-specific scripts |
 | D3 | Land the stable `core` showcase | in progress | use merged-main fixtures only |
-| D4 | Add real popup-surface automation | planned | belongs to the `operator` PR |
+| D4 | Add real popup-surface automation | in progress | belongs to the `operator` PR |
 | D5 | Add redirect/rollback demo variant | in progress | belongs to the `recovery` PR |
 | D6 | Tighten presenter copy and pacing | in progress | keep the polish small and deliberate |
 

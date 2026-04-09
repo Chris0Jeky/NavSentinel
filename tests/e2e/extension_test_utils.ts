@@ -4,6 +4,8 @@ import path from "path";
 import type { BrowserContext, Page, Worker } from "@playwright/test";
 
 type GymServerHandle = { baseUrl: string; close: () => Promise<void> };
+const SAFE_GYM_PORT_START = 46000;
+const SAFE_GYM_PORT_ATTEMPTS = 25;
 
 export async function getServiceWorker(context: BrowserContext): Promise<Worker> {
   const existing = context.serviceWorkers()[0];
@@ -163,7 +165,7 @@ export async function startGymServer(gymRoot: string): Promise<GymServerHandle> 
     }
   });
 
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  await bindGymServer(server);
   const addr = server.address();
   if (!addr || typeof addr === "string") throw new Error("Failed to bind Gym server");
 
@@ -171,6 +173,36 @@ export async function startGymServer(gymRoot: string): Promise<GymServerHandle> 
     baseUrl: `http://127.0.0.1:${addr.port}`,
     close: () => new Promise<void>((resolve) => server.close(() => resolve()))
   };
+}
+
+async function bindGymServer(server: http.Server): Promise<void> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt < SAFE_GYM_PORT_ATTEMPTS; attempt += 1) {
+    const port = SAFE_GYM_PORT_START + attempt;
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const onError = (error: NodeJS.ErrnoException) => {
+          server.off("listening", onListening);
+          reject(error);
+        };
+        const onListening = () => {
+          server.off("error", onError);
+          resolve();
+        };
+
+        server.once("error", onError);
+        server.once("listening", onListening);
+        server.listen(port, "127.0.0.1");
+      });
+      return;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+    }
+  }
+
+  throw lastError ?? new Error("Failed to bind Gym server to a safe local port");
 }
 
 export async function getGymBaseUrl(

@@ -120,6 +120,8 @@ Current lane intent:
   - live-web sanity checks only
 - `npm run demo:showcase`
   - stable guided headed walkthrough of the merged-main `core` demo variant
+- `npm run demo:showcase:operator`
+  - popup/options heavy walkthrough using the real browser-action popup
 - `npm run demo:showcase:recovery`
   - redirect and recovery-prompt focused walkthrough using fresh-page recovery chapters
 - `npm run demo:showcase:record`
