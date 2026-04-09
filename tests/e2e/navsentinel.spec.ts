@@ -946,3 +946,500 @@ test("Level 6 blocks programmatic click new tab @regression", async () => {
     fs.rmSync(userDataDir, { recursive: true, force: true });
   }
 });
+
+test("RW-08 popup window reuse laundering keeps the original consent popup @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/rw08-window-reuse-laundering.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await waitForNavSentinelBridge(page);
+
+      const popupPromise = context.waitForEvent("page", { timeout: 5000 }).catch(() => null);
+      await page.click("#rw08Launch");
+
+      const popup = await popupPromise;
+      expect(popup, "Expected the consent popup to open").not.toBeNull();
+      await popup?.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
+      expect(popup?.url()).toContain("rw08-consent-popup.html");
+
+      await waitForToastText(page, "Blocked", 3000);
+      expect(popup?.url()).toContain("rw08-consent-popup.html");
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("RW-09 mixed empty-target and named-target auth launches with delayed reuse blocking @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/rw09-target-ambiguity.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await waitForNavSentinelBridge(page);
+
+      const firstPopupPromise = context.waitForEvent("page", { timeout: 5000 }).catch(() => null);
+      await page.click("#rw09Start");
+      const firstPopup = await firstPopupPromise;
+      expect(firstPopup, "Expected the first auth popup to open").not.toBeNull();
+
+      await page.waitForSelector("#rw09Resume:not([hidden])", { timeout: 3000 });
+
+      const secondPopupPromise = context.waitForEvent("page", { timeout: 5000 }).catch(() => null);
+      await page.click("#rw09Resume");
+      const secondPopup = await secondPopupPromise;
+      expect(secondPopup, "Expected the second auth popup to open").not.toBeNull();
+
+      await waitForToastText(page, "Blocked", 3000);
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("RW-10 keyboard-only auth popup launch from Space and Enter activation @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/rw10-keyboard-auth-launch.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await waitForNavSentinelBridge(page);
+
+      await page.focus("#rw10Button");
+      const buttonPopupPromise = context.waitForEvent("page", { timeout: 5000 }).catch(() => null);
+      await page.keyboard.press("Space");
+      const buttonPopup = await buttonPopupPromise;
+      expect(buttonPopup, "Expected Space-activated popup to open").not.toBeNull();
+      await assertNoToastFor(page);
+
+      await page.focus("#rw10Submit");
+      const inputPopupPromise = context.waitForEvent("page", { timeout: 5000 }).catch(() => null);
+      await page.keyboard.press("Enter");
+      const inputPopup = await inputPopupPromise;
+      expect(inputPopup, "Expected Enter-activated popup to open").not.toBeNull();
+      await assertNoToastFor(page);
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("RW-11 invoice approval payout trap blocks the deceptive new tab @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/rw11-fake-invoice-approval.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await waitForNavSentinelBridge(page);
+
+      const btn = page.locator("#rw11Review");
+      const box = await btn.boundingBox();
+      expect(box, "#rw11Review should be visible").toBeTruthy();
+
+      const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
+      await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+
+      const popup = await popupPromise;
+      expect(popup, "Expected the trap new tab to be blocked").toBeNull();
+      await waitForToastText(page, "Blocked new tab", 3000);
+      await expect(page).toHaveURL(/rw11-fake-invoice-approval\.html/);
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("RW-12 wallet connect first popup allowed with blocked burst follow-up @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/rw12-wallet-connect-burst.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await waitForNavSentinelBridge(page);
+
+      const beforePages = context.pages().length;
+      const popupPromise = context.waitForEvent("page", { timeout: 5000 }).catch(() => null);
+      await page.click("#rw12Connect");
+
+      const popup = await popupPromise;
+      expect(popup, "Expected the first wallet popup to open").not.toBeNull();
+      await popup?.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
+      expect(popup?.url()).toContain("rw12-wallet-connect-popup.html");
+
+      await waitForToastText(page, "Blocked popup", 3000);
+      await page.waitForTimeout(300);
+      expect(context.pages().length).toBe(beforePages + 1);
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("RW-14 checkout express-pay overlay blocks the hidden trap @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/rw14-checkout-express-pay-overlay.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await waitForNavSentinelBridge(page);
+
+      const btn = page.locator("#rw14Pay");
+      const box = await btn.boundingBox();
+      expect(box, "#rw14Pay should be visible").toBeTruthy();
+
+      const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
+      await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+
+      const popup = await popupPromise;
+      expect(popup, "Expected the trap new tab to be blocked").toBeNull();
+      await waitForToastText(page, "Blocked new tab", 3000);
+      await expect(page).toHaveURL(/rw14-checkout-express-pay-overlay\.html/);
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("RW-15 bank security alert delayed redirect triggers rollback @rollback", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/rw15-bank-security-alert.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await waitForNavSentinelBridge(page);
+
+      await page.click("#rw15Verify");
+      await page.waitForURL(/rw15-bank-verify-transaction\.html/, { timeout: 8000 });
+
+      const toastText = await waitForToastMatch(page, /Blocked redirect|redirect/i, 5000);
+      expect(toastText).toBeTruthy();
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("RW-16 fake document preview overlay blocks the hidden trap @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/rw16-fake-document-preview-overlay.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await waitForNavSentinelBridge(page);
+
+      const openBtn = page.locator("#rw16Open");
+      const box = await openBtn.boundingBox();
+      expect(box, "#rw16Open should be visible").toBeTruthy();
+
+      const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
+      await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+
+      const popup = await popupPromise;
+      expect(popup, "Expected the trap new tab to be blocked").toBeNull();
+      await waitForToastText(page, "Blocked new tab", 3000);
+      await expect(page).toHaveURL(/rw16-fake-document-preview-overlay\.html/);
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("RW-17 media overlay hijack blocks the hidden ad trap @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/rw17-media-overlay-hijack.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await waitForNavSentinelBridge(page);
+
+      const playBtn = page.locator("#rw17Play");
+      const box = await playBtn.boundingBox();
+      expect(box, "#rw17Play should be visible").toBeTruthy();
+
+      const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
+      await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+
+      const popup = await popupPromise;
+      expect(popup, "Expected the trap new tab to be blocked").toBeNull();
+      await waitForToastText(page, "Blocked new tab", 3000);
+      await expect(page).toHaveURL(/rw17-media-overlay-hijack\.html/);
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("RW-18 fake codec warning blocks the hidden installer trap @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/rw18-browser-update-warning.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await waitForNavSentinelBridge(page);
+
+      const installBtn = page.locator("#rw18Install");
+      const box = await installBtn.boundingBox();
+      expect(box, "#rw18Install should be visible").toBeTruthy();
+
+      const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
+      await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+
+      const popup = await popupPromise;
+      expect(popup, "Expected the trap new tab to be blocked").toBeNull();
+      await waitForToastText(page, "Blocked new tab", 3000);
+      await expect(page).toHaveURL(/rw18-browser-update-warning\.html/);
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("RW-19 repeated tech-support popup burst is blocked @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      const beforePages = context.pages().length;
+
+      await page.goto(`${baseUrl}/rw19-tech-support-scare.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await waitForNavSentinelBridge(page);
+      await waitForToastText(page, "Blocked popup", 5000);
+
+      await page.waitForTimeout(1500);
+      expect(context.pages().length).toBe(beforePages);
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("RW-20 support widget first popup allowed with blocked follow-up abuse @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/rw20-chat-widget-abuse.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await waitForNavSentinelBridge(page);
+
+      const beforePages = context.pages().length;
+      const popupPromise = context.waitForEvent("page", { timeout: 5000 }).catch(() => null);
+      await page.click("#rw20Chat");
+
+      const popup = await popupPromise;
+      expect(popup, "Expected the first chat popup to open").not.toBeNull();
+      await popup?.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
+      expect(popup?.url()).toContain("rw20-chat-popup.html");
+
+      await waitForToastText(page, "Blocked popup", 3000);
+      await page.waitForTimeout(300);
+      expect(context.pages().length).toBe(beforePages + 1);
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
