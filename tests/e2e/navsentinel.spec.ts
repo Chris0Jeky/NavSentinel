@@ -1043,7 +1043,7 @@ test("RW-09 mixed empty-target and named-target auth launches with delayed reuse
   }
 });
 
-test("RW-10 keyboard-only auth popup launch from Space and Enter activation @regression", async () => {
+test("RW-10 Space-triggered auth button opens without prompting @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
@@ -1066,17 +1066,51 @@ test("RW-10 keyboard-only auth popup launch from Space and Enter activation @reg
       await waitForNavSentinelBridge(page);
 
       await page.focus("#rw10Button");
-      const buttonPopupPromise = context.waitForEvent("page", { timeout: 5000 }).catch(() => null);
+      const popupPromise = context.waitForEvent("page", { timeout: 5000 }).catch(() => null);
       await page.keyboard.press("Space");
-      const buttonPopup = await buttonPopupPromise;
-      expect(buttonPopup, "Expected Space-activated popup to open").not.toBeNull();
+      const popup = await popupPromise;
+      expect(popup, "Expected Space-activated popup to open").not.toBeNull();
+      await popup?.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
+      expect(popup?.url()).toContain("rw10-consent-popup.html?launcher=button");
       await assertNoToastFor(page);
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("RW-10 Enter-triggered submit input opens without prompting @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/rw10-keyboard-auth-launch.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      await waitForNavSentinelBridge(page);
 
       await page.focus("#rw10Submit");
-      const inputPopupPromise = context.waitForEvent("page", { timeout: 5000 }).catch(() => null);
+      const popupPromise = context.waitForEvent("page", { timeout: 5000 }).catch(() => null);
       await page.keyboard.press("Enter");
-      const inputPopup = await inputPopupPromise;
-      expect(inputPopup, "Expected Enter-activated popup to open").not.toBeNull();
+      const popup = await popupPromise;
+      expect(popup, "Expected Enter-activated popup to open").not.toBeNull();
+      await popup?.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
+      expect(popup?.url()).toContain("rw10-consent-popup.html?launcher=input");
       await assertNoToastFor(page);
     } finally {
       await context.close();
