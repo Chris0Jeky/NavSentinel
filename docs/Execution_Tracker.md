@@ -177,7 +177,7 @@ Why last:
 | 3 | Adversarial Gym coverage | folded into PR #5 |
 | 4 | Legitimate-flow Gym coverage | folded into PR #5 |
 | 5 | Premium operator surfaces and popup coverage | complete (PR #9) |
-| 6 | Real-world adversarial simulation program | Waves 1-4 merged (PRs #10-#13 via #9); Wave 5 not yet merged; **E2E tests for RW-08 through RW-20 lost during stacked merge** |
+| 6 | Real-world adversarial simulation program | Waves 1-4 merged (PRs #10-#13 via #9); Wave 5 not yet merged; E2E tests re-implemented (see recovery row) |
 | 7 | Release and repo hygiene | in progress -- issue templates, changelog, and manifest branding landed; README screenshots still outstanding |
 | -- | Demo showcase system | complete (PRs #14, #15, #16) -- core, operator, recovery variants |
-| -- | Recover missing Wave 2-4 E2E tests | complete -- E2E tests for RW-08 through RW-20 recovered |
+| -- | Recover missing Wave 2-4 E2E tests | landed -- basic E2E coverage for RW-08 through RW-20 re-implemented; assertions simplified vs originals; allow-once and event-log-depth checks still missing |

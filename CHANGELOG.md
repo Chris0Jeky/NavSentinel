@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - GitHub issue templates
 - This changelog
 
-## [0.2.0] - 2025-06-01
+## [0.2.0] - 2026-03-01
 
 ### Added
 - Guided demo showcase with core, operator, and recovery variants (PRs #14-#16)
@@ -21,7 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ### Changed
 - Popup and options UI refined for operator clarity
 
-## [0.1.0] - 2025-04-01
+## [0.1.0] - 2026-01-20
 
 ### Added
 - Merged SentinelSuite baseline with navigation firewall and credential guard

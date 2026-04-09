@@ -962,6 +962,8 @@ test("RW-08 popup window reuse laundering keeps the original consent popup @regr
 
     try {
       const page = await context.newPage();
+      const beforePages = context.pages().length;
+
       await page.goto(`${baseUrl}/rw08-window-reuse-laundering.html`, {
         waitUntil: "domcontentloaded",
         timeout: 20_000
@@ -975,9 +977,10 @@ test("RW-08 popup window reuse laundering keeps the original consent popup @regr
       const popup = await popupPromise;
       expect(popup, "Expected the consent popup to open").not.toBeNull();
       await popup?.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
-      expect(popup?.url()).toContain("rw08-consent-popup.html");
+      expect(popup?.url()).toContain("rw08-consent-popup.html?step=consent");
 
-      await waitForToastText(page, "Blocked", 3000);
+      await expect.poll(() => context.pages().length, { timeout: 5000 }).toBe(beforePages + 1);
+      await waitForToastText(page, "Blocked popup", 3000);
       expect(popup?.url()).toContain("rw08-consent-popup.html");
     } finally {
       await context.close();
@@ -1014,15 +1017,20 @@ test("RW-09 mixed empty-target and named-target auth launches with delayed reuse
       await page.click("#rw09Start");
       const firstPopup = await firstPopupPromise;
       expect(firstPopup, "Expected the first auth popup to open").not.toBeNull();
+      await firstPopup?.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
+      expect(firstPopup?.url()).toContain("rw09-consent-step1.html");
 
+      await assertNoToastFor(page, 800);
       await page.waitForSelector("#rw09Resume:not([hidden])", { timeout: 3000 });
 
       const secondPopupPromise = context.waitForEvent("page", { timeout: 5000 }).catch(() => null);
       await page.click("#rw09Resume");
       const secondPopup = await secondPopupPromise;
       expect(secondPopup, "Expected the second auth popup to open").not.toBeNull();
+      await secondPopup?.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
+      expect(secondPopup?.url()).toContain("rw09-consent-step2.html");
 
-      await waitForToastText(page, "Blocked", 3000);
+      await waitForToastText(page, "Blocked popup", 3000);
     } finally {
       await context.close();
     }
@@ -1147,11 +1155,10 @@ test("RW-12 wallet connect first popup allowed with blocked burst follow-up @reg
       const popup = await popupPromise;
       expect(popup, "Expected the first wallet popup to open").not.toBeNull();
       await popup?.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
-      expect(popup?.url()).toContain("rw12-wallet-connect-popup.html");
+      expect(popup?.url()).toContain("rw12-wallet-connect-popup.html?step=connect");
 
+      await expect.poll(() => context.pages().length, { timeout: 5000 }).toBe(beforePages + 1);
       await waitForToastText(page, "Blocked popup", 3000);
-      await page.waitForTimeout(300);
-      expect(context.pages().length).toBe(beforePages + 1);
     } finally {
       await context.close();
     }
@@ -1310,6 +1317,13 @@ test("RW-17 media overlay hijack blocks the hidden ad trap @regression", async (
       const box = await playBtn.boundingBox();
       expect(box, "#rw17Play should be visible").toBeTruthy();
 
+      await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+      await page.waitForFunction(
+        () => document.getElementById("status")?.textContent?.includes("active"),
+        null,
+        { timeout: 3000 }
+      );
+
       const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
       await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
 
@@ -1391,9 +1405,14 @@ test("RW-19 repeated tech-support popup burst is blocked @regression", async () 
       });
 
       await waitForNavSentinelBridge(page);
-      await waitForToastText(page, "Blocked popup", 5000);
 
-      await page.waitForTimeout(1500);
+      await page.waitForFunction(
+        () => document.getElementById("attempts")?.textContent?.includes("4"),
+        null,
+        { timeout: 5000 }
+      );
+
+      await waitForToastText(page, "Blocked popup", 3000);
       expect(context.pages().length).toBe(beforePages);
     } finally {
       await context.close();
@@ -1433,11 +1452,10 @@ test("RW-20 support widget first popup allowed with blocked follow-up abuse @reg
       const popup = await popupPromise;
       expect(popup, "Expected the first chat popup to open").not.toBeNull();
       await popup?.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
-      expect(popup?.url()).toContain("rw20-chat-popup.html");
+      expect(popup?.url()).toContain("rw20-chat-popup.html?step=chat");
 
+      await expect.poll(() => context.pages().length, { timeout: 5000 }).toBe(beforePages + 1);
       await waitForToastText(page, "Blocked popup", 3000);
-      await page.waitForTimeout(300);
-      expect(context.pages().length).toBe(beforePages + 1);
     } finally {
       await context.close();
     }
