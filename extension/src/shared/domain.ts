@@ -1,5 +1,5 @@
 import type { CredentialSettings } from "./storage";
-import pslTrie from "./psl_data.json";
+import pslTrie from "./psl_data.json" with { type: "json" };
 
 type TrieNode = { [label: string]: TrieNode | number };
 const PSL_ROOT: TrieNode = pslTrie as TrieNode;
