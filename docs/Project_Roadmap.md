@@ -13,7 +13,7 @@ know it's done. It synthesizes the findings from
 
 | Phase | Title | Tasks | Done | Status |
 |---|---|---|---|---|
-| 0 | Stabilize | 6 | 0 | **Next up** |
+| 0 | Stabilize | 6 | 3 | **In progress** |
 | 1 | Validate Foundation | 8 | 0 | Blocked on Phase 0 |
 | 2 | Target 2025-2026 Threats | 10 | 0 | Blocked on Phase 1 |
 | 3 | Productize | 9 | 0 | Blocked on Phase 2 |
@@ -99,12 +99,12 @@ Decisions taken during this planning session. Each is final unless explicitly re
 
 | ID | Title | Effort | Status | Depends On | Branch |
 |---|---|---|---|---|---|
-| P0-01 | Recover missing Wave 2-4 E2E tests | M | pending | -- | `fix/recover-wave2-4-tests` |
-| P0-02 | Land Wave 5 gym fixtures and stress tests | M | pending | P0-01 | `feat/wave5-stress` |
+| P0-01 | Recover missing Wave 2-4 E2E tests | M | **done** | -- | `fix/recover-wave2-4-tests` |
+| P0-02 | Land Wave 5 gym fixtures and stress tests | M | **done** | P0-01 | `feat/wave5-stress` |
 | P0-03 | Wire stress lane into CI | S | pending | P0-02 | `infra/stress-ci` |
 | P0-04 | Property tests for scoring and state machine | M | pending | -- | `test/property-tests` |
 | P0-05 | Clean up stale branches | S | pending | -- | (no branch needed) |
-| P0-06 | Archive stale docs and refresh navigation | S | pending | -- | `docs/roadmap-refresh` |
+| P0-06 | Archive stale docs and refresh navigation | S | **done** | -- | `docs/roadmap-refresh` |
 
 ### Task Details
 
