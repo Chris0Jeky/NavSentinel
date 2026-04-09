@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RW-23 - Multi-Tab Simultaneous Prompts</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 42px 18px;
+        background: #f0f4f8;
+        color: #1a1a1a;
+      }
+      .card {
+        padding: 26px;
+        border-radius: 18px;
+        border: 1px solid #d2dce6;
+        background: white;
+        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.06);
+      }
+      button {
+        min-height: 48px;
+        margin-top: 18px;
+        padding: 0 22px;
+        border: none;
+        border-radius: 12px;
+        background: #6c5ce7;
+        color: white;
+        font-size: 15px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <section class="card">
+      <h1>RW-23: Multi-tab simultaneous prompts</h1>
+      <p>
+        This page opens two new tabs that each trigger a suspicious navigation.
+        NavSentinel must handle prompts from multiple tabs without state leaking
+        between them.
+      </p>
+      <button id="rw23Launch" type="button">Open both tabs</button>
+    </section>
+
+    <script>
+      document.getElementById('rw23Launch').addEventListener('click', () => {
+        // Open two tabs that will each trigger their own suspicious action
+        window.open('rw23-tab-a.html', '_blank');
+        window.setTimeout(() => {
+          window.open('rw23-tab-b.html', '_blank');
+        }, 50);
+      });
+    </script>
+  </body>
+</html>

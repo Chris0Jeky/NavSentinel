@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RW-22 - Rollback After Worker Restart</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 42px 18px;
+        background: #fafbfc;
+        color: #1a1a1a;
+      }
+      .card {
+        padding: 26px;
+        border-radius: 18px;
+        border: 1px solid #d8dee4;
+        background: white;
+        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.06);
+      }
+      button {
+        min-height: 48px;
+        margin-top: 18px;
+        padding: 0 22px;
+        border: none;
+        border-radius: 12px;
+        background: #d63031;
+        color: white;
+        font-size: 15px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <section class="card">
+      <h1>RW-22: Rollback after worker restart</h1>
+      <p>
+        A delayed redirect fires after the user clicks a benign-looking link.
+        The redirect should be caught and rolled back even if the service worker
+        has gone idle and restarted between the click and the redirect.
+      </p>
+      <button id="rw22Link" type="button">View order status</button>
+    </section>
+
+    <script>
+      document.getElementById('rw22Link').addEventListener('click', () => {
+        // Navigate to a harmless-looking intermediate page that will auto-redirect
+        window.location.href = 'rw22-order-status.html';
+      });
+    </script>
+  </body>
+</html>

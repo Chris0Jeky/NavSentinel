@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>RW-22 Order Status</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 42px 18px;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>Order Status</h2>
+    <p>Loading your order details...</p>
+
+    <script>
+      // Delayed redirect to a suspicious destination after enough time
+      // for the MV3 service worker to potentially go idle
+      window.setTimeout(() => {
+        window.location.href = 'rw22-phish-landing.html?ref=order';
+      }, 3500);
+    </script>
+  </body>
+</html>

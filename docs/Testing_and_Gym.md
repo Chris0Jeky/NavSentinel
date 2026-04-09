@@ -187,9 +187,20 @@ Current pages:
 - `gym/rw20-chat-widget-abuse.html`
 - `gym/rw20-chat-popup.html`
 - `gym/rw20-remote-tool.html`
+- `gym/rw21-allow-once-double-spend.html` (+ `rw21-settings-popup.html`, `rw21-exfil-popup.html`)
+- `gym/rw22-rollback-worker-restart.html` (+ `rw22-order-status.html`, `rw22-phish-landing.html`)
+- `gym/rw23-multi-tab-prompts.html` (+ `rw23-tab-a.html`, `rw23-tab-a-popup.html`, `rw23-tab-b.html`, `rw23-tab-b-popup.html`)
+- `gym/rw24-idle-resume-popup.html` (+ `rw24-stale-popup.html`)
+- `gym/rw25-rapid-close-reopen.html` (+ `rw25-churn-popup.html`, `rw25-exfil-popup.html`)
 
 Every current primitive Gym level has a dedicated automated path, and the real-world scenario waves
 are continuing to land alongside those primitives.
+
+### Stress lane
+
+The stress lane exercises timing edge cases, state isolation, and worker lifecycle scenarios.
+Run with `npm run test:e2e:stress`. Config: `playwright.stress.config.ts`.
+Tests: `tests/e2e/navsentinel.stress.spec.ts`.
 
 ## Effective manual testing workflow
 

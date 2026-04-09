@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>RW-23 Tab B</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 42px 18px;
+      }
+      button {
+        min-height: 48px;
+        margin-top: 18px;
+        padding: 0 22px;
+        border: none;
+        border-radius: 12px;
+        background: #e17055;
+        color: white;
+        font-size: 15px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>Tab B: Account Recovery</h2>
+    <p>This tab also contains a deceptive action that triggers a popup.</p>
+    <button id="rw23TabBAction" type="button">Recover account</button>
+
+    <script>
+      document.getElementById('rw23TabBAction').addEventListener('click', () => {
+        window.open(
+          'rw23-tab-b-popup.html?step=recover',
+          'rw23-tab-b-pop',
+          'popup,width=420,height=620'
+        );
+      });
+    </script>
+  </body>
+</html>
