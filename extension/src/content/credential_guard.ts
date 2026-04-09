@@ -1,6 +1,7 @@
 import {
   addTrustedDomain,
   appendEvent,
+  appendPromptOutcome,
   getCredentialSettings,
   getTrustedDomains
 } from "../shared/storage";
@@ -151,7 +152,37 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
       outsideAction: "cancel"
     });
 
-    if (choice === "cancel") return;
+    const credDomain = risk.page.registrableDomain || risk.page.host;
+    const credReasons = risk.reasons.map((r) => r.code);
+
+    if (choice === "cancel") {
+      void appendPromptOutcome({
+        domain: credDomain,
+        type: "cred",
+        score: risk.score,
+        outcome: "cancel",
+        reasons: credReasons
+      }).catch(() => {});
+      return;
+    }
+
+    if (choice === "trust_site" || choice === "trust_dest") {
+      void appendPromptOutcome({
+        domain: credDomain,
+        type: "cred",
+        score: risk.score,
+        outcome: "trust",
+        reasons: credReasons
+      }).catch(() => {});
+    } else {
+      void appendPromptOutcome({
+        domain: credDomain,
+        type: "cred",
+        score: risk.score,
+        outcome: "allow_once",
+        reasons: credReasons
+      }).catch(() => {});
+    }
 
     if (choice === "trust_site" && risk.page.registrableDomain) {
       await addTrustedDomain(risk.page.registrableDomain);
