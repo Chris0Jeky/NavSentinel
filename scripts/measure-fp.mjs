@@ -65,7 +65,12 @@ function parseArgs() {
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === "--sites" && args[i + 1]) {
-      opts.sites = parseInt(args[++i], 10);
+      const n = parseInt(args[++i], 10);
+      if (!Number.isFinite(n) || n < 1) {
+        console.error(`Invalid --sites value: ${args[i]} (must be a positive integer)`);
+        process.exit(1);
+      }
+      opts.sites = n;
     } else if (arg === "--out" && args[i + 1]) {
       opts.out = args[++i];
     } else if (arg === "--cache" && args[i + 1]) {
@@ -73,7 +78,12 @@ function parseArgs() {
     } else if (arg === "--headed") {
       opts.headed = true;
     } else if (arg === "--timeout" && args[i + 1]) {
-      opts.timeout = parseInt(args[++i], 10);
+      const n = parseInt(args[++i], 10);
+      if (!Number.isFinite(n) || n < 1000) {
+        console.error(`Invalid --timeout value: ${args[i]} (must be >= 1000 ms)`);
+        process.exit(1);
+      }
+      opts.timeout = n;
     } else if (arg === "--resume") {
       opts.resume = true;
     } else if (arg === "--help" || arg === "-h") {
@@ -266,7 +276,16 @@ function parseTrancoCSV(csv, count) {
  */
 function csvEscape(value) {
   // Strip ANSI escape codes (e.g. from Playwright error messages)
-  const str = String(value ?? "").replace(/\x1b\[[0-9;]*m/g, "");
+  let str = String(value ?? "").replace(/\x1b\[[0-9;]*m/g, "");
+
+  // Neutralize CSV formula injection: if the value starts with a character
+  // that spreadsheet applications interpret as a formula (=, +, -, @, tab,
+  // carriage return), prefix with a single quote. This prevents malicious
+  // Tranco entries from executing formulas when the CSV is opened in Excel.
+  if (/^[=+\-@\t\r]/.test(str)) {
+    str = "'" + str;
+  }
+
   if (str.includes('"') || str.includes(",") || str.includes("\n") || str.includes("\r")) {
     return `"${str.replace(/"/g, '""')}"`;
   }
@@ -336,31 +355,46 @@ async function clearEventLog(context) {
  *
  * Wraps the inner logic in an overall timeout (4x the per-navigation
  * timeout) so a single slow site cannot stall the entire run.
+ *
+ * Uses a shared `pageRef` so the timeout handler can close any orphaned
+ * page — without this, a timed-out visitSiteInner would leave a zombie
+ * page navigating in the background.
  */
 async function visitSite(context, domain, timeoutMs) {
   const overallTimeout = timeoutMs * 4; // homepage + up to 3 subpages
   const url = `https://${domain}`;
 
+  // Shared reference so the timeout handler can close orphaned pages
+  const pageRef = { page: null };
+  let timerId;
+
   const raceTimeout = new Promise((_, reject) => {
-    const id = setTimeout(
+    timerId = setTimeout(
       () => reject(new Error(`Overall site timeout after ${overallTimeout}ms`)),
       overallTimeout
     );
     // Allow the timer to not keep the process alive
-    if (id.unref) id.unref();
+    if (timerId.unref) timerId.unref();
   });
 
   try {
-    return await Promise.race([visitSiteInner(context, domain, url, timeoutMs), raceTimeout]);
+    return await Promise.race([visitSiteInner(context, domain, url, timeoutMs, pageRef), raceTimeout]);
   } catch (err) {
+    // Close any orphaned page left by visitSiteInner when the timeout won
+    if (pageRef.page) {
+      try { await pageRef.page.close(); } catch { /* already closed */ }
+    }
     return { url, events: [], error: err.message };
+  } finally {
+    clearTimeout(timerId);
   }
 }
 
 /**
  * Inner implementation for visitSite (no overall timeout guard).
+ * Accepts pageRef to share the page handle with the outer timeout guard.
  */
-async function visitSiteInner(context, domain, url, timeoutMs) {
+async function visitSiteInner(context, domain, url, timeoutMs, pageRef) {
   let page;
 
   try {
@@ -368,6 +402,14 @@ async function visitSiteInner(context, domain, url, timeoutMs) {
     await clearEventLog(context);
 
     page = await context.newPage();
+    pageRef.page = page; // expose to the outer timeout handler
+
+    // Auto-dismiss any JavaScript dialogs (alert, confirm, beforeunload, prompt).
+    // Many top-1000 sites show cookie consent or notification dialogs that would
+    // otherwise block navigation and page.close().
+    page.on("dialog", async (dialog) => {
+      try { await dialog.dismiss(); } catch { /* already dismissed */ }
+    });
 
     // Navigate to the site
     try {
@@ -499,16 +541,36 @@ async function findInternalLinks(page, domain) {
  */
 function loadTestedDomains(csvPath) {
   if (!fs.existsSync(csvPath)) return new Set();
-  const content = fs.readFileSync(csvPath, "utf-8");
+  let content = fs.readFileSync(csvPath, "utf-8");
+
+  // Strip UTF-8 BOM if present (written by this script for Excel compat)
+  if (content.charCodeAt(0) === 0xfeff) {
+    content = content.slice(1);
+  }
+
   const lines = content.split("\n").slice(1); // skip header
   const domains = new Set();
   for (const line of lines) {
     if (!line.trim()) continue;
+    // Parse the second CSV field (domain) respecting quoted fields.
+    // Format: rank,domain,url_visited,...
+    // The rank field is always a plain integer, so the first comma is safe.
     const comma = line.indexOf(",");
     if (comma === -1) continue;
-    const secondComma = line.indexOf(",", comma + 1);
-    if (secondComma === -1) continue;
-    const domain = line.slice(comma + 1, secondComma).replace(/^"|"$/g, "");
+
+    const rest = line.slice(comma + 1);
+    let domain;
+    if (rest.startsWith('"')) {
+      // Quoted field: find the closing quote (handles escaped "" inside)
+      const endQuote = rest.indexOf('"', 1);
+      domain = endQuote > 1 ? rest.slice(1, endQuote).replace(/""/g, '"') : "";
+    } else {
+      const nextComma = rest.indexOf(",");
+      domain = nextComma !== -1 ? rest.slice(0, nextComma) : rest.trim();
+    }
+
+    // Strip leading single-quote from formula-injection defense
+    if (domain.startsWith("'")) domain = domain.slice(1);
     if (domain) domains.add(domain);
   }
   return domains;
@@ -690,6 +752,7 @@ async function main() {
         csvRow(rank, domain, `https://${domain}`, "harness_error", "", "", "", "", "", err.message) + "\n"
       );
       errored++;
+      tested++; // count harness errors in tested total so denominator stays consistent
       console.log(`HARNESS ERROR: ${err.message}`);
     }
 
