@@ -258,10 +258,31 @@ If E2E fails in CI, check these first:
 - the E2E specs are still using the shared extension helpers
 - the change did not break DOM readiness markers or shadow-root toast assertions
 
+### CDS evasion red-team suite
+
+The evasion suite (P1-07, `test/cds-evasion` branch, PR #25) adds gym fixtures that
+deliberately combine near-threshold signals to validate CDS hardening:
+
+- `gym/evasion-01-opacity-009.html` (opacity just above threshold)
+- `gym/evasion-02-size-34pct.html` (viewport coverage just below threshold)
+- `gym/evasion-03-labeled-overlay.html` (overlay with aria-label)
+- `gym/evasion-04-zindex-9998.html` (z-index just below threshold)
+- `gym/evasion-05-composite.html` (combines all near-threshold signals)
+
+E2E tests: `tests/e2e/evasion.spec.ts`.
+
+### FP measurement
+
+The false positive measurement infrastructure (P1-05, `test/fp-measurement` branch, PR #24)
+provides `scripts/measure-fp.mjs`, which launches Chromium with NavSentinel against the
+Tranco top-1000 and records every prompt, block, or warning. Results go to `tests/fp-results/`
+(gitignored). Target: < 0.1% FP rate.
+
 ## What is still outstanding
 
 From the testing perspective, the clearest next steps are:
 
+- build a real-world phishing test corpus (P1-06) with 50+ snapshots and TP/FN measurement
 - continue the real-world adversarial program beyond the first seeded scenarios
 - add a heavier stress lane for worker churn, repeated popup bursts, and delayed navigation chains
 - add lower-cost property/state tests for scoring, DOM hint building, and tab-scoped worker policy

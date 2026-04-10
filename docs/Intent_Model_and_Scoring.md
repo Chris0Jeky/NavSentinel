@@ -173,7 +173,7 @@ Decision thresholds:
 - Strict mode: block >= 50
 
 Note:
-- NRS is not implemented yet. Current behavior uses CDS for deceptive click blocking and separate new-tab gating rules.
+- NRS is implemented (P1-04, `feat/nrs` branch, PR #23). Navigation decisions now use NRS as the primary score, with CDS as its foundation.
 
 ## Explainability
 - Each score contribution produces a reason code.
