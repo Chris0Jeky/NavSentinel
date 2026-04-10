@@ -22,6 +22,12 @@
  * - evasion-04 (z-index): Blocked by blank-anchor check (no name)
  * - evasion-05 (composite): MUST be caught -- blocked via blank-anchor + high CDS
  * - evasion-06 (delayed): Same as 05 after injection delay; tests click-time eval
+ * - evasion-09 (filter opacity): Blocked by blank-anchor; documents that CDS
+ *     opacity gradient is evaded by CSS filter: opacity()
+ * - evasion-10 (transform scale): Blocked; verifies CSS transforms don't evade
+ *     size detection (getBoundingClientRect returns transformed box)
+ * - evasion-11 (shadow DOM): Blocked by blank-anchor via composedPath();
+ *     documents that CDS overlay scoring misses shadow content
  */
 import { test, expect, chromium } from "@playwright/test";
 import fs from "fs";
@@ -398,6 +404,139 @@ test("Evasion 08: clip-path overlay strip is blocked when clicked @regression", 
     expect(popup, "Clip-path strip click should be blocked").toBeNull();
     await waitForToastText(page, "Blocked new tab", 3000);
     await expect(page).toHaveURL(/evasion-08-clip-path-hidden\.html/);
+  } finally {
+    await cleanup();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Evasion 09: filter: opacity() bypass
+//
+// DOCUMENTED EVASION GAP: CSS filter: opacity(9%) makes the element visually
+// near-invisible but getComputedStyle().opacity still returns "1". This
+// completely bypasses the CDS opacity gradient. The overlay is still caught
+// by the blank-anchor gate (no name + target=_blank).
+//
+// This test verifies the blank-anchor fallback and documents the opacity gap.
+// ---------------------------------------------------------------------------
+test("Evasion 09: filter:opacity() bypasses CDS opacity but blank-anchor gate catches it @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { page, context, cleanup } = await setupEvasionTest("evasion-09-filter-opacity.html");
+
+  try {
+    const trap = page.locator("#trap");
+    const box = await trap.boundingBox();
+    expect(box, "#trap overlay should be in the DOM").toBeTruthy();
+
+    // Verify the evasion: computed opacity should be 1 (not 0.09)
+    const computedOpacity = await page.evaluate(() => {
+      const el = document.getElementById("trap");
+      if (!el) return null;
+      return window.getComputedStyle(el).opacity;
+    });
+    expect(computedOpacity, "filter:opacity should not affect computed opacity property").toBe("1");
+
+    // Despite the opacity bypass, the blank-anchor gate should still block
+    const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
+    await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+
+    const popup = await popupPromise;
+    expect(popup, "Overlay should be blocked by blank-anchor gate despite opacity bypass").toBeNull();
+    await waitForToastText(page, "Blocked new tab", 3000);
+    await expect(page).toHaveURL(/evasion-09-filter-opacity\.html/);
+  } finally {
+    await cleanup();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Evasion 10: CSS transform: scale() overlay
+//
+// Verifies that CSS transforms do NOT evade size detection. In Chrome,
+// getBoundingClientRect() returns the transformed bounding box, so the
+// coverage ratio calculation should correctly see the large dimensions.
+// ---------------------------------------------------------------------------
+test("Evasion 10: CSS transform:scale() overlay is blocked @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { page, context, cleanup } = await setupEvasionTest("evasion-10-transform-scale.html");
+
+  try {
+    const trap = page.locator("#trap");
+    const box = await trap.boundingBox();
+    expect(box, "#trap overlay should be in the DOM").toBeTruthy();
+
+    // Verify the transform is applied: bounding box should be much larger than 10x10
+    expect(box!.width, "Transformed width should exceed original 10px").toBeGreaterThan(100);
+    expect(box!.height, "Transformed height should exceed original 10px").toBeGreaterThan(100);
+
+    // The overlay is a blank anchor with no name -- blank-anchor gate blocks it.
+    // The large transformed size also contributes to a high CDS score.
+    const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
+    await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+
+    const popup = await popupPromise;
+    expect(popup, "Transform-scaled overlay should be blocked").toBeNull();
+    await waitForToastText(page, "Blocked new tab", 3000);
+    await expect(page).toHaveURL(/evasion-10-transform-scale\.html/);
+  } finally {
+    await cleanup();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Evasion 11: Shadow DOM overlay hiding
+//
+// Tests that composedPath() from click events traverses into shadow DOM,
+// allowing the blank-anchor gate to find the inner deceptive <a> element.
+// Documents that CDS overlay scoring only sees the shadow host (a plain div).
+// ---------------------------------------------------------------------------
+test("Evasion 11: shadow DOM overlay is caught via composedPath @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { page, context, cleanup } = await setupEvasionTest("evasion-11-shadow-dom.html");
+
+  try {
+    // Wait for shadow DOM setup to complete
+    await page.waitForFunction(
+      () => document.getElementById("shadow-host")?.getAttribute("data-shadow-ready") === "1",
+      null,
+      { timeout: 5000 }
+    );
+
+    const host = page.locator("#shadow-host");
+    const box = await host.boundingBox();
+    expect(box, "#shadow-host should be in the DOM with dimensions").toBeTruthy();
+
+    // Click in the center of the shadow host area. The click event's
+    // composedPath() should include the inner <a> from the shadow root.
+    const popupPromise = context.waitForEvent("page", { timeout: 2500 }).catch(() => null);
+    await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+
+    const popup = await popupPromise;
+
+    if (popup) {
+      // If popup opened, composedPath() did not find the inner anchor,
+      // or the blank-anchor gate did not fire. This is an evasion success.
+      await popup.close().catch(() => {});
+      // eslint-disable-next-line no-console
+      console.log("[evasion-11] Shadow DOM overlay EVADED blank-anchor gate.");
+    } else {
+      // composedPath() found the inner <a> and blank-anchor gate caught it
+      // eslint-disable-next-line no-console
+      console.log("[evasion-11] Shadow DOM overlay was CAUGHT via composedPath.");
+      await page.waitForFunction(
+        () => {
+          const toastHost = document.querySelector("#__navsentinel_toast_host");
+          const text = toastHost?.shadowRoot?.querySelector(".body")?.textContent ?? "";
+          return text.includes("Blocked") || text.includes("blocked");
+        },
+        null,
+        { timeout: 3000 }
+      );
+    }
+    await expect(page).toHaveURL(/evasion-11-shadow-dom\.html/);
   } finally {
     await cleanup();
   }

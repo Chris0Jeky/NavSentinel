@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Evasion 10 - CSS transform: scale() overlay</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 24px;
+      max-width: 700px;
+    }
+    #legit-link {
+      display: inline-block;
+      padding: 14px 28px;
+      font-size: 18px;
+      background: #1a73e8;
+      color: #fff;
+      border-radius: 8px;
+      text-decoration: none;
+      position: relative;
+      z-index: 1;
+      margin-top: 12vh;
+      margin-left: 12vw;
+    }
+    /*
+     * EVASION TECHNIQUE: CSS transform: scale() to inflate a tiny element.
+     *
+     * The attacker creates a 10x10px element and scales it by 100x via
+     * CSS transform. This makes it visually cover a large area (1000x1000px).
+     *
+     * Detection analysis:
+     *   - elementsFromPoint() DOES return transformed elements (uses visual
+     *     bounding box for hit-testing in modern Chrome)
+     *   - getBoundingClientRect() returns the TRANSFORMED bounding box,
+     *     so readRect() in dom_builder.ts will see the large dimensions
+     *   - Therefore, coverage ratio calculation should correctly report
+     *     the visually-large size
+     *
+     * Expected CDS contributions:
+     *   no_accessible_name                 15
+     *   overlay_large_interactive         30+ (transformed size > 35% viewport)
+     *   overlay_elevated_zindex            10 (z-index 9998)
+     *   cursor_pointer_no_affordance       10 (pointer + no name + opacity < 0.3)
+     *   near_invisible_opacity            ~14 (opacity 0.09)
+     *   intent_mismatch_under_interactive  35 (legit link under)
+     *   composite_escalation               15 (6+ factors)
+     *   Total: ~129 -> BLOCKED
+     *
+     * Also blocked by blank-anchor gate (no name + target=_blank).
+     *
+     * This fixture verifies that CSS transforms do not evade size detection.
+     */
+    #trap {
+      position: fixed;
+      /* Start tiny: 10x10px */
+      width: 10px;
+      height: 10px;
+      /* Scale up to cover a large area */
+      transform: scale(100);
+      transform-origin: top left;
+      top: 0;
+      left: 0;
+      opacity: 0.09;
+      z-index: 9998;
+      cursor: pointer;
+      background: transparent;
+    }
+  </style>
+</head>
+<body>
+  <h1>Evasion 10: CSS transform: scale() overlay</h1>
+  <p>
+    The overlay is a 10x10px element scaled up by <code>transform: scale(100)</code>,
+    making it visually cover 1000x1000px. This tests whether CDS correctly uses
+    the transformed bounding box (via <code>getBoundingClientRect()</code>) for
+    coverage ratio calculation.
+  </p>
+  <p>
+    In Chrome, both <code>elementsFromPoint()</code> and
+    <code>getBoundingClientRect()</code> account for CSS transforms, so
+    this should NOT be a viable evasion. This fixture documents and verifies
+    that behavior.
+  </p>
+
+  <a id="legit-link" href="https://example.com/safe" aria-label="Safe destination link">
+    Click here for safe content
+  </a>
+
+  <!-- Evasion overlay: tiny element scaled up via CSS transform -->
+  <a id="trap" href="https://evil.example/evasion10" target="_blank" rel="noreferrer"></a>
+</body>
+</html>
