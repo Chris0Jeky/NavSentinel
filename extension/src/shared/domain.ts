@@ -170,12 +170,24 @@ export function isMixedScript(host: string): boolean {
   );
 }
 
+/**
+ * Maximum input length for Levenshtein distance computation.
+ * DNS hostnames are limited to 253 characters; anything beyond that
+ * is either malformed or adversarial. We bail out early to prevent
+ * quadratic time/memory usage on crafted inputs.
+ */
+const LEVENSHTEIN_MAX_LEN = 253;
+
 export function levenshtein(a: string, b: string): number {
   if (a === b) return 0;
   const n = a.length;
   const m = b.length;
   if (n === 0) return m;
   if (m === 0) return n;
+  // Guard against pathologically long inputs
+  if (n > LEVENSHTEIN_MAX_LEN || m > LEVENSHTEIN_MAX_LEN) {
+    return Math.max(n, m);
+  }
 
   const prev = new Array<number>(m + 1);
   const cur = new Array<number>(m + 1);
@@ -364,9 +376,9 @@ export function computeCredentialRisk(params: {
 
   // Enhanced lookalike checks (P1-03)
   if (cfg.similarity.enabled && pageHost) {
-    const enhanced = detectLookalike(pageHost, trusted);
+    const enhanced = detectLookalike(pageHost, trusted, lookalike);
 
-    // Homoglyph-normalized Levenshtein (catches paypaI.com -> paypal.com)
+    // Homoglyph-normalized Levenshtein (catches paypa1.com -> paypal.com)
     if (enhanced.homoglyphLevenshtein &&
         enhanced.homoglyphLevenshtein.distance <= maxDistance &&
         !(lookalike && lookalike.distance <= maxDistance)) {
@@ -496,6 +508,52 @@ export const BRAND_LIST: ReadonlyArray<readonly [brand: string, domain: string]>
 ] as const;
 
 /**
+ * Known legitimate domains owned by brands that would otherwise
+ * false-positive on brand-keyword detection. Keyed by brand keyword,
+ * each value is a set of registrable domains that belong to the brand
+ * and should NOT trigger BRAND_KEYWORD_DOMAIN or SUBDOMAIN_STUFFING.
+ *
+ * This list is intentionally conservative -- only high-traffic domains
+ * that users encounter daily are included.
+ */
+export const BRAND_KNOWN_ALIASES: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+  ["google", new Set([
+    "googleapis.com", "googleusercontent.com", "googlevideo.com",
+    "googletagmanager.com", "googlesyndication.com", "googleadservices.com",
+    "googleads.com", "googlechrome.com", "googleanalytics.com",
+    "googlemail.com", "googledomains.com", "google-analytics.com",
+  ])],
+  ["microsoft", new Set([
+    "microsoftonline.com", "microsoft365.com", "microsoftstream.com",
+    "microsoftedge.com",
+  ])],
+  ["amazon", new Set([
+    "amazonaws.com", "amazonws.com", "amazontrust.com",
+    "amazonpay.com", "amazoncognito.com",
+  ])],
+  ["discord", new Set(["discordapp.com"])],
+  ["reddit", new Set(["redditmedia.com", "redditinc.com", "redditstatic.com"])],
+  ["shopify", new Set(["shopifycloud.com", "shopifysvc.com"])],
+  ["github", new Set(["githubusercontent.com", "githubusercontent.com", "githubassets.com"])],
+  ["gitlab", new Set(["gitlab.io"])],
+  ["apple", new Set(["apple-dns.net", "appleid.apple.com"])],
+  ["facebook", new Set(["facebookcorewwwi.onion", "facebookmail.com"])],
+  ["instagram", new Set(["instagramstatic.com"])],
+  ["netflix", new Set(["nflxext.com", "nflxvideo.net"])],
+  ["stripe", new Set(["stripecdn.com"])],
+  ["yahoo", new Set(["yahooapis.com", "yahoodns.net"])],
+  ["coinbase", new Set(["coinbasecloud.com"])],
+]);
+
+/**
+ * Check if a registrable domain is a known legitimate alias of a brand.
+ */
+function isBrandAlias(brand: string, registrableDomain: string): boolean {
+  const aliases = BRAND_KNOWN_ALIASES.get(brand);
+  return aliases ? aliases.has(registrableDomain) : false;
+}
+
+/**
  * Minimum brand keyword length for substring matching.
  * Keywords shorter than this threshold must match the full label exactly
  * (after separator stripping and homoglyph normalization) to avoid
@@ -520,6 +578,8 @@ const HOMOGLYPH_MAP: ReadonlyArray<readonly [from: string, to: string]> = [
   ["1", "l"],
   ["!", "l"],
   ["|", "l"],
+  ["5", "s"],
+  ["8", "b"],
 ];
 
 /**
@@ -534,12 +594,7 @@ export function normalizeHomoglyphs(input: string): string {
   if (!input) return "";
   let result = input.toLowerCase();
   for (const [from, to] of HOMOGLYPH_MAP) {
-    // Replace all occurrences of each pattern
-    let idx = result.indexOf(from);
-    while (idx !== -1) {
-      result = result.slice(0, idx) + to + result.slice(idx + from.length);
-      idx = result.indexOf(from, idx + to.length);
-    }
+    result = result.replaceAll(from, to);
   }
   return result;
 }
@@ -575,22 +630,19 @@ function getBrandRegDomain(canonical: string): string {
 
 /**
  * Returns true if `label` (after normalization) matches the brand keyword
- * as a substring (for long keywords) or as the full label (for short keywords).
+ * at a word-start position. For all brand lengths, the brand must appear
+ * at the start of the label (i.e. `startsWith`). This prevents false
+ * positives from unrelated words that happen to embed the brand as an
+ * interior substring (e.g. "pinstripe" should not match "stripe",
+ * "usbankruptcy" should not match "usbank").
  *
- * Short keywords (< BRAND_SUBSTRING_MIN_LEN) require the stripped label to
- * exactly equal the brand keyword with extra characters, which means the
- * stripped label must strictly contain the brand and be longer. But because
- * short keywords like "chase" or "ebay" are common words, we require the
- * label to *start with* the brand keyword rather than merely containing it,
- * reducing false positives from unrelated words that happen to include them.
+ * The label must also be strictly longer than the brand keyword, so that
+ * `detectBrandInDomain` doesn't flag the brand's own canonical domain
+ * (which has exactly the same length as the keyword).
  */
 function brandKeywordMatch(strippedLabel: string, brand: string): boolean {
   if (strippedLabel.length <= brand.length) return false;
-  if (brand.length >= BRAND_SUBSTRING_MIN_LEN) {
-    // Long keywords: substring match anywhere in the label
-    return strippedLabel.includes(brand);
-  }
-  // Short keywords: must start with the brand keyword to reduce false positives
+  // Require the brand to appear at the start of the label
   return strippedLabel.startsWith(brand);
 }
 
@@ -620,6 +672,8 @@ export function detectBrandInDomain(
     const canonicalReg = getBrandRegDomain(canonical);
     // Skip if this IS the brand's own domain
     if (reg === canonicalReg) continue;
+    // Skip known legitimate brand-owned aliases (e.g. microsoftonline.com)
+    if (isBrandAlias(brand, reg)) continue;
 
     if (brandKeywordMatch(strippedLabel, brand)) {
       return { brand, canonicalDomain: canonicalReg };
@@ -657,6 +711,8 @@ export function detectSubdomainStuffing(
     const canonicalReg = getBrandRegDomain(canonical);
     // Skip if the registrable domain IS the brand's domain
     if (reg === canonicalReg) continue;
+    // Skip known legitimate brand-owned aliases
+    if (isBrandAlias(brand, reg)) continue;
 
     for (const sub of subLabels) {
       const normalizedSub = normalizeHomoglyphs(sub);
@@ -674,14 +730,18 @@ export function detectSubdomainStuffing(
 
 /**
  * Enhanced lookalike detection combining:
- * 1. Levenshtein distance against trusted domains (existing)
+ * 1. Levenshtein distance against trusted domains (existing, can be precomputed)
  * 2. Homoglyph-normalized Levenshtein (new)
  * 3. Brand keyword in registrable domain (new)
  * 4. Subdomain stuffing (new)
+ *
+ * @param rawLookalike - Optional precomputed result from findClosestLookalike.
+ *   When provided, avoids a redundant O(N) Levenshtein scan over trusted domains.
  */
 export function detectLookalike(
   fullHost: string,
-  trustedDomains: string[]
+  trustedDomains: string[],
+  rawLookalike?: { target: string; distance: number } | null
 ): {
   levenshtein: { target: string; distance: number } | null;
   homoglyphLevenshtein: { target: string; distance: number } | null;
@@ -691,7 +751,10 @@ export function detectLookalike(
   const h = normalizeHost(fullHost);
   const reg = h ? getRegistrableDomain(h) : "";
 
-  const lev = reg ? findClosestLookalike(reg, trustedDomains) : null;
+  // Use precomputed raw Levenshtein if provided, otherwise compute it
+  const lev = rawLookalike !== undefined
+    ? rawLookalike
+    : (reg ? findClosestLookalike(reg, trustedDomains) : null);
 
   // Homoglyph-normalized Levenshtein: normalize both sides then compare
   let homoglyphLev: { target: string; distance: number } | null = null;

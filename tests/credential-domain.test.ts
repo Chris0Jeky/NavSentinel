@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  BRAND_KNOWN_ALIASES,
   computeCredentialRisk,
   detectBrandInDomain,
   detectLookalike,
@@ -7,6 +8,7 @@ import {
   findClosestLookalike,
   getRegistrableDomain,
   isMixedScript,
+  levenshtein,
   normalizeHomoglyphs
 } from "../extension/src/shared/domain";
 import type { CredentialSettings } from "../extension/src/shared/storage";
@@ -431,5 +433,167 @@ describe("computeCredentialRisk enhanced detection", () => {
     const codes = risk.reasons.map((r) => r.code);
     expect(codes).toContain("LOOKALIKE_DOMAIN");
     expect(codes).not.toContain("HOMOGLYPH_LOOKALIKE");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Adversarial Review Round 2: Regression tests
+// ---------------------------------------------------------------------------
+
+describe("brand known-alias false-positive guards", () => {
+  // HIGH-impact: these are real domains millions of users visit daily
+  it("does NOT flag microsoftonline.com (Microsoft 365 SSO)", () => {
+    expect(detectBrandInDomain("microsoftonline.com")).toBeNull();
+  });
+
+  it("does NOT flag microsoft365.com", () => {
+    expect(detectBrandInDomain("microsoft365.com")).toBeNull();
+  });
+
+  it("does NOT flag googleusercontent.com", () => {
+    expect(detectBrandInDomain("googleusercontent.com")).toBeNull();
+  });
+
+  it("does NOT flag googlevideo.com (YouTube CDN)", () => {
+    expect(detectBrandInDomain("googlevideo.com")).toBeNull();
+  });
+
+  it("does NOT flag googletagmanager.com", () => {
+    expect(detectBrandInDomain("googletagmanager.com")).toBeNull();
+  });
+
+  it("does NOT flag googlesyndication.com", () => {
+    expect(detectBrandInDomain("googlesyndication.com")).toBeNull();
+  });
+
+  it("does NOT flag googlechrome.com", () => {
+    expect(detectBrandInDomain("googlechrome.com")).toBeNull();
+  });
+
+  it("does NOT flag googleapis.com", () => {
+    expect(detectBrandInDomain("googleapis.com")).toBeNull();
+  });
+
+  it("does NOT flag amazonaws.com (AWS)", () => {
+    expect(detectBrandInDomain("amazonaws.com")).toBeNull();
+  });
+
+  it("does NOT flag discordapp.com (legacy Discord)", () => {
+    expect(detectBrandInDomain("discordapp.com")).toBeNull();
+  });
+
+  it("does NOT flag redditmedia.com (Reddit CDN)", () => {
+    expect(detectBrandInDomain("redditmedia.com")).toBeNull();
+  });
+
+  it("does NOT flag shopifycloud.com (Shopify CDN)", () => {
+    expect(detectBrandInDomain("shopifycloud.com")).toBeNull();
+  });
+
+  it("does NOT flag githubassets.com", () => {
+    expect(detectBrandInDomain("githubassets.com")).toBeNull();
+  });
+
+  it("does NOT flag facebookmail.com", () => {
+    expect(detectBrandInDomain("facebookmail.com")).toBeNull();
+  });
+
+  // Verify subdomain stuffing also respects aliases
+  it("does NOT flag cdn.googleusercontent.com via subdomain stuffing", () => {
+    expect(detectSubdomainStuffing("cdn.googleusercontent.com")).toBeNull();
+  });
+
+  it("does NOT flag login.microsoftonline.com via subdomain stuffing", () => {
+    expect(detectSubdomainStuffing("login.microsoftonline.com")).toBeNull();
+  });
+
+  // Verify that phishing domains are STILL caught
+  it("DOES flag google-secure-login.com (not in aliases)", () => {
+    const result = detectBrandInDomain("google-secure-login.com");
+    expect(result).not.toBeNull();
+    expect(result!.brand).toBe("google");
+  });
+
+  it("DOES flag microsoft-verify.com (not in aliases)", () => {
+    const result = detectBrandInDomain("microsoft-verify.com");
+    expect(result).not.toBeNull();
+    expect(result!.brand).toBe("microsoft");
+  });
+});
+
+describe("brandKeywordMatch startsWith-only policy", () => {
+  // Regression: ensures interior substrings no longer trigger false positives
+  it("does NOT flag pinstripe.com for 'stripe'", () => {
+    expect(detectBrandInDomain("pinstripe.com")).toBeNull();
+  });
+
+  it("does NOT flag seakraken.com for 'kraken'", () => {
+    expect(detectBrandInDomain("seakraken.com")).toBeNull();
+  });
+
+  // But startsWith matches still work
+  it("DOES flag stripepayments.com for 'stripe'", () => {
+    const result = detectBrandInDomain("stripepayments.com");
+    expect(result).not.toBeNull();
+    expect(result!.brand).toBe("stripe");
+  });
+
+  it("DOES flag krakenwallet.com for 'kraken'", () => {
+    const result = detectBrandInDomain("krakenwallet.com");
+    expect(result).not.toBeNull();
+    expect(result!.brand).toBe("kraken");
+  });
+});
+
+describe("extended homoglyph normalization", () => {
+  it("normalizes 5 to s", () => {
+    expect(normalizeHomoglyphs("cha5e")).toBe("chase");
+  });
+
+  it("normalizes 8 to b", () => {
+    expect(normalizeHomoglyphs("face8ook")).toBe("facebook");
+  });
+
+  it("normalizes combined 5 and 8", () => {
+    expect(normalizeHomoglyphs("8e5tbuy")).toBe("bestbuy");
+  });
+});
+
+describe("levenshtein length guard", () => {
+  it("returns max length for inputs exceeding 253 chars", () => {
+    const longA = "a".repeat(300);
+    const longB = "b".repeat(250);
+    expect(levenshtein(longA, longB)).toBe(300);
+  });
+
+  it("works normally for inputs within DNS length limits", () => {
+    expect(levenshtein("paypal.com", "paypa1.com")).toBe(1);
+  });
+
+  it("handles one empty and one long string", () => {
+    const long = "a".repeat(300);
+    expect(levenshtein("", long)).toBe(300);
+  });
+});
+
+describe("edge cases: IP addresses, punycode, empty inputs", () => {
+  it("detectBrandInDomain returns null for IP address", () => {
+    expect(detectBrandInDomain("192.168.1.1")).toBeNull();
+  });
+
+  it("detectSubdomainStuffing returns null for IP address", () => {
+    expect(detectSubdomainStuffing("192.168.1.1")).toBeNull();
+  });
+
+  it("detectBrandInDomain returns null for punycode domain", () => {
+    // xn--pypal-4ve.com is a punycode domain, not matching any brand via ASCII
+    expect(detectBrandInDomain("xn--pypal-4ve.com")).toBeNull();
+  });
+
+  it("detectSubdomainStuffing handles punycode subdomain gracefully", () => {
+    // Should not throw
+    const result = detectSubdomainStuffing("xn--pypal-4ve.evil.com");
+    // xn--pypal-4ve does not match any brand keyword after normalization
+    expect(result).toBeNull();
   });
 });
