@@ -3,7 +3,7 @@ import {
   computeNRS,
   nrsDecision,
   NRS_ALLOW_THRESHOLD,
-  NRS_PROMPT_THRESHOLD,
+  NRS_SMART_BLOCK_THRESHOLD,
   NRS_STRICT_BLOCK_THRESHOLD,
   type NavContext,
   type NrsResult,
@@ -179,6 +179,23 @@ describe("computeNRS", () => {
       expect(result.reasonCodes).toContain("nrs_allowlisted");
     });
 
+    it("sets allowlisted flag to true when destination matches", () => {
+      const result = computeNRS(makeCtx({
+        cds: makeCds(60),
+        destinationUrl: "https://trusted.com/page",
+        allowlistedHosts: ["trusted.com"],
+      }));
+      expect(result.allowlisted).toBe(true);
+    });
+
+    it("sets allowlisted flag to false when destination does not match", () => {
+      const result = computeNRS(makeCtx({
+        destinationUrl: "https://evil.com/page",
+        allowlistedHosts: ["trusted.com"],
+      }));
+      expect(result.allowlisted).toBe(false);
+    });
+
     it("does not subtract when destination is not allowlisted", () => {
       const result = computeNRS(makeCtx({
         destinationUrl: "https://evil.com/page",
@@ -205,7 +222,7 @@ describe("computeNRS", () => {
   });
 
   describe("explicit new-tab intent factor (-30)", () => {
-    it("subtracts 30 for explicit new-tab intent", () => {
+    it("subtracts 30 for explicit new-tab intent when isNewTab is true", () => {
       const result = computeNRS(makeCtx({
         isNewTab: true,
         explicitNewTabIntent: true,
@@ -219,15 +236,28 @@ describe("computeNRS", () => {
       const result = computeNRS(makeCtx({ explicitNewTabIntent: false }));
       expect(result.reasonCodes).not.toContain("nrs_explicit_new_tab");
     });
+
+    it("does not subtract when isNewTab is false even if explicitNewTabIntent is true", () => {
+      // Attacker scenario: ctrl+click on a same-tab deceptive link should NOT
+      // get the -30 discount because the nav doesn't actually open a new tab.
+      const result = computeNRS(makeCtx({
+        cds: makeCds(50),
+        isNewTab: false,
+        explicitNewTabIntent: true,
+      }));
+      expect(result.nrs).toBe(50);
+      expect(result.reasonCodes).not.toContain("nrs_explicit_new_tab");
+    });
   });
 
   describe("floor clamping", () => {
     it("clamps NRS to 0 when factors go negative", () => {
       const result = computeNRS(makeCtx({
         cds: makeCds(0),
+        isNewTab: true,
         explicitNewTabIntent: true,
       }));
-      // 0 - 30 = -30, clamped to 0
+      // 0 + 20 (new tab) - 30 (explicit) = -10, clamped to 0
       expect(result.nrs).toBe(0);
     });
 
@@ -341,13 +371,30 @@ describe("nrsDecision", () => {
     });
   });
 
+  describe("allowlisted hard-allow override", () => {
+    it("returns allow in smart mode regardless of NRS when allowlisted", () => {
+      expect(nrsDecision(100, "smart", true)).toBe("allow");
+      expect(nrsDecision(200, "smart", true)).toBe("allow");
+    });
+
+    it("returns allow in strict mode regardless of NRS when allowlisted", () => {
+      expect(nrsDecision(100, "strict", true)).toBe("allow");
+      expect(nrsDecision(200, "strict", true)).toBe("allow");
+    });
+
+    it("does not override when not allowlisted", () => {
+      expect(nrsDecision(100, "smart", false)).toBe("block");
+      expect(nrsDecision(100, "strict", false)).toBe("block");
+    });
+  });
+
   describe("threshold constants match spec", () => {
     it("allow threshold is 40", () => {
       expect(NRS_ALLOW_THRESHOLD).toBe(40);
     });
 
-    it("prompt/block threshold (smart) is 70", () => {
-      expect(NRS_PROMPT_THRESHOLD).toBe(70);
+    it("smart block threshold is 70", () => {
+      expect(NRS_SMART_BLOCK_THRESHOLD).toBe(70);
     });
 
     it("strict block threshold is 50", () => {

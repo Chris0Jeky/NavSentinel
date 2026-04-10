@@ -1,6 +1,6 @@
 import { computeCDS } from "../shared/scoring";
 import { computeNRS, nrsDecision, type NavContext } from "../shared/nrs";
-import { appendEvent, getNavSettings, onNavSettingsChange, type NavSettings } from "../shared/storage";
+import { appendEvent, getNavSettings, onNavSettingsChange, type NavSettings, type EventKind } from "../shared/storage";
 import { makeToken, setActiveToken } from "../shared/stateMachine";
 import type { Mode } from "../shared/types";
 import {
@@ -502,6 +502,8 @@ function showAllowPrompt(params: {
   target?: string;
   features?: string;
   actionId?: string | null;
+  /** Event kind for telemetry. Defaults to "nav_blank_prompt". */
+  eventKind?: EventKind;
 }): void {
   const actions = [
     {
@@ -525,7 +527,7 @@ function showAllowPrompt(params: {
   }
 
   appendEventSafely({
-    kind: "nav_blank_prompt",
+    kind: params.eventKind ?? "nav_blank_prompt",
     site: siteKeyFromLocation(),
     url: params.url,
     ...(params.host ? { destHost: params.host } : {})
@@ -652,6 +654,12 @@ window.addEventListener(
     if (!(e instanceof MouseEvent)) return;
 
     const isKeyboardActivation = e.isTrusted && e.detail === 0;
+    // Keyboard activations (Enter/Space) do not fire pointerdown, so
+    // gestureAttemptCount would grow unbounded without a reset here.
+    if (isKeyboardActivation) {
+      gestureAttemptCount = 0;
+      lastPointerdownTs = 0;
+    }
     const downForClick =
       !isKeyboardActivation && lastDown && performance.now() - lastDown.ts < 1500 ? lastDown : null;
 
@@ -719,10 +727,15 @@ window.addEventListener(
     const siteKey = siteKeyFromLocation();
     const allowlistedHosts = allowlist[siteKey] ?? [];
 
+    // isNewTab covers both target=_blank and explicit user new-tab
+    // (ctrl/cmd-click, middle-click) so NRS applies the +20 factor
+    // whenever a new tab will actually open.
+    const isNewTab = isBlankAnchor || explicitNewTab;
+
     // Compute NRS from CDS + navigation context
     const navCtx: NavContext = {
       cds: cdsResult,
-      isNewTab: isBlankAnchor,
+      isNewTab,
       destinationUrl: parsed?.href ?? undefined,
       pageHost: location.hostname,
       pointerdownDeltaMs,
@@ -746,8 +759,9 @@ window.addEventListener(
     });
     setActiveToken(token);
 
-    // Use NRS for navigation decisions
-    const nrsAction = nrsDecision(nrs, mode);
+    // Use NRS for navigation decisions.
+    // Pass the allowlisted flag so hard-allow overrides regardless of score.
+    const nrsAction = nrsDecision(nrs, mode, nrsResult.allowlisted);
     const smartAllowsBlank =
       mode === "smart" && !!anchor && isLegitBlankAnchor(anchor, ctx, cds, cdsReasonCodes);
 
@@ -805,6 +819,8 @@ window.addEventListener(
             title: "Suspicious navigation",
             url: parsed.href,
             host: parsed.host,
+            target: "_self",
+            eventKind: "nav_same_tab_prompt",
           });
         } else {
           showToast({ message: `NavSentinel flagged a suspicious click (NRS=${nrs}).` });

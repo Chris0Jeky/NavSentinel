@@ -39,11 +39,14 @@ export interface NrsResult {
   nrs: number;
   cds: number;
   reasonCodes: string[];
+  /** True when the destination matched the user's allowlist (hard allow). */
+  allowlisted: boolean;
 }
 
 /** NRS thresholds per the spec. */
 export const NRS_ALLOW_THRESHOLD = 40;
-export const NRS_PROMPT_THRESHOLD = 70;
+/** Smart-mode block threshold (prompt zone is NRS_ALLOW_THRESHOLD..NRS_SMART_BLOCK_THRESHOLD-1). */
+export const NRS_SMART_BLOCK_THRESHOLD = 70;
 export const NRS_STRICT_BLOCK_THRESHOLD = 50;
 
 /** Factor weights matching the spec table. */
@@ -142,13 +145,17 @@ export function computeNRS(ctx: NavContext): NrsResult {
   }
 
   // -100: Destination matches allowlist (hard allow)
-  if (isDestinationAllowlisted(ctx.destinationUrl, ctx.allowlistedHosts)) {
+  const allowlisted = isDestinationAllowlisted(ctx.destinationUrl, ctx.allowlistedHosts);
+  if (allowlisted) {
     nrs += WEIGHT_ALLOWLIST;
     reasons.push("nrs_allowlisted");
   }
 
   // -30: Explicit new-tab intent (middle click or ctrl/cmd click)
-  if (ctx.explicitNewTabIntent) {
+  // Only applies when the navigation actually opens a new tab;
+  // otherwise an attacker could ctrl-click a same-tab deceptive link
+  // to get a free -30 discount.
+  if (ctx.explicitNewTabIntent && ctx.isNewTab) {
     nrs += WEIGHT_EXPLICIT_NEW_TAB;
     reasons.push("nrs_explicit_new_tab");
   }
@@ -156,21 +163,27 @@ export function computeNRS(ctx: NavContext): NrsResult {
   // Clamp to floor of 0 — negative NRS has no meaning
   nrs = Math.max(0, nrs);
 
-  return { nrs, cds: cdsValue, reasonCodes: reasons };
+  return { nrs, cds: cdsValue, reasonCodes: reasons, allowlisted };
 }
 
 /**
  * Determine the navigation decision from an NRS result.
+ *
+ * When `allowlisted` is true the destination matched the user's allowlist
+ * and the spec says this is a "hard allow" — override to allow regardless
+ * of score.
  */
 export function nrsDecision(
   nrs: number,
-  mode: Mode
+  mode: Mode,
+  allowlisted = false
 ): "allow" | "prompt" | "block" {
   if (mode === "off") return "allow";
+  if (allowlisted) return "allow";
 
   const blockThreshold = mode === "strict"
     ? NRS_STRICT_BLOCK_THRESHOLD
-    : NRS_PROMPT_THRESHOLD;
+    : NRS_SMART_BLOCK_THRESHOLD;
 
   if (nrs >= blockThreshold) return "block";
   if (nrs >= NRS_ALLOW_THRESHOLD) return "prompt";

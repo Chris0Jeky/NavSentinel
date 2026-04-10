@@ -232,6 +232,7 @@ export async function clearTrustedDomains(): Promise<void> {
 
 export type EventKind =
   | "nav_blank_prompt"
+  | "nav_same_tab_prompt"
   | "nav_click_block"
   | "nav_rollback"
   | "nav_allowlist_add"
