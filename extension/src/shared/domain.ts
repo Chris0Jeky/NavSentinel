@@ -1,47 +1,8 @@
 import type { CredentialSettings } from "./storage";
+import pslTrie from "./psl_data.json" with { type: "json" };
 
-const MULTIPART_SUFFIXES = new Set([
-  "co.uk",
-  "org.uk",
-  "gov.uk",
-  "ac.uk",
-  "nhs.uk",
-  "police.uk",
-  "com.au",
-  "net.au",
-  "org.au",
-  "edu.au",
-  "gov.au",
-  "co.nz",
-  "org.nz",
-  "govt.nz",
-  "co.jp",
-  "or.jp",
-  "ne.jp",
-  "co.kr",
-  "or.kr",
-  "go.kr",
-  "co.in",
-  "firm.in",
-  "net.in",
-  "org.in",
-  "com.br",
-  "net.br",
-  "org.br",
-  "com.mx",
-  "org.mx",
-  "co.za",
-  "org.za",
-  "com.sg",
-  "net.sg",
-  "org.sg",
-  "com.hk",
-  "net.hk",
-  "org.hk",
-  "com.tw",
-  "net.tw",
-  "org.tw"
-]);
+type TrieNode = { [label: string]: TrieNode | number };
+const PSL_ROOT: TrieNode = pslTrie as TrieNode;
 
 export function normalizeHost(host: string): string {
   if (!host) return "";
@@ -71,22 +32,86 @@ export function splitLabels(host: string): string[] {
   return h.split(".").filter(Boolean);
 }
 
+/**
+ * Count how many labels from the right form the public suffix for this host,
+ * using the PSL trie.  Returns the number of labels in the public suffix,
+ * or 0 if no rule matches (fallback: treat TLD as the public suffix).
+ *
+ * Algorithm (per https://wiki.mozilla.org/Public_Suffix_List/Algorithm):
+ *   Walk labels right-to-left. At each level check:
+ *     1. If the current label has an exception marker ("!"), stop — it is NOT
+ *        part of the public suffix.
+ *     2. If the current label has an exact match in the trie, descend.
+ *     3. Else if a wildcard ("*") child exists, use that.
+ *     4. Else stop — the trie has no deeper rule.
+ */
+function pslSuffixLength(labels: string[]): number {
+  let node: TrieNode = PSL_ROOT;
+  let depth = 0;
+  let confirmedSuffix = 0;
+
+  for (let i = labels.length - 1; i >= 0; i--) {
+    const label = labels[i] as string;
+
+    // Check for an exact match first
+    const exactChild = node[label];
+    if (exactChild !== undefined && typeof exactChild === "object") {
+      // Check exception marker on the matched child
+      if ((exactChild as TrieNode)["!"] === 1) {
+        // This label is an exception to a wildcard rule.
+        // The public suffix is everything traversed so far (depth),
+        // because the exception implies the parent path is a valid suffix.
+        confirmedSuffix = depth;
+        break;
+      }
+      node = exactChild as TrieNode;
+      depth++;
+      // Only confirm this depth if the node is a valid suffix endpoint
+      if (node[""] === 1) {
+        confirmedSuffix = depth;
+      }
+      continue;
+    }
+
+    // Check for wildcard
+    const wildChild = node["*"];
+    if (wildChild !== undefined && typeof wildChild === "object") {
+      node = wildChild as TrieNode;
+      depth++;
+      // Wildcard matches always confirm the suffix
+      confirmedSuffix = depth;
+      continue;
+    }
+
+    // No match at this level — stop
+    break;
+  }
+
+  return confirmedSuffix;
+}
+
 export function getRegistrableDomain(host: string): string {
   const h = normalizeHost(host);
   if (!h) return "";
   if (isIPAddress(h)) return h;
 
   const labels = splitLabels(h);
-  if (labels.length <= 2) return h;
+  if (labels.length === 0) return "";
 
-  const last2 = labels.slice(-2).join(".");
-  const last3 = labels.slice(-3).join(".");
+  const suffixLen = pslSuffixLength(labels);
 
-  if (MULTIPART_SUFFIXES.has(last2) && labels.length >= 3) {
-    return last3;
+  // If PSL matched nothing, fall back to treating the TLD as the suffix
+  const effectiveSuffix = suffixLen > 0 ? suffixLen : 1;
+
+  // The registrable domain is the public suffix + one label to the left
+  const regLen = effectiveSuffix + 1;
+
+  if (labels.length <= effectiveSuffix) {
+    // The entire hostname IS a public suffix (or shorter) — return as-is
+    return h;
   }
 
-  return last2;
+  return labels.slice(-regLen).join(".");
 }
 
 export function subdomainDepth(host: string): number {
