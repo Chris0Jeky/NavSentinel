@@ -35,9 +35,10 @@ import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 import {
-  assertNoToastFor,
   getGymBaseUrl,
+  readToastText,
   waitForNavSentinelBridge,
+  waitForToastMatch,
   waitForToastText
 } from "./extension_test_utils";
 
@@ -59,14 +60,22 @@ async function setupEvasionTest(fixtureName: string) {
   const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-evasion-"));
 
-  const context = await chromium.launchPersistentContext(userDataDir, {
-    headless: false,
-    timeout: 60_000,
-    args: [
-      `--disable-extensions-except=${extensionPath}`,
-      `--load-extension=${extensionPath}`
-    ]
-  });
+  let context;
+  try {
+    context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [
+        `--disable-extensions-except=${extensionPath}`,
+        `--load-extension=${extensionPath}`
+      ]
+    });
+  } catch (err) {
+    // Clean up resources if browser launch fails
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+    throw err;
+  }
 
   const page = await context.newPage();
   await page.goto(`${baseUrl}/${fixtureName}`, {
@@ -168,26 +177,16 @@ test("Evasion 03: whitespace aria-label evades in smart mode (documented gap) @r
 
     const popup = await popupPromise;
 
-    // Expect either: the popup opens (evasion succeeds) OR a toast appears.
-    // We document whichever happens. The current expectation is that the
-    // whitespace-label trick evades the blank-anchor gate.
+    // DOCUMENTED GAP: whitespace aria-label evades the blank-anchor gate.
+    // Assert that evasion succeeds (popup opens). If this assertion starts
+    // failing, it means the gap has been fixed -- update the test accordingly.
+    expect(popup, "Expected whitespace aria-label to evade blank-anchor gate (documented gap)").not.toBeNull();
     if (popup) {
-      // Evasion succeeded -- blank-anchor gate was bypassed
       await popup.close().catch(() => {});
-      // Verify no blocking toast appeared
-      const toastText = await page.evaluate(() => {
-        const host = document.querySelector("#__navsentinel_toast_host");
-        return host?.shadowRoot?.querySelector(".body")?.textContent?.trim() ?? null;
-      });
-      // eslint-disable-next-line no-console
-      console.log(`[evasion-03] Whitespace aria-label EVADED. Toast: ${toastText ?? "none"}`);
-    } else {
-      // Evasion failed -- NavSentinel caught it despite the label trick.
-      // This would mean the gap has been fixed (or a stricter mode is active).
-      await waitForToastText(page, "Blocked", 3000);
-      // eslint-disable-next-line no-console
-      console.log("[evasion-03] Whitespace aria-label was CAUGHT.");
     }
+    // Verify no blocking toast appeared
+    const toastText = await readToastText(page);
+    expect(toastText, "No blocking toast expected when evasion succeeds").toBeNull();
   } finally {
     await cleanup();
   }
@@ -208,14 +207,11 @@ test("Evasion 03: single-char aria-label also evades in smart mode @regression",
 
     const popup = await popupPromise;
 
+    // DOCUMENTED GAP: single-char aria-label also evades the blank-anchor gate.
+    // Assert evasion succeeds. If this starts failing, the gap has been fixed.
+    expect(popup, "Expected single-char aria-label to evade blank-anchor gate (documented gap)").not.toBeNull();
     if (popup) {
       await popup.close().catch(() => {});
-      // eslint-disable-next-line no-console
-      console.log("[evasion-03] Single-char aria-label EVADED.");
-    } else {
-      await waitForToastText(page, "Blocked", 3000);
-      // eslint-disable-next-line no-console
-      console.log("[evasion-03] Single-char aria-label was CAUGHT.");
     }
   } finally {
     await cleanup();
@@ -270,15 +266,7 @@ test("Evasion 05: composite near-threshold overlay MUST be caught @regression", 
     expect(popup, "Composite evasion overlay MUST be blocked").toBeNull();
 
     // Should show a blocking toast (either "Blocked new tab" or "blocked deceptive click")
-    await page.waitForFunction(
-      () => {
-        const host = document.querySelector("#__navsentinel_toast_host");
-        const text = host?.shadowRoot?.querySelector(".body")?.textContent ?? "";
-        return text.includes("Blocked new tab") || text.includes("blocked deceptive click");
-      },
-      null,
-      { timeout: 3000 }
-    );
+    await waitForToastMatch(page, /Blocked new tab|blocked deceptive click/, 3000);
     await expect(page).toHaveURL(/evasion-05-composite\.html/);
   } finally {
     await cleanup();
@@ -313,15 +301,7 @@ test("Evasion 06: delayed-injected overlay is caught after injection @regression
     expect(popup, "Delayed-injected overlay MUST be blocked").toBeNull();
 
     // NavSentinel evaluates at click time, so delayed injection should be caught
-    await page.waitForFunction(
-      () => {
-        const host = document.querySelector("#__navsentinel_toast_host");
-        const text = host?.shadowRoot?.querySelector(".body")?.textContent ?? "";
-        return text.includes("Blocked new tab") || text.includes("blocked deceptive click");
-      },
-      null,
-      { timeout: 3000 }
-    );
+    await waitForToastMatch(page, /Blocked new tab|blocked deceptive click/, 3000);
     await expect(page).toHaveURL(/evasion-06-delayed-injection\.html/);
   } finally {
     await cleanup();
@@ -353,23 +333,12 @@ test("Evasion 07: pointer-events:none overlay relies on main_guard intercept @re
 
     const popup = await popupPromise;
 
-    if (popup) {
-      // If a popup opened, the evasion succeeded and main_guard did not catch it
-      await popup.close().catch(() => {});
-      // eslint-disable-next-line no-console
-      console.log("[evasion-07] pointer-events:none bypass EVADED main_guard.");
-    } else {
-      // main_guard caught the window.open
-      // eslint-disable-next-line no-console
-      console.log("[evasion-07] pointer-events:none bypass was CAUGHT by main_guard.");
-      // Check for a blocking toast
-      const toastText = await page.evaluate(() => {
-        const host = document.querySelector("#__navsentinel_toast_host");
-        return host?.shadowRoot?.querySelector(".body")?.textContent?.trim() ?? null;
-      });
-      // eslint-disable-next-line no-console
-      console.log(`[evasion-07] Toast: ${toastText ?? "none"}`);
-    }
+    // main_guard.ts should intercept the window.open call from the capturing
+    // click listener. Assert the popup is blocked.
+    expect(popup, "Expected main_guard to block the pointer-events:none bypass window.open").toBeNull();
+    const toastText = await readToastText(page);
+    // eslint-disable-next-line no-console
+    console.log(`[evasion-07] Toast: ${toastText ?? "none"}`);
   } finally {
     await cleanup();
   }
@@ -516,26 +485,10 @@ test("Evasion 11: shadow DOM overlay is caught via composedPath @regression", as
 
     const popup = await popupPromise;
 
-    if (popup) {
-      // If popup opened, composedPath() did not find the inner anchor,
-      // or the blank-anchor gate did not fire. This is an evasion success.
-      await popup.close().catch(() => {});
-      // eslint-disable-next-line no-console
-      console.log("[evasion-11] Shadow DOM overlay EVADED blank-anchor gate.");
-    } else {
-      // composedPath() found the inner <a> and blank-anchor gate caught it
-      // eslint-disable-next-line no-console
-      console.log("[evasion-11] Shadow DOM overlay was CAUGHT via composedPath.");
-      await page.waitForFunction(
-        () => {
-          const toastHost = document.querySelector("#__navsentinel_toast_host");
-          const text = toastHost?.shadowRoot?.querySelector(".body")?.textContent ?? "";
-          return text.includes("Blocked") || text.includes("blocked");
-        },
-        null,
-        { timeout: 3000 }
-      );
-    }
+    // composedPath() should find the inner <a target="_blank"> inside the
+    // shadow root, allowing the blank-anchor gate to catch it.
+    expect(popup, "Expected composedPath to find shadow DOM anchor and block it").toBeNull();
+    await waitForToastText(page, "Blocked", 3000);
     await expect(page).toHaveURL(/evasion-11-shadow-dom\.html/);
   } finally {
     await cleanup();
