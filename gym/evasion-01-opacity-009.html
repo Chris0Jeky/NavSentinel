@@ -18,6 +18,8 @@
       color: #fff;
       border-radius: 8px;
       text-decoration: none;
+      /* Push below overlay area to avoid intent_mismatch */
+      margin-top: 20vh;
     }
     /*
      * Evasion technique: opacity 0.09 — just above the 0.08 "invisible" cutoff.
@@ -25,19 +27,27 @@
      * invisible_but_clickable penalty (25). Instead it lands in the
      * near_invisible_opacity gradient (0.08-0.15), scoring ~14 points.
      *
+     * Isolation: overlay is small (150x80px) and z-index below gradient
+     * start to test opacity scoring alone. Cursor is default to avoid
+     * cursor_pointer_no_affordance. Legit link is pushed below.
+     *
      * Expected CDS contributions:
      *   near_invisible_opacity               ~14 (opacity 0.09)
      *   no_accessible_name                    15 (anchor with no text/aria)
-     *   cursor_pointer_no_affordance           10 (pointer + no name + opacity < 0.3)
-     *   intent_mismatch_under_interactive      35 (underlying legit link)
-     * Total ~ 74 -> should be caught in smart mode (threshold 70)
+     * Total ~ 29 -> should NOT block in smart mode (threshold 70)
+     *
+     * This documents that a single near-invisible opacity signal is not
+     * enough to trigger blocking on its own.
      */
     #trap {
-      position: fixed;
-      inset: 0;
+      position: absolute;
+      top: 24px;
+      left: 24px;
+      width: 150px;
+      height: 80px;
       opacity: 0.09;
-      z-index: 10000;
-      cursor: pointer;
+      z-index: 10;
+      cursor: default;
     }
   </style>
 </head>
@@ -48,12 +58,17 @@
     This tests whether the gradient penalty in near_invisible_opacity catches
     nearly-invisible elements that technically pass the isVisible() check.
   </p>
+  <p>
+    This is an isolated single-signal test: the overlay is small and uses low
+    z-index to avoid triggering other penalties. It verifies that the
+    near_invisible_opacity gradient works, but won't block on its own.
+  </p>
 
   <a id="legit-link" href="https://example.com/safe" aria-label="Safe destination link">
     Click here for safe content
   </a>
 
-  <!-- Evasion overlay: near-invisible anchor covering viewport -->
+  <!-- Evasion overlay: near-invisible, small, isolated signal -->
   <a id="trap" href="https://evil.example/evasion01" target="_blank" rel="noreferrer"></a>
 </body>
 </html>

@@ -19,6 +19,8 @@
       border: none;
       border-radius: 8px;
       cursor: pointer;
+      /* Push legit button below overlay area so it is NOT underlying */
+      margin-top: 65vh;
     }
     /*
      * Evasion technique: overlay covering exactly 34% of the viewport.
@@ -26,8 +28,13 @@
      * Falls in the medium range (20%-35%), scoring a scaled value.
      * At 34%, scaled = round(20 * (0.34-0.20)/0.15) = round(20 * 0.933) = 19.
      *
+     * Isolation: uses z-index 4999 (below the 5000 gradient start) and
+     * position: absolute (not fixed) so z-index scoring does not fire.
+     * The legit button is placed below the overlay area to avoid
+     * intent_mismatch_under_interactive.
+     *
      * Expected CDS contributions:
-     *   overlay_medium_interactive  19 (34% coverage)
+     *   overlay_medium_interactive  19 (34% coverage, absolute position)
      *   no_accessible_name          15 (no text/aria on overlay)
      * Total ~ 34 -> should NOT block in smart mode (threshold 70)
      *
@@ -35,15 +42,15 @@
      * to trigger blocking on its own.
      */
     #trap {
-      position: fixed;
+      position: absolute;
       /* 34% of viewport: sqrt(0.34) ~ 0.583 -> 58.3% of each dimension */
       top: 0;
       left: 0;
       width: 58.3vw;
       height: 58.3vh;
       background: rgba(0, 0, 0, 0.02);
-      z-index: 10000;
-      cursor: pointer;
+      z-index: 4999;
+      cursor: default;
     }
   </style>
 </head>
@@ -61,7 +68,7 @@
 
   <button id="legit-btn">Legitimate button</button>
 
-  <!-- Evasion overlay: just under 35% viewport coverage -->
+  <!-- Evasion overlay: just under 35% viewport coverage, isolated signal -->
   <a id="trap" href="https://evil.example/evasion02" target="_blank" rel="noreferrer"
      role="link"></a>
 </body>

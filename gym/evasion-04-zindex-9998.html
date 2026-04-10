@@ -18,29 +18,36 @@
       color: #fff;
       border-radius: 8px;
       text-decoration: none;
+      /* Push below overlay area to avoid intent_mismatch */
+      margin-top: 20vh;
     }
     /*
      * Evasion technique: z-index 9998 — just below the 9999 "high z-index"
      * threshold that adds +15. Falls in the gradient range (5000-9999),
      * scoring: round(10 * (9998 - 5000) / 4999) = round(10 * 0.9998) = 10.
      *
+     * Isolation: overlay is small (150x80px, well below 20% viewport) to
+     * avoid size penalties. Opacity is 1.0 to avoid opacity penalties.
+     * Legit link is pushed below to avoid intent_mismatch.
+     *
      * Expected CDS contributions:
      *   overlay_elevated_zindex     10 (z-index 9998, gradient)
      *   no_accessible_name          15 (no text/aria on overlay)
-     * Total ~ 25 -> should NOT block in smart mode alone
+     * Total ~ 25 -> should NOT block in smart mode (threshold 70)
      *
-     * Tests that the gradient catches high-but-not-maximum z-index values.
+     * Tests that the gradient catches high-but-not-maximum z-index values,
+     * but a single z-index signal alone is not enough to trigger blocking.
      */
     #trap {
       position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
+      top: 24px;
+      left: 24px;
+      width: 150px;
+      height: 80px;
       z-index: 9998;
-      opacity: 0.5;
-      background: rgba(0, 0, 0, 0.01);
-      cursor: pointer;
+      opacity: 1.0;
+      background: rgba(0, 0, 0, 0.02);
+      cursor: default;
     }
   </style>
 </head>
@@ -52,16 +59,16 @@
     the elevated gradient range (5000-9999), scoring approximately 10 points.
   </p>
   <p>
-    This documents that a single near-threshold z-index is insufficient to
-    trigger blocking alone. An attacker using only z-index evasion would
-    need additional deceptive signals to be caught.
+    This is an isolated single-signal test: overlay is small and fully opaque
+    to avoid size and opacity penalties. This documents that a single
+    near-threshold z-index is insufficient to trigger blocking alone.
   </p>
 
   <a id="legit-link" href="https://example.com/safe" aria-label="Safe destination link">
     Click here for safe content
   </a>
 
-  <!-- Evasion overlay: z-index 9998, fixed position -->
+  <!-- Evasion overlay: z-index 9998, fixed position, small size -->
   <a id="trap" href="https://evil.example/evasion04" target="_blank" rel="noreferrer"
      role="link"></a>
 </body>

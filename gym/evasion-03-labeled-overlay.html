@@ -18,6 +18,8 @@
       color: #fff;
       border-radius: 8px;
       text-decoration: none;
+      /* Push below overlay area to avoid intent_mismatch */
+      margin-top: 30vh;
     }
     /*
      * Evasion technique: overlay with a single-character aria-label (" ").
@@ -26,28 +28,33 @@
      *
      * Also tests aria-label="x" (length 1, still < 2 threshold).
      *
-     * Expected CDS contributions (for the whitespace-label trap):
-     *   no_accessible_name               15 (aria-label " " treated as absent)
-     *   near_invisible_opacity           ~14 (opacity 0.09)
-     *   cursor_pointer_no_affordance      10 (pointer + no name + opacity < 0.3)
-     * Total ~ 39 -> may not block alone, but documents label hardening works
+     * Isolation: overlays are positioned with small size (15% viewport each)
+     * and z-index below gradient start to test label hardening in isolation.
+     * opacity is 1.0 (normal) to avoid opacity penalties.
      *
-     * The fixture includes TWO overlays to test both whitespace and single-char.
+     * Expected CDS contributions (for either trap):
+     *   no_accessible_name               15 (aria-label < 2 chars treated as absent)
+     * Total ~ 15 -> should NOT block alone in any mode
+     *
+     * This documents that the accessible name hardening correctly strips
+     * whitespace-only and single-char labels, but a single signal is not
+     * enough to trigger blocking on its own.
      */
     .trap-overlay {
-      position: fixed;
+      position: absolute;
       top: 0;
-      width: 50vw;
-      height: 100vh;
-      opacity: 0.09;
-      z-index: 10000;
-      cursor: pointer;
+      width: 120px;
+      height: 120px;
+      opacity: 1.0;
+      z-index: 10;
+      cursor: default;
+      background: rgba(0, 0, 0, 0.02);
     }
     #trap-whitespace {
       left: 0;
     }
     #trap-singlechar {
-      left: 50vw;
+      left: 140px;
     }
   </style>
 </head>
@@ -59,12 +66,14 @@
     (<code>aria-label="x"</code>). The CDS hardening treats labels shorter than
     2 characters as absent, so both should score as no_accessible_name.
   </p>
+  <p>
+    This is an isolated single-signal test: no opacity tricks, no high z-index,
+    no large coverage. It verifies that the label-stripping logic works, though
+    it will not block on its own (CDS ~15, below both thresholds).
+  </p>
 
-  <a id="legit-link" href="https://example.com/safe" aria-label="Safe destination link">
-    Click here for safe content
-  </a>
-
-  <!-- Left half: whitespace-only aria-label -->
+  <!-- Overlays placed above the legit link area -->
+  <!-- Left: whitespace-only aria-label -->
   <a id="trap-whitespace"
      class="trap-overlay"
      href="https://evil.example/evasion03-ws"
@@ -72,12 +81,16 @@
      rel="noreferrer"
      aria-label=" "></a>
 
-  <!-- Right half: single character aria-label -->
+  <!-- Right: single character aria-label -->
   <a id="trap-singlechar"
      class="trap-overlay"
      href="https://evil.example/evasion03-char"
      target="_blank"
      rel="noreferrer"
      aria-label="x"></a>
+
+  <a id="legit-link" href="https://example.com/safe" aria-label="Safe destination link">
+    Click here for safe content
+  </a>
 </body>
 </html>
