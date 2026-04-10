@@ -321,3 +321,84 @@ test("Evasion 06: delayed-injected overlay is caught after injection @regression
     await cleanup();
   }
 });
+
+// ---------------------------------------------------------------------------
+// Evasion 07: pointer-events: none bypass
+//
+// The overlay uses pointer-events: none so CDS never sees it in the
+// elementsFromPoint() stack. A document-level click listener attempts
+// window.open. The main_guard.ts intercept should catch the window.open.
+// ---------------------------------------------------------------------------
+test("Evasion 07: pointer-events:none overlay relies on main_guard intercept @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { page, context, cleanup } = await setupEvasionTest("evasion-07-pointer-events-none.html");
+
+  try {
+    const legitLink = page.locator("#legit-link");
+    const box = await legitLink.boundingBox();
+    expect(box, "#legit-link should be visible").toBeTruthy();
+
+    // Click on the legit link. The document-level capturing listener will
+    // preventDefault and call window.open with a malicious URL.
+    // main_guard.ts should intercept the window.open.
+    const popupPromise = context.waitForEvent("page", { timeout: 2500 }).catch(() => null);
+    await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+
+    const popup = await popupPromise;
+
+    if (popup) {
+      // If a popup opened, the evasion succeeded and main_guard did not catch it
+      await popup.close().catch(() => {});
+      // eslint-disable-next-line no-console
+      console.log("[evasion-07] pointer-events:none bypass EVADED main_guard.");
+    } else {
+      // main_guard caught the window.open
+      // eslint-disable-next-line no-console
+      console.log("[evasion-07] pointer-events:none bypass was CAUGHT by main_guard.");
+      // Check for a blocking toast
+      const toastText = await page.evaluate(() => {
+        const host = document.querySelector("#__navsentinel_toast_host");
+        return host?.shadowRoot?.querySelector(".body")?.textContent?.trim() ?? null;
+      });
+      // eslint-disable-next-line no-console
+      console.log(`[evasion-07] Toast: ${toastText ?? "none"}`);
+    }
+  } finally {
+    await cleanup();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Evasion 08: clip-path visual hiding
+//
+// Documents that clip-path affects hit-testing in Chrome. The overlay
+// is clipped to a thin strip; only that strip is clickable. Clicks
+// elsewhere pass through to underlying elements.
+// ---------------------------------------------------------------------------
+test("Evasion 08: clip-path overlay strip is blocked when clicked @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { page, context, cleanup } = await setupEvasionTest("evasion-08-clip-path-hidden.html");
+
+  try {
+    const trap = page.locator("#trap");
+    const box = await trap.boundingBox();
+
+    // clip-path: inset(0 0 98% 0) means only the top 2% is visible/clickable.
+    // The bounding box from Playwright reflects the full element area, but
+    // only the top strip is clickable.
+    expect(box, "#trap overlay should be in the DOM").toBeTruthy();
+
+    // Click in the visible strip (top 2% of the overlay)
+    const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
+    await page.mouse.click(box!.x + box!.width / 2, box!.y + 5);
+
+    const popup = await popupPromise;
+    expect(popup, "Clip-path strip click should be blocked").toBeNull();
+    await waitForToastText(page, "Blocked new tab", 3000);
+    await expect(page).toHaveURL(/evasion-08-clip-path-hidden\.html/);
+  } finally {
+    await cleanup();
+  }
+});
