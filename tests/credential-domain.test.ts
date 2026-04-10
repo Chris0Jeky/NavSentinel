@@ -288,11 +288,9 @@ describe("detectSubdomainStuffing", () => {
 describe("detectLookalike (combined)", () => {
   const trusted = ["paypal.com", "google.com"];
 
-  it("detects homoglyph lookalike paypaI.com via normalized Levenshtein", () => {
-    // Capital I -> lowercase i via normalizeHost, but "paypai.com" vs "paypal.com"
-    // has Levenshtein distance 1 (i vs l). The homoglyph normalization doesn't
-    // help here because 'i' is not in the confusable table.
-    // But paypa1.com -> normalizeHomoglyphs -> paypal.com (distance 0)
+  it("detects homoglyph lookalike paypa1.com via normalized Levenshtein", () => {
+    // paypa1.com -> normalizeHomoglyphs -> paypal.com (distance 0)
+    // The digit '1' is normalized to 'l' by the homoglyph table.
     const result = detectLookalike("paypa1.com", trusted);
     expect(result.homoglyphLevenshtein).not.toBeNull();
     expect(result.homoglyphLevenshtein!.distance).toBe(0);
