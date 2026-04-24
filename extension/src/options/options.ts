@@ -251,7 +251,7 @@ async function refreshEventLog(): Promise<void> {
 }
 
 function pct(n: number, total: number): string {
-  if (total === 0) return "-- %";
+  if (total === 0) return "--";
   return `${((n / total) * 100).toFixed(1)}%`;
 }
 
