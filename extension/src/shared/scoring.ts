@@ -118,11 +118,9 @@ export function computeCDS(ctx: ClickContext): ScoreResult {
       cds += 30;
       reasons.push("overlay_large_interactive");
     } else if (ratio > 0.20) {
-      const scaled = Math.round(20 * ((ratio - 0.20) / 0.15));
-      if (scaled > 0) {
-        cds += scaled;
-        reasons.push("overlay_medium_interactive");
-      }
+      const scaled = Math.max(1, Math.round(20 * ((ratio - 0.20) / 0.15)));
+      cds += scaled;
+      reasons.push("overlay_medium_interactive");
     }
   }
 
@@ -152,11 +150,9 @@ export function computeCDS(ctx: ClickContext): ScoreResult {
       cds += 15;
       reasons.push("overlay_high_zindex");
     } else if (z >= 5000) {
-      const scaled = Math.round(10 * ((z - 5000) / 4999));
-      if (scaled > 0) {
-        cds += scaled;
-        reasons.push("overlay_elevated_zindex");
-      }
+      const scaled = Math.max(1, Math.round(10 * ((z - 5000) / 4999)));
+      cds += scaled;
+      reasons.push("overlay_elevated_zindex");
     }
   }
 
@@ -208,11 +204,8 @@ export function computeCDS(ctx: ClickContext): ScoreResult {
   // --- Composite escalation ---
   const mitigating = new Set(["keyboard_activation", "legit_modal_backdrop"]);
   const positiveCount = reasons.filter(r => !mitigating.has(r)).length;
-  if (positiveCount >= 4) {
-    cds += 15;
-    reasons.push("composite_escalation");
-  } else if (positiveCount >= 3) {
-    cds += 10;
+  if (positiveCount >= 3) {
+    cds += positiveCount >= 4 ? 15 : 10;
     reasons.push("composite_escalation");
   }
 
