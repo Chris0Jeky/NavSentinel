@@ -39,7 +39,21 @@ export type SuiteSettingsPatch = Partial<Omit<SuiteSettings, "nav" | "credential
 export const SUITE_SETTINGS_KEY = "sentinelsuite:settings_v1";
 export const TRUSTED_DOMAINS_KEY = "sentinelsuite:trusted_domains_v1";
 export const EVENT_LOG_KEY = "sentinelsuite:event_log_v1";
+export const PROMPT_OUTCOMES_KEY = "sentinelsuite:prompt_outcomes_v1";
 const LEGACY_SETTINGS_KEY = "navsentinel:settings";
+
+export type PromptType = "nav" | "cred";
+export type PromptOutcome = "allow" | "allow_once" | "always_allow" | "block" | "trust" | "dismiss" | "cancel";
+
+export interface PromptOutcomeEntry {
+  id: string;
+  ts: number;
+  domain: string;
+  type: PromptType;
+  score: number;
+  outcome: PromptOutcome;
+  reasons?: string[];
+}
 
 const DEFAULT_SUITE_SETTINGS: SuiteSettings = {
   nav: {
@@ -303,23 +317,70 @@ export async function clearEventLog(): Promise<void> {
   await chrome.storage.local.set({ [EVENT_LOG_KEY]: [] });
 }
 
+const PROMPT_OUTCOMES_LIMIT = 500;
+
+export async function getPromptOutcomes(): Promise<PromptOutcomeEntry[]> {
+  const res = await chrome.storage.local.get(PROMPT_OUTCOMES_KEY);
+  const log = res[PROMPT_OUTCOMES_KEY];
+  if (!Array.isArray(log)) return [];
+  return log.slice(-PROMPT_OUTCOMES_LIMIT) as PromptOutcomeEntry[];
+}
+
+export async function appendPromptOutcome(
+  partial: Omit<PromptOutcomeEntry, "id" | "ts"> & { id?: string; ts?: number }
+): Promise<void> {
+  const entry: PromptOutcomeEntry = {
+    id: partial.id ?? makeId(),
+    ts: partial.ts ?? Date.now(),
+    domain: partial.domain,
+    type: partial.type,
+    score: partial.score,
+    outcome: partial.outcome,
+    ...(partial.reasons !== undefined ? { reasons: partial.reasons } : {})
+  };
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await chrome.storage.local.get(PROMPT_OUTCOMES_KEY);
+    const cur = Array.isArray(res[PROMPT_OUTCOMES_KEY])
+      ? (res[PROMPT_OUTCOMES_KEY] as PromptOutcomeEntry[])
+      : [];
+    const next = [...cur.filter((item) => item?.id !== entry.id), entry].slice(-PROMPT_OUTCOMES_LIMIT);
+    await chrome.storage.local.set({ [PROMPT_OUTCOMES_KEY]: next });
+
+    const verify = await chrome.storage.local.get(PROMPT_OUTCOMES_KEY);
+    const verifyLog = Array.isArray(verify[PROMPT_OUTCOMES_KEY])
+      ? (verify[PROMPT_OUTCOMES_KEY] as PromptOutcomeEntry[])
+      : [];
+    if (verifyLog.some((item) => item?.id === entry.id)) {
+      return;
+    }
+  }
+}
+
+export async function clearPromptOutcomes(): Promise<void> {
+  await chrome.storage.local.set({ [PROMPT_OUTCOMES_KEY]: [] });
+}
+
 export async function exportAll(): Promise<{
   exportedAt: string;
   settings: SuiteSettings;
   allowlist: Allowlist;
   trustedDomains: string[];
   eventLog: EventLogEntry[];
+  promptOutcomes: PromptOutcomeEntry[];
 }> {
   const settings = await getSuiteSettings();
   const allowlist = await getAllowlist();
   const trustedDomains = await getTrustedDomains();
   const eventLog = await getEventLog();
+  const promptOutcomes = await getPromptOutcomes();
   return {
     exportedAt: new Date().toISOString(),
     settings,
     allowlist,
     trustedDomains,
-    eventLog
+    eventLog,
+    promptOutcomes
   };
 }
 
@@ -351,6 +412,12 @@ export async function importAll(payload: unknown): Promise<void> {
     const boundedLogLimit = Math.max(0, Math.min(importLogLimit, 5000));
     await chrome.storage.local.set({
       [EVENT_LOG_KEY]: (p.eventLog as EventLogEntry[]).slice(-boundedLogLimit)
+    });
+  }
+
+  if (Array.isArray(p.promptOutcomes)) {
+    await chrome.storage.local.set({
+      [PROMPT_OUTCOMES_KEY]: (p.promptOutcomes as PromptOutcomeEntry[]).slice(-PROMPT_OUTCOMES_LIMIT)
     });
   }
 }

@@ -412,6 +412,17 @@ button:hover {
   font-size: 12px;
 }
 
+.stat-label {
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.stat-value {
+  font-size: 26px;
+  font-weight: 700;
+  margin-top: 4px;
+}
+
 .mono {
   font-family: "Cascadia Code", "SFMono-Regular", Menlo, Consolas, monospace;
 }

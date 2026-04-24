@@ -139,6 +139,59 @@
         <section class="section">
           <div class="section-head">
             <div>
+              <div class="section-kicker">Analytics</div>
+              <h2>Prompt statistics</h2>
+            </div>
+            <p class="section-copy">
+              Local-only prompt outcome tracking for evidence-based threshold tuning.
+              No data leaves your machine.
+            </p>
+          </div>
+
+          <div class="control-grid">
+            <div class="field-card">
+              <div class="stat-label">Total prompts</div>
+              <div id="statTotal" class="stat-value mono">--</div>
+            </div>
+            <div class="field-card">
+              <div class="stat-label">Allow rate</div>
+              <div id="statAllowRate" class="stat-value mono">--</div>
+            </div>
+            <div class="field-card">
+              <div class="stat-label">Block/cancel rate</div>
+              <div id="statBlockRate" class="stat-value mono">--</div>
+            </div>
+            <div class="field-card">
+              <div class="stat-label">Trust rate</div>
+              <div id="statTrustRate" class="stat-value mono">--</div>
+            </div>
+            <div class="field-card">
+              <div class="stat-label">Dismiss rate</div>
+              <div id="statDismissRate" class="stat-value mono">--</div>
+            </div>
+            <div class="field-card">
+              <div class="stat-label">Avg score at allow</div>
+              <div id="statAvgScoreAllow" class="stat-value mono">--</div>
+            </div>
+            <div class="field-card">
+              <div class="stat-label">Avg score at block/cancel</div>
+              <div id="statAvgScoreBlock" class="stat-value mono">--</div>
+            </div>
+          </div>
+
+          <div class="toolbar">
+            <div class="toolbar-actions">
+              <button id="refreshStats">Refresh stats</button>
+              <button id="clearStats">Clear stats</button>
+            </div>
+          </div>
+
+          <div id="topDomains" class="events"></div>
+        </section>
+
+        <section class="section">
+          <div class="section-head">
+            <div>
               <div class="section-kicker">Signals</div>
               <h2>Event log</h2>
             </div>
