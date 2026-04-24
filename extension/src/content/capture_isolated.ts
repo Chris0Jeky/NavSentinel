@@ -35,9 +35,15 @@ const RISKY_BLANK_REASONS = new Set([
   "intent_mismatch_under_interactive",
   "invisible_but_clickable",
   "overlay_large_interactive",
+  "overlay_medium_interactive",
   "overlay_high_zindex",
+  "overlay_elevated_zindex",
   "retargeted_target_mismatch",
-  "cursor_pointer_no_affordance"
+  "cursor_pointer_no_affordance",
+  "near_invisible_opacity",
+  "low_opacity",
+  "no_accessible_name",
+  "composite_escalation"
 ]);
 
 function makeBridgeSession(): string {
@@ -424,8 +430,8 @@ function isInteractiveElement(el: Element): boolean {
 
 function elementNameLength(el: Element): number {
   const text = (el.textContent ?? "").replace(/\s+/g, "");
-  const aria = el.getAttribute("aria-label") ?? "";
-  const title = el.getAttribute("title") ?? "";
+  const aria = (el.getAttribute("aria-label") ?? "").trim();
+  const title = (el.getAttribute("title") ?? "").trim();
   return Math.min(120, text.length + aria.length + title.length);
 }
 
