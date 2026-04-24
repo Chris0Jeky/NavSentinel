@@ -79,7 +79,15 @@ describe("computeCDS property tests", () => {
   });
 
   it("score has an upper bound (sum of all positive factors)", () => {
-    // Positive factors: 15 + 30 + 35 + 20 + 15 + 10 + 25 = 150
+    // Positive factors:
+    //   no_accessible_name: 15
+    //   overlay_large_interactive: 30  (or overlay_medium_interactive: 1-20)
+    //   intent_mismatch_under_interactive: 35
+    //   retargeted_target_mismatch: 20
+    //   overlay_high_zindex: 15  (or overlay_elevated_zindex: 1-10)
+    //   cursor_pointer_no_affordance: 10
+    //   invisible_but_clickable: 25  (or near_invisible_opacity: 8-15, low_opacity: 1-8)
+    //   Sum: 150
     // Composite escalation (4+ factors): +15
     // Total max: 165
     const MAX_CDS = 165;
