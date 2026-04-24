@@ -512,8 +512,9 @@ function showAllowPrompt(params: {
   target?: string;
   features?: string;
   actionId?: string | null;
+  promptScore?: number;
 }): void {
-  const promptScore = lastDebug?.cds ?? 0;
+  const promptScore = params.promptScore ?? lastDebug?.cds ?? 0;
   const actions = [
     {
       label: "Allow once",
@@ -563,7 +564,7 @@ function showAllowPrompt(params: {
       appendOutcomeSafely({
         domain: siteKeyFromLocation(),
         type: "nav",
-        score: 0,
+        score: promptScore,
         outcome: "dismiss"
       });
     }
@@ -755,7 +756,8 @@ window.addEventListener(
             title: "Blocked new tab",
             url: parsed.href,
             host: parsed.host,
-            target: "_blank"
+            target: "_blank",
+            promptScore: cds
           });
         } else {
           showToast({ message: "NavSentinel blocked a new tab navigation." });
