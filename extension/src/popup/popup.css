@@ -100,6 +100,14 @@ body::before {
   font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
 }
 
+.version-tag {
+  font-family: "Aptos", "Segoe UI Variable", "Trebuchet MS", sans-serif;
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+  vertical-align: baseline;
+}
+
 .hero-copy {
   margin-top: 8px;
   color: var(--muted);

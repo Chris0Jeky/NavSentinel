@@ -21,6 +21,7 @@ import {
   getRecentPopupEvents
 } from "./popup_model";
 
+const versionEl = document.getElementById("version") as HTMLSpanElement;
 const siteEl = document.getElementById("site") as HTMLDivElement;
 const trustStatusEl = document.getElementById("trustStatus") as HTMLDivElement;
 const trustBtn = document.getElementById("trustBtn") as HTMLButtonElement;
@@ -312,4 +313,5 @@ chrome.runtime.onMessage.addListener((message: PopupTestMessage, sender, sendRes
   return true;
 });
 
+versionEl.textContent = `v${chrome.runtime.getManifest().version}`;
 void refreshUi();
