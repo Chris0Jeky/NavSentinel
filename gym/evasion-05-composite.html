@@ -1,0 +1,72 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Evasion 05 - Composite near-threshold signals</title>
+  <style>
+    body { font-family: sans-serif; padding: 24px; margin: 0; }
+    .real-link {
+      display: block;
+      padding: 16px 32px;
+      background: #1a73e8;
+      color: #fff;
+      text-align: center;
+      text-decoration: none;
+      border-radius: 4px;
+      width: 240px;
+      margin: 80px auto;
+    }
+    /*
+      Combines ALL near-threshold evasion signals:
+      - opacity: 0.09 (just above old 0.08)
+      - ~34% viewport (just under old 35%)
+      - z-index: 9998 (just under old 9999)
+      - whitespace-only aria-label
+      - position: absolute
+    */
+    .overlay {
+      position: absolute;
+      top: 0; left: 0;
+      width: 58.3vw;
+      height: 58.3vh;
+      opacity: 0.09;
+      background: red;
+      z-index: 9998;
+      cursor: pointer;
+    }
+    .info {
+      max-width: 600px;
+      margin: 0 auto;
+      font-size: 14px;
+      color: #555;
+    }
+  </style>
+</head>
+<body>
+  <div class="info">
+    <p><a href="index.html">&larr; Back to Gym index</a></p>
+    <h1>Evasion 05 - Composite Near-threshold Signals</h1>
+    <p>
+      This overlay combines every near-threshold evasion in one element:
+      opacity 0.09, ~34% viewport, z-index 9998, whitespace aria-label,
+      positioned absolute. Should trigger multiple gradient factors plus
+      <code>composite_escalation</code> for a high CDS.
+    </p>
+    <p>Expected signals:</p>
+    <ul>
+      <li><code>no_accessible_name</code> (whitespace label ignored)</li>
+      <li><code>overlay_medium_interactive</code> (~34% coverage)</li>
+      <li><code>overlay_elevated_zindex</code> (9998)</li>
+      <li><code>near_invisible_opacity</code> (0.09)</li>
+      <li><code>cursor_pointer_no_affordance</code> (pointer + no name + low opacity)</li>
+      <li><code>composite_escalation</code> (5 factors)</li>
+    </ul>
+  </div>
+
+  <a id="legit-link" class="real-link" href="https://example.com">Real Link</a>
+
+  <!-- Attacker overlay: all near-threshold signals combined -->
+  <a id="trap" class="overlay" href="https://evil.example.com" target="_blank" rel="noreferrer" aria-label=" "></a>
+</body>
+</html>

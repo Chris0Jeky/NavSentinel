@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Evasion 09 - filter: opacity() bypass</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 24px;
+      max-width: 700px;
+    }
+    #legit-link {
+      display: inline-block;
+      padding: 14px 28px;
+      font-size: 18px;
+      background: #1a73e8;
+      color: #fff;
+      border-radius: 8px;
+      text-decoration: none;
+      position: relative;
+      z-index: 1;
+      margin-top: 12vh;
+      margin-left: 12vw;
+    }
+    /*
+     * EVASION TECHNIQUE: filter: opacity(9%) instead of opacity: 0.09
+     *
+     * CDS reads opacity via getComputedStyle(el).opacity, which only reflects
+     * the CSS `opacity` property. CSS `filter: opacity(9%)` makes the element
+     * visually near-invisible but getComputedStyle().opacity still returns "1".
+     *
+     * This means:
+     *   - near_invisible_opacity does NOT fire (opacity reads as 1.0)
+     *   - invisible_but_clickable does NOT fire (isVisible() sees opacity 1.0)
+     *   - cursor_pointer_no_affordance does NOT fire (requires opacity < 0.3)
+     *
+     * However, the overlay is still a blank anchor with no name, so the
+     * blank-anchor interception gate catches it. Without that gate, CDS
+     * alone would score only:
+     *   no_accessible_name                 15
+     *   overlay_elevated_zindex            10 (z-index 9998)
+     *   overlay_medium_interactive        ~13 (30% viewport)
+     *   intent_mismatch_under_interactive  35 (legit link under)
+     *   composite_escalation               15 (4+ factors)
+     *   Total CDS: ~88 -> BLOCKED
+     *
+     * But this DOES mean the opacity gradient is completely bypassed.
+     * If the attacker uses filter: opacity() on a same-tab link (no blank
+     * anchor gate), the opacity penalty is entirely evaded.
+     *
+     * DOCUMENTED GAP: CDS opacity detection does not inspect CSS filter
+     * functions. Future hardening should parse getComputedStyle().filter
+     * for opacity() values.
+     */
+    #trap {
+      position: fixed;
+      top: 10%;
+      left: 10%;
+      width: 54.8vw;
+      height: 54.8vh;
+      /* KEY EVASION: filter opacity instead of property opacity */
+      opacity: 1;
+      filter: opacity(9%);
+      z-index: 9998;
+      cursor: pointer;
+      background: transparent;
+    }
+  </style>
+</head>
+<body>
+  <h1>Evasion 09: filter: opacity() bypass</h1>
+  <p>
+    The overlay uses <code>filter: opacity(9%)</code> instead of
+    <code>opacity: 0.09</code>. The element is visually near-invisible,
+    but <code>getComputedStyle().opacity</code> reports <code>1</code>.
+  </p>
+  <p>
+    This bypasses the CDS opacity gradient entirely. The overlay is still
+    caught by the blank-anchor interception gate (no name + target=_blank),
+    but the opacity-specific scoring is evaded.
+  </p>
+  <p>
+    <strong>Documented gap:</strong> CDS should also inspect
+    <code>getComputedStyle().filter</code> for <code>opacity()</code>
+    function values to close this evasion vector.
+  </p>
+
+  <a id="legit-link" href="https://example.com/safe" aria-label="Safe destination link">
+    Click here for safe content
+  </a>
+
+  <!-- Evasion overlay: filter opacity bypass, composite signals -->
+  <a id="trap" href="https://evil.example/evasion09" target="_blank" rel="noreferrer"></a>
+</body>
+</html>

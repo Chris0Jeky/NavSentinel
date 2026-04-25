@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Evasion 06 - Delayed Injection</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 24px;
+      max-width: 700px;
+    }
+    #legit-link {
+      display: inline-block;
+      padding: 14px 28px;
+      font-size: 18px;
+      background: #1a73e8;
+      color: #fff;
+      border-radius: 8px;
+      text-decoration: none;
+    }
+    #status {
+      margin-top: 16px;
+      padding: 12px;
+      background: #f0f0f0;
+      border-radius: 6px;
+      font-family: monospace;
+      font-size: 14px;
+    }
+    /*
+     * Evasion technique: overlay injected 2 seconds after page load.
+     * Tests whether NavSentinel's click-time detection catches overlays
+     * that were not present at initial page load.
+     *
+     * NavSentinel evaluates elementsFromPoint() at click time (pointerdown
+     * and click handlers), so delayed injection should still be caught
+     * because the overlay will be in the element stack when clicked.
+     *
+     * The injected overlay uses the same composite signals as evasion-05
+     * to ensure it WOULD be caught if detected:
+     *   - opacity 0.09
+     *   - no accessible name
+     *   - z-index 9998, fixed position
+     *   - ~30% viewport coverage
+     *   - cursor: pointer
+     *
+     * Expected: Caught, since CDS evaluation happens at click time.
+     */
+  </style>
+</head>
+<body>
+  <h1>Evasion 06: Delayed injection (2-second delay)</h1>
+  <p>
+    The overlay is injected via JavaScript 2 seconds after page load.
+    This tests whether NavSentinel re-evaluates the DOM at click time
+    rather than only at page load.
+  </p>
+  <p>
+    After the overlay appears, clicking anywhere in its area should trigger
+    CDS detection with the same composite signals as evasion-05.
+  </p>
+
+  <a id="legit-link" href="https://example.com/safe" aria-label="Safe destination link">
+    Click here for safe content
+  </a>
+
+  <div id="status">Overlay will be injected in 2 seconds...</div>
+
+  <script>
+    (function () {
+      var statusEl = document.getElementById("status");
+      var injected = false;
+
+      setTimeout(function () {
+        if (injected) return;
+        injected = true;
+
+        var trap = document.createElement("a");
+        trap.id = "trap";
+        trap.href = "https://evil.example/evasion06";
+        trap.target = "_blank";
+        trap.rel = "noreferrer";
+        trap.style.cssText = [
+          "position: fixed",
+          "top: 10%",
+          "left: 10%",
+          "width: 54.8vw",
+          "height: 54.8vh",
+          "opacity: 0.09",
+          "z-index: 9998",
+          "cursor: pointer",
+          "background: transparent"
+        ].join(";");
+        document.body.appendChild(trap);
+
+        if (statusEl) {
+          statusEl.textContent = "Overlay injected! Click in the center area to test detection.";
+          statusEl.style.background = "#fff3cd";
+        }
+      }, 2000);
+    })();
+  </script>
+</body>
+</html>

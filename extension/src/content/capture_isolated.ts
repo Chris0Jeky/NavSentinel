@@ -38,9 +38,15 @@ const RISKY_BLANK_REASONS = new Set([
   "intent_mismatch_under_interactive",
   "invisible_but_clickable",
   "overlay_large_interactive",
+  "overlay_medium_interactive",
   "overlay_high_zindex",
+  "overlay_elevated_zindex",
   "retargeted_target_mismatch",
-  "cursor_pointer_no_affordance"
+  "cursor_pointer_no_affordance",
+  "near_invisible_opacity",
+  "low_opacity",
+  "no_accessible_name",
+  "composite_escalation"
 ]);
 
 function makeBridgeSession(): string {
@@ -218,7 +224,9 @@ function handleBridgeMessage(message: unknown): void {
         ? "Blocked redirect"
         : data.kind === "form_submit" || data.kind === "form_request_submit"
           ? "Blocked form submit"
-          : "Blocked popup";
+          : data.kind === "shadow_anchor"
+            ? "Blocked new tab"
+            : "Blocked popup";
 
     showAllowPrompt({
       title,
@@ -429,8 +437,8 @@ function isInteractiveElement(el: Element): boolean {
 
 function elementNameLength(el: Element): number {
   const text = (el.textContent ?? "").replace(/\s+/g, "");
-  const aria = el.getAttribute("aria-label") ?? "";
-  const title = el.getAttribute("title") ?? "";
+  const aria = (el.getAttribute("aria-label") ?? "").trim();
+  const title = (el.getAttribute("title") ?? "").trim();
   return Math.min(120, text.length + aria.length + title.length);
 }
 
@@ -467,14 +475,48 @@ function getNrsBlockThreshold(mode: Mode): number {
   return mode === "strict" ? NRS_STRICT_BLOCK_THRESHOLD : NRS_BLOCK_THRESHOLD;
 }
 
+function tryOpenShadowRoot(el: Element): ShadowRoot | null {
+  if (el.shadowRoot) return el.shadowRoot;
+  try {
+    // chrome.dom API is available to MV3 content scripts without permissions
+    // and reliably accesses shadow roots from the isolated world.
+    return (globalThis as Record<string, unknown> as { chrome?: { dom?: { openOrClosedShadowRoot?: (e: Element) => ShadowRoot | null } } })
+      .chrome?.dom?.openOrClosedShadowRoot?.(el) ?? null;
+  } catch { return null; }
+}
+
+function findAnchorInShadowRoots(x: number, y: number): HTMLAnchorElement | null {
+  for (const el of document.elementsFromPoint(x, y)) {
+    const sr = tryOpenShadowRoot(el);
+    if (!sr) continue;
+    const inner = sr.elementFromPoint(x, y);
+    if (inner?.tagName === "A") return inner as HTMLAnchorElement;
+    const anc = inner?.closest?.("a");
+    if (anc) return anc as HTMLAnchorElement;
+    const first = sr.querySelector("a");
+    if (first) return first as HTMLAnchorElement;
+  }
+  return null;
+}
+
 function findAnchorFromEvent(e: MouseEvent): HTMLAnchorElement | null {
   const path = e.composedPath?.() ?? [];
   for (const el of path) {
     if (el instanceof HTMLAnchorElement) return el;
     if (el instanceof Element && el.tagName === "A") return el as HTMLAnchorElement;
+    // Cross-world fallback: shadow-internal elements in composedPath may not
+    // pass instanceof checks from the extension's isolated world.
+    if ((el as { nodeType?: number; tagName?: string })?.nodeType === 1 &&
+        (el as { tagName?: string })?.tagName === "A")
+      return el as unknown as HTMLAnchorElement;
   }
   const target = e.target as Element | null;
-  return (target?.closest("a") as HTMLAnchorElement | null) ?? null;
+  const fromClosest = (target?.closest("a") as HTMLAnchorElement | null) ?? null;
+  if (fromClosest) return fromClosest;
+  // Shadow DOM fallback: composedPath() may not pierce shadow roots in all
+  // Chromium builds when called from the extension's isolated world.
+  // Scan all elements at click coordinates for shadow roots containing anchors.
+  return findAnchorInShadowRoots(e.clientX, e.clientY);
 }
 
 function allowOnce(url: string, target?: string, features?: string): void {

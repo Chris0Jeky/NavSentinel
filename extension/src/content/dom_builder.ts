@@ -37,7 +37,7 @@ function approxNonWhitespaceTextLen(el: Element, cap = 80): number {
 function attrLen(el: Element, name: string, cap = 80): number {
   const v = el.getAttribute(name);
   if (!v) return 0;
-  return Math.min(v.length, cap);
+  return Math.min(v.trim().length, cap);
 }
 
 function isInteractiveCheap(el: Element): boolean {
