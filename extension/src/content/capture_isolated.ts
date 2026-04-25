@@ -9,6 +9,9 @@ import {
   onAllowlistChange,
   type Allowlist
 } from "../shared/allowlist";
+import { getRegistrableDomain } from "../shared/domain";
+import { computeNRS, NRS_BLOCK_THRESHOLD, NRS_STRICT_BLOCK_THRESHOLD } from "../shared/nrs";
+import type { NavigationContext } from "../shared/nrs";
 import { showToast } from "./ui_toast";
 import {
   buildClickContextFromEvents,
@@ -61,6 +64,8 @@ let bridgeRetryDelayMs = BRIDGE_RETRY_MS;
 let bridgeInitStartedAt = 0;
 let forwardCheckInFlight = false;
 let forwardCheckTimer = 0;
+let gestureNavAttempts = 0;
+let gestureDownId: number | null = null;
 
 function markMainGuardReady(): void {
   if (bridgeRetryTimer) {
@@ -458,8 +463,8 @@ function isLegitBlankAnchor(
   return true;
 }
 
-function getBlockThreshold(mode: Mode): number {
-  return mode === "strict" ? CDS_STRICT_BLOCK_THRESHOLD : CDS_SMART_BLOCK_THRESHOLD;
+function getNrsBlockThreshold(mode: Mode): number {
+  return mode === "strict" ? NRS_STRICT_BLOCK_THRESHOLD : NRS_BLOCK_THRESHOLD;
 }
 
 function findAnchorFromEvent(e: MouseEvent): HTMLAnchorElement | null {
@@ -697,7 +702,8 @@ window.addEventListener(
       return buildClickContextFromEvents({ down: downForClick, click });
     })();
 
-    const { cds, reasonCodes } = computeCDS(ctx);
+    const cdsResult = computeCDS(ctx);
+    const { cds, reasonCodes: cdsReasons } = cdsResult;
     const mode: Mode = settings.defaultMode;
     const pointer = isKeyboardActivation
       ? undefined
@@ -721,16 +727,6 @@ window.addEventListener(
             meta: e.metaKey
           };
 
-    const token = makeToken({
-      siteKey: siteKeyFromLocation(),
-      frameKey: frameKey(),
-      mode,
-      pointer,
-      cds,
-      reasonCodes
-    });
-    setActiveToken(token);
-
     const explicitNewTab = !!ctx.explicitNewTabIntent;
     const anchor = findAnchorFromEvent(e);
     const anchorTarget = (anchor?.target ?? "").toLowerCase();
@@ -741,28 +737,72 @@ window.addEventListener(
       ? isAllowlisted(allowlist, siteKeyFromLocation(), parsed.host)
       : false;
 
+    const currentDownId = downForClick ? downForClick.ts : performance.now();
+    if (currentDownId !== gestureDownId) {
+      gestureDownId = currentDownId;
+      gestureNavAttempts = 0;
+    }
+    gestureNavAttempts++;
+
+    const siteRegDomain = getRegistrableDomain(siteKeyFromLocation());
+    const destRegDomain = parsed?.host ? getRegistrableDomain(parsed.host) : null;
+    const isCrossSite = !!(siteRegDomain && destRegDomain && siteRegDomain !== destRegDomain);
+
+    const timeSincePointerdownMs = downForClick
+      ? performance.now() - downForClick.ts
+      : undefined;
+
+    const userActivationActive = !!(navigator as any).userActivation?.isActive;
+
+    const navCtx: NavigationContext = {
+      isNewTabOrWindow: isBlankAnchor,
+      isCrossSite,
+      timeSincePointerdownMs,
+      userActivationActive,
+      multipleAttemptsInGesture: gestureNavAttempts > 1,
+      destinationAllowlisted: isAllowed,
+      explicitNewTabIntent: explicitNewTab,
+    };
+
+    const nrsResult = computeNRS(cdsResult, navCtx);
+    const { nrs, reasonCodes, nrsFactors } = nrsResult;
+
+    const token = makeToken({
+      siteKey: siteKeyFromLocation(),
+      frameKey: frameKey(),
+      mode,
+      pointer,
+      cds,
+      reasonCodes
+    });
+    setActiveToken(token);
+
     let decision: "allow" | "prompt" | "block" = "allow";
-    const blockThreshold = getBlockThreshold(mode);
+    const blockThreshold = getNrsBlockThreshold(mode);
     const smartAllowsBlank =
-      mode === "smart" && !!anchor && isLegitBlankAnchor(anchor, ctx, cds, reasonCodes);
+      mode === "smart" && !!anchor && isLegitBlankAnchor(anchor, ctx, cds, cdsReasons);
 
     if (mode !== "off") {
       if (isBlankAnchor && !isAllowed && !explicitNewTab && !smartAllowsBlank) {
-        decision = "prompt";
+        if (nrs >= blockThreshold) {
+          decision = "block";
+        } else {
+          decision = "prompt";
+        }
         e.preventDefault();
         e.stopImmediatePropagation();
         if (parsed?.href) {
           showAllowPrompt({
-            title: "Blocked new tab",
+            title: decision === "block" ? "Blocked new tab" : "Suspicious new tab",
             url: parsed.href,
             host: parsed.host,
             target: "_blank",
-            promptScore: cds
+            promptScore: nrs
           });
         } else {
-          showToast({ message: "NavSentinel blocked a new tab navigation." });
+          showToast({ message: `NavSentinel blocked a new tab navigation (NRS=${nrs}).` });
         }
-      } else if (!isBlankAnchor && cds >= blockThreshold) {
+      } else if (!isBlankAnchor && nrs >= blockThreshold) {
         decision = "block";
         e.preventDefault();
         e.stopImmediatePropagation();
@@ -770,16 +810,16 @@ window.addEventListener(
           kind: "nav_click_block",
           site: siteKeyFromLocation(),
           url: location.href,
-          score: cds,
+          score: nrs,
           reasons: reasonCodes
         });
         appendOutcomeSafely({
           domain: siteKeyFromLocation(),
           type: "nav",
-          score: cds,
+          score: nrs,
           outcome: "block"
         });
-        showToast({ message: `NavSentinel blocked deceptive click (CDS=${cds}).` });
+        showToast({ message: `NavSentinel blocked deceptive click (NRS=${nrs}, CDS=${cds}).` });
       }
     }
 
@@ -795,11 +835,11 @@ window.addEventListener(
       });
     }
 
-    lastDebug = { mode, decision, cds, reasonCodes, ctx };
+    lastDebug = { mode, decision, cds, nrs, reasonCodes, nrsFactors, ctx };
     refreshDebug();
 
     if (settings.debug) {
-      console.debug("[NavSentinel] click", { decision, cds, reasonCodes, ctx });
+      console.debug("[NavSentinel] click", { decision, nrs, cds, reasonCodes, nrsFactors, ctx });
     }
   },
   true
