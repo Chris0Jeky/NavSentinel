@@ -67,6 +67,10 @@ async function startSnapshotServer(): Promise<SnapshotServer> {
       }
 
       res.setHeader("content-type", "text/html; charset=utf-8");
+      res.setHeader(
+        "content-security-policy",
+        "default-src 'self' 'unsafe-inline'; connect-src 'none'; form-action 'none'; frame-src 'none';"
+      );
       res.statusCode = 200;
       res.end(fs.readFileSync(filepath));
     } catch {
@@ -165,8 +169,8 @@ interface PageResult {
   url: string;
   source: string;
   detected: boolean;
-  events: Array<{ kind?: string; score?: number }>;
-  error?: string;
+  events: Array<{ kind?: string | undefined; score?: number | undefined }>;
+  error?: string | undefined;
 }
 
 // ── Main test ──────────────────────────────────────────────────────
@@ -205,8 +209,7 @@ test("Phishing corpus validation @corpus", async () => {
       // Wait for service worker to be ready
       await getServiceWorker(context);
 
-      for (let i = 0; i < testable.length; i++) {
-        const entry = testable[i];
+      for (const [i, entry] of testable.entries()) {
         const pageUrl = `${server.baseUrl}/${entry.filename}`;
 
         console.log(`  [${i + 1}/${testable.length}] ${entry.source}: ${entry.url}`);
@@ -215,6 +218,7 @@ test("Phishing corpus validation @corpus", async () => {
           await clearEventLog(context);
 
           const page = await context.newPage();
+          page.on("dialog", (d) => d.dismiss().catch(() => {}));
           try {
             await page.goto(pageUrl, {
               waitUntil: "domcontentloaded",

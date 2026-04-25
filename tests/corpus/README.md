@@ -27,7 +27,7 @@ node scripts/fetch-phishing-corpus.mjs --limit 100
 node scripts/fetch-phishing-corpus.mjs --dry-run
 
 # Run the corpus validation test
-npm run test:corpus
+npm run test:e2e:corpus
 ```
 
 ## Files
