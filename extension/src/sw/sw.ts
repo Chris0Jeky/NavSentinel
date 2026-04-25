@@ -6,12 +6,14 @@ const NAV_GESTURE_TTL_MS = 1500;
 const NAV_TARGET_ALLOW_TTL_MS = 10000;
 const ROLLBACK_SUPPRESS_MS = 6000;
 const ROLLBACK_RETURN_TTL_MS = 5000;
+const TYPED_ORIGIN_TTL_MS = 5_000;
 
 const allowUntilByTab = new Map<number, number>();
 const gestureUntilByTab = new Map<number, number>();
 const allowStartedByTab = new Map<number, string>();
 const allowTargetByTab = new Map<number, { url: string; expiresAt: number }>();
 const suppressUntilByTab = new Map<number, number>();
+const typedOriginByTab = new Map<number, number>();
 const readyTabs = new Set<number>();
 const pendingRollbackByTab = new Map<number, { url: string; prevUrl?: string; qualifiers: string[] }>();
 const pendingForwardByTab = new Map<number, { url: string; ts: number; returnUrl?: string }>();
@@ -265,8 +267,18 @@ chrome.webNavigation.onCommitted.addListener((details) => {
     qualifiers.includes("from_address_bar");
   const isLinkish = details.transitionType === "link";
 
+  if (isUserTyped && !isRedirect) {
+    typedOriginByTab.set(details.tabId, now);
+  } else if (!isRedirect) {
+    typedOriginByTab.delete(details.tabId);
+  }
+
   if (isUserTyped) return;
   if (!isRedirect && !isLinkish) return;
+
+  const typedOriginTs = typedOriginByTab.get(details.tabId) ?? 0;
+  const fromTypedOrigin = isRedirect && now - typedOriginTs < TYPED_ORIGIN_TTL_MS;
+  if (fromTypedOrigin) return;
 
   const allowUntil = allowUntilByTab.get(details.tabId) ?? 0;
   const startedUrl = allowStartedByTab.get(details.tabId);
@@ -314,6 +326,7 @@ chrome.webNavigation.onErrorOccurred?.addListener((details) => {
   clearPendingTabState(details.tabId, { preserveForwardOffer });
   rollbackReturnByTab.delete(details.tabId);
   allowStartedByTab.delete(details.tabId);
+  typedOriginByTab.delete(details.tabId);
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
@@ -323,6 +336,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   allowTargetByTab.delete(tabId);
   suppressUntilByTab.delete(tabId);
   rollbackReturnByTab.delete(tabId);
+  typedOriginByTab.delete(tabId);
   clearPendingTabState(tabId);
   lastUrlByTab.delete(tabId);
 });
