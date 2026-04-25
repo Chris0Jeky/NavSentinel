@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   computeNRS,
-  NRS_ALLOW_THRESHOLD,
   NRS_BLOCK_THRESHOLD,
   NRS_STRICT_BLOCK_THRESHOLD,
 } from "../extension/src/shared/nrs";
@@ -184,7 +183,7 @@ describe("computeNRS", () => {
   describe("threshold boundaries", () => {
     it("NRS < 40 is in allow range", () => {
       const result = computeNRS(baseCds(39), baseNav());
-      expect(result.nrs).toBeLessThan(NRS_ALLOW_THRESHOLD);
+      expect(result.nrs).toBeLessThan(40);
     });
 
     it("NRS = 40 is at prompt threshold", () => {
@@ -193,7 +192,7 @@ describe("computeNRS", () => {
         baseNav({ isNewTabOrWindow: true })
       );
       expect(result.nrs).toBe(40);
-      expect(result.nrs).toBeGreaterThanOrEqual(NRS_ALLOW_THRESHOLD);
+      expect(result.nrs).toBeGreaterThanOrEqual(40);
       expect(result.nrs).toBeLessThan(NRS_BLOCK_THRESHOLD);
     });
 
@@ -219,7 +218,7 @@ describe("computeNRS", () => {
     it("NRS = 69 is in prompt range (not yet block)", () => {
       const result = computeNRS(baseCds(69), baseNav());
       expect(result.nrs).toBe(69);
-      expect(result.nrs).toBeGreaterThanOrEqual(NRS_ALLOW_THRESHOLD);
+      expect(result.nrs).toBeGreaterThanOrEqual(40);
       expect(result.nrs).toBeLessThan(NRS_BLOCK_THRESHOLD);
     });
   });
@@ -244,7 +243,7 @@ describe("computeNRS", () => {
       );
       // 60 + 20 + 20 - 100 = 0
       expect(result.nrs).toBe(0);
-      expect(result.nrs).toBeLessThan(NRS_ALLOW_THRESHOLD);
+      expect(result.nrs).toBeLessThan(40);
     });
 
     it("allowlist alone cannot reduce very high combined score below block", () => {

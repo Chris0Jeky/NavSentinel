@@ -737,7 +737,7 @@ window.addEventListener(
       ? isAllowlisted(allowlist, siteKeyFromLocation(), parsed.host)
       : false;
 
-    const currentDownId = downForClick ? downForClick.ts : null;
+    const currentDownId = downForClick ? downForClick.ts : performance.now();
     if (currentDownId !== gestureDownId) {
       gestureDownId = currentDownId;
       gestureNavAttempts = 0;
@@ -793,7 +793,7 @@ window.addEventListener(
         e.stopImmediatePropagation();
         if (parsed?.href) {
           showAllowPrompt({
-            title: decision === "block" ? "Blocked new tab" : "Blocked new tab",
+            title: decision === "block" ? "Blocked new tab" : "Suspicious new tab",
             url: parsed.href,
             host: parsed.host,
             target: "_blank",
