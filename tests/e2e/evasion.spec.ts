@@ -239,19 +239,16 @@ test("Evasion 05: composite near-threshold overlay MUST be caught @regression", 
   const { page, context, cleanup } = await setupEvasionTest("evasion-05-composite.html");
 
   try {
-    // Click on the legit link area, which is UNDER the overlay.
-    // The overlay (trap) sits on top, so the click hits the trap first.
-    const legitLink = page.locator("#legit-link");
-    const linkBox = await legitLink.boundingBox();
-    expect(linkBox, "#legit-link should be visible").toBeTruthy();
+    const trap = page.locator("#trap");
+    const box = await trap.boundingBox();
+    expect(box, "#trap composite overlay should be in the DOM").toBeTruthy();
 
     const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
-    await page.mouse.click(linkBox!.x + linkBox!.width / 2, linkBox!.y + linkBox!.height / 2);
+    await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
 
     const popup = await popupPromise;
     expect(popup, "Composite evasion overlay MUST be blocked").toBeNull();
 
-    // Should show a blocking toast (either "Blocked new tab" or "blocked deceptive click")
     await waitForToastMatch(page, /Blocked new tab|blocked deceptive click/, 3000);
     await expect(page).toHaveURL(/evasion-05-composite\.html/);
   } finally {

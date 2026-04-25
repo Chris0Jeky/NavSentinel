@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Evasion 11 - Shadow DOM overlay hiding</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 24px;
+      max-width: 700px;
+    }
+    #legit-link {
+      display: inline-block;
+      padding: 14px 28px;
+      font-size: 18px;
+      background: #1a73e8;
+      color: #fff;
+      border-radius: 8px;
+      text-decoration: none;
+      position: relative;
+      z-index: 1;
+      margin-top: 12vh;
+      margin-left: 12vw;
+    }
+    /*
+     * EVASION TECHNIQUE: Shadow DOM to hide deceptive overlay content.
+     *
+     * How it works:
+     *   1. A benign-looking <div> host element sits on top of the page
+     *   2. The host has a shadow root containing a deceptive <a> overlay
+     *   3. elementsFromPoint() returns the shadow HOST, not the inner <a>
+     *   4. CDS evaluates the host: a plain <div> with no onclick, no role,
+     *      so it scores as non-interactive (0 points from most rules)
+     *
+     * Why this is an evasion:
+     *   - The shadow host is a plain <div> -- not interactive per isInteractive()
+     *   - CDS cannot see the <a> element inside the shadow root
+     *   - The <a> inside shadow DOM can have target="_blank" and href to evil
+     *   - Clicks within the shadow root propagate to the inner <a>, which
+     *     navigates to the attacker's URL
+     *
+     * Mitigation:
+     *   - composedPath() from click events DOES traverse into shadow DOM
+     *   - findAnchorFromEvent() in capture_isolated.ts uses composedPath()
+     *   - So the blank-anchor interception path SHOULD find the inner <a>
+     *   - The CDS overlay scoring misses it, but the anchor gate catches it
+     *
+     * Expected: Caught by blank-anchor gate (composedPath finds the inner <a>)
+     * but CDS overlay scoring is evaded (host looks benign).
+     *
+     * DOCUMENTED GAP: If the inner element is NOT a blank anchor (e.g., uses
+     * onclick + window.open), CDS would miss it entirely.
+     */
+  </style>
+</head>
+<body>
+  <h1>Evasion 11: Shadow DOM overlay hiding</h1>
+  <p>
+    A benign-looking <code>&lt;div&gt;</code> host element covers the page,
+    with a deceptive <code>&lt;a&gt;</code> link hidden inside its shadow root.
+    <code>elementsFromPoint()</code> returns the host (a plain div), not
+    the inner deceptive link.
+  </p>
+  <p>
+    The blank-anchor interception uses <code>composedPath()</code> which
+    traverses into shadow DOM, so this specific attack is caught. But the
+    CDS overlay scoring is completely evaded -- it only sees a benign div.
+  </p>
+
+  <a id="legit-link" href="https://example.com/safe" aria-label="Safe destination link">
+    Click here for safe content
+  </a>
+
+  <div id="shadow-host"></div>
+
+  <script>
+    (function () {
+      var host = document.getElementById("shadow-host");
+      if (!host) return;
+
+      // Style the host to cover the overlay area
+      host.style.cssText = [
+        "position: fixed",
+        "top: 10%",
+        "left: 10%",
+        "width: 54.8vw",
+        "height: 54.8vh",
+        "z-index: 9998"
+      ].join(";");
+
+      // Create shadow root with deceptive content
+      var shadow = host.attachShadow({ mode: "open" });
+      shadow.innerHTML = [
+        "<style>",
+        "  a {",
+        "    display: block;",
+        "    width: 100%;",
+        "    height: 100%;",
+        "    opacity: 0.09;",
+        "    cursor: pointer;",
+        "    text-decoration: none;",
+        "  }",
+        "</style>",
+        '<a id="trap" href="https://evil.example/evasion11" target="_blank" rel="noreferrer">',
+        "</a>"
+      ].join("\n");
+
+      // Mark as ready for test coordination
+      host.setAttribute("data-shadow-ready", "1");
+    })();
+  </script>
+</body>
+</html>

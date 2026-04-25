@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Evasion 07 - pointer-events: none bypass</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 24px;
+      max-width: 700px;
+    }
+    #legit-link {
+      display: inline-block;
+      padding: 14px 28px;
+      font-size: 18px;
+      background: #1a73e8;
+      color: #fff;
+      border-radius: 8px;
+      text-decoration: none;
+    }
+    /*
+     * Evasion technique: pointer-events: none overlay with document-level click
+     * capture that redirects the click to a malicious destination.
+     *
+     * How it works:
+     *   1. A visually deceptive overlay sits on top with pointer-events: none
+     *   2. Clicks pass through to the element underneath (legit link)
+     *   3. A capturing event listener on the document intercepts the click
+     *      and opens a malicious URL via window.open
+     *
+     * Why this evades CDS:
+     *   - elementsFromPoint() does NOT include pointer-events: none elements
+     *   - The top element in the stack is the underlying legit link
+     *   - CDS scores the legit link, which looks benign (has name, visible, etc.)
+     *   - The malicious redirect happens AFTER CDS evaluation
+     *
+     * Expected: NOT caught by CDS overlay detection. The deceptive layer
+     * is invisible to elementsFromPoint(). Detection would require monitoring
+     * document-level click listeners or window.open calls.
+     *
+     * The main_guard.ts intercept for window.open SHOULD catch this, but
+     * only if the extension's navigation guard is active.
+     */
+    #visual-trap {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(255, 0, 0, 0.03);
+      z-index: 10000;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      color: rgba(0, 0, 0, 0.05);
+    }
+  </style>
+</head>
+<body>
+  <h1>Evasion 07: pointer-events: none bypass</h1>
+  <p>
+    The visual overlay uses <code>pointer-events: none</code> so clicks pass
+    through to the underlying elements. A document-level capturing click
+    listener then opens a malicious URL via <code>window.open</code>.
+  </p>
+  <p>
+    CDS cannot see this overlay because <code>elementsFromPoint()</code>
+    skips elements with <code>pointer-events: none</code>. The deceptive
+    redirect relies on the main_guard.ts window.open intercept.
+  </p>
+
+  <a id="legit-link" href="https://example.com/safe" aria-label="Safe destination link">
+    Click here for safe content
+  </a>
+
+  <!-- Visual-only overlay: not clickable, not in elementsFromPoint -->
+  <div id="visual-trap">Win a prize! Click anywhere!</div>
+
+  <script>
+    // Attacker's document-level capture: intercepts all clicks
+    document.addEventListener("click", function (e) {
+      // Only trigger on clicks to the legit link area
+      var link = e.target && e.target.closest ? e.target.closest("#legit-link") : null;
+      if (!link) return;
+      e.preventDefault();
+      e.stopPropagation();
+      // Attempt malicious redirect via window.open
+      try {
+        window.open("https://evil.example/evasion07", "_blank");
+      } catch (err) {
+        // main_guard.ts should catch this
+      }
+    }, true); // capturing phase
+  </script>
+</body>
+</html>

@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Evasion 08 - clip-path visual hiding</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 24px;
+      max-width: 700px;
+    }
+    #legit-link {
+      display: inline-block;
+      padding: 14px 28px;
+      font-size: 18px;
+      background: #1a73e8;
+      color: #fff;
+      border-radius: 8px;
+      text-decoration: none;
+      position: relative;
+      z-index: 1;
+    }
+    /*
+     * Evasion technique: clip-path to visually hide an overlay while keeping
+     * it clickable in the DOM.
+     *
+     * How it works:
+     *   - The overlay covers the viewport but uses clip-path: inset(0 0 98% 0)
+     *     to clip it to a thin ~2% strip at the top of the viewport
+     *   - However, clip-path DOES affect hit-testing in modern browsers:
+     *     the clipped-out areas are NOT clickable
+     *   - So this is actually NOT a viable evasion technique in Chrome
+     *
+     * CDS analysis:
+     *   - elementsFromPoint() will NOT return the clipped overlay for clicks
+     *     outside the tiny visible area
+     *   - Inside the tiny visible area, it would be detected like any overlay
+     *
+     * Expected: NOT a viable evasion in Chrome (clip-path clips hit-testing)
+     * Documented to confirm this behavior and ensure no regression.
+     *
+     * Alternative technique tested: using clip-path: polygon() to create a
+     * near-invisible sliver that is technically clickable. This trades
+     * viewport coverage for stealth.
+     */
+    #trap {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 10000;
+      cursor: pointer;
+      /* Clip to a thin strip at the top -- ~2% viewport visible */
+      clip-path: inset(0 0 98% 0);
+      background: rgba(0, 0, 0, 0.01);
+    }
+  </style>
+</head>
+<body>
+  <h1>Evasion 08: clip-path visual hiding</h1>
+  <p>
+    The overlay uses <code>clip-path: inset(0 0 98% 0)</code> to clip itself
+    to only a thin strip at the top of the viewport. In Chrome, clip-path
+    affects hit-testing: clicks outside the clipped area pass through.
+  </p>
+  <p>
+    This documents that clip-path is <strong>not</strong> a viable evasion
+    for full-viewport overlays, but could be used for targeted thin-strip
+    overlays that cover navigation bars or specific UI elements.
+  </p>
+
+  <a id="legit-link" href="https://example.com/safe" aria-label="Safe destination link">
+    Click here for safe content
+  </a>
+
+  <!-- Overlay clipped to a thin strip; only that strip is clickable -->
+  <a id="trap" href="https://evil.example/evasion08" target="_blank" rel="noreferrer"></a>
+</body>
+</html>
