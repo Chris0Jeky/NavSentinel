@@ -242,23 +242,7 @@ chrome.webNavigation.onBeforeNavigate.addListener((details) => {
   }
 });
 
-const TYPED_ORIGIN_TTL_MS = 10_000;
-
-chrome.webNavigation.onCommitted.addListener((details) => {
-  if (details.frameId !== 0) return;
-  const qualifiers = details.transitionQualifiers ?? [];
-  const isUserTyped =
-    details.transitionType === "typed" ||
-    details.transitionType === "auto_bookmark" ||
-    qualifiers.includes("from_address_bar");
-  const isRedirect =
-    qualifiers.includes("client_redirect") || qualifiers.includes("server_redirect");
-  if (isUserTyped && !isRedirect) {
-    typedOriginByTab.set(details.tabId, Date.now());
-  } else if (!isRedirect) {
-    typedOriginByTab.delete(details.tabId);
-  }
-});
+const TYPED_ORIGIN_TTL_MS = 5_000;
 
 chrome.webNavigation.onCommitted.addListener((details) => {
   if (details.frameId !== 0) return;
@@ -283,6 +267,12 @@ chrome.webNavigation.onCommitted.addListener((details) => {
     details.transitionType === "auto_bookmark" ||
     qualifiers.includes("from_address_bar");
   const isLinkish = details.transitionType === "link";
+
+  if (isUserTyped && !isRedirect) {
+    typedOriginByTab.set(details.tabId, now);
+  } else if (!isRedirect) {
+    typedOriginByTab.delete(details.tabId);
+  }
 
   if (isUserTyped) return;
   if (!isRedirect && !isLinkish) return;
