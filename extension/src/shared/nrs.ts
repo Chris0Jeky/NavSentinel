@@ -3,11 +3,11 @@ import type { ScoreResult } from "./scoring";
 export interface NavigationContext {
   isNewTabOrWindow: boolean;
   isCrossSite: boolean;
-  timeSincePointerdownMs?: number;
-  userActivationActive?: boolean;
-  multipleAttemptsInGesture?: boolean;
-  destinationAllowlisted?: boolean;
-  explicitNewTabIntent?: boolean;
+  timeSincePointerdownMs?: number | undefined;
+  userActivationActive?: boolean | undefined;
+  multipleAttemptsInGesture?: boolean | undefined;
+  destinationAllowlisted?: boolean | undefined;
+  explicitNewTabIntent?: boolean | undefined;
 }
 
 export interface NRSResult {
