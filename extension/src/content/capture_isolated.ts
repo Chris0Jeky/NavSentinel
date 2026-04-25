@@ -797,7 +797,7 @@ window.addEventListener(
             url: parsed.href,
             host: parsed.host,
             target: "_blank",
-            promptScore: cds
+            promptScore: nrs
           });
         } else {
           showToast({ message: `NavSentinel blocked a new tab navigation (NRS=${nrs}).` });
