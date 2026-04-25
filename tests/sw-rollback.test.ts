@@ -1180,4 +1180,91 @@ describe("service worker rollback gating", () => {
 
     expect(response.shouldRollback).toBe(true);
   });
+
+  it("enforces absolute deadline cap on long redirect chains (15s max)", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+
+    mock.emitCommitted({
+      tabId: 64,
+      frameId: 0,
+      url: "https://example.test/typed",
+      transitionType: "typed",
+      transitionQualifiers: []
+    });
+
+    vi.setSystemTime(new Date("2026-03-17T12:00:04.500Z"));
+    mock.emitCommitted({
+      tabId: 64,
+      frameId: 0,
+      url: "https://hop1.test/redirect",
+      transitionType: "link",
+      transitionQualifiers: ["server_redirect"]
+    });
+
+    vi.setSystemTime(new Date("2026-03-17T12:00:09.000Z"));
+    mock.emitCommitted({
+      tabId: 64,
+      frameId: 0,
+      url: "https://hop2.test/redirect",
+      transitionType: "link",
+      transitionQualifiers: ["server_redirect"]
+    });
+
+    vi.setSystemTime(new Date("2026-03-17T12:00:13.500Z"));
+    mock.emitCommitted({
+      tabId: 64,
+      frameId: 0,
+      url: "https://hop3.test/redirect",
+      transitionType: "link",
+      transitionQualifiers: ["server_redirect"]
+    });
+
+    // T=18s: within 5s sliding window of hop3 (T=13.5s) but past 15s absolute deadline
+    vi.setSystemTime(new Date("2026-03-17T12:00:18.000Z"));
+    mock.emitCommitted({
+      tabId: 64,
+      frameId: 0,
+      url: "https://evil.test/final",
+      transitionType: "link",
+      transitionQualifiers: ["server_redirect"]
+    });
+
+    const response = mock.dispatchRuntimeMessage({ type: "ns-check-rollback" }, { tab: { id: 64 } }) as {
+      shouldRollback: boolean;
+    };
+
+    expect(response.shouldRollback).toBe(true);
+  });
+
+  it("exempts same-domain redirect with expired gesture (registrable-domain check)", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+
+    mock.emitCommitted({
+      tabId: 65,
+      frameId: 0,
+      url: "https://www.example.test/home",
+      transitionType: "typed",
+      transitionQualifiers: []
+    });
+
+    // Well past typed-origin window (11s > 5s TTL)
+    vi.setSystemTime(new Date("2026-03-17T12:00:11.000Z"));
+    mock.emitCommitted({
+      tabId: 65,
+      frameId: 0,
+      url: "https://www.example.test/login",
+      transitionType: "link",
+      transitionQualifiers: ["server_redirect"]
+    });
+
+    const response = mock.dispatchRuntimeMessage({ type: "ns-check-rollback" }, { tab: { id: 65 } }) as {
+      shouldRollback: boolean;
+    };
+
+    expect(response.shouldRollback).toBe(false);
+  });
 });

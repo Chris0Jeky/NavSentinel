@@ -330,6 +330,7 @@ function callNativeOpen(
   return nativeOpen.call(thisArg, url as any, target, features);
 }
 
+// Subframes are exempt: the SW's onCommitted (frameId === 0) handles top-level nav decisions.
 function isSubframe(): boolean {
   try {
     return window.top !== window;

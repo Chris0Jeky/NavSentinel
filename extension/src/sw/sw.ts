@@ -8,13 +8,14 @@ const NAV_TARGET_ALLOW_TTL_MS = 10000;
 const ROLLBACK_SUPPRESS_MS = 6000;
 const ROLLBACK_RETURN_TTL_MS = 5000;
 const TYPED_ORIGIN_TTL_MS = 5_000;
+const TYPED_ORIGIN_MAX_MS = 15_000;
 
 const allowUntilByTab = new Map<number, number>();
 const gestureUntilByTab = new Map<number, number>();
 const allowStartedByTab = new Map<number, string>();
 const allowTargetByTab = new Map<number, { url: string; expiresAt: number }>();
 const suppressUntilByTab = new Map<number, number>();
-const typedOriginByTab = new Map<number, number>();
+const typedOriginByTab = new Map<number, { ts: number; deadline: number }>();
 const readyTabs = new Set<number>();
 const pendingRollbackByTab = new Map<number, { url: string; prevUrl?: string; qualifiers: string[] }>();
 const pendingForwardByTab = new Map<number, { url: string; ts: number; returnUrl?: string }>();
@@ -268,10 +269,10 @@ chrome.webNavigation.onCommitted.addListener((details) => {
     qualifiers.includes("from_address_bar");
   const isLinkish = details.transitionType === "link";
 
-  const typedOriginTs = typedOriginByTab.get(details.tabId) ?? 0;
+  const typedOriginEntry = typedOriginByTab.get(details.tabId);
 
   if (isUserTyped && !isRedirect) {
-    typedOriginByTab.set(details.tabId, now);
+    typedOriginByTab.set(details.tabId, { ts: now, deadline: now + TYPED_ORIGIN_MAX_MS });
   } else if (!isRedirect) {
     typedOriginByTab.delete(details.tabId);
   }
@@ -279,25 +280,28 @@ chrome.webNavigation.onCommitted.addListener((details) => {
   if (isUserTyped) return;
   if (!isRedirect && !isLinkish) return;
 
-  const inTypedOriginWindow = now - typedOriginTs < TYPED_ORIGIN_TTL_MS;
+  const inTypedOriginWindow = typedOriginEntry != null
+    && now - typedOriginEntry.ts < TYPED_ORIGIN_TTL_MS
+    && now < typedOriginEntry.deadline;
   if (inTypedOriginWindow) {
     if (isRedirect) {
-      typedOriginByTab.set(details.tabId, now);
+      typedOriginByTab.set(details.tabId, { ts: now, deadline: typedOriginEntry.deadline });
     }
     return;
   }
 
   if (prevUrl) {
     try {
-      const prevHost = new URL(prevUrl).hostname.toLowerCase();
-      const curHost = new URL(details.url).hostname.toLowerCase();
-      if (prevHost && curHost) {
-        const prevReg = getRegistrableDomain(prevHost);
-        const curReg = getRegistrableDomain(curHost);
+      const prevUrlObj = new URL(prevUrl);
+      const curUrlObj = new URL(details.url);
+      const isHttp = (p: string) => p === "http:" || p === "https:";
+      if (isHttp(prevUrlObj.protocol) && isHttp(curUrlObj.protocol)) {
+        const prevReg = getRegistrableDomain(prevUrlObj.hostname.toLowerCase());
+        const curReg = getRegistrableDomain(curUrlObj.hostname.toLowerCase());
         if (prevReg && curReg && prevReg === curReg) return;
       }
-    } catch {
-      // invalid URL, continue with normal checks
+    } catch (err) {
+      console.warn("[NavSentinel] same-domain check failed", err);
     }
   }
 
