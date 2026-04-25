@@ -636,12 +636,39 @@ window.addEventListener(
   true
 );
 
+function findSuspiciousShadowAnchor(e: MouseEvent): HTMLAnchorElement | null {
+  const path = e.composedPath();
+  for (const node of path) {
+    if (!(node instanceof HTMLAnchorElement)) continue;
+    if (node.target.toLowerCase() !== "_blank") continue;
+    if (!(node.getRootNode() instanceof ShadowRoot)) continue;
+    const nameLen = textLength(node) + attrLength(node, "aria-label") + attrLength(node, "title");
+    if (nameLen > 0 && hasVisibleBox(node)) continue;
+    return node;
+  }
+  return null;
+}
+
 window.addEventListener(
   "click",
   (event) => {
     if (!(event instanceof MouseEvent)) return;
     maybeArmPopupIntent(event);
     maybeArmPopupIntent(event, { keyboardOnly: true });
+
+    if (mode !== "off" && event.isTrusted) {
+      const shadowAnchor = findSuspiciousShadowAnchor(event);
+      if (shadowAnchor) {
+        event.preventDefault();
+        const href = shadowAnchor.href;
+        registerBlockedAction({
+          kind: "shadow_anchor",
+          url: href,
+          target: "_blank",
+          action: () => callNativeOpen(window, href, "_blank")
+        });
+      }
+    }
   },
   true
 );

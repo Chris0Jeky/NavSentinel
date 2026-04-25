@@ -219,7 +219,9 @@ function handleBridgeMessage(message: unknown): void {
         ? "Blocked redirect"
         : data.kind === "form_submit" || data.kind === "form_request_submit"
           ? "Blocked form submit"
-          : "Blocked popup";
+          : data.kind === "shadow_anchor"
+            ? "Blocked new tab"
+            : "Blocked popup";
 
     showAllowPrompt({
       title,
