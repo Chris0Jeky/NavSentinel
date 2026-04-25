@@ -33,7 +33,7 @@ const MANIFEST_PATH = path.resolve(CORPUS_DIR, "manifest.json");
 
 const OPENPHISH_FEED_URL = "https://openphish.com/feed.txt";
 const PHISHTANK_FEED_URL =
-  "http://data.phishtank.com/data/online-valid.json";
+  "https://data.phishtank.com/data/online-valid.json";
 
 // ── Argument parsing ───────────────────────────────────────────────
 
@@ -89,16 +89,19 @@ Options:
 
 // ── HTTP helpers ───────────────────────────────────────────────────
 
+const USER_AGENT = "NavSentinel-CorpusFetcher/1.0 (security-research; https://github.com/Chris0Jeky/NavSentinel)";
+
 /**
  * Fetch a URL via HTTP or HTTPS, following up to maxRedirects redirects.
- * Returns the final response body as a string.
+ * Returns the final response body as a Buffer.
  */
 function fetchUrl(url, timeoutMs = 15_000, maxRedirects = 5) {
   return new Promise((resolve, reject) => {
     const attempt = (currentUrl, remaining) => {
       const mod = currentUrl.startsWith("https:") ? https : http;
+      const reqOpts = { timeout: timeoutMs, headers: { "user-agent": USER_AGENT } };
 
-      const req = mod.get(currentUrl, { timeout: timeoutMs }, (res) => {
+      const req = mod.get(currentUrl, reqOpts, (res) => {
         if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
           if (remaining <= 0) {
             reject(new Error(`Too many redirects fetching ${url}`));
@@ -117,7 +120,7 @@ function fetchUrl(url, timeoutMs = 15_000, maxRedirects = 5) {
 
         const chunks = [];
         res.on("data", (chunk) => chunks.push(chunk));
-        res.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
+        res.on("end", () => resolve(Buffer.concat(chunks)));
         res.on("error", reject);
       });
 
@@ -132,14 +135,14 @@ function fetchUrl(url, timeoutMs = 15_000, maxRedirects = 5) {
 }
 
 /**
- * Download just the HTML body of a URL. Returns null on any error.
+ * Download the raw HTML of a URL as a Buffer. Returns null on any error.
+ * Preserving the original encoding avoids mangling non-UTF-8 phishing pages.
  */
 async function downloadPage(url, timeoutMs) {
   try {
-    const body = await fetchUrl(url, timeoutMs, 3);
-    // Basic validation: must look like HTML
-    if (!body || body.length < 20) return null;
-    return body;
+    const buf = await fetchUrl(url, timeoutMs, 3);
+    if (!buf || buf.length < 20) return null;
+    return buf;
   } catch {
     return null;
   }
@@ -153,8 +156,8 @@ async function downloadPage(url, timeoutMs) {
 async function fetchOpenPhishUrls() {
   console.log("Fetching OpenPhish feed...");
   try {
-    const body = await fetchUrl(OPENPHISH_FEED_URL, 30_000);
-    const urls = body
+    const buf = await fetchUrl(OPENPHISH_FEED_URL, 30_000);
+    const urls = buf.toString("utf-8")
       .split("\n")
       .map((l) => l.trim())
       .filter((l) => l.startsWith("http"));
@@ -175,10 +178,10 @@ async function fetchOpenPhishUrls() {
 async function fetchPhishTankUrls() {
   console.log("Fetching PhishTank feed...");
   try {
-    const body = await fetchUrl(PHISHTANK_FEED_URL, 60_000);
+    const buf = await fetchUrl(PHISHTANK_FEED_URL, 60_000);
     let entries;
     try {
-      entries = JSON.parse(body);
+      entries = JSON.parse(buf.toString("utf-8"));
     } catch {
       console.warn("  PhishTank: failed to parse JSON response");
       return [];
@@ -283,19 +286,19 @@ async function main() {
       `  [${i + 1}/${selected.length}] ${entry.source}: ${truncateUrl(entry.url, 60)} ... `
     );
 
-    const html = await downloadPage(entry.url, opts.timeout);
+    const buf = await downloadPage(entry.url, opts.timeout);
 
-    if (html) {
-      fs.writeFileSync(filepath, html, "utf-8");
+    if (buf) {
+      fs.writeFileSync(filepath, buf);
       downloaded++;
-      console.log(`OK (${(html.length / 1024).toFixed(1)} KB)`);
+      console.log(`OK (${(buf.length / 1024).toFixed(1)} KB)`);
 
       manifest.push({
         filename,
         url: entry.url,
         source: entry.source,
         fetchDate: new Date().toISOString(),
-        sizeBytes: html.length,
+        sizeBytes: buf.length,
       });
     } else {
       failed++;
