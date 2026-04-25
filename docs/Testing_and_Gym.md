@@ -21,6 +21,9 @@ npm run test:e2e:smoke
 npm run test:e2e:regression
 npm run test:e2e:rollback
 npm run test:e2e:live
+npm run test:e2e:stress
+npm run test:e2e:corpus
+npm run measure:fp
 npm run demo:showcase
 npm run demo:showcase:record
 ```
@@ -49,14 +52,24 @@ Current unit coverage lives in:
 - `tests/popup-model.test.ts`
 - `tests/storage-suite.test.ts`
 - `tests/sw-rollback.test.ts`
+- `tests/psl-domain.test.ts`
+- `tests/nrs.test.ts`
+- `tests/scoring.property.test.ts`
+- `tests/statemachine-timing.test.ts`
+- `tests/prompt-telemetry.test.ts`
 
 These currently cover:
 
 - trusted-domain normalization and registrable-domain handling
+- PSL-based domain extraction for cloud-hosted and multi-part TLDs
 - credential-risk heuristics and model behavior
 - popup event formatting and limit handling
 - storage import/export, settings migration, and normalization paths
 - service-worker rollback, gesture-window, and target-allowance behavior
+- NRS computation, navigation factors, and CDS layering
+- property-based scoring tests (monotonicity, bounds, gradient continuity)
+- state machine timing edge cases (token expiry, window boundaries)
+- prompt telemetry recording, statistics, and bounded storage
 
 ### Playwright E2E
 
@@ -65,6 +78,9 @@ Current E2E coverage lives in:
 - `tests/e2e/navsentinel.spec.ts`
 - `tests/e2e/credential-guard.spec.ts`
 - `tests/e2e/suite-ui.spec.ts`
+- `tests/e2e/evasion.spec.ts`
+- `tests/e2e/navsentinel.stress.spec.ts`
+- `tests/e2e/corpus-validation.spec.ts`
 
 It currently covers:
 
@@ -118,6 +134,12 @@ Current lane intent:
   - rollback/recovery behavior that is deterministic enough to run regularly but still separate from the default lane
 - `npm run test:e2e:live`
   - live-web sanity checks only
+- `npm run test:e2e:stress`
+  - timing edge cases, state isolation, and worker lifecycle scenarios
+- `npm run test:e2e:corpus`
+  - validation against real phishing page snapshots (requires local download via `node scripts/fetch-phishing-corpus.mjs`)
+- `npm run measure:fp`
+  - false positive measurement against Tranco top-1000 sites
 - `npm run demo:showcase`
   - stable guided headed walkthrough of the merged-main `core` demo variant
 - `npm run demo:showcase:operator`
@@ -192,15 +214,37 @@ Current pages:
 - `gym/rw23-multi-tab-prompts.html` (+ `rw23-tab-a.html`, `rw23-tab-a-popup.html`, `rw23-tab-b.html`, `rw23-tab-b-popup.html`)
 - `gym/rw24-idle-resume-popup.html` (+ `rw24-stale-popup.html`)
 - `gym/rw25-rapid-close-reopen.html` (+ `rw25-churn-popup.html`, `rw25-exfil-popup.html`)
+- `gym/evasion-01-opacity-009.html` through `gym/evasion-11-shadow-dom.html` (CDS evasion red-team fixtures)
 
 Every current primitive Gym level has a dedicated automated path, and the real-world scenario waves
 are continuing to land alongside those primitives.
+
+### Evasion red-team lane
+
+CDS evasion fixtures test gradient scoring and composite escalation against near-threshold signals:
+opacity just above threshold, viewport coverage just below, labeled overlays, z-index boundaries,
+composite multi-signal evasion, delayed injection, pointer-events bypass, clip-path hiding,
+filter opacity, transform scale, and shadow DOM hiding.
+Run with the default E2E lane. Tests: `tests/e2e/evasion.spec.ts`.
 
 ### Stress lane
 
 The stress lane exercises timing edge cases, state isolation, and worker lifecycle scenarios.
 Run with `npm run test:e2e:stress`. Config: `playwright.stress.config.ts`.
 Tests: `tests/e2e/navsentinel.stress.spec.ts`.
+
+### Phishing corpus lane
+
+Tests NavSentinel against HTML snapshots of real phishing pages downloaded from OpenPhish
+and PhishTank feeds. Measures true positive and false negative rates. Requires local
+snapshot download before running.
+Run with `npm run test:e2e:corpus`. Config: `playwright.corpus.config.ts`.
+Tests: `tests/e2e/corpus-validation.spec.ts`.
+
+### False positive measurement
+
+Visits Tranco top-1000 sites with NavSentinel loaded to measure false positive rate.
+Run with `npm run measure:fp`. Script: `scripts/measure-fp.mjs`.
 
 ## Effective manual testing workflow
 
@@ -242,7 +286,7 @@ Tests: `tests/e2e/navsentinel.stress.spec.ts`.
 
 ## CI expectations
 
-CI currently runs:
+CI currently runs on every PR:
 
 - `npm run verify:versions`
 - `npm run typecheck`
@@ -250,6 +294,9 @@ CI currently runs:
 - `npm run build`
 - `npm run package:ext`
 - `xvfb-run -a npm run test:e2e`
+
+The stress lane (`npm run test:e2e:stress`) runs on a nightly schedule.
+The corpus and FP measurement lanes run manually (they require local data).
 
 If E2E fails in CI, check these first:
 
@@ -262,6 +309,7 @@ If E2E fails in CI, check these first:
 
 From the testing perspective, the clearest next steps are:
 
-- continue the real-world adversarial program beyond the first seeded scenarios
-- add a heavier stress lane for worker churn, repeated popup bursts, and delayed navigation chains
-- add lower-cost property/state tests for scoring, DOM hint building, and tab-scoped worker policy
+- run the FP measurement against Tranco top-1000 and record baseline rate (infrastructure exists, actual run pending)
+- run the phishing corpus validation to establish baseline TP/FN rates
+- add gym fixtures for Phase 2 detections (DoubleClickjacking, ClickFix, redirect chains, DOM mutation)
+- build competitive benchmark suite comparing NavSentinel against Safe Browsing alone
