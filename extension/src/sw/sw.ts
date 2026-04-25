@@ -1,3 +1,4 @@
+import { getRegistrableDomain } from "../shared/domain";
 import { getNavSettings, SUITE_SETTINGS_KEY } from "../shared/storage";
 
 const BASELINE_RULESET_ID = "baseline";
@@ -267,6 +268,8 @@ chrome.webNavigation.onCommitted.addListener((details) => {
     qualifiers.includes("from_address_bar");
   const isLinkish = details.transitionType === "link";
 
+  const typedOriginTs = typedOriginByTab.get(details.tabId) ?? 0;
+
   if (isUserTyped && !isRedirect) {
     typedOriginByTab.set(details.tabId, now);
   } else if (!isRedirect) {
@@ -276,9 +279,27 @@ chrome.webNavigation.onCommitted.addListener((details) => {
   if (isUserTyped) return;
   if (!isRedirect && !isLinkish) return;
 
-  const typedOriginTs = typedOriginByTab.get(details.tabId) ?? 0;
-  const fromTypedOrigin = isRedirect && now - typedOriginTs < TYPED_ORIGIN_TTL_MS;
-  if (fromTypedOrigin) return;
+  const inTypedOriginWindow = now - typedOriginTs < TYPED_ORIGIN_TTL_MS;
+  if (inTypedOriginWindow) {
+    if (isRedirect) {
+      typedOriginByTab.set(details.tabId, now);
+    }
+    return;
+  }
+
+  if (prevUrl) {
+    try {
+      const prevHost = new URL(prevUrl).hostname.toLowerCase();
+      const curHost = new URL(details.url).hostname.toLowerCase();
+      if (prevHost && curHost) {
+        const prevReg = getRegistrableDomain(prevHost);
+        const curReg = getRegistrableDomain(curHost);
+        if (prevReg && curReg && prevReg === curReg) return;
+      }
+    } catch {
+      // invalid URL, continue with normal checks
+    }
+  }
 
   const allowUntil = allowUntilByTab.get(details.tabId) ?? 0;
   const startedUrl = allowStartedByTab.get(details.tabId);

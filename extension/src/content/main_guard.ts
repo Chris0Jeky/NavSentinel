@@ -330,13 +330,21 @@ function callNativeOpen(
   return nativeOpen.call(thisArg, url as any, target, features);
 }
 
+function isSubframe(): boolean {
+  try {
+    return window.top !== window;
+  } catch {
+    return true;
+  }
+}
+
 function patchedOpen(
   this: Window,
   url?: string | URL,
   target?: string,
   features?: string
 ): Window | null {
-  if (isOff()) {
+  if (isOff() || isSubframe()) {
     postAllowed({ kind: "window_open", ...(url !== undefined ? { url: String(url) } : {}) });
     return callNativeOpen(this, url, target, features);
   }
@@ -377,7 +385,7 @@ function resolveFormAction(form: HTMLFormElement): string | undefined {
 
 function patchLocation(): void {
   const patchedAssign = function (this: Location, url: string | URL): void {
-    if (isOff()) {
+    if (isOff() || isSubframe()) {
       postAllowed({ kind: "location_assign", url: String(url) });
       notifyAllowedTarget(url);
       nativeAssign.call(this, url);
@@ -400,7 +408,7 @@ function patchLocation(): void {
   };
 
   const patchedReplace = function (this: Location, url: string | URL): void {
-    if (isOff()) {
+    if (isOff() || isSubframe()) {
       postAllowed({ kind: "location_replace", url: String(url) });
       notifyAllowedTarget(url);
       nativeReplace.call(this, url);
@@ -476,7 +484,7 @@ function patchLocation(): void {
 function patchForms(): void {
   HTMLFormElement.prototype.submit = function (): void {
     const actionUrl = resolveFormAction(this);
-    if (isOff()) {
+    if (isOff() || isSubframe()) {
       postAllowed({ kind: "form_submit", ...(actionUrl !== undefined ? { url: actionUrl } : {}) });
       notifyAllowedTarget(actionUrl);
       nativeFormSubmit.call(this);
@@ -501,7 +509,7 @@ function patchForms(): void {
   if (nativeFormRequestSubmit) {
     HTMLFormElement.prototype.requestSubmit = function (submitter?: HTMLElement | null): void {
       const actionUrl = resolveFormAction(this);
-      if (isOff()) {
+      if (isOff() || isSubframe()) {
         postAllowed({
           kind: "form_request_submit",
           ...(actionUrl !== undefined ? { url: actionUrl } : {})

@@ -258,7 +258,7 @@ describe("service worker rollback gating", () => {
     mock.dispatchRuntimeMessage(
       {
         type: "ns-allow-target-nav",
-        url: "https://example.test/allowed-target",
+        url: "https://target.test/allowed",
         ttlMs: 10_000
       },
       { tab: { id: 15 } }
@@ -268,7 +268,7 @@ describe("service worker rollback gating", () => {
     mock.emitCommitted({
       tabId: 15,
       frameId: 0,
-      url: "https://example.test/other",
+      url: "https://other.test/page",
       transitionType: "link",
       transitionQualifiers: []
     });
@@ -277,7 +277,7 @@ describe("service worker rollback gating", () => {
     mock.emitCommitted({
       tabId: 15,
       frameId: 0,
-      url: "https://example.test/allowed-target",
+      url: "https://target.test/allowed",
       transitionType: "link",
       transitionQualifiers: []
     });
@@ -289,7 +289,7 @@ describe("service worker rollback gating", () => {
 
     expect(response.shouldRollback).toBe(true);
     expect(response.entry?.allowedAtCommit).toBe(false);
-    expect(response.entry?.url).toBe("https://example.test/allowed-target");
+    expect(response.entry?.url).toBe("https://target.test/allowed");
   });
 
   it("retains the previous top-frame URL from a typed commit for later rollback", async () => {
@@ -309,7 +309,7 @@ describe("service worker rollback gating", () => {
     mock.emitCommitted({
       tabId: 19,
       frameId: 0,
-      url: "https://example.test/redirected",
+      url: "https://evil.test/redirected",
       transitionType: "link",
       transitionQualifiers: ["client_redirect"]
     });
@@ -344,12 +344,12 @@ describe("service worker rollback gating", () => {
     mock.emitBeforeNavigate({
       tabId: 23,
       frameId: 0,
-      url: "https://example.test/redirected"
+      url: "https://evil.test/redirected"
     });
     mock.emitCommitted({
       tabId: 23,
       frameId: 0,
-      url: "https://example.test/redirected",
+      url: "https://evil.test/redirected",
       transitionType: "link",
       transitionQualifiers: ["client_redirect"]
     });
@@ -363,7 +363,7 @@ describe("service worker rollback gating", () => {
         tabId: 23,
         message: {
           type: "ns-rollback",
-          url: "https://example.test/redirected",
+          url: "https://evil.test/redirected",
           prevUrl: "https://example.test/origin",
           qualifiers: ["client_redirect"]
         }
@@ -388,7 +388,7 @@ describe("service worker rollback gating", () => {
     mock.emitCommitted({
       tabId: 24,
       frameId: 0,
-      url: "https://example.test/redirected",
+      url: "https://evil.test/redirected",
       transitionType: "link",
       transitionQualifiers: ["client_redirect"]
     });
@@ -413,7 +413,7 @@ describe("service worker rollback gating", () => {
 
     expect(rollback.shouldRollback).toBe(false);
     expect(forward.status).toBe("offer");
-    expect(forward.url).toBe("https://example.test/redirected");
+    expect(forward.url).toBe("https://evil.test/redirected");
 
     const consumedForward = mock.dispatchRuntimeMessage(
       { type: "ns-check-forward", currentUrl: "https://example.test/origin" },
@@ -440,7 +440,7 @@ describe("service worker rollback gating", () => {
     mock.emitCommitted({
       tabId: 27,
       frameId: 0,
-      url: "https://example.test/redirected",
+      url: "https://evil.test/redirected",
       transitionType: "link",
       transitionQualifiers: ["client_redirect"]
     });
@@ -463,7 +463,7 @@ describe("service worker rollback gating", () => {
     ) as { status?: string; url?: string };
 
     expect(queuedForward.status).toBe("offer");
-    expect(queuedForward.url).toBe("https://example.test/redirected");
+    expect(queuedForward.url).toBe("https://evil.test/redirected");
     expect(mock.sentMessages).toEqual([]);
   });
 
@@ -484,7 +484,7 @@ describe("service worker rollback gating", () => {
     mock.emitCommitted({
       tabId: 29,
       frameId: 0,
-      url: "https://example.test/redirected",
+      url: "https://evil.test/redirected",
       transitionType: "link",
       transitionQualifiers: ["client_redirect"]
     });
@@ -501,7 +501,7 @@ describe("service worker rollback gating", () => {
     mock.emitErrorOccurred({
       tabId: 29,
       frameId: 0,
-      url: "https://example.test/redirected"
+      url: "https://evil.test/redirected"
     });
 
     const forward = mock.dispatchRuntimeMessage(
@@ -510,7 +510,7 @@ describe("service worker rollback gating", () => {
     ) as { status?: string; url?: string };
 
     expect(forward.status).toBe("offer");
-    expect(forward.url).toBe("https://example.test/redirected");
+    expect(forward.url).toBe("https://evil.test/redirected");
   });
 
   it("does not surface a forward offer while already on the forward URL", async () => {
@@ -1032,6 +1032,149 @@ describe("service worker rollback gating", () => {
     });
 
     const response = mock.dispatchRuntimeMessage({ type: "ns-check-rollback" }, { tab: { id: 54 } }) as {
+      shouldRollback: boolean;
+    };
+
+    expect(response.shouldRollback).toBe(true);
+  });
+
+  it("does not roll back same-registrable-domain navigations (e.g. amazon.com login redirect)", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+
+    mock.emitCommitted({
+      tabId: 60,
+      frameId: 0,
+      url: "https://www.amazon.com/",
+      transitionType: "typed",
+      transitionQualifiers: []
+    });
+
+    vi.setSystemTime(new Date("2026-03-17T12:00:11.000Z"));
+    mock.emitCommitted({
+      tabId: 60,
+      frameId: 0,
+      url: "https://www.amazon.com/ap/signin?openid.return_to=https%3A%2F%2Fwww.amazon.com",
+      transitionType: "link",
+      transitionQualifiers: []
+    });
+
+    const response = mock.dispatchRuntimeMessage({ type: "ns-check-rollback" }, { tab: { id: 60 } }) as {
+      shouldRollback: boolean;
+    };
+
+    expect(response.shouldRollback).toBe(false);
+  });
+
+  it("allows link-classified navigations within typed-origin window (e.g. live.com SSO chain)", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+
+    mock.emitCommitted({
+      tabId: 61,
+      frameId: 0,
+      url: "https://live.com",
+      transitionType: "typed",
+      transitionQualifiers: []
+    });
+
+    vi.setSystemTime(new Date("2026-03-17T12:00:00.200Z"));
+    mock.emitCommitted({
+      tabId: 61,
+      frameId: 0,
+      url: "https://login.live.com/",
+      transitionType: "link",
+      transitionQualifiers: ["server_redirect"]
+    });
+
+    vi.setSystemTime(new Date("2026-03-17T12:00:00.500Z"));
+    mock.emitCommitted({
+      tabId: 61,
+      frameId: 0,
+      url: "https://outlook.live.com/mail/",
+      transitionType: "link",
+      transitionQualifiers: ["server_redirect"]
+    });
+
+    vi.setSystemTime(new Date("2026-03-17T12:00:01.500Z"));
+    mock.emitCommitted({
+      tabId: 61,
+      frameId: 0,
+      url: "https://www.microsoft.com/en-gb/outlook",
+      transitionType: "link",
+      transitionQualifiers: []
+    });
+
+    const response = mock.dispatchRuntimeMessage({ type: "ns-check-rollback" }, { tab: { id: 61 } }) as {
+      shouldRollback: boolean;
+    };
+
+    expect(response.shouldRollback).toBe(false);
+  });
+
+  it("refreshes typed-origin clock on redirect chain hops", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+
+    mock.emitCommitted({
+      tabId: 62,
+      frameId: 0,
+      url: "https://example.test/typed",
+      transitionType: "typed",
+      transitionQualifiers: []
+    });
+
+    vi.setSystemTime(new Date("2026-03-17T12:00:04.500Z"));
+    mock.emitCommitted({
+      tabId: 62,
+      frameId: 0,
+      url: "https://hop1.test/redirect",
+      transitionType: "link",
+      transitionQualifiers: ["server_redirect"]
+    });
+
+    vi.setSystemTime(new Date("2026-03-17T12:00:09.000Z"));
+    mock.emitCommitted({
+      tabId: 62,
+      frameId: 0,
+      url: "https://hop2.test/final",
+      transitionType: "link",
+      transitionQualifiers: ["server_redirect"]
+    });
+
+    const response = mock.dispatchRuntimeMessage({ type: "ns-check-rollback" }, { tab: { id: 62 } }) as {
+      shouldRollback: boolean;
+    };
+
+    expect(response.shouldRollback).toBe(false);
+  });
+
+  it("still rolls back cross-domain navigations outside typed-origin window", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+
+    mock.emitCommitted({
+      tabId: 63,
+      frameId: 0,
+      url: "https://example.test/origin",
+      transitionType: "typed",
+      transitionQualifiers: []
+    });
+
+    vi.setSystemTime(new Date("2026-03-17T12:00:11.000Z"));
+    mock.emitCommitted({
+      tabId: 63,
+      frameId: 0,
+      url: "https://evil.test/phish",
+      transitionType: "link",
+      transitionQualifiers: []
+    });
+
+    const response = mock.dispatchRuntimeMessage({ type: "ns-check-rollback" }, { tab: { id: 63 } }) as {
       shouldRollback: boolean;
     };
 
