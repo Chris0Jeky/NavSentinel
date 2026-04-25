@@ -6,6 +6,7 @@ const NAV_GESTURE_TTL_MS = 1500;
 const NAV_TARGET_ALLOW_TTL_MS = 10000;
 const ROLLBACK_SUPPRESS_MS = 6000;
 const ROLLBACK_RETURN_TTL_MS = 5000;
+const TYPED_ORIGIN_TTL_MS = 5_000;
 
 const allowUntilByTab = new Map<number, number>();
 const gestureUntilByTab = new Map<number, number>();
@@ -241,8 +242,6 @@ chrome.webNavigation.onBeforeNavigate.addListener((details) => {
     gestureUntilByTab.delete(details.tabId);
   }
 });
-
-const TYPED_ORIGIN_TTL_MS = 5_000;
 
 chrome.webNavigation.onCommitted.addListener((details) => {
   if (details.frameId !== 0) return;
