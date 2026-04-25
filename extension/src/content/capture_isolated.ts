@@ -475,7 +475,17 @@ function findAnchorFromEvent(e: MouseEvent): HTMLAnchorElement | null {
     if (el instanceof Element && el.tagName === "A") return el as HTMLAnchorElement;
   }
   const target = e.target as Element | null;
-  return (target?.closest("a") as HTMLAnchorElement | null) ?? null;
+  const fromClosest = (target?.closest("a") as HTMLAnchorElement | null) ?? null;
+  if (fromClosest) return fromClosest;
+  // Shadow DOM fallback: composedPath() may not pierce shadow roots in all
+  // Chromium builds when called from the extension's isolated world.
+  if (target?.shadowRoot) {
+    const inner = target.shadowRoot.elementFromPoint(e.clientX, e.clientY);
+    if (inner instanceof HTMLAnchorElement) return inner;
+    if (inner instanceof Element && inner.tagName === "A") return inner as HTMLAnchorElement;
+    return (inner?.closest("a") as HTMLAnchorElement | null) ?? null;
+  }
+  return null;
 }
 
 function allowOnce(url: string, target?: string, features?: string): void {

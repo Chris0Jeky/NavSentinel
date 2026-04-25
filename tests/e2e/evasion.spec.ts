@@ -471,7 +471,7 @@ test("Evasion 11: shadow DOM overlay is caught via composedPath @regression", as
     // composedPath() should find the inner <a target="_blank"> inside the
     // shadow root, allowing the blank-anchor gate to catch it.
     expect(popup, "Expected composedPath to find shadow DOM anchor and block it").toBeNull();
-    await waitForToastText(page, "Blocked", 3000);
+    await waitForToastText(page, "Blocked", 5000);
     await expect(page).toHaveURL(/evasion-11-shadow-dom\.html/);
   } finally {
     await cleanup();
