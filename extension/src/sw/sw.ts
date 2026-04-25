@@ -12,6 +12,7 @@ const gestureUntilByTab = new Map<number, number>();
 const allowStartedByTab = new Map<number, string>();
 const allowTargetByTab = new Map<number, { url: string; expiresAt: number }>();
 const suppressUntilByTab = new Map<number, number>();
+const typedOriginByTab = new Map<number, number>();
 const readyTabs = new Set<number>();
 const pendingRollbackByTab = new Map<number, { url: string; prevUrl?: string; qualifiers: string[] }>();
 const pendingForwardByTab = new Map<number, { url: string; ts: number; returnUrl?: string }>();
@@ -241,6 +242,24 @@ chrome.webNavigation.onBeforeNavigate.addListener((details) => {
   }
 });
 
+const TYPED_ORIGIN_TTL_MS = 10_000;
+
+chrome.webNavigation.onCommitted.addListener((details) => {
+  if (details.frameId !== 0) return;
+  const qualifiers = details.transitionQualifiers ?? [];
+  const isUserTyped =
+    details.transitionType === "typed" ||
+    details.transitionType === "auto_bookmark" ||
+    qualifiers.includes("from_address_bar");
+  const isRedirect =
+    qualifiers.includes("client_redirect") || qualifiers.includes("server_redirect");
+  if (isUserTyped && !isRedirect) {
+    typedOriginByTab.set(details.tabId, Date.now());
+  } else if (!isRedirect) {
+    typedOriginByTab.delete(details.tabId);
+  }
+});
+
 chrome.webNavigation.onCommitted.addListener((details) => {
   if (details.frameId !== 0) return;
   rollbackReturnByTab.delete(details.tabId);
@@ -267,6 +286,10 @@ chrome.webNavigation.onCommitted.addListener((details) => {
 
   if (isUserTyped) return;
   if (!isRedirect && !isLinkish) return;
+
+  const typedOriginTs = typedOriginByTab.get(details.tabId) ?? 0;
+  const fromTypedOrigin = isRedirect && now - typedOriginTs < TYPED_ORIGIN_TTL_MS;
+  if (fromTypedOrigin) return;
 
   const allowUntil = allowUntilByTab.get(details.tabId) ?? 0;
   const startedUrl = allowStartedByTab.get(details.tabId);
@@ -323,6 +346,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   allowTargetByTab.delete(tabId);
   suppressUntilByTab.delete(tabId);
   rollbackReturnByTab.delete(tabId);
+  typedOriginByTab.delete(tabId);
   clearPendingTabState(tabId);
   lastUrlByTab.delete(tabId);
 });
