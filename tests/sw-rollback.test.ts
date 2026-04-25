@@ -559,7 +559,7 @@ describe("service worker rollback gating", () => {
     mock.emitCommitted({
       tabId: 26,
       frameId: 0,
-      url: "https://example.test/redirected",
+      url: "https://evil.test/redirected",
       transitionType: "link",
       transitionQualifiers: ["client_redirect"]
     });
@@ -603,7 +603,7 @@ describe("service worker rollback gating", () => {
     mock.emitCommitted({
       tabId: 30,
       frameId: 0,
-      url: "https://example.test/redirected",
+      url: "https://evil.test/redirected",
       transitionType: "link",
       transitionQualifiers: ["client_redirect"]
     });
@@ -644,7 +644,7 @@ describe("service worker rollback gating", () => {
     mock.emitCommitted({
       tabId: 25,
       frameId: 0,
-      url: "https://example.test/redirected",
+      url: "https://evil.test/redirected",
       transitionType: "link",
       transitionQualifiers: ["client_redirect"]
     });
@@ -659,7 +659,7 @@ describe("service worker rollback gating", () => {
       shouldRollback: boolean;
     };
     const forward = mock.dispatchRuntimeMessage(
-      { type: "ns-check-forward", currentUrl: "https://example.test/redirected" },
+      { type: "ns-check-forward", currentUrl: "https://evil.test/redirected" },
       { tab: { id: 25 } }
     ) as { status?: string; url?: string };
 
