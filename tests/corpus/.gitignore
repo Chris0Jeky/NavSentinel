@@ -1,0 +1,6 @@
+# Downloaded phishing page snapshots — do not commit third-party HTML
+snapshots/
+
+# Manifest and results are generated per-run
+manifest.json
+validation-results.json
