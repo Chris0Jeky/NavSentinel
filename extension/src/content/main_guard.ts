@@ -330,7 +330,7 @@ function callNativeOpen(
   return nativeOpen.call(thisArg, url as any, target, features);
 }
 
-// Subframes are exempt: the SW's onCommitted (frameId === 0) handles top-level nav decisions.
+// Subframes skip guards only for self-navigations; top-level nav is caught by the SW's onCommitted.
 function isSubframe(): boolean {
   try {
     return window.top !== window;
@@ -345,7 +345,8 @@ function patchedOpen(
   target?: string,
   features?: string
 ): Window | null {
-  if (isOff() || isSubframe()) {
+  const isSelfTarget = !target || target === "_self" || target === window.name;
+  if (isOff() || (isSubframe() && isSelfTarget)) {
     postAllowed({ kind: "window_open", ...(url !== undefined ? { url: String(url) } : {}) });
     return callNativeOpen(this, url, target, features);
   }
@@ -386,7 +387,7 @@ function resolveFormAction(form: HTMLFormElement): string | undefined {
 
 function patchLocation(): void {
   const patchedAssign = function (this: Location, url: string | URL): void {
-    if (isOff() || isSubframe()) {
+    if (isOff() || (isSubframe() && this === window.location)) {
       postAllowed({ kind: "location_assign", url: String(url) });
       notifyAllowedTarget(url);
       nativeAssign.call(this, url);
@@ -409,7 +410,7 @@ function patchLocation(): void {
   };
 
   const patchedReplace = function (this: Location, url: string | URL): void {
-    if (isOff() || isSubframe()) {
+    if (isOff() || (isSubframe() && this === window.location)) {
       postAllowed({ kind: "location_replace", url: String(url) });
       notifyAllowedTarget(url);
       nativeReplace.call(this, url);
@@ -485,7 +486,8 @@ function patchLocation(): void {
 function patchForms(): void {
   HTMLFormElement.prototype.submit = function (): void {
     const actionUrl = resolveFormAction(this);
-    if (isOff() || isSubframe()) {
+    const isSelfTarget = !this.target || this.target === "_self" || this.target === window.name;
+    if (isOff() || (isSubframe() && isSelfTarget)) {
       postAllowed({ kind: "form_submit", ...(actionUrl !== undefined ? { url: actionUrl } : {}) });
       notifyAllowedTarget(actionUrl);
       nativeFormSubmit.call(this);
@@ -510,7 +512,8 @@ function patchForms(): void {
   if (nativeFormRequestSubmit) {
     HTMLFormElement.prototype.requestSubmit = function (submitter?: HTMLElement | null): void {
       const actionUrl = resolveFormAction(this);
-      if (isOff() || isSubframe()) {
+      const isSelfTarget = !this.target || this.target === "_self" || this.target === window.name;
+      if (isOff() || (isSubframe() && isSelfTarget)) {
         postAllowed({
           kind: "form_request_submit",
           ...(actionUrl !== undefined ? { url: actionUrl } : {})
