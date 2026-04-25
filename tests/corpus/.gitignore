@@ -1,5 +1,6 @@
 # Downloaded phishing page snapshots — do not commit third-party HTML
 snapshots/
 
-# Manifest is generated per-run; track the template but not the output
+# Manifest and results are generated per-run
 manifest.json
+validation-results.json
