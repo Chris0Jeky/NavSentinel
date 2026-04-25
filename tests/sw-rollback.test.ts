@@ -1005,4 +1005,36 @@ describe("service worker rollback gating", () => {
 
     expect(response.shouldRollback).toBe(false);
   });
+
+  it("clears typed origin on navigation error so subsequent redirects are checked", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+
+    mock.emitCommitted({
+      tabId: 54,
+      frameId: 0,
+      url: "https://example.test/typed",
+      transitionType: "typed",
+      transitionQualifiers: []
+    });
+
+    vi.setSystemTime(new Date("2026-03-17T12:00:00.200Z"));
+    mock.emitErrorOccurred({ tabId: 54, frameId: 0, url: "https://example.test/error" });
+
+    vi.setSystemTime(new Date("2026-03-17T12:00:00.400Z"));
+    mock.emitCommitted({
+      tabId: 54,
+      frameId: 0,
+      url: "https://evil.test/after-error",
+      transitionType: "link",
+      transitionQualifiers: ["server_redirect"]
+    });
+
+    const response = mock.dispatchRuntimeMessage({ type: "ns-check-rollback" }, { tab: { id: 54 } }) as {
+      shouldRollback: boolean;
+    };
+
+    expect(response.shouldRollback).toBe(true);
+  });
 });

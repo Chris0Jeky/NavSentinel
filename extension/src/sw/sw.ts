@@ -326,6 +326,7 @@ chrome.webNavigation.onErrorOccurred?.addListener((details) => {
   clearPendingTabState(details.tabId, { preserveForwardOffer });
   rollbackReturnByTab.delete(details.tabId);
   allowStartedByTab.delete(details.tabId);
+  typedOriginByTab.delete(details.tabId);
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
