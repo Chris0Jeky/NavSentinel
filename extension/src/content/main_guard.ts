@@ -24,7 +24,7 @@ function postToIsolated(type: string, payload?: Record<string, unknown>): void {
   });
 }
 
-let mode: "off" | "smart" | "strict" = "smart";
+let mode: "off" | "smart" | "strict" = "off";
 let debug = false;
 
 let openCount = 0;
