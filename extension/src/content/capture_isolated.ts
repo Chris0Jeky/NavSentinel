@@ -98,8 +98,12 @@ function refreshDebug(): void {
 
 async function initSettings() {
   ensureBridge();
-  settings = await getNavSettings();
-  allowlist = await getAllowlist();
+  try {
+    settings = await getNavSettings();
+    allowlist = await getAllowlist();
+  } catch (err) {
+    console.warn("[NavSentinel] Failed to load settings, using defaults", err);
+  }
   document.documentElement.setAttribute("data-navsentinel-capture-ready", "1");
   setDebugEnabled(settings.debug);
   postToMain("ns-config", { mode: settings.defaultMode, debug: settings.debug });
@@ -256,6 +260,7 @@ function ensureBridge(): void {
     bridgeRetryTimer = 0;
     if (bridgeReady || mainGuard === "no") return;
     if (Date.now() - bridgeInitStartedAt >= MAX_BRIDGE_INIT_MS) {
+      console.warn("[NavSentinel] Bridge init timed out — MAIN world guard disabled");
       bridgePort?.close();
       bridgePort = null;
       bridgeReady = false;
