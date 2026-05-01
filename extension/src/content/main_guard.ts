@@ -867,8 +867,19 @@ function patchOpenerLocation(): void {
 
     // Use configurable: false to prevent attacker code from redefining
     // window.opener after the proxy is installed.
+    // Preserve setter so pages that intentionally do `window.opener = null`
+    // (a common security hardening pattern) still work correctly.
+    let openerDisowned = false;
     Object.defineProperty(window, "opener", {
-      get() { return openerProxy; },
+      get() { return openerDisowned ? null : openerProxy; },
+      set(value) {
+        // Allow disowning the opener (security best practice) but do not
+        // allow replacing it with an arbitrary object.
+        if (value === null || value === undefined) {
+          openerDisowned = true;
+        }
+        // Silently ignore other assignments; the proxy stays in place.
+      },
       configurable: false
     });
   } catch {

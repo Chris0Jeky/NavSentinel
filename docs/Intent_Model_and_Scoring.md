@@ -192,9 +192,9 @@ DoubleClickjacking (January 2025) bypasses X-Frame-Options, CSP frame-ancestors,
 
 Detection is layered across three runtime surfaces:
 
-- **main_guard.ts**: intercepts `window.opener.location` writes via a Proxy on `window.opener`. Tracks `window.open` timestamps. Detects double-click timing (two clicks within 500ms where `window.open` fires between them). Sends bridge messages to the isolated world.
-- **capture_isolated.ts**: correlates bridge messages (`ns-dblclick-window-open`, `ns-dblclick-opener-nav`, `ns-dblclick-second-click`) and service worker notifications (`ns-dblclick-child-closed`) to set the `doubleClickHijackActive` flag. Signal expires after 5 seconds to avoid stale false positives.
-- **sw.ts**: tracks tab creation with `openerTabId` via `chrome.tabs.onCreated`. When a child tab closes within 5 seconds of creation, notifies the opener tab's content script.
+- **main_guard.ts**: intercepts `window.opener.location` writes (including `.href`, `.assign()`, `.replace()`) via a nested Proxy on `window.opener` and its `location` object. Tracks `window.open` timestamps. Detects double-click timing (two clicks within 800ms where `window.open` fires between them). Sends bridge messages to the isolated world.
+- **capture_isolated.ts**: correlates bridge messages (`ns-dblclick-window-open`, `ns-dblclick-opener-nav`, `ns-dblclick-second-click`) and service worker notifications (`ns-dblclick-child-closed`) to set the `doubleClickHijackActive` flag. Requires opener-nav evidence for child-close and second-click signals. Signal expires after 5 seconds to avoid stale false positives.
+- **sw.ts**: tracks tab creation with `openerTabId` via `chrome.tabs.onCreated`. When a child tab that performed an `opener.location` write closes within 5 seconds of creation, notifies the opener tab's content script.
 
 The `nrs_double_click_hijack` factor (+40) alone puts NRS at the prompt threshold. Combined with cross-site (+20) or new-tab (+20) factors it reaches the block threshold.
 

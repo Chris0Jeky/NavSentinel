@@ -36,8 +36,10 @@ const lastCommittedByTab = new Map<
 >();
 
 // --- DoubleClickjacking: track child windows opened by tabs ---
-// Maps child tabId -> { openerTabId, createdAt }
-const childWindowByTab = new Map<number, { openerTabId: number; createdAt: number }>();
+// Maps child tabId -> { openerTabId, createdAt, openerNavObserved }
+// openerNavObserved is set when the child tab sends ns-dblclick-opener-nav,
+// confirming it wrote to opener.location.
+const childWindowByTab = new Map<number, { openerTabId: number; createdAt: number; openerNavObserved: boolean }>();
 
 function pruneStaleChildWindows(): void {
   const now = Date.now();
@@ -53,7 +55,7 @@ function pruneStaleChildWindows(): void {
     const sorted = [...childWindowByTab.entries()].sort((a, b) => a[1].createdAt - b[1].createdAt);
     const excess = childWindowByTab.size - DBLCLICK_CHILD_PRUNE_LIMIT;
     for (let i = 0; i < excess; i++) {
-      childWindowByTab.delete(sorted[i][0]);
+      childWindowByTab.delete(sorted[i]![0]);
     }
   }
 }
@@ -256,6 +258,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (typeof childTabId !== "number") return;
     const childEntry = childWindowByTab.get(childTabId);
     if (!childEntry) return;
+    // Mark that this child performed an opener.location write so the
+    // child-close signal is only sent for confirmed attack scenarios.
+    childEntry.openerNavObserved = true;
     chrome.tabs.sendMessage(
       childEntry.openerTabId,
       {
@@ -408,7 +413,8 @@ chrome.tabs.onCreated.addListener((tab) => {
   pruneStaleChildWindows();
   childWindowByTab.set(tab.id, {
     openerTabId: tab.openerTabId,
-    createdAt: Date.now()
+    createdAt: Date.now(),
+    openerNavObserved: false
   });
 });
 
@@ -418,8 +424,11 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   if (childEntry) {
     childWindowByTab.delete(tabId);
     const age = Date.now() - childEntry.createdAt;
-    if (age <= DBLCLICK_CHILD_MAX_AGE_MS) {
-      // Child window closed quickly -- notify the opener tab.
+    // Only notify the opener if the child actually wrote to opener.location.
+    // Without this gate, benign popups (OAuth, help windows) that open and
+    // self-close quickly would cause false positives.
+    if (age <= DBLCLICK_CHILD_MAX_AGE_MS && childEntry.openerNavObserved) {
+      // Child window closed quickly after opener.location write -- notify the opener tab.
       chrome.tabs.sendMessage(
         childEntry.openerTabId,
         { type: "ns-dblclick-child-closed", childTabId: tabId, ageMs: age },

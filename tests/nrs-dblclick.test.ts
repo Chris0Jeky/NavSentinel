@@ -99,7 +99,7 @@ describe("NRS double-click hijack factor", () => {
     expect(result.nrsFactors).toContain("nrs_allowlisted");
   });
 
-  it("allowlist cannot fully suppress hijack with additional factors", () => {
+  it("allowlist clamps hijack + additional factors to zero", () => {
     const result = computeNRS(
       baseCds(20),
       baseNav({
@@ -109,7 +109,7 @@ describe("NRS double-click hijack factor", () => {
         destinationAllowlisted: true,
       })
     );
-    // 20 + 40 + 20 + 20 - 100 = 0
+    // 20 + 40 + 20 + 20 - 100 = 0 (clamped)
     expect(result.nrs).toBe(0);
   });
 

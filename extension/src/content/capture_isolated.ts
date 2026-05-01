@@ -778,8 +778,10 @@ function isDoubleClickHijackActive(): boolean {
   const now = Date.now();
   if (now - dblclickWindowOpenTs > DBLCLICK_HIJACK_STALE_MS) return false;
   if (dblclickOpenerNavTs > 0 && now - dblclickOpenerNavTs <= DBLCLICK_HIJACK_STALE_MS) return true;
-  if (dblclickChildClosed && now - dblclickChildClosedTs <= DBLCLICK_HIJACK_STALE_MS) return true;
-  if (dblclickSecondClickTs > 0 && now - dblclickSecondClickTs <= DBLCLICK_HIJACK_STALE_MS) return true;
+  if (dblclickChildClosed && now - dblclickChildClosedTs <= DBLCLICK_HIJACK_STALE_MS
+      && dblclickOpenerNavTs > 0) return true;
+  if (dblclickSecondClickTs > 0 && now - dblclickSecondClickTs <= DBLCLICK_HIJACK_STALE_MS
+      && dblclickOpenerNavTs > 0) return true;
   return false;
 }
 
@@ -899,7 +901,7 @@ window.addEventListener(
         kind: "dblclickjack_detected",
         site: siteKeyFromLocation(),
         url: dblclickOpenerNavUrl || location.href,
-        destHost: (() => { try { return new URL(dblclickOpenerNavUrl || location.href).hostname; } catch { return ""; } })(),
+        destHost: (() => { try { return new URL(dblclickOpenerNavUrl || location.href, location.href).hostname; } catch { return location.hostname; } })(),
       });
     }
 
