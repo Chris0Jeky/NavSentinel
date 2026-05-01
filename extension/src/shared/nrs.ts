@@ -8,6 +8,7 @@ export interface NavigationContext {
   multipleAttemptsInGesture?: boolean | undefined;
   destinationAllowlisted?: boolean | undefined;
   explicitNewTabIntent?: boolean | undefined;
+  doubleClickHijackActive?: boolean | undefined;
 }
 
 export interface NRSResult {
@@ -24,6 +25,7 @@ const NRS_WEIGHT_USER_ACTIVATION = 5;
 const NRS_WEIGHT_MULTIPLE_ATTEMPTS = 25;
 const NRS_WEIGHT_ALLOWLIST = -100;
 const NRS_WEIGHT_EXPLICIT_NEW_TAB = -30;
+const NRS_WEIGHT_DOUBLE_CLICK_HIJACK = 40;
 
 export const NRS_BLOCK_THRESHOLD = 70;
 export const NRS_STRICT_BLOCK_THRESHOLD = 50;
@@ -55,6 +57,11 @@ export function computeNRS(cdsResult: ScoreResult, navCtx: NavigationContext): N
   if (navCtx.multipleAttemptsInGesture) {
     nrs += NRS_WEIGHT_MULTIPLE_ATTEMPTS;
     nrsFactors.push("nrs_multiple_attempts");
+  }
+
+  if (navCtx.doubleClickHijackActive) {
+    nrs += NRS_WEIGHT_DOUBLE_CLICK_HIJACK;
+    nrsFactors.push("nrs_double_click_hijack");
   }
 
   if (navCtx.destinationAllowlisted) {
