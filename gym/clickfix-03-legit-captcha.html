@@ -117,7 +117,9 @@
     <h2>Complete Verification</h2>
     <p>Please verify you are human to continue.</p>
 
-    <!-- This has the .g-recaptcha class that NavSentinel checks for -->
+    <!-- This has the .g-recaptcha class AND a provider iframe, which together
+         suppress ClickFix detection. A bare class name alone is not sufficient
+         (an attacker could add a fake class to evade detection). -->
     <div class="g-recaptcha" data-sitekey="fake-sitekey-for-gym">
       <div class="checkbox" id="recaptcha-checkbox"></div>
       <span class="label">I'm not a robot</span>
@@ -125,6 +127,8 @@
         <div>reCAPTCHA</div>
         <div>Privacy - Terms</div>
       </div>
+      <!-- Simulated reCAPTCHA iframe (real sites have this from Google) -->
+      <iframe src="https://www.google.com/recaptcha/api2/anchor" style="width:0;height:0;border:0;" title="reCAPTCHA"></iframe>
     </div>
   </div>
 

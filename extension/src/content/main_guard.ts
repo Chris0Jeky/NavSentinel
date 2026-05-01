@@ -742,12 +742,21 @@ window.addEventListener(
 
 // --- Clipboard API command keyword detection ---
 
+// NOTE: Keep this list in sync with COMMAND_KEYWORDS in clickfix_detector.ts
 const COMMAND_KEYWORDS = [
-  "powershell", "cmd", "curl", "wget", "bash", "sh ", "/bin/",
-  "mshta", "msiexec", "certutil", "bitsadmin", "rundll32", "regsvr32",
-  "wscript", "cscript", "invoke-", "iex", "iwr", "start-process",
+  // Windows shells and scripting
+  "powershell", "cmd", "mshta", "msiexec", "certutil", "bitsadmin",
+  "rundll32", "regsvr32", "wscript", "cscript",
+  // Windows LOLBins
+  "forfiles", "pcalua", "schtasks", "installutil",
+  // Unix/macOS shells
+  "curl", "wget", "bash", "sh ", "/bin/", "osascript",
+  // PowerShell cmdlets and patterns
+  "invoke-", "iex", "iwr", "start-process",
   "downloadstring", "downloadfile", "new-object", "system.net",
-  "frombase64", "base64", "-encodedcommand", "-enc ", "|",
+  "frombase64", "base64", "-encodedcommand", "-enc ",
+  // Network indicators
+  "http://", "https://",
 ];
 
 function textLooksLikeCommand(text: string): boolean {
@@ -789,13 +798,35 @@ function patchClipboard(): void {
   if (nativeClipboardWrite) {
     try {
       navigator.clipboard.write = function (data: ClipboardItem[]): Promise<void> {
-        // For ClipboardItem writes, flag the event without inspecting content
-        // (ClipboardItem may contain blobs which are expensive to read)
-        postToIsolated("ns-clipboard-write", {
-          ts: nowMs(),
-          contentLength: -1,
-          looksLikeCommand: false,
-        });
+        // Try to read text/plain content from ClipboardItems for command detection.
+        // Non-text MIME types are skipped (blobs may be expensive to read).
+        let inspected = false;
+        try {
+          for (const item of data) {
+            if (item.types.includes("text/plain")) {
+              item.getType("text/plain").then((blob) => {
+                blob.text().then((text) => {
+                  postToIsolated("ns-clipboard-write", {
+                    ts: nowMs(),
+                    contentLength: text.length,
+                    looksLikeCommand: textLooksLikeCommand(text),
+                  });
+                }).catch(() => {});
+              }).catch(() => {});
+              inspected = true;
+              break;
+            }
+          }
+        } catch {
+          // ClipboardItem API may not be fully available
+        }
+        if (!inspected) {
+          postToIsolated("ns-clipboard-write", {
+            ts: nowMs(),
+            contentLength: -1,
+            looksLikeCommand: false,
+          });
+        }
         if (debug) {
           console.debug("[NavSentinel] clipboard.write intercepted");
         }
@@ -812,13 +843,23 @@ const nativeExecCommand = document.execCommand.bind(document);
 try {
   document.execCommand = function (command: string, ...rest: any[]): boolean {
     if (command.toLowerCase() === "copy" && !isOff()) {
+      // Read the current selection to detect command-like content
+      let selText = "";
+      try {
+        selText = window.getSelection()?.toString() ?? "";
+      } catch {
+        // getSelection may throw in some contexts
+      }
       postToIsolated("ns-clipboard-write", {
         ts: nowMs(),
-        contentLength: -1,
-        looksLikeCommand: false,
+        contentLength: selText.length || -1,
+        looksLikeCommand: selText.length > 0 ? textLooksLikeCommand(selText) : false,
       });
       if (debug) {
-        console.debug("[NavSentinel] document.execCommand('copy') intercepted");
+        console.debug("[NavSentinel] document.execCommand('copy') intercepted", {
+          length: selText.length,
+          looksLikeCommand: selText.length > 0 ? textLooksLikeCommand(selText) : false,
+        });
       }
     }
     return nativeExecCommand(command, ...rest);

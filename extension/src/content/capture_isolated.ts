@@ -194,6 +194,10 @@ function handleBridgeMessage(message: unknown): void {
     mode?: "off" | "smart" | "strict";
     debug?: boolean;
     v?: number;
+    // Clipboard write metadata (ns-clipboard-write)
+    ts?: number;
+    contentLength?: number;
+    looksLikeCommand?: boolean;
   };
   if (!data || data.source !== NS_SOURCE || data.v !== PROTOCOL_VERSION) return;
   if (data.session !== bridgeSession) return;
@@ -253,10 +257,10 @@ function handleBridgeMessage(message: unknown): void {
   }
 
   if (data.type === "ns-clipboard-write") {
-    const ts = typeof (data as any).ts === "number" ? (data as any).ts : Date.now();
-    const contentLength = typeof (data as any).contentLength === "number" ? (data as any).contentLength : -1;
-    const looksLikeCommand = typeof (data as any).looksLikeCommand === "boolean" ? (data as any).looksLikeCommand : false;
-    recordClipboardWrite({ ts, contentLength, looksLikeCommand });
+    const ts = typeof data.ts === "number" ? data.ts : Date.now();
+    const contentLength = typeof data.contentLength === "number" ? data.contentLength : -1;
+    const cmdLike = typeof data.looksLikeCommand === "boolean" ? data.looksLikeCommand : false;
+    recordClipboardWrite({ ts, contentLength, looksLikeCommand: cmdLike });
     if (settings.defaultMode !== "off") {
       handleClickFixScan();
     }

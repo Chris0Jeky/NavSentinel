@@ -3,6 +3,7 @@ import {
   looksLikeCommand,
   matchesCaptchaPattern,
   matchesInstructionPattern,
+  hasLegitCaptcha,
   recordClipboardWrite,
   hasRecentClipboardWrite,
   hasRecentCommandClipboardWrite,
@@ -81,8 +82,19 @@ describe("looksLikeCommand", () => {
     expect(looksLikeCommand("powershell -enc aGVsbG8=")).toBe(true);
   });
 
-  it("detects pipe character", () => {
-    expect(looksLikeCommand("echo hello | clip")).toBe(true);
+  it("detects LOLBins: forfiles, schtasks, installutil, pcalua", () => {
+    expect(looksLikeCommand("forfiles /p c:\\windows /c cmd")).toBe(true);
+    expect(looksLikeCommand("schtasks /create /tn evil")).toBe(true);
+    expect(looksLikeCommand("installutil /LogFile= payload.dll")).toBe(true);
+    expect(looksLikeCommand("pcalua -a calc.exe")).toBe(true);
+  });
+
+  it("detects macOS osascript", () => {
+    expect(looksLikeCommand("osascript -e 'do shell script'")).toBe(true);
+  });
+
+  it("does NOT flag standalone pipe in plain text", () => {
+    expect(looksLikeCommand("Column A | Column B | Column C")).toBe(false);
   });
 
   it("detects http:// and https://", () => {
@@ -343,5 +355,55 @@ describe("clipboard event tracking", () => {
     recordClipboardWrite({ ts: now, contentLength: 30, looksLikeCommand: false });
     expect(hasRecentClipboardWrite()).toBe(true);
     expect(hasRecentCommandClipboardWrite()).toBe(true);
+  });
+});
+
+// --- hasLegitCaptcha hardening ---
+// Note: hasLegitCaptcha requires a DOM environment (jsdom/happy-dom) for full
+// integration testing. These tests are skipped in pure Node environments.
+// The hardened logic is verified via the gym fixtures (clickfix-03) and manual testing.
+
+describe("hasLegitCaptcha", () => {
+  const hasDOM = typeof globalThis.document !== "undefined";
+
+  it.skipIf(!hasDOM)("returns false for bare class name without provider iframe", () => {
+    const div = document.createElement("div");
+    div.innerHTML = '<div class="g-recaptcha"><span>fake</span></div>';
+    expect(hasLegitCaptcha(div)).toBe(false);
+  });
+
+  it.skipIf(!hasDOM)("returns true when class name is backed by provider iframe", () => {
+    const div = document.createElement("div");
+    div.innerHTML = '<div class="g-recaptcha"><iframe src="https://www.google.com/recaptcha/api2/anchor"></iframe></div>';
+    expect(hasLegitCaptcha(div)).toBe(true);
+  });
+
+  it.skipIf(!hasDOM)("returns true for standalone provider iframe without class", () => {
+    const div = document.createElement("div");
+    div.innerHTML = '<iframe src="https://www.google.com/recaptcha/api2/anchor"></iframe>';
+    expect(hasLegitCaptcha(div)).toBe(true);
+  });
+
+  it.skipIf(!hasDOM)("returns true for hCaptcha iframe", () => {
+    const div = document.createElement("div");
+    div.innerHTML = '<iframe src="https://hcaptcha.com/challenge"></iframe>';
+    expect(hasLegitCaptcha(div)).toBe(true);
+  });
+
+  it.skipIf(!hasDOM)("returns true for Cloudflare Turnstile iframe", () => {
+    const div = document.createElement("div");
+    div.innerHTML = '<iframe src="https://challenges.cloudflare.com/turnstile"></iframe>';
+    expect(hasLegitCaptcha(div)).toBe(true);
+  });
+
+  it.skipIf(!hasDOM)("returns false for empty root", () => {
+    const div = document.createElement("div");
+    expect(hasLegitCaptcha(div)).toBe(false);
+  });
+
+  it.skipIf(!hasDOM)("detects provider iframe as sibling of class-name element", () => {
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = '<div><div class="g-recaptcha"></div><iframe src="https://www.google.com/recaptcha/api2/anchor"></iframe></div>';
+    expect(hasLegitCaptcha(wrapper)).toBe(true);
   });
 });

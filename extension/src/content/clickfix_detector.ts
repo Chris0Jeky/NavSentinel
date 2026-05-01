@@ -68,13 +68,9 @@ export function _resetClipboardEvents(): void {
  * to the isolated world (content is NOT sent, only the boolean result).
  */
 const COMMAND_KEYWORDS = [
+  // Windows shells and scripting
   "powershell",
   "cmd",
-  "curl",
-  "wget",
-  "bash",
-  "sh ",
-  "/bin/",
   "mshta",
   "msiexec",
   "certutil",
@@ -83,6 +79,19 @@ const COMMAND_KEYWORDS = [
   "regsvr32",
   "wscript",
   "cscript",
+  // Windows LOLBins
+  "forfiles",
+  "pcalua",
+  "schtasks",
+  "installutil",
+  // Unix/macOS shells
+  "curl",
+  "wget",
+  "bash",
+  "sh ",
+  "/bin/",
+  "osascript",
+  // PowerShell cmdlets and patterns
   "invoke-",
   "iex",
   "iwr",
@@ -95,10 +104,12 @@ const COMMAND_KEYWORDS = [
   "base64",
   "-encodedcommand",
   "-enc ",
+  // Network indicators
   "http://",
   "https://",
-  "|",
 ];
+// NOTE: Keep this list in sync with COMMAND_KEYWORDS in main_guard.ts
+// (main_guard runs in the main world and cannot import this module)
 
 export function looksLikeCommand(text: string): boolean {
   if (!text || text.length < 5) return false;
@@ -143,34 +154,63 @@ const INSTRUCTION_PATTERNS: RegExp[] = [
 ];
 
 /**
- * Known legitimate CAPTCHA provider markers. If any of these are present,
- * the overlay is likely a real CAPTCHA and should NOT be flagged.
+ * Known legitimate CAPTCHA provider iframe sources. These are the strong
+ * signals — a cross-origin iframe from these domains is hard to fake.
  */
-const LEGIT_CAPTCHA_SELECTORS = [
-  // reCAPTCHA
-  ".g-recaptcha",
-  'iframe[src*="recaptcha"]',
-  "#recaptcha",
+const LEGIT_CAPTCHA_IFRAME_SELECTORS = [
   'iframe[src*="google.com/recaptcha"]',
-  // hCaptcha
-  ".h-captcha",
+  'iframe[src*="recaptcha"]',
   'iframe[src*="hcaptcha.com"]',
-  // Cloudflare Turnstile
-  ".cf-turnstile",
   'iframe[src*="challenges.cloudflare.com"]',
-  // Arkose Labs (FunCaptcha)
   'iframe[src*="funcaptcha.com"]',
   'iframe[src*="arkoselabs.com"]',
 ];
 
 /**
+ * Class-name markers for CAPTCHA providers. These are weaker signals
+ * because an attacker can trivially add a class name to any element.
+ * We only trust these if the matching element also contains a cross-origin
+ * iframe (or is itself an iframe from the provider domain).
+ */
+const LEGIT_CAPTCHA_CLASS_SELECTORS: { selector: string; iframeDomain: string }[] = [
+  { selector: ".g-recaptcha", iframeDomain: "google.com/recaptcha" },
+  { selector: "#recaptcha", iframeDomain: "google.com/recaptcha" },
+  { selector: ".h-captcha", iframeDomain: "hcaptcha.com" },
+  { selector: ".cf-turnstile", iframeDomain: "challenges.cloudflare.com" },
+];
+
+/**
  * Check whether a known legitimate CAPTCHA provider is present on the page.
  * If so, ClickFix detection should be suppressed to avoid false positives.
+ *
+ * To prevent attackers from adding a bare class name to suppress detection,
+ * class-name-only matches are validated by checking for a cross-origin
+ * iframe from the expected provider domain within the matched element.
  */
 export function hasLegitCaptcha(root: Document | Element = document): boolean {
-  for (const selector of LEGIT_CAPTCHA_SELECTORS) {
+  // Strong signal: cross-origin iframe from a known CAPTCHA provider
+  for (const selector of LEGIT_CAPTCHA_IFRAME_SELECTORS) {
     try {
       if (root.querySelector(selector)) return true;
+    } catch {
+      // invalid selector in this context — skip
+    }
+  }
+
+  // Weaker signal: class name must be backed by a provider iframe
+  for (const { selector, iframeDomain } of LEGIT_CAPTCHA_CLASS_SELECTORS) {
+    try {
+      const el = root.querySelector(selector);
+      if (!el) continue;
+      // Check if this element or its descendants contain a real provider iframe
+      const iframe = el.querySelector(`iframe[src*="${iframeDomain}"]`);
+      if (iframe) return true;
+      // Also check siblings (some providers inject the iframe as a sibling)
+      const parent = el.parentElement;
+      if (parent) {
+        const siblingIframe = parent.querySelector(`iframe[src*="${iframeDomain}"]`);
+        if (siblingIframe) return true;
+      }
     } catch {
       // invalid selector in this context — skip
     }
@@ -206,8 +246,9 @@ export function matchesInstructionPattern(text: string): boolean {
  * Detect if there is a prominent overlay/modal on the page.
  * Returns the overlay element if found, or null.
  *
- * An overlay is defined as a fixed/absolute positioned element covering at
- * least 25% of the viewport, with a z-index above 100.
+ * An overlay is defined as a fixed/absolute/sticky positioned element covering
+ * at least 25% of the viewport, with a z-index above 100. Also checks for
+ * open <dialog> elements.
  */
 export function findClickFixOverlay(root: Document = document): Element | null {
   const vw = Math.max(window.innerWidth, 1);
@@ -216,11 +257,40 @@ export function findClickFixOverlay(root: Document = document): Element | null {
   const minCoverage = 0.25;
   const minZIndex = 100;
 
-  const candidates = Array.from(root.querySelectorAll("*"));
+  // Check open <dialog> elements first (native modals)
+  try {
+    const dialogs = root.querySelectorAll("dialog[open]");
+    for (const dialog of dialogs) {
+      const rect = (dialog as HTMLElement).getBoundingClientRect();
+      if (rect && rect.width > 0 && rect.height > 0) {
+        const coverage = (rect.width * rect.height) / viewportArea;
+        if (coverage >= minCoverage) return dialog;
+      }
+    }
+  } catch {
+    // dialog selector may not be supported
+  }
+
+  // Check direct children of body and their immediate children (covers most
+  // real-world overlay patterns without scanning the entire DOM).
+  // Overlays are almost always direct children of <body> or at most one
+  // level deep for framework wrappers.
+  const body = root.body;
+  if (!body) return null;
+
+  const candidates: Element[] = [];
+  for (const child of body.children) {
+    candidates.push(child);
+    // Also check one level of children for framework wrappers
+    for (const grandchild of child.children) {
+      candidates.push(grandchild);
+    }
+  }
+
   for (const el of candidates) {
     const cs = window.getComputedStyle(el);
     const pos = cs.position;
-    if (pos !== "fixed" && pos !== "absolute") continue;
+    if (pos !== "fixed" && pos !== "absolute" && pos !== "sticky") continue;
     if (cs.display === "none" || cs.visibility === "hidden") continue;
 
     const z = cs.zIndex === "auto" ? 0 : Number.parseInt(cs.zIndex, 10);
@@ -277,17 +347,16 @@ export function scanForClickFix(root: Document = document): ClickFixScanResult {
   const overlay = findClickFixOverlay(root);
 
   // Signal 3: text pattern matching
-  // Scan overlay text if available, otherwise scan body (bounded)
+  // Scan both overlay text and body text — instruction text may be outside the overlay
   let overlayText = "";
   if (overlay) {
     overlayText = (overlay.textContent ?? "").slice(0, 2000);
   }
 
   const bodyText = (root.body?.textContent ?? "").slice(0, 5000);
-  const textToScan = overlayText || bodyText;
 
-  const hasCaptchaText = matchesCaptchaPattern(textToScan);
-  const hasInstructionText = matchesInstructionPattern(textToScan);
+  const hasCaptchaText = matchesCaptchaPattern(overlayText) || matchesCaptchaPattern(bodyText);
+  const hasInstructionText = matchesInstructionPattern(overlayText) || matchesInstructionPattern(bodyText);
 
   // Build score from combination of signals.
   //
