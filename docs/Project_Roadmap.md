@@ -221,7 +221,7 @@ Phase 0 is complete when:
 | P1-03 | Enhance lookalike detection | M | **done** | P1-01 | `feat/lookalike-v2` |
 | P1-04 | Implement NRS | L | **done** | P1-02 | `feat/nrs-impl` (PR #28) |
 | P1-05 | False positive measurement on Tranco top-1000 | L | **done** | P1-01 | `test/fp-measurement` (PR #24); FP rate fix on `fix/fp-rate-reduction` (PR #32); re-run on `test/fp-measurement-rerun` |
-| P1-06 | Real-world phishing test corpus | L | **partial** | P1-01 | `test/phishing-corpus` (PR #30) |
+| P1-06 | Real-world phishing test corpus | L | **done** | P1-01 | `test/phishing-corpus` (PR #30); corpus run on `test/phishing-corpus-run` |
 | P1-07 | CDS evasion red-team test suite | M | **done** | P1-02 | `test/cds-evasion` (PR #25) |
 | P1-08 | Local prompt telemetry | M | **done** | P0 gate | `feat/prompt-telemetry` (PR #21) |
 
@@ -426,7 +426,7 @@ Phase 1 is complete when:
 - [x] Lookalike detection catches subdomain stuffing, homoglyphs, and brand keywords (PR #22 merged)
 - [x] NRS is implemented per spec and wired into navigation decisions (PR #28 merged)
 - [ ] False positive rate on Tranco top-200 measured at 0.72% (1/138: unity3d.com); measurement complete but above 0.1% target — follow-up tuning needed for multi-domain ecosystem FPs (PR #24, fixes via PR #32, re-run 2026-05-01)
-- [ ] At least 50 real phishing pages tested, TP rate measured (P1-06 infrastructure merged via PR #30, actual corpus run pending)
+- [x] At least 50 real phishing pages tested, TP rate measured (P1-06 infrastructure merged via PR #30; corpus run: 100 pages tested, 28% overall TP, 100% credential guard TP on 5 pages with detectable password forms; ~16 additional password-form pages missed due to dynamic JS injection in static snapshots)
 - [x] CDS evasion red-team suite exists and composite evasion is caught (PR #25 merged)
 - [x] Prompt telemetry is recording locally (PR #21 merged)
 
