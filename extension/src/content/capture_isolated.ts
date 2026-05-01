@@ -262,6 +262,13 @@ function handleBridgeMessage(message: unknown): void {
   // --- DoubleClickjacking bridge messages from main_guard ---
   if (data.type === "ns-dblclick-window-open") {
     dblclickWindowOpenTs = typeof (data as any).ts === "number" ? (data as any).ts : Date.now();
+    // Reset stale signals from a previous detection cycle to prevent
+    // a stale dblclickChildClosed flag from causing false positives.
+    dblclickOpenerNavTs = 0;
+    dblclickOpenerNavUrl = "";
+    dblclickSecondClickTs = 0;
+    dblclickChildClosed = false;
+    dblclickChildClosedTs = 0;
     return;
   }
 

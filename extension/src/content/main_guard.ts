@@ -9,7 +9,10 @@ const ALLOW_ONCE_TTL_MS = 1200;
 const BLOCKED_ACTION_TTL_MS = 5000;
 const MAX_POPUP_INTENT_VIEWPORT_SHARE = 0.35;
 const PROTOCOL_VERSION = 1;
-const DBLCLICK_WINDOW_MS = 500;
+// 800ms covers accessibility settings with wider double-click windows (up to 900ms+).
+// Combined with window.open + opener.location correlation, FP risk from the wider
+// window is minimal.
+const DBLCLICK_WINDOW_MS = 800;
 const OPENER_NAV_STALE_MS = 3000;
 
 let bridgePort: MessagePort | null = null;
@@ -768,19 +771,69 @@ function patchOpenerLocation(): void {
   // Capture the real opener reference before anyone can tamper with it.
   const realOpener = window.opener;
 
+  function recordOpenerNav(url: string): void {
+    lastOpenerNavTs = nowMs();
+    lastOpenerNavUrl = url;
+    postToIsolated("ns-dblclick-opener-nav", { url, ts: lastOpenerNavTs });
+    if (debug) {
+      console.debug("[NavSentinel] opener.location write intercepted", { url });
+    }
+  }
+
+  // Proxy the Location object to intercept .href setter, .assign(), and .replace().
+  // Without this, an attacker can bypass the opener Proxy by calling methods
+  // directly on the real Location object returned by the get trap.
+  function createLocationProxy(): typeof realOpener.location {
+    const realLocation = realOpener.location;
+    try {
+      return new Proxy(realLocation, {
+        set(_target, prop, value) {
+          if (prop === "href") {
+            const url = String(value);
+            recordOpenerNav(url);
+            try { realLocation.href = value; } catch { /* cross-origin */ }
+            return true;
+          }
+          try { (realLocation as any)[prop] = value; } catch { /* ignore */ }
+          return true;
+        },
+        get(_target, prop) {
+          if (prop === "assign") {
+            return function assign(url: string | URL): void {
+              recordOpenerNav(String(url));
+              try { realLocation.assign(url as string); } catch { /* cross-origin */ }
+            };
+          }
+          if (prop === "replace") {
+            return function replace(url: string | URL): void {
+              recordOpenerNav(String(url));
+              try { realLocation.replace(url as string); } catch { /* cross-origin */ }
+            };
+          }
+          try {
+            const val = (realLocation as any)[prop];
+            if (typeof val === "function") return val.bind(realLocation);
+            return val;
+          } catch {
+            return undefined;
+          }
+        }
+      });
+    } catch {
+      return realLocation;
+    }
+  }
+
   try {
+    const locationProxy = createLocationProxy();
+
     // Watch for direct property assignment: window.opener.location = url
     // We proxy the opener object so we can intercept .location sets.
     const openerProxy = new Proxy(realOpener, {
       set(_target, prop, value) {
         if (prop === "location") {
           const url = String(value);
-          lastOpenerNavTs = nowMs();
-          lastOpenerNavUrl = url;
-          postToIsolated("ns-dblclick-opener-nav", { url, ts: lastOpenerNavTs });
-          if (debug) {
-            console.debug("[NavSentinel] opener.location write intercepted", { url });
-          }
+          recordOpenerNav(url);
           // Allow the navigation to proceed so the attack surface
           // remains observable (the isolated-world will flag the click).
           try {
@@ -799,7 +852,8 @@ function patchOpenerLocation(): void {
       },
       get(_target, prop) {
         if (prop === "location") {
-          return realOpener.location;
+          // Return the proxied Location to intercept .href, .assign(), .replace()
+          return locationProxy;
         }
         try {
           const val = (realOpener as any)[prop];
@@ -811,13 +865,15 @@ function patchOpenerLocation(): void {
       }
     });
 
+    // Use configurable: false to prevent attacker code from redefining
+    // window.opener after the proxy is installed.
     Object.defineProperty(window, "opener", {
       get() { return openerProxy; },
-      configurable: true
+      configurable: false
     });
   } catch {
     // Some environments (cross-origin) may prevent redefining window.opener.
-    // Fall back to polling: check whether opener.location changed.
+    // Fall back gracefully -- the SW child-close correlation still works.
   }
 }
 
@@ -851,8 +907,10 @@ window.addEventListener(
   true
 );
 
+// patchOpenerLocation must run first to capture window.opener before any
+// other script can save a reference to the real opener object.
+patchOpenerLocation();
 patchOpen();
 patchLocation();
 patchForms();
-patchOpenerLocation();
 (window as any).__navsentinelMainGuard = true;

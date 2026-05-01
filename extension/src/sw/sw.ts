@@ -41,10 +41,19 @@ const childWindowByTab = new Map<number, { openerTabId: number; createdAt: numbe
 
 function pruneStaleChildWindows(): void {
   const now = Date.now();
-  if (childWindowByTab.size <= DBLCLICK_CHILD_PRUNE_LIMIT) return;
+  // Always prune entries older than 2x the max age to prevent stale
+  // correlations from tab ID reuse, regardless of map size.
   for (const [tabId, entry] of childWindowByTab) {
     if (now - entry.createdAt > DBLCLICK_CHILD_MAX_AGE_MS * 2) {
       childWindowByTab.delete(tabId);
+    }
+  }
+  // Hard cap: if still over limit after age-based pruning, drop oldest entries.
+  if (childWindowByTab.size > DBLCLICK_CHILD_PRUNE_LIMIT) {
+    const sorted = [...childWindowByTab.entries()].sort((a, b) => a[1].createdAt - b[1].createdAt);
+    const excess = childWindowByTab.size - DBLCLICK_CHILD_PRUNE_LIMIT;
+    for (let i = 0; i < excess; i++) {
+      childWindowByTab.delete(sorted[i][0]);
     }
   }
 }
@@ -240,24 +249,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   // DoubleClickjacking: forward opener.location write from child to opener tab.
+  // Only forward if the sender tab is a known child window to prevent
+  // malicious pages from injecting false opener-nav signals.
   if (message.type === "ns-dblclick-opener-nav") {
     const childTabId = sender.tab?.id;
-    if (typeof childTabId === "number") {
-      const childEntry = childWindowByTab.get(childTabId);
-      if (childEntry) {
-        chrome.tabs.sendMessage(
-          childEntry.openerTabId,
-          {
-            type: "ns-dblclick-opener-nav-from-child",
-            url: typeof message.url === "string" ? message.url : "",
-            ts: typeof message.ts === "number" ? message.ts : Date.now(),
-          },
-          () => {
-            if (chrome.runtime.lastError) { /* opener may have navigated away */ }
-          }
-        );
+    if (typeof childTabId !== "number") return;
+    const childEntry = childWindowByTab.get(childTabId);
+    if (!childEntry) return;
+    chrome.tabs.sendMessage(
+      childEntry.openerTabId,
+      {
+        type: "ns-dblclick-opener-nav-from-child",
+        url: typeof message.url === "string" ? message.url : "",
+        ts: typeof message.ts === "number" ? message.ts : Date.now(),
+      },
+      () => {
+        if (chrome.runtime.lastError) { /* opener may have navigated away */ }
       }
-    }
+    );
     sendResponse?.({ ok: true });
   }
 });
