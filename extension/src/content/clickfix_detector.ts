@@ -70,7 +70,8 @@ export function _resetClipboardEvents(): void {
 const COMMAND_KEYWORDS = [
   // Windows shells and scripting
   "powershell",
-  "cmd",
+  "cmd /",
+  "cmd.exe",
   "mshta",
   "msiexec",
   "certutil",
@@ -85,16 +86,17 @@ const COMMAND_KEYWORDS = [
   "schtasks",
   "installutil",
   // Unix/macOS shells
-  "curl",
-  "wget",
+  "curl ",
+  "wget ",
   "bash",
   "sh ",
   "/bin/",
   "osascript",
   // PowerShell cmdlets and patterns
   "invoke-",
-  "iex",
-  "iwr",
+  "iex ",
+  "iex(",
+  "iwr ",
   "start-process",
   "downloadstring",
   "downloadfile",
@@ -104,9 +106,6 @@ const COMMAND_KEYWORDS = [
   "base64",
   "-encodedcommand",
   "-enc ",
-  // Network indicators
-  "http://",
-  "https://",
 ];
 // NOTE: Keep this list in sync with COMMAND_KEYWORDS in main_guard.ts
 // (main_guard runs in the main world and cannot import this module)
@@ -260,7 +259,8 @@ export function findClickFixOverlay(root: Document = document): Element | null {
   // Check open <dialog> elements first (native modals)
   try {
     const dialogs = root.querySelectorAll("dialog[open]");
-    for (const dialog of dialogs) {
+    for (let i = 0; i < dialogs.length; i++) {
+      const dialog = dialogs[i]!;
       const rect = (dialog as HTMLElement).getBoundingClientRect();
       if (rect && rect.width > 0 && rect.height > 0) {
         const coverage = (rect.width * rect.height) / viewportArea;
@@ -279,11 +279,12 @@ export function findClickFixOverlay(root: Document = document): Element | null {
   if (!body) return null;
 
   const candidates: Element[] = [];
-  for (const child of body.children) {
+  for (let i = 0; i < body.children.length; i++) {
+    const child = body.children[i]!;
     candidates.push(child);
     // Also check one level of children for framework wrappers
-    for (const grandchild of child.children) {
-      candidates.push(grandchild);
+    for (let j = 0; j < child.children.length; j++) {
+      candidates.push(child.children[j]!);
     }
   }
 

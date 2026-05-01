@@ -745,18 +745,16 @@ window.addEventListener(
 // NOTE: Keep this list in sync with COMMAND_KEYWORDS in clickfix_detector.ts
 const COMMAND_KEYWORDS = [
   // Windows shells and scripting
-  "powershell", "cmd", "mshta", "msiexec", "certutil", "bitsadmin",
+  "powershell", "cmd /", "cmd.exe", "mshta", "msiexec", "certutil", "bitsadmin",
   "rundll32", "regsvr32", "wscript", "cscript",
   // Windows LOLBins
   "forfiles", "pcalua", "schtasks", "installutil",
   // Unix/macOS shells
-  "curl", "wget", "bash", "sh ", "/bin/", "osascript",
+  "curl ", "wget ", "bash", "sh ", "/bin/", "osascript",
   // PowerShell cmdlets and patterns
-  "invoke-", "iex", "iwr", "start-process",
+  "invoke-", "iex ", "iex(", "iwr ", "start-process",
   "downloadstring", "downloadfile", "new-object", "system.net",
   "frombase64", "base64", "-encodedcommand", "-enc ",
-  // Network indicators
-  "http://", "https://",
 ];
 
 function textLooksLikeCommand(text: string): boolean {
@@ -776,19 +774,26 @@ function patchClipboard(): void {
   if (nativeClipboardWriteText) {
     try {
       navigator.clipboard.writeText = function (data: string): Promise<void> {
-        // Send metadata to isolated world — NEVER the actual content
-        postToIsolated("ns-clipboard-write", {
-          ts: nowMs(),
-          contentLength: data.length,
-          looksLikeCommand: textLooksLikeCommand(data),
-        });
-        if (debug) {
-          console.debug("[NavSentinel] clipboard.writeText intercepted", {
-            length: data.length,
-            looksLikeCommand: textLooksLikeCommand(data),
+        // Capture metadata before calling native (data may be GC'd), but
+        // only send the bridge message after the write succeeds so that
+        // failed writes (permission denied, no user gesture) do not cause
+        // false ClickFix detections.
+        const cmdLike = textLooksLikeCommand(data);
+        const len = data.length;
+        return nativeClipboardWriteText!(data).then((result) => {
+          postToIsolated("ns-clipboard-write", {
+            ts: nowMs(),
+            contentLength: len,
+            looksLikeCommand: cmdLike,
           });
-        }
-        return nativeClipboardWriteText!(data);
+          if (debug) {
+            console.debug("[NavSentinel] clipboard.writeText intercepted", {
+              length: len,
+              looksLikeCommand: cmdLike,
+            });
+          }
+          return result;
+        });
       };
     } catch {
       // clipboard.writeText may not be configurable in all contexts
@@ -798,39 +803,42 @@ function patchClipboard(): void {
   if (nativeClipboardWrite) {
     try {
       navigator.clipboard.write = function (data: ClipboardItem[]): Promise<void> {
-        // Try to read text/plain content from ClipboardItems for command detection.
-        // Non-text MIME types are skipped (blobs may be expensive to read).
-        let inspected = false;
-        try {
-          for (const item of data) {
-            if (item.types.includes("text/plain")) {
-              item.getType("text/plain").then((blob) => {
-                blob.text().then((text) => {
-                  postToIsolated("ns-clipboard-write", {
-                    ts: nowMs(),
-                    contentLength: text.length,
-                    looksLikeCommand: textLooksLikeCommand(text),
-                  });
+        // Only send the bridge message after the native write succeeds.
+        return nativeClipboardWrite!(data).then((result) => {
+          // Try to read text/plain content from ClipboardItems for command detection.
+          // Non-text MIME types are skipped (blobs may be expensive to read).
+          let inspected = false;
+          try {
+            for (const item of data) {
+              if (item.types.includes("text/plain")) {
+                item.getType("text/plain").then((blob) => {
+                  blob.text().then((text) => {
+                    postToIsolated("ns-clipboard-write", {
+                      ts: nowMs(),
+                      contentLength: text.length,
+                      looksLikeCommand: textLooksLikeCommand(text),
+                    });
+                  }).catch(() => {});
                 }).catch(() => {});
-              }).catch(() => {});
-              inspected = true;
-              break;
+                inspected = true;
+                break;
+              }
             }
+          } catch {
+            // ClipboardItem API may not be fully available
           }
-        } catch {
-          // ClipboardItem API may not be fully available
-        }
-        if (!inspected) {
-          postToIsolated("ns-clipboard-write", {
-            ts: nowMs(),
-            contentLength: -1,
-            looksLikeCommand: false,
-          });
-        }
-        if (debug) {
-          console.debug("[NavSentinel] clipboard.write intercepted");
-        }
-        return nativeClipboardWrite!(data);
+          if (!inspected) {
+            postToIsolated("ns-clipboard-write", {
+              ts: nowMs(),
+              contentLength: -1,
+              looksLikeCommand: false,
+            });
+          }
+          if (debug) {
+            console.debug("[NavSentinel] clipboard.write intercepted");
+          }
+          return result;
+        });
       };
     } catch {
       // clipboard.write may not be configurable in all contexts
@@ -842,7 +850,9 @@ function patchClipboard(): void {
 const nativeExecCommand = document.execCommand.bind(document);
 try {
   document.execCommand = function (command: string, ...rest: any[]): boolean {
-    if (command.toLowerCase() === "copy" && !isOff()) {
+    const result = nativeExecCommand(command, ...rest);
+    // Only emit clipboard event when the copy actually succeeded
+    if (command.toLowerCase() === "copy" && result && !isOff()) {
       // Read the current selection to detect command-like content
       let selText = "";
       try {
@@ -862,7 +872,7 @@ try {
         });
       }
     }
-    return nativeExecCommand(command, ...rest);
+    return result;
   } as typeof document.execCommand;
 } catch {
   // execCommand may not be configurable
