@@ -416,7 +416,7 @@ Phase 1 is complete when:
 - [x] CDS resists the 5 specific evasion patterns from the Thesis Review (PR #20 merged, PR #25 red-team suite confirms)
 - [x] Lookalike detection catches subdomain stuffing, homoglyphs, and brand keywords (PR #22 merged)
 - [x] NRS is implemented per spec and wired into navigation decisions (PR #28 merged)
-- [x] False positive rate on Tranco top-200 is measured at 0.72% (1/138 sites: unity3d.com); above 0.1% target but measurement complete (PR #24, fixes via PR #32, re-run 2026-05-01). Follow-up tuning needed for multi-domain ecosystem FPs.
+- [ ] False positive rate on Tranco top-200 measured at 0.72% (1/138: unity3d.com); measurement complete but above 0.1% target — follow-up tuning needed for multi-domain ecosystem FPs (PR #24, fixes via PR #32, re-run 2026-05-01)
 - [ ] At least 50 real phishing pages tested, TP rate measured (P1-06 infrastructure merged via PR #30, actual corpus run pending)
 - [x] CDS evasion red-team suite exists and composite evasion is caught (PR #25 merged)
 - [x] Prompt telemetry is recording locally (PR #21 merged)

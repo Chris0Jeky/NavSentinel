@@ -9,7 +9,7 @@
 | Successful visits | ~138 |
 | Errors (DNS/timeout) | ~62 |
 | Interaction-phase FPs | **1 site** (2 events on unity3d.com) |
-| Initial-load artifacts (excluded) | 3 sites |
+| Initial-load artifacts (excluded) | 2 sites (live.com, myfritz.net) |
 | Extension version | 0.2.1 |
 | Extension build | post-PR #32 (FP rate reduction) |
 | Target | < 0.1% |
@@ -90,8 +90,10 @@ on a legitimate Tranco-listed site:
 
 ## Initial-load artifact analysis
 
-Three sites triggered `nav_rollback` during the initial `page.goto()` redirect
-chain. In all cases, the sites perform cross-registrable-domain redirects:
+Two sites triggered `nav_rollback` during the initial `page.goto()` redirect
+chain in the definitive Run 3 (live.com, myfritz.net). A third site
+(outlook.com) triggered in the old-script reference run but not in Run 3.
+All three perform cross-registrable-domain redirects:
 
 | Site | Redirect chain | Why it triggers |
 |---|---|---|
