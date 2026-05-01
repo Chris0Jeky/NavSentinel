@@ -15,11 +15,11 @@ know it's done. It synthesizes the findings from
 |---|---|---|---|---|
 | 0 | Stabilize | 6 | 6 | **Done** |
 | 1 | Validate Foundation | 8 | 8 | **Tasks done** (gate open — FP rate above target) |
-| 2 | Target 2025-2026 Threats | 10 | 3 | **In progress** |
-| 3 | Productize | 9 | 0 | Blocked on Phase 2 |
+| 2 | Target 2025-2026 Threats | 13 | 3 | **In progress** |
+| 3 | Productize | 12 | 0 | Blocked on Phase 2 |
 | 4 | Differentiate | 8 | 0 | Future |
 
-Total: **41 tasks** across 5 phases.
+Total: **47 tasks** across 5 phases.
 
 Last updated: 2026-05-01
 
@@ -448,6 +448,9 @@ Phase 1 is complete when:
 | P2-08 | History.pushState gating | M | pending | P2-06 | `feat/pushstate-gating` |
 | P2-09 | Gym fixtures for new detections | M | pending | P2-01, P2-02 | `test/phase2-gym` |
 | P2-10 | Competitive benchmark suite | L | pending | P1-05, P1-06 | `test/competitive-bench` |
+| P2-11 | NRS scoring ceiling and compound FP mitigation | M | pending | P2-01, P2-03 | -- |
+| P2-12 | Integrate ClickFix scoring into NRS pipeline | M | pending | P2-02 | -- |
+| P2-13 | Bloom filter per-frame loading optimization | S | pending | P2-03 | -- |
 
 ### Task Details
 
@@ -673,6 +676,58 @@ Run the same test corpus against competing tools to quantify NavSentinel's addit
 **Done when**: Benchmark runs. NavSentinel demonstrates additive value over Safe Browsing
 alone for interaction-level attacks. Results documented.
 
+#### P2-11: NRS scoring ceiling and compound FP mitigation
+
+NRS has no ceiling. Bloom filter FP (+50) + DoubleClickjacking (+40) + cross-site (+20) +
+new-tab (+20) = 130 on a potentially legitimate page. No mitigating factor for "user
+previously allowed this popup."
+
+**What to do**:
+- Add `openerWindowPreviouslyAllowed` NRS factor (-20)
+- Consider a soft ceiling where factors beyond 100 get diminishing returns
+- Add test for compound scoring scenarios
+
+**Files**: `extension/src/shared/nrs.ts`, `extension/src/shared/scoring.ts`,
+`tests/scoring.property.test.ts`
+
+**Done when**: Compound NRS scenarios are bounded. A page triggering multiple factors does not
+produce runaway scores. Previously-allowed popups reduce NRS. Tests cover compound scenarios.
+
+#### P2-12: Integrate ClickFix scoring into NRS pipeline
+
+ClickFix detection runs a parallel scoring pipeline (`scanForClickFix` returns up to 60
+points) that isn't fed into NRS. A page doing both ClickFix and navigation manipulation gets
+two separate UI interventions with no unified threat score.
+
+**What to do**:
+- Add a `clickfixActive` field to `NavigationContext`
+- Feed ClickFix score into NRS when both clipboard signals and navigation signals are present
+- Unify the UI response so a single threat assessment covers both vectors
+
+**Files**: `extension/src/shared/nrs.ts`, `extension/src/content/capture_isolated.ts`,
+`extension/src/content/clickfix_detector.ts`
+
+**Done when**: ClickFix score feeds into NRS when both signals are present. A single unified
+UI response is shown. No regression on standalone ClickFix or navigation detection.
+
+#### P2-13: Bloom filter per-frame loading optimization
+
+`capture_isolated.ts` runs in `all_frames`. Each frame loads its own copy of
+`reputation_data.bin`. On a page with 10 iframes, that's 10 fetches and 10 ArrayBuffer
+allocations.
+
+**What to do**:
+- Load bloom filter only in `window.top === window` context
+- Expose a message-based lookup API for child frames, or accept the duplication for
+  simplicity (local file fetches are fast)
+
+**Files**: `extension/src/content/capture_isolated.ts`,
+`extension/src/shared/reputation.ts`
+
+**Done when**: Child frames no longer independently load the bloom filter binary. Reputation
+lookups still work for navigations originating from child frames. Performance improvement
+measurable on iframe-heavy pages.
+
 ### Phase 2 Gate
 
 Phase 2 is complete when:
@@ -702,6 +757,9 @@ Phase 2 is complete when:
 | P3-07 | Release infrastructure | M | pending | P2 gate | `infra/release` |
 | P3-08 | Issue templates and repo hygiene | S | pending | -- | `docs/repo-hygiene` |
 | P3-09 | Seek volunteer security audit | S | pending | P2 gate | (no branch) |
+| P3-10 | Migrate SW ephemeral state to chrome.storage.session | M | pending | P2-01 | -- |
+| P3-11 | jsdom/happy-dom test environment for ClickFix DOM tests | S | pending | P2-02 | -- |
+| P3-12 | Bloom filter size monitoring in CI | S | pending | P2-03 | -- |
 
 ### Task Details
 
@@ -860,6 +918,49 @@ The code is clean and readable but hasn't been reviewed by an external security 
 
 **Done when**: At least one external security professional has reviewed the bridge design
 and CDS logic. Findings addressed or documented as accepted risks.
+
+#### P3-10: Migrate SW ephemeral state to chrome.storage.session
+
+All SW Maps (`childWindowByTab`, `allowUntilByTab`, `gestureUntilByTab`, etc.) are lost on
+MV3 SW restart. DoubleClickjacking detection fails silently if SW restarts mid-detection.
+
+**What to do**:
+- Migrate critical tab state to `chrome.storage.session` (survives SW restart, cleared on
+  browser close)
+- Keep TTL-based cleanup
+- Requires Chrome 102+
+
+**Files**: `extension/src/sw/sw.ts`, `extension/src/shared/storage.ts`
+
+**Done when**: Critical tab state survives SW restart. DoubleClickjacking detection works
+across SW lifecycle boundaries. TTL cleanup still functions. Existing E2E tests still pass.
+
+#### P3-11: jsdom/happy-dom test environment for ClickFix DOM tests
+
+7 ClickFix tests are skipped because they require DOM environment (`hasLegitCaptcha` tests
+that check for iframes, class names). Currently verified via gym fixtures only.
+
+**What to do**:
+- Configure Vitest with jsdom or happy-dom environment for `clickfix-detector.test.ts`
+- Move from `.skipIf(!hasDOM)` to always-run
+
+**Files**: `vitest.config.ts`, `extension/src/content/clickfix_detector.test.ts`
+
+**Done when**: All 7 previously-skipped ClickFix DOM tests run and pass in CI. No
+`.skipIf(!hasDOM)` guards remain.
+
+#### P3-12: Bloom filter size monitoring in CI
+
+`reputation_data.bin` will grow when real phishing feeds are used. Need to enforce the 2MB
+cap and alert on unexpected size changes.
+
+**What to do**:
+- Add a CI step that checks `reputation_data.bin` size and fails if > 2MB
+- Add the bloom filter build to the CI pipeline
+
+**Files**: `.github/workflows/ci.yml`, `scripts/build-bloom-filter.mjs`
+
+**Done when**: CI fails if bloom filter exceeds 2MB. Bloom filter build is reproducible in CI.
 
 ### Phase 3 Gate
 
