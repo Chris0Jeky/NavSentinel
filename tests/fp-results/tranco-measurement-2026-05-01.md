@@ -4,16 +4,16 @@
 
 | Metric | Value |
 |---|---|
-| **Tranco top-200 FP rate** | **0.000%** |
+| **Tranco top-200 FP rate** | **0.72%** (1 site: unity3d.com) |
 | Sites tested | 200 |
 | Successful visits | ~138 |
 | Errors (DNS/timeout) | ~62 |
-| Interaction-phase FPs | **0** |
+| Interaction-phase FPs | **1 site** (2 events on unity3d.com) |
 | Initial-load artifacts (excluded) | 3 sites |
 | Extension version | 0.2.1 |
 | Extension build | post-PR #32 (FP rate reduction) |
 | Target | < 0.1% |
-| **Result** | **PASS** |
+| **Result** | **Near target** -- 0.72% with one known multi-domain FP |
 
 ## Methodology
 
@@ -74,7 +74,8 @@ on a legitimate Tranco-listed site:
 - **FP rate**: 0.000% (20 successful, 0 FPs)
 
 ### Run 3: Top-200 (updated script, definitive)
-- **FP rate**: 0.000% (interaction FPs: 0)
+- **FP rate**: 0.72% (1 FP site out of ~138 successful visits)
+- **FP site**: unity3d.com (2 `nav_click_block` events, NRS 70 and 115)
 - Initial-load artifacts excluded: live.com, myfritz.net (nav_rollback from
   cross-domain redirect chains during page.goto())
 
@@ -109,6 +110,42 @@ The measurement script's `page.goto()` uses CDP `Page.navigate`, which does
 not consistently produce the `"typed"` transition in Chrome's webNavigation
 API, so the typed-origin exemption may not activate.
 
+## Interaction-phase false positive: unity3d.com
+
+unity3d.com redirects to unity.com on load. When clicking internal links on
+unity.com, some links navigate to domains in the Unity ecosystem that have
+different registrable domains (e.g. unity3d.com vs unity.com). This triggers:
+
+| Event | NRS | Reason codes |
+|---|---|---|
+| `nav_click_block` #1 | 70 | `intent_mismatch_under_interactive`, `nrs_cross_site`, `nrs_fast_attempt`, `nrs_user_activation_active` |
+| `nav_click_block` #2 | 115 | `intent_mismatch_under_interactive`, `retargeted_target_mismatch`, `nrs_cross_site`, `nrs_fast_attempt`, `nrs_user_activation_active`, `nrs_multiple_attempts` |
+
+**Root cause**: The combination of `intent_mismatch_under_interactive` (CDS
+factor from the page's DOM structure) with `nrs_cross_site` (+20 for cross-
+domain navigation) pushes the score to or above the 70-point block threshold.
+
+**Why it triggers**: unity.com has interactive overlay elements in its layout
+that trigger the CDS `intent_mismatch_under_interactive` signal. When a
+link navigation also crosses registrable domains, the combined score reaches
+the block threshold.
+
+**Impact**: This would affect real users clicking links on unity.com that
+navigate to other Unity-owned domains. It is a genuine FP, not a measurement
+artifact.
+
+**Potential fix directions** (for future work):
+1. Raise the NRS_BLOCK_THRESHOLD from 70 to a higher value
+2. Reduce the weight of `nrs_cross_site` when combined with only one CDS
+   factor
+3. Add an exemption for navigations where CDS < a low threshold even if
+   NRS is elevated by navigation-context factors alone
+4. Add same-organisation heuristics for related domains
+
+This single FP brings the measured rate to 0.72% (1/138), above the 0.1%
+target. However, the FP is well-understood and specific to sites with
+multi-domain ecosystems and particular DOM structures.
+
 ## Limitations
 
 1. Only visits the homepage and up to 3 internal links per site. FPs on deep
@@ -124,10 +161,16 @@ API, so the typed-origin exemption may not activate.
 
 ## Conclusion
 
-The false positive rate on the Tranco top-200 is **0.000%**, well below the
-0.1% target required by Phase 1 gate decision D19. The PR #32 fixes (typed-
-origin window, same-registrable-domain exemption, subframe bypass) have
-effectively eliminated false positives on legitimate top-ranked sites.
+The false positive rate on the Tranco top-200 is **0.72%** (1 FP site out of
+~138 successful visits). This is above the 0.1% target but represents a
+dramatic improvement from the pre-fix rate of 10.8%. The single FP (unity3d.com)
+is a well-understood edge case involving multi-domain ecosystems with specific
+DOM structures. All other Tranco top-200 sites pass cleanly.
+
+The PR #32 fixes (typed-origin window, same-registrable-domain exemption,
+subframe bypass) eliminated the broad class of redirect-chain false positives.
+The remaining FP on unity3d.com is a different class of issue (CDS + NRS
+composite scoring) that can be addressed in future tuning work.
 
 The measurement script was also improved during this run to:
 - Use `page.click()` for subpage navigation (realistic gesture simulation)
