@@ -8,6 +8,8 @@ export interface NavigationContext {
   multipleAttemptsInGesture?: boolean | undefined;
   destinationAllowlisted?: boolean | undefined;
   explicitNewTabIntent?: boolean | undefined;
+  /** Destination domain matched the bloom filter of known-bad domains */
+  knownBadDomain?: boolean | undefined;
 }
 
 export interface NRSResult {
@@ -24,6 +26,7 @@ const NRS_WEIGHT_USER_ACTIVATION = 5;
 const NRS_WEIGHT_MULTIPLE_ATTEMPTS = 25;
 const NRS_WEIGHT_ALLOWLIST = -100;
 const NRS_WEIGHT_EXPLICIT_NEW_TAB = -30;
+const NRS_WEIGHT_KNOWN_BAD_DOMAIN = 50;
 
 export const NRS_BLOCK_THRESHOLD = 70;
 export const NRS_STRICT_BLOCK_THRESHOLD = 50;
@@ -65,6 +68,11 @@ export function computeNRS(cdsResult: ScoreResult, navCtx: NavigationContext): N
   if (navCtx.explicitNewTabIntent) {
     nrs += NRS_WEIGHT_EXPLICIT_NEW_TAB;
     nrsFactors.push("nrs_explicit_new_tab_intent");
+  }
+
+  if (navCtx.knownBadDomain) {
+    nrs += NRS_WEIGHT_KNOWN_BAD_DOMAIN;
+    nrsFactors.push("nrs_known_bad_domain");
   }
 
   nrs = Math.max(0, nrs);

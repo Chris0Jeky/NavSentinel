@@ -12,6 +12,7 @@ import {
 import { getRegistrableDomain } from "../shared/domain";
 import { computeNRS, NRS_BLOCK_THRESHOLD, NRS_STRICT_BLOCK_THRESHOLD } from "../shared/nrs";
 import type { NavigationContext } from "../shared/nrs";
+import { initReputation, isKnownBadDomain } from "../shared/reputation";
 import { showToast } from "./ui_toast";
 import {
   buildClickContextFromEvents,
@@ -96,6 +97,26 @@ function refreshDebug(): void {
   });
 }
 
+async function loadReputationFilter(): Promise<void> {
+  try {
+    const url = chrome.runtime.getURL("reputation_data.bin");
+    const response = await fetch(url);
+    if (!response.ok) {
+      console.warn("[NavSentinel] Reputation filter not found (HTTP", response.status, ")");
+      return;
+    }
+    const data = await response.arrayBuffer();
+    if (initReputation(data)) {
+      if (settings.debug) {
+        console.debug("[NavSentinel] Reputation bloom filter loaded:", data.byteLength, "bytes");
+      }
+    }
+  } catch (err) {
+    // Graceful degradation: reputation checks will return false
+    console.warn("[NavSentinel] Failed to load reputation filter:", err);
+  }
+}
+
 async function initSettings() {
   ensureBridge();
   try {
@@ -108,6 +129,8 @@ async function initSettings() {
   setDebugEnabled(settings.debug);
   postToMain("ns-config", { mode: settings.defaultMode, debug: settings.debug });
   postToMain("ns-ping");
+  // Load reputation bloom filter in the background (non-blocking)
+  void loadReputationFilter();
   if (window.top === window) {
     try {
       chrome.runtime.sendMessage({ type: "ns-ready" });
@@ -801,6 +824,8 @@ window.addEventListener(
 
     const userActivationActive = !!(navigator as any).userActivation?.isActive;
 
+    const destDomainBad = destRegDomain ? isKnownBadDomain(destRegDomain) : false;
+
     const navCtx: NavigationContext = {
       isNewTabOrWindow: isBlankAnchor,
       isCrossSite,
@@ -809,6 +834,7 @@ window.addEventListener(
       multipleAttemptsInGesture: gestureNavAttempts > 1,
       destinationAllowlisted: isAllowed,
       explicitNewTabIntent: explicitNewTab,
+      knownBadDomain: destDomainBad,
     };
 
     const nrsResult = computeNRS(cdsResult, navCtx);
