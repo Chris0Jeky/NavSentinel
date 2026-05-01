@@ -67,9 +67,12 @@ async function startSnapshotServer(): Promise<SnapshotServer> {
       }
 
       res.setHeader("content-type", "text/html; charset=utf-8");
+      // form-action 'self' (not 'none') so that native form submit can reach
+      // the local server — needed if the test ever switches from synthetic
+      // dispatchEvent to Playwright's page.click() on submit buttons.
       res.setHeader(
         "content-security-policy",
-        "default-src 'self' 'unsafe-inline'; connect-src 'none'; form-action 'none'; frame-src 'none';"
+        "default-src 'self' 'unsafe-inline'; connect-src 'none'; form-action 'self'; frame-src 'none';"
       );
       res.statusCode = 200;
       res.end(fs.readFileSync(filepath));
@@ -242,16 +245,24 @@ test("Phishing corpus validation @corpus", async () => {
             // --- Simulate user interactions to trigger detection ---
 
             // 1. Try submitting any password form (triggers credential guard)
+            // Check for password inputs both inside and outside <form> elements.
+            // Many phishing kits place password fields outside forms or create
+            // them dynamically, so we search the entire document.
             const hasPasswordForm = await page.evaluate(() => {
+              // First check: password inputs inside forms
               const forms = Array.from(document.querySelectorAll("form"));
-              return forms.some(
+              const inForm = forms.some(
                 (f) => f.querySelector('input[type="password"]') !== null
               );
+              if (inForm) return true;
+              // Second check: standalone password inputs anywhere in the page
+              return document.querySelector('input[type="password"]') !== null;
             });
 
             if (hasPasswordForm) {
               // Fill a dummy value and attempt form submission
               await page.evaluate(() => {
+                // Try forms with password fields first
                 const forms = Array.from(document.querySelectorAll("form"));
                 for (const form of forms) {
                   const pw = form.querySelector('input[type="password"]') as HTMLInputElement | null;
@@ -269,8 +280,22 @@ test("Phishing corpus validation @corpus", async () => {
                     form.dispatchEvent(new SubmitEvent("submit", {
                       bubbles: true, cancelable: true
                     }));
-                    break; // Only submit the first password form
+                    return; // Only submit the first password form
                   }
+                }
+                // Fallback: password input outside a form — find or create a
+                // wrapping form and dispatch submit so credential guard fires.
+                const standalonePw = document.querySelector('input[type="password"]') as HTMLInputElement | null;
+                if (standalonePw) {
+                  standalonePw.value = "testpassword123";
+                  const parentForm = standalonePw.closest("form");
+                  if (parentForm) {
+                    parentForm.dispatchEvent(new SubmitEvent("submit", {
+                      bubbles: true, cancelable: true
+                    }));
+                  }
+                  // Even without a form, the password field is now filled —
+                  // other signals (paste warn) may still fire.
                 }
               });
               // Wait for credential guard to process and fire events

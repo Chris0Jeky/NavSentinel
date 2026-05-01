@@ -54,6 +54,18 @@ This methodology has known limitations that affect detection rates:
 5. **No content analysis yet**: NavSentinel does not yet have page content
    fingerprinting (planned for P2-04). Many phishing pages that mimic brand
    login forms are not detectable by interaction-level heuristics alone.
+6. **Synthetic events**: Both form submission and link clicks are dispatched
+   programmatically via `dispatchEvent()`, not through native Playwright clicks.
+   This means `isTrusted` is false and no `pointerdown` precedes the click, so
+   the NRS navigation risk score has less signal than real user interaction.
+   The navigation guard detection rate (24.2%) may be an undercount.
+7. **Password form detection undercount**: The test searches for
+   `input[type="password"]` in the DOM. Pages that inject password fields via
+   JavaScript (which does not execute in static snapshots) or use non-standard
+   input types (e.g., `type="text"` with CSS masking) are missed. The test
+   found only 5 pages with detectable password forms; manual inspection of the
+   snapshots suggests approximately 21 pages originally had password forms,
+   with the remainder relying on dynamic JavaScript creation.
 
 ---
 
@@ -91,10 +103,14 @@ This methodology has known limitations that affect detection rates:
 
 ### What NavSentinel detects well
 
-1. **Credential harvesting forms (100% TP rate)**: Every phishing page with a
-   `<input type="password">` was detected when form submission was attempted.
-   The credential guard correctly identifies untrusted domains and non-HTTPS
-   pages attempting to collect passwords.
+1. **Credential harvesting forms (100% TP rate on detected forms)**: Every
+   phishing page where the test found a `<input type="password">` in the DOM
+   was detected when form submission was attempted (5/5). The credential guard
+   correctly identifies untrusted domains and non-HTTPS pages attempting to
+   collect passwords. **Caveat**: only 5 of an estimated 21 password-form pages
+   were identified by the test selector -- the remainder likely use JavaScript
+   to inject password fields dynamically, which does not execute in static
+   snapshots (see Limitations #7).
 
 2. **Pages with suspicious outbound links (~24%)**: Pages containing links
    that trigger NavSentinel's navigation guard (cross-origin navigation from
