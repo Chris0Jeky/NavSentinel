@@ -12,6 +12,7 @@ import {
 import { getRegistrableDomain } from "../shared/domain";
 import { computeNRS, NRS_BLOCK_THRESHOLD, NRS_STRICT_BLOCK_THRESHOLD } from "../shared/nrs";
 import type { NavigationContext } from "../shared/nrs";
+import { initReputation, isKnownBadDomain } from "../shared/reputation";
 import { showToast } from "./ui_toast";
 import {
   buildClickContextFromEvents,
@@ -106,6 +107,40 @@ function refreshDebug(): void {
   });
 }
 
+/** Maximum .bin file size we will read (2 MB + 16-byte header, matching MAX_FILTER_BITS). */
+const MAX_REPUTATION_FILE_BYTES = 2 * 1024 * 1024 + 16;
+
+async function loadReputationFilter(): Promise<void> {
+  try {
+    const url = chrome.runtime.getURL("reputation_data.bin");
+    const response = await fetch(url);
+    if (!response.ok) {
+      console.warn("[NavSentinel] Reputation filter not found (HTTP", response.status, ")");
+      return;
+    }
+    // Pre-read size guard: reject obviously oversized responses before buffering.
+    const cl = response.headers.get("content-length");
+    if (cl && Number(cl) > MAX_REPUTATION_FILE_BYTES) {
+      console.warn("[NavSentinel] Reputation file too large (Content-Length:", cl, ")");
+      return;
+    }
+    const data = await response.arrayBuffer();
+    // Post-read size guard: Content-Length can be absent or spoofed.
+    if (data.byteLength > MAX_REPUTATION_FILE_BYTES) {
+      console.warn("[NavSentinel] Reputation file too large:", data.byteLength, "bytes");
+      return;
+    }
+    if (initReputation(data)) {
+      if (settings.debug) {
+        console.debug("[NavSentinel] Reputation bloom filter loaded:", data.byteLength, "bytes");
+      }
+    }
+  } catch (err) {
+    // Graceful degradation: reputation checks will return false
+    console.warn("[NavSentinel] Failed to load reputation filter:", err);
+  }
+}
+
 async function initSettings() {
   ensureBridge();
   try {
@@ -118,6 +153,8 @@ async function initSettings() {
   setDebugEnabled(settings.debug);
   postToMain("ns-config", { mode: settings.defaultMode, debug: settings.debug });
   postToMain("ns-ping");
+  // Load reputation bloom filter in the background (non-blocking)
+  void loadReputationFilter();
   if (window.top === window) {
     try {
       chrome.runtime.sendMessage({ type: "ns-ready" });
@@ -885,6 +922,15 @@ window.addEventListener(
 
     const dblClickHijack = isDoubleClickHijackActive();
 
+    // Check both the registrable domain and the full hostname against the
+    // bloom filter. Feeds may contain either form, and attackers may use
+    // deep subdomains to evade registrable-domain-only checks.
+    const destHost = parsed?.host ?? null;
+    const destDomainBad = destRegDomain
+      ? isKnownBadDomain(destRegDomain) ||
+        (destHost !== null && destHost !== destRegDomain && isKnownBadDomain(destHost))
+      : false;
+
     const navCtx: NavigationContext = {
       isNewTabOrWindow: isBlankAnchor,
       isCrossSite,
@@ -894,6 +940,7 @@ window.addEventListener(
       destinationAllowlisted: isAllowed,
       explicitNewTabIntent: explicitNewTab,
       doubleClickHijackActive: dblClickHijack,
+      knownBadDomain: destDomainBad,
     };
 
     if (dblClickHijack) {
