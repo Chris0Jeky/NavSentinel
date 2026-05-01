@@ -882,9 +882,12 @@ function patchOpenerLocation(): void {
       },
       configurable: false
     });
-  } catch {
+  } catch (e) {
     // Some environments (cross-origin) may prevent redefining window.opener.
     // Fall back gracefully -- the SW child-close correlation still works.
+    if (debug) {
+      console.debug("[NavSentinel] patchOpenerLocation failed, SW fallback active", e);
+    }
   }
 }
 
