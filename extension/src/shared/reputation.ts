@@ -169,7 +169,8 @@ export function checkDomain(filter: BloomFilterState, domain: string): boolean {
 
   const key = domain.toLowerCase();
   const h1 = murmurhash3_32(key, 0x9747b28c);
-  const h2 = murmurhash3_32(key, 0xc6a4a793);
+  // Force h2 to be odd so double-hashing never degenerates when h2=0.
+  const h2 = murmurhash3_32(key, 0xc6a4a793) | 1;
 
   for (let i = 0; i < filter.k; i++) {
     const bit = ((h1 + Math.imul(i, h2)) >>> 0) % filter.m;
@@ -220,10 +221,11 @@ export function createFilter(m: number, k: number): BloomFilterState {
  * Used by the build script; not needed at runtime.
  */
 export function insertDomain(filter: BloomFilterState, domain: string): void {
-  if (!domain) return;
+  if (!domain || filter.m === 0) return;
   const key = domain.toLowerCase();
   const h1 = murmurhash3_32(key, 0x9747b28c);
-  const h2 = murmurhash3_32(key, 0xc6a4a793);
+  // Force h2 to be odd -- must match checkDomain's h2 derivation.
+  const h2 = murmurhash3_32(key, 0xc6a4a793) | 1;
 
   for (let i = 0; i < filter.k; i++) {
     const bit = ((h1 + Math.imul(i, h2)) >>> 0) % filter.m;

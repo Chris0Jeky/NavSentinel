@@ -16,7 +16,7 @@
  * Usage:  node scripts/build-bloom-filter.mjs
  */
 
-import { writeFileSync, readFileSync, existsSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -103,10 +103,11 @@ function createFilter(m, k) {
 }
 
 function insertDomain(filter, domain) {
-  if (!domain) return;
+  if (!domain || filter.m === 0) return;
   const key = domain.toLowerCase();
   const h1 = murmurhash3_32(key, 0x9747b28c);
-  const h2 = murmurhash3_32(key, 0xc6a4a793);
+  // Force h2 to be odd -- must match runtime checkDomain derivation.
+  const h2 = murmurhash3_32(key, 0xc6a4a793) | 1;
 
   for (let i = 0; i < filter.k; i++) {
     const bit = ((h1 + Math.imul(i, h2)) >>> 0) % filter.m;
@@ -169,6 +170,30 @@ const FETCH_TIMEOUT_MS = 30_000;
 const MAX_RESPONSE_BYTES = 50 * 1024 * 1024;
 
 /**
+ * Stream-read response body up to a byte limit. Avoids trusting
+ * Content-Length alone (which can be absent or spoofed).
+ */
+async function readTextWithLimit(res, limit = MAX_RESPONSE_BYTES) {
+  if (!res.body) return res.text();
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let totalBytes = 0;
+  let text = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    totalBytes += value.byteLength;
+    if (totalBytes > limit) {
+      reader.cancel();
+      throw new Error(`Response body exceeded ${limit} byte limit`);
+    }
+    text += decoder.decode(value, { stream: true });
+  }
+  text += decoder.decode();
+  return text;
+}
+
+/**
  * Fetch with a timeout and response size limit.
  */
 async function fetchWithTimeout(url, timeoutMs = FETCH_TIMEOUT_MS) {
@@ -197,7 +222,7 @@ async function fetchUrlhausDomains() {
   try {
     const res = await fetchWithTimeout(URLHAUS_CSV_URL);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const text = await res.text();
+    const text = await readTextWithLimit(res);
 
     const domains = new Set();
     for (const line of text.split("\n")) {
@@ -238,7 +263,7 @@ async function fetchOpenPhishDomains() {
   try {
     const res = await fetchWithTimeout(OPENPHISH_FEED_URL);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const text = await res.text();
+    const text = await readTextWithLimit(res);
 
     const domains = new Set();
     for (const line of text.split("\n")) {

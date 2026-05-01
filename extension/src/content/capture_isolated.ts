@@ -97,6 +97,9 @@ function refreshDebug(): void {
   });
 }
 
+/** Maximum .bin file size we will read (2 MB + 16-byte header, matching MAX_FILTER_BITS). */
+const MAX_REPUTATION_FILE_BYTES = 2 * 1024 * 1024 + 16;
+
 async function loadReputationFilter(): Promise<void> {
   try {
     const url = chrome.runtime.getURL("reputation_data.bin");
@@ -105,7 +108,18 @@ async function loadReputationFilter(): Promise<void> {
       console.warn("[NavSentinel] Reputation filter not found (HTTP", response.status, ")");
       return;
     }
+    // Pre-read size guard: reject obviously oversized responses before buffering.
+    const cl = response.headers.get("content-length");
+    if (cl && Number(cl) > MAX_REPUTATION_FILE_BYTES) {
+      console.warn("[NavSentinel] Reputation file too large (Content-Length:", cl, ")");
+      return;
+    }
     const data = await response.arrayBuffer();
+    // Post-read size guard: Content-Length can be absent or spoofed.
+    if (data.byteLength > MAX_REPUTATION_FILE_BYTES) {
+      console.warn("[NavSentinel] Reputation file too large:", data.byteLength, "bytes");
+      return;
+    }
     if (initReputation(data)) {
       if (settings.debug) {
         console.debug("[NavSentinel] Reputation bloom filter loaded:", data.byteLength, "bytes");

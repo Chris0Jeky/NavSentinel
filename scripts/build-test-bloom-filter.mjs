@@ -51,8 +51,10 @@ function murmurhash3_32(key, seed) {
   switch (len & 3) {
     case 3:
       k1 ^= (key.charCodeAt(tail + 2) & 0xff) << 16;
+    // falls through
     case 2:
       k1 ^= (key.charCodeAt(tail + 1) & 0xff) << 8;
+    // falls through
     case 1:
       k1 ^= key.charCodeAt(tail) & 0xff;
       k1 = Math.imul(k1, c1);
@@ -87,10 +89,11 @@ function createFilter(m, k) {
 }
 
 function insertDomain(filter, domain) {
-  if (!domain) return;
+  if (!domain || filter.m === 0) return;
   const key = domain.toLowerCase();
   const h1 = murmurhash3_32(key, 0x9747b28c);
-  const h2 = murmurhash3_32(key, 0xc6a4a793);
+  // Force h2 to be odd -- must match runtime checkDomain derivation.
+  const h2 = murmurhash3_32(key, 0xc6a4a793) | 1;
   for (let i = 0; i < filter.k; i++) {
     const bit = ((h1 + Math.imul(i, h2)) >>> 0) % filter.m;
     const byteIndex = bit >>> 3;
