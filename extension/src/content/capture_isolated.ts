@@ -10,6 +10,7 @@ import {
   type Allowlist
 } from "../shared/allowlist";
 import { getRegistrableDomain } from "../shared/domain";
+import { areSameOrganization } from "../shared/domain_groups";
 import { computeNRS, NRS_BLOCK_THRESHOLD, NRS_STRICT_BLOCK_THRESHOLD } from "../shared/nrs";
 import type { NavigationContext } from "../shared/nrs";
 import { initReputation, isKnownBadDomain } from "../shared/reputation";
@@ -919,7 +920,12 @@ window.addEventListener(
 
     const siteRegDomain = getRegistrableDomain(siteKeyFromLocation());
     const destRegDomain = parsed?.host ? getRegistrableDomain(parsed.host) : null;
-    const isCrossSite = !!(siteRegDomain && destRegDomain && siteRegDomain !== destRegDomain);
+    const isCrossSite = !!(
+      siteRegDomain &&
+      destRegDomain &&
+      siteRegDomain !== destRegDomain &&
+      !areSameOrganization(siteRegDomain, destRegDomain)
+    );
 
     const timeSincePointerdownMs = downForClick
       ? performance.now() - downForClick.ts

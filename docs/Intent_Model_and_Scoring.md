@@ -174,6 +174,35 @@ Decision thresholds:
 - Block: >= 70
 - Strict mode: block >= 50
 
+### Same-organization domain exemption
+
+Many companies operate multiple registrable domains (e.g. unity3d.com and
+unity.com are both Unity Technologies). Without special handling, navigating
+between these domains triggers the `nrs_cross_site` (+20) factor, which can
+push the NRS above the block threshold when combined with even moderate CDS
+signals.
+
+A small, explicit list of same-organization domain groups in
+`extension/src/shared/domain_groups.ts` suppresses the cross-site flag when
+both source and destination belong to the same group. The list is:
+
+- Unity Technologies: unity.com, unity3d.com
+- Google / Alphabet: google.com, youtube.com, googleapis.com, ...
+- Microsoft: microsoft.com, live.com, outlook.com, bing.com, ...
+- Amazon: amazon.com, amazonaws.com, ...
+- Apple: apple.com, icloud.com
+- Meta: facebook.com, instagram.com, whatsapp.com, ...
+- Cloudflare, Mozilla, Yahoo, Adobe, Atlassian, JetBrains, GitHub, Reddit
+
+The exemption only applies to the `isCrossSite` flag in navigation scoring.
+It does not affect credential-risk scoring, reputation lookups, or any other
+detection layer.
+
+**Abuse resistance**: The list is explicit and auditable. An attacker
+registering `unity-phishing.com` would not match because only exact
+registrable-domain matches are checked. No substring, prefix, or fuzzy
+matching is used.
+
 Note:
 - NRS is implemented as of P1-04. Navigation decisions use NRS as the primary score. CDS remains available in the debug overlay.
 - The `nrs_known_bad_domain` factor (P2-03) uses a build-time compiled bloom filter of known-bad domains. The filter is loaded at startup from a static binary asset. See `extension/src/shared/reputation.ts`.
