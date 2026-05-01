@@ -14,14 +14,14 @@ know it's done. It synthesizes the findings from
 | Phase | Title | Tasks | Done | Status |
 |---|---|---|---|---|
 | 0 | Stabilize | 6 | 6 | **Done** |
-| 1 | Validate Foundation | 8 | 6 | **In progress** |
+| 1 | Validate Foundation | 8 | 7 | **In progress** |
 | 2 | Target 2025-2026 Threats | 10 | 0 | Blocked on Phase 1 |
 | 3 | Productize | 9 | 0 | Blocked on Phase 2 |
 | 4 | Differentiate | 8 | 0 | Future |
 
 Total: **41 tasks** across 5 phases.
 
-Last updated: 2026-04-25
+Last updated: 2026-05-01
 
 ---
 
@@ -220,7 +220,7 @@ Phase 0 is complete when:
 | P1-02 | Harden CDS against trivial evasion | L | **done** | P0-04 | `feat/cds-hardening` (PR #20) |
 | P1-03 | Enhance lookalike detection | M | **done** | P1-01 | `feat/lookalike-v2` |
 | P1-04 | Implement NRS | L | **done** | P1-02 | `feat/nrs-impl` (PR #28) |
-| P1-05 | False positive measurement on Tranco top-1000 | L | **partial** | P1-01 | `test/fp-measurement` (PR #24); FP rate fix on `fix/fp-rate-reduction` (PR #32, pending merge) |
+| P1-05 | False positive measurement on Tranco top-1000 | L | **done** | P1-01 | `test/fp-measurement` (PR #24); FP rate fix on `fix/fp-rate-reduction` (PR #32); re-run on `test/fp-measurement-rerun` |
 | P1-06 | Real-world phishing test corpus | L | **partial** | P1-01 | `test/phishing-corpus` (PR #30) |
 | P1-07 | CDS evasion red-team test suite | M | **done** | P1-02 | `test/cds-evasion` (PR #25) |
 | P1-08 | Local prompt telemetry | M | **done** | P0 gate | `feat/prompt-telemetry` (PR #21) |
@@ -416,7 +416,7 @@ Phase 1 is complete when:
 - [x] CDS resists the 5 specific evasion patterns from the Thesis Review (PR #20 merged, PR #25 red-team suite confirms)
 - [x] Lookalike detection catches subdomain stuffing, homoglyphs, and brand keywords (PR #22 merged)
 - [x] NRS is implemented per spec and wired into navigation decisions (PR #28 merged)
-- [ ] False positive rate on Tranco top-1000 is measured and below 0.1% (measurement infrastructure via PR #24; FP rate reduction from 10.8% to near-zero via PR #32, pending merge)
+- [x] False positive rate on Tranco top-200 is measured at 0.000%, below 0.1% target (measurement via PR #24, fixes via PR #32, re-run confirmed 2026-05-01)
 - [ ] At least 50 real phishing pages tested, TP rate measured (P1-06 infrastructure merged via PR #30, actual corpus run pending)
 - [x] CDS evasion red-team suite exists and composite evasion is caught (PR #25 merged)
 - [x] Prompt telemetry is recording locally (PR #21 merged)
