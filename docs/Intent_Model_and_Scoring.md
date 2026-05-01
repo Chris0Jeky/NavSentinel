@@ -165,6 +165,7 @@ Start with NRS = CDS and add:
 | Multiple attempts within one gesture | +25 | Legit flows rarely do this. |
 | Destination matches allowlist | -100 | Hard allow. |
 | Explicit new-tab intent (middle click or ctrl/cmd click) | -30 | Respect user intent. |
+| Destination in bloom filter of known-bad domains | +50 | Strong signal from public threat feeds. |
 
 Decision thresholds:
 - Allow: NRS < 40
@@ -174,6 +175,7 @@ Decision thresholds:
 
 Note:
 - NRS is implemented as of P1-04. Navigation decisions use NRS as the primary score. CDS remains available in the debug overlay.
+- The `nrs_known_bad_domain` factor (P2-03) uses a build-time compiled bloom filter of known-bad domains. The filter is loaded at startup from a static binary asset. See `extension/src/shared/reputation.ts`.
 
 ## Explainability
 - Each score contribution produces a reason code.

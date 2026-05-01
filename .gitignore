@@ -11,3 +11,6 @@ AGENTS.md
 test-results/.last-run.json
 playwright-report/
 /RESOURCES
+# Downloaded threat feed data (build-bloom-filter.mjs downloads)
+*.csv.tmp
+feeds/

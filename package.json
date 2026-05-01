@@ -24,7 +24,9 @@
     "package:ext": "node scripts/package.mjs",
     "gym:serve": "vite --root gym --port 5173 --strictPort",
     "update:psl": "node scripts/update-psl.mjs",
-    "measure:fp": "node scripts/measure-fp.mjs"
+    "measure:fp": "node scripts/measure-fp.mjs",
+    "build:bloom": "node scripts/build-bloom-filter.mjs",
+    "build:bloom:test": "node scripts/build-test-bloom-filter.mjs"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.3.0",
