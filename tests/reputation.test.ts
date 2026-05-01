@@ -10,6 +10,8 @@ import {
   initReputation,
   isKnownBadDomain,
   reputationReady,
+  MAX_FILTER_BITS,
+  MAX_HASH_FUNCTIONS,
   type BloomFilterState,
 } from "../extension/src/shared/reputation";
 
@@ -208,6 +210,39 @@ describe("bloom filter serialization", () => {
     view.setUint32(0, 0x424c4f4d, true); // "BLOM"
     view.setUint32(4, 99, true); // bad version
     expect(() => loadFilter(buf)).toThrow("Unsupported bloom filter version");
+  });
+
+  it("rejects m exceeding safety cap (OOM prevention)", () => {
+    const buf = new Uint8Array(20);
+    const view = new DataView(buf.buffer);
+    view.setUint32(0, 0x424c4f4d, true); // "BLOM"
+    view.setUint32(4, 1, true);           // version 1
+    view.setUint32(8, 7, true);           // k=7
+    view.setUint32(12, MAX_FILTER_BITS + 1, true); // m exceeds cap
+    expect(() => loadFilter(buf)).toThrow("exceeds safety cap");
+  });
+
+  it("rejects k exceeding safety cap (CPU-lock prevention)", () => {
+    const buf = new Uint8Array(20);
+    const view = new DataView(buf.buffer);
+    view.setUint32(0, 0x424c4f4d, true); // "BLOM"
+    view.setUint32(4, 1, true);           // version 1
+    view.setUint32(8, MAX_HASH_FUNCTIONS + 1, true); // k exceeds cap
+    view.setUint32(12, 64, true);         // m=64 (small)
+    expect(() => loadFilter(buf)).toThrow("exceeds safety cap");
+  });
+
+  it("accepts m and k at safety cap limits", () => {
+    // Build a valid header with k=MAX_HASH_FUNCTIONS and a small m
+    const m = 64;
+    const k = MAX_HASH_FUNCTIONS;
+    const filter = createFilter(m, k);
+    const binary = serializeFilter(filter);
+    const view = new DataView(binary.buffer);
+    view.setUint32(8, k, true);
+    const loaded = loadFilter(binary);
+    expect(loaded.k).toBe(k);
+    expect(loaded.m).toBe(m);
   });
 
   it("rejects truncated bit array", () => {

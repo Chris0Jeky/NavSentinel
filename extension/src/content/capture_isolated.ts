@@ -824,7 +824,14 @@ window.addEventListener(
 
     const userActivationActive = !!(navigator as any).userActivation?.isActive;
 
-    const destDomainBad = destRegDomain ? isKnownBadDomain(destRegDomain) : false;
+    // Check both the registrable domain and the full hostname against the
+    // bloom filter. Feeds may contain either form, and attackers may use
+    // deep subdomains to evade registrable-domain-only checks.
+    const destHost = parsed?.host ?? null;
+    const destDomainBad = destRegDomain
+      ? isKnownBadDomain(destRegDomain) ||
+        (destHost !== null && destHost !== destRegDomain && isKnownBadDomain(destHost))
+      : false;
 
     const navCtx: NavigationContext = {
       isNewTabOrWindow: isBlankAnchor,

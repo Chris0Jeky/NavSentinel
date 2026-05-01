@@ -131,6 +131,33 @@ function serializeFilter(filter) {
 }
 
 // ---------------------------------------------------------------------------
+// Domain normalization
+// ---------------------------------------------------------------------------
+
+/**
+ * Extract a rough "registrable domain" from a hostname by keeping only the
+ * last two labels (or three for known two-part TLDs like .co.uk).
+ * This is a best-effort approximation -- the runtime uses a full PSL trie.
+ * The goal is to ensure that when a feed lists "evil.sub.example.com",
+ * we also insert "example.com" so the runtime registrable-domain check works.
+ */
+const TWO_PART_TLDS = new Set([
+  "co.uk", "co.jp", "co.kr", "co.nz", "co.za", "co.in", "co.id",
+  "com.au", "com.br", "com.cn", "com.mx", "com.tw", "com.sg",
+  "org.uk", "org.au", "net.au", "ac.uk", "gov.uk",
+]);
+
+function getBaseDomain(host) {
+  const parts = host.split(".");
+  if (parts.length <= 2) return host;
+  const lastTwo = parts.slice(-2).join(".");
+  if (TWO_PART_TLDS.has(lastTwo) && parts.length >= 3) {
+    return parts.slice(-3).join(".");
+  }
+  return lastTwo;
+}
+
+// ---------------------------------------------------------------------------
 // Feed fetchers
 // ---------------------------------------------------------------------------
 
@@ -138,15 +165,22 @@ const URLHAUS_CSV_URL = "https://urlhaus.abuse.ch/downloads/csv/";
 const OPENPHISH_FEED_URL = "https://openphish.com/feed.txt";
 
 const FETCH_TIMEOUT_MS = 30_000;
+/** Maximum response body size (50 MB) to prevent OOM from a hijacked feed. */
+const MAX_RESPONSE_BYTES = 50 * 1024 * 1024;
 
 /**
- * Fetch with a timeout.
+ * Fetch with a timeout and response size limit.
  */
 async function fetchWithTimeout(url, timeoutMs = FETCH_TIMEOUT_MS) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(url, { signal: controller.signal });
+    // Check Content-Length header if available
+    const cl = res.headers.get("content-length");
+    if (cl && Number(cl) > MAX_RESPONSE_BYTES) {
+      throw new Error(`Response too large: ${cl} bytes (limit ${MAX_RESPONSE_BYTES})`);
+    }
     return res;
   } finally {
     clearTimeout(timer);
@@ -178,13 +212,17 @@ async function fetchUrlhausDomains() {
         const host = u.hostname.toLowerCase();
         if (host && !host.match(/^(\d{1,3}\.){3}\d{1,3}$/)) {
           domains.add(host);
+          // Also insert the base (registrable) domain so runtime checks
+          // using getRegistrableDomain() can find it.
+          const base = getBaseDomain(host);
+          if (base !== host) domains.add(base);
         }
       } catch {
         // skip invalid URLs
       }
     }
 
-    console.log(`  URLhaus: ${domains.size} unique domains`);
+    console.log(`  URLhaus: ${domains.size} unique domains (including base domains)`);
     return domains;
   } catch (err) {
     console.warn(`  URLhaus fetch failed: ${err.message}`);
@@ -211,13 +249,15 @@ async function fetchOpenPhishDomains() {
         const host = u.hostname.toLowerCase();
         if (host && !host.match(/^(\d{1,3}\.){3}\d{1,3}$/)) {
           domains.add(host);
+          const base = getBaseDomain(host);
+          if (base !== host) domains.add(base);
         }
       } catch {
         // skip invalid URLs
       }
     }
 
-    console.log(`  OpenPhish: ${domains.size} unique domains`);
+    console.log(`  OpenPhish: ${domains.size} unique domains (including base domains)`);
     return domains;
   } catch (err) {
     console.warn(`  OpenPhish fetch failed: ${err.message}`);

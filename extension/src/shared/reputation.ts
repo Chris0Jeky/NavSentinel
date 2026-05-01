@@ -85,6 +85,14 @@ const HEADER_MAGIC = 0x424c4f4d; // "BLOM"
 const HEADER_VERSION = 1;
 const HEADER_SIZE = 16; // magic(4) + version(4) + k(4) + m(4)
 
+/**
+ * Safety caps to prevent OOM / CPU-lock from a crafted .bin file.
+ * MAX_FILTER_BITS = 16M bits = 2MB bit array -- well above the 150KB budget.
+ * MAX_HASH_FUNCTIONS = 30 -- optimal k for any practical FP rate is < 20.
+ */
+export const MAX_FILTER_BITS = 16 * 1024 * 1024; // 16 Mbit = 2 MB
+export const MAX_HASH_FUNCTIONS = 30;
+
 export interface BloomFilterState {
   /** Bit array */
   bits: Uint8Array;
@@ -126,6 +134,13 @@ export function loadFilter(data: ArrayBuffer | Uint8Array): BloomFilterState {
 
   const k = view.getUint32(8, true);
   const m = view.getUint32(12, true);
+
+  if (m > MAX_FILTER_BITS) {
+    throw new Error(`Bloom filter m=${m} exceeds safety cap of ${MAX_FILTER_BITS} bits`);
+  }
+  if (k > MAX_HASH_FUNCTIONS) {
+    throw new Error(`Bloom filter k=${k} exceeds safety cap of ${MAX_HASH_FUNCTIONS}`);
+  }
 
   const expectedBytes = Math.ceil(m / 8);
   if (bytes.length < HEADER_SIZE + expectedBytes) {
