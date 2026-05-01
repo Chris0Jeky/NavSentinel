@@ -268,6 +268,18 @@ function handleBridgeMessage(message: unknown): void {
   if (data.type === "ns-dblclick-opener-nav") {
     dblclickOpenerNavTs = typeof (data as any).ts === "number" ? (data as any).ts : Date.now();
     dblclickOpenerNavUrl = typeof (data as any).url === "string" ? (data as any).url : "";
+    // Forward to the SW so it can notify the opener tab.
+    // This capture_isolated is running in the CHILD window; the opener tab
+    // needs this signal to correlate with its click timing.
+    try {
+      chrome.runtime.sendMessage({
+        type: "ns-dblclick-opener-nav",
+        url: dblclickOpenerNavUrl,
+        ts: dblclickOpenerNavTs,
+      });
+    } catch {
+      // ignore -- SW may not be reachable
+    }
     return;
   }
 
@@ -677,6 +689,14 @@ if (chrome?.runtime?.onMessage) {
     if (window.top !== window) return;
     dblclickChildClosed = true;
     dblclickChildClosedTs = Date.now();
+  });
+
+  // DoubleClickjacking: SW forwards opener.location write from child tab.
+  chrome.runtime.onMessage.addListener((message) => {
+    if (!message || message.type !== "ns-dblclick-opener-nav-from-child") return;
+    if (window.top !== window) return;
+    dblclickOpenerNavTs = typeof message.ts === "number" ? message.ts : Date.now();
+    dblclickOpenerNavUrl = typeof message.url === "string" ? message.url : "";
   });
 }
 

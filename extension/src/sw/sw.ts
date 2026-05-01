@@ -238,6 +238,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse?.({ status: "none", url: "" });
     }
   }
+
+  // DoubleClickjacking: forward opener.location write from child to opener tab.
+  if (message.type === "ns-dblclick-opener-nav") {
+    const childTabId = sender.tab?.id;
+    if (typeof childTabId === "number") {
+      const childEntry = childWindowByTab.get(childTabId);
+      if (childEntry) {
+        chrome.tabs.sendMessage(
+          childEntry.openerTabId,
+          {
+            type: "ns-dblclick-opener-nav-from-child",
+            url: typeof message.url === "string" ? message.url : "",
+            ts: typeof message.ts === "number" ? message.ts : Date.now(),
+          },
+          () => {
+            if (chrome.runtime.lastError) { /* opener may have navigated away */ }
+          }
+        );
+      }
+    }
+    sendResponse?.({ ok: true });
+  }
 });
 
 chrome.webNavigation.onBeforeNavigate.addListener((details) => {
