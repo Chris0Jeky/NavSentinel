@@ -68,6 +68,21 @@ The important constraints are:
 
 This keeps actionable control traffic off the old page-visible `window.postMessage` path and makes the bridge state far less spoofable than the earlier fallback design.
 
+## Domain reputation (bloom filter)
+
+`extension/src/shared/reputation.ts` provides a build-time compiled bloom filter of known-bad domains from public threat feeds (URLhaus, OpenPhish). The filter ships as a static binary asset (`reputation_data.bin`) and requires no runtime network calls.
+
+Key characteristics:
+- MurmurHash3-based bloom filter with double hashing
+- Binary format: 16-byte header (magic, version, k, m) + bit array
+- Target false positive rate: < 0.01%
+- Size budget: < 150KB
+- Lookup time: < 1ms
+
+The build script (`scripts/build-bloom-filter.mjs`) fetches feeds and compiles the filter. A deterministic test filter can be built with `scripts/build-test-bloom-filter.mjs`.
+
+At runtime, `capture_isolated.ts` loads the filter on startup via `chrome.runtime.getURL` and checks destination domains during navigation decisions. A bloom filter hit adds `nrs_known_bad_domain` (+50) to the Navigation Risk Score.
+
 ## Shared state and storage
 
 `extension/src/shared/storage.ts` is the local persistence backbone. It stores:

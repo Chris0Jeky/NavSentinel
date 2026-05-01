@@ -1,0 +1,131 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DoubleClickjacking 01 - Basic Attack</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      padding: 24px;
+      max-width: 720px;
+      margin: 0 auto;
+    }
+    h1 { margin-top: 0; }
+    .attack-zone {
+      border: 2px solid #c00;
+      border-radius: 8px;
+      padding: 32px;
+      text-align: center;
+      margin: 24px 0;
+      background: #fff5f5;
+    }
+    .attack-btn {
+      font-size: 18px;
+      padding: 14px 32px;
+      cursor: pointer;
+      border: none;
+      border-radius: 6px;
+      background: #c00;
+      color: white;
+      font-weight: 600;
+    }
+    .info {
+      background: #f8f8f8;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 16px;
+      margin: 16px 0;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .log {
+      font-family: ui-monospace, monospace;
+      font-size: 12px;
+      background: #1a1a1a;
+      color: #0f0;
+      padding: 12px;
+      border-radius: 6px;
+      min-height: 80px;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <h1>DoubleClickjacking 01 - Basic Attack</h1>
+
+  <div class="info">
+    <strong>Attack pattern:</strong> Double-click the button below. On the first
+    click, a child window opens. The child window navigates the opener
+    (this page) to a different URL using <code>window.opener.location</code>,
+    then closes itself. Your second click lands on the navigated page.
+    <br><br>
+    <strong>Expected:</strong> NavSentinel should detect the DoubleClickjacking
+    pattern and flag the second click with an elevated NRS score
+    (<code>nrs_double_click_hijack</code> factor, +40).
+  </div>
+
+  <div class="attack-zone">
+    <p>Double-click the button to trigger the attack simulation:</p>
+    <button class="attack-btn" id="trigger">Double-Click Me</button>
+  </div>
+
+  <div class="log" id="log">Waiting for interaction...</div>
+
+  <!-- Child window page served inline via data URI -->
+  <script>
+    const log = document.getElementById("log");
+    function addLog(msg) {
+      log.textContent += "\n" + new Date().toISOString().slice(11, 23) + " " + msg;
+    }
+
+    const trigger = document.getElementById("trigger");
+    let clickCount = 0;
+
+    trigger.addEventListener("click", () => {
+      clickCount++;
+      addLog(`Click #${clickCount} on trigger button`);
+
+      if (clickCount === 1) {
+        // First click: open a child window that will navigate the opener.
+        // The child page uses window.opener.location to redirect us.
+        const childHtml = `
+          <!doctype html>
+          <html>
+          <head><title>Loading...</title></head>
+          <body>
+            <p>Processing...</p>
+            <script>
+              // Simulate the attack: navigate opener to a "sensitive" page
+              try {
+                window.opener.location = "doubleclick-01-target.html";
+              } catch (e) {
+                // Cross-origin fallback for safety
+                document.body.textContent = "opener.location blocked: " + e.message;
+              }
+              // Close self after a brief delay
+              setTimeout(() => window.close(), 200);
+            <\/script>
+          </body>
+          </html>
+        `;
+
+        addLog("Opening child window...");
+        const child = window.open(
+          "data:text/html," + encodeURIComponent(childHtml),
+          "dblclick_child",
+          "width=400,height=300"
+        );
+
+        if (!child) {
+          addLog("Child window was BLOCKED by NavSentinel (expected if guard is active)");
+        } else {
+          addLog("Child window opened successfully");
+        }
+      } else {
+        addLog("Second click detected - in a real attack this would land on the target page");
+      }
+    });
+  </script>
+</body>
+</html>

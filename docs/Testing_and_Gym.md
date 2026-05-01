@@ -58,6 +58,7 @@ Current unit coverage lives in:
 - `tests/statemachine-timing.test.ts`
 - `tests/prompt-telemetry.test.ts`
 - `tests/clickfix-detector.test.ts`
+- `tests/nrs-dblclick.test.ts`
 
 These currently cover:
 
@@ -72,6 +73,7 @@ These currently cover:
 - state machine timing edge cases (token expiry, window boundaries)
 - prompt telemetry recording, statistics, and bounded storage
 - ClickFix command detection, CAPTCHA/instruction pattern matching, clipboard event tracking, and legitimate CAPTCHA suppression
+- DoubleClickjacking NRS factor (+40 weight, factor combinations, allowlist interaction)
 
 ### Playwright E2E
 
@@ -220,6 +222,9 @@ Current pages:
 - `gym/clickfix-01-basic.html` (fake CAPTCHA overlay with clipboard write + Win+R instructions)
 - `gym/clickfix-02-instructions.html` (dark-themed terminal instructions variant)
 - `gym/clickfix-03-legit-captcha.html` (legitimate reCAPTCHA + OTP copy, false positive check)
+- `gym/doubleclick-01-basic.html` (+ `doubleclick-01-target.html`) -- basic DoubleClickjacking attack simulation
+- `gym/doubleclick-02-oauth.html` (+ `doubleclick-02-consent.html`) -- OAuth consent DoubleClickjacking variant
+- `gym/doubleclick-03-legit.html` -- legitimate double-click interaction (false-positive check)
 
 Every current primitive Gym level has a dedicated automated path, and the real-world scenario waves
 are continuing to land alongside those primitives.
@@ -323,5 +328,5 @@ From the testing perspective, the clearest next steps are:
 
 - run the FP measurement against Tranco top-1000 and record baseline rate (infrastructure exists, actual run pending)
 - run the phishing corpus validation to establish baseline TP/FN rates
-- add gym fixtures for remaining Phase 2 detections (DoubleClickjacking, redirect chains, DOM mutation) — ClickFix fixtures are done
+- add gym fixtures for remaining Phase 2 detections (redirect chains, DOM mutation) — ClickFix and DoubleClickjacking fixtures are done
 - build competitive benchmark suite comparing NavSentinel against Safe Browsing alone

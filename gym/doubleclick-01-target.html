@@ -1,0 +1,80 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sensitive Action Page (DoubleClickjacking Target)</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      padding: 24px;
+      max-width: 600px;
+      margin: 0 auto;
+      background: #f0f4ff;
+    }
+    .consent-box {
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 12px;
+      padding: 32px;
+      text-align: center;
+      margin: 48px auto;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .consent-box h2 { margin-top: 0; }
+    .allow-btn {
+      font-size: 16px;
+      padding: 12px 32px;
+      cursor: pointer;
+      background: #4285f4;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      margin: 8px;
+    }
+    .deny-btn {
+      font-size: 16px;
+      padding: 12px 32px;
+      cursor: pointer;
+      background: #f44336;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      margin: 8px;
+    }
+    .warning {
+      background: #fff3e0;
+      border: 1px solid #ff9800;
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 24px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="consent-box">
+    <h2>Confirm Account Action</h2>
+    <p>An application is requesting access to your account.</p>
+    <p>Do you want to allow <strong>EvilApp</strong> to access your data?</p>
+    <button class="allow-btn" id="allowBtn">Allow</button>
+    <button class="deny-btn" id="denyBtn">Deny</button>
+  </div>
+
+  <div class="warning">
+    <strong>Gym fixture:</strong> This is the target page that the
+    DoubleClickjacking attack navigates the parent to. In a real attack, the
+    "Allow" button would be positioned exactly where the user's second click
+    lands, granting OAuth consent or MFA approval without awareness.
+  </div>
+
+  <script>
+    document.getElementById("allowBtn").addEventListener("click", () => {
+      document.body.innerHTML = "<h1 style='color:red;text-align:center;margin-top:100px'>ATTACK SUCCEEDED: Consent was granted by the second click of the double-click.</h1>";
+    });
+    document.getElementById("denyBtn").addEventListener("click", () => {
+      document.body.innerHTML = "<h1 style='color:green;text-align:center;margin-top:100px'>Action denied.</h1>";
+    });
+  </script>
+</body>
+</html>

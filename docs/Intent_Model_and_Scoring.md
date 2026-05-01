@@ -163,8 +163,10 @@ Start with NRS = CDS and add:
 | Attempt within 0-250ms of pointerdown | +10 | Typical click-handler timing. |
 | navigator.userActivation.isActive is true | +5 | Confirms user activation. |
 | Multiple attempts within one gesture | +25 | Legit flows rarely do this. |
+| DoubleClickjacking pattern active | +40 | Child window + opener.location write + rapid close detected. |
 | Destination matches allowlist | -100 | Hard allow. |
 | Explicit new-tab intent (middle click or ctrl/cmd click) | -30 | Respect user intent. |
+| Destination in bloom filter of known-bad domains | +50 | Strong signal from public threat feeds. |
 
 Decision thresholds:
 - Allow: NRS < 40
@@ -174,6 +176,7 @@ Decision thresholds:
 
 Note:
 - NRS is implemented as of P1-04. Navigation decisions use NRS as the primary score. CDS remains available in the debug overlay.
+- The `nrs_known_bad_domain` factor (P2-03) uses a build-time compiled bloom filter of known-bad domains. The filter is loaded at startup from a static binary asset. See `extension/src/shared/reputation.ts`.
 
 ## ClickFix / Fake CAPTCHA detection
 
@@ -222,6 +225,26 @@ Implementation files:
 ## Explainability
 - Each score contribution produces a reason code.
 - Prompt UI should show destination URL with allow-once and always-allow actions.
+
+## DoubleClickjacking detection
+
+DoubleClickjacking (January 2025) bypasses X-Frame-Options, CSP frame-ancestors, and SameSite cookies. The attack sequence:
+
+1. User double-clicks on attacker page
+2. First click triggers `window.open()` to attacker-controlled child window
+3. Child window uses `window.opener.location` to navigate parent to target page (OAuth consent, MFA confirm, payment)
+4. Child window closes itself
+5. User's second click lands on the sensitive button in the now-navigated parent
+
+Detection is layered across three runtime surfaces:
+
+- **main_guard.ts**: intercepts `window.opener.location` writes (including `.href`, `.assign()`, `.replace()`) via a nested Proxy on `window.opener` and its `location` object. Tracks `window.open` timestamps. Detects double-click timing (two clicks within 800ms where `window.open` fires between them). Sends bridge messages to the isolated world.
+- **capture_isolated.ts**: correlates bridge messages (`ns-dblclick-window-open`, `ns-dblclick-opener-nav`, `ns-dblclick-second-click`) and service worker notifications (`ns-dblclick-child-closed`) to set the `doubleClickHijackActive` flag. Requires opener-nav evidence for child-close and second-click signals. Signal expires after 5 seconds to avoid stale false positives.
+- **sw.ts**: tracks tab creation with `openerTabId` via `chrome.tabs.onCreated`. When a child tab that performed an `opener.location` write closes within 5 seconds of creation, notifies the opener tab's content script.
+
+The `nrs_double_click_hijack` factor (+40) alone puts NRS at the prompt threshold. Combined with cross-site (+20) or new-tab (+20) factors it reaches the block threshold.
+
+Reason code: `nrs_double_click_hijack`
 
 ## Future extensions (plan for, do not overfit)
 - Short redirect-chain correlation tied to a single gesture token.

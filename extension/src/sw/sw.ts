@@ -9,6 +9,8 @@ const ROLLBACK_SUPPRESS_MS = 6000;
 const ROLLBACK_RETURN_TTL_MS = 5000;
 const TYPED_ORIGIN_TTL_MS = 5_000;
 const TYPED_ORIGIN_MAX_MS = 15_000;
+const DBLCLICK_CHILD_MAX_AGE_MS = 5_000;
+const DBLCLICK_CHILD_PRUNE_LIMIT = 50;
 
 const allowUntilByTab = new Map<number, number>();
 const gestureUntilByTab = new Map<number, number>();
@@ -32,6 +34,31 @@ const lastCommittedByTab = new Map<
     allowedAtCommit: boolean;
   }
 >();
+
+// --- DoubleClickjacking: track child windows opened by tabs ---
+// Maps child tabId -> { openerTabId, createdAt, openerNavObserved }
+// openerNavObserved is set when the child tab sends ns-dblclick-opener-nav,
+// confirming it wrote to opener.location.
+const childWindowByTab = new Map<number, { openerTabId: number; createdAt: number; openerNavObserved: boolean }>();
+
+function pruneStaleChildWindows(): void {
+  const now = Date.now();
+  // Always prune entries older than 2x the max age to prevent stale
+  // correlations from tab ID reuse, regardless of map size.
+  for (const [tabId, entry] of childWindowByTab) {
+    if (now - entry.createdAt > DBLCLICK_CHILD_MAX_AGE_MS * 2) {
+      childWindowByTab.delete(tabId);
+    }
+  }
+  // Hard cap: if still over limit after age-based pruning, drop oldest entries.
+  if (childWindowByTab.size > DBLCLICK_CHILD_PRUNE_LIMIT) {
+    const sorted = [...childWindowByTab.entries()].sort((a, b) => a[1].createdAt - b[1].createdAt);
+    const excess = childWindowByTab.size - DBLCLICK_CHILD_PRUNE_LIMIT;
+    for (let i = 0; i < excess; i++) {
+      childWindowByTab.delete(sorted[i]![0]);
+    }
+  }
+}
 
 function clearPendingTabState(
   tabId: number,
@@ -222,6 +249,31 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse?.({ status: "none", url: "" });
     }
   }
+
+  // DoubleClickjacking: forward opener.location write from child to opener tab.
+  // Only forward if the sender tab is a known child window to prevent
+  // malicious pages from injecting false opener-nav signals.
+  if (message.type === "ns-dblclick-opener-nav") {
+    const childTabId = sender.tab?.id;
+    if (typeof childTabId !== "number") return;
+    const childEntry = childWindowByTab.get(childTabId);
+    if (!childEntry) return;
+    // Mark that this child performed an opener.location write so the
+    // child-close signal is only sent for confirmed attack scenarios.
+    childEntry.openerNavObserved = true;
+    chrome.tabs.sendMessage(
+      childEntry.openerTabId,
+      {
+        type: "ns-dblclick-opener-nav-from-child",
+        url: typeof message.url === "string" ? message.url : "",
+        ts: typeof message.ts === "number" ? message.ts : Date.now(),
+      },
+      () => {
+        if (chrome.runtime.lastError) { /* opener may have navigated away */ }
+      }
+    );
+    sendResponse?.({ ok: true });
+  }
 });
 
 chrome.webNavigation.onBeforeNavigate.addListener((details) => {
@@ -354,7 +406,40 @@ chrome.webNavigation.onErrorOccurred?.addListener((details) => {
   typedOriginByTab.delete(details.tabId);
 });
 
+// --- DoubleClickjacking: track tab creation with opener ---
+chrome.tabs.onCreated.addListener((tab) => {
+  if (typeof tab.id !== "number") return;
+  if (typeof tab.openerTabId !== "number") return;
+  pruneStaleChildWindows();
+  childWindowByTab.set(tab.id, {
+    openerTabId: tab.openerTabId,
+    createdAt: Date.now(),
+    openerNavObserved: false
+  });
+});
+
 chrome.tabs.onRemoved.addListener((tabId) => {
+  // --- DoubleClickjacking: detect child-window close ---
+  const childEntry = childWindowByTab.get(tabId);
+  if (childEntry) {
+    childWindowByTab.delete(tabId);
+    const age = Date.now() - childEntry.createdAt;
+    // Only notify the opener if the child actually wrote to opener.location.
+    // Without this gate, benign popups (OAuth, help windows) that open and
+    // self-close quickly would cause false positives.
+    if (age <= DBLCLICK_CHILD_MAX_AGE_MS && childEntry.openerNavObserved) {
+      // Child window closed quickly after opener.location write -- notify the opener tab.
+      chrome.tabs.sendMessage(
+        childEntry.openerTabId,
+        { type: "ns-dblclick-child-closed", childTabId: tabId, ageMs: age },
+        () => {
+          // Ignore errors if the opener tab's content script isn't ready.
+          if (chrome.runtime.lastError) { /* expected if tab navigated away */ }
+        }
+      );
+    }
+  }
+
   allowUntilByTab.delete(tabId);
   gestureUntilByTab.delete(tabId);
   allowStartedByTab.delete(tabId);
