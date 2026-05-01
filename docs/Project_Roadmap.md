@@ -14,8 +14,8 @@ know it's done. It synthesizes the findings from
 | Phase | Title | Tasks | Done | Status |
 |---|---|---|---|---|
 | 0 | Stabilize | 6 | 6 | **Done** |
-| 1 | Validate Foundation | 8 | 7 | **In progress** |
-| 2 | Target 2025-2026 Threats | 10 | 0 | Blocked on Phase 1 |
+| 1 | Validate Foundation | 8 | 8 | **Tasks done** (gate open — FP rate above target) |
+| 2 | Target 2025-2026 Threats | 10 | 3 | **In progress** |
 | 3 | Productize | 9 | 0 | Blocked on Phase 2 |
 | 4 | Differentiate | 8 | 0 | Future |
 
@@ -220,8 +220,8 @@ Phase 0 is complete when:
 | P1-02 | Harden CDS against trivial evasion | L | **done** | P0-04 | `feat/cds-hardening` (PR #20) |
 | P1-03 | Enhance lookalike detection | M | **done** | P1-01 | `feat/lookalike-v2` |
 | P1-04 | Implement NRS | L | **done** | P1-02 | `feat/nrs-impl` (PR #28) |
-| P1-05 | False positive measurement on Tranco top-1000 | L | **done** | P1-01 | `test/fp-measurement` (PR #24); FP rate fix on `fix/fp-rate-reduction` (PR #32); re-run on `test/fp-measurement-rerun` |
-| P1-06 | Real-world phishing test corpus | L | **done** | P1-01 | `test/phishing-corpus` (PR #30); corpus run on `test/phishing-corpus-run` |
+| P1-05 | False positive measurement on Tranco top-1000 | L | **done** | P1-01 | `test/fp-measurement` (PR #24); FP rate fix on `fix/fp-rate-reduction` (PR #32); re-run on `test/fp-measurement-rerun` (PR #39) |
+| P1-06 | Real-world phishing test corpus | L | **done** | P1-01 | `test/phishing-corpus` (PR #30); corpus run on `test/phishing-corpus-run` (PR #38) |
 | P1-07 | CDS evasion red-team test suite | M | **done** | P1-02 | `test/cds-evasion` (PR #25) |
 | P1-08 | Local prompt telemetry | M | **done** | P0 gate | `feat/prompt-telemetry` (PR #21) |
 
@@ -438,9 +438,9 @@ Phase 1 is complete when:
 
 | ID | Title | Effort | Status | Depends On | Branch |
 |---|---|---|---|---|---|
-| P2-01 | DoubleClickjacking detection | XL | pending | P1 gate | `feat/double-clickjacking` |
-| P2-02 | ClickFix / fake CAPTCHA detection | L | pending | P1 gate | `feat/clickfix-detection` |
-| P2-03 | Local bloom filter URL reputation | L | pending | P1-01 | `feat/bloom-reputation` |
+| P2-01 | DoubleClickjacking detection | XL | **done** | P1 gate | `feat/double-clickjacking` (PR #36) |
+| P2-02 | ClickFix / fake CAPTCHA detection | L | **done** | P1 gate | `feat/clickfix-detection` (PR #37) |
+| P2-03 | Local bloom filter URL reputation | L | **done** | P1-01 | `feat/bloom-reputation` (PR #35) |
 | P2-04 | Page content fingerprinting | L | pending | P1 gate | `feat/content-fingerprint` |
 | P2-05 | OAuth consent flow monitoring | L | pending | P2-01 | `feat/oauth-monitoring` |
 | P2-06 | Redirect chain correlation | L | pending | P1-04 | `feat/redirect-chains` |
@@ -676,9 +676,9 @@ alone for interaction-level attacks. Results documented.
 ### Phase 2 Gate
 
 Phase 2 is complete when:
-- [ ] DoubleClickjacking detection works and has gym coverage
-- [ ] ClickFix / fake CAPTCHA detection works and has gym coverage
-- [ ] Bloom filter catches known-bad domains without network calls
+- [x] DoubleClickjacking detection works and has gym coverage (PR #36 merged)
+- [x] ClickFix / fake CAPTCHA detection works and has gym coverage (PR #37 merged)
+- [x] Bloom filter catches known-bad domains without network calls (PR #35 merged)
 - [ ] Page content fingerprinting detects brand/domain mismatches
 - [ ] Redirect chains are correlated and scored as a unit
 - [ ] DOM mutations are monitored for post-load injection
