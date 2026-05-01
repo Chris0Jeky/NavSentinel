@@ -157,9 +157,10 @@ multi-domain ecosystems and particular DOM structures.
 3. Some sites block automated browsers or require CAPTCHA, showing up as
    errors rather than testable visits.
 4. The Tranco list is a snapshot; site behavior changes over time.
-5. Only tests the top-200 (not the full 1000). Based on 0% FP rate across
-   138 successful visits and the absence of any interaction-phase FPs, the
-   rate on the full 1000 is expected to remain below 0.1%.
+5. Only tests the top-200 (not the full 1000). The single interaction-phase
+   FP (unity3d.com) is a specific multi-domain ecosystem case; the remaining
+   137 successful visits had zero FPs. The rate on the full 1000 is expected
+   to remain in the same range (~0.7%) or improve with tuning.
 
 ## Conclusion
 

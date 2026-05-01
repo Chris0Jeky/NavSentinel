@@ -461,10 +461,16 @@ async function visitSiteInner(context, domain, url, timeoutMs, pageRef) {
     // real pointer/click events, which lets NavSentinel's gesture-tracking
     // recognise the navigation as user-initiated.  page.goto() bypasses
     // gesture signals and can trigger false rollbacks.
-    const clickableLinks = await findClickableInternalLinks(page, domain);
-    const linksToClick = clickableLinks.slice(0, 3);
-
-    for (const linkSelector of linksToClick) {
+    //
+    // We re-discover clickable links after each navigation because clicking
+    // a link typically navigates to a new page whose DOM no longer contains
+    // the data-ns-fp selectors stamped on the previous page.
+    let clicksRemaining = 3;
+    while (clicksRemaining > 0) {
+      const clickableLinks = await findClickableInternalLinks(page, domain);
+      if (clickableLinks.length === 0) break;
+      const linkSelector = clickableLinks[0];
+      clicksRemaining--;
       try {
         await page.click(linkSelector, { timeout: 5000 });
         await page.waitForLoadState("domcontentloaded", { timeout: timeoutMs });
@@ -708,7 +714,8 @@ async function main() {
   let tested = 0;
   let skipped = 0;
   let errored = 0;
-  let fpCount = 0;
+  let fpSiteCount = 0;       // unique sites with at least one interaction-phase FP
+  let fpEventCount = 0;      // total interaction-phase FP events (for detail reporting)
   let initialLoadFpCount = 0;
   let interrupted = false;
   const startTime = Date.now();
@@ -764,11 +771,18 @@ async function main() {
         // even though a real user (who types the URL or clicks a link)
         // would never see this.  We report them as "initial_load_fp" but
         // do NOT count them toward the FP rate.
+        //
+        // FP rate is computed per-site (not per-event): a site counts as
+        // one FP regardless of how many events it fires.
+        let siteHasFP = false;
         for (const event of result.events) {
           const isFP = FP_EVENT_KINDS.has(event.kind);
           const isInitialLoad = event._phase === "initial_load";
 
-          if (isFP && !isInitialLoad) fpCount++;
+          if (isFP && !isInitialLoad) {
+            fpEventCount++;
+            siteHasFP = true;
+          }
           if (isFP && isInitialLoad) initialLoadFpCount++;
 
           const action = isFP
@@ -790,6 +804,7 @@ async function main() {
             ) + "\n"
           );
         }
+        if (siteHasFP) fpSiteCount++;
 
         const fpEvents = result.events.filter(
           (e) => FP_EVENT_KINDS.has(e.kind) && e._phase !== "initial_load"
@@ -822,7 +837,7 @@ async function main() {
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
       const rate = (tested / ((Date.now() - startTime) / 1000)).toFixed(1);
       const initNote = initialLoadFpCount > 0 ? `, ${initialLoadFpCount} initial-load artifacts` : "";
-      console.log(`\n--- Progress: ${tested} tested, ${errored} errors, ${fpCount} FPs${initNote}, ${elapsed}s elapsed, ${rate} sites/s ---\n`);
+      console.log(`\n--- Progress: ${tested} tested, ${errored} errors, ${fpSiteCount} FP sites (${fpEventCount} events)${initNote}, ${elapsed}s elapsed, ${rate} sites/s ---\n`);
     }
   }
 
@@ -835,14 +850,16 @@ async function main() {
   }
   fs.rmSync(userDataDir, { recursive: true, force: true });
 
-  // Final report
+  // Final report — FP rate is per-site (unique domains with at least one
+  // interaction-phase FP event), not per-event.
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
   const testedSuccessfully = tested - errored;
-  const fpRate = testedSuccessfully > 0 ? ((fpCount / testedSuccessfully) * 100).toFixed(3) : "N/A";
+  const fpRate = testedSuccessfully > 0 ? ((fpSiteCount / testedSuccessfully) * 100).toFixed(3) : "N/A";
 
   const initLoadNote = initialLoadFpCount > 0
     ? `\n  Initial-load artifacts: ${initialLoadFpCount} (not counted — see methodology)`
     : "";
+  const eventDetail = fpEventCount !== fpSiteCount ? ` (${fpEventCount} events)` : "";
 
   console.log(`
 ════════════════════════════════════════════
@@ -850,8 +867,8 @@ async function main() {
 ════════════════════════════════════════════
   Sites tested:      ${tested} (${testedSuccessfully} successful, ${errored} errors)
   Sites skipped:     ${skipped} (resume)
-  False positives:   ${fpCount}${initLoadNote}
-  FP rate:           ${fpRate}% (of ${testedSuccessfully} successful visits)
+  FP sites:          ${fpSiteCount}${eventDetail}${initLoadNote}
+  FP rate:           ${fpRate}% (${fpSiteCount}/${testedSuccessfully} sites)
   Time elapsed:      ${elapsed}s
   Target:            < 0.1%
 ────────────────────────────────────────────
@@ -859,7 +876,7 @@ async function main() {
 ════════════════════════════════════════════
 `);
 
-  if (fpCount > 0) {
+  if (fpSiteCount > 0) {
     console.log("False positive details:");
     const csvContent = fs.readFileSync(opts.out, "utf-8");
     const fpLines = csvContent.split("\n").filter((line) => line.includes(",false_positive,") || line.includes(",yes,"));
@@ -884,7 +901,7 @@ async function main() {
   }
 
   // Exit with non-zero if FP rate exceeds target
-  const fpRateNum = testedSuccessfully > 0 ? (fpCount / testedSuccessfully) * 100 : 0;
+  const fpRateNum = testedSuccessfully > 0 ? (fpSiteCount / testedSuccessfully) * 100 : 0;
   if (testedSuccessfully === 0) {
     console.log("\nWARN: No sites were successfully tested. Cannot compute FP rate.");
     process.exit(1);

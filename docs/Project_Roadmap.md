@@ -349,6 +349,15 @@ validated without knowing the real-world false positive rate.
 **Done when**: Script runs, produces a report, FP rate is measured. If rate > 0.1%, create
 follow-up tasks to tune thresholds.
 
+**Result (2026-05-01)**: 0.72% FP rate (1/138: unity3d.com). Above 0.1% target.
+Follow-up tuning tasks created per the definition above:
+
+1. **Tune NRS/CDS composite scoring for multi-domain ecosystems** — unity3d.com FP is
+   caused by `intent_mismatch_under_interactive` (CDS) + `nrs_cross_site` (+20) pushing
+   NRS to 70 (block threshold). Options: raise NRS_BLOCK_THRESHOLD, reduce nrs_cross_site
+   weight when CDS has only one factor, or add same-organisation domain heuristics.
+2. **Re-run measurement after tuning** to verify rate drops below 0.1%.
+
 #### P1-06: Real-world phishing test corpus
 
 Validate detection against real phishing pages, not just synthetic gym fixtures.
