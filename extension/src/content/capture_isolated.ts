@@ -74,6 +74,16 @@ let forwardCheckTimer = 0;
 let gestureNavAttempts = 0;
 let gestureDownId: number | null = null;
 
+// --- DoubleClickjacking detection state ---
+const DBLCLICK_HIJACK_STALE_MS = 5000;
+let dblclickWindowOpenTs = 0;
+let dblclickOpenerNavTs = 0;
+let dblclickOpenerNavUrl = "";
+let dblclickSecondClickTs = 0;
+/** True when the SW reports a child-window close correlated with opener nav. */
+let dblclickChildClosed = false;
+let dblclickChildClosedTs = 0;
+
 function markMainGuardReady(): void {
   if (bridgeRetryTimer) {
     window.clearTimeout(bridgeRetryTimer);
@@ -283,6 +293,43 @@ function handleBridgeMessage(message: unknown): void {
   if (data.type === "ns-nav-allowed") {
     lastNav = { kind: data.kind ?? "unknown", url: data.url ?? "", status: "allowed" };
     refreshDebug();
+    return;
+  }
+
+  // --- DoubleClickjacking bridge messages from main_guard ---
+  if (data.type === "ns-dblclick-window-open") {
+    dblclickWindowOpenTs = typeof (data as any).ts === "number" ? (data as any).ts : Date.now();
+    // Reset stale signals from a previous detection cycle to prevent
+    // a stale dblclickChildClosed flag from causing false positives.
+    dblclickOpenerNavTs = 0;
+    dblclickOpenerNavUrl = "";
+    dblclickSecondClickTs = 0;
+    dblclickChildClosed = false;
+    dblclickChildClosedTs = 0;
+    return;
+  }
+
+  if (data.type === "ns-dblclick-opener-nav") {
+    dblclickOpenerNavTs = typeof (data as any).ts === "number" ? (data as any).ts : Date.now();
+    dblclickOpenerNavUrl = typeof (data as any).url === "string" ? (data as any).url : "";
+    // Forward to the SW so it can notify the opener tab.
+    // This capture_isolated is running in the CHILD window; the opener tab
+    // needs this signal to correlate with its click timing.
+    try {
+      chrome.runtime.sendMessage({
+        type: "ns-dblclick-opener-nav",
+        url: dblclickOpenerNavUrl,
+        ts: dblclickOpenerNavTs,
+      });
+    } catch {
+      // ignore -- SW may not be reachable
+    }
+    return;
+  }
+
+  if (data.type === "ns-dblclick-second-click") {
+    dblclickSecondClickTs = typeof (data as any).ts === "number" ? (data as any).ts : Date.now();
+    return;
   }
 }
 
@@ -678,6 +725,23 @@ if (chrome?.runtime?.onMessage) {
     if (!url) return;
     showRollbackPrompt(url);
   });
+
+  // DoubleClickjacking: SW notifies us when a child window closes
+  // after an opener.location write was observed.
+  chrome.runtime.onMessage.addListener((message) => {
+    if (!message || message.type !== "ns-dblclick-child-closed") return;
+    if (window.top !== window) return;
+    dblclickChildClosed = true;
+    dblclickChildClosedTs = Date.now();
+  });
+
+  // DoubleClickjacking: SW forwards opener.location write from child tab.
+  chrome.runtime.onMessage.addListener((message) => {
+    if (!message || message.type !== "ns-dblclick-opener-nav-from-child") return;
+    if (window.top !== window) return;
+    dblclickOpenerNavTs = typeof message.ts === "number" ? message.ts : Date.now();
+    dblclickOpenerNavUrl = typeof message.url === "string" ? message.url : "";
+  });
 }
 
 if (chrome?.runtime?.sendMessage && window.top === window) {
@@ -738,6 +802,24 @@ if (chrome?.runtime?.sendMessage && window.top === window) {
   } else {
     runForward();
   }
+}
+
+/**
+ * Returns true when the DoubleClickjacking attack pattern is active:
+ * - A window.open was recently observed, AND
+ * - Either an opener.location write was detected, OR
+ *   the SW signaled that a child window closed after an opener nav.
+ * The signal expires after DBLCLICK_HIJACK_STALE_MS to avoid stale FPs.
+ */
+function isDoubleClickHijackActive(): boolean {
+  const now = Date.now();
+  if (now - dblclickWindowOpenTs > DBLCLICK_HIJACK_STALE_MS) return false;
+  if (dblclickOpenerNavTs > 0 && now - dblclickOpenerNavTs <= DBLCLICK_HIJACK_STALE_MS) return true;
+  if (dblclickChildClosed && now - dblclickChildClosedTs <= DBLCLICK_HIJACK_STALE_MS
+      && dblclickOpenerNavTs > 0) return true;
+  if (dblclickSecondClickTs > 0 && now - dblclickSecondClickTs <= DBLCLICK_HIJACK_STALE_MS
+      && dblclickOpenerNavTs > 0) return true;
+  return false;
 }
 
 window.addEventListener(
@@ -838,6 +920,8 @@ window.addEventListener(
 
     const userActivationActive = !!(navigator as any).userActivation?.isActive;
 
+    const dblClickHijack = isDoubleClickHijackActive();
+
     // Check both the registrable domain and the full hostname against the
     // bloom filter. Feeds may contain either form, and attackers may use
     // deep subdomains to evade registrable-domain-only checks.
@@ -855,8 +939,18 @@ window.addEventListener(
       multipleAttemptsInGesture: gestureNavAttempts > 1,
       destinationAllowlisted: isAllowed,
       explicitNewTabIntent: explicitNewTab,
+      doubleClickHijackActive: dblClickHijack,
       knownBadDomain: destDomainBad,
     };
+
+    if (dblClickHijack) {
+      appendEventSafely({
+        kind: "dblclickjack_detected",
+        site: siteKeyFromLocation(),
+        url: dblclickOpenerNavUrl || location.href,
+        destHost: (() => { try { return new URL(dblclickOpenerNavUrl || location.href, location.href).hostname; } catch { return location.hostname; } })(),
+      });
+    }
 
     const nrsResult = computeNRS(cdsResult, navCtx);
     const { nrs, reasonCodes, nrsFactors } = nrsResult;

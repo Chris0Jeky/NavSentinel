@@ -1,0 +1,147 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DoubleClickjacking 02 - OAuth Consent Variant</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 24px;
+      max-width: 700px;
+      margin: 0 auto;
+    }
+    h1 { margin-top: 0; }
+    .attack-surface {
+      margin: 24px 0;
+      padding: 32px;
+      background: #fff3e0;
+      border: 2px solid #ff9800;
+      border-radius: 12px;
+      text-align: center;
+    }
+    .captcha-mock {
+      display: inline-block;
+      padding: 16px 24px;
+      border: 1px solid #ccc;
+      background: #fafafa;
+      border-radius: 4px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .captcha-mock:hover {
+      background: #eee;
+    }
+    .captcha-checkbox {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 2px solid #999;
+      border-radius: 2px;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+    .log {
+      margin-top: 24px;
+      font-family: monospace;
+      font-size: 13px;
+      background: #1a1a1a;
+      color: #aaffaa;
+      padding: 12px;
+      border-radius: 8px;
+      max-height: 200px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+    .note {
+      font-size: 13px;
+      color: #666;
+      margin-top: 16px;
+    }
+  </style>
+</head>
+<body>
+  <h1>DoubleClickjacking 02 - OAuth Consent Variant</h1>
+  <p>
+    Simulates the OAuth consent variant of DoubleClickjacking. The attacker
+    presents a fake CAPTCHA or "verify" prompt. When the user double-clicks
+    the checkbox, the first click opens a child window that navigates the
+    parent to a real OAuth consent page. The second click lands on the
+    "Allow" button of the consent page.
+  </p>
+  <p><strong>Expected:</strong> NavSentinel detects the double-click hijack
+    pattern and blocks the second click or warns before it takes effect.</p>
+
+  <div class="attack-surface">
+    <p>Complete the security verification to continue:</p>
+    <div class="captcha-mock" id="captcha">
+      <span class="captcha-checkbox" id="checkbox"></span>
+      <span>I'm not a robot</span>
+    </div>
+  </div>
+
+  <div class="log" id="log"></div>
+
+  <p class="note">
+    In a real attack, the second click would land on an OAuth consent "Allow"
+    button (e.g., Google OAuth, Microsoft consent). The attacker gains
+    persistent access to the victim's account without any visible phishing.
+  </p>
+
+  <script>
+    const log = document.getElementById("log");
+    const captcha = document.getElementById("captcha");
+    const checkbox = document.getElementById("checkbox");
+    let clickCount = 0;
+
+    function addLog(msg) {
+      const line = `[${new Date().toISOString().slice(11,23)}] ${msg}\n`;
+      log.textContent += line;
+      log.scrollTop = log.scrollHeight;
+    }
+
+    captcha.addEventListener("click", () => {
+      clickCount++;
+      addLog(`CAPTCHA click #${clickCount}`);
+
+      if (clickCount === 1) {
+        checkbox.style.background = "#4caf50";
+        checkbox.textContent = "✓";
+        checkbox.style.color = "white";
+        checkbox.style.textAlign = "center";
+        checkbox.style.lineHeight = "20px";
+
+        addLog("First click: opening OAuth consent window...");
+        const child = window.open("about:blank", "_blank", "width=400,height=300");
+        if (child) {
+          addLog("Child window opened. Simulating opener.location redirect to OAuth consent...");
+          setTimeout(() => {
+            try {
+              child.document.write(`
+                <html><body>
+                <p>Loading OAuth consent...</p>
+                <script>
+                  if (window.opener) {
+                    window.opener.location = "${location.origin}/gym/doubleclick-02-consent.html";
+                  }
+                  setTimeout(() => window.close(), 150);
+                <\/script>
+                </body></html>
+              `);
+            } catch (e) {
+              addLog("Cross-origin block: " + e.message);
+            }
+          }, 80);
+        } else {
+          addLog("Child window blocked by NavSentinel (expected).");
+        }
+      } else {
+        addLog("Second click (double-click) - would hit OAuth 'Allow' button!");
+        addLog("ATTACK: Attacker would gain persistent OAuth token access.");
+      }
+    });
+
+    addLog("Fixture loaded. Double-click the CAPTCHA checkbox to simulate the OAuth consent attack.");
+  </script>
+</body>
+</html>

@@ -44,6 +44,7 @@ function createChromeMock() {
       transitionQualifiers?: string[];
     }) => void
   >();
+  const tabCreated = createEvent<(tab: { id?: number; openerTabId?: number }) => void>();
   const tabRemoved = createEvent<(tabId: number) => void>();
   const tabUpdated = createEvent<
     (tabId: number, changeInfo: { status?: string; url?: string }, tab: { url?: string }) => void
@@ -86,6 +87,7 @@ function createChromeMock() {
         onErrorOccurred: errorOccurred
       },
       tabs: {
+        onCreated: tabCreated,
         onRemoved: tabRemoved,
         onUpdated: tabUpdated,
         sendMessage: vi.fn(
