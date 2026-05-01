@@ -1,0 +1,112 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OAuth Consent (DoubleClickjacking Target)</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      padding: 24px;
+      max-width: 500px;
+      margin: 0 auto;
+      background: #fafafa;
+    }
+    .consent-card {
+      background: white;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 24px;
+      margin: 48px auto;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+    }
+    .consent-card h2 { margin-top: 0; font-size: 18px; }
+    .brand-icon {
+      width: 48px;
+      height: 48px;
+      background: #4285f4;
+      border-radius: 50%;
+      display: inline-block;
+      margin-bottom: 12px;
+      line-height: 48px;
+      text-align: center;
+      color: white;
+      font-weight: bold;
+      font-size: 24px;
+    }
+    .permissions {
+      text-align: left;
+      margin: 16px 0;
+      padding-left: 24px;
+    }
+    .permissions li { margin: 8px 0; }
+    .btn-row {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      margin-top: 24px;
+    }
+    .allow-btn {
+      padding: 10px 24px;
+      background: #1a73e8;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .cancel-btn {
+      padding: 10px 24px;
+      background: white;
+      color: #1a73e8;
+      border: 1px solid #dadce0;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .warning {
+      background: #fff3e0;
+      border: 1px solid #ff9800;
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 24px;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <div class="consent-card">
+    <div style="text-align:center;">
+      <div class="brand-icon">E</div>
+      <h2>EvilApp wants to access your account</h2>
+    </div>
+    <p style="text-align:center;color:#666;font-size:14px;">
+      This will allow EvilApp to:
+    </p>
+    <ul class="permissions">
+      <li>Read your email</li>
+      <li>Manage your contacts</li>
+      <li>Access your files</li>
+    </ul>
+    <div class="btn-row">
+      <button class="cancel-btn" id="cancelBtn">Cancel</button>
+      <button class="allow-btn" id="allowBtn">Allow</button>
+    </div>
+  </div>
+
+  <div class="warning">
+    <strong>Gym fixture:</strong> This simulates an OAuth consent page.
+    In the DoubleClickjacking attack, the user's second click lands on
+    the "Allow" button, granting persistent access to the attacker's app.
+  </div>
+
+  <script>
+    document.getElementById("allowBtn").addEventListener("click", () => {
+      document.body.innerHTML = "<h1 style='color:red;text-align:center;margin-top:100px'>ATTACK SUCCEEDED: OAuth consent granted via double-click hijack.</h1>";
+    });
+    document.getElementById("cancelBtn").addEventListener("click", () => {
+      document.body.innerHTML = "<h1 style='color:green;text-align:center;margin-top:100px'>Consent denied.</h1>";
+    });
+  </script>
+</body>
+</html>

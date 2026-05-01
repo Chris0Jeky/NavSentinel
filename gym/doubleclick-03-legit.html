@@ -1,0 +1,107 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DoubleClickjacking 03 - Legitimate Double-Click (No Attack)</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 24px;
+      max-width: 700px;
+      margin: 0 auto;
+    }
+    h1 { margin-top: 0; }
+    .legit-surface {
+      margin: 24px 0;
+      padding: 32px;
+      background: #e8f5e9;
+      border: 2px solid #4caf50;
+      border-radius: 12px;
+      text-align: center;
+    }
+    .legit-btn {
+      font-size: 18px;
+      padding: 16px 48px;
+      cursor: pointer;
+      background: #4caf50;
+      color: white;
+      border: none;
+      border-radius: 8px;
+    }
+    .legit-btn:hover {
+      background: #388e3c;
+    }
+    .counter {
+      font-size: 48px;
+      font-weight: bold;
+      margin: 16px 0;
+    }
+    .log {
+      margin-top: 24px;
+      font-family: monospace;
+      font-size: 13px;
+      background: #1a1a1a;
+      color: #aaffaa;
+      padding: 12px;
+      border-radius: 8px;
+      max-height: 200px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+    .note {
+      font-size: 13px;
+      color: #666;
+      margin-top: 16px;
+    }
+  </style>
+</head>
+<body>
+  <h1>DoubleClickjacking 03 - Legitimate Double-Click</h1>
+  <p>
+    This is a <strong>benign</strong> page with a legitimate double-click
+    interaction. No <code>window.open</code> is called and no
+    <code>opener.location</code> is modified.
+  </p>
+  <p><strong>Expected:</strong> NavSentinel does NOT trigger any
+    double-click hijack warnings. Double-clicking should work normally.</p>
+
+  <div class="legit-surface">
+    <p>Double-click the button to increment the counter:</p>
+    <div class="counter" id="counter">0</div>
+    <button class="legit-btn" id="dblBtn">Double-click me!</button>
+  </div>
+
+  <div class="log" id="log"></div>
+
+  <p class="note">
+    This fixture verifies that legitimate double-click interactions are not
+    flagged as DoubleClickjacking. A false positive here would be a regression.
+  </p>
+
+  <script>
+    const log = document.getElementById("log");
+    const btn = document.getElementById("dblBtn");
+    const counter = document.getElementById("counter");
+    let count = 0;
+
+    function addLog(msg) {
+      const line = `[${new Date().toISOString().slice(11,23)}] ${msg}\n`;
+      log.textContent += line;
+      log.scrollTop = log.scrollHeight;
+    }
+
+    btn.addEventListener("dblclick", () => {
+      count++;
+      counter.textContent = String(count);
+      addLog(`Double-click #${count} - counter incremented (legitimate).`);
+    });
+
+    btn.addEventListener("click", () => {
+      addLog("Single click registered (no popup, no opener nav).");
+    });
+
+    addLog("Fixture loaded. Double-click the green button. No warnings should appear.");
+  </script>
+</body>
+</html>
