@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Builds a bloom filter of known-bad domains from public threat feeds
- * and writes it to extension/src/shared/reputation_data.bin.
+ * and writes it to extension/public/reputation_data.bin.
  *
  * Feeds:
  *   - URLhaus CSV (abuse.ch)
@@ -250,7 +250,7 @@ async function fetchUrlhausDomains() {
     console.log(`  URLhaus: ${domains.size} unique domains (including base domains)`);
     return domains;
   } catch (err) {
-    console.warn(`  URLhaus fetch failed: ${err.message}`);
+    console.warn(`  URLhaus fetch failed: ${err instanceof Error ? err.message : String(err)}`);
     return new Set();
   }
 }
@@ -285,7 +285,7 @@ async function fetchOpenPhishDomains() {
     console.log(`  OpenPhish: ${domains.size} unique domains (including base domains)`);
     return domains;
   } catch (err) {
-    console.warn(`  OpenPhish fetch failed: ${err.message}`);
+    console.warn(`  OpenPhish fetch failed: ${err instanceof Error ? err.message : String(err)}`);
     return new Set();
   }
 }

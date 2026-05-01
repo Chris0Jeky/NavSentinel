@@ -3,7 +3,7 @@
  * Generates a small deterministic bloom filter for unit testing.
  * This avoids depending on external feeds for test execution.
  *
- * Outputs to: extension/src/shared/reputation_data.bin
+ * Outputs to: extension/public/reputation_data.bin
  *
  * Usage: node scripts/build-test-bloom-filter.mjs
  */
