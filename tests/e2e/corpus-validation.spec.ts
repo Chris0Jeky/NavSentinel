@@ -260,21 +260,32 @@ test("Phishing corpus validation @corpus", async () => {
             });
 
             if (hasPasswordForm) {
-              // Fill a dummy value and attempt form submission
+              // Fill a dummy value and attempt form submission.
+              // We also dispatch input/change events so that any listeners
+              // (credential guard, phishing kit validation) see realistic input.
               await page.evaluate(() => {
+                function fillInput(el: HTMLInputElement, value: string): void {
+                  el.value = value;
+                  el.dispatchEvent(new Event("input", { bubbles: true }));
+                  el.dispatchEvent(new Event("change", { bubbles: true }));
+                }
+
                 // Try forms with password fields first
                 const forms = Array.from(document.querySelectorAll("form"));
                 for (const form of forms) {
                   const pw = form.querySelector('input[type="password"]') as HTMLInputElement | null;
                   if (pw) {
-                    // Fill password so submit isn't trivially blocked by validation
-                    pw.value = "testpassword123";
+                    fillInput(pw, "testpassword123");
                     // Also fill any email/text inputs
                     const textInputs = form.querySelectorAll(
                       'input[type="text"], input[type="email"], input:not([type])'
                     );
                     textInputs.forEach((inp) => {
-                      (inp as HTMLInputElement).value = "test@example.com";
+                      const el = inp as HTMLInputElement;
+                      // Skip hidden/checkbox/radio inputs
+                      const t = (el.type || "text").toLowerCase();
+                      if (t === "hidden" || t === "checkbox" || t === "radio" || t === "submit" || t === "button") return;
+                      fillInput(el, "test@example.com");
                     });
                     // Dispatch submit event to trigger credential guard
                     form.dispatchEvent(new SubmitEvent("submit", {
@@ -283,19 +294,23 @@ test("Phishing corpus validation @corpus", async () => {
                     return; // Only submit the first password form
                   }
                 }
-                // Fallback: password input outside a form — find or create a
-                // wrapping form and dispatch submit so credential guard fires.
+                // Fallback: password input outside a form — wrap in a
+                // temporary form so the credential guard's submit listener fires.
                 const standalonePw = document.querySelector('input[type="password"]') as HTMLInputElement | null;
                 if (standalonePw) {
-                  standalonePw.value = "testpassword123";
-                  const parentForm = standalonePw.closest("form");
-                  if (parentForm) {
-                    parentForm.dispatchEvent(new SubmitEvent("submit", {
-                      bubbles: true, cancelable: true
-                    }));
+                  fillInput(standalonePw, "testpassword123");
+                  let form = standalonePw.closest("form");
+                  if (!form) {
+                    // Create a temporary wrapper form so SubmitEvent has a
+                    // form target that contains a password field, which is
+                    // what the credential guard checks via isPasswordForm().
+                    form = document.createElement("form");
+                    standalonePw.parentElement?.insertBefore(form, standalonePw);
+                    form.appendChild(standalonePw);
                   }
-                  // Even without a form, the password field is now filled —
-                  // other signals (paste warn) may still fire.
+                  form.dispatchEvent(new SubmitEvent("submit", {
+                    bubbles: true, cancelable: true
+                  }));
                 }
               });
               // Wait for credential guard to process and fire events
@@ -303,6 +318,8 @@ test("Phishing corpus validation @corpus", async () => {
             }
 
             // 2. Try clicking the first visible link (triggers navigation guard)
+            // Dispatch pointerdown before click so that capture_isolated.ts
+            // populates lastDown / downForClick context for NRS scoring.
             const clickedLink = await page.evaluate(() => {
               const links = Array.from(document.querySelectorAll("a[href]"));
               for (const link of links) {
@@ -312,10 +329,11 @@ test("Phishing corpus validation @corpus", async () => {
                 if (!href || href === "#" || href.startsWith("javascript:") || href.startsWith("#")) continue;
                 const rect = el.getBoundingClientRect();
                 if (rect.width > 0 && rect.height > 0) {
-                  // Dispatch a click event rather than actually navigating
-                  el.dispatchEvent(new MouseEvent("click", {
-                    bubbles: true, cancelable: true, view: window
-                  }));
+                  const cx = rect.x + rect.width / 2;
+                  const cy = rect.y + rect.height / 2;
+                  const common = { bubbles: true, cancelable: true, view: window, clientX: cx, clientY: cy };
+                  el.dispatchEvent(new PointerEvent("pointerdown", common));
+                  el.dispatchEvent(new MouseEvent("click", common));
                   return true;
                 }
               }
@@ -334,11 +352,13 @@ test("Phishing corpus validation @corpus", async () => {
             });
 
             // 4. Check for credential modal
+            // The credential modal uses id "__sentinelsuite_cred_modal_host__"
+            // and renders an ".overlay" > ".card" structure inside its shadow root.
             const hasCredentialModal = await page.evaluate(() => {
-              const host = document.querySelector("#__navsentinel_modal_host");
+              const host = document.querySelector("#__sentinelsuite_cred_modal_host__");
               if (!host || !host.shadowRoot) return false;
-              const modal = host.shadowRoot.querySelector(".modal");
-              return !!modal;
+              const overlay = host.shadowRoot.querySelector(".overlay");
+              return !!overlay;
             });
 
             // Check event log for detections

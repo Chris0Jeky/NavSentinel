@@ -25,7 +25,7 @@
 5. **User interactions simulated**:
    - On pages with password forms: fill dummy values, dispatch `SubmitEvent`
    - On all pages: click the first visible link (dispatches `MouseEvent`)
-6. Detection checked via NavSentinel event log and UI elements (toast, modal)
+6. Detection checked via NavSentinel event log and UI elements (toast, credential modal at `#__sentinelsuite_cred_modal_host__`)
 
 ### Detection criteria
 
@@ -56,9 +56,13 @@ This methodology has known limitations that affect detection rates:
    login forms are not detectable by interaction-level heuristics alone.
 6. **Synthetic events**: Both form submission and link clicks are dispatched
    programmatically via `dispatchEvent()`, not through native Playwright clicks.
-   This means `isTrusted` is false and no `pointerdown` precedes the click, so
-   the NRS navigation risk score has less signal than real user interaction.
-   The navigation guard detection rate (24.2%) may be an undercount.
+   This means `isTrusted` is false. The test dispatches `pointerdown` before
+   `click` so that `capture_isolated.ts` populates `downForClick` context for
+   NRS scoring, but the events are still untrusted. The navigation guard
+   detection rate (24.2%) may be an undercount. Most `nav_rollback` detections
+   appear to come from pages that auto-redirect (meta refresh, inline JS) rather
+   than from the synthetic click, because untrusted click events do not cause
+   the browser to follow anchor hrefs.
 7. **Password form detection undercount**: The test searches for
    `input[type="password"]` in the DOM. Pages that inject password fields via
    JavaScript (which does not execute in static snapshots) or use non-standard
@@ -218,7 +222,13 @@ target of > 60% depends on Phase 2 features:
 ### Test infrastructure improvements
 
 1. Consider using Playwright's `page.type()` instead of `value` assignment for
-   more realistic form interaction (triggers input/change events).
+   even more realistic form interaction (the test now dispatches `input`/`change`
+   events after setting values, but `page.type()` would also produce per-key
+   `keydown`/`keyup` events).
 2. Add scroll-and-wait to trigger lazy-loaded content.
 3. Consider serving pages on a mock domain (not 127.0.0.1) to enable
    domain-based heuristics to fire more realistically.
+4. Investigate whether synthetic (untrusted) clicks contribute any detections
+   at all, since the browser does not follow anchor hrefs for untrusted events.
+   The nav_rollback detections may come entirely from auto-redirect behavior
+   in the phishing pages themselves.
