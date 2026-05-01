@@ -318,6 +318,16 @@ const nativeReplace = Location.prototype.replace;
 const nativeFormSubmit = HTMLFormElement.prototype.submit;
 const nativeFormRequestSubmit = HTMLFormElement.prototype.requestSubmit;
 
+// Clipboard API natives (may not exist in all contexts)
+const nativeClipboardWriteText =
+  typeof navigator !== "undefined" && navigator.clipboard
+    ? navigator.clipboard.writeText?.bind(navigator.clipboard)
+    : undefined;
+const nativeClipboardWrite =
+  typeof navigator !== "undefined" && navigator.clipboard
+    ? navigator.clipboard.write?.bind(navigator.clipboard)
+    : undefined;
+
 function callNativeOpen(
   thisArg: Window,
   url?: string | URL,
@@ -730,7 +740,95 @@ window.addEventListener(
   true
 );
 
+// --- Clipboard API command keyword detection ---
+
+const COMMAND_KEYWORDS = [
+  "powershell", "cmd", "curl", "wget", "bash", "sh ", "/bin/",
+  "mshta", "msiexec", "certutil", "bitsadmin", "rundll32", "regsvr32",
+  "wscript", "cscript", "invoke-", "iex", "iwr", "start-process",
+  "downloadstring", "downloadfile", "new-object", "system.net",
+  "frombase64", "base64", "-encodedcommand", "-enc ", "|",
+];
+
+function textLooksLikeCommand(text: string): boolean {
+  if (!text || text.length < 5) return false;
+  const lower = text.toLowerCase();
+  for (const kw of COMMAND_KEYWORDS) {
+    if (lower.includes(kw)) return true;
+  }
+  return false;
+}
+
+// --- Clipboard API patching ---
+
+function patchClipboard(): void {
+  if (typeof navigator === "undefined" || !navigator.clipboard) return;
+
+  if (nativeClipboardWriteText) {
+    try {
+      navigator.clipboard.writeText = function (data: string): Promise<void> {
+        // Send metadata to isolated world — NEVER the actual content
+        postToIsolated("ns-clipboard-write", {
+          ts: nowMs(),
+          contentLength: data.length,
+          looksLikeCommand: textLooksLikeCommand(data),
+        });
+        if (debug) {
+          console.debug("[NavSentinel] clipboard.writeText intercepted", {
+            length: data.length,
+            looksLikeCommand: textLooksLikeCommand(data),
+          });
+        }
+        return nativeClipboardWriteText!(data);
+      };
+    } catch {
+      // clipboard.writeText may not be configurable in all contexts
+    }
+  }
+
+  if (nativeClipboardWrite) {
+    try {
+      navigator.clipboard.write = function (data: ClipboardItem[]): Promise<void> {
+        // For ClipboardItem writes, flag the event without inspecting content
+        // (ClipboardItem may contain blobs which are expensive to read)
+        postToIsolated("ns-clipboard-write", {
+          ts: nowMs(),
+          contentLength: -1,
+          looksLikeCommand: false,
+        });
+        if (debug) {
+          console.debug("[NavSentinel] clipboard.write intercepted");
+        }
+        return nativeClipboardWrite!(data);
+      };
+    } catch {
+      // clipboard.write may not be configurable in all contexts
+    }
+  }
+}
+
+// Also intercept document.execCommand("copy") as an evasion vector
+const nativeExecCommand = document.execCommand.bind(document);
+try {
+  document.execCommand = function (command: string, ...rest: any[]): boolean {
+    if (command.toLowerCase() === "copy" && !isOff()) {
+      postToIsolated("ns-clipboard-write", {
+        ts: nowMs(),
+        contentLength: -1,
+        looksLikeCommand: false,
+      });
+      if (debug) {
+        console.debug("[NavSentinel] document.execCommand('copy') intercepted");
+      }
+    }
+    return nativeExecCommand(command, ...rest);
+  } as typeof document.execCommand;
+} catch {
+  // execCommand may not be configurable
+}
+
 patchOpen();
 patchLocation();
 patchForms();
+patchClipboard();
 (window as any).__navsentinelMainGuard = true;
