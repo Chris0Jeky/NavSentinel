@@ -22,6 +22,7 @@ import {
   type DownCapture
 } from "./dom_builder";
 import { setDebugEnabled, updateDebugOverlay, type DebugInfo } from "./debug_overlay";
+import { recordClipboardWrite, scanForClickFix } from "./clickfix_detector";
 
 const CDS_SMART_BLOCK_THRESHOLD = 70;
 const CDS_STRICT_BLOCK_THRESHOLD = 50;
@@ -47,7 +48,9 @@ const RISKY_BLANK_REASONS = new Set([
   "near_invisible_opacity",
   "low_opacity",
   "no_accessible_name",
-  "composite_escalation"
+  "composite_escalation",
+  "clipboard_write_with_overlay",
+  "clickfix_instruction_pattern"
 ]);
 
 function makeBridgeSession(): string {
@@ -238,6 +241,10 @@ function handleBridgeMessage(message: unknown): void {
     mode?: "off" | "smart" | "strict";
     debug?: boolean;
     v?: number;
+    // Clipboard write metadata (ns-clipboard-write)
+    ts?: number;
+    contentLength?: number;
+    looksLikeCommand?: boolean;
   };
   if (!data || data.source !== NS_SOURCE || data.v !== PROTOCOL_VERSION) return;
   if (data.session !== bridgeSession) return;
@@ -293,6 +300,17 @@ function handleBridgeMessage(message: unknown): void {
   if (data.type === "ns-nav-allowed") {
     lastNav = { kind: data.kind ?? "unknown", url: data.url ?? "", status: "allowed" };
     refreshDebug();
+    return;
+  }
+
+  if (data.type === "ns-clipboard-write") {
+    const ts = typeof data.ts === "number" ? data.ts : Date.now();
+    const contentLength = typeof data.contentLength === "number" ? data.contentLength : -1;
+    const cmdLike = typeof data.looksLikeCommand === "boolean" ? data.looksLikeCommand : false;
+    recordClipboardWrite({ ts, contentLength, looksLikeCommand: cmdLike });
+    if (settings.defaultMode !== "off") {
+      handleClickFixScan();
+    }
     return;
   }
 
@@ -422,6 +440,45 @@ function notifyAllowedTarget(url: string, ttlMs = NAV_TARGET_ALLOW_TTL_MS): void
   } catch {
     // ignore
   }
+}
+
+let clickFixAlertedAt = 0;
+
+function handleClickFixScan(): void {
+  if (settings.defaultMode === "off") return;
+  const now = Date.now();
+  // Rate-limit: at most one alert per 10 seconds
+  if (now - clickFixAlertedAt < 10_000) return;
+
+  const result = scanForClickFix();
+  if (!result.detected) return;
+
+  clickFixAlertedAt = now;
+  appendEventSafely({
+    kind: "clickfix_detected",
+    site: siteKeyFromLocation(),
+    url: location.href,
+    score: result.score,
+    reasons: result.reasons,
+  });
+
+  showToast({
+    message: "NavSentinel detected a possible ClickFix attack. This page wrote to your clipboard while showing a fake verification dialog. Do NOT paste into Run or Terminal.",
+    actions: [
+      {
+        label: "Dismiss",
+        onClick: () => {
+          appendOutcomeSafely({
+            domain: siteKeyFromLocation(),
+            type: "nav",
+            score: result.score,
+            outcome: "dismiss",
+          });
+        },
+      },
+    ],
+    timeoutMs: 0,
+  });
 }
 
 function showRollbackPrompt(url: string): void {

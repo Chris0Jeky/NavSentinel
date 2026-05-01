@@ -330,6 +330,16 @@ const nativeReplace = Location.prototype.replace;
 const nativeFormSubmit = HTMLFormElement.prototype.submit;
 const nativeFormRequestSubmit = HTMLFormElement.prototype.requestSubmit;
 
+// Clipboard API natives (may not exist in all contexts)
+const nativeClipboardWriteText =
+  typeof navigator !== "undefined" && navigator.clipboard
+    ? navigator.clipboard.writeText?.bind(navigator.clipboard)
+    : undefined;
+const nativeClipboardWrite =
+  typeof navigator !== "undefined" && navigator.clipboard
+    ? navigator.clipboard.write?.bind(navigator.clipboard)
+    : undefined;
+
 function callNativeOpen(
   thisArg: Window,
   url?: string | URL,
@@ -751,6 +761,112 @@ window.addEventListener(
   true
 );
 
+// --- Clipboard API command keyword detection ---
+
+// NOTE: Keep this list in sync with COMMAND_KEYWORDS in clickfix_detector.ts
+const COMMAND_KEYWORDS = [
+  // Windows shells and scripting
+  "powershell", "cmd /", "cmd.exe", "mshta", "msiexec", "certutil", "bitsadmin",
+  "rundll32", "regsvr32", "wscript", "cscript",
+  // Windows LOLBins
+  "forfiles", "pcalua", "schtasks", "installutil",
+  // Unix/macOS shells
+  "curl ", "wget ", "bash", "sh ", "/bin/", "osascript",
+  // PowerShell cmdlets and patterns
+  "invoke-", "iex ", "iex(", "iwr ", "start-process",
+  "downloadstring", "downloadfile", "new-object", "system.net",
+  "frombase64", "base64", "-encodedcommand", "-enc ",
+];
+
+function textLooksLikeCommand(text: string): boolean {
+  if (!text || text.length < 5) return false;
+  const lower = text.toLowerCase();
+  for (const kw of COMMAND_KEYWORDS) {
+    if (lower.includes(kw)) return true;
+  }
+  return false;
+}
+
+// --- Clipboard API patching ---
+
+function patchClipboard(): void {
+  if (typeof navigator === "undefined" || !navigator.clipboard) return;
+
+  if (nativeClipboardWriteText) {
+    try {
+      navigator.clipboard.writeText = function (data: string): Promise<void> {
+        // Capture metadata before calling native (data may be GC'd), but
+        // only send the bridge message after the write succeeds so that
+        // failed writes (permission denied, no user gesture) do not cause
+        // false ClickFix detections.
+        const cmdLike = textLooksLikeCommand(data);
+        const len = data.length;
+        return nativeClipboardWriteText!(data).then((result) => {
+          postToIsolated("ns-clipboard-write", {
+            ts: nowMs(),
+            contentLength: len,
+            looksLikeCommand: cmdLike,
+          });
+          if (debug) {
+            console.debug("[NavSentinel] clipboard.writeText intercepted", {
+              length: len,
+              looksLikeCommand: cmdLike,
+            });
+          }
+          return result;
+        });
+      };
+    } catch {
+      // clipboard.writeText may not be configurable in all contexts
+    }
+  }
+
+  if (nativeClipboardWrite) {
+    try {
+      navigator.clipboard.write = function (data: ClipboardItem[]): Promise<void> {
+        // Only send the bridge message after the native write succeeds.
+        return nativeClipboardWrite!(data).then((result) => {
+          // Try to read text/plain content from ClipboardItems for command detection.
+          // Non-text MIME types are skipped (blobs may be expensive to read).
+          let inspected = false;
+          try {
+            for (const item of data) {
+              if (item.types.includes("text/plain")) {
+                item.getType("text/plain").then((blob) => {
+                  blob.text().then((text) => {
+                    postToIsolated("ns-clipboard-write", {
+                      ts: nowMs(),
+                      contentLength: text.length,
+                      looksLikeCommand: textLooksLikeCommand(text),
+                    });
+                  }).catch(() => {});
+                }).catch(() => {});
+                inspected = true;
+                break;
+              }
+            }
+          } catch {
+            // ClipboardItem API may not be fully available
+          }
+          if (!inspected) {
+            postToIsolated("ns-clipboard-write", {
+              ts: nowMs(),
+              contentLength: -1,
+              looksLikeCommand: false,
+            });
+          }
+          if (debug) {
+            console.debug("[NavSentinel] clipboard.write intercepted");
+          }
+          return result;
+        });
+      };
+    } catch {
+      // clipboard.write may not be configurable in all contexts
+    }
+  }
+}
+
 /**
  * Intercept opener.location writes from child windows.
  *
@@ -891,6 +1007,38 @@ function patchOpenerLocation(): void {
   }
 }
 
+// Also intercept document.execCommand("copy") as an evasion vector
+const nativeExecCommand = document.execCommand.bind(document);
+try {
+  document.execCommand = function (command: string, ...rest: any[]): boolean {
+    const result = nativeExecCommand(command, ...rest);
+    // Only emit clipboard event when the copy actually succeeded
+    if (command.toLowerCase() === "copy" && result && !isOff()) {
+      // Read the current selection to detect command-like content
+      let selText = "";
+      try {
+        selText = window.getSelection()?.toString() ?? "";
+      } catch {
+        // getSelection may throw in some contexts
+      }
+      postToIsolated("ns-clipboard-write", {
+        ts: nowMs(),
+        contentLength: selText.length || -1,
+        looksLikeCommand: selText.length > 0 ? textLooksLikeCommand(selText) : false,
+      });
+      if (debug) {
+        console.debug("[NavSentinel] document.execCommand('copy') intercepted", {
+          length: selText.length,
+          looksLikeCommand: selText.length > 0 ? textLooksLikeCommand(selText) : false,
+        });
+      }
+    }
+    return result;
+  } as typeof document.execCommand;
+} catch {
+  // execCommand may not be configurable
+}
+
 /**
  * Track double-click timing for DoubleClickjacking correlation.
  * When two clicks land within DBLCLICK_WINDOW_MS and a window.open
@@ -927,4 +1075,5 @@ patchOpenerLocation();
 patchOpen();
 patchLocation();
 patchForms();
+patchClipboard();
 (window as any).__navsentinelMainGuard = true;

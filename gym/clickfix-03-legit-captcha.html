@@ -1,0 +1,173 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ClickFix 03 - Legitimate CAPTCHA (False Positive Check)</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 24px;
+      background: #f5f5f5;
+    }
+    h1 { margin-top: 0; }
+    .description {
+      background: #d4edda;
+      border: 1px solid #28a745;
+      padding: 12px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+    }
+
+    /* Simulated legitimate CAPTCHA area */
+    .captcha-section {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 24px;
+      max-width: 500px;
+      margin: 20px 0;
+    }
+    .captcha-section h2 {
+      margin-top: 0;
+      font-size: 18px;
+    }
+
+    /* Mimics reCAPTCHA container */
+    .g-recaptcha {
+      border: 1px solid #d3d3d3;
+      border-radius: 3px;
+      padding: 14px;
+      background: #f9f9f9;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 300px;
+      margin: 16px 0;
+    }
+    .g-recaptcha .checkbox {
+      width: 24px;
+      height: 24px;
+      border: 2px solid #c1c1c1;
+      border-radius: 2px;
+      cursor: pointer;
+    }
+    .g-recaptcha .label {
+      font-size: 14px;
+      color: #555;
+    }
+    .g-recaptcha .branding {
+      margin-left: auto;
+      text-align: center;
+      font-size: 10px;
+      color: #999;
+    }
+
+    /* Also simulate a copy-to-clipboard UI (legit use case like OTP copy) */
+    .otp-section {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 24px;
+      max-width: 500px;
+      margin: 20px 0;
+    }
+    .otp-code {
+      font-family: monospace;
+      font-size: 24px;
+      letter-spacing: 4px;
+      background: #f0f0f0;
+      padding: 12px 16px;
+      border-radius: 4px;
+      display: inline-block;
+      margin: 8px 0;
+    }
+    .copy-btn {
+      display: inline-block;
+      background: #4285f4;
+      color: #fff;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-left: 8px;
+    }
+
+    #status {
+      margin-top: 16px;
+      padding: 8px 12px;
+      border-radius: 4px;
+      font-size: 14px;
+      background: #d4edda;
+    }
+  </style>
+</head>
+<body>
+  <h1>ClickFix 03 - Legitimate CAPTCHA (False Positive Check)</h1>
+  <div class="description">
+    <strong>Scenario:</strong> This page simulates a legitimate site with a real reCAPTCHA
+    widget and a copy-OTP button. Both are common legitimate patterns.
+    <br><br>
+    <strong>Expected:</strong> NavSentinel should NOT flag this page. The presence of a
+    <code>.g-recaptcha</code> class should suppress ClickFix detection, and the OTP copy
+    button is a legitimate clipboard usage pattern.
+  </div>
+
+  <div class="captcha-section">
+    <h2>Complete Verification</h2>
+    <p>Please verify you are human to continue.</p>
+
+    <!-- This has the .g-recaptcha class AND a provider iframe, which together
+         suppress ClickFix detection. A bare class name alone is not sufficient
+         (an attacker could add a fake class to evade detection). -->
+    <div class="g-recaptcha" data-sitekey="fake-sitekey-for-gym">
+      <div class="checkbox" id="recaptcha-checkbox"></div>
+      <span class="label">I'm not a robot</span>
+      <div class="branding">
+        <div>reCAPTCHA</div>
+        <div>Privacy - Terms</div>
+      </div>
+      <!-- Simulated reCAPTCHA iframe (real sites have this from Google) -->
+      <iframe src="https://www.google.com/recaptcha/api2/anchor" style="width:0;height:0;border:0;" title="reCAPTCHA"></iframe>
+    </div>
+  </div>
+
+  <div class="otp-section">
+    <h2>Your Verification Code</h2>
+    <p>Copy this code and enter it in the app:</p>
+    <span class="otp-code" id="otp-code">847293</span>
+    <button class="copy-btn" id="copy-otp-btn">Copy Code</button>
+  </div>
+
+  <div id="status">Status: Waiting. Try clicking the copy button - no ClickFix alert should appear.</div>
+
+  <script>
+    const copyBtn = document.getElementById("copy-otp-btn");
+    const otpCode = document.getElementById("otp-code");
+    const statusEl = document.getElementById("status");
+
+    // This is a legitimate clipboard write (copying an OTP code)
+    // NavSentinel should NOT flag this because:
+    // 1. The page has a .g-recaptcha element (legitimate CAPTCHA marker)
+    // 2. Even without that, clipboard write + legit CAPTCHA != ClickFix
+    copyBtn.addEventListener("click", function() {
+      navigator.clipboard.writeText(otpCode.textContent).then(function() {
+        statusEl.textContent = "Status: OTP copied to clipboard. This should NOT trigger a ClickFix alert.";
+        copyBtn.textContent = "Copied!";
+      }).catch(function(err) {
+        statusEl.textContent = "Status: Copy failed (expected in some contexts): " + err.message;
+      });
+    });
+
+    // Simulate clicking the reCAPTCHA checkbox
+    const checkbox = document.getElementById("recaptcha-checkbox");
+    checkbox.addEventListener("click", function() {
+      checkbox.style.background = "#4285f4";
+      checkbox.innerHTML = "&#10003;";
+      checkbox.style.color = "#fff";
+      checkbox.style.textAlign = "center";
+      checkbox.style.lineHeight = "24px";
+    });
+  </script>
+</body>
+</html>

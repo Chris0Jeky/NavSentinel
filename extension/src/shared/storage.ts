@@ -256,6 +256,7 @@ export type EventKind =
   | "cred_untrust_domain"
   | "cred_paste_warn"
   | "suite_config_update"
+  | "clickfix_detected"
   | "dblclickjack_detected";
 
 export interface EventLogEntry {

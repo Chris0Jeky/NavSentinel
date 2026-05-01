@@ -178,6 +178,50 @@ Note:
 - NRS is implemented as of P1-04. Navigation decisions use NRS as the primary score. CDS remains available in the debug overlay.
 - The `nrs_known_bad_domain` factor (P2-03) uses a build-time compiled bloom filter of known-bad domains. The filter is loaded at startup from a static binary asset. See `extension/src/shared/reputation.ts`.
 
+## ClickFix / Fake CAPTCHA detection
+
+ClickFix detection is a page-level scan rather than a per-click CDS/NRS factor. It runs
+when a clipboard write is intercepted from the main world and correlates three independent
+signals:
+
+| Signal | Source | Required? |
+| --- | --- | --- |
+| Clipboard write event | `navigator.clipboard.writeText()` or `document.execCommand("copy")` intercepted in `main_guard.ts` | At least 2 of 3 |
+| Overlay/modal present | Fixed/absolute element covering >= 25% viewport with z-index >= 100 | At least 2 of 3 |
+| CAPTCHA/instruction text | Regex patterns matching "verify you are human", "press Win+R", "paste", etc. | At least 2 of 3 |
+
+Scoring within the ClickFix scan:
+
+| Factor | Weight | Reason code |
+| --- | --- | --- |
+| Command-like clipboard content + overlay | +35 | `clipboard_command_with_overlay` |
+| Non-command clipboard write + overlay + text patterns | +35 | `clipboard_write_with_overlay` |
+| CAPTCHA text + instruction text both present | +25 | `clickfix_instruction_pattern` |
+| Instruction text + overlay (without CAPTCHA text) | +15 | `clickfix_paste_instruction` |
+| CAPTCHA text + overlay (without instruction text) | +10 | `clickfix_captcha_text_with_overlay` |
+
+A non-command clipboard write + overlay alone does NOT trigger detection. Either the
+clipboard content must look command-like, or the page must contain CAPTCHA / instruction
+text patterns. This prevents false positives on legitimate "Copy" buttons alongside cookie
+consent modals or other overlays.
+
+Detection triggers when at least 2 of the 3 signals fire and the combined score >= 25.
+
+False positive suppression:
+- Known legitimate CAPTCHA providers (reCAPTCHA `.g-recaptcha`, hCaptcha `.h-captcha`,
+  Cloudflare Turnstile `.cf-turnstile`, Arkose Labs/FunCaptcha iframes) suppress the scan
+  entirely.
+
+Privacy:
+- Clipboard content is NEVER stored or transmitted. Only metadata (content length, boolean
+  command-like indicator) crosses the main-to-isolated bridge.
+- Clipboard events are pruned after 30 seconds and capped at 5 entries.
+
+Implementation files:
+- `extension/src/content/main_guard.ts` — clipboard API patching + `document.execCommand("copy")` interception
+- `extension/src/content/clickfix_detector.ts` — pattern matching, overlay detection, combined scan
+- `extension/src/content/capture_isolated.ts` — bridge message handling and toast display
+
 ## Explainability
 - Each score contribution produces a reason code.
 - Prompt UI should show destination URL with allow-once and always-allow actions.

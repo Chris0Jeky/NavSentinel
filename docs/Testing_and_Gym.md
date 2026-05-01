@@ -57,6 +57,7 @@ Current unit coverage lives in:
 - `tests/scoring.property.test.ts`
 - `tests/statemachine-timing.test.ts`
 - `tests/prompt-telemetry.test.ts`
+- `tests/clickfix-detector.test.ts`
 - `tests/nrs-dblclick.test.ts`
 
 These currently cover:
@@ -71,6 +72,7 @@ These currently cover:
 - property-based scoring tests (monotonicity, bounds, gradient continuity)
 - state machine timing edge cases (token expiry, window boundaries)
 - prompt telemetry recording, statistics, and bounded storage
+- ClickFix command detection, CAPTCHA/instruction pattern matching, clipboard event tracking, and legitimate CAPTCHA suppression
 - DoubleClickjacking NRS factor (+40 weight, factor combinations, allowlist interaction)
 
 ### Playwright E2E
@@ -217,12 +219,22 @@ Current pages:
 - `gym/rw24-idle-resume-popup.html` (+ `rw24-stale-popup.html`)
 - `gym/rw25-rapid-close-reopen.html` (+ `rw25-churn-popup.html`, `rw25-exfil-popup.html`)
 - `gym/evasion-01-opacity-009.html` through `gym/evasion-11-shadow-dom.html` (CDS evasion red-team fixtures)
+- `gym/clickfix-01-basic.html` (fake CAPTCHA overlay with clipboard write + Win+R instructions)
+- `gym/clickfix-02-instructions.html` (dark-themed terminal instructions variant)
+- `gym/clickfix-03-legit-captcha.html` (legitimate reCAPTCHA + OTP copy, false positive check)
 - `gym/doubleclick-01-basic.html` (+ `doubleclick-01-target.html`) -- basic DoubleClickjacking attack simulation
 - `gym/doubleclick-02-oauth.html` (+ `doubleclick-02-consent.html`) -- OAuth consent DoubleClickjacking variant
 - `gym/doubleclick-03-legit.html` -- legitimate double-click interaction (false-positive check)
 
 Every current primitive Gym level has a dedicated automated path, and the real-world scenario waves
 are continuing to land alongside those primitives.
+
+### ClickFix detection lane
+
+ClickFix fixtures test detection of fake CAPTCHA overlays that write malicious commands to the
+clipboard and instruct users to paste them into Run dialogs or terminals. The legitimate CAPTCHA
+fixture (`clickfix-03`) verifies that real CAPTCHA providers (reCAPTCHA, hCaptcha, Turnstile)
+suppress ClickFix detection to avoid false positives.
 
 ### Evasion red-team lane
 
@@ -316,5 +328,5 @@ From the testing perspective, the clearest next steps are:
 
 - run the FP measurement against Tranco top-1000 and record baseline rate (infrastructure exists, actual run pending)
 - run the phishing corpus validation to establish baseline TP/FN rates
-- add gym fixtures for remaining Phase 2 detections (ClickFix, redirect chains, DOM mutation)
+- add gym fixtures for remaining Phase 2 detections (redirect chains, DOM mutation) — ClickFix and DoubleClickjacking fixtures are done
 - build competitive benchmark suite comparing NavSentinel against Safe Browsing alone
