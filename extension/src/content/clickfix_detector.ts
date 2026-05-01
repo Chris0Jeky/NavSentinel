@@ -289,21 +289,25 @@ export function scanForClickFix(root: Document = document): ClickFixScanResult {
   const hasCaptchaText = matchesCaptchaPattern(textToScan);
   const hasInstructionText = matchesInstructionPattern(textToScan);
 
-  // Build score from combination of signals
-  if (hadClipboardWrite && overlay) {
-    score += 35;
-    reasons.push("clipboard_write_with_overlay");
-  }
+  // Build score from combination of signals.
+  //
+  // Clipboard write + overlay alone is NOT sufficient (would false-positive
+  // on any "Copy" button visible alongside a cookie banner or modal).
+  // Either the clipboard content must look command-like, or the page text
+  // must contain CAPTCHA / paste-instruction patterns.
 
   if (hadCommandWrite && overlay) {
-    score += 10;
+    score += 35;
     reasons.push("clipboard_command_with_overlay");
+  } else if (hadClipboardWrite && overlay && (hasCaptchaText || hasInstructionText)) {
+    score += 35;
+    reasons.push("clipboard_write_with_overlay");
   }
 
   if (hasCaptchaText && hasInstructionText) {
     score += 25;
     reasons.push("clickfix_instruction_pattern");
-  } else if (hasInstructionText) {
+  } else if (hasInstructionText && overlay) {
     score += 15;
     reasons.push("clickfix_paste_instruction");
   } else if (hasCaptchaText && overlay) {
@@ -311,7 +315,7 @@ export function scanForClickFix(root: Document = document): ClickFixScanResult {
     reasons.push("clickfix_captcha_text_with_overlay");
   }
 
-  // Detection requires at least two independent signals
+  // Detection requires at least two independent signals AND sufficient score
   const signalCount = [
     hadClipboardWrite,
     !!overlay,

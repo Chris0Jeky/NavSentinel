@@ -191,11 +191,16 @@ Scoring within the ClickFix scan:
 
 | Factor | Weight | Reason code |
 | --- | --- | --- |
-| Clipboard write + overlay present | +35 | `clipboard_write_with_overlay` |
-| Command-like clipboard content + overlay | +10 | `clipboard_command_with_overlay` |
+| Command-like clipboard content + overlay | +35 | `clipboard_command_with_overlay` |
+| Non-command clipboard write + overlay + text patterns | +35 | `clipboard_write_with_overlay` |
 | CAPTCHA text + instruction text both present | +25 | `clickfix_instruction_pattern` |
-| Instruction text only (without CAPTCHA text) | +15 | `clickfix_paste_instruction` |
-| CAPTCHA text + overlay (without instruction) | +10 | `clickfix_captcha_text_with_overlay` |
+| Instruction text + overlay (without CAPTCHA text) | +15 | `clickfix_paste_instruction` |
+| CAPTCHA text + overlay (without instruction text) | +10 | `clickfix_captcha_text_with_overlay` |
+
+A non-command clipboard write + overlay alone does NOT trigger detection. Either the
+clipboard content must look command-like, or the page must contain CAPTCHA / instruction
+text patterns. This prevents false positives on legitimate "Copy" buttons alongside cookie
+consent modals or other overlays.
 
 Detection triggers when at least 2 of the 3 signals fire and the combined score >= 25.
 
