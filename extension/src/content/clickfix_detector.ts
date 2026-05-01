@@ -131,14 +131,14 @@ const INSTRUCTION_PATTERNS: RegExp[] = [
   /press\s+win\s*\+\s*r/i,
   /press\s+ctrl\s*\+\s*v/i,
   /press\s+⊞\s*\+\s*r/i,
-  /open\s+(?:a\s+)?(?:run|terminal|command|cmd|powershell)\s+(?:dialog|window|prompt)?/i,
+  /open\s+(?:a\s+)?(?:run|terminal|command|cmd|powershell)(?:\s+(?:dialog|window|prompt))?/i,
   /paste\s+(?:it\s+)?(?:in|into)\s+(?:the\s+)?(?:run|terminal|command|address|search)/i,
   /cmd\s*\+\s*space/i,
   /windows\s*\+\s*r/i,
   /win\s+r/i,
   /copy\s+and\s+paste/i,
   /press\s+enter\s+to\s+(?:verify|confirm|continue)/i,
-  /click\s+(?:the\s+)?(?:verify|checkbox|button)\s+(?:then|and)\s+(?:press|paste|open)/i,
+  /click\s+(?:the\s+)?(?:verify|checkbox|button)(?:\s+\w+)*\s+(?:then|and)\s+(?:press|paste|open)/i,
   /right[\s-]?click\s+(?:and\s+)?paste/i,
 ];
 
@@ -216,7 +216,7 @@ export function findClickFixOverlay(root: Document = document): Element | null {
   const minCoverage = 0.25;
   const minZIndex = 100;
 
-  const candidates = root.querySelectorAll("*");
+  const candidates = Array.from(root.querySelectorAll("*"));
   for (const el of candidates) {
     const cs = window.getComputedStyle(el);
     const pos = cs.position;
