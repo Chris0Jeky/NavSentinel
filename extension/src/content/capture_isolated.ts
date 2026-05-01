@@ -771,6 +771,7 @@ if (chrome?.runtime?.onMessage) {
 }
 
 if (chrome?.runtime?.sendMessage && window.top === window) {
+  // -- Rollback polling --
   const run = (retries = 4) => {
     chrome.runtime.sendMessage({ type: "ns-check-rollback" }, (resp) => {
       if (resp?.shouldRollback) {
@@ -791,9 +792,8 @@ if (chrome?.runtime?.sendMessage && window.top === window) {
   } else {
     run();
   }
-}
 
-if (chrome?.runtime?.sendMessage && window.top === window) {
+  // -- Forward polling --
   const runForward = (retries = 1) => {
     if (forwardCheckInFlight) return;
     if (forwardCheckTimer) {

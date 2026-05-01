@@ -185,7 +185,9 @@ export function checkDomain(filter: BloomFilterState, domain: string): boolean {
 
 /**
  * Serialize a bloom filter to its binary representation.
- * Used by the build script; not needed at runtime.
+ * Not used at runtime -- build scripts have their own copies.
+ * Exported only for unit tests.
+ * @internal
  */
 export function serializeFilter(filter: BloomFilterState): Uint8Array {
   const expectedBytes = Math.ceil(filter.m / 8);
@@ -203,7 +205,9 @@ export function serializeFilter(filter: BloomFilterState): Uint8Array {
 
 /**
  * Create a new empty bloom filter with the given parameters.
- * Used by the build script to construct a filter from a domain list.
+ * Not used at runtime -- build scripts have their own copies.
+ * Exported only for unit tests.
+ * @internal
  *
  * @param m Number of bits
  * @param k Number of hash functions
@@ -218,7 +222,9 @@ export function createFilter(m: number, k: number): BloomFilterState {
 
 /**
  * Insert a domain into the bloom filter.
- * Used by the build script; not needed at runtime.
+ * Not used at runtime -- build scripts have their own copies.
+ * Exported only for unit tests.
+ * @internal
  */
 export function insertDomain(filter: BloomFilterState, domain: string): void {
   if (!domain || filter.m === 0) return;
@@ -237,6 +243,9 @@ export function insertDomain(filter: BloomFilterState, domain: string): void {
 
 /**
  * Calculate optimal bloom filter parameters for n items at a target FP rate.
+ * Not used at runtime -- build scripts have their own copies.
+ * Exported only for unit tests.
+ * @internal
  *
  * m = -(n * ln(p)) / (ln(2))^2
  * k = (m / n) * ln(2)
@@ -285,6 +294,8 @@ export function isKnownBadDomain(domain: string): boolean {
 
 /**
  * Returns true if the reputation module has a loaded filter.
+ * Not used at runtime. Exported only for unit tests.
+ * @internal
  */
 export function reputationReady(): boolean {
   return _filter !== null;
