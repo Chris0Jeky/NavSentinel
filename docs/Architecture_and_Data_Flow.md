@@ -40,8 +40,21 @@ This is the main user-facing navigation decision surface.
 - `Location.prototype.replace`
 - `HTMLFormElement.prototype.submit`
 - `HTMLFormElement.prototype.requestSubmit`
+- `navigator.clipboard.writeText` (for ClickFix detection)
+- `document.execCommand("copy")` (for ClickFix detection)
+- `window.opener.location` writes (for DoubleClickjacking detection)
 
-It captures blocked or replayable navigation attempts and hands control back to the isolated-world logic.
+It captures blocked or replayable navigation attempts, clipboard write metadata, and opener-location-write signals, handing control back to the isolated-world logic.
+
+### ClickFix detector
+
+`extension/src/content/clickfix_detector.ts` is a page-level scanner that correlates three independent signals to detect fake CAPTCHA / ClickFix attacks:
+
+- clipboard write events (intercepted by `main_guard.ts`)
+- overlay/modal presence (fixed/absolute element covering >= 25% viewport)
+- CAPTCHA/instruction text patterns ("verify you are human", "press Win+R", etc.)
+
+Detection triggers when at least 2 of 3 signals fire and the combined score reaches 25. Known legitimate CAPTCHA providers (reCAPTCHA, hCaptcha, Turnstile, Arkose Labs) suppress the scan.
 
 ### Credential guard
 
@@ -82,6 +95,16 @@ Key characteristics:
 The build script (`scripts/build-bloom-filter.mjs`) fetches feeds and compiles the filter. A deterministic test filter can be built with `scripts/build-test-bloom-filter.mjs`.
 
 At runtime, `capture_isolated.ts` loads the filter on startup via `chrome.runtime.getURL` and checks destination domains during navigation decisions. A bloom filter hit adds `nrs_known_bad_domain` (+50) to the Navigation Risk Score.
+
+## DoubleClickjacking detection
+
+Detection of the DoubleClickjacking attack pattern (January 2025) is layered across three runtime surfaces:
+
+- `main_guard.ts`: intercepts `window.opener.location` writes via a Proxy; tracks `window.open` timestamps and double-click timing
+- `capture_isolated.ts`: correlates bridge messages (`ns-dblclick-window-open`, `ns-dblclick-opener-nav`, `ns-dblclick-second-click`) and service worker notifications to set a `doubleClickHijackActive` flag
+- `sw.ts`: tracks child tab creation and closure timing; notifies the opener tab's content script when a child that wrote `opener.location` closes within 5 seconds
+
+The `nrs_double_click_hijack` factor (+40) alone reaches the prompt threshold. Combined with cross-site (+20) or new-tab (+20) it reaches the block threshold. Signals expire after 5 seconds to avoid stale false positives.
 
 ## Shared state and storage
 

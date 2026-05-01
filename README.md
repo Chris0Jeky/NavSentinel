@@ -1,9 +1,12 @@
 # NavSentinel
 
-NavSentinel is a local-first Chrome MV3 extension that hardens two abuse-heavy browser surfaces:
+NavSentinel is a local-first Chrome MV3 extension that hardens several abuse-heavy browser surfaces:
 
 - deceptive navigation flows such as hidden overlays, popunders, retargeted clicks, delayed redirects, and synthetic popup attempts
 - risky credential submissions such as HTTP password posts, lookalike domains, untrusted domains, and suspicious cross-site form actions
+- DoubleClickjacking attacks that hijack a double-click gesture to land on sensitive buttons (OAuth consent, MFA, payment)
+- ClickFix / fake CAPTCHA overlays that write malicious commands to the clipboard and instruct users to paste them
+- known-bad domains via a build-time bloom filter compiled from public threat feeds (no network calls)
 
 The current `main` branch ships the merged suite baseline. That means the extension now includes the navigation firewall, the credential guard, a popup, a full options page, trusted-domain management, and a bounded local event log.
 
@@ -13,6 +16,9 @@ The current `main` branch ships the merged suite baseline. That means the extens
 - Patches `window.open`, `location.assign`, `location.replace`, and form submission in the main world to catch script-driven navigation.
 - Relays isolated-world and main-world control messages through the extension runtime instead of page-visible `window.postMessage` traffic.
 - Intercepts password-form submission and computes local credential risk before allowing the submit.
+- Detects DoubleClickjacking attack patterns across main-world, isolated-world, and service-worker layers.
+- Detects ClickFix / fake CAPTCHA overlays that combine clipboard writes with deceptive instruction text.
+- Checks destination domains against a build-time bloom filter of known-bad domains from public threat feeds.
 - Stores only local settings, allowlists, trusted domains, and a bounded event log in `chrome.storage.local`.
 - Provides a popup for the current tab and an options page for persistent configuration, import/export, and log review.
 
@@ -138,9 +144,9 @@ The Playwright config intentionally limits discovery to E2E specs so Vitest file
 ## Privacy and security posture
 
 - No remote telemetry
-- No remote reputation lookups
+- No remote reputation lookups (bloom filter is compiled at build time)
 - No password-value storage
-- No clipboard-content capture
+- No clipboard-content capture (ClickFix detection checks metadata only)
 - Local-only settings and logs
 
 See:

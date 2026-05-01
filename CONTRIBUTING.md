@@ -42,7 +42,13 @@ npm run gym:serve
 - navigation scoring and click decisions
   - `extension/src/content/capture_isolated.ts`
   - `extension/src/shared/scoring.ts`
-- main-world popup/redirect/form enforcement
+  - `extension/src/shared/nrs.ts`
+- domain reputation (bloom filter)
+  - `extension/src/shared/reputation.ts`
+  - `scripts/build-bloom-filter.mjs`
+- ClickFix / fake CAPTCHA detection
+  - `extension/src/content/clickfix_detector.ts`
+- main-world popup/redirect/form/clipboard enforcement
   - `extension/src/content/main_guard.ts`
 - credential risk and prompts
   - `extension/src/content/credential_guard.ts`

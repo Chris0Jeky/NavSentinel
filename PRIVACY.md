@@ -20,6 +20,15 @@ The event log can include:
 - risk score and reason codes
 - small metadata fields related to the decision
 
+## Build-Time Bundled Assets
+
+The extension ships with two static data assets compiled at build time:
+
+- a Public Suffix List (PSL) snapshot for accurate registrable-domain extraction
+- a bloom filter of known-bad domains compiled from public threat feeds (URLhaus, OpenPhish)
+
+These are read-only. They are never updated at runtime and require no network calls.
+
 ## What The Extension Does Not Do
 
 - no telemetry upload
@@ -27,6 +36,7 @@ The event log can include:
 - no cloud scoring
 - no credential exfiltration
 - no remote allowlist or reputation lookups
+- no clipboard content storage (ClickFix detection only checks metadata, never stores content)
 
 ## Import And Export
 

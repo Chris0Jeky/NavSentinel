@@ -59,6 +59,7 @@ Current unit coverage lives in:
 - `tests/prompt-telemetry.test.ts`
 - `tests/clickfix-detector.test.ts`
 - `tests/nrs-dblclick.test.ts`
+- `tests/reputation.test.ts`
 
 These currently cover:
 
@@ -74,6 +75,7 @@ These currently cover:
 - prompt telemetry recording, statistics, and bounded storage
 - ClickFix command detection, CAPTCHA/instruction pattern matching, clipboard event tracking, and legitimate CAPTCHA suppression
 - DoubleClickjacking NRS factor (+40 weight, factor combinations, allowlist interaction)
+- Bloom filter reputation: MurmurHash3, binary format parsing, known-bad domain lookup, false positive verification, and NRS integration (+50 weight)
 
 ### Playwright E2E
 
@@ -326,7 +328,13 @@ If E2E fails in CI, check these first:
 
 From the testing perspective, the clearest next steps are:
 
-- run the FP measurement against Tranco top-1000 and record baseline rate (infrastructure exists, actual run pending)
-- run the phishing corpus validation to establish baseline TP/FN rates
-- add gym fixtures for remaining Phase 2 detections (redirect chains, DOM mutation) — ClickFix and DoubleClickjacking fixtures are done
+- tune NRS/CDS scoring to reduce FP rate below 0.1% target (currently 0.72% on Tranco top-200; 1 FP: unity3d.com)
+- add gym fixtures for remaining Phase 2 detections (redirect chains, DOM mutation, pushState abuse) — ClickFix and DoubleClickjacking fixtures are done
 - build competitive benchmark suite comparing NavSentinel against Safe Browsing alone
+
+Completed measurement milestones:
+
+- FP measurement on Tranco top-200: 0.72% (1/138 sites prompted: unity3d.com) — PR #39
+- Phishing corpus validation: 100 pages tested, 28% overall TP, 100% credential guard TP on detectable password forms — PR #38
+
+Test count: **327 passing** across 13 test files (as of 2026-05-01).

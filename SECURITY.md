@@ -45,7 +45,8 @@ The most security-sensitive code lives in:
 ## Known Limitations
 
 - event logging is best-effort because `chrome.storage.local` is not transactional
-- domain normalization uses a curated multipart-suffix list rather than the full PSL
+- domain normalization uses a build-time PSL snapshot; new TLDs require a data rebuild
+- bloom filter of known-bad domains is a build-time snapshot; new threats require a filter rebuild
 - a browser extension cannot defend against a fully compromised browser or OS
 
 ## Reporting
