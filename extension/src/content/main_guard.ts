@@ -9,6 +9,8 @@ const ALLOW_ONCE_TTL_MS = 1200;
 const BLOCKED_ACTION_TTL_MS = 5000;
 const MAX_POPUP_INTENT_VIEWPORT_SHARE = 0.35;
 const PROTOCOL_VERSION = 1;
+const DBLCLICK_WINDOW_MS = 500;
+const OPENER_NAV_STALE_MS = 3000;
 
 let bridgePort: MessagePort | null = null;
 let bridgeSession: string | null = null;
@@ -35,6 +37,13 @@ let allowOpenUntil = 0;
 let allowRedirectUntil = 0;
 let popupIntentArmed = false;
 let popupIntentClearTimer = 0;
+
+// --- DoubleClickjacking detection state ---
+// Tracks the timestamp of the last window.open call from this page.
+let lastWindowOpenTs = 0;
+// Tracks opener.location writes observed from child windows.
+let lastOpenerNavTs = 0;
+let lastOpenerNavUrl = "";
 
 const blockedActions = new Map<
   string,
@@ -357,6 +366,11 @@ function isFormSelfTarget(formTarget: string): boolean {
   return formTarget === window.name;
 }
 
+function recordWindowOpen(): void {
+  lastWindowOpenTs = nowMs();
+  postToIsolated("ns-dblclick-window-open", { ts: lastWindowOpenTs });
+}
+
 function patchedOpen(
   this: Window,
   url?: string | URL,
@@ -365,17 +379,20 @@ function patchedOpen(
 ): Window | null {
   if (isOff() || (isSubframe() && isSubframeSelfTarget(target))) {
     postAllowed({ kind: "window_open", ...(url !== undefined ? { url: String(url) } : {}) });
+    recordWindowOpen();
     return callNativeOpen(this, url, target, features);
   }
 
   const allowance = consumeOpenAllowance();
   if (allowance !== "none") {
     postAllowed({ kind: "window_open", ...(url !== undefined ? { url: String(url) } : {}) });
+    recordWindowOpen();
     return callNativeOpen(this, url, target, features);
   }
 
   if (consumePopupIntentAllowance(target, features)) {
     postAllowed({ kind: "window_open", ...(url !== undefined ? { url: String(url) } : {}) });
+    recordWindowOpen();
     return callNativeOpen(this, url, target, features);
   }
 
@@ -385,6 +402,7 @@ function patchedOpen(
     ...(target !== undefined ? { target } : {}),
     ...(features !== undefined ? { features } : {}),
     action: () => {
+      recordWindowOpen();
       callNativeOpen(this, url, target, features);
     }
   });
@@ -730,7 +748,111 @@ window.addEventListener(
   true
 );
 
+/**
+ * Intercept opener.location writes from child windows.
+ *
+ * In a DoubleClickjacking attack the child window navigates the opener
+ * to a sensitive page (OAuth consent, MFA confirm) so the user's second
+ * click lands on that page. We detect this by defining a setter on
+ * window.opener that records the navigation attempt and forwards it to
+ * the isolated world.
+ *
+ * This only has an effect in the *child* window, where `window.opener`
+ * is non-null.  The parent's isolated-world script correlates the
+ * opener-nav event with click timing to flag the attack.
+ */
+function patchOpenerLocation(): void {
+  // Only relevant when this page was opened by another page.
+  if (!window.opener) return;
+
+  // Capture the real opener reference before anyone can tamper with it.
+  const realOpener = window.opener;
+
+  try {
+    // Watch for direct property assignment: window.opener.location = url
+    // We proxy the opener object so we can intercept .location sets.
+    const openerProxy = new Proxy(realOpener, {
+      set(_target, prop, value) {
+        if (prop === "location") {
+          const url = String(value);
+          lastOpenerNavTs = nowMs();
+          lastOpenerNavUrl = url;
+          postToIsolated("ns-dblclick-opener-nav", { url, ts: lastOpenerNavTs });
+          if (debug) {
+            console.debug("[NavSentinel] opener.location write intercepted", { url });
+          }
+          // Allow the navigation to proceed so the attack surface
+          // remains observable (the isolated-world will flag the click).
+          try {
+            realOpener.location = value;
+          } catch {
+            // cross-origin assignment -- browser will handle it
+          }
+          return true;
+        }
+        try {
+          (realOpener as any)[prop] = value;
+        } catch {
+          // ignore cross-origin errors
+        }
+        return true;
+      },
+      get(_target, prop) {
+        if (prop === "location") {
+          return realOpener.location;
+        }
+        try {
+          const val = (realOpener as any)[prop];
+          if (typeof val === "function") return val.bind(realOpener);
+          return val;
+        } catch {
+          return undefined;
+        }
+      }
+    });
+
+    Object.defineProperty(window, "opener", {
+      get() { return openerProxy; },
+      configurable: true
+    });
+  } catch {
+    // Some environments (cross-origin) may prevent redefining window.opener.
+    // Fall back to polling: check whether opener.location changed.
+  }
+}
+
+/**
+ * Track double-click timing for DoubleClickjacking correlation.
+ * When two clicks land within DBLCLICK_WINDOW_MS and a window.open
+ * fired between them, notify the isolated world.
+ */
+let lastClickTs = 0;
+window.addEventListener(
+  "click",
+  () => {
+    const now = nowMs();
+    const gap = now - lastClickTs;
+    if (gap > 0 && gap <= DBLCLICK_WINDOW_MS) {
+      // This is the second click of a double-click.
+      const openBetween = lastWindowOpenTs > lastClickTs && lastWindowOpenTs <= now;
+      const openerNavRecent = lastOpenerNavTs > 0 && (now - lastOpenerNavTs) <= OPENER_NAV_STALE_MS;
+      if (openBetween || openerNavRecent) {
+        postToIsolated("ns-dblclick-second-click", {
+          ts: now,
+          firstClickTs: lastClickTs,
+          windowOpenTs: lastWindowOpenTs,
+          openerNavTs: lastOpenerNavTs,
+          openerNavUrl: lastOpenerNavUrl
+        });
+      }
+    }
+    lastClickTs = now;
+  },
+  true
+);
+
 patchOpen();
 patchLocation();
 patchForms();
+patchOpenerLocation();
 (window as any).__navsentinelMainGuard = true;
