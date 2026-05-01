@@ -9,6 +9,8 @@ const ROLLBACK_SUPPRESS_MS = 6000;
 const ROLLBACK_RETURN_TTL_MS = 5000;
 const TYPED_ORIGIN_TTL_MS = 5_000;
 const TYPED_ORIGIN_MAX_MS = 15_000;
+const DBLCLICK_CHILD_MAX_AGE_MS = 5_000;
+const DBLCLICK_CHILD_PRUNE_LIMIT = 50;
 
 const allowUntilByTab = new Map<number, number>();
 const gestureUntilByTab = new Map<number, number>();
@@ -32,6 +34,20 @@ const lastCommittedByTab = new Map<
     allowedAtCommit: boolean;
   }
 >();
+
+// --- DoubleClickjacking: track child windows opened by tabs ---
+// Maps child tabId -> { openerTabId, createdAt }
+const childWindowByTab = new Map<number, { openerTabId: number; createdAt: number }>();
+
+function pruneStaleChildWindows(): void {
+  const now = Date.now();
+  if (childWindowByTab.size <= DBLCLICK_CHILD_PRUNE_LIMIT) return;
+  for (const [tabId, entry] of childWindowByTab) {
+    if (now - entry.createdAt > DBLCLICK_CHILD_MAX_AGE_MS * 2) {
+      childWindowByTab.delete(tabId);
+    }
+  }
+}
 
 function clearPendingTabState(
   tabId: number,
@@ -354,7 +370,36 @@ chrome.webNavigation.onErrorOccurred?.addListener((details) => {
   typedOriginByTab.delete(details.tabId);
 });
 
+// --- DoubleClickjacking: track tab creation with opener ---
+chrome.tabs.onCreated.addListener((tab) => {
+  if (typeof tab.id !== "number") return;
+  if (typeof tab.openerTabId !== "number") return;
+  pruneStaleChildWindows();
+  childWindowByTab.set(tab.id, {
+    openerTabId: tab.openerTabId,
+    createdAt: Date.now()
+  });
+});
+
 chrome.tabs.onRemoved.addListener((tabId) => {
+  // --- DoubleClickjacking: detect child-window close ---
+  const childEntry = childWindowByTab.get(tabId);
+  if (childEntry) {
+    childWindowByTab.delete(tabId);
+    const age = Date.now() - childEntry.createdAt;
+    if (age <= DBLCLICK_CHILD_MAX_AGE_MS) {
+      // Child window closed quickly -- notify the opener tab.
+      chrome.tabs.sendMessage(
+        childEntry.openerTabId,
+        { type: "ns-dblclick-child-closed", childTabId: tabId, ageMs: age },
+        () => {
+          // Ignore errors if the opener tab's content script isn't ready.
+          if (chrome.runtime.lastError) { /* expected if tab navigated away */ }
+        }
+      );
+    }
+  }
+
   allowUntilByTab.delete(tabId);
   gestureUntilByTab.delete(tabId);
   allowStartedByTab.delete(tabId);
