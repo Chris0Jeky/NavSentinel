@@ -188,10 +188,9 @@ export class SessionStateManager {
       this._restoreMap(this.lastCommittedByTab, data[KEYS.lastCommitted]);
       this._restoreMap(this.childWindowByTab, data[KEYS.childWindow]);
       this._restoreMap(this.oauthFlowByTab, data[KEYS.oauthFlow]);
-      this._restoreMap(this.redirectChainData, data[KEYS.redirectChains]);
-    } catch {
-      // Graceful degradation: if session storage fails, we start with empty Maps.
-      // This is the same behavior as before the migration.
+      this._restoreRedirectChains(data[KEYS.redirectChains]);
+    } catch (err) {
+      console.warn("[NavSentinel] session storage hydration failed:", err);
     }
     this._hydrated = true;
   }
@@ -203,16 +202,15 @@ export class SessionStateManager {
   /** Persist a single Map to session storage. */
   persistMap<V>(map: Map<number, V>, key: keyof typeof KEYS): void {
     const storageKey = KEYS[key];
-    void chrome.storage.session.set({ [storageKey]: mapToObj(map) }).catch(() => {
-      // Fire-and-forget: if session storage write fails, the in-memory
-      // cache is still authoritative for this SW lifetime.
+    void chrome.storage.session.set({ [storageKey]: mapToObj(map) }).catch((err) => {
+      console.warn("[NavSentinel] session persist failed:", err);
     });
   }
 
   /** Persist the readyTabs Set to session storage. */
   persistReadyTabs(): void {
-    void chrome.storage.session.set({ [KEYS.readyTabs]: setToArray(this.readyTabs) }).catch(() => {
-      // Fire-and-forget
+    void chrome.storage.session.set({ [KEYS.readyTabs]: setToArray(this.readyTabs) }).catch((err) => {
+      console.warn("[NavSentinel] session persist failed:", err);
     });
   }
 
@@ -235,8 +233,8 @@ export class SessionStateManager {
       [KEYS.oauthFlow]: mapToObj(this.oauthFlowByTab),
       [KEYS.redirectChains]: mapToObj(this.redirectChainData),
     };
-    void chrome.storage.session.set(data).catch(() => {
-      // Fire-and-forget
+    void chrome.storage.session.set(data).catch((err) => {
+      console.warn("[NavSentinel] session persistAll failed:", err);
     });
   }
 
@@ -272,6 +270,15 @@ export class SessionStateManager {
     const restored = objToMap<V>(raw);
     for (const [k, v] of restored) {
       map.set(k, v);
+    }
+  }
+
+  private _restoreRedirectChains(raw: unknown): void {
+    const restored = objToMap<RedirectChain>(raw);
+    for (const [k, v] of restored) {
+      if (v && Array.isArray(v.hops) && typeof v.startedAt === "number") {
+        this.redirectChainData.set(k, v);
+      }
     }
   }
 

@@ -69,7 +69,9 @@ const redirectChainTracker = new RedirectChainTracker(swState.redirectChainData)
 const oauthFlowByTab = swState.oauthFlowByTab;
 
 // --- Hydrate ephemeral state from session storage on SW startup ---
-void swState.hydrate();
+// Event listeners are registered synchronously (required by MV3), but handler
+// bodies await this promise so the first event after a restart sees restored state.
+const hydrateReady = swState.hydrate();
 
 function pruneStaleOAuthFlows(): void {
   const now = Date.now();
@@ -446,6 +448,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 chrome.webNavigation.onBeforeNavigate.addListener((details) => {
   if (details.frameId !== 0) return;
+  if (!swState.hydrated) { void hydrateReady.then(() => onBeforeNavigateHandler(details)); return; }
+  onBeforeNavigateHandler(details);
+});
+function onBeforeNavigateHandler(details: chrome.webNavigation.WebNavigationParentedCallbackDetails): void {
   const forward = pendingForwardByTab.get(details.tabId);
   const rollbackReturn = getActiveRollbackReturn(details.tabId);
   const preserveForwardOffer =
@@ -467,10 +473,14 @@ chrome.webNavigation.onBeforeNavigate.addListener((details) => {
     gestureUntilByTab.delete(details.tabId);
   }
   swState.persistAll();
-});
+}
 
 chrome.webNavigation.onCommitted.addListener((details) => {
   if (details.frameId !== 0) return;
+  if (!swState.hydrated) { void hydrateReady.then(() => onCommittedHandler(details)); return; }
+  onCommittedHandler(details);
+});
+function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitionCallbackDetails): void {
   rollbackReturnByTab.delete(details.tabId);
   const now = Date.now();
   const targetAllowance = allowTargetByTab.get(details.tabId);
@@ -582,7 +592,7 @@ chrome.webNavigation.onCommitted.addListener((details) => {
     });
   }
   swState.persistAll();
-});
+}
 
 chrome.webNavigation.onErrorOccurred?.addListener((details) => {
   if (details.frameId !== 0) return;
@@ -601,6 +611,7 @@ chrome.webNavigation.onErrorOccurred?.addListener((details) => {
 chrome.tabs.onCreated.addListener((tab) => {
   if (typeof tab.id !== "number") return;
   if (typeof tab.openerTabId !== "number") return;
+  if (!swState.hydrated) { void hydrateReady.then(() => { /* tab already tracked by next event */ }); }
   pruneStaleChildWindows();
   childWindowByTab.set(tab.id, {
     openerTabId: tab.openerTabId,
@@ -611,7 +622,10 @@ chrome.tabs.onCreated.addListener((tab) => {
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
-  // --- DoubleClickjacking: detect child-window close ---
+  if (!swState.hydrated) { void hydrateReady.then(() => onRemovedHandler(tabId)); return; }
+  onRemovedHandler(tabId);
+});
+function onRemovedHandler(tabId: number): void {
   const childEntry = childWindowByTab.get(tabId);
   if (childEntry) {
     childWindowByTab.delete(tabId);
@@ -645,7 +659,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   lastUrlByTab.delete(tabId);
   // Batch persist all cleanup in one storage write
   swState.persistAll();
-});
+}
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   const forward = pendingForwardByTab.get(tabId);
