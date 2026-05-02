@@ -11,6 +11,10 @@ export interface NavigationContext {
   doubleClickHijackActive?: boolean | undefined;
   /** Destination domain matched the bloom filter of known-bad domains */
   knownBadDomain?: boolean | undefined;
+  /** Number of hops in the current redirect chain (0 = no chain) */
+  redirectChainDepth?: number | undefined;
+  /** Chain passed through a known URL shortener or advertising redirector */
+  redirectViaKnownRedirector?: boolean | undefined;
 }
 
 export interface NRSResult {
@@ -29,6 +33,10 @@ const NRS_WEIGHT_ALLOWLIST = -100;
 const NRS_WEIGHT_EXPLICIT_NEW_TAB = -30;
 const NRS_WEIGHT_DOUBLE_CLICK_HIJACK = 40;
 const NRS_WEIGHT_KNOWN_BAD_DOMAIN = 50;
+/** +5 per hop beyond 2, capped at +25 (so 3 hops = +5, 7 hops = +25) */
+const NRS_WEIGHT_REDIRECT_CHAIN_DEPTH_PER_HOP = 5;
+const NRS_WEIGHT_REDIRECT_CHAIN_DEPTH_CAP = 25;
+const NRS_WEIGHT_KNOWN_REDIRECTOR = 15;
 
 export const NRS_BLOCK_THRESHOLD = 70;
 export const NRS_STRICT_BLOCK_THRESHOLD = 50;
@@ -80,6 +88,21 @@ export function computeNRS(cdsResult: ScoreResult, navCtx: NavigationContext): N
   if (navCtx.knownBadDomain) {
     nrs += NRS_WEIGHT_KNOWN_BAD_DOMAIN;
     nrsFactors.push("nrs_known_bad_domain");
+  }
+
+  if (navCtx.redirectChainDepth !== undefined && navCtx.redirectChainDepth > 2) {
+    const hopsOver2 = navCtx.redirectChainDepth - 2;
+    const bonus = Math.min(
+      hopsOver2 * NRS_WEIGHT_REDIRECT_CHAIN_DEPTH_PER_HOP,
+      NRS_WEIGHT_REDIRECT_CHAIN_DEPTH_CAP
+    );
+    nrs += bonus;
+    nrsFactors.push("nrs_redirect_chain_depth");
+  }
+
+  if (navCtx.redirectViaKnownRedirector) {
+    nrs += NRS_WEIGHT_KNOWN_REDIRECTOR;
+    nrsFactors.push("nrs_known_redirector");
   }
 
   nrs = Math.max(0, nrs);
