@@ -14,6 +14,7 @@ import {
   isCrossSiteCredentialAction,
   shouldPromptCredentialSubmit
 } from "./credential_guard_model";
+import { analyzePageContent } from "./content_analyzer";
 
 const allowNextSubmitUntil = new WeakMap<HTMLFormElement, number>();
 
@@ -93,6 +94,27 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
       trustedDomains: trusted,
       config: cfg
     });
+
+    // Content fingerprinting: boost risk when page content signals phishing.
+    // Skip entirely for trusted domains -- they have already been allowlisted
+    // by the user and content analysis would only produce false positives.
+    if (!risk.page.isTrusted) {
+      const pageHost = normalizeHost(location.hostname);
+      const pageDomain = getRegistrableDomain(pageHost) || pageHost;
+      const contentAnalysis = analyzePageContent(document, pageDomain);
+      if (contentAnalysis.score > 0) {
+        const boost = Math.min(contentAnalysis.score, 100 - risk.score);
+        risk.score = Math.min(100, risk.score + boost);
+        for (let i = 0; i < contentAnalysis.reasons.length; i++) {
+          risk.reasons.push({ code: "CONTENT_FP", label: contentAnalysis.reasons[i] ?? "" });
+        }
+        // Recalculate severity after boost
+        if (risk.score >= 70) risk.severity = "high";
+        else if (risk.score >= 40) risk.severity = "medium";
+        else if (risk.score >= 15) risk.severity = "low";
+        else risk.severity = "none";
+      }
+    }
 
     const crossSite = isCrossSiteCredentialAction(risk);
     const isHttpsOk = risk.page.isHttps && risk.action.isHttps;
