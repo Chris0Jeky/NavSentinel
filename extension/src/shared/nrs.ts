@@ -11,6 +11,8 @@ export interface NavigationContext {
   doubleClickHijackActive?: boolean | undefined;
   /** Destination domain matched the bloom filter of known-bad domains */
   knownBadDomain?: boolean | undefined;
+  /** ClickFix scan score (0-60 range from scanForClickFix); 0 or undefined = no ClickFix signal */
+  clickfixScore?: number | undefined;
 }
 
 export interface NRSResult {
@@ -29,6 +31,7 @@ const NRS_WEIGHT_ALLOWLIST = -100;
 const NRS_WEIGHT_EXPLICIT_NEW_TAB = -30;
 const NRS_WEIGHT_DOUBLE_CLICK_HIJACK = 40;
 const NRS_WEIGHT_KNOWN_BAD_DOMAIN = 50;
+const NRS_WEIGHT_CLICKFIX_CAP = 40;
 
 export const NRS_BLOCK_THRESHOLD = 70;
 export const NRS_STRICT_BLOCK_THRESHOLD = 50;
@@ -80,6 +83,11 @@ export function computeNRS(cdsResult: ScoreResult, navCtx: NavigationContext): N
   if (navCtx.knownBadDomain) {
     nrs += NRS_WEIGHT_KNOWN_BAD_DOMAIN;
     nrsFactors.push("nrs_known_bad_domain");
+  }
+
+  if (navCtx.clickfixScore !== undefined && navCtx.clickfixScore > 0) {
+    nrs += Math.min(navCtx.clickfixScore, NRS_WEIGHT_CLICKFIX_CAP);
+    nrsFactors.push("nrs_clickfix_active");
   }
 
   nrs = Math.max(0, nrs);
