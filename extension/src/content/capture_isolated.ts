@@ -83,6 +83,7 @@ let forwardCheckInFlight = false;
 let forwardCheckTimer = 0;
 let gestureNavAttempts = 0;
 let gestureDownId: number | null = null;
+let cachedChainInfo: { depth: number; viaKnownRedirector: boolean; knownRedirectorHops: number } | null = null;
 
 function markMainGuardReady(): void {
   if (bridgeRetryTimer) {
@@ -158,6 +159,17 @@ async function initSettings() {
   if (window.top === window) {
     try {
       chrome.runtime.sendMessage({ type: "ns-ready" });
+    } catch {
+      // ignore
+    }
+    // Fetch redirect chain info for this tab's navigation
+    try {
+      chrome.runtime.sendMessage({ type: "ns-get-chain-info" }, (resp) => {
+        if (chrome.runtime.lastError) return;
+        if (resp && typeof resp.depth === "number") {
+          cachedChainInfo = resp;
+        }
+      });
     } catch {
       // ignore
     }
@@ -954,6 +966,11 @@ window.addEventListener(
       explicitNewTabIntent: explicitNewTab,
       doubleClickHijackActive: dblClickHijack,
       knownBadDomain: destDomainBad,
+      ...(cachedChainInfo && cachedChainInfo.depth >= 2 ? {
+        redirectChainDepth: cachedChainInfo.depth,
+        redirectViaKnownRedirector: cachedChainInfo.viaKnownRedirector,
+        knownRedirectorHops: cachedChainInfo.knownRedirectorHops,
+      } : {}),
     };
 
     if (dblClickHijack) {

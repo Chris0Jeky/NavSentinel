@@ -11,6 +11,12 @@ export interface NavigationContext {
   doubleClickHijackActive?: boolean | undefined;
   /** Destination domain matched the bloom filter of known-bad domains */
   knownBadDomain?: boolean | undefined;
+  /** Number of hops in the redirect chain leading to this navigation */
+  redirectChainDepth?: number | undefined;
+  /** Whether any hop in the redirect chain passed through a known redirector */
+  redirectViaKnownRedirector?: boolean | undefined;
+  /** Number of hops through known redirectors in the chain */
+  knownRedirectorHops?: number | undefined;
 }
 
 export interface NRSResult {
@@ -29,6 +35,11 @@ const NRS_WEIGHT_ALLOWLIST = -100;
 const NRS_WEIGHT_EXPLICIT_NEW_TAB = -30;
 const NRS_WEIGHT_DOUBLE_CLICK_HIJACK = 40;
 const NRS_WEIGHT_KNOWN_BAD_DOMAIN = 50;
+const NRS_WEIGHT_REDIRECT_CHAIN_PER_HOP = 5;
+const NRS_WEIGHT_REDIRECT_CHAIN_CAP = 25;
+const NRS_WEIGHT_REDIRECT_CHAIN_THRESHOLD = 2;
+const NRS_WEIGHT_REDIRECT_KNOWN_REDIRECTOR = 15;
+const NRS_WEIGHT_REDIRECT_KNOWN_REDIRECTOR_CAP = 30;
 
 export const NRS_BLOCK_THRESHOLD = 70;
 export const NRS_STRICT_BLOCK_THRESHOLD = 50;
@@ -80,6 +91,20 @@ export function computeNRS(cdsResult: ScoreResult, navCtx: NavigationContext): N
   if (navCtx.knownBadDomain) {
     nrs += NRS_WEIGHT_KNOWN_BAD_DOMAIN;
     nrsFactors.push("nrs_known_bad_domain");
+  }
+
+  if (navCtx.redirectChainDepth !== undefined && navCtx.redirectChainDepth > NRS_WEIGHT_REDIRECT_CHAIN_THRESHOLD) {
+    const hopsOverThreshold = navCtx.redirectChainDepth - NRS_WEIGHT_REDIRECT_CHAIN_THRESHOLD;
+    const chainScore = Math.min(hopsOverThreshold * NRS_WEIGHT_REDIRECT_CHAIN_PER_HOP, NRS_WEIGHT_REDIRECT_CHAIN_CAP);
+    nrs += chainScore;
+    nrsFactors.push("nrs_redirect_chain_depth");
+  }
+
+  if (navCtx.redirectViaKnownRedirector) {
+    const redirectorHops = navCtx.knownRedirectorHops ?? 1;
+    const redirectorScore = Math.min(redirectorHops * NRS_WEIGHT_REDIRECT_KNOWN_REDIRECTOR, NRS_WEIGHT_REDIRECT_KNOWN_REDIRECTOR_CAP);
+    nrs += redirectorScore;
+    nrsFactors.push("nrs_redirect_via_known_redirector");
   }
 
   nrs = Math.max(0, nrs);

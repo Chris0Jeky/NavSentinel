@@ -1,5 +1,6 @@
 import { getRegistrableDomain } from "../shared/domain";
 import { getNavSettings, SUITE_SETTINGS_KEY } from "../shared/storage";
+import { RedirectChainTracker } from "../shared/redirect_chain";
 
 const BASELINE_RULESET_ID = "baseline";
 const NAV_ALLOW_TTL_MS = 1500;
@@ -34,6 +35,9 @@ const lastCommittedByTab = new Map<
     allowedAtCommit: boolean;
   }
 >();
+
+// --- Redirect chain correlation ---
+const redirectChainTracker = new RedirectChainTracker();
 
 // --- DoubleClickjacking: track child windows opened by tabs ---
 // Maps child tabId -> { openerTabId, createdAt, openerNavObserved }
@@ -250,6 +254,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
   }
 
+  if (message.type === "ns-get-chain-info") {
+    const tabId = sender.tab?.id;
+    if (typeof tabId === "number") {
+      const info = redirectChainTracker.getChainInfo(tabId);
+      sendResponse?.(info ?? { depth: 0, viaKnownRedirector: false, knownRedirectorHops: 0 });
+    }
+  }
+
   // DoubleClickjacking: forward opener.location write from child to opener tab.
   // Only forward if the sender tab is a known child window to prevent
   // malicious pages from injecting false opener-nav signals.
@@ -311,6 +323,14 @@ chrome.webNavigation.onCommitted.addListener((details) => {
   }
   const prevUrl = lastUrlByTab.get(details.tabId);
   lastUrlByTab.set(details.tabId, details.url);
+
+  // Track redirect chains across all top-frame commits
+  redirectChainTracker.recordHop(
+    details.tabId,
+    details.url,
+    now,
+    details.transitionType
+  );
 
   const qualifiers = details.transitionQualifiers ?? [];
   const isRedirect =
@@ -447,6 +467,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   suppressUntilByTab.delete(tabId);
   rollbackReturnByTab.delete(tabId);
   typedOriginByTab.delete(tabId);
+  redirectChainTracker.deleteTab(tabId);
   clearPendingTabState(tabId);
   lastUrlByTab.delete(tabId);
 });

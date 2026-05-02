@@ -1,0 +1,70 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Chain 02 - Simulated 3-Hop Redirect via URL Shortener</title>
+  <style>
+    body { font-family: sans-serif; padding: 24px; }
+    button { padding: 12px 18px; font-size: 16px; margin: 8px 4px; }
+    #status { border: 2px dashed #999; padding: 16px; margin-top: 18px; }
+    code { background: #f4f4f4; padding: 2px 4px; }
+  </style>
+</head>
+<body>
+  <h1>Chain 02: Simulated 3-Hop Redirect through URL Shortener</h1>
+  <p>This scenario simulates a redirect chain: <code>start &rarr; bit.ly &rarr; track.ads.com &rarr; landing</code>.</p>
+  <p>In a real attack, the browser's <code>webNavigation.onCommitted</code> events would fire
+     for each hop. This gym page simulates the chain by performing rapid same-tab redirects.</p>
+
+  <p><strong>Expected:</strong></p>
+  <ul>
+    <li>After the chain completes, the NRS debug overlay should show <code>nrs_redirect_chain_depth</code>.</li>
+    <li>Known-redirector hops (bit.ly, track.ads.com) should trigger <code>nrs_redirect_via_known_redirector</code>.</li>
+    <li>Chain depth = 3, so depth penalty = +5 (one hop beyond threshold of 2).</li>
+    <li>2 known redirector hops = +30 (capped).</li>
+  </ul>
+
+  <div id="status">
+    <p>Click below to start the simulated redirect chain (same-tab):</p>
+    <button id="startChain">Start 3-hop chain</button>
+    <p id="chainStatus"></p>
+  </div>
+
+  <script>
+    const btn = document.getElementById('startChain');
+    const status = document.getElementById('chainStatus');
+    let step = 0;
+    const hops = [
+      // Hop 1: simulated shortener redirect
+      'chain-02-shortener.html?hop=1&from=bit.ly',
+      // Hop 2: simulated tracking redirect
+      'chain-02-shortener.html?hop=2&from=track.ads.com',
+      // Hop 3: final landing
+      'chain-02-shortener.html?hop=3&landed=true',
+    ];
+
+    const params = new URLSearchParams(location.search);
+    const hop = params.get('hop');
+
+    if (hop === '3') {
+      status.textContent = 'Chain complete! 3 hops simulated. Check NRS debug overlay for chain factors.';
+    } else if (hop) {
+      // Auto-continue the chain
+      const nextHop = parseInt(hop, 10);
+      if (nextHop < 3) {
+        status.textContent = 'Hop ' + hop + ' reached, redirecting...';
+        setTimeout(() => {
+          location.assign(hops[nextHop]);
+        }, 100);
+      }
+    }
+
+    btn.addEventListener('click', () => {
+      status.textContent = 'Starting chain...';
+      setTimeout(() => {
+        location.assign(hops[0]);
+      }, 100);
+    });
+  </script>
+</body>
+</html>
