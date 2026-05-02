@@ -352,6 +352,11 @@ test.describe("Redirect Chains", () => {
         null,
         { timeout: 5000 }
       );
+
+      // Note: redirect chain detection operates at the SW level on cross-origin
+      // navigations. Same-origin gym hops (via query param) exercise the fixture
+      // logic but may not trigger nrs_redirect_chain_depth scoring. Full cross-
+      // origin chain detection is validated by the redirect_chain unit tests.
     } finally {
       await cleanup();
     }
@@ -373,6 +378,9 @@ test.describe("Redirect Chains", () => {
         null,
         { timeout: 5000 }
       );
+
+      // See chain-02 note: same-origin gym hops don't trigger SW-level chain
+      // scoring. Cross-origin detection is covered by redirect_chain unit tests.
     } finally {
       await cleanup();
     }
@@ -615,12 +623,12 @@ test.describe("Content Fingerprinting", () => {
       // field and submits on an untrusted domain (127.0.0.1), but there
       // should be no brand-mismatch or kit-match signals.
 
-      // Wait a moment for processing
-      await page.waitForTimeout(2000);
-
       // The page title is "MyApp - Dashboard" with no brand impersonation.
       // Content fingerprinting should return score ~5 (generic login language)
       // which is well below the brand mismatch or kit thresholds.
+      // Credential guard may still fire (untrusted domain), but no phishing-
+      // specific content signals should appear in the toast.
+      await assertNoToastFor(page, 2000);
       await expect(page).toHaveURL(/content-fp-03-legit-login\.html/);
     } finally {
       await cleanup();
@@ -674,8 +682,10 @@ test.describe("OAuth Flow Analysis", () => {
         { timeout: 3000 }
       );
 
-      // The page does not actually navigate (it just updates status text),
-      // so we verify the fixture loaded and ran correctly
+      // This fixture constructs a malicious OAuth URL with a spoofed
+      // redirect_uri but does not actually navigate. It validates the fixture
+      // renders correctly. Actual OAuth redirect detection is tested by unit
+      // tests for the OAuth flow monitor in sw.ts.
       await expect(page).toHaveURL(/oauth-02-redirect-hijack\.html/);
     } finally {
       await cleanup();
