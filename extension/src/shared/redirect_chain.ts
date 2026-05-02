@@ -135,7 +135,16 @@ export function isKnownRedirector(url: string): boolean {
  * service worker (module-level maps, lost on restart).
  */
 export class RedirectChainTracker {
-  private chains = new Map<number, RedirectChain>();
+  private chains: Map<number, RedirectChain>;
+
+  /**
+   * @param backingMap Optional external Map to use as the backing store.
+   *   When provided, the tracker reads/writes from this Map directly,
+   *   allowing an outer layer (e.g. SessionStateManager) to persist it.
+   */
+  constructor(backingMap?: Map<number, RedirectChain>) {
+    this.chains = backingMap ?? new Map<number, RedirectChain>();
+  }
 
   /**
    * Record a navigation commit for a tab. If the commit is within the

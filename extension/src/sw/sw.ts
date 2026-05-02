@@ -8,6 +8,7 @@ import {
   isUnexpectedCallback,
   type OAuthFlowState,
 } from "../content/oauth_monitor";
+import { swState } from "../shared/session_state";
 
 const BASELINE_RULESET_ID = "baseline";
 
@@ -43,34 +44,34 @@ const DBLCLICK_CHILD_PRUNE_LIMIT = 50;
 const OAUTH_FLOW_MAX_AGE_MS = 60_000;
 const OAUTH_FLOW_PRUNE_LIMIT = 50;
 
-const allowUntilByTab = new Map<number, number>();
-const gestureUntilByTab = new Map<number, number>();
-const allowStartedByTab = new Map<number, string>();
-const allowTargetByTab = new Map<number, { url: string; expiresAt: number }>();
-const suppressUntilByTab = new Map<number, number>();
-const typedOriginByTab = new Map<number, { ts: number; deadline: number }>();
-const readyTabs = new Set<number>();
-const pendingRollbackByTab = new Map<number, { url: string; prevUrl?: string; qualifiers: string[] }>();
-const pendingForwardByTab = new Map<number, { url: string; ts: number; returnUrl?: string }>();
-const rollbackReturnByTab = new Map<number, { url: string; expiresAt: number }>();
-const lastUrlByTab = new Map<number, string>();
-const lastCommittedByTab = new Map<
-  number,
-  {
-    url: string;
-    prevUrl?: string;
-    transitionType: string;
-    qualifiers: string[];
-    ts: number;
-    allowedAtCommit: boolean;
-  }
->();
+// --- Session-backed state (write-through cache) ---
+// In-memory Maps are the primary read path (synchronous).
+// Writes are mirrored to chrome.storage.session for SW restart resilience.
+// On startup, hydrate() populates these from session storage.
+const allowUntilByTab = swState.allowUntilByTab;
+const gestureUntilByTab = swState.gestureUntilByTab;
+const allowStartedByTab = swState.allowStartedByTab;
+const allowTargetByTab = swState.allowTargetByTab;
+const suppressUntilByTab = swState.suppressUntilByTab;
+const typedOriginByTab = swState.typedOriginByTab;
+const readyTabs = swState.readyTabs;
+const pendingRollbackByTab = swState.pendingRollbackByTab;
+const pendingForwardByTab = swState.pendingForwardByTab;
+const rollbackReturnByTab = swState.rollbackReturnByTab;
+const lastUrlByTab = swState.lastUrlByTab;
+const lastCommittedByTab = swState.lastCommittedByTab;
 
 // --- Redirect chain correlation ---
-const redirectChainTracker = new RedirectChainTracker();
+// Pass the session-backed Map so the tracker persists via swState.
+const redirectChainTracker = new RedirectChainTracker(swState.redirectChainData);
 
 // --- OAuth flow tracking per tab ---
-const oauthFlowByTab = new Map<number, OAuthFlowState>();
+const oauthFlowByTab = swState.oauthFlowByTab;
+
+// --- Hydrate ephemeral state from session storage on SW startup ---
+// Event listeners are registered synchronously (required by MV3), but handler
+// bodies await this promise so the first event after a restart sees restored state.
+const hydrateReady = swState.hydrate();
 
 function pruneStaleOAuthFlows(): void {
   const now = Date.now();
@@ -88,6 +89,7 @@ function pruneStaleOAuthFlows(): void {
       oauthFlowByTab.delete(sorted[i]![0]);
     }
   }
+  swState.persistMap(oauthFlowByTab, "oauthFlow");
 }
 
 function processOAuthNavigation(tabId: number, url: string): void {
@@ -103,6 +105,7 @@ function processOAuthNavigation(tabId: number, url: string): void {
         );
       }
       existingFlow.phase = "complete";
+      swState.persistMap(oauthFlowByTab, "oauthFlow");
       chrome.tabs.sendMessage(
         tabId,
         { type: "ns-oauth-flow-update", flow: existingFlow },
@@ -141,6 +144,7 @@ function processOAuthNavigation(tabId: number, url: string): void {
     };
     oauthFlowByTab.set(tabId, flow);
   }
+  swState.persistMap(oauthFlowByTab, "oauthFlow");
 
   const flow = oauthFlowByTab.get(tabId);
   if (flow) {
@@ -156,7 +160,7 @@ function processOAuthNavigation(tabId: number, url: string): void {
 // Maps child tabId -> { openerTabId, createdAt, openerNavObserved }
 // openerNavObserved is set when the child tab sends ns-dblclick-opener-nav,
 // confirming it wrote to opener.location.
-const childWindowByTab = new Map<number, { openerTabId: number; createdAt: number; openerNavObserved: boolean }>();
+const childWindowByTab = swState.childWindowByTab;
 
 function pruneStaleChildWindows(): void {
   const now = Date.now();
@@ -175,6 +179,7 @@ function pruneStaleChildWindows(): void {
       childWindowByTab.delete(sorted[i]![0]);
     }
   }
+  swState.persistMap(childWindowByTab, "childWindow");
 }
 
 function clearPendingTabState(
@@ -187,6 +192,7 @@ function clearPendingTabState(
     pendingForwardByTab.delete(tabId);
   }
   lastCommittedByTab.delete(tabId);
+  // Persist is deferred to the caller's batch persist.
 }
 
 function trySendRollback(
@@ -208,6 +214,8 @@ function trySendRollback(
       } else {
         pendingRollbackByTab.delete(tabId);
       }
+      swState.persistMap(pendingRollbackByTab, "pendingRollback");
+      swState.persistReadyTabs();
     }
   );
 }
@@ -223,6 +231,8 @@ function trySendForwardOffer(
     } else {
       pendingForwardByTab.delete(tabId);
     }
+    swState.persistMap(pendingForwardByTab, "pendingForward");
+    swState.persistReadyTabs();
   });
 }
 
@@ -231,6 +241,7 @@ function getActiveRollbackReturn(tabId: number): { url: string; expiresAt: numbe
   if (!entry) return null;
   if (Date.now() > entry.expiresAt) {
     rollbackReturnByTab.delete(tabId);
+    swState.persistMap(rollbackReturnByTab, "rollbackReturn");
     return null;
   }
   return entry;
@@ -281,6 +292,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (typeof tabId === "number") {
       const ttl = typeof message.ttlMs === "number" ? message.ttlMs : NAV_ALLOW_TTL_MS;
       allowUntilByTab.set(tabId, Date.now() + ttl);
+      swState.persistMap(allowUntilByTab, "allowUntil");
     }
     sendResponse?.({ ok: true });
   }
@@ -290,6 +302,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (typeof tabId === "number") {
       const ttl = typeof message.ttlMs === "number" ? message.ttlMs : NAV_GESTURE_TTL_MS;
       gestureUntilByTab.set(tabId, Date.now() + ttl);
+      swState.persistMap(gestureUntilByTab, "gestureUntil");
     }
     sendResponse?.({ ok: true });
   }
@@ -302,6 +315,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         url: message.url,
         expiresAt: Date.now() + ttl
       });
+      swState.persistMap(allowTargetByTab, "allowTarget");
     }
     sendResponse?.({ ok: true });
   }
@@ -310,6 +324,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const tabId = sender.tab?.id;
     if (typeof tabId === "number") {
       readyTabs.add(tabId);
+      swState.persistReadyTabs();
       const pending = pendingRollbackByTab.get(tabId);
       if (pending) {
         trySendRollback(tabId, pending);
@@ -339,6 +354,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           ? { returnUrl: message.returnUrl }
           : {})
       });
+      swState.persistMap(pendingForwardByTab, "pendingForward");
     }
   }
 
@@ -349,6 +365,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         url: message.returnUrl,
         expiresAt: Date.now() + ROLLBACK_RETURN_TTL_MS
       });
+      swState.persistMap(rollbackReturnByTab, "rollbackReturn");
     }
     sendResponse?.({ ok: true });
   }
@@ -364,11 +381,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
       if (forward && currentUrl && forward.returnUrl === currentUrl) {
         pendingForwardByTab.delete(tabId);
+        swState.persistMap(pendingForwardByTab, "pendingForward");
         sendResponse?.({ status: "offer", url: forward.url });
         return;
       }
       if (forward) {
         pendingForwardByTab.delete(tabId);
+        swState.persistMap(pendingForwardByTab, "pendingForward");
         sendResponse?.({ status: "offer", url: forward.url });
         return;
       }
@@ -400,6 +419,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // Mark that this child performed an opener.location write so the
     // child-close signal is only sent for confirmed attack scenarios.
     childEntry.openerNavObserved = true;
+    swState.persistMap(childWindowByTab, "childWindow");
 
     // --- OAuth: detect opener manipulation during an active OAuth flow ---
     const openerOAuthFlow = oauthFlowByTab.get(childEntry.openerTabId);
@@ -428,6 +448,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 chrome.webNavigation.onBeforeNavigate.addListener((details) => {
   if (details.frameId !== 0) return;
+  if (!swState.hydrated) { void hydrateReady.then(() => onBeforeNavigateHandler(details)); return; }
+  onBeforeNavigateHandler(details);
+});
+function onBeforeNavigateHandler(details: chrome.webNavigation.WebNavigationParentedCallbackDetails): void {
   const forward = pendingForwardByTab.get(details.tabId);
   const rollbackReturn = getActiveRollbackReturn(details.tabId);
   const preserveForwardOffer =
@@ -440,15 +464,23 @@ chrome.webNavigation.onBeforeNavigate.addListener((details) => {
   const now = Date.now();
   const allowUntil = allowUntilByTab.get(details.tabId) ?? 0;
   const gestureUntil = gestureUntilByTab.get(details.tabId) ?? 0;
-  if (now > allowUntil && now > gestureUntil) return;
+  if (now > allowUntil && now > gestureUntil) {
+    swState.persistAll();
+    return;
+  }
   allowStartedByTab.set(details.tabId, details.url);
   if (now <= gestureUntil) {
     gestureUntilByTab.delete(details.tabId);
   }
-});
+  swState.persistAll();
+}
 
 chrome.webNavigation.onCommitted.addListener((details) => {
   if (details.frameId !== 0) return;
+  if (!swState.hydrated) { void hydrateReady.then(() => onCommittedHandler(details)); return; }
+  onCommittedHandler(details);
+});
+function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitionCallbackDetails): void {
   rollbackReturnByTab.delete(details.tabId);
   const now = Date.now();
   const targetAllowance = allowTargetByTab.get(details.tabId);
@@ -495,8 +527,8 @@ chrome.webNavigation.onCommitted.addListener((details) => {
     typedOriginByTab.delete(details.tabId);
   }
 
-  if (isUserTyped) return;
-  if (!isRedirect && !isLinkish) return;
+  if (isUserTyped) { swState.persistAll(); return; }
+  if (!isRedirect && !isLinkish) { swState.persistAll(); return; }
 
   const inTypedOriginWindow = typedOriginEntry != null
     && now - typedOriginEntry.ts < TYPED_ORIGIN_TTL_MS
@@ -505,6 +537,7 @@ chrome.webNavigation.onCommitted.addListener((details) => {
     if (isRedirect) {
       typedOriginByTab.set(details.tabId, { ts: now, deadline: typedOriginEntry.deadline });
     }
+    swState.persistAll();
     return;
   }
 
@@ -516,7 +549,7 @@ chrome.webNavigation.onCommitted.addListener((details) => {
       if (isHttp(prevUrlObj.protocol) && isHttp(curUrlObj.protocol)) {
         const prevReg = getRegistrableDomain(prevUrlObj.hostname.toLowerCase());
         const curReg = getRegistrableDomain(curUrlObj.hostname.toLowerCase());
-        if (prevReg && curReg && prevReg === curReg) return;
+        if (prevReg && curReg && prevReg === curReg) { swState.persistAll(); return; }
       }
     } catch (err) {
       console.warn("[NavSentinel] same-domain check failed", err);
@@ -537,10 +570,10 @@ chrome.webNavigation.onCommitted.addListener((details) => {
     allowedAtCommit
   });
 
-  if (allowedAtCommit) return;
+  if (allowedAtCommit) { swState.persistAll(); return; }
 
   const suppressUntil = suppressUntilByTab.get(details.tabId) ?? 0;
-  if (now <= suppressUntil) return;
+  if (now <= suppressUntil) { swState.persistAll(); return; }
 
   pendingForwardByTab.set(details.tabId, { url: details.url, ts: now });
   suppressUntilByTab.set(details.tabId, now + ROLLBACK_SUPPRESS_MS);
@@ -558,7 +591,8 @@ chrome.webNavigation.onCommitted.addListener((details) => {
       qualifiers
     });
   }
-});
+  swState.persistAll();
+}
 
 chrome.webNavigation.onErrorOccurred?.addListener((details) => {
   if (details.frameId !== 0) return;
@@ -570,22 +604,28 @@ chrome.webNavigation.onErrorOccurred?.addListener((details) => {
   rollbackReturnByTab.delete(details.tabId);
   allowStartedByTab.delete(details.tabId);
   typedOriginByTab.delete(details.tabId);
+  swState.persistAll();
 });
 
 // --- DoubleClickjacking: track tab creation with opener ---
 chrome.tabs.onCreated.addListener((tab) => {
   if (typeof tab.id !== "number") return;
   if (typeof tab.openerTabId !== "number") return;
+  if (!swState.hydrated) { void hydrateReady.then(() => { /* tab already tracked by next event */ }); }
   pruneStaleChildWindows();
   childWindowByTab.set(tab.id, {
     openerTabId: tab.openerTabId,
     createdAt: Date.now(),
     openerNavObserved: false
   });
+  swState.persistMap(childWindowByTab, "childWindow");
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
-  // --- DoubleClickjacking: detect child-window close ---
+  if (!swState.hydrated) { void hydrateReady.then(() => onRemovedHandler(tabId)); return; }
+  onRemovedHandler(tabId);
+});
+function onRemovedHandler(tabId: number): void {
   const childEntry = childWindowByTab.get(tabId);
   if (childEntry) {
     childWindowByTab.delete(tabId);
@@ -617,7 +657,9 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   oauthFlowByTab.delete(tabId);
   clearPendingTabState(tabId);
   lastUrlByTab.delete(tabId);
-});
+  // Batch persist all cleanup in one storage write
+  swState.persistAll();
+}
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   const forward = pendingForwardByTab.get(tabId);

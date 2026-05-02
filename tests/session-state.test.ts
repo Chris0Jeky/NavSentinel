@@ -1,0 +1,738 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { SessionStateManager } from "../extension/src/shared/session_state";
+
+// ---------------------------------------------------------------------------
+// Minimal chrome.storage.session mock
+// ---------------------------------------------------------------------------
+
+function createSessionStorageMock() {
+  let store: Record<string, unknown> = {};
+  return {
+    get store() { return store; },
+    mock: {
+      async get(keys?: string | string[]) {
+        if (keys === undefined) return { ...store };
+        if (typeof keys === "string") {
+          return { [keys]: store[keys] };
+        }
+        const result: Record<string, unknown> = {};
+        for (const key of keys) {
+          result[key] = store[key];
+        }
+        return result;
+      },
+      async set(items: Record<string, unknown>) {
+        Object.assign(store, items);
+      },
+      async remove(keys: string | string[]) {
+        const keyList = typeof keys === "string" ? [keys] : keys;
+        for (const key of keyList) {
+          delete store[key];
+        }
+      },
+    },
+    clear() {
+      store = {};
+    },
+  };
+}
+
+describe("SessionStateManager", () => {
+  let sessionStorage: ReturnType<typeof createSessionStorageMock>;
+
+  beforeEach(() => {
+    sessionStorage = createSessionStorageMock();
+    vi.stubGlobal("chrome", {
+      storage: {
+        session: sessionStorage.mock,
+      },
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // -----------------------------------------------------------------------
+  // Hydration
+  // -----------------------------------------------------------------------
+
+  it("hydrates maps from empty session storage without errors", async () => {
+    const mgr = new SessionStateManager();
+    await mgr.hydrate();
+    expect(mgr.hydrated).toBe(true);
+    expect(mgr.allowUntilByTab.size).toBe(0);
+    expect(mgr.readyTabs.size).toBe(0);
+  });
+
+  it("hydrates maps from populated session storage", async () => {
+    // Pre-populate session storage with serialised state
+    await sessionStorage.mock.set({
+      "ns_sw:allowUntil": { "7": 123456 },
+      "ns_sw:gestureUntil": { "8": 789012 },
+      "ns_sw:readyTabs": [7, 8, 9],
+      "ns_sw:lastUrl": { "7": "https://example.test/" },
+      "ns_sw:childWindow": {
+        "10": { openerTabId: 7, createdAt: 100000, openerNavObserved: true },
+      },
+    });
+
+    const mgr = new SessionStateManager();
+    await mgr.hydrate();
+
+    expect(mgr.allowUntilByTab.get(7)).toBe(123456);
+    expect(mgr.gestureUntilByTab.get(8)).toBe(789012);
+    expect(mgr.readyTabs.has(7)).toBe(true);
+    expect(mgr.readyTabs.has(8)).toBe(true);
+    expect(mgr.readyTabs.has(9)).toBe(true);
+    expect(mgr.readyTabs.size).toBe(3);
+    expect(mgr.lastUrlByTab.get(7)).toBe("https://example.test/");
+    expect(mgr.childWindowByTab.get(10)).toEqual({
+      openerTabId: 7,
+      createdAt: 100000,
+      openerNavObserved: true,
+    });
+  });
+
+  it("gracefully handles corrupted session storage data", async () => {
+    await sessionStorage.mock.set({
+      "ns_sw:allowUntil": "not-an-object",
+      "ns_sw:readyTabs": "not-an-array",
+    });
+
+    const mgr = new SessionStateManager();
+    await mgr.hydrate();
+
+    expect(mgr.hydrated).toBe(true);
+    expect(mgr.allowUntilByTab.size).toBe(0);
+    expect(mgr.readyTabs.size).toBe(0);
+  });
+
+  it("gracefully handles session storage API failure", async () => {
+    vi.stubGlobal("chrome", {
+      storage: {
+        session: {
+          get: async () => { throw new Error("storage unavailable"); },
+          set: async () => { throw new Error("storage unavailable"); },
+        },
+      },
+    });
+
+    const mgr = new SessionStateManager();
+    await mgr.hydrate();
+
+    expect(mgr.hydrated).toBe(true);
+    expect(mgr.allowUntilByTab.size).toBe(0);
+  });
+
+  // -----------------------------------------------------------------------
+  // Write-through persistence
+  // -----------------------------------------------------------------------
+
+  it("persists a single map to session storage", async () => {
+    const mgr = new SessionStateManager();
+    await mgr.hydrate();
+
+    mgr.allowUntilByTab.set(7, 123456);
+    mgr.persistMap(mgr.allowUntilByTab, "allowUntil");
+
+    // Wait for the fire-and-forget write
+    await new Promise((r) => setTimeout(r, 0));
+
+    const data = await sessionStorage.mock.get("ns_sw:allowUntil");
+    expect(data["ns_sw:allowUntil"]).toEqual({ "7": 123456 });
+  });
+
+  it("persists readyTabs set to session storage", async () => {
+    const mgr = new SessionStateManager();
+    await mgr.hydrate();
+
+    mgr.readyTabs.add(7);
+    mgr.readyTabs.add(8);
+    mgr.persistReadyTabs();
+
+    await new Promise((r) => setTimeout(r, 0));
+
+    const data = await sessionStorage.mock.get("ns_sw:readyTabs");
+    const arr = data["ns_sw:readyTabs"] as number[];
+    expect(arr).toContain(7);
+    expect(arr).toContain(8);
+    expect(arr.length).toBe(2);
+  });
+
+  it("persists all state in a single batch write", async () => {
+    const mgr = new SessionStateManager();
+    await mgr.hydrate();
+
+    mgr.allowUntilByTab.set(7, 123456);
+    mgr.gestureUntilByTab.set(8, 789012);
+    mgr.readyTabs.add(9);
+    mgr.lastUrlByTab.set(7, "https://example.test/");
+    mgr.persistAll();
+
+    await new Promise((r) => setTimeout(r, 0));
+
+    const data = await sessionStorage.mock.get([
+      "ns_sw:allowUntil",
+      "ns_sw:gestureUntil",
+      "ns_sw:readyTabs",
+      "ns_sw:lastUrl",
+    ]);
+    expect(data["ns_sw:allowUntil"]).toEqual({ "7": 123456 });
+    expect(data["ns_sw:gestureUntil"]).toEqual({ "8": 789012 });
+    expect(data["ns_sw:readyTabs"]).toContain(9);
+    expect(data["ns_sw:lastUrl"]).toEqual({ "7": "https://example.test/" });
+  });
+
+  // -----------------------------------------------------------------------
+  // State survives simulated SW restart
+  // -----------------------------------------------------------------------
+
+  it("state survives a simulated SW restart via hydration", async () => {
+    // Phase 1: write state with manager A
+    const mgrA = new SessionStateManager();
+    await mgrA.hydrate();
+
+    mgrA.allowUntilByTab.set(7, 999999);
+    mgrA.gestureUntilByTab.set(8, 888888);
+    mgrA.allowStartedByTab.set(7, "https://example.test/nav");
+    mgrA.allowTargetByTab.set(7, { url: "https://target.test/", expiresAt: 999999 });
+    mgrA.suppressUntilByTab.set(7, 777777);
+    mgrA.typedOriginByTab.set(7, { ts: 100000, deadline: 200000 });
+    mgrA.readyTabs.add(7);
+    mgrA.pendingRollbackByTab.set(7, {
+      url: "https://evil.test/",
+      prevUrl: "https://safe.test/",
+      qualifiers: ["client_redirect"],
+    });
+    mgrA.pendingForwardByTab.set(7, { url: "https://evil.test/", ts: 100000 });
+    mgrA.rollbackReturnByTab.set(7, { url: "https://safe.test/", expiresAt: 999999 });
+    mgrA.lastUrlByTab.set(7, "https://current.test/");
+    mgrA.lastCommittedByTab.set(7, {
+      url: "https://evil.test/",
+      prevUrl: "https://safe.test/",
+      transitionType: "link",
+      qualifiers: ["client_redirect"],
+      ts: 100000,
+      allowedAtCommit: false,
+    });
+    mgrA.childWindowByTab.set(10, {
+      openerTabId: 7,
+      createdAt: 100000,
+      openerNavObserved: true,
+    });
+    mgrA.oauthFlowByTab.set(7, {
+      initiatorUrl: "https://app.test/",
+      consentUrl: "https://oauth.test/authorize",
+      expectedCallbackDomain: "app.test",
+      startedAt: 100000,
+      phase: "redirect",
+    });
+    mgrA.redirectChainData.set(7, {
+      hops: [
+        { url: "https://a.test/", ts: 100000, transitionType: "link" },
+        { url: "https://b.test/", ts: 100100, transitionType: "link" },
+      ],
+      startedAt: 100000,
+    });
+
+    // Persist all state
+    mgrA.persistAll();
+    await new Promise((r) => setTimeout(r, 0));
+
+    // Phase 2: "restart" -- create a new manager that knows nothing
+    // and hydrate from the same session storage
+    const mgrB = new SessionStateManager();
+    expect(mgrB.allowUntilByTab.size).toBe(0); // empty before hydration
+    await mgrB.hydrate();
+
+    // Verify all state was restored
+    expect(mgrB.allowUntilByTab.get(7)).toBe(999999);
+    expect(mgrB.gestureUntilByTab.get(8)).toBe(888888);
+    expect(mgrB.allowStartedByTab.get(7)).toBe("https://example.test/nav");
+    expect(mgrB.allowTargetByTab.get(7)).toEqual({
+      url: "https://target.test/",
+      expiresAt: 999999,
+    });
+    expect(mgrB.suppressUntilByTab.get(7)).toBe(777777);
+    expect(mgrB.typedOriginByTab.get(7)).toEqual({ ts: 100000, deadline: 200000 });
+    expect(mgrB.readyTabs.has(7)).toBe(true);
+    expect(mgrB.pendingRollbackByTab.get(7)).toEqual({
+      url: "https://evil.test/",
+      prevUrl: "https://safe.test/",
+      qualifiers: ["client_redirect"],
+    });
+    expect(mgrB.pendingForwardByTab.get(7)).toEqual({
+      url: "https://evil.test/",
+      ts: 100000,
+    });
+    expect(mgrB.rollbackReturnByTab.get(7)).toEqual({
+      url: "https://safe.test/",
+      expiresAt: 999999,
+    });
+    expect(mgrB.lastUrlByTab.get(7)).toBe("https://current.test/");
+    expect(mgrB.lastCommittedByTab.get(7)).toEqual({
+      url: "https://evil.test/",
+      prevUrl: "https://safe.test/",
+      transitionType: "link",
+      qualifiers: ["client_redirect"],
+      ts: 100000,
+      allowedAtCommit: false,
+    });
+    expect(mgrB.childWindowByTab.get(10)).toEqual({
+      openerTabId: 7,
+      createdAt: 100000,
+      openerNavObserved: true,
+    });
+    expect(mgrB.oauthFlowByTab.get(7)).toEqual({
+      initiatorUrl: "https://app.test/",
+      consentUrl: "https://oauth.test/authorize",
+      expectedCallbackDomain: "app.test",
+      startedAt: 100000,
+      phase: "redirect",
+    });
+    expect(mgrB.redirectChainData.get(7)).toEqual({
+      hops: [
+        { url: "https://a.test/", ts: 100000, transitionType: "link" },
+        { url: "https://b.test/", ts: 100100, transitionType: "link" },
+      ],
+      startedAt: 100000,
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Tab state isolation
+  // -----------------------------------------------------------------------
+
+  it("deleteTab clears only the specified tab across all maps", async () => {
+    const mgr = new SessionStateManager();
+    await mgr.hydrate();
+
+    // Set state for tab 7 and tab 8
+    mgr.allowUntilByTab.set(7, 100);
+    mgr.allowUntilByTab.set(8, 200);
+    mgr.gestureUntilByTab.set(7, 300);
+    mgr.gestureUntilByTab.set(8, 400);
+    mgr.readyTabs.add(7);
+    mgr.readyTabs.add(8);
+    mgr.lastUrlByTab.set(7, "https://a.test/");
+    mgr.lastUrlByTab.set(8, "https://b.test/");
+    mgr.childWindowByTab.set(7, { openerTabId: 1, createdAt: 0, openerNavObserved: false });
+    mgr.oauthFlowByTab.set(7, {
+      initiatorUrl: "",
+      consentUrl: "",
+      expectedCallbackDomain: "",
+      startedAt: 0,
+      phase: "redirect",
+    });
+    mgr.redirectChainData.set(7, { hops: [], startedAt: 0 });
+    mgr.redirectChainData.set(8, { hops: [], startedAt: 0 });
+
+    // Delete tab 7
+    mgr.deleteTab(7);
+    await new Promise((r) => setTimeout(r, 0));
+
+    // Tab 7 state should be gone
+    expect(mgr.allowUntilByTab.has(7)).toBe(false);
+    expect(mgr.gestureUntilByTab.has(7)).toBe(false);
+    expect(mgr.readyTabs.has(7)).toBe(false);
+    expect(mgr.lastUrlByTab.has(7)).toBe(false);
+    expect(mgr.childWindowByTab.has(7)).toBe(false);
+    expect(mgr.oauthFlowByTab.has(7)).toBe(false);
+    expect(mgr.redirectChainData.has(7)).toBe(false);
+
+    // Tab 8 state should be untouched
+    expect(mgr.allowUntilByTab.get(8)).toBe(200);
+    expect(mgr.gestureUntilByTab.get(8)).toBe(400);
+    expect(mgr.readyTabs.has(8)).toBe(true);
+    expect(mgr.lastUrlByTab.get(8)).toBe("https://b.test/");
+    expect(mgr.redirectChainData.has(8)).toBe(true);
+
+    // Verify session storage also persisted the cleanup
+    const stored = await sessionStorage.mock.get("ns_sw:allowUntil");
+    expect(stored["ns_sw:allowUntil"]).toEqual({ "8": 200 });
+  });
+
+  // -----------------------------------------------------------------------
+  // Serialisation edge cases
+  // -----------------------------------------------------------------------
+
+  it("handles non-numeric keys in stored objects gracefully", async () => {
+    await sessionStorage.mock.set({
+      "ns_sw:allowUntil": { "abc": 123, "7": 456, "NaN": 789 },
+    });
+
+    const mgr = new SessionStateManager();
+    await mgr.hydrate();
+
+    // Only valid numeric keys should be restored
+    expect(mgr.allowUntilByTab.get(7)).toBe(456);
+    expect(mgr.allowUntilByTab.size).toBe(1);
+  });
+
+  it("handles null/undefined values in stored data", async () => {
+    await sessionStorage.mock.set({
+      "ns_sw:allowUntil": null,
+      "ns_sw:readyTabs": null,
+    });
+
+    const mgr = new SessionStateManager();
+    await mgr.hydrate();
+
+    expect(mgr.hydrated).toBe(true);
+    expect(mgr.allowUntilByTab.size).toBe(0);
+    expect(mgr.readyTabs.size).toBe(0);
+  });
+
+  it("handles arrays stored where objects expected", async () => {
+    await sessionStorage.mock.set({
+      "ns_sw:allowUntil": [1, 2, 3],
+    });
+
+    const mgr = new SessionStateManager();
+    await mgr.hydrate();
+
+    // Arrays have numeric keys (indices), so entries may be restored
+    // The important thing is no crash
+    expect(mgr.hydrated).toBe(true);
+  });
+
+  // -----------------------------------------------------------------------
+  // Complex object persistence
+  // -----------------------------------------------------------------------
+
+  it("round-trips lastCommittedByTab correctly", async () => {
+    const mgr = new SessionStateManager();
+    await mgr.hydrate();
+
+    const entry = {
+      url: "https://evil.test/phish",
+      prevUrl: "https://safe.test/home",
+      transitionType: "link",
+      qualifiers: ["client_redirect", "server_redirect"],
+      ts: 1700000000000,
+      allowedAtCommit: false,
+    };
+
+    mgr.lastCommittedByTab.set(42, entry);
+    mgr.persistMap(mgr.lastCommittedByTab, "lastCommitted");
+    await new Promise((r) => setTimeout(r, 0));
+
+    // Create new manager and hydrate
+    const mgr2 = new SessionStateManager();
+    await mgr2.hydrate();
+
+    expect(mgr2.lastCommittedByTab.get(42)).toEqual(entry);
+  });
+
+  it("round-trips pendingRollbackByTab with optional prevUrl", async () => {
+    const mgr = new SessionStateManager();
+    await mgr.hydrate();
+
+    // Entry without prevUrl
+    mgr.pendingRollbackByTab.set(10, {
+      url: "https://evil.test/",
+      qualifiers: ["server_redirect"],
+    });
+    mgr.persistMap(mgr.pendingRollbackByTab, "pendingRollback");
+    await new Promise((r) => setTimeout(r, 0));
+
+    const mgr2 = new SessionStateManager();
+    await mgr2.hydrate();
+
+    const restored = mgr2.pendingRollbackByTab.get(10);
+    expect(restored).toBeDefined();
+    expect(restored!.url).toBe("https://evil.test/");
+    expect(restored!.prevUrl).toBeUndefined();
+    expect(restored!.qualifiers).toEqual(["server_redirect"]);
+  });
+});
+
+describe("SW integration: state persistence through session storage", () => {
+  // This group tests the actual sw.ts module's interaction with session storage
+
+  type RuntimeMessage = Record<string, unknown>;
+  type RuntimeSender = { tab?: { id?: number }; frameId?: number };
+  type SendResponse = (response?: unknown) => void;
+
+  function createEvent<T extends (...args: any[]) => void>() {
+    const listeners: T[] = [];
+    return {
+      addListener(listener: T) { listeners.push(listener); },
+      emit(...args: Parameters<T>) {
+        for (const listener of listeners) { listener(...args); }
+      },
+    };
+  }
+
+  function createChromeMock() {
+    const runtimeOnMessage = createEvent<
+      (message: RuntimeMessage, sender: RuntimeSender, sendResponse: SendResponse) => void
+    >();
+    const runtimeOnInstalled = createEvent<() => void>();
+    const runtimeOnStartup = createEvent<() => void>();
+    const storageOnChanged = createEvent<
+      (changes: Record<string, { oldValue: unknown; newValue: unknown }>, areaName: string) => void
+    >();
+    const beforeNavigate = createEvent<
+      (details: { tabId: number; frameId: number; url: string }) => void
+    >();
+    const errorOccurred = createEvent<
+      (details: { tabId: number; frameId: number; url?: string }) => void
+    >();
+    const committed = createEvent<
+      (details: {
+        tabId: number;
+        frameId: number;
+        url: string;
+        transitionType: string;
+        transitionQualifiers?: string[];
+      }) => void
+    >();
+    const tabCreated = createEvent<(tab: { id?: number; openerTabId?: number }) => void>();
+    const tabRemoved = createEvent<(tabId: number) => void>();
+    const tabUpdated = createEvent<
+      (tabId: number, changeInfo: { status?: string; url?: string }, tab: { url?: string }) => void
+    >();
+    const sentMessages: Array<{
+      tabId: number;
+      message: unknown;
+      options?: { frameId?: number };
+    }> = [];
+
+    const sessionStore: Record<string, unknown> = {};
+
+    return {
+      chrome: {
+        runtime: {
+          onMessage: runtimeOnMessage,
+          onInstalled: runtimeOnInstalled,
+          onStartup: runtimeOnStartup,
+          getURL: (path: string) => `chrome-extension://test/${path}`,
+          lastError: null as null | { message: string },
+        },
+        storage: {
+          local: {
+            async get(keys?: string | string[]) {
+              if (keys === undefined) return {};
+              if (typeof keys === "string") return {};
+              return Object.fromEntries(keys.map((key) => [key, undefined]));
+            },
+            async set() {},
+            async remove() {},
+          },
+          session: {
+            async get(keys?: string | string[]) {
+              if (keys === undefined) return { ...sessionStore };
+              if (typeof keys === "string") {
+                return { [keys]: sessionStore[keys] };
+              }
+              const result: Record<string, unknown> = {};
+              for (const key of keys) {
+                result[key] = sessionStore[key];
+              }
+              return result;
+            },
+            async set(items: Record<string, unknown>) {
+              Object.assign(sessionStore, items);
+            },
+            async remove(keys: string | string[]) {
+              const keyList = typeof keys === "string" ? [keys] : keys;
+              for (const key of keyList) {
+                delete sessionStore[key];
+              }
+            },
+          },
+          onChanged: storageOnChanged,
+        },
+        declarativeNetRequest: {
+          updateEnabledRulesets: vi.fn().mockResolvedValue(undefined),
+        },
+        webNavigation: {
+          onBeforeNavigate: beforeNavigate,
+          onCommitted: committed,
+          onErrorOccurred: errorOccurred,
+        },
+        tabs: {
+          onCreated: tabCreated,
+          onRemoved: tabRemoved,
+          onUpdated: tabUpdated,
+          sendMessage: vi.fn(
+            (
+              tabId: number,
+              message: unknown,
+              optionsOrCallback?: { frameId?: number } | (() => void),
+              callback?: () => void,
+            ) => {
+              const options =
+                typeof optionsOrCallback === "function" ? undefined : optionsOrCallback;
+              const done = typeof optionsOrCallback === "function" ? optionsOrCallback : callback;
+              sentMessages.push({
+                tabId,
+                message,
+                ...(options ? { options } : {}),
+              });
+              done?.();
+            },
+          ),
+        },
+      },
+      sessionStore,
+      emitBeforeNavigate(details: { tabId: number; frameId: number; url: string }) {
+        beforeNavigate.emit(details);
+      },
+      emitCommitted(details: {
+        tabId: number;
+        frameId: number;
+        url: string;
+        transitionType: string;
+        transitionQualifiers?: string[];
+      }) {
+        committed.emit(details);
+      },
+      emitErrorOccurred(details: { tabId: number; frameId: number; url?: string }) {
+        errorOccurred.emit(details);
+      },
+      emitTabCreated(tab: { id?: number; openerTabId?: number }) {
+        tabCreated.emit(tab);
+      },
+      emitTabRemoved(tabId: number) {
+        tabRemoved.emit(tabId);
+      },
+      dispatchRuntimeMessage(message: RuntimeMessage, sender: RuntimeSender = {}) {
+        let response: unknown;
+        runtimeOnMessage.emit(message, sender, (value) => {
+          response = value;
+        });
+        return response;
+      },
+      sentMessages,
+    };
+  }
+
+  beforeEach(() => {
+    vi.resetModules();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-17T12:00:00.000Z"));
+    // Stub fetch to prevent loadReputationFilter from hanging
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("no network in tests")));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  /** Flush microtasks and pending promise chains. */
+  async function flushAsync(): Promise<void> {
+    // Flush microtask queue multiple times to ensure all chained
+    // promise callbacks (from fire-and-forget storage writes) resolve.
+    for (let i = 0; i < 5; i++) {
+      await Promise.resolve();
+    }
+  }
+
+  it("persists gesture state to session storage on ns-nav-gesture", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+    await flushAsync();
+
+    mock.dispatchRuntimeMessage(
+      { type: "ns-nav-gesture", ttlMs: 1200 },
+      { tab: { id: 7 } },
+    );
+    await flushAsync();
+
+    const stored = mock.sessionStore["ns_sw:gestureUntil"] as Record<string, number>;
+    expect(stored).toBeDefined();
+    expect(stored["7"]).toBeDefined();
+    expect(typeof stored["7"]).toBe("number");
+  });
+
+  it("persists allow-nav state to session storage", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+    await flushAsync();
+
+    mock.dispatchRuntimeMessage(
+      { type: "ns-allow-nav", ttlMs: 2000 },
+      { tab: { id: 11 } },
+    );
+    await flushAsync();
+
+    const stored = mock.sessionStore["ns_sw:allowUntil"] as Record<string, number>;
+    expect(stored).toBeDefined();
+    expect(stored["11"]).toBeDefined();
+  });
+
+  it("persists childWindow state when a tab with opener is created", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+    await flushAsync();
+
+    mock.emitTabCreated({ id: 20, openerTabId: 10 });
+    await flushAsync();
+
+    const stored = mock.sessionStore["ns_sw:childWindow"] as Record<string, unknown>;
+    expect(stored).toBeDefined();
+    expect(stored["20"]).toBeDefined();
+  });
+
+  it("cleans up session storage when a tab is removed", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+    await flushAsync();
+
+    // Add some state for tab 30
+    mock.dispatchRuntimeMessage(
+      { type: "ns-allow-nav", ttlMs: 5000 },
+      { tab: { id: 30 } },
+    );
+    mock.dispatchRuntimeMessage(
+      { type: "ns-nav-gesture", ttlMs: 5000 },
+      { tab: { id: 30 } },
+    );
+    await flushAsync();
+
+    // Verify state exists
+    const beforeAllow = mock.sessionStore["ns_sw:allowUntil"] as Record<string, number>;
+    expect(beforeAllow["30"]).toBeDefined();
+
+    // Remove the tab
+    mock.emitTabRemoved(30);
+    await flushAsync();
+
+    // Verify state was cleaned up
+    const afterAllow = mock.sessionStore["ns_sw:allowUntil"] as Record<string, number>;
+    expect(afterAllow["30"]).toBeUndefined();
+  });
+
+  it("persists committed navigation state for rollback detection", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+    await flushAsync();
+
+    // Commit a typed navigation to establish origin
+    mock.emitCommitted({
+      tabId: 50,
+      frameId: 0,
+      url: "https://example.test/origin",
+      transitionType: "typed",
+      transitionQualifiers: [],
+    });
+    await flushAsync();
+
+    // Check that lastUrl was persisted
+    const lastUrl = mock.sessionStore["ns_sw:lastUrl"] as Record<string, string>;
+    expect(lastUrl["50"]).toBe("https://example.test/origin");
+
+    // Check that typedOrigin was persisted
+    const typedOrigin = mock.sessionStore["ns_sw:typedOrigin"] as Record<string, unknown>;
+    expect(typedOrigin["50"]).toBeDefined();
+  });
+});
