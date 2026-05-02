@@ -1,0 +1,63 @@
+name: Feature Request
+description: Suggest a feature or improvement for NavSentinel
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What would you like NavSentinel to do?
+      placeholder: "I'd like the extension to ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case
+      description: Describe the scenario where this feature would help.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed solution
+      description: How do you imagine this working?
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any workarounds or alternative approaches you've thought about.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: surface
+    attributes:
+      label: Affected extension surface
+      options:
+        - label: Navigation guard
+        - label: Credential guard
+        - label: Popup UI
+        - label: Options page
+        - label: Service worker
+        - label: Other
+
+  - type: markdown
+    attributes:
+      value: |
+        > **Note:** NavSentinel is local-first by design -- no features requiring
+        > network calls, remote telemetry, or cloud lookups will be accepted.
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context
+      description: Mockups, references, or anything else.
+    validations:
+      required: false

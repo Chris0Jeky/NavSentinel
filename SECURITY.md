@@ -53,6 +53,8 @@ The most security-sensitive code lives in:
 
 If you find a security issue in the repository, report it privately to the maintainers before opening a public issue if the bug could materially weaken the extension's protections.
 
+**Email:** jeky.tck@gmail.com
+
 When reporting, include:
 
 - affected file paths

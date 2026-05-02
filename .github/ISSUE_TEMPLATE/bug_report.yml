@@ -1,0 +1,104 @@
+name: Bug Report
+description: Report a bug in NavSentinel
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Brief description of the bug.
+      placeholder: "When I visit a site with X, NavSentinel does Y instead of Z."
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro-steps
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps to trigger the bug.
+      value: |
+        1. Go to '...'
+        2. Click on '...'
+        3. Observe '...'
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      placeholder: "Navigation should have been allowed without a prompt."
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      placeholder: "A blocking modal appeared and the page never loaded."
+    validations:
+      required: true
+
+  - type: input
+    id: ext-version
+    attributes:
+      label: Extension version
+      placeholder: "0.3.0"
+    validations:
+      required: true
+
+  - type: input
+    id: browser-version
+    attributes:
+      label: Browser and version
+      placeholder: "Chrome 125.0.6422.60"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: "Windows 11 / macOS 14 / Ubuntu 24.04"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: nav-mode
+    attributes:
+      label: Navigation guard mode
+      options:
+        - smart
+        - strict
+        - "off"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: cred-mode
+    attributes:
+      label: Credential guard mode
+      options:
+        - smart
+        - strict
+        - "off"
+    validations:
+      required: false
+
+  - type: textarea
+    id: console-errors
+    attributes:
+      label: Console errors
+      description: Paste any errors from the browser console or the service-worker console.
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context
+      description: Screenshots, debug overlay output, or anything else that helps. If the debug overlay is visible, a screenshot of it is very useful.
+    validations:
+      required: false

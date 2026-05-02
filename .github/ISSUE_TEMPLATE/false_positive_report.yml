@@ -1,0 +1,90 @@
+name: False Positive Report
+description: Report a site that was incorrectly blocked or prompted
+title: "[FP] "
+labels: ["false-positive"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Every false-positive report helps tune detection thresholds. Thank you for filing!
+
+  - type: input
+    id: url
+    attributes:
+      label: Website URL
+      description: The URL that was incorrectly flagged.
+      placeholder: "https://example.com/page"
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened?
+      placeholder: "The page should have loaded normally without a prompt."
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What did the extension do instead?
+      placeholder: "A blocking modal appeared / navigation was blocked / a credential warning fired."
+    validations:
+      required: true
+
+  - type: input
+    id: ext-version
+    attributes:
+      label: Extension version
+      placeholder: "0.3.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: nav-mode
+    attributes:
+      label: Navigation guard mode
+      options:
+        - smart
+        - strict
+        - "off"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: cred-mode
+    attributes:
+      label: Credential guard mode
+      options:
+        - smart
+        - strict
+        - "off"
+    validations:
+      required: false
+
+  - type: input
+    id: nrs-score
+    attributes:
+      label: NRS score (if visible in debug overlay)
+      placeholder: "0.42"
+    validations:
+      required: false
+
+  - type: input
+    id: cds-score
+    attributes:
+      label: CDS score (if visible in debug overlay)
+      placeholder: "0.65"
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context
+      description: Debug overlay screenshot, console output, or anything else.
+    validations:
+      required: false
