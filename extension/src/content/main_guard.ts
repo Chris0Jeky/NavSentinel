@@ -907,7 +907,8 @@ function pathLooksCrossOrigin(newUrl: string): boolean {
     const segments = parsed.pathname.split("/").filter(Boolean);
     const currentHost = location.hostname.toLowerCase();
     for (const rawSeg of segments) {
-      const seg = decodeURIComponent(rawSeg);
+      let seg: string;
+      try { seg = decodeURIComponent(rawSeg); } catch { seg = rawSeg; }
       const dots = seg.split(".").length - 1;
       // Require 2+ dots to distinguish real domains (accounts.google.com)
       // from file names (style.css), version strings (v1.2.3), etc.
@@ -963,6 +964,7 @@ function patchHistory(): void {
     unused: string,
     url?: string | URL | null,
   ): void {
+    const result = nativePushState.call(this, data, unused, url);
     const reason = checkPushStateSuspicious(url, "pushState");
     if (reason) {
       postToIsolated("ns-pushstate-suspicious", {
@@ -975,7 +977,7 @@ function patchHistory(): void {
         console.debug("[NavSentinel] suspicious pushState", { url: String(url), reason });
       }
     }
-    return nativePushState.call(this, data, unused, url);
+    return result;
   };
 
   History.prototype.replaceState = function (
@@ -983,6 +985,7 @@ function patchHistory(): void {
     unused: string,
     url?: string | URL | null,
   ): void {
+    const result = nativeReplaceState.call(this, data, unused, url);
     const reason = checkPushStateSuspicious(url, "replaceState");
     if (reason) {
       postToIsolated("ns-pushstate-suspicious", {
@@ -995,7 +998,7 @@ function patchHistory(): void {
         console.debug("[NavSentinel] suspicious replaceState", { url: String(url), reason });
       }
     }
-    return nativeReplaceState.call(this, data, unused, url);
+    return result;
   };
 }
 
