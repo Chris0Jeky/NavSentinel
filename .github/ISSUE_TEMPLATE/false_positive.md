@@ -27,6 +27,13 @@ to show a warning (e.g. "Clicked a navigation link on the homepage").
 Describe why this should not have triggered a warning. For example:
 "This is a normal navigation link on a trusted site."
 
+## Scores (from debug overlay)
+
+If the debug overlay is enabled, please provide the scores shown:
+
+- **NRS (Navigation Risk Score):** [e.g. 0.85]
+- **CDS (Credential Danger Score):** [e.g. 0.40]
+
 ## Screenshots of the warning shown
 
 If possible, include a screenshot of the NavSentinel warning dialog or
