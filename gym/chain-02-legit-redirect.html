@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chain-02: Legitimate single redirect</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 40px 18px;
+        line-height: 1.5;
+      }
+      .hero {
+        padding: 22px;
+        border: 1px solid #d7dfe8;
+        border-radius: 18px;
+        background: linear-gradient(180deg, #fff, #f7fafc);
+      }
+      .status {
+        margin-top: 16px;
+        padding: 12px;
+        border-radius: 8px;
+        background: #f0f4f8;
+        font-family: monospace;
+        font-size: 14px;
+        white-space: pre-line;
+      }
+      button {
+        margin-top: 18px;
+        padding: 14px 18px;
+        font-size: 16px;
+        border-radius: 12px;
+        border: none;
+        background: #2f855a;
+        color: white;
+        cursor: pointer;
+      }
+      .note {
+        font-size: 13px;
+        color: #666;
+        margin-top: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="hero">
+      <h1>Chain-02: Legitimate single redirect</h1>
+      <p>
+        Simulates a single legitimate redirect, such as a login page redirecting
+        to a dashboard after authentication. This is a common, benign pattern
+        that should NOT trigger elevated risk scoring.
+      </p>
+      <p>
+        <strong>Expected:</strong> A single-hop redirect does not meet the
+        chain depth threshold (must exceed 2 hops), so NRS should not be
+        elevated by the redirect chain factor.
+      </p>
+      <button id="loginBtn">Log in</button>
+      <div class="status" id="status">Waiting...</div>
+      <p class="note">
+        This models the common pattern of typing a URL, getting redirected to
+        a login page, then being sent to a dashboard. Only 1 redirect hop,
+        well below the chain depth scoring threshold.
+      </p>
+    </div>
+
+    <script>
+      var status = document.getElementById('status');
+      var params = new URLSearchParams(location.search);
+      var step = params.get('step') || '';
+
+      if (step === 'dashboard') {
+        status.textContent = 'Dashboard loaded after single redirect.\nThis is normal behavior.';
+        status.style.background = '#c6f6d5';
+      }
+
+      document.getElementById('loginBtn').addEventListener('click', function() {
+        status.textContent = 'Logging in... redirecting to dashboard.';
+        window.setTimeout(function() {
+          location.assign('chain-02-legit-redirect.html?step=dashboard');
+        }, 300);
+      });
+    </script>
+  </body>
+</html>

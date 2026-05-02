@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chain-01: Multi-hop redirect chain</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 40px 18px;
+        line-height: 1.5;
+      }
+      .hero {
+        padding: 22px;
+        border: 1px solid #d7dfe8;
+        border-radius: 18px;
+        background: linear-gradient(180deg, #fff, #f7fafc);
+      }
+      .status {
+        margin-top: 16px;
+        padding: 12px;
+        border-radius: 8px;
+        background: #f0f4f8;
+        font-family: monospace;
+        font-size: 14px;
+        white-space: pre-line;
+      }
+      button {
+        margin-top: 18px;
+        padding: 14px 18px;
+        font-size: 16px;
+        border-radius: 12px;
+        border: none;
+        background: #c53030;
+        color: white;
+        cursor: pointer;
+      }
+      .note {
+        font-size: 13px;
+        color: #666;
+        margin-top: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="hero">
+      <h1>Chain-01: Multi-hop redirect chain</h1>
+      <p>
+        Simulates a 3-hop malvertising redirect chain. Clicking the button
+        triggers a sequence of rapid client-side redirects through different
+        origins, mimicking A &rarr; B &rarr; C &rarr; D chains seen in real
+        malvertising campaigns.
+      </p>
+      <p>
+        <strong>Expected:</strong> NavSentinel should detect the redirect chain
+        depth (3 hops) and elevate the NRS score. The service worker tracks each
+        hop and exposes the chain depth to content scripts.
+      </p>
+      <button id="startChain">Start redirect chain</button>
+      <div class="status" id="status">Waiting...</div>
+      <p class="note">
+        Note: This fixture uses <code>location.assign()</code> with short delays
+        to simulate client-side redirect hops. In a real attack, these would be
+        server-side 302/307 redirects or JS-based <code>location.replace()</code>
+        calls through multiple domains.
+      </p>
+    </div>
+
+    <script>
+      const status = document.getElementById('status');
+      const params = new URLSearchParams(location.search);
+      const hop = parseInt(params.get('hop') || '0', 10);
+      const maxHops = 3;
+
+      if (hop > 0) {
+        status.textContent = 'Hop ' + hop + ' of ' + maxHops + ' reached.';
+        if (hop < maxHops) {
+          status.textContent += '\nRedirecting to hop ' + (hop + 1) + ' in 500ms...';
+          window.setTimeout(function() {
+            location.assign('chain-01-multi-hop.html?hop=' + (hop + 1));
+          }, 500);
+        } else {
+          status.textContent += '\nFinal destination reached. Chain complete.';
+          status.style.background = '#fed7d7';
+        }
+      }
+
+      document.getElementById('startChain').addEventListener('click', function() {
+        status.textContent = 'Starting redirect chain...';
+        window.setTimeout(function() {
+          location.assign('chain-01-multi-hop.html?hop=1');
+        }, 200);
+      });
+    </script>
+  </body>
+</html>
