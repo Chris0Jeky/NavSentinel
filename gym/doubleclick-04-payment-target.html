@@ -1,0 +1,70 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Confirm Payment - Secure Checkout</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      padding: 24px;
+      max-width: 500px;
+      margin: 40px auto;
+      background: #f0f4f9;
+    }
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 32px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      text-align: center;
+    }
+    h1 { font-size: 22px; margin-top: 0; }
+    .amount {
+      font-size: 36px;
+      font-weight: 700;
+      color: #c00;
+      margin: 16px 0;
+    }
+    .confirm-btn {
+      font-size: 18px;
+      padding: 16px 48px;
+      background: #c00;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    .note {
+      margin-top: 24px;
+      font-size: 13px;
+      color: #666;
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      padding: 12px;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Confirm Payment</h1>
+    <p>You are about to authorize a payment to:</p>
+    <p><strong>Attacker's Wallet</strong></p>
+    <div class="amount">$5,449.00</div>
+    <button class="confirm-btn" id="confirmBtn">Confirm Payment</button>
+  </div>
+
+  <div class="note">
+    <strong>Gym fixture:</strong> This is the target page for DoubleClickjacking 04.
+    In a real attack, the user's second click from the checkout page would land on
+    the "Confirm Payment" button here, authorizing an inflated or redirected payment.
+  </div>
+
+  <script>
+    document.getElementById("confirmBtn").addEventListener("click", function() {
+      alert("Payment authorized! (This is a gym simulation - no real payment was made.)");
+    });
+  </script>
+</body>
+</html>
