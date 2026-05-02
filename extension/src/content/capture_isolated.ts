@@ -446,11 +446,18 @@ function handleClickFixScan(): void {
 
   const result = scanForClickFix();
 
-  // Always update tracked ClickFix state so the click handler can read it
-  clickfixState = {
-    score: result.detected ? result.score : 0,
-    lastScanTs: now,
-  };
+  // Update tracked ClickFix state for NRS integration.
+  // Only overwrite a positive state with another positive detection;
+  // a negative scan must not wipe a prior positive — let TTL handle expiry.
+  // This prevents an adversarial second clipboard write (innocuous value after
+  // removing the overlay) from clearing the positive state prematurely.
+  const newScore = result.detected ? result.score : 0;
+  if (newScore > 0 || clickfixState.score <= 0) {
+    clickfixState = {
+      score: newScore,
+      lastScanTs: now,
+    };
+  }
 
   if (!result.detected) return;
 
@@ -1024,7 +1031,9 @@ window.addEventListener(
         e.stopImmediatePropagation();
         if (parsed?.href) {
           const title = hasClickfix
-            ? "Suspicious navigation + fake dialog detected"
+            ? (decision === "block"
+              ? "Blocked: navigation + fake dialog"
+              : "Suspicious navigation + fake dialog detected")
             : decision === "block" ? "Blocked new tab" : "Suspicious new tab";
           showAllowPrompt({
             title,
