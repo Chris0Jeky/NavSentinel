@@ -34,6 +34,8 @@ const POST_LOAD_GRACE_MS = 2000;
 const VIEWPORT_COVERAGE_THRESHOLD = 0.25;
 const MAX_SIGNALS = 64;
 const TINY_IFRAME_DIMENSION = 4;
+/** Avoid `Node.ELEMENT_NODE` so unit tests run without a full DOM polyfill. */
+const ELEMENT_NODE_TYPE = 1;
 
 // ---------------------------------------------------------------------------
 // Module state
@@ -67,14 +69,14 @@ export function describeElement(el: Element): string {
  * covers at least `VIEWPORT_COVERAGE_THRESHOLD` of the viewport.
  */
 export function isLargeOverlay(el: Element): boolean {
-  const style = window.getComputedStyle(el);
+  const style = getComputedStyle(el);
   const pos = style.position;
   if (pos !== "fixed" && pos !== "absolute" && pos !== "sticky") return false;
 
   const rect = el.getBoundingClientRect();
   if (rect.width <= 0 || rect.height <= 0) return false;
 
-  const vpArea = window.innerWidth * window.innerHeight;
+  const vpArea = innerWidth * innerHeight;
   if (vpArea <= 0) return false;
 
   const coverage = (rect.width * rect.height) / vpArea;
@@ -116,7 +118,7 @@ export function looksLikeLegitOverlay(el: Element): boolean {
 export function classifyIframe(
   iframe: HTMLIFrameElement
 ): { severity: "low" | "medium" | "high"; reason: string } | null {
-  const style = window.getComputedStyle(iframe);
+  const style = getComputedStyle(iframe);
 
   // Hidden via display:none
   if (style.display === "none") {
@@ -159,7 +161,7 @@ export function classifyAddedNode(
   now: number,
   loadedAt: number
 ): MutationSignal[] {
-  if (node.nodeType !== Node.ELEMENT_NODE) return [];
+  if (node.nodeType !== ELEMENT_NODE_TYPE) return [];
   const el = node as Element;
   const results: MutationSignal[] = [];
   const timeSinceLoad = now - loadedAt;
@@ -310,7 +312,7 @@ function processBatch(): void {
     if (
       mutation.type === "attributes" &&
       mutation.attributeName === "action" &&
-      mutation.target.nodeType === Node.ELEMENT_NODE
+      mutation.target.nodeType === ELEMENT_NODE_TYPE
     ) {
       const form = mutation.target as Element;
       const newValue = form.getAttribute("action");
@@ -336,7 +338,7 @@ function pushSignal(signal: MutationSignal): void {
 
 function scheduleBatch(): void {
   if (batchTimer) return;
-  batchTimer = window.setTimeout(processBatch, BATCH_INTERVAL_MS);
+  batchTimer = setTimeout(processBatch, BATCH_INTERVAL_MS) as unknown as number;
 }
 
 // ---------------------------------------------------------------------------
@@ -374,7 +376,7 @@ export function stopMutationMonitor(): void {
   observer.disconnect();
   observer = null;
   if (batchTimer) {
-    window.clearTimeout(batchTimer);
+    clearTimeout(batchTimer);
     batchTimer = 0;
   }
   pendingMutations.length = 0;
