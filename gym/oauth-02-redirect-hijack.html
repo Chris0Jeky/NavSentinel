@@ -1,0 +1,50 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>OAuth 02 - Redirect Hijack (malicious)</title>
+  <style>
+    body { font-family: sans-serif; padding: 24px; }
+    button { padding: 12px 20px; font-size: 16px; margin: 8px 0; }
+    .warning { color: #c00; font-weight: bold; }
+    .status { margin-top: 16px; padding: 12px; background: #fff0f0; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>OAuth 02: Redirect URI Hijack</h1>
+  <p class="warning">MALICIOUS SCENARIO</p>
+  <p>
+    This simulates an OAuth consent phishing attack where the
+    <code>redirect_uri</code> points to an attacker-controlled domain
+    instead of the legitimate application domain.
+  </p>
+  <p>
+    The user is tricked into initiating an OAuth flow from what looks like
+    a real app, but the authorization code is sent to <code>evil-collector.com</code>.
+    NavSentinel should flag this as an unexpected callback redirect (+30 NRS).
+  </p>
+
+  <button id="fake-signin">Sign in with Google</button>
+
+  <div class="status" id="status">Status: waiting for user action</div>
+
+  <script>
+    const status = document.getElementById('status');
+
+    document.getElementById('fake-signin').addEventListener('click', () => {
+      status.textContent = 'Status: initiating malicious OAuth flow...';
+
+      // The redirect_uri points to a completely different domain (the attacker's).
+      // A legitimate flow would have redirect_uri matching the application's domain.
+      const consentUrl = 'https://accounts.google.com/o/oauth2/v2/auth'
+        + '?client_id=fake-client-id.apps.googleusercontent.com'
+        + '&redirect_uri=' + encodeURIComponent('https://evil-collector.com/steal')
+        + '&response_type=code'
+        + '&scope=openid%20email%20profile';
+
+      status.textContent = 'Status: consent URL redirect_uri points to evil-collector.com -- '
+        + 'NavSentinel should detect the domain mismatch. URL: ' + consentUrl;
+    });
+  </script>
+</body>
+</html>

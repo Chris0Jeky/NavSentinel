@@ -1,5 +1,11 @@
-import { getRegistrableDomain } from "../shared/domain";
+import { getRegistrableDomain, normalizeHost } from "../shared/domain";
 import { getNavSettings, SUITE_SETTINGS_KEY } from "../shared/storage";
+import {
+  isOAuthUrl,
+  extractRedirectUri,
+  isUnexpectedCallback,
+  type OAuthFlowState,
+} from "../content/oauth_monitor";
 
 const BASELINE_RULESET_ID = "baseline";
 const NAV_ALLOW_TTL_MS = 1500;
@@ -11,6 +17,8 @@ const TYPED_ORIGIN_TTL_MS = 5_000;
 const TYPED_ORIGIN_MAX_MS = 15_000;
 const DBLCLICK_CHILD_MAX_AGE_MS = 5_000;
 const DBLCLICK_CHILD_PRUNE_LIMIT = 50;
+const OAUTH_FLOW_MAX_AGE_MS = 60_000;
+const OAUTH_FLOW_PRUNE_LIMIT = 50;
 
 const allowUntilByTab = new Map<number, number>();
 const gestureUntilByTab = new Map<number, number>();
@@ -34,6 +42,105 @@ const lastCommittedByTab = new Map<
     allowedAtCommit: boolean;
   }
 >();
+
+// --- OAuth flow tracking per tab ---
+// Maps tabId -> OAuthFlowState. Tracks OAuth authorization flows so we can
+// detect when a consent flow redirects to an unexpected callback endpoint.
+// Known limitation: this state is lost on SW restart (same as dblclick
+// tracking). P3-10 will address this with chrome.storage.session.
+const oauthFlowByTab = new Map<number, OAuthFlowState>();
+
+function pruneStaleOAuthFlows(): void {
+  const now = Date.now();
+  for (const [tabId, flow] of oauthFlowByTab) {
+    if (now - flow.startedAt > OAUTH_FLOW_MAX_AGE_MS) {
+      oauthFlowByTab.delete(tabId);
+    }
+  }
+  if (oauthFlowByTab.size > OAUTH_FLOW_PRUNE_LIMIT) {
+    const sorted = [...oauthFlowByTab.entries()].sort(
+      (a, b) => a[1].startedAt - b[1].startedAt,
+    );
+    const excess = oauthFlowByTab.size - OAUTH_FLOW_PRUNE_LIMIT;
+    for (let i = 0; i < excess; i++) {
+      oauthFlowByTab.delete(sorted[i]![0]);
+    }
+  }
+}
+
+/**
+ * Try to start or advance an OAuth flow for a tab when navigating to a URL.
+ * Returns true if the URL was recognized as part of an OAuth flow.
+ */
+function processOAuthNavigation(tabId: number, url: string): void {
+  if (!isOAuthUrl(url)) {
+    // If we had an active flow in redirect/consent phase and now navigate
+    // to a non-OAuth URL, treat it as the callback phase.
+    const existingFlow = oauthFlowByTab.get(tabId);
+    if (existingFlow && (existingFlow.phase === "redirect" || existingFlow.phase === "consent")) {
+      existingFlow.phase = "callback";
+      if (isUnexpectedCallback(existingFlow, url)) {
+        // Notify the content script about the mismatch
+        chrome.tabs.sendMessage(
+          tabId,
+          { type: "ns-oauth-redirect-mismatch", callbackUrl: url },
+          () => { if (chrome.runtime.lastError) { /* tab may not be ready */ } },
+        );
+      }
+      existingFlow.phase = "complete";
+      // Forward final flow state to content script
+      chrome.tabs.sendMessage(
+        tabId,
+        { type: "ns-oauth-flow-update", flow: existingFlow },
+        () => { if (chrome.runtime.lastError) { /* ignore */ } },
+      );
+    }
+    return;
+  }
+
+  // URL is OAuth-like -- start or update a flow
+  const redirectUri = extractRedirectUri(url);
+  let expectedCallbackDomain = "";
+  if (redirectUri) {
+    try {
+      expectedCallbackDomain = normalizeHost(new URL(redirectUri).hostname);
+    } catch {
+      // malformed redirect_uri
+    }
+  }
+
+  const existingFlow = oauthFlowByTab.get(tabId);
+  if (existingFlow && existingFlow.phase === "redirect") {
+    // Advance to consent phase
+    existingFlow.consentUrl = url;
+    existingFlow.phase = "consent";
+    if (expectedCallbackDomain) {
+      existingFlow.expectedCallbackDomain = expectedCallbackDomain;
+    }
+  } else {
+    // Start a new flow
+    pruneStaleOAuthFlows();
+    const prevUrl = lastUrlByTab.get(tabId) ?? "";
+    const flow: OAuthFlowState = {
+      initiatorUrl: prevUrl,
+      consentUrl: url,
+      expectedCallbackDomain,
+      startedAt: Date.now(),
+      phase: "redirect",
+    };
+    oauthFlowByTab.set(tabId, flow);
+  }
+
+  // Forward flow state to content script
+  const flow = oauthFlowByTab.get(tabId);
+  if (flow) {
+    chrome.tabs.sendMessage(
+      tabId,
+      { type: "ns-oauth-flow-update", flow },
+      () => { if (chrome.runtime.lastError) { /* ignore */ } },
+    );
+  }
+}
 
 // --- DoubleClickjacking: track child windows opened by tabs ---
 // Maps child tabId -> { openerTabId, createdAt, openerNavObserved }
@@ -261,6 +368,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // Mark that this child performed an opener.location write so the
     // child-close signal is only sent for confirmed attack scenarios.
     childEntry.openerNavObserved = true;
+
+    // --- OAuth: detect opener manipulation during an active OAuth flow ---
+    const openerOAuthFlow = oauthFlowByTab.get(childEntry.openerTabId);
+    if (openerOAuthFlow && openerOAuthFlow.phase !== "complete") {
+      chrome.tabs.sendMessage(
+        childEntry.openerTabId,
+        { type: "ns-oauth-opener-manipulation", flow: openerOAuthFlow },
+        () => { if (chrome.runtime.lastError) { /* ignore */ } },
+      );
+    }
+
     chrome.tabs.sendMessage(
       childEntry.openerTabId,
       {
@@ -311,6 +429,9 @@ chrome.webNavigation.onCommitted.addListener((details) => {
   }
   const prevUrl = lastUrlByTab.get(details.tabId);
   lastUrlByTab.set(details.tabId, details.url);
+
+  // --- OAuth flow tracking ---
+  processOAuthNavigation(details.tabId, details.url);
 
   const qualifiers = details.transitionQualifiers ?? [];
   const isRedirect =
@@ -447,6 +568,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   suppressUntilByTab.delete(tabId);
   rollbackReturnByTab.delete(tabId);
   typedOriginByTab.delete(tabId);
+  oauthFlowByTab.delete(tabId);
   clearPendingTabState(tabId);
   lastUrlByTab.delete(tabId);
 });
