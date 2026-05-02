@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "NavSentinel Suite",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Navigation intent firewall plus local-first credential submission guardrails.",
   "icons": {
     "16": "assets/icon16.png",
