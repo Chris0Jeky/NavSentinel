@@ -13,6 +13,7 @@ import { getRegistrableDomain } from "../shared/domain";
 import { areSameOrganization } from "../shared/domain_groups";
 import { computeNRS, NRS_BLOCK_THRESHOLD, NRS_STRICT_BLOCK_THRESHOLD } from "../shared/nrs";
 import type { NavigationContext } from "../shared/nrs";
+import type { RedirectChainInfo } from "../shared/redirect_chain";
 import { initReputation, isKnownBadDomain } from "../shared/reputation";
 import { showToast } from "./ui_toast";
 import {
@@ -35,6 +36,11 @@ import {
   getMutationAlertCount,
   type MutationAlert,
 } from "./mutation_monitor";
+import {
+  handleOAuthRuntimeMessage,
+  isOAuthRedirectMismatch,
+  isOAuthOpenerManipulation,
+} from "./oauth_monitor";
 
 const CDS_SMART_BLOCK_THRESHOLD = 70;
 const CDS_STRICT_BLOCK_THRESHOLD = 50;
@@ -88,6 +94,9 @@ let forwardCheckInFlight = false;
 let forwardCheckTimer = 0;
 let gestureNavAttempts = 0;
 let gestureDownId: number | null = null;
+const CHAIN_INFO_TTL_MS = 30_000;
+let cachedChainInfo: RedirectChainInfo | null = null;
+let cachedChainInfoAt = 0;
 
 function markMainGuardReady(): void {
   if (bridgeRetryTimer) {
@@ -164,6 +173,18 @@ async function initSettings() {
   if (window.top === window) {
     try {
       chrome.runtime.sendMessage({ type: "ns-ready" });
+    } catch {
+      // ignore
+    }
+    // Fetch redirect chain info for this tab's navigation
+    try {
+      chrome.runtime.sendMessage({ type: "ns-get-chain-info" }, (resp) => {
+        if (chrome.runtime.lastError) return;
+        if (resp && typeof resp.depth === "number") {
+          cachedChainInfo = resp;
+          cachedChainInfoAt = Date.now();
+        }
+      });
     } catch {
       // ignore
     }
@@ -429,14 +450,46 @@ function notifyAllowedTarget(url: string, ttlMs = NAV_TARGET_ALLOW_TTL_MS): void
 
 let clickFixAlertedAt = 0;
 
+/** Tracked ClickFix state for NRS integration. Expires after 30 s. */
+const CLICKFIX_STATE_TTL_MS = 30_000;
+let clickfixState: { score: number; lastScanTs: number } = {
+  score: 0,
+  lastScanTs: 0,
+};
+
+/** Return current ClickFix score if it has not expired, otherwise 0. */
+function getClickfixScoreForNRS(): number {
+  if (clickfixState.score <= 0) return 0;
+  if (Date.now() - clickfixState.lastScanTs > CLICKFIX_STATE_TTL_MS) {
+    clickfixState = { score: 0, lastScanTs: 0 };
+    return 0;
+  }
+  return clickfixState.score;
+}
+
 function handleClickFixScan(): void {
   if (settings.defaultMode === "off") return;
   const now = Date.now();
-  // Rate-limit: at most one alert per 10 seconds
-  if (now - clickFixAlertedAt < 10_000) return;
 
   const result = scanForClickFix();
+
+  // Update tracked ClickFix state for NRS integration.
+  // Only overwrite a positive state with another positive detection;
+  // a negative scan must not wipe a prior positive — let TTL handle expiry.
+  // This prevents an adversarial second clipboard write (innocuous value after
+  // removing the overlay) from clearing the positive state prematurely.
+  const newScore = result.detected ? result.score : 0;
+  if (newScore > 0 || clickfixState.score <= 0) {
+    clickfixState = {
+      score: newScore,
+      lastScanTs: now,
+    };
+  }
+
   if (!result.detected) return;
+
+  // Rate-limit standalone toast: at most one alert per 10 seconds
+  if (now - clickFixAlertedAt < 10_000) return;
 
   clickFixAlertedAt = now;
   appendEventSafely({
@@ -838,6 +891,13 @@ if (chrome?.runtime?.onMessage) {
     if (window.top !== window) return;
     handleDblclickRuntimeMessage(message);
   });
+
+  // OAuth monitoring: delegate to oauth_monitor module for
+  // ns-oauth-flow-update, ns-oauth-redirect-mismatch, ns-oauth-opener-manipulation.
+  chrome.runtime.onMessage.addListener((message) => {
+    if (window.top !== window) return;
+    handleOAuthRuntimeMessage(message);
+  });
 }
 
 if (chrome?.runtime?.sendMessage && window.top === window) {
@@ -1014,6 +1074,10 @@ window.addEventListener(
         (destHost !== null && destHost !== destRegDomain && isKnownBadDomain(destHost))
       : false;
 
+    const oauthRedirectMismatch = isOAuthRedirectMismatch();
+    const oauthOpenerManip = isOAuthOpenerManipulation();
+    const cfScore = getClickfixScoreForNRS();
+
     const navCtx: NavigationContext = {
       isNewTabOrWindow: isBlankAnchor,
       isCrossSite,
@@ -1024,6 +1088,20 @@ window.addEventListener(
       explicitNewTabIntent: explicitNewTab,
       doubleClickHijackActive: dblClickHijack,
       knownBadDomain: destDomainBad,
+      ...(() => {
+        const chain = cachedChainInfo;
+        if (chain && chain.depth >= 2 && Date.now() - cachedChainInfoAt <= CHAIN_INFO_TTL_MS) {
+          return {
+            redirectChainDepth: chain.depth,
+            redirectViaKnownRedirector: chain.viaKnownRedirector,
+            knownRedirectorHops: chain.knownRedirectorHops,
+          };
+        }
+        return {};
+      })(),
+      oauthRedirectMismatch,
+      oauthOpenerManipulation: oauthOpenerManip,
+      clickfixScore: cfScore > 0 ? cfScore : undefined,
     };
 
     if (dblClickHijack) {
@@ -1055,6 +1133,7 @@ window.addEventListener(
       mode === "smart" && !!anchor && isLegitBlankAnchor(anchor, ctx, cds, cdsReasons);
 
     if (mode !== "off") {
+      const hasClickfix = cfScore > 0;
       if (isBlankAnchor && !isAllowed && !explicitNewTab && !smartAllowsBlank) {
         if (nrs >= blockThreshold) {
           decision = "block";
@@ -1064,15 +1143,26 @@ window.addEventListener(
         e.preventDefault();
         e.stopImmediatePropagation();
         if (parsed?.href) {
+          const title = hasClickfix
+            ? (decision === "block"
+              ? "Blocked: navigation + fake dialog"
+              : "Suspicious navigation + fake dialog detected")
+            : decision === "block" ? "Blocked new tab" : "Suspicious new tab";
           showAllowPrompt({
-            title: decision === "block" ? "Blocked new tab" : "Suspicious new tab",
+            title,
             url: parsed.href,
             host: parsed.host,
             target: "_blank",
             promptScore: nrs
           });
+          // Suppress standalone ClickFix toast — unified prompt covers it
+          if (hasClickfix) clickFixAlertedAt = Date.now();
         } else {
-          showToast({ message: `NavSentinel blocked a new tab navigation (NRS=${nrs}).` });
+          const msg = hasClickfix
+            ? `NavSentinel blocked a new tab navigation with fake dialog detected (NRS=${nrs}).`
+            : `NavSentinel blocked a new tab navigation (NRS=${nrs}).`;
+          showToast({ message: msg });
+          if (hasClickfix) clickFixAlertedAt = Date.now();
         }
       } else if (!isBlankAnchor && nrs >= blockThreshold) {
         decision = "block";
@@ -1091,7 +1181,11 @@ window.addEventListener(
           score: nrs,
           outcome: "block"
         });
-        showToast({ message: `NavSentinel blocked deceptive click (NRS=${nrs}, CDS=${cds}).` });
+        const msg = hasClickfix
+          ? `NavSentinel blocked deceptive click + fake dialog detected (NRS=${nrs}, CDS=${cds}).`
+          : `NavSentinel blocked deceptive click (NRS=${nrs}, CDS=${cds}).`;
+        showToast({ message: msg });
+        if (hasClickfix) clickFixAlertedAt = Date.now();
       }
     }
 
