@@ -11,6 +11,10 @@ export interface NavigationContext {
   doubleClickHijackActive?: boolean | undefined;
   /** Destination domain matched the bloom filter of known-bad domains */
   knownBadDomain?: boolean | undefined;
+  /** OAuth callback redirected to an unexpected domain */
+  oauthRedirectMismatch?: boolean | undefined;
+  /** Opener manipulation detected during an active OAuth flow */
+  oauthOpenerManipulation?: boolean | undefined;
 }
 
 export interface NRSResult {
@@ -29,6 +33,8 @@ const NRS_WEIGHT_ALLOWLIST = -100;
 const NRS_WEIGHT_EXPLICIT_NEW_TAB = -30;
 const NRS_WEIGHT_DOUBLE_CLICK_HIJACK = 40;
 const NRS_WEIGHT_KNOWN_BAD_DOMAIN = 50;
+const NRS_WEIGHT_OAUTH_REDIRECT_MISMATCH = 30;
+const NRS_WEIGHT_OAUTH_OPENER_MANIPULATION = 45;
 
 export const NRS_BLOCK_THRESHOLD = 70;
 export const NRS_STRICT_BLOCK_THRESHOLD = 50;
@@ -80,6 +86,16 @@ export function computeNRS(cdsResult: ScoreResult, navCtx: NavigationContext): N
   if (navCtx.knownBadDomain) {
     nrs += NRS_WEIGHT_KNOWN_BAD_DOMAIN;
     nrsFactors.push("nrs_known_bad_domain");
+  }
+
+  if (navCtx.oauthRedirectMismatch) {
+    nrs += NRS_WEIGHT_OAUTH_REDIRECT_MISMATCH;
+    nrsFactors.push("nrs_oauth_redirect_mismatch");
+  }
+
+  if (navCtx.oauthOpenerManipulation) {
+    nrs += NRS_WEIGHT_OAUTH_OPENER_MANIPULATION;
+    nrsFactors.push("nrs_oauth_opener_manipulation");
   }
 
   nrs = Math.max(0, nrs);
