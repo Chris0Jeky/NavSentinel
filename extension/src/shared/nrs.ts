@@ -11,6 +11,8 @@ export interface NavigationContext {
   doubleClickHijackActive?: boolean | undefined;
   /** Destination domain matched the bloom filter of known-bad domains */
   knownBadDomain?: boolean | undefined;
+  /** The user previously allowed the popup that opened this tab */
+  openerWindowPreviouslyAllowed?: boolean | undefined;
 }
 
 export interface NRSResult {
@@ -29,6 +31,11 @@ const NRS_WEIGHT_ALLOWLIST = -100;
 const NRS_WEIGHT_EXPLICIT_NEW_TAB = -30;
 const NRS_WEIGHT_DOUBLE_CLICK_HIJACK = 40;
 const NRS_WEIGHT_KNOWN_BAD_DOMAIN = 50;
+const NRS_WEIGHT_OPENER_PREVIOUSLY_ALLOWED = -20;
+
+/** Raw scores above this get 50% weight on the excess. */
+const NRS_DIMINISHING_RETURNS_THRESHOLD = 100;
+const NRS_DIMINISHING_RETURNS_FACTOR = 0.5;
 
 export const NRS_BLOCK_THRESHOLD = 70;
 export const NRS_STRICT_BLOCK_THRESHOLD = 50;
@@ -80,6 +87,17 @@ export function computeNRS(cdsResult: ScoreResult, navCtx: NavigationContext): N
   if (navCtx.knownBadDomain) {
     nrs += NRS_WEIGHT_KNOWN_BAD_DOMAIN;
     nrsFactors.push("nrs_known_bad_domain");
+  }
+
+  if (navCtx.openerWindowPreviouslyAllowed) {
+    nrs += NRS_WEIGHT_OPENER_PREVIOUSLY_ALLOWED;
+    nrsFactors.push("nrs_opener_previously_allowed");
+  }
+
+  // Diminishing returns: points above the threshold get reduced weight
+  if (nrs > NRS_DIMINISHING_RETURNS_THRESHOLD) {
+    nrs = NRS_DIMINISHING_RETURNS_THRESHOLD +
+      (nrs - NRS_DIMINISHING_RETURNS_THRESHOLD) * NRS_DIMINISHING_RETURNS_FACTOR;
   }
 
   nrs = Math.max(0, nrs);
