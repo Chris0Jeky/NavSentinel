@@ -155,8 +155,21 @@ It also provides:
 - rollback suppression windows
 - pending rollback and forward-offer state
 - DNR ruleset enable/disable synchronization
+- DoubleClickjacking child-window tracking
+- OAuth flow state per tab
+- redirect chain correlation
+
+All 15 ephemeral Maps/Sets are backed by `chrome.storage.session` via a write-through cache (`extension/src/shared/session_state.ts`). In-memory Maps are the primary sync read path; every write is mirrored to session storage (fire-and-forget). On SW restart, `hydrate()` restores state from session storage before the first event is processed (handlers gate on a hydrate-ready promise). Session storage is cleared when the browser closes.
 
 It listens to `chrome.webNavigation` events to decide when a committed navigation should be treated as legitimate, rolled back, or offered back to the user.
+
+### PushState guard
+
+`extension/src/content/pushstate_guard.ts` receives `ns-pushstate-suspicious` bridge messages from `main_guard.ts` when the page uses `history.pushState` or `history.replaceState` to inject domain-like paths after a user gesture. Exposes `isPushStateAbuseActive()` (10s TTL) for NRS integration.
+
+### Smart defaults
+
+`extension/src/shared/smart_defaults.ts` analyzes prompt telemetry to detect repeated "Allow once" decisions for the same domain pair. After 3 consecutive allows, suggests adding the pair to the permanent allowlist. Manages 24h cooldowns for dismissed suggestions.
 
 ## Data flow examples
 

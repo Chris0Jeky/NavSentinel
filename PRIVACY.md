@@ -20,6 +20,10 @@ The event log can include:
 - risk score and reason codes
 - small metadata fields related to the decision
 
+In `chrome.storage.session`, the extension stores ephemeral tab state (allow windows, gesture tokens, rollback state, child-window tracking) so it survives service worker restarts within a browser session. This data is automatically cleared when the browser closes and never persists to disk.
+
+In `chrome.storage.local`, the extension also stores prompt outcome data including source and destination domains for smart-default suggestions (allowlist after 3 consecutive allows) and cooldown timestamps.
+
 ## Build-Time Bundled Assets
 
 The extension ships with two static data assets compiled at build time:

@@ -275,6 +275,21 @@ The `nrs_double_click_hijack` factor (+40) alone puts NRS at the prompt threshol
 
 Reason code: `nrs_double_click_hijack`
 
+### PushState abuse detection (P2-08)
+
+Patches `history.pushState` and `history.replaceState` in the main world to detect:
+1. **Domain-like path after gesture**: A pushState within 2s of a user click where the new URL path contains a segment with 2+ dots resembling a domain (e.g., `/accounts.chase.com/login`) that differs from the current hostname.
+2. **Rapid-fire detection**: 4+ pushState/replaceState calls within 1 second.
+
+URL-encoded dots (`%2E`) are decoded before checking. Detection only fires after the native call succeeds.
+
+The `nrs_pushstate_abuse` factor (+20) is added when suspicious pushState is detected. The signal expires after 10 seconds (TTL in `pushstate_guard.ts`).
+
+Reason code: `nrs_pushstate_abuse`
+
+### Smart defaults (P3-03)
+
+After 3 consecutive "Allow once" decisions for the same source-to-destination domain pair, a suggestion toast offers "Always Allow". Acceptance adds the pair to the permanent allowlist. Dismissal triggers a 24-hour cooldown. Pattern detection in `extension/src/shared/smart_defaults.ts`.
+
 ## Future extensions (plan for, do not overfit)
 - Short redirect-chain correlation tied to a single gesture token.
-- Same-tab history.pushState gating within a short window after a gesture.

@@ -60,6 +60,12 @@ Current unit coverage lives in:
 - `tests/clickfix-detector.test.ts`
 - `tests/nrs-dblclick.test.ts`
 - `tests/reputation.test.ts`
+- `tests/nrs-pushstate.test.ts`
+- `tests/pushstate-guard.test.ts`
+- `tests/session-state.test.ts`
+- `tests/smart-defaults.test.ts`
+- `tests/content-analyzer.test.ts`
+- `tests/keyword-sync.test.ts`
 
 These currently cover:
 
@@ -76,6 +82,12 @@ These currently cover:
 - ClickFix command detection, CAPTCHA/instruction pattern matching, clipboard event tracking, and legitimate CAPTCHA suppression
 - DoubleClickjacking NRS factor (+40 weight, factor combinations, allowlist interaction)
 - Bloom filter reputation: MurmurHash3, binary format parsing, known-bad domain lookup, false positive verification, and NRS integration (+50 weight)
+- PushState abuse NRS factor (+20 weight, gesture correlation, rapid-fire detection)
+- PushState guard bridge message handling, TTL expiration, URL tracking
+- Session state manager: hydration, persistence, round-tripping across SW restarts, tab isolation
+- Smart defaults: pattern detection, consecutive-allow threshold, cooldown logic, storage integration
+- Content analyzer: brand/domain mismatch, phishing kit fingerprints
+- Keyword sync for allowlist/storage operations
 
 ### Playwright E2E
 
@@ -87,6 +99,7 @@ Current E2E coverage lives in:
 - `tests/e2e/evasion.spec.ts`
 - `tests/e2e/navsentinel.stress.spec.ts`
 - `tests/e2e/corpus-validation.spec.ts`
+- `tests/e2e/phase2-detections.spec.ts`
 
 It currently covers:
 
@@ -337,4 +350,4 @@ Completed measurement milestones:
 - FP measurement on Tranco top-200: 0.72% (1/138 sites prompted: unity3d.com) — PR #39
 - Phishing corpus validation: 100 pages tested, 28% overall TP, 100% credential guard TP on detectable password forms — PR #38
 
-Test count: **327 passing** across 13 test files (as of 2026-05-01).
+Test count: **654 passing** across 25 test files (as of 2026-05-03).
