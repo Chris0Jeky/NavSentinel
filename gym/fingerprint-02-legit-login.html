@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Acme Corp - Employee Portal</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 420px;
+        margin: 80px auto;
+        padding: 0 16px;
+        background: #f0f2f5;
+      }
+
+      .card {
+        background: white;
+        border-radius: 12px;
+        padding: 40px 32px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+      }
+
+      .logo {
+        width: 48px;
+        height: 48px;
+        background: #2563eb;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: 700;
+        font-size: 20px;
+        margin-bottom: 24px;
+      }
+
+      h1 {
+        font-size: 22px;
+        margin: 0 0 4px;
+      }
+
+      .subtitle {
+        color: #666;
+        font-size: 14px;
+        margin: 0 0 24px;
+      }
+
+      form {
+        display: grid;
+        gap: 14px;
+      }
+
+      label {
+        font-size: 14px;
+        font-weight: 500;
+        display: grid;
+        gap: 4px;
+      }
+
+      input {
+        font: inherit;
+        padding: 10px 12px;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+      }
+
+      button {
+        font: inherit;
+        padding: 10px;
+        border: none;
+        border-radius: 6px;
+        background: #2563eb;
+        color: white;
+        cursor: pointer;
+        font-weight: 600;
+        margin-top: 4px;
+      }
+
+      .note {
+        margin-top: 16px;
+        padding: 12px;
+        background: #d1fae5;
+        border-radius: 6px;
+        font-size: 13px;
+        color: #065f46;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="logo">A</div>
+      <h1>Employee Portal</h1>
+      <p class="subtitle">Sign in to your Acme Corp account</p>
+
+      <form action="/auth/login" method="post">
+        <label>
+          Email
+          <input name="email" type="email" placeholder="you@acme.com" autocomplete="username" />
+        </label>
+        <label>
+          Password
+          <input name="password" type="password" autocomplete="current-password" />
+        </label>
+        <button type="submit">Sign in</button>
+      </form>
+    </div>
+
+    <p class="note">
+      <strong>Gym fixture:</strong> This is a legitimate-looking corporate login page.
+      It should NOT trigger any content fingerprint signals: no brand name references,
+      no suspicious form actions (same-origin relative POST), no phishing kit patterns,
+      and no brand favicon/logo mismatches.
+    </p>
+  </body>
+</html>
