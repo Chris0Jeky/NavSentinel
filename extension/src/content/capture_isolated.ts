@@ -1,5 +1,11 @@
 import { computeCDS } from "../shared/scoring";
-import { appendEvent, appendPromptOutcome, getNavSettings, onNavSettingsChange, type NavSettings } from "../shared/storage";
+import { appendEvent, appendPromptOutcome, getPromptOutcomes, getNavSettings, onNavSettingsChange, type NavSettings } from "../shared/storage";
+import {
+  analyzeOutcomesForPair,
+  isPairOnCooldown,
+  setCooldown,
+  clearCooldown,
+} from "../shared/smart_defaults";
 import { makeToken, setActiveToken } from "../shared/stateMachine";
 import type { Mode } from "../shared/types";
 import {
@@ -830,6 +836,55 @@ async function allowAlways(
   allowActionOnce(params.actionId ?? null, params.url, params.target, params.features);
 }
 
+/**
+ * After an "Allow once" click, check whether the user has now hit the smart
+ * default threshold for this domain pair. If so, show a suggestion toast.
+ */
+function checkSmartDefaultSuggestion(sourceDomain: string, destDomain: string): void {
+  void (async () => {
+    try {
+      const onCooldown = await isPairOnCooldown(sourceDomain, destDomain);
+      if (onCooldown) return;
+
+      const outcomes = await getPromptOutcomes();
+      const suggestion = analyzeOutcomesForPair(outcomes, sourceDomain, destDomain);
+      if (!suggestion) return;
+
+      const displayDomain = getRegistrableDomain(destDomain) || destDomain;
+      showToast({
+        message: `You’ve allowed navigations to ${displayDomain} ${suggestion.allowCount} times. Always allow?`,
+        actions: [
+          {
+            label: "Always Allow",
+            onClick: () => {
+              void (async () => {
+                try {
+                  await clearCooldown(sourceDomain, destDomain);
+                  allowlist = await addAllowlistEntry(sourceDomain, destDomain);
+                  appendEventSafely({
+                    kind: "nav_allowlist_add",
+                    site: sourceDomain,
+                    destHost: destDomain,
+                    url: location.href,
+                  });
+                } catch {
+                  // ignore
+                }
+              })();
+            },
+          },
+        ],
+        onDismiss: () => {
+          void setCooldown(sourceDomain, destDomain).catch(() => {});
+        },
+        timeoutMs: 0,
+      });
+    } catch {
+      // Graceful degradation: don't break the main flow
+    }
+  })();
+}
+
 function showAllowPrompt(params: {
   title: string;
   url: string;
@@ -840,17 +895,24 @@ function showAllowPrompt(params: {
   promptScore?: number;
 }): void {
   const promptScore = params.promptScore ?? lastDebug?.cds ?? 0;
+  const sourceDomain = siteKeyFromLocation();
+  const destDomain = params.host ?? undefined;
   const actions = [
     {
       label: "Allow once",
       onClick: () => {
-        appendOutcomeSafely({
-          domain: siteKeyFromLocation(),
+        allowActionOnce(params.actionId, params.url, params.target, params.features);
+        void appendPromptOutcome({
+          domain: sourceDomain,
+          ...(destDomain !== undefined ? { destDomain } : {}),
           type: "nav",
           score: promptScore,
           outcome: "allow_once"
-        });
-        allowActionOnce(params.actionId, params.url, params.target, params.features);
+        }).then(() => {
+          if (destDomain) {
+            checkSmartDefaultSuggestion(sourceDomain, destDomain);
+          }
+        }).catch(() => {});
       }
     }
   ];
@@ -860,12 +922,13 @@ function showAllowPrompt(params: {
       label: "Always allow",
       onClick: () => {
         appendOutcomeSafely({
-          domain: siteKeyFromLocation(),
+          domain: sourceDomain,
+          ...(destDomain !== undefined ? { destDomain } : {}),
           type: "nav",
           score: promptScore,
           outcome: "always_allow"
         });
-        void allowAlways(siteKeyFromLocation(), params.host as string, {
+        void allowAlways(sourceDomain, params.host as string, {
           ...(params.actionId !== undefined ? { actionId: params.actionId } : {}),
           ...(params.url !== undefined ? { url: params.url } : {}),
           ...(params.target !== undefined ? { target: params.target } : {}),
@@ -877,7 +940,7 @@ function showAllowPrompt(params: {
 
   appendEventSafely({
     kind: "nav_blank_prompt",
-    site: siteKeyFromLocation(),
+    site: sourceDomain,
     url: params.url,
     ...(params.host ? { destHost: params.host } : {})
   });
@@ -887,7 +950,8 @@ function showAllowPrompt(params: {
     actions,
     onDismiss: () => {
       appendOutcomeSafely({
-        domain: siteKeyFromLocation(),
+        domain: sourceDomain,
+        ...(destDomain !== undefined ? { destDomain } : {}),
         type: "nav",
         score: promptScore,
         outcome: "dismiss"
