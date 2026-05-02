@@ -1,5 +1,6 @@
 import { getRegistrableDomain, normalizeHost } from "../shared/domain";
 import { getNavSettings, SUITE_SETTINGS_KEY } from "../shared/storage";
+import { RedirectChainTracker } from "../shared/redirect_chain";
 import {
   isOAuthUrl,
   extractRedirectUri,
@@ -43,11 +44,10 @@ const lastCommittedByTab = new Map<
   }
 >();
 
+// --- Redirect chain correlation ---
+const redirectChainTracker = new RedirectChainTracker();
+
 // --- OAuth flow tracking per tab ---
-// Maps tabId -> OAuthFlowState. Tracks OAuth authorization flows so we can
-// detect when a consent flow redirects to an unexpected callback endpoint.
-// Known limitation: this state is lost on SW restart (same as dblclick
-// tracking). P3-10 will address this with chrome.storage.session.
 const oauthFlowByTab = new Map<number, OAuthFlowState>();
 
 function pruneStaleOAuthFlows(): void {
@@ -68,19 +68,12 @@ function pruneStaleOAuthFlows(): void {
   }
 }
 
-/**
- * Try to start or advance an OAuth flow for a tab when navigating to a URL.
- * Returns true if the URL was recognized as part of an OAuth flow.
- */
 function processOAuthNavigation(tabId: number, url: string): void {
   if (!isOAuthUrl(url)) {
-    // If we had an active flow in redirect/consent phase and now navigate
-    // to a non-OAuth URL, treat it as the callback phase.
     const existingFlow = oauthFlowByTab.get(tabId);
     if (existingFlow && (existingFlow.phase === "redirect" || existingFlow.phase === "consent")) {
       existingFlow.phase = "callback";
       if (isUnexpectedCallback(existingFlow, url)) {
-        // Notify the content script about the mismatch
         chrome.tabs.sendMessage(
           tabId,
           { type: "ns-oauth-redirect-mismatch", callbackUrl: url },
@@ -88,7 +81,6 @@ function processOAuthNavigation(tabId: number, url: string): void {
         );
       }
       existingFlow.phase = "complete";
-      // Forward final flow state to content script
       chrome.tabs.sendMessage(
         tabId,
         { type: "ns-oauth-flow-update", flow: existingFlow },
@@ -98,7 +90,6 @@ function processOAuthNavigation(tabId: number, url: string): void {
     return;
   }
 
-  // URL is OAuth-like -- start or update a flow
   const redirectUri = extractRedirectUri(url);
   let expectedCallbackDomain = "";
   if (redirectUri) {
@@ -111,14 +102,12 @@ function processOAuthNavigation(tabId: number, url: string): void {
 
   const existingFlow = oauthFlowByTab.get(tabId);
   if (existingFlow && existingFlow.phase === "redirect") {
-    // Advance to consent phase
     existingFlow.consentUrl = url;
     existingFlow.phase = "consent";
     if (expectedCallbackDomain) {
       existingFlow.expectedCallbackDomain = expectedCallbackDomain;
     }
   } else {
-    // Start a new flow
     pruneStaleOAuthFlows();
     const prevUrl = lastUrlByTab.get(tabId) ?? "";
     const flow: OAuthFlowState = {
@@ -131,7 +120,6 @@ function processOAuthNavigation(tabId: number, url: string): void {
     oauthFlowByTab.set(tabId, flow);
   }
 
-  // Forward flow state to content script
   const flow = oauthFlowByTab.get(tabId);
   if (flow) {
     chrome.tabs.sendMessage(
@@ -357,6 +345,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
   }
 
+  if (message.type === "ns-get-chain-info") {
+    const tabId = sender.tab?.id;
+    if (typeof tabId === "number") {
+      const info = redirectChainTracker.getChainInfo(tabId);
+      sendResponse?.(info ?? { depth: 0, viaKnownRedirector: false, knownRedirectorHops: 0 });
+    } else {
+      // No tab context (popup, devtools, etc.) -- return default to avoid
+      // hanging the caller's message port.
+      sendResponse?.({ depth: 0, viaKnownRedirector: false, knownRedirectorHops: 0 });
+    }
+    return;
+  }
+
   // DoubleClickjacking: forward opener.location write from child to opener tab.
   // Only forward if the sender tab is a known child window to prevent
   // malicious pages from injecting false opener-nav signals.
@@ -441,6 +442,19 @@ chrome.webNavigation.onCommitted.addListener((details) => {
     details.transitionType === "auto_bookmark" ||
     qualifiers.includes("from_address_bar");
   const isLinkish = details.transitionType === "link";
+
+  // Only record hops that are redirect-driven OR that extend an existing
+  // chain (a non-redirect commit arriving within the chain window).
+  // Plain user-typed and same-domain navigations should NOT inflate chain
+  // depth -- they are benign and would cause false positives.
+  if (isRedirect || redirectChainTracker.hasActiveChain(details.tabId, now)) {
+    redirectChainTracker.recordHop(
+      details.tabId,
+      details.url,
+      now,
+      details.transitionType
+    );
+  }
 
   const typedOriginEntry = typedOriginByTab.get(details.tabId);
 
@@ -568,6 +582,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   suppressUntilByTab.delete(tabId);
   rollbackReturnByTab.delete(tabId);
   typedOriginByTab.delete(tabId);
+  redirectChainTracker.deleteTab(tabId);
   oauthFlowByTab.delete(tabId);
   clearPendingTabState(tabId);
   lastUrlByTab.delete(tabId);

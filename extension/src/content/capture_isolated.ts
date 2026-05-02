@@ -13,6 +13,7 @@ import { getRegistrableDomain } from "../shared/domain";
 import { areSameOrganization } from "../shared/domain_groups";
 import { computeNRS, NRS_BLOCK_THRESHOLD, NRS_STRICT_BLOCK_THRESHOLD } from "../shared/nrs";
 import type { NavigationContext } from "../shared/nrs";
+import type { RedirectChainInfo } from "../shared/redirect_chain";
 import { initReputation, isKnownBadDomain } from "../shared/reputation";
 import { showToast } from "./ui_toast";
 import {
@@ -88,6 +89,9 @@ let forwardCheckInFlight = false;
 let forwardCheckTimer = 0;
 let gestureNavAttempts = 0;
 let gestureDownId: number | null = null;
+const CHAIN_INFO_TTL_MS = 30_000;
+let cachedChainInfo: RedirectChainInfo | null = null;
+let cachedChainInfoAt = 0;
 
 function markMainGuardReady(): void {
   if (bridgeRetryTimer) {
@@ -163,6 +167,18 @@ async function initSettings() {
   if (window.top === window) {
     try {
       chrome.runtime.sendMessage({ type: "ns-ready" });
+    } catch {
+      // ignore
+    }
+    // Fetch redirect chain info for this tab's navigation
+    try {
+      chrome.runtime.sendMessage({ type: "ns-get-chain-info" }, (resp) => {
+        if (chrome.runtime.lastError) return;
+        if (resp && typeof resp.depth === "number") {
+          cachedChainInfo = resp;
+          cachedChainInfoAt = Date.now();
+        }
+      });
     } catch {
       // ignore
     }
@@ -1002,6 +1018,17 @@ window.addEventListener(
       explicitNewTabIntent: explicitNewTab,
       doubleClickHijackActive: dblClickHijack,
       knownBadDomain: destDomainBad,
+      ...(() => {
+        const chain = cachedChainInfo;
+        if (chain && chain.depth >= 2 && Date.now() - cachedChainInfoAt <= CHAIN_INFO_TTL_MS) {
+          return {
+            redirectChainDepth: chain.depth,
+            redirectViaKnownRedirector: chain.viaKnownRedirector,
+            knownRedirectorHops: chain.knownRedirectorHops,
+          };
+        }
+        return {};
+      })(),
       oauthRedirectMismatch,
       oauthOpenerManipulation: oauthOpenerManip,
       clickfixScore: cfScore > 0 ? cfScore : undefined,
