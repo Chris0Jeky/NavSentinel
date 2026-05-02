@@ -6,6 +6,7 @@ import {
   getTrustedDomains
 } from "../shared/storage";
 import { computeCredentialRisk, getRegistrableDomain, normalizeHost } from "../shared/domain";
+import type { RiskResult } from "../shared/domain";
 import { showToast } from "./ui_toast";
 import { showCredentialModal } from "./credential_modal";
 import {
@@ -14,6 +15,25 @@ import {
   isCrossSiteCredentialAction,
   shouldPromptCredentialSubmit
 } from "./credential_guard_model";
+import { analyzePageContent } from "./content_analyzer";
+
+function applyContentAnalysis(risk: RiskResult): void {
+  try {
+    const analysis = analyzePageContent();
+    for (let i = 0; i < analysis.signals.length; i++) {
+      const signal = analysis.signals[i];
+      if (!signal) continue;
+      risk.reasons.push({ code: signal.code, label: signal.label });
+      risk.score = Math.min(100, risk.score + signal.score);
+    }
+    if (risk.score >= 70) risk.severity = "high";
+    else if (risk.score >= 40) risk.severity = "medium";
+    else if (risk.score >= 15) risk.severity = "low";
+    else risk.severity = "none";
+  } catch {
+    // content analysis is best-effort; never block submission on failure
+  }
+}
 
 const allowNextSubmitUntil = new WeakMap<HTMLFormElement, number>();
 
@@ -93,6 +113,8 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
       trustedDomains: trusted,
       config: cfg
     });
+
+    applyContentAnalysis(risk);
 
     const crossSite = isCrossSiteCredentialAction(risk);
     const isHttpsOk = risk.page.isHttps && risk.action.isHttps;
