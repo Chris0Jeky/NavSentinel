@@ -51,14 +51,31 @@ const TRACKING_PREFIXES = [
   "redir.",
 ];
 
+/**
+ * Known-legitimate domains that happen to match tracking prefixes
+ * (e.g. go.microsoft.com, go.dev, click.mailchimp.com).
+ * These are NOT attacker-operated redirectors.
+ */
+const TRACKING_PREFIX_ALLOWLIST = new Set([
+  "go.microsoft.com",
+  "go.dev",
+  "go.googleprod.com",
+  "go.google.com",
+  "click.mailchimp.com",
+  "click.convertkit.com",
+  "click.pstmrk.it",
+]);
+
+/** Only redirect-specific params. Removed overly generic SSO/OAuth
+ *  params (next, continue, target) that cause false positives. */
 const REDIRECT_PARAMS = new Set([
   "url",
   "redirect",
-  "next",
+  "redirect_uri",
+  "redirect_url",
   "goto",
   "dest",
-  "target",
-  "continue",
+  "return_to",
 ]);
 
 const OPEN_REDIRECT_PATHS = [
@@ -85,9 +102,12 @@ export function isKnownRedirector(url: string): boolean {
   // Exact shortener domain match
   if (SHORTENER_DOMAINS.has(hostname)) return true;
 
-  // Tracking subdomain prefix match (e.g. click.example.com)
-  for (const prefix of TRACKING_PREFIXES) {
-    if (hostname.startsWith(prefix)) return true;
+  // Tracking subdomain prefix match (e.g. click.example.com).
+  // Skip known-legitimate services that happen to match tracking prefixes.
+  if (!TRACKING_PREFIX_ALLOWLIST.has(hostname)) {
+    for (const prefix of TRACKING_PREFIXES) {
+      if (hostname.startsWith(prefix)) return true;
+    }
   }
 
   // Redirect query parameters
@@ -96,9 +116,11 @@ export function isKnownRedirector(url: string): boolean {
   }
 
   // Open redirect path patterns (e.g. /redirect?url=...)
+  // Note: URL.pathname never includes the query string, so we only
+  // need exact match or path-prefix match (no "?" check needed).
   const pathname = parsed.pathname.toLowerCase();
   for (const rpath of OPEN_REDIRECT_PATHS) {
-    if (pathname === rpath || pathname.startsWith(rpath + "?") || pathname.startsWith(rpath + "/")) {
+    if (pathname === rpath || pathname.startsWith(rpath + "/")) {
       return true;
     }
   }
@@ -128,8 +150,12 @@ export class RedirectChainTracker {
 
     if (existing && existing.hops.length > 0) {
       const lastHop = existing.hops[existing.hops.length - 1]!;
-      if (ts - lastHop.ts <= CHAIN_WINDOW_MS && existing.hops.length < CHAIN_MAX_HOPS) {
-        existing.hops.push(hop);
+      if (ts - lastHop.ts <= CHAIN_WINDOW_MS) {
+        if (existing.hops.length < CHAIN_MAX_HOPS) {
+          existing.hops.push(hop);
+        }
+        // At max hops: stop appending but preserve the chain so the
+        // "long chain" signal is not lost on the landing page.
         return;
       }
     }
@@ -159,6 +185,19 @@ export class RedirectChainTracker {
       viaKnownRedirector: knownRedirectorHops > 0,
       knownRedirectorHops,
     };
+  }
+
+  /**
+   * Returns true if the tab has an active (non-stale) chain with at
+   * least one hop whose timestamp is within the chain window of `now`.
+   * Used by the SW to decide whether a non-redirect commit should
+   * extend an existing chain.
+   */
+  hasActiveChain(tabId: number, now: number): boolean {
+    const chain = this.chains.get(tabId);
+    if (!chain || chain.hops.length === 0) return false;
+    const lastHop = chain.hops[chain.hops.length - 1]!;
+    return now - lastHop.ts <= CHAIN_WINDOW_MS;
   }
 
   /**

@@ -259,7 +259,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (typeof tabId === "number") {
       const info = redirectChainTracker.getChainInfo(tabId);
       sendResponse?.(info ?? { depth: 0, viaKnownRedirector: false, knownRedirectorHops: 0 });
+    } else {
+      // No tab context (popup, devtools, etc.) -- return default to avoid
+      // hanging the caller's message port.
+      sendResponse?.({ depth: 0, viaKnownRedirector: false, knownRedirectorHops: 0 });
     }
+    return;
   }
 
   // DoubleClickjacking: forward opener.location write from child to opener tab.
@@ -324,14 +329,6 @@ chrome.webNavigation.onCommitted.addListener((details) => {
   const prevUrl = lastUrlByTab.get(details.tabId);
   lastUrlByTab.set(details.tabId, details.url);
 
-  // Track redirect chains across all top-frame commits
-  redirectChainTracker.recordHop(
-    details.tabId,
-    details.url,
-    now,
-    details.transitionType
-  );
-
   const qualifiers = details.transitionQualifiers ?? [];
   const isRedirect =
     qualifiers.includes("client_redirect") || qualifiers.includes("server_redirect");
@@ -340,6 +337,19 @@ chrome.webNavigation.onCommitted.addListener((details) => {
     details.transitionType === "auto_bookmark" ||
     qualifiers.includes("from_address_bar");
   const isLinkish = details.transitionType === "link";
+
+  // Only record hops that are redirect-driven OR that extend an existing
+  // chain (a non-redirect commit arriving within the chain window).
+  // Plain user-typed and same-domain navigations should NOT inflate chain
+  // depth -- they are benign and would cause false positives.
+  if (isRedirect || redirectChainTracker.hasActiveChain(details.tabId, now)) {
+    redirectChainTracker.recordHop(
+      details.tabId,
+      details.url,
+      now,
+      details.transitionType
+    );
+  }
 
   const typedOriginEntry = typedOriginByTab.get(details.tabId);
 

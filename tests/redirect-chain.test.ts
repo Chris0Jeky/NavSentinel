@@ -47,12 +47,19 @@ describe("isKnownRedirector", () => {
 
   it("detects redirect query parameters", () => {
     expect(isKnownRedirector("https://example.com/login?redirect=https://evil.com")).toBe(true);
-    expect(isKnownRedirector("https://example.com/auth?next=/dashboard")).toBe(true);
     expect(isKnownRedirector("https://example.com/go?url=https://other.com")).toBe(true);
     expect(isKnownRedirector("https://example.com/page?goto=foo")).toBe(true);
     expect(isKnownRedirector("https://example.com/link?dest=bar")).toBe(true);
-    expect(isKnownRedirector("https://example.com/sso?target=baz")).toBe(true);
-    expect(isKnownRedirector("https://example.com/oauth?continue=qux")).toBe(true);
+    expect(isKnownRedirector("https://example.com/auth?redirect_uri=https://app.com/callback")).toBe(true);
+    expect(isKnownRedirector("https://example.com/auth?redirect_url=https://app.com")).toBe(true);
+    expect(isKnownRedirector("https://example.com/login?return_to=/dashboard")).toBe(true);
+  });
+
+  it("does not flag generic SSO/OAuth params (next, continue, target)", () => {
+    // These were removed to reduce false positives on legitimate auth flows
+    expect(isKnownRedirector("https://accounts.google.com/ServiceLogin?continue=https://mail.google.com")).toBe(false);
+    expect(isKnownRedirector("https://example.com/auth?next=/dashboard")).toBe(false);
+    expect(isKnownRedirector("https://example.com/sso?target=baz")).toBe(false);
   });
 
   it("detects open redirect path patterns", () => {
@@ -63,11 +70,50 @@ describe("isKnownRedirector", () => {
     expect(isKnownRedirector("https://example.com/link/ext")).toBe(true);
   });
 
+  it("does not flag known-legitimate tracking-prefix domains", () => {
+    // These match tracking prefixes but are legitimate services.
+    // Use paths that don't also match open-redirect path patterns.
+    expect(isKnownRedirector("https://go.microsoft.com/fwlink/123")).toBe(false);
+    expect(isKnownRedirector("https://go.dev/doc/tutorial")).toBe(false);
+    expect(isKnownRedirector("https://go.google.com/something")).toBe(false);
+    expect(isKnownRedirector("https://go.googleprod.com/foo")).toBe(false);
+    expect(isKnownRedirector("https://click.mailchimp.com/track/click/abc")).toBe(false);
+    expect(isKnownRedirector("https://click.convertkit.com/campaigns/xyz")).toBe(false);
+  });
+
+  it("still flags tracking prefixes for non-allowlisted domains", () => {
+    expect(isKnownRedirector("https://go.somewhere-suspicious.com/page")).toBe(true);
+    expect(isKnownRedirector("https://click.evil-tracker.com/redirect")).toBe(true);
+  });
+
+  it("handles mixed-case hostnames", () => {
+    // Shortener domains
+    expect(isKnownRedirector("https://BIT.LY/abc123")).toBe(true);
+    expect(isKnownRedirector("https://T.Co/xyz")).toBe(true);
+    // Tracking prefixes
+    expect(isKnownRedirector("https://CLICK.Example.COM/track")).toBe(true);
+    // Allowlisted domains should still be allowlisted regardless of case
+    expect(isKnownRedirector("https://GO.MICROSOFT.COM/fwlink")).toBe(false);
+  });
+
+  it("handles URL-encoded redirect parameters", () => {
+    // Param names are case-insensitive
+    expect(isKnownRedirector("https://example.com/page?REDIRECT=foo")).toBe(true);
+    expect(isKnownRedirector("https://example.com/page?Url=bar")).toBe(true);
+    expect(isKnownRedirector("https://example.com/page?GOTO=baz")).toBe(true);
+  });
+
   it("does not flag normal URLs", () => {
     expect(isKnownRedirector("https://example.com/")).toBe(false);
     expect(isKnownRedirector("https://www.google.com/search?q=test")).toBe(false);
     expect(isKnownRedirector("https://github.com/user/repo")).toBe(false);
     expect(isKnownRedirector("https://amazon.com/product/123")).toBe(false);
+  });
+
+  it("does not flag URLs with non-redirect query params", () => {
+    // Common params that should not trigger redirector detection
+    expect(isKnownRedirector("https://shop.com/product?id=123&size=large")).toBe(false);
+    expect(isKnownRedirector("https://example.com/page?q=search&page=2")).toBe(false);
   });
 
   it("handles invalid URLs gracefully", () => {
@@ -117,15 +163,15 @@ describe("RedirectChainTracker", () => {
     expect(info).toBeNull();
   });
 
-  it("caps chain at 10 hops", () => {
+  it("caps chain at 10 hops but preserves the chain signal", () => {
     const tracker = new RedirectChainTracker();
     for (let i = 0; i < 12; i++) {
       tracker.recordHop(1, `https://hop${i}.com/`, 1000 + i * 500, "link");
     }
     const info = tracker.getChainInfo(1);
     expect(info).not.toBeNull();
-    // 10 hops max, then 11th starts a new chain
-    expect(info!.depth).toBeLessThanOrEqual(10);
+    // Chain should remain at 10 hops (not reset by the 11th/12th)
+    expect(info!.depth).toBe(10);
   });
 
   it("prunes chains older than 15 seconds", () => {
@@ -162,6 +208,49 @@ describe("RedirectChainTracker", () => {
       tracker.recordHop(i, `https://tab${i}.com/`, 1000 + i, "link");
     }
     expect(tracker.size).toBeLessThanOrEqual(100);
+  });
+
+  it("hasActiveChain returns true within chain window", () => {
+    const tracker = new RedirectChainTracker();
+    tracker.recordHop(1, "https://a.com/", 1000, "link");
+    expect(tracker.hasActiveChain(1, 5000)).toBe(true); // 4s < 10s window
+  });
+
+  it("hasActiveChain returns false outside chain window", () => {
+    const tracker = new RedirectChainTracker();
+    tracker.recordHop(1, "https://a.com/", 1000, "link");
+    expect(tracker.hasActiveChain(1, 12000)).toBe(false); // 11s > 10s window
+  });
+
+  it("hasActiveChain returns false for unknown tab", () => {
+    const tracker = new RedirectChainTracker();
+    expect(tracker.hasActiveChain(99, 1000)).toBe(false);
+  });
+});
+
+// --- False positive scenarios ---
+
+describe("isKnownRedirector false positive scenarios", () => {
+  it("does not flag a standard SSO login flow URL", () => {
+    // Google SSO uses 'continue' param -- now excluded
+    expect(isKnownRedirector("https://accounts.google.com/ServiceLogin?continue=https://mail.google.com")).toBe(false);
+    // Microsoft SSO
+    expect(isKnownRedirector("https://login.microsoftonline.com/common/oauth2/authorize?client_id=abc&response_type=code")).toBe(false);
+  });
+
+  it("does not flag legitimate email marketing tracking links", () => {
+    // Mailchimp click tracking is allowlisted (tracking prefix bypassed)
+    expect(isKnownRedirector("https://click.mailchimp.com/track/click/30abc")).toBe(false);
+    // ConvertKit click tracking is allowlisted (use path that doesn't match open redirect patterns)
+    expect(isKnownRedirector("https://click.convertkit.com/campaigns/xyz")).toBe(false);
+  });
+
+  it("does not flag Go language website", () => {
+    expect(isKnownRedirector("https://go.dev/doc/tutorial/getting-started")).toBe(false);
+  });
+
+  it("does not flag Microsoft Go links", () => {
+    expect(isKnownRedirector("https://go.microsoft.com/fwlink/?LinkId=2135060")).toBe(false);
   });
 });
 

@@ -13,6 +13,7 @@ import { getRegistrableDomain } from "../shared/domain";
 import { areSameOrganization } from "../shared/domain_groups";
 import { computeNRS, NRS_BLOCK_THRESHOLD, NRS_STRICT_BLOCK_THRESHOLD } from "../shared/nrs";
 import type { NavigationContext } from "../shared/nrs";
+import type { RedirectChainInfo } from "../shared/redirect_chain";
 import { initReputation, isKnownBadDomain } from "../shared/reputation";
 import { showToast } from "./ui_toast";
 import {
@@ -83,7 +84,9 @@ let forwardCheckInFlight = false;
 let forwardCheckTimer = 0;
 let gestureNavAttempts = 0;
 let gestureDownId: number | null = null;
-let cachedChainInfo: { depth: number; viaKnownRedirector: boolean; knownRedirectorHops: number } | null = null;
+const CHAIN_INFO_TTL_MS = 30_000;
+let cachedChainInfo: RedirectChainInfo | null = null;
+let cachedChainInfoAt = 0;
 
 function markMainGuardReady(): void {
   if (bridgeRetryTimer) {
@@ -168,6 +171,7 @@ async function initSettings() {
         if (chrome.runtime.lastError) return;
         if (resp && typeof resp.depth === "number") {
           cachedChainInfo = resp;
+          cachedChainInfoAt = Date.now();
         }
       });
     } catch {
@@ -966,11 +970,19 @@ window.addEventListener(
       explicitNewTabIntent: explicitNewTab,
       doubleClickHijackActive: dblClickHijack,
       knownBadDomain: destDomainBad,
-      ...(cachedChainInfo && cachedChainInfo.depth >= 2 ? {
-        redirectChainDepth: cachedChainInfo.depth,
-        redirectViaKnownRedirector: cachedChainInfo.viaKnownRedirector,
-        knownRedirectorHops: cachedChainInfo.knownRedirectorHops,
-      } : {}),
+      ...(() => {
+        // Expire cached chain info after TTL to avoid stale penalties
+        // on clicks that happen long after the redirect chain completed.
+        const chain = cachedChainInfo;
+        if (chain && chain.depth >= 2 && Date.now() - cachedChainInfoAt <= CHAIN_INFO_TTL_MS) {
+          return {
+            redirectChainDepth: chain.depth,
+            redirectViaKnownRedirector: chain.viaKnownRedirector,
+            knownRedirectorHops: chain.knownRedirectorHops,
+          };
+        }
+        return {};
+      })(),
     };
 
     if (dblClickHijack) {
