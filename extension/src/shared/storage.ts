@@ -49,6 +49,7 @@ export interface PromptOutcomeEntry {
   id: string;
   ts: number;
   domain: string;
+  destDomain?: string;
   type: PromptType;
   score: number;
   outcome: PromptOutcome;
@@ -337,6 +338,7 @@ export async function appendPromptOutcome(
     id: partial.id ?? makeId(),
     ts: partial.ts ?? Date.now(),
     domain: partial.domain,
+    ...(partial.destDomain !== undefined ? { destDomain: partial.destDomain } : {}),
     type: partial.type,
     score: partial.score,
     outcome: partial.outcome,
