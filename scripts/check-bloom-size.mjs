@@ -36,6 +36,11 @@ try {
   process.exit(1);
 }
 
+if (!stat.isFile()) {
+  console.error(`ERROR: Path is not a regular file: ${filePath}`);
+  process.exit(1);
+}
+
 const sizeBytes = stat.size;
 const sizeKB = (sizeBytes / 1024).toFixed(2);
 
