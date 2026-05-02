@@ -32,6 +32,11 @@ import {
   getDblclickOpenerNavUrl,
 } from "./dblclick_guard";
 import {
+  startMutationMonitor,
+  getMutationAlertCount,
+  type MutationAlert,
+} from "./mutation_monitor";
+import {
   handleOAuthRuntimeMessage,
   isOAuthRedirectMismatch,
   isOAuthOpenerManipulation,
@@ -112,6 +117,7 @@ function refreshDebug(): void {
   updateDebugOverlay({
     ...lastDebug,
     mainGuard,
+    mutationAlerts: getMutationAlertCount(),
     ...(lastNav ? { lastNav } : {})
   });
 }
@@ -512,6 +518,70 @@ function handleClickFixScan(): void {
     timeoutMs: 0,
   });
 }
+
+// --- Mutation monitor ---
+
+const MUTATION_START_DELAY_MS = 2000;
+
+function handleMutationAlert(alert: MutationAlert): void {
+  if (settings.defaultMode === "off") return;
+
+  appendEventSafely({
+    kind: "mutation_alert",
+    site: siteKeyFromLocation(),
+    url: location.href,
+    reasons: [alert.type],
+    extra: { details: alert.details, severity: alert.severity },
+  });
+
+  // Only show a warning toast for high-severity overlay injections.
+  // Low-severity alerts (cookie banners, chat widgets, ARIA dialogs) are
+  // still logged for telemetry but do not disturb the user.
+  if (alert.type === "overlay_injected" && alert.severity === "high") {
+    showToast({
+      message: "NavSentinel detected a suspicious overlay injected after page load. The page may be attempting a phishing attack.",
+      actions: [{ label: "Dismiss", onClick: () => {} }],
+      timeoutMs: 0,
+    });
+  }
+
+  refreshDebug();
+}
+
+function initMutationMonitor(): void {
+  if (settings.defaultMode === "off") return;
+  startMutationMonitor(document, handleMutationAlert);
+}
+
+function scheduleMutationMonitor(): void {
+  // Only run the mutation monitor in the top frame. Sub-frames run with
+  // all_frames:true but the monitor is most valuable in the top frame, and
+  // cross-origin iframes already cannot be observed from the parent. Wrapped
+  // in try/catch because accessing window.top throws in sandboxed iframes.
+  try {
+    if (window !== window.top) return;
+  } catch {
+    // Sandboxed iframe -- skip monitoring
+    return;
+  }
+
+  // Use the `load` event (readyState "complete") as the baseline instead of
+  // `DOMContentLoaded`. This avoids false positives from SPA hydration that
+  // often continues 3-5 seconds after DCL. If `load` already fired, delay
+  // from the current time with a longer window (3 s) since we cannot know
+  // how long ago the page finished loading.
+  if (document.readyState === "complete") {
+    setTimeout(initMutationMonitor, 3000);
+  } else {
+    window.addEventListener("load", () => {
+      setTimeout(initMutationMonitor, MUTATION_START_DELAY_MS);
+    }, { once: true });
+  }
+}
+
+scheduleMutationMonitor();
+
+// --- Rollback prompts ---
 
 function showRollbackPrompt(url: string): void {
   const now = Date.now();
