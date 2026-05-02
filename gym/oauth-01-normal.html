@@ -1,0 +1,51 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>OAuth 01 - Normal OAuth Flow (benign)</title>
+  <style>
+    body { font-family: sans-serif; padding: 24px; }
+    button { padding: 12px 20px; font-size: 16px; margin: 8px 0; }
+    .status { margin-top: 16px; padding: 12px; background: #f0f0f0; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>OAuth 01: Normal OAuth Flow</h1>
+  <p>
+    This simulates a <strong>legitimate</strong> OAuth consent flow.
+    The redirect_uri points back to the same application domain.
+    NavSentinel must <strong>NOT</strong> trigger on this flow.
+  </p>
+
+  <button id="google-signin">Sign in with Google</button>
+  <button id="github-signin">Sign in with GitHub</button>
+
+  <div class="status" id="status">Status: waiting for user action</div>
+
+  <script>
+    const status = document.getElementById('status');
+
+    // Simulate a legitimate OAuth redirect where redirect_uri matches the app domain
+    document.getElementById('google-signin').addEventListener('click', () => {
+      status.textContent = 'Status: redirecting to Google OAuth...';
+      // In a real flow this would redirect to Google. Here we simulate the
+      // consent URL with a redirect_uri pointing back to the same origin.
+      const consentUrl = 'https://accounts.google.com/o/oauth2/v2/auth'
+        + '?client_id=123456.apps.googleusercontent.com'
+        + '&redirect_uri=' + encodeURIComponent(location.origin + '/callback')
+        + '&response_type=code'
+        + '&scope=openid%20email';
+      status.textContent = 'Status: would navigate to ' + consentUrl;
+    });
+
+    document.getElementById('github-signin').addEventListener('click', () => {
+      status.textContent = 'Status: redirecting to GitHub OAuth...';
+      const consentUrl = 'https://github.com/login/oauth/authorize'
+        + '?client_id=abc123def456'
+        + '&redirect_uri=' + encodeURIComponent(location.origin + '/auth/github/callback')
+        + '&scope=user:email';
+      status.textContent = 'Status: would navigate to ' + consentUrl;
+    });
+  </script>
+</body>
+</html>

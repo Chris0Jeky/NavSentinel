@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 import { describe, expect, it, beforeEach } from "vitest";
 import {
   looksLikeCommand,
@@ -376,49 +377,44 @@ describe("clipboard event tracking", () => {
 });
 
 // --- hasLegitCaptcha hardening ---
-// Note: hasLegitCaptcha requires a DOM environment (jsdom/happy-dom) for full
-// integration testing. These tests are skipped in pure Node environments.
-// The hardened logic is verified via the gym fixtures (clickfix-03) and manual testing.
 
 describe("hasLegitCaptcha", () => {
-  const hasDOM = typeof globalThis.document !== "undefined";
-
-  it.skipIf(!hasDOM)("returns false for bare class name without provider iframe", () => {
+  it("returns false for bare class name without provider iframe", () => {
     const div = document.createElement("div");
     div.innerHTML = '<div class="g-recaptcha"><span>fake</span></div>';
     expect(hasLegitCaptcha(div)).toBe(false);
   });
 
-  it.skipIf(!hasDOM)("returns true when class name is backed by provider iframe", () => {
+  it("returns true when class name is backed by provider iframe", () => {
     const div = document.createElement("div");
     div.innerHTML = '<div class="g-recaptcha"><iframe src="https://www.google.com/recaptcha/api2/anchor"></iframe></div>';
     expect(hasLegitCaptcha(div)).toBe(true);
   });
 
-  it.skipIf(!hasDOM)("returns true for standalone provider iframe without class", () => {
+  it("returns true for standalone provider iframe without class", () => {
     const div = document.createElement("div");
     div.innerHTML = '<iframe src="https://www.google.com/recaptcha/api2/anchor"></iframe>';
     expect(hasLegitCaptcha(div)).toBe(true);
   });
 
-  it.skipIf(!hasDOM)("returns true for hCaptcha iframe", () => {
+  it("returns true for hCaptcha iframe", () => {
     const div = document.createElement("div");
     div.innerHTML = '<iframe src="https://hcaptcha.com/challenge"></iframe>';
     expect(hasLegitCaptcha(div)).toBe(true);
   });
 
-  it.skipIf(!hasDOM)("returns true for Cloudflare Turnstile iframe", () => {
+  it("returns true for Cloudflare Turnstile iframe", () => {
     const div = document.createElement("div");
     div.innerHTML = '<iframe src="https://challenges.cloudflare.com/turnstile"></iframe>';
     expect(hasLegitCaptcha(div)).toBe(true);
   });
 
-  it.skipIf(!hasDOM)("returns false for empty root", () => {
+  it("returns false for empty root", () => {
     const div = document.createElement("div");
     expect(hasLegitCaptcha(div)).toBe(false);
   });
 
-  it.skipIf(!hasDOM)("detects provider iframe as sibling of class-name element", () => {
+  it("detects provider iframe as sibling of class-name element", () => {
     const wrapper = document.createElement("div");
     wrapper.innerHTML = '<div><div class="g-recaptcha"></div><iframe src="https://www.google.com/recaptcha/api2/anchor"></iframe></div>';
     expect(hasLegitCaptcha(wrapper)).toBe(true);

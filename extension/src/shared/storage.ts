@@ -258,7 +258,8 @@ export type EventKind =
   | "suite_config_update"
   | "clickfix_detected"
   | "dblclickjack_detected"
-  | "nav_reputation_late_warn";
+  | "nav_reputation_late_warn"
+  | "mutation_alert";
 
 export interface EventLogEntry {
   id: string;

@@ -1,0 +1,68 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Chain 03 - Deep 5+ Hop Redirect Chain</title>
+  <style>
+    body { font-family: sans-serif; padding: 24px; }
+    button { padding: 12px 18px; font-size: 16px; margin: 8px 4px; }
+    #status { border: 2px dashed #999; padding: 16px; margin-top: 18px; }
+    code { background: #f4f4f4; padding: 2px 4px; }
+  </style>
+</head>
+<body>
+  <h1>Chain 03: Deep 5+ Hop Redirect Chain</h1>
+  <p>This scenario simulates a malvertising-style redirect chain with 6 hops,
+     including multiple known redirectors.</p>
+  <p>Chain: <code>start &rarr; bit.ly &rarr; click.tracker.com &rarr; redirect.ads.net &rarr; go.partner.com &rarr; middle.site &rarr; final landing</code></p>
+
+  <p><strong>Expected:</strong></p>
+  <ul>
+    <li>Chain depth = 6, so depth penalty = (6-2)*5 = +20.</li>
+    <li>Multiple known redirector hops should trigger <code>nrs_redirect_via_known_redirector</code> at +30 (capped).</li>
+    <li>Combined chain NRS contribution: up to +50, which alone pushes past strict-mode threshold.</li>
+  </ul>
+
+  <div id="status">
+    <p>Click below to start the simulated 6-hop chain:</p>
+    <button id="startChain">Start 6-hop chain</button>
+    <p id="chainStatus"></p>
+  </div>
+
+  <script>
+    const btn = document.getElementById('startChain');
+    const status = document.getElementById('chainStatus');
+    const hops = [
+      'chain-03-deep.html?hop=1',
+      'chain-03-deep.html?hop=2',
+      'chain-03-deep.html?hop=3',
+      'chain-03-deep.html?hop=4',
+      'chain-03-deep.html?hop=5',
+      'chain-03-deep.html?hop=6&landed=true',
+    ];
+
+    const params = new URLSearchParams(location.search);
+    const hop = params.get('hop');
+    const landed = params.get('landed');
+
+    if (landed === 'true') {
+      status.textContent = 'Chain complete! 6 hops simulated. Check NRS debug overlay for chain factors.';
+    } else if (hop) {
+      const nextIdx = parseInt(hop, 10);
+      status.textContent = 'Hop ' + hop + ' of 6, redirecting...';
+      if (nextIdx < 6) {
+        setTimeout(() => {
+          location.assign(hops[nextIdx]);
+        }, 80);
+      }
+    }
+
+    btn.addEventListener('click', () => {
+      status.textContent = 'Starting 6-hop chain...';
+      setTimeout(() => {
+        location.assign(hops[0]);
+      }, 80);
+    });
+  </script>
+</body>
+</html>
