@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Chain 01 - Direct Navigation (no chain)</title>
+  <style>
+    body { font-family: sans-serif; padding: 24px; }
+    a { display: inline-block; padding: 12px 18px; font-size: 16px; margin: 8px 4px; }
+    #status { border: 2px dashed #999; padding: 16px; margin-top: 18px; }
+  </style>
+</head>
+<body>
+  <h1>Chain 01: Direct Navigation (no redirect chain)</h1>
+  <p>This page was loaded directly. There is no multi-hop redirect chain leading here.</p>
+  <p><strong>Expected:</strong> No redirect chain NRS penalty should apply.
+     <code>nrs_redirect_chain_depth</code> and <code>nrs_redirect_via_known_redirector</code>
+     must NOT appear in NRS factors.</p>
+
+  <div id="status">
+    <a href="level1-basic-opacity.html" target="_blank">Open a new tab (should not trigger chain penalty)</a>
+    <br>
+    <a href="https://example.com" target="_blank">Cross-site link (chain factors should be absent)</a>
+  </div>
+
+  <p>If NRS debug overlay is enabled, verify that no redirect chain factors are listed.</p>
+</body>
+</html>

