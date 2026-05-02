@@ -159,6 +159,7 @@ export class SessionStateManager {
   readonly redirectChainData = new Map<number, RedirectChain>();
 
   private _hydrated = false;
+  private _hydratePromise: Promise<void> | null = null;
 
   /** Whether hydrate() has completed. */
   get hydrated(): boolean {
@@ -168,9 +169,16 @@ export class SessionStateManager {
   // -----------------------------------------------------------------------
   // Hydrate: load from session storage into in-memory Maps.
   // Called once at SW startup before processing events.
+  // Cached: subsequent calls return the same promise.
   // -----------------------------------------------------------------------
 
-  async hydrate(): Promise<void> {
+  hydrate(): Promise<void> {
+    if (this._hydratePromise) return this._hydratePromise;
+    this._hydratePromise = this._doHydrate();
+    return this._hydratePromise;
+  }
+
+  private async _doHydrate(): Promise<void> {
     try {
       const data = await chrome.storage.session.get(Object.values(KEYS));
 
@@ -199,23 +207,26 @@ export class SessionStateManager {
   // Persist: mirror in-memory state to session storage (fire-and-forget).
   // -----------------------------------------------------------------------
 
-  /** Persist a single Map to session storage. */
+  /** Persist a single Map to session storage. Skips write if not yet hydrated. */
   persistMap<V>(map: Map<number, V>, key: keyof typeof KEYS): void {
+    if (!this._hydrated) return;
     const storageKey = KEYS[key];
     void chrome.storage.session.set({ [storageKey]: mapToObj(map) }).catch((err) => {
       console.warn("[NavSentinel] session persist failed:", err);
     });
   }
 
-  /** Persist the readyTabs Set to session storage. */
+  /** Persist the readyTabs Set to session storage. Skips write if not yet hydrated. */
   persistReadyTabs(): void {
+    if (!this._hydrated) return;
     void chrome.storage.session.set({ [KEYS.readyTabs]: setToArray(this.readyTabs) }).catch((err) => {
       console.warn("[NavSentinel] session persist failed:", err);
     });
   }
 
-  /** Persist all state in a single batch write. Used during bulk cleanup. */
+  /** Persist all state in a single batch write. Skips write if not yet hydrated. */
   persistAll(): void {
+    if (!this._hydrated) return;
     const data: Record<string, unknown> = {
       [KEYS.allowUntil]: mapToObj(this.allowUntilByTab),
       [KEYS.gestureUntil]: mapToObj(this.gestureUntilByTab),
