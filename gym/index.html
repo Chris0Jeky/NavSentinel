@@ -102,6 +102,15 @@
     <li><a href="evasion-11-shadow-dom.html">Evasion 11 - shadow DOM hiding</a></li>
   </ol>
 
+  <h2>PushState Abuse</h2>
+  <p>These fixtures test detection of suspicious history.pushState/replaceState URL manipulation after user gestures.</p>
+
+  <ol>
+    <li><a href="pushstate-01-suspicious.html">PushState 01 - domain-like path after click</a></li>
+    <li><a href="pushstate-02-rapid-change.html">PushState 02 - rapid-fire pushState burst</a></li>
+    <li><a href="pushstate-03-legit-spa.html">PushState 03 - legitimate SPA navigation (false positive check)</a></li>
+  </ol>
+
   <p class="note">Run with <code>npm run gym:serve</code> from the repo root, or <code>python -m http.server 5173</code> from the <code>gym</code> folder.</p>
 </body>
 </html>

@@ -906,10 +906,12 @@ function pathLooksCrossOrigin(newUrl: string): boolean {
 
     const segments = parsed.pathname.split("/").filter(Boolean);
     const currentHost = location.hostname.toLowerCase();
-    for (const seg of segments) {
-      // A segment that contains a dot and looks like a domain
-      if (seg.includes(".") && /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i.test(seg)) {
-        // If it differs from the current host, it is suspicious
+    for (const rawSeg of segments) {
+      const seg = decodeURIComponent(rawSeg);
+      const dots = seg.split(".").length - 1;
+      // Require 2+ dots to distinguish real domains (accounts.google.com)
+      // from file names (style.css), version strings (v1.2.3), etc.
+      if (dots >= 2 && /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i.test(seg)) {
         if (seg.toLowerCase() !== currentHost) {
           return true;
         }

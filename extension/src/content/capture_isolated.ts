@@ -283,6 +283,9 @@ function handleBridgeMessage(message: unknown): void {
     ts?: number;
     contentLength?: number;
     looksLikeCommand?: boolean;
+    // PushState abuse metadata (ns-pushstate-suspicious)
+    reason?: string;
+    method?: string;
   };
   if (!data || data.source !== NS_SOURCE || data.v !== PROTOCOL_VERSION) return;
   if (data.session !== bridgeSession) return;
@@ -377,7 +380,7 @@ function handleBridgeMessage(message: unknown): void {
         kind: "pushstate_abuse",
         site: siteKeyFromLocation(),
         url: typeof data.url === "string" ? data.url : location.href,
-        reasons: [typeof (data as any).reason === "string" ? (data as any).reason : "unknown"],
+        reasons: [typeof data.reason === "string" ? data.reason : "unknown"],
       });
     }
     return;

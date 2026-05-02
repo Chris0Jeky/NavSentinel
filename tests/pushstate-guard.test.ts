@@ -53,20 +53,7 @@ describe("pushstate_guard", () => {
         ts: oldTs,
         url: "/accounts.chase.com/login",
       });
-      // The internal state stores the ts from the message, but
-      // isPushStateAbuseActive uses Date.now(), so with a ts of
-      // 11 seconds ago the signal should be stale.
-      // However, the implementation stores the ts as-is. Let's
-      // check that the state was set and test the actual TTL logic.
-      // The module stores the ts from data, so set it to old time:
-      _resetPushStateState();
-      // Simulate old detection by manipulating via a recent ts
-      // and checking the returned value is true.
-      handlePushStateBridgeMessage("ns-pushstate-suspicious", {
-        ts: Date.now(),
-        url: "/accounts.chase.com/login",
-      });
-      expect(isPushStateAbuseActive()).toBe(true);
+      expect(isPushStateAbuseActive()).toBe(false);
     });
 
     it("returns false after reset", () => {
