@@ -83,6 +83,25 @@ let forwardCheckInFlight = false;
 let forwardCheckTimer = 0;
 let gestureNavAttempts = 0;
 let gestureDownId: number | null = null;
+let cachedChainDepth = 0;
+let cachedChainViaKnownRedirector = false;
+let chainInfoFetchedAt = 0;
+
+function refreshChainInfo(): void {
+  if (window.top !== window) return;
+  try {
+    chrome.runtime.sendMessage({ type: "ns-get-redirect-chain" }, (resp) => {
+      if (chrome.runtime.lastError) return;
+      if (resp && typeof resp.depth === "number") {
+        cachedChainDepth = resp.depth;
+        cachedChainViaKnownRedirector = !!resp.viaKnownRedirector;
+        chainInfoFetchedAt = Date.now();
+      }
+    });
+  } catch {
+    // ignore -- SW may not be reachable
+  }
+}
 
 function markMainGuardReady(): void {
   if (bridgeRetryTimer) {
@@ -161,6 +180,7 @@ async function initSettings() {
     } catch {
       // ignore
     }
+    refreshChainInfo();
   }
 }
 
@@ -816,10 +836,11 @@ if (chrome?.runtime?.sendMessage && window.top === window) {
     });
   };
 
-  window.addEventListener("pageshow", () => runForward());
+  window.addEventListener("pageshow", () => { runForward(); refreshChainInfo(); });
   window.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
       runForward();
+      refreshChainInfo();
     }
   });
 
@@ -944,6 +965,11 @@ window.addEventListener(
         (destHost !== null && destHost !== destRegDomain && isKnownBadDomain(destHost))
       : false;
 
+    // Use cached redirect chain info if it was fetched recently (within 30s)
+    const chainInfoFresh = chainInfoFetchedAt > 0 && (Date.now() - chainInfoFetchedAt) < 30_000;
+    const chainDepth = chainInfoFresh ? cachedChainDepth : 0;
+    const chainViaRedirector = chainInfoFresh ? cachedChainViaKnownRedirector : false;
+
     const navCtx: NavigationContext = {
       isNewTabOrWindow: isBlankAnchor,
       isCrossSite,
@@ -954,6 +980,8 @@ window.addEventListener(
       explicitNewTabIntent: explicitNewTab,
       doubleClickHijackActive: dblClickHijack,
       knownBadDomain: destDomainBad,
+      redirectChainDepth: chainDepth > 0 ? chainDepth : undefined,
+      redirectViaKnownRedirector: chainViaRedirector ? true : undefined,
     };
 
     if (dblClickHijack) {
