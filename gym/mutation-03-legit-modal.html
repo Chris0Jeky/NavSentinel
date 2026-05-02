@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mutation 03 - Legitimate Cookie Consent Modal</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 24px;
+      max-width: 700px;
+    }
+    .description {
+      background: #d4edda;
+      border: 1px solid #28a745;
+      padding: 12px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+    }
+    .content {
+      line-height: 1.6;
+    }
+    a {
+      color: #1a73e8;
+    }
+    #status {
+      margin-top: 16px;
+      padding: 12px;
+      background: #f0f0f0;
+      border-radius: 6px;
+      font-family: monospace;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Mutation 03: Legitimate Cookie Consent Modal</h1>
+  <div class="description">
+    <strong>Scenario:</strong> A legitimate cookie consent banner appears 3 seconds
+    after page load. It uses <code>position: fixed</code> and covers a significant
+    portion of the viewport, but it is a standard consent dialog.
+    <br><br>
+    <strong>Expected:</strong> NavSentinel's mutation monitor should detect this as a
+    <code>post_load_overlay</code> signal but assign <strong>low</strong> severity
+    because it matches consent/cookie banner patterns.
+  </div>
+
+  <div class="content">
+    <h2>Welcome to Our Website</h2>
+    <p>
+      This is a normal content page. Lorem ipsum dolor sit amet, consectetur
+      adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna
+      aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris
+      nisi ut aliquip ex ea commodo consequat.
+    </p>
+    <p>
+      <a href="https://example.com/about">About Us</a> |
+      <a href="https://example.com/contact">Contact</a> |
+      <a href="https://example.com/privacy">Privacy Policy</a>
+    </p>
+  </div>
+
+  <div id="status">Cookie consent banner will appear in 3 seconds...</div>
+
+  <script>
+    (function () {
+      var statusEl = document.getElementById("status");
+      var shown = false;
+
+      setTimeout(function () {
+        if (shown) return;
+        shown = true;
+
+        // Inject a legitimate-looking cookie consent banner
+        var banner = document.createElement("div");
+        banner.id = "cookie-consent-banner";
+        banner.className = "cookie-notice";
+        banner.setAttribute("role", "dialog");
+        banner.setAttribute("aria-label", "Cookie consent");
+        banner.style.cssText = [
+          "position: fixed",
+          "bottom: 0",
+          "left: 0",
+          "width: 100%",
+          "min-height: 30vh",
+          "background: #fff",
+          "border-top: 2px solid #ddd",
+          "box-shadow: 0 -4px 12px rgba(0,0,0,0.15)",
+          "z-index: 10000",
+          "padding: 24px",
+          "box-sizing: border-box",
+          "font-family: sans-serif"
+        ].join(";");
+
+        banner.innerHTML = [
+          "<h3 style='margin-top:0'>We use cookies</h3>",
+          "<p>This website uses cookies to ensure you get the best experience. ",
+          "We use essential cookies for site functionality and analytics cookies ",
+          "to understand how you use our site. You can accept all cookies or ",
+          "customize your preferences.</p>",
+          "<p><a href='/privacy'>Read our Privacy Policy</a></p>",
+          "<div style='display:flex;gap:12px;margin-top:12px'>",
+          "  <button id='accept-cookies' style='background:#1a73e8;color:#fff;border:none;padding:10px 24px;border-radius:4px;cursor:pointer'>Accept All Cookies</button>",
+          "  <button id='reject-cookies' style='background:#f0f0f0;color:#333;border:1px solid #ccc;padding:10px 24px;border-radius:4px;cursor:pointer'>Essential Only</button>",
+          "  <button id='customize-cookies' style='background:transparent;color:#1a73e8;border:none;padding:10px 24px;cursor:pointer;text-decoration:underline'>Customize</button>",
+          "</div>"
+        ].join("");
+
+        document.body.appendChild(banner);
+
+        // Handle dismissal
+        var acceptBtn = document.getElementById("accept-cookies");
+        var rejectBtn = document.getElementById("reject-cookies");
+        if (acceptBtn) {
+          acceptBtn.addEventListener("click", function () {
+            banner.remove();
+            if (statusEl) {
+              statusEl.textContent = "Cookies accepted. Banner dismissed.";
+              statusEl.style.background = "#d4edda";
+            }
+          });
+        }
+        if (rejectBtn) {
+          rejectBtn.addEventListener("click", function () {
+            banner.remove();
+            if (statusEl) {
+              statusEl.textContent = "Essential cookies only. Banner dismissed.";
+              statusEl.style.background = "#d4edda";
+            }
+          });
+        }
+
+        if (statusEl) {
+          statusEl.textContent = "Cookie consent banner shown. This should be detected as low severity.";
+          statusEl.style.background = "#fff3cd";
+        }
+      }, 3000);
+    })();
+  </script>
+</body>
+</html>

