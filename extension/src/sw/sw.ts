@@ -1,5 +1,5 @@
 import { getRegistrableDomain } from "../shared/domain";
-import { initReputation, isKnownBadDomain } from "../shared/reputation";
+import { initReputation, isKnownBadDomain, reputationReady } from "../shared/reputation";
 import { getNavSettings, SUITE_SETTINGS_KEY } from "../shared/storage";
 
 const BASELINE_RULESET_ID = "baseline";
@@ -174,7 +174,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === "ns-reputation-check") {
     const domain = typeof message.domain === "string" ? message.domain : "";
-    sendResponse?.({ knownBad: domain ? isKnownBadDomain(domain) : false });
+    sendResponse?.({
+      knownBad: domain ? isKnownBadDomain(domain) : false,
+      filterReady: reputationReady(),
+    });
     return;
   }
 

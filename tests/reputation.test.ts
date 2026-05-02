@@ -444,57 +444,81 @@ describe("checkReputationViaMessage", () => {
     delete (globalThis as any).chrome;
   });
 
-  it("resolves true when SW responds knownBad: true", async () => {
+  it("resolves knownBad: true and filterReady: true when SW responds accordingly", async () => {
     sendMessageMock.mockImplementation((_msg: any, cb: any) => {
-      cb({ knownBad: true });
+      cb({ knownBad: true, filterReady: true });
     });
     const result = await checkReputationViaMessage("evil.example");
-    expect(result).toBe(true);
+    expect(result.knownBad).toBe(true);
+    expect(result.filterReady).toBe(true);
     expect(sendMessageMock).toHaveBeenCalledWith(
       { type: "ns-reputation-check", domain: "evil.example" },
       expect.any(Function)
     );
   });
 
-  it("resolves false when SW responds knownBad: false", async () => {
+  it("resolves knownBad: false, filterReady: true when domain is clean", async () => {
     sendMessageMock.mockImplementation((_msg: any, cb: any) => {
-      cb({ knownBad: false });
+      cb({ knownBad: false, filterReady: true });
     });
     const result = await checkReputationViaMessage("safe.example");
-    expect(result).toBe(false);
+    expect(result.knownBad).toBe(false);
+    expect(result.filterReady).toBe(true);
   });
 
-  it("resolves false when SW returns null response", async () => {
+  it("resolves knownBad: false, filterReady: false when SW returns null response", async () => {
     sendMessageMock.mockImplementation((_msg: any, cb: any) => {
       cb(null);
     });
     const result = await checkReputationViaMessage("any.example");
-    expect(result).toBe(false);
+    expect(result.knownBad).toBe(false);
+    expect(result.filterReady).toBe(false);
   });
 
-  it("resolves false when runtime.lastError is set", async () => {
+  it("resolves knownBad: false, filterReady: false when runtime.lastError is set", async () => {
     sendMessageMock.mockImplementation((_msg: any, cb: any) => {
       (globalThis as any).chrome.runtime.lastError = { message: "disconnected" };
       cb(undefined);
       (globalThis as any).chrome.runtime.lastError = null;
     });
     const result = await checkReputationViaMessage("any.example");
-    expect(result).toBe(false);
+    expect(result.knownBad).toBe(false);
+    expect(result.filterReady).toBe(false);
   });
 
-  it("resolves false when sendMessage throws", async () => {
+  it("resolves knownBad: false, filterReady: false when sendMessage throws", async () => {
     sendMessageMock.mockImplementation(() => {
       throw new Error("Extension context invalidated");
     });
     const result = await checkReputationViaMessage("any.example");
-    expect(result).toBe(false);
+    expect(result.knownBad).toBe(false);
+    expect(result.filterReady).toBe(false);
   });
 
-  it("resolves false when chrome.runtime is undefined", async () => {
+  it("resolves knownBad: false, filterReady: false when chrome.runtime is undefined", async () => {
     delete (globalThis as any).chrome;
     // Re-import is not needed; the function accesses chrome at call time
     // but the try/catch should handle the missing global.
     const result = await checkReputationViaMessage("any.example");
-    expect(result).toBe(false);
+    expect(result.knownBad).toBe(false);
+    expect(result.filterReady).toBe(false);
+  });
+
+  it("distinguishes 'domain clean' from 'filter not ready'", async () => {
+    // Filter not ready: SW responds without filterReady
+    sendMessageMock.mockImplementation((_msg: any, cb: any) => {
+      cb({ knownBad: false, filterReady: false });
+    });
+    const notReady = await checkReputationViaMessage("any.example");
+    expect(notReady.knownBad).toBe(false);
+    expect(notReady.filterReady).toBe(false);
+
+    // Filter ready, domain clean
+    sendMessageMock.mockImplementation((_msg: any, cb: any) => {
+      cb({ knownBad: false, filterReady: true });
+    });
+    const clean = await checkReputationViaMessage("safe.example");
+    expect(clean.knownBad).toBe(false);
+    expect(clean.filterReady).toBe(true);
   });
 });

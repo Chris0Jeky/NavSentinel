@@ -110,13 +110,16 @@ function refreshDebug(): void {
 /** Maximum .bin file size we will read (2 MB + 16-byte header, matching MAX_FILTER_BITS). */
 const MAX_REPUTATION_FILE_BYTES = 2 * 1024 * 1024 + 16;
 
-const isTopFrame = window === window.top;
+/** Safe top-frame check that won't throw in sandboxed iframes without allow-same-origin. */
+function isTopFrame(): boolean {
+  try { return window === window.top; } catch { return false; }
+}
 
 async function loadReputationFilter(): Promise<void> {
   // Only the top frame loads the bloom filter locally.
   // Child frames delegate reputation checks to the service worker via
   // checkReputationViaMessage(), avoiding duplicate ~117KB fetches.
-  if (!isTopFrame) return;
+  if (!isTopFrame()) return;
 
   try {
     const url = chrome.runtime.getURL("reputation_data.bin");
@@ -162,7 +165,7 @@ async function initSettings() {
   postToMain("ns-ping");
   // Load reputation bloom filter in the background (non-blocking)
   void loadReputationFilter();
-  if (window.top === window) {
+  if (isTopFrame()) {
     try {
       chrome.runtime.sendMessage({ type: "ns-ready" });
     } catch {
@@ -189,7 +192,7 @@ function siteKeyFromLocation(): string {
 }
 
 function frameKey(): string {
-  return window.top === window ? "top" : "frame";
+  return isTopFrame() ? "top" : "frame";
 }
 
 function postToMain(type: string, payload?: Record<string, unknown>): void {
@@ -509,7 +512,7 @@ function showRollbackPrompt(url: string): void {
 
 function handleRollback(url: string, prevUrl?: string): void {
   if (settings.defaultMode === "off") return;
-  if (window.top !== window) return;
+  if (!isTopFrame()) return;
   if (!url) return;
   const target = prevUrl && prevUrl !== url ? prevUrl : "";
   if (target) {
@@ -753,7 +756,7 @@ function showAllowPrompt(params: {
 if (chrome?.runtime?.onMessage) {
   chrome.runtime.onMessage.addListener((message) => {
     if (!message || message.type !== "ns-rollback") return;
-    if (window.top !== window) return;
+    if (!isTopFrame()) return;
     if (settings.defaultMode === "off") return;
     const url = typeof message.url === "string" ? message.url : "";
     const prevUrl = typeof message.prevUrl === "string" ? message.prevUrl : "";
@@ -762,7 +765,7 @@ if (chrome?.runtime?.onMessage) {
 
   chrome.runtime.onMessage.addListener((message) => {
     if (!message || message.type !== "ns-forward-offer") return;
-    if (window.top !== window) return;
+    if (!isTopFrame()) return;
     if (settings.defaultMode === "off") return;
     const url = typeof message.url === "string" ? message.url : "";
     if (!url) return;
@@ -772,12 +775,12 @@ if (chrome?.runtime?.onMessage) {
   // DoubleClickjacking: delegate to dblclick_guard module for
   // ns-dblclick-child-closed and ns-dblclick-opener-nav-from-child.
   chrome.runtime.onMessage.addListener((message) => {
-    if (window.top !== window) return;
+    if (!isTopFrame()) return;
     handleDblclickRuntimeMessage(message);
   });
 }
 
-if (chrome?.runtime?.sendMessage && window.top === window) {
+if (chrome?.runtime?.sendMessage && isTopFrame()) {
   // -- Rollback polling --
   const run = (retries = 4) => {
     chrome.runtime.sendMessage({ type: "ns-check-rollback" }, (resp) => {
@@ -947,6 +950,11 @@ window.addEventListener(
     // deep subdomains to evade registrable-domain-only checks.
     // In the top frame the filter is loaded locally for synchronous lookups.
     // Child frames skip loading and delegate to the SW asynchronously below.
+    //
+    // NOTE: In child frames, isKnownBadDomain() always returns false because
+    // the bloom filter is not loaded locally. The +50 knownBadDomain NRS
+    // factor is therefore absent. The async SW check below provides a
+    // best-effort late warning but cannot retroactively block.
     const destHost = parsed?.host ?? null;
     const destDomainBad = destRegDomain
       ? isKnownBadDomain(destRegDomain) ||
@@ -1057,7 +1065,7 @@ window.addEventListener(
     // Child frames don't load the bloom filter locally to save memory.
     // If the synchronous path allowed the navigation and we have a
     // cross-site destination, ask the SW for a deferred reputation check.
-    if (!isTopFrame && decision === "allow" && destRegDomain && isCrossSite && mode !== "off") {
+    if (!isTopFrame() && decision === "allow" && destRegDomain && isCrossSite && mode !== "off") {
       void (async () => {
         try {
           const checks = [checkReputationViaMessage(destRegDomain)];
@@ -1065,14 +1073,24 @@ window.addEventListener(
             checks.push(checkReputationViaMessage(destHost));
           }
           const results = await Promise.all(checks);
-          if (!results.some(Boolean)) return;
-          // Destination is known-bad -- show a late warning toast.
+          const anyBad = results.some((r) => r.knownBad);
+          const anyReady = results.some((r) => r.filterReady);
+          if (!anyBad) {
+            if (!anyReady && settings.debug) {
+              console.debug("[NavSentinel] Child-frame reputation check: filter not ready in SW");
+            }
+            return;
+          }
+          // Destination is known-bad -- late async check from child frame.
+          // The synchronous NRS path could not include the +50 knownBadDomain
+          // factor because the bloom filter is not loaded in child frames.
           const host = destHost ?? destRegDomain;
           appendEventSafely({
             kind: "nav_reputation_late_warn",
             site: siteKeyFromLocation(),
             url: parsed?.href ?? location.href,
             destHost: host,
+            reasons: ["late_async_child_frame"],
           });
           showToast({
             message: `NavSentinel: navigated to a known-bad domain (${host}).`,

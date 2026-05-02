@@ -301,27 +301,37 @@ export function reputationReady(): boolean {
   return _filter !== null;
 }
 
+export interface ReputationCheckResult {
+  knownBad: boolean;
+  filterReady: boolean;
+}
+
 /**
  * Ask the service worker to check a domain against the bloom filter.
  *
  * Used by child frames that do not load their own copy of the filter.
- * Returns false on any communication error (graceful degradation).
+ * Returns `{ knownBad: false, filterReady: false }` on any communication
+ * error (graceful degradation). Callers can inspect `filterReady` to
+ * distinguish "domain is clean" from "filter not loaded yet".
  */
-export function checkReputationViaMessage(domain: string): Promise<boolean> {
+export function checkReputationViaMessage(domain: string): Promise<ReputationCheckResult> {
   return new Promise((resolve) => {
     try {
       chrome.runtime.sendMessage(
         { type: "ns-reputation-check", domain },
         (response) => {
           if (chrome.runtime.lastError || !response) {
-            resolve(false);
+            resolve({ knownBad: false, filterReady: false });
             return;
           }
-          resolve(!!response.knownBad);
+          resolve({
+            knownBad: !!response.knownBad,
+            filterReady: !!response.filterReady,
+          });
         }
       );
     } catch {
-      resolve(false);
+      resolve({ knownBad: false, filterReady: false });
     }
   });
 }
