@@ -84,8 +84,9 @@ describe("NRS double-click hijack factor", () => {
         multipleAttemptsInGesture: true,
       })
     );
-    // 5 + 40 + 20 + 20 + 10 + 5 + 25 = 125
-    expect(result.nrs).toBe(125);
+    // Raw: 5 + 40 + 20 + 20 + 10 + 5 + 25 = 125
+    // Diminishing returns: 100 + (125 - 100) * 0.5 = 112.5
+    expect(result.nrs).toBe(112.5);
   });
 
   it("allowlist reduces double-click hijack score", () => {
