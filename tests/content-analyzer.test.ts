@@ -5,7 +5,6 @@ import {
   KIT_FINGERPRINTS,
   domainMatchesBrand,
   type PageSnapshot,
-  type ContentAnalysisResult,
 } from "../extension/src/content/content_analyzer";
 
 // ---------------------------------------------------------------------------
@@ -56,7 +55,7 @@ function loginSnapshot(opts: {
 // ---------------------------------------------------------------------------
 
 describe("content_analyzer - brand mismatch", () => {
-  it("detects Google branding on non-Google domain", () => {
+  it("detects Google branding on non-Google domain (title+img = 45)", () => {
     const snap = loginSnapshot({
       title: "Sign in - Google Accounts",
       imgSignals: "google logo.png",
@@ -64,17 +63,27 @@ describe("content_analyzer - brand mismatch", () => {
     const result = analyzeSnapshot(snap, "evil-phish.com");
     expect(result.brandMismatch).toBe(true);
     expect(result.brandDetected).toBe("Google");
-    expect(result.score).toBeGreaterThanOrEqual(45);
+    expect(result.score).toBe(45);
     expect(result.reasons.length).toBeGreaterThan(0);
+    expect(result.reasons[0]).toContain("title+img");
   });
 
-  it("detects Microsoft branding on non-Microsoft domain", () => {
+  it("detects Microsoft branding on non-Microsoft domain (title only = 30)", () => {
     const snap = loginSnapshot({
       title: "Sign in to your Microsoft account",
     });
     const result = analyzeSnapshot(snap, "evil-login.com");
     expect(result.brandMismatch).toBe(true);
     expect(result.brandDetected).toBe("Microsoft");
+    expect(result.score).toBe(30);
+  });
+
+  it("does NOT match Microsoft on generic 'sign in to your account' title", () => {
+    const snap = loginSnapshot({
+      title: "Sign in to your account",
+    });
+    const result = analyzeSnapshot(snap, "random-corp.com");
+    expect(result.brandMismatch).toBe(false);
   });
 
   it("detects PayPal branding on non-PayPal domain", () => {
@@ -87,7 +96,7 @@ describe("content_analyzer - brand mismatch", () => {
     expect(result.brandDetected).toBe("PayPal");
   });
 
-  it("detects brand from visible text even without title match", () => {
+  it("detects brand from bodyText only with weak score (+10)", () => {
     const snap = loginSnapshot({
       title: "Login Page",
       bodyText: "welcome to netflix sign in to continue watching.",
@@ -95,9 +104,11 @@ describe("content_analyzer - brand mismatch", () => {
     const result = analyzeSnapshot(snap, "stream-login.com");
     expect(result.brandMismatch).toBe(true);
     expect(result.brandDetected).toBe("Netflix");
+    expect(result.score).toBe(10);
+    expect(result.reasons[0]).toContain("bodyText");
   });
 
-  it("detects brand from image alt text", () => {
+  it("detects brand from image alt text with img-only score (+15)", () => {
     const snap = loginSnapshot({
       title: "Login",
       imgSignals: "amazon logo fake-logo.png",
@@ -105,6 +116,8 @@ describe("content_analyzer - brand mismatch", () => {
     const result = analyzeSnapshot(snap, "amaz0n-login.com");
     expect(result.brandMismatch).toBe(true);
     expect(result.brandDetected).toBe("Amazon");
+    expect(result.score).toBe(15);
+    expect(result.reasons[0]).toContain("img");
   });
 
   it("does NOT flag brand mismatch on legitimate Google domain", () => {
@@ -135,11 +148,19 @@ describe("content_analyzer - brand mismatch", () => {
   });
 
   it("detects multiple bank brands", () => {
+    // Chase requires "Chase Bank" / "Chase Online" / "Chase.com" in title
+    // because "chase" is a common English word.
+    const bankTitles: Record<string, string> = {
+      "Wells Fargo": "wells fargo online banking",
+      "Chase": "chase bank online banking",
+      "Bank of America": "bank of america online banking",
+      "Citibank": "citibank online banking",
+    };
     for (const brandName of ["Wells Fargo", "Chase", "Bank of America", "Citibank"]) {
       const brand = BRAND_DB.find((b) => b.name === brandName);
       expect(brand).toBeDefined();
       const snap = loginSnapshot({
-        title: `${brandName} Online Banking`.toLowerCase(),
+        title: bankTitles[brandName]!,
         bodyText: `welcome to ${brandName}`.toLowerCase(),
       });
       const result = analyzeSnapshot(snap, "fake-bank.com");
@@ -334,21 +355,21 @@ describe("content_analyzer - suspicious form actions", () => {
 // ---------------------------------------------------------------------------
 
 describe("content_analyzer - unrecognized domain login", () => {
-  it("adds score for login-titled page on unknown domain", () => {
+  it("adds small score (+5) for login-titled page on unknown domain", () => {
     const snap = loginSnapshot({
       title: "sign in - secure portal",
     });
     const result = analyzeSnapshot(snap, "random-unknown-site.com");
-    expect(result.score).toBeGreaterThanOrEqual(15);
+    expect(result.score).toBe(5);
     expect(result.reasons.some((r) => r.includes("unrecognized domain"))).toBe(true);
   });
 
-  it("adds score for page with 'Log in' title on unknown domain", () => {
+  it("adds small score (+5) for page with 'Log in' title on unknown domain", () => {
     const snap = loginSnapshot({
       title: "log in - secure access",
     });
     const result = analyzeSnapshot(snap, "phishy-site.net");
-    expect(result.score).toBeGreaterThanOrEqual(15);
+    expect(result.score).toBe(5);
   });
 
   it("does NOT flag login page on known brand domain", () => {
@@ -543,20 +564,24 @@ describe("content_analyzer - edge cases", () => {
     expect(result.brandMismatch).toBe(false);
   });
 
-  it("score never exceeds 100", () => {
+  it("score never exceeds 100 even with max signals", () => {
+    // title+img brand mismatch (45) + phishing kit (40) + suspicious form (25) = 110 -> capped at 100
     const snap: PageSnapshot = {
       title: "sign in - google accounts",
       bodyText: "google paypal netflix",
-      htmlSnippet: '<script>var evilginx_config = {}; var telegram_bot = "x";</script><form action="data:evil"><input type="password" /></form>',
-      scriptText: 'var evilginx_config = {}; var telegram_bot = "x";',
+      htmlSnippet: '<div class="login-16shop"><form action="data:evil"><input type="password" /></form></div>',
+      scriptText: "",
       imgSignals: "google",
       hasPasswordField: true,
       formActions: [{ action: "data:text/html;base64,evil", hasPassword: true }],
-      metaTags: [{ name: "generator", content: "gophish" }],
+      metaTags: [],
       matchedSelectors: [".login-16shop"],
     };
     const result = analyzeSnapshot(snap, "evil-phish.com");
     expect(result.score).toBeLessThanOrEqual(100);
+    expect(result.brandMismatch).toBe(true);
+    expect(result.phishingKitMatch).toBe(true);
+    expect(result.suspiciousFormAction).toBe(true);
   });
 
   it("does not crash on formAction with invalid URL characters", () => {
@@ -565,5 +590,186 @@ describe("content_analyzer - edge cases", () => {
     });
     const result = analyzeSnapshot(snap, "example.com");
     expect(result).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tiered brand scoring
+// ---------------------------------------------------------------------------
+
+describe("content_analyzer - tiered brand scoring", () => {
+  it("title + img match = 45 (strongest tier)", () => {
+    const snap = loginSnapshot({
+      title: "Sign in - Google Accounts",
+      imgSignals: "google logo.png",
+    });
+    const result = analyzeSnapshot(snap, "evil.com");
+    expect(result.score).toBe(45);
+    expect(result.reasons[0]).toContain("title+img");
+  });
+
+  it("title only = 30", () => {
+    const snap = loginSnapshot({
+      title: "Sign in - Google Accounts",
+    });
+    const result = analyzeSnapshot(snap, "evil.com");
+    expect(result.score).toBe(30);
+    expect(result.reasons[0]).toContain("title");
+  });
+
+  it("img only = 15", () => {
+    const snap = loginSnapshot({
+      title: "Login",
+      imgSignals: "paypal logo.png",
+    });
+    const result = analyzeSnapshot(snap, "evil.com");
+    expect(result.score).toBe(15);
+    expect(result.reasons[0]).toContain("img");
+  });
+
+  it("bodyText only = 10 (weakest tier)", () => {
+    const snap = loginSnapshot({
+      title: "Login",
+      bodyText: "sign in with google to continue",
+    });
+    const result = analyzeSnapshot(snap, "evil.com");
+    expect(result.score).toBe(10);
+    expect(result.reasons[0]).toContain("bodyText");
+  });
+
+  it("title + bodyText = 30 (title dominates)", () => {
+    const snap = loginSnapshot({
+      title: "PayPal - Log in",
+      bodyText: "paypal secure login",
+    });
+    const result = analyzeSnapshot(snap, "evil.com");
+    expect(result.score).toBe(30);
+    expect(result.reasons[0]).toContain("title+bodyText");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Common-word brand suppression (apple, adobe, chase)
+// ---------------------------------------------------------------------------
+
+describe("content_analyzer - common-word brand suppression", () => {
+  it("does NOT flag 'apple' from bodyText alone", () => {
+    const snap = loginSnapshot({
+      title: "Login",
+      bodyText: "buy the latest apple products here",
+    });
+    const result = analyzeSnapshot(snap, "fruit-store.com");
+    expect(result.brandMismatch).toBe(false);
+  });
+
+  it("does NOT flag 'adobe' from bodyText alone", () => {
+    const snap = loginSnapshot({
+      title: "Login",
+      bodyText: "made with adobe photoshop",
+    });
+    const result = analyzeSnapshot(snap, "design-blog.com");
+    expect(result.brandMismatch).toBe(false);
+  });
+
+  it("does NOT flag 'chase' from bodyText alone", () => {
+    const snap = loginSnapshot({
+      title: "Login",
+      bodyText: "chase your dreams today",
+    });
+    const result = analyzeSnapshot(snap, "motivation-site.com");
+    expect(result.brandMismatch).toBe(false);
+  });
+
+  it("DOES flag Apple when title matches Apple ID", () => {
+    const snap = loginSnapshot({
+      title: "Apple ID - Sign In",
+      bodyText: "apple id sign in",
+    });
+    const result = analyzeSnapshot(snap, "evil-apple.com");
+    expect(result.brandMismatch).toBe(true);
+    expect(result.brandDetected).toBe("Apple");
+  });
+
+  it("DOES flag Adobe when title matches", () => {
+    const snap = loginSnapshot({
+      title: "Adobe Sign In",
+      bodyText: "sign in to your adobe account",
+    });
+    const result = analyzeSnapshot(snap, "evil-adobe.com");
+    expect(result.brandMismatch).toBe(true);
+    expect(result.brandDetected).toBe("Adobe");
+  });
+
+  it("DOES flag Chase when title says 'Chase Bank'", () => {
+    const snap = loginSnapshot({
+      title: "Chase Bank Online",
+      bodyText: "welcome to chase",
+    });
+    const result = analyzeSnapshot(snap, "evil-chase.com");
+    expect(result.brandMismatch).toBe(true);
+    expect(result.brandDetected).toBe("Chase");
+  });
+
+  it("does NOT flag Chase on bare 'chase' in title", () => {
+    const snap = loginSnapshot({
+      title: "The Great Chase - Login",
+      bodyText: "chase the prize",
+    });
+    const result = analyzeSnapshot(snap, "game-site.com");
+    // "chase" alone in title should NOT match the narrowed pattern
+    expect(result.brandDetected).not.toBe("Chase");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Hidden-Input-Harvester narrowed
+// ---------------------------------------------------------------------------
+
+describe("content_analyzer - Hidden-Input-Harvester narrowed", () => {
+  it("does NOT flag standard CSRF token hidden inputs", () => {
+    const snap = loginSnapshot({
+      matchedSelectors: ['input[type="hidden"][name*="token"]'],
+      htmlSnippet: '<form><input type="hidden" name="csrf_token" value="abc123" /><input type="password" /></form>',
+    });
+    const result = analyzeSnapshot(snap, "legit-site.com");
+    // The narrowed fingerprint no longer has selectors, so this should not trigger
+    expect(result.phishingKitMatch).toBe(false);
+  });
+
+  it("DOES flag pages containing 'harvester' keyword", () => {
+    const snap = loginSnapshot({
+      htmlSnippet: '<div class="harvester-panel"><form><input type="password" /></form></div>',
+    });
+    const result = analyzeSnapshot(snap, "phish.com");
+    expect(result.phishingKitMatch).toBe(true);
+    expect(result.kitName).toBe("Hidden-Input-Harvester");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SSO / social login false-positive guards
+// ---------------------------------------------------------------------------
+
+describe("content_analyzer - SSO and social login FP guards", () => {
+  it("bodyText mention of 'google' with password does NOT give high score", () => {
+    // Simulates an SSO page that says "Sign in with Google" but is a
+    // legitimate third-party site.
+    const snap = loginSnapshot({
+      title: "My App - Login",
+      bodyText: "sign in with google or facebook to continue",
+    });
+    const result = analyzeSnapshot(snap, "myapp.com");
+    // bodyText only => 10 (Google wins because it appears first in DB)
+    expect(result.score).toBeLessThanOrEqual(10);
+  });
+
+  it("'Pay with PayPal' button text does NOT trigger high score", () => {
+    const snap = loginSnapshot({
+      title: "Checkout - My Store",
+      bodyText: "pay with paypal or credit card",
+    });
+    const result = analyzeSnapshot(snap, "mystore.com");
+    // bodyText only => 10
+    expect(result.score).toBeLessThanOrEqual(10);
   });
 });

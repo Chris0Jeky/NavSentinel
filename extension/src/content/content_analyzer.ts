@@ -37,7 +37,7 @@ export interface PageSnapshot {
   title: string;
   /** Body text content (first ~5000 chars) */
   bodyText: string;
-  /** Full innerHTML of <html> (first ~50000 chars) */
+  /** Full innerHTML of <html> (first ~10000 chars) */
   htmlSnippet: string;
   /** Concatenated inline script text (first ~30000 chars) */
   scriptText: string;
@@ -61,7 +61,13 @@ export interface BrandEntry {
   name: string;
   domains: string[];
   titlePatterns: RegExp[];
-  formActionDomains?: string[];
+  /**
+   * When true, the brand name is a common English word (e.g. "apple",
+   * "adobe", "chase") and bodyText-only matches must be suppressed to
+   * avoid false positives.  These brands require a title or imgSignals
+   * match before bodyText is considered.
+   */
+  commonWord?: boolean;
 }
 
 export const BRAND_DB: ReadonlyArray<BrandEntry> = [
@@ -69,121 +75,106 @@ export const BRAND_DB: ReadonlyArray<BrandEntry> = [
     name: "Google",
     domains: ["google.com", "accounts.google.com", "googleapis.com", "googlemail.com", "gmail.com"],
     titlePatterns: [/\bgoogle\b/i, /\bgmail\b/i, /\bsign\s*in\s*[-–]\s*google/i],
-    formActionDomains: ["google.com", "googleapis.com"],
   },
   {
     name: "Microsoft",
     domains: ["microsoft.com", "live.com", "outlook.com", "microsoftonline.com", "office.com", "office365.com"],
-    titlePatterns: [/\bmicrosoft\b/i, /\boutlook\b/i, /\boffice\s*365\b/i, /\bsign\s*in\s*to\s*your\s*account/i],
-    formActionDomains: ["microsoft.com", "microsoftonline.com", "live.com"],
+    // Brand-specific -- the old generic "sign in to your account" matched any login page.
+    titlePatterns: [/\bmicrosoft\b/i, /\boutlook\b/i, /\boffice\s*365\b/i, /\bmicrosoft\b.*sign\s*in|sign\s*in.*\bmicrosoft\b/i],
   },
   {
     name: "Apple",
     domains: ["apple.com", "icloud.com", "appleid.apple.com"],
     titlePatterns: [/\bapple\s*id\b/i, /\bicloud\b/i, /\bsign\s*in.*apple/i],
-    formActionDomains: ["apple.com", "icloud.com"],
+    commonWord: true,
   },
   {
     name: "Amazon",
     domains: ["amazon.com", "amazon.co.uk", "amazon.de", "amazon.fr", "amazon.co.jp", "amazonaws.com"],
     titlePatterns: [/\bamazon\b/i, /\bamazon\s*sign[\s-]*in\b/i],
-    formActionDomains: ["amazon.com"],
   },
   {
     name: "PayPal",
     domains: ["paypal.com", "paypal.me"],
     titlePatterns: [/\bpaypal\b/i, /\blog\s*in\s*to\s*paypal\b/i],
-    formActionDomains: ["paypal.com"],
   },
   {
     name: "Netflix",
     domains: ["netflix.com"],
     titlePatterns: [/\bnetflix\b/i, /\bsign\s*in.*netflix/i],
-    formActionDomains: ["netflix.com"],
   },
   {
     name: "Facebook",
     domains: ["facebook.com", "fb.com", "facebookcorewwwi.onion"],
     titlePatterns: [/\bfacebook\b/i, /\blog\s*in.*facebook/i],
-    formActionDomains: ["facebook.com", "fb.com"],
   },
   {
     name: "Instagram",
     domains: ["instagram.com"],
     titlePatterns: [/\binstagram\b/i, /\blog\s*in.*instagram/i],
-    formActionDomains: ["instagram.com"],
   },
   {
     name: "Twitter",
     domains: ["twitter.com", "x.com"],
     titlePatterns: [/\btwitter\b/i, /\b(?:log\s*in|sign\s*in).*(?:twitter|x\.com)/i],
-    formActionDomains: ["twitter.com", "x.com"],
   },
   {
     name: "LinkedIn",
     domains: ["linkedin.com"],
     titlePatterns: [/\blinkedin\b/i, /\bsign\s*in.*linkedin/i],
-    formActionDomains: ["linkedin.com"],
   },
   {
     name: "Dropbox",
     domains: ["dropbox.com"],
     titlePatterns: [/\bdropbox\b/i, /\bsign\s*in.*dropbox/i],
-    formActionDomains: ["dropbox.com"],
   },
   {
     name: "Adobe",
     domains: ["adobe.com", "adobelogin.com"],
     titlePatterns: [/\badobe\b/i, /\bsign\s*in.*adobe/i],
-    formActionDomains: ["adobe.com"],
+    commonWord: true,
   },
   {
     name: "Yahoo",
     domains: ["yahoo.com", "yahooapis.com"],
     titlePatterns: [/\byahoo\b/i, /\bsign\s*in.*yahoo/i],
-    formActionDomains: ["yahoo.com"],
   },
   {
     name: "Wells Fargo",
     domains: ["wellsfargo.com"],
     titlePatterns: [/\bwells\s*fargo\b/i, /\bsign\s*on.*wells\s*fargo/i],
-    formActionDomains: ["wellsfargo.com"],
   },
   {
     name: "Chase",
     domains: ["chase.com"],
-    titlePatterns: [/\bchase\b/i, /\bsign\s*in.*chase/i, /\bjpmorgan\s*chase\b/i],
-    formActionDomains: ["chase.com"],
+    // "chase" alone is a common English word -- require adjacent banking context.
+    titlePatterns: [/\bchase\s*(bank|online|\.com)/i, /\bjpmorgan\s*chase\b/i, /\bsign\s*in.*chase\s*(bank|online|\.com)/i],
+    commonWord: true,
   },
   {
     name: "Bank of America",
     domains: ["bankofamerica.com", "bofa.com"],
     titlePatterns: [/\bbank\s*of\s*america\b/i, /\bbofa\b/i, /\bsign\s*in.*bank\s*of\s*america/i],
-    formActionDomains: ["bankofamerica.com"],
   },
   {
     name: "Citibank",
     domains: ["citibank.com", "citi.com", "citibankonline.com"],
     titlePatterns: [/\bcitibank\b/i, /\bciti\b/i, /\bsign\s*on.*citi/i],
-    formActionDomains: ["citibank.com", "citi.com"],
   },
   {
     name: "USPS",
     domains: ["usps.com"],
     titlePatterns: [/\busps\b/i, /\bunited\s*states\s*postal/i],
-    formActionDomains: ["usps.com"],
   },
   {
     name: "DHL",
     domains: ["dhl.com", "dhl.de"],
     titlePatterns: [/\bdhl\b/i, /\bsign\s*in.*dhl/i],
-    formActionDomains: ["dhl.com"],
   },
   {
     name: "FedEx",
     domains: ["fedex.com"],
     titlePatterns: [/\bfedex\b/i, /\bsign\s*in.*fedex/i],
-    formActionDomains: ["fedex.com"],
   },
 ];
 
@@ -325,7 +316,8 @@ export const KIT_FINGERPRINTS: ReadonlyArray<KitFingerprint> = [
   },
   {
     name: "Hidden-Input-Harvester",
-    selectors: ['input[type="hidden"][name*="token"]', 'input[type="hidden"][name*="session"]'],
+    // Standard CSRF tokens and session IDs are normal -- only flag the
+    // "harvester" keyword which is specific to phishing kits.
     htmlPatterns: [/harvester/i],
   },
   {
@@ -395,8 +387,8 @@ export function buildPageSnapshot(doc: Document): PageSnapshot {
     ? (body.innerText ?? body.textContent ?? "").slice(0, 5000).toLowerCase()
     : "";
 
-  // HTML snippet
-  const htmlSnippet = doc.documentElement.innerHTML.slice(0, 50000);
+  // HTML snippet -- limited to 10 KB to avoid serializing the entire DOM
+  const htmlSnippet = doc.documentElement.innerHTML.slice(0, 10000);
 
   // Script text
   const scripts = doc.querySelectorAll("script");
@@ -473,26 +465,74 @@ export function buildPageSnapshot(doc: Document): PageSnapshot {
 // Brand detection (pure -- operates on snapshot)
 // ---------------------------------------------------------------------------
 
-function detectBrand(snapshot: PageSnapshot, currentDomain: string): BrandEntry | null {
+/** Signal tiers: which evidence channels matched for a brand. */
+export interface BrandSignal {
+  brand: BrandEntry;
+  titleMatch: boolean;
+  imgMatch: boolean;
+  bodyTextMatch: boolean;
+  /** Tiered score contribution:
+   *  title+img = 45, title only = 30, bodyText only = 10, img only = 15 */
+  score: number;
+}
+
+function detectBrand(snapshot: PageSnapshot, currentDomain: string): BrandSignal | null {
+  let best: BrandSignal | null = null;
+
   for (let i = 0; i < BRAND_DB.length; i++) {
     const brand = BRAND_DB[i]!;
     // Skip if current domain belongs to this brand
     if (domainMatchesBrand(currentDomain, brand)) continue;
 
+    let titleMatch = false;
+    let imgMatch = false;
+    let bodyTextMatch = false;
+
     // Check title patterns
     for (let j = 0; j < brand.titlePatterns.length; j++) {
-      if (brand.titlePatterns[j]!.test(snapshot.title)) return brand;
+      if (brand.titlePatterns[j]!.test(snapshot.title)) {
+        titleMatch = true;
+        break;
+      }
     }
 
-    // Check visible text for brand name
+    // Check image signals (favicon / logo src / alt text)
     const brandLower = brand.name.toLowerCase();
-    if (snapshot.bodyText.includes(brandLower)) return brand;
+    if (snapshot.imgSignals.includes(brandLower)) {
+      imgMatch = true;
+    }
 
-    // Check image signals
-    if (snapshot.imgSignals.includes(brandLower)) return brand;
+    // Check visible body text for brand name.
+    // For common-word brands (apple, adobe, chase) bodyText alone is
+    // suppressed -- they need at least a title or img match first.
+    if (snapshot.bodyText.includes(brandLower)) {
+      if (!brand.commonWord || titleMatch || imgMatch) {
+        bodyTextMatch = true;
+      }
+    }
+
+    // At least one signal must fire
+    if (!titleMatch && !imgMatch && !bodyTextMatch) continue;
+
+    // Tiered scoring
+    let score: number;
+    if (titleMatch && imgMatch) {
+      score = 45; // strongest: title + favicon/logo
+    } else if (titleMatch) {
+      score = 30; // title only
+    } else if (imgMatch) {
+      score = 15; // img only
+    } else {
+      // bodyTextMatch only -- weak signal
+      score = 10;
+    }
+
+    if (!best || score > best.score) {
+      best = { brand, titleMatch, imgMatch, bodyTextMatch, score };
+    }
   }
 
-  return null;
+  return best;
 }
 
 // ---------------------------------------------------------------------------
@@ -610,15 +650,19 @@ export function analyzeSnapshot(snapshot: PageSnapshot, currentDomain: string): 
     reasons: [],
   };
 
-  // 1. Brand / domain mismatch
+  // 1. Brand / domain mismatch (tiered scoring)
   if (snapshot.hasPasswordField) {
-    const brand = detectBrand(snapshot, currentDomain);
-    if (brand) {
+    const signal = detectBrand(snapshot, currentDomain);
+    if (signal) {
       result.brandMismatch = true;
-      result.brandDetected = brand.name;
-      result.score += 45;
+      result.brandDetected = signal.brand.name;
+      result.score += signal.score;
+      const channels: string[] = [];
+      if (signal.titleMatch) channels.push("title");
+      if (signal.imgMatch) channels.push("img");
+      if (signal.bodyTextMatch) channels.push("bodyText");
       result.reasons.push(
-        `Page references "${brand.name}" but domain "${currentDomain}" is not a known ${brand.name} domain`
+        `Page references "${signal.brand.name}" (${channels.join("+")}) but domain "${currentDomain}" is not a known ${signal.brand.name} domain`
       );
     }
   }
@@ -643,12 +687,13 @@ export function analyzeSnapshot(snapshot: PageSnapshot, currentDomain: string): 
   }
 
   // 4. Login form on unrecognizable domain mimicking branded flow
+  //    Kept at a very low score (+5) to avoid FPs on small-business login pages.
   if (snapshot.hasPasswordField && !result.brandMismatch) {
     const loginSignals = /(?:sign\s*in|log\s*in|password|authenticate|verify\s*(?:your|account)|secure\s*(?:login|access))/i;
     if (loginSignals.test(snapshot.title)) {
       const isKnown = BRAND_DB.some((b) => domainMatchesBrand(currentDomain, b));
       if (!isKnown) {
-        result.score += 15;
+        result.score += 5;
         result.reasons.push(
           "Login page on unrecognized domain uses branded login flow language"
         );
