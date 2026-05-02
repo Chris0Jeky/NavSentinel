@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import fc from "fast-check";
 import { computeCDS } from "../extension/src/shared/scoring";
 import type { ClickContext, ElementHint } from "../extension/src/shared/scoring";
+import { computeNRS } from "../extension/src/shared/nrs";
+import type { NavigationContext } from "../extension/src/shared/nrs";
+import type { ScoreResult } from "../extension/src/shared/scoring";
 
 /**
  * Arbitrary generators for scoring property tests.
@@ -252,6 +255,93 @@ describe("computeCDS property tests", () => {
         expect(a.reasonCodes).toEqual(b.reasonCodes);
       }),
       { numRuns: 200 }
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// NRS property tests (diminishing returns ceiling)
+// ---------------------------------------------------------------------------
+
+/**
+ * Arbitrary generator for NavigationContext.
+ * Uses stripUndefined to satisfy exactOptionalPropertyTypes.
+ */
+const arbNavigationContext: fc.Arbitrary<NavigationContext> = fc
+  .record(
+    {
+      isNewTabOrWindow: fc.boolean(),
+      isCrossSite: fc.boolean(),
+      timeSincePointerdownMs: fc.option(
+        fc.integer({ min: 0, max: 2000 }),
+        { nil: undefined }
+      ),
+      userActivationActive: fc.option(fc.boolean(), { nil: undefined }),
+      multipleAttemptsInGesture: fc.option(fc.boolean(), { nil: undefined }),
+      destinationAllowlisted: fc.option(fc.boolean(), { nil: undefined }),
+      explicitNewTabIntent: fc.option(fc.boolean(), { nil: undefined }),
+      doubleClickHijackActive: fc.option(fc.boolean(), { nil: undefined }),
+      knownBadDomain: fc.option(fc.boolean(), { nil: undefined }),
+      openerWindowPreviouslyAllowed: fc.option(fc.boolean(), { nil: undefined }),
+    },
+    { requiredKeys: ["isNewTabOrWindow", "isCrossSite"] }
+  )
+  .map(stripUndefined) as fc.Arbitrary<NavigationContext>;
+
+const arbScoreResult: fc.Arbitrary<ScoreResult> = fc.record({
+  cds: fc.integer({ min: 0, max: 165 }),
+  reasonCodes: fc.constant([] as string[]),
+});
+
+/** Compute raw additive NRS (no ceiling, no floor) for comparison. */
+function rawAdditiveNrs(cds: ScoreResult, nav: NavigationContext): number {
+  let raw = cds.cds;
+  if (nav.isNewTabOrWindow) raw += 20;
+  if (nav.isCrossSite) raw += 20;
+  if (nav.timeSincePointerdownMs !== undefined && nav.timeSincePointerdownMs <= 250) raw += 10;
+  if (nav.userActivationActive) raw += 5;
+  if (nav.multipleAttemptsInGesture) raw += 25;
+  if (nav.doubleClickHijackActive) raw += 40;
+  if (nav.destinationAllowlisted) raw -= 100;
+  if (nav.explicitNewTabIntent) raw -= 30;
+  if (nav.knownBadDomain) raw += 50;
+  if (nav.openerWindowPreviouslyAllowed) raw -= 20;
+  return raw;
+}
+
+describe("computeNRS property tests", () => {
+  it("NRS is always >= 0", () => {
+    fc.assert(
+      fc.property(arbScoreResult, arbNavigationContext, (cds, nav) => {
+        const result = computeNRS(cds, nav);
+        expect(result.nrs).toBeGreaterThanOrEqual(0);
+      }),
+      { numRuns: 500 }
+    );
+  });
+
+  it("NRS with diminishing returns is always <= raw additive NRS (floored)", () => {
+    fc.assert(
+      fc.property(arbScoreResult, arbNavigationContext, (cds, nav) => {
+        const result = computeNRS(cds, nav);
+        const raw = Math.max(0, rawAdditiveNrs(cds, nav));
+        expect(result.nrs).toBeLessThanOrEqual(raw);
+      }),
+      { numRuns: 500 }
+    );
+  });
+
+  it("diminishing returns only affect scores > 100", () => {
+    fc.assert(
+      fc.property(arbScoreResult, arbNavigationContext, (cds, nav) => {
+        const result = computeNRS(cds, nav);
+        const raw = rawAdditiveNrs(cds, nav);
+        // If raw <= 100, the effective score equals the floored raw
+        if (raw <= 100) {
+          expect(result.nrs).toBe(Math.max(0, raw));
+        }
+      }),
+      { numRuns: 500 }
     );
   });
 });

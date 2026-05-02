@@ -1,0 +1,77 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>OAuth 03 - Consent + Opener Manipulation (malicious)</title>
+  <style>
+    body { font-family: sans-serif; padding: 24px; }
+    button { padding: 12px 20px; font-size: 16px; margin: 8px 0; }
+    .warning { color: #c00; font-weight: bold; }
+    .status { margin-top: 16px; padding: 12px; background: #fff0f0; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>OAuth 03: Consent + Opener Manipulation</h1>
+  <p class="warning">MALICIOUS SCENARIO</p>
+  <p>
+    This simulates a combined attack where a malicious page:
+  </p>
+  <ol>
+    <li>Opens a popup that looks like an OAuth consent screen</li>
+    <li>The popup manipulates <code>window.opener.location</code> to navigate
+        the parent tab to a phishing page while the user is distracted</li>
+  </ol>
+  <p>
+    This combines OAuth consent phishing with DoubleClickjacking.
+    NavSentinel should detect both the OAuth flow and the opener manipulation,
+    stacking +45 (OAuth opener manipulation) with the existing +40
+    (DoubleClickjacking) for a combined NRS of 85+.
+  </p>
+
+  <button id="fake-consent">Authorize Application</button>
+
+  <div class="status" id="status">Status: waiting for user action</div>
+
+  <script>
+    const status = document.getElementById('status');
+
+    document.getElementById('fake-consent').addEventListener('click', () => {
+      status.textContent = 'Status: opening fake consent popup...';
+
+      // Open a popup that simulates an OAuth consent screen
+      const popup = window.open(
+        'about:blank',
+        'oauth-consent',
+        'popup,width=520,height=640'
+      );
+
+      if (popup) {
+        // Simulate writing a fake consent page
+        popup.document.write(`
+          <html>
+          <head><title>Authorization Required</title></head>
+          <body style="font-family:sans-serif;padding:24px">
+            <h2>Grant Permission</h2>
+            <p>This application wants access to your account.</p>
+            <button onclick="
+              // ATTACK: manipulate opener.location while user is in this popup
+              if (window.opener) {
+                window.opener.location = 'https://phishing-site.com/fake-login';
+              }
+              window.close();
+            ">Allow</button>
+            <button onclick="window.close()">Deny</button>
+          </body>
+          </html>
+        `);
+
+        status.textContent = 'Status: popup opened -- if user clicks Allow, '
+          + 'the popup will write to opener.location (attack). '
+          + 'NavSentinel should detect the opener manipulation during OAuth flow.';
+      } else {
+        status.textContent = 'Status: popup was blocked by the browser or NavSentinel.';
+      }
+    });
+  </script>
+</body>
+</html>

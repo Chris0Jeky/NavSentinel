@@ -17,6 +17,14 @@ export interface NavigationContext {
   redirectViaKnownRedirector?: boolean | undefined;
   /** Number of hops through known redirectors in the chain */
   knownRedirectorHops?: number | undefined;
+  /** OAuth callback redirected to an unexpected domain */
+  oauthRedirectMismatch?: boolean | undefined;
+  /** Opener manipulation detected during an active OAuth flow */
+  oauthOpenerManipulation?: boolean | undefined;
+  /** ClickFix scan score (0-60 range from scanForClickFix); 0 or undefined = no ClickFix signal */
+  clickfixScore?: number | undefined;
+  /** The user previously allowed the popup that opened this tab */
+  openerWindowPreviouslyAllowed?: boolean | undefined;
 }
 
 export interface NRSResult {
@@ -40,6 +48,14 @@ const NRS_WEIGHT_REDIRECT_CHAIN_CAP = 25;
 const NRS_WEIGHT_REDIRECT_CHAIN_THRESHOLD = 2;
 const NRS_WEIGHT_REDIRECT_KNOWN_REDIRECTOR = 15;
 const NRS_WEIGHT_REDIRECT_KNOWN_REDIRECTOR_CAP = 30;
+const NRS_WEIGHT_OAUTH_REDIRECT_MISMATCH = 30;
+const NRS_WEIGHT_OAUTH_OPENER_MANIPULATION = 45;
+const NRS_WEIGHT_CLICKFIX_CAP = 40;
+const NRS_WEIGHT_OPENER_PREVIOUSLY_ALLOWED = -20;
+
+/** Raw scores above this get 50% weight on the excess. */
+const NRS_DIMINISHING_RETURNS_THRESHOLD = 100;
+const NRS_DIMINISHING_RETURNS_FACTOR = 0.5;
 
 export const NRS_BLOCK_THRESHOLD = 70;
 export const NRS_STRICT_BLOCK_THRESHOLD = 50;
@@ -105,6 +121,42 @@ export function computeNRS(cdsResult: ScoreResult, navCtx: NavigationContext): N
     const redirectorScore = Math.min(redirectorHops * NRS_WEIGHT_REDIRECT_KNOWN_REDIRECTOR, NRS_WEIGHT_REDIRECT_KNOWN_REDIRECTOR_CAP);
     nrs += redirectorScore;
     nrsFactors.push("nrs_redirect_via_known_redirector");
+  }
+
+  if (navCtx.oauthRedirectMismatch) {
+    nrs += NRS_WEIGHT_OAUTH_REDIRECT_MISMATCH;
+    nrsFactors.push("nrs_oauth_redirect_mismatch");
+  }
+
+  // When both oauthOpenerManipulation and doubleClickHijackActive fire
+  // from the same event, use only the higher weight to avoid an overly
+  // aggressive combined +85. We still record the factor for diagnostics.
+  if (navCtx.oauthOpenerManipulation) {
+    if (navCtx.doubleClickHijackActive) {
+      const delta = NRS_WEIGHT_OAUTH_OPENER_MANIPULATION - NRS_WEIGHT_DOUBLE_CLICK_HIJACK;
+      if (delta > 0) {
+        nrs += delta;
+      }
+    } else {
+      nrs += NRS_WEIGHT_OAUTH_OPENER_MANIPULATION;
+    }
+    nrsFactors.push("nrs_oauth_opener_manipulation");
+  }
+
+  if (navCtx.clickfixScore !== undefined && navCtx.clickfixScore > 0) {
+    nrs += Math.min(navCtx.clickfixScore, NRS_WEIGHT_CLICKFIX_CAP);
+    nrsFactors.push("nrs_clickfix_active");
+  }
+
+  if (navCtx.openerWindowPreviouslyAllowed) {
+    nrs += NRS_WEIGHT_OPENER_PREVIOUSLY_ALLOWED;
+    nrsFactors.push("nrs_opener_previously_allowed");
+  }
+
+  // Diminishing returns: points above the threshold get reduced weight
+  if (nrs > NRS_DIMINISHING_RETURNS_THRESHOLD) {
+    nrs = NRS_DIMINISHING_RETURNS_THRESHOLD +
+      (nrs - NRS_DIMINISHING_RETURNS_THRESHOLD) * NRS_DIMINISHING_RETURNS_FACTOR;
   }
 
   nrs = Math.max(0, nrs);
