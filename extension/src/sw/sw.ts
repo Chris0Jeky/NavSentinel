@@ -1,7 +1,29 @@
 import { getRegistrableDomain } from "../shared/domain";
+import { initReputation, isKnownBadDomain } from "../shared/reputation";
 import { getNavSettings, SUITE_SETTINGS_KEY } from "../shared/storage";
 
 const BASELINE_RULESET_ID = "baseline";
+
+/** Maximum .bin file size we will read (2 MB + 16-byte header, matching MAX_FILTER_BITS). */
+const MAX_REPUTATION_FILE_BYTES = 2 * 1024 * 1024 + 16;
+
+/** Load the bloom filter into SW memory so child frames can query via message. */
+async function loadReputationFilter(): Promise<void> {
+  try {
+    const url = chrome.runtime.getURL("reputation_data.bin");
+    const response = await fetch(url);
+    if (!response.ok) return;
+    const cl = response.headers.get("content-length");
+    if (cl && Number(cl) > MAX_REPUTATION_FILE_BYTES) return;
+    const data = await response.arrayBuffer();
+    if (data.byteLength > MAX_REPUTATION_FILE_BYTES) return;
+    initReputation(data);
+  } catch {
+    // Graceful degradation: reputation checks via SW will return false
+  }
+}
+
+void loadReputationFilter();
 const NAV_ALLOW_TTL_MS = 1500;
 const NAV_GESTURE_TTL_MS = 1500;
 const NAV_TARGET_ALLOW_TTL_MS = 10000;
@@ -149,6 +171,12 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message !== "object") return;
+
+  if (message.type === "ns-reputation-check") {
+    const domain = typeof message.domain === "string" ? message.domain : "";
+    sendResponse?.({ knownBad: domain ? isKnownBadDomain(domain) : false });
+    return;
+  }
 
   if (message.type === "ns-allow-nav") {
     const tabId = sender.tab?.id;

@@ -300,3 +300,28 @@ export function isKnownBadDomain(domain: string): boolean {
 export function reputationReady(): boolean {
   return _filter !== null;
 }
+
+/**
+ * Ask the service worker to check a domain against the bloom filter.
+ *
+ * Used by child frames that do not load their own copy of the filter.
+ * Returns false on any communication error (graceful degradation).
+ */
+export function checkReputationViaMessage(domain: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    try {
+      chrome.runtime.sendMessage(
+        { type: "ns-reputation-check", domain },
+        (response) => {
+          if (chrome.runtime.lastError || !response) {
+            resolve(false);
+            return;
+          }
+          resolve(!!response.knownBad);
+        }
+      );
+    } catch {
+      resolve(false);
+    }
+  });
+}

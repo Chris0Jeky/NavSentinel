@@ -13,7 +13,7 @@ import { getRegistrableDomain } from "../shared/domain";
 import { areSameOrganization } from "../shared/domain_groups";
 import { computeNRS, NRS_BLOCK_THRESHOLD, NRS_STRICT_BLOCK_THRESHOLD } from "../shared/nrs";
 import type { NavigationContext } from "../shared/nrs";
-import { initReputation, isKnownBadDomain } from "../shared/reputation";
+import { initReputation, isKnownBadDomain, checkReputationViaMessage } from "../shared/reputation";
 import { showToast } from "./ui_toast";
 import {
   buildClickContextFromEvents,
@@ -110,7 +110,14 @@ function refreshDebug(): void {
 /** Maximum .bin file size we will read (2 MB + 16-byte header, matching MAX_FILTER_BITS). */
 const MAX_REPUTATION_FILE_BYTES = 2 * 1024 * 1024 + 16;
 
+const isTopFrame = window === window.top;
+
 async function loadReputationFilter(): Promise<void> {
+  // Only the top frame loads the bloom filter locally.
+  // Child frames delegate reputation checks to the service worker via
+  // checkReputationViaMessage(), avoiding duplicate ~117KB fetches.
+  if (!isTopFrame) return;
+
   try {
     const url = chrome.runtime.getURL("reputation_data.bin");
     const response = await fetch(url);
@@ -938,6 +945,8 @@ window.addEventListener(
     // Check both the registrable domain and the full hostname against the
     // bloom filter. Feeds may contain either form, and attackers may use
     // deep subdomains to evade registrable-domain-only checks.
+    // In the top frame the filter is loaded locally for synchronous lookups.
+    // Child frames skip loading and delegate to the SW asynchronously below.
     const destHost = parsed?.host ?? null;
     const destDomainBad = destRegDomain
       ? isKnownBadDomain(destRegDomain) ||
@@ -1042,6 +1051,37 @@ window.addEventListener(
 
     if (settings.debug) {
       console.debug("[NavSentinel] click", { decision, nrs, cds, reasonCodes, nrsFactors, ctx });
+    }
+
+    // --- Child-frame async reputation check ---
+    // Child frames don't load the bloom filter locally to save memory.
+    // If the synchronous path allowed the navigation and we have a
+    // cross-site destination, ask the SW for a deferred reputation check.
+    if (!isTopFrame && decision === "allow" && destRegDomain && isCrossSite && mode !== "off") {
+      void (async () => {
+        try {
+          const checks = [checkReputationViaMessage(destRegDomain)];
+          if (destHost !== null && destHost !== destRegDomain) {
+            checks.push(checkReputationViaMessage(destHost));
+          }
+          const results = await Promise.all(checks);
+          if (!results.some(Boolean)) return;
+          // Destination is known-bad -- show a late warning toast.
+          const host = destHost ?? destRegDomain;
+          appendEventSafely({
+            kind: "nav_reputation_late_warn",
+            site: siteKeyFromLocation(),
+            url: parsed?.href ?? location.href,
+            destHost: host,
+          });
+          showToast({
+            message: `NavSentinel: navigated to a known-bad domain (${host}).`,
+            timeoutMs: 8000,
+          });
+        } catch {
+          // Graceful degradation: SW unreachable
+        }
+      })();
     }
   },
   true

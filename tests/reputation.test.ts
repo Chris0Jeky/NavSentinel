@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from "vitest";
+import { describe, expect, it, beforeEach, vi, afterEach } from "vitest";
 import {
   murmurhash3_32,
   loadFilter,
@@ -10,6 +10,7 @@ import {
   initReputation,
   isKnownBadDomain,
   reputationReady,
+  checkReputationViaMessage,
   MAX_FILTER_BITS,
   MAX_HASH_FUNCTIONS,
   type BloomFilterState,
@@ -419,5 +420,81 @@ describe("NRS known_bad_domain factor", () => {
 
     const result = computeNRS(cdsResult, navCtx);
     expect(result.nrs).toBe(0); // clamped to 0
+  });
+});
+
+// ---------------------------------------------------------------------------
+// checkReputationViaMessage (child-frame SW delegation)
+// ---------------------------------------------------------------------------
+
+describe("checkReputationViaMessage", () => {
+  let sendMessageMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    sendMessageMock = vi.fn();
+    (globalThis as any).chrome = {
+      runtime: {
+        lastError: null,
+        sendMessage: sendMessageMock,
+      },
+    };
+  });
+
+  afterEach(() => {
+    delete (globalThis as any).chrome;
+  });
+
+  it("resolves true when SW responds knownBad: true", async () => {
+    sendMessageMock.mockImplementation((_msg: any, cb: any) => {
+      cb({ knownBad: true });
+    });
+    const result = await checkReputationViaMessage("evil.example");
+    expect(result).toBe(true);
+    expect(sendMessageMock).toHaveBeenCalledWith(
+      { type: "ns-reputation-check", domain: "evil.example" },
+      expect.any(Function)
+    );
+  });
+
+  it("resolves false when SW responds knownBad: false", async () => {
+    sendMessageMock.mockImplementation((_msg: any, cb: any) => {
+      cb({ knownBad: false });
+    });
+    const result = await checkReputationViaMessage("safe.example");
+    expect(result).toBe(false);
+  });
+
+  it("resolves false when SW returns null response", async () => {
+    sendMessageMock.mockImplementation((_msg: any, cb: any) => {
+      cb(null);
+    });
+    const result = await checkReputationViaMessage("any.example");
+    expect(result).toBe(false);
+  });
+
+  it("resolves false when runtime.lastError is set", async () => {
+    sendMessageMock.mockImplementation((_msg: any, cb: any) => {
+      (globalThis as any).chrome.runtime.lastError = { message: "disconnected" };
+      cb(undefined);
+      (globalThis as any).chrome.runtime.lastError = null;
+    });
+    const result = await checkReputationViaMessage("any.example");
+    expect(result).toBe(false);
+  });
+
+  it("resolves false when sendMessage throws", async () => {
+    sendMessageMock.mockImplementation(() => {
+      throw new Error("Extension context invalidated");
+    });
+    const result = await checkReputationViaMessage("any.example");
+    expect(result).toBe(false);
+  });
+
+  it("resolves false when chrome.runtime is undefined", async () => {
+    delete (globalThis as any).chrome;
+    // Re-import is not needed; the function accesses chrome at call time
+    // but the try/catch should handle the missing global.
+    const result = await checkReputationViaMessage("any.example");
+    expect(result).toBe(false);
   });
 });

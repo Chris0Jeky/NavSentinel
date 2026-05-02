@@ -257,7 +257,8 @@ export type EventKind =
   | "cred_paste_warn"
   | "suite_config_update"
   | "clickfix_detected"
-  | "dblclickjack_detected";
+  | "dblclickjack_detected"
+  | "nav_reputation_late_warn";
 
 export interface EventLogEntry {
   id: string;
