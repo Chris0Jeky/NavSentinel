@@ -1,0 +1,86 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mutation 01 - Delayed Overlay Injection</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 24px;
+      background: #f5f5f5;
+    }
+    h1 { margin-top: 0; }
+    .description {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      padding: 12px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+    }
+    #status {
+      margin-top: 16px;
+      padding: 8px 12px;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    .status-pending { background: #fff3cd; }
+    .status-triggered { background: #d4edda; color: #155724; }
+  </style>
+</head>
+<body>
+  <h1>Mutation 01 - Delayed Overlay Injection</h1>
+  <div class="description">
+    <strong>Attack scenario:</strong> A malicious overlay is injected 3 seconds after
+    page load, covering the entire viewport. This mimics a post-load phishing overlay
+    that could steal credentials or trick the user.
+    <br><br>
+    <strong>Expected:</strong> NavSentinel mutation monitor detects the overlay injection
+    and fires an <code>overlay_injected</code> alert.
+    <br><br>
+    <strong>Timing:</strong> The overlay appears 3 seconds after load. The mutation monitor
+    starts 2 seconds after load, so it should catch this.
+  </div>
+
+  <p>This is the legitimate page content. A login form appears below.</p>
+  <form action="/login" method="POST">
+    <label>Email: <input type="email" /></label><br><br>
+    <label>Password: <input type="password" /></label><br><br>
+    <button type="submit">Log In</button>
+  </form>
+
+  <div id="status" class="status-pending">
+    Status: Waiting 3 seconds before injecting overlay...
+  </div>
+
+  <script>
+    setTimeout(function() {
+      var overlay = document.createElement("div");
+      overlay.id = "malicious-overlay";
+      overlay.style.position = "fixed";
+      overlay.style.top = "0";
+      overlay.style.left = "0";
+      overlay.style.width = "100%";
+      overlay.style.height = "100%";
+      overlay.style.background = "rgba(0,0,0,0.8)";
+      overlay.style.zIndex = "10000";
+      overlay.style.display = "flex";
+      overlay.style.alignItems = "center";
+      overlay.style.justifyContent = "center";
+      overlay.style.color = "#fff";
+      overlay.style.fontSize = "24px";
+      overlay.innerHTML = '<div style="background:#fff;color:#333;padding:32px;border-radius:8px;text-align:center;">' +
+        '<h2>Session Expired</h2>' +
+        '<p>Please re-enter your credentials to continue.</p>' +
+        '<form><label>Email: <input type="email" style="width:200px"/></label><br><br>' +
+        '<label>Password: <input type="password" style="width:200px"/></label><br><br>' +
+        '<button type="button">Verify</button></form></div>';
+      document.body.appendChild(overlay);
+
+      document.getElementById("status").textContent =
+        "Status: Overlay injected! NavSentinel should fire overlay_injected alert.";
+      document.getElementById("status").className = "status-triggered";
+    }, 3000);
+  </script>
+</body>
+</html>

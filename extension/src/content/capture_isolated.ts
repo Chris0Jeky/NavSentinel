@@ -30,6 +30,11 @@ import {
   isDoubleClickHijackActive,
   getDblclickOpenerNavUrl,
 } from "./dblclick_guard";
+import {
+  startMutationMonitor,
+  getMutationAlertCount,
+  type MutationAlert,
+} from "./mutation_monitor";
 
 const CDS_SMART_BLOCK_THRESHOLD = 70;
 const CDS_STRICT_BLOCK_THRESHOLD = 50;
@@ -103,6 +108,7 @@ function refreshDebug(): void {
   updateDebugOverlay({
     ...lastDebug,
     mainGuard,
+    mutationAlerts: getMutationAlertCount(),
     ...(lastNav ? { lastNav } : {})
   });
 }
@@ -459,6 +465,52 @@ function handleClickFixScan(): void {
     timeoutMs: 0,
   });
 }
+
+// --- Mutation monitor ---
+
+const MUTATION_START_DELAY_MS = 2000;
+
+function handleMutationAlert(alert: MutationAlert): void {
+  if (settings.defaultMode === "off") return;
+
+  appendEventSafely({
+    kind: "mutation_alert",
+    site: siteKeyFromLocation(),
+    url: location.href,
+    reasons: [alert.type],
+    extra: { details: alert.details },
+  });
+
+  // If an overlay was injected, show a warning toast
+  if (alert.type === "overlay_injected") {
+    showToast({
+      message: "NavSentinel detected a suspicious overlay injected after page load. The page may be attempting a phishing attack.",
+      actions: [{ label: "Dismiss", onClick: () => {} }],
+      timeoutMs: 0,
+    });
+  }
+
+  refreshDebug();
+}
+
+function initMutationMonitor(): void {
+  if (settings.defaultMode === "off") return;
+  startMutationMonitor(document, handleMutationAlert);
+}
+
+function scheduleMutationMonitor(): void {
+  if (document.readyState === "loading") {
+    window.addEventListener("DOMContentLoaded", () => {
+      setTimeout(initMutationMonitor, MUTATION_START_DELAY_MS);
+    }, { once: true });
+  } else {
+    setTimeout(initMutationMonitor, MUTATION_START_DELAY_MS);
+  }
+}
+
+scheduleMutationMonitor();
+
+// --- Rollback prompts ---
 
 function showRollbackPrompt(url: string): void {
   const now = Date.now();

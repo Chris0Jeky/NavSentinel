@@ -1,0 +1,151 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mutation 04 - Legitimate Dynamic Page</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 24px;
+      background: #f5f5f5;
+    }
+    h1 { margin-top: 0; }
+    .description {
+      background: #d4edda;
+      border: 1px solid #28a745;
+      padding: 12px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+    }
+    #status {
+      margin-top: 16px;
+      padding: 8px 12px;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    .status-ok { background: #d4edda; color: #155724; }
+    .tab-bar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .tab-bar button {
+      padding: 8px 16px;
+      border: 1px solid #ddd;
+      background: #fff;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    .tab-bar button.active {
+      background: #007bff;
+      color: #fff;
+      border-color: #007bff;
+    }
+    #content-area {
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      border: 1px solid #ddd;
+      max-width: 600px;
+      min-height: 200px;
+    }
+    form label { display: block; margin-bottom: 12px; }
+    form input { width: 200px; padding: 4px; }
+  </style>
+</head>
+<body>
+  <h1>Mutation 04 - Legitimate Dynamic Page</h1>
+  <div class="description">
+    <strong>Benign scenario:</strong> This page simulates a typical single-page app
+    that dynamically builds its UI. It adds tooltips, swaps tab content, and loads
+    a YouTube embed -- all common legitimate behaviors.
+    <br><br>
+    <strong>Expected:</strong> NavSentinel mutation monitor should <strong>NOT</strong>
+    trigger any alerts for these normal mutations.
+  </div>
+
+  <div class="tab-bar">
+    <button class="active" data-tab="home">Home</button>
+    <button data-tab="about">About</button>
+    <button data-tab="contact">Contact</button>
+  </div>
+
+  <div id="content-area">
+    <h3>Home</h3>
+    <p>Welcome to our website. Click the tabs above to navigate.</p>
+  </div>
+
+  <div id="status" class="status-ok">
+    Status: Legitimate dynamic page. No alerts should fire.
+  </div>
+
+  <script>
+    // --- Tab switching (dynamic DOM mutations, no phishing) ---
+    var tabs = {
+      home: '<h3>Home</h3><p>Welcome to our website. Click the tabs above to navigate.</p>',
+      about: '<h3>About Us</h3><p>We are a legitimate company providing great services.</p>' +
+             '<p>Founded in 2020, we serve millions of users worldwide.</p>',
+      contact: '<h3>Contact</h3><p>Get in touch with us:</p>' +
+               '<form action="/contact" method="POST">' +
+               '<label>Name: <input type="text" name="name" /></label>' +
+               '<label>Email: <input type="email" name="email" /></label>' +
+               '<label>Message: <textarea name="message" rows="3" style="width:200px;"></textarea></label>' +
+               '<button type="submit">Send</button></form>'
+    };
+
+    var contentArea = document.getElementById("content-area");
+    var buttons = document.querySelectorAll(".tab-bar button");
+
+    for (var i = 0; i < buttons.length; i++) {
+      buttons[i].addEventListener("click", function() {
+        for (var j = 0; j < buttons.length; j++) {
+          buttons[j].classList.remove("active");
+        }
+        this.classList.add("active");
+        var tab = this.getAttribute("data-tab");
+        contentArea.innerHTML = tabs[tab] || "<p>Not found</p>";
+      });
+    }
+
+    // --- Simulate a tooltip appearing (small positioned element, low z-index) ---
+    setTimeout(function() {
+      var tooltip = document.createElement("div");
+      tooltip.style.position = "absolute";
+      tooltip.style.top = "100px";
+      tooltip.style.left = "200px";
+      tooltip.style.background = "#333";
+      tooltip.style.color = "#fff";
+      tooltip.style.padding = "6px 10px";
+      tooltip.style.borderRadius = "4px";
+      tooltip.style.fontSize = "12px";
+      tooltip.style.zIndex = "50";
+      tooltip.textContent = "Helpful tooltip";
+      document.body.appendChild(tooltip);
+
+      // Remove tooltip after 2 seconds
+      setTimeout(function() { tooltip.remove(); }, 2000);
+    }, 3000);
+
+    // --- Simulate loading a YouTube embed (legitimate cross-origin iframe) ---
+    setTimeout(function() {
+      var iframe = document.createElement("iframe");
+      iframe.src = "https://www.youtube.com/embed/dQw4w9WgXcQ";
+      iframe.width = "560";
+      iframe.height = "315";
+      iframe.style.border = "none";
+      iframe.style.marginTop = "16px";
+      iframe.setAttribute("allowfullscreen", "");
+      contentArea.appendChild(iframe);
+    }, 4000);
+
+    // --- Simulate loading a Google Analytics iframe (legitimate hidden iframe) ---
+    setTimeout(function() {
+      var iframe = document.createElement("iframe");
+      iframe.src = "https://www.google-analytics.com/collect";
+      iframe.style.display = "none";
+      document.body.appendChild(iframe);
+    }, 4500);
+  </script>
+</body>
+</html>
