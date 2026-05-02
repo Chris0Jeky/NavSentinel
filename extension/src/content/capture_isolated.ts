@@ -41,6 +41,10 @@ import {
   isOAuthRedirectMismatch,
   isOAuthOpenerManipulation,
 } from "./oauth_monitor";
+import {
+  handlePushStateBridgeMessage,
+  isPushStateAbuseActive,
+} from "./pushstate_guard";
 
 const CDS_SMART_BLOCK_THRESHOLD = 70;
 const CDS_STRICT_BLOCK_THRESHOLD = 50;
@@ -364,6 +368,19 @@ function handleBridgeMessage(message: unknown): void {
       }
       return;
     }
+  }
+
+  // --- PushState abuse bridge messages from main_guard ---
+  if (handlePushStateBridgeMessage(data.type ?? "", data)) {
+    if (settings.defaultMode !== "off") {
+      appendEventSafely({
+        kind: "pushstate_abuse",
+        site: siteKeyFromLocation(),
+        url: typeof data.url === "string" ? data.url : location.href,
+        reasons: [typeof (data as any).reason === "string" ? (data as any).reason : "unknown"],
+      });
+    }
+    return;
   }
 }
 
@@ -1094,6 +1111,7 @@ window.addEventListener(
     const oauthRedirectMismatch = isOAuthRedirectMismatch();
     const oauthOpenerManip = isOAuthOpenerManipulation();
     const cfScore = getClickfixScoreForNRS();
+    const pushStateAbuse = isPushStateAbuseActive();
 
     const navCtx: NavigationContext = {
       isNewTabOrWindow: isBlankAnchor,
@@ -1119,6 +1137,7 @@ window.addEventListener(
       oauthRedirectMismatch,
       oauthOpenerManipulation: oauthOpenerManip,
       clickfixScore: cfScore > 0 ? cfScore : undefined,
+      pushStateAbuse,
     };
 
     if (dblClickHijack) {
