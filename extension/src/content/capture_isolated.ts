@@ -30,6 +30,14 @@ import {
   isDoubleClickHijackActive,
   getDblclickOpenerNavUrl,
 } from "./dblclick_guard";
+import {
+  isOAuthFlow,
+  trackOAuthRedirect,
+  isOAuthCallbackSuspicious,
+  isOAuthCallback,
+  getOAuthFlowState,
+  markOpenerManipulated,
+} from "./oauth_monitor";
 
 const CDS_SMART_BLOCK_THRESHOLD = 70;
 const CDS_STRICT_BLOCK_THRESHOLD = 50;
@@ -260,6 +268,11 @@ function handleBridgeMessage(message: unknown): void {
     lastNav = { kind: data.kind ?? "unknown", url: data.url ?? "", status: "blocked" };
     refreshDebug();
 
+    // Track OAuth flows in blocked navigations
+    if (data.url && isOAuthFlow(data.url)) {
+      trackOAuthRedirect(data.url);
+    }
+
     if (settings.defaultMode === "off") {
       allowActionOnce(data.id, data.url, data.target, data.features);
       return;
@@ -297,6 +310,11 @@ function handleBridgeMessage(message: unknown): void {
   if (data.type === "ns-nav-allowed") {
     lastNav = { kind: data.kind ?? "unknown", url: data.url ?? "", status: "allowed" };
     refreshDebug();
+
+    // Track OAuth flows in allowed navigations
+    if (data.url && isOAuthFlow(data.url)) {
+      trackOAuthRedirect(data.url);
+    }
     return;
   }
 
@@ -315,6 +333,11 @@ function handleBridgeMessage(message: unknown): void {
   {
     const dblResult = handleDblclickBridgeMessage(data.type ?? "", data);
     if (dblResult.handled) {
+      // If opener navigation was detected during an active OAuth flow,
+      // mark the flow as having opener manipulation (ConsentFix attack).
+      if (data.type === "ns-dblclick-opener-nav" && getOAuthFlowState().active) {
+        markOpenerManipulated();
+      }
       // Forward to the SW so it can notify the opener tab.
       // This capture_isolated is running in the CHILD window; the opener tab
       // needs this signal to correlate with its click timing.
@@ -944,6 +967,19 @@ window.addEventListener(
         (destHost !== null && destHost !== destRegDomain && isKnownBadDomain(destHost))
       : false;
 
+    // --- OAuth flow detection ---
+    const destUrl = parsed?.href ?? "";
+    const oauthState = getOAuthFlowState();
+    const oauthFlowActive = oauthState.active || (!!destUrl && isOAuthFlow(destUrl));
+    const oauthRedirectMismatch = oauthState.active && !!destUrl && isOAuthCallback(destUrl) &&
+      isOAuthCallbackSuspicious(destUrl);
+    const oauthOpenerManipulation = oauthState.currentFlow?.openerManipulated === true;
+
+    // Track new OAuth initiations from anchor clicks
+    if (destUrl && isOAuthFlow(destUrl) && !oauthState.active) {
+      trackOAuthRedirect(destUrl);
+    }
+
     const navCtx: NavigationContext = {
       isNewTabOrWindow: isBlankAnchor,
       isCrossSite,
@@ -954,6 +990,9 @@ window.addEventListener(
       explicitNewTabIntent: explicitNewTab,
       doubleClickHijackActive: dblClickHijack,
       knownBadDomain: destDomainBad,
+      oauthFlowActive,
+      oauthRedirectMismatch,
+      oauthOpenerManipulation,
     };
 
     if (dblClickHijack) {

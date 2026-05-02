@@ -11,6 +11,8 @@ const TYPED_ORIGIN_TTL_MS = 5_000;
 const TYPED_ORIGIN_MAX_MS = 15_000;
 const DBLCLICK_CHILD_MAX_AGE_MS = 5_000;
 const DBLCLICK_CHILD_PRUNE_LIMIT = 50;
+const OAUTH_FLOW_TTL_MS = 120_000; // 2 minutes
+const OAUTH_FLOW_MAX_ENTRIES = 50;
 
 const allowUntilByTab = new Map<number, number>();
 const gestureUntilByTab = new Map<number, number>();
@@ -40,6 +42,59 @@ const lastCommittedByTab = new Map<
 // openerNavObserved is set when the child tab sends ns-dblclick-opener-nav,
 // confirming it wrote to opener.location.
 const childWindowByTab = new Map<number, { openerTabId: number; createdAt: number; openerNavObserved: boolean }>();
+
+// --- OAuth flow tracking across tab navigations ---
+// Maps tabId -> { url, redirectUri, startedAt }
+// Tracks when a tab navigates to an OAuth authorization URL so the
+// content script can correlate callback navigations with the original flow.
+const oauthFlowByTab = new Map<number, { url: string; redirectUri?: string; startedAt: number }>();
+
+/** URL path/query indicators re-used from oauth_monitor.ts for SW-side detection. */
+const SW_OAUTH_INDICATORS: readonly string[] = [
+  "response_type=",
+  "client_id=",
+  "redirect_uri=",
+  "scope=",
+  "/oauth",
+  "/authorize",
+  "/auth/callback",
+  "/oauth2/",
+  "/consent",
+];
+
+function isOAuthUrl(url: string): boolean {
+  const lower = url.toLowerCase();
+  for (const ind of SW_OAUTH_INDICATORS) {
+    if (lower.includes(ind)) return true;
+  }
+  return false;
+}
+
+function extractRedirectUri(url: string): string | undefined {
+  try {
+    const parsed = new URL(url);
+    return parsed.searchParams.get("redirect_uri") ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function pruneStaleOAuthFlows(): void {
+  const now = Date.now();
+  for (const [tabId, entry] of oauthFlowByTab) {
+    if (now - entry.startedAt > OAUTH_FLOW_TTL_MS) {
+      oauthFlowByTab.delete(tabId);
+    }
+  }
+  // Hard cap
+  if (oauthFlowByTab.size > OAUTH_FLOW_MAX_ENTRIES) {
+    const sorted = [...oauthFlowByTab.entries()].sort((a, b) => a[1].startedAt - b[1].startedAt);
+    const excess = oauthFlowByTab.size - OAUTH_FLOW_MAX_ENTRIES;
+    for (let i = 0; i < excess; i++) {
+      oauthFlowByTab.delete(sorted[i]![0]);
+    }
+  }
+}
 
 function pruneStaleChildWindows(): void {
   const now = Date.now();
@@ -274,6 +329,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     );
     sendResponse?.({ ok: true });
   }
+
+  // --- OAuth flow state query from content script ---
+  if (message.type === "ns-oauth-query") {
+    const tabId = sender.tab?.id;
+    if (typeof tabId === "number") {
+      const flow = oauthFlowByTab.get(tabId);
+      if (flow && Date.now() - flow.startedAt <= OAUTH_FLOW_TTL_MS) {
+        sendResponse?.({
+          active: true,
+          url: flow.url,
+          redirectUri: flow.redirectUri ?? "",
+        });
+      } else {
+        sendResponse?.({ active: false, url: "", redirectUri: "" });
+      }
+    }
+  }
 });
 
 chrome.webNavigation.onBeforeNavigate.addListener((details) => {
@@ -311,6 +383,18 @@ chrome.webNavigation.onCommitted.addListener((details) => {
   }
   const prevUrl = lastUrlByTab.get(details.tabId);
   lastUrlByTab.set(details.tabId, details.url);
+
+  // --- OAuth flow tracking ---
+  // When a tab navigates to an OAuth URL, record the flow so the content
+  // script can query it for redirect_uri mismatch detection.
+  if (isOAuthUrl(details.url)) {
+    pruneStaleOAuthFlows();
+    oauthFlowByTab.set(details.tabId, {
+      url: details.url,
+      redirectUri: extractRedirectUri(details.url),
+      startedAt: Date.now(),
+    });
+  }
 
   const qualifiers = details.transitionQualifiers ?? [];
   const isRedirect =
@@ -447,6 +531,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   suppressUntilByTab.delete(tabId);
   rollbackReturnByTab.delete(tabId);
   typedOriginByTab.delete(tabId);
+  oauthFlowByTab.delete(tabId);
   clearPendingTabState(tabId);
   lastUrlByTab.delete(tabId);
 });
