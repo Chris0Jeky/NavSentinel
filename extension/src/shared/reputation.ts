@@ -261,6 +261,27 @@ export function optimalParams(n: number, p: number): { m: number; k: number } {
 }
 
 // ---------------------------------------------------------------------------
+// Frame detection
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns true when running inside a child frame (not the top-level frame).
+ * In a child frame, loading the bloom filter binary is skipped to avoid
+ * redundant fetches and allocations on iframe-heavy pages (P2-13).
+ *
+ * The check uses a try/catch because cross-origin iframes will throw a
+ * SecurityError when accessing `window.top`.
+ */
+export function isChildFrame(): boolean {
+  try {
+    return window !== window.top;
+  } catch {
+    // Cross-origin iframe — definitely a child frame.
+    return true;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Runtime reputation state
 // ---------------------------------------------------------------------------
 
@@ -299,4 +320,12 @@ export function isKnownBadDomain(domain: string): boolean {
  */
 export function reputationReady(): boolean {
   return _filter !== null;
+}
+
+/**
+ * Reset the internal filter state. Exported only for unit tests.
+ * @internal
+ */
+export function _resetFilter(): void {
+  _filter = null;
 }

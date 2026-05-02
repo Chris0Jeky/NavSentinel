@@ -13,7 +13,7 @@ import { getRegistrableDomain } from "../shared/domain";
 import { areSameOrganization } from "../shared/domain_groups";
 import { computeNRS, NRS_BLOCK_THRESHOLD, NRS_STRICT_BLOCK_THRESHOLD } from "../shared/nrs";
 import type { NavigationContext } from "../shared/nrs";
-import { initReputation, isKnownBadDomain } from "../shared/reputation";
+import { initReputation, isChildFrame, isKnownBadDomain } from "../shared/reputation";
 import { showToast } from "./ui_toast";
 import {
   buildClickContextFromEvents,
@@ -153,8 +153,12 @@ async function initSettings() {
   setDebugEnabled(settings.debug);
   postToMain("ns-config", { mode: settings.defaultMode, debug: settings.debug });
   postToMain("ns-ping");
-  // Load reputation bloom filter in the background (non-blocking)
-  void loadReputationFilter();
+  // Load reputation bloom filter only in the top frame (P2-13).
+  // Child frames skip the ~117KB fetch+allocation; isKnownBadDomain()
+  // gracefully returns false when the filter is not loaded.
+  if (!isChildFrame()) {
+    void loadReputationFilter();
+  }
   if (window.top === window) {
     try {
       chrome.runtime.sendMessage({ type: "ns-ready" });
