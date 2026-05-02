@@ -146,8 +146,8 @@ describe("NRS ClickFix integration", () => {
           multipleAttemptsInGesture: true,
         })
       );
-      // 5 + 20 + 20 + 10 + 5 + 25 + 40 (capped) = 125
-      expect(result.nrs).toBe(125);
+      // 5 + 20 + 20 + 10 + 5 + 25 + 40 (capped) = 125 raw, diminishing returns: 100 + (25)*0.5 = 112.5
+      expect(result.nrs).toBe(112.5);
     });
 
     it("allowlist reduces clickfix-boosted score", () => {
