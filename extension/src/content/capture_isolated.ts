@@ -478,11 +478,13 @@ function handleMutationAlert(alert: MutationAlert): void {
     site: siteKeyFromLocation(),
     url: location.href,
     reasons: [alert.type],
-    extra: { details: alert.details },
+    extra: { details: alert.details, severity: alert.severity },
   });
 
-  // If an overlay was injected, show a warning toast
-  if (alert.type === "overlay_injected") {
+  // Only show a warning toast for high-severity overlay injections.
+  // Low-severity alerts (cookie banners, chat widgets, ARIA dialogs) are
+  // still logged for telemetry but do not disturb the user.
+  if (alert.type === "overlay_injected" && alert.severity === "high") {
     showToast({
       message: "NavSentinel detected a suspicious overlay injected after page load. The page may be attempting a phishing attack.",
       actions: [{ label: "Dismiss", onClick: () => {} }],
@@ -499,12 +501,28 @@ function initMutationMonitor(): void {
 }
 
 function scheduleMutationMonitor(): void {
-  if (document.readyState === "loading") {
-    window.addEventListener("DOMContentLoaded", () => {
+  // Only run the mutation monitor in the top frame. Sub-frames run with
+  // all_frames:true but the monitor is most valuable in the top frame, and
+  // cross-origin iframes already cannot be observed from the parent. Wrapped
+  // in try/catch because accessing window.top throws in sandboxed iframes.
+  try {
+    if (window !== window.top) return;
+  } catch {
+    // Sandboxed iframe -- skip monitoring
+    return;
+  }
+
+  // Use the `load` event (readyState "complete") as the baseline instead of
+  // `DOMContentLoaded`. This avoids false positives from SPA hydration that
+  // often continues 3-5 seconds after DCL. If `load` already fired, delay
+  // from the current time with a longer window (3 s) since we cannot know
+  // how long ago the page finished loading.
+  if (document.readyState === "complete") {
+    setTimeout(initMutationMonitor, 3000);
+  } else {
+    window.addEventListener("load", () => {
       setTimeout(initMutationMonitor, MUTATION_START_DELAY_MS);
     }, { once: true });
-  } else {
-    setTimeout(initMutationMonitor, MUTATION_START_DELAY_MS);
   }
 }
 

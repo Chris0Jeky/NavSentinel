@@ -14,6 +14,16 @@
  * - Auto-disconnects after 5 minutes to save resources
  *
  * Runs in the ISOLATED content script world.
+ *
+ * Known limitation: Shadow DOM subtrees are NOT observed. An attacker could
+ * create a custom element with `attachShadow({mode: "open"})` and inject
+ * overlays, forms, or password fields inside the shadow tree without
+ * triggering any alerts. The codebase already handles shadow DOM for click
+ * detection (see `capture_isolated.ts` `tryOpenShadowRoot`), but recursively
+ * observing shadow roots as they appear is non-trivial and deferred to a
+ * follow-up task.
+ * TODO(shadow-dom): Observe shadow roots by listening for shadow host
+ * attachment via a secondary MutationObserver or periodic polling.
  */
 
 // ---------------------------------------------------------------------------
@@ -26,8 +36,11 @@ export type MutationAlertType =
   | "password_injected"
   | "suspicious_iframe";
 
+export type MutationAlertSeverity = "low" | "medium" | "high";
+
 export interface MutationAlert {
   type: MutationAlertType;
+  severity: MutationAlertSeverity;
   element: Element;
   details: string;
   timestamp: number;
@@ -67,6 +80,36 @@ const LEGIT_IFRAME_PATTERNS: RegExp[] = [
   /apis\.google\.com/i,
   /accounts\.google\.com/i,
   /gstatic\.com/i,
+];
+
+/**
+ * Cookie consent banner patterns matched against element id + className.
+ */
+const COOKIE_CONSENT_PATTERNS: RegExp[] = [
+  /cookie[-_]?consent/i,
+  /cookie[-_]?banner/i,
+  /cookie[-_]?notice/i,
+  /onetrust/i,
+  /cookiebot/i,
+  /osano/i,
+  /gdpr/i,
+  /cc[-_]?banner/i,
+  /consent[-_]?banner/i,
+  /consent[-_]?modal/i,
+];
+
+/**
+ * Chat widget patterns matched against element id + className.
+ */
+const CHAT_WIDGET_PATTERNS: RegExp[] = [
+  /intercom/i,
+  /drift/i,
+  /crisp/i,
+  /tawk/i,
+  /zendesk/i,
+  /tidio/i,
+  /hubspot[-_]?chat/i,
+  /livechat/i,
 ];
 
 // ---------------------------------------------------------------------------
@@ -122,6 +165,52 @@ function pushAlert(alert: MutationAlert): void {
 // Detection: overlays
 // ---------------------------------------------------------------------------
 
+/**
+ * Check if an element or its ancestors match any patterns in a list.
+ * Tests against the concatenation of `id` and `className`.
+ */
+function matchesPatterns(el: Element, patterns: RegExp[]): boolean {
+  let current: Element | null = el;
+  // Walk up to 5 ancestors to check for wrapper elements
+  for (let depth = 0; current && depth < 5; depth++) {
+    const id = current.id ?? "";
+    const cls = typeof current.className === "string" ? current.className : "";
+    const haystack = id + " " + cls;
+    for (const pat of patterns) {
+      if (pat.test(haystack)) return true;
+    }
+    current = current.parentElement;
+  }
+  return false;
+}
+
+/**
+ * Check if an element or its ancestors have dialog/modal ARIA roles.
+ * Mirrors the logic in `dom_builder.ts:detectLegitModalBackdrop`.
+ */
+function hasDialogRole(el: Element): boolean {
+  let current: Element | null = el;
+  for (let depth = 0; current && depth < 5; depth++) {
+    const role = (current.getAttribute("role") ?? "").toLowerCase();
+    if (role === "dialog" || role === "alertdialog") return true;
+    if ((current.getAttribute("aria-modal") ?? "").toLowerCase() === "true") return true;
+    current = current.parentElement;
+  }
+  return false;
+}
+
+/**
+ * Determine if an overlay-like element is likely benign (cookie banner,
+ * chat widget, SPA modal with proper ARIA roles). Returns null if not
+ * benign, or a reason string if the element should be downgraded to 'low'.
+ */
+function getBenignOverlayReason(el: Element): string | null {
+  if (hasDialogRole(el)) return "dialog_role";
+  if (matchesPatterns(el, COOKIE_CONSENT_PATTERNS)) return "cookie_consent";
+  if (matchesPatterns(el, CHAT_WIDGET_PATTERNS)) return "chat_widget";
+  return null;
+}
+
 function checkOverlay(el: Element): void {
   // Only check elements that could plausibly be overlays
   if (!(el instanceof HTMLElement)) return;
@@ -142,10 +231,18 @@ function checkOverlay(el: Element): void {
   const coverage = (rect.width * rect.height) / (vw * vh);
   if (coverage < MIN_OVERLAY_COVERAGE) return;
 
+  // Check for benign overlays (cookie banners, chat widgets, ARIA dialogs).
+  // These are downgraded to 'low' severity instead of suppressed entirely,
+  // so we can still learn from them in telemetry.
+  const benignReason = getBenignOverlayReason(el);
+  const severity: MutationAlertSeverity = benignReason ? "low" : "high";
+  const suffix = benignReason ? ` (downgraded: ${benignReason})` : "";
+
   pushAlert({
     type: "overlay_injected",
+    severity,
     element: el,
-    details: `Overlay injected: position=${pos}, z-index=${z}, coverage=${(coverage * 100).toFixed(1)}%`,
+    details: `Overlay injected: position=${pos}, z-index=${z}, coverage=${(coverage * 100).toFixed(1)}%${suffix}`,
     timestamp: Date.now(),
   });
 }
@@ -184,6 +281,7 @@ function checkFormActionChange(form: Element): void {
 
   pushAlert({
     type: "form_action_changed",
+    severity: crossDomain ? "high" : "medium",
     element: form,
     details: detail,
     timestamp: Date.now(),
@@ -207,6 +305,7 @@ function checkPasswordInjection(el: Element): void {
 
   pushAlert({
     type: "password_injected",
+    severity: "high",
     element: el,
     details: detail,
     timestamp: Date.now(),
@@ -247,6 +346,7 @@ function checkSuspiciousIframe(el: Element): void {
 
   pushAlert({
     type: "suspicious_iframe",
+    severity: "medium",
     element: el,
     details: `Suspicious iframe injected: ${reasons.join(", ")}`,
     timestamp: Date.now(),
@@ -290,6 +390,7 @@ function processAttributeChange(record: MutationRecord): void {
     if (input.type === "password") {
       pushAlert({
         type: "password_injected",
+        severity: "high",
         element: target,
         details: "Input type changed to password after page load",
         timestamp: Date.now(),
@@ -301,8 +402,10 @@ function processAttributeChange(record: MutationRecord): void {
     checkSuspiciousIframe(target);
   }
 
-  // Style attribute changes on existing elements could create overlays
-  if (record.attributeName === "style") {
+  // Style or class attribute changes on existing elements could create overlays.
+  // An attacker can inject a benign element then toggle a class to reveal it
+  // as a phishing overlay (e.g., el.classList.add("active")).
+  if (record.attributeName === "style" || record.attributeName === "class") {
     checkOverlay(target);
   }
 }
@@ -368,7 +471,7 @@ export function startMutationMonitor(
     childList: true,
     subtree: true,
     attributes: true,
-    attributeFilter: ["action", "type", "src", "style"],
+    attributeFilter: ["action", "type", "src", "style", "class"],
   });
 
   // Auto-disconnect after 5 minutes
