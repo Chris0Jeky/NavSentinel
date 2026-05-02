@@ -1,0 +1,126 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Chain 04 - Legitimate Redirect Chain (No Attack)</title>
+  <style>
+    body { font-family: sans-serif; padding: 24px; max-width: 700px; }
+    h1 { margin-top: 0; }
+    .description {
+      background: #d4edda;
+      border: 1px solid #28a745;
+      padding: 12px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+    }
+    button { padding: 12px 18px; font-size: 16px; margin: 8px 4px; cursor: pointer; }
+    #status { border: 2px dashed #28a745; padding: 16px; margin-top: 18px; }
+    code { background: #f4f4f4; padding: 2px 4px; }
+    .flow-box {
+      background: #f8f9fa;
+      border: 1px solid #dee2e6;
+      border-radius: 8px;
+      padding: 16px;
+      margin: 16px 0;
+    }
+    .flow-box h3 { margin-top: 0; }
+  </style>
+</head>
+<body>
+  <h1>Chain 04: Legitimate Redirect Chain (No Attack)</h1>
+  <div class="description">
+    <strong>Benign scenario:</strong> This page simulates legitimate redirect chains
+    that are common on the web. These should NOT trigger redirect chain penalties.
+    <br><br>
+    <strong>Expected:</strong> NavSentinel does NOT flag these as malicious redirect chains.
+    Marketing redirect parameters and OAuth callback flows are normal web behavior.
+  </div>
+
+  <div class="flow-box">
+    <h3>Scenario 1: OAuth Callback Redirect</h3>
+    <p>Simulates an OAuth flow: app -> provider -> callback -> app dashboard.
+    The redirect_uri matches the same origin.</p>
+    <button id="oauthFlow">Simulate OAuth Callback</button>
+  </div>
+
+  <div class="flow-box">
+    <h3>Scenario 2: Marketing UTM Redirect</h3>
+    <p>Simulates a marketing redirect: email link -> utm tracker -> landing page.
+    Same-origin redirect chain with tracking parameters.</p>
+    <button id="utmFlow">Simulate UTM Redirect</button>
+  </div>
+
+  <div class="flow-box">
+    <h3>Scenario 3: Login Redirect</h3>
+    <p>Simulates a login redirect: protected page -> login -> original page.
+    This is the standard "redirect after login" pattern.</p>
+    <button id="loginFlow">Simulate Login Redirect</button>
+  </div>
+
+  <div id="status">
+    <p>Status: <span id="statusText">Click a button to simulate a legitimate redirect flow.</span></p>
+    <p id="chainInfo"></p>
+  </div>
+
+  <script>
+    var statusText = document.getElementById("statusText");
+    var chainInfo = document.getElementById("chainInfo");
+    var params = new URLSearchParams(location.search);
+    var step = params.get("step");
+    var flow = params.get("flow");
+
+    if (step && flow) {
+      // We're in the middle of a simulated redirect chain
+      var stepNum = parseInt(step, 10);
+      statusText.textContent = "Redirect step " + step + " of flow '" + flow + "'";
+
+      if (flow === "oauth" && stepNum === 1) {
+        chainInfo.textContent = "Simulating OAuth provider redirect... (would normally be cross-origin to accounts.google.com)";
+        setTimeout(function() {
+          location.assign("chain-04-legit-redirect.html?flow=oauth&step=2&code=abc123");
+        }, 100);
+      } else if (flow === "oauth" && stepNum === 2) {
+        statusText.textContent = "OAuth callback complete! Returned to app with auth code.";
+        chainInfo.textContent = "Chain: app -> provider -> callback. This is a normal 2-hop redirect. No penalty should apply.";
+      } else if (flow === "utm" && stepNum === 1) {
+        chainInfo.textContent = "UTM tracker redirect...";
+        setTimeout(function() {
+          location.assign("chain-04-legit-redirect.html?flow=utm&step=2&utm_source=email&utm_medium=newsletter");
+        }, 100);
+      } else if (flow === "utm" && stepNum === 2) {
+        statusText.textContent = "Landing page reached via UTM redirect.";
+        chainInfo.textContent = "Chain: email link -> tracker -> landing. Normal marketing flow. No penalty should apply.";
+      } else if (flow === "login" && stepNum === 1) {
+        chainInfo.textContent = "Login successful, redirecting back...";
+        setTimeout(function() {
+          location.assign("chain-04-legit-redirect.html?flow=login&step=2&auth=session123");
+        }, 100);
+      } else if (flow === "login" && stepNum === 2) {
+        statusText.textContent = "Logged in and redirected back to the original page.";
+        chainInfo.textContent = "Chain: protected page -> login -> original page. Standard login redirect. No penalty should apply.";
+      }
+    }
+
+    document.getElementById("oauthFlow").addEventListener("click", function() {
+      statusText.textContent = "Starting OAuth flow...";
+      setTimeout(function() {
+        location.assign("chain-04-legit-redirect.html?flow=oauth&step=1");
+      }, 100);
+    });
+
+    document.getElementById("utmFlow").addEventListener("click", function() {
+      statusText.textContent = "Starting UTM redirect...";
+      setTimeout(function() {
+        location.assign("chain-04-legit-redirect.html?flow=utm&step=1");
+      }, 100);
+    });
+
+    document.getElementById("loginFlow").addEventListener("click", function() {
+      statusText.textContent = "Starting login redirect...";
+      setTimeout(function() {
+        location.assign("chain-04-legit-redirect.html?flow=login&step=1");
+      }, 100);
+    });
+  </script>
+</body>
+</html>

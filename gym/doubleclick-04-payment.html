@@ -1,0 +1,141 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DoubleClickjacking 04 - Payment Button Variant</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      padding: 24px;
+      max-width: 720px;
+      margin: 0 auto;
+      background: #fafafa;
+    }
+    h1 { margin-top: 0; }
+    .info {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      border-radius: 6px;
+      padding: 16px;
+      margin: 16px 0;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .checkout-card {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 12px;
+      padding: 32px;
+      max-width: 480px;
+      margin: 24px auto;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    .checkout-card h2 { margin-top: 0; }
+    .order-summary {
+      border-top: 1px solid #eee;
+      border-bottom: 1px solid #eee;
+      padding: 12px 0;
+      margin: 16px 0;
+    }
+    .order-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 4px 0;
+    }
+    .total { font-weight: 700; font-size: 18px; }
+    .pay-btn {
+      width: 100%;
+      font-size: 18px;
+      padding: 16px;
+      cursor: pointer;
+      border: none;
+      border-radius: 8px;
+      background: #1a73e8;
+      color: white;
+      font-weight: 600;
+      margin-top: 16px;
+    }
+    .pay-btn:hover { background: #1557b0; }
+    .log {
+      font-family: ui-monospace, monospace;
+      font-size: 12px;
+      background: #1a1a1a;
+      color: #0f0;
+      padding: 12px;
+      border-radius: 6px;
+      min-height: 80px;
+      white-space: pre-wrap;
+      margin-top: 24px;
+    }
+  </style>
+</head>
+<body>
+  <h1>DoubleClickjacking 04 - Payment Button Variant</h1>
+
+  <div class="info">
+    <strong>Attack pattern:</strong> A checkout page asks the user to double-click
+    the "Pay Now" button. On the first click, a child window opens and navigates
+    the opener to a different payment confirmation page using
+    <code>window.opener.location</code>. The second click lands on the attacker's
+    payment page, authorizing an unintended transaction.
+    <br><br>
+    <strong>Expected:</strong> NavSentinel detects the DoubleClickjacking pattern
+    and flags the second click with <code>nrs_double_click_hijack</code>.
+  </div>
+
+  <div class="checkout-card">
+    <h2>Order Checkout</h2>
+    <div class="order-summary">
+      <div class="order-row"><span>Premium Subscription (1yr)</span><span>$49.99</span></div>
+      <div class="order-row"><span>Tax</span><span>$4.50</span></div>
+      <div class="order-row total"><span>Total</span><span>$54.49</span></div>
+    </div>
+    <p style="font-size:13px;color:#666;">Double-click to confirm your payment:</p>
+    <button class="pay-btn" id="payBtn">Pay Now - $54.49</button>
+  </div>
+
+  <div class="log" id="log">Waiting for interaction...</div>
+
+  <script>
+    var log = document.getElementById("log");
+    function addLog(msg) {
+      log.textContent += "\n" + new Date().toISOString().slice(11, 23) + " " + msg;
+    }
+
+    var payBtn = document.getElementById("payBtn");
+    var clickCount = 0;
+
+    payBtn.addEventListener("click", function() {
+      clickCount++;
+      addLog("Click #" + clickCount + " on Pay button");
+
+      if (clickCount === 1) {
+        // First click: open a child window that navigates the opener to a
+        // fake payment confirmation page.
+        addLog("Opening child window to hijack opener...");
+        var child = window.open("about:blank", "_blank", "width=400,height=300");
+        if (child) {
+          addLog("Child window opened. Writing redirect script...");
+          try {
+            child.document.write(
+              '<!doctype html><html><body><p>Processing payment...</p>' +
+              '<script>' +
+              'try { window.opener.location = "doubleclick-04-payment-target.html"; }' +
+              ' catch(e) { document.body.textContent = "opener blocked: " + e.message; }' +
+              'setTimeout(function() { window.close(); }, 200);' +
+              '<\/script></body></html>'
+            );
+          } catch (e) {
+            addLog("Cross-origin block: " + e.message);
+          }
+        } else {
+          addLog("Child window BLOCKED by NavSentinel (expected)");
+        }
+      } else {
+        addLog("Second click - in a real attack this authorizes the attacker's payment!");
+      }
+    });
+  </script>
+</body>
+</html>
