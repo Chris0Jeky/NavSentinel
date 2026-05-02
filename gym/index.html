@@ -74,6 +74,7 @@
     <li><a href="clickfix-01-basic.html">ClickFix 01 - basic fake CAPTCHA with clipboard write</a></li>
     <li><a href="clickfix-02-instructions.html">ClickFix 02 - terminal instructions variant</a></li>
     <li><a href="clickfix-03-legit-captcha.html">ClickFix 03 - legitimate CAPTCHA (false positive check)</a></li>
+    <li><a href="clickfix-04-winr.html">ClickFix 04 - Win+R instruction variant</a></li>
   </ol>
 
   <h2>DoubleClickjacking</h2>
@@ -83,6 +84,45 @@
     <li><a href="doubleclick-01-basic.html">DoubleClick 01 - basic DoubleClickjacking attack</a></li>
     <li><a href="doubleclick-02-oauth.html">DoubleClick 02 - OAuth consent variant</a></li>
     <li><a href="doubleclick-03-legit.html">DoubleClick 03 - legitimate double-click (no attack)</a></li>
+    <li><a href="doubleclick-04-payment.html">DoubleClick 04 - payment button variant</a></li>
+  </ol>
+
+  <h2>Redirect Chain Correlation</h2>
+  <p>These fixtures test detection of suspicious multi-hop redirect chains.</p>
+
+  <ol>
+    <li><a href="chain-01-direct.html">Chain 01 - direct navigation (no chain)</a></li>
+    <li><a href="chain-02-shortener.html">Chain 02 - URL shortener redirect</a></li>
+    <li><a href="chain-03-deep.html">Chain 03 - deep 5+ hop redirect chain</a></li>
+    <li><a href="chain-04-legit-redirect.html">Chain 04 - legitimate redirect chain (false positive check)</a></li>
+  </ol>
+
+  <h2>DOM Mutation Monitor</h2>
+  <p>These fixtures test detection of post-load DOM injection attacks.</p>
+
+  <ol>
+    <li><a href="mutation-01-delayed-overlay.html">Mutation 01 - delayed overlay injection</a></li>
+    <li><a href="mutation-02-form-action-change.html">Mutation 02 - form action change</a></li>
+    <li><a href="mutation-03-password-inject.html">Mutation 03 - password field injection</a></li>
+    <li><a href="mutation-04-legit-dynamic.html">Mutation 04 - legitimate dynamic page (false positive check)</a></li>
+  </ol>
+
+  <h2>Content Fingerprinting</h2>
+  <p>These fixtures test page content fingerprinting for phishing detection.</p>
+
+  <ol>
+    <li><a href="content-fp-01-brand-mismatch.html">Content FP 01 - brand impersonation mismatch</a></li>
+    <li><a href="content-fp-02-phishing-kit.html">Content FP 02 - phishing kit signatures</a></li>
+    <li><a href="content-fp-03-legit-login.html">Content FP 03 - legitimate login page (false positive check)</a></li>
+  </ol>
+
+  <h2>OAuth Flow Analysis</h2>
+  <p>These fixtures test OAuth redirect analysis for consent phishing detection.</p>
+
+  <ol>
+    <li><a href="oauth-01-normal.html">OAuth 01 - normal OAuth flow (benign)</a></li>
+    <li><a href="oauth-02-redirect-hijack.html">OAuth 02 - redirect URI hijack (malicious)</a></li>
+    <li><a href="oauth-03-consent-opener.html">OAuth 03 - consent opener manipulation</a></li>
   </ol>
 
   <h2>Evasion Tests</h2>
