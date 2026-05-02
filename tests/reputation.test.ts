@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from "vitest";
+import { describe, expect, it, beforeEach, vi, afterEach } from "vitest";
 import {
   murmurhash3_32,
   loadFilter,
@@ -10,6 +10,7 @@ import {
   initReputation,
   isKnownBadDomain,
   reputationReady,
+  checkReputationViaMessage,
   MAX_FILTER_BITS,
   MAX_HASH_FUNCTIONS,
   type BloomFilterState,
@@ -419,5 +420,105 @@ describe("NRS known_bad_domain factor", () => {
 
     const result = computeNRS(cdsResult, navCtx);
     expect(result.nrs).toBe(0); // clamped to 0
+  });
+});
+
+// ---------------------------------------------------------------------------
+// checkReputationViaMessage (child-frame SW delegation)
+// ---------------------------------------------------------------------------
+
+describe("checkReputationViaMessage", () => {
+  let sendMessageMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    sendMessageMock = vi.fn();
+    (globalThis as any).chrome = {
+      runtime: {
+        lastError: null,
+        sendMessage: sendMessageMock,
+      },
+    };
+  });
+
+  afterEach(() => {
+    delete (globalThis as any).chrome;
+  });
+
+  it("resolves knownBad: true and filterReady: true when SW responds accordingly", async () => {
+    sendMessageMock.mockImplementation((_msg: any, cb: any) => {
+      cb({ knownBad: true, filterReady: true });
+    });
+    const result = await checkReputationViaMessage("evil.example");
+    expect(result.knownBad).toBe(true);
+    expect(result.filterReady).toBe(true);
+    expect(sendMessageMock).toHaveBeenCalledWith(
+      { type: "ns-reputation-check", domain: "evil.example" },
+      expect.any(Function)
+    );
+  });
+
+  it("resolves knownBad: false, filterReady: true when domain is clean", async () => {
+    sendMessageMock.mockImplementation((_msg: any, cb: any) => {
+      cb({ knownBad: false, filterReady: true });
+    });
+    const result = await checkReputationViaMessage("safe.example");
+    expect(result.knownBad).toBe(false);
+    expect(result.filterReady).toBe(true);
+  });
+
+  it("resolves knownBad: false, filterReady: false when SW returns null response", async () => {
+    sendMessageMock.mockImplementation((_msg: any, cb: any) => {
+      cb(null);
+    });
+    const result = await checkReputationViaMessage("any.example");
+    expect(result.knownBad).toBe(false);
+    expect(result.filterReady).toBe(false);
+  });
+
+  it("resolves knownBad: false, filterReady: false when runtime.lastError is set", async () => {
+    sendMessageMock.mockImplementation((_msg: any, cb: any) => {
+      (globalThis as any).chrome.runtime.lastError = { message: "disconnected" };
+      cb(undefined);
+      (globalThis as any).chrome.runtime.lastError = null;
+    });
+    const result = await checkReputationViaMessage("any.example");
+    expect(result.knownBad).toBe(false);
+    expect(result.filterReady).toBe(false);
+  });
+
+  it("resolves knownBad: false, filterReady: false when sendMessage throws", async () => {
+    sendMessageMock.mockImplementation(() => {
+      throw new Error("Extension context invalidated");
+    });
+    const result = await checkReputationViaMessage("any.example");
+    expect(result.knownBad).toBe(false);
+    expect(result.filterReady).toBe(false);
+  });
+
+  it("resolves knownBad: false, filterReady: false when chrome.runtime is undefined", async () => {
+    delete (globalThis as any).chrome;
+    // Re-import is not needed; the function accesses chrome at call time
+    // but the try/catch should handle the missing global.
+    const result = await checkReputationViaMessage("any.example");
+    expect(result.knownBad).toBe(false);
+    expect(result.filterReady).toBe(false);
+  });
+
+  it("distinguishes 'domain clean' from 'filter not ready'", async () => {
+    // Filter not ready: SW responds without filterReady
+    sendMessageMock.mockImplementation((_msg: any, cb: any) => {
+      cb({ knownBad: false, filterReady: false });
+    });
+    const notReady = await checkReputationViaMessage("any.example");
+    expect(notReady.knownBad).toBe(false);
+    expect(notReady.filterReady).toBe(false);
+
+    // Filter ready, domain clean
+    sendMessageMock.mockImplementation((_msg: any, cb: any) => {
+      cb({ knownBad: false, filterReady: true });
+    });
+    const clean = await checkReputationViaMessage("safe.example");
+    expect(clean.knownBad).toBe(false);
+    expect(clean.filterReady).toBe(true);
   });
 });
