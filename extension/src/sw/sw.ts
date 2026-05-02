@@ -46,6 +46,8 @@ const lastCommittedByTab = new Map<
 // --- OAuth flow tracking per tab ---
 // Maps tabId -> OAuthFlowState. Tracks OAuth authorization flows so we can
 // detect when a consent flow redirects to an unexpected callback endpoint.
+// Known limitation: this state is lost on SW restart (same as dblclick
+// tracking). P3-10 will address this with chrome.storage.session.
 const oauthFlowByTab = new Map<number, OAuthFlowState>();
 
 function pruneStaleOAuthFlows(): void {

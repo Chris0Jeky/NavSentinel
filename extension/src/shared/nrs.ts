@@ -93,8 +93,21 @@ export function computeNRS(cdsResult: ScoreResult, navCtx: NavigationContext): N
     nrsFactors.push("nrs_oauth_redirect_mismatch");
   }
 
+  // When both oauthOpenerManipulation and doubleClickHijackActive fire
+  // from the same event, use only the higher weight to avoid an overly
+  // aggressive combined +85. We still record the factor for diagnostics.
   if (navCtx.oauthOpenerManipulation) {
-    nrs += NRS_WEIGHT_OAUTH_OPENER_MANIPULATION;
+    if (navCtx.doubleClickHijackActive) {
+      // doubleClickHijackActive already contributed; only add the delta
+      // if oauthOpenerManipulation is the higher weight.
+      const delta = NRS_WEIGHT_OAUTH_OPENER_MANIPULATION - NRS_WEIGHT_DOUBLE_CLICK_HIJACK;
+      if (delta > 0) {
+        nrs += delta;
+      }
+      // else: doubleClickHijack weight >= oauthOpener weight; no additional score
+    } else {
+      nrs += NRS_WEIGHT_OAUTH_OPENER_MANIPULATION;
+    }
     nrsFactors.push("nrs_oauth_opener_manipulation");
   }
 

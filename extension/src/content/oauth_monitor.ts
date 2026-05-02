@@ -11,6 +11,10 @@
  * The service worker tracks per-tab OAuth flow state and forwards it
  * to the content script via runtime messages. This module processes
  * those messages and exposes signals for NRS scoring.
+ *
+ * Known limitation: MV3 service worker restarts lose in-memory flow
+ * state (same pattern as DoubleClickjacking tracking). P3-10 will
+ * address this with chrome.storage.session persistence.
  */
 
 import { getRegistrableDomain, normalizeHost } from "../shared/domain";
@@ -29,39 +33,83 @@ export interface OAuthFlowState {
 
 /**
  * URL path segments that indicate an OAuth / authorization flow.
- * Matched case-insensitively against the URL pathname.
+ * Matched at path-segment boundaries (preceded by "/" and followed by "/"
+ * or end-of-path) to avoid substring matches inside unrelated words.
  */
 const OAUTH_PATH_KEYWORDS = [
   "oauth",
+  "oauth2",
   "authorize",
   "consent",
-  "login",
-  "auth",
-  "signin",
-  "sign-in",
   "openid",
 ] as const;
 
 /**
+ * OAuth-specific query parameter names whose presence (together with a
+ * path keyword) indicates a genuine OAuth flow. Generic params like
+ * "continue" and "next" are excluded to avoid false positives on normal
+ * login pages.
+ */
+const OAUTH_QUERY_PARAMS = [
+  "response_type",
+  "client_id",
+  "redirect_uri",
+  "scope",
+] as const;
+
+/**
  * Query parameter names that carry a redirect URI in OAuth flows.
+ * Only OAuth-specific names are kept; generic names like "continue" and
+ * "next" were removed to reduce false positives.
  */
 const REDIRECT_PARAM_NAMES = [
   "redirect_uri",
   "redirect_url",
-  "callback",
-  "return_to",
-  "return_url",
-  "continue",
-  "next",
   "callback_url",
-  "post_login_redirect_uri",
+  "return_url",
 ] as const;
+
+/** TTL for OAuth flag expiry (ms). Flags auto-expire after this period. */
+const OAUTH_FLAG_TTL_MS = 60_000;
+
+/** Hosts treated as local development callbacks (never flag as mismatch). */
+const LOCALHOST_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 // --- URL analysis helpers ---
 
 /**
+ * Check whether a keyword appears at a path-segment boundary.
+ * Matches "/keyword/", "/keyword?", "/keyword" at end of path.
+ */
+function hasPathSegment(lowerPath: string, keyword: string): boolean {
+  let idx = 0;
+  while (true) {
+    idx = lowerPath.indexOf(keyword, idx);
+    if (idx === -1) return false;
+    // Must be preceded by '/'
+    if (idx === 0 || lowerPath[idx - 1] !== "/") {
+      idx += 1;
+      continue;
+    }
+    // Must be followed by '/', '?', or end-of-string
+    const afterIdx = idx + keyword.length;
+    if (afterIdx >= lowerPath.length) return true;
+    const after = lowerPath[afterIdx];
+    if (after === "/" || after === "?") return true;
+    idx += 1;
+  }
+}
+
+/**
  * Returns true when the URL looks like part of an OAuth / authorization flow.
- * Checks whether the pathname or query string contains any of the OAuth keywords.
+ *
+ * To avoid false positives on normal login pages, the function requires BOTH:
+ *   1. A path keyword at a segment boundary (e.g. "/oauth2/" not "oauth" in
+ *      "myauthpage")
+ *   2. At least one OAuth-specific query parameter (response_type, client_id,
+ *      redirect_uri, scope)
+ *
+ * This two-gate approach prevents every /login page from being treated as OAuth.
  */
 export function isOAuthUrl(url: string): boolean {
   let parsed: URL;
@@ -75,10 +123,19 @@ export function isOAuthUrl(url: string): boolean {
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
 
   const lowerPath = parsed.pathname.toLowerCase();
-  const lowerSearch = parsed.search.toLowerCase();
 
+  let hasKeyword = false;
   for (const kw of OAUTH_PATH_KEYWORDS) {
-    if (lowerPath.includes(kw) || lowerSearch.includes(kw)) return true;
+    if (hasPathSegment(lowerPath, kw)) {
+      hasKeyword = true;
+      break;
+    }
+  }
+  if (!hasKeyword) return false;
+
+  // Require at least one OAuth-specific query parameter
+  for (const param of OAUTH_QUERY_PARAMS) {
+    if (parsed.searchParams.has(param)) return true;
   }
 
   return false;
@@ -125,6 +182,10 @@ export function isUnexpectedCallback(
     return true;
   }
 
+  // Localhost callbacks are used in local development (e.g. desktop OAuth
+  // flows). Never treat them as mismatches.
+  if (LOCALHOST_HOSTS.has(actualHost)) return false;
+
   const actualReg = getRegistrableDomain(actualHost);
   const expectedReg = getRegistrableDomain(
     normalizeHost(flow.expectedCallbackDomain),
@@ -140,11 +201,18 @@ export function isUnexpectedCallback(
 /** Current OAuth flow state for this tab, forwarded from the SW. */
 let currentFlow: OAuthFlowState | null = null;
 
-/** True when the SW reported an unexpected OAuth callback redirect. */
-let oauthRedirectMismatch = false;
+/**
+ * Timestamp (ms) when the redirect-mismatch flag was set, or 0 if unset.
+ * The flag auto-expires after OAUTH_FLAG_TTL_MS to prevent permanent
+ * latching in SPAs where subsequent navigations would inherit the penalty.
+ */
+let oauthRedirectMismatchAt = 0;
 
-/** True when opener manipulation was observed during an active OAuth flow. */
-let oauthOpenerManipulation = false;
+/**
+ * Timestamp (ms) when the opener-manipulation flag was set, or 0 if unset.
+ * Same TTL-based expiry as oauthRedirectMismatchAt.
+ */
+let oauthOpenerManipulationAt = 0;
 
 /**
  * Handle OAuth-related chrome.runtime.onMessage messages from the SW.
@@ -166,12 +234,12 @@ export function handleOAuthRuntimeMessage(message: any): boolean {
   }
 
   if (message.type === "ns-oauth-redirect-mismatch") {
-    oauthRedirectMismatch = true;
+    oauthRedirectMismatchAt = Date.now();
     return true;
   }
 
   if (message.type === "ns-oauth-opener-manipulation") {
-    oauthOpenerManipulation = true;
+    oauthOpenerManipulationAt = Date.now();
     return true;
   }
 
@@ -180,27 +248,45 @@ export function handleOAuthRuntimeMessage(message: any): boolean {
 
 // --- NRS signal accessors ---
 
+/** Returns true if a timestamp is set and has not yet expired. */
+function isFlagActive(setAt: number): boolean {
+  return setAt > 0 && (Date.now() - setAt) < OAUTH_FLAG_TTL_MS;
+}
+
 /**
  * Returns true when the SW detected an OAuth callback redirect to an
  * unexpected domain. Used by NRS scoring (+30).
+ * Auto-expires after OAUTH_FLAG_TTL_MS to prevent permanent latching.
  */
 export function isOAuthRedirectMismatch(): boolean {
-  return oauthRedirectMismatch;
+  if (!isFlagActive(oauthRedirectMismatchAt)) {
+    oauthRedirectMismatchAt = 0;
+    return false;
+  }
+  return true;
 }
 
 /**
  * Returns true when opener manipulation was observed during an active
  * OAuth consent flow. Used by NRS scoring (+45).
+ * Auto-expires after OAUTH_FLAG_TTL_MS to prevent permanent latching.
  */
 export function isOAuthOpenerManipulation(): boolean {
-  return oauthOpenerManipulation;
+  if (!isFlagActive(oauthOpenerManipulationAt)) {
+    oauthOpenerManipulationAt = 0;
+    return false;
+  }
+  return true;
 }
 
 /**
  * Returns the current OAuth flow state for this tab, or null if no
- * flow is active.
+ * flow is active. Also clears stale flow state that has expired.
  */
 export function getOAuthFlowState(): OAuthFlowState | null {
+  if (currentFlow && (Date.now() - currentFlow.startedAt) >= OAUTH_FLAG_TTL_MS) {
+    currentFlow = null;
+  }
   return currentFlow;
 }
 
@@ -209,6 +295,6 @@ export function getOAuthFlowState(): OAuthFlowState | null {
  */
 export function _resetOAuthState(): void {
   currentFlow = null;
-  oauthRedirectMismatch = false;
-  oauthOpenerManipulation = false;
+  oauthRedirectMismatchAt = 0;
+  oauthOpenerManipulationAt = 0;
 }
