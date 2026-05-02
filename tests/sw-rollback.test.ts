@@ -76,6 +76,29 @@ function createChromeMock() {
             // not needed in these tests
           }
         },
+        session: {
+          _store: {} as Record<string, unknown>,
+          async get(keys?: string | string[]) {
+            if (keys === undefined) return { ...this._store };
+            if (typeof keys === "string") {
+              return { [keys]: this._store[keys] };
+            }
+            const result: Record<string, unknown> = {};
+            for (const key of keys) {
+              result[key] = this._store[key];
+            }
+            return result;
+          },
+          async set(items: Record<string, unknown>) {
+            Object.assign(this._store, items);
+          },
+          async remove(keys: string | string[]) {
+            const keyList = typeof keys === "string" ? [keys] : keys;
+            for (const key of keyList) {
+              delete this._store[key];
+            }
+          }
+        },
         onChanged: storageOnChanged
       },
       declarativeNetRequest: {
