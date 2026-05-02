@@ -11,6 +11,7 @@ export type DebugInfo = {
   ctx: ClickContext;
   mainGuard?: "unknown" | "yes" | "no";
   lastNav?: { kind: string; url: string; status: "allowed" | "blocked" };
+  mutationSignals?: number;
 };
 
 let enabled = false;
@@ -107,7 +108,8 @@ export function updateDebugOverlay(info: DebugInfo): void {
     `Under: ${under ? `${formatElement(under)} (${formatRect(under)})` : "none"}`,
     `Retargeted: ${info.ctx.retargeted ? "yes" : "no"}`,
     `LegitBackdrop: ${info.ctx.isLegitModalBackdrop ? "yes" : "no"}`,
-    `ExplicitNewTab: ${info.ctx.explicitNewTabIntent ? "yes" : "no"}`
+    `ExplicitNewTab: ${info.ctx.explicitNewTabIntent ? "yes" : "no"}`,
+    `MutationSignals: ${info.mutationSignals ?? 0}`
   ];
 
   pre.textContent = lines.join("\n");

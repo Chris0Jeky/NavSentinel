@@ -30,6 +30,12 @@ import {
   isDoubleClickHijackActive,
   getDblclickOpenerNavUrl,
 } from "./dblclick_guard";
+import {
+  startMutationMonitor,
+  getMutationSignals,
+  clearMutationSignals,
+  type MutationSignal,
+} from "./mutation_monitor";
 
 const CDS_SMART_BLOCK_THRESHOLD = 70;
 const CDS_STRICT_BLOCK_THRESHOLD = 50;
@@ -155,6 +161,8 @@ async function initSettings() {
   postToMain("ns-ping");
   // Load reputation bloom filter in the background (non-blocking)
   void loadReputationFilter();
+  // Start DOM mutation monitoring after settings are ready
+  startMutationMonitor();
   if (window.top === window) {
     try {
       chrome.runtime.sendMessage({ type: "ns-ready" });
@@ -944,6 +952,12 @@ window.addEventListener(
         (destHost !== null && destHost !== destRegDomain && isKnownBadDomain(destHost))
       : false;
 
+    // Check for high-severity mutation signals (post-load DOM tampering)
+    const mutSignals = getMutationSignals();
+    const hasHighMutationSignal = mutSignals.some(
+      (s: MutationSignal) => s.severity === "high"
+    );
+
     const navCtx: NavigationContext = {
       isNewTabOrWindow: isBlankAnchor,
       isCrossSite,
@@ -954,6 +968,7 @@ window.addEventListener(
       explicitNewTabIntent: explicitNewTab,
       doubleClickHijackActive: dblClickHijack,
       knownBadDomain: destDomainBad,
+      mutationSignalsActive: hasHighMutationSignal,
     };
 
     if (dblClickHijack) {
@@ -1037,11 +1052,11 @@ window.addEventListener(
       });
     }
 
-    lastDebug = { mode, decision, cds, nrs, reasonCodes, nrsFactors, ctx };
+    lastDebug = { mode, decision, cds, nrs, reasonCodes, nrsFactors, ctx, mutationSignals: mutSignals.length };
     refreshDebug();
 
     if (settings.debug) {
-      console.debug("[NavSentinel] click", { decision, nrs, cds, reasonCodes, nrsFactors, ctx });
+      console.debug("[NavSentinel] click", { decision, nrs, cds, reasonCodes, nrsFactors, ctx, mutationSignals: mutSignals.length });
     }
   },
   true
