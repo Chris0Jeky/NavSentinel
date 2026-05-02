@@ -1,0 +1,153 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OAuth 02 - Legitimate OAuth Flow (False Positive Check)</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 24px;
+      max-width: 700px;
+      margin: 0 auto;
+    }
+    h1 { margin-top: 0; }
+    .legit-surface {
+      margin: 24px 0;
+      padding: 32px;
+      background: #e8f5e9;
+      border: 2px solid #43a047;
+      border-radius: 12px;
+      text-align: center;
+    }
+    .oauth-btn {
+      display: inline-block;
+      padding: 12px 24px;
+      background: #fff;
+      color: #333;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 15px;
+      cursor: pointer;
+      margin: 8px;
+    }
+    .oauth-btn:hover {
+      background: #f5f5f5;
+    }
+    .oauth-btn img {
+      vertical-align: middle;
+      margin-right: 8px;
+      width: 18px;
+      height: 18px;
+    }
+    .log {
+      margin-top: 24px;
+      font-family: monospace;
+      font-size: 13px;
+      background: #1a1a1a;
+      color: #aaffaa;
+      padding: 12px;
+      border-radius: 8px;
+      max-height: 200px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+    .note {
+      font-size: 13px;
+      color: #666;
+      margin-top: 16px;
+    }
+  </style>
+</head>
+<body>
+  <h1>OAuth 02 - Legitimate OAuth Flow</h1>
+  <p>
+    Simulates a legitimate OAuth login flow. The page opens the real OAuth
+    provider with a matching <code>redirect_uri</code> that points back to
+    this application's own domain. This flow should <strong>NOT</strong> be
+    blocked or flagged by NavSentinel.
+  </p>
+  <p><strong>Expected:</strong> NavSentinel may detect the OAuth flow but
+    should NOT block it. The redirect_uri matches the application's domain,
+    there is no opener manipulation, and the navigation is user-initiated
+    with a visible, labeled button.</p>
+
+  <div class="legit-surface">
+    <p>Sign in to continue:</p>
+    <button class="oauth-btn" id="googleBtn">
+      Sign in with Google
+    </button>
+    <button class="oauth-btn" id="githubBtn">
+      Sign in with GitHub
+    </button>
+  </div>
+
+  <div class="log" id="log"></div>
+
+  <p class="note">
+    This fixture verifies that legitimate OAuth popups with proper
+    redirect_uri values, visible buttons, and no opener manipulation do not
+    trigger false positives. The OAuth monitor should recognize the flow
+    but NOT elevate the risk score.
+  </p>
+
+  <script>
+    const log = document.getElementById("log");
+
+    function addLog(msg) {
+      const line = `[${new Date().toISOString().slice(11,23)}] ${msg}\n`;
+      log.textContent += line;
+      log.scrollTop = log.scrollHeight;
+    }
+
+    // Legitimate OAuth URLs -- redirect_uri matches the app's own domain
+    const currentOrigin = location.origin;
+    const googleOAuthUrl =
+      "https://accounts.google.com/o/oauth2/v2/auth" +
+      "?client_id=real-app-id.apps.googleusercontent.com" +
+      `&redirect_uri=${encodeURIComponent(currentOrigin + "/auth/callback")}` +
+      "&response_type=code" +
+      "&scope=openid+email" +
+      "&state=secure-random-state";
+
+    const githubOAuthUrl =
+      "https://github.com/login/oauth/authorize" +
+      "?client_id=real-github-client-id" +
+      `&redirect_uri=${encodeURIComponent(currentOrigin + "/auth/github/callback")}` +
+      "&scope=user:email" +
+      "&state=secure-random-state";
+
+    document.getElementById("googleBtn").addEventListener("click", () => {
+      addLog("User clicked 'Sign in with Google' (legitimate)");
+      addLog(`redirect_uri = ${currentOrigin}/auth/callback`);
+      addLog("This is a legitimate OAuth flow -- redirect_uri matches app domain.");
+
+      const child = window.open(googleOAuthUrl, "_blank", "width=500,height=600");
+      if (child) {
+        addLog("Google OAuth popup opened successfully.");
+        addLog("No opener manipulation. No redirect mismatch.");
+      } else {
+        addLog("Popup was blocked. If NavSentinel blocked this, it may be a false positive.");
+        addLog("NOTE: NavSentinel may still gate the popup for user confirmation, which is acceptable behavior.");
+      }
+    });
+
+    document.getElementById("githubBtn").addEventListener("click", () => {
+      addLog("User clicked 'Sign in with GitHub' (legitimate)");
+      addLog(`redirect_uri = ${currentOrigin}/auth/github/callback`);
+      addLog("This is a legitimate OAuth flow -- redirect_uri matches app domain.");
+
+      const child = window.open(githubOAuthUrl, "_blank", "width=500,height=600");
+      if (child) {
+        addLog("GitHub OAuth popup opened successfully.");
+      } else {
+        addLog("Popup was blocked. If NavSentinel blocked this, check popup-intent heuristics.");
+        addLog("NOTE: NavSentinel may gate cross-site popups for confirmation -- that is acceptable.");
+      }
+    });
+
+    addLog("Fixture loaded. Click a sign-in button to test the legitimate OAuth flow.");
+    addLog(`App origin: ${currentOrigin}`);
+  </script>
+</body>
+</html>

