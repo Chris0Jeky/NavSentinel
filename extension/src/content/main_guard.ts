@@ -15,6 +15,14 @@ const PROTOCOL_VERSION = 1;
 const DBLCLICK_WINDOW_MS = 800;
 const OPENER_NAV_STALE_MS = 3000;
 
+// --- PushState gating constants ---
+/** How long after a gesture a pushState/replaceState call is considered gesture-correlated. */
+const PUSHSTATE_GESTURE_WINDOW_MS = 2000;
+/** Minimum number of rapid state changes to flag without domain-like path analysis. */
+const PUSHSTATE_RAPID_THRESHOLD = 4;
+/** Window for counting rapid pushState calls. */
+const PUSHSTATE_RAPID_WINDOW_MS = 1000;
+
 let bridgePort: MessagePort | null = null;
 let bridgeSession: string | null = null;
 
@@ -47,6 +55,12 @@ let lastWindowOpenTs = 0;
 // Tracks opener.location writes observed from child windows.
 let lastOpenerNavTs = 0;
 let lastOpenerNavUrl = "";
+
+// --- PushState gating state ---
+/** Timestamp of the most recent trusted user gesture (pointerdown/click). */
+let lastGestureTs = 0;
+/** Timestamps of recent pushState/replaceState calls for rapid-fire detection. */
+let pushStateTimestamps: number[] = [];
 
 const blockedActions = new Map<
   string,
@@ -680,6 +694,7 @@ window.addEventListener(
   "pointerdown",
   (event) => {
     if (!(event instanceof PointerEvent)) return;
+    if (event.isTrusted) lastGestureTs = nowMs();
     maybeArmPopupIntent(event);
   },
   true
@@ -711,6 +726,7 @@ window.addEventListener(
   "click",
   (event) => {
     if (!(event instanceof MouseEvent)) return;
+    if (event.isTrusted) lastGestureTs = nowMs();
     maybeArmPopupIntent(event);
     maybeArmPopupIntent(event, { keyboardOnly: true });
 
@@ -865,6 +881,125 @@ function patchClipboard(): void {
       // clipboard.write may not be configurable in all contexts
     }
   }
+}
+
+// --- PushState detection helpers ---
+
+/**
+ * Heuristic: does the new path look like a cross-origin navigation attempt?
+ *
+ * Attackers use pushState to set the URL path to something like
+ * `/accounts.google.com/signin` or `/www.chase.com/secure/login` to
+ * make the address bar appear as if the user navigated to a trusted site.
+ *
+ * We check for domain-like segments (containing dots) in the new path
+ * that do not match the current hostname.
+ *
+ * Legitimate SPAs typically push paths like `/dashboard`, `/user/123`,
+ * `/products/widget` -- none of which contain dots that look like domains.
+ */
+function pathLooksCrossOrigin(newUrl: string): boolean {
+  try {
+    const parsed = new URL(newUrl, location.href);
+    // Only inspect same-origin pushState (cross-origin would throw)
+    if (parsed.origin !== location.origin) return false;
+
+    const segments = parsed.pathname.split("/").filter(Boolean);
+    const currentHost = location.hostname.toLowerCase();
+    for (const rawSeg of segments) {
+      let seg: string;
+      try { seg = decodeURIComponent(rawSeg); } catch { seg = rawSeg; }
+      const dots = seg.split(".").length - 1;
+      // Require 2+ dots to distinguish real domains (accounts.google.com)
+      // from file names (style.css), version strings (v1.2.3), etc.
+      if (dots >= 2 && /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i.test(seg)) {
+        if (seg.toLowerCase() !== currentHost) {
+          return true;
+        }
+      }
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check if a pushState/replaceState call is suspicious.
+ *
+ * Returns a reason string if suspicious, or null if benign.
+ */
+function checkPushStateSuspicious(url: string | URL | null | undefined, method: string): string | null {
+  if (isOff()) return null;
+
+  const now = nowMs();
+  const urlStr = url != null ? String(url) : "";
+
+  // --- Rapid-fire detection ---
+  // Track timestamps and prune old entries
+  pushStateTimestamps.push(now);
+  const cutoff = now - PUSHSTATE_RAPID_WINDOW_MS;
+  pushStateTimestamps = pushStateTimestamps.filter(ts => ts >= cutoff);
+
+  if (pushStateTimestamps.length >= PUSHSTATE_RAPID_THRESHOLD) {
+    return "rapid_pushstate";
+  }
+
+  // --- Gesture-correlated domain-like path ---
+  if (lastGestureTs > 0 && (now - lastGestureTs) <= PUSHSTATE_GESTURE_WINDOW_MS) {
+    if (urlStr && pathLooksCrossOrigin(urlStr)) {
+      return "domain_like_path_after_gesture";
+    }
+  }
+
+  return null;
+}
+
+const nativePushState = History.prototype.pushState;
+const nativeReplaceState = History.prototype.replaceState;
+
+function patchHistory(): void {
+  History.prototype.pushState = function (
+    data: any,
+    unused: string,
+    url?: string | URL | null,
+  ): void {
+    const result = nativePushState.call(this, data, unused, url);
+    const reason = checkPushStateSuspicious(url, "pushState");
+    if (reason) {
+      postToIsolated("ns-pushstate-suspicious", {
+        ts: nowMs(),
+        url: url != null ? String(url) : "",
+        method: "pushState",
+        reason,
+      });
+      if (debug) {
+        console.debug("[NavSentinel] suspicious pushState", { url: String(url), reason });
+      }
+    }
+    return result;
+  };
+
+  History.prototype.replaceState = function (
+    data: any,
+    unused: string,
+    url?: string | URL | null,
+  ): void {
+    const result = nativeReplaceState.call(this, data, unused, url);
+    const reason = checkPushStateSuspicious(url, "replaceState");
+    if (reason) {
+      postToIsolated("ns-pushstate-suspicious", {
+        ts: nowMs(),
+        url: url != null ? String(url) : "",
+        method: "replaceState",
+        reason,
+      });
+      if (debug) {
+        console.debug("[NavSentinel] suspicious replaceState", { url: String(url), reason });
+      }
+    }
+    return result;
+  };
 }
 
 /**
@@ -1076,4 +1211,5 @@ patchOpen();
 patchLocation();
 patchForms();
 patchClipboard();
+patchHistory();
 (window as any).__navsentinelMainGuard = true;

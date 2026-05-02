@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PushState 02 - Rapid State Changes</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 24px;
+      background: #f5f5f5;
+    }
+    h1 { margin-top: 0; }
+    .description {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      padding: 12px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+    }
+    #status {
+      margin-top: 16px;
+      padding: 8px 12px;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    .status-pending { background: #fff3cd; }
+    .status-triggered { background: #d4edda; color: #155724; }
+    button.attack-btn {
+      padding: 12px 24px;
+      font-size: 16px;
+      background: #dc3545;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button.attack-btn:hover { background: #c82333; }
+  </style>
+</head>
+<body>
+  <h1>PushState 02 - Rapid State Changes</h1>
+  <div class="description">
+    <strong>Attack scenario:</strong> After the user clicks, the page fires
+    multiple rapid <code>history.pushState</code> calls in quick succession.
+    This is used to overwhelm the browser history, making it difficult for the
+    user to navigate back, and to cycle through different deceptive URLs.
+    <br><br>
+    <strong>Expected:</strong> NavSentinel detects the rapid pushState burst
+    (4+ calls within 1 second) and flags it as
+    <code>ns-pushstate-suspicious</code> with reason <code>rapid_pushstate</code>.
+  </div>
+
+  <button class="attack-btn" id="trigger">Click to continue</button>
+
+  <div id="status" class="status-pending">
+    Status: Waiting for user click...
+  </div>
+
+  <script>
+    document.getElementById("trigger").addEventListener("click", function() {
+      // Simulate the attack: rapid-fire pushState calls
+      history.pushState({}, "", "/step1");
+      history.pushState({}, "", "/step2");
+      history.pushState({}, "", "/step3");
+      history.pushState({}, "", "/secure.bank.com/login");
+      history.pushState({}, "", "/verify");
+
+      document.getElementById("status").textContent =
+        "Status: Rapid pushState burst fired! NavSentinel should flag ns-pushstate-suspicious with reason rapid_pushstate.";
+      document.getElementById("status").className = "status-triggered";
+    });
+  </script>
+</body>
+</html>

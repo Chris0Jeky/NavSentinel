@@ -25,6 +25,8 @@ export interface NavigationContext {
   clickfixScore?: number | undefined;
   /** The user previously allowed the popup that opened this tab */
   openerWindowPreviouslyAllowed?: boolean | undefined;
+  /** Suspicious history.pushState/replaceState abuse detected after a user gesture */
+  pushStateAbuse?: boolean | undefined;
 }
 
 export interface NRSResult {
@@ -52,6 +54,7 @@ const NRS_WEIGHT_OAUTH_REDIRECT_MISMATCH = 30;
 const NRS_WEIGHT_OAUTH_OPENER_MANIPULATION = 45;
 const NRS_WEIGHT_CLICKFIX_CAP = 40;
 const NRS_WEIGHT_OPENER_PREVIOUSLY_ALLOWED = -20;
+const NRS_WEIGHT_PUSHSTATE_ABUSE = 20;
 
 /** Raw scores above this get 50% weight on the excess. */
 const NRS_DIMINISHING_RETURNS_THRESHOLD = 100;
@@ -151,6 +154,11 @@ export function computeNRS(cdsResult: ScoreResult, navCtx: NavigationContext): N
   if (navCtx.openerWindowPreviouslyAllowed) {
     nrs += NRS_WEIGHT_OPENER_PREVIOUSLY_ALLOWED;
     nrsFactors.push("nrs_opener_previously_allowed");
+  }
+
+  if (navCtx.pushStateAbuse) {
+    nrs += NRS_WEIGHT_PUSHSTATE_ABUSE;
+    nrsFactors.push("nrs_pushstate_abuse");
   }
 
   // Diminishing returns: points above the threshold get reduced weight
