@@ -830,8 +830,9 @@ function checkSmartDefaultSuggestion(sourceDomain: string, destDomain: string): 
       const suggestion = analyzeOutcomesForPair(outcomes, sourceDomain, destDomain);
       if (!suggestion) return;
 
+      const displayDomain = getRegistrableDomain(destDomain) || destDomain;
       showToast({
-        message: `You’ve allowed navigations to ${destDomain} ${suggestion.allowCount} times. Always allow?`,
+        message: `You’ve allowed navigations to ${displayDomain} ${suggestion.allowCount} times. Always allow?`,
         actions: [
           {
             label: "Always Allow",
@@ -880,18 +881,18 @@ function showAllowPrompt(params: {
     {
       label: "Allow once",
       onClick: () => {
-        appendOutcomeSafely({
+        allowActionOnce(params.actionId, params.url, params.target, params.features);
+        void appendPromptOutcome({
           domain: sourceDomain,
           ...(destDomain !== undefined ? { destDomain } : {}),
           type: "nav",
           score: promptScore,
           outcome: "allow_once"
-        });
-        allowActionOnce(params.actionId, params.url, params.target, params.features);
-        // After recording the outcome, check if smart default threshold is met
-        if (destDomain) {
-          checkSmartDefaultSuggestion(sourceDomain, destDomain);
-        }
+        }).then(() => {
+          if (destDomain) {
+            checkSmartDefaultSuggestion(sourceDomain, destDomain);
+          }
+        }).catch(() => {});
       }
     }
   ];
