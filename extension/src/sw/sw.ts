@@ -12,6 +12,87 @@ const TYPED_ORIGIN_MAX_MS = 15_000;
 const DBLCLICK_CHILD_MAX_AGE_MS = 5_000;
 const DBLCLICK_CHILD_PRUNE_LIMIT = 50;
 
+// --- Redirect chain tracking ---
+const REDIRECT_CHAIN_WINDOW_MS = 10_000;
+const REDIRECT_CHAIN_MAX_HOPS = 10;
+const REDIRECT_CHAIN_STALE_MS = 30_000;
+
+interface RedirectChainHop {
+  url: string;
+  ts: number;
+  transitionType: string;
+}
+
+interface RedirectChain {
+  hops: RedirectChainHop[];
+  startTs: number;
+}
+
+const redirectChainByTab = new Map<number, RedirectChain>();
+
+/** URL shorteners and advertising redirect domains. */
+const KNOWN_REDIRECTOR_DOMAINS: ReadonlyArray<string> = [
+  "bit.ly",
+  "t.co",
+  "goo.gl",
+  "tinyurl.com",
+  "ow.ly",
+  "is.gd",
+  "buff.ly",
+  "rb.gy",
+  "doubleclick.net",
+  "googleadservices.com",
+  "googlesyndication.com",
+  "adclick.g.doubleclick.net",
+  "clickserve.dartsearch.net",
+  "adfox.yandex.ru",
+];
+
+function isKnownRedirectorHost(hostname: string): boolean {
+  const lower = hostname.toLowerCase();
+  for (let i = 0; i < KNOWN_REDIRECTOR_DOMAINS.length; i++) {
+    const domain = KNOWN_REDIRECTOR_DOMAINS[i]!;
+    if (lower === domain || lower.endsWith("." + domain)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function pruneStaleChains(now: number): void {
+  const entries = Array.from(redirectChainByTab.entries());
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i]!;
+    const chain = entry[1];
+    const lastHop = chain.hops[chain.hops.length - 1];
+    const lastTs = lastHop ? lastHop.ts : chain.startTs;
+    if (now - lastTs > REDIRECT_CHAIN_STALE_MS) {
+      redirectChainByTab.delete(entry[0]);
+    }
+  }
+}
+
+function getRedirectChainInfo(tabId: number): { depth: number; viaKnownRedirector: boolean } {
+  const chain = redirectChainByTab.get(tabId);
+  if (!chain || chain.hops.length === 0) {
+    return { depth: 0, viaKnownRedirector: false };
+  }
+  let viaKnownRedirector = false;
+  for (let i = 0; i < chain.hops.length; i++) {
+    const hop = chain.hops[i]!;
+    try {
+      const hostname = new URL(hop.url).hostname;
+      if (isKnownRedirectorHost(hostname)) {
+        viaKnownRedirector = true;
+        break;
+      }
+    } catch {
+      // ignore invalid URLs
+    }
+  }
+  return { depth: chain.hops.length, viaKnownRedirector };
+}
+
 const allowUntilByTab = new Map<number, number>();
 const gestureUntilByTab = new Map<number, number>();
 const allowStartedByTab = new Map<number, string>();
@@ -250,6 +331,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
   }
 
+  if (message.type === "ns-get-redirect-chain") {
+    const tabId = sender.tab?.id;
+    if (typeof tabId === "number") {
+      const info = getRedirectChainInfo(tabId);
+      sendResponse?.({ depth: info.depth, viaKnownRedirector: info.viaKnownRedirector });
+    } else {
+      sendResponse?.({ depth: 0, viaKnownRedirector: false });
+    }
+  }
+
   // DoubleClickjacking: forward opener.location write from child to opener tab.
   // Only forward if the sender tab is a known child window to prevent
   // malicious pages from injecting false opener-nav signals.
@@ -311,6 +402,40 @@ chrome.webNavigation.onCommitted.addListener((details) => {
   }
   const prevUrl = lastUrlByTab.get(details.tabId);
   lastUrlByTab.set(details.tabId, details.url);
+
+  // --- Redirect chain tracking ---
+  {
+    pruneStaleChains(now);
+    const qualifiersForChain = details.transitionQualifiers ?? [];
+    const isChainRedirect =
+      qualifiersForChain.includes("client_redirect") ||
+      qualifiersForChain.includes("server_redirect");
+    const existingChain = redirectChainByTab.get(details.tabId);
+
+    if (existingChain && isChainRedirect) {
+      const lastHop = existingChain.hops[existingChain.hops.length - 1];
+      const lastTs = lastHop ? lastHop.ts : existingChain.startTs;
+      if (now - lastTs <= REDIRECT_CHAIN_WINDOW_MS && existingChain.hops.length < REDIRECT_CHAIN_MAX_HOPS) {
+        existingChain.hops.push({ url: details.url, ts: now, transitionType: details.transitionType });
+      } else if (now - lastTs > REDIRECT_CHAIN_WINDOW_MS) {
+        // Gap too large, start fresh
+        redirectChainByTab.set(details.tabId, {
+          hops: [{ url: details.url, ts: now, transitionType: details.transitionType }],
+          startTs: now,
+        });
+      }
+      // If at max hops, just stop appending (chain is already capped)
+    } else if (isChainRedirect) {
+      // No existing chain, start a new one
+      redirectChainByTab.set(details.tabId, {
+        hops: [{ url: details.url, ts: now, transitionType: details.transitionType }],
+        startTs: now,
+      });
+    } else {
+      // Not a redirect -- reset chain for this tab
+      redirectChainByTab.delete(details.tabId);
+    }
+  }
 
   const qualifiers = details.transitionQualifiers ?? [];
   const isRedirect =
@@ -447,6 +572,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   suppressUntilByTab.delete(tabId);
   rollbackReturnByTab.delete(tabId);
   typedOriginByTab.delete(tabId);
+  redirectChainByTab.delete(tabId);
   clearPendingTabState(tabId);
   lastUrlByTab.delete(tabId);
 });
