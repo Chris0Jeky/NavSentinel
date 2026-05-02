@@ -30,6 +30,11 @@ import {
   isDoubleClickHijackActive,
   getDblclickOpenerNavUrl,
 } from "./dblclick_guard";
+import {
+  handleOAuthRuntimeMessage,
+  isOAuthRedirectMismatch,
+  isOAuthOpenerManipulation,
+} from "./oauth_monitor";
 
 const CDS_SMART_BLOCK_THRESHOLD = 70;
 const CDS_STRICT_BLOCK_THRESHOLD = 50;
@@ -768,6 +773,13 @@ if (chrome?.runtime?.onMessage) {
     if (window.top !== window) return;
     handleDblclickRuntimeMessage(message);
   });
+
+  // OAuth monitoring: delegate to oauth_monitor module for
+  // ns-oauth-flow-update, ns-oauth-redirect-mismatch, ns-oauth-opener-manipulation.
+  chrome.runtime.onMessage.addListener((message) => {
+    if (window.top !== window) return;
+    handleOAuthRuntimeMessage(message);
+  });
 }
 
 if (chrome?.runtime?.sendMessage && window.top === window) {
@@ -944,6 +956,9 @@ window.addEventListener(
         (destHost !== null && destHost !== destRegDomain && isKnownBadDomain(destHost))
       : false;
 
+    const oauthRedirectMismatch = isOAuthRedirectMismatch();
+    const oauthOpenerManip = isOAuthOpenerManipulation();
+
     const navCtx: NavigationContext = {
       isNewTabOrWindow: isBlankAnchor,
       isCrossSite,
@@ -954,6 +969,8 @@ window.addEventListener(
       explicitNewTabIntent: explicitNewTab,
       doubleClickHijackActive: dblClickHijack,
       knownBadDomain: destDomainBad,
+      oauthRedirectMismatch,
+      oauthOpenerManipulation: oauthOpenerManip,
     };
 
     if (dblClickHijack) {
