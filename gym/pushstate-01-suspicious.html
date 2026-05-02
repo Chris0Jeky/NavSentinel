@@ -1,0 +1,72 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PushState 01 - Suspicious Domain-like Path</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 24px;
+      background: #f5f5f5;
+    }
+    h1 { margin-top: 0; }
+    .description {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      padding: 12px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+    }
+    #status {
+      margin-top: 16px;
+      padding: 8px 12px;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    .status-pending { background: #fff3cd; }
+    .status-triggered { background: #d4edda; color: #155724; }
+    button.attack-btn {
+      padding: 12px 24px;
+      font-size: 16px;
+      background: #dc3545;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button.attack-btn:hover { background: #c82333; }
+  </style>
+</head>
+<body>
+  <h1>PushState 01 - Suspicious Domain-like Path</h1>
+  <div class="description">
+    <strong>Attack scenario:</strong> After the user clicks a button, the page
+    uses <code>history.pushState</code> to change the URL path to look like a
+    trusted banking domain (e.g., <code>/accounts.chase.com/secure/login</code>).
+    This makes the address bar appear as if the user navigated to Chase bank.
+    <br><br>
+    <strong>Expected:</strong> NavSentinel detects the domain-like path in the
+    pushState call occurring right after a user gesture and flags it as
+    <code>ns-pushstate-suspicious</code> with reason
+    <code>domain_like_path_after_gesture</code>.
+  </div>
+
+  <button class="attack-btn" id="trigger">Click to verify your identity</button>
+
+  <div id="status" class="status-pending">
+    Status: Waiting for user click...
+  </div>
+
+  <script>
+    document.getElementById("trigger").addEventListener("click", function() {
+      // Simulate the attack: pushState to a domain-like path
+      history.pushState({ page: "login" }, "", "/accounts.chase.com/secure/login");
+
+      document.getElementById("status").textContent =
+        "Status: pushState fired with domain-like path! NavSentinel should flag ns-pushstate-suspicious.";
+      document.getElementById("status").className = "status-triggered";
+    });
+  </script>
+</body>
+</html>
