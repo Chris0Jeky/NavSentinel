@@ -16,7 +16,11 @@ const RECENT_WINDOW = 10;
 const RATIO_THRESHOLD = 0.7;
 const MAX_ENTRIES = 200;
 
-export function computeAdjustment(outcomes: PromptOutcomeEntry[], domain: string): number {
+export function computeAdjustment(
+  outcomes: PromptOutcomeEntry[],
+  domain: string,
+  baseThreshold = 70
+): number {
   const domainOutcomes = outcomes.filter(o => o.domain === domain);
   if (domainOutcomes.length < MIN_OUTCOMES) return 0;
 
@@ -32,7 +36,13 @@ export function computeAdjustment(outcomes: PromptOutcomeEntry[], domain: string
       o.outcome === "always_allow" ||
       o.outcome === "trust"
     ) {
-      allowWeight++;
+      // Discount high-score allows: if the user allowed at a score near/above
+      // the threshold, this may have been social engineering, not genuine trust
+      if (o.score >= baseThreshold) {
+        allowWeight += 0.3;
+      } else {
+        allowWeight++;
+      }
     } else if (o.outcome === "block" || o.outcome === "dismiss") {
       blockWeight++;
     }

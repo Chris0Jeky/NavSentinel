@@ -4,7 +4,6 @@ import { getRegistrableDomain, normalizeHost, safeUrlParse } from "./domain";
 import {
   ADAPTIVE_SCORES_KEY,
   getAdaptiveScores,
-  clearAdaptiveScores,
   type DomainAdjustment,
 } from "./adaptive_scoring";
 
@@ -438,8 +437,25 @@ export async function importAll(payload: unknown): Promise<void> {
   }
 
   if (p.adaptiveScores && typeof p.adaptiveScores === "object" && !Array.isArray(p.adaptiveScores)) {
-    await chrome.storage.local.set({
-      [ADAPTIVE_SCORES_KEY]: p.adaptiveScores
-    });
+    const raw = p.adaptiveScores as Record<string, unknown>;
+    const validated: Record<string, DomainAdjustment> = {};
+    let count = 0;
+    for (const [key, val] of Object.entries(raw)) {
+      if (count >= 200) break;
+      if (!val || typeof val !== "object") continue;
+      const entry = val as Record<string, unknown>;
+      if (typeof entry.domain !== "string") continue;
+      if (typeof entry.adjustment !== "number") continue;
+      const adjustment = Math.max(-15, Math.min(15, Math.trunc(entry.adjustment)));
+      validated[key] = {
+        domain: entry.domain,
+        adjustment,
+        allowCount: typeof entry.allowCount === "number" ? entry.allowCount : 0,
+        blockCount: typeof entry.blockCount === "number" ? entry.blockCount : 0,
+        lastUpdated: typeof entry.lastUpdated === "number" ? entry.lastUpdated : Date.now(),
+      };
+      count++;
+    }
+    await chrome.storage.local.set({ [ADAPTIVE_SCORES_KEY]: validated });
   }
 }

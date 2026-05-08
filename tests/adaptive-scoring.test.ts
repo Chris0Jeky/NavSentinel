@@ -223,6 +223,99 @@ describe("adaptive scoring", () => {
       // example.com has only 2 outcomes, below threshold
       expect(computeAdjustment(outcomes, "example.com")).toBe(0);
     });
+
+    it("discounts high-score allows (score >= baseThreshold)", async () => {
+      const { chrome } = createChromeMock();
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+      const { computeAdjustment } = await import("../extension/src/shared/adaptive_scoring");
+
+      // 8 high-score allows + 2 blocks: allowWeight = 8*0.3=2.4, blockWeight=2, total=4.4
+      // allowRatio = 2.4/4.4 ≈ 0.545 => below 0.7, so adjustment = 0
+      const highScoreOutcomes: PromptOutcomeEntry[] = [
+        ...Array.from({ length: 8 }, () => makeOutcome("example.com", "allow_once", 80)),
+        ...Array.from({ length: 2 }, () => makeOutcome("example.com", "block", 80)),
+      ];
+
+      // 8 low-score allows + 2 blocks: allowWeight = 8, blockWeight=2, total=10
+      // allowRatio = 0.8 => above 0.7, so negative adjustment
+      const lowScoreOutcomes: PromptOutcomeEntry[] = [
+        ...Array.from({ length: 8 }, () => makeOutcome("example.com", "allow_once", 30)),
+        ...Array.from({ length: 2 }, () => makeOutcome("example.com", "block", 30)),
+      ];
+
+      const highScoreAdj = computeAdjustment(highScoreOutcomes, "example.com");
+      const lowScoreAdj = computeAdjustment(lowScoreOutcomes, "example.com");
+
+      // Low-score allows produce a negative adjustment
+      expect(lowScoreAdj).toBeLessThan(0);
+      // High-score allows are discounted so adjustment is less negative (0 in this case)
+      expect(highScoreAdj).toBeGreaterThan(lowScoreAdj);
+    });
+
+    it("mixed high-score and low-score allows produce less negative adjustment than all low-score", async () => {
+      const { chrome } = createChromeMock();
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+      const { computeAdjustment } = await import("../extension/src/shared/adaptive_scoring");
+
+      // 5 high-score allows + 5 low-score allows
+      const mixedOutcomes: PromptOutcomeEntry[] = [
+        ...Array.from({ length: 5 }, () => makeOutcome("example.com", "allow_once", 80)),
+        ...Array.from({ length: 5 }, () => makeOutcome("example.com", "allow_once", 30)),
+      ];
+
+      // All 10 low-score allows
+      const allLowOutcomes: PromptOutcomeEntry[] = [];
+      for (let i = 0; i < 10; i++) {
+        allLowOutcomes.push(makeOutcome("example.com", "allow_once", 30));
+      }
+
+      const mixedAdj = computeAdjustment(mixedOutcomes, "example.com");
+      const allLowAdj = computeAdjustment(allLowOutcomes, "example.com");
+
+      // Mixed should produce less negative (or equal) adjustment
+      expect(mixedAdj).toBeGreaterThanOrEqual(allLowAdj);
+    });
+
+    it("baseThreshold parameter controls the discount cutoff", async () => {
+      const { chrome } = createChromeMock();
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+      const { computeAdjustment } = await import("../extension/src/shared/adaptive_scoring");
+
+      // 8 allows at score 55 + 2 blocks — score 55 is above strict (50) but below smart (70)
+      const outcomes: PromptOutcomeEntry[] = [
+        ...Array.from({ length: 8 }, () => makeOutcome("example.com", "allow_once", 55)),
+        ...Array.from({ length: 2 }, () => makeOutcome("example.com", "block", 55)),
+      ];
+
+      // With baseThreshold=50 (strict), score 55 >= 50, so allows are discounted (0.3 each)
+      // allowWeight = 8*0.3=2.4, blockWeight=2, ratio=2.4/4.4≈0.545 => 0
+      const strictAdj = computeAdjustment(outcomes, "example.com", 50);
+      // With baseThreshold=70 (smart), score 55 < 70, so allows get full weight
+      // allowWeight = 8, blockWeight=2, ratio=8/10=0.8 => negative
+      const smartAdj = computeAdjustment(outcomes, "example.com", 70);
+
+      // Strict should be less negative (discounted) than smart (full weight)
+      expect(strictAdj).toBeGreaterThan(smartAdj);
+    });
+
+    it("high-score allows mixed with blocks reduce gaming potential", async () => {
+      const { chrome } = createChromeMock();
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+      const { computeAdjustment } = await import("../extension/src/shared/adaptive_scoring");
+
+      // Gaming scenario: 8 high-score allows + 2 blocks
+      // Without discounting, allowRatio = 8/10 = 0.8 => negative adjustment
+      // With discounting, allowWeight = 8*0.3 = 2.4, blockWeight = 2
+      // ratio = 2.4/4.4 ≈ 0.545 — below 0.7 threshold => 0 adjustment
+      const gamingOutcomes: PromptOutcomeEntry[] = [
+        ...Array.from({ length: 8 }, () => makeOutcome("example.com", "allow_once", 75)),
+        ...Array.from({ length: 2 }, () => makeOutcome("example.com", "block", 75)),
+      ];
+
+      const adj = computeAdjustment(gamingOutcomes, "example.com");
+      // Should NOT produce a significant negative adjustment
+      expect(adj).toBe(0);
+    });
   });
 
   describe("storage functions", () => {
