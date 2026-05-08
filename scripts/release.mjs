@@ -82,6 +82,15 @@ const status = run("git status --porcelain");
 if (status) {
   console.error("Working tree is not clean. Commit or stash changes first.");
   if (!dryRun) process.exit(1);
+  console.log("[dry-run] WARNING: working tree is dirty -- real release would abort.");
+}
+
+// Validate we're on the main branch
+const branch = run("git rev-parse --abbrev-ref HEAD");
+if (branch !== "main") {
+  console.error(`Release must be run from main branch (currently on ${branch})`);
+  if (!dryRun) process.exit(1);
+  console.log("[dry-run] WARNING: not on main branch -- real release would abort.");
 }
 
 // 2. Read current version
@@ -102,6 +111,11 @@ if (currentVersion !== manifest.version) {
 
 // 3. Compute new version
 const newVersion = bumpVersion(currentVersion, bumpType);
+
+if (!/^\d+\.\d+\.\d+$/.test(newVersion)) {
+  console.error(`Computed version is not valid semver: ${newVersion}`);
+  process.exit(1);
+}
 
 console.log(`Bump: ${currentVersion} -> ${newVersion} (${bumpType})`);
 
@@ -134,10 +148,22 @@ if (idx === -1) {
   process.exit(1);
 }
 
-const insertPoint = idx + unreleasedHeading.length;
-const newSection = `\n\n## [${newVersion}] - ${todayISO()}`;
-changelog =
-  changelog.slice(0, insertPoint) + newSection + changelog.slice(insertPoint);
+const afterUnreleased = idx + unreleasedHeading.length;
+const nextSectionIdx = changelog.indexOf("\n## [", afterUnreleased);
+
+// Content between [Unreleased] heading and the next version section
+const unreleasedContent = nextSectionIdx === -1
+  ? changelog.slice(afterUnreleased)
+  : changelog.slice(afterUnreleased, nextSectionIdx);
+
+const rest = nextSectionIdx === -1 ? "" : changelog.slice(nextSectionIdx);
+
+changelog = changelog.slice(0, afterUnreleased)
+  + "\n"
+  + `\n## [${newVersion}] - ${todayISO()}`
+  + unreleasedContent
+  + rest;
+
 fs.writeFileSync(changelogPath, changelog, "utf8");
 console.log(`Updated CHANGELOG.md with [${newVersion}] - ${todayISO()}`);
 

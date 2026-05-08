@@ -32,7 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - NRS now applies diminishing returns for scores above 100
 - Previously-allowed popups reduce NRS by 20 points
 
-## [0.3.0] - 2026-04-20
+## [0.3.0] - 2026-05-02
 
 ### Added
 - Navigation Risk Score (NRS) -- composite scoring layering CDS with navigation context
@@ -45,7 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Local prompt telemetry -- tracks allow/block/trust/dismiss outcomes locally
 - Same-organization domain groups to suppress cross-site penalty for multi-domain ecosystems
 
-## [0.2.0] - 2026-04-09
+## [0.2.0] - 2026-04-25
 
 ### Added
 - Property tests for CDS scoring and state machine (fast-check)
