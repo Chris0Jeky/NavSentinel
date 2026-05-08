@@ -84,7 +84,9 @@ const RISKY_BLANK_REASONS = new Set([
 
 function buildPlainMessage(prefix: string, reasonCodes: string[]): string {
   const positive = reasonCodes.filter(r =>
-    !r.startsWith("keyboard_") && !r.startsWith("legit_") && !r.includes("allowlisted") && !r.includes("previously_allowed") && !r.includes("explicit_new_tab")
+    !r.startsWith("keyboard_") && !r.startsWith("legit_") &&
+    !r.includes("allowlisted") && !r.includes("previously_allowed") &&
+    !r.includes("explicit_new_tab") && r !== "nrs_user_activation_active"
   );
   const topReason = positive[0];
   const explanation = topReason ? explainReasonCode(topReason) : "";

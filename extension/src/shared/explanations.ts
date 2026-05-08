@@ -34,6 +34,18 @@ const EXPLANATIONS: Record<string, string> = {
   nrs_opener_previously_allowed: "You previously allowed this popup source",
   nrs_pushstate_abuse: "Page manipulated its URL suspiciously after your click",
 
+  // ClickFix detector reason codes (clickfix_detector.ts)
+  clipboard_command_with_overlay: "Clipboard was overwritten with a command while a dialog was active",
+  clipboard_write_with_overlay: "Clipboard was overwritten while a dialog was active",
+  clickfix_instruction_pattern: "Page contains fake verification with paste instructions",
+  clickfix_paste_instruction: "Page instructs you to paste clipboard contents",
+  clickfix_captcha_text_with_overlay: "Fake CAPTCHA text detected alongside a dialog overlay",
+
+  // Mutation monitor reason codes (mutation_monitor.ts)
+  overlay_injected: "A suspicious overlay was injected after the page loaded",
+  form_action_changed: "A form's submission target was changed after page load",
+  password_field_injected: "A password field was injected into an existing form",
+
   // Other event-related codes used in toasts
   clickfix_detected: "Fake verification dialog with clipboard hijack detected",
   dblclickjack_detected: "Double-click hijack attempt detected",
