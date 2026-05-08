@@ -420,7 +420,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "ns-tab-risk-update") {
     const tabId = sender.tab?.id;
     if (tabId === undefined) return;
-    const state = message.state as IconState;
+    const state = message.state;
+    if (state !== "green" && state !== "yellow" && state !== "red" && state !== "gray") return;
     const blockCount = typeof message.blockCount === "number" ? message.blockCount : 0;
     void updateTabIcon(tabId, state, blockCount);
   }

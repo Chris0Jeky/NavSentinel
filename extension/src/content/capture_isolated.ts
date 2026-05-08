@@ -236,6 +236,8 @@ onNavSettingsChange((s) => {
   postToMain("ns-config", { mode: s.defaultMode, debug: s.debug });
   if (s.defaultMode === "off") {
     sendIconUpdate("gray");
+  } else {
+    sendIconUpdate("green");
   }
   refreshDebug();
 });
@@ -1316,8 +1318,7 @@ window.addEventListener(
     }
 
     if (decision === "block") {
-      tabBlockCount++;
-      sendIconUpdate("red", tabBlockCount);
+      sendIconUpdate("red", tabBlockCount + 1);
     } else if (decision === "prompt") {
       sendIconUpdate("yellow");
     }
