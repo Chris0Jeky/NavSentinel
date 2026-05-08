@@ -12,6 +12,7 @@ export type DebugInfo = {
   mainGuard?: "unknown" | "yes" | "no";
   lastNav?: { kind: string; url: string; status: "allowed" | "blocked" };
   mutationAlerts?: number;
+  adaptiveAdj?: number;
 };
 
 let enabled = false;
@@ -109,7 +110,8 @@ export function updateDebugOverlay(info: DebugInfo): void {
     `Retargeted: ${info.ctx.retargeted ? "yes" : "no"}`,
     `LegitBackdrop: ${info.ctx.isLegitModalBackdrop ? "yes" : "no"}`,
     `ExplicitNewTab: ${info.ctx.explicitNewTabIntent ? "yes" : "no"}`,
-    `MutationAlerts: ${info.mutationAlerts ?? 0}`
+    `MutationAlerts: ${info.mutationAlerts ?? 0}`,
+    `AdaptiveAdj: ${info.adaptiveAdj ?? 0}`
   ];
 
   pre.textContent = lines.join("\n");

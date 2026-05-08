@@ -1,5 +1,6 @@
 import { computeCDS } from "../shared/scoring";
 import { appendEvent, appendPromptOutcome, getPromptOutcomes, getNavSettings, onNavSettingsChange, type NavSettings } from "../shared/storage";
+import { getEffectiveThresholdAdjustment, updateAdaptiveScores } from "../shared/adaptive_scoring";
 import {
   analyzeOutcomesForPair,
   isPairOnCooldown,
@@ -89,6 +90,7 @@ function makeBridgeSession(): string {
 let lastDown: DownCapture | null = null;
 let settings: NavSettings = { defaultMode: "smart", debug: false, dnrEnabled: false };
 let allowlist: Allowlist = {};
+let adaptiveAdjustment = 0;
 let bridgePort: MessagePort | null = null;
 let bridgeReady = false;
 const bridgeSession = makeBridgeSession();
@@ -184,6 +186,9 @@ async function initSettings() {
   } catch (err) {
     console.warn("[NavSentinel] Failed to load settings, using defaults", err);
   }
+  try {
+    adaptiveAdjustment = await getEffectiveThresholdAdjustment(siteKeyFromLocation());
+  } catch { /* ignore */ }
   document.documentElement.setAttribute("data-navsentinel-capture-ready", "1");
   setDebugEnabled(settings.debug);
   postToMain("ns-config", { mode: settings.defaultMode, debug: settings.debug });
@@ -451,10 +456,22 @@ function appendEventSafely(
   });
 }
 
+function refreshAdaptiveScores(): void {
+  void (async () => {
+    try {
+      const outcomes = await getPromptOutcomes();
+      await updateAdaptiveScores(outcomes);
+      adaptiveAdjustment = await getEffectiveThresholdAdjustment(siteKeyFromLocation());
+    } catch { /* ignore */ }
+  })();
+}
+
 function appendOutcomeSafely(
   partial: Parameters<typeof appendPromptOutcome>[0]
 ): void {
-  void appendPromptOutcome(partial).catch(() => {
+  void appendPromptOutcome(partial).then(() => {
+    refreshAdaptiveScores();
+  }).catch(() => {
     // ignore
   });
 }
@@ -756,7 +773,8 @@ function isLegitBlankAnchor(
 }
 
 function getNrsBlockThreshold(mode: Mode): number {
-  return mode === "strict" ? NRS_STRICT_BLOCK_THRESHOLD : NRS_BLOCK_THRESHOLD;
+  const base = mode === "strict" ? NRS_STRICT_BLOCK_THRESHOLD : NRS_BLOCK_THRESHOLD;
+  return Math.max(30, Math.min(100, base + adaptiveAdjustment));
 }
 
 function tryOpenShadowRoot(el: Element): ShadowRoot | null {
@@ -909,6 +927,7 @@ function showAllowPrompt(params: {
           score: promptScore,
           outcome: "allow_once"
         }).then(() => {
+          refreshAdaptiveScores();
           if (destDomain) {
             checkSmartDefaultSuggestion(sourceDomain, destDomain);
           }
@@ -1304,7 +1323,7 @@ window.addEventListener(
       });
     }
 
-    lastDebug = { mode, decision, cds, nrs, reasonCodes, nrsFactors, ctx };
+    lastDebug = { mode, decision, cds, nrs, reasonCodes, nrsFactors, ctx, adaptiveAdj: adaptiveAdjustment };
     refreshDebug();
 
     if (settings.debug) {

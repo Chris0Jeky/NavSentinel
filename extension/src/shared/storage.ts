@@ -1,6 +1,12 @@
 import type { Mode } from "./types";
 import { ALLOWLIST_KEY, getAllowlist, normalizeAllowlist, type Allowlist } from "./allowlist";
 import { getRegistrableDomain, normalizeHost, safeUrlParse } from "./domain";
+import {
+  ADAPTIVE_SCORES_KEY,
+  getAdaptiveScores,
+  clearAdaptiveScores,
+  type DomainAdjustment,
+} from "./adaptive_scoring";
 
 export type CredMode = "off" | "smart" | "strict";
 
@@ -375,19 +381,22 @@ export async function exportAll(): Promise<{
   trustedDomains: string[];
   eventLog: EventLogEntry[];
   promptOutcomes: PromptOutcomeEntry[];
+  adaptiveScores: Record<string, DomainAdjustment>;
 }> {
   const settings = await getSuiteSettings();
   const allowlist = await getAllowlist();
   const trustedDomains = await getTrustedDomains();
   const eventLog = await getEventLog();
   const promptOutcomes = await getPromptOutcomes();
+  const adaptiveScores = await getAdaptiveScores();
   return {
     exportedAt: new Date().toISOString(),
     settings,
     allowlist,
     trustedDomains,
     eventLog,
-    promptOutcomes
+    promptOutcomes,
+    adaptiveScores,
   };
 }
 
@@ -425,6 +434,12 @@ export async function importAll(payload: unknown): Promise<void> {
   if (Array.isArray(p.promptOutcomes)) {
     await chrome.storage.local.set({
       [PROMPT_OUTCOMES_KEY]: (p.promptOutcomes as PromptOutcomeEntry[]).slice(-PROMPT_OUTCOMES_LIMIT)
+    });
+  }
+
+  if (p.adaptiveScores && typeof p.adaptiveScores === "object" && !Array.isArray(p.adaptiveScores)) {
+    await chrome.storage.local.set({
+      [ADAPTIVE_SCORES_KEY]: p.adaptiveScores
     });
   }
 }

@@ -17,6 +17,7 @@ import {
   updateSuiteSettings,
   type PromptOutcomeEntry
 } from "../shared/storage";
+import { clearAdaptiveScores } from "../shared/adaptive_scoring";
 import {
   clearAllowlist,
   getAllowlist,
@@ -462,6 +463,7 @@ refreshStatsBtn.addEventListener("click", async () => {
 
 clearStatsBtn.addEventListener("click", async () => {
   await clearPromptOutcomes();
+  await clearAdaptiveScores();
   await refreshStats();
   flashStatus(statusEl, "Stats cleared.");
 });
