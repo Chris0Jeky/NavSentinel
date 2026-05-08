@@ -22,6 +22,7 @@ import type { NavigationContext } from "../shared/nrs";
 import type { RedirectChainInfo } from "../shared/redirect_chain";
 import { initReputation, isKnownBadDomain, checkReputationViaMessage } from "../shared/reputation";
 import { showToast } from "./ui_toast";
+import { explainReasonCode } from "../shared/explanations";
 import {
   buildClickContextFromEvents,
   buildKeyboardClickContext,
@@ -80,6 +81,15 @@ const RISKY_BLANK_REASONS = new Set([
   "clipboard_write_with_overlay",
   "clickfix_instruction_pattern"
 ]);
+
+function buildPlainMessage(prefix: string, reasonCodes: string[]): string {
+  const positive = reasonCodes.filter(r =>
+    !r.startsWith("keyboard_") && !r.startsWith("legit_") && !r.includes("allowlisted") && !r.includes("previously_allowed") && !r.includes("explicit_new_tab")
+  );
+  const topReason = positive[0];
+  const explanation = topReason ? explainReasonCode(topReason) : "";
+  return explanation ? `${prefix} — ${explanation}` : prefix;
+}
 
 function makeBridgeSession(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
@@ -537,7 +547,7 @@ function handleClickFixScan(): void {
   });
 
   showToast({
-    message: "NavSentinel detected a possible ClickFix attack. This page wrote to your clipboard while showing a fake verification dialog. Do NOT paste into Run or Terminal.",
+    message: buildPlainMessage("NavSentinel detected a fake verification dialog with clipboard hijack. Do NOT paste into Run or Terminal", result.reasons),
     actions: [
       {
         label: "Dismiss",
@@ -575,7 +585,7 @@ function handleMutationAlert(alert: MutationAlert): void {
   // still logged for telemetry but do not disturb the user.
   if (alert.type === "overlay_injected" && alert.severity === "high") {
     showToast({
-      message: "NavSentinel detected a suspicious overlay injected after page load. The page may be attempting a phishing attack.",
+      message: buildPlainMessage("NavSentinel detected a suspicious overlay injected after page load", [alert.type]),
       actions: [{ label: "Dismiss", onClick: () => {} }],
       timeoutMs: 0,
     });
@@ -635,7 +645,7 @@ function showRollbackPrompt(url: string): void {
   (window as any).__navsentinelRollbackPrompt = { url, ts: now };
   appendEventSafely({ kind: "nav_rollback", site: siteKeyFromLocation(), url, destHost: host });
   showToast({
-    message: `NavSentinel rolled back a redirect to ${host}.`,
+    message: `NavSentinel rolled back a suspicious redirect to ${host}`,
     actions: [
       {
         label: "Proceed",
@@ -1261,10 +1271,10 @@ window.addEventListener(
           // Suppress standalone ClickFix toast — unified prompt covers it
           if (hasClickfix) clickFixAlertedAt = Date.now();
         } else {
-          const msg = hasClickfix
-            ? `NavSentinel blocked a new tab navigation with fake dialog detected (NRS=${nrs}).`
-            : `NavSentinel blocked a new tab navigation (NRS=${nrs}).`;
-          showToast({ message: msg });
+          const prefix = hasClickfix
+            ? "NavSentinel blocked a new tab with fake dialog detected"
+            : "NavSentinel blocked a suspicious new tab";
+          showToast({ message: buildPlainMessage(prefix, reasonCodes) });
           if (hasClickfix) clickFixAlertedAt = Date.now();
         }
       } else if (!isBlankAnchor && nrs >= blockThreshold) {
@@ -1284,10 +1294,10 @@ window.addEventListener(
           score: nrs,
           outcome: "block"
         });
-        const msg = hasClickfix
-          ? `NavSentinel blocked deceptive click + fake dialog detected (NRS=${nrs}, CDS=${cds}).`
-          : `NavSentinel blocked deceptive click (NRS=${nrs}, CDS=${cds}).`;
-        showToast({ message: msg });
+        const blockPrefix = hasClickfix
+          ? "NavSentinel blocked a deceptive click with fake dialog"
+          : "NavSentinel blocked a deceptive click";
+        showToast({ message: buildPlainMessage(blockPrefix, reasonCodes) });
         if (hasClickfix) clickFixAlertedAt = Date.now();
       }
     }
@@ -1343,7 +1353,7 @@ window.addEventListener(
             reasons: ["late_async_child_frame"],
           });
           showToast({
-            message: `NavSentinel: navigated to a known-bad domain (${host}).`,
+            message: `NavSentinel warning: ${host} is a known malicious domain`,
             timeoutMs: 8000,
           });
         } catch {

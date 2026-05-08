@@ -6,6 +6,7 @@ import {
   getTrustedDomains
 } from "../shared/storage";
 import { computeCredentialRisk, getRegistrableDomain, normalizeHost } from "../shared/domain";
+import { explainReasonCodes } from "../shared/explanations";
 import { showToast } from "./ui_toast";
 import { showCredentialModal } from "./credential_modal";
 import {
@@ -152,7 +153,7 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
         { k: "Destination", v: risk.action.registrableDomain || risk.action.host || "(unknown)" },
         { k: "Risk score", v: `${risk.score} (${risk.severity})` }
       ],
-      reasons: getCredentialReasonLines(risk.reasons),
+      reasons: explainReasonCodes(getCredentialReasonLines(risk.reasons)),
       actions: [
         { id: "cancel", label: "Cancel", kind: "danger" },
         { id: "proceed_once", label: "Proceed once", kind: "primary" },
