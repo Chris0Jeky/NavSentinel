@@ -95,7 +95,9 @@ let adaptiveAdjustment = 0;
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== "local") return;
   if (changes[ADAPTIVE_SCORES_KEY]) {
-    refreshAdaptiveScores().catch(() => {});
+    const newScores = changes[ADAPTIVE_SCORES_KEY].newValue;
+    const domain = siteKeyFromLocation();
+    adaptiveAdjustment = (newScores && typeof newScores === "object" && newScores[domain]?.adjustment) ?? 0;
   }
 });
 

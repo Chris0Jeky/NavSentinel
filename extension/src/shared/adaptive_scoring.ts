@@ -64,9 +64,11 @@ export function computeAdjustment(
 
   let adjustment = 0;
   if (allowRatio >= RATIO_THRESHOLD) {
-    adjustment = -Math.round(MAX_ADJUSTMENT * ((allowRatio - RATIO_THRESHOLD) / (1 - RATIO_THRESHOLD)));
+    // User mostly allows -> raise threshold -> fewer auto-blocks -> user decides more
+    adjustment = Math.round(MAX_ADJUSTMENT * ((allowRatio - RATIO_THRESHOLD) / (1 - RATIO_THRESHOLD)));
   } else if (blockRatio >= RATIO_THRESHOLD) {
-    adjustment = Math.round(MAX_ADJUSTMENT * ((blockRatio - RATIO_THRESHOLD) / (1 - RATIO_THRESHOLD)));
+    // User mostly blocks -> lower threshold -> more auto-blocks -> stricter protection
+    adjustment = -Math.round(MAX_ADJUSTMENT * ((blockRatio - RATIO_THRESHOLD) / (1 - RATIO_THRESHOLD)));
   }
 
   adjustment = Math.max(MIN_ADJUSTMENT, Math.min(MAX_ADJUSTMENT, adjustment));
@@ -84,11 +86,15 @@ export async function updateAdaptiveScores(
   outcomes: PromptOutcomeEntry[],
   baseThreshold = 70
 ): Promise<void> {
-  const domains = new Set(outcomes.map(o => o.domain));
+  const grouped = new Map<string, PromptOutcomeEntry[]>();
+  for (const o of outcomes) {
+    const list = grouped.get(o.domain);
+    if (list) list.push(o);
+    else grouped.set(o.domain, [o]);
+  }
   const scores: Record<string, DomainAdjustment> = {};
 
-  for (const domain of domains) {
-    const domainOutcomes = outcomes.filter(o => o.domain === domain);
+  for (const [domain, domainOutcomes] of grouped) {
     const { adjustment, allowCount, blockCount } = computeAdjustment(domainOutcomes, baseThreshold);
     if (adjustment !== 0) {
       scores[domain] = { domain, adjustment, allowCount, blockCount, lastUpdated: Date.now() };

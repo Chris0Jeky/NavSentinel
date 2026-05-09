@@ -78,7 +78,7 @@ describe("adaptive scoring", () => {
       expect(computeAdjustment(outcomes).adjustment).toBe(0);
     });
 
-    it("returns negative adjustment for majority allows", async () => {
+    it("returns positive adjustment for majority allows", async () => {
       const { chrome } = createChromeMock();
       vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
       const { computeAdjustment } = await import("../extension/src/shared/adaptive_scoring");
@@ -89,13 +89,13 @@ describe("adaptive scoring", () => {
       }
 
       const result = computeAdjustment(outcomes);
-      expect(result.adjustment).toBeLessThan(0);
-      expect(result.adjustment).toBeGreaterThanOrEqual(-15);
+      expect(result.adjustment).toBeGreaterThan(0);
+      expect(result.adjustment).toBeLessThanOrEqual(15);
       expect(result.allowCount).toBe(10);
       expect(result.blockCount).toBe(0);
     });
 
-    it("returns positive adjustment for majority blocks", async () => {
+    it("returns negative adjustment for majority blocks", async () => {
       const { chrome } = createChromeMock();
       vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
       const { computeAdjustment } = await import("../extension/src/shared/adaptive_scoring");
@@ -106,8 +106,8 @@ describe("adaptive scoring", () => {
       }
 
       const result = computeAdjustment(outcomes);
-      expect(result.adjustment).toBeGreaterThan(0);
-      expect(result.adjustment).toBeLessThanOrEqual(15);
+      expect(result.adjustment).toBeLessThan(0);
+      expect(result.adjustment).toBeGreaterThanOrEqual(-15);
       expect(result.allowCount).toBe(0);
       expect(result.blockCount).toBe(10);
     });
@@ -128,7 +128,7 @@ describe("adaptive scoring", () => {
       expect(computeAdjustment(outcomes).adjustment).toBe(0);
     });
 
-    it("bounds adjustment to -15", async () => {
+    it("bounds adjustment to +15", async () => {
       const { chrome } = createChromeMock();
       vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
       const { computeAdjustment } = await import("../extension/src/shared/adaptive_scoring");
@@ -139,10 +139,10 @@ describe("adaptive scoring", () => {
       }
 
       const result = computeAdjustment(outcomes);
-      expect(result.adjustment).toBe(-15);
+      expect(result.adjustment).toBe(15);
     });
 
-    it("bounds adjustment to +15", async () => {
+    it("bounds adjustment to -15", async () => {
       const { chrome } = createChromeMock();
       vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
       const { computeAdjustment } = await import("../extension/src/shared/adaptive_scoring");
@@ -153,7 +153,7 @@ describe("adaptive scoring", () => {
       }
 
       const result = computeAdjustment(outcomes);
-      expect(result.adjustment).toBe(15);
+      expect(result.adjustment).toBe(-15);
     });
 
     it("treats trust as an allow outcome", async () => {
@@ -166,7 +166,7 @@ describe("adaptive scoring", () => {
         outcomes.push(makeOutcome("example.com", "trust"));
       }
 
-      expect(computeAdjustment(outcomes).adjustment).toBeLessThan(0);
+      expect(computeAdjustment(outcomes).adjustment).toBeGreaterThan(0);
     });
 
     it("treats dismiss as a block outcome", async () => {
@@ -179,7 +179,7 @@ describe("adaptive scoring", () => {
         outcomes.push(makeOutcome("example.com", "dismiss"));
       }
 
-      expect(computeAdjustment(outcomes).adjustment).toBeGreaterThan(0);
+      expect(computeAdjustment(outcomes).adjustment).toBeLessThan(0);
     });
 
     it("ignores cancel outcomes", async () => {
@@ -211,7 +211,7 @@ describe("adaptive scoring", () => {
       }
 
       const result = computeAdjustment(outcomes);
-      expect(result.adjustment).toBeLessThan(0);
+      expect(result.adjustment).toBeGreaterThan(0);
     });
 
     it("works with pre-filtered outcomes (caller filters by domain)", async () => {
@@ -240,7 +240,7 @@ describe("adaptive scoring", () => {
       ];
 
       // 8 low-score allows + 2 blocks: allowWeight = 8, blockWeight=2, total=10
-      // allowRatio = 0.8 => above 0.7, so negative adjustment
+      // allowRatio = 0.8 => above 0.7, so positive adjustment
       const lowScoreOutcomes: PromptOutcomeEntry[] = [
         ...Array.from({ length: 8 }, () => makeOutcome("example.com", "allow_once", 30)),
         ...Array.from({ length: 2 }, () => makeOutcome("example.com", "block", 30)),
@@ -249,13 +249,13 @@ describe("adaptive scoring", () => {
       const highScoreResult = computeAdjustment(highScoreOutcomes);
       const lowScoreResult = computeAdjustment(lowScoreOutcomes);
 
-      // Low-score allows produce a negative adjustment
-      expect(lowScoreResult.adjustment).toBeLessThan(0);
-      // High-score allows are discounted so adjustment is less negative (0 in this case)
-      expect(highScoreResult.adjustment).toBeGreaterThan(lowScoreResult.adjustment);
+      // Low-score allows produce a positive adjustment (raise threshold = fewer auto-blocks)
+      expect(lowScoreResult.adjustment).toBeGreaterThan(0);
+      // High-score allows are discounted so adjustment is less positive (0 in this case)
+      expect(highScoreResult.adjustment).toBeLessThan(lowScoreResult.adjustment);
     });
 
-    it("mixed high-score and low-score allows produce less negative adjustment than all low-score", async () => {
+    it("mixed high-score and low-score allows produce less positive adjustment than all low-score", async () => {
       const { chrome } = createChromeMock();
       vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
       const { computeAdjustment } = await import("../extension/src/shared/adaptive_scoring");
@@ -275,8 +275,8 @@ describe("adaptive scoring", () => {
       const mixedResult = computeAdjustment(mixedOutcomes);
       const allLowResult = computeAdjustment(allLowOutcomes);
 
-      // Mixed should produce less negative (or equal) adjustment
-      expect(mixedResult.adjustment).toBeGreaterThanOrEqual(allLowResult.adjustment);
+      // Mixed should produce less positive (or equal) adjustment
+      expect(mixedResult.adjustment).toBeLessThanOrEqual(allLowResult.adjustment);
     });
 
     it("baseThreshold parameter controls the discount cutoff", async () => {
@@ -294,11 +294,11 @@ describe("adaptive scoring", () => {
       // allowWeight = 8*0.3=2.4, blockWeight=2, ratio=2.4/4.4≈0.545 => 0
       const strictResult = computeAdjustment(outcomes, 50);
       // With baseThreshold=70 (smart), score 55 < 70, so allows get full weight
-      // allowWeight = 8, blockWeight=2, ratio=8/10=0.8 => negative
+      // allowWeight = 8, blockWeight=2, ratio=8/10=0.8 => positive
       const smartResult = computeAdjustment(outcomes, 70);
 
-      // Strict should be less negative (discounted) than smart (full weight)
-      expect(strictResult.adjustment).toBeGreaterThan(smartResult.adjustment);
+      // Strict should be less positive (discounted) than smart (full weight)
+      expect(strictResult.adjustment).toBeLessThan(smartResult.adjustment);
     });
 
     it("strict-mode threshold (baseThreshold=50) discounts more aggressively", async () => {
@@ -317,12 +317,12 @@ describe("adaptive scoring", () => {
       const strictResult = computeAdjustment(outcomes, 50);
 
       // Smart mode (baseThreshold=70): score 60 < 70, so allows get full weight
-      // allowWeight = 8, blockWeight=2, total=10, allowRatio=0.8 => negative
+      // allowWeight = 8, blockWeight=2, total=10, allowRatio=0.8 => positive
       const smartResult = computeAdjustment(outcomes, 70);
 
-      // Strict should produce less negative (or zero) adjustment due to discounting
+      // Strict should produce less positive (or zero) adjustment due to discounting
       expect(strictResult.adjustment).toBe(0);
-      expect(smartResult.adjustment).toBeLessThan(0);
+      expect(smartResult.adjustment).toBeGreaterThan(0);
     });
 
     it("high-score allows mixed with blocks reduce gaming potential", async () => {
@@ -331,7 +331,7 @@ describe("adaptive scoring", () => {
       const { computeAdjustment } = await import("../extension/src/shared/adaptive_scoring");
 
       // Gaming scenario: 8 high-score allows + 2 blocks
-      // Without discounting, allowRatio = 8/10 = 0.8 => negative adjustment
+      // Without discounting, allowRatio = 8/10 = 0.8 => positive adjustment
       // With discounting, allowWeight = 8*0.3 = 2.4, blockWeight = 2
       // ratio = 2.4/4.4 ≈ 0.545 — below 0.7 threshold => 0 adjustment
       const gamingOutcomes: PromptOutcomeEntry[] = [
@@ -340,7 +340,7 @@ describe("adaptive scoring", () => {
       ];
 
       const result = computeAdjustment(gamingOutcomes);
-      // Should NOT produce a significant negative adjustment
+      // Should NOT produce a significant positive adjustment
       expect(result.adjustment).toBe(0);
     });
   });
@@ -370,7 +370,7 @@ describe("adaptive scoring", () => {
       await updateAdaptiveScores(outcomes);
       const scores = await getAdaptiveScores();
       expect(scores["example.com"]).toBeDefined();
-      expect(scores["example.com"]!.adjustment).toBeLessThan(0);
+      expect(scores["example.com"]!.adjustment).toBeGreaterThan(0);
       expect(scores["example.com"]!.domain).toBe("example.com");
     });
 
@@ -408,7 +408,7 @@ describe("adaptive scoring", () => {
     it("clearAdaptiveScores empties storage", async () => {
       const key = "sentinelsuite:adaptive_scores_v1";
       const { chrome } = createChromeMock({
-        [key]: { "example.com": { domain: "example.com", adjustment: -5, allowCount: 10, blockCount: 0, lastUpdated: 1 } }
+        [key]: { "example.com": { domain: "example.com", adjustment: 5, allowCount: 10, blockCount: 0, lastUpdated: 1 } }
       });
       vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
       const { clearAdaptiveScores, getAdaptiveScores } = await import(

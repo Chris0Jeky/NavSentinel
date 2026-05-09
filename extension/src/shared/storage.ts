@@ -7,6 +7,7 @@ import {
   updateAdaptiveScores,
   type DomainAdjustment,
 } from "./adaptive_scoring";
+import { NRS_BLOCK_THRESHOLD, NRS_STRICT_BLOCK_THRESHOLD } from "./nrs";
 
 export type CredMode = "off" | "smart" | "strict";
 
@@ -437,11 +438,11 @@ export async function importAll(payload: unknown): Promise<void> {
     });
   }
 
-  // Never trust pre-computed adaptive scores from an import file.
-  // Recompute them from the imported prompt outcomes instead.
   if (Array.isArray(p.promptOutcomes)) {
     const importedOutcomes = (p.promptOutcomes as PromptOutcomeEntry[]).slice(-PROMPT_OUTCOMES_LIMIT);
-    await updateAdaptiveScores(importedOutcomes);
+    const settings = await getNavSettings();
+    const threshold = settings.defaultMode === "strict" ? NRS_STRICT_BLOCK_THRESHOLD : NRS_BLOCK_THRESHOLD;
+    await updateAdaptiveScores(importedOutcomes, threshold);
   } else {
     // No outcomes imported — clear adaptive scores to avoid stale data
     await chrome.storage.local.set({ [ADAPTIVE_SCORES_KEY]: {} });
