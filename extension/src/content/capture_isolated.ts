@@ -210,6 +210,7 @@ async function initSettings() {
   postToMain("ns-ping");
   // Load reputation bloom filter in the background (non-blocking)
   void loadReputationFilter();
+  previousMode = settings.defaultMode;
   if (isTopFrame()) {
     sendIconUpdate(settings.defaultMode === "off" ? "gray" : "green");
     try {
@@ -240,9 +241,16 @@ onNavSettingsChange((s) => {
   postToMain("ns-config", { mode: s.defaultMode, debug: s.debug });
   if (s.defaultMode !== previousMode) {
     previousMode = s.defaultMode;
-    sendIconUpdate(s.defaultMode === "off" ? "gray" : "green");
-    // Reset severity tracking when mode changes
-    currentTabRiskState = s.defaultMode === "off" ? "gray" : "green";
+    const newState: TabRiskState = s.defaultMode === "off" ? "gray" : "green";
+    currentTabRiskState = newState;
+    tabBlockCount = 0;
+    if (isTopFrame()) {
+      chrome.runtime.sendMessage({
+        type: "ns-tab-risk-update",
+        state: newState,
+        blockCount: 0,
+      }).catch(() => {});
+    }
   }
   refreshDebug();
 });
