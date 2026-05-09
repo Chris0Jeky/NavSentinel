@@ -57,8 +57,12 @@ const MAX_NRS_HISTORY = 50;
 /** Apply time-based decay in-place. Returns true if the profile was decayed. */
 function applyDecay(profile: DomainProfile, now: number): boolean {
   if (now - profile.lastSeen < DECAY_AGE_MS) return false;
-  profile.visits = Math.max(1, Math.floor(profile.visits * 0.5));
-  profile.triggerCount = Math.floor(profile.triggerCount * 0.5);
+  while (now - profile.lastSeen >= DECAY_AGE_MS) {
+    profile.visits = Math.max(1, Math.floor(profile.visits * 0.5));
+    profile.triggerCount = Math.floor(profile.triggerCount * 0.5);
+    profile.totalNRS = Math.floor(profile.totalNRS * 0.5);
+    profile.lastSeen += DECAY_AGE_MS;
+  }
   return true;
 }
 
@@ -173,7 +177,11 @@ export async function getDomainRisk(domain: string): Promise<DomainRiskAssessmen
   }
 
   const now = Date.now();
-  applyDecay(profile, now);
+  const decayed = applyDecay(profile, now);
+
+  if (decayed) {
+    await saveProfiles(profiles);
+  }
 
   const avgNRS = profile.totalNRS / profile.visits;
   const consistency = stddev(profile.nrsHistory);
@@ -197,8 +205,15 @@ export async function getTopSuspiciousDomains(limit: number): Promise<DomainProf
   const profiles = await loadProfiles();
   const now = Date.now();
 
+  let anyDecayed = false;
   for (const profile of profiles.values()) {
-    applyDecay(profile, now);
+    if (applyDecay(profile, now)) {
+      anyDecayed = true;
+    }
+  }
+
+  if (anyDecayed) {
+    await saveProfiles(profiles);
   }
 
   return [...profiles.values()]
