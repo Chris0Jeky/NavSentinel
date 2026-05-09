@@ -162,4 +162,24 @@ describe("icon_manager", () => {
       expect(setBadgeText).toHaveBeenCalledWith({ tabId: 30, text: "" });
     });
   });
+
+  describe("tabState pruning", () => {
+    it("prunes oldest entries when exceeding 200 tabs", async () => {
+      const map = _getTabStateMap();
+      // Fill to 200 — no pruning yet
+      for (let i = 1; i <= 200; i++) {
+        map.set(i, { icon: "green", blocks: 0 });
+      }
+      expect(map.size).toBe(200);
+
+      // Adding tab 201 via updateTabIcon triggers pruning
+      await updateTabIcon(201, "red");
+      expect(map.size).toBe(200);
+      // Oldest entry (tab 1) should have been pruned
+      expect(map.has(1)).toBe(false);
+      // Newest entry should still exist
+      expect(map.has(201)).toBe(true);
+      expect(map.has(200)).toBe(true);
+    });
+  });
 });

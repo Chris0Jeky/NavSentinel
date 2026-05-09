@@ -9,6 +9,21 @@ const BADGE_CONFIG: Record<IconState, { text: string; color: string } | null> = 
 
 const tabState = new Map<number, { icon: IconState; blocks: number }>();
 
+// Cap tabState size to prevent unbounded memory growth in long-lived SW.
+// Other per-tab Maps in the SW use similar pruning (e.g. DBLCLICK_CHILD_PRUNE_LIMIT).
+const TAB_STATE_MAX = 200;
+
+function pruneTabState(): void {
+  if (tabState.size <= TAB_STATE_MAX) return;
+  const excess = tabState.size - TAB_STATE_MAX;
+  let removed = 0;
+  for (const key of tabState.keys()) {
+    if (removed >= excess) break;
+    tabState.delete(key);
+    removed++;
+  }
+}
+
 export async function updateTabIcon(
   tabId: number,
   state: IconState,
@@ -17,6 +32,7 @@ export async function updateTabIcon(
   const current = tabState.get(tabId);
   if (current && current.icon === state && current.blocks === blockCount) return;
   tabState.set(tabId, { icon: state, blocks: blockCount });
+  pruneTabState();
 
   try {
     const config = BADGE_CONFIG[state];
