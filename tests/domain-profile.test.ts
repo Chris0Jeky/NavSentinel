@@ -173,9 +173,10 @@ describe("decay logic", () => {
 
     const risk = await getDomainRisk("old.com");
     // After decay: visits floor(20*0.5)=10, triggerCount floor(8*0.5)=4
-    // avgNRS = 800/10 = 80, triggerCount 4 > 3 AND avgNRS 80 > 30
+    // totalNRS floor(800*0.5)=400, avgNRS = 400/10 = 40
+    // triggerCount 4 > 3 AND avgNRS 40 > 30
     expect(risk.isRepeatOffender).toBe(true);
-    expect(risk.avgNRS).toBe(80);
+    expect(risk.avgNRS).toBe(40);
   });
 });
 
