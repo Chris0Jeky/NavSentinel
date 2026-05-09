@@ -27,7 +27,8 @@
     "measure:fp": "node scripts/measure-fp.mjs",
     "build:bloom": "node scripts/build-bloom-filter.mjs",
     "build:bloom:test": "node scripts/build-test-bloom-filter.mjs",
-    "check:bloom-size": "node scripts/check-bloom-size.mjs"
+    "check:bloom-size": "node scripts/check-bloom-size.mjs",
+    "benchmark": "node scripts/benchmark.mjs"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.3.0",
