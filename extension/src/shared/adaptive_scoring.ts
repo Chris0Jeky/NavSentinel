@@ -8,6 +8,12 @@ export interface DomainAdjustment {
   lastUpdated: number;
 }
 
+export interface AdjustmentResult {
+  adjustment: number;
+  allowCount: number;
+  blockCount: number;
+}
+
 export const ADAPTIVE_SCORES_KEY = "sentinelsuite:adaptive_scores_v1";
 const MAX_ADJUSTMENT = 15;
 const MIN_ADJUSTMENT = -15;
@@ -17,17 +23,17 @@ const RATIO_THRESHOLD = 0.7;
 const MAX_ENTRIES = 200;
 
 export function computeAdjustment(
-  outcomes: PromptOutcomeEntry[],
-  domain: string,
+  domainOutcomes: PromptOutcomeEntry[],
   baseThreshold = 70
-): number {
-  const domainOutcomes = outcomes.filter(o => o.domain === domain);
-  if (domainOutcomes.length < MIN_OUTCOMES) return 0;
+): AdjustmentResult {
+  if (domainOutcomes.length < MIN_OUTCOMES) return { adjustment: 0, allowCount: 0, blockCount: 0 };
 
   const recent = domainOutcomes.slice(-RECENT_WINDOW);
 
   let allowWeight = 0;
   let blockWeight = 0;
+  let allowCount = 0;
+  let blockCount = 0;
 
   for (const o of recent) {
     if (
@@ -36,6 +42,7 @@ export function computeAdjustment(
       o.outcome === "always_allow" ||
       o.outcome === "trust"
     ) {
+      allowCount++;
       // Discount high-score allows: if the user allowed at a score near/above
       // the threshold, this may have been social engineering, not genuine trust
       if (o.score >= baseThreshold) {
@@ -44,12 +51,13 @@ export function computeAdjustment(
         allowWeight++;
       }
     } else if (o.outcome === "block" || o.outcome === "dismiss") {
+      blockCount++;
       blockWeight++;
     }
   }
 
   const total = allowWeight + blockWeight;
-  if (total === 0) return 0;
+  if (total === 0) return { adjustment: 0, allowCount, blockCount };
 
   const allowRatio = allowWeight / total;
   const blockRatio = blockWeight / total;
@@ -61,7 +69,8 @@ export function computeAdjustment(
     adjustment = Math.round(MAX_ADJUSTMENT * ((blockRatio - RATIO_THRESHOLD) / (1 - RATIO_THRESHOLD)));
   }
 
-  return Math.max(MIN_ADJUSTMENT, Math.min(MAX_ADJUSTMENT, adjustment));
+  adjustment = Math.max(MIN_ADJUSTMENT, Math.min(MAX_ADJUSTMENT, adjustment));
+  return { adjustment, allowCount, blockCount };
 }
 
 export async function getAdaptiveScores(): Promise<Record<string, DomainAdjustment>> {
@@ -72,24 +81,16 @@ export async function getAdaptiveScores(): Promise<Record<string, DomainAdjustme
 }
 
 export async function updateAdaptiveScores(
-  outcomes: PromptOutcomeEntry[]
-): Promise<Record<string, DomainAdjustment>> {
+  outcomes: PromptOutcomeEntry[],
+  baseThreshold = 70
+): Promise<void> {
   const domains = new Set(outcomes.map(o => o.domain));
   const scores: Record<string, DomainAdjustment> = {};
 
   for (const domain of domains) {
     const domainOutcomes = outcomes.filter(o => o.domain === domain);
-    const adjustment = computeAdjustment(outcomes, domain);
+    const { adjustment, allowCount, blockCount } = computeAdjustment(domainOutcomes, baseThreshold);
     if (adjustment !== 0) {
-      const allowCount = domainOutcomes.filter(o =>
-        o.outcome === "allow" ||
-        o.outcome === "allow_once" ||
-        o.outcome === "always_allow" ||
-        o.outcome === "trust"
-      ).length;
-      const blockCount = domainOutcomes.filter(o =>
-        o.outcome === "block" || o.outcome === "dismiss"
-      ).length;
       scores[domain] = { domain, adjustment, allowCount, blockCount, lastUpdated: Date.now() };
     }
   }
@@ -99,11 +100,10 @@ export async function updateAdaptiveScores(
     entries.sort((a, b) => b[1].lastUpdated - a[1].lastUpdated);
     const pruned = Object.fromEntries(entries.slice(0, MAX_ENTRIES));
     await chrome.storage.local.set({ [ADAPTIVE_SCORES_KEY]: pruned });
-    return pruned;
+    return;
   }
 
   await chrome.storage.local.set({ [ADAPTIVE_SCORES_KEY]: scores });
-  return scores;
 }
 
 export async function getEffectiveThresholdAdjustment(domain: string): Promise<number> {

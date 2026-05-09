@@ -1,6 +1,6 @@
 import { computeCDS } from "../shared/scoring";
 import { appendEvent, appendPromptOutcome, getPromptOutcomes, getNavSettings, onNavSettingsChange, type NavSettings } from "../shared/storage";
-import { getEffectiveThresholdAdjustment, updateAdaptiveScores } from "../shared/adaptive_scoring";
+import { ADAPTIVE_SCORES_KEY, getEffectiveThresholdAdjustment, updateAdaptiveScores } from "../shared/adaptive_scoring";
 import {
   analyzeOutcomesForPair,
   isPairOnCooldown,
@@ -91,6 +91,14 @@ let lastDown: DownCapture | null = null;
 let settings: NavSettings = { defaultMode: "smart", debug: false, dnrEnabled: false };
 let allowlist: Allowlist = {};
 let adaptiveAdjustment = 0;
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== "local") return;
+  if (changes[ADAPTIVE_SCORES_KEY]) {
+    refreshAdaptiveScores().catch(() => {});
+  }
+});
+
 let bridgePort: MessagePort | null = null;
 let bridgeReady = false;
 const bridgeSession = makeBridgeSession();
@@ -456,14 +464,13 @@ function appendEventSafely(
   });
 }
 
-function refreshAdaptiveScores(): void {
-  void (async () => {
-    try {
-      const outcomes = await getPromptOutcomes();
-      await updateAdaptiveScores(outcomes);
-      adaptiveAdjustment = await getEffectiveThresholdAdjustment(siteKeyFromLocation());
-    } catch { /* ignore */ }
-  })();
+async function refreshAdaptiveScores(baseThreshold?: number): Promise<void> {
+  try {
+    const threshold = baseThreshold ?? (settings.defaultMode === "strict" ? NRS_STRICT_BLOCK_THRESHOLD : NRS_BLOCK_THRESHOLD);
+    const outcomes = await getPromptOutcomes();
+    await updateAdaptiveScores(outcomes, threshold);
+    adaptiveAdjustment = await getEffectiveThresholdAdjustment(siteKeyFromLocation());
+  } catch { /* ignore */ }
 }
 
 function appendOutcomeSafely(
