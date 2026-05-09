@@ -151,6 +151,15 @@
     <li><a href="pushstate-03-legit-spa.html">PushState 03 - legitimate SPA navigation (false positive check)</a></li>
   </ol>
 
+  <h2>CSP Analysis</h2>
+  <p>These fixtures test CSP (Content Security Policy) analysis as an NRS risk modifier.</p>
+
+  <ol>
+    <li><a href="csp-missing.html">CSP Missing - no Content Security Policy</a></li>
+    <li><a href="csp-permissive.html">CSP Permissive - weak policy (wildcard + unsafe-inline)</a></li>
+    <li><a href="csp-strict.html">CSP Strict - nonce-based policy (false positive check)</a></li>
+  </ol>
+
   <p class="note">Run with <code>npm run gym:serve</code> from the repo root, or <code>python -m http.server 5173</code> from the <code>gym</code> folder.</p>
 </body>
 </html>

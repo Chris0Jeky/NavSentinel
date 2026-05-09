@@ -27,6 +27,8 @@ export interface NavigationContext {
   openerWindowPreviouslyAllowed?: boolean | undefined;
   /** Suspicious history.pushState/replaceState abuse detected after a user gesture */
   pushStateAbuse?: boolean | undefined;
+  /** CSP weakness score from csp_analyzer (only applied when base NRS > 20) */
+  cspWeaknessScore?: number | undefined;
 }
 
 export interface NRSResult {
@@ -55,6 +57,8 @@ const NRS_WEIGHT_OAUTH_OPENER_MANIPULATION = 45;
 const NRS_WEIGHT_CLICKFIX_CAP = 40;
 const NRS_WEIGHT_OPENER_PREVIOUSLY_ALLOWED = -20;
 const NRS_WEIGHT_PUSHSTATE_ABUSE = 20;
+/** Minimum base NRS before CSP weakness is applied as a modifier. */
+const NRS_CSP_MODIFIER_THRESHOLD = 20;
 
 /** Raw scores above this get 50% weight on the excess. */
 const NRS_DIMINISHING_RETURNS_THRESHOLD = 100;
@@ -159,6 +163,20 @@ export function computeNRS(cdsResult: ScoreResult, navCtx: NavigationContext): N
   if (navCtx.pushStateAbuse) {
     nrs += NRS_WEIGHT_PUSHSTATE_ABUSE;
     nrsFactors.push("nrs_pushstate_abuse");
+  }
+
+  // CSP weakness is a modifier: only apply when other risk factors pushed
+  // the base NRS above the threshold. A missing or permissive CSP alone
+  // should never trigger a block or prompt.
+  if (navCtx.cspWeaknessScore !== undefined && navCtx.cspWeaknessScore !== 0) {
+    if (navCtx.cspWeaknessScore > 0 && nrs > NRS_CSP_MODIFIER_THRESHOLD) {
+      nrs += navCtx.cspWeaknessScore;
+      nrsFactors.push("nrs_csp_weakness");
+    } else if (navCtx.cspWeaknessScore < 0) {
+      // Strict CSP reduces risk regardless of base NRS
+      nrs += navCtx.cspWeaknessScore;
+      nrsFactors.push("nrs_csp_strict");
+    }
   }
 
   // Diminishing returns: points above the threshold get reduced weight

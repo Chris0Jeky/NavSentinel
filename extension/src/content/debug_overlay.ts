@@ -12,6 +12,7 @@ export type DebugInfo = {
   mainGuard?: "unknown" | "yes" | "no";
   lastNav?: { kind: string; url: string; status: "allowed" | "blocked" };
   mutationAlerts?: number;
+  cspInfo?: { hasCSP: boolean; score: number; isStrict: boolean; reasons: string[] };
 };
 
 let enabled = false;
@@ -109,7 +110,8 @@ export function updateDebugOverlay(info: DebugInfo): void {
     `Retargeted: ${info.ctx.retargeted ? "yes" : "no"}`,
     `LegitBackdrop: ${info.ctx.isLegitModalBackdrop ? "yes" : "no"}`,
     `ExplicitNewTab: ${info.ctx.explicitNewTabIntent ? "yes" : "no"}`,
-    `MutationAlerts: ${info.mutationAlerts ?? 0}`
+    `MutationAlerts: ${info.mutationAlerts ?? 0}`,
+    `CSP: ${info.cspInfo ? (info.cspInfo.hasCSP ? `yes (score=${info.cspInfo.score}, strict=${info.cspInfo.isStrict})` : `none (score=${info.cspInfo.score})`) : "n/a"}`
   ];
 
   pre.textContent = lines.join("\n");

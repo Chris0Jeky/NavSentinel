@@ -1,0 +1,69 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CSP Missing - No Content Security Policy</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 24px;
+      background: #f5f5f5;
+    }
+    h1 { margin-top: 0; }
+    .description {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      padding: 12px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+    }
+    .panel {
+      background: #fff;
+      border: 1px solid #ddd;
+      padding: 16px;
+      border-radius: 4px;
+      margin-bottom: 16px;
+    }
+    .panel h3 { margin-top: 0; }
+    a.suspicious-link {
+      display: inline-block;
+      padding: 12px 24px;
+      font-size: 16px;
+      background: #dc3545;
+      color: #fff;
+      text-decoration: none;
+      border-radius: 4px;
+    }
+    a.suspicious-link:hover { background: #c82333; }
+  </style>
+</head>
+<body>
+  <h1>CSP Missing - No Content Security Policy</h1>
+  <div class="description">
+    <strong>Scenario:</strong> This page has no CSP meta tag at all. When combined
+    with other risk signals (e.g., cross-site new-tab navigation), the missing CSP
+    should act as a confidence modifier that slightly elevates the NRS score.
+    <br><br>
+    <strong>Expected:</strong> NavSentinel detects <code>csp_no_policy</code> with
+    a score of +5. The CSP weakness only applies when other risk factors push
+    the base NRS above 20. The debug overlay should show
+    <code>CSP: none (score=5)</code>.
+  </div>
+
+  <div class="panel">
+    <h3>Test: Cross-site link (no CSP modifier applies)</h3>
+    <p>This link opens a cross-site target in a new tab. The missing CSP acts
+    as a modifier on top of the existing NRS factors.</p>
+    <a class="suspicious-link" href="https://example.com/login" target="_blank" rel="noopener">
+      Open suspicious link
+    </a>
+  </div>
+
+  <div class="panel">
+    <h3>Comparison</h3>
+    <p>Compare with <a href="csp-strict.html">CSP Strict</a> (nonce-based CSP)
+    and <a href="csp-permissive.html">CSP Permissive</a> (wildcard + unsafe-inline).</p>
+  </div>
+</body>
+</html>
