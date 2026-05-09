@@ -117,6 +117,14 @@ if (!/^\d+\.\d+\.\d+$/.test(newVersion)) {
   process.exit(1);
 }
 
+// 3b. Abort if tag already exists
+const existingTags = run("git tag --list").split("
+").map(t => t.trim());
+if (existingTags.includes(`v${newVersion}`)) {
+  console.error(`Tag v${newVersion} already exists. Aborting.`);
+  process.exit(1);
+}
+
 console.log(`Bump: ${currentVersion} -> ${newVersion} (${bumpType})`);
 
 if (dryRun) {

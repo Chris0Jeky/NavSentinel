@@ -94,10 +94,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Verify tag is on main
         run: |
-          git fetch origin main --unshallow || git fetch origin main
           if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
             echo "::error::Tag must point to a commit on main"
             exit 1
