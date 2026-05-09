@@ -88,9 +88,9 @@ function buildPlainMessage(prefix: string, reasonCodes: string[]): string {
     !r.includes("allowlisted") && !r.includes("previously_allowed") &&
     !r.includes("explicit_new_tab") && r !== "nrs_user_activation_active"
   );
-  const topReason = positive[0];
+  const topReason = positive[positive.length - 1];
   const explanation = topReason ? explainReasonCode(topReason) : "";
-  return explanation ? `${prefix} — ${explanation}` : prefix;
+  return (explanation && explanation !== topReason) ? `${prefix} — ${explanation}` : prefix;
 }
 
 function makeBridgeSession(): string {
@@ -587,7 +587,7 @@ function handleMutationAlert(alert: MutationAlert): void {
   // still logged for telemetry but do not disturb the user.
   if (alert.type === "overlay_injected" && alert.severity === "high") {
     showToast({
-      message: buildPlainMessage("NavSentinel detected a suspicious overlay injected after page load", [alert.type]),
+      message: "NavSentinel detected a suspicious overlay injected after page load. The page may be attempting a phishing attack.",
       actions: [{ label: "Dismiss", onClick: () => {} }],
       timeoutMs: 0,
     });

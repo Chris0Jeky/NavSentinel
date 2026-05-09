@@ -6,7 +6,6 @@ import {
   getTrustedDomains
 } from "../shared/storage";
 import { computeCredentialRisk, getRegistrableDomain, normalizeHost } from "../shared/domain";
-
 import { showToast } from "./ui_toast";
 import { showCredentialModal } from "./credential_modal";
 import {

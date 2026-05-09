@@ -44,7 +44,8 @@ const EXPLANATIONS: Record<string, string> = {
   // Mutation monitor reason codes (mutation_monitor.ts)
   overlay_injected: "A suspicious overlay was injected after the page loaded",
   form_action_changed: "A form's submission target was changed after page load",
-  password_field_injected: "A password field was injected into an existing form",
+  password_injected: "A password field was injected into an existing form",
+  suspicious_iframe: "A suspicious iframe was injected after the page loaded",
 
   // Other event-related codes used in toasts
   clickfix_detected: "Fake verification dialog with clipboard hijack detected",

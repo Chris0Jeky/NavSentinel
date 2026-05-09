@@ -49,7 +49,8 @@ const KNOWN_CLICKFIX_CODES = [
 const KNOWN_MUTATION_CODES = [
   "overlay_injected",
   "form_action_changed",
-  "password_field_injected",
+  "password_injected",
+  "suspicious_iframe",
 ];
 
 const KNOWN_EVENT_CODES = [
