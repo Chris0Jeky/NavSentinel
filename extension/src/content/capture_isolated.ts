@@ -51,6 +51,7 @@ import {
   handlePushStateBridgeMessage,
   isPushStateAbuseActive,
 } from "./pushstate_guard";
+import { getDomainRisk, recordNavigation } from "../shared/domain_profile";
 
 const CDS_SMART_BLOCK_THRESHOLD = 70;
 const CDS_STRICT_BLOCK_THRESHOLD = 50;
@@ -107,6 +108,7 @@ let gestureDownId: number | null = null;
 const CHAIN_INFO_TTL_MS = 30_000;
 let cachedChainInfo: RedirectChainInfo | null = null;
 let cachedChainInfoAt = 0;
+let cachedDomainRepeatOffender = false;
 
 function markMainGuardReady(): void {
   if (bridgeRetryTimer) {
@@ -190,6 +192,10 @@ async function initSettings() {
   postToMain("ns-ping");
   // Load reputation bloom filter in the background (non-blocking)
   void loadReputationFilter();
+  // Pre-fetch domain risk for the current site (non-blocking)
+  void getDomainRisk(siteKeyFromLocation()).then((risk) => {
+    cachedDomainRepeatOffender = risk.isRepeatOffender;
+  }).catch(() => {});
   if (isTopFrame()) {
     try {
       chrome.runtime.sendMessage({ type: "ns-ready" });
@@ -1205,6 +1211,7 @@ window.addEventListener(
       oauthOpenerManipulation: oauthOpenerManip,
       clickfixScore: cfScore > 0 ? cfScore : undefined,
       pushStateAbuse,
+      domainRepeatOffender: cachedDomainRepeatOffender,
     };
 
     if (dblClickHijack) {
@@ -1309,6 +1316,15 @@ window.addEventListener(
 
     if (settings.debug) {
       console.debug("[NavSentinel] click", { decision, nrs, cds, reasonCodes, nrsFactors, ctx });
+    }
+
+    // --- Record domain profile (async, non-blocking) ---
+    if (mode !== "off") {
+      const site = siteKeyFromLocation();
+      void recordNavigation(site, nrs, reasonCodes, getNrsBlockThreshold(mode))
+        .then(() => getDomainRisk(site))
+        .then((risk) => { cachedDomainRepeatOffender = risk.isRepeatOffender; })
+        .catch(() => {});
     }
 
     // --- Child-frame async reputation check ---
