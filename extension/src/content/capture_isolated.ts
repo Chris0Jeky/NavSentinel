@@ -1319,9 +1319,14 @@ window.addEventListener(
     }
 
     // --- Record domain profile (async, non-blocking) ---
+    // Filter out the repeat-offender factor to prevent feedback loop:
+    // recording it would bake +10 into totalNRS, inflating avgNRS and
+    // making the domain a permanent repeat offender.
     if (mode !== "off") {
       const site = siteKeyFromLocation();
-      void recordNavigation(site, nrs, reasonCodes, getNrsBlockThreshold(mode))
+      const baseReasons = reasonCodes.filter(r => r !== "nrs_domain_repeat_offender");
+      const baseNrs = cachedDomainRepeatOffender ? nrs - 10 : nrs;
+      void recordNavigation(site, baseNrs, baseReasons, getNrsBlockThreshold(mode))
         .then(() => getDomainRisk(site))
         .then((risk) => { cachedDomainRepeatOffender = risk.isRepeatOffender; })
         .catch(() => {});
