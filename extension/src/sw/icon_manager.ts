@@ -47,15 +47,12 @@ export function getTabIconState(tabId: number): IconState {
 }
 
 export async function setAllTabsGray(): Promise<void> {
-  const ids = [...tabState.keys()];
   tabState.clear();
+  const tabs = await chrome.tabs.query({});
   await Promise.all(
-    ids.map((tabId) => {
-      try {
-        return chrome.action.setBadgeText({ tabId, text: "" }).catch(() => {});
-      } catch {
-        return Promise.resolve();
-      }
+    tabs.map((tab) => {
+      if (tab.id === undefined) return Promise.resolve();
+      return chrome.action.setBadgeText({ tabId: tab.id, text: "" }).catch(() => {});
     }),
   );
 }

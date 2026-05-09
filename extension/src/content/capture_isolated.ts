@@ -102,6 +102,7 @@ let bridgeRetryDelayMs = BRIDGE_RETRY_MS;
 let bridgeInitStartedAt = 0;
 let forwardCheckInFlight = false;
 let forwardCheckTimer = 0;
+let previousMode = "";
 let gestureNavAttempts = 0;
 let gestureDownId: number | null = null;
 const CHAIN_INFO_TTL_MS = 30_000;
@@ -109,19 +110,22 @@ let cachedChainInfo: RedirectChainInfo | null = null;
 let cachedChainInfoAt = 0;
 
 type TabRiskState = "green" | "yellow" | "red" | "gray";
+const SEVERITY: Record<TabRiskState, number> = { gray: 0, green: 1, yellow: 2, red: 3 };
 let currentTabRiskState: TabRiskState = "green";
 let tabBlockCount = 0;
 
-function sendIconUpdate(state: TabRiskState, blockCount = 0): void {
+function sendIconUpdate(state: TabRiskState, blockCount?: number): void {
   if (!isTopFrame()) return;
-  if (state === currentTabRiskState && blockCount === tabBlockCount) return;
+  if (SEVERITY[state] < SEVERITY[currentTabRiskState]) return;
+  const count = blockCount ?? tabBlockCount;
+  if (state === currentTabRiskState && count === tabBlockCount) return;
   currentTabRiskState = state;
-  tabBlockCount = blockCount;
-  try {
-    chrome.runtime.sendMessage({ type: "ns-tab-risk-update", state, blockCount });
-  } catch {
-    // ignore
-  }
+  tabBlockCount = count;
+  chrome.runtime.sendMessage({
+    type: "ns-tab-risk-update",
+    state,
+    blockCount: count,
+  }).catch(() => {});
 }
 
 function markMainGuardReady(): void {
@@ -234,10 +238,11 @@ onNavSettingsChange((s) => {
   settings = s;
   setDebugEnabled(s.debug);
   postToMain("ns-config", { mode: s.defaultMode, debug: s.debug });
-  if (s.defaultMode === "off") {
-    sendIconUpdate("gray");
-  } else {
-    sendIconUpdate("green");
+  if (s.defaultMode !== previousMode) {
+    previousMode = s.defaultMode;
+    sendIconUpdate(s.defaultMode === "off" ? "gray" : "green");
+    // Reset severity tracking when mode changes
+    currentTabRiskState = s.defaultMode === "off" ? "gray" : "green";
   }
   refreshDebug();
 });

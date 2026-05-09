@@ -10,11 +10,15 @@ import {
 
 const setBadgeText = vi.fn().mockResolvedValue(undefined);
 const setBadgeBackgroundColor = vi.fn().mockResolvedValue(undefined);
+const tabsQuery = vi.fn().mockResolvedValue([]);
 
 vi.stubGlobal("chrome", {
   action: {
     setBadgeText,
     setBadgeBackgroundColor,
+  },
+  tabs: {
+    query: tabsQuery,
   },
 });
 
@@ -23,6 +27,8 @@ describe("icon_manager", () => {
     _getTabStateMap().clear();
     setBadgeText.mockClear();
     setBadgeBackgroundColor.mockClear();
+    tabsQuery.mockClear();
+    tabsQuery.mockResolvedValue([]);
   });
 
   it("sets green badge with checkmark", async () => {
@@ -128,17 +134,32 @@ describe("icon_manager", () => {
       await updateTabIcon(20, "green");
       await updateTabIcon(21, "red", 1);
       setBadgeText.mockClear();
+      tabsQuery.mockResolvedValue([{ id: 20 }, { id: 21 }, { id: 22 }]);
 
       await setAllTabsGray();
       expect(_getTabStateMap().size).toBe(0);
-      expect(setBadgeText).toHaveBeenCalledTimes(2);
+      expect(tabsQuery).toHaveBeenCalledWith({});
+      // Clears badges for all queried tabs, not just tracked ones
+      expect(setBadgeText).toHaveBeenCalledTimes(3);
       expect(setBadgeText).toHaveBeenCalledWith({ tabId: 20, text: "" });
       expect(setBadgeText).toHaveBeenCalledWith({ tabId: 21, text: "" });
+      expect(setBadgeText).toHaveBeenCalledWith({ tabId: 22, text: "" });
     });
 
     it("handles empty state gracefully", async () => {
+      tabsQuery.mockResolvedValue([]);
       await setAllTabsGray();
       expect(_getTabStateMap().size).toBe(0);
+      expect(tabsQuery).toHaveBeenCalledWith({});
+    });
+
+    it("skips tabs without an id", async () => {
+      tabsQuery.mockResolvedValue([{ id: 30 }, { id: undefined }, {}]);
+      setBadgeText.mockClear();
+
+      await setAllTabsGray();
+      expect(setBadgeText).toHaveBeenCalledTimes(1);
+      expect(setBadgeText).toHaveBeenCalledWith({ tabId: 30, text: "" });
     });
   });
 });
