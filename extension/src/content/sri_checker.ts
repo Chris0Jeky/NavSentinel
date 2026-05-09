@@ -59,7 +59,7 @@ function isCrossOrigin(resourceUrl: string, pageOrigin: string, pageUrl: string)
 }
 
 /**
- * Check whether the page has at least one visible, non-disabled password input.
+ * Check whether the page has at least one non-disabled password input.
  */
 function hasPasswordField(doc: Document): boolean {
   const inputs = doc.querySelectorAll('input[type="password"]');

@@ -117,21 +117,25 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
       }
     }
 
-    // SRI awareness: flag missing subresource integrity on credential pages
-    const sriAnalysis = checkSRI(document, location.href, location.origin);
-    if (sriAnalysis.score !== 0) {
-      const sriBoost = sriAnalysis.score > 0
-        ? Math.min(sriAnalysis.score, 100 - risk.score)
-        : Math.max(sriAnalysis.score, -risk.score);
-      risk.score = Math.max(0, Math.min(100, risk.score + sriBoost));
-      for (let i = 0; i < sriAnalysis.reasons.length; i++) {
-        risk.reasons.push({ code: "SRI_MISSING_ON_CREDENTIAL_PAGE", label: sriAnalysis.reasons[i] ?? "" });
+    // SRI awareness: flag missing subresource integrity on credential pages.
+    // Skip entirely for trusted domains -- consistent with content analysis above.
+    if (!risk.page.isTrusted) {
+      const sriAnalysis = checkSRI(document, location.href, location.origin);
+      if (sriAnalysis.score !== 0) {
+        const sriBoost = sriAnalysis.score > 0
+          ? Math.min(sriAnalysis.score, 100 - risk.score)
+          : Math.max(sriAnalysis.score, -risk.score);
+        risk.score = Math.max(0, Math.min(100, risk.score + sriBoost));
+        const sriCode = sriAnalysis.score > 0 ? "SRI_MISSING_ON_CREDENTIAL_PAGE" : "SRI_PRESENT_ON_CREDENTIAL_PAGE";
+        for (let i = 0; i < sriAnalysis.reasons.length; i++) {
+          risk.reasons.push({ code: sriCode, label: sriAnalysis.reasons[i] ?? "" });
+        }
+        // Recalculate severity after SRI modifier
+        if (risk.score >= 70) risk.severity = "high";
+        else if (risk.score >= 40) risk.severity = "medium";
+        else if (risk.score >= 15) risk.severity = "low";
+        else risk.severity = "none";
       }
-      // Recalculate severity after SRI modifier
-      if (risk.score >= 70) risk.severity = "high";
-      else if (risk.score >= 40) risk.severity = "medium";
-      else if (risk.score >= 15) risk.severity = "low";
-      else risk.severity = "none";
     }
 
     const crossSite = isCrossSiteCredentialAction(risk);
