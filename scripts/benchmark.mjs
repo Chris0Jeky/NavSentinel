@@ -26,10 +26,12 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import http from "node:http";
+import { fileURLToPath } from "node:url";
 
 // ── Constants ──────────────────────────────────────────────────────
 
-const ROOT = path.resolve(import.meta.dirname, "..");
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.resolve(__dirname, "..");
 const EXTENSION_PATH = process.env.EXTENSION_PATH
   ? path.resolve(process.env.EXTENSION_PATH)
   : path.resolve(ROOT, "extension", "dist");
@@ -568,6 +570,19 @@ function compareBaseline(analysis, baselinePath) {
     }
   }
 
+  // Flag categories with high error rates (may mask real regressions)
+  for (const [catName, cat] of Object.entries(analysis.categories)) {
+    const errorRate = cat.errors / cat.total;
+    if (errorRate > 0.2) {
+      regressions.push({
+        category: catName,
+        metric: "errorRate",
+        expected: "<=20%",
+        actual: `${Math.round(errorRate * 100)}%`,
+      });
+    }
+  }
+
   return { hasBaseline: true, regressions, improvements };
 }
 
@@ -751,6 +766,7 @@ async function main() {
   const results = [];
   const startTime = Date.now();
 
+  try {
   for (let i = 0; i < corpus.length; i++) {
     const fixture = corpus[i];
     const progress = `[${i + 1}/${corpus.length}]`;
@@ -758,6 +774,11 @@ async function main() {
 
     const result = await runFixture(context, gym.baseUrl, fixture, opts.timeout);
     results.push(result);
+
+    // Clear clipboard permissions granted for this fixture
+    if (fixture.grantClipboard) {
+      try { await context.clearPermissions(); } catch { /* ok */ }
+    }
 
     if (result.error) {
       console.log(`ERROR: ${result.error.slice(0, 60)}`);
@@ -771,11 +792,6 @@ async function main() {
       console.log("FP (false positive)");
     }
   }
-
-  // Cleanup browser
-  try { await context.close(); } catch { /* ok */ }
-  await gym.close();
-  fs.rmSync(userDataDir, { recursive: true, force: true });
 
   // Analyze
   const analysis = analyzeResults(results);
@@ -799,8 +815,8 @@ async function main() {
   const markdown = generateMarkdown(analysis, comparison, results);
   fs.writeFileSync(mdPath, markdown, "utf-8");
 
-  // Update baseline if requested or if none exists
-  if (opts.updateBaseline || !fs.existsSync(opts.baseline)) {
+  // Update baseline if explicitly requested
+  if (opts.updateBaseline) {
     const baselineData = {
       updatedAt: new Date().toISOString(),
       thresholds: {
@@ -814,12 +830,8 @@ async function main() {
       },
       lastRun: analysis,
     };
-
-    // Only write if user asked for update; don't auto-create baseline file
-    if (opts.updateBaseline) {
-      fs.writeFileSync(opts.baseline, JSON.stringify(baselineData, null, 2), "utf-8");
-      console.log(`\nBaseline updated: ${opts.baseline}`);
-    }
+    fs.writeFileSync(opts.baseline, JSON.stringify(baselineData, null, 2), "utf-8");
+    console.log(`\nBaseline updated: ${opts.baseline}`);
   }
 
   // Console summary
@@ -868,6 +880,11 @@ async function main() {
   }
 
   console.log("PASS: All thresholds met");
+  } finally {
+    try { await context.close(); } catch { /* ok */ }
+    try { await gym.close(); } catch { /* ok */ }
+    try { fs.rmSync(userDataDir, { recursive: true, force: true }); } catch { /* ok */ }
+  }
 }
 
 main().catch((err) => {
