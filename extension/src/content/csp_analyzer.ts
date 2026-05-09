@@ -8,6 +8,11 @@
  * Content scripts in the isolated world can read meta tags but cannot see
  * HTTP response headers, so only meta-tag CSP is checked.
  *
+ * IMPORTANT: Because meta tags are attacker-controlled, CSP is only used
+ * as a risk-elevating signal (positive scores for weakness). A "strict"
+ * CSP detected via meta tag is NOT treated as a safety signal because an
+ * attacker can trivially inject a fake nonce-based CSP meta tag.
+ *
  * Performance budget: < 2 ms for analyzeCSP().
  */
 
@@ -15,21 +20,28 @@ export interface CSPAnalysis {
   /** Whether any CSP was found (meta tag) */
   hasCSP: boolean;
   /**
-   * Score adjustment for NRS. Positive = weaker policy (risk modifier),
-   * negative = stronger policy (confidence reducer).
+   * Score adjustment for NRS. Positive = weaker policy (risk modifier).
+   * CSP is never used as a negative reducer because content scripts read
+   * meta tags which are attacker-controlled.
    */
   score: number;
   /** Human-readable reason codes for debug overlay / event log */
   reasons: string[];
-  /** True when the CSP uses nonces or hashes (security-conscious site) */
+  /** True when the CSP uses nonces or hashes (informational only) */
   isStrict: boolean;
 }
 
-/** Directives we care about for scoring. */
+/**
+ * Directives we care about for scoring.
+ *
+ * Note: frame-ancestors is NOT included because it is not supported in
+ * <meta> CSP tags per the CSP Level 3 spec. Browsers ignore
+ * frame-ancestors in meta elements, so scoring its absence would be a
+ * false signal.
+ */
 const SCORED_DIRECTIVES = new Set([
   "default-src",
   "script-src",
-  "frame-ancestors",
   "form-action",
 ]);
 
@@ -87,7 +99,10 @@ export function scoreCSPStrings(cspStrings: string[]): CSPAnalysis {
   let score = 0;
   let isStrict = false;
 
-  // Merge all CSP directives (browsers apply all meta CSP tags).
+  // Merge all CSP directives. Browsers actually *intersect* multiple
+  // policies (every policy must permit a resource), but we union the
+  // values as a conservative heuristic: if *any* policy allows a weak
+  // source, we still flag it.
   const merged = new Map<string, string[]>();
   for (const raw of cspStrings) {
     if (!raw) continue;
@@ -112,10 +127,13 @@ export function scoreCSPStrings(cspStrings: string[]): CSPAnalysis {
   const scriptSrc = merged.get("script-src") ?? merged.get("default-src");
   const defaultSrc = merged.get("default-src");
 
-  // Check for nonces/hashes in script-src (strong signal)
+  // Detect nonces/hashes in script-src for informational purposes.
+  // We do NOT reduce the score here because content scripts read meta
+  // tags which are attacker-controlled -- an attacker can inject a fake
+  // <meta> CSP with a nonce to game the reduction. Strict CSP is only
+  // trustworthy from HTTP headers, which content scripts cannot read.
   if (scriptSrc && hasNoncesOrHashes(scriptSrc)) {
     isStrict = true;
-    score -= 5;
     reasons.push("csp_strict_nonces");
   }
 
@@ -131,11 +149,9 @@ export function scoreCSPStrings(cspStrings: string[]): CSPAnalysis {
     reasons.push("csp_wildcard_default");
   }
 
-  // Missing frame-ancestors is relevant for clickjacking context
-  if (!merged.has("frame-ancestors")) {
-    score += 2;
-    reasons.push("csp_no_frame_ancestors");
-  }
+  // NOTE: frame-ancestors is intentionally NOT scored here. Per the CSP
+  // Level 3 spec, frame-ancestors is not enforced in <meta> elements, so
+  // its absence in meta CSP is meaningless.
 
   // If no specific weakness was found and we have a CSP, it's neutral
   if (reasons.length === 0) {
@@ -152,12 +168,20 @@ export function scoreCSPStrings(cspStrings: string[]): CSPAnalysis {
  * and fed into NRS as a modifier when other risk factors are present.
  */
 export function analyzeCSP(doc: Document = document): CSPAnalysis {
-  const metas = doc.querySelectorAll('meta[http-equiv="Content-Security-Policy"]');
+  // Query all meta[http-equiv] and filter case-insensitively. The HTML
+  // spec says http-equiv is case-insensitive, but CSS attribute selectors
+  // are case-sensitive by default. We also exclude
+  // Content-Security-Policy-Report-Only which is report-only and does
+  // not enforce restrictions.
+  const allMetas = doc.querySelectorAll("meta[http-equiv]");
   const cspStrings: string[] = [];
-  for (let i = 0; i < metas.length; i++) {
-    const content = (metas[i] as HTMLMetaElement).content;
-    if (content) {
-      cspStrings.push(content);
+  for (let i = 0; i < allMetas.length; i++) {
+    const el = allMetas[i] as HTMLMetaElement;
+    if (el.httpEquiv.toLowerCase() === "content-security-policy") {
+      const content = el.content;
+      if (content) {
+        cspStrings.push(content);
+      }
     }
   }
   return scoreCSPStrings(cspStrings);

@@ -44,18 +44,19 @@
   <h1>CSP Strict - Nonce-based Content Security Policy</h1>
   <div class="description">
     <strong>Scenario:</strong> This page has a strict CSP with nonce-based
-    script-src and frame-ancestors 'none'. This indicates a security-conscious
-    site and should reduce the NRS score by 5.
+    script-src and frame-ancestors 'none'. The <code>isStrict</code> flag is set
+    for informational purposes, but CSP does NOT reduce NRS because meta-tag
+    CSP is attacker-controlled and cannot be trusted as a safety signal.
     <br><br>
     <strong>Expected:</strong> NavSentinel detects <code>csp_strict_nonces</code>
-    with a score of -5. The debug overlay should show
-    <code>CSP: yes (score=-5, strict=true)</code>.
+    with a score of 0 (no reduction). The debug overlay should show
+    <code>CSP: yes (score=0, strict=true)</code>.
   </div>
 
   <div class="panel">
-    <h3>Test: Cross-site link (strict CSP reduces risk)</h3>
-    <p>Even with a cross-site new-tab link, the strict CSP should slightly reduce
-    the overall NRS.</p>
+    <h3>Test: Cross-site link (strict CSP is informational only)</h3>
+    <p>With a cross-site new-tab link, the strict CSP flag is detected but does
+    NOT reduce NRS (meta-tag CSP is attacker-controlled).</p>
     <a class="safe-link" href="https://example.com/dashboard" target="_blank" rel="noopener">
       Open link (strict CSP page)
     </a>

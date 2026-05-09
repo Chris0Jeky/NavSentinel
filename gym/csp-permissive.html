@@ -45,13 +45,14 @@
   <div class="description">
     <strong>Scenario:</strong> This page has a very permissive CSP with wildcard
     <code>default-src *</code> and <code>'unsafe-inline' 'unsafe-eval'</code> in
-    script-src, plus no <code>frame-ancestors</code>. This should produce a
-    CSP weakness score of +8.
+    script-src. This should produce a CSP weakness score of +6.
     <br><br>
-    <strong>Expected:</strong> NavSentinel detects <code>csp_wildcard_default</code>,
-    <code>csp_permissive</code>, and <code>csp_no_frame_ancestors</code> with a
-    combined score of +8. The debug overlay should show
-    <code>CSP: yes (score=8, strict=false)</code>.
+    <strong>Expected:</strong> NavSentinel detects <code>csp_wildcard_default</code>
+    and <code>csp_permissive</code> with a combined score of +6. The debug overlay
+    should show <code>CSP: yes (score=6, strict=false)</code>.
+    <br><br>
+    <em>Note:</em> <code>frame-ancestors</code> is not scored because browsers
+    ignore it in <code>&lt;meta&gt;</code> CSP tags per the CSP Level 3 spec.
   </div>
 
   <div class="panel">
