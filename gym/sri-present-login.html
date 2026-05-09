@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SRI Present - Login Page (Control)</title>
+    <!-- External scripts WITH integrity attributes (SRI present) -->
+    <script
+      src="https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js"
+      integrity="sha384-4bIq6s5ZMbIaA0hA1piOhKRweG+WUfyflBvs0jBKSX3O08p7BVoNXL7ypQYYjep"
+      crossorigin="anonymous"
+    ></script>
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"
+      integrity="sha384-sherN55lpQQxWIAQTjZCYV9cZjTJ2CMDT4yKZDcG1X34ZUEF4cPoN/3TrZG8bX5P"
+      crossorigin="anonymous"
+    ></script>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css"
+      integrity="sha384-M86HUGbBFILBBZ9ykMAbT3nk1h4+DmPxUMsQCX1JCvJ+/GNNIlT8lhNBlmyMRv+"
+      crossorigin="anonymous"
+    >
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 720px;
+        margin: 40px auto;
+        padding: 0 16px;
+        line-height: 1.5;
+      }
+      form {
+        display: grid;
+        gap: 12px;
+        padding: 20px;
+        border: 1px solid #ccc;
+        border-radius: 12px;
+        background: #fafafa;
+      }
+      input, button {
+        font: inherit;
+        padding: 10px 12px;
+      }
+      .note {
+        color: #555;
+        font-size: 14px;
+      }
+      .ok {
+        color: #060;
+        background: #f0fff0;
+        padding: 12px;
+        border-radius: 8px;
+        border: 1px solid #cfc;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>SRI Present - Login Page (Control)</h1>
+    <p class="ok">
+      This page loads 3 external resources (2 scripts, 1 stylesheet) and all
+      have Subresource Integrity hashes. NavSentinel should recognize this as
+      a security-conscious site and apply a -3 credential risk modifier.
+    </p>
+    <p class="note">
+      Expected: SRI checker reports 3/3 external resources have SRI,
+      applying -3 to credential risk score.
+    </p>
+
+    <form id="loginForm" action="#" method="post">
+      <label>
+        Email
+        <input id="email" name="email" type="email" autocomplete="email" />
+      </label>
+      <label>
+        Password
+        <input id="password" type="password" name="password" autocomplete="current-password" />
+      </label>
+      <button type="submit">Sign in</button>
+    </form>
+  </body>
+</html>

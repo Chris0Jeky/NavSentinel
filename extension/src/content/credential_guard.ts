@@ -15,6 +15,7 @@ import {
   shouldPromptCredentialSubmit
 } from "./credential_guard_model";
 import { analyzePageContent } from "./content_analyzer";
+import { checkSRI } from "./sri_checker";
 
 const allowNextSubmitUntil = new WeakMap<HTMLFormElement, number>();
 
@@ -114,6 +115,23 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
         else if (risk.score >= 15) risk.severity = "low";
         else risk.severity = "none";
       }
+    }
+
+    // SRI awareness: flag missing subresource integrity on credential pages
+    const sriAnalysis = checkSRI(document, location.href, location.origin);
+    if (sriAnalysis.score !== 0) {
+      const sriBoost = sriAnalysis.score > 0
+        ? Math.min(sriAnalysis.score, 100 - risk.score)
+        : Math.max(sriAnalysis.score, -risk.score);
+      risk.score = Math.max(0, Math.min(100, risk.score + sriBoost));
+      for (let i = 0; i < sriAnalysis.reasons.length; i++) {
+        risk.reasons.push({ code: "SRI_MISSING_ON_CREDENTIAL_PAGE", label: sriAnalysis.reasons[i] ?? "" });
+      }
+      // Recalculate severity after SRI modifier
+      if (risk.score >= 70) risk.severity = "high";
+      else if (risk.score >= 40) risk.severity = "medium";
+      else if (risk.score >= 15) risk.severity = "low";
+      else risk.severity = "none";
     }
 
     const crossSite = isCrossSiteCredentialAction(risk);

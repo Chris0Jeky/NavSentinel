@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SRI Missing - Login Page</title>
+    <!-- External scripts WITHOUT integrity attributes (SRI missing) -->
+    <script src="https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css">
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 720px;
+        margin: 40px auto;
+        padding: 0 16px;
+        line-height: 1.5;
+      }
+      form {
+        display: grid;
+        gap: 12px;
+        padding: 20px;
+        border: 1px solid #ccc;
+        border-radius: 12px;
+        background: #fafafa;
+      }
+      input, button {
+        font: inherit;
+        padding: 10px 12px;
+      }
+      .note {
+        color: #555;
+        font-size: 14px;
+      }
+      .warning {
+        color: #c00;
+        background: #fff0f0;
+        padding: 12px;
+        border-radius: 8px;
+        border: 1px solid #fcc;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>SRI Missing - Login Page</h1>
+    <p class="warning">
+      This page loads 3 external resources (2 scripts, 1 stylesheet) without
+      Subresource Integrity hashes. NavSentinel should flag this as a
+      supply-chain risk on a credential page.
+    </p>
+    <p class="note">
+      Expected: SRI checker reports 0/3 external resources have SRI,
+      adding +8 to credential risk score.
+    </p>
+
+    <form id="loginForm" action="#" method="post">
+      <label>
+        Email
+        <input id="email" name="email" type="email" autocomplete="email" />
+      </label>
+      <label>
+        Password
+        <input id="password" type="password" name="password" autocomplete="current-password" />
+      </label>
+      <button type="submit">Sign in</button>
+    </form>
+  </body>
+</html>

@@ -151,6 +151,14 @@
     <li><a href="pushstate-03-legit-spa.html">PushState 03 - legitimate SPA navigation (false positive check)</a></li>
   </ol>
 
+  <h2>Sub-resource Integrity (SRI)</h2>
+  <p>These fixtures test SRI awareness on credential pages.</p>
+
+  <ol>
+    <li><a href="sri-missing-login.html">SRI 01 - login page with external scripts missing SRI</a></li>
+    <li><a href="sri-present-login.html">SRI 02 - login page with all scripts having SRI (control)</a></li>
+  </ol>
+
   <p class="note">Run with <code>npm run gym:serve</code> from the repo root, or <code>python -m http.server 5173</code> from the <code>gym</code> folder.</p>
 </body>
 </html>
