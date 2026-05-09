@@ -158,17 +158,30 @@ const unreleasedContent = nextSectionIdx === -1
 
 const rest = nextSectionIdx === -1 ? "" : changelog.slice(nextSectionIdx);
 
+const trimmedContent = unreleasedContent.trim();
+if (!trimmedContent) {
+  console.error("No changes under [Unreleased]. Add changelog entries before releasing.");
+  process.exit(1);
+}
+
+const releaseDate = todayISO();
+
 changelog = changelog.slice(0, afterUnreleased)
   + "\n"
-  + `\n## [${newVersion}] - ${todayISO()}`
+  + `\n## [${newVersion}] - ${releaseDate}`
   + unreleasedContent
   + rest;
 
 fs.writeFileSync(changelogPath, changelog, "utf8");
-console.log(`Updated CHANGELOG.md with [${newVersion}] - ${todayISO()}`);
+console.log(`Updated CHANGELOG.md with [${newVersion}] - ${releaseDate}`);
+
+// 6b. Sync package-lock.json
+if (!dryRun) {
+  run("npm install --package-lock-only --ignore-scripts");
+}
 
 // 7. Stage and commit
-run("git add package.json extension/manifest.json CHANGELOG.md");
+run("git add package.json extension/manifest.json CHANGELOG.md package-lock.json");
 run(`git commit -m "Release v${newVersion}"`);
 console.log(`Committed: Release v${newVersion}`);
 
