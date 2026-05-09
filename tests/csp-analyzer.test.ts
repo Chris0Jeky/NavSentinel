@@ -40,10 +40,15 @@ describe("parseCSP", () => {
     expect(result.get("default-src")).toEqual(["'none'"]);
   });
 
-  it("parses frame-ancestors and form-action", () => {
-    const result = parseCSP("frame-ancestors 'self'; form-action 'self' https://example.com");
-    expect(result.get("frame-ancestors")).toEqual(["'self'"]);
+  it("parses form-action", () => {
+    const result = parseCSP("form-action 'self' https://example.com");
     expect(result.get("form-action")).toEqual(["'self'", "https://example.com"]);
+  });
+
+  it("does not parse frame-ancestors (not enforceable in meta tags)", () => {
+    const result = parseCSP("frame-ancestors 'self'; form-action 'self'");
+    expect(result.has("frame-ancestors")).toBe(false);
+    expect(result.get("form-action")).toEqual(["'self'"]);
   });
 
   it("lowercases directive names", () => {
@@ -84,26 +89,30 @@ describe("scoreCSPStrings", () => {
       const result = scoreCSPStrings(["script-src 'self' 'unsafe-inline'"]);
       expect(result.hasCSP).toBe(true);
       expect(result.reasons).toContain("csp_permissive");
-      expect(result.score).toBeGreaterThanOrEqual(3);
+      expect(result.score).toBe(3);
     });
 
     it("scores +3 for unsafe-eval in script-src", () => {
       const result = scoreCSPStrings(["script-src 'self' 'unsafe-eval'"]);
       expect(result.hasCSP).toBe(true);
       expect(result.reasons).toContain("csp_permissive");
+      expect(result.score).toBe(3);
     });
 
     it("scores +3 for wildcard in default-src", () => {
       const result = scoreCSPStrings(["default-src *"]);
       expect(result.hasCSP).toBe(true);
       expect(result.reasons).toContain("csp_wildcard_default");
-      expect(result.score).toBeGreaterThanOrEqual(3);
+      expect(result.score).toBe(3);
     });
 
-    it("scores +2 for missing frame-ancestors", () => {
+    it("does not score missing frame-ancestors (not enforceable in meta)", () => {
       const result = scoreCSPStrings(["script-src 'self'"]);
       expect(result.hasCSP).toBe(true);
-      expect(result.reasons).toContain("csp_no_frame_ancestors");
+      expect(result.reasons).not.toContain("csp_no_frame_ancestors");
+      // script-src 'self' with no weakness => neutral
+      expect(result.score).toBe(0);
+      expect(result.reasons).toContain("csp_present");
     });
 
     it("accumulates multiple weakness scores", () => {
@@ -111,58 +120,62 @@ describe("scoreCSPStrings", () => {
         "default-src *; script-src 'self' 'unsafe-inline'",
       ]);
       expect(result.hasCSP).toBe(true);
-      // wildcard default (+3) + unsafe-inline (+3) + no frame-ancestors (+2) = 8
-      expect(result.score).toBe(8);
+      // wildcard default (+3) + unsafe-inline (+3) = 6
+      expect(result.score).toBe(6);
       expect(result.reasons).toContain("csp_wildcard_default");
       expect(result.reasons).toContain("csp_permissive");
-      expect(result.reasons).toContain("csp_no_frame_ancestors");
+      expect(result.reasons).not.toContain("csp_no_frame_ancestors");
     });
   });
 
-  describe("strict CSP", () => {
-    it("scores -5 for nonce-based script-src", () => {
+  describe("strict CSP (informational only, no score reduction)", () => {
+    it("detects nonce-based script-src but does not reduce score", () => {
       const result = scoreCSPStrings([
-        "script-src 'nonce-abc123'; frame-ancestors 'self'",
+        "script-src 'nonce-abc123'",
       ]);
       expect(result.hasCSP).toBe(true);
       expect(result.isStrict).toBe(true);
       expect(result.reasons).toContain("csp_strict_nonces");
-      expect(result.score).toBe(-5);
+      // Strict CSP no longer reduces score (attacker-controlled meta tags)
+      expect(result.score).toBe(0);
     });
 
-    it("scores -5 for hash-based script-src", () => {
+    it("detects hash-based script-src but does not reduce score", () => {
       const result = scoreCSPStrings([
-        "script-src 'sha256-abcdef123456'; frame-ancestors 'none'",
+        "script-src 'sha256-abcdef123456'",
       ]);
       expect(result.isStrict).toBe(true);
       expect(result.reasons).toContain("csp_strict_nonces");
+      expect(result.score).toBe(0);
     });
 
-    it("strict with frame-ancestors yields negative score", () => {
+    it("strict CSP yields neutral score", () => {
       const result = scoreCSPStrings([
-        "default-src 'self'; script-src 'nonce-xyz'; frame-ancestors 'self'",
+        "default-src 'self'; script-src 'nonce-xyz'",
       ]);
       expect(result.hasCSP).toBe(true);
       expect(result.isStrict).toBe(true);
-      expect(result.score).toBe(-5);
+      expect(result.score).toBe(0);
+    });
+
+    it("score is never negative (attackers cannot game a reduction)", () => {
+      const result = scoreCSPStrings([
+        "default-src 'none'; script-src 'nonce-fake123' 'strict-dynamic'; " +
+          "form-action 'self'",
+      ]);
+      expect(result.isStrict).toBe(true);
+      expect(result.score).toBeGreaterThanOrEqual(0);
     });
   });
 
   describe("partial CSP", () => {
     it("neutral score when CSP is present but has no scored weaknesses", () => {
       const result = scoreCSPStrings([
-        "default-src 'self'; frame-ancestors 'self'",
+        "default-src 'self'",
       ]);
       expect(result.hasCSP).toBe(true);
       expect(result.score).toBe(0);
       expect(result.reasons).toContain("csp_present");
-    });
-
-    it("only frame-ancestors missing on otherwise clean CSP", () => {
-      const result = scoreCSPStrings(["default-src 'self'"]);
-      expect(result.hasCSP).toBe(true);
-      expect(result.score).toBe(2);
-      expect(result.reasons).toContain("csp_no_frame_ancestors");
     });
   });
 
@@ -170,10 +183,10 @@ describe("scoreCSPStrings", () => {
     it("merges directives from multiple strings", () => {
       const result = scoreCSPStrings([
         "script-src 'self'",
-        "frame-ancestors 'none'",
+        "default-src 'none'",
       ]);
       expect(result.hasCSP).toBe(true);
-      // script-src 'self' is fine, frame-ancestors present => neutral
+      // script-src 'self' is fine, default-src 'none' is fine => neutral
       expect(result.score).toBe(0);
       expect(result.reasons).toContain("csp_present");
     });
@@ -181,7 +194,7 @@ describe("scoreCSPStrings", () => {
     it("picks up unsafe from second string", () => {
       const result = scoreCSPStrings([
         "default-src 'self'",
-        "script-src 'unsafe-eval'; frame-ancestors 'self'",
+        "script-src 'unsafe-eval'",
       ]);
       expect(result.hasCSP).toBe(true);
       expect(result.reasons).toContain("csp_permissive");
@@ -189,13 +202,14 @@ describe("scoreCSPStrings", () => {
   });
 
   describe("real-world CSP strings", () => {
-    it("GitHub-style strict CSP", () => {
+    it("GitHub-style strict CSP has neutral score (not negative)", () => {
       const result = scoreCSPStrings([
         "default-src 'none'; script-src 'nonce-abc123' 'strict-dynamic'; " +
-          "frame-ancestors 'none'; form-action 'self'",
+          "form-action 'self'",
       ]);
       expect(result.isStrict).toBe(true);
-      expect(result.score).toBe(-5);
+      // Strict CSP is informational only; score stays at 0
+      expect(result.score).toBe(0);
     });
 
     it("lax CSP with everything allowed", () => {
@@ -203,8 +217,21 @@ describe("scoreCSPStrings", () => {
         "default-src *; script-src * 'unsafe-inline' 'unsafe-eval'",
       ]);
       expect(result.hasCSP).toBe(true);
-      // wildcard default (+3) + unsafe-inline/eval (+3) + no frame-ancestors (+2) = 8
-      expect(result.score).toBe(8);
+      // wildcard default (+3) + unsafe-inline/eval (+3) = 6
+      expect(result.score).toBe(6);
+    });
+  });
+
+  describe("Content-Security-Policy-Report-Only exclusion", () => {
+    it("Report-Only is excluded by analyzeCSP (not scoreCSPStrings)", () => {
+      // scoreCSPStrings only processes raw strings; the filtering of
+      // Report-Only happens in analyzeCSP via the httpEquiv check.
+      // This test documents that scoreCSPStrings is agnostic to the
+      // header type -- the caller (analyzeCSP) is responsible for
+      // excluding Report-Only meta tags by comparing httpEquiv.
+      const result = scoreCSPStrings(["script-src 'self'"]);
+      expect(result.hasCSP).toBe(true);
+      // The filtering is in analyzeCSP, not here
     });
   });
 });
@@ -244,24 +271,25 @@ describe("NRS CSP modifier integration", () => {
     expect(result.nrsFactors).toContain("nrs_csp_weakness");
   });
 
-  it("applies strict CSP reduction regardless of base NRS", () => {
+  it("ignores negative cspWeaknessScore (meta CSP is attacker-controlled)", () => {
     const result = computeNRS(
       baseCds(10),
       baseNav({ cspWeaknessScore: -5 })
     );
-    // 10 - 5 = 5
-    expect(result.nrs).toBe(5);
-    expect(result.nrsFactors).toContain("nrs_csp_strict");
+    // Negative scores are never applied -- attacker can fake strict CSP
+    expect(result.nrs).toBe(10);
+    expect(result.nrsFactors).not.toContain("nrs_csp_strict");
+    expect(result.nrsFactors).not.toContain("nrs_csp_weakness");
   });
 
-  it("strict CSP can reduce NRS to 0", () => {
+  it("ignores negative cspWeaknessScore even with high base NRS", () => {
     const result = computeNRS(
-      baseCds(3),
-      baseNav({ cspWeaknessScore: -5 })
+      baseCds(30),
+      baseNav({ isNewTabOrWindow: true, cspWeaknessScore: -5 })
     );
-    // 3 - 5 = -2 -> clamped to 0
-    expect(result.nrs).toBe(0);
-    expect(result.nrsFactors).toContain("nrs_csp_strict");
+    // 30 + 20 = 50; negative CSP ignored
+    expect(result.nrs).toBe(50);
+    expect(result.nrsFactors).not.toContain("nrs_csp_strict");
   });
 
   it("does not apply when cspWeaknessScore is 0", () => {
@@ -271,7 +299,6 @@ describe("NRS CSP modifier integration", () => {
     );
     expect(result.nrs).toBe(50);
     expect(result.nrsFactors).not.toContain("nrs_csp_weakness");
-    expect(result.nrsFactors).not.toContain("nrs_csp_strict");
   });
 
   it("does not apply when cspWeaknessScore is undefined", () => {
