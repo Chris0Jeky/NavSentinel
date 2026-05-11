@@ -1,6 +1,6 @@
 ---
 name: ns-codex-tooling
-description: Choose Codex-native tools for NavSentinel work: search, parallel reads, patching, planning, verification, browser checks, docs lookup, and safe delegation.
+description: "Choose Codex-native tools for NavSentinel work: search, parallel reads, patching, planning, verification, browser checks, docs lookup, and safe delegation."
 user-invocable: true
 ---
 
