@@ -133,7 +133,10 @@ def run_configured_hook(hook: dict, payload: dict, extra_env: dict[str, str] | N
 def is_denied(stdout: str) -> bool:
     if not stdout.strip():
         return False
-    data = json.loads(stdout)
+    try:
+        data = json.loads(stdout)
+    except json.JSONDecodeError:
+        return False
     output = data.get("hookSpecificOutput", {})
     return output.get("permissionDecision") == "deny"
 
@@ -144,12 +147,19 @@ def test_pre_tool_use(settings: dict) -> None:
         "rm -rf dist",
         "rm -fr dist",
         "rm -r -f dist",
+        "rm -r dist; rm -f dist",
+        "rm --recursive dist",
         "Remove-Item -LiteralPath dist -Recurse -Force",
         "Remove-Item -LiteralPath dist -Force -Recurse",
         "git reset --hard",
+        "git reset --soft HEAD~10",
+        "git reset --mixed HEAD~5",
+        "git rebase -i HEAD~5",
+        "git rebase --interactive HEAD~10",
         "git clean -fdx",
         "git clean -xdf",
         "git clean --force",
+        "git clean -n dist; git clean -f dist",
         "git checkout -- extension/src/sw/sw.ts",
         "git push --force origin main",
         "git push -f origin main",

@@ -436,11 +436,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse?.({ status: "offer", url: forward.url });
         return;
       }
-      if (forward) {
+      if (forward && !forward.returnUrl) {
         pendingForwardByTab.delete(tabId);
         swState.persistMap(pendingForwardByTab, "pendingForward");
         sendResponse?.({ status: "offer", url: forward.url });
         return;
+      }
+      if (forward && Date.now() - forward.ts > ROLLBACK_SUPPRESS_MS) {
+        pendingForwardByTab.delete(tabId);
+        swState.persistMap(pendingForwardByTab, "pendingForward");
       }
       sendResponse?.({ status: "none", url: "" });
     }
@@ -654,6 +658,10 @@ function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitio
 
 chrome.webNavigation.onErrorOccurred?.addListener((details) => {
   if (details.frameId !== 0) return;
+  if (!swState.hydrated) { void hydrateReady.then(() => onErrorOccurredHandler(details)); return; }
+  onErrorOccurredHandler(details);
+});
+function onErrorOccurredHandler(details: { tabId: number; frameId: number; url?: string }): void {
   const forward = pendingForwardByTab.get(details.tabId);
   const rollbackReturn = getActiveRollbackReturn(details.tabId);
   const preserveForwardOffer =
@@ -663,7 +671,7 @@ chrome.webNavigation.onErrorOccurred?.addListener((details) => {
   allowStartedByTab.delete(details.tabId);
   typedOriginByTab.delete(details.tabId);
   swState.persistAll();
-});
+}
 
 // --- DoubleClickjacking: track tab creation with opener ---
 chrome.tabs.onCreated.addListener((tab) => {
@@ -708,6 +716,7 @@ function onRemovedHandler(tabId: number): void {
   gestureUntilByTab.delete(tabId);
   allowStartedByTab.delete(tabId);
   allowTargetByTab.delete(tabId);
+  userNavContextUntilByTab.delete(tabId);
   suppressUntilByTab.delete(tabId);
   rollbackReturnByTab.delete(tabId);
   typedOriginByTab.delete(tabId);

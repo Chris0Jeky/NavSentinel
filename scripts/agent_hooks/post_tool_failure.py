@@ -25,12 +25,16 @@ LEDGER = Path(
 SECRET_RE = re.compile(
     r"(?i)(authorization\s*[:=]\s*bearer)\s+\S+|"
     r"\b(bearer)\s+\S+|"
-    r"(token|secret|password|api[_-]?key|authorization)\s*[:=]\s*\S+"
+    r"(token|secret|password|api[_-]?key|authorization)\s*[:=]\s*\S+|"
+    r"(AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|X-Api-Key)\s*[:=]\s*\S+|"
+    r"(-----BEGIN\s[A-Z ]*PRIVATE\sKEY-----)"
 )
 
 
 def redact_secret(match: re.Match[str]) -> str:
     prefix = next(group for group in match.groups() if group)
+    if "PRIVATE KEY" in prefix:
+        return "<redacted-pem-key>"
     if "bearer" in prefix.lower():
         return f"{prefix} <redacted>"
     return f"{prefix}=<redacted>"

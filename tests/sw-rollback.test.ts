@@ -1459,4 +1459,89 @@ describe("service worker rollback gating", () => {
 
     expect(response.shouldRollback).toBe(false);
   });
+
+  it("clears user navigation context when a tab is removed (prevents tab-ID reuse leak)", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+
+    // Establish user nav context via gesture + allowed commit
+    mock.dispatchRuntimeMessage(
+      { type: "ns-nav-gesture", ttlMs: 1500, url: "https://example.test/origin" },
+      { tab: { id: 70 } }
+    );
+    mock.emitBeforeNavigate({
+      tabId: 70,
+      frameId: 0,
+      url: "https://example.test/page"
+    });
+    mock.emitCommitted({
+      tabId: 70,
+      frameId: 0,
+      url: "https://example.test/page",
+      transitionType: "link",
+      transitionQualifiers: []
+    });
+
+    // Tab removed
+    mock.emitTabRemoved(70);
+
+    // Tab ID reused by a new tab — typed commit to establish prevUrl
+    mock.emitCommitted({
+      tabId: 70,
+      frameId: 0,
+      url: "https://safe.test/new-tab",
+      transitionType: "typed",
+      transitionQualifiers: []
+    });
+
+    // Same-domain redirect after typed-origin expired — should be exempted
+    // by the registrable-domain check, NOT blocked by stale user nav context
+    vi.setSystemTime(new Date("2026-03-17T12:00:11.000Z"));
+    mock.emitCommitted({
+      tabId: 70,
+      frameId: 0,
+      url: "https://safe.test/login",
+      transitionType: "link",
+      transitionQualifiers: ["server_redirect"]
+    });
+
+    const response = mock.dispatchRuntimeMessage({ type: "ns-check-rollback" }, { tab: { id: 70 } }) as {
+      shouldRollback: boolean;
+    };
+
+    // Without the fix, stale userNavContextUntilByTab would suppress
+    // the same-domain exemption, causing a false-positive rollback
+    expect(response.shouldRollback).toBe(false);
+  });
+
+  it("does not offer a forward to an unrelated page when returnUrl is set", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+
+    // Store a forward offer with a specific returnUrl
+    mock.dispatchRuntimeMessage(
+      { type: "ns-store-forward", url: "https://evil.test/redirected", returnUrl: "https://example.test/origin" },
+      { tab: { id: 71 } }
+    );
+
+    // An unrelated page checks for forward offers — should not consume it
+    const unrelated = mock.dispatchRuntimeMessage(
+      { type: "ns-check-forward", currentUrl: "https://other.test/unrelated" },
+      { tab: { id: 71 } }
+    ) as { status?: string; url?: string };
+
+    expect(unrelated.status).toBe("none");
+    expect(unrelated.url).toBe("");
+
+    // The correct return page checks — should get the offer
+    const correct = mock.dispatchRuntimeMessage(
+      { type: "ns-check-forward", currentUrl: "https://example.test/origin" },
+      { tab: { id: 71 } }
+    ) as { status?: string; url?: string };
+
+    expect(correct.status).toBe("offer");
+    expect(correct.url).toBe("https://evil.test/redirected");
+  });
 });
