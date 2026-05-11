@@ -1,11 +1,11 @@
 {
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "permissions": {
-    "defaultMode": "ask",
+    "defaultMode": "default",
     "allow": [
-      "Read(*)",
-      "Grep(*)",
-      "Glob(*)",
-      "LS(*)",
+      "Read",
+      "Grep",
+      "Glob",
       "Bash(pwd)",
       "Bash(git status*)",
       "Bash(git diff*)",
@@ -47,7 +47,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python scripts/agent_hooks/pre_tool_use.py",
+            "shell": "powershell",
+            "command": "python \"$env:CLAUDE_PROJECT_DIR\\scripts\\agent_hooks\\pre_tool_use.py\"",
             "timeout": 5
           }
         ]
@@ -59,7 +60,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python scripts/agent_hooks/post_tool_failure.py",
+            "shell": "powershell",
+            "command": "python \"$env:CLAUDE_PROJECT_DIR\\scripts\\agent_hooks\\post_tool_failure.py\"",
             "timeout": 10
           }
         ]

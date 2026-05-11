@@ -14,11 +14,11 @@ import sys
 
 DENY_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\brm\s+-rf\b", re.I), "Recursive removal requires explicit human approval."),
-    (re.compile(r"\bRemove-Item\b.*\b-Recurse\b.*\b-Force\b", re.I), "Recursive forced removal requires explicit human approval."),
+    (re.compile(r"\bRemove-Item\b(?=.*(?:^|\s)-Recurse\b)(?=.*(?:^|\s)-Force\b)", re.I), "Recursive forced removal requires explicit human approval."),
     (re.compile(r"\b(?:rd|rmdir)\s+/s\b", re.I), "Recursive directory removal requires explicit human approval."),
     (re.compile(r"\bgit\s+reset\s+--hard\b", re.I), "Hard reset would discard work; inspect state and ask first."),
     (re.compile(r"\bgit\s+clean\s+-f[dDxX]*\b", re.I), "Git clean can delete untracked work; ask first."),
-    (re.compile(r"\bgit\s+checkout\s+--\b", re.I), "Path checkout can overwrite user changes; ask first."),
+    (re.compile(r"\bgit\s+checkout\s+--(?:\s|$)", re.I), "Path checkout can overwrite user changes; ask first."),
     (re.compile(r"\bgit\s+restore\s+(?:\.|--worktree|--staged)\b", re.I), "Git restore can overwrite work; ask first."),
     (re.compile(r"\bgit\s+push\s+--force(?:-with-lease)?\b", re.I), "Force-push is blocked by project policy."),
     (re.compile(r"\bgit\s+filter-branch\b", re.I), "History rewriting requires explicit approval."),

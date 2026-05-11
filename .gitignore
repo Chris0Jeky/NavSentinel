@@ -13,6 +13,7 @@ test-results/.last-run.json
 playwright-report/
 /RESOURCES
 /.claude/worktrees/
+/.claude/settings.local.json
 # Downloaded threat feed data (build-bloom-filter.mjs downloads)
 *.csv.tmp
 feeds/

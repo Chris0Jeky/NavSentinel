@@ -18,13 +18,22 @@ from pathlib import Path
 ROOT = Path(os.environ.get("CLAUDE_PROJECT_DIR", ".")).resolve()
 LEDGER = ROOT / "docs" / "agentic" / "failure_ledger.jsonl"
 SECRET_RE = re.compile(
-    r"(?i)(token|secret|password|api[_-]?key|authorization|bearer)\s*[:=]\s*\S+"
+    r"(?i)(authorization\s*[:=]\s*bearer)\s+\S+|"
+    r"\b(bearer)\s+\S+|"
+    r"(token|secret|password|api[_-]?key|authorization)\s*[:=]\s*\S+"
 )
+
+
+def redact_secret(match: re.Match[str]) -> str:
+    prefix = next(group for group in match.groups() if group)
+    if "bearer" in prefix.lower():
+        return f"{prefix} <redacted>"
+    return f"{prefix}=<redacted>"
 
 
 def scrub(text: object, limit: int = 800) -> str:
     value = str(text or "")
-    value = SECRET_RE.sub(r"\1=<redacted>", value)
+    value = SECRET_RE.sub(redact_secret, value)
     value = value.replace(str(ROOT), ".")
     if len(value) > limit:
         digest = hashlib.sha256(value.encode("utf-8", "ignore")).hexdigest()[:12]
