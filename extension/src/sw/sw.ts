@@ -39,6 +39,7 @@ const ROLLBACK_SUPPRESS_MS = 6000;
 const ROLLBACK_RETURN_TTL_MS = 5000;
 const TYPED_ORIGIN_TTL_MS = 5_000;
 const TYPED_ORIGIN_MAX_MS = 15_000;
+const USER_NAV_CONTEXT_TTL_MS = 10_000;
 const DBLCLICK_CHILD_MAX_AGE_MS = 5_000;
 const DBLCLICK_CHILD_PRUNE_LIMIT = 50;
 const OAUTH_FLOW_MAX_AGE_MS = 60_000;
@@ -52,6 +53,7 @@ const allowUntilByTab = swState.allowUntilByTab;
 const gestureUntilByTab = swState.gestureUntilByTab;
 const allowStartedByTab = swState.allowStartedByTab;
 const allowTargetByTab = swState.allowTargetByTab;
+const userNavContextUntilByTab = swState.userNavContextUntilByTab;
 const suppressUntilByTab = swState.suppressUntilByTab;
 const typedOriginByTab = swState.typedOriginByTab;
 const readyTabs = swState.readyTabs;
@@ -247,6 +249,49 @@ function getActiveRollbackReturn(tabId: number): { url: string; expiresAt: numbe
   return entry;
 }
 
+function hasRecentUserNavigationContext(tabId: number, now: number): boolean {
+  const contextUntil = userNavContextUntilByTab.get(tabId);
+  if (contextUntil !== undefined) {
+    if (now <= contextUntil) return true;
+    userNavContextUntilByTab.delete(tabId);
+  }
+
+  const gestureUntil = gestureUntilByTab.get(tabId);
+  if (gestureUntil !== undefined && now <= gestureUntil + USER_NAV_CONTEXT_TTL_MS) {
+    return true;
+  }
+
+  const priorCommit = lastCommittedByTab.get(tabId);
+  return !!priorCommit?.allowedAtCommit && now - priorCommit.ts <= USER_NAV_CONTEXT_TTL_MS;
+}
+
+function rememberUserNavigationContext(tabId: number, now: number): void {
+  userNavContextUntilByTab.set(tabId, now + USER_NAV_CONTEXT_TTL_MS);
+}
+
+function pruneExpiredGesture(tabId: number, now: number): void {
+  const gestureUntil = gestureUntilByTab.get(tabId);
+  if (gestureUntil !== undefined && now > gestureUntil) {
+    gestureUntilByTab.delete(tabId);
+  }
+}
+
+function isSameRegistrableNavigation(prevUrl: string | undefined, nextUrl: string): boolean {
+  if (!prevUrl) return false;
+  try {
+    const prevUrlObj = new URL(prevUrl);
+    const curUrlObj = new URL(nextUrl);
+    const isHttp = (p: string) => p === "http:" || p === "https:";
+    if (!isHttp(prevUrlObj.protocol) || !isHttp(curUrlObj.protocol)) return false;
+    const prevReg = getRegistrableDomain(prevUrlObj.hostname.toLowerCase());
+    const curReg = getRegistrableDomain(curUrlObj.hostname.toLowerCase());
+    return !!prevReg && !!curReg && prevReg === curReg;
+  } catch (err) {
+    console.warn("[NavSentinel] same-domain check failed", err);
+    return false;
+  }
+}
+
 async function syncDnrRulesets(): Promise<void> {
   try {
     const settings = await getNavSettings();
@@ -301,8 +346,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const tabId = sender.tab?.id;
     if (typeof tabId === "number") {
       const ttl = typeof message.ttlMs === "number" ? message.ttlMs : NAV_GESTURE_TTL_MS;
-      gestureUntilByTab.set(tabId, Date.now() + ttl);
-      swState.persistMap(gestureUntilByTab, "gestureUntil");
+      const now = Date.now();
+      gestureUntilByTab.set(tabId, now + ttl);
+      if (typeof message.url === "string" && message.url) {
+        lastUrlByTab.set(tabId, message.url);
+      }
+      rememberUserNavigationContext(tabId, now);
+      typedOriginByTab.delete(tabId);
+      swState.persistAll();
     }
     sendResponse?.({ ok: true });
   }
@@ -541,36 +592,43 @@ function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitio
     return;
   }
 
-  if (prevUrl) {
-    try {
-      const prevUrlObj = new URL(prevUrl);
-      const curUrlObj = new URL(details.url);
-      const isHttp = (p: string) => p === "http:" || p === "https:";
-      if (isHttp(prevUrlObj.protocol) && isHttp(curUrlObj.protocol)) {
-        const prevReg = getRegistrableDomain(prevUrlObj.hostname.toLowerCase());
-        const curReg = getRegistrableDomain(curUrlObj.hostname.toLowerCase());
-        if (prevReg && curReg && prevReg === curReg) { swState.persistAll(); return; }
-      }
-    } catch (err) {
-      console.warn("[NavSentinel] same-domain check failed", err);
-    }
-  }
-
   const allowUntil = allowUntilByTab.get(details.tabId) ?? 0;
   const startedUrl = allowStartedByTab.get(details.tabId);
   const startedAllowed = startedUrl === details.url;
   const allowedAtCommit = now <= allowUntil || startedAllowed || targetAllowed;
   allowStartedByTab.delete(details.tabId);
-  lastCommittedByTab.set(details.tabId, {
+  const recentUserNavigationContext = hasRecentUserNavigationContext(details.tabId, now);
+  pruneExpiredGesture(details.tabId, now);
+
+  const entry = {
     url: details.url,
     ...(prevUrl !== undefined ? { prevUrl } : {}),
     transitionType: details.transitionType,
     qualifiers,
     ts: now,
     allowedAtCommit
-  });
+  };
 
-  if (allowedAtCommit) { swState.persistAll(); return; }
+  if (allowedAtCommit) {
+    lastCommittedByTab.set(details.tabId, entry);
+    rememberUserNavigationContext(details.tabId, now);
+    swState.persistAll();
+    return;
+  }
+
+  if (!prevUrl) {
+    lastCommittedByTab.delete(details.tabId);
+    swState.persistAll();
+    return;
+  }
+
+  if (!recentUserNavigationContext && isSameRegistrableNavigation(prevUrl, details.url)) {
+    lastCommittedByTab.delete(details.tabId);
+    swState.persistAll();
+    return;
+  }
+
+  lastCommittedByTab.set(details.tabId, entry);
 
   const suppressUntil = suppressUntilByTab.get(details.tabId) ?? 0;
   if (now <= suppressUntil) { swState.persistAll(); return; }
@@ -662,13 +720,17 @@ function onRemovedHandler(tabId: number): void {
 }
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  const pendingRollback = pendingRollbackByTab.get(tabId);
+  if (pendingRollback && (changeInfo.status === "complete" || changeInfo.url)) {
+    trySendRollback(tabId, pendingRollback);
+  }
+
   const forward = pendingForwardByTab.get(tabId);
   if (!forward) return;
   if (changeInfo.status !== "complete" && !changeInfo.url) return;
   const currentUrl = tab.url ?? changeInfo.url ?? "";
   if (!currentUrl) return;
   if (currentUrl === forward.url) return;
-  if (forward.returnUrl && currentUrl === forward.returnUrl) return;
   if (!readyTabs.has(tabId)) return;
   trySendForwardOffer(tabId, forward);
 });

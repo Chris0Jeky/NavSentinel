@@ -218,7 +218,10 @@ describe("service worker rollback gating", () => {
     vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
     await import("../extension/src/sw/sw");
 
-    mock.dispatchRuntimeMessage({ type: "ns-nav-gesture", ttlMs: 800 }, { tab: { id: 11 } });
+    mock.dispatchRuntimeMessage(
+      { type: "ns-nav-gesture", ttlMs: 800, url: "https://example.test/origin" },
+      { tab: { id: 11 } }
+    );
     vi.setSystemTime(new Date("2026-03-17T12:00:02.200Z"));
     mock.emitBeforeNavigate({
       tabId: 11,
@@ -240,6 +243,45 @@ describe("service worker rollback gating", () => {
 
     expect(response.shouldRollback).toBe(true);
     expect(response.entry?.allowedAtCommit).toBe(false);
+    expect(response.entry?.url).toBe("https://example.test/late");
+  });
+
+  it("keeps rolling back a delayed same-domain navigation after a prior page commit", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+
+    mock.emitCommitted({
+      tabId: 12,
+      frameId: 0,
+      url: "https://example.test/origin",
+      transitionType: "typed",
+      transitionQualifiers: []
+    });
+
+    mock.dispatchRuntimeMessage({ type: "ns-nav-gesture", ttlMs: 800 }, { tab: { id: 12 } });
+    vi.setSystemTime(new Date("2026-03-17T12:00:02.200Z"));
+    mock.emitBeforeNavigate({
+      tabId: 12,
+      frameId: 0,
+      url: "https://example.test/late"
+    });
+    mock.emitCommitted({
+      tabId: 12,
+      frameId: 0,
+      url: "https://example.test/late",
+      transitionType: "link",
+      transitionQualifiers: []
+    });
+
+    const response = mock.dispatchRuntimeMessage({ type: "ns-check-rollback" }, { tab: { id: 12 } }) as {
+      shouldRollback: boolean;
+      entry?: { allowedAtCommit?: boolean; prevUrl?: string; url?: string };
+    };
+
+    expect(response.shouldRollback).toBe(true);
+    expect(response.entry?.allowedAtCommit).toBe(false);
+    expect(response.entry?.prevUrl).toBe("https://example.test/origin");
     expect(response.entry?.url).toBe("https://example.test/late");
   });
 
@@ -273,6 +315,28 @@ describe("service worker rollback gating", () => {
 
     expect(response.shouldRollback).toBe(false);
     expect(response.entry?.allowedAtCommit).toBe(true);
+  });
+
+  it("does not treat a newly opened child tab's first commit as same-tab rollback", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+
+    mock.chrome.tabs.onCreated.emit({ id: 16, openerTabId: 7 });
+    mock.emitCommitted({
+      tabId: 16,
+      frameId: 0,
+      url: "https://example.test/popup",
+      transitionType: "link",
+      transitionQualifiers: []
+    });
+
+    const response = mock.dispatchRuntimeMessage({ type: "ns-check-rollback" }, { tab: { id: 16 } }) as {
+      shouldRollback: boolean;
+    };
+
+    expect(response.shouldRollback).toBe(false);
+    expect(mock.sentMessages).toEqual([]);
   });
 
   it("consumes a target allowance after a different top-frame commit", async () => {
@@ -396,6 +460,55 @@ describe("service worker rollback gating", () => {
     ]);
   });
 
+  it("retries queued rollback when tab completion wins the ready-message race", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+
+    mock.dispatchRuntimeMessage({ type: "ns-ready" }, { tab: { id: 28 } });
+    mock.emitCommitted({
+      tabId: 28,
+      frameId: 0,
+      url: "https://example.test/origin",
+      transitionType: "typed",
+      transitionQualifiers: []
+    });
+
+    vi.setSystemTime(new Date("2026-03-17T12:00:11.000Z"));
+    mock.emitBeforeNavigate({
+      tabId: 28,
+      frameId: 0,
+      url: "https://evil.test/redirected"
+    });
+    mock.emitCommitted({
+      tabId: 28,
+      frameId: 0,
+      url: "https://evil.test/redirected",
+      transitionType: "link",
+      transitionQualifiers: ["client_redirect"]
+    });
+
+    expect(mock.sentMessages).toEqual([]);
+
+    mock.emitTabUpdated(
+      28,
+      { status: "complete" },
+      { url: "https://evil.test/redirected" }
+    );
+
+    expect(mock.sentMessages).toEqual([
+      {
+        tabId: 28,
+        message: {
+          type: "ns-rollback",
+          url: "https://evil.test/redirected",
+          prevUrl: "https://example.test/origin",
+          qualifiers: ["client_redirect"]
+        }
+      }
+    ]);
+  });
+
   it("preserves the forward offer while rolling back to the prior top-frame URL", async () => {
     const mock = createChromeMock();
     vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
@@ -490,6 +603,49 @@ describe("service worker rollback gating", () => {
     expect(queuedForward.status).toBe("offer");
     expect(queuedForward.url).toBe("https://evil.test/redirected");
     expect(mock.sentMessages).toEqual([]);
+  });
+
+  it("sends the forward offer when the rollback return page completes after ready", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+
+    mock.emitCommitted({
+      tabId: 30,
+      frameId: 0,
+      url: "https://example.test/origin",
+      transitionType: "typed",
+      transitionQualifiers: []
+    });
+
+    vi.setSystemTime(new Date("2026-03-17T12:00:11.000Z"));
+    mock.emitCommitted({
+      tabId: 30,
+      frameId: 0,
+      url: "https://evil.test/redirected",
+      transitionType: "link",
+      transitionQualifiers: ["client_redirect"]
+    });
+    mock.dispatchRuntimeMessage(
+      { type: "ns-begin-rollback", returnUrl: "https://example.test/origin" },
+      { tab: { id: 30 } }
+    );
+
+    mock.emitBeforeNavigate({
+      tabId: 30,
+      frameId: 0,
+      url: "https://example.test/origin"
+    });
+    mock.dispatchRuntimeMessage({ type: "ns-ready" }, { tab: { id: 30 } });
+    mock.emitTabUpdated(30, { status: "complete" }, { url: "https://example.test/origin" });
+
+    expect(mock.sentMessages).toContainEqual({
+      tabId: 30,
+      message: {
+        type: "ns-forward-offer",
+        url: "https://evil.test/redirected"
+      }
+    });
   });
 
   it("preserves the forward offer when the blocked destination aborts during rollback", async () => {
@@ -701,7 +857,10 @@ describe("service worker rollback gating", () => {
     vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
     await import("../extension/src/sw/sw");
 
-    mock.dispatchRuntimeMessage({ type: "ns-nav-gesture", ttlMs: 800 }, { tab: { id: 17 } });
+    mock.dispatchRuntimeMessage(
+      { type: "ns-nav-gesture", ttlMs: 800, url: "https://example.test/origin" },
+      { tab: { id: 17 } }
+    );
     vi.setSystemTime(new Date("2026-03-17T12:00:00.300Z"));
     mock.emitBeforeNavigate({
       tabId: 17,
@@ -931,7 +1090,15 @@ describe("service worker rollback gating", () => {
 
     mock.emitTabRemoved(51);
 
-    vi.setSystemTime(new Date("2026-03-17T12:00:00.300Z"));
+    mock.emitCommitted({
+      tabId: 51,
+      frameId: 0,
+      url: "https://example.test/new-tab",
+      transitionType: "typed",
+      transitionQualifiers: []
+    });
+
+    vi.setSystemTime(new Date("2026-03-17T12:00:11.000Z"));
     mock.emitCommitted({
       tabId: 51,
       frameId: 0,

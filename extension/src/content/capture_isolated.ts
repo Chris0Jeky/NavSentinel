@@ -469,7 +469,7 @@ function notifyNavAllow(ttlMs = NAV_ALLOW_TTL_MS): void {
 
 function notifyNavGesture(ttlMs = NAV_GESTURE_TTL_MS): void {
   try {
-    chrome.runtime.sendMessage({ type: "ns-nav-gesture", ttlMs });
+    chrome.runtime.sendMessage({ type: "ns-nav-gesture", ttlMs, url: location.href });
   } catch {
     // ignore
   }
@@ -663,7 +663,15 @@ function handleRollback(url: string, prevUrl?: string): void {
   if (settings.defaultMode === "off") return;
   if (!isTopFrame()) return;
   if (!url) return;
-  const target = prevUrl && prevUrl !== url ? prevUrl : "";
+  const referrerTarget = (() => {
+    if (!document.referrer || document.referrer === location.href) return "";
+    try {
+      return new URL(document.referrer).toString();
+    } catch {
+      return "";
+    }
+  })();
+  const target = prevUrl && prevUrl !== url ? prevUrl : referrerTarget;
   if (target) {
     try {
       chrome.runtime.sendMessage({ type: "ns-begin-rollback", returnUrl: target });
@@ -671,14 +679,6 @@ function handleRollback(url: string, prevUrl?: string): void {
       notifyNavAllow();
       notifyAllowedTarget(target);
       window.setTimeout(() => {
-        try {
-          if (history.length > 1) {
-            history.back();
-            return;
-          }
-        } catch {
-          // ignore
-        }
         try {
           postToMain("ns-allow", { allowOpen: false, allowRedirect: true });
           location.replace(target);
