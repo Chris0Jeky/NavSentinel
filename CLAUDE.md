@@ -97,3 +97,5 @@ Do not claim tests passed unless they actually ran in the current environment.
 ## Local Settings
 
 Use committed `.claude/settings.json` for shared guardrails. Use `.claude/settings.local.json` only for machine-specific prompts or overrides. Permission bypass mode belongs only in disposable containers or VMs.
+
+Project-scoped MCP defaults live in `.mcp.json` and are credential-free. Check `/mcp` in the active Claude runtime before claiming a server is connected or using remote/authenticated MCP capabilities.
