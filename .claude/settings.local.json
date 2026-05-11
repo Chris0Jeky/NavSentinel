@@ -1,24 +1,4 @@
 {
-  "permissions": {
-    "defaultMode": "bypassPermissions",
-    "allow": [
-      "Bash(rg:*)",
-      "Bash(git status:*)",
-      "Bash(git diff:*)",
-      "Bash(npm install:*)",
-      "Bash(npm ci:*)",
-      "Bash(npm run:*)",
-      "Bash(npx vitest:*)",
-      "Bash(npx playwright:*)",
-      "Bash(npx tsc:*)"
-    ],
-    "deny": [
-      "Bash(git push --force:*)",
-      "Bash(git push --force-with-lease:*)",
-      "Bash(git reset --hard:*)",
-      "Bash(rm -rf /:*)"
-    ]
-  },
   "hooks": {
     "SessionStart": [
       {
@@ -26,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo 'NavSentinel. Read CLAUDE.md, AGENTS.md, and CONTRIBUTING.md before editing. Check docs/Execution_Tracker.md for active work plan.'",
+            "command": "echo 'NavSentinel. Read CLAUDE.md, AGENTS.md, docs/Project_Roadmap.md, and autodoc/AGENT_INDEX.md before editing.'",
             "timeout": 5
           }
         ]
