@@ -13,6 +13,22 @@ Both runtimes use:
 - `docs/agentic/GUIDE_UPDATE_PROTOCOL.md` for promoting lessons into durable instructions.
 - `scripts/agent_hooks/render_failure_ledger.py` to render the failure ledger.
 
+## MCP Baseline
+
+The committed project MCP baseline is `.mcp.json`. It is intentionally credential-free and uses Windows-safe `cmd /c npx` stdio launches for local utility servers:
+
+- `context7`: current library and framework docs.
+- `playwright`: browser automation when a runtime exposes MCP tools.
+- `ripgrep`: search helper for runtimes that use MCP search.
+
+Do not commit authenticated GitHub, Docker Desktop gateway, OpenAI docs, or private remote MCP credentials. Keep those in user/runtime config and verify them in the active runtime before claiming availability. For Claude, use `/mcp`. For Codex, use the actually exposed tools, `tool_search`, or a direct tool call. Dependency checks that work in PowerShell:
+
+```powershell
+cmd /c npx --version
+docker --version
+gh --version
+```
+
 ## Claude Code
 
 Claude should use:
@@ -67,6 +83,8 @@ Before closing agentic-infrastructure work, verify:
 
 ```bash
 rg --files .claude/skills .agents/skills docs/agentic autodoc
-python -m py_compile scripts/agent_hooks/pre_tool_use.py scripts/agent_hooks/post_tool_failure.py scripts/agent_hooks/render_failure_ledger.py
+python -m py_compile scripts/agent_hooks/pre_tool_use.py scripts/agent_hooks/post_tool_use.py scripts/agent_hooks/post_tool_failure.py scripts/agent_hooks/session_start.py scripts/agent_hooks/render_failure_ledger.py scripts/agent_hooks/smoke_test.py scripts/agent_hooks/validate_skills.py
+npm run agent:hooks:smoke
+npm run agent:skills:validate
 python scripts/agent_hooks/render_failure_ledger.py
 ```

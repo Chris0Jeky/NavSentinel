@@ -13,18 +13,40 @@ import sys
 
 
 DENY_PATTERNS: list[tuple[re.Pattern[str], str]] = [
-    (re.compile(r"\brm\s+-rf\b", re.I), "Recursive removal requires explicit human approval."),
+    (
+        re.compile(
+            r"\brm\s+(?=[^|&;]*(?:-[a-z]*r|--recursive\b))"
+            r"(?=[^|&;]*(?:-[a-z]*f|--force\b))",
+            re.I,
+        ),
+        "Recursive forced removal requires explicit human approval.",
+    ),
     (re.compile(r"\bRemove-Item\b(?=.*(?:^|\s)-Recurse\b)(?=.*(?:^|\s)-Force\b)", re.I), "Recursive forced removal requires explicit human approval."),
     (re.compile(r"\b(?:rd|rmdir)\s+/s\b", re.I), "Recursive directory removal requires explicit human approval."),
     (re.compile(r"\bgit\s+reset\s+--hard\b", re.I), "Hard reset would discard work; inspect state and ask first."),
-    (re.compile(r"\bgit\s+clean\s+-f[dDxX]*\b", re.I), "Git clean can delete untracked work; ask first."),
+    (re.compile(r"\bgit\s+clean\b(?=[^|&;]*(?:-\S*f\S*|--force\b))", re.I), "Git clean can delete untracked work; ask first."),
     (re.compile(r"\bgit\s+checkout\s+--(?:\s|$)", re.I), "Path checkout can overwrite user changes; ask first."),
     (re.compile(r"\bgit\s+restore\s+(?:\.|--worktree|--staged)\b", re.I), "Git restore can overwrite work; ask first."),
-    (re.compile(r"\bgit\s+push\s+--force(?:-with-lease)?\b", re.I), "Force-push is blocked by project policy."),
+    (re.compile(r"\bgit\s+push\b(?=[^|&;]*(?:--force(?:-with-lease)?|-f)\b)", re.I), "Force-push is blocked by project policy."),
     (re.compile(r"\bgit\s+filter-branch\b", re.I), "History rewriting requires explicit approval."),
     (re.compile(r"\bsudo\b", re.I), "sudo is outside normal repo workflow."),
     (re.compile(r"\bchmod\s+-R\s+777\b", re.I), "Recursive world-writable permissions are blocked."),
-    (re.compile(r"\b(?:curl|wget)\b.+\|\s*(?:sh|bash|pwsh|powershell)\b", re.I), "Piping remote scripts into a shell is blocked."),
+    (
+        re.compile(
+            r"\b(?:curl|wget|iwr|irm|Invoke-WebRequest|Invoke-RestMethod)\b.+\|\s*"
+            r"(?:sh|bash|pwsh|powershell|iex|Invoke-Expression)\b",
+            re.I,
+        ),
+        "Piping remote scripts into an interpreter is blocked.",
+    ),
+    (
+        re.compile(
+            r"\b(?:psql|mysql|sqlite3|mongosh|mongo|redis-cli)\b.+\b"
+            r"(?:drop\s+database|drop\s+table|truncate\s+table|delete\s+from)\b",
+            re.I,
+        ),
+        "Destructive database commands require explicit approval.",
+    ),
     (re.compile(r"\bnpm\s+publish\b", re.I), "Publishing requires explicit release approval."),
     (re.compile(r"\bchrome-webstore-upload\b|\bweb-ext\s+sign\b", re.I), "Store signing/upload requires explicit release approval."),
 ]

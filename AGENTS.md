@@ -53,6 +53,7 @@ Do not bulk-read `node_modules`, build output, generated data, archive docs, or 
 - `docs/` contains project documentation, plans, and agentic protocols.
 - `.agents/skills/` contains Codex-oriented workflows.
 - `.claude/skills/` and `.claude/settings.json` contain Claude-oriented workflows and guardrails.
+- `.mcp.json` contains credential-free, project-scoped Claude MCP defaults. Verify live MCP status in the active runtime before relying on any server.
 
 ## Build, Test, And Development Commands
 
@@ -65,6 +66,8 @@ Do not bulk-read `node_modules`, build output, generated data, archive docs, or 
 - `npm run test:e2e:smoke`, `npm run test:e2e:regression`, `npm run test:e2e:rollback`, `npm run test:e2e:stress`, `npm run test:e2e:corpus`: targeted E2E lanes.
 - `npm run gym:serve`: serve the Gym at port 5173.
 - `npm run verify:versions`, `npm run package:ext`: release/package checks.
+- `npm run agent:hooks:smoke`: parse and exercise shared Claude hook/MCP guardrails.
+- `npm run agent:skills:validate`: validate Claude/Codex local skill metadata and parity.
 
 ## Coding Style And Naming
 

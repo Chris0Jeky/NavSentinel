@@ -16,7 +16,12 @@ from pathlib import Path
 
 
 ROOT = Path(os.environ.get("CLAUDE_PROJECT_DIR", ".")).resolve()
-LEDGER = ROOT / "docs" / "agentic" / "failure_ledger.jsonl"
+LEDGER = Path(
+    os.environ.get(
+        "NAVSENTINEL_FAILURE_LEDGER",
+        str(ROOT / "docs" / "agentic" / "failure_ledger.jsonl"),
+    )
+).resolve()
 SECRET_RE = re.compile(
     r"(?i)(authorization\s*[:=]\s*bearer)\s+\S+|"
     r"\b(bearer)\s+\S+|"
