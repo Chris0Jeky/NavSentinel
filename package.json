@@ -28,8 +28,11 @@
     "build:bloom": "node scripts/build-bloom-filter.mjs",
     "build:bloom:test": "node scripts/build-test-bloom-filter.mjs",
     "check:bloom-size": "node scripts/check-bloom-size.mjs",
-    "agent:hooks:smoke": "python scripts/agent_hooks/smoke_test.py",
-    "agent:skills:validate": "python scripts/agent_hooks/validate_skills.py"
+    "release": "node scripts/release.mjs",
+    "release:patch": "node scripts/release.mjs patch",
+    "release:minor": "node scripts/release.mjs minor",
+    "release:major": "node scripts/release.mjs major",
+    "release:dry": "node scripts/release.mjs patch --dry-run"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.3.0",
