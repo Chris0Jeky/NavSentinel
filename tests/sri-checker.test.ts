@@ -314,4 +314,13 @@ describe("sri_checker - edge cases", () => {
     expect(result.withoutSRI).toBe(3);
     expect(result.score).toBe(8);
   });
+
+  it("matches stylesheet with rel='stylesheet alternate'", () => {
+    const doc = makeDoc(loginPage(
+      '<link rel="stylesheet alternate" href="' + EXTERNAL_ORIGIN + '/theme.css">'
+    ));
+    const result = checkSRI(doc, PAGE_URL, PAGE_ORIGIN);
+    expect(result.totalExternal).toBe(1);
+    expect(result.withoutSRI).toBe(1);
+  });
 });

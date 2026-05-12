@@ -260,6 +260,13 @@ export interface RiskResult {
   lookalike: { target: string; distance: number } | null;
 }
 
+export function recalcSeverity(score: number): RiskResult["severity"] {
+  if (score >= 70) return "high";
+  if (score >= 40) return "medium";
+  if (score >= 15) return "low";
+  return "none";
+}
+
 export function computeCredentialRisk(params: {
   pageUrl: string;
   actionUrl: string;
@@ -419,10 +426,7 @@ export function computeCredentialRisk(params: {
 
   score = Math.max(0, Math.min(100, score));
 
-  let severity: RiskResult["severity"] = "none";
-  if (score >= 70) severity = "high";
-  else if (score >= 40) severity = "medium";
-  else if (score >= 15) severity = "low";
+  const severity = recalcSeverity(score);
 
   return {
     score,

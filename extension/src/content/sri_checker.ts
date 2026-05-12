@@ -74,6 +74,29 @@ function hasPasswordField(doc: Document): boolean {
 // Main analysis
 // ---------------------------------------------------------------------------
 
+function scanResources(
+  doc: Document,
+  selector: string,
+  attrName: string,
+  pageOrigin: string,
+  pageUrl: string,
+  result: SRIAnalysis,
+): void {
+  const elements = doc.querySelectorAll(selector);
+  for (let i = 0; i < elements.length; i++) {
+    const el = elements[i] as HTMLElement;
+    const url = el.getAttribute(attrName) ?? "";
+    if (!url || !isCrossOrigin(url, pageOrigin, pageUrl)) continue;
+
+    result.totalExternal++;
+    if (el.hasAttribute("integrity") && (el.getAttribute("integrity") ?? "").trim().length > 0) {
+      result.withSRI++;
+    } else {
+      result.withoutSRI++;
+    }
+  }
+}
+
 /**
  * Scan the page for external scripts and stylesheets and check whether
  * they carry SRI hashes. Only meaningful on credential pages.
@@ -98,35 +121,8 @@ export function checkSRI(
   // Gate: only check on credential pages
   if (!hasPasswordField(doc)) return result;
 
-  // Collect external scripts (<script src="...">)
-  const scripts = doc.querySelectorAll("script[src]");
-  for (let i = 0; i < scripts.length; i++) {
-    const el = scripts[i] as HTMLScriptElement;
-    const src = el.getAttribute("src") ?? "";
-    if (!src || !isCrossOrigin(src, pageOrigin, pageUrl)) continue;
-
-    result.totalExternal++;
-    if (el.hasAttribute("integrity") && (el.getAttribute("integrity") ?? "").trim().length > 0) {
-      result.withSRI++;
-    } else {
-      result.withoutSRI++;
-    }
-  }
-
-  // Collect external stylesheets (<link rel="stylesheet" href="...">)
-  const links = doc.querySelectorAll('link[rel="stylesheet"][href]');
-  for (let i = 0; i < links.length; i++) {
-    const el = links[i] as HTMLLinkElement;
-    const href = el.getAttribute("href") ?? "";
-    if (!href || !isCrossOrigin(href, pageOrigin, pageUrl)) continue;
-
-    result.totalExternal++;
-    if (el.hasAttribute("integrity") && (el.getAttribute("integrity") ?? "").trim().length > 0) {
-      result.withSRI++;
-    } else {
-      result.withoutSRI++;
-    }
-  }
+  scanResources(doc, "script[src]", "src", pageOrigin, pageUrl, result);
+  scanResources(doc, 'link[rel~="stylesheet"][href]', "href", pageOrigin, pageUrl, result);
 
   // Scoring
   if (result.totalExternal === 0) {
