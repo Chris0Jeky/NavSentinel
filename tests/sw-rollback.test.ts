@@ -101,6 +101,10 @@ function createChromeMock() {
         },
         onChanged: storageOnChanged
       },
+      action: {
+        setBadgeText: vi.fn().mockResolvedValue(undefined),
+        setBadgeBackgroundColor: vi.fn().mockResolvedValue(undefined),
+      },
       declarativeNetRequest: {
         updateEnabledRulesets: vi.fn().mockResolvedValue(undefined)
       },

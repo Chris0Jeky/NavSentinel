@@ -9,8 +9,12 @@ import {
   type OAuthFlowState,
 } from "../content/oauth_monitor";
 import { swState } from "../shared/session_state";
+import { updateTabIcon, clearTabIcon, setAllTabsGray, type IconState } from "./icon_manager";
 
 const BASELINE_RULESET_ID = "baseline";
+
+/** Cached defaultMode for synchronous access in navigation handlers. */
+let cachedDefaultMode = "smart";
 
 /** Maximum .bin file size we will read (2 MB + 16-byte header, matching MAX_FILTER_BITS). */
 const MAX_REPUTATION_FILE_BYTES = 2 * 1024 * 1024 + 16;
@@ -308,16 +312,29 @@ async function syncDnrRulesets(): Promise<void> {
 
 chrome.runtime.onInstalled.addListener(() => {
   void syncDnrRulesets();
+  chrome.action.setBadgeText({ text: "" }).catch(() => {});
+  void getNavSettings().then((s) => { cachedDefaultMode = s.defaultMode; }).catch(() => {});
 });
 
 chrome.runtime.onStartup.addListener(() => {
   void syncDnrRulesets();
+  void getNavSettings().then((s) => { cachedDefaultMode = s.defaultMode; }).catch(() => {});
 });
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== "local") return;
   if (!changes[SUITE_SETTINGS_KEY]) return;
   void syncDnrRulesets();
+
+  const newVal = changes[SUITE_SETTINGS_KEY]!.newValue as
+    | { nav?: { defaultMode?: string } }
+    | undefined;
+  if (newVal?.nav?.defaultMode) {
+    cachedDefaultMode = newVal.nav.defaultMode;
+  }
+  if (newVal?.nav?.defaultMode === "off") {
+    void setAllTabsGray();
+  }
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -463,6 +480,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return;
   }
 
+  if (message.type === "ns-tab-risk-update") {
+    const tabId = sender.tab?.id;
+    if (tabId === undefined) return;
+    const state = message.state;
+    if (state !== "green" && state !== "yellow" && state !== "red" && state !== "gray") return;
+    const blockCount = typeof message.blockCount === "number" &&
+      Number.isFinite(message.blockCount) && message.blockCount >= 0
+        ? Math.floor(message.blockCount)
+        : 0;
+    void updateTabIcon(tabId, state, blockCount);
+  }
+
   // DoubleClickjacking: forward opener.location write from child to opener tab.
   // Only forward if the sender tab is a known child window to prevent
   // malicious pages from injecting false opener-nav signals.
@@ -548,6 +577,11 @@ function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitio
   }
   const prevUrl = lastUrlByTab.get(details.tabId);
   lastUrlByTab.set(details.tabId, details.url);
+
+  // Reset tab icon for fresh top-frame navigation.
+  // Content script will escalate to yellow/red as threats are detected.
+  // Uses synchronous cached mode to avoid racing with content-script threat escalation.
+  void updateTabIcon(details.tabId, cachedDefaultMode === "off" ? "gray" : "green");
 
   // --- OAuth flow tracking ---
   processOAuthNavigation(details.tabId, details.url);
@@ -692,6 +726,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   onRemovedHandler(tabId);
 });
 function onRemovedHandler(tabId: number): void {
+  clearTabIcon(tabId);
   const childEntry = childWindowByTab.get(tabId);
   if (childEntry) {
     childWindowByTab.delete(tabId);

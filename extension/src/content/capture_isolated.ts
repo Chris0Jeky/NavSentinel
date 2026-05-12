@@ -114,11 +114,31 @@ let bridgeRetryDelayMs = BRIDGE_RETRY_MS;
 let bridgeInitStartedAt = 0;
 let forwardCheckInFlight = false;
 let forwardCheckTimer = 0;
+let previousMode = "";
 let gestureNavAttempts = 0;
 let gestureDownId: number | null = null;
 const CHAIN_INFO_TTL_MS = 30_000;
 let cachedChainInfo: RedirectChainInfo | null = null;
 let cachedChainInfoAt = 0;
+
+type TabRiskState = "green" | "yellow" | "red" | "gray";
+const SEVERITY: Record<TabRiskState, number> = { gray: 0, green: 1, yellow: 2, red: 3 };
+let currentTabRiskState: TabRiskState = "green";
+let tabBlockCount = 0;
+
+function sendIconUpdate(state: TabRiskState, blockCount?: number): void {
+  if (!isTopFrame()) return;
+  if (SEVERITY[state] < SEVERITY[currentTabRiskState]) return;
+  const count = blockCount ?? tabBlockCount;
+  if (state === currentTabRiskState && count === tabBlockCount) return;
+  currentTabRiskState = state;
+  tabBlockCount = count;
+  chrome.runtime.sendMessage({
+    type: "ns-tab-risk-update",
+    state,
+    blockCount: count,
+  }).catch(() => {});
+}
 
 function markMainGuardReady(): void {
   if (bridgeRetryTimer) {
@@ -202,7 +222,9 @@ async function initSettings() {
   postToMain("ns-ping");
   // Load reputation bloom filter in the background (non-blocking)
   void loadReputationFilter();
+  previousMode = settings.defaultMode;
   if (isTopFrame()) {
+    sendIconUpdate(settings.defaultMode === "off" ? "gray" : "green");
     try {
       chrome.runtime.sendMessage({ type: "ns-ready" });
     } catch {
@@ -229,6 +251,19 @@ onNavSettingsChange((s) => {
   settings = s;
   setDebugEnabled(s.debug);
   postToMain("ns-config", { mode: s.defaultMode, debug: s.debug });
+  if (s.defaultMode !== previousMode) {
+    previousMode = s.defaultMode;
+    const newState: TabRiskState = s.defaultMode === "off" ? "gray" : "green";
+    currentTabRiskState = newState;
+    tabBlockCount = 0;
+    if (isTopFrame()) {
+      chrome.runtime.sendMessage({
+        type: "ns-tab-risk-update",
+        state: newState,
+        blockCount: 0,
+      }).catch(() => {});
+    }
+  }
   refreshDebug();
 });
 
@@ -540,6 +575,7 @@ function handleClickFixScan(): void {
   if (now - clickFixAlertedAt < 10_000) return;
 
   clickFixAlertedAt = now;
+  sendIconUpdate("red");
   appendEventSafely({
     kind: "clickfix_detected",
     site: siteKeyFromLocation(),
@@ -586,6 +622,7 @@ function handleMutationAlert(alert: MutationAlert): void {
   // Low-severity alerts (cookie banners, chat widgets, ARIA dialogs) are
   // still logged for telemetry but do not disturb the user.
   if (alert.type === "overlay_injected" && alert.severity === "high") {
+    sendIconUpdate("yellow");
     showToast({
       message: "NavSentinel detected a suspicious overlay injected after page load. The page may be attempting a phishing attack.",
       actions: [{ label: "Dismiss", onClick: () => {} }],
@@ -645,6 +682,7 @@ function showRollbackPrompt(url: string): void {
     }
   })();
   (window as any).__navsentinelRollbackPrompt = { url, ts: now };
+  sendIconUpdate("yellow");
   appendEventSafely({ kind: "nav_rollback", site: siteKeyFromLocation(), url, destHost: host });
   showToast({
     message: `NavSentinel rolled back a suspicious redirect to ${host}`,
@@ -1302,6 +1340,12 @@ window.addEventListener(
         showToast({ message: buildPlainMessage(blockPrefix, reasonCodes) });
         if (hasClickfix) clickFixAlertedAt = Date.now();
       }
+    }
+
+    if (decision === "block") {
+      sendIconUpdate("red", tabBlockCount + 1);
+    } else if (decision === "prompt") {
+      sendIconUpdate("yellow");
     }
 
     if (decision === "allow") {
