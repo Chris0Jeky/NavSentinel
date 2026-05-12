@@ -6,41 +6,40 @@ user-invocable: true
 
 # NavSentinel Extension Development
 
-Use this when the task involves changing extension runtime behavior.
+Use this when the task changes extension runtime behavior.
 
-## Change surface map
+## Change Surface Map
 
-From `CONTRIBUTING.md`:
+From `CONTRIBUTING.md` and `autodoc/AGENT_INDEX.md`:
 
-- navigation scoring and click decisions: `extension/src/content/capture_isolated.ts`, `extension/src/shared/scoring.ts`
-- main-world popup/redirect/form enforcement: `extension/src/content/main_guard.ts`
+- navigation scoring and click decisions: `extension/src/content/capture_isolated.ts`, `extension/src/shared/scoring.ts`, `extension/src/shared/nrs.ts`
+- main-world popup, redirect, form, clipboard, and opener enforcement: `extension/src/content/main_guard.ts`
 - credential risk and prompts: `extension/src/content/credential_guard.ts`, `extension/src/content/credential_modal.ts`, `extension/src/shared/domain.ts`
-- storage and persistence: `extension/src/shared/storage.ts`, `extension/src/shared/allowlist.ts`
+- storage and persistence: `extension/src/shared/storage.ts`, `extension/src/shared/allowlist.ts`, `extension/src/shared/session_state.ts`
 - popup and options UI: `extension/src/popup/*`, `extension/src/options/*`
-- rollback and DNR sync: `extension/src/sw/sw.ts`
+- rollback, OAuth, DNR, redirect chains, and session-backed SW state: `extension/src/sw/sw.ts`
 
-## Build and verify cycle
+## Build And Verify Cycle
 
-1. `npm run build` to bundle to `extension/dist/`
-2. Reload the extension in `chrome://extensions`
-3. `npm run test` for unit tests
-4. `npm run typecheck` for type safety
-5. `npm run test:e2e` for Playwright E2E (requires extension loaded)
+1. `npm run typecheck` for type safety.
+2. `npm run build` to bundle to `extension/dist/`.
+3. Reload the extension in `chrome://extensions` for manual checks.
+4. `npm run test` for unit tests.
+5. Targeted Playwright E2E for behavior that only exists in a browser.
 
 Use `npm run watch` during development for automatic rebuilds.
 
-## Gym testing
+## Gym Testing
 
-- Start the Gym: `npm run gym:serve`
-- Levels 1-9: navigation scenarios
-- Level 10: delayed redirects and form submits
-- Level 11: risky password-submit prompt coverage
-- Level 12: slow same-tab navigation legitimacy
+- Start the Gym: `npm run gym:serve`.
+- Primitive levels cover navigation, overlays, OAuth, credential, and redirect cases.
+- Real-world `rw*` pages cover realistic attack and false-positive scenarios.
+- Evasion, ClickFix, DoubleClickjacking, corpus, stress, rollback, and live lanes have separate configs where needed.
 
 ## Guardrails
 
-- keep logic local; no remote calls or telemetry
-- content scripts must not exfiltrate data
-- main-world patching must be minimal and defensible
-- test heuristic changes in the Gym, not just unit tests
-- respect MV3 service-worker lifecycle constraints
+- Keep logic local; no remote calls or telemetry.
+- Content scripts must not exfiltrate data.
+- Main-world patching must be minimal and defensible.
+- Respect MV3 service-worker lifecycle constraints.
+- Preserve deterministic test hooks unless tests are updated in the same change.

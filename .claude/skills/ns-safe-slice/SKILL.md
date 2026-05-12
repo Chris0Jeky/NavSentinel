@@ -6,29 +6,32 @@ user-invocable: true
 
 # NavSentinel Safe Slice
 
-Use this when you are implementing or editing inside this repo.
+Use this when implementing or editing inside this repo.
 
 ## Workflow
 
-1. Restate the task in one sentence.
+1. Restate the requested outcome in one sentence.
 2. Identify the smallest seam that advances it.
 3. Read only the files needed to confirm that seam.
-4. If the seam crosses content-script / service-worker / UI boundaries, check the architecture doc first.
+4. If the seam crosses content-script, service-worker, storage, or UI boundaries, check `docs/Architecture_and_Data_Flow.md`.
 5. Make one coherent change set.
 6. Run the narrowest meaningful verification.
-7. Summarize outcome, residual risk, and next slice.
+7. Update docs, roadmap, or `autodoc/AGENT_INDEX.md` only if their truth changed.
+8. Summarize outcome, residual risk, and next safe slice.
 
-## Preferred checks
+## Preferred Checks
 
-- scoring or heuristic change -> `npm run test` (Vitest)
-- content script or UI change -> `npm run build` then manual load or E2E
+- scoring or heuristic change -> `npm run test` plus targeted Gym/E2E where relevant
+- content script or service worker change -> `npm run typecheck` and `npm run build`
+- UI change -> `npm run build` plus popup/options or E2E smoke coverage
 - type contract change -> `npm run typecheck`
-- Gym fixture -> `npm run test:e2e` or targeted Playwright spec
-- docs or workflow change -> validate paths and accuracy
+- Gym fixture -> link from `gym/index.html` and add or update `tests/e2e/*.spec.ts`
+- docs or workflow change -> validate paths, stale references, and hook/script syntax
 
-## Extra repo guardrails
+## Extra Repo Guardrails
 
-- edit source under `extension/src/`, not compiled output in `extension/dist/`
-- do not mix navigation-guard logic changes with credential-guard logic changes in the same slice
-- keep content-script, shared, popup, options, and service-worker modules focused and small
-- if you touch scoring thresholds, verify in the Gym, not just in unit tests
+- Edit source under `extension/src/`, not compiled output in `extension/dist/`.
+- Do not mix navigation-guard and credential-guard logic changes in the same slice unless the request explicitly spans both.
+- Keep content-script, shared, popup, options, and service-worker modules focused.
+- If you touch scoring thresholds, verify in the Gym, not just unit tests.
+- Keep local-first behavior intact; no runtime network calls without explicit product approval.
