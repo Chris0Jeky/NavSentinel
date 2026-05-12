@@ -11,6 +11,7 @@ Promote a lesson when at least one condition is true:
 3. A workaround was required and future agents would rediscover it.
 4. A source-of-truth path changed.
 5. A safety, privacy, permission, or release boundary changed.
+6. A review finding was deferred as "non-blocking" and later caused rework or tech debt.
 
 ## Where To Write
 

@@ -37,6 +37,16 @@ Mention these explicitly when they apply:
 - Gym fixture additions that need linking from `gym/index.html`
 - extension reload, build, or Chrome Web Store release implications
 
+## PR Review Follow-Through
+
+When the work includes a review of a PR:
+
+1. Read existing PR comments and address any unresolved feedback before adding new findings.
+2. Post a structured comment on the PR with all findings using `gh pr comment` (unless the user says otherwise).
+3. Fix every finding — both from your review and from existing unaddressed PR comments. "Non-blocking" means "fix it now."
+4. If a finding is genuinely out of scope (different seam, pre-existing debt), seed a follow-up: GitHub issue, roadmap entry, or failure ledger entry with a concrete fix path.
+5. Do not close the review until every finding is resolved or has a seeded follow-up.
+
 ## Handoff Shape
 
 ```text
@@ -44,6 +54,7 @@ Changed: <files/seams>
 Verified: <commands/results>
 Not verified: <reason>
 Failures/workarounds: <classification + future fix>
+Review findings: <all addressed | N seeded as issues>
 Docs/status sync: <updated or not needed>
 Next safe slice: <one concrete action>
 ```

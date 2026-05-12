@@ -40,9 +40,19 @@ npm run build
 
 Add targeted E2E for browser-only attack paths.
 
+## PR Review Follow-Through
+
+When reviewing a PR:
+
+1. Read existing PR comments and address any unresolved feedback before adding new findings.
+2. Post a structured comment on the PR with all findings using `gh pr comment` (unless the user says otherwise).
+3. Fix every finding — both from your review and from existing unaddressed PR comments. "Non-blocking" means "fix it now."
+4. If a finding is genuinely out of scope, seed a follow-up: GitHub issue, roadmap entry, or failure ledger entry with a concrete fix path.
+5. Do not close the review until every finding is resolved or has a seeded follow-up.
+
 ## Output
 
 - short security assessment
 - threats mitigated or left open
 - tests added or run
-- prioritized fix plan for issues found
+- all findings addressed or seeded as follow-ups (no tech debt accrual)

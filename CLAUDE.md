@@ -70,7 +70,20 @@ Otherwise proceed with a stated assumption and record it in the handoff. Batch b
 
 Every failed command, missing dependency, tool denial, flaky test, docs-control warning, or workaround must appear in the final handoff if unresolved.
 
+No finding or failure may be skipped because it is "non-blocking" or "minor." Every finding must be either fixed in the current work or seeded as a concrete follow-up (GitHub issue, roadmap entry, or failure ledger entry with a fix path). Tech debt accrual from skipped findings is not acceptable.
+
 For recurring or instructive failures, append to `docs/agentic/failure_ledger.jsonl` or update `docs/agentic/FAILURE_LEDGER.md`, then promote confirmed lessons through `docs/agentic/GUIDE_UPDATE_PROTOCOL.md`.
+
+## Review Protocol
+
+When a review is performed on a PR (unless the user explicitly says otherwise):
+
+1. Read existing PR comments (`gh api repos/{owner}/{repo}/pulls/{number}/comments` and `gh pr view {number} --comments`) and address any unresolved feedback before adding new findings.
+2. Post a structured comment on the PR with all findings using `gh pr comment`.
+3. Act on every finding — both from your review and from existing unaddressed PR comments. Fix all issues regardless of severity tier.
+4. Do not skip or defer findings labeled "non-blocking", "minor", or "informational". Every finding must be resolved in the current work or explicitly documented with a seeded follow-up.
+5. If a finding drifts genuinely out of scope (different extension layer, unrelated seam, pre-existing tech debt), document it and seed a fix: open a GitHub issue, add a roadmap entry, or append to `docs/agentic/FAILURE_LEDGER.md` with a concrete future-fix path.
+6. Tech debt accrual from reviews is not acceptable. "Non-blocking" means "fix it now, not later."
 
 ## Verification Protocol
 

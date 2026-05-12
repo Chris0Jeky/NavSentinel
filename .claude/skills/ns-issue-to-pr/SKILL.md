@@ -46,7 +46,17 @@ Do not create a branch if the user requested a tiny local docs/workflow patch an
 
 Only update roadmap, docs, or agent index when their truth changed.
 
-### 6. Handoff
+### 6. Review Follow-Through
+
+If the PR was reviewed (by self or another agent):
+
+- Read existing PR comments and address any unresolved feedback before adding new findings.
+- Fix every finding — both from your review and from existing unaddressed PR comments, regardless of severity tier.
+- If a finding is genuinely out of scope, seed a follow-up: GitHub issue, roadmap entry, or failure ledger entry.
+- Post all findings as a PR comment using `gh pr comment` (unless the user says otherwise).
+- Do not merge or hand off with unaddressed findings.
+
+### 7. Handoff
 
 ```text
 Summary
@@ -54,6 +64,7 @@ Changed
 Verified
 Not verified
 Failures/workarounds
+Review findings: <all addressed | N seeded as issues>
 Docs/status sync
 Next safe slice
 ```
