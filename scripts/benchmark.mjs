@@ -49,8 +49,8 @@ const DETECTION_EVENTS = new Set([
   "cred_paste_warn",
   "clickfix_detected",
   "mutation_alert",
-  "dblclick_block",
-  "pushstate_warn",
+  "dblclickjack_detected",
+  "pushstate_abuse",
 ]);
 
 // ── Gym fixture corpus ────────────────────────────────────────────
@@ -60,9 +60,9 @@ const DETECTION_EVENTS = new Set([
 const CORPUS = [
   // Clickjacking
   { file: "level1-basic-opacity.html", category: "clickjacking", expected: "detect", interact: "click:#play" },
-  { file: "level2-moving-target.html", category: "clickjacking", expected: "detect", interact: "click:#play" },
-  { file: "level3-instant-injection.html", category: "clickjacking", expected: "detect", interact: "click:#play" },
-  { file: "level4-visual-mimicry.html", category: "clickjacking", expected: "detect", interact: "click:#play" },
+  { file: "level2-moving-target.html", category: "clickjacking", expected: "detect", interact: "click:#realBtn" },
+  { file: "level3-instant-injection.html", category: "clickjacking", expected: "detect", interact: "click:#target" },
+  { file: "level4-visual-mimicry.html", category: "clickjacking", expected: "detect", interact: "click:#trap" },
   { file: "level5-window-open-popunder.html", category: "clickjacking", expected: "detect", interact: "click:#area" },
   { file: "level6-programmatic-click.html", category: "clickjacking", expected: "detect", interact: "click:#real" },
 
@@ -394,6 +394,13 @@ async function runFixture(context, baseUrl, fixture, timeoutMs) {
   }
 }
 
+async function closeExtraPages(context) {
+  const pages = context.pages();
+  for (let i = 2; i < pages.length; i++) {
+    try { await pages[i].close(); } catch { /* ok */ }
+  }
+}
+
 async function performInteraction(page, context, interact, timeoutMs) {
   if (interact.startsWith("wait:")) {
     const ms = parseInt(interact.slice(5), 10);
@@ -417,14 +424,7 @@ async function performInteraction(page, context, interact, timeoutMs) {
       // Interaction failed, but we still collect events
     }
 
-    // Handle potential popups (for DoubleClickjacking fixtures)
-    const popupPages = context.pages();
-    if (popupPages.length > 2) {
-      // Close extra pages that opened
-      for (let i = 2; i < popupPages.length; i++) {
-        try { await popupPages[i].close(); } catch { /* ok */ }
-      }
-    }
+    await closeExtraPages(context);
     return;
   }
 
@@ -457,12 +457,7 @@ async function performInteraction(page, context, interact, timeoutMs) {
       // Element may not exist yet or interaction failed
     }
 
-    const popupPages = context.pages();
-    if (popupPages.length > 2) {
-      for (let i = 2; i < popupPages.length; i++) {
-        try { await popupPages[i].close(); } catch { /* ok */ }
-      }
-    }
+    await closeExtraPages(context);
     return;
   }
 }
@@ -815,8 +810,8 @@ async function main() {
   const markdown = generateMarkdown(analysis, comparison, results);
   fs.writeFileSync(mdPath, markdown, "utf-8");
 
-  // Update baseline if explicitly requested
-  if (opts.updateBaseline) {
+  // Update baseline if requested or if none exists (first run)
+  if (opts.updateBaseline || !fs.existsSync(opts.baseline)) {
     const baselineData = {
       updatedAt: new Date().toISOString(),
       thresholds: {
@@ -831,7 +826,7 @@ async function main() {
       lastRun: analysis,
     };
     fs.writeFileSync(opts.baseline, JSON.stringify(baselineData, null, 2), "utf-8");
-    console.log(`\nBaseline updated: ${opts.baseline}`);
+    console.log(`\nBaseline ${opts.updateBaseline ? "updated" : "established"}: ${opts.baseline}`);
   }
 
   // Console summary
@@ -874,17 +869,20 @@ async function main() {
   console.log(`  Markdown:    ${mdPath}\n`);
 
   // Exit code: non-zero if regressions exist
+  let exitCode = 0;
   if (comparison.hasBaseline && comparison.regressions.length > 0) {
     console.log("FAIL: Regressions detected against baseline");
-    process.exit(1);
+    exitCode = 1;
+  } else {
+    console.log("PASS: All thresholds met");
   }
-
-  console.log("PASS: All thresholds met");
   } finally {
     try { await context.close(); } catch { /* ok */ }
     try { await gym.close(); } catch { /* ok */ }
     try { fs.rmSync(userDataDir, { recursive: true, force: true }); } catch { /* ok */ }
   }
+
+  if (exitCode) process.exit(exitCode);
 }
 
 main().catch((err) => {
