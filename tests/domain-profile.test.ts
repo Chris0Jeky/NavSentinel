@@ -10,6 +10,7 @@ import {
   REPEAT_OFFENDER_TRIGGER_MIN,
   REPEAT_OFFENDER_AVG_NRS_MIN,
   type DomainProfile,
+  type DomainRiskAssessment,
 } from "../extension/src/shared/domain_profile";
 
 // ---------------------------------------------------------------------------
@@ -154,6 +155,29 @@ describe("decay logic", () => {
     expect(p.visits).toBe(6);
     // After decay: triggerCount floor(6*0.5)=3, then NRS 30 < 70 so no increment = 3
     expect(p.triggerCount).toBe(3);
+  });
+
+  it("halves factor counts and prunes zeroes on decay", async () => {
+    const staleTs = Date.now() - DECAY_AGE_MS - 1000;
+    store[DOMAIN_PROFILES_KEY] = {
+      "factors-decay.com": {
+        domain: "factors-decay.com",
+        visits: 10,
+        totalNRS: 500,
+        maxNRS: 80,
+        triggerCount: 6,
+        lastSeen: staleTs,
+        factors: { nrs_cross_site: 8, nrs_new_tab_window: 1 },
+        nrsHistory: [50, 50, 50, 50, 50],
+      },
+    };
+
+    await recordNavigation("factors-decay.com", 30, ["nrs_cross_site"]);
+    const p = getStoredProfiles()["factors-decay.com"]!;
+    // nrs_cross_site: floor(8*0.5)=4, then +1 from new recording = 5
+    expect(p.factors["nrs_cross_site"]).toBe(5);
+    // nrs_new_tab_window: floor(1*0.5)=0, pruned
+    expect(p.factors["nrs_new_tab_window"]).toBeUndefined();
   });
 
   it("decay applies when reading risk assessment for stale profiles", async () => {
@@ -376,6 +400,40 @@ describe("storage format", () => {
     expect(p).toBeDefined();
     expect(p!.domain).toBe("format.com");
     expect(p!.nrsHistory).toEqual([25]);
+  });
+});
+
+describe("recordNavigation return value", () => {
+  it("returns a DomainRiskAssessment after recording", async () => {
+    const risk: DomainRiskAssessment = await recordNavigation("ret.com", 50, ["nrs_cross_site"]);
+    expect(risk.avgNRS).toBe(50);
+    expect(risk.isRepeatOffender).toBe(false);
+    expect(risk.topFactors).toContain("nrs_cross_site");
+  });
+
+  it("returns updated assessment after multiple recordings", async () => {
+    await recordNavigation("multi.com", 80, [], 70);
+    await recordNavigation("multi.com", 80, [], 70);
+    await recordNavigation("multi.com", 80, [], 70);
+    const risk = await recordNavigation("multi.com", 80, [], 70);
+    expect(risk.avgNRS).toBe(80);
+    expect(risk.isRepeatOffender).toBe(true);
+  });
+});
+
+describe("async mutex (serialization)", () => {
+  it("concurrent writes are serialized and all data is preserved", async () => {
+    const promises = [];
+    for (let i = 0; i < 5; i++) {
+      promises.push(recordNavigation("race.com", 40, [`reason_${i}`]));
+    }
+    await Promise.all(promises);
+    const p = getStoredProfiles()["race.com"]!;
+    expect(p.visits).toBe(5);
+    expect(p.totalNRS).toBe(200);
+    for (let i = 0; i < 5; i++) {
+      expect(p.factors[`reason_${i}`]).toBe(1);
+    }
   });
 });
 

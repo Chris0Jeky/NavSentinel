@@ -61,6 +61,10 @@ function applyDecay(profile: DomainProfile, now: number): boolean {
     profile.visits = Math.max(1, Math.floor(profile.visits * 0.5));
     profile.triggerCount = Math.floor(profile.triggerCount * 0.5);
     profile.totalNRS = Math.floor(profile.totalNRS * 0.5);
+    for (const key of Object.keys(profile.factors)) {
+      profile.factors[key] = Math.floor(profile.factors[key]! * 0.5);
+      if (profile.factors[key] === 0) delete profile.factors[key];
+    }
     profile.lastSeen += DECAY_AGE_MS;
   }
   return true;
@@ -107,62 +111,86 @@ async function saveProfiles(profiles: Map<string, DomainProfile>): Promise<void>
 }
 
 // ---------------------------------------------------------------------------
+// Assessment helper
+// ---------------------------------------------------------------------------
+
+function computeAssessment(profile: DomainProfile): DomainRiskAssessment {
+  const avgNRS = profile.totalNRS / profile.visits;
+  const consistency = stddev(profile.nrsHistory);
+  const isRepeatOffender =
+    profile.triggerCount > REPEAT_OFFENDER_TRIGGER_MIN &&
+    avgNRS > REPEAT_OFFENDER_AVG_NRS_MIN;
+  const topFactors = Object.entries(profile.factors)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([k]) => k);
+  return { avgNRS, consistency, isRepeatOffender, topFactors };
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
+let pending: Promise<unknown> = Promise.resolve();
+
 /**
  * Record a navigation event for the given domain.
- * Non-blocking — callers should fire-and-forget (`void recordNavigation(...)`)
- * to avoid slowing down the click pipeline.
+ * Returns the updated risk assessment, eliminating the need for a
+ * separate getDomainRisk call. Serialized via promise chain to
+ * prevent concurrent read-modify-write races.
  */
-export async function recordNavigation(
+export function recordNavigation(
   domain: string,
   nrs: number,
   reasons: string[],
   blockThreshold = 70,
-): Promise<void> {
-  const now = Date.now();
-  const profiles = await loadProfiles();
+): Promise<DomainRiskAssessment> {
+  const next = pending.then(async (): Promise<DomainRiskAssessment> => {
+    const now = Date.now();
+    const profiles = await loadProfiles();
 
-  let profile = profiles.get(domain);
-  if (!profile) {
-    profile = {
-      domain,
-      visits: 0,
-      totalNRS: 0,
-      maxNRS: 0,
-      triggerCount: 0,
-      lastSeen: now,
-      factors: {},
-      nrsHistory: [],
-    };
-    profiles.set(domain, profile);
-  }
+    let profile = profiles.get(domain);
+    if (!profile) {
+      profile = {
+        domain,
+        visits: 0,
+        totalNRS: 0,
+        maxNRS: 0,
+        triggerCount: 0,
+        lastSeen: now,
+        factors: {},
+        nrsHistory: [],
+      };
+      profiles.set(domain, profile);
+    }
 
-  applyDecay(profile, now);
+    applyDecay(profile, now);
 
-  profile.visits += 1;
-  profile.totalNRS += nrs;
-  profile.maxNRS = Math.max(profile.maxNRS, nrs);
-  profile.lastSeen = now;
+    profile.visits += 1;
+    profile.totalNRS += nrs;
+    profile.maxNRS = Math.max(profile.maxNRS, nrs);
+    profile.lastSeen = now;
 
-  if (nrs >= blockThreshold) {
-    profile.triggerCount += 1;
-  }
+    if (nrs >= blockThreshold) {
+      profile.triggerCount += 1;
+    }
 
-  // Track NRS history for stddev (bounded ring buffer)
-  profile.nrsHistory.push(nrs);
-  if (profile.nrsHistory.length > MAX_NRS_HISTORY) {
-    profile.nrsHistory = profile.nrsHistory.slice(-MAX_NRS_HISTORY);
-  }
+    profile.nrsHistory.push(nrs);
+    if (profile.nrsHistory.length > MAX_NRS_HISTORY) {
+      profile.nrsHistory = profile.nrsHistory.slice(-MAX_NRS_HISTORY);
+    }
 
-  // Accumulate reason code counts
-  for (const reason of reasons) {
-    profile.factors[reason] = (profile.factors[reason] ?? 0) + 1;
-  }
+    for (const reason of reasons) {
+      profile.factors[reason] = (profile.factors[reason] ?? 0) + 1;
+    }
 
-  evictLRU(profiles);
-  await saveProfiles(profiles);
+    evictLRU(profiles);
+    await saveProfiles(profiles);
+
+    return computeAssessment(profile);
+  });
+  pending = next.catch(() => {});
+  return next;
 }
 
 /**
@@ -183,19 +211,7 @@ export async function getDomainRisk(domain: string): Promise<DomainRiskAssessmen
     await saveProfiles(profiles);
   }
 
-  const avgNRS = profile.totalNRS / profile.visits;
-  const consistency = stddev(profile.nrsHistory);
-
-  const isRepeatOffender =
-    profile.triggerCount > REPEAT_OFFENDER_TRIGGER_MIN &&
-    avgNRS > REPEAT_OFFENDER_AVG_NRS_MIN;
-
-  const topFactors = Object.entries(profile.factors)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([k]) => k);
-
-  return { avgNRS, consistency, isRepeatOffender, topFactors };
+  return computeAssessment(profile);
 }
 
 /**
