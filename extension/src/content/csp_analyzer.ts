@@ -84,8 +84,48 @@ function hasNoncesOrHashes(values: string[]): boolean {
 }
 
 /**
+ * Score a single parsed CSP policy.
+ */
+function scorePolicy(parsed: Map<string, string[]>): {
+  score: number;
+  reasons: string[];
+  isStrict: boolean;
+} {
+  const reasons: string[] = [];
+  let score = 0;
+  let isStrict = false;
+
+  const scriptSrc = parsed.get("script-src") ?? parsed.get("default-src");
+
+  if (scriptSrc && hasNoncesOrHashes(scriptSrc)) {
+    isStrict = true;
+    reasons.push("csp_strict_nonces");
+  }
+
+  if (scriptSrc && hasUnsafe(scriptSrc)) {
+    score += 3;
+    reasons.push("csp_permissive");
+  }
+
+  if (scriptSrc && hasWildcard(scriptSrc)) {
+    score += 3;
+    reasons.push("csp_wildcard");
+  }
+
+  if (reasons.length === 0) {
+    reasons.push("csp_present");
+  }
+
+  return { score, reasons, isStrict };
+}
+
+/**
  * Score an array of raw CSP strings. This is the pure-logic core of the
  * CSP analyzer, usable in tests without a DOM environment.
+ *
+ * Multiple policies use intersection semantics (strictest wins): each
+ * policy is scored independently and the minimum score is taken, matching
+ * how browsers enforce multiple CSP policies.
  *
  * @param cspStrings - CSP content-attribute values from meta tags (or empty
  *   array if no CSP meta tags were found).
@@ -95,70 +135,41 @@ export function scoreCSPStrings(cspStrings: string[]): CSPAnalysis {
     return { hasCSP: false, score: 5, reasons: ["csp_no_policy"], isStrict: false };
   }
 
-  const reasons: string[] = [];
-  let score = 0;
-  let isStrict = false;
+  let minScore = Infinity;
+  let minReasons: string[] = [];
+  let anyStrict = false;
+  let anyNonEmpty = false;
+  let anyScoredDirective = false;
 
-  // Merge all CSP directives. Browsers actually *intersect* multiple
-  // policies (every policy must permit a resource), but we union the
-  // values as a conservative heuristic: if *any* policy allows a weak
-  // source, we still flag it.
-  const merged = new Map<string, string[]>();
   for (const raw of cspStrings) {
     if (!raw) continue;
+    anyNonEmpty = true;
     const parsed = parseCSP(raw);
-    for (const [dir, vals] of parsed) {
-      const existing = merged.get(dir);
-      if (existing) {
-        merged.set(dir, [...existing, ...vals]);
-      } else {
-        merged.set(dir, vals);
-      }
+    if (parsed.size === 0) continue;
+    anyScoredDirective = true;
+
+    const policy = scorePolicy(parsed);
+    if (policy.isStrict) anyStrict = true;
+    if (policy.score < minScore) {
+      minScore = policy.score;
+      minReasons = policy.reasons;
     }
   }
 
-  // If meta tags existed but had no parseable scored directives
-  if (merged.size === 0) {
+  if (!anyNonEmpty) {
     return { hasCSP: false, score: 5, reasons: ["csp_no_policy"], isStrict: false };
   }
 
-  // --- Score individual directives ---
-
-  const scriptSrc = merged.get("script-src") ?? merged.get("default-src");
-  const defaultSrc = merged.get("default-src");
-
-  // Detect nonces/hashes in script-src for informational purposes.
-  // We do NOT reduce the score here because content scripts read meta
-  // tags which are attacker-controlled -- an attacker can inject a fake
-  // <meta> CSP with a nonce to game the reduction. Strict CSP is only
-  // trustworthy from HTTP headers, which content scripts cannot read.
-  if (scriptSrc && hasNoncesOrHashes(scriptSrc)) {
-    isStrict = true;
-    reasons.push("csp_strict_nonces");
+  if (!anyScoredDirective) {
+    return { hasCSP: true, score: 0, reasons: ["csp_present"], isStrict: false };
   }
 
-  // Check for unsafe-inline / unsafe-eval in script-src
-  if (scriptSrc && hasUnsafe(scriptSrc)) {
-    score += 3;
-    reasons.push("csp_permissive");
-  }
-
-  // Check for wildcard in default-src
-  if (defaultSrc && hasWildcard(defaultSrc)) {
-    score += 3;
-    reasons.push("csp_wildcard_default");
-  }
-
-  // NOTE: frame-ancestors is intentionally NOT scored here. Per the CSP
-  // Level 3 spec, frame-ancestors is not enforced in <meta> elements, so
-  // its absence in meta CSP is meaningless.
-
-  // If no specific weakness was found and we have a CSP, it's neutral
-  if (reasons.length === 0) {
-    reasons.push("csp_present");
-  }
-
-  return { hasCSP: true, score, reasons, isStrict };
+  return {
+    hasCSP: true,
+    score: minScore === Infinity ? 0 : minScore,
+    reasons: minReasons.length > 0 ? minReasons : ["csp_present"],
+    isStrict: anyStrict,
+  };
 }
 
 /**

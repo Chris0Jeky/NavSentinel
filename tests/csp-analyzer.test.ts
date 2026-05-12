@@ -77,10 +77,11 @@ describe("scoreCSPStrings", () => {
       expect(result.reasons).toContain("csp_no_policy");
     });
 
-    it("returns hasCSP=false for CSP with only non-scored directives", () => {
+    it("returns hasCSP=true with score 0 for CSP with only non-scored directives", () => {
       const result = scoreCSPStrings(["img-src *; style-src 'self'"]);
-      expect(result.hasCSP).toBe(false);
-      expect(result.score).toBe(5);
+      expect(result.hasCSP).toBe(true);
+      expect(result.score).toBe(0);
+      expect(result.reasons).toContain("csp_present");
     });
   });
 
@@ -99,10 +100,17 @@ describe("scoreCSPStrings", () => {
       expect(result.score).toBe(3);
     });
 
-    it("scores +3 for wildcard in default-src", () => {
+    it("scores +3 for wildcard in default-src (effective script source)", () => {
       const result = scoreCSPStrings(["default-src *"]);
       expect(result.hasCSP).toBe(true);
-      expect(result.reasons).toContain("csp_wildcard_default");
+      expect(result.reasons).toContain("csp_wildcard");
+      expect(result.score).toBe(3);
+    });
+
+    it("scores +3 for wildcard in explicit script-src", () => {
+      const result = scoreCSPStrings(["script-src *; default-src 'self'"]);
+      expect(result.hasCSP).toBe(true);
+      expect(result.reasons).toContain("csp_wildcard");
       expect(result.score).toBe(3);
     });
 
@@ -120,9 +128,9 @@ describe("scoreCSPStrings", () => {
         "default-src *; script-src 'self' 'unsafe-inline'",
       ]);
       expect(result.hasCSP).toBe(true);
-      // wildcard default (+3) + unsafe-inline (+3) = 6
-      expect(result.score).toBe(6);
-      expect(result.reasons).toContain("csp_wildcard_default");
+      // script-src has unsafe-inline (+3) but no wildcard; default-src
+      // wildcard doesn't affect scripts when script-src is present.
+      expect(result.score).toBe(3);
       expect(result.reasons).toContain("csp_permissive");
       expect(result.reasons).not.toContain("csp_no_frame_ancestors");
     });
@@ -179,25 +187,47 @@ describe("scoreCSPStrings", () => {
     });
   });
 
-  describe("multiple CSP strings (simulating multiple meta tags)", () => {
-    it("merges directives from multiple strings", () => {
+  describe("multiple CSP strings (per-policy intersection)", () => {
+    it("takes minimum score across independent policies", () => {
       const result = scoreCSPStrings([
         "script-src 'self'",
         "default-src 'none'",
       ]);
       expect(result.hasCSP).toBe(true);
-      // script-src 'self' is fine, default-src 'none' is fine => neutral
       expect(result.score).toBe(0);
       expect(result.reasons).toContain("csp_present");
     });
 
-    it("picks up unsafe from second string", () => {
+    it("strict policy blocks permissive policy (intersection semantics)", () => {
       const result = scoreCSPStrings([
         "default-src 'self'",
         "script-src 'unsafe-eval'",
       ]);
       expect(result.hasCSP).toBe(true);
-      expect(result.reasons).toContain("csp_permissive");
+      // Policy 1 is strict (score 0), policy 2 is permissive (score 3).
+      // Intersection: the strict policy dominates, so score = 0.
+      expect(result.score).toBe(0);
+      expect(result.reasons).toContain("csp_present");
+    });
+
+    it("both policies permissive yields permissive score", () => {
+      const result = scoreCSPStrings([
+        "script-src 'self' 'unsafe-inline'",
+        "script-src 'self' 'unsafe-eval'",
+      ]);
+      expect(result.hasCSP).toBe(true);
+      // Both policies score +3, so min is 3
+      expect(result.score).toBe(3);
+    });
+
+    it("isStrict true if any policy uses nonces", () => {
+      const result = scoreCSPStrings([
+        "script-src 'nonce-abc123'",
+        "script-src 'self' 'unsafe-inline'",
+      ]);
+      expect(result.isStrict).toBe(true);
+      // Policy 1 score=0 (nonce), policy 2 score=3 (unsafe). Min=0.
+      expect(result.score).toBe(0);
     });
   });
 
@@ -217,8 +247,10 @@ describe("scoreCSPStrings", () => {
         "default-src *; script-src * 'unsafe-inline' 'unsafe-eval'",
       ]);
       expect(result.hasCSP).toBe(true);
-      // wildcard default (+3) + unsafe-inline/eval (+3) = 6
+      // script-src wildcard (+3) + unsafe-inline/eval (+3) = 6
       expect(result.score).toBe(6);
+      expect(result.reasons).toContain("csp_wildcard");
+      expect(result.reasons).toContain("csp_permissive");
     });
   });
 

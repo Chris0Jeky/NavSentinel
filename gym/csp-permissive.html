@@ -44,10 +44,10 @@
   <h1>CSP Permissive - Weak Content Security Policy</h1>
   <div class="description">
     <strong>Scenario:</strong> This page has a very permissive CSP with wildcard
-    <code>default-src *</code> and <code>'unsafe-inline' 'unsafe-eval'</code> in
-    script-src. This should produce a CSP weakness score of +6.
+    <code>default-src *</code> and <code>script-src * 'unsafe-inline' 'unsafe-eval'</code>.
+    This should produce a CSP weakness score of +6.
     <br><br>
-    <strong>Expected:</strong> NavSentinel detects <code>csp_wildcard_default</code>
+    <strong>Expected:</strong> NavSentinel detects <code>csp_wildcard</code>
     and <code>csp_permissive</code> with a combined score of +6. The debug overlay
     should show <code>CSP: yes (score=6, strict=false)</code>.
     <br><br>
