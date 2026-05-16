@@ -1130,13 +1130,17 @@ The extension must remain lightweight. Budget per navigation:
 
 Extension bundle size budget:
 
-| Component | Budget |
-|---|---|
-| Extension JS (minified) | < 200KB |
-| PSL data | < 200KB |
-| Bloom filter | < 150KB |
-| Icons and assets | < 50KB |
-| Total extension size | < 600KB |
+| Component | Budget | Notes |
+|---|---|---|
+| Storage module (includes PSL trie) | < 200KB | PSL data (~157KB) is inlined into this JS chunk at build time |
+| capture_isolated (content script) | < 60KB | Main navigation detection logic |
+| credential_guard (content script) | < 30KB | Credential protection logic |
+| service worker | < 25KB | Background orchestration |
+| Bloom filter (reputation_data.bin) | < 175KB | Build-time compiled from threat feeds |
+| Icons and assets | < 50KB | PNGs, SVGs |
+| Total dist (all files) | < 500KB | Enforced by `npm run check:perf-budget` |
+
+See `scripts/check-perf-budget.mjs` for per-chunk enforcement details.
 
 ---
 
