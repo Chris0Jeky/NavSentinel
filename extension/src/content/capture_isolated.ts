@@ -675,16 +675,7 @@ function initMutationMonitor(): void {
 }
 
 function scheduleMutationMonitor(): void {
-  // Only run the mutation monitor in the top frame. Sub-frames run with
-  // all_frames:true but the monitor is most valuable in the top frame, and
-  // cross-origin iframes already cannot be observed from the parent. Wrapped
-  // in try/catch because accessing window.top throws in sandboxed iframes.
-  try {
-    if (window !== window.top) return;
-  } catch {
-    // Sandboxed iframe -- skip monitoring
-    return;
-  }
+  if (!isTopFrame()) return;
 
   // Use the `load` event (readyState "complete") as the baseline instead of
   // `DOMContentLoaded`. This avoids false positives from SPA hydration that
@@ -743,8 +734,10 @@ function showRollbackPrompt(url: string): void {
         label: "Proceed",
         onClick: () => {
           try {
-            notifyNavAllow();
-            location.assign(url);
+            if (/^https?:\/\//i.test(url)) {
+              notifyNavAllow();
+              location.assign(url);
+            }
           } catch {
             // ignore
           }
@@ -1102,7 +1095,10 @@ if (chrome?.runtime?.sendMessage && isTopFrame()) {
   // -- Rollback polling --
   const run = (retries = 4) => {
     chrome.runtime.sendMessage({ type: "ns-check-rollback" }, (resp) => {
-      if (chrome.runtime.lastError) return;
+      if (chrome.runtime.lastError) {
+        if (retries > 0) window.setTimeout(() => run(retries - 1), 200);
+        return;
+      }
       if (resp?.shouldRollback) {
         if (settings.defaultMode === "off") return;
         const url = typeof resp.entry?.url === "string" ? resp.entry.url : "";
@@ -1130,7 +1126,7 @@ if (chrome?.runtime?.sendMessage && isTopFrame()) {
       forwardCheckTimer = 0;
     }
     forwardCheckInFlight = true;
-    const inflightGuard = window.setTimeout(() => { forwardCheckInFlight = false; }, 5000);
+    const inflightGuard = window.setTimeout(() => { forwardCheckInFlight = false; }, 2000);
     chrome.runtime.sendMessage({ type: "ns-check-forward", currentUrl: location.href }, (resp) => {
       window.clearTimeout(inflightGuard);
       forwardCheckInFlight = false;
