@@ -5,13 +5,12 @@ describe("classifyEventTone", () => {
   it("classifies credential events (real EventKind values)", () => {
     expect(classifyEventTone("cred_submit_prompt")).toBe("credential");
     expect(classifyEventTone("cred_paste_warn")).toBe("credential");
-    expect(classifyEventTone("cred_trust_page")).toBe("credential");
-    expect(classifyEventTone("cred_trust_dest")).toBe("credential");
+    expect(classifyEventTone("cred_trust_domain")).toBe("credential");
+    expect(classifyEventTone("cred_untrust_domain")).toBe("credential");
   });
 
   it("classifies config events (real EventKind values)", () => {
     expect(classifyEventTone("suite_config_update")).toBe("config");
-    expect(classifyEventTone("suite_mode_change")).toBe("config");
   });
 
   it("classifies navigation events as default", () => {
