@@ -22,7 +22,7 @@
  * detection (see `capture_isolated.ts` `tryOpenShadowRoot`), but recursively
  * observing shadow roots as they appear is non-trivial and deferred to a
  * follow-up task.
- * TODO(shadow-dom): Observe shadow roots by listening for shadow host
+ * TODO(shadow-dom, #97): Observe shadow roots by listening for shadow host
  * attachment via a secondary MutationObserver or periodic polling.
  */
 
