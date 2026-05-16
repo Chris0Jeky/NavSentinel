@@ -16,8 +16,8 @@ know it's done. It synthesizes the findings from
 | 0 | Stabilize | 6 | 6 | **Done** |
 | 1 | Validate Foundation | 8 | 8 | **Done** (FP gate cleared via same-org domain groups) |
 | 2 | Target 2025-2026 Threats | 13 | 13 | **Done** |
-| 3 | Productize | 12 | 9 | **In progress** (P3-01, P3-02, P3-03, P3-05, P3-07, P3-08, P3-10, P3-11, P3-12 done) |
-| 4 | Differentiate | 8 | 3 | In progress (P4-05, P4-06, P4-07 done) |
+| 3 | Productize | 12 | 9 | **In progress** (9 done, P3-04/P3-06/P3-09 in PR) |
+| 4 | Differentiate | 8 | 3 | In progress (P4-05, P4-06, P4-07 done; P4-08 in PR) |
 
 Total: **47 tasks** across 5 phases. **39/47 complete.**
 
@@ -754,12 +754,12 @@ Phase 2 is complete when:
 | P3-01 | Plain-English risk explanations | M | **done** | P2 gate | `feat/plain-english-ui` (PR #64) |
 | P3-02 | Visual risk indicators (icon color) | M | **done** | P2 gate | `feat/icon-risk` (PR #65) |
 | P3-03 | Smart defaults that learn | M | **done** | P1-08 | `feat/smart-defaults` (PR #62) |
-| P3-04 | Onboarding flow | L | pending | P3-01, P3-02 | `feat/onboarding` |
+| P3-04 | Onboarding flow | L | **in PR** | P3-01, P3-02 | `feat/onboarding` (PR #73) |
 | P3-05 | Adaptive scoring with user feedback | L | **done** | P1-08, P3-03 | `feat/adaptive-scoring` (PR #66) |
-| P3-06 | Chrome Web Store listing | M | pending | P3-01, P3-02 | `docs/cws-listing` |
+| P3-06 | Chrome Web Store listing | M | **in PR** | P3-01, P3-02 | `docs/cws-listing` (PR #81) |
 | P3-07 | Release infrastructure | M | **done** | P2 gate | `infra/release` (PR #67) |
 | P3-08 | Issue templates and repo hygiene | S | **done** | -- | `docs/issue-templates` (PR #50) |
-| P3-09 | Seek volunteer security audit | S | pending | P2 gate | (no branch) |
+| P3-09 | Seek volunteer security audit | S | **in PR** | P2 gate | `docs/security-audit-prep` (PR #82) |
 | P3-10 | Migrate SW ephemeral state to chrome.storage.session | M | **done** | P2-01 | `feat/sw-session-storage` (PR #63) |
 | P3-11 | jsdom/happy-dom test environment for ClickFix DOM tests | S | **done** | P2-02 | `test/jsdom-clickfix-tests` (PR #49) |
 | P3-12 | Bloom filter size monitoring in CI | S | **done** | P2-03 | `infra/bloom-ci-check` (PR #48) |
@@ -997,7 +997,7 @@ ordered by estimated impact. Timelines are intentionally open-ended.
 | P4-05 | CSP / permissions analysis | L | **done** | P2 gate | PR #71 |
 | P4-06 | Sub-resource integrity awareness | M | **done** | P2 gate | PR #68 |
 | P4-07 | Per-domain behavioral profiling | L | **done** | P1-08 | PR #69 |
-| P4-08 | Navigation pattern anomaly detection | L | pending | P4-07 |
+| P4-08 | Navigation pattern anomaly detection | L | **in PR** | P4-07 | `feat/nav-anomaly` (PR #78) |
 
 ### Task Details
 
