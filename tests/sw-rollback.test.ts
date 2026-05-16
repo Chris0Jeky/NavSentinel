@@ -4,7 +4,7 @@ type RuntimeMessage = Record<string, unknown>;
 type RuntimeSender = { tab?: { id?: number }; frameId?: number };
 type SendResponse = (response?: unknown) => void;
 
-type ChromeMock = ReturnType<typeof createChromeMock>;
+type _ChromeMock = ReturnType<typeof createChromeMock>;
 
 function createEvent<T extends (...args: any[]) => void>() {
   const listeners: T[] = [];

@@ -12,11 +12,8 @@ import {
   _getRecentNavs,
   NAV_PROFILE_KEY,
   DECAY_INTERVAL_MS,
-  DECAY_FACTOR,
   MAX_TOTAL_NAVIGATIONS,
   BURST_WINDOW_MS,
-  BURST_MIN_COUNT,
-  RARE_CATEGORY_THRESHOLD,
   MAX_BURST_RECORDS,
   BURST_RECORD_TTL_MS,
   BASE_ANOMALY_SCORE,
@@ -24,7 +21,6 @@ import {
   ANOMALY_SCORE_CAP,
   MIN_NAVIGATIONS_FOR_ANOMALY,
   type NavProfile,
-  type NavCategory,
   type BurstRecord,
 } from "../extension/src/shared/nav_anomaly";
 
