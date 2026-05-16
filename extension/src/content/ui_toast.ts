@@ -75,7 +75,7 @@ export function showToast(opts: ToastOptions) {
 
   const wrap = document.createElement("div");
   wrap.className = "wrap";
-    wrap.setAttribute("role", "alert");
+  wrap.setAttribute("role", "alert");
 
   const body = document.createElement("div");
   body.className = "body";

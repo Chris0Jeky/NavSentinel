@@ -43,7 +43,7 @@ function ensureHost(): void {
     .overlay { pointer-events: auto; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55); display: flex; align-items: center; justify-content: center; padding: 24px; }
     .card { width: min(760px, 96vw); max-height: min(82vh, 820px); overflow: auto; background: rgba(17, 17, 17, 0.98); color: #f5f5f5; border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.16); box-shadow: 0 18px 60px rgba(0, 0, 0, 0.45); }
     .header { padding: 16px 18px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
-    .title { font-size: 16px; font-weight: 700; letter-spacing: 0.2px; }
+    .title { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: 0.2px; }
     .subtitle { margin-top: 6px; font-size: 13px; line-height: 1.35; color: rgba(255, 255, 255, 0.8); }
     .body { padding: 14px 18px 10px; }
     .kv { display: grid; grid-template-columns: 140px 1fr; gap: 8px 10px; margin-bottom: 12px; }
