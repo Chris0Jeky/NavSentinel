@@ -534,7 +534,7 @@ without any network calls (Thesis Review, Section 7.2).
   - Fetches URLhaus and OpenPhish domain feeds
   - Extracts unique domains
   - Compiles to a bloom filter binary
-  - Outputs to `extension/src/shared/reputation_data.bin`
+  - Outputs to `extension/public/reputation_data.bin`
 - Add `extension/src/shared/reputation.ts` with bloom filter lookup
 - Wire reputation check into navigation decisions (NRS factor: `known_bad_domain` +50)
 - Wire reputation check into credential guard (risk factor: known-bad domain)
@@ -543,7 +543,7 @@ without any network calls (Thesis Review, Section 7.2).
 **Size budget**: ~125KB for 100K domains (acceptable for extension bundle).
 
 **Files**: new `scripts/build-bloom-filter.mjs`, new `extension/src/shared/reputation.ts`,
-new `extension/src/shared/reputation_data.bin`, `extension/src/shared/scoring.ts` or `nrs.ts`
+new `extension/public/reputation_data.bin`, `extension/src/shared/scoring.ts` or `nrs.ts`
 
 **Done when**: Bloom filter lookup works. Known-bad domains from test feed are caught.
 False positive rate of bloom filter itself is < 0.01%. No runtime network calls.
