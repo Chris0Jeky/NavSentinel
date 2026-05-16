@@ -158,6 +158,10 @@ let _config: JsBehaviorMonitorConfig | null = null;
 /** Tracks original form action values at DOM parse time. */
 const _originalFormActions = new WeakMap<HTMLFormElement, string>();
 
+let _formSubmitPatched = false;
+let _formObserver: MutationObserver | null = null;
+let _originalSubmitFn: typeof HTMLFormElement.prototype.submit | null = null;
+
 // ============================================================================
 // Form Submit Monitoring (Slice 2)
 // ============================================================================
@@ -227,7 +231,7 @@ function patchFormSubmitMonitoring(config: JsBehaviorMonitorConfig): void {
   snapshotExistingForms();
 
   // Observe newly added forms via MutationObserver
-  const observer = new MutationObserver((mutations) => {
+  _formObserver = new MutationObserver((mutations) => {
     for (let mi = 0; mi < mutations.length; mi++) {
       const added = mutations[mi]!.addedNodes;
       for (let ni = 0; ni < added.length; ni++) {
@@ -243,7 +247,7 @@ function patchFormSubmitMonitoring(config: JsBehaviorMonitorConfig): void {
       }
     }
   });
-  observer.observe(document.documentElement, { childList: true, subtree: true });
+  _formObserver.observe(document.documentElement, { childList: true, subtree: true });
 
   // Capturing submit event listener
   document.addEventListener("submit", (e) => {
@@ -255,7 +259,8 @@ function patchFormSubmitMonitoring(config: JsBehaviorMonitorConfig): void {
   }, true);
 
   // Patch HTMLFormElement.prototype.submit for programmatic submits
-  const originalSubmit = HTMLFormElement.prototype.submit;
+  _originalSubmitFn = HTMLFormElement.prototype.submit;
+  const originalSubmit = _originalSubmitFn;
   HTMLFormElement.prototype.submit = function (this: HTMLFormElement) {
     handleFormSubmit(this, config);
     return originalSubmit.call(this);
@@ -439,6 +444,16 @@ export function _resetState(): void {
   _lastCredentialReadTs = 0;
   _isInsideFormSubmit = false;
   _config = null;
+
+  if (_formObserver) {
+    _formObserver.disconnect();
+    _formObserver = null;
+  }
+  if (_originalSubmitFn) {
+    HTMLFormElement.prototype.submit = _originalSubmitFn;
+    _originalSubmitFn = null;
+  }
+  _formSubmitPatched = false;
 }
 
 // ============================================================================
