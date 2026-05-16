@@ -223,6 +223,12 @@ test("Level 10 delayed form submit prompts @regression", async () => {
       );
       expect(bridgeReady, "Expected bridge to be ready (patches applied)").toBe(true);
 
+      const patchHardened = await page.evaluate(() => {
+        const desc = Object.getOwnPropertyDescriptor(window, "open");
+        return desc ? !desc.writable && !desc.configurable : false;
+      });
+      expect(patchHardened, "Expected window.open to be non-writable and non-configurable").toBe(true);
+
       await page.click("#submitDelayed");
       await page.waitForTimeout(2600);
       await waitForToastText(page, "Blocked form submit", 4000);
