@@ -148,6 +148,7 @@ describe("getAllowlist", () => {
     store[LEGACY_KEY] = { "": ["orphan.com"] };
     const result = await getAllowlist();
     expect(result).toEqual({});
+    expect(store[ALLOWLIST_KEY]).toBeUndefined();
   });
 
   it("prefers new key over legacy key", async () => {

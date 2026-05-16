@@ -206,8 +206,8 @@ describe("buildClickContextFromEvents", () => {
     Object.defineProperty(overlay, "getBoundingClientRect", {
       value: () => ({ x: 0, y: 0, width: 1024, height: 768, top: 0, left: 0, right: 1024, bottom: 768 }),
     });
-    Object.defineProperty(window, "innerWidth", { value: 1024, writable: true });
-    Object.defineProperty(window, "innerHeight", { value: 768, writable: true });
+    Object.defineProperty(window, "innerWidth", { value: 1024, writable: true, configurable: true });
+    Object.defineProperty(window, "innerHeight", { value: 768, writable: true, configurable: true });
 
     const stack = [overlay, dialog, document.documentElement];
     const result = buildClickContextFromEvents({
@@ -223,8 +223,8 @@ describe("buildClickContextFromEvents", () => {
     Object.defineProperty(overlay, "getBoundingClientRect", {
       value: () => ({ x: 0, y: 0, width: 1024, height: 768, top: 0, left: 0, right: 1024, bottom: 768 }),
     });
-    Object.defineProperty(window, "innerWidth", { value: 1024, writable: true });
-    Object.defineProperty(window, "innerHeight", { value: 768, writable: true });
+    Object.defineProperty(window, "innerWidth", { value: 1024, writable: true, configurable: true });
+    Object.defineProperty(window, "innerHeight", { value: 768, writable: true, configurable: true });
 
     const stack = [overlay, modal, document.documentElement];
     const result = buildClickContextFromEvents({
@@ -274,9 +274,7 @@ describe("buildKeyboardClickContext", () => {
 
 describe("capturePointerDown", () => {
   beforeEach(() => {
-    if (!document.elementsFromPoint) {
-      (document as any).elementsFromPoint = (_x: number, _y: number) => [document.documentElement];
-    }
+    (document as any).elementsFromPoint = (_x: number, _y: number) => [document.documentElement];
   });
 
   it("captures coordinates and modifier keys", () => {
@@ -322,9 +320,7 @@ describe("capturePointerDown", () => {
 
 describe("captureClick", () => {
   beforeEach(() => {
-    if (!document.elementsFromPoint) {
-      (document as any).elementsFromPoint = (_x: number, _y: number) => [document.documentElement];
-    }
+    (document as any).elementsFromPoint = (_x: number, _y: number) => [document.documentElement];
   });
 
   it("captures coordinates", () => {
