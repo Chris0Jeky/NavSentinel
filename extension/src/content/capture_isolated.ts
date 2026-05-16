@@ -504,7 +504,7 @@ function handleBridgeMessage(message: unknown): void {
     data.type === "ns-js-credential-read"
   ) {
     if (settings.defaultMode !== "off") {
-      handleJsBehaviorSignal(data.type);
+        handleJsBehaviorSignal(data.type, data as Record<string, unknown>);
     }
     return;
   }
@@ -651,25 +651,42 @@ function getJsBehaviorScoreForNRS(): number {
   return computeJsBehaviorScore(_jsBehaviorState);
 }
 
-function handleJsBehaviorSignal(type: string): void {
+function handleJsBehaviorSignal(type: string, payload: Record<string, unknown>): void {
   const now = Date.now();
   if (isStateExpired(_jsBehaviorState)) {
     _jsBehaviorState = createEmptyState();
   }
   _jsBehaviorState.lastSignalTs = now;
 
+  const recordSignal = (key: keyof JsBehaviorState["signalCounts"]) => {
+    _jsBehaviorState.signalCounts[key]++;
+    _jsBehaviorState.signalLastTs[key] = now;
+  };
+
   switch (type) {
-    case "ns-js-form-submit-suspicious":
-      _jsBehaviorState.signalCounts.formSubmitSuspicious++;
+    case "ns-js-form-submit-suspicious": {
+      const hasCredentialFields = payload.hasCredentialFields === true;
+      const isCrossOrigin = payload.isCrossOrigin === true;
+      const actionDynamicallyChanged = payload.actionDynamicallyChanged === true;
+      if (hasCredentialFields && isCrossOrigin) {
+        recordSignal("formSubmitSuspicious");
+      }
+      if (actionDynamicallyChanged) {
+        recordSignal("dynamicFormAction");
+      }
+      if (!hasCredentialFields && !isCrossOrigin && !actionDynamicallyChanged) {
+        recordSignal("formSubmitSuspicious");
+      }
       break;
+    }
     case "ns-js-exfil-network":
-      _jsBehaviorState.signalCounts.exfilNetwork++;
+      recordSignal("exfilNetwork");
       break;
     case "ns-js-exfil-beacon":
-      _jsBehaviorState.signalCounts.exfilBeacon++;
+      recordSignal("exfilBeacon");
       break;
     case "ns-js-credential-read":
-      _jsBehaviorState.signalCounts.credentialRead++;
+      recordSignal("credentialRead");
       break;
   }
 

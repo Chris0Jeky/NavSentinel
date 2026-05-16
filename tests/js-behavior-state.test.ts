@@ -4,9 +4,21 @@ import {
   isStateExpired,
   computeJsBehaviorScore,
   JS_BEHAVIOR_STATE_TTL_MS,
+  JS_BEHAVIOR_MULTI_SIGNAL_WINDOW_MS,
   NRS_WEIGHT_JS_BEHAVIOR_CAP,
+  SCORE_DYNAMIC_FORM_ACTION,
   type JsBehaviorState,
 } from "../extension/src/shared/js_behavior_state";
+
+function markSignal(
+  state: JsBehaviorState,
+  key: keyof JsBehaviorState["signalCounts"],
+  ts = Date.now()
+): void {
+  state.lastSignalTs = ts;
+  state.signalCounts[key] = 1;
+  state.signalLastTs[key] = ts;
+}
 
 describe("js_behavior_state", () => {
   describe("createEmptyState", () => {
@@ -15,9 +27,11 @@ describe("js_behavior_state", () => {
       expect(state.score).toBe(0);
       expect(state.lastSignalTs).toBe(0);
       expect(state.signalCounts.formSubmitSuspicious).toBe(0);
+      expect(state.signalCounts.dynamicFormAction).toBe(0);
       expect(state.signalCounts.exfilNetwork).toBe(0);
       expect(state.signalCounts.exfilBeacon).toBe(0);
       expect(state.signalCounts.credentialRead).toBe(0);
+      expect(state.signalLastTs.dynamicFormAction).toBe(0);
     });
 
     it("returns a new object each time", () => {
@@ -63,6 +77,12 @@ describe("js_behavior_state", () => {
       expect(computeJsBehaviorScore(state)).toBe(15);
     });
 
+    it("scores single dynamic form action signal at 10", () => {
+      const state = createEmptyState();
+      state.signalCounts.dynamicFormAction = 1;
+      expect(computeJsBehaviorScore(state)).toBe(SCORE_DYNAMIC_FORM_ACTION);
+    });
+
     it("scores single network exfil signal at 20", () => {
       const state = createEmptyState();
       state.signalCounts.exfilNetwork = 1;
@@ -83,10 +103,20 @@ describe("js_behavior_state", () => {
 
     it("adds multiple signals bonus when 2+ types fire", () => {
       const state = createEmptyState();
-      state.signalCounts.formSubmitSuspicious = 1;
-      state.signalCounts.exfilNetwork = 1;
+      const now = Date.now();
+      markSignal(state, "formSubmitSuspicious", now);
+      markSignal(state, "exfilNetwork", now + 1000);
       // 15 + 20 + 10 (bonus) = 45, capped at 35
       expect(computeJsBehaviorScore(state)).toBe(NRS_WEIGHT_JS_BEHAVIOR_CAP);
+    });
+
+    it("does not add multiple signals bonus outside the correlation window", () => {
+      const state = createEmptyState();
+      const now = Date.now();
+      markSignal(state, "formSubmitSuspicious", now);
+      markSignal(state, "credentialRead", now + JS_BEHAVIOR_MULTI_SIGNAL_WINDOW_MS + 1);
+
+      expect(computeJsBehaviorScore(state)).toBe(25);
     });
 
     it("caps at NRS_WEIGHT_JS_BEHAVIOR_CAP (35)", () => {
@@ -95,9 +125,17 @@ describe("js_behavior_state", () => {
         lastSignalTs: Date.now(),
         signalCounts: {
           formSubmitSuspicious: 5,
+          dynamicFormAction: 5,
           exfilNetwork: 5,
           exfilBeacon: 5,
           credentialRead: 5,
+        },
+        signalLastTs: {
+          formSubmitSuspicious: Date.now(),
+          dynamicFormAction: Date.now(),
+          exfilNetwork: Date.now(),
+          exfilBeacon: Date.now(),
+          credentialRead: Date.now(),
         },
       };
       expect(computeJsBehaviorScore(state)).toBe(NRS_WEIGHT_JS_BEHAVIOR_CAP);
