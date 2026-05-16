@@ -25,9 +25,17 @@ const PUSHSTATE_RAPID_WINDOW_MS = 1000;
 
 let bridgePort: MessagePort | null = null;
 let bridgeSession: string | null = null;
+const MAX_PENDING_OUTBOUND = 32;
+const pendingOutbound: Array<{ type: string; payload?: Record<string, unknown> }> = [];
 
 function postToIsolated(type: string, payload?: Record<string, unknown>): void {
-  if (!bridgePort || !bridgeSession) return;
+  if (!bridgePort || !bridgeSession) {
+    pendingOutbound.push({ type, ...(payload !== undefined ? { payload } : {}) });
+    if (pendingOutbound.length > MAX_PENDING_OUTBOUND) {
+      pendingOutbound.splice(0, pendingOutbound.length - MAX_PENDING_OUTBOUND);
+    }
+    return;
+  }
   bridgePort.postMessage({
     source: NS_SOURCE,
     type,
@@ -35,6 +43,13 @@ function postToIsolated(type: string, payload?: Record<string, unknown>): void {
     session: bridgeSession,
     ...(payload ?? {})
   });
+}
+
+function flushPendingOutbound(): void {
+  const snapshot = pendingOutbound.splice(0);
+  for (const msg of snapshot) {
+    postToIsolated(msg.type, msg.payload);
+  }
 }
 
 let mode: "off" | "smart" | "strict" = "off";
@@ -300,9 +315,10 @@ function postAllowed(params: { kind: string; url?: string }): void {
 }
 
 function notifyAllowedTarget(url: string | URL | undefined): void {
-  if (url === undefined) return;
+  if (url === undefined || String(url) === "") return;
   try {
     const href = new URL(String(url), location.href).toString();
+    if (!href.startsWith("http:") && !href.startsWith("https:")) return;
     postToIsolated("ns-allow-target-nav", { url: href, ttlMs: TARGET_NAV_TTL_MS });
   } catch {
     // ignore
@@ -427,6 +443,7 @@ function patchedOpen(
 ): Window | null {
   if (isOff() || (isSubframe() && isSubframeSelfTarget(target))) {
     postAllowed({ kind: "window_open", ...(url !== undefined ? { url: String(url) } : {}) });
+    notifyAllowedTarget(url);
     recordWindowOpen();
     return callNativeOpen(this, url, target, features);
   }
@@ -434,12 +451,14 @@ function patchedOpen(
   const allowance = consumeOpenAllowance();
   if (allowance !== "none") {
     postAllowed({ kind: "window_open", ...(url !== undefined ? { url: String(url) } : {}) });
+    notifyAllowedTarget(url);
     recordWindowOpen();
     return callNativeOpen(this, url, target, features);
   }
 
   if (consumePopupIntentAllowance(target, features)) {
     postAllowed({ kind: "window_open", ...(url !== undefined ? { url: String(url) } : {}) });
+    notifyAllowedTarget(url);
     recordWindowOpen();
     return callNativeOpen(this, url, target, features);
   }
@@ -792,6 +811,7 @@ window.addEventListener(
     bridgePort.onmessage = (bridgeEvent) => handleBridgeMessage(bridgeEvent.data);
     bridgePort.start?.();
     postToIsolated("ns-bridge-ready");
+    flushPendingOutbound();
   },
   true
 );
