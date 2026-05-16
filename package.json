@@ -37,6 +37,11 @@
     "agent:skills:validate": "python scripts/agent_hooks/validate_skills.py",
     "benchmark": "node scripts/benchmark.mjs"
   },
+  "overrides": {
+    "@crxjs/vite-plugin": {
+      "rollup": "2.80.0"
+    }
+  },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.3.0",
     "@playwright/test": "^1.49.0",
