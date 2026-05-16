@@ -342,6 +342,29 @@ const nativeReplace = Location.prototype.replace;
 const nativeFormSubmit = HTMLFormElement.prototype.submit;
 const nativeFormRequestSubmit = HTMLFormElement.prototype.requestSubmit;
 
+/** Best-effort defineProperty on a prototype; falls back to simple assignment. */
+function hardenProto(
+  proto: object,
+  prop: string,
+  value: Function,
+  label: string
+): void {
+  try {
+    Object.defineProperty(proto, prop, {
+      value,
+      writable: false,
+      configurable: false,
+    });
+  } catch {
+    try {
+      (proto as any)[prop] = value;
+    } catch { /* ignore — already patched or frozen */ }
+    if (debug) {
+      console.debug(`[NavSentinel] defineProperty failed for ${label}, used assignment fallback`);
+    }
+  }
+}
+
 // Clipboard API natives (may not exist in all contexts)
 const nativeClipboardWriteText =
   typeof navigator !== "undefined" && navigator.clipboard
@@ -492,8 +515,8 @@ function patchLocation(): void {
     });
   };
 
-  Location.prototype.assign = patchedAssign;
-  Location.prototype.replace = patchedReplace;
+  hardenProto(Location.prototype, "assign", patchedAssign, "Location.prototype.assign");
+  hardenProto(Location.prototype, "replace", patchedReplace, "Location.prototype.replace");
 
   try {
     Object.defineProperty(window.location, "assign", {
@@ -504,8 +527,9 @@ function patchLocation(): void {
   } catch {
     try {
       (window.location as any).assign = patchedAssign;
-    } catch {
-      // ignore
+    } catch { /* ignore */ }
+    if (debug) {
+      console.debug("[NavSentinel] defineProperty failed for window.location.assign, used assignment fallback");
     }
   }
 
@@ -518,8 +542,9 @@ function patchLocation(): void {
   } catch {
     try {
       (window.location as any).replace = patchedReplace;
-    } catch {
-      // ignore
+    } catch { /* ignore */ }
+    if (debug) {
+      console.debug("[NavSentinel] defineProperty failed for window.location.replace, used assignment fallback");
     }
   }
 
@@ -534,7 +559,7 @@ function patchLocation(): void {
 }
 
 function patchForms(): void {
-  HTMLFormElement.prototype.submit = function (): void {
+  const patchedFormSubmit = function (this: HTMLFormElement): void {
     const actionUrl = resolveFormAction(this);
     if (isOff() || (isSubframe() && isFormSelfTarget(this.target))) {
       postAllowed({ kind: "form_submit", ...(actionUrl !== undefined ? { url: actionUrl } : {}) });
@@ -557,9 +582,10 @@ function patchForms(): void {
       action: () => nativeFormSubmit.call(this)
     });
   };
+  hardenProto(HTMLFormElement.prototype, "submit", patchedFormSubmit, "HTMLFormElement.prototype.submit");
 
   if (nativeFormRequestSubmit) {
-    HTMLFormElement.prototype.requestSubmit = function (submitter?: HTMLElement | null): void {
+    const patchedFormRequestSubmit = function (this: HTMLFormElement, submitter?: HTMLElement | null): void {
       const actionUrl = resolveFormAction(this);
       if (isOff() || (isSubframe() && isFormSelfTarget(this.target))) {
         postAllowed({
@@ -588,6 +614,7 @@ function patchForms(): void {
         action: () => nativeFormRequestSubmit.call(this, submitter as any)
       });
     };
+    hardenProto(HTMLFormElement.prototype, "requestSubmit", patchedFormRequestSubmit, "HTMLFormElement.prototype.requestSubmit");
   }
 }
 
@@ -600,10 +627,13 @@ function patchOpen(): void {
     });
   } catch {
     window.open = patchedOpen as any;
+    if (debug) {
+      console.debug("[NavSentinel] defineProperty failed for window.open, used assignment fallback");
+    }
   }
 
   if (Window.prototype.open !== patchedOpen) {
-    Window.prototype.open = function (
+    const protoWrapper = function (
       this: Window,
       url?: string | URL,
       target?: string,
@@ -611,6 +641,7 @@ function patchOpen(): void {
     ): Window | null {
       return patchedOpen.call(this, url, target, features);
     } as any;
+    hardenProto(Window.prototype, "open", protoWrapper, "Window.prototype.open");
   }
 }
 
@@ -947,7 +978,7 @@ const nativePushState = History.prototype.pushState;
 const nativeReplaceState = History.prototype.replaceState;
 
 function patchHistory(): void {
-  History.prototype.pushState = function (
+  const patchedPushState = function (
     data: any,
     unused: string,
     url?: string | URL | null,
@@ -968,7 +999,7 @@ function patchHistory(): void {
     return result;
   };
 
-  History.prototype.replaceState = function (
+  const patchedReplaceState = function (
     data: any,
     unused: string,
     url?: string | URL | null,
@@ -988,6 +1019,8 @@ function patchHistory(): void {
     }
     return result;
   };
+  hardenProto(History.prototype, "pushState", patchedPushState, "History.prototype.pushState");
+  hardenProto(History.prototype, "replaceState", patchedReplaceState, "History.prototype.replaceState");
 }
 
 /**
