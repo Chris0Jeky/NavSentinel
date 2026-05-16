@@ -10,7 +10,7 @@ NavSentinel protects users from interaction-level browser attacks (DoubleClickja
 | Permission | Justification |
 |-----------|---------------|
 | `storage` | Stores user settings, navigation allowlist, trusted domain list, and local event log. All data stays local. |
-| `declarativeNetRequest` / `declarativeNetRequestWithHostAccess` | Reserved for future static redirect-interception rules. Currently contains only localhost-scoped test stubs. Rules are declarative and bundled at build time. |
+| `declarativeNetRequest` | Reserved for future static redirect-interception rules. Currently contains only localhost-scoped test stubs. Rules are declarative and bundled at build time. |
 | `webNavigation` | Monitors navigation commits to detect redirect chains, rollback suspicious navigations, and correlate gesture tokens with navigation events. |
 | `tabs` | Tracks tab creation/closure for DoubleClickjacking detection (child window monitoring) and rollback affordances. |
 | `host_permissions: <all_urls>` | Content scripts must run on all pages to detect click deception, credential risks, and overlay attacks. No data is collected or transmitted. |

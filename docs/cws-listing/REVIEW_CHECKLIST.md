@@ -32,6 +32,7 @@
 - [x] Category selected
 - [ ] 1-5 screenshots captured (see SCREENSHOTS.md)
 - [ ] Promotional tile (440x280)
+- [ ] Promotional marquee tile (1400x560)
 
 ### Functionality
 - [ ] Extension loads without errors on fresh install
@@ -45,6 +46,7 @@
 
 ### Manifest Pre-Submission
 - [ ] Add `"minimum_chrome_version": "116"` to `extension/manifest.json`
+- [ ] Remove `declarativeNetRequestWithHostAccess` from `manifest.json` permissions (unused; only `declarativeNetRequest` is needed for static rulesets)
 
 ### Known Limitations to Document
 - Extension requires Manifest V3 (Chrome 116+)

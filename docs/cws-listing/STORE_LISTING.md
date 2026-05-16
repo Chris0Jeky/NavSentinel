@@ -30,7 +30,7 @@ Traditional browser protection compares URLs against known-bad lists. NavSentine
 
 - **Smart** (recommended) — Balanced protection. Prompts on suspicious navigations and credential risks without interrupting normal browsing.
 - **Strict** — Maximum protection. Lower thresholds for all detections. Best for high-risk environments.
-- **Off** — Protection disabled. No detections are scored, logged, or prompted. Useful for debugging site compatibility.
+- **Off** — Protection disabled. No navigations are blocked or prompted. Some internal scoring and event logging may still occur. Useful for debugging site compatibility.
 
 ### Key Features
 
