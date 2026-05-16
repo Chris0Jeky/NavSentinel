@@ -1128,17 +1128,22 @@ The extension must remain lightweight. Budget per navigation:
 | DOM mutation check | < 5ms per mutation batch |
 | Total per-navigation overhead | < 100ms |
 
-Extension bundle size budget:
+Extension bundle size budget (12 budgets enforced by `npm run check:perf-budget`):
 
 | Component | Budget | Notes |
 |---|---|---|
-| Storage module (includes PSL trie) | < 200KB | PSL data (~157KB) is inlined into this JS chunk at build time |
 | capture_isolated (content script) | < 60KB | Main navigation detection logic |
+| main_guard (MAIN world) | < 20KB | Pushstate/clickfix interception in page context |
 | credential_guard (content script) | < 30KB | Credential protection logic |
 | service worker | < 25KB | Background orchestration |
-| Bloom filter (reputation_data.bin) | < 175KB | Build-time compiled from threat feeds |
-| Icons and assets | < 50KB | PNGs, SVGs |
-| Total dist (all files) | < 500KB | Enforced by `npm run check:perf-budget` |
+| Storage module (includes PSL trie) | < 200KB | PSL data (~157KB) is inlined into this JS chunk at build time |
+| popup JS | < 10KB | Popup entry point bundle |
+| options JS | < 15KB | Options page entry point bundle |
+| oauth_monitor (shared) | < 8KB | OAuth flow monitoring shared chunk |
+| domain_profile (shared) | < 6KB | Domain profiling shared chunk |
+| ui_toast (shared) | < 5KB | Toast notification shared chunk |
+| Bloom filter (reputation_data.bin) | < 150KB | Build-time compiled from threat feeds |
+| Total dist (all files) | < 500KB | Aggregate cap on entire dist/ directory |
 
 See `scripts/check-perf-budget.mjs` for per-chunk enforcement details.
 
