@@ -1,0 +1,65 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'nonce-gym-test-123'; frame-ancestors 'none'; form-action 'self'" />
+  <title>CSP Strict - Nonce-based Content Security Policy</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 24px;
+      background: #f5f5f5;
+    }
+    h1 { margin-top: 0; }
+    .description {
+      background: #d4edda;
+      border: 1px solid #28a745;
+      padding: 12px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+    }
+    .panel {
+      background: #fff;
+      border: 1px solid #ddd;
+      padding: 16px;
+      border-radius: 4px;
+      margin-bottom: 16px;
+    }
+    .panel h3 { margin-top: 0; }
+    a.safe-link {
+      display: inline-block;
+      padding: 12px 24px;
+      font-size: 16px;
+      background: #28a745;
+      color: #fff;
+      text-decoration: none;
+      border-radius: 4px;
+    }
+    a.safe-link:hover { background: #218838; }
+  </style>
+</head>
+<body>
+  <h1>CSP Strict - Nonce-based Content Security Policy</h1>
+  <div class="description">
+    <strong>Scenario:</strong> This page has a strict CSP with nonce-based
+    script-src and frame-ancestors 'none'. The <code>isStrict</code> flag is set
+    for informational purposes, but CSP does NOT reduce NRS because meta-tag
+    CSP is attacker-controlled and cannot be trusted as a safety signal.
+    <br><br>
+    <strong>Expected:</strong> NavSentinel detects <code>csp_strict_nonces</code>
+    with a score of 0 (no reduction). The debug overlay should show
+    <code>CSP: yes (score=0, strict=true)</code>.
+  </div>
+
+  <div class="panel">
+    <h3>Test: Cross-site link (strict CSP is informational only)</h3>
+    <p>With a cross-site new-tab link, the strict CSP flag is detected but does
+    NOT reduce NRS (meta-tag CSP is attacker-controlled).</p>
+    <a class="safe-link" href="https://example.com/dashboard" target="_blank" rel="noopener">
+      Open link (strict CSP page)
+    </a>
+  </div>
+</body>
+</html>

@@ -53,6 +53,7 @@ import {
   handlePushStateBridgeMessage,
   isPushStateAbuseActive,
 } from "./pushstate_guard";
+import { analyzeCSP, type CSPAnalysis } from "./csp_analyzer";
 import { getDomainRisk, recordNavigation } from "../shared/domain_profile";
 
 const CDS_SMART_BLOCK_THRESHOLD = 70;
@@ -133,6 +134,8 @@ let gestureDownId: number | null = null;
 const CHAIN_INFO_TTL_MS = 30_000;
 let cachedChainInfo: RedirectChainInfo | null = null;
 let cachedChainInfoAt = 0;
+/** Cached CSP analysis for the current page (computed once after DOM ready). */
+let cachedCSPAnalysis: CSPAnalysis | null = null;
 let cachedDomainRepeatOffender = false;
 
 type TabRiskState = "green" | "yellow" | "red" | "gray";
@@ -174,7 +177,8 @@ function refreshDebug(): void {
     ...lastDebug,
     mainGuard,
     mutationAlerts: getMutationAlertCount(),
-    ...(lastNav ? { lastNav } : {})
+    ...(lastNav ? { lastNav } : {}),
+    ...(cachedCSPAnalysis ? { cspInfo: cachedCSPAnalysis } : {}),
   });
 }
 
@@ -697,6 +701,22 @@ function scheduleMutationMonitor(): void {
 }
 
 scheduleMutationMonitor();
+
+// --- CSP analysis (run once after DOM is ready) ---
+
+function runCSPAnalysis(): void {
+  if (cachedCSPAnalysis) return;
+  cachedCSPAnalysis = analyzeCSP(document);
+  if (settings.debug) {
+    console.debug("[NavSentinel] CSP analysis:", cachedCSPAnalysis);
+  }
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", runCSPAnalysis, { once: true });
+} else {
+  runCSPAnalysis();
+}
 
 // --- Rollback prompts ---
 
@@ -1289,6 +1309,7 @@ window.addEventListener(
       oauthOpenerManipulation: oauthOpenerManip,
       clickfixScore: cfScore > 0 ? cfScore : undefined,
       pushStateAbuse,
+      cspWeaknessScore: cachedCSPAnalysis?.score,
       domainRepeatOffender: cachedDomainRepeatOffender,
     };
 
