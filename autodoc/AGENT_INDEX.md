@@ -59,7 +59,7 @@ All paths above are relative to repo root. Content scripts live under `extension
 - Build output and generated data are easy context traps. Agents should edit source under `extension/src/` and avoid `extension/dist/`.
 - The highest-risk seams are main-world patching, bridge messages, service-worker lifecycle state, and credential/data privacy behavior.
 - All branches have been cleaned; only `main` and `origin/main` exist.
-- Open issues: #86 (bridge session race), #90 (bridge retry race) — both in `main_guard.ts` bridge initialization.
+- Open issues: None. (#86 and #90 were fixed in fb72412.)
 
 ## Interface-On-Top Convention
 

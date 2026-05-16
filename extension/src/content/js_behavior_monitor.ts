@@ -148,16 +148,18 @@ interface NetworkRequestRecord {
 }
 
 let _recentFormSubmits: FormSubmitRecord[] = [];
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 let _recentNetworkRequests: NetworkRequestRecord[] = [];
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 let _lastCredentialReadTs = 0;
 let _isInsideFormSubmit = false;
 let _config: JsBehaviorMonitorConfig | null = null;
-let _formSubmitPatched = false;
 
 /** Tracks original form action values at DOM parse time. */
-const _originalFormActions = new WeakMap<HTMLFormElement, string>();
+let _originalFormActions = new WeakMap<HTMLFormElement, string>();
+
+let _formSubmitPatched = false;
+let _formObserver: MutationObserver | null = null;
+let _originalSubmitFn: typeof HTMLFormElement.prototype.submit | null = null;
+let _submitListener: ((e: Event) => void) | null = null;
 
 // ============================================================================
 // Form Submit Monitoring (Slice 2)
@@ -179,11 +181,13 @@ function snapshotExistingForms(): void {
 }
 
 /** Handle a form submit event and emit signals if suspicious. */
-function handleFormSubmit(form: HTMLFormElement): void {
+function handleFormSubmit(form: HTMLFormElement, submitter?: HTMLElement | null): void {
   if (!_config || _config.mode === "off") return;
 
+  recordOriginalAction(form);
   const hasCredentials = formHasCredentialFields(form);
-  const action = form.action || location.href;
+  const submitterFormAction = submitter?.getAttribute("formaction") ?? "";
+  const action = submitterFormAction || form.action || location.href;
   const crossOrigin = isCrossOriginUrl(action);
   const originalAction = _originalFormActions.get(form) ?? "";
   const resolvedOriginal = originalAction
@@ -205,7 +209,7 @@ function handleFormSubmit(form: HTMLFormElement): void {
   }
 
   _isInsideFormSubmit = true;
-  setTimeout(() => { _isInsideFormSubmit = false; }, 0);
+  queueMicrotask(() => { _isInsideFormSubmit = false; });
 
   const isSuspicious =
     (hasCredentials && crossOrigin) || actionDynamicallyChanged;
@@ -230,7 +234,7 @@ function patchFormSubmitMonitoring(): void {
   snapshotExistingForms();
 
   // Observe newly added forms via MutationObserver
-  const observer = new MutationObserver((mutations) => {
+  _formObserver = new MutationObserver((mutations) => {
     for (let mi = 0; mi < mutations.length; mi++) {
       const added = mutations[mi]!.addedNodes;
       for (let ni = 0; ni < added.length; ni++) {
@@ -246,18 +250,21 @@ function patchFormSubmitMonitoring(): void {
       }
     }
   });
-  observer.observe(document.documentElement, { childList: true, subtree: true });
+  _formObserver.observe(document.documentElement, { childList: true, subtree: true });
 
   // Capturing submit event listener
-  document.addEventListener("submit", (e) => {
+  _submitListener = (e) => {
     const form = e.target;
     if (form instanceof HTMLFormElement) {
-      handleFormSubmit(form);
+      const submitter = (e as SubmitEvent).submitter ?? null;
+      handleFormSubmit(form, submitter);
     }
-  }, true);
+  };
+  document.addEventListener("submit", _submitListener, true);
 
   // Patch HTMLFormElement.prototype.submit for programmatic submits
-  const originalSubmit = HTMLFormElement.prototype.submit;
+  _originalSubmitFn = HTMLFormElement.prototype.submit;
+  const originalSubmit = _originalSubmitFn;
   HTMLFormElement.prototype.submit = function (this: HTMLFormElement) {
     handleFormSubmit(this);
     return originalSubmit.call(this);
@@ -287,12 +294,11 @@ function patchCredentialValueGetter(_cfg: JsBehaviorMonitorConfig): void {
   );
   if (!descriptor || !descriptor.get) return;
 
-  _credentialGetterPatched = true;
-
   const originalGetter = descriptor.get;
   const originalSetter = descriptor.set;
 
-  Object.defineProperty(HTMLInputElement.prototype, "value", {
+  try {
+    Object.defineProperty(HTMLInputElement.prototype, "value", {
     get(this: HTMLInputElement) {
       const val = originalGetter.call(this);
 
@@ -332,8 +338,12 @@ function patchCredentialValueGetter(_cfg: JsBehaviorMonitorConfig): void {
       }
     },
     enumerable: descriptor.enumerable ?? true,
-    configurable: true,
-  });
+      configurable: true,
+    });
+    _credentialGetterPatched = true;
+  } catch {
+    // Non-configurable or frozen prototypes should degrade without breaking page code.
+  }
 }
 
 // ============================================================================
@@ -341,24 +351,17 @@ function patchCredentialValueGetter(_cfg: JsBehaviorMonitorConfig): void {
 // ============================================================================
 
 /**
- * Initialize the JS behavior monitor. Called once from main_guard.ts after
- * all existing patches are applied.
+ * Initialize the JS behavior monitor from main_guard.ts. Form submit
+ * observation must install before main_guard hardens form prototypes; network
+ * and credential-read wrappers install with the rest of the monitor patches.
  *
- * Installs prototype patches for:
+ * When fully implemented (#106 Slices 2-4), installs:
  * - fetch() wrapper
  * - XMLHttpRequest.prototype.open() and .send()
  * - navigator.sendBeacon()
  * - HTMLInputElement.prototype.value getter (for password fields)
  *
- * Also registers a capturing 'submit' event listener for form monitoring.
- *
  * @param config - Monitor configuration including bridge post function
- *
- * TODO: Implement fetch() wrapper (Slice 3)
- * TODO: Implement XHR open/send wrapper (Slice 3)
- * TODO: Implement sendBeacon wrapper (Slice 3)
- * TODO: Implement value getter patch (Slice 4)
- * TODO: Implement form submit listener (Slice 2)
  */
 export function initJsBehaviorMonitor(config: JsBehaviorMonitorConfig): void {
   _config = config;
@@ -380,8 +383,7 @@ export function initJsBehaviorMonitor(config: JsBehaviorMonitorConfig): void {
  *
  * @param form - The form element to inspect
  * @returns true if the form contains password inputs
- *
- * TODO: Implement (Slice 2)
+ * @see https://github.com/Chris0Jeky/NavSentinel/issues/106 Slice 2
  */
 export function formHasCredentialFields(form: HTMLFormElement): boolean {
   return form.querySelector('input[type="password"]') !== null;
@@ -395,8 +397,7 @@ export function formHasCredentialFields(form: HTMLFormElement): boolean {
  *
  * @param url - The URL to check (absolute or relative)
  * @returns true if the URL resolves to a different origin
- *
- * TODO: Implement (Slice 2)
+ * @see https://github.com/Chris0Jeky/NavSentinel/issues/106 Slice 2
  */
 export function isCrossOriginUrl(url: string): boolean {
   if (!url) return false;
@@ -421,13 +422,17 @@ export function isCrossOriginUrl(url: string): boolean {
  *
  * @param url - The URL to extract origin from
  * @returns The origin string, or empty string on failure
- *
- * TODO: Implement (Slice 2)
+ * @see https://github.com/Chris0Jeky/NavSentinel/issues/106 Slice 2
  */
 export function extractOrigin(url: string): string {
   if (!url) return "";
+  const lc = url.trimStart().toLowerCase();
+  if (lc.startsWith("data:") || lc.startsWith("javascript:") || lc.startsWith("blob:")) {
+    return "";
+  }
   try {
     const resolved = new URL(url, location.href);
+    if (resolved.origin === "null") return "";
     return resolved.origin;
   } catch {
     return "";
@@ -442,8 +447,7 @@ export function extractOrigin(url: string): string {
  *
  * @param requestTs - Timestamp of the network request
  * @returns Whether the request correlates with a credential form submit
- *
- * TODO: Implement (Slice 3)
+ * @see https://github.com/Chris0Jeky/NavSentinel/issues/106 Slice 3
  */
 export function correlatesWithFormSubmit(requestTs: number): boolean {
   return _recentFormSubmits.some(
@@ -462,8 +466,7 @@ export function correlatesWithFormSubmit(requestTs: number): boolean {
  *
  * @param state - Current aggregated behavior state
  * @returns Computed score (0 to NRS_WEIGHT_JS_BEHAVIOR_CAP)
- *
- * TODO: Implement (Slice 5)
+ * @see https://github.com/Chris0Jeky/NavSentinel/issues/106 Slice 5
  */
 export function computeJsBehaviorScore(state: JsBehaviorState): number {
   void state;
@@ -510,10 +513,25 @@ export function _resetState(): void {
   _lastCredentialReadTs = 0;
   _isInsideFormSubmit = false;
   _config = null;
+
+  if (_formObserver) {
+    _formObserver.disconnect();
+    _formObserver = null;
+  }
+  if (_submitListener) {
+    document.removeEventListener("submit", _submitListener, true);
+    _submitListener = null;
+  }
+  if (_originalSubmitFn) {
+    HTMLFormElement.prototype.submit = _originalSubmitFn;
+    _originalSubmitFn = null;
+  }
+  _originalFormActions = new WeakMap<HTMLFormElement, string>();
+  _formSubmitPatched = false;
 }
 
 // ============================================================================
-// TODO List - Implementation Plan
+// Implementation Plan (#106)
 // ============================================================================
 //
 // Slice 2 - Form Submit Monitoring:
@@ -540,6 +558,7 @@ export function _resetState(): void {
 //   [ ] Emit ns-js-credential-read signal (metadata only, never the value)
 //
 // Slice 5 - NRS Integration:
+//   [ ] Extract scoring utilities to extension/src/shared/js_behavior_state.ts
 //   [ ] Add jsBehaviorScore to NavigationContext in nrs.ts
 //   [ ] Add NRS_WEIGHT_JS_BEHAVIOR_CAP constant and factor logic
 //   [ ] Handle bridge messages in capture_isolated.ts

