@@ -21,7 +21,7 @@ const hasDOM = typeof globalThis.document !== "undefined";
 // Helper to collect alerts
 // ---------------------------------------------------------------------------
 
-function collectAlerts(): MutationAlert[] {
+function _collectAlerts(): MutationAlert[] {
   const collected: MutationAlert[] = [];
   return collected;
 }

@@ -173,7 +173,6 @@ function renderSignals(reasons: string[] | undefined): void {
 
   for (const r of reasons.slice(0, 5)) {
     const chip = document.createElement("span");
-    const isPositive = r.startsWith("-") || r.startsWith("+") === false;
     chip.className = `signal-chip ${r.startsWith("-") ? "signal-chip--ok" : "signal-chip--warn"}`;
     chip.textContent = r;
     signalsEl.appendChild(chip);
