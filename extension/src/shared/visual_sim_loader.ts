@@ -27,7 +27,12 @@ let _loadPromise: Promise<boolean> | null = null;
 
 export function loadBrandTemplates(): Promise<boolean> {
   if (_loadPromise) return _loadPromise;
-  _loadPromise = doLoad();
+  _loadPromise = doLoad().then((loaded) => {
+    if (!loaded) {
+      _loadPromise = null;
+    }
+    return loaded;
+  });
   return _loadPromise;
 }
 
