@@ -313,5 +313,5 @@ After 3 consecutive "Allow once" decisions for the same source-to-destination do
 - **DOM mutation monitoring (P2-07)**: MutationObserver detects post-load overlay injection, form action changes, and password field injection. See `extension/src/content/mutation_monitor.ts`.
 - **CSP analysis (P4-05)**: Content Security Policy weakness scoring as an NRS modifier. Only applied when base NRS already exceeds 20. See `extension/src/content/csp_analyzer.ts`.
 - **SRI awareness (P4-06)**: Sub-resource integrity checking on credential pages. See `extension/src/content/sri_checker.ts`.
-- **Per-domain behavioral profiling (P4-07)**: Tracks per-domain NRS history with weekly decay. Domains consistently triggering high scores are flagged as repeat offenders. See `extension/src/shared/domain_profile.ts`.
+- **Per-domain behavioral profiling (P4-07)**: Tracks per-domain NRS history with 30-day decay. Domains consistently triggering high scores are flagged as repeat offenders. See `extension/src/shared/domain_profile.ts`.
 - **Adaptive scoring (P3-05)**: Per-domain threshold adjustments based on user allow/block patterns, bounded ±15. See `extension/src/shared/adaptive_scoring.ts`.

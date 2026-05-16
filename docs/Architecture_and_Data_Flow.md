@@ -211,7 +211,7 @@ It listens to `chrome.webNavigation` events to decide when a committed navigatio
 `extension/src/shared/redirect_chain.ts` and `extension/src/sw/sw.ts` correlate multi-hop redirects that were previously invisible because each navigation was scored independently.
 
 - Per-tab navigation chains tracked with timestamps in the service worker
-- Navigations within 15 seconds correlated as a chain, capped at 10 hops
+- Navigations within 10 seconds correlated as a chain, capped at 10 hops
 - Known redirector patterns (URL shorteners, ad networks) detected via `isKnownRedirector()`
 - NRS factors: `nrs_redirect_chain_depth` (+5/hop over threshold 2, cap 25) and `nrs_redirect_via_known_redirector` (+15/hop, cap 30)
 
@@ -219,7 +219,7 @@ It listens to `chrome.webNavigation` events to decide when a committed navigatio
 
 `extension/src/content/mutation_monitor.ts` detects post-load injection attacks via MutationObserver:
 
-- Watches for new fixed-position, full-viewport elements added after initial load
+- Watches for new fixed-position elements covering >= 25% of viewport added after initial load
 - Detects form action attribute changes and password field injection
 - Rate-limited: 100ms debounce, 50-alert hard cap, 5-minute auto-disconnect
 - Excludes cookie consent banners, chat widgets, and elements with proper ARIA markup
@@ -227,9 +227,9 @@ It listens to `chrome.webNavigation` events to decide when a committed navigatio
 
 ## CSP analysis
 
-`extension/src/content/csp_analyzer.ts` analyzes Content Security Policy headers and meta tags as a risk modifier:
+`extension/src/content/csp_analyzer.ts` analyzes Content Security Policy meta tags as a risk modifier:
 
-- Parses CSP directives from HTTP headers and `<meta>` tags
+- Parses CSP directives from `<meta>` tags only (content scripts cannot access HTTP response headers)
 - Scores weakness based on `unsafe-inline`, `unsafe-eval`, wildcard sources, missing directives
 - CSP weakness applied as a modifier only when base NRS already exceeds 20 (attacker-controlled meta tags can't be trusted as a safety signal)
 - NRS factor: `nrs_csp_weakness` (cap 10)
@@ -248,8 +248,8 @@ It listens to `chrome.webNavigation` events to decide when a committed navigatio
 `extension/src/shared/domain_profile.ts` tracks per-domain navigation patterns over time:
 
 - Records visit count, total NRS, NRS history, and timestamps per domain
-- Computes domain risk assessment: `safe`, `caution`, or `repeat_offender`
-- Exponential decay: counters halved weekly, applied lazily on read
+- Computes domain risk assessment via `isRepeatOffender` boolean flag
+- Exponential decay: counters halved every 30 days, applied lazily on read
 - Async mutex for serialization safety; LRU eviction at 500 domains
 - NRS factor: `nrs_domain_repeat_offender` (+10) for domains with consistently high scores
 
@@ -258,7 +258,7 @@ It listens to `chrome.webNavigation` events to decide when a committed navigatio
 `extension/src/shared/adaptive_scoring.ts` adjusts per-domain thresholds based on user feedback:
 
 - Tracks allow/block decisions per domain via prompt telemetry
-- After consistent "allow" patterns, lowers effective threshold (bounded ±15)
+- After consistent "allow" patterns, raises effective block threshold (more permissive, bounded ±15)
 - Per-domain adjustments stored in `chrome.storage.local`
 - Exposed in debug overlay as `AdaptiveAdj`
 

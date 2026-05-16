@@ -95,8 +95,6 @@ Current unit coverage lives in:
 - `tests/icon-manager.test.ts`
 - `tests/csp-analyzer.test.ts`
 - `tests/sri-checker.test.ts`
-- `tests/allowlist.test.ts`
-- `tests/event-tone.test.ts`
 
 These currently cover:
 
