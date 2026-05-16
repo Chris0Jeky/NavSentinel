@@ -43,7 +43,7 @@ function ensureHost(): void {
     .overlay { pointer-events: auto; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55); display: flex; align-items: center; justify-content: center; padding: 24px; }
     .card { width: min(760px, 96vw); max-height: min(82vh, 820px); overflow: auto; background: rgba(17, 17, 17, 0.98); color: #f5f5f5; border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.16); box-shadow: 0 18px 60px rgba(0, 0, 0, 0.45); }
     .header { padding: 16px 18px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
-    .title { font-size: 16px; font-weight: 700; letter-spacing: 0.2px; }
+    .title { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: 0.2px; }
     .subtitle { margin-top: 6px; font-size: 13px; line-height: 1.35; color: rgba(255, 255, 255, 0.8); }
     .body { padding: 14px 18px 10px; }
     .kv { display: grid; grid-template-columns: 140px 1fr; gap: 8px 10px; margin-bottom: 12px; }
@@ -55,6 +55,7 @@ function ensureHost(): void {
     li { font-size: 12px; line-height: 1.35; margin-bottom: 6px; color: rgba(255, 255, 255, 0.9); }
     .footer { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; padding: 12px 18px 16px; border-top: 1px solid rgba(255, 255, 255, 0.1); background: rgba(255, 255, 255, 0.03); }
     button { all: unset; cursor: pointer; padding: 8px 12px; border-radius: 11px; background: rgba(255, 255, 255, 0.1); font-size: 12px; border: 1px solid rgba(255, 255, 255, 0.1); }
+      button:focus-visible { outline: 2px solid rgba(142, 210, 255, 0.78); outline-offset: 2px; }
     button:hover { background: rgba(255, 255, 255, 0.16); }
     .primary { background: rgba(120, 200, 255, 0.18); border-color: rgba(120, 200, 255, 0.22); }
     .primary:hover { background: rgba(120, 200, 255, 0.26); }
@@ -96,7 +97,7 @@ export function showCredentialModal(spec: ModalSpec): Promise<string> {
 
     const header = document.createElement("div");
     header.className = "header";
-    const title = document.createElement("div");
+    const title = document.createElement("h2");
     title.className = "title";
     title.id = titleId;
     title.textContent = spec.title;

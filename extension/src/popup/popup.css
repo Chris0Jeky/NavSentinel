@@ -181,7 +181,7 @@ body::before {
 }
 
 .section-title {
-  margin-top: 4px;
+  margin: 4px 0 0;
   font-size: 16px;
   font-weight: 700;
 }
@@ -232,12 +232,14 @@ body::before {
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(3, 9, 18, 0.68);
   color: var(--text);
-  outline: none;
+  outline: 2px solid transparent;
 }
 
-.select:focus {
+.select:focus-visible {
   border-color: rgba(142, 210, 255, 0.5);
   box-shadow: 0 0 0 3px rgba(142, 210, 255, 0.14);
+  outline: 2px solid rgba(142, 210, 255, 0.78);
+  outline-offset: 2px;
 }
 
 .btn {
@@ -353,6 +355,8 @@ body::before {
 }
 
 .link {
+  all: unset;
+  cursor: pointer;
   color: var(--accent);
   text-decoration: none;
   font-size: 12px;

@@ -55,6 +55,7 @@ import {
 } from "./pushstate_guard";
 import { analyzeCSP, type CSPAnalysis } from "./csp_analyzer";
 import { getDomainRisk, recordNavigation } from "../shared/domain_profile";
+import { recordNavigationAnomaly, getAnomalyScoreSync } from "../shared/nav_anomaly";
 
 const CDS_SMART_BLOCK_THRESHOLD = 70;
 const CDS_STRICT_BLOCK_THRESHOLD = 50;
@@ -364,7 +365,7 @@ function handleBridgeMessage(message: unknown): void {
     // PushState abuse metadata (ns-pushstate-suspicious)
     reason?: string;
     method?: string;
-    // Allow-target-nav TTL (ns-allow-target-nav)
+    // Allow-target-nav relay (ns-allow-target-nav)
     ttlMs?: number;
   };
   if (!data || data.source !== NS_SOURCE || data.v !== PROTOCOL_VERSION) return;
@@ -421,6 +422,13 @@ function handleBridgeMessage(message: unknown): void {
   if (data.type === "ns-nav-allowed") {
     lastNav = { kind: data.kind ?? "unknown", url: data.url ?? "", status: "allowed" };
     refreshDebug();
+    return;
+  }
+
+  if (data.type === "ns-allow-target-nav") {
+    const url = typeof data.url === "string" ? data.url : "";
+    const ttlMs = typeof data.ttlMs === "number" ? data.ttlMs : NAV_TARGET_ALLOW_TTL_MS;
+    if (url) notifyAllowedTarget(url, ttlMs);
     return;
   }
 
@@ -1301,6 +1309,10 @@ window.addEventListener(
     const cfScore = getClickfixScoreForNRS();
     const pushStateAbuse = isPushStateAbuseActive();
 
+    // Sync best-effort anomaly score (uses in-memory sliding window only).
+    // The authoritative async path runs after the decision is made.
+    const navAnomalyScore = destHost ? getAnomalyScoreSync(destHost) : 0;
+
     const navCtx: NavigationContext = {
       isNewTabOrWindow: isBlankAnchor,
       isCrossSite,
@@ -1328,6 +1340,7 @@ window.addEventListener(
       pushStateAbuse,
       cspWeaknessScore: cachedCSPAnalysis?.score,
       domainRepeatOffender: cachedDomainRepeatOffender,
+      navAnomalyScore: navAnomalyScore > 0 ? navAnomalyScore : undefined,
     };
 
     if (dblClickHijack) {
@@ -1433,7 +1446,7 @@ window.addEventListener(
       });
     }
 
-    lastDebug = { mode, decision, cds, nrs, reasonCodes, nrsFactors, ctx, adaptiveAdj: adaptiveAdjustment };
+    lastDebug = { mode, decision, cds, nrs, reasonCodes, nrsFactors, ctx, adaptiveAdj: adaptiveAdjustment, navAnomalyScore };
     refreshDebug();
 
     if (settings.debug) {
@@ -1451,6 +1464,14 @@ window.addEventListener(
       void recordNavigation(site, baseNrs, baseReasons, getNrsBlockThreshold(mode))
         .then((risk) => { cachedDomainRepeatOffender = risk.isRepeatOffender; })
         .catch((err) => { console.warn("[NavSentinel] domain profile write failed:", err); });
+    }
+
+    // --- Record navigation anomaly profile (async, non-blocking) ---
+    // Records the destination in the nav pattern profile and updates
+    // the in-memory sliding window for burst detection.
+    if (mode !== "off" && destHost) {
+      void recordNavigationAnomaly(destHost)
+        .catch((err) => { console.warn("[NavSentinel] nav anomaly write failed:", err); });
     }
 
     // --- Child-frame async reputation check ---
