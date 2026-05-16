@@ -114,7 +114,7 @@ export function getRegistrableDomain(host: string): string {
   return labels.slice(-regLen).join(".");
 }
 
-export function subdomainDepth(host: string): number {
+function subdomainDepth(host: string): number {
   const h = normalizeHost(host);
   if (!h || isIPAddress(h)) return 0;
   const labels = splitLabels(h);

@@ -134,7 +134,7 @@ export async function getSuiteSettings(): Promise<SuiteSettings> {
   return mergeSuiteSettings(structuredClone(DEFAULT_SUITE_SETTINGS), stored);
 }
 
-export async function setSuiteSettings(next: SuiteSettings): Promise<void> {
+async function setSuiteSettings(next: SuiteSettings): Promise<void> {
   const merged = mergeSuiteSettings(structuredClone(DEFAULT_SUITE_SETTINGS), next);
   await chrome.storage.local.set({ [SUITE_SETTINGS_KEY]: merged });
 }
@@ -161,7 +161,7 @@ export async function getNavSettings(): Promise<NavSettings> {
   return s.nav;
 }
 
-export async function setNavSettings(nav: NavSettings): Promise<void> {
+async function setNavSettings(nav: NavSettings): Promise<void> {
   await updateSuiteSettings({ nav });
 }
 
@@ -174,11 +174,11 @@ export async function getCredentialSettings(): Promise<CredentialSettings> {
   return s.credential;
 }
 
-export async function setCredentialSettings(credential: CredentialSettings): Promise<void> {
+async function setCredentialSettings(credential: CredentialSettings): Promise<void> {
   await updateSuiteSettings({ credential });
 }
 
-export function onCredentialSettingsChange(cb: (s: CredentialSettings) => void): void {
+function onCredentialSettingsChange(cb: (s: CredentialSettings) => void): void {
   onSuiteSettingsChange((s) => cb(s.credential));
 }
 
