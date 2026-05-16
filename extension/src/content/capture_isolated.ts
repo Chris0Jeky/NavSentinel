@@ -1072,7 +1072,7 @@ if (chrome?.runtime?.onMessage) {
     if (!isTopFrame()) return;
     if (settings.defaultMode === "off") return;
     const url = typeof message.url === "string" ? message.url : "";
-    if (!url) return;
+    if (!url || !/^https?:\/\//i.test(url)) return;
     showRollbackPrompt(url);
   });
 
@@ -1093,10 +1093,10 @@ if (chrome?.runtime?.onMessage) {
 
 if (chrome?.runtime?.sendMessage && isTopFrame()) {
   // -- Rollback polling --
-  const run = (retries = 4) => {
+  const run = (polls = 4, errorBudget = 3) => {
     chrome.runtime.sendMessage({ type: "ns-check-rollback" }, (resp) => {
       if (chrome.runtime.lastError) {
-        if (retries > 0) window.setTimeout(() => run(retries - 1), 200);
+        if (errorBudget > 0) window.setTimeout(() => run(polls, errorBudget - 1), 200);
         return;
       }
       if (resp?.shouldRollback) {
@@ -1106,8 +1106,8 @@ if (chrome?.runtime?.sendMessage && isTopFrame()) {
         handleRollback(url, prevUrl);
         return;
       }
-      if (retries > 0) {
-        window.setTimeout(() => run(retries - 1), 200);
+      if (polls > 0) {
+        window.setTimeout(() => run(polls - 1, errorBudget), 200);
       }
     });
   };
@@ -1119,7 +1119,7 @@ if (chrome?.runtime?.sendMessage && isTopFrame()) {
   }
 
   // -- Forward polling --
-  const runForward = (retries = 1) => {
+  const runForward = (retries = 1, errorBudget = 3) => {
     if (forwardCheckInFlight) return;
     if (forwardCheckTimer) {
       window.clearTimeout(forwardCheckTimer);
@@ -1130,16 +1130,20 @@ if (chrome?.runtime?.sendMessage && isTopFrame()) {
     chrome.runtime.sendMessage({ type: "ns-check-forward", currentUrl: location.href }, (resp) => {
       window.clearTimeout(inflightGuard);
       forwardCheckInFlight = false;
-      if (chrome.runtime.lastError) return;
+      if (chrome.runtime.lastError) {
+        if (errorBudget > 0) forwardCheckTimer = window.setTimeout(() => runForward(retries, errorBudget - 1), 200);
+        return;
+      }
       const status = typeof resp?.status === "string" ? resp.status : "";
       const url = typeof resp?.url === "string" ? resp.url : "";
       if (status === "offer" && url) {
         if (settings.defaultMode === "off") return;
+        if (!/^https?:\/\//i.test(url)) return;
         showRollbackPrompt(url);
         return;
       }
       if (!resp && retries > 0) {
-        forwardCheckTimer = window.setTimeout(() => runForward(retries - 1), 200);
+        forwardCheckTimer = window.setTimeout(() => runForward(retries - 1, errorBudget), 200);
       }
     });
   };
