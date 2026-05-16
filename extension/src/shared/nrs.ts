@@ -27,6 +27,8 @@ export interface NavigationContext {
   openerWindowPreviouslyAllowed?: boolean | undefined;
   /** Suspicious history.pushState/replaceState abuse detected after a user gesture */
   pushStateAbuse?: boolean | undefined;
+  /** Domain has been flagged as a repeat offender by domain profiling */
+  domainRepeatOffender?: boolean | undefined;
 }
 
 export interface NRSResult {
@@ -55,6 +57,7 @@ const NRS_WEIGHT_OAUTH_OPENER_MANIPULATION = 45;
 const NRS_WEIGHT_CLICKFIX_CAP = 40;
 const NRS_WEIGHT_OPENER_PREVIOUSLY_ALLOWED = -20;
 const NRS_WEIGHT_PUSHSTATE_ABUSE = 20;
+const NRS_WEIGHT_DOMAIN_REPEAT_OFFENDER = 10;
 
 /** Raw scores above this get 50% weight on the excess. */
 const NRS_DIMINISHING_RETURNS_THRESHOLD = 100;
@@ -159,6 +162,11 @@ export function computeNRS(cdsResult: ScoreResult, navCtx: NavigationContext): N
   if (navCtx.pushStateAbuse) {
     nrs += NRS_WEIGHT_PUSHSTATE_ABUSE;
     nrsFactors.push("nrs_pushstate_abuse");
+  }
+
+  if (navCtx.domainRepeatOffender) {
+    nrs += NRS_WEIGHT_DOMAIN_REPEAT_OFFENDER;
+    nrsFactors.push("nrs_domain_repeat_offender");
   }
 
   // Diminishing returns: points above the threshold get reduced weight
