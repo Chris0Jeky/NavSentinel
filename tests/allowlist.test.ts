@@ -144,6 +144,12 @@ describe("getAllowlist", () => {
     expect(store[LEGACY_KEY]).toBeUndefined();
   });
 
+  it("skips migration when legacy key normalizes to empty (corrupt data)", async () => {
+    store[LEGACY_KEY] = { "": ["orphan.com"] };
+    const result = await getAllowlist();
+    expect(result).toEqual({});
+  });
+
   it("prefers new key over legacy key", async () => {
     store[ALLOWLIST_KEY] = { "new.com": ["a.com"] };
     store[LEGACY_KEY] = { "old.com": ["b.com"] };
@@ -183,6 +189,13 @@ describe("addAllowlistEntry", () => {
   it("is case-insensitive", async () => {
     const result = await addAllowlistEntry("SITE.COM", "DEST.COM");
     expect(isAllowlisted(result, "site.com", "dest.com")).toBe(true);
+  });
+
+  it("persisted list is sorted even when added in reverse order", async () => {
+    await addAllowlistEntry("site.com", "z.com");
+    await addAllowlistEntry("site.com", "a.com");
+    const persisted = store[ALLOWLIST_KEY] as Record<string, string[]>;
+    expect(persisted["site.com"]).toEqual(["a.com", "z.com"]);
   });
 });
 
@@ -267,5 +280,16 @@ describe("onAllowlistChange", () => {
     onAllowlistChange(cb);
     handler!({ "other_key": { newValue: "something" } }, "local");
     expect(cb).not.toHaveBeenCalled();
+  });
+
+  it("calls callback with empty object when key is deleted (newValue undefined)", () => {
+    let handler: ((changes: any, area: string) => void) | undefined;
+    (chrome.storage.onChanged.addListener as any).mockImplementation((fn: any) => {
+      handler = fn;
+    });
+    const cb = vi.fn();
+    onAllowlistChange(cb);
+    handler!({ [ALLOWLIST_KEY]: { oldValue: { "a.com": ["b.com"] }, newValue: undefined } }, "local");
+    expect(cb).toHaveBeenCalledWith({});
   });
 });

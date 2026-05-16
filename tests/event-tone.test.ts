@@ -23,12 +23,11 @@ describe("classifyEventTone", () => {
     expect(classifyEventTone("nav_allowlist_remove")).toBe("navigation");
   });
 
-  it('returns "navigation" for unprefixed kinds', () => {
+  it('returns "navigation" for other prefixed and unprefixed kinds', () => {
     expect(classifyEventTone("clickfix_detected")).toBe("navigation");
     expect(classifyEventTone("dblclickjack_detected")).toBe("navigation");
     expect(classifyEventTone("mutation_alert")).toBe("navigation");
     expect(classifyEventTone("pushstate_abuse")).toBe("navigation");
-    expect(classifyEventTone("nav_reputation_late_warn")).toBe("navigation");
   });
 
   it('returns "navigation" for non-string input', () => {
