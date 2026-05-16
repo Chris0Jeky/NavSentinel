@@ -148,9 +148,7 @@ interface NetworkRequestRecord {
 }
 
 let _recentFormSubmits: FormSubmitRecord[] = [];
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 let _recentNetworkRequests: NetworkRequestRecord[] = [];
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 let _lastCredentialReadTs = 0;
 let _isInsideFormSubmit = false;
 let _config: JsBehaviorMonitorConfig | null = null;
@@ -264,6 +262,135 @@ function patchFormSubmitMonitoring(config: JsBehaviorMonitorConfig): void {
 }
 
 // ============================================================================
+// Network Exfiltration Monitoring (Slice 3)
+// ============================================================================
+
+let _fetchPatched = false;
+let _xhrPatched = false;
+let _beaconPatched = false;
+
+function pageHasCredentialFields(): boolean {
+  return document.querySelector('input[type="password"]:not([disabled])') !== null;
+}
+
+function recordNetworkRequest(destinationOrigin: string, api: "fetch" | "xhr" | "beacon"): void {
+  if (!_config || _config.mode === "off") return;
+
+  const now = Date.now();
+  _recentNetworkRequests.push({ ts: now, destinationOrigin, api });
+  if (_recentNetworkRequests.length > MAX_RECENT_NETWORK_REQUESTS) {
+    _recentNetworkRequests.shift();
+  }
+
+  if (destinationOrigin === location.origin || !destinationOrigin) return;
+
+  if (api === "beacon") {
+    if (pageHasCredentialFields()) {
+      _config.postSignal("ns-js-exfil-beacon", {
+        ts: now,
+        api,
+        destinationOrigin,
+        credentialFieldsPresent: true,
+      } as unknown as Record<string, unknown>);
+    }
+    return;
+  }
+
+  const correlated = correlatesWithFormSubmit(now);
+  if (correlated) {
+    const signal: JsExfilNetworkSignal = {
+      ts: now,
+      api,
+      destinationOrigin,
+      msSinceFormSubmit: _recentFormSubmits.length > 0
+        ? now - _recentFormSubmits[_recentFormSubmits.length - 1]!.ts
+        : -1,
+      credentialFieldsPresent: pageHasCredentialFields(),
+    };
+    _config.postSignal(
+      "ns-js-exfil-network",
+      signal as unknown as Record<string, unknown>
+    );
+  }
+}
+
+function patchFetchMonitoring(_cfg: JsBehaviorMonitorConfig): void {
+  if (_fetchPatched) return;
+  _fetchPatched = true;
+  void _cfg;
+
+  const originalFetch = window.fetch;
+  window.fetch = function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    let url = "";
+    if (typeof input === "string") {
+      url = input;
+    } else if (input instanceof URL) {
+      url = input.href;
+    } else if (input instanceof Request) {
+      url = input.url;
+    }
+
+    const origin = extractOrigin(url);
+    if (origin && origin !== location.origin) {
+      recordNetworkRequest(origin, "fetch");
+    }
+
+    return originalFetch.call(window, input, init);
+  };
+}
+
+function patchXHRMonitoring(_cfg: JsBehaviorMonitorConfig): void {
+  if (_xhrPatched) return;
+  _xhrPatched = true;
+  void _cfg;
+
+  const originalOpen = XMLHttpRequest.prototype.open;
+  const xhrUrlMap = new WeakMap<XMLHttpRequest, string>();
+
+  XMLHttpRequest.prototype.open = function (
+    this: XMLHttpRequest,
+    method: string,
+    url: string | URL,
+    ...rest: unknown[]
+  ) {
+    const urlStr = typeof url === "string" ? url : url.href;
+    xhrUrlMap.set(this, urlStr);
+    return (originalOpen as Function).apply(this, [method, url, ...rest]);
+  };
+
+  const originalSend = XMLHttpRequest.prototype.send;
+  XMLHttpRequest.prototype.send = function (
+    this: XMLHttpRequest,
+    body?: Document | XMLHttpRequestBodyInit | null
+  ) {
+    const url = xhrUrlMap.get(this);
+    if (url) {
+      const origin = extractOrigin(url);
+      if (origin && origin !== location.origin) {
+        recordNetworkRequest(origin, "xhr");
+      }
+    }
+    return originalSend.call(this, body);
+  };
+}
+
+function patchBeaconMonitoring(_cfg: JsBehaviorMonitorConfig): void {
+  if (_beaconPatched) return;
+  _beaconPatched = true;
+  void _cfg;
+
+  const originalBeacon = navigator.sendBeacon.bind(navigator);
+  navigator.sendBeacon = function (url: string | URL, data?: BodyInit | null): boolean {
+    const urlStr = typeof url === "string" ? url : url.href;
+    const origin = extractOrigin(urlStr);
+    if (origin && origin !== location.origin) {
+      recordNetworkRequest(origin, "beacon");
+    }
+    return originalBeacon(url, data);
+  };
+}
+
+// ============================================================================
 // Credential Field Value Monitoring (Slice 4)
 // ============================================================================
 
@@ -357,9 +484,9 @@ export function initJsBehaviorMonitor(config: JsBehaviorMonitorConfig): void {
   if (config.mode === "off") return;
 
   patchFormSubmitMonitoring(config);
-  // TODO (Slice 3): patchFetchMonitoring(config);
-  // TODO (Slice 3): patchXHRMonitoring(config);
-  // TODO (Slice 3): patchBeaconMonitoring(config);
+  patchFetchMonitoring(config);
+  patchXHRMonitoring(config);
+  patchBeaconMonitoring(config);
   patchCredentialValueGetter(config);
 }
 
@@ -559,7 +686,3 @@ export function _resetState(): void {
 //   [ ] Verify total per-navigation overhead stays under 100ms budget
 //
 
-// Suppress unused variable warnings for constants used in future implementation slices
-void FORM_SUBMIT_CORRELATION_WINDOW_MS;
-void MAX_RECENT_FORM_SUBMITS;
-void MAX_RECENT_NETWORK_REQUESTS;

