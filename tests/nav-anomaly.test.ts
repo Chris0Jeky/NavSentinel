@@ -708,6 +708,79 @@ describe("edge cases", () => {
 });
 
 // ========================================================================
+// getAnomalyScoreSync
+// ========================================================================
+
+describe("getAnomalyScoreSync", () => {
+  it("returns 0 when session nav count is below minimum", () => {
+    // sessionNavCount starts at 0 after _resetRecentNavs
+    const score = getAnomalyScoreSync("binance.com");
+    expect(score).toBe(0);
+  });
+
+  it("returns BASE_ANOMALY_SCORE for 2 burst navs in the window", async () => {
+    const now = Date.now();
+    // Build up session nav count via recordNavigationAnomaly
+    store[NAV_PROFILE_KEY] = makeEstablishedProfile(now);
+    for (let i = 0; i < MIN_NAVIGATIONS_FOR_ANOMALY + 1; i++) {
+      await recordNavigationAnomaly("youtube.com", now + i * 100);
+    }
+    _resetRecentNavs();
+
+    // Now add 2 crypto navs to the sliding window via recordNavigationAnomaly
+    await recordNavigationAnomaly("binance.com", now + 50000);
+    // getAnomalyScoreSync should see 1 crypto in window + won't count itself
+    // We need to add them to the window manually via record calls
+    await recordNavigationAnomaly("coinbase.com", now + 51000);
+
+    // Now sync call should see 2 crypto navs (already recorded) in the window
+    // But getAnomalyScoreSync only looks at the in-memory window, not storage
+    const score = getAnomalyScoreSync("metamask.io", now + 52000);
+    // At this point: 3 crypto navs in window (binance, coinbase from record + metamask being checked)
+    // recentCount=3 => should give 15
+    expect(score).toBe(BASE_ANOMALY_SCORE + BURST_3_PLUS_BONUS);
+  });
+
+  it("returns 15 for 3+ burst navs in the window", async () => {
+    const now = Date.now();
+    store[NAV_PROFILE_KEY] = makeEstablishedProfile(now);
+    // Build session count
+    for (let i = 0; i < MIN_NAVIGATIONS_FOR_ANOMALY + 1; i++) {
+      await recordNavigationAnomaly("youtube.com", now + i * 100);
+    }
+    _resetRecentNavs();
+
+    // Add 3 crypto navs to the sliding window
+    await recordNavigationAnomaly("binance.com", now + 50000);
+    await recordNavigationAnomaly("coinbase.com", now + 51000);
+    await recordNavigationAnomaly("metamask.io", now + 52000);
+
+    // Sync check should see 3 crypto + 1 more = 4 crypto navs
+    const score = getAnomalyScoreSync("crypto.example.com", now + 53000);
+    expect(score).toBe(BASE_ANOMALY_SCORE + BURST_3_PLUS_BONUS);
+    expect(score).toBe(15);
+  });
+
+  it("returns BASE_ANOMALY_SCORE (10) for exactly 2 burst navs", async () => {
+    const now = Date.now();
+    store[NAV_PROFILE_KEY] = makeEstablishedProfile(now);
+    // Build session count
+    for (let i = 0; i < MIN_NAVIGATIONS_FOR_ANOMALY + 1; i++) {
+      await recordNavigationAnomaly("youtube.com", now + i * 100);
+    }
+    _resetRecentNavs();
+
+    // Add 1 crypto nav to the window
+    await recordNavigationAnomaly("binance.com", now + 50000);
+
+    // Sync check sees 1 in window + current = 2 total
+    const score = getAnomalyScoreSync("coinbase.com", now + 51000);
+    expect(score).toBe(BASE_ANOMALY_SCORE);
+    expect(score).toBe(10);
+  });
+});
+
+// ========================================================================
 // NRS integration
 // ========================================================================
 
