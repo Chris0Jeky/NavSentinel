@@ -81,6 +81,11 @@ describe("computeAHash", () => {
     const pixels = makePixels(16, 16, 128);
     expect(() => computeAHash(pixels, 16, 16)).toThrow();
   });
+
+  it("throws for truncated pixel buffer", () => {
+    const pixels = new Uint8ClampedArray(8 * 8 * 4 - 1);
+    expect(() => computeAHash(pixels, 8, 8)).toThrow(/Pixel buffer too short/);
+  });
 });
 
 describe("computeBHash", () => {
@@ -109,6 +114,11 @@ describe("computeBHash", () => {
   it("throws for wrong dimensions", () => {
     const pixels = makePixels(8, 8, 128);
     expect(() => computeBHash(pixels, 8, 8)).toThrow();
+  });
+
+  it("throws for truncated pixel buffer", () => {
+    const pixels = new Uint8ClampedArray(16 * 16 * 4 - 1);
+    expect(() => computeBHash(pixels, 16, 16)).toThrow(/Pixel buffer too short/);
   });
 });
 

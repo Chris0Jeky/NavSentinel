@@ -19,6 +19,9 @@ export function computeAHash(pixels: Uint8ClampedArray, width: number, height: n
   if (width !== AHASH_SIZE || height !== AHASH_SIZE) {
     throw new Error(`aHash requires ${AHASH_SIZE}x${AHASH_SIZE} input`);
   }
+  if (pixels.length < width * height * 4) {
+    throw new Error(`Pixel buffer too short: need ${width * height * 4}, got ${pixels.length}`);
+  }
 
   let sum = 0;
   const grayscale = new Uint8Array(AHASH_SIZE * AHASH_SIZE);
@@ -46,19 +49,18 @@ export function computeAHash(pixels: Uint8ClampedArray, width: number, height: n
 }
 
 /**
- * Compute Block Mean Hash (bHash) from a 16x16 grayscale image.
+ * Compute Block Mean Hash (bHash) from a 16x16 RGBA image.
  *
- * Divides the image into 4x4 blocks, computes the mean of each block,
- * then compares each block mean to the overall image mean.
- * Result: 256-bit hash stored as 32-byte Uint8Array (16 blocks in each dimension / 4 = 4x4 grid... actually 16x16/4=4x4 blocks = 16 bits? No.)
- *
- * Actually: 16x16 image, 4x4 pixel blocks → 4x4 grid of blocks = 16 block means.
- * But for 256 bits, we use individual pixels compared to block means.
- * Simplified: each of the 256 pixels compared to the overall mean → 256-bit hash.
+ * Divides the 16x16 image into a 4x4 grid of 4x4-pixel blocks, computes
+ * block means, then thresholds each pixel against the average of its block
+ * mean and the overall image mean. Result: 256-bit hash (32 bytes).
  */
 export function computeBHash(pixels: Uint8ClampedArray, width: number, height: number): Uint8Array {
   if (width !== BHASH_SIZE || height !== BHASH_SIZE) {
     throw new Error(`bHash requires ${BHASH_SIZE}x${BHASH_SIZE} input`);
+  }
+  if (pixels.length < width * height * 4) {
+    throw new Error(`Pixel buffer too short: need ${width * height * 4}, got ${pixels.length}`);
   }
 
   let sum = 0;
