@@ -55,6 +55,7 @@ function ensureHost(): void {
     li { font-size: 12px; line-height: 1.35; margin-bottom: 6px; color: rgba(255, 255, 255, 0.9); }
     .footer { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; padding: 12px 18px 16px; border-top: 1px solid rgba(255, 255, 255, 0.1); background: rgba(255, 255, 255, 0.03); }
     button { all: unset; cursor: pointer; padding: 8px 12px; border-radius: 11px; background: rgba(255, 255, 255, 0.1); font-size: 12px; border: 1px solid rgba(255, 255, 255, 0.1); }
+      button:focus-visible { outline: 2px solid rgba(142, 210, 255, 0.78); outline-offset: 2px; }
     button:hover { background: rgba(255, 255, 255, 0.16); }
     .primary { background: rgba(120, 200, 255, 0.18); border-color: rgba(120, 200, 255, 0.22); }
     .primary:hover { background: rgba(120, 200, 255, 0.26); }
@@ -96,7 +97,7 @@ export function showCredentialModal(spec: ModalSpec): Promise<string> {
 
     const header = document.createElement("div");
     header.className = "header";
-    const title = document.createElement("div");
+    const title = document.createElement("h2");
     title.className = "title";
     title.id = titleId;
     title.textContent = spec.title;

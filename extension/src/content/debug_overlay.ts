@@ -32,6 +32,7 @@ function ensureHost(): void {
   host.style.bottom = "16px";
   host.style.zIndex = "2147483647";
   host.style.pointerEvents = "none";
+  host.setAttribute("aria-hidden", "true");
 
   root = host.attachShadow({ mode: "open" });
 
