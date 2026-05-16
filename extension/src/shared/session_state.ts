@@ -79,6 +79,7 @@ const KEYS = {
   gestureUntil: `${PREFIX}gestureUntil`,
   allowStarted: `${PREFIX}allowStarted`,
   allowTarget: `${PREFIX}allowTarget`,
+  userNavContextUntil: `${PREFIX}userNavContextUntil`,
   suppressUntil: `${PREFIX}suppressUntil`,
   typedOrigin: `${PREFIX}typedOrigin`,
   readyTabs: `${PREFIX}readyTabs`,
@@ -144,6 +145,7 @@ export class SessionStateManager {
   readonly gestureUntilByTab = new Map<number, number>();
   readonly allowStartedByTab = new Map<number, string>();
   readonly allowTargetByTab = new Map<number, AllowTargetEntry>();
+  readonly userNavContextUntilByTab = new Map<number, number>();
   readonly suppressUntilByTab = new Map<number, number>();
   readonly typedOriginByTab = new Map<number, TypedOriginEntry>();
   readonly readyTabs = new Set<number>();
@@ -186,6 +188,7 @@ export class SessionStateManager {
       this._restoreMap(this.gestureUntilByTab, data[KEYS.gestureUntil]);
       this._restoreMap(this.allowStartedByTab, data[KEYS.allowStarted]);
       this._restoreMap(this.allowTargetByTab, data[KEYS.allowTarget]);
+      this._restoreMap(this.userNavContextUntilByTab, data[KEYS.userNavContextUntil]);
       this._restoreMap(this.suppressUntilByTab, data[KEYS.suppressUntil]);
       this._restoreMap(this.typedOriginByTab, data[KEYS.typedOrigin]);
       this._restoreSet(this.readyTabs, data[KEYS.readyTabs]);
@@ -232,6 +235,7 @@ export class SessionStateManager {
       [KEYS.gestureUntil]: mapToObj(this.gestureUntilByTab),
       [KEYS.allowStarted]: mapToObj(this.allowStartedByTab),
       [KEYS.allowTarget]: mapToObj(this.allowTargetByTab),
+      [KEYS.userNavContextUntil]: mapToObj(this.userNavContextUntilByTab),
       [KEYS.suppressUntil]: mapToObj(this.suppressUntilByTab),
       [KEYS.typedOrigin]: mapToObj(this.typedOriginByTab),
       [KEYS.readyTabs]: setToArray(this.readyTabs),
@@ -258,6 +262,7 @@ export class SessionStateManager {
     this.gestureUntilByTab.delete(tabId);
     this.allowStartedByTab.delete(tabId);
     this.allowTargetByTab.delete(tabId);
+    this.userNavContextUntilByTab.delete(tabId);
     this.suppressUntilByTab.delete(tabId);
     this.typedOriginByTab.delete(tabId);
     this.readyTabs.delete(tabId);

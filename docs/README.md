@@ -27,6 +27,10 @@ This folder documents the current merged `main` branch.
 
 ## Active operational docs
 
+- `autodoc/AGENT_INDEX.md`
+  - Fast agent-facing map of code seams, context traps, and verification hints.
+- `docs/agentic/`
+  - Question, failure, guide-update, skill-routing, and Claude/Codex tooling parity protocols for agent-driven work.
 - `docs/Demo_Showcase_Plan.md`
   - The active plan for the guided demo variants and record-mode rollout.
 - `docs/Testing_Expansion_Strategy.md`

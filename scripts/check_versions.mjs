@@ -32,4 +32,11 @@ if (packageVersion !== manifestVersion) {
   process.exit(1);
 }
 
+const lockfilePath = path.join(root, "package-lock.json");
+const lockfile = JSON.parse(fs.readFileSync(lockfilePath, "utf8"));
+if (lockfile.version !== packageVersion) {
+  console.error(`[verify:versions] Version mismatch: package-lock.json=${lockfile.version} vs package.json=${packageVersion}`);
+  process.exit(1);
+}
+
 console.log(`[verify:versions] OK: ${packageVersion}`);

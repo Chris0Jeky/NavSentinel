@@ -1,5 +1,6 @@
 import { computeCDS } from "../shared/scoring";
 import { appendEvent, appendPromptOutcome, getPromptOutcomes, getNavSettings, onNavSettingsChange, type NavSettings } from "../shared/storage";
+import { ADAPTIVE_SCORES_KEY, getEffectiveThresholdAdjustment, updateAdaptiveScores } from "../shared/adaptive_scoring";
 import {
   analyzeOutcomesForPair,
   isPairOnCooldown,
@@ -22,6 +23,7 @@ import type { NavigationContext } from "../shared/nrs";
 import type { RedirectChainInfo } from "../shared/redirect_chain";
 import { initReputation, isKnownBadDomain, checkReputationViaMessage } from "../shared/reputation";
 import { showToast } from "./ui_toast";
+import { explainReasonCode } from "../shared/explanations";
 import {
   buildClickContextFromEvents,
   buildKeyboardClickContext,
@@ -81,6 +83,17 @@ const RISKY_BLANK_REASONS = new Set([
   "clickfix_instruction_pattern"
 ]);
 
+function buildPlainMessage(prefix: string, reasonCodes: string[]): string {
+  const positive = reasonCodes.filter(r =>
+    !r.startsWith("keyboard_") && !r.startsWith("legit_") &&
+    !r.includes("allowlisted") && !r.includes("previously_allowed") &&
+    !r.includes("explicit_new_tab") && r !== "nrs_user_activation_active"
+  );
+  const topReason = positive[positive.length - 1];
+  const explanation = topReason ? explainReasonCode(topReason) : "";
+  return (explanation && explanation !== topReason) ? `${prefix} — ${explanation}` : prefix;
+}
+
 function makeBridgeSession(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
@@ -89,6 +102,17 @@ function makeBridgeSession(): string {
 let lastDown: DownCapture | null = null;
 let settings: NavSettings = { defaultMode: "smart", debug: false, dnrEnabled: false };
 let allowlist: Allowlist = {};
+let adaptiveAdjustment = 0;
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== "local") return;
+  if (changes[ADAPTIVE_SCORES_KEY]) {
+    const newScores = changes[ADAPTIVE_SCORES_KEY].newValue;
+    const domain = siteKeyFromLocation();
+    adaptiveAdjustment = (newScores && typeof newScores === "object" && newScores[domain]?.adjustment) ?? 0;
+  }
+});
+
 let bridgePort: MessagePort | null = null;
 let bridgeReady = false;
 const bridgeSession = makeBridgeSession();
@@ -102,11 +126,31 @@ let bridgeRetryDelayMs = BRIDGE_RETRY_MS;
 let bridgeInitStartedAt = 0;
 let forwardCheckInFlight = false;
 let forwardCheckTimer = 0;
+let previousMode = "";
 let gestureNavAttempts = 0;
 let gestureDownId: number | null = null;
 const CHAIN_INFO_TTL_MS = 30_000;
 let cachedChainInfo: RedirectChainInfo | null = null;
 let cachedChainInfoAt = 0;
+
+type TabRiskState = "green" | "yellow" | "red" | "gray";
+const SEVERITY: Record<TabRiskState, number> = { gray: 0, green: 1, yellow: 2, red: 3 };
+let currentTabRiskState: TabRiskState = "green";
+let tabBlockCount = 0;
+
+function sendIconUpdate(state: TabRiskState, blockCount?: number): void {
+  if (!isTopFrame()) return;
+  if (SEVERITY[state] < SEVERITY[currentTabRiskState]) return;
+  const count = blockCount ?? tabBlockCount;
+  if (state === currentTabRiskState && count === tabBlockCount) return;
+  currentTabRiskState = state;
+  tabBlockCount = count;
+  chrome.runtime.sendMessage({
+    type: "ns-tab-risk-update",
+    state,
+    blockCount: count,
+  }).catch(() => {});
+}
 
 function markMainGuardReady(): void {
   if (bridgeRetryTimer) {
@@ -184,13 +228,18 @@ async function initSettings() {
   } catch (err) {
     console.warn("[NavSentinel] Failed to load settings, using defaults", err);
   }
+  try {
+    adaptiveAdjustment = await getEffectiveThresholdAdjustment(siteKeyFromLocation());
+  } catch { /* ignore */ }
   document.documentElement.setAttribute("data-navsentinel-capture-ready", "1");
   setDebugEnabled(settings.debug);
   postToMain("ns-config", { mode: settings.defaultMode, debug: settings.debug });
   postToMain("ns-ping");
   // Load reputation bloom filter in the background (non-blocking)
   void loadReputationFilter();
+  previousMode = settings.defaultMode;
   if (isTopFrame()) {
+    sendIconUpdate(settings.defaultMode === "off" ? "gray" : "green");
     try {
       chrome.runtime.sendMessage({ type: "ns-ready" });
     } catch {
@@ -217,6 +266,19 @@ onNavSettingsChange((s) => {
   settings = s;
   setDebugEnabled(s.debug);
   postToMain("ns-config", { mode: s.defaultMode, debug: s.debug });
+  if (s.defaultMode !== previousMode) {
+    previousMode = s.defaultMode;
+    const newState: TabRiskState = s.defaultMode === "off" ? "gray" : "green";
+    currentTabRiskState = newState;
+    tabBlockCount = 0;
+    if (isTopFrame()) {
+      chrome.runtime.sendMessage({
+        type: "ns-tab-risk-update",
+        state: newState,
+        blockCount: 0,
+      }).catch(() => {});
+    }
+  }
   refreshDebug();
 });
 
@@ -451,10 +513,21 @@ function appendEventSafely(
   });
 }
 
+async function refreshAdaptiveScores(baseThreshold?: number): Promise<void> {
+  try {
+    const threshold = baseThreshold ?? (settings.defaultMode === "strict" ? NRS_STRICT_BLOCK_THRESHOLD : NRS_BLOCK_THRESHOLD);
+    const outcomes = await getPromptOutcomes();
+    await updateAdaptiveScores(outcomes, threshold);
+    adaptiveAdjustment = await getEffectiveThresholdAdjustment(siteKeyFromLocation());
+  } catch { /* ignore */ }
+}
+
 function appendOutcomeSafely(
   partial: Parameters<typeof appendPromptOutcome>[0]
 ): void {
-  void appendPromptOutcome(partial).catch(() => {
+  void appendPromptOutcome(partial).then(() => {
+    refreshAdaptiveScores();
+  }).catch(() => {
     // ignore
   });
 }
@@ -469,7 +542,7 @@ function notifyNavAllow(ttlMs = NAV_ALLOW_TTL_MS): void {
 
 function notifyNavGesture(ttlMs = NAV_GESTURE_TTL_MS): void {
   try {
-    chrome.runtime.sendMessage({ type: "ns-nav-gesture", ttlMs });
+    chrome.runtime.sendMessage({ type: "ns-nav-gesture", ttlMs, url: location.href });
   } catch {
     // ignore
   }
@@ -528,6 +601,7 @@ function handleClickFixScan(): void {
   if (now - clickFixAlertedAt < 10_000) return;
 
   clickFixAlertedAt = now;
+  sendIconUpdate("red");
   appendEventSafely({
     kind: "clickfix_detected",
     site: siteKeyFromLocation(),
@@ -537,7 +611,7 @@ function handleClickFixScan(): void {
   });
 
   showToast({
-    message: "NavSentinel detected a possible ClickFix attack. This page wrote to your clipboard while showing a fake verification dialog. Do NOT paste into Run or Terminal.",
+    message: buildPlainMessage("NavSentinel detected a fake verification dialog with clipboard hijack. Do NOT paste into Run or Terminal", result.reasons),
     actions: [
       {
         label: "Dismiss",
@@ -574,6 +648,7 @@ function handleMutationAlert(alert: MutationAlert): void {
   // Low-severity alerts (cookie banners, chat widgets, ARIA dialogs) are
   // still logged for telemetry but do not disturb the user.
   if (alert.type === "overlay_injected" && alert.severity === "high") {
+    sendIconUpdate("yellow");
     showToast({
       message: "NavSentinel detected a suspicious overlay injected after page load. The page may be attempting a phishing attack.",
       actions: [{ label: "Dismiss", onClick: () => {} }],
@@ -633,9 +708,10 @@ function showRollbackPrompt(url: string): void {
     }
   })();
   (window as any).__navsentinelRollbackPrompt = { url, ts: now };
+  sendIconUpdate("yellow");
   appendEventSafely({ kind: "nav_rollback", site: siteKeyFromLocation(), url, destHost: host });
   showToast({
-    message: `NavSentinel rolled back a redirect to ${host}.`,
+    message: `NavSentinel rolled back a suspicious redirect to ${host}`,
     actions: [
       {
         label: "Proceed",
@@ -663,7 +739,15 @@ function handleRollback(url: string, prevUrl?: string): void {
   if (settings.defaultMode === "off") return;
   if (!isTopFrame()) return;
   if (!url) return;
-  const target = prevUrl && prevUrl !== url ? prevUrl : "";
+  const referrerTarget = (() => {
+    if (!document.referrer || document.referrer === location.href) return "";
+    try {
+      return new URL(document.referrer).toString();
+    } catch {
+      return "";
+    }
+  })();
+  const target = prevUrl && prevUrl !== url ? prevUrl : referrerTarget;
   if (target) {
     try {
       chrome.runtime.sendMessage({ type: "ns-begin-rollback", returnUrl: target });
@@ -671,14 +755,6 @@ function handleRollback(url: string, prevUrl?: string): void {
       notifyNavAllow();
       notifyAllowedTarget(target);
       window.setTimeout(() => {
-        try {
-          if (history.length > 1) {
-            history.back();
-            return;
-          }
-        } catch {
-          // ignore
-        }
         try {
           postToMain("ns-allow", { allowOpen: false, allowRedirect: true });
           location.replace(target);
@@ -756,7 +832,8 @@ function isLegitBlankAnchor(
 }
 
 function getNrsBlockThreshold(mode: Mode): number {
-  return mode === "strict" ? NRS_STRICT_BLOCK_THRESHOLD : NRS_BLOCK_THRESHOLD;
+  const base = mode === "strict" ? NRS_STRICT_BLOCK_THRESHOLD : NRS_BLOCK_THRESHOLD;
+  return Math.max(30, Math.min(100, base + adaptiveAdjustment));
 }
 
 function tryOpenShadowRoot(el: Element): ShadowRoot | null {
@@ -909,6 +986,7 @@ function showAllowPrompt(params: {
           score: promptScore,
           outcome: "allow_once"
         }).then(() => {
+          refreshAdaptiveScores();
           if (destDomain) {
             checkSmartDefaultSuggestion(sourceDomain, destDomain);
           }
@@ -1261,10 +1339,10 @@ window.addEventListener(
           // Suppress standalone ClickFix toast — unified prompt covers it
           if (hasClickfix) clickFixAlertedAt = Date.now();
         } else {
-          const msg = hasClickfix
-            ? `NavSentinel blocked a new tab navigation with fake dialog detected (NRS=${nrs}).`
-            : `NavSentinel blocked a new tab navigation (NRS=${nrs}).`;
-          showToast({ message: msg });
+          const prefix = hasClickfix
+            ? "NavSentinel blocked a new tab with fake dialog detected"
+            : "NavSentinel blocked a suspicious new tab";
+          showToast({ message: buildPlainMessage(prefix, reasonCodes) });
           if (hasClickfix) clickFixAlertedAt = Date.now();
         }
       } else if (!isBlankAnchor && nrs >= blockThreshold) {
@@ -1284,12 +1362,18 @@ window.addEventListener(
           score: nrs,
           outcome: "block"
         });
-        const msg = hasClickfix
-          ? `NavSentinel blocked deceptive click + fake dialog detected (NRS=${nrs}, CDS=${cds}).`
-          : `NavSentinel blocked deceptive click (NRS=${nrs}, CDS=${cds}).`;
-        showToast({ message: msg });
+        const blockPrefix = hasClickfix
+          ? "NavSentinel blocked a deceptive click with fake dialog"
+          : "NavSentinel blocked a deceptive click";
+        showToast({ message: buildPlainMessage(blockPrefix, reasonCodes) });
         if (hasClickfix) clickFixAlertedAt = Date.now();
       }
+    }
+
+    if (decision === "block") {
+      sendIconUpdate("red", tabBlockCount + 1);
+    } else if (decision === "prompt") {
+      sendIconUpdate("yellow");
     }
 
     if (decision === "allow") {
@@ -1304,7 +1388,7 @@ window.addEventListener(
       });
     }
 
-    lastDebug = { mode, decision, cds, nrs, reasonCodes, nrsFactors, ctx };
+    lastDebug = { mode, decision, cds, nrs, reasonCodes, nrsFactors, ctx, adaptiveAdj: adaptiveAdjustment };
     refreshDebug();
 
     if (settings.debug) {
@@ -1343,7 +1427,7 @@ window.addEventListener(
             reasons: ["late_async_child_frame"],
           });
           showToast({
-            message: `NavSentinel: navigated to a known-bad domain (${host}).`,
+            message: `NavSentinel warning: ${host} is a known malicious domain`,
             timeoutMs: 8000,
           });
         } catch {
