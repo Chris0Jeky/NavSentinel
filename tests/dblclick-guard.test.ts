@@ -70,7 +70,7 @@ describe("dblclick_guard", () => {
       expect(result.forwardToSW!.url).toBe("");
     });
 
-    it("resets stale signals on new window-open", () => {
+    it("resets state on new window-open cycle", () => {
       const now = Date.now();
       handleDblclickBridgeMessage("ns-dblclick-window-open", { ts: now });
       handleDblclickBridgeMessage("ns-dblclick-opener-nav", {
@@ -199,7 +199,7 @@ describe("dblclick_guard", () => {
       expect(isDoubleClickHijackActive()).toBe(false);
     });
 
-    it("expires opener-nav signal independently", () => {
+    it("expires when window-open goes stale even if opener-nav is fresh", () => {
       const now = Date.now();
       handleDblclickBridgeMessage("ns-dblclick-window-open", { ts: now });
 
@@ -230,6 +230,49 @@ describe("dblclick_guard", () => {
         url: "https://bank.example.com",
         ts: now + 100,
       });
+      expect(isDoubleClickHijackActive()).toBe(true);
+    });
+
+    it("activates via child-closed when opener-nav has stale ts", () => {
+      const now = Date.now();
+      handleDblclickBridgeMessage("ns-dblclick-window-open", { ts: now });
+      handleDblclickRuntimeMessage({
+        type: "ns-dblclick-opener-nav-from-child",
+        url: "https://bank.example.com",
+        ts: now - 5100,
+      });
+      handleDblclickRuntimeMessage({ type: "ns-dblclick-child-closed" });
+
+      expect(isDoubleClickHijackActive()).toBe(true);
+    });
+
+    it("expires child-closed signal after DBLCLICK_HIJACK_STALE_MS", () => {
+      const now = Date.now();
+      handleDblclickBridgeMessage("ns-dblclick-window-open", { ts: now });
+      handleDblclickRuntimeMessage({
+        type: "ns-dblclick-opener-nav-from-child",
+        url: "https://bank.example.com",
+        ts: now - 5100,
+      });
+      handleDblclickRuntimeMessage({ type: "ns-dblclick-child-closed" });
+      expect(isDoubleClickHijackActive()).toBe(true);
+
+      vi.advanceTimersByTime(5001);
+      expect(isDoubleClickHijackActive()).toBe(false);
+    });
+
+    it("activates via second-click when opener-nav has stale ts", () => {
+      const now = Date.now();
+      handleDblclickBridgeMessage("ns-dblclick-window-open", { ts: now });
+      handleDblclickRuntimeMessage({
+        type: "ns-dblclick-opener-nav-from-child",
+        url: "https://bank.example.com",
+        ts: now - 5100,
+      });
+      handleDblclickBridgeMessage("ns-dblclick-second-click", {
+        ts: Date.now(),
+      });
+
       expect(isDoubleClickHijackActive()).toBe(true);
     });
   });
