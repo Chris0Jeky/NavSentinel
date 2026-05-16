@@ -364,6 +364,8 @@ function handleBridgeMessage(message: unknown): void {
     // PushState abuse metadata (ns-pushstate-suspicious)
     reason?: string;
     method?: string;
+    // Allow-target-nav TTL (ns-allow-target-nav)
+    ttlMs?: number;
   };
   if (!data || data.source !== NS_SOURCE || data.v !== PROTOCOL_VERSION) return;
   if (data.session !== bridgeSession) return;
@@ -449,6 +451,22 @@ function handleBridgeMessage(message: unknown): void {
       }
       return;
     }
+  }
+
+  if (data.type === "ns-allow-target-nav") {
+    const url = typeof data.url === "string" ? data.url : "";
+    if (url) {
+      try {
+        chrome.runtime.sendMessage({
+          type: "ns-allow-target-nav",
+          url,
+          ttlMs: typeof data.ttlMs === "number" ? data.ttlMs : undefined
+        });
+      } catch {
+        // SW may not be reachable
+      }
+    }
+    return;
   }
 
   // --- PushState abuse bridge messages from main_guard ---

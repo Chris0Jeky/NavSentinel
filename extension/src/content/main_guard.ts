@@ -305,7 +305,7 @@ function notifyAllowedTarget(url: string | URL | undefined): void {
   if (url === undefined) return;
   try {
     const href = new URL(String(url), location.href).toString();
-    chrome.runtime.sendMessage({ type: "ns-allow-target-nav", url: href, ttlMs: TARGET_NAV_TTL_MS });
+    postToIsolated("ns-allow-target-nav", { url: href, ttlMs: TARGET_NAV_TTL_MS });
   } catch {
     // ignore
   }
