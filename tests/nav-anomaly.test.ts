@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach, vi } from "vitest";
 import {
   classifyDomain,
+  getAnomalyScoreSync,
   applyDecay,
   normalizeProfile,
   pruneBurstRecords,
@@ -198,6 +199,31 @@ describe("classifyDomain", () => {
   it("classifies subdomains via registrable domain lookup", () => {
     // sub.github.com should resolve to github.com via PSL
     expect(classifyDomain("sub.github.com")).toBe("developer");
+  });
+
+  it("does not false-positive on domains containing 'press' as substring", () => {
+    expect(classifyDomain("express.com")).toBe("unknown");
+    expect(classifyDomain("wordpress.com")).toBe("unknown");
+  });
+
+  it("does not false-positive on domains containing 'shop' as substring", () => {
+    expect(classifyDomain("workshop-tools.com")).toBe("unknown");
+  });
+
+  it("does not false-positive on domains containing 'store' as substring", () => {
+    expect(classifyDomain("restore-backup.com")).toBe("unknown");
+  });
+
+  it("does not false-positive on domains containing 'drive' as substring", () => {
+    expect(classifyDomain("driveway-repair.com")).toBe("unknown");
+  });
+
+  it("still matches anchored keywords at segment boundaries", () => {
+    expect(classifyDomain("my-press.com")).toBe("news");
+    expect(classifyDomain("press.example.com")).toBe("news");
+    expect(classifyDomain("shop.example.com")).toBe("shopping");
+    expect(classifyDomain("my-store.net")).toBe("shopping");
+    expect(classifyDomain("drive.example.com")).toBe("cloud");
   });
 });
 
