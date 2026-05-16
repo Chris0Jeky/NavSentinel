@@ -13,51 +13,54 @@ describe("onboarding page", () => {
     expect(html.length).toBeGreaterThan(0);
   });
 
-  it("contains the welcome section", () => {
-    expect(html).toContain('data-section="welcome"');
+  it("contains the welcome hero section", () => {
     expect(html).toContain("NavSentinel");
     expect(html).toContain("Safe Browsing");
+    expect(html).toContain("hero");
   });
 
-  it("contains the how-it-works section with three cards", () => {
-    expect(html).toContain('data-section="how-it-works"');
+  it("contains the how-it-works section with three feature cards", () => {
+    expect(html).toContain("Detection layers");
     expect(html).toContain("Monitors clicks");
     expect(html).toContain("Analyzes navigation");
     expect(html).toContain("Protects credentials");
   });
 
   it("contains the what-to-expect section with toast mockups", () => {
-    expect(html).toContain('data-section="what-to-expect"');
-    expect(html).toContain("toast-caution");
-    expect(html).toContain("toast-blocked");
+    expect(html).toContain("Notifications");
+    expect(html).toContain("toast-mock--warn");
+    expect(html).toContain("toast-mock--block");
     expect(html).toContain("Caution");
     expect(html).toContain("Blocked");
   });
 
-  it("contains the settings section with three modes", () => {
-    expect(html).toContain('data-section="settings"');
-    expect(html).toContain("mode-badge-smart");
-    expect(html).toContain("mode-badge-strict");
-    expect(html).toContain("mode-badge-off");
+  it("contains the protection modes section with three modes", () => {
+    expect(html).toContain("Protection modes");
+    expect(html).toContain("mode-badge--green");
+    expect(html).toContain("mode-badge--amber");
+    expect(html).toContain("mode-badge--muted");
     expect(html).toContain("Smart");
     expect(html).toContain("Strict");
     expect(html).toContain("Off");
   });
 
   it("contains the get-started CTA section", () => {
-    expect(html).toContain('data-section="cta"');
     expect(html).toContain('id="getStarted"');
     expect(html).toContain("Get started");
   });
 
   it("contains the options page link", () => {
     expect(html).toContain('id="openOptions"');
-    expect(html).toContain("options page");
+    expect(html).toContain("options dashboard");
   });
 
   it("references the onboarding script and stylesheet", () => {
     expect(html).toContain('src="./onboarding.ts"');
     expect(html).toContain('href="./onboarding.css"');
+  });
+
+  it("references the design tokens stylesheet", () => {
+    expect(html).toContain("design_tokens.css");
   });
 
   it("has no external CDN or network URLs", () => {
@@ -81,6 +84,11 @@ describe("onboarding TypeScript module", () => {
     expect(ts).toContain("openOptions");
     expect(ts).toContain("openOptionsPage");
   });
+
+  it("imports icons from the shared icon system", () => {
+    expect(ts).toContain("logoSentinel");
+    expect(ts).toContain("icon");
+  });
 });
 
 describe("onboarding CSS", () => {
@@ -90,13 +98,13 @@ describe("onboarding CSS", () => {
     expect(css.length).toBeGreaterThan(0);
   });
 
-  it("uses the specified dark theme background", () => {
-    expect(css).toMatch(/#0a0a0a|#1a1a1a/);
+  it("uses dark theme background colors from design tokens", () => {
+    expect(css).toMatch(/#08070a|#030206/);
   });
 
-  it("uses the extension color palette", () => {
-    expect(css).toContain("#4ade80"); // green
-    expect(css).toContain("#facc15"); // yellow
-    expect(css).toContain("#f87171"); // red
+  it("uses the brass/jade color palette", () => {
+    expect(css).toContain("ns-cyan");
+    expect(css).toContain("ns-green");
+    expect(css).toContain("ns-red");
   });
 });
