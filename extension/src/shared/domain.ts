@@ -9,14 +9,14 @@ export function normalizeHost(host: string): string {
   return host.toLowerCase().replace(/\.$/, "");
 }
 
-export function isIPv4(host: string): boolean {
+function isIPv4(host: string): boolean {
   const m = host.match(/^(\d{1,3})(\.\d{1,3}){3}$/);
   if (!m) return false;
   const parts = host.split(".").map((x) => Number(x));
   return parts.every((n) => Number.isFinite(n) && n >= 0 && n <= 255);
 }
 
-export function isIPv6(host: string): boolean {
+function isIPv6(host: string): boolean {
   if (!host.includes(":")) return false;
   return /^[0-9a-fA-F:.]+$/.test(host);
 }
@@ -26,7 +26,7 @@ export function isIPAddress(host: string): boolean {
   return isIPv4(h) || isIPv6(h);
 }
 
-export function splitLabels(host: string): string[] {
+function splitLabels(host: string): string[] {
   const h = normalizeHost(host);
   if (!h) return [];
   return h.split(".").filter(Boolean);
@@ -114,7 +114,7 @@ export function getRegistrableDomain(host: string): string {
   return labels.slice(-regLen).join(".");
 }
 
-export function subdomainDepth(host: string): number {
+function subdomainDepth(host: string): number {
   const h = normalizeHost(host);
   if (!h || isIPAddress(h)) return 0;
   const labels = splitLabels(h);
@@ -122,7 +122,7 @@ export function subdomainDepth(host: string): number {
   return Math.max(0, labels.length - regLabels.length);
 }
 
-export function containsPunycode(host: string): boolean {
+function containsPunycode(host: string): boolean {
   return normalizeHost(host)
     .split(".")
     .some((label) => label.startsWith("xn--"));
@@ -450,12 +450,6 @@ export function computeCredentialRisk(params: {
   };
 }
 
-export function isHostWithinDomain(host: string, domain: string): boolean {
-  const h = normalizeHost(host);
-  const d = normalizeHost(domain);
-  if (!h || !d) return false;
-  return h === d || h.endsWith(`.${d}`);
-}
 
 // ---------------------------------------------------------------------------
 // Enhanced lookalike detection (P1-03)
