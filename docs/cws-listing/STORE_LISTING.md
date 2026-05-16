@@ -30,14 +30,14 @@ Traditional browser protection compares URLs against known-bad lists. NavSentine
 
 - **Smart** (recommended) — Balanced protection. Prompts on suspicious navigations and credential risks without interrupting normal browsing.
 - **Strict** — Maximum protection. Lower thresholds for all detections. Best for high-risk environments.
-- **Off** — Monitoring only. Events are logged but nothing is blocked. Useful for testing.
+- **Off** — Protection disabled. No detections are scored, logged, or prompted. Useful for debugging site compatibility.
 
 ### Key Features
 
 - **Local-first**: No telemetry, no cloud scoring, no remote lookups. Everything runs in your browser.
 - **Dual scoring engine**: Click Deception Score (CDS) analyzes click context; Navigation Risk Score (NRS) analyzes destination risk. Both produce explainable reason codes.
 - **Known-bad domain filter**: Build-time bloom filter from public threat feeds (URLhaus, OpenPhish) adds +50 to risk score for known malicious destinations.
-- **Smart defaults**: After 3 "Allow once" decisions for the same site pair, suggests adding it to your permanent allowlist.
+- **Smart defaults**: After 3 consecutive allow decisions for the same site pair, suggests adding it to your permanent allowlist.
 - **Detailed event log**: Every decision is logged locally with score, reason codes, and timestamps. Export as JSON for analysis.
 - **Trusted domain management**: Mark sites you trust for credential submissions. Uses registrable-domain matching for accuracy.
 
@@ -50,7 +50,7 @@ NavSentinel stores only local settings, allowlist entries, trusted domains, and 
 NavSentinel is fully open source. Every detection heuristic, scoring weight, and decision threshold is auditable in the public repository.
 
 ## Category
-Productivity (or Security)
+Productivity
 
 ## Language
 English

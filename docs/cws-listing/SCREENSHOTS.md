@@ -26,9 +26,10 @@ CWS requires 1-5 screenshots at 1280x800 or 640x400.
 - Show: mode selectors, trusted domain list, event log with entries, allowlist
 - Shows the full control surface
 
-### 5. Onboarding — Welcome Page
-- Open `src/onboarding/onboarding.html`
-- Shows the first-install experience with detection layer cards
+### 5. Options — Allowlist & Trusted Domains
+- Open the options page with a populated allowlist and trusted domain list
+- Shows the user-control surface for managing per-site decisions
+- **Note**: An onboarding page exists in PR #73 (`feat/onboarding`) but has not merged to main. Replace this screenshot with onboarding once it ships.
 
 ## Capture Commands
 

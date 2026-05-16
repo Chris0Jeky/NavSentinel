@@ -43,6 +43,9 @@
 - [ ] Credential guard prompts on risky submits
 - [ ] No console errors during normal browsing
 
+### Manifest Pre-Submission
+- [ ] Add `"minimum_chrome_version": "116"` to `extension/manifest.json`
+
 ### Known Limitations to Document
 - Extension requires Manifest V3 (Chrome 116+)
 - Bloom filter is build-time only (no runtime updates)
