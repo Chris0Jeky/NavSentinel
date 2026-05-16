@@ -459,15 +459,11 @@ function handleBridgeMessage(message: unknown): void {
   if (data.type === "ns-allow-target-nav") {
     const url = typeof data.url === "string" ? data.url : "";
     if (url) {
-      try {
-        chrome.runtime.sendMessage({
-          type: "ns-allow-target-nav",
-          url,
-          ttlMs: typeof data.ttlMs === "number" ? data.ttlMs : NAV_TARGET_ALLOW_TTL_MS
-        });
-      } catch {
-        // SW may not be reachable
-      }
+      chrome.runtime.sendMessage({
+        type: "ns-allow-target-nav",
+        url,
+        ttlMs: typeof data.ttlMs === "number" ? data.ttlMs : NAV_TARGET_ALLOW_TTL_MS
+      }).catch(() => {});
     }
     return;
   }
