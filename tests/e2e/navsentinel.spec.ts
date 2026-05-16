@@ -6,6 +6,7 @@ import { fileURLToPath } from "url";
 import {
   assertNoToastFor,
   clickToastButton,
+  dismissOnboarding,
   getGymBaseUrl,
   waitForNavSentinelBridge,
   waitForToastMatch,
@@ -983,6 +984,7 @@ test("RW-08 popup window reuse laundering keeps the original consent popup @regr
     });
 
     try {
+      await dismissOnboarding(context);
       const page = await context.newPage();
       const beforePages = context.pages().length;
 
@@ -1410,6 +1412,7 @@ test("RW-19 repeated tech-support popup burst is blocked @regression", async () 
     });
 
     try {
+      await dismissOnboarding(context);
       const page = await context.newPage();
       const beforePages = context.pages().length;
 
