@@ -39,28 +39,178 @@ function ensureHost(): void {
   root = host.attachShadow({ mode: "open" });
   const style = document.createElement("style");
   style.textContent = `
-    :host, * { box-sizing: border-box; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
-    .overlay { pointer-events: auto; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55); display: flex; align-items: center; justify-content: center; padding: 24px; }
-    .card { width: min(760px, 96vw); max-height: min(82vh, 820px); overflow: auto; background: rgba(17, 17, 17, 0.98); color: #f5f5f5; border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.16); box-shadow: 0 18px 60px rgba(0, 0, 0, 0.45); }
-    .header { padding: 16px 18px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
-    .title { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: 0.2px; }
-    .subtitle { margin-top: 6px; font-size: 13px; line-height: 1.35; color: rgba(255, 255, 255, 0.8); }
-    .body { padding: 14px 18px 10px; }
-    .kv { display: grid; grid-template-columns: 140px 1fr; gap: 8px 10px; margin-bottom: 12px; }
-    .k { color: rgba(255, 255, 255, 0.7); font-size: 12px; }
-    .v { font-size: 12px; word-break: break-word; }
-    .reasons { margin-top: 8px; border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 10px; }
-    .reasons-title { font-size: 12px; color: rgba(255, 255, 255, 0.75); margin-bottom: 8px; }
-    ul { margin: 0; padding-left: 18px; }
-    li { font-size: 12px; line-height: 1.35; margin-bottom: 6px; color: rgba(255, 255, 255, 0.9); }
-    .footer { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; padding: 12px 18px 16px; border-top: 1px solid rgba(255, 255, 255, 0.1); background: rgba(255, 255, 255, 0.03); }
-    button { all: unset; cursor: pointer; padding: 8px 12px; border-radius: 11px; background: rgba(255, 255, 255, 0.1); font-size: 12px; border: 1px solid rgba(255, 255, 255, 0.1); }
-      button:focus-visible { outline: 2px solid rgba(142, 210, 255, 0.78); outline-offset: 2px; }
-    button:hover { background: rgba(255, 255, 255, 0.16); }
-    .primary { background: rgba(120, 200, 255, 0.18); border-color: rgba(120, 200, 255, 0.22); }
-    .primary:hover { background: rgba(120, 200, 255, 0.26); }
-    .danger { background: rgba(255, 80, 80, 0.16); border-color: rgba(255, 80, 80, 0.22); }
-    .danger:hover { background: rgba(255, 80, 80, 0.24); }
+    :host, * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif; }
+    .overlay {
+      pointer-events: auto;
+      position: fixed;
+      inset: 0;
+      background: rgba(3, 2, 6, 0.75);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      animation: fade-in 0.15s ease-out;
+    }
+    @keyframes fade-in {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    @keyframes scale-in {
+      from { opacity: 0; transform: scale(0.96) translateY(8px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .card {
+      width: min(720px, 96vw);
+      max-height: min(82vh, 820px);
+      overflow: auto;
+      background: linear-gradient(180deg, #110f13, #08070a);
+      color: #f6efe1;
+      border-radius: 14px;
+      border: 1px solid #2a2530;
+      box-shadow: 0 18px 60px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(245, 166, 35, 0.08);
+      animation: scale-in 0.2s ease-out;
+    }
+    .header {
+      padding: 18px 20px;
+      border-bottom: 1px solid #1c181f;
+      position: relative;
+      overflow: hidden;
+    }
+    .header::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at top left, rgba(245, 166, 35, 0.06), transparent 60%);
+      pointer-events: none;
+    }
+    .header-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      position: relative;
+    }
+    .header-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: rgba(208, 69, 49, 0.12);
+      border: 1px solid rgba(208, 69, 49, 0.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .header-icon svg {
+      width: 16px;
+      height: 16px;
+      stroke: #d04531;
+      fill: none;
+      stroke-width: 1.6;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .title {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      color: #f6efe1;
+    }
+    .subtitle {
+      margin-top: 8px;
+      font-size: 12px;
+      line-height: 1.45;
+      color: #c4b69c;
+      position: relative;
+    }
+    .body { padding: 16px 20px 12px; }
+    .kv {
+      display: grid;
+      grid-template-columns: 130px 1fr;
+      gap: 6px 12px;
+      margin-bottom: 14px;
+    }
+    .k {
+      color: #756a5a;
+      font-size: 11px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .v {
+      font-size: 12px;
+      font-family: 'SF Mono', 'Cascadia Code', 'JetBrains Mono', Menlo, Consolas, monospace;
+      word-break: break-word;
+      color: #f6efe1;
+    }
+    .reasons {
+      margin-top: 10px;
+      border-top: 1px dashed #1c181f;
+      padding-top: 12px;
+    }
+    .reasons-title {
+      font-size: 10px;
+      color: #756a5a;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      font-weight: 500;
+    }
+    ul { margin: 0; padding-left: 0; list-style: none; }
+    li {
+      font-size: 11.5px;
+      line-height: 1.4;
+      margin-bottom: 6px;
+      color: #c4b69c;
+      padding-left: 14px;
+      position: relative;
+    }
+    li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 7px;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: #ed7a31;
+    }
+    .footer {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      padding: 14px 20px 18px;
+      border-top: 1px solid #1c181f;
+      background: rgba(0, 0, 0, 0.2);
+    }
+    button {
+      all: unset;
+      cursor: pointer;
+      padding: 8px 14px;
+      border-radius: 7px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid #2a2530;
+      font-size: 11.5px;
+      font-weight: 500;
+      color: #c4b69c;
+      transition: background 0.12s, transform 0.1s;
+    }
+    button:hover { background: rgba(255, 255, 255, 0.1); transform: translateY(-1px); }
+    button:focus-visible { outline: 2px solid #f5a623; outline-offset: 2px; }
+    .primary {
+      background: rgba(122, 183, 135, 0.12);
+      border-color: rgba(122, 183, 135, 0.3);
+      color: #7ab787;
+    }
+    .primary:hover { background: rgba(122, 183, 135, 0.2); }
+    .danger {
+      background: rgba(208, 69, 49, 0.12);
+      border-color: rgba(208, 69, 49, 0.3);
+      color: #d04531;
+    }
+    .danger:hover { background: rgba(208, 69, 49, 0.2); }
   `;
   root.appendChild(style);
   document.documentElement.appendChild(host);
@@ -97,11 +247,22 @@ export function showCredentialModal(spec: ModalSpec): Promise<string> {
 
     const header = document.createElement("div");
     header.className = "header";
+
+    const headerRow = document.createElement("div");
+    headerRow.className = "header-row";
+
+    const iconBox = document.createElement("div");
+    iconBox.className = "header-icon";
+    iconBox.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 3 L22 20 H2 Z"/><line x1="12" y1="10" x2="12" y2="14"/><circle cx="12" cy="17" r="0.5" fill="#d04531"/></svg>';
+
     const title = document.createElement("h2");
     title.className = "title";
     title.id = titleId;
     title.textContent = spec.title;
-    header.appendChild(title);
+
+    headerRow.appendChild(iconBox);
+    headerRow.appendChild(title);
+    header.appendChild(headerRow);
 
     if (spec.subtitle) {
       const sub = document.createElement("div");
