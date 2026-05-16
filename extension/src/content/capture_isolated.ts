@@ -440,17 +440,12 @@ function handleBridgeMessage(message: unknown): void {
     return;
   }
 
+  // Forwarded from MAIN world — not gated on mode because allowed navigations
+  // must be pre-approved in the SW even when the guard is "off".
   if (data.type === "ns-allow-target-nav") {
     const url = typeof data.url === "string" ? data.url : "";
     const ttlMs = typeof data.ttlMs === "number" ? data.ttlMs : NAV_TARGET_ALLOW_TTL_MS;
-    if (url) {
-      notifyAllowedTarget(url, ttlMs);
-      chrome.runtime.sendMessage({
-        type: "ns-allow-target-nav",
-        url,
-        ttlMs,
-      }).catch(() => {});
-    }
+    if (url) notifyAllowedTarget(url, ttlMs);
     return;
   }
 
@@ -482,7 +477,6 @@ function handleBridgeMessage(message: unknown): void {
       return;
     }
   }
-
 
   // --- PushState abuse bridge messages from main_guard ---
   if (handlePushStateBridgeMessage(data.type ?? "", data)) {
