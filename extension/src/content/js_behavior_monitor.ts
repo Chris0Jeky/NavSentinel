@@ -178,11 +178,12 @@ function snapshotExistingForms(): void {
 }
 
 /** Handle a form submit event and emit signals if suspicious. */
-function handleFormSubmit(form: HTMLFormElement, config: JsBehaviorMonitorConfig): void {
+function handleFormSubmit(form: HTMLFormElement, config: JsBehaviorMonitorConfig, submitter?: HTMLElement | null): void {
   if (config.mode === "off") return;
 
   const hasCredentials = formHasCredentialFields(form);
-  const action = form.action || location.href;
+  const submitterFormAction = submitter?.getAttribute("formaction") ?? "";
+  const action = submitterFormAction || form.action || location.href;
   const crossOrigin = isCrossOriginUrl(action);
   const originalAction = _originalFormActions.get(form) ?? "";
   const resolvedOriginal = originalAction
@@ -248,7 +249,8 @@ function patchFormSubmitMonitoring(config: JsBehaviorMonitorConfig): void {
   document.addEventListener("submit", (e) => {
     const form = e.target;
     if (form instanceof HTMLFormElement) {
-      handleFormSubmit(form, config);
+      const submitter = (e as SubmitEvent).submitter ?? null;
+      handleFormSubmit(form, config, submitter);
     }
   }, true);
 
