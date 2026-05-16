@@ -196,6 +196,91 @@ It listens to `chrome.webNavigation` events to decide when a committed navigatio
 3. `capture_isolated.ts` receives or polls the rollback state.
 4. The tab is returned to the previous page when possible and the user gets a proceed option for the original destination.
 
+## OAuth consent flow monitoring
+
+`extension/src/content/oauth_monitor.ts` detects OAuth abuse by tracking consent flow lifecycle:
+
+- Identifies OAuth redirect patterns (URLs containing `oauth`, `authorize`, `consent` with redirect parameters)
+- Tracks the full flow: initial redirect → consent page → callback
+- Flags unexpected post-consent redirects (`nrs_oauth_redirect_mismatch`, +30)
+- Detects `window.opener` manipulation during active OAuth flows (`nrs_oauth_opener_manipulation`, +45)
+- State tracked per tab in the service worker with 60s TTL and 50-entry cap
+
+## Redirect chain correlation
+
+`extension/src/shared/redirect_chain.ts` and `extension/src/sw/sw.ts` correlate multi-hop redirects that were previously invisible because each navigation was scored independently.
+
+- Per-tab navigation chains tracked with timestamps in the service worker
+- Navigations within 15 seconds correlated as a chain, capped at 10 hops
+- Known redirector patterns (URL shorteners, ad networks) detected via `isKnownRedirector()`
+- NRS factors: `nrs_redirect_chain_depth` (+5/hop over threshold 2, cap 25) and `nrs_redirect_via_known_redirector` (+15/hop, cap 30)
+
+## DOM mutation monitoring
+
+`extension/src/content/mutation_monitor.ts` detects post-load injection attacks via MutationObserver:
+
+- Watches for new fixed-position, full-viewport elements added after initial load
+- Detects form action attribute changes and password field injection
+- Rate-limited: 100ms debounce, 50-alert hard cap, 5-minute auto-disconnect
+- Excludes cookie consent banners, chat widgets, and elements with proper ARIA markup
+- Feeds mutation alert count into the debug overlay
+
+## CSP analysis
+
+`extension/src/content/csp_analyzer.ts` analyzes Content Security Policy headers and meta tags as a risk modifier:
+
+- Parses CSP directives from HTTP headers and `<meta>` tags
+- Scores weakness based on `unsafe-inline`, `unsafe-eval`, wildcard sources, missing directives
+- CSP weakness applied as a modifier only when base NRS already exceeds 20 (attacker-controlled meta tags can't be trusted as a safety signal)
+- NRS factor: `nrs_csp_weakness` (cap 10)
+
+## Sub-resource integrity awareness
+
+`extension/src/content/sri_checker.ts` flags credential pages that load external scripts without SRI hashes:
+
+- Scans `<script>` and `<link>` tags for cross-origin resources
+- Checks for `integrity` attribute presence
+- Integrates with credential guard to elevate risk on pages with missing SRI
+- Only active on pages containing password fields
+
+## Per-domain behavioral profiling
+
+`extension/src/shared/domain_profile.ts` tracks per-domain navigation patterns over time:
+
+- Records visit count, total NRS, NRS history, and timestamps per domain
+- Computes domain risk assessment: `safe`, `caution`, or `repeat_offender`
+- Exponential decay: counters halved weekly, applied lazily on read
+- Async mutex for serialization safety; LRU eviction at 500 domains
+- NRS factor: `nrs_domain_repeat_offender` (+10) for domains with consistently high scores
+
+## Adaptive scoring
+
+`extension/src/shared/adaptive_scoring.ts` adjusts per-domain thresholds based on user feedback:
+
+- Tracks allow/block decisions per domain via prompt telemetry
+- After consistent "allow" patterns, lowers effective threshold (bounded ±15)
+- Per-domain adjustments stored in `chrome.storage.local`
+- Exposed in debug overlay as `AdaptiveAdj`
+
+## Visual risk indicators
+
+`extension/src/sw/icon_manager.ts` color-codes the browser action badge based on page risk:
+
+- Green: safe/trusted domain
+- Yellow: elevated risk detected
+- Red: navigation blocked
+- Gray: extension disabled
+- Badge text shows active block count
+- Updates on navigation, trust changes, and mode changes via `ns-tab-risk-update` messages
+
+## Plain-English explanations
+
+`extension/src/shared/explanations.ts` maps technical reason codes to user-friendly messages:
+
+- All toast and credential modal messages use plain English
+- Debug overlay retains technical reason codes
+- Concise messages (< 80 characters)
+
 ## Test-facing hooks and observability
 
 The extension exposes a small amount of deterministic test state used by the Playwright suite:
