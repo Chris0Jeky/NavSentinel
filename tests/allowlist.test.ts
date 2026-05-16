@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   normalizeAllowlist,
   isAllowlisted,
@@ -112,6 +112,11 @@ describe("isAllowlisted", () => {
 
   it("returns false for empty list", () => {
     expect(isAllowlisted({}, "example.com", "foo.com")).toBe(false);
+  });
+
+  it("requires pre-normalized list (mixed-case keys won't match lowercase query)", () => {
+    const mixedCase: Allowlist = { "Example.COM": ["foo.com"] };
+    expect(isAllowlisted(mixedCase, "example.com", "foo.com")).toBe(false);
   });
 });
 
