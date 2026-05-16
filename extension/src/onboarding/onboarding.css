@@ -390,3 +390,16 @@ body::before {
     border-radius: 16px;
   }
 }
+
+/* --- Focus indicators --- */
+
+.btn-primary:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 3px;
+}
+
+.link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-color: var(--accent);
+}
