@@ -33,6 +33,8 @@ export interface NavigationContext {
   domainRepeatOffender?: boolean | undefined;
   /** Navigation anomaly score from nav_anomaly (0-15 range) */
   navAnomalyScore?: number | undefined;
+  /** JS behavior analysis score (0-35 range) - credential exfil/form manipulation signals */
+  jsBehaviorScore?: number | undefined;
 }
 
 export interface NRSResult {
@@ -66,6 +68,7 @@ const NRS_CSP_MODIFIER_THRESHOLD = 20;
 const NRS_WEIGHT_CSP_CAP = 10;
 const NRS_WEIGHT_DOMAIN_REPEAT_OFFENDER = 10;
 const NRS_WEIGHT_NAV_ANOMALY_CAP = 15;
+const NRS_WEIGHT_JS_BEHAVIOR_CAP = 35;
 
 /** Raw scores above this get 50% weight on the excess. */
 const NRS_DIMINISHING_RETURNS_THRESHOLD = 100;
@@ -185,6 +188,11 @@ export function computeNRS(cdsResult: ScoreResult, navCtx: NavigationContext): N
   if (navCtx.navAnomalyScore && navCtx.navAnomalyScore > 0 && nrs > NRS_CSP_MODIFIER_THRESHOLD) {
     nrs += Math.min(navCtx.navAnomalyScore, NRS_WEIGHT_NAV_ANOMALY_CAP);
     nrsFactors.push("nrs_nav_anomaly");
+  }
+
+  if (navCtx.jsBehaviorScore && navCtx.jsBehaviorScore > 0) {
+    nrs += Math.min(navCtx.jsBehaviorScore, NRS_WEIGHT_JS_BEHAVIOR_CAP);
+    nrsFactors.push("nrs_js_behavior_suspicious");
   }
 
   // Diminishing returns: points above the threshold get reduced weight

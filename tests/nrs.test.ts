@@ -270,4 +270,35 @@ describe("computeNRS", () => {
       expect(result.nrsFactors).toEqual([]);
     });
   });
+
+  describe("jsBehaviorScore", () => {
+    it("adds JS behavior score capped at 35", () => {
+      const result = computeNRS(baseCds(0), baseNav({ jsBehaviorScore: 25 }));
+      expect(result.nrs).toBe(25);
+      expect(result.nrsFactors).toContain("nrs_js_behavior_suspicious");
+    });
+
+    it("caps JS behavior score at 35 even if input is higher", () => {
+      const result = computeNRS(baseCds(0), baseNav({ jsBehaviorScore: 50 }));
+      expect(result.nrs).toBe(35);
+    });
+
+    it("does not add score when jsBehaviorScore is 0", () => {
+      const result = computeNRS(baseCds(10), baseNav({ jsBehaviorScore: 0 }));
+      expect(result.nrs).toBe(10);
+      expect(result.nrsFactors).not.toContain("nrs_js_behavior_suspicious");
+    });
+
+    it("does not add score when jsBehaviorScore is undefined", () => {
+      const result = computeNRS(baseCds(10), baseNav());
+      expect(result.nrs).toBe(10);
+      expect(result.nrsFactors).not.toContain("nrs_js_behavior_suspicious");
+    });
+
+    it("fires unconditionally (no NRS threshold gate)", () => {
+      const result = computeNRS(baseCds(0), baseNav({ jsBehaviorScore: 20 }));
+      expect(result.nrs).toBe(20);
+      expect(result.nrsFactors).toContain("nrs_js_behavior_suspicious");
+    });
+  });
 });
