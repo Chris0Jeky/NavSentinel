@@ -29,6 +29,8 @@ export interface NavigationContext {
   pushStateAbuse?: boolean | undefined;
   /** CSP weakness score from csp_analyzer (positive only; applied when base NRS > 20) */
   cspWeaknessScore?: number | undefined;
+  /** Domain has been flagged as a repeat offender by domain profiling */
+  domainRepeatOffender?: boolean | undefined;
 }
 
 export interface NRSResult {
@@ -60,6 +62,7 @@ const NRS_WEIGHT_PUSHSTATE_ABUSE = 20;
 /** Minimum base NRS before CSP weakness is applied as a modifier. */
 const NRS_CSP_MODIFIER_THRESHOLD = 20;
 const NRS_WEIGHT_CSP_CAP = 10;
+const NRS_WEIGHT_DOMAIN_REPEAT_OFFENDER = 10;
 
 /** Raw scores above this get 50% weight on the excess. */
 const NRS_DIMINISHING_RETURNS_THRESHOLD = 100;
@@ -166,14 +169,14 @@ export function computeNRS(cdsResult: ScoreResult, navCtx: NavigationContext): N
     nrsFactors.push("nrs_pushstate_abuse");
   }
 
-  // CSP weakness is a risk-elevating modifier only: it amplifies existing
-  // suspicion but never reduces NRS. Content scripts read meta tags which
-  // are attacker-controlled, so a "strict" CSP cannot be trusted as a
-  // safety signal. Only apply positive scores when the base NRS already
-  // exceeds the threshold.
   if (navCtx.cspWeaknessScore && navCtx.cspWeaknessScore > 0 && nrs > NRS_CSP_MODIFIER_THRESHOLD) {
     nrs += Math.min(navCtx.cspWeaknessScore, NRS_WEIGHT_CSP_CAP);
     nrsFactors.push("nrs_csp_weakness");
+  }
+
+  if (navCtx.domainRepeatOffender) {
+    nrs += NRS_WEIGHT_DOMAIN_REPEAT_OFFENDER;
+    nrsFactors.push("nrs_domain_repeat_offender");
   }
 
   // Diminishing returns: points above the threshold get reduced weight

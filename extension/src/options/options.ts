@@ -24,6 +24,11 @@ import {
   removeAllowlistEntry,
   type Allowlist
 } from "../shared/allowlist";
+import {
+  clearDomainProfiles,
+  getTopSuspiciousDomains,
+  type DomainProfile,
+} from "../shared/domain_profile";
 const navModeEl = document.getElementById("navMode") as HTMLSelectElement;
 const navDebugEl = document.getElementById("navDebug") as HTMLInputElement;
 const navDnrEl = document.getElementById("navDnrEnabled") as HTMLInputElement;
@@ -60,6 +65,9 @@ const statAvgScoreBlockEl = document.getElementById("statAvgScoreBlock") as HTML
 const refreshStatsBtn = document.getElementById("refreshStats") as HTMLButtonElement;
 const clearStatsBtn = document.getElementById("clearStats") as HTMLButtonElement;
 const topDomainsEl = document.getElementById("topDomains") as HTMLDivElement;
+const domainProfilesEl = document.getElementById("domainProfiles") as HTMLDivElement;
+const refreshProfilesBtn = document.getElementById("refreshProfiles") as HTMLButtonElement;
+const clearProfilesBtn = document.getElementById("clearProfiles") as HTMLButtonElement;
 const statusTimers = new WeakMap<HTMLElement, number>();
 
 function flashStatus(
@@ -320,6 +328,57 @@ async function refreshStats(): Promise<void> {
   renderStats(await getPromptOutcomes());
 }
 
+function renderDomainProfiles(profiles: DomainProfile[]): void {
+  domainProfilesEl.innerHTML = "";
+
+  if (profiles.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "allowlist-empty";
+    empty.textContent = "No domain profiles recorded yet.";
+    domainProfilesEl.appendChild(empty);
+    return;
+  }
+
+  for (const p of profiles) {
+    const row = document.createElement("div");
+    row.className = "event";
+    const avgNRS = p.visits > 0 ? (p.totalNRS / p.visits).toFixed(1) : "0";
+
+    const head = document.createElement("div");
+    head.className = "event-head";
+
+    const badge = document.createElement("span");
+    badge.className = "badge mono";
+    badge.textContent = p.domain;
+
+    const meta = document.createElement("span");
+    meta.className = "event-time mono";
+    meta.textContent = `visits=${p.visits} avgNRS=${avgNRS} triggers=${p.triggerCount}`;
+
+    head.appendChild(badge);
+    head.appendChild(meta);
+
+    const details = document.createElement("div");
+    details.className = "mono";
+    const topFactors = Object.entries(p.factors)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([k, v]) => `${k}(${v})`)
+      .join(", ");
+    if (topFactors) {
+      details.textContent = `top factors: ${topFactors}`;
+    }
+
+    row.appendChild(head);
+    if (details.textContent) row.appendChild(details);
+    domainProfilesEl.appendChild(row);
+  }
+}
+
+async function refreshDomainProfiles(): Promise<void> {
+  renderDomainProfiles(await getTopSuspiciousDomains(10));
+}
+
 function getInt(el: HTMLInputElement, fallback: number): number {
   const n = Number(el.value);
   return Number.isFinite(n) ? Math.trunc(n) : fallback;
@@ -343,6 +402,7 @@ async function init(): Promise<void> {
   await refreshTrusted();
   await refreshEventLog();
   await refreshStats();
+  await refreshDomainProfiles();
 }
 
 saveBtn.addEventListener("click", async () => {
@@ -466,6 +526,17 @@ clearStatsBtn.addEventListener("click", async () => {
   await clearAdaptiveScores();
   await refreshStats();
   flashStatus(statusEl, "Stats cleared.");
+});
+
+refreshProfilesBtn.addEventListener("click", async () => {
+  await refreshDomainProfiles();
+  flashStatus(statusEl, "Profiles refreshed.");
+});
+
+clearProfilesBtn.addEventListener("click", async () => {
+  await clearDomainProfiles();
+  await refreshDomainProfiles();
+  flashStatus(statusEl, "Domain profiles cleared.");
 });
 
 void init();

@@ -54,6 +54,7 @@ import {
   isPushStateAbuseActive,
 } from "./pushstate_guard";
 import { analyzeCSP, type CSPAnalysis } from "./csp_analyzer";
+import { getDomainRisk, recordNavigation } from "../shared/domain_profile";
 
 const CDS_SMART_BLOCK_THRESHOLD = 70;
 const CDS_STRICT_BLOCK_THRESHOLD = 50;
@@ -135,6 +136,7 @@ let cachedChainInfo: RedirectChainInfo | null = null;
 let cachedChainInfoAt = 0;
 /** Cached CSP analysis for the current page (computed once after DOM ready). */
 let cachedCSPAnalysis: CSPAnalysis | null = null;
+let cachedDomainRepeatOffender = false;
 
 type TabRiskState = "green" | "yellow" | "red" | "gray";
 const SEVERITY: Record<TabRiskState, number> = { gray: 0, green: 1, yellow: 2, red: 3 };
@@ -241,6 +243,10 @@ async function initSettings() {
   postToMain("ns-ping");
   // Load reputation bloom filter in the background (non-blocking)
   void loadReputationFilter();
+  // Pre-fetch domain risk for the current site (non-blocking)
+  void getDomainRisk(siteKeyFromLocation()).then((risk) => {
+    cachedDomainRepeatOffender = risk.isRepeatOffender;
+  }).catch((err) => { console.warn("[NavSentinel] domain profile pre-fetch failed:", err); });
   previousMode = settings.defaultMode;
   if (isTopFrame()) {
     sendIconUpdate(settings.defaultMode === "off" ? "gray" : "green");
@@ -1304,6 +1310,7 @@ window.addEventListener(
       clickfixScore: cfScore > 0 ? cfScore : undefined,
       pushStateAbuse,
       cspWeaknessScore: cachedCSPAnalysis?.score,
+      domainRepeatOffender: cachedDomainRepeatOffender,
     };
 
     if (dblClickHijack) {
@@ -1414,6 +1421,19 @@ window.addEventListener(
 
     if (settings.debug) {
       console.debug("[NavSentinel] click", { decision, nrs, cds, reasonCodes, nrsFactors, ctx });
+    }
+
+    // --- Record domain profile (async, non-blocking) ---
+    // Filter out the repeat-offender factor to prevent feedback loop:
+    // recording it would bake +10 into totalNRS, inflating avgNRS and
+    // making the domain a permanent repeat offender.
+    if (mode !== "off") {
+      const site = siteKeyFromLocation();
+      const baseReasons = reasonCodes.filter(r => r !== "nrs_domain_repeat_offender");
+      const baseNrs = Math.max(0, cachedDomainRepeatOffender ? nrs - 10 : nrs);
+      void recordNavigation(site, baseNrs, baseReasons, getNrsBlockThreshold(mode))
+        .then((risk) => { cachedDomainRepeatOffender = risk.isRepeatOffender; })
+        .catch((err) => { console.warn("[NavSentinel] domain profile write failed:", err); });
     }
 
     // --- Child-frame async reputation check ---
