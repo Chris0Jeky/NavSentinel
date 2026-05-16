@@ -9,7 +9,8 @@ import {
   getRegistrableDomain,
   isMixedScript,
   levenshtein,
-  normalizeHomoglyphs
+  normalizeHomoglyphs,
+  recalcSeverity
 } from "../extension/src/shared/domain";
 import type { CredentialSettings } from "../extension/src/shared/storage";
 
@@ -594,4 +595,15 @@ describe("edge cases: IP addresses, punycode, empty inputs", () => {
     // xn--pypal-4ve does not match any brand keyword after normalization
     expect(result).toBeNull();
   });
+});
+
+describe("recalcSeverity", () => {
+  it("returns 'high' for score >= 70", () => expect(recalcSeverity(70)).toBe("high"));
+  it("returns 'high' for score = 100", () => expect(recalcSeverity(100)).toBe("high"));
+  it("returns 'medium' for score >= 40", () => expect(recalcSeverity(40)).toBe("medium"));
+  it("returns 'medium' for score = 69", () => expect(recalcSeverity(69)).toBe("medium"));
+  it("returns 'low' for score >= 15", () => expect(recalcSeverity(15)).toBe("low"));
+  it("returns 'low' for score = 39", () => expect(recalcSeverity(39)).toBe("low"));
+  it("returns 'none' for score < 15", () => expect(recalcSeverity(14)).toBe("none"));
+  it("returns 'none' for score = 0", () => expect(recalcSeverity(0)).toBe("none"));
 });

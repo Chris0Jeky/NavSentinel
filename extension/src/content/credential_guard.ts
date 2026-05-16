@@ -5,7 +5,7 @@ import {
   getCredentialSettings,
   getTrustedDomains
 } from "../shared/storage";
-import { computeCredentialRisk, getRegistrableDomain, normalizeHost } from "../shared/domain";
+import { computeCredentialRisk, getRegistrableDomain, normalizeHost, recalcSeverity } from "../shared/domain";
 import { showToast } from "./ui_toast";
 import { showCredentialModal } from "./credential_modal";
 import {
@@ -15,6 +15,7 @@ import {
   shouldPromptCredentialSubmit
 } from "./credential_guard_model";
 import { analyzePageContent } from "./content_analyzer";
+import { checkSRI } from "./sri_checker";
 
 const allowNextSubmitUntil = new WeakMap<HTMLFormElement, number>();
 
@@ -108,11 +109,21 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
         for (let i = 0; i < contentAnalysis.reasons.length; i++) {
           risk.reasons.push({ code: "CONTENT_FP", label: contentAnalysis.reasons[i] ?? "" });
         }
-        // Recalculate severity after boost
-        if (risk.score >= 70) risk.severity = "high";
-        else if (risk.score >= 40) risk.severity = "medium";
-        else if (risk.score >= 15) risk.severity = "low";
-        else risk.severity = "none";
+        risk.severity = recalcSeverity(risk.score);
+      }
+    }
+
+    // SRI awareness: flag missing subresource integrity on credential pages.
+    // Skip entirely for trusted domains -- consistent with content analysis above.
+    if (!risk.page.isTrusted) {
+      const sriAnalysis = checkSRI(document, location.href, location.origin);
+      if (sriAnalysis.score !== 0) {
+        risk.score = Math.max(0, Math.min(100, risk.score + sriAnalysis.score));
+        const sriCode = sriAnalysis.score > 0 ? "SRI_MISSING_ON_CREDENTIAL_PAGE" : "SRI_PRESENT_ON_CREDENTIAL_PAGE";
+        for (let i = 0; i < sriAnalysis.reasons.length; i++) {
+          risk.reasons.push({ code: sriCode, label: sriAnalysis.reasons[i] ?? "" });
+        }
+        risk.severity = recalcSeverity(risk.score);
       }
     }
 
