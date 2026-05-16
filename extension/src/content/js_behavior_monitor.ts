@@ -259,17 +259,8 @@ function patchFormSubmitMonitoring(config: JsBehaviorMonitorConfig): void {
     return originalSubmit.call(this);
   };
 
-  // Patch HTMLFormElement.prototype.requestSubmit for programmatic submits
-  if (HTMLFormElement.prototype.requestSubmit) {
-    const originalRequestSubmit = HTMLFormElement.prototype.requestSubmit;
-    HTMLFormElement.prototype.requestSubmit = function (
-      this: HTMLFormElement,
-      submitter?: HTMLElement | null
-    ) {
-      handleFormSubmit(this, config);
-      return originalRequestSubmit.call(this, submitter);
-    };
-  }
+  // Note: requestSubmit() fires a 'submit' event which the capturing listener
+  // above already handles. No prototype patch needed — patching it would double-fire.
 }
 
 // ============================================================================
@@ -336,8 +327,13 @@ export function formHasCredentialFields(form: HTMLFormElement): boolean {
  */
 export function isCrossOriginUrl(url: string): boolean {
   if (!url) return false;
+  const lc = url.trimStart().toLowerCase();
+  if (lc.startsWith("data:") || lc.startsWith("javascript:") || lc.startsWith("blob:")) {
+    return false;
+  }
   try {
     const resolved = new URL(url, location.href);
+    if (resolved.origin === "null") return false;
     return resolved.origin !== location.origin;
   } catch {
     return false;
@@ -378,9 +374,10 @@ export function extractOrigin(url: string): string {
  */
 export function correlatesWithFormSubmit(requestTs: number): boolean {
   return _recentFormSubmits.some(
-    (rec) =>
-      rec.hasCredentials &&
-      requestTs - rec.ts <= FORM_SUBMIT_CORRELATION_WINDOW_MS
+    (rec) => {
+      const delta = requestTs - rec.ts;
+      return rec.hasCredentials && delta >= 0 && delta <= FORM_SUBMIT_CORRELATION_WINDOW_MS;
+    }
   );
 }
 
