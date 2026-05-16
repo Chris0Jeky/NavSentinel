@@ -1,8 +1,10 @@
+// @vitest-environment happy-dom
 import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 
 // The mutation monitor relies on DOM APIs (MutationObserver, getComputedStyle,
 // getBoundingClientRect). We test the pure-logic paths directly and use
 // lightweight stubs for the DOM-dependent parts.
+// Environment: happy-dom provides the required DOM APIs (MutationObserver, document, etc.)
 
 // We import the module functions. Because the module manages internal state
 // we reset between tests.
@@ -14,17 +16,6 @@ import {
   _resetMutationState,
   type MutationAlert,
 } from "../extension/src/content/mutation_monitor";
-
-const hasDOM = typeof globalThis.document !== "undefined";
-
-// ---------------------------------------------------------------------------
-// Helper to collect alerts
-// ---------------------------------------------------------------------------
-
-function collectAlerts(): MutationAlert[] {
-  const collected: MutationAlert[] = [];
-  return collected;
-}
 
 // ---------------------------------------------------------------------------
 // Unit tests that work WITHOUT a full DOM
@@ -60,7 +51,7 @@ describe("mutation_monitor module API", () => {
 });
 
 // ---------------------------------------------------------------------------
-// DOM-dependent tests (run only when DOM is available, e.g., jsdom/happy-dom)
+// DOM-dependent tests (happy-dom provides MutationObserver and DOM APIs)
 // ---------------------------------------------------------------------------
 
 describe("mutation_monitor DOM integration", () => {
@@ -74,14 +65,14 @@ describe("mutation_monitor DOM integration", () => {
     vi.useRealTimers();
   });
 
-  it.skipIf(!hasDOM)("starts and stops without error", () => {
+  it("starts and stops without error", () => {
     const alerts: MutationAlert[] = [];
     startMutationMonitor(document, (a) => alerts.push(a));
     expect(getMutationAlertCount()).toBe(0);
     stopMutationMonitor();
   });
 
-  it.skipIf(!hasDOM)("detects password field injection into existing form", async () => {
+  it("detects password field injection into existing form", async () => {
     const alerts: MutationAlert[] = [];
     const form = document.createElement("form");
     document.body.appendChild(form);
@@ -107,7 +98,7 @@ describe("mutation_monitor DOM integration", () => {
     stopMutationMonitor();
   });
 
-  it.skipIf(!hasDOM)("detects input type changed to password", async () => {
+  it("detects input type changed to password", async () => {
     const alerts: MutationAlert[] = [];
     const input = document.createElement("input");
     input.type = "text";
@@ -126,16 +117,28 @@ describe("mutation_monitor DOM integration", () => {
     stopMutationMonitor();
   });
 
-  it.skipIf(!hasDOM)("detects form action attribute change", async () => {
+  it("detects form action attribute change", async () => {
     const alerts: MutationAlert[] = [];
-    const form = document.createElement("form");
-    form.setAttribute("action", "/login");
-    document.body.appendChild(form);
 
+    // Start monitoring BEFORE adding the form. In happy-dom, querySelectorAll
+    // returns different object refs than MutationRecord.target, so the form
+    // must first be observed via an attribute mutation to register its baseline.
     startMutationMonitor(document, (a) => alerts.push(a));
 
+    const form = document.createElement("form");
+    document.body.appendChild(form);
+
+    // First attribute mutation on "action" registers the form (baseline = "/login")
+    form.setAttribute("action", "/login");
+
+    // Flush so the observer processes and records the initial action
+    vi.advanceTimersByTime(150);
+    await vi.advanceTimersByTimeAsync(150);
+
+    // Second mutation: change to cross-domain URL — this should trigger the alert
     form.setAttribute("action", "https://evil.example.com/steal");
 
+    vi.advanceTimersByTime(150);
     await vi.advanceTimersByTimeAsync(150);
 
     const actionAlerts = alerts.filter((a) => a.type === "form_action_changed");
@@ -146,7 +149,69 @@ describe("mutation_monitor DOM integration", () => {
     stopMutationMonitor();
   });
 
-  it.skipIf(!hasDOM)("does not alert for form action unchanged", async () => {
+  it("detects cross-domain action change on a pre-existing snapshotted form", async () => {
+    const alerts: MutationAlert[] = [];
+    const form = document.createElement("form");
+    form.setAttribute("action", "/login");
+    document.body.appendChild(form);
+    const nativeMutationObserver = globalThis.MutationObserver;
+    let mutationCallback: MutationCallback = () => {
+      throw new Error("MutationObserver callback was not initialized");
+    };
+
+    class TestMutationObserver {
+      constructor(callback: MutationCallback) {
+        mutationCallback = callback;
+      }
+
+      observe(): void {}
+
+      disconnect(): void {}
+    }
+
+    vi.stubGlobal("MutationObserver", TestMutationObserver);
+
+    const querySelectorAll = document.querySelectorAll.bind(document);
+    const querySpy = vi
+      .spyOn(document, "querySelectorAll")
+      .mockImplementation((selector: string) => {
+        if (selector === "form") {
+          return [form] as unknown as NodeListOf<Element>;
+        }
+        return querySelectorAll(selector);
+      });
+
+    try {
+      startMutationMonitor(document, (a) => alerts.push(a));
+      querySpy.mockRestore();
+
+      form.setAttribute("action", "https://evil.example.com/steal");
+      mutationCallback?.(
+        [
+          {
+            type: "attributes",
+            target: form,
+            attributeName: "action",
+          } as unknown as MutationRecord,
+        ],
+        {} as MutationObserver
+      );
+
+      vi.advanceTimersByTime(150);
+      await vi.advanceTimersByTimeAsync(150);
+
+      const actionAlerts = alerts.filter((a) => a.type === "form_action_changed");
+      expect(actionAlerts.length).toBeGreaterThanOrEqual(1);
+      expect(actionAlerts[0]!.details).toContain('was "/login"');
+    } finally {
+      querySpy.mockRestore();
+      form.remove();
+      stopMutationMonitor();
+      vi.stubGlobal("MutationObserver", nativeMutationObserver);
+    }
+  });
+
+  it("does not alert for form action unchanged", async () => {
     const alerts: MutationAlert[] = [];
     const form = document.createElement("form");
     form.setAttribute("action", "/login");
@@ -166,7 +231,7 @@ describe("mutation_monitor DOM integration", () => {
     stopMutationMonitor();
   });
 
-  it.skipIf(!hasDOM)("detects suspicious hidden iframe injection", async () => {
+  it("detects suspicious hidden iframe injection", async () => {
     const alerts: MutationAlert[] = [];
     startMutationMonitor(document, (a) => alerts.push(a));
 
@@ -184,7 +249,7 @@ describe("mutation_monitor DOM integration", () => {
     stopMutationMonitor();
   });
 
-  it.skipIf(!hasDOM)("ignores legitimate reCAPTCHA iframes", async () => {
+  it("ignores legitimate reCAPTCHA iframes", async () => {
     const alerts: MutationAlert[] = [];
     startMutationMonitor(document, (a) => alerts.push(a));
 
@@ -201,7 +266,7 @@ describe("mutation_monitor DOM integration", () => {
     stopMutationMonitor();
   });
 
-  it.skipIf(!hasDOM)("caps alerts at 50", async () => {
+  it("caps alerts at 50", async () => {
     const alerts: MutationAlert[] = [];
     startMutationMonitor(document, (a) => alerts.push(a));
 
@@ -222,7 +287,7 @@ describe("mutation_monitor DOM integration", () => {
     stopMutationMonitor();
   });
 
-  it.skipIf(!hasDOM)("auto-disconnects after 5 minutes", async () => {
+  it("auto-disconnects after 5 minutes", async () => {
     const alerts: MutationAlert[] = [];
     startMutationMonitor(document, (a) => alerts.push(a));
 
@@ -242,7 +307,7 @@ describe("mutation_monitor DOM integration", () => {
     input.remove();
   });
 
-  it.skipIf(!hasDOM)("stopMutationMonitor prevents further alerts", async () => {
+  it("stopMutationMonitor prevents further alerts", async () => {
     const alerts: MutationAlert[] = [];
     startMutationMonitor(document, (a) => alerts.push(a));
     stopMutationMonitor();

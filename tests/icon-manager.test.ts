@@ -5,7 +5,6 @@ import {
   getTabIconState,
   setAllTabsGray,
   _getTabStateMap,
-  type IconState,
 } from "../extension/src/sw/icon_manager";
 
 const setBadgeText = vi.fn().mockResolvedValue(undefined);

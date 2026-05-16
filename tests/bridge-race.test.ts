@@ -1,10 +1,10 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { describe, expect, it } from "vitest";
 
 describe("bridge race condition fixes", () => {
   describe("issue #90: retry generation counter prevents closing active port", () => {
     it("stale retry callback is invalidated by generation counter", () => {
       let gen = 0;
-      let bridgeReady = false;
+      let _bridgeReady = false;
 
       const attempt = () => {
         gen++;
@@ -21,7 +21,7 @@ describe("bridge race condition fixes", () => {
       const first = attempt();
       expect(first.thisGen).toBe(1);
 
-      bridgeReady = true;
+      _bridgeReady = true;
       gen++;
 
       expect(gen).toBe(2);
@@ -52,7 +52,7 @@ describe("bridge race condition fixes", () => {
 
     it("markMainGuardReady increments gen to invalidate pending retries", () => {
       let gen = 0;
-      let bridgeReady = false;
+      let _bridgeReady = false;
       let retryFired = false;
 
       gen++;
@@ -67,7 +67,7 @@ describe("bridge race condition fixes", () => {
       };
 
       gen++;
-      bridgeReady = true;
+      _bridgeReady = true;
 
       retryCallback();
       expect(retryFired).toBe(false);

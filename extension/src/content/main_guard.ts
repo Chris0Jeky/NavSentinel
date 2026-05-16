@@ -997,7 +997,7 @@ function pathLooksCrossOrigin(newUrl: string): boolean {
  *
  * Returns a reason string if suspicious, or null if benign.
  */
-function checkPushStateSuspicious(url: string | URL | null | undefined, method: string): string | null {
+function checkPushStateSuspicious(url: string | URL | null | undefined, _method: string): string | null {
   if (isOff()) return null;
 
   const now = nowMs();

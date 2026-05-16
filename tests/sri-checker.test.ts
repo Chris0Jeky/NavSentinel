@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { describe, expect, it, beforeEach } from "vitest";
-import { checkSRI, type SRIAnalysis } from "../extension/src/content/sri_checker";
+import { describe, expect, it } from "vitest";
+import { checkSRI } from "../extension/src/content/sri_checker";
 
 // ---------------------------------------------------------------------------
 // Helpers
