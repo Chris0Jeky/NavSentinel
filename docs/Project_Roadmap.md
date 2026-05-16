@@ -41,7 +41,7 @@ Decisions taken during this planning session. Each is final unless explicitly re
 | D04 | **Effort: S / M / L / XL** | S: < 4 hours, single focus. M: 4-12 hours, 2-5 files. L: 2-5 days, new subsystem. XL: 1-2 weeks, cross-cutting. |
 | D05 | **Branch convention: `{type}/{slug}`** | Types: `fix/`, `feat/`, `test/`, `infra/`, `docs/`. Replaces the `codex/` prefix from the merge era. |
 | D06 | **PSL: build-time bundled JSON** | Ship a static JSON asset compiled from publicsuffix.org at build time. No runtime network calls. Add a `scripts/update-psl.mjs` build script. Update manually or via dependabot-like cadence. |
-| D07 | **Bloom filter: build-time from free feeds** | Compile from URLhaus + OpenPhish at build time. ~125KB budget for 100K domains. Ship as binary asset. No runtime lookups. |
+| D07 | **Bloom filter: build-time from free feeds** | Compile from URLhaus + OpenPhish at build time. ~150KB budget for 100K domains. Ship as binary asset. No runtime lookups. |
 | D08 | **No ML at this stage** | ML adds model size, inference complexity, and update mechanism overhead. Heuristic/pattern detection keeps the extension light and auditable. Revisit in Phase 4 if heuristics plateau. |
 | D09 | **DoubleClickjacking = headline feature** | No consumer extension detects this. The attack bypasses all traditional defenses. NavSentinel is architecturally positioned. This is the single strongest differentiator. |
 | D10 | **Drop "(Dev)" branding** | Ship as "NavSentinel". The Dev suffix signals unfinished work and undermines trust. |
@@ -540,7 +540,7 @@ without any network calls (Thesis Review, Section 7.2).
 - Wire reputation check into credential guard (risk factor: known-bad domain)
 - Add unit tests with known-bad domains and false positive verification
 
-**Size budget**: ~125KB for 100K domains (acceptable for extension bundle).
+**Size budget**: ~150KB for 100K domains (acceptable for extension bundle).
 
 **Files**: new `scripts/build-bloom-filter.mjs`, new `extension/src/shared/reputation.ts`,
 new `extension/src/shared/reputation_data.bin`, `extension/src/shared/scoring.ts` or `nrs.ts`
