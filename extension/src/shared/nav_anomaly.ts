@@ -587,7 +587,13 @@ export function getAnomalyScoreSync(
   const recentCount = countRecentCategory(category, ts);
 
   if (sessionNavCount < MIN_NAVIGATIONS_FOR_ANOMALY) return 0;
-  return recentCount >= BURST_MIN_COUNT && category !== "unknown" ? BASE_ANOMALY_SCORE : 0;
+  if (recentCount < BURST_MIN_COUNT || category === "unknown") return 0;
+
+  let score = BASE_ANOMALY_SCORE;
+  if (recentCount >= 3) {
+    score += BURST_3_PLUS_BONUS;
+  }
+  return Math.min(score, ANOMALY_SCORE_CAP);
 }
 
 /**
