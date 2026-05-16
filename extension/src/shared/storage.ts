@@ -134,11 +134,6 @@ export async function getSuiteSettings(): Promise<SuiteSettings> {
   return mergeSuiteSettings(structuredClone(DEFAULT_SUITE_SETTINGS), stored);
 }
 
-async function setSuiteSettings(next: SuiteSettings): Promise<void> {
-  const merged = mergeSuiteSettings(structuredClone(DEFAULT_SUITE_SETTINGS), next);
-  await chrome.storage.local.set({ [SUITE_SETTINGS_KEY]: merged });
-}
-
 export async function updateSuiteSettings(partial: SuiteSettingsPatch): Promise<SuiteSettings> {
   const cur = await getSuiteSettings();
   const next = mergeSuiteSettings(cur, partial);
@@ -161,10 +156,6 @@ export async function getNavSettings(): Promise<NavSettings> {
   return s.nav;
 }
 
-async function setNavSettings(nav: NavSettings): Promise<void> {
-  await updateSuiteSettings({ nav });
-}
-
 export function onNavSettingsChange(cb: (s: NavSettings) => void): void {
   onSuiteSettingsChange((s) => cb(s.nav));
 }
@@ -174,13 +165,6 @@ export async function getCredentialSettings(): Promise<CredentialSettings> {
   return s.credential;
 }
 
-async function setCredentialSettings(credential: CredentialSettings): Promise<void> {
-  await updateSuiteSettings({ credential });
-}
-
-function onCredentialSettingsChange(cb: (s: CredentialSettings) => void): void {
-  onSuiteSettingsChange((s) => cb(s.credential));
-}
 
 function normalizeTrustedDomain(value: unknown): string {
   if (typeof value !== "string") return "";
