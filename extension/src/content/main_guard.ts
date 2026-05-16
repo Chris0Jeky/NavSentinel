@@ -979,6 +979,7 @@ const nativeReplaceState = History.prototype.replaceState;
 
 function patchHistory(): void {
   const patchedPushState = function (
+    this: History,
     data: any,
     unused: string,
     url?: string | URL | null,
@@ -1000,6 +1001,7 @@ function patchHistory(): void {
   };
 
   const patchedReplaceState = function (
+    this: History,
     data: any,
     unused: string,
     url?: string | URL | null,
