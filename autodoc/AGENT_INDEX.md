@@ -1,6 +1,6 @@
 # Agent Index - NavSentinel
 
-Last reviewed: 2026-05-11.
+Last reviewed: 2026-05-16.
 
 This is a fast orientation layer for coding agents. It should point to interfaces and seams, not duplicate implementation details.
 
@@ -33,24 +33,30 @@ This is a fast orientation layer for coding agents. It should point to interface
 
 | Domain | Interface files | Meaty files | Verification hints |
 | --- | --- | --- | --- |
-| Navigation capture and CDS/NRS | `extension/src/content/capture_isolated.ts`, `extension/src/shared/scoring.ts`, `extension/src/shared/nrs.ts` | `extension/src/content/dom_builder.ts`, `extension/src/content/debug_overlay.ts` | `npm run test`, targeted scoring/NRS tests, relevant Gym E2E. |
-| Main-world guard and bridge | `extension/src/content/main_guard.ts` | `extension/src/content/pushstate_guard.ts`, `extension/src/content/dblclick_guard.ts` | `npm run build`, `tests/e2e/phase2-detections.spec.ts`, pushState/doubleclick unit tests. |
-| Credential guard | `extension/src/content/credential_guard.ts`, `extension/src/content/credential_guard_model.ts` | `extension/src/content/credential_modal.ts`, `extension/src/shared/domain.ts` | credential/domain Vitest tests and `tests/e2e/credential-guard.spec.ts`. |
-| Service worker state and rollback | `extension/src/sw/sw.ts`, `extension/src/shared/session_state.ts` | rollback, allow-once, OAuth, DNR, redirect-chain state inside `sw.ts` | `tests/sw-rollback.test.ts`, `tests/session-state.test.ts`, rollback/stress E2E lanes. |
-| Reputation and content analysis | `extension/src/shared/reputation.ts`, `extension/src/content/content_analyzer.ts` | `scripts/build-bloom-filter.mjs`, `scripts/fetch-phishing-corpus.mjs` | reputation/content analyzer tests, corpus lane when data exists. |
-| Popup/options UI | `extension/src/popup/popup.ts`, `extension/src/options/options.ts` | popup/options CSS and HTML in same directories | popup/options unit tests, `npm run build`, UI E2E smoke. |
-| Gym and E2E harness | `gym/index.html`, `tests/e2e/extension_test_utils.ts` | scenario pages under `gym/`, specs under `tests/e2e/` | targeted Playwright spec, `npm run gym:serve` for manual checks. |
-| Build/release | `package.json`, `vite.config.ts`, `extension/manifest.json` | `scripts/package.mjs`, version check script | `npm run verify:versions`, `npm run build`, `npm run package:ext`. |
-| Agentic workflow | `CLAUDE.md`, `AGENTS.md`, `docs/agentic/*`, `autodoc/AGENT_INDEX.md` | `.claude/skills/*`, `.agents/skills/*`, `scripts/agent_hooks/*` | path checks, hook script py_compile, render failure ledger. |
+| Navigation capture and CDS/NRS | `capture_isolated.ts`, `scoring.ts`, `nrs.ts`, `nav_anomaly.ts`, `adaptive_scoring.ts` | `dom_builder.ts`, `debug_overlay.ts`, `domain_groups.ts` | scoring/NRS/nav-anomaly/adaptive tests, Gym E2E. |
+| Main-world guard and bridge | `main_guard.ts`, `pushstate_guard.ts`, `dblclick_guard.ts` | `clickfix_detector.ts`, `mutation_monitor.ts`, `oauth_monitor.ts` | `npm run build`, phase2-detections E2E, pushstate/dblclick/clickfix unit tests. |
+| Credential guard | `credential_guard.ts`, `credential_guard_model.ts` | `credential_modal.ts`, `domain.ts`, `allowlist.ts` | credential/domain/allowlist tests, credential-guard E2E. |
+| Service worker state and rollback | `sw.ts`, `session_state.ts` | `redirect_chain.ts`, `icon_manager.ts` | sw-rollback, session-state, redirect-chain tests, rollback/stress E2E. |
+| Reputation and content analysis | `reputation.ts`, `content_analyzer.ts`, `domain_profile.ts` | `sri_checker.ts`, `csp_analyzer.ts`, `build-bloom-filter.mjs` | reputation/domain-profile/sri/csp tests, corpus E2E. |
+| Popup/options UI | `popup.ts`, `popup_model.ts`, `options.ts` | popup/options CSS/HTML, `event_tone.ts`, `explanations.ts`, `smart_defaults.ts` | popup/options unit tests, suite-ui E2E. |
+| Onboarding | `onboarding/onboarding.ts` | onboarding HTML/CSS | `tests/onboarding.test.ts`, `npm run build`. |
+| Toast and state display | `ui_toast.ts` | `stateMachine.ts`, `types.ts`, `popup_test.ts` | statemachine-timing tests, `npm run build`. |
+| Gym and E2E harness | `gym/index.html`, `tests/e2e/extension_test_utils.ts` | 52 gym HTML fixtures, 10 E2E specs under `tests/e2e/` | Playwright spec, `npm run gym:serve`. |
+| Build/release | `package.json`, `vite.config.ts`, `extension/manifest.json` | `scripts/package.mjs`, `scripts/release.mjs`, `scripts/check_versions.mjs`, `scripts/check-perf-budget.mjs` | `npm run verify:versions`, `npm run build`, `npm run package:ext`. |
+| Data pipeline | `scripts/build-bloom-filter.mjs`, `scripts/fetch-phishing-corpus.mjs` | `scripts/build-test-bloom-filter.mjs`, `scripts/measure-fp.mjs`, `scripts/check-bloom-size.mjs`, `scripts/update-psl.mjs` | `npm run build:bloom`, `npm run check:bloom-size`. |
+| Agentic workflow | `CLAUDE.md`, `AGENTS.md`, `docs/agentic/*`, `autodoc/AGENT_INDEX.md` | `.claude/skills/*`, `.agents/skills/*`, `scripts/agent_hooks/*` | `npm run agent:hooks:smoke`, `npm run agent:skills:validate`. |
+
+All paths above are relative to repo root. Content scripts live under `extension/src/content/`, shared modules under `extension/src/shared/`, SW under `extension/src/sw/`.
 
 ## Current Agent-Readiness Observations
 
-- NavSentinel already has focused repo docs, strong test surfaces, and local Claude skills.
+- NavSentinel v0.4.0, Phases 0-3 complete, 994 tests (37 unit + 10 E2E files), 40 source files, 52 gym fixtures.
 - The active planning source is `docs/Project_Roadmap.md`; archived execution trackers are historical only.
-- Existing Claude skills were refreshed to use the active roadmap instead of archived trackers.
+- `docs/Comprehensive_Project_Analysis.md` is a historical snapshot from 2026-04-09 — do not treat it as current.
 - Codex has a matching `.agents/skills` layer and should use `AGENTS.md`, Codex-native planning, parallel reads, patching, and verification tools.
 - Build output and generated data are easy context traps. Agents should edit source under `extension/src/` and avoid `extension/dist/`.
 - The highest-risk seams are main-world patching, bridge messages, service-worker lifecycle state, and credential/data privacy behavior.
+- All branches have been cleaned; only `main` and `origin/main` exist.
 
 ## Interface-On-Top Convention
 

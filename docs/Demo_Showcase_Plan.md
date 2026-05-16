@@ -72,20 +72,20 @@ The same runner should support:
 
 | Variant | Status | Notes |
 | --- | --- | --- |
-| `core` | in progress | stable merged-main chapter set is the first PR |
-| `operator` | in progress | real popup-surface automation is the next stacked PR |
-| `recovery` | in progress | redirect and rollback chapter set is the third stacked PR |
+| `core` | done | stable merged-main chapter set |
+| `operator` | done | real popup-surface automation |
+| `recovery` | done | redirect and rollback chapter set |
 
 ### Work items
 
 | ID | Item | Status | Notes |
 | --- | --- | --- | --- |
-| D1 | Add dedicated demo Playwright config | in progress | foundation for all variants |
-| D2 | Add a runner with named variants and record mode | in progress | should own mode/env wiring instead of shell-specific scripts |
-| D3 | Land the stable `core` showcase | in progress | use merged-main fixtures only |
-| D4 | Add real popup-surface automation | in progress | belongs to the `operator` PR |
-| D5 | Add redirect/rollback demo variant | in progress | belongs to the `recovery` PR |
-| D6 | Tighten presenter copy and pacing | in progress | keep the polish small and deliberate |
+| D1 | Add dedicated demo Playwright config | done | foundation for all variants |
+| D2 | Add a runner with named variants and record mode | done | owns mode/env wiring |
+| D3 | Land the stable `core` showcase | done | uses merged-main fixtures |
+| D4 | Add real popup-surface automation | done | shipped in `operator` variant |
+| D5 | Add redirect/rollback demo variant | done | shipped in `recovery` variant |
+| D6 | Tighten presenter copy and pacing | done | polish applied |
 
 ## Current `core` shape
 

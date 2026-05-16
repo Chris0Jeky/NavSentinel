@@ -29,7 +29,7 @@ CWS requires 1-5 screenshots at 1280x800 or 640x400.
 ### 5. Options — Allowlist & Trusted Domains
 - Open the options page with a populated allowlist and trusted domain list
 - Shows the user-control surface for managing per-site decisions
-- **Note**: An onboarding page exists in PR #73 (`feat/onboarding`) but has not merged to main. Replace this screenshot with onboarding once it ships.
+- **Note**: Onboarding page shipped (PR #73, merged 2026-05-16). Consider replacing this screenshot with the onboarding flow for better first-impression storytelling.
 
 ## Capture Commands
 

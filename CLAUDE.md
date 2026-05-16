@@ -134,13 +134,14 @@ Do not claim tests passed unless they actually ran in the current environment.
 
 ## Project Hot Spots
 
-- Navigation capture and scoring: `extension/src/content/capture_isolated.ts`, `extension/src/shared/scoring.ts`, `extension/src/shared/nrs.ts`.
-- Main-world guard and bridge: `extension/src/content/main_guard.ts`, `extension/src/content/pushstate_guard.ts`, `extension/src/content/dblclick_guard.ts`.
-- Credential guard: `extension/src/content/credential_guard.ts`, `extension/src/content/credential_modal.ts`, `extension/src/shared/domain.ts`.
-- Service worker state and rollback: `extension/src/sw/sw.ts`, `extension/src/shared/session_state.ts`.
-- Reputation and content analysis: `extension/src/shared/reputation.ts`, `extension/src/content/content_analyzer.ts`, `scripts/build-bloom-filter.mjs`.
-- Popup/options UI: `extension/src/popup/*`, `extension/src/options/*`.
-- Test surfaces: `tests/*.test.ts`, `tests/e2e/*.spec.ts`, `gym/*`.
+- Navigation capture and scoring: `extension/src/content/capture_isolated.ts`, `extension/src/shared/scoring.ts`, `extension/src/shared/nrs.ts`, `extension/src/shared/nav_anomaly.ts`, `extension/src/shared/adaptive_scoring.ts`.
+- Main-world guard and bridge: `extension/src/content/main_guard.ts`, `extension/src/content/pushstate_guard.ts`, `extension/src/content/dblclick_guard.ts`, `extension/src/content/clickfix_detector.ts`, `extension/src/content/mutation_monitor.ts`.
+- Credential guard: `extension/src/content/credential_guard.ts`, `extension/src/content/credential_modal.ts`, `extension/src/shared/domain.ts`, `extension/src/shared/allowlist.ts`.
+- Service worker state and rollback: `extension/src/sw/sw.ts`, `extension/src/shared/session_state.ts`, `extension/src/sw/icon_manager.ts`.
+- Reputation and content analysis: `extension/src/shared/reputation.ts`, `extension/src/content/content_analyzer.ts`, `extension/src/shared/domain_profile.ts`, `extension/src/content/sri_checker.ts`, `extension/src/content/csp_analyzer.ts`.
+- Popup/options UI: `extension/src/popup/*`, `extension/src/options/*`, `extension/src/onboarding/*`.
+- Shared helpers: `extension/src/shared/explanations.ts`, `extension/src/shared/event_tone.ts`, `extension/src/shared/smart_defaults.ts`, `extension/src/shared/domain_groups.ts`.
+- Test surfaces: `tests/*.test.ts` (37 files), `tests/e2e/*.spec.ts` (10 files), `gym/*` (52 fixtures).
 
 ## Local Settings
 
