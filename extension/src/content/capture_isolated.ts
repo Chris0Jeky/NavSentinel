@@ -774,7 +774,7 @@ function handleRollback(url: string, prevUrl?: string): void {
     }
   })();
   const target = prevUrl && prevUrl !== url ? prevUrl : referrerTarget;
-  if (target) {
+  if (target && /^https?:\/\//i.test(target)) {
     try {
       chrome.runtime.sendMessage({ type: "ns-begin-rollback", returnUrl: target });
       chrome.runtime.sendMessage({ type: "ns-store-forward", url, returnUrl: target });
@@ -1093,7 +1093,7 @@ if (chrome?.runtime?.onMessage) {
   // OAuth monitoring: delegate to oauth_monitor module for
   // ns-oauth-flow-update, ns-oauth-redirect-mismatch, ns-oauth-opener-manipulation.
   chrome.runtime.onMessage.addListener((message) => {
-    if (window.top !== window) return;
+    if (!isTopFrame()) return;
     handleOAuthRuntimeMessage(message);
   });
 }
@@ -1102,6 +1102,7 @@ if (chrome?.runtime?.sendMessage && isTopFrame()) {
   // -- Rollback polling --
   const run = (retries = 4) => {
     chrome.runtime.sendMessage({ type: "ns-check-rollback" }, (resp) => {
+      if (chrome.runtime.lastError) return;
       if (resp?.shouldRollback) {
         if (settings.defaultMode === "off") return;
         const url = typeof resp.entry?.url === "string" ? resp.entry.url : "";
@@ -1129,8 +1130,11 @@ if (chrome?.runtime?.sendMessage && isTopFrame()) {
       forwardCheckTimer = 0;
     }
     forwardCheckInFlight = true;
+    const inflightGuard = window.setTimeout(() => { forwardCheckInFlight = false; }, 5000);
     chrome.runtime.sendMessage({ type: "ns-check-forward", currentUrl: location.href }, (resp) => {
+      window.clearTimeout(inflightGuard);
       forwardCheckInFlight = false;
+      if (chrome.runtime.lastError) return;
       const status = typeof resp?.status === "string" ? resp.status : "";
       const url = typeof resp?.url === "string" ? resp.url : "";
       if (status === "offer" && url) {
