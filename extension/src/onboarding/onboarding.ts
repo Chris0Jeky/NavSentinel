@@ -8,7 +8,11 @@ const openOptionsLink = document.getElementById("openOptions") as HTMLAnchorElem
 
 if (getStartedBtn) {
   getStartedBtn.addEventListener("click", () => {
-    window.close();
+    chrome.tabs.getCurrent().then((tab) => {
+      if (tab?.id) chrome.tabs.remove(tab.id);
+    }).catch(() => {
+      window.close();
+    });
   });
 }
 

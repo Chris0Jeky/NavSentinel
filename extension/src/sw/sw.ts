@@ -316,9 +316,9 @@ chrome.runtime.onInstalled.addListener((details) => {
   void getNavSettings().then((s) => { cachedDefaultMode = s.defaultMode; }).catch(() => {});
 
   if (details.reason === "install") {
-    void chrome.tabs.create({
+    chrome.tabs.create({
       url: chrome.runtime.getURL("src/onboarding/onboarding.html"),
-    });
+    }).catch(() => {});
   }
 });
 
