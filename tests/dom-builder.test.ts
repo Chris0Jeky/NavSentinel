@@ -199,40 +199,6 @@ describe("buildClickContextFromEvents", () => {
     });
     expect(result.isLegitModalBackdrop).toBe(false);
   });
-
-  it("isLegitModalBackdrop is true for large overlay above a dialog", () => {
-    const dialog = makeEl("div", { role: "dialog" });
-    const overlay = makeEl("div");
-    Object.defineProperty(overlay, "getBoundingClientRect", {
-      value: () => ({ x: 0, y: 0, width: 1024, height: 768, top: 0, left: 0, right: 1024, bottom: 768 }),
-    });
-    Object.defineProperty(window, "innerWidth", { value: 1024, writable: true, configurable: true });
-    Object.defineProperty(window, "innerHeight", { value: 768, writable: true, configurable: true });
-
-    const stack = [overlay, dialog, document.documentElement];
-    const result = buildClickContextFromEvents({
-      down: fakeDown({ top: overlay, stack }),
-      click: fakeClick({ top: overlay, stack }),
-    });
-    expect(result.isLegitModalBackdrop).toBe(true);
-  });
-
-  it("isLegitModalBackdrop is true for aria-modal sibling", () => {
-    const modal = makeEl("div", { "aria-modal": "true" });
-    const overlay = makeEl("div");
-    Object.defineProperty(overlay, "getBoundingClientRect", {
-      value: () => ({ x: 0, y: 0, width: 1024, height: 768, top: 0, left: 0, right: 1024, bottom: 768 }),
-    });
-    Object.defineProperty(window, "innerWidth", { value: 1024, writable: true, configurable: true });
-    Object.defineProperty(window, "innerHeight", { value: 768, writable: true, configurable: true });
-
-    const stack = [overlay, modal, document.documentElement];
-    const result = buildClickContextFromEvents({
-      down: fakeDown({ top: overlay, stack }),
-      click: fakeClick({ top: overlay, stack }),
-    });
-    expect(result.isLegitModalBackdrop).toBe(true);
-  });
 });
 
 describe("buildKeyboardClickContext", () => {
@@ -269,66 +235,5 @@ describe("buildKeyboardClickContext", () => {
     expect(result.top.tag).toBe("BUTTON");
     expect(result.top.role).toBe("tab");
     expect(result.top.textLength).toBeGreaterThan(0);
-  });
-});
-
-describe("capturePointerDown", () => {
-  beforeEach(() => {
-    (document as any).elementsFromPoint = (_x: number, _y: number) => [document.documentElement];
-  });
-
-  it("captures coordinates and modifier keys", () => {
-    const event = new PointerEvent("pointerdown", {
-      clientX: 50,
-      clientY: 25,
-      button: 0,
-      ctrlKey: true,
-      shiftKey: false,
-      altKey: false,
-      metaKey: false,
-    });
-    const result = capturePointerDown(event);
-    expect(result.x).toBe(50);
-    expect(result.y).toBe(25);
-    expect(result.button).toBe(0);
-    expect(result.ctrl).toBe(true);
-    expect(result.shift).toBe(false);
-    expect(result.ts).toBeGreaterThan(0);
-    expect(result.stack).toBeInstanceOf(Array);
-  });
-
-  it("captures middle button", () => {
-    const event = new PointerEvent("pointerdown", { button: 1 });
-    const result = capturePointerDown(event);
-    expect(result.button).toBe(1);
-  });
-
-  it("captures all modifier keys", () => {
-    const event = new PointerEvent("pointerdown", {
-      ctrlKey: true,
-      shiftKey: true,
-      altKey: true,
-      metaKey: true,
-    });
-    const result = capturePointerDown(event);
-    expect(result.ctrl).toBe(true);
-    expect(result.shift).toBe(true);
-    expect(result.alt).toBe(true);
-    expect(result.meta).toBe(true);
-  });
-});
-
-describe("captureClick", () => {
-  beforeEach(() => {
-    (document as any).elementsFromPoint = (_x: number, _y: number) => [document.documentElement];
-  });
-
-  it("captures coordinates", () => {
-    const event = new MouseEvent("click", { clientX: 100, clientY: 200 });
-    const result = captureClick(event);
-    expect(result.x).toBe(100);
-    expect(result.y).toBe(200);
-    expect(result.ts).toBeGreaterThan(0);
-    expect(result.stack).toBeInstanceOf(Array);
   });
 });

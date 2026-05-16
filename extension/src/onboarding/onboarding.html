@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Welcome to NavSentinel</title>
+    <link rel="stylesheet" href="./onboarding.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <section class="section hero" data-section="welcome">
+        <div class="eyebrow">First-install setup</div>
+        <div class="hero-row">
+          <div>
+            <h1 class="title">NavSentinel</h1>
+            <p class="subtitle">
+              Catches what Safe Browsing can't see. NavSentinel detects interaction-level
+              browser attacks — DoubleClickjacking, ClickFix, redirect chains, and OAuth
+              abuse — without sending data anywhere. Everything runs locally in your browser.
+            </p>
+          </div>
+          <div class="hero-mark" aria-hidden="true">NS</div>
+        </div>
+      </section>
+
+      <section class="section" data-section="how-it-works">
+        <div class="section-head">
+          <div class="section-kicker">Detection layers</div>
+          <h2>How it works</h2>
+        </div>
+
+        <div class="card-grid">
+          <div class="card">
+            <div class="card-icon" aria-hidden="true">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M15 15l-2 5L9 9l11 4-5 2z" />
+                <path d="M2 2l7.586 7.586" />
+              </svg>
+            </div>
+            <h3 class="card-title">Monitors clicks</h3>
+            <p class="card-copy">
+              Watches for suspicious overlay patterns, hidden elements, and double-click
+              hijacking that trick you into clicking something you didn't intend.
+            </p>
+          </div>
+
+          <div class="card">
+            <div class="card-icon" aria-hidden="true">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+              </svg>
+            </div>
+            <h3 class="card-title">Analyzes navigation</h3>
+            <p class="card-copy">
+              Scores navigation risk based on context — cross-site jumps, redirect chains,
+              and known-bad domains all raise the risk level.
+            </p>
+          </div>
+
+          <div class="card">
+            <div class="card-icon" aria-hidden="true">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+            </div>
+            <h3 class="card-title">Protects credentials</h3>
+            <p class="card-copy">
+              Warns about credential entry on suspicious or lookalike domains before your
+              password leaves the browser.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" data-section="what-to-expect">
+        <div class="section-head">
+          <div class="section-kicker">Notifications</div>
+          <h2>What to expect</h2>
+        </div>
+
+        <p class="section-copy">
+          When NavSentinel detects something suspicious, you'll see a notification.
+          You can always choose to allow the navigation.
+        </p>
+
+        <div class="toast-grid">
+          <div class="toast-mockup toast-caution">
+            <div class="toast-header">
+              <span class="toast-icon" aria-hidden="true">&#9888;</span>
+              <span class="toast-label">Caution</span>
+            </div>
+            <div class="toast-body">
+              Suspicious navigation detected to <span class="mono">example-login.site</span>.
+              This may be a deceptive redirect.
+            </div>
+            <div class="toast-actions">
+              <span class="toast-btn">Allow once</span>
+              <span class="toast-btn toast-btn-secondary">Block</span>
+            </div>
+          </div>
+
+          <div class="toast-mockup toast-blocked">
+            <div class="toast-header">
+              <span class="toast-icon" aria-hidden="true">&#10007;</span>
+              <span class="toast-label">Blocked</span>
+            </div>
+            <div class="toast-body">
+              Navigation to <span class="mono">phish-site.example</span> was blocked.
+              Known malicious domain detected.
+            </div>
+            <div class="toast-actions">
+              <span class="toast-btn">Allow anyway</span>
+              <span class="toast-btn toast-btn-secondary">Dismiss</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" data-section="settings">
+        <div class="section-head">
+          <div class="section-kicker">Protection modes</div>
+          <h2>Choose your level</h2>
+        </div>
+
+        <div class="mode-grid">
+          <div class="mode-card">
+            <div class="mode-badge mode-badge-smart">Smart</div>
+            <p class="mode-copy">
+              Balanced protection. Prompts on suspicious cross-site navigations and
+              credential risks. Recommended for most users.
+            </p>
+          </div>
+
+          <div class="mode-card">
+            <div class="mode-badge mode-badge-strict">Strict</div>
+            <p class="mode-copy">
+              Maximum protection. Prompts on all cross-site navigations and blocks
+              risky credential submissions by default.
+            </p>
+          </div>
+
+          <div class="mode-card">
+            <div class="mode-badge mode-badge-off">Off</div>
+            <p class="mode-copy">
+              Monitoring only. Events are logged but no navigations are blocked or
+              prompted. Useful for testing.
+            </p>
+          </div>
+        </div>
+
+        <p class="section-copy settings-link-copy">
+          You can change modes anytime from the popup or the
+          <a href="#" id="openOptions" class="link">options page</a>.
+        </p>
+      </section>
+
+      <section class="section cta-section" data-section="cta">
+        <p class="cta-copy">
+          NavSentinel is active and protecting your browsing. Nothing to configure —
+          it works out of the box.
+        </p>
+        <button id="getStarted" class="btn-primary">Get started</button>
+      </section>
+    </div>
+
+    <script type="module" src="./onboarding.ts"></script>
+  </body>
+</html>

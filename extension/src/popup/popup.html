@@ -12,7 +12,7 @@
         <div class="eyebrow">Local-first browser defense</div>
         <div class="hero-row">
           <div>
-            <div class="title">NavSentinel <span id="version" class="version-tag"></span></div>
+            <h1 class="title">NavSentinel <span id="version" class="version-tag"></span></h1>
             <div class="hero-copy">
               Current-tab control tower for deceptive navigation and credential risk.
             </div>
@@ -23,7 +23,7 @@
         <div class="site-panel">
           <div class="label">Current site</div>
           <div id="site" class="site mono">-</div>
-          <div id="trustStatus" class="status-pill">-</div>
+          <div id="trustStatus" class="status-pill" aria-live="polite" aria-atomic="true">-</div>
         </div>
       </header>
 
@@ -31,7 +31,7 @@
         <div class="section-head">
           <div>
             <div class="label">Protection posture</div>
-            <div class="section-title">Quick controls</div>
+            <h2 class="section-title">Quick controls</h2>
           </div>
         </div>
 
@@ -71,9 +71,9 @@
         <div class="section-head">
           <div>
             <div class="label">Recent events</div>
-            <div class="section-title">Latest signals</div>
+            <h2 class="section-title">Latest signals</h2>
           </div>
-          <a class="link" href="#" id="openOptions">Open options</a>
+          <button class="link" id="openOptions">Open options</button>
         </div>
 
         <div id="events" class="events">Loading...</div>

@@ -6,6 +6,7 @@ import { fileURLToPath } from "url";
 import {
   assertNoToastFor,
   clickToastButton,
+  dismissOnboarding,
   getGymBaseUrl,
   waitForNavSentinelBridge,
   waitForToastMatch,
@@ -218,9 +219,22 @@ test("Level 10 delayed form submit prompts @regression", async () => {
 
       await waitForNavSentinelBridge(page);
 
-      const patchInfo = await page.evaluate(() => (window as any).__navsentinelLocationPatch);
-      expect(patchInfo, "Expected location patch info").toBeTruthy();
-      expect(patchInfo.protoAssign, "Expected Location.prototype.assign to be patched").toBe(true);
+      const bridgeReady = await page.evaluate(
+        () => document.documentElement.getAttribute("data-navsentinel-bridge-ready") === "1"
+      );
+      expect(bridgeReady, "Expected bridge to be ready (patches applied)").toBe(true);
+
+      const patchHardened = await page.evaluate(() => {
+        const desc = Object.getOwnPropertyDescriptor(window, "open");
+        return desc ? !desc.writable : false;
+      });
+      expect(patchHardened, "Expected window.open to be non-writable").toBe(true);
+
+      const protoHardened = await page.evaluate(() => {
+        const desc = Object.getOwnPropertyDescriptor(Window.prototype, "open");
+        return desc ? !desc.writable && !desc.configurable : false;
+      });
+      expect(protoHardened, "Expected Window.prototype.open to be non-writable and non-configurable").toBe(true);
 
       await page.click("#submitDelayed");
       await page.waitForTimeout(2600);
@@ -983,6 +997,7 @@ test("RW-08 popup window reuse laundering keeps the original consent popup @regr
     });
 
     try {
+      await dismissOnboarding(context);
       const page = await context.newPage();
       const beforePages = context.pages().length;
 
@@ -1410,6 +1425,7 @@ test("RW-19 repeated tech-support popup burst is blocked @regression", async () 
     });
 
     try {
+      await dismissOnboarding(context);
       const page = await context.newPage();
       const beforePages = context.pages().length;
 

@@ -1548,4 +1548,197 @@ describe("service worker rollback gating", () => {
     expect(correct.status).toBe("offer");
     expect(correct.url).toBe("https://evil.test/redirected");
   });
+
+  describe("TTL clamping", () => {
+    it("clamps ttlMs above MAX_TTL_MS (30s) — target expired after 30s", async () => {
+      const mock = createChromeMock();
+      vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+      await import("../extension/src/sw/sw");
+
+      mock.dispatchRuntimeMessage(
+        { type: "ns-allow-nav", ttlMs: 1200 },
+        { tab: { id: 80 } }
+      );
+      vi.setSystemTime(new Date("2026-03-17T12:00:00.100Z"));
+      mock.emitCommitted({
+        tabId: 80, frameId: 0,
+        url: "https://origin.test/page",
+        transitionType: "link", transitionQualifiers: []
+      });
+
+      mock.dispatchRuntimeMessage(
+        { type: "ns-allow-target-nav", url: "https://evil.test/slow", ttlMs: 120_000 },
+        { tab: { id: 80 } }
+      );
+
+      // Intermediate: at T+15s the clamped allowance (30s) is still active
+      // Use a separate tab to avoid consuming the target allowance on tab 80
+      mock.dispatchRuntimeMessage(
+        { type: "ns-allow-nav", ttlMs: 1200 },
+        { tab: { id: 180 } }
+      );
+      vi.setSystemTime(new Date("2026-03-17T12:00:00.100Z"));
+      mock.emitCommitted({
+        tabId: 180, frameId: 0,
+        url: "https://origin.test/page",
+        transitionType: "link", transitionQualifiers: []
+      });
+      mock.dispatchRuntimeMessage(
+        { type: "ns-allow-target-nav", url: "https://evil.test/slow", ttlMs: 120_000 },
+        { tab: { id: 180 } }
+      );
+      vi.setSystemTime(new Date("2026-03-17T12:00:15.000Z"));
+      mock.emitCommitted({
+        tabId: 180, frameId: 0,
+        url: "https://evil.test/slow",
+        transitionType: "link", transitionQualifiers: []
+      });
+      const midResponse = mock.dispatchRuntimeMessage(
+        { type: "ns-check-rollback" },
+        { tab: { id: 180 } }
+      ) as { shouldRollback: boolean };
+      expect(midResponse.shouldRollback).toBe(false);
+
+      // At T+31s the clamped TTL (30s, not 120s) has expired on tab 80
+      vi.setSystemTime(new Date("2026-03-17T12:00:31.000Z"));
+      mock.emitCommitted({
+        tabId: 80, frameId: 0,
+        url: "https://evil.test/slow",
+        transitionType: "link", transitionQualifiers: []
+      });
+
+      const response = mock.dispatchRuntimeMessage(
+        { type: "ns-check-rollback" },
+        { tab: { id: 80 } }
+      ) as { shouldRollback: boolean };
+
+      expect(response.shouldRollback).toBe(true);
+    });
+
+    it("falls back to default TTL for NaN ttlMs", async () => {
+      const mock = createChromeMock();
+      vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+      await import("../extension/src/sw/sw");
+
+      mock.dispatchRuntimeMessage(
+        { type: "ns-allow-target-nav", url: "https://example.test/nan", ttlMs: NaN },
+        { tab: { id: 81 } }
+      );
+
+      vi.setSystemTime(new Date("2026-03-17T12:00:03.500Z"));
+      mock.emitCommitted({
+        tabId: 81, frameId: 0,
+        url: "https://example.test/nan",
+        transitionType: "link", transitionQualifiers: []
+      });
+
+      const response = mock.dispatchRuntimeMessage(
+        { type: "ns-check-rollback" },
+        { tab: { id: 81 } }
+      ) as { shouldRollback: boolean; entry?: { allowedAtCommit?: boolean } };
+
+      expect(response.shouldRollback).toBe(false);
+      expect(response.entry?.allowedAtCommit).toBe(true);
+    });
+
+    it("falls back to default TTL for negative ttlMs", async () => {
+      const mock = createChromeMock();
+      vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+      await import("../extension/src/sw/sw");
+
+      mock.dispatchRuntimeMessage(
+        { type: "ns-allow-target-nav", url: "https://example.test/neg", ttlMs: -1 },
+        { tab: { id: 82 } }
+      );
+
+      vi.setSystemTime(new Date("2026-03-17T12:00:03.500Z"));
+      mock.emitCommitted({
+        tabId: 82, frameId: 0,
+        url: "https://example.test/neg",
+        transitionType: "link", transitionQualifiers: []
+      });
+
+      const response = mock.dispatchRuntimeMessage(
+        { type: "ns-check-rollback" },
+        { tab: { id: 82 } }
+      ) as { shouldRollback: boolean; entry?: { allowedAtCommit?: boolean } };
+
+      expect(response.shouldRollback).toBe(false);
+      expect(response.entry?.allowedAtCommit).toBe(true);
+    });
+  });
+
+  describe("URL protocol validation", () => {
+    it("rejects javascript: URLs in ns-allow-target-nav", async () => {
+      const mock = createChromeMock();
+      vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+      await import("../extension/src/sw/sw");
+
+      mock.dispatchRuntimeMessage(
+        { type: "ns-allow-nav", ttlMs: 1200 },
+        { tab: { id: 83 } }
+      );
+      vi.setSystemTime(new Date("2026-03-17T12:00:00.100Z"));
+      mock.emitCommitted({
+        tabId: 83, frameId: 0,
+        url: "https://origin.test/page",
+        transitionType: "link", transitionQualifiers: []
+      });
+
+      mock.dispatchRuntimeMessage(
+        { type: "ns-allow-target-nav", url: "javascript:alert(1)", ttlMs: 10_000 },
+        { tab: { id: 83 } }
+      );
+
+      vi.setSystemTime(new Date("2026-03-17T12:00:02.000Z"));
+      mock.emitCommitted({
+        tabId: 83, frameId: 0,
+        url: "https://evil.test/redirected",
+        transitionType: "link", transitionQualifiers: []
+      });
+
+      const response = mock.dispatchRuntimeMessage(
+        { type: "ns-check-rollback" },
+        { tab: { id: 83 } }
+      ) as { shouldRollback: boolean };
+
+      expect(response.shouldRollback).toBe(true);
+    });
+
+    it("rejects data: URLs in ns-allow-target-nav", async () => {
+      const mock = createChromeMock();
+      vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+      await import("../extension/src/sw/sw");
+
+      mock.dispatchRuntimeMessage(
+        { type: "ns-allow-nav", ttlMs: 1200 },
+        { tab: { id: 84 } }
+      );
+      vi.setSystemTime(new Date("2026-03-17T12:00:00.100Z"));
+      mock.emitCommitted({
+        tabId: 84, frameId: 0,
+        url: "https://origin.test/page",
+        transitionType: "link", transitionQualifiers: []
+      });
+
+      mock.dispatchRuntimeMessage(
+        { type: "ns-allow-target-nav", url: "data:text/html,<h1>pwned</h1>", ttlMs: 10_000 },
+        { tab: { id: 84 } }
+      );
+
+      vi.setSystemTime(new Date("2026-03-17T12:00:02.000Z"));
+      mock.emitCommitted({
+        tabId: 84, frameId: 0,
+        url: "https://evil.test/redirected",
+        transitionType: "link", transitionQualifiers: []
+      });
+
+      const response = mock.dispatchRuntimeMessage(
+        { type: "ns-check-rollback" },
+        { tab: { id: 84 } }
+      ) as { shouldRollback: boolean };
+
+      expect(response.shouldRollback).toBe(true);
+    });
+  });
 });

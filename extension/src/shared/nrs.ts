@@ -31,6 +31,8 @@ export interface NavigationContext {
   cspWeaknessScore?: number | undefined;
   /** Domain has been flagged as a repeat offender by domain profiling */
   domainRepeatOffender?: boolean | undefined;
+  /** Navigation anomaly score from nav_anomaly (0-15 range) */
+  navAnomalyScore?: number | undefined;
 }
 
 export interface NRSResult {
@@ -63,6 +65,7 @@ const NRS_WEIGHT_PUSHSTATE_ABUSE = 20;
 const NRS_CSP_MODIFIER_THRESHOLD = 20;
 const NRS_WEIGHT_CSP_CAP = 10;
 const NRS_WEIGHT_DOMAIN_REPEAT_OFFENDER = 10;
+const NRS_WEIGHT_NAV_ANOMALY_CAP = 15;
 
 /** Raw scores above this get 50% weight on the excess. */
 const NRS_DIMINISHING_RETURNS_THRESHOLD = 100;
@@ -177,6 +180,11 @@ export function computeNRS(cdsResult: ScoreResult, navCtx: NavigationContext): N
   if (navCtx.domainRepeatOffender) {
     nrs += NRS_WEIGHT_DOMAIN_REPEAT_OFFENDER;
     nrsFactors.push("nrs_domain_repeat_offender");
+  }
+
+  if (navCtx.navAnomalyScore && navCtx.navAnomalyScore > 0 && nrs > NRS_CSP_MODIFIER_THRESHOLD) {
+    nrs += Math.min(navCtx.navAnomalyScore, NRS_WEIGHT_NAV_ANOMALY_CAP);
+    nrsFactors.push("nrs_nav_anomaly");
   }
 
   // Diminishing returns: points above the threshold get reduced weight
