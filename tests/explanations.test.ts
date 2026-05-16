@@ -36,6 +36,8 @@ const KNOWN_NRS_CODES = [
   "nrs_clickfix_active",
   "nrs_opener_previously_allowed",
   "nrs_pushstate_abuse",
+  "nrs_csp_weakness",
+  "nrs_domain_repeat_offender",
 ];
 
 const KNOWN_CLICKFIX_CODES = [
