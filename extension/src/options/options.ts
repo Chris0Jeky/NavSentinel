@@ -123,6 +123,7 @@ function renderAllowlist(list: Allowlist): void {
 
       const removeBtn = document.createElement("button");
       removeBtn.textContent = "Remove";
+      removeBtn.setAttribute("aria-label", `Remove ${host} from allowlist`);
       removeBtn.addEventListener("click", async () => {
         await removeAllowlistEntry(site, host);
         try {
@@ -174,6 +175,7 @@ function renderTrusted(domains: string[]): void {
 
     const removeBtn = document.createElement("button");
     removeBtn.textContent = "Remove";
+    removeBtn.setAttribute("aria-label", `Remove ${domain} from trusted`);
     removeBtn.addEventListener("click", async () => {
       await removeTrustedDomain(domain);
       try {
