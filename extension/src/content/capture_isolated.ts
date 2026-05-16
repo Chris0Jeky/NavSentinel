@@ -700,16 +700,7 @@ function initMutationMonitor(): void {
 }
 
 function scheduleMutationMonitor(): void {
-  // Only run the mutation monitor in the top frame. Sub-frames run with
-  // all_frames:true but the monitor is most valuable in the top frame, and
-  // cross-origin iframes already cannot be observed from the parent. Wrapped
-  // in try/catch because accessing window.top throws in sandboxed iframes.
-  try {
-    if (window !== window.top) return;
-  } catch {
-    // Sandboxed iframe -- skip monitoring
-    return;
-  }
+  if (!isTopFrame()) return;
 
   // Use the `load` event (readyState "complete") as the baseline instead of
   // `DOMContentLoaded`. This avoids false positives from SPA hydration that
@@ -1105,7 +1096,7 @@ if (chrome?.runtime?.onMessage) {
     if (!isTopFrame()) return;
     if (settings.defaultMode === "off") return;
     const url = typeof message.url === "string" ? message.url : "";
-    if (!url) return;
+    if (!url || !/^https?:\/\//i.test(url)) return;
     showRollbackPrompt(url);
   });
 
@@ -1119,15 +1110,19 @@ if (chrome?.runtime?.onMessage) {
   // OAuth monitoring: delegate to oauth_monitor module for
   // ns-oauth-flow-update, ns-oauth-redirect-mismatch, ns-oauth-opener-manipulation.
   chrome.runtime.onMessage.addListener((message) => {
-    if (window.top !== window) return;
+    if (!isTopFrame()) return;
     handleOAuthRuntimeMessage(message);
   });
 }
 
 if (chrome?.runtime?.sendMessage && isTopFrame()) {
   // -- Rollback polling --
-  const run = (retries = 4) => {
+  const run = (polls = 4, errorBudget = 3) => {
     chrome.runtime.sendMessage({ type: "ns-check-rollback" }, (resp) => {
+      if (chrome.runtime.lastError) {
+        if (errorBudget > 0) window.setTimeout(() => run(polls, errorBudget - 1), 200);
+        return;
+      }
       if (resp?.shouldRollback) {
         if (settings.defaultMode === "off") return;
         const url = typeof resp.entry?.url === "string" ? resp.entry.url : "";
@@ -1135,8 +1130,8 @@ if (chrome?.runtime?.sendMessage && isTopFrame()) {
         handleRollback(url, prevUrl);
         return;
       }
-      if (retries > 0) {
-        window.setTimeout(() => run(retries - 1), 200);
+      if (polls > 0) {
+        window.setTimeout(() => run(polls - 1, errorBudget), 200);
       }
     });
   };
@@ -1148,24 +1143,31 @@ if (chrome?.runtime?.sendMessage && isTopFrame()) {
   }
 
   // -- Forward polling --
-  const runForward = (retries = 1) => {
+  const runForward = (retries = 1, errorBudget = 3) => {
     if (forwardCheckInFlight) return;
     if (forwardCheckTimer) {
       window.clearTimeout(forwardCheckTimer);
       forwardCheckTimer = 0;
     }
     forwardCheckInFlight = true;
+    const inflightGuard = window.setTimeout(() => { forwardCheckInFlight = false; }, 2000);
     chrome.runtime.sendMessage({ type: "ns-check-forward", currentUrl: location.href }, (resp) => {
+      window.clearTimeout(inflightGuard);
       forwardCheckInFlight = false;
+      if (chrome.runtime.lastError) {
+        if (errorBudget > 0) forwardCheckTimer = window.setTimeout(() => runForward(retries, errorBudget - 1), 200);
+        return;
+      }
       const status = typeof resp?.status === "string" ? resp.status : "";
       const url = typeof resp?.url === "string" ? resp.url : "";
       if (status === "offer" && url) {
         if (settings.defaultMode === "off") return;
+        if (!/^https?:\/\//i.test(url)) return;
         showRollbackPrompt(url);
         return;
       }
       if (!resp && retries > 0) {
-        forwardCheckTimer = window.setTimeout(() => runForward(retries - 1), 200);
+        forwardCheckTimer = window.setTimeout(() => runForward(retries - 1, errorBudget), 200);
       }
     });
   };
