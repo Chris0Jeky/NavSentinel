@@ -129,8 +129,8 @@ test("guided operator showcase with the real popup surface @demo @demo-operator"
     await optionsPage.waitForURL(/\/src\/options\/options\.html/, { timeout: 5000 });
     await optionsPage.bringToFront();
     await expect(optionsPage.locator("#trustedList")).toContainText("127.0.0.1");
-    await expect(optionsPage.locator("#navMode")).toHaveValue("strict");
-    await expect(optionsPage.locator("#credMode")).toHaveValue("strict");
+    await expect(optionsPage.locator('#navModeSeg .seg-btn[data-value="strict"]')).toHaveAttribute("aria-pressed", "true");
+    await expect(optionsPage.locator('#credModeSeg .seg-btn[data-value="strict"]')).toHaveAttribute("aria-pressed", "true");
     await demoPause(optionsPage, 2600);
 
     await page.bringToFront();
