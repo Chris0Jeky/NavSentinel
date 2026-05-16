@@ -41,6 +41,7 @@ test("options normalizes trusted-domain input and persists mode changes @smoke",
 
       await options.locator('#navModeSeg .seg-btn[data-value="strict"]').click();
       await options.locator('#credModeSeg .seg-btn[data-value="strict"]').click();
+      await options.locator('.nav-btn[data-section="trust"]').click();
       await options.locator("#trustedInput").fill("https://login.example.com/account");
       await options.locator("#addTrusted").click();
       await options.locator("#save").click();
@@ -60,6 +61,7 @@ test("options normalizes trusted-domain input and persists mode changes @smoke",
       await options.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
       await expect(options.locator('#navModeSeg .seg-btn[data-value="strict"]')).toHaveAttribute("aria-pressed", "true");
       await expect(options.locator('#credModeSeg .seg-btn[data-value="strict"]')).toHaveAttribute("aria-pressed", "true");
+      await options.locator('.nav-btn[data-section="trust"]').click();
       await expect(options.locator("#trustedList")).toContainText("example.com");
     } finally {
       await context.close();
