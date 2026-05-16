@@ -317,10 +317,16 @@ async function syncDnrRulesets(): Promise<void> {
   }
 }
 
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener((details) => {
   void syncDnrRulesets();
   chrome.action.setBadgeText({ text: "" }).catch(() => {});
   void getNavSettings().then((s) => { cachedDefaultMode = s.defaultMode; }).catch(() => {});
+
+  if (details.reason === "install") {
+    chrome.tabs.create({
+      url: chrome.runtime.getURL("src/onboarding/onboarding.html"),
+    }).catch(() => {});
+  }
 });
 
 chrome.runtime.onStartup.addListener(() => {
