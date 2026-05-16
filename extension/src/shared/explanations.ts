@@ -33,6 +33,8 @@ const EXPLANATIONS: Record<string, string> = {
   nrs_clickfix_active: "Fake verification dialog detected on this page",
   nrs_opener_previously_allowed: "You previously allowed this popup source",
   nrs_pushstate_abuse: "Page manipulated its URL suspiciously after your click",
+  nrs_csp_weakness: "Page has weak or missing Content Security Policy",
+  nrs_domain_repeat_offender: "This domain has previously triggered warnings",
 
   // ClickFix detector reason codes (clickfix_detector.ts)
   clipboard_command_with_overlay: "Clipboard was overwritten with a command while a dialog was active",
