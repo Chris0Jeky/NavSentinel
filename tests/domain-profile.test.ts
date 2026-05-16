@@ -8,7 +8,6 @@ import {
   MAX_PROFILES,
   DECAY_AGE_MS,
   REPEAT_OFFENDER_TRIGGER_MIN,
-  REPEAT_OFFENDER_AVG_NRS_MIN,
   type DomainProfile,
   type DomainRiskAssessment,
 } from "../extension/src/shared/domain_profile";

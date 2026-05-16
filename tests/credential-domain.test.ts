@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  BRAND_KNOWN_ALIASES,
   computeCredentialRisk,
   detectBrandInDomain,
   detectLookalike,

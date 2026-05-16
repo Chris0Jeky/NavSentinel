@@ -23,7 +23,6 @@ import {
   getServiceWorker,
   waitForNavSentinelBridge,
   waitForToastMatch,
-  waitForToastText
 } from "./extension_test_utils";
 
 const __filename = fileURLToPath(import.meta.url);

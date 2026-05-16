@@ -235,7 +235,6 @@ test("RW-25 rapid close/reopen churn blocks the final exfil popup @stress", asyn
 
       await waitForNavSentinelBridge(page);
 
-      const beforePages = context.pages().length;
       await page.click("#rw25Churn");
 
       // Wait for the full churn sequence to complete (open/close/open/close/exfil)
