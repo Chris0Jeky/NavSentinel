@@ -25,9 +25,13 @@ const PUSHSTATE_RAPID_WINDOW_MS = 1000;
 
 let bridgePort: MessagePort | null = null;
 let bridgeSession: string | null = null;
+const pendingOutbound: Array<{ type: string; payload?: Record<string, unknown> }> = [];
 
 function postToIsolated(type: string, payload?: Record<string, unknown>): void {
-  if (!bridgePort || !bridgeSession) return;
+  if (!bridgePort || !bridgeSession) {
+    pendingOutbound.push({ type, ...(payload !== undefined ? { payload } : {}) });
+    return;
+  }
   bridgePort.postMessage({
     source: NS_SOURCE,
     type,
@@ -35,6 +39,13 @@ function postToIsolated(type: string, payload?: Record<string, unknown>): void {
     session: bridgeSession,
     ...(payload ?? {})
   });
+}
+
+function flushPendingOutbound(): void {
+  while (pendingOutbound.length > 0) {
+    const msg = pendingOutbound.shift()!;
+    postToIsolated(msg.type, msg.payload);
+  }
 }
 
 let mode: "off" | "smart" | "strict" = "off";
@@ -302,9 +313,10 @@ function postAllowed(params: { kind: string; url?: string }): void {
 }
 
 function notifyAllowedTarget(url: string | URL | undefined): void {
-  if (url === undefined) return;
+  if (url === undefined || String(url) === "") return;
   try {
     const href = new URL(String(url), location.href).toString();
+    if (!href.startsWith("http:") && !href.startsWith("https:")) return;
     postToIsolated("ns-allow-target-nav", { url: href, ttlMs: TARGET_NAV_TTL_MS });
   } catch {
     // ignore
@@ -773,6 +785,7 @@ window.addEventListener(
     bridgePort.onmessage = (bridgeEvent) => handleBridgeMessage(bridgeEvent.data);
     bridgePort.start?.();
     postToIsolated("ns-bridge-ready");
+    flushPendingOutbound();
   },
   true
 );
