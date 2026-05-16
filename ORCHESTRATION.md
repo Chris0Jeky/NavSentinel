@@ -2,7 +2,7 @@
 
 **Purpose**: This file is the single source of truth for the autonomous multi-session workflow. Read this FIRST after any context compaction or session restart. It survives wipes because it's on disk.
 
-**Last updated**: 2026-05-16T10:05:00Z
+**Last updated**: 2026-05-16T13:10:00Z
 
 ---
 
@@ -40,7 +40,11 @@
 | 3     | 9    | 12    | IN PROGRESS |
 | 4     | 3    | 8     | IN PROGRESS |
 
-**Total: 39/47 tasks complete** (after merging 5 open PRs).
+**Total: 39/47 tasks complete** (all remaining in reviewed PRs ready for merge).
+
+**Test count**: 806 passing (main), 10 skipped. 31 test files across unit + SW rollback suites.
+
+**Open PRs**: 17 (#67-#71 legacy, #72-#94 reviewed). All R2-complete.
 
 ## Remaining Roadmap Tasks
 
@@ -113,10 +117,48 @@
 | #69 | feat/domain-profiling | P4-07 | ✅ | ✅ done | ✅ done | YES | PENDING |
 | #70 | worktree-agent-* | P2-10 | ⏳ E2E | ✅ done | ✅ done | YES (pending CI) | PENDING |
 | #71 | worktree-agent-* | P4-05 | ✅ | ✅ done | ✅ done | YES | PENDING |
+| #72 | test/coverage-gaps | Coverage | ✅ | ✅ done | ✅ done | YES | PENDING |
+| #73 | feat/onboarding | P3-04 | ✅ | ✅ done | ✅ done | YES | PENDING |
+| #74 | docs/freshness-sweep | AUD-02 | ✅ | ✅ done | ✅ done | YES | PENDING |
+| #78 | feat/nav-anomaly | P4-08 | ✅ | ✅ done | ✅ done | YES | PENDING |
+| #79 | fix/bridge-security | AUD-03 | ✅ | ✅ done | ✅ done | YES | PENDING |
+| #80 | fix/accessibility | AUD-05 | ✅ | ✅ done | ✅ done | YES | PENDING |
+| #81 | docs/cws-listing | P3-06 | ✅ | ✅ done | ✅ done | YES | PENDING |
+| #82 | docs/security-audit-prep | P3-09 | ✅ | ✅ done | ✅ done | YES | PENDING |
+| #83 | test/perf-budget | AUD-04 | ✅ | ✅ done | ✅ done | YES | PENDING |
+| #84 | test/coverage-audit | AUD-01 | ✅ | ✅ done | ✅ done | YES | PENDING |
+| #85 | fix/main-world-sendmessage | #77 | ✅ | ✅ done | ✅ done | YES | PENDING |
+| #87 | test/dblclick-guard | Tests | ✅ | ✅ done | ✅ done | YES | PENDING |
+| #88 | fix/sw-ttl-clamp | Security | ✅ | ✅ done | ✅ done | YES | PENDING |
+| #89 | fix/capture-isolated-bugs | Bugs | ✅ | ✅ done | ✅ done | YES | PENDING |
+| #92 | fix/missing-explanations | UI copy | ✅ | ✅ done | ✅ done | YES | PENDING |
+| #93 | fix/dead-exports-cleanup | Dead code | ✅ | ✅ done | ✅ done | YES | PENDING |
+| #94 | fix/dep-audit | #91 | ✅ | ✅ done | ✅ done | YES | PENDING |
+
+## Open Issues
+
+| Issue | Title | Addressed By |
+|-------|-------|-------------|
+| #75 | Writable/configurable patches | PR #79 |
+| #76 | Extension fingerprinting via globals | PR #79 |
+| #77 | chrome.runtime.sendMessage in MAIN world | PR #85 |
+| #86 | Bridge session race (pre-existing) | Design issue, needs RFC |
+| #90 | Bridge port retry race condition | Low-probability timing issue |
+| #91 | Dev dependency audit | PR #94 (partial — 3 of 9 fixed) |
 
 ## Active Branches
 
 None currently active (all work is on main or in open PRs above).
+
+## Merge Order (When Ready)
+
+`capture_isolated.ts` is a 4-way conflict hotspot. Recommended merge sequence:
+
+**Phase 1 (safe, isolated):** #81, #82, #87, #92 — docs + new test file + UI copy, no conflicts
+**Phase 2 (docs/UI):** #74, #80 — merge #74 before #78 (shared `explanations.ts`)
+**Phase 3 (core source — strict order):** #78 → #79 → #85 → #88 → #89 — all touch `capture_isolated.ts`
+**Phase 4 (onboarding):** #73 — after #88 (shared `sw.ts`)
+**Phase 5 (test infra):** #83 → #72 → #84 — 3-way conflict in test files
 
 ## Key Commands
 
