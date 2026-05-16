@@ -54,12 +54,19 @@ describe("computeAHash", () => {
     expect(hash.length).toBe(8);
   });
 
-  it("uniform image produces all-zeros or all-ones hash", () => {
+  it("uniform image produces all-zeros sentinel hash", () => {
     const pixels = makePixels(8, 8, 100);
     const hash = computeAHash(pixels, 8, 8);
-    const allZero = hash.every(b => b === 0);
-    const allOnes = hash.every(b => b === 0xFF);
-    expect(allZero || allOnes).toBe(true);
+    expect(hash.every(b => b === 0)).toBe(true);
+  });
+
+  it("all uniform colors produce the same all-zeros hash", () => {
+    const black = computeAHash(makePixels(8, 8, 0), 8, 8);
+    const white = computeAHash(makePixels(8, 8, 255), 8, 8);
+    const gray = computeAHash(makePixels(8, 8, 128), 8, 8);
+    expect(hammingDistance(black, white)).toBe(0);
+    expect(hammingDistance(white, gray)).toBe(0);
+    expect(black.every(b => b === 0)).toBe(true);
   });
 
   it("identical images produce identical hashes", () => {

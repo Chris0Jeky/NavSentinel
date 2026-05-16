@@ -36,6 +36,15 @@ export function computeAHash(pixels: Uint8ClampedArray, width: number, height: n
   }
 
   const mean = sum / (AHASH_SIZE * AHASH_SIZE);
+
+  // Uniform images have no perceptual structure — return all-zeros sentinel
+  // to avoid false-positive collisions with any template.
+  let isUniform = true;
+  for (let i = 0; i < AHASH_SIZE * AHASH_SIZE; i++) {
+    if (grayscale[i] !== grayscale[0]) { isUniform = false; break; }
+  }
+  if (isUniform) return new Uint8Array(8);
+
   const hash = new Uint8Array(8);
 
   for (let i = 0; i < 64; i++) {
