@@ -39,6 +39,13 @@ void loadReputationFilter();
 const NAV_ALLOW_TTL_MS = 1500;
 const NAV_GESTURE_TTL_MS = 1500;
 const NAV_TARGET_ALLOW_TTL_MS = 10000;
+const MAX_TTL_MS = 30_000;
+const MAX_GESTURE_TTL_MS = 3_000;
+
+function clampTtl(raw: unknown, fallback: number, ceiling = MAX_TTL_MS): number {
+  if (typeof raw !== "number" || !Number.isFinite(raw) || raw <= 0) return fallback;
+  return Math.min(raw, ceiling);
+}
 const ROLLBACK_SUPPRESS_MS = 6000;
 const ROLLBACK_RETURN_TTL_MS = 5000;
 const TYPED_ORIGIN_TTL_MS = 5_000;
@@ -352,7 +359,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "ns-allow-nav") {
     const tabId = sender.tab?.id;
     if (typeof tabId === "number") {
-      const ttl = typeof message.ttlMs === "number" ? message.ttlMs : NAV_ALLOW_TTL_MS;
+      const ttl = clampTtl(message.ttlMs, NAV_ALLOW_TTL_MS);
       allowUntilByTab.set(tabId, Date.now() + ttl);
       swState.persistMap(allowUntilByTab, "allowUntil");
     }
@@ -362,7 +369,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "ns-nav-gesture") {
     const tabId = sender.tab?.id;
     if (typeof tabId === "number") {
-      const ttl = typeof message.ttlMs === "number" ? message.ttlMs : NAV_GESTURE_TTL_MS;
+      const ttl = clampTtl(message.ttlMs, NAV_GESTURE_TTL_MS, MAX_GESTURE_TTL_MS);
       const now = Date.now();
       gestureUntilByTab.set(tabId, now + ttl);
       if (typeof message.url === "string" && message.url) {
@@ -378,12 +385,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "ns-allow-target-nav") {
     const tabId = sender.tab?.id;
     if (typeof tabId === "number" && typeof message.url === "string" && message.url) {
-      const ttl = typeof message.ttlMs === "number" ? message.ttlMs : NAV_TARGET_ALLOW_TTL_MS;
-      allowTargetByTab.set(tabId, {
-        url: message.url,
-        expiresAt: Date.now() + ttl
-      });
-      swState.persistMap(allowTargetByTab, "allowTarget");
+      const lower = message.url.toLowerCase();
+      const isHttp = lower.startsWith("http:") || lower.startsWith("https:");
+      if (isHttp) {
+        const ttl = clampTtl(message.ttlMs, NAV_TARGET_ALLOW_TTL_MS);
+        allowTargetByTab.set(tabId, {
+          url: message.url,
+          expiresAt: Date.now() + ttl
+        });
+        swState.persistMap(allowTargetByTab, "allowTarget");
+      }
     }
     sendResponse?.({ ok: true });
   }
