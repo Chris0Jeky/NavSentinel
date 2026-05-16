@@ -21,13 +21,11 @@ export const JS_BEHAVIOR_STATE_TTL_MS = 30_000;
 export const NRS_WEIGHT_JS_BEHAVIOR_CAP = 35;
 
 export const SCORE_CROSS_ORIGIN_CREDENTIAL_FORM = 15;
-export const SCORE_DYNAMIC_FORM_ACTION = 10;
 export const SCORE_NETWORK_EXFIL_DURING_SUBMIT = 20;
 export const SCORE_BEACON_EXFIL_CREDENTIAL_PAGE = 15;
 export const SCORE_CREDENTIAL_READ_OUTSIDE_SUBMIT = 10;
 export const SCORE_MULTIPLE_SIGNALS_BONUS = 10;
 
-const MULTI_SIGNAL_WINDOW_MS = 5000;
 
 export function createEmptyState(): JsBehaviorState {
   return {
@@ -76,4 +74,3 @@ export function computeJsBehaviorScore(state: JsBehaviorState): number {
   return Math.min(score, NRS_WEIGHT_JS_BEHAVIOR_CAP);
 }
 
-void MULTI_SIGNAL_WINDOW_MS;
