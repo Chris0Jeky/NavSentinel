@@ -156,17 +156,32 @@ CDS bands:
 
 Start with NRS = CDS and add:
 
-| Feature | Weight | Rationale |
-| --- | --- | --- |
-| New tab/window (window.open or target=_blank) | +20 | Primary abuse case. |
-| Cross-site destination (different registrable domain) | +20 | Monetization redirects are often cross-site. |
-| Attempt within 0-250ms of pointerdown | +10 | Typical click-handler timing. |
-| navigator.userActivation.isActive is true | +5 | Confirms user activation. |
-| Multiple attempts within one gesture | +25 | Legit flows rarely do this. |
-| DoubleClickjacking pattern active | +40 | Child window + opener.location write + rapid close detected. |
-| Destination matches allowlist | -100 | Hard allow. |
-| Explicit new-tab intent (middle click or ctrl/cmd click) | -30 | Respect user intent. |
-| Destination in bloom filter of known-bad domains | +50 | Strong signal from public threat feeds. |
+| Feature | Weight | Reason code | Rationale |
+| --- | --- | --- | --- |
+| New tab/window (window.open or target=_blank) | +20 | `nrs_new_tab_window` | Primary abuse case. |
+| Cross-site destination (different registrable domain) | +20 | `nrs_cross_site` | Monetization redirects are often cross-site. |
+| Attempt within 0-250ms of pointerdown | +10 | `nrs_fast_attempt` | Typical click-handler timing. |
+| navigator.userActivation.isActive is true | +5 | `nrs_user_activation_active` | Confirms user activation. |
+| Multiple attempts within one gesture | +25 | `nrs_multiple_attempts` | Legit flows rarely do this. |
+| DoubleClickjacking pattern active | +40 | `nrs_double_click_hijack` | Child window + opener.location write + rapid close detected. |
+| Destination matches allowlist | -100 | `nrs_allowlisted` | Hard allow. |
+| Explicit new-tab intent (middle click or ctrl/cmd click) | -30 | `nrs_explicit_new_tab_intent` | Respect user intent. |
+| Destination in bloom filter of known-bad domains | +50 | `nrs_known_bad_domain` | Strong signal from public threat feeds. |
+| Redirect chain depth (per hop over 2, cap 25) | +5/hop | `nrs_redirect_chain_depth` | Multi-hop redirects are common in malvertising. |
+| Redirect via known redirector (per hop, cap 30) | +15/hop | `nrs_redirect_via_known_redirector` | Known URL shorteners/redirectors in the chain. |
+| OAuth redirect mismatch | +30 | `nrs_oauth_redirect_mismatch` | OAuth callback redirected to unexpected domain. |
+| OAuth opener manipulation | +45 | `nrs_oauth_opener_manipulation` | Opener manipulation during active OAuth flow. |
+| ClickFix score (cap 40) | 0-40 | `nrs_clickfix_active` | Fake CAPTCHA/ClickFix scan score from content analysis. |
+| Opener window previously allowed | -20 | `nrs_opener_previously_allowed` | User already allowed the popup that created this tab. |
+| PushState abuse | +20 | `nrs_pushstate_abuse` | Suspicious history.pushState after user gesture. |
+| CSP weakness (cap 10, only when base NRS > 20) | 0-10 | `nrs_csp_weakness` | Weak or missing Content Security Policy. |
+| Domain repeat offender | +10 | `nrs_domain_repeat_offender` | Domain flagged by behavioral profiling. |
+
+When both `oauthOpenerManipulation` and `doubleClickHijackActive` fire from the same event, only the higher weight is applied to avoid an overly aggressive combined +85.
+
+### Diminishing returns
+
+Raw NRS scores above 100 get 50% weight on the excess. This prevents runaway scores when multiple factors stack, while preserving the relative ordering.
 
 Decision thresholds:
 - Allow: NRS < 40
@@ -291,5 +306,12 @@ Reason code: `nrs_pushstate_abuse`
 
 After 3 consecutive "Allow once" decisions for the same source-to-destination domain pair, a suggestion toast offers "Always Allow". Acceptance adds the pair to the permanent allowlist. Dismissal triggers a 24-hour cooldown. Pattern detection in `extension/src/shared/smart_defaults.ts`.
 
-## Future extensions (plan for, do not overfit)
-- Short redirect-chain correlation tied to a single gesture token.
+## Implemented extensions
+
+- **Redirect chain correlation (P2-06)**: Per-tab navigation chains tracked in the service worker. Multi-hop chains through known redirectors elevate the final destination's NRS. See `extension/src/shared/redirect_chain.ts`.
+- **OAuth consent flow monitoring (P2-05)**: Tracks OAuth redirect patterns, flags unexpected post-consent redirects and opener manipulation. See `extension/src/content/oauth_monitor.ts`.
+- **DOM mutation monitoring (P2-07)**: MutationObserver detects post-load overlay injection, form action changes, and password field injection. See `extension/src/content/mutation_monitor.ts`.
+- **CSP analysis (P4-05)**: Content Security Policy weakness scoring as an NRS modifier. Only applied when base NRS already exceeds 20. See `extension/src/content/csp_analyzer.ts`.
+- **SRI awareness (P4-06)**: Sub-resource integrity checking on credential pages. See `extension/src/content/sri_checker.ts`.
+- **Per-domain behavioral profiling (P4-07)**: Tracks per-domain NRS history with 30-day decay. Domains consistently triggering high scores are flagged as repeat offenders. See `extension/src/shared/domain_profile.ts`.
+- **Adaptive scoring (P3-05)**: Per-domain threshold adjustments based on user allow/block patterns, bounded ±15. See `extension/src/shared/adaptive_scoring.ts`.
