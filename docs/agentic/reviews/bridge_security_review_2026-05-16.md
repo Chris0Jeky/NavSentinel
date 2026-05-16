@@ -110,7 +110,7 @@ The bridge connects two execution contexts within the same page:
 
 ### Finding 6: stopImmediatePropagation relies on listener registration order (Severity: Medium)
 
-**Description:** The MAIN guard calls `event.stopImmediatePropagation()` on the bridge init message to prevent page scripts from observing it. This only works if the extension's listener was registered before the page's listeners on the same event target in the same phase (capture). Chrome guarantees `document_start` content scripts run before page scripts, so the MAIN world script (injected at `document_start`) registers its listener first.
+**Description:** The MAIN guard calls `event.stopImmediatePropagation()` on the bridge init message to prevent page scripts from observing it. This call only executes after all validation checks pass (correct source, type, session, and protocol version — see lines 810-813), not for every message event. It only works if the extension's listener was registered before the page's listeners on the same event target in the same phase (capture). Chrome guarantees `document_start` content scripts run before page scripts, so the MAIN world script (injected at `document_start`) registers its listener first.
 
 **Impact:** If a page somehow manages to register a capture-phase `message` listener before the extension's MAIN world script runs (e.g., via a service worker cache or preload manipulation), it could observe the init message. However, as noted in Finding 1, the session is the only leaked value and the port is exclusively transferred.
 
@@ -125,7 +125,7 @@ However, there is a narrow window: if an attacker posts a fake init message with
 **Mitigating factors:**
 1. Chrome's `document_start` timing means the extension's message listener is registered first and the extension's init fires before any page script runs.
 2. The attacker would need to transfer a real MessagePort and answer the challenge within the same turn.
-3. Even if successful, the attacker gains the ability to send commands to the MAIN guard (allow-once, gesture-allow), which would *reduce* security (allowing blocked navigations). The attacker cannot use this to *block* legitimate user actions or steal data.
+3. Even if successful, the attacker gains the ability to send commands to the MAIN guard (allow-once, gesture-allow, ns-config). Critically, sending `ns-config` with `mode: "off"` would fully disable the MAIN guard, eliminating all navigation protection for that page. The attacker cannot use this to steal data directly, but can disable all phishing detection.
 
 **Recommendation:** Consider having the MAIN guard validate that the init message's `event.origin` or source matches expected values, or require a pre-shared token injected at script build time. However, given the mitigating factors, this is a theoretical concern with no practical exploit path in standard Chrome environments.
 
@@ -143,7 +143,7 @@ No critical or high severity vulnerabilities were found. The medium findings are
 
 ## Recommendations (Priority Order)
 
-1. **(Low effort)** Document the `document_start` timing assumption explicitly in SECURITY.md.
+1. **(Done)** Document the `document_start` timing assumption explicitly in SECURITY.md (completed in commit a8bf9e4).
 2. **(Low effort)** Add `pagehide`/`pageshow` handlers for bfcache lifecycle cleanup.
 3. **(Medium effort)** Remove the `session` field from the `window.postMessage` init payload -- pass it only through the port after transfer. This eliminates the information leak in Finding 1 without changing the protocol semantics.
 4. **(Low effort)** Add a comment documenting that Finding 7's theoretical attack requires violating Chrome's content script injection ordering, which is not possible in standard Chromium.
