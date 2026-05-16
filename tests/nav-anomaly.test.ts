@@ -718,65 +718,59 @@ describe("getAnomalyScoreSync", () => {
     expect(score).toBe(0);
   });
 
-  it("returns BASE_ANOMALY_SCORE for 2 burst navs in the window", async () => {
+  it("returns BASE_ANOMALY_SCORE (10) for exactly 2 crypto navs in window", async () => {
     const now = Date.now();
-    // Build up session nav count via recordNavigationAnomaly
     store[NAV_PROFILE_KEY] = makeEstablishedProfile(now);
+    // Build up sessionNavCount via recordNavigationAnomaly
     for (let i = 0; i < MIN_NAVIGATIONS_FOR_ANOMALY + 1; i++) {
       await recordNavigationAnomaly("youtube.com", now + i * 100);
     }
     _resetRecentNavs();
 
-    // Now add 2 crypto navs to the sliding window via recordNavigationAnomaly
+    // Record exactly 2 crypto navs into the sliding window
     await recordNavigationAnomaly("binance.com", now + 50000);
-    // getAnomalyScoreSync should see 1 crypto in window + won't count itself
-    // We need to add them to the window manually via record calls
     await recordNavigationAnomaly("coinbase.com", now + 51000);
 
-    // Now sync call should see 2 crypto navs (already recorded) in the window
-    // But getAnomalyScoreSync only looks at the in-memory window, not storage
+    // getAnomalyScoreSync reads the window without adding to it.
+    // countRecentCategory sees 2 crypto entries => recentCount = 2.
     const score = getAnomalyScoreSync("metamask.io", now + 52000);
-    // At this point: 3 crypto navs in window (binance, coinbase from record + metamask being checked)
-    // recentCount=3 => should give 15
-    expect(score).toBe(BASE_ANOMALY_SCORE + BURST_3_PLUS_BONUS);
+    // recentCount = 2 (only the 2 already recorded; sync does not push).
+    expect(score).toBe(BASE_ANOMALY_SCORE);
+    expect(score).toBe(10);
   });
 
-  it("returns 15 for 3+ burst navs in the window", async () => {
+  it("returns 15 for 3+ crypto navs already in the window", async () => {
     const now = Date.now();
     store[NAV_PROFILE_KEY] = makeEstablishedProfile(now);
-    // Build session count
     for (let i = 0; i < MIN_NAVIGATIONS_FOR_ANOMALY + 1; i++) {
       await recordNavigationAnomaly("youtube.com", now + i * 100);
     }
     _resetRecentNavs();
 
-    // Add 3 crypto navs to the sliding window
+    // Record 3 crypto navs into the sliding window
     await recordNavigationAnomaly("binance.com", now + 50000);
     await recordNavigationAnomaly("coinbase.com", now + 51000);
     await recordNavigationAnomaly("metamask.io", now + 52000);
 
-    // Sync check should see 3 crypto + 1 more = 4 crypto navs
-    const score = getAnomalyScoreSync("crypto.example.com", now + 53000);
+    // Sync check sees 3 crypto in window => recentCount = 3 => 10 + 5 = 15
+    const score = getAnomalyScoreSync("walletconnect.com", now + 53000);
     expect(score).toBe(BASE_ANOMALY_SCORE + BURST_3_PLUS_BONUS);
     expect(score).toBe(15);
   });
 
-  it("returns BASE_ANOMALY_SCORE (10) for exactly 2 burst navs", async () => {
+  it("returns 0 for unknown category even with burst", async () => {
     const now = Date.now();
     store[NAV_PROFILE_KEY] = makeEstablishedProfile(now);
-    // Build session count
     for (let i = 0; i < MIN_NAVIGATIONS_FOR_ANOMALY + 1; i++) {
       await recordNavigationAnomaly("youtube.com", now + i * 100);
     }
     _resetRecentNavs();
 
-    // Add 1 crypto nav to the window
-    await recordNavigationAnomaly("binance.com", now + 50000);
+    await recordNavigationAnomaly("random-xyz-12345.net", now + 50000);
+    await recordNavigationAnomaly("another-xyz-99999.net", now + 51000);
 
-    // Sync check sees 1 in window + current = 2 total
-    const score = getAnomalyScoreSync("coinbase.com", now + 51000);
-    expect(score).toBe(BASE_ANOMALY_SCORE);
-    expect(score).toBe(10);
+    const score = getAnomalyScoreSync("yet-another-random.net", now + 52000);
+    expect(score).toBe(0);
   });
 });
 
