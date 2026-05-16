@@ -127,6 +127,7 @@ let rollbackShownAt = 0;
 let bridgeRetryTimer = 0;
 let bridgeRetryDelayMs = BRIDGE_RETRY_MS;
 let bridgeInitStartedAt = 0;
+let bridgeAttemptGen = 0;
 let forwardCheckInFlight = false;
 let forwardCheckTimer = 0;
 let previousMode = "";
@@ -163,6 +164,7 @@ function markMainGuardReady(): void {
     window.clearTimeout(bridgeRetryTimer);
     bridgeRetryTimer = 0;
   }
+  bridgeAttemptGen++;
   bridgeRetryDelayMs = BRIDGE_RETRY_MS;
   bridgeInitStartedAt = 0;
   bridgeReady = true;
@@ -350,6 +352,7 @@ function handleBridgeMessage(message: unknown): void {
     source?: string;
     type?: string;
     session?: string;
+    challenge?: string;
     id?: string;
     kind?: string;
     url?: string;
@@ -369,6 +372,18 @@ function handleBridgeMessage(message: unknown): void {
     ttlMs?: number;
   };
   if (!data || data.source !== NS_SOURCE || data.v !== PROTOCOL_VERSION) return;
+
+  if (data.type === "ns-challenge" && data.session === bridgeSession && data.challenge) {
+    bridgePort?.postMessage({
+      source: NS_SOURCE,
+      type: "ns-challenge-response",
+      v: PROTOCOL_VERSION,
+      session: bridgeSession,
+      challenge: data.challenge
+    });
+    return;
+  }
+
   if (data.session !== bridgeSession) return;
 
   if (data.type === "ns-bridge-ready") {
@@ -512,7 +527,12 @@ function ensureBridge(): void {
       refreshDebug();
       return;
     }
-    bridgePort?.close();
+
+    const prevPort = bridgePort;
+    bridgeAttemptGen++;
+    const thisGen = bridgeAttemptGen;
+
+    prevPort?.close();
 
     const channel = new MessageChannel();
     bridgePort = channel.port1;
@@ -532,7 +552,11 @@ function ensureBridge(): void {
     );
 
     if (!bridgeReady && mainGuard === "unknown") {
-      bridgeRetryTimer = window.setTimeout(attempt, bridgeRetryDelayMs);
+      bridgeRetryTimer = window.setTimeout(() => {
+        bridgeRetryTimer = 0;
+        if (bridgeAttemptGen !== thisGen) return;
+        attempt();
+      }, bridgeRetryDelayMs);
       bridgeRetryDelayMs = Math.min(bridgeRetryDelayMs * 2, MAX_BRIDGE_RETRY_MS);
     }
   };

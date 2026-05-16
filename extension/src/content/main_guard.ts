@@ -25,11 +25,13 @@ const PUSHSTATE_RAPID_WINDOW_MS = 1000;
 
 let bridgePort: MessagePort | null = null;
 let bridgeSession: string | null = null;
+let bridgeVerified = false;
+let bridgeChallenge: string | null = null;
 const MAX_PENDING_OUTBOUND = 32;
 const pendingOutbound: Array<{ type: string; payload?: Record<string, unknown> }> = [];
 
 function postToIsolated(type: string, payload?: Record<string, unknown>): void {
-  if (!bridgePort || !bridgeSession) {
+  if (!bridgePort || !bridgeSession || !bridgeVerified) {
     pendingOutbound.push({ type, ...(payload !== undefined ? { payload } : {}) });
     if (pendingOutbound.length > MAX_PENDING_OUTBOUND) {
       pendingOutbound.splice(0, pendingOutbound.length - MAX_PENDING_OUTBOUND);
@@ -785,6 +787,11 @@ window.addEventListener(
   true
 );
 
+function generateChallenge(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 window.addEventListener(
   "message",
   (event) => {
@@ -808,10 +815,32 @@ window.addEventListener(
     bridgePort?.close();
     bridgePort = nextPort;
     bridgeSession = data.session;
-    bridgePort.onmessage = (bridgeEvent) => handleBridgeMessage(bridgeEvent.data);
+    bridgeVerified = false;
+    bridgeChallenge = generateChallenge();
+
+    bridgePort.onmessage = (bridgeEvent) => {
+      const msg = bridgeEvent.data as { source?: string; type?: string; challenge?: string };
+      if (!bridgeVerified) {
+        if (msg && msg.source === NS_SOURCE && msg.type === "ns-challenge-response" && msg.challenge === bridgeChallenge) {
+          bridgeVerified = true;
+          bridgeChallenge = null;
+          bridgePort!.onmessage = (e) => handleBridgeMessage(e.data);
+          postToIsolated("ns-bridge-ready");
+          flushPendingOutbound();
+        }
+        return;
+      }
+      handleBridgeMessage(bridgeEvent.data);
+    };
     bridgePort.start?.();
-    postToIsolated("ns-bridge-ready");
-    flushPendingOutbound();
+
+    bridgePort.postMessage({
+      source: NS_SOURCE,
+      type: "ns-challenge",
+      v: PROTOCOL_VERSION,
+      session: bridgeSession,
+      challenge: bridgeChallenge
+    });
   },
   true
 );
