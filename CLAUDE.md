@@ -25,6 +25,41 @@ When sources conflict, follow the higher source and report the conflict.
 
 Do not bulk-read archives, generated build output, large dumps, `node_modules`, or previous artifacts unless the task explicitly requires them.
 
+## Git Workflow
+
+See `docs/agentic/GIT_WORKFLOW.md` for full details, plain-language explanations, and recovery procedures.
+
+### Branch safety tiers
+
+The pre-tool-use hook enforces branch-aware rules:
+
+- **Protected branches** (`main`, `master`, `develop`, `release`): No rebase, force-push, hard reset, or history rewriting. Always blocked.
+- **Other branches** (including agent worktree branches): These operations are allowed but go through the user permission prompt. You must explain what you are doing and the risks before attempting.
+
+### Default workflow
+
+- **Update branch from main:** `git merge main` (not rebase).
+- **Reconcile local/remote divergence:** `git merge origin/<branch>`.
+- **Do not `git commit --amend` after pushing.** Create a new commit instead.
+- **Recovery:** `git rebase --abort`, `git merge --abort`, and `git stash` are always allowed.
+
+### Explain-before-acting rule
+
+Before any git command that rewrites history or discards work (rebase, force-push, reset, clean, checkout --, restore), you MUST:
+
+1. Tell the user what you want to do in plain language — not just the command.
+2. Explain what could go wrong and what data could be lost.
+3. State whether this is reversible and how.
+4. Wait for the user to approve via the permission prompt.
+
+### When you get tangled
+
+If you end up with diverged branches, unresolvable conflicts, or detached HEAD:
+
+1. **Stop.** Do not attempt destructive recovery without explaining the situation.
+2. Tell the user: what happened, what state you are in, what options exist (safest first).
+3. Let the user choose. Never silently discard work to get unstuck.
+
 ## Default Work Style
 
 - Prefer narrow diffs over rewrites.

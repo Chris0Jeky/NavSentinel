@@ -148,6 +148,30 @@ Docs/status sync: <updated or not needed>
 Next safe slice: <one concrete action>
 ```
 
+## Git Workflow
+
+See `docs/agentic/GIT_WORKFLOW.md` for full details and recovery procedures.
+
+### Branch safety tiers
+
+- **Protected branches** (`main`, `master`, `develop`, `release`): No rebase, force-push, hard reset, or history rewriting. Always blocked by the pre-tool-use hook.
+- **Other branches**: These operations are allowed but require user approval. You must explain what you are doing and the risks before attempting.
+
+### Default workflow
+
+- **Update branch from main:** `git merge main` (not rebase).
+- **Reconcile divergence:** `git merge origin/<branch>`.
+- **Do not amend pushed commits.** Create a new commit instead.
+- **Recovery:** `git rebase --abort`, `git merge --abort`, `git stash` are always safe.
+
+### Explain-before-acting rule
+
+Before any command that rewrites history or discards work, you MUST tell the user in plain language: what you want to do, what could go wrong, and whether it is reversible. Wait for approval.
+
+### When tangled
+
+Stop. Explain the situation and options (safest first). Let the user choose. Never silently discard work.
+
 ## Commits And Pull Requests
 
 - Commit messages are short, imperative, and sentence case.

@@ -11,6 +11,7 @@ python scripts/agent_hooks/render_failure_ledger.py
 | Date | Class | Surface | Failure | Workaround | Future fix | Status |
 | --- | --- | --- | --- | --- | --- | --- |
 | 2026-05-11 | seed | agentic-pack | Ledger created | n/a | Start recording recurring failures and promote confirmed lessons | open |
+| 2026-05-12 | blocker | git-workflow | Agent rebased onto main, then force-push blocked, then hard-reset blocked — trapped in irrecoverable diverged state | Aborted manually; branch required user intervention | Rewrote hook with branch-aware tiers, added explain-before-acting protocol, created GIT_WORKFLOW.md | fixed |
 
 ## Classification
 
