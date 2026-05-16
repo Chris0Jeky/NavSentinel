@@ -129,7 +129,7 @@
                 Lookalike similarity (edit distance)
               </label>
               <div class="inline-field">
-                <input id="similarityMaxDistance" type="number" min="0" max="8" step="1" />
+                <input id="similarityMaxDistance" type="number" min="0" max="8" step="1" aria-label="Maximum lookalike edit distance" />
                 <span class="hint-inline">0-8</span>
               </div>
             </div>
@@ -237,7 +237,7 @@
                 Import JSON
                 <input id="importFile" type="file" accept="application/json" />
               </label>
-              <span id="status" class="status"></span>
+              <span id="status" class="status" role="status" aria-live="polite"></span>
             </div>
           </div>
 
@@ -274,7 +274,7 @@
 
           <div class="toolbar">
             <div class="toolbar-actions trusted-actions">
-              <input id="trustedInput" class="mono" placeholder="example.com" />
+              <input id="trustedInput" class="mono" placeholder="example.com" aria-label="Trusted domain" />
               <button id="addTrusted">Add</button>
               <button id="clearTrusted">Clear all</button>
             </div>
@@ -289,7 +289,7 @@
           Tip: validate behavior in the Gym after changing protection modes or trust state.
         </div>
         <div class="sticky-actions">
-          <span id="saveStatus" class="status"></span>
+          <span id="saveStatus" class="status" role="status" aria-live="polite"></span>
           <button id="save" class="primary">Save settings</button>
         </div>
       </div>
