@@ -4,13 +4,16 @@ extension/dist/
 .vite/
 artifacts/
 *.log
+__pycache__/
+*.pyc
 .DS_Store
 /.idea
 HistoryDump.txt
-AGENTS.md
 test-results/.last-run.json
 playwright-report/
 /RESOURCES
+/.claude/worktrees/
+/.claude/settings.local.json
 # Downloaded threat feed data (build-bloom-filter.mjs downloads)
 *.csv.tmp
 feeds/

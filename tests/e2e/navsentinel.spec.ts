@@ -139,7 +139,8 @@ test("Level 3 instant injection blocks the injected trap path @regression", asyn
           const text = host?.shadowRoot?.querySelector(".body")?.textContent ?? "";
           return (
             text.includes("Blocked new tab") ||
-            text.includes("NavSentinel blocked deceptive click")
+            text.includes("blocked a suspicious new tab") ||
+            text.includes("blocked a deceptive click")
           );
         },
         null,
@@ -338,7 +339,7 @@ test("RW-03 delayed redirect landing prompts before final navigation @regression
       await page.click("#rw03Watch");
       const rw03Toast = await waitForToastMatch(
         page,
-        /Blocked redirect|rolled back a redirect/i,
+        /Blocked redirect|rolled back a.*redirect/i,
         7000
       );
       await clickToastButton(page, /Blocked redirect/i.test(rw03Toast) ? "Allow once" : "Proceed");

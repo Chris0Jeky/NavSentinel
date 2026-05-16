@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "defaultMode": "bypassPermissions",
+    "allow": [
+      "Read",
+      "Grep",
+      "Glob",
+      "Bash(pwd)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git branch*)",
+      "Bash(git log*)",
+      "Bash(git show*)",
+      "Bash(git stash*)",
+      "Bash(git rebase --abort*)",
+      "Bash(git rebase --continue*)",
+      "Bash(git rebase --skip*)",
+      "Bash(git merge --abort*)",
+      "Bash(rg *)",
+      "Bash(npm run verify:versions*)",
+      "Bash(npm run typecheck*)",
+      "Bash(npm run test*)",
+      "Bash(npm run build*)",
+      "Bash(npm run package:ext*)",
+      "Bash(npm run gym:serve*)",
+      "Bash(npm run agent:*)",
+      "Bash(node scripts/package.mjs*)",
+      "Bash(python scripts/agent_hooks/render_failure_ledger.py*)",
+      "Bash(python scripts/agent_hooks/smoke_test.py*)",
+      "Bash(python scripts/agent_hooks/validate_skills.py*)",
+      "Bash(python -m py_compile scripts/agent_hooks/*.py*)"
+    ],
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(rm -fr *)",
+      "Bash(rm -r -f *)",
+      "Bash(Remove-Item * -Recurse * -Force*)",
+      "Bash(Remove-Item * -Force * -Recurse*)",
+      "Bash(sudo *)",
+      "Bash(chmod -R 777 *)",
+      "Bash(curl * | sh*)",
+      "Bash(curl * | bash*)",
+      "Bash(wget * | sh*)",
+      "Bash(wget * | bash*)",
+      "Bash(iwr * | powershell*)",
+      "Bash(irm * | iex*)",
+      "Bash(psql *DROP DATABASE*)",
+      "Bash(mysql *TRUNCATE TABLE*)",
+      "Bash(npm publish*)",
+      "Bash(*.env*)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "powershell",
+            "command": "python \"$env:CLAUDE_PROJECT_DIR\\scripts\\agent_hooks\\session_start.py\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "powershell",
+            "command": "python \"$env:CLAUDE_PROJECT_DIR\\scripts\\agent_hooks\\pre_tool_use.py\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "powershell",
+            "command": "python \"$env:CLAUDE_PROJECT_DIR\\scripts\\agent_hooks\\post_tool_use.py\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "Bash|Edit|Write|MultiEdit|mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "powershell",
+            "command": "python \"$env:CLAUDE_PROJECT_DIR\\scripts\\agent_hooks\\post_tool_failure.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

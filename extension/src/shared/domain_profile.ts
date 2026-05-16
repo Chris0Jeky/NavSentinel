@@ -56,8 +56,11 @@ const MAX_NRS_HISTORY = 50;
 
 /** Apply time-based decay in-place. Returns true if the profile was decayed. */
 function applyDecay(profile: DomainProfile, now: number): boolean {
+  if (!Number.isFinite(profile.lastSeen) || !Number.isFinite(now)) return false;
   if (now - profile.lastSeen < DECAY_AGE_MS) return false;
-  while (now - profile.lastSeen >= DECAY_AGE_MS) {
+  const MAX_DECAY_ITERATIONS = 24;
+  let iterations = 0;
+  while (now - profile.lastSeen >= DECAY_AGE_MS && iterations < MAX_DECAY_ITERATIONS) {
     profile.visits = Math.max(1, Math.floor(profile.visits * 0.5));
     profile.triggerCount = Math.floor(profile.triggerCount * 0.5);
     profile.totalNRS = Math.floor(profile.totalNRS * 0.5);
@@ -66,6 +69,10 @@ function applyDecay(profile: DomainProfile, now: number): boolean {
       if (profile.factors[key] === 0) delete profile.factors[key];
     }
     profile.lastSeen += DECAY_AGE_MS;
+    iterations++;
+  }
+  if (iterations === MAX_DECAY_ITERATIONS) {
+    profile.lastSeen = now;
   }
   return true;
 }
@@ -115,7 +122,7 @@ async function saveProfiles(profiles: Map<string, DomainProfile>): Promise<void>
 // ---------------------------------------------------------------------------
 
 function computeAssessment(profile: DomainProfile): DomainRiskAssessment {
-  const avgNRS = profile.totalNRS / profile.visits;
+  const avgNRS = profile.visits > 0 ? profile.totalNRS / profile.visits : 0;
   const consistency = stddev(profile.nrsHistory);
   const isRepeatOffender =
     profile.triggerCount > REPEAT_OFFENDER_TRIGGER_MIN &&
@@ -189,7 +196,7 @@ export function recordNavigation(
 
     return computeAssessment(profile);
   });
-  pending = next.catch(() => {});
+  pending = next.catch((err) => { console.warn("[NavSentinel] profile serialization error:", err); });
   return next;
 }
 
