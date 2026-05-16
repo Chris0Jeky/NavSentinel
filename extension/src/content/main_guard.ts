@@ -358,7 +358,7 @@ function hardenProto(
   } catch {
     try {
       (proto as any)[prop] = value;
-    } catch { /* ignore — already patched or frozen */ }
+    } catch { /* ignore ï¿½ already patched or frozen */ }
     if (debug) {
       console.debug(`[NavSentinel] defineProperty failed for ${label}, used assignment fallback`);
     }
@@ -623,7 +623,7 @@ function patchOpen(): void {
     Object.defineProperty(window, "open", {
       value: patchedOpen,
       writable: false,
-      configurable: false
+      configurable: true,
     });
   } catch {
     window.open = patchedOpen as any;

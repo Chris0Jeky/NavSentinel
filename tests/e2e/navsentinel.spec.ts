@@ -225,9 +225,15 @@ test("Level 10 delayed form submit prompts @regression", async () => {
 
       const patchHardened = await page.evaluate(() => {
         const desc = Object.getOwnPropertyDescriptor(window, "open");
+        return desc ? !desc.writable : false;
+      });
+      expect(patchHardened, "Expected window.open to be non-writable").toBe(true);
+
+      const protoHardened = await page.evaluate(() => {
+        const desc = Object.getOwnPropertyDescriptor(Window.prototype, "open");
         return desc ? !desc.writable && !desc.configurable : false;
       });
-      expect(patchHardened, "Expected window.open to be non-writable and non-configurable").toBe(true);
+      expect(protoHardened, "Expected Window.prototype.open to be non-writable and non-configurable").toBe(true);
 
       await page.click("#submitDelayed");
       await page.waitForTimeout(2600);
