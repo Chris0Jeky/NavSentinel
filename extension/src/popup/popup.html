@@ -8,82 +8,93 @@
     <link rel="stylesheet" href="./popup.css" />
   </head>
   <body>
-    <div class="wrap">
-      <header class="hero section">
-        <div class="eyebrow">Local-first browser defense</div>
+    <div class="wrap ns-root">
+      <!-- Hero header -->
+      <header class="hero">
         <div class="hero-row">
-          <div>
-            <h1 class="title">NavSentinel <span id="version" class="version-tag"></span></h1>
-            <div class="hero-copy">
-              Current-tab control tower for deceptive navigation and credential risk.
+          <div id="logoSlot" class="hero-logo" aria-hidden="true"></div>
+          <div class="hero-info">
+            <div class="hero-title ns-serif">NavSentinel</div>
+            <div class="hero-meta ns-mono">
+              <span class="status-dot status-dot--green"></span>
+              <span id="version"></span> · armed
             </div>
           </div>
-          <div class="hero-mark" aria-hidden="true">NS</div>
+          <button id="openOptions" class="icon-btn" aria-label="Open dashboard">
+            <span id="gearIcon"></span>
+          </button>
         </div>
 
-        <div class="site-panel">
-          <div class="label">Current site</div>
-          <div id="site" class="site mono">-</div>
-          <div id="trustStatus" class="status-pill" aria-live="polite" aria-atomic="true">-</div>
+        <!-- Current page card -->
+        <div class="site-card">
+          <div class="site-card-row">
+            <div id="shieldArc" class="shield-arc" aria-label="Tab risk score"></div>
+            <div class="site-info">
+              <div class="site-host-row">
+                <span id="trustDot" class="status-dot"></span>
+                <span id="site" class="site-host ns-mono">-</span>
+              </div>
+              <div class="site-meta">
+                <span id="trustStatus" class="trust-pill ns-uc" aria-live="polite" aria-atomic="true">-</span>
+                <span id="sessionMeta" class="session-meta ns-mono"></span>
+              </div>
+            </div>
+            <button id="trustBtn" class="trust-btn trust-btn--trust">Trust</button>
+            <button id="untrustBtn" class="trust-btn trust-btn--untrust" hidden>Untrust</button>
+          </div>
+
+          <!-- Active signals -->
+          <div id="signals" class="signals-row"></div>
         </div>
       </header>
 
-      <section class="section">
-        <div class="section-head">
-          <div>
-            <div class="label">Protection posture</div>
-            <h2 class="section-title">Quick controls</h2>
+      <!-- Mode strip -->
+      <section class="mode-strip">
+        <div class="mode-card mode-card--nav">
+          <div class="mode-card-head">
+            <span id="navIcon" class="mode-icon"></span>
+            <span class="mode-label ns-uc">nav</span>
+          </div>
+          <div class="seg" id="navSeg">
+            <button class="seg-btn" data-value="off">Off</button>
+            <button class="seg-btn" data-value="smart">Smart</button>
+            <button class="seg-btn" data-value="strict">Strict</button>
           </div>
         </div>
-
-        <div class="control-grid">
-          <label class="control-card" for="navMode">
-            <span class="card-kicker">Navigation mode</span>
-            <span class="card-copy">
-              Tunes click-deception gating, popup/new-tab prompts, and rollback behavior.
-            </span>
-            <select id="navMode" class="select">
-              <option value="off">Off</option>
-              <option value="smart">Smart</option>
-              <option value="strict">Strict</option>
-            </select>
-          </label>
-
-          <label class="control-card" for="credMode">
-            <span class="card-kicker">Credential mode</span>
-            <span class="card-copy">
-              Prompts before risky password submits or untrusted password-field activity.
-            </span>
-            <select id="credMode" class="select">
-              <option value="off">Off</option>
-              <option value="smart">Smart</option>
-              <option value="strict">Strict</option>
-            </select>
-          </label>
-        </div>
-
-        <div class="row action-row">
-          <button id="trustBtn" class="btn primary">Trust site</button>
-          <button id="untrustBtn" class="btn danger">Remove trust</button>
+        <div class="mode-card mode-card--cred">
+          <div class="mode-card-head">
+            <span id="credIcon" class="mode-icon"></span>
+            <span class="mode-label ns-uc">cred</span>
+          </div>
+          <div class="seg" id="credSeg">
+            <button class="seg-btn" data-value="off">Off</button>
+            <button class="seg-btn" data-value="smart">Smart</button>
+            <button class="seg-btn" data-value="strict">Strict</button>
+          </div>
         </div>
       </section>
 
-      <section class="section">
-        <div class="section-head">
-          <div>
-            <div class="label">Recent events</div>
-            <h2 class="section-title">Latest signals</h2>
+      <!-- Activity feed -->
+      <section class="activity">
+        <div class="activity-head">
+          <span class="activity-label ns-uc">activity</span>
+          <div class="activity-sparkline">
+            <span id="eventCount" class="event-count ns-mono"></span>
           </div>
-          <button class="link" id="openOptions">Open options</button>
         </div>
-
         <div id="events" class="events">Loading...</div>
-
-        <div class="row footer-row">
-          <div class="hint">Local log only. Nothing leaves the browser.</div>
-          <button id="refreshBtn" class="btn subtle">Refresh</button>
-        </div>
       </section>
+
+      <!-- Footer -->
+      <footer class="footer">
+        <span class="footer-local">
+          <span id="lockIcon"></span>
+          everything stays local
+        </span>
+        <button id="refreshBtn" class="footer-link">
+          Refresh <span id="chevronIcon"></span>
+        </button>
+      </footer>
     </div>
 
     <script type="module" src="./popup.ts"></script>

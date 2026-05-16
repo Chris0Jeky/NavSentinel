@@ -1,6 +1,7 @@
 import type { CredMode, EventLogEntry } from "../shared/storage";
 import type { Mode } from "../shared/types";
 import { classifyEventTone } from "../shared/event_tone";
+import { icon, logoSentinel } from "../shared/icons";
 import {
   POPUP_TEST_CRED_MODES,
   POPUP_TEST_NAV_MODES,
@@ -21,16 +22,81 @@ import {
   getRecentPopupEvents
 } from "./popup_model";
 
+const logoSlot = document.getElementById("logoSlot") as HTMLDivElement;
 const versionEl = document.getElementById("version") as HTMLSpanElement;
-const siteEl = document.getElementById("site") as HTMLDivElement;
-const trustStatusEl = document.getElementById("trustStatus") as HTMLDivElement;
+const siteEl = document.getElementById("site") as HTMLSpanElement;
+const trustDot = document.getElementById("trustDot") as HTMLSpanElement;
+const trustStatusEl = document.getElementById("trustStatus") as HTMLSpanElement;
 const trustBtn = document.getElementById("trustBtn") as HTMLButtonElement;
 const untrustBtn = document.getElementById("untrustBtn") as HTMLButtonElement;
-const navModeEl = document.getElementById("navMode") as HTMLSelectElement;
-const credModeEl = document.getElementById("credMode") as HTMLSelectElement;
+const navSeg = document.getElementById("navSeg") as HTMLDivElement;
+const credSeg = document.getElementById("credSeg") as HTMLDivElement;
 const eventsEl = document.getElementById("events") as HTMLDivElement;
+const eventCountEl = document.getElementById("eventCount") as HTMLSpanElement;
+const signalsEl = document.getElementById("signals") as HTMLDivElement;
+const shieldArcEl = document.getElementById("shieldArc") as HTMLDivElement;
 const refreshBtn = document.getElementById("refreshBtn") as HTMLButtonElement;
 const openOptions = document.getElementById("openOptions") as HTMLButtonElement;
+
+logoSlot.innerHTML = logoSentinel(32, false);
+document.getElementById("gearIcon")!.innerHTML = icon("gear", 14);
+document.getElementById("navIcon")!.innerHTML = icon("shield", 11, "var(--ns-cyan)");
+document.getElementById("credIcon")!.innerHTML = icon("key", 11, "var(--ns-green)");
+document.getElementById("lockIcon")!.innerHTML = icon("lock", 11, "var(--ns-green)");
+document.getElementById("chevronIcon")!.innerHTML = icon("chevron", 10, "var(--ns-cyan)");
+
+function renderShieldArc(value: number, size = 42): string {
+  const r = size / 2 - 4;
+  const c = 2 * Math.PI * r;
+  const col = value >= 70 ? "var(--ns-red)" : value >= 40 ? "var(--ns-orange)" : "var(--ns-green)";
+  return `<svg width="${size}" height="${size}" style="transform:rotate(-90deg)">
+    <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="3"/>
+    <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${col}" stroke-width="3"
+            stroke-dasharray="${(value / 100) * c} ${c}" stroke-linecap="round"
+            style="transition:stroke-dasharray 0.4s ease-out"/>
+  </svg>
+  <span class="ns-mono" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:${col};transform:rotate(90deg)">${value}</span>`;
+}
+
+function setSegValue(seg: HTMLDivElement, value: string): void {
+  const btns = Array.from(seg.querySelectorAll<HTMLButtonElement>(".seg-btn"));
+  for (const btn of btns) {
+    const active = btn.dataset.value === value.toLowerCase();
+    btn.setAttribute("aria-pressed", String(active));
+  }
+}
+
+function getSegValue(seg: HTMLDivElement): string {
+  const btns = Array.from(seg.querySelectorAll<HTMLButtonElement>(".seg-btn"));
+  for (const btn of btns) {
+    if (btn.getAttribute("aria-pressed") === "true") {
+      return btn.dataset.value ?? "smart";
+    }
+  }
+  return "smart";
+}
+
+function severityClass(score: number): string {
+  if (score >= 70) return "high";
+  if (score >= 40) return "medium";
+  return "low";
+}
+
+function severityLabel(score: number): string {
+  if (score >= 70) return "high";
+  if (score >= 40) return "med";
+  return "low";
+}
+
+function eventIconName(kind: string): string {
+  if (kind.startsWith("nav_")) return "shield";
+  if (kind.startsWith("cred_")) return "key";
+  return "gear";
+}
+
+function eventLabel(kind: string): string {
+  return kind.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+}
 
 async function getActiveTabUrl(): Promise<string> {
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -39,31 +105,16 @@ async function getActiveTabUrl(): Promise<string> {
 
 function fmtTime(ts: number): string {
   try {
-    return new Date(ts).toLocaleTimeString();
+    return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   } catch {
     return "";
   }
 }
 
-function formatEventKind(kind: string): string {
-  return kind.replace(/_/g, " ");
-}
-
-function buildEventDetail(event: EventLogEntry): string {
-  const parts: string[] = [];
-  if (event.site) parts.push(`site ${event.site}`);
-  if (event.destHost) parts.push(`dest ${event.destHost}`);
-  if (typeof event.score === "number") parts.push(`score ${event.score}`);
-  if (event.reasons?.length) {
-    parts.push(
-      `signals ${event.reasons.slice(0, 3).join(", ")}${event.reasons.length > 3 ? "..." : ""}`
-    );
-  }
-  return parts.join(" • ");
-}
-
 function renderEvents(log: EventLogEntry[]): void {
-  const list = getRecentPopupEvents(log, 6);
+  const list = getRecentPopupEvents(log, 5);
+  eventCountEl.textContent = String(log.length);
+
   if (list.length === 0) {
     eventsEl.innerHTML = "";
     const empty = document.createElement("div");
@@ -76,74 +127,114 @@ function renderEvents(log: EventLogEntry[]): void {
   eventsEl.innerHTML = "";
   for (const event of list) {
     const eventKind = typeof event.kind === "string" ? event.kind : "unknown";
-    const card = document.createElement("article");
-    card.className = "event-card";
-    card.dataset.tone = classifyEventTone(eventKind);
+    const tone = classifyEventTone(eventKind);
+    const score = typeof event.score === "number" ? event.score : 0;
 
-    const head = document.createElement("div");
-    head.className = "event-head";
+    const row = document.createElement("div");
+    row.className = "event-row";
 
-    const kind = document.createElement("div");
-    kind.className = "event-kind";
-    kind.textContent = formatEventKind(eventKind);
+    const iconBox = document.createElement("div");
+    iconBox.className = `event-icon-box event-icon-box--${tone}`;
+    const iconColor = tone === "navigation" ? "var(--ns-cyan)" : tone === "credential" ? "var(--ns-green)" : "var(--ns-orange)";
+    iconBox.innerHTML = icon(eventIconName(eventKind), 12, iconColor);
+    row.appendChild(iconBox);
 
-    const time = document.createElement("div");
-    time.className = "event-time mono";
-    time.textContent = fmtTime(event.ts);
+    const body = document.createElement("div");
+    body.className = "event-body";
+    const title = document.createElement("div");
+    title.className = "event-title";
+    title.textContent = eventLabel(eventKind);
+    body.appendChild(title);
+    const sub = document.createElement("div");
+    sub.className = "event-sub";
+    sub.textContent = `${event.site || "—"} · ${fmtTime(event.ts)}`;
+    body.appendChild(sub);
+    row.appendChild(body);
 
-    head.appendChild(kind);
-    head.appendChild(time);
-    card.appendChild(head);
-
-    const detail = buildEventDetail(event);
-    if (detail) {
-      const body = document.createElement("div");
-      body.className = "event-detail";
-      body.textContent = detail;
-      card.appendChild(body);
+    if (score > 0) {
+      const scoreEl = document.createElement("div");
+      scoreEl.className = `event-score event-score--${severityClass(score)}`;
+      scoreEl.innerHTML = `<div class="event-score-val">${score}</div><div class="event-score-label">${severityLabel(score)}</div>`;
+      row.appendChild(scoreEl);
     }
 
-    eventsEl.appendChild(card);
+    eventsEl.appendChild(row);
+  }
+}
+
+function renderSignals(reasons: string[] | undefined): void {
+  signalsEl.innerHTML = "";
+  if (!reasons || reasons.length === 0) return;
+
+  const label = document.createElement("span");
+  label.className = "signals-label";
+  label.textContent = "signals";
+  signalsEl.appendChild(label);
+
+  for (const r of reasons.slice(0, 5)) {
+    const chip = document.createElement("span");
+    const isPositive = r.startsWith("-") || r.startsWith("+") === false;
+    chip.className = `signal-chip ${r.startsWith("-") ? "signal-chip--ok" : "signal-chip--warn"}`;
+    chip.textContent = r;
+    signalsEl.appendChild(chip);
   }
 }
 
 async function refreshUi(): Promise<void> {
   const settings = await getSuiteSettings();
-  navModeEl.value = settings.nav.defaultMode;
-  credModeEl.value = settings.credential.mode;
+  setSegValue(navSeg, settings.nav.defaultMode);
+  setSegValue(credSeg, settings.credential.mode);
 
   const url = await getActiveTabUrl();
   const trusted = await getTrustedDomains();
   const siteState = derivePopupSiteState(url, trusted);
   siteEl.textContent = siteState.siteLabel;
-  trustStatusEl.textContent = siteState.trustStatus;
-  trustStatusEl.dataset.state = siteState.isTrusted
-    ? "trusted"
-    : siteState.registrableDomain
-      ? "caution"
-      : "neutral";
+
+  if (siteState.isTrusted) {
+    trustStatusEl.textContent = "trusted";
+    trustStatusEl.dataset.state = "trusted";
+    trustDot.className = "status-dot status-dot--trusted";
+  } else if (siteState.registrableDomain) {
+    trustStatusEl.textContent = "observing";
+    trustStatusEl.dataset.state = "";
+    trustDot.className = "status-dot status-dot--observed";
+  } else {
+    trustStatusEl.textContent = "—";
+    trustStatusEl.dataset.state = "";
+    trustDot.className = "status-dot";
+  }
+
   trustBtn.disabled = !siteState.canTrust;
   untrustBtn.disabled = !siteState.canUntrust;
+  trustBtn.hidden = siteState.isTrusted;
+  untrustBtn.hidden = !siteState.isTrusted;
 
-  renderEvents(await getEventLog());
+  const log = await getEventLog();
+  renderEvents(log);
+
+  const lastEvent = log.length > 0 ? log[log.length - 1] : null;
+  const tabRisk = lastEvent && typeof lastEvent.score === "number" ? lastEvent.score : 0;
+  shieldArcEl.style.position = "relative";
+  shieldArcEl.innerHTML = renderShieldArc(tabRisk);
+  renderSignals(lastEvent?.reasons);
 }
 
 function getPopupSnapshot(): PopupSnapshot {
-  const events = Array.from(eventsEl.querySelectorAll(".event-card"))
+  const events = Array.from(eventsEl.querySelectorAll(".event-row"))
     .map((node) => node.textContent?.replace(/\s+/g, " ").trim() ?? "")
     .filter(Boolean);
 
   return {
-    credMode: credModeEl.value,
+    credMode: getSegValue(credSeg),
     events,
-    navMode: navModeEl.value,
+    navMode: getSegValue(navSeg),
     site: siteEl.textContent?.trim() ?? "",
     trustStatus: trustStatusEl.textContent?.trim() ?? ""
   };
 }
 
 async function setNavMode(mode: Mode): Promise<void> {
-  navModeEl.value = mode;
+  setSegValue(navSeg, mode);
   await updateSuiteSettings({ nav: { defaultMode: mode } });
   try {
     await appendEvent({ kind: "suite_config_update", extra: { navMode: mode } });
@@ -154,7 +245,7 @@ async function setNavMode(mode: Mode): Promise<void> {
 }
 
 async function setCredMode(mode: CredMode): Promise<void> {
-  credModeEl.value = mode;
+  setSegValue(credSeg, mode);
   await updateSuiteSettings({ credential: { mode } });
   try {
     await appendEvent({ kind: "suite_config_update", extra: { credMode: mode } });
@@ -192,12 +283,16 @@ async function untrustCurrentSite(): Promise<void> {
   await refreshUi();
 }
 
-navModeEl.addEventListener("change", async () => {
-  await setNavMode(navModeEl.value as Mode);
+navSeg.addEventListener("click", async (e) => {
+  const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".seg-btn");
+  if (!btn || btn.getAttribute("aria-pressed") === "true") return;
+  await setNavMode(btn.dataset.value as Mode);
 });
 
-credModeEl.addEventListener("change", async () => {
-  await setCredMode(credModeEl.value as CredMode);
+credSeg.addEventListener("click", async (e) => {
+  const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".seg-btn");
+  if (!btn || btn.getAttribute("aria-pressed") === "true") return;
+  await setCredMode(btn.dataset.value as CredMode);
 });
 
 trustBtn.addEventListener("click", async () => {
@@ -313,5 +408,5 @@ chrome.runtime.onMessage.addListener((message: PopupTestMessage, sender, sendRes
   return true;
 });
 
-versionEl.textContent = `v${chrome.runtime.getManifest().version}`;
+versionEl.textContent = chrome.runtime.getManifest().version;
 void refreshUi();
