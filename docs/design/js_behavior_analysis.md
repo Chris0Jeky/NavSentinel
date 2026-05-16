@@ -43,9 +43,9 @@ The monitor emits structured signals over the existing bridge (same `postToIsola
 
 ### Integration with Existing Patterns
 
-- **Bridge protocol**: Uses the same `NS_SOURCE`, `PROTOCOL_VERSION`, and `bridgeSession` constants as `main_guard.ts`. The monitor is initialized in the same main-world script. Form-submit observation installs before `main_guard.ts` hardens form prototypes; network and credential-read wrappers install with the rest of the monitor patches.
+- **Bridge protocol**: Uses the same `NS_SOURCE`, `PROTOCOL_VERSION`, and `bridgeSession` constants as `main_guard.ts`. The monitor is initialized in the same main-world script, after all existing patches are applied.
 - **Scoring integration**: Adds a new `jsBehaviorScore` field to `NavigationContext` in `nrs.ts`, similar to `clickfixScore`. The score is computed from accumulated behavior signals and capped to prevent runaway escalation.
-- **Mode awareness**: Respects the `mode` variable (`off`/`smart`/`strict`). When `off`, wrappers keep delegating to native APIs but take the same early-return shape as `main_guard.ts`: skip monitoring work and emit no signals.
+- **Mode awareness**: Respects the `mode` variable (`off`/`smart`/`strict`). When `off`, patches still run (to avoid detectable absence) but signals are not emitted.
 
 ### Design Principles
 
@@ -56,32 +56,18 @@ The monitor emits structured signals over the existing bridge (same `postToIsola
 
 ## APIs to Intercept
 
-### 1. Form Submit Monitoring
+### 1. `HTMLFormElement.prototype.submit` and `requestSubmit`
 
-**Approach**: The existing `main_guard.ts` already applies `hardenProto()` with `writable: false, configurable: false` on `HTMLFormElement.prototype.submit`. Re-patching that method is impossible. Instead, the behavior monitor uses two complementary techniques:
-
-1. **Capturing `submit` event listener** — A capturing-phase listener on `document` observes all form submissions (both user-initiated and programmatic via `requestSubmit()`). This fires before any page-level handlers and cannot be blocked by `stopPropagation` in the bubbling phase.
-
-2. **`HTMLFormElement.prototype.submit` wrapper** — For direct `.submit()` calls (which do not fire the `submit` event), the monitor installs its wrapper *before* `main_guard.ts` hardens the prototype. The wrapper observes and then delegates to the original. This is coordinated via initialization order in `main_guard.ts` (behavior monitor patches first, then `hardenProto()` seals the final state).
-
-**Detection logic** (in both paths):
+**Already patched** in `main_guard.ts` for navigation blocking. The behavior monitor adds a pre-call inspection layer that checks:
 - Whether the form contains password/credential fields
 - Whether the form action points to a cross-origin domain
-- Whether the form action was dynamically changed — detected by comparing the live `form.action` against the initial value stored in a `WeakMap<HTMLFormElement, string>` populated at form discovery time (via `MutationObserver`). This avoids property descriptor locking on the form element.
+- Whether the form action was dynamically changed (compared to the static HTML attribute)
 
 Signal emitted: `ns-js-form-submit-suspicious`
 
 ### 2. `fetch()` and `XMLHttpRequest.prototype.send()`
 
-**Approach**: The monitor uses **observe-and-forward wrapping**, not `hardenProto()`. For each API:
-
-1. Save a reference to the original function (e.g., `const originalFetch = window.fetch`).
-2. Install a wrapper that observes the call arguments (destination URL, timing) and then unconditionally forwards to the original: `return originalFetch.apply(this, arguments)`.
-3. The wrapper does NOT prevent the call, modify arguments, or block on async logic.
-
-This preserves the "observe, don't block" principle. The page (and other extensions) can still wrap these APIs further — our wrapper always delegates, so stacking is safe.
-
-**Detection logic** flags network requests that:
+**New patches.** Wraps both APIs to detect network requests that:
 - Fire within a short window (2000ms) of a form submission
 - Target a cross-origin destination
 - Occur on a page containing credential fields
@@ -92,9 +78,7 @@ Signal emitted: `ns-js-exfil-network`
 
 ### 3. `navigator.sendBeacon()`
 
-**Approach**: Same observe-and-forward pattern as fetch/XHR. The original `navigator.sendBeacon` is saved, and the wrapper observes then delegates unconditionally. No hardening is applied.
-
-**Rationale for monitoring**: The beacon API is commonly used for exfiltration because:
+**New patch.** Similar to fetch monitoring but specifically targets the beacon API which is commonly used for exfiltration because:
 - It survives page navigation (fire-and-forget)
 - It requires no response handling
 - It is less likely to be noticed in DevTools
@@ -127,8 +111,6 @@ Signal emitted: `ns-js-credential-read`
 
 **Total cap: 35 points** (diminishing returns apply above this to prevent single-factor dominance)
 
-**Score aggregation:** All applicable signal scores are summed and the total is clamped with `Math.min(sum, NRS_WEIGHT_JS_BEHAVIOR_CAP)`. Individual signal caps prevent repeated signals from inflating the sum. There is no priority ordering; all triggered signals contribute equally up to the cap.
-
 The factor is added to `NavigationContext` as:
 ```typescript
 jsBehaviorScore?: number | undefined;
@@ -137,13 +119,8 @@ jsBehaviorScore?: number | undefined;
 NRS integration (in `nrs.ts`):
 ```typescript
 const NRS_WEIGHT_JS_BEHAVIOR_CAP = 35;
-// JS behavior signals fire unconditionally (no NRS threshold gate).
-// Rationale: these signals detect active credential exfiltration attacks
-// that may occur on otherwise-clean pages with no other suspicious indicators.
-// Gating behind an NRS threshold (like CSP weakness) would suppress detection
-// of the exact attack scenario this monitor targets. This matches the design
-// precedent set by clickfixScore, which also fires unconditionally.
-if (navCtx.jsBehaviorScore && navCtx.jsBehaviorScore > 0) {
+// Applied when base NRS > 20 (same threshold as CSP weakness)
+if (navCtx.jsBehaviorScore && navCtx.jsBehaviorScore > 0 && nrs > NRS_CSP_MODIFIER_THRESHOLD) {
   nrs += Math.min(navCtx.jsBehaviorScore, NRS_WEIGHT_JS_BEHAVIOR_CAP);
   nrsFactors.push("nrs_js_behavior_suspicious");
 }
@@ -151,10 +128,9 @@ if (navCtx.jsBehaviorScore && navCtx.jsBehaviorScore > 0) {
 
 ### Interaction with Existing Factors
 
-- **ClickFix**: JS behavior signals are independent of ClickFix detection. Both can fire simultaneously (e.g., a ClickFix page that also has credential exfiltration). Like `clickfixScore`, `jsBehaviorScore` fires unconditionally — no NRS threshold gate is required because these signals represent active attacks, not ambient risk modifiers.
+- **ClickFix**: JS behavior signals are independent of ClickFix detection. Both can fire simultaneously (e.g., a ClickFix page that also has credential exfiltration).
 - **Known bad domain**: If a page already scores +50 from reputation, JS behavior adds at most 35 more, subject to diminishing returns above 100.
 - **Credential guard**: The existing credential guard protects against phishing forms. JS behavior analysis complements it by detecting exfiltration from legitimate forms that have been compromised.
-- **Clipboard monitoring**: Clipboard-write and `document.execCommand("copy")` coverage remains in the existing ClickFix/main-guard clipboard path. This monitor does not duplicate clipboard hooks; it focuses on credential reads and network/form exfiltration signals that complement that coverage.
 
 ## Performance Constraints
 
@@ -162,7 +138,7 @@ if (navCtx.jsBehaviorScore && navCtx.jsBehaviorScore > 0) {
 
 | Component | Budget | Strategy |
 | --- | --- | --- |
-| API wrapping (one-time) | 5ms | Applied once at script injection; form submit wrapper installed before `hardenProto()` seals, network wrappers use observe-and-forward (not hardened) |
+| Prototype patches (one-time) | 5ms | Applied once at script injection; frozen with `Object.defineProperty` |
 | fetch/XHR wrapper per call | 0.1ms | Thin wrapper: check timestamp + destination origin only |
 | Form submit inspection | 2ms | Synchronous check of form fields and action attribute |
 | Value getter per read | 0.05ms | Type check + debounce guard; no-op if not password field |
@@ -195,7 +171,7 @@ if (navCtx.jsBehaviorScore && navCtx.jsBehaviorScore > 0) {
 
 | File | Change |
 | --- | --- |
-| `extension/src/content/main_guard.ts` | Import and call `initJsBehaviorMonitor()` early enough for form-submit observation before form prototype hardening |
+| `extension/src/content/main_guard.ts` | Import and call `initJsBehaviorMonitor()` after existing patches |
 | `extension/src/content/capture_isolated.ts` | Handle new bridge message types (`ns-js-*`), maintain JS behavior state |
 | `extension/src/shared/nrs.ts` | Add `jsBehaviorScore` to `NavigationContext`, add NRS factor |
 | `extension/src/shared/scoring.ts` | No changes (CDS is click-geometry only) |
@@ -268,7 +244,7 @@ export interface JsBehaviorState {
 1. **No value storage**: The monitor never stores, logs, or bridges actual field values. Only boolean flags and metadata are transmitted.
 2. **Origin-only destinations**: Network request destinations are reduced to origin (protocol + host + port) before bridging. No paths, query params, or bodies.
 3. **Debounce prevents fingerprinting**: The debounce logic prevents pages from using the value getter timing to detect NavSentinel's presence.
-4. **Patch detection resistance**: Network API wrappers use observe-and-forward (not `hardenProto()`), which is intentional — hardening network APIs would break the "observe, don't block" principle. Form submit monitoring is protected by the existing `hardenProto()` seal on `HTMLFormElement.prototype.submit` (the behavior wrapper is installed first, then hardened together with the navigation guard). The `value` getter patch on `HTMLInputElement.prototype` uses `Object.defineProperty` with `configurable: false` to resist removal.
+4. **Patch detection resistance**: Patches use the same `hardenProto()` pattern as existing guards, making them harder to remove or detect.
 5. **No exfiltration of user data**: The extension itself never makes network calls. All signals stay local (bridge -> NRS -> storage).
 
 ## Open Questions (for implementation slices)

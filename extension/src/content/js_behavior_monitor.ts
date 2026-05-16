@@ -152,11 +152,11 @@ let _recentNetworkRequests: NetworkRequestRecord[] = [];
 let _lastCredentialReadTs = 0;
 let _isInsideFormSubmit = false;
 let _config: JsBehaviorMonitorConfig | null = null;
+let _formSubmitPatched = false;
 
 /** Tracks original form action values at DOM parse time. */
 let _originalFormActions = new WeakMap<HTMLFormElement, string>();
 
-let _formSubmitPatched = false;
 let _formObserver: MutationObserver | null = null;
 let _originalSubmitFn: typeof HTMLFormElement.prototype.submit | null = null;
 let _submitListener: ((e: Event) => void) | null = null;
@@ -271,7 +271,155 @@ function patchFormSubmitMonitoring(): void {
   };
 
   // Note: requestSubmit() fires a 'submit' event which the capturing listener
-  // above already handles. No prototype patch needed — patching it would double-fire.
+  // above already handles. No prototype patch needed; patching it would double-fire.
+}
+
+// ============================================================================
+// Network Exfiltration Monitoring (Slice 3)
+// ============================================================================
+
+let _fetchPatched = false;
+let _xhrPatched = false;
+let _beaconPatched = false;
+
+function pageHasCredentialFields(): boolean {
+  return document.querySelector('input[type="password"]:not([disabled])') !== null;
+}
+
+function recordNetworkRequest(destinationOrigin: string, api: "fetch" | "xhr" | "beacon"): void {
+  if (!_config || _config.mode === "off") return;
+
+  const now = Date.now();
+  _recentNetworkRequests.push({ ts: now, destinationOrigin, api });
+  if (_recentNetworkRequests.length > MAX_RECENT_NETWORK_REQUESTS) {
+    _recentNetworkRequests.shift();
+  }
+
+  if (destinationOrigin === location.origin || !destinationOrigin) return;
+
+  if (api === "beacon") {
+    if (pageHasCredentialFields()) {
+      _config.postSignal("ns-js-exfil-beacon", {
+        ts: now,
+        api,
+        destinationOrigin,
+        credentialFieldsPresent: true,
+      } as unknown as Record<string, unknown>);
+    }
+    return;
+  }
+
+  const correlated = correlatesWithFormSubmit(now);
+  if (correlated) {
+    const signal: JsExfilNetworkSignal = {
+      ts: now,
+      api,
+      destinationOrigin,
+      msSinceFormSubmit: _recentFormSubmits.length > 0
+        ? now - _recentFormSubmits[_recentFormSubmits.length - 1]!.ts
+        : -1,
+      credentialFieldsPresent: pageHasCredentialFields(),
+    };
+    _config.postSignal(
+      "ns-js-exfil-network",
+      signal as unknown as Record<string, unknown>
+    );
+  }
+}
+
+function patchFetchMonitoring(_cfg: JsBehaviorMonitorConfig): void {
+  if (_fetchPatched) return;
+  void _cfg;
+
+  const originalFetch = window.fetch;
+  if (!originalFetch) return;
+  _fetchPatched = true;
+  window.fetch = function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    try {
+      let url = "";
+      if (typeof input === "string") {
+        url = input;
+      } else if (typeof input === "object" && input !== null && "href" in input) {
+        url = String((input as URL).href);
+      } else if (typeof input === "object" && input !== null && "url" in input) {
+        url = String((input as Request).url);
+      }
+
+      const origin = extractOrigin(url);
+      if (origin && origin !== location.origin) {
+        recordNetworkRequest(origin, "fetch");
+      }
+    } catch (_) {
+      // Never break page fetch due to monitoring errors
+    }
+
+    return originalFetch.call(window, input, init);
+  };
+}
+
+function patchXHRMonitoring(_cfg: JsBehaviorMonitorConfig): void {
+  if (_xhrPatched) return;
+  void _cfg;
+  _xhrPatched = true;
+
+  const originalOpen = XMLHttpRequest.prototype.open;
+  const xhrUrlMap = new WeakMap<XMLHttpRequest, string>();
+
+  XMLHttpRequest.prototype.open = function (
+    this: XMLHttpRequest,
+    method: string,
+    url: string | URL,
+    ...rest: unknown[]
+  ) {
+    try {
+      const urlStr = typeof url === "string" ? url : String(url);
+      xhrUrlMap.set(this, urlStr);
+    } catch (_) {
+      // Never break XHR due to monitoring errors
+    }
+    return (originalOpen as Function).apply(this, [method, url, ...rest]);
+  };
+
+  const originalSend = XMLHttpRequest.prototype.send;
+  XMLHttpRequest.prototype.send = function (
+    this: XMLHttpRequest,
+    body?: Document | XMLHttpRequestBodyInit | null
+  ) {
+    try {
+      const url = xhrUrlMap.get(this);
+      if (url) {
+        const origin = extractOrigin(url);
+        if (origin && origin !== location.origin) {
+          recordNetworkRequest(origin, "xhr");
+        }
+      }
+    } catch (_) {
+      // Never break XHR due to monitoring errors
+    }
+    return originalSend.call(this, body);
+  };
+}
+
+function patchBeaconMonitoring(_cfg: JsBehaviorMonitorConfig): void {
+  if (_beaconPatched) return;
+  void _cfg;
+
+  if (!navigator.sendBeacon) return;
+  _beaconPatched = true;
+
+  const originalBeacon = navigator.sendBeacon.bind(navigator);
+  navigator.sendBeacon = function (url: string | URL, data?: BodyInit | null): boolean {
+    try {
+      const urlStr = typeof url === "string" ? url : String(url);
+      const origin = extractOrigin(urlStr);
+      if (origin && origin !== location.origin) {
+        recordNetworkRequest(origin, "beacon");
+      }
+    } catch (_) {
+      // Never break sendBeacon due to monitoring errors
+    }
+    return originalBeacon(url, data);
+  };
 }
 
 // ============================================================================
@@ -299,45 +447,45 @@ function patchCredentialValueGetter(_cfg: JsBehaviorMonitorConfig): void {
 
   try {
     Object.defineProperty(HTMLInputElement.prototype, "value", {
-    get(this: HTMLInputElement) {
-      const val = originalGetter.call(this);
+      get(this: HTMLInputElement) {
+        const val = originalGetter.call(this);
 
-      try {
-        if (
-          this.type === "password" &&
-          val.length > 0 &&
-          !_isInsideFormSubmit &&
-          _config &&
-          _config.mode !== "off"
-        ) {
-          const now = Date.now();
-          const lastRead = _credReadDebounceMap.get(this) ?? 0;
-          if (now - lastRead > CREDENTIAL_READ_DEBOUNCE_MS) {
-            _credReadDebounceMap.set(this, now);
-            _lastCredentialReadTs = now;
-            const signal: JsCredentialReadSignal = {
-              ts: now,
-              isInsideSubmitHandler: false,
-              fieldCount: document.querySelectorAll('input[type="password"]').length,
-            };
-            _config.postSignal(
-              "ns-js-credential-read",
-              signal as unknown as Record<string, unknown>
-            );
+        try {
+          if (
+            this.type === "password" &&
+            val.length > 0 &&
+            !_isInsideFormSubmit &&
+            _config &&
+            _config.mode !== "off"
+          ) {
+            const now = Date.now();
+            const lastRead = _credReadDebounceMap.get(this) ?? 0;
+            if (now - lastRead > CREDENTIAL_READ_DEBOUNCE_MS) {
+              _credReadDebounceMap.set(this, now);
+              _lastCredentialReadTs = now;
+              const signal: JsCredentialReadSignal = {
+                ts: now,
+                isInsideSubmitHandler: false,
+                fieldCount: document.querySelectorAll('input[type="password"]').length,
+              };
+              _config.postSignal(
+                "ns-js-credential-read",
+                signal as unknown as Record<string, unknown>
+              );
+            }
           }
+        } catch {
+          // Never break page scripts; swallow monitoring errors.
         }
-      } catch {
-        // Never break page scripts — swallow monitoring errors
-      }
 
-      return val;
-    },
-    set(this: HTMLInputElement, v: string) {
-      if (originalSetter) {
-        originalSetter.call(this, v);
-      }
-    },
-    enumerable: descriptor.enumerable ?? true,
+        return val;
+      },
+      set(this: HTMLInputElement, v: string) {
+        if (originalSetter) {
+          originalSetter.call(this, v);
+        }
+      },
+      enumerable: descriptor.enumerable ?? true,
       configurable: true,
     });
     _credentialGetterPatched = true;
@@ -355,7 +503,7 @@ function patchCredentialValueGetter(_cfg: JsBehaviorMonitorConfig): void {
  * observation must install before main_guard hardens form prototypes; network
  * and credential-read wrappers install with the rest of the monitor patches.
  *
- * When fully implemented (#106 Slices 2-4), installs:
+ * Installs prototype patches for:
  * - fetch() wrapper
  * - XMLHttpRequest.prototype.open() and .send()
  * - navigator.sendBeacon()
@@ -369,9 +517,9 @@ export function initJsBehaviorMonitor(config: JsBehaviorMonitorConfig): void {
   if (config.mode === "off") return;
 
   patchFormSubmitMonitoring();
-  // TODO (Slice 3): patchFetchMonitoring(config);
-  // TODO (Slice 3): patchXHRMonitoring(config);
-  // TODO (Slice 3): patchBeaconMonitoring(config);
+  patchFetchMonitoring(config);
+  patchXHRMonitoring(config);
+  patchBeaconMonitoring(config);
   patchCredentialValueGetter(config);
 }
 
@@ -383,7 +531,8 @@ export function initJsBehaviorMonitor(config: JsBehaviorMonitorConfig): void {
  *
  * @param form - The form element to inspect
  * @returns true if the form contains password inputs
- * @see https://github.com/Chris0Jeky/NavSentinel/issues/106 Slice 2
+ *
+ * TODO: Implement (Slice 2)
  */
 export function formHasCredentialFields(form: HTMLFormElement): boolean {
   return form.querySelector('input[type="password"]') !== null;
@@ -397,7 +546,8 @@ export function formHasCredentialFields(form: HTMLFormElement): boolean {
  *
  * @param url - The URL to check (absolute or relative)
  * @returns true if the URL resolves to a different origin
- * @see https://github.com/Chris0Jeky/NavSentinel/issues/106 Slice 2
+ *
+ * TODO: Implement (Slice 2)
  */
 export function isCrossOriginUrl(url: string): boolean {
   if (!url) return false;
@@ -422,7 +572,8 @@ export function isCrossOriginUrl(url: string): boolean {
  *
  * @param url - The URL to extract origin from
  * @returns The origin string, or empty string on failure
- * @see https://github.com/Chris0Jeky/NavSentinel/issues/106 Slice 2
+ *
+ * TODO: Implement (Slice 2)
  */
 export function extractOrigin(url: string): string {
   if (!url) return "";
@@ -447,7 +598,8 @@ export function extractOrigin(url: string): string {
  *
  * @param requestTs - Timestamp of the network request
  * @returns Whether the request correlates with a credential form submit
- * @see https://github.com/Chris0Jeky/NavSentinel/issues/106 Slice 3
+ *
+ * TODO: Implement (Slice 3)
  */
 export function correlatesWithFormSubmit(requestTs: number): boolean {
   return _recentFormSubmits.some(
@@ -466,7 +618,8 @@ export function correlatesWithFormSubmit(requestTs: number): boolean {
  *
  * @param state - Current aggregated behavior state
  * @returns Computed score (0 to NRS_WEIGHT_JS_BEHAVIOR_CAP)
- * @see https://github.com/Chris0Jeky/NavSentinel/issues/106 Slice 5
+ *
+ * TODO: Implement (Slice 5)
  */
 export function computeJsBehaviorScore(state: JsBehaviorState): number {
   void state;
@@ -531,7 +684,7 @@ export function _resetState(): void {
 }
 
 // ============================================================================
-// Implementation Plan (#106)
+// TODO List - Implementation Plan
 // ============================================================================
 //
 // Slice 2 - Form Submit Monitoring:
@@ -558,7 +711,6 @@ export function _resetState(): void {
 //   [ ] Emit ns-js-credential-read signal (metadata only, never the value)
 //
 // Slice 5 - NRS Integration:
-//   [ ] Extract scoring utilities to extension/src/shared/js_behavior_state.ts
 //   [ ] Add jsBehaviorScore to NavigationContext in nrs.ts
 //   [ ] Add NRS_WEIGHT_JS_BEHAVIOR_CAP constant and factor logic
 //   [ ] Handle bridge messages in capture_isolated.ts
@@ -587,7 +739,3 @@ export function _resetState(): void {
 //   [ ] Verify total per-navigation overhead stays under 100ms budget
 //
 
-// Suppress unused variable warnings for constants used in future implementation slices
-void FORM_SUBMIT_CORRELATION_WINDOW_MS;
-void MAX_RECENT_FORM_SUBMITS;
-void MAX_RECENT_NETWORK_REQUESTS;
