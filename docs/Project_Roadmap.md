@@ -23,7 +23,7 @@ Total: **47 tasks** across 5 phases. **43/47 complete** (remaining 4 are XL Phas
 
 **Completed cross-cutting initiative:** UI Redesign (9 phases, R1–R9) — done 2026-05-16. See [REDESIGN_ORCHESTRATION.md](REDESIGN_ORCHESTRATION.md).
 
-**Open issues:** #86 (bridge session race), #90 (bridge retry race condition).
+**Open issues:** None.
 
 Last updated: 2026-05-16
 
@@ -745,7 +745,7 @@ Phase 2 is complete when:
 - [x] History.pushState gating detects URL manipulation (PR #60 merged: 2+ dot domain-like path check, %2E decode, rapid-fire detection, +20 NRS factor)
 - [x] Phase 2 gym fixtures have comprehensive E2E coverage (PR #61 merged: 22 tests across 6 detection types, 4 new fixtures)
 - [x] Competitive benchmark demonstrates additive value (PR #70 merged: Playwright-based benchmark suite with baseline comparison and regression detection)
-- [ ] No regression in Phase 1 measurements (FP rate, TP rate) — needs re-run after P4 additions
+- [ ] No regression in Phase 1 measurements (FP rate, TP rate) — needs re-run after P4 additions (blocked on FP re-measurement run)
 
 ---
 

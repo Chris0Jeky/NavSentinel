@@ -261,7 +261,7 @@ describe("smart defaults – storage integration", () => {
 
   it("clearCooldown removes a pair's cooldown entry", async () => {
     const future = Date.now() + SMART_DEFAULT_COOLDOWN_MS;
-    const { chrome, store } = createChromeMock({
+    const { chrome } = createChromeMock({
       [SMART_DEFAULT_COOLDOWNS_KEY]: { "a.com|b.com": future, "c.com|d.com": future },
     });
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
