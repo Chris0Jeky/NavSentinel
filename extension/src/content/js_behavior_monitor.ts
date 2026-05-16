@@ -50,14 +50,14 @@ export interface JsExfilNetworkSignal {
   credentialFieldsPresent: boolean;
 }
 
-/** Signal emitted when a credential field value is read. */
+/** Signal emitted when a credential field value is read outside form submission. */
 export interface JsCredentialReadSignal {
   /** Timestamp of the read */
   ts: number;
-  /** Input field type (always 'password' in initial implementation) */
-  fieldType: string;
   /** Whether the read occurred during a form submit event */
-  duringSubmit: boolean;
+  isInsideSubmitHandler: boolean;
+  /** Number of password fields on the page */
+  fieldCount: number;
 }
 
 /** Aggregated JS behavior state tracked in the isolated world. */
@@ -93,7 +93,7 @@ export interface JsBehaviorMonitorConfig {
 const FORM_SUBMIT_CORRELATION_WINDOW_MS = 2000;
 
 /** Debounce window for credential field value reads (ms). */
-const CREDENTIAL_READ_DEBOUNCE_MS = 500;
+export const CREDENTIAL_READ_DEBOUNCE_MS = 500;
 
 /** Maximum tracked recent form submissions. */
 const MAX_RECENT_FORM_SUBMITS = 10;
@@ -181,8 +181,8 @@ function snapshotExistingForms(): void {
 }
 
 /** Handle a form submit event and emit signals if suspicious. */
-function handleFormSubmit(form: HTMLFormElement, config: JsBehaviorMonitorConfig, submitter?: HTMLElement | null): void {
-  if (config.mode === "off") return;
+function handleFormSubmit(form: HTMLFormElement, submitter?: HTMLElement | null): void {
+  if (!_config || _config.mode === "off") return;
 
   recordOriginalAction(form);
   const hasCredentials = formHasCredentialFields(form);
@@ -209,7 +209,7 @@ function handleFormSubmit(form: HTMLFormElement, config: JsBehaviorMonitorConfig
   }
 
   _isInsideFormSubmit = true;
-  setTimeout(() => { _isInsideFormSubmit = false; }, 0);
+  queueMicrotask(() => { _isInsideFormSubmit = false; });
 
   const isSuspicious =
     (hasCredentials && crossOrigin) || actionDynamicallyChanged;
@@ -222,15 +222,14 @@ function handleFormSubmit(form: HTMLFormElement, config: JsBehaviorMonitorConfig
       actionDynamicallyChanged,
       destinationOrigin: resolvedCurrent,
     };
-    config.postSignal("ns-js-form-submit-suspicious", signal as unknown as Record<string, unknown>);
+    _config.postSignal("ns-js-form-submit-suspicious", signal as unknown as Record<string, unknown>);
   }
 }
 
 /** Install form submit monitoring: capturing listener + prototype patch. */
-function patchFormSubmitMonitoring(config: JsBehaviorMonitorConfig): void {
+function patchFormSubmitMonitoring(): void {
   if (_formSubmitPatched) return;
   _formSubmitPatched = true;
-  void config;
 
   snapshotExistingForms();
 
@@ -256,10 +255,9 @@ function patchFormSubmitMonitoring(config: JsBehaviorMonitorConfig): void {
   // Capturing submit event listener
   _submitListener = (e) => {
     const form = e.target;
-    const currentConfig = _config;
-    if (form instanceof HTMLFormElement && currentConfig) {
+    if (form instanceof HTMLFormElement) {
       const submitter = (e as SubmitEvent).submitter ?? null;
-      handleFormSubmit(form, currentConfig, submitter);
+      handleFormSubmit(form, submitter);
     }
   };
   document.addEventListener("submit", _submitListener, true);
@@ -268,15 +266,84 @@ function patchFormSubmitMonitoring(config: JsBehaviorMonitorConfig): void {
   _originalSubmitFn = HTMLFormElement.prototype.submit;
   const originalSubmit = _originalSubmitFn;
   HTMLFormElement.prototype.submit = function (this: HTMLFormElement) {
-    const currentConfig = _config;
-    if (currentConfig) {
-      handleFormSubmit(this, currentConfig);
-    }
+    handleFormSubmit(this);
     return originalSubmit.call(this);
   };
 
   // Note: requestSubmit() fires a 'submit' event which the capturing listener
   // above already handles. No prototype patch needed — patching it would double-fire.
+}
+
+// ============================================================================
+// Credential Field Value Monitoring (Slice 4)
+// ============================================================================
+
+/** Per-input debounce tracking for credential reads. */
+const _credReadDebounceMap = new WeakMap<HTMLInputElement, number>();
+
+let _credentialGetterPatched = false;
+
+/** Install value getter patch on HTMLInputElement to detect credential reads. */
+function patchCredentialValueGetter(_cfg: JsBehaviorMonitorConfig): void {
+  if (_credentialGetterPatched) return;
+  void _cfg;
+
+  const descriptor = Object.getOwnPropertyDescriptor(
+    HTMLInputElement.prototype,
+    "value"
+  );
+  if (!descriptor || !descriptor.get) return;
+
+  const originalGetter = descriptor.get;
+  const originalSetter = descriptor.set;
+
+  try {
+    Object.defineProperty(HTMLInputElement.prototype, "value", {
+    get(this: HTMLInputElement) {
+      const val = originalGetter.call(this);
+
+      try {
+        if (
+          this.type === "password" &&
+          val.length > 0 &&
+          !_isInsideFormSubmit &&
+          _config &&
+          _config.mode !== "off"
+        ) {
+          const now = Date.now();
+          const lastRead = _credReadDebounceMap.get(this) ?? 0;
+          if (now - lastRead > CREDENTIAL_READ_DEBOUNCE_MS) {
+            _credReadDebounceMap.set(this, now);
+            _lastCredentialReadTs = now;
+            const signal: JsCredentialReadSignal = {
+              ts: now,
+              isInsideSubmitHandler: false,
+              fieldCount: document.querySelectorAll('input[type="password"]').length,
+            };
+            _config.postSignal(
+              "ns-js-credential-read",
+              signal as unknown as Record<string, unknown>
+            );
+          }
+        }
+      } catch {
+        // Never break page scripts — swallow monitoring errors
+      }
+
+      return val;
+    },
+    set(this: HTMLInputElement, v: string) {
+      if (originalSetter) {
+        originalSetter.call(this, v);
+      }
+    },
+    enumerable: descriptor.enumerable ?? true,
+      configurable: true,
+    });
+    _credentialGetterPatched = true;
+  } catch {
+    // Non-configurable or frozen prototypes should degrade without breaking page code.
+  }
 }
 
 // ============================================================================
@@ -301,11 +368,11 @@ export function initJsBehaviorMonitor(config: JsBehaviorMonitorConfig): void {
 
   if (config.mode === "off") return;
 
-  patchFormSubmitMonitoring(config);
+  patchFormSubmitMonitoring();
   // TODO (Slice 3): patchFetchMonitoring(config);
   // TODO (Slice 3): patchXHRMonitoring(config);
   // TODO (Slice 3): patchBeaconMonitoring(config);
-  // TODO (Slice 4): patchCredentialValueGetter(config);
+  patchCredentialValueGetter(config);
 }
 
 /**
@@ -520,8 +587,7 @@ export function _resetState(): void {
 //   [ ] Verify total per-navigation overhead stays under 100ms budget
 //
 
-// Suppress unused variable warnings for constants used in implementation slices
+// Suppress unused variable warnings for constants used in future implementation slices
 void FORM_SUBMIT_CORRELATION_WINDOW_MS;
-void CREDENTIAL_READ_DEBOUNCE_MS;
 void MAX_RECENT_FORM_SUBMITS;
 void MAX_RECENT_NETWORK_REQUESTS;

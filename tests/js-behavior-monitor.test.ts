@@ -8,6 +8,7 @@ import {
   createEmptyState,
   isStateExpired,
   JS_BEHAVIOR_STATE_TTL_MS,
+  CREDENTIAL_READ_DEBOUNCE_MS,
   initJsBehaviorMonitor,
   _resetState,
 } from "../extension/src/content/js_behavior_monitor";
@@ -287,5 +288,207 @@ describe("initJsBehaviorMonitor form submit detection", () => {
     form.dispatchEvent(new Event("submit", { bubbles: true }));
 
     expect(postSignal).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("isCrossOriginUrl – data/javascript/blob URIs", () => {
+  it("returns false for data: URIs", () => {
+    expect(isCrossOriginUrl("data:text/html,<h1>hi</h1>")).toBe(false);
+  });
+
+  it("returns false for javascript: URIs", () => {
+    expect(isCrossOriginUrl("javascript:void(0)")).toBe(false);
+  });
+
+  it("returns false for blob: URIs", () => {
+    expect(isCrossOriginUrl("blob:https://example.com/abc-123")).toBe(false);
+  });
+
+  it("returns false for data: with leading whitespace", () => {
+    expect(isCrossOriginUrl("  data:text/html,x")).toBe(false);
+  });
+});
+
+describe("correlatesWithFormSubmit – bounds checking", () => {
+  it("returns false when request timestamp is before the submit", () => {
+    const postSignal = vi.fn();
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+
+    const form = document.createElement("form");
+    form.action = "https://evil.com/steal";
+    const pw = document.createElement("input");
+    pw.type = "password";
+    form.appendChild(pw);
+    document.body.appendChild(form);
+
+    form.dispatchEvent(new Event("submit", { bubbles: true }));
+
+    // Request timestamp earlier than the submit — negative delta
+    expect(correlatesWithFormSubmit(0)).toBe(false);
+  });
+});
+
+describe("credential field value monitoring", () => {
+  it("emits signal when password field value is read outside submit", () => {
+    const postSignal = vi.fn();
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+
+    const form = document.createElement("form");
+    const input = document.createElement("input");
+    input.type = "password";
+    form.appendChild(input);
+    document.body.appendChild(form);
+
+    // Set value directly on the element
+    input.value = "secret123";
+
+    // Read it back — this should trigger the credential read signal
+    const _val = input.value;
+    void _val;
+
+    expect(postSignal).toHaveBeenCalledWith(
+      "ns-js-credential-read",
+      expect.objectContaining({
+        isInsideSubmitHandler: false,
+        fieldCount: 1,
+      })
+    );
+  });
+
+  it("returns password values even when signal emission throws", () => {
+    const postSignal = vi.fn(() => {
+      throw new Error("bridge unavailable");
+    });
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+
+    const input = document.createElement("input");
+    input.type = "password";
+    input.value = "secret123";
+    document.body.appendChild(input);
+
+    expect(input.value).toBe("secret123");
+    expect(postSignal).toHaveBeenCalledWith(
+      "ns-js-credential-read",
+      expect.anything()
+    );
+  });
+
+  it("does not emit signal for non-password fields", () => {
+    const postSignal = vi.fn();
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+
+    const input = document.createElement("input");
+    input.type = "text";
+    document.body.appendChild(input);
+
+    input.value = "hello";
+    const _val = input.value;
+    void _val;
+
+    expect(postSignal).not.toHaveBeenCalledWith(
+      "ns-js-credential-read",
+      expect.anything()
+    );
+  });
+
+  it("does not emit signal when password value is empty", () => {
+    const postSignal = vi.fn();
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+
+    const input = document.createElement("input");
+    input.type = "password";
+    document.body.appendChild(input);
+
+    // Value is empty string, reading it should not trigger
+    const _val = input.value;
+    void _val;
+
+    expect(postSignal).not.toHaveBeenCalledWith(
+      "ns-js-credential-read",
+      expect.anything()
+    );
+  });
+
+  it("debounces rapid credential reads on the same field", () => {
+    const postSignal = vi.fn();
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+
+    const input = document.createElement("input");
+    input.type = "password";
+    document.body.appendChild(input);
+
+    input.value = "secret";
+
+    // First read triggers
+    void input.value;
+    expect(postSignal).toHaveBeenCalledTimes(1);
+
+    // Second immediate read is debounced
+    void input.value;
+    expect(postSignal).toHaveBeenCalledTimes(1);
+  });
+
+  it("emits again after debounce window expires", () => {
+    const postSignal = vi.fn();
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+
+    const input = document.createElement("input");
+    input.type = "password";
+    document.body.appendChild(input);
+
+    input.value = "secret";
+
+    const baseTime = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(baseTime);
+    void input.value;
+    expect(postSignal).toHaveBeenCalledTimes(1);
+
+    // Advance past debounce window
+    vi.spyOn(Date, "now").mockReturnValue(baseTime + CREDENTIAL_READ_DEBOUNCE_MS + 1);
+    void input.value;
+    expect(postSignal).toHaveBeenCalledTimes(2);
+
+    vi.restoreAllMocks();
+  });
+
+  it("does not emit during form submit flow", () => {
+    const postSignal = vi.fn();
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+
+    const form = document.createElement("form");
+    const input = document.createElement("input");
+    input.type = "password";
+    form.appendChild(input);
+    document.body.appendChild(form);
+
+    input.value = "secret";
+
+    // Add a submit handler that reads the password value
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      void input.value;
+    });
+
+    form.dispatchEvent(new Event("submit", { bubbles: true }));
+
+    // The credential read signal should not have fired (form submit context)
+    const credReadCalls = postSignal.mock.calls.filter(
+      (c: [string, unknown]) => c[0] === "ns-js-credential-read"
+    );
+    expect(credReadCalls).toHaveLength(0);
+  });
+
+  it("does not emit when mode is off", () => {
+    const postSignal = vi.fn();
+    initJsBehaviorMonitor({ debug: false, mode: "off", postSignal });
+
+    const input = document.createElement("input");
+    input.type = "password";
+    document.body.appendChild(input);
+
+    input.value = "secret";
+    void input.value;
+
+    expect(postSignal).not.toHaveBeenCalled();
   });
 });
