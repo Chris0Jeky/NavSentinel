@@ -67,17 +67,20 @@ It computes risk through `extension/src/shared/domain.ts` and uses `extension/sr
 
 ## Main/isolated bridge
 
-The main/isolated bridge is intentionally split into two phases:
+The main/isolated bridge is intentionally split into three phases:
 
-1. isolated world generates a per-document bridge session and initiates the handoff
-2. steady-state traffic flows over `MessageChannel` / `MessagePort`
+1. isolated world generates a per-document bridge session nonce and transfers a `MessagePort` to the main world via `window.postMessage`
+2. main world sends a random challenge nonce back through the `MessagePort`; isolated world echoes it — only then is the bridge considered verified
+3. steady-state traffic flows over the verified `MessagePort`
 
 The important constraints are:
 
 - messages must carry the NavSentinel source marker
 - messages must match the current protocol version
-- messages must match the current per-document session
+- messages must match the current per-document session nonce
 - only a narrow allowlist of bridge message types is accepted
+- the challenge-response handshake prevents malicious same-page scripts from racing to install a fake bridge port
+- a generation counter in the isolated world prevents stale retry timers from closing successfully-established connections
 
 This keeps actionable control traffic off the old page-visible `window.postMessage` path and makes the bridge state far less spoofable than the earlier fallback design.
 

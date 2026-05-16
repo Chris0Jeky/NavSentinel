@@ -2,7 +2,7 @@
 
 **Purpose**: This file is the single source of truth for the autonomous multi-session workflow. Read this FIRST after any context compaction or session restart. It survives wipes because it's on disk.
 
-**Last updated**: 2026-05-16T16:50:00Z
+**Last updated**: 2026-05-16T21:00:00Z
 
 ---
 
@@ -42,9 +42,11 @@
 
 **Total: 47/47 tasks complete** (all implemented and merged to main).
 
-**Test count**: 994 passing (main), 10 skipped. 37 test files across unit + SW rollback suites.
+**Test count**: 1003 passing (main), 10 skipped. 38 unit test files + 10 E2E spec files. 48 source files.
 
-**Open PRs**: 0 — all 22 PRs merged to main.
+**Open PRs**: 0 — all 94 PRs merged. **Open Issues**: 0 — all closed.
+
+**Redesign**: Complete (R1-R9). Brass/jade design system, 26-icon SVG system, segmented controls, sidebar nav options. See `docs/REDESIGN_ORCHESTRATION.md`.
 
 ## Completed Tasks (all on main)
 
@@ -69,7 +71,7 @@
 | AUD-04 | Performance budget verification  | #83   | ✅ |
 | AUD-05 | Accessibility audit of UI        | #80   | ✅ |
 
-### Remaining Phase 4 (future — XL effort, blocked on P3 gate)
+### Remaining Phase 4 (future — XL effort, P3 gate cleared)
 | ID    | Title                            | Effort | Status  |
 |-------|----------------------------------|--------|---------|
 | P4-01 | Visual similarity detection      | XL     | PENDING |
@@ -104,15 +106,15 @@
 | #93 | fix/dead-exports-cleanup | Dead code | ✅ | ✅ | ✅ | ✅ 2026-05-16 |
 | #94 | fix/dep-audit | #91 | ✅ | ✅ | ✅ | ✅ 2026-05-16 |
 
-## Open Issues
+## Closed Issues (all resolved)
 
-| Issue | Title | Status |
+| Issue | Title | Resolution |
 |-------|-------|--------|
-| #75 | Writable/configurable patches | Addressed by PR #79 (merged) |
-| #76 | Extension fingerprinting via globals | Addressed by PR #79 (merged) |
-| #77 | chrome.runtime.sendMessage in MAIN world | Addressed by PR #85 (merged) |
-| #86 | Bridge session race (pre-existing) | Design issue, needs RFC |
-| #90 | Bridge port retry race condition | Low-probability timing issue |
+| #75 | Writable/configurable patches | PR #79 (merged) |
+| #76 | Extension fingerprinting via globals | PR #79 (merged) |
+| #77 | chrome.runtime.sendMessage in MAIN world | PR #85 (merged) |
+| #86 | Bridge session race | Fixed: challenge-response handshake (commit `fb72412`) |
+| #90 | Bridge port retry race condition | Fixed: generation counter (commit `fb72412`) |
 | #91 | Dev dependency audit | PR #94 (partial — 3 of 9 fixed, rest blocked by breaking vite upgrade) |
 
 ## Active Branches
@@ -143,8 +145,10 @@ git worktree add ../NavSentinel-<branch> -b <branch>
 
 ## Notes
 
-- All 22 PRs merged to main on 2026-05-16. Main is green: 994 tests, typecheck clean, build successful.
-- Issues #86 and #90 are low-priority design/timing issues that remain open.
-- Issue #91 (dev dependency audit) is partially addressed by PR #94 — remaining vulns require vite >=6.2 (breaking change).
+- All 94 PRs merged. 1003 tests, typecheck clean, build in ~500ms.
+- Issues #86 and #90 fixed via challenge-response handshake and generation counter (commit `fb72412`).
+- Issue #91 (dev dependency audit) partially addressed by PR #94 — remaining vulns require vite >=6.2 (breaking change).
+- UI redesign complete: brass/jade palette, design tokens, 26-icon SVG system, segmented controls, sidebar nav.
+- Bridge security hardened: challenge-response handshake prevents spoofed port installation.
 - `failure_ledger.jsonl` gets modified by the pre-tool hook — restore it before branch switches.
 - Pre-tool hook blocks destructive ops on protected branches. Use `git restore` instead of `git checkout --`.

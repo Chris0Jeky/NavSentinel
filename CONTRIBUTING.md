@@ -60,6 +60,10 @@ npm run gym:serve
 - popup and options UI
   - `extension/src/popup/*`
   - `extension/src/options/*`
+  - `extension/src/onboarding/*`
+- design system (shared tokens, icons, typography)
+  - `extension/src/shared/design_tokens.css`
+  - `extension/src/shared/icons.ts`
 - rollback and DNR sync
   - `extension/src/sw/sw.ts`
 

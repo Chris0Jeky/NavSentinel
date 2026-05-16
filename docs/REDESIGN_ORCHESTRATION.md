@@ -103,7 +103,7 @@ Complete visual redesign of all NavSentinel UI surfaces based on the design syst
 
 ### Phase R8: Test Updates ✓
 **Status:** Complete (commit `9b9c6da`)
-**Deliverable:** All tests green with new UI (996 passing)
+**Deliverable:** All tests green with new UI (1003 passing)
 
 - Update E2E selectors for new popup DOM structure
 - Update E2E selectors for new options DOM structure
@@ -197,7 +197,7 @@ All design reference material lives in `RESOURCES/redesign/`:
 
 **All 9 phases complete.** Committed directly to main on 2026-05-16 (7 commits: design tokens → icon system → popup → options → credential modal/toast → onboarding → store listing → E2E test alignment).
 
-- 996 unit tests passing
+- 1003 unit tests passing
 - TypeScript clean, build in ~3.3s
 - E2E tests updated for new segmented controls (aria-pressed verification)
 
@@ -206,7 +206,7 @@ All design reference material lives in `RESOURCES/redesign/`:
 The redesign is complete when:
 1. ~~All 9 phases merged to main via the PR Merge Protocol~~ **Done** (committed to main 2026-05-16)
 2. ~~Extension loads and all functionality works with new UI~~ **Done**
-3. ~~All tests pass (unit + E2E)~~ **Done** (996 unit, E2E selectors updated)
+3. ~~All tests pass (unit + E2E)~~ **Done** (1003 unit, E2E selectors updated)
 4. ~~Manual QA checklist fully green~~ **Done**
 5. Landing page deployed — **Pending** (landing page not yet created; deferred to separate initiative)
 6. ~~Store assets ready for upload~~ **Done** (STORE_LISTING.md created with copy and asset requirements)

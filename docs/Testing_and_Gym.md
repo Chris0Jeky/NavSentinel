@@ -393,4 +393,4 @@ Completed measurement milestones:
 - FP measurement on Tranco top-200: 0.72% (1/138 sites prompted: unity3d.com) — PR #39
 - Phishing corpus validation: 100 pages tested, 28% overall TP, 100% credential guard TP on detectable password forms — PR #38
 
-Test count: **654 passing** across 25 test files (as of 2026-05-03).
+Test count: **1003 passing** across 38 unit test files and 10 E2E spec files (as of 2026-05-16).

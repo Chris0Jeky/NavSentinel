@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Complete UI redesign with brass/jade design system (design tokens, 26-icon SVG system, LogoSentinel mark)
+- Popup: Modern HUD variant with ShieldArc gauge, segmented mode controls, signal chips
+- Options: SOC dashboard with sidebar navigation, toggle switches, segmented controls
+- Credential modal: dark gradient card with alert icon, monospace KV grid, color-coded actions
+- Toast: brass-themed with amber dot indicator, pulse animation, slide-up entrance
+- Onboarding: redesigned with new design tokens, icon slots, feature grid, toast mockups
+- Chrome Web Store listing copy and asset requirements (docs/STORE_LISTING.md)
+- Bridge security: challenge-response handshake prevents spoofed port installation (#86)
+- Bridge reliability: generation counter prevents stale retries from closing active ports (#90)
+- Unit tests for bridge race condition fixes (7 new tests)
+- Navigation pattern anomaly detection (P4-08)
+- CSP analysis as NRS risk modifier (P4-05)
+- Sub-resource integrity awareness for credential pages (P4-06)
+- Per-domain behavioral profiling (P4-07)
+- Competitive benchmark suite (P2-10)
+- First-install onboarding flow (P3-04)
+- Security audit scope document (P3-09)
+- Performance budget verification in CI (AUD-04)
+- Unit tests for dblclick_guard, allowlist, event_tone, dom_builder modules
+- Missing NRS explanation strings
+- Accessibility improvements across all UI surfaces
+
+### Fixed
+- Bridge retry race condition: stale retry could close successfully-established port (#90)
+- Bridge session race: MAIN world accepted any first ns-port-init sender (#86)
+- Protocol injection, lastError, and isTopFrame bugs in capture_isolated (#89)
+- SW TTL clamp and rollback URL validation hardening (#88)
+- Extension ID leak in MAIN world via chrome.runtime.sendMessage (#77, #85)
+- Main-world patches hardened against bypass and fingerprinting (#79)
+- 3 high-severity CVEs in dev dependencies (rollup, undici) (#91, #94)
+- Dead exports removed, public API surface reduced (#93)
+
+### Changed
+- Options page mode controls: `<select>` elements replaced with segmented button controls
+- E2E tests updated to use aria-pressed attribute verification for segmented controls
+- All UI surfaces now use shared design tokens (CSS custom properties)
+
 ## [0.4.0] - 2026-05-03
 
 ### Added

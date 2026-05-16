@@ -41,7 +41,7 @@ This is a fast orientation layer for coding agents. It should point to interface
 | Popup/options UI | `popup.ts`, `popup_model.ts`, `options.ts` | popup/options CSS/HTML, `design_tokens.css`, `icons.ts`, `event_tone.ts`, `explanations.ts`, `smart_defaults.ts` | popup/options unit tests, suite-ui E2E. UI uses segmented controls (`#navModeSeg`/`#credModeSeg` with `.seg-btn[data-value]` + `aria-pressed`), toggle buttons (`aria-checked`), and sidebar nav (`data-section`). |
 | Onboarding | `onboarding/onboarding.ts` | onboarding HTML/CSS, imports `icons.ts` | `tests/onboarding.test.ts`, `npm run build`. |
 | Toast and state display | `ui_toast.ts` | `stateMachine.ts`, `types.ts`, `popup_test.ts` | statemachine-timing tests, `npm run build`. Toast uses Shadow DOM with self-contained brass-palette styles. |
-| Gym and E2E harness | `gym/index.html`, `tests/e2e/extension_test_utils.ts` | 52 gym HTML fixtures, 10 E2E specs under `tests/e2e/` | Playwright spec, `npm run gym:serve`. |
+| Gym and E2E harness | `gym/index.html`, `tests/e2e/extension_test_utils.ts` | 112 gym HTML fixtures, 10 E2E specs under `tests/e2e/` | Playwright spec, `npm run gym:serve`. |
 | Build/release | `package.json`, `vite.config.ts`, `extension/manifest.json` | `scripts/package.mjs`, `scripts/release.mjs`, `scripts/check_versions.mjs`, `scripts/check-perf-budget.mjs` | `npm run verify:versions`, `npm run build`, `npm run package:ext`. |
 | Data pipeline | `scripts/build-bloom-filter.mjs`, `scripts/fetch-phishing-corpus.mjs` | `scripts/build-test-bloom-filter.mjs`, `scripts/measure-fp.mjs`, `scripts/check-bloom-size.mjs`, `scripts/update-psl.mjs` | `npm run build:bloom`, `npm run check:bloom-size`. |
 | Agentic workflow | `CLAUDE.md`, `AGENTS.md`, `docs/agentic/*`, `autodoc/AGENT_INDEX.md` | `.claude/skills/*`, `.agents/skills/*`, `scripts/agent_hooks/*` | `npm run agent:hooks:smoke`, `npm run agent:skills:validate`. |
@@ -50,7 +50,7 @@ All paths above are relative to repo root. Content scripts live under `extension
 
 ## Current Agent-Readiness Observations
 
-- NavSentinel v0.4.0, Phases 0-3 complete + Phase 4 partial (4/8), 996 tests (37 unit + 10 E2E files), 40+ source files, 52 gym fixtures.
+- NavSentinel v0.4.0, Phases 0-3 complete + Phase 4 partial (4/8), 1003 tests (38 unit test files + 10 E2E spec files), 48 source files, 112 gym fixtures.
 - **UI redesign complete** (2026-05-16): brass/jade design system, design tokens, 26-icon SVG system, segmented controls replacing selects, sidebar nav options page, ShieldArc popup gauge. See `docs/REDESIGN_ORCHESTRATION.md`.
 - The active planning source is `docs/Project_Roadmap.md`; archived execution trackers are historical only.
 - `docs/Comprehensive_Project_Analysis.md` is a historical snapshot from 2026-04-09 — do not treat it as current.

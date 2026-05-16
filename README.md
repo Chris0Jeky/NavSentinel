@@ -54,9 +54,10 @@ The current `main` branch ships the merged suite baseline. That means the extens
 
 - `extension/`: MV3 source, manifest, assets, and build output
 - `gym/`: deterministic HTML fixtures for navigation and credential scenarios
-- `tests/`: Vitest unit tests and Playwright E2E tests
-- `docs/`: architecture, threat model, testing, release, and usage docs
-- `scripts/`: release and verification scripts
+- `tests/`: Vitest unit tests (38 files) and Playwright E2E tests (10 specs)
+- `docs/`: architecture, threat model, testing, release, roadmap, and redesign docs
+- `scripts/`: release, bloom filter build, benchmark, PSL update, and agent hook scripts
+- `autodoc/`: agent-facing code orientation index
 
 ## Build and run
 
@@ -107,12 +108,15 @@ The options page is the durable operator view. It lets you:
 
 ### Gym
 
-The Gym gives you deterministic fixtures for common attack and edge-case patterns:
+The Gym gives you 112 deterministic fixtures for attack and edge-case patterns:
 
-- Levels 1-9: overlay, retargeting, popunder, programmatic click, and legitimacy edge cases
-- Level 10: delayed redirects and form submits
-- Level 11: risky password-submit prompt coverage
-- Level 12: slow same-tab navigation legitimacy coverage
+- Levels 1-12: overlay, retargeting, popunder, programmatic click, delayed redirects, credential prompts, and legitimacy edge cases
+- DoubleClickjacking: basic, OAuth consent, payment, and legitimate double-click variants
+- ClickFix: fake CAPTCHA, clipboard hijack, Win+R instructions, and real CAPTCHA contrasts
+- Redirect chains: direct, shortener, deep chains, and legitimate redirect flows
+- Content fingerprinting: brand mismatch, phishing kit, and legitimate login pages
+- DOM mutation: delayed overlay, form action change, password injection variants
+- PushState abuse, evasion composites, CSP/SRI scenarios, and real-world adversarial fixtures (RW-01 through RW-25)
 
 Start it with:
 
