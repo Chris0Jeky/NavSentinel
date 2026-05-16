@@ -57,6 +57,7 @@ function ensureHost() {
       font-size: 12px;
     }
     button:hover { background: rgba(255,255,255,0.18); }
+    button:focus-visible { outline: 2px solid rgba(255,255,255,0.8); outline-offset: 2px; }
     .danger { background: rgba(255, 80, 80, 0.18); }
     .danger:hover { background: rgba(255, 80, 80, 0.26); }
   `;
@@ -74,6 +75,9 @@ export function showToast(opts: ToastOptions) {
 
   const wrap = document.createElement("div");
   wrap.className = "wrap";
+    wrap.setAttribute("role", "alert");
+    wrap.setAttribute("aria-live", "assertive");
+    wrap.setAttribute("aria-atomic", "true");
 
   const body = document.createElement("div");
   body.className = "body";
@@ -110,6 +114,11 @@ export function showToast(opts: ToastOptions) {
   wrap.appendChild(row);
 
   root.appendChild(wrap);
+
+  if (actions.length > 0) {
+    const firstBtn = row.querySelector("button");
+    if (firstBtn) (firstBtn as HTMLButtonElement).focus();
+  }
 
   const t = opts.timeoutMs ?? 4000;
   if (t > 0) {
