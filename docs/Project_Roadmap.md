@@ -15,13 +15,13 @@ know it's done. It synthesizes the findings from
 |---|---|---|---|---|
 | 0 | Stabilize | 6 | 6 | **Done** |
 | 1 | Validate Foundation | 8 | 8 | **Done** (FP gate cleared via same-org domain groups) |
-| 2 | Target 2025-2026 Threats | 13 | 12 | **In progress** (1 remaining: P2-10) |
-| 3 | Productize | 12 | 5 | In progress (P3-03, P3-08, P3-10, P3-11, P3-12 done) |
-| 4 | Differentiate | 8 | 0 | Future |
+| 2 | Target 2025-2026 Threats | 13 | 13 | **Done** |
+| 3 | Productize | 12 | 9 | **In progress** (P3-01, P3-02, P3-03, P3-05, P3-07, P3-08, P3-10, P3-11, P3-12 done) |
+| 4 | Differentiate | 8 | 3 | In progress (P4-05, P4-06, P4-07 done) |
 
-Total: **47 tasks** across 5 phases. **31/47 complete.**
+Total: **47 tasks** across 5 phases. **39/47 complete.**
 
-Last updated: 2026-05-03
+Last updated: 2026-05-16
 
 ---
 
@@ -448,7 +448,7 @@ Phase 1 is complete when:
 | P2-07 | DOM mutation monitoring | M | **done** | P1 gate | `feat/dom-mutation` (PR #45) |
 | P2-08 | History.pushState gating | M | **done** | P2-06 | `feat/pushstate-gating` (PR #60) |
 | P2-09 | Gym fixtures for new detections | M | **done** | P2-01, P2-02 | `test/phase2-gym` (PR #61) |
-| P2-10 | Competitive benchmark suite | L | pending | P1-05, P1-06 | `test/competitive-bench` |
+| P2-10 | Competitive benchmark suite | L | **done** | P1-05, P1-06 | `test/competitive-bench` (PR #70) |
 | P2-11 | NRS scoring ceiling and compound FP mitigation | M | **done** | P2-01, P2-03 | `fix/nrs-scoring-ceiling` (PR #57) |
 | P2-12 | Integrate ClickFix scoring into NRS pipeline | M | **done** | P2-02 | `feat/clickfix-nrs-integration` (PR #44) |
 | P2-13 | Bloom filter per-frame loading optimization | S | **done** | P2-03 | `fix/bloom-per-frame` (PR #46) |
@@ -740,8 +740,8 @@ Phase 2 is complete when:
 - [x] DOM mutations are monitored for post-load injection (PR #45 merged: MutationObserver with cookie/chat/ARIA exclusions, 100ms debounce, 50-alert cap)
 - [x] History.pushState gating detects URL manipulation (PR #60 merged: 2+ dot domain-like path check, %2E decode, rapid-fire detection, +20 NRS factor)
 - [x] Phase 2 gym fixtures have comprehensive E2E coverage (PR #61 merged: 22 tests across 6 detection types, 4 new fixtures)
-- [ ] Competitive benchmark demonstrates additive value
-- [ ] No regression in Phase 1 measurements (FP rate, TP rate)
+- [x] Competitive benchmark demonstrates additive value (PR #70 merged: Playwright-based benchmark suite with baseline comparison and regression detection)
+- [ ] No regression in Phase 1 measurements (FP rate, TP rate) — needs re-run after P4 additions
 
 ---
 
@@ -751,13 +751,13 @@ Phase 2 is complete when:
 
 | ID | Title | Effort | Status | Depends On | Branch |
 |---|---|---|---|---|---|
-| P3-01 | Plain-English risk explanations | M | pending | P2 gate | `feat/plain-english-ui` |
-| P3-02 | Visual risk indicators (icon color) | M | pending | P2 gate | `feat/icon-risk` |
+| P3-01 | Plain-English risk explanations | M | **done** | P2 gate | `feat/plain-english-ui` (PR #64) |
+| P3-02 | Visual risk indicators (icon color) | M | **done** | P2 gate | `feat/icon-risk` (PR #65) |
 | P3-03 | Smart defaults that learn | M | **done** | P1-08 | `feat/smart-defaults` (PR #62) |
 | P3-04 | Onboarding flow | L | pending | P3-01, P3-02 | `feat/onboarding` |
-| P3-05 | Adaptive scoring with user feedback | L | pending | P1-08, P3-03 | `feat/adaptive-scoring` |
+| P3-05 | Adaptive scoring with user feedback | L | **done** | P1-08, P3-03 | `feat/adaptive-scoring` (PR #66) |
 | P3-06 | Chrome Web Store listing | M | pending | P3-01, P3-02 | `docs/cws-listing` |
-| P3-07 | Release infrastructure | M | pending | P2 gate | `infra/release` |
+| P3-07 | Release infrastructure | M | **done** | P2 gate | `infra/release` (PR #67) |
 | P3-08 | Issue templates and repo hygiene | S | **done** | -- | `docs/issue-templates` (PR #50) |
 | P3-09 | Seek volunteer security audit | S | pending | P2 gate | (no branch) |
 | P3-10 | Migrate SW ephemeral state to chrome.storage.session | M | **done** | P2-01 | `feat/sw-session-storage` (PR #63) |
@@ -968,15 +968,15 @@ cap and alert on unexpected size changes.
 ### Phase 3 Gate
 
 Phase 3 is complete when:
-- [ ] All user-facing messages are in plain English
-- [ ] Icon changes color based on page risk
-- [ ] Smart defaults suggest allowlist additions
+- [x] All user-facing messages are in plain English (PR #64 merged)
+- [x] Icon changes color based on page risk (PR #65 merged)
+- [x] Smart defaults suggest allowlist additions (PR #62 merged: 24h cooldown, 25 unit tests)
 - [ ] Onboarding flow exists and works on first install
 - [ ] Extension is listed on Chrome Web Store
-- [ ] Release workflow is scripted
-- [x] Issue templates exist (PR #50 merged: bug report, feature request, false positive, security vulnerability)
-- [x] Smart defaults suggest allowlist after 3 consecutive allows (PR #62 merged: 24h cooldown, 25 unit tests)
-- [x] SW state survives service worker restarts (PR #63 merged: 15 Maps to chrome.storage.session, hydrate gate, shape validation)
+- [x] Release workflow is scripted (PR #67 merged: CHANGELOG, version bump script, CI release job)
+- [x] Issue templates exist (PR #50 merged)
+- [x] Adaptive scoring adjusts per-domain thresholds (PR #66 merged)
+- [x] SW state survives service worker restarts (PR #63 merged)
 - [ ] At least one external security review completed
 
 ---
@@ -994,9 +994,9 @@ ordered by estimated impact. Timelines are intentionally open-ended.
 | P4-02 | JavaScript behavior analysis | XL | pending | P3 gate |
 | P4-03 | Cross-browser port (Firefox MV3) | XL | pending | P3 gate |
 | P4-04 | Community threat intelligence | XL | pending | P3 gate |
-| P4-05 | CSP / permissions analysis | L | pending | P2 gate |
-| P4-06 | Sub-resource integrity awareness | M | pending | P2 gate |
-| P4-07 | Per-domain behavioral profiling | L | pending | P1-08 |
+| P4-05 | CSP / permissions analysis | L | **done** | P2 gate | PR #71 |
+| P4-06 | Sub-resource integrity awareness | M | **done** | P2 gate | PR #68 |
+| P4-07 | Per-domain behavioral profiling | L | **done** | P1-08 | PR #69 |
 | P4-08 | Navigation pattern anomaly detection | L | pending | P4-07 |
 
 ### Task Details
