@@ -45,6 +45,7 @@ const DETECTION_EVENTS = new Set([
   "nav_blank_prompt",
   "nav_click_block",
   "nav_rollback",
+  "nav_reputation_late_warn",
   "cred_submit_prompt",
   "cred_paste_warn",
   "clickfix_detected",
@@ -435,6 +436,8 @@ async function performInteraction(page, context, interact, timeoutMs) {
     } catch {
       // Interaction failed
     }
+
+    await closeExtraPages(context);
     return;
   }
 
@@ -760,6 +763,7 @@ async function main() {
 
   const results = [];
   const startTime = Date.now();
+  let exitCode = 0;
 
   try {
   for (let i = 0; i < corpus.length; i++) {
@@ -869,7 +873,6 @@ async function main() {
   console.log(`  Markdown:    ${mdPath}\n`);
 
   // Exit code: non-zero if regressions exist
-  let exitCode = 0;
   if (comparison.hasBaseline && comparison.regressions.length > 0) {
     console.log("FAIL: Regressions detected against baseline");
     exitCode = 1;
