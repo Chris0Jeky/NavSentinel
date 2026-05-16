@@ -1,0 +1,41 @@
+import { describe, it, expect } from "vitest";
+import { classifyEventTone } from "../extension/src/shared/event_tone";
+
+describe("classifyEventTone", () => {
+  it("classifies credential events", () => {
+    expect(classifyEventTone("cred_submit_prompt")).toBe("credential");
+    expect(classifyEventTone("cred_paste_warn")).toBe("credential");
+    expect(classifyEventTone("cred_modal_block")).toBe("credential");
+  });
+
+  it("classifies config events", () => {
+    expect(classifyEventTone("suite_mode_change")).toBe("config");
+    expect(classifyEventTone("suite_allowlist_add")).toBe("config");
+  });
+
+  it("classifies navigation events as default", () => {
+    expect(classifyEventTone("nav_click_block")).toBe("navigation");
+    expect(classifyEventTone("nav_blank_prompt")).toBe("navigation");
+    expect(classifyEventTone("nav_rollback")).toBe("navigation");
+  });
+
+  it("classifies unknown event kinds as navigation", () => {
+    expect(classifyEventTone("unknown_event")).toBe("navigation");
+    expect(classifyEventTone("something_else")).toBe("navigation");
+  });
+
+  it("handles non-string input gracefully", () => {
+    expect(classifyEventTone(42 as unknown as string)).toBe("navigation");
+    expect(classifyEventTone(null as unknown as string)).toBe("navigation");
+    expect(classifyEventTone(undefined as unknown as string)).toBe("navigation");
+  });
+
+  it("handles empty string", () => {
+    expect(classifyEventTone("")).toBe("navigation");
+  });
+
+  it("is case-sensitive (cred_ prefix must be lowercase)", () => {
+    expect(classifyEventTone("CRED_submit")).toBe("navigation");
+    expect(classifyEventTone("Cred_submit")).toBe("navigation");
+  });
+});
