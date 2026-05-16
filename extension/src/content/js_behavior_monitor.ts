@@ -328,18 +328,22 @@ function patchFetchMonitoring(_cfg: JsBehaviorMonitorConfig): void {
   if (!originalFetch) return;
   _fetchPatched = true;
   window.fetch = function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-    let url = "";
-    if (typeof input === "string") {
-      url = input;
-    } else if (input instanceof URL) {
-      url = input.href;
-    } else if (input instanceof Request) {
-      url = input.url;
-    }
+    try {
+      let url = "";
+      if (typeof input === "string") {
+        url = input;
+      } else if (typeof input === "object" && input !== null && "href" in input) {
+        url = String((input as URL).href);
+      } else if (typeof input === "object" && input !== null && "url" in input) {
+        url = String((input as Request).url);
+      }
 
-    const origin = extractOrigin(url);
-    if (origin && origin !== location.origin) {
-      recordNetworkRequest(origin, "fetch");
+      const origin = extractOrigin(url);
+      if (origin && origin !== location.origin) {
+        recordNetworkRequest(origin, "fetch");
+      }
+    } catch (_) {
+      // Never break page fetch due to monitoring errors
     }
 
     return originalFetch.call(window, input, init);
@@ -360,8 +364,12 @@ function patchXHRMonitoring(_cfg: JsBehaviorMonitorConfig): void {
     url: string | URL,
     ...rest: unknown[]
   ) {
-    const urlStr = typeof url === "string" ? url : url.href;
-    xhrUrlMap.set(this, urlStr);
+    try {
+      const urlStr = typeof url === "string" ? url : String(url);
+      xhrUrlMap.set(this, urlStr);
+    } catch (_) {
+      // Never break XHR due to monitoring errors
+    }
     return (originalOpen as Function).apply(this, [method, url, ...rest]);
   };
 
@@ -370,12 +378,16 @@ function patchXHRMonitoring(_cfg: JsBehaviorMonitorConfig): void {
     this: XMLHttpRequest,
     body?: Document | XMLHttpRequestBodyInit | null
   ) {
-    const url = xhrUrlMap.get(this);
-    if (url) {
-      const origin = extractOrigin(url);
-      if (origin && origin !== location.origin) {
-        recordNetworkRequest(origin, "xhr");
+    try {
+      const url = xhrUrlMap.get(this);
+      if (url) {
+        const origin = extractOrigin(url);
+        if (origin && origin !== location.origin) {
+          recordNetworkRequest(origin, "xhr");
+        }
       }
+    } catch (_) {
+      // Never break XHR due to monitoring errors
     }
     return originalSend.call(this, body);
   };
@@ -390,10 +402,14 @@ function patchBeaconMonitoring(_cfg: JsBehaviorMonitorConfig): void {
 
   const originalBeacon = navigator.sendBeacon.bind(navigator);
   navigator.sendBeacon = function (url: string | URL, data?: BodyInit | null): boolean {
-    const urlStr = typeof url === "string" ? url : url.href;
-    const origin = extractOrigin(urlStr);
-    if (origin && origin !== location.origin) {
-      recordNetworkRequest(origin, "beacon");
+    try {
+      const urlStr = typeof url === "string" ? url : String(url);
+      const origin = extractOrigin(urlStr);
+      if (origin && origin !== location.origin) {
+        recordNetworkRequest(origin, "beacon");
+      }
+    } catch (_) {
+      // Never break sendBeacon due to monitoring errors
     }
     return originalBeacon(url, data);
   };
