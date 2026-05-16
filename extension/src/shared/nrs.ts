@@ -1,4 +1,5 @@
 import type { ScoreResult } from "./scoring";
+import { NRS_WEIGHT_JS_BEHAVIOR_CAP } from "./js_behavior_state";
 
 export interface NavigationContext {
   isNewTabOrWindow: boolean;
@@ -68,7 +69,6 @@ const NRS_CSP_MODIFIER_THRESHOLD = 20;
 const NRS_WEIGHT_CSP_CAP = 10;
 const NRS_WEIGHT_DOMAIN_REPEAT_OFFENDER = 10;
 const NRS_WEIGHT_NAV_ANOMALY_CAP = 15;
-const NRS_WEIGHT_JS_BEHAVIOR_CAP = 35;
 
 /** Raw scores above this get 50% weight on the excess. */
 const NRS_DIMINISHING_RETURNS_THRESHOLD = 100;
