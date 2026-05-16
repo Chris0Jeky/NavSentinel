@@ -164,8 +164,9 @@ void _isInsideFormSubmit;
 // ============================================================================
 
 /**
- * Initialize the JS behavior monitor. Called once from main_guard.ts after
- * all existing patches are applied.
+ * Initialize the JS behavior monitor from main_guard.ts. Form submit
+ * observation must install before main_guard hardens form prototypes; network
+ * and credential-read wrappers install with the rest of the monitor patches.
  *
  * When fully implemented (#106 Slices 2-4), installs:
  * - fetch() wrapper

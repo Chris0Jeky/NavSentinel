@@ -43,9 +43,9 @@ The monitor emits structured signals over the existing bridge (same `postToIsola
 
 ### Integration with Existing Patterns
 
-- **Bridge protocol**: Uses the same `NS_SOURCE`, `PROTOCOL_VERSION`, and `bridgeSession` constants as `main_guard.ts`. The monitor is initialized in the same main-world script, after all existing patches are applied.
+- **Bridge protocol**: Uses the same `NS_SOURCE`, `PROTOCOL_VERSION`, and `bridgeSession` constants as `main_guard.ts`. The monitor is initialized in the same main-world script. Form-submit observation installs before `main_guard.ts` hardens form prototypes; network and credential-read wrappers install with the rest of the monitor patches.
 - **Scoring integration**: Adds a new `jsBehaviorScore` field to `NavigationContext` in `nrs.ts`, similar to `clickfixScore`. The score is computed from accumulated behavior signals and capped to prevent runaway escalation.
-- **Mode awareness**: Respects the `mode` variable (`off`/`smart`/`strict`). When `off`, patches still run (to avoid detectable absence) but signals are not emitted.
+- **Mode awareness**: Respects the `mode` variable (`off`/`smart`/`strict`). When `off`, wrappers keep delegating to native APIs but take the same early-return shape as `main_guard.ts`: skip monitoring work and emit no signals.
 
 ### Design Principles
 
@@ -126,7 +126,8 @@ Signal emitted: `ns-js-credential-read`
 | Multiple exfil signals combined | 10 | 10 | 2+ of the above fire within 5s window |
 
 **Total cap: 35 points** (diminishing returns apply above this to prevent single-factor dominance)
-n**Score aggregation:** All applicable signal scores are summed and the total is clamped with `Math.min(sum, NRS_WEIGHT_JS_BEHAVIOR_CAP)`. Individual signal caps prevent repeated signals from inflating the sum. There is no priority ordering; all triggered signals contribute equally up to the cap.
+
+**Score aggregation:** All applicable signal scores are summed and the total is clamped with `Math.min(sum, NRS_WEIGHT_JS_BEHAVIOR_CAP)`. Individual signal caps prevent repeated signals from inflating the sum. There is no priority ordering; all triggered signals contribute equally up to the cap.
 
 The factor is added to `NavigationContext` as:
 ```typescript
@@ -153,6 +154,7 @@ if (navCtx.jsBehaviorScore && navCtx.jsBehaviorScore > 0) {
 - **ClickFix**: JS behavior signals are independent of ClickFix detection. Both can fire simultaneously (e.g., a ClickFix page that also has credential exfiltration). Like `clickfixScore`, `jsBehaviorScore` fires unconditionally — no NRS threshold gate is required because these signals represent active attacks, not ambient risk modifiers.
 - **Known bad domain**: If a page already scores +50 from reputation, JS behavior adds at most 35 more, subject to diminishing returns above 100.
 - **Credential guard**: The existing credential guard protects against phishing forms. JS behavior analysis complements it by detecting exfiltration from legitimate forms that have been compromised.
+- **Clipboard monitoring**: Clipboard-write and `document.execCommand("copy")` coverage remains in the existing ClickFix/main-guard clipboard path. This monitor does not duplicate clipboard hooks; it focuses on credential reads and network/form exfiltration signals that complement that coverage.
 
 ## Performance Constraints
 
@@ -193,7 +195,7 @@ if (navCtx.jsBehaviorScore && navCtx.jsBehaviorScore > 0) {
 
 | File | Change |
 | --- | --- |
-| `extension/src/content/main_guard.ts` | Import and call `initJsBehaviorMonitor()` after existing patches |
+| `extension/src/content/main_guard.ts` | Import and call `initJsBehaviorMonitor()` early enough for form-submit observation before form prototype hardening |
 | `extension/src/content/capture_isolated.ts` | Handle new bridge message types (`ns-js-*`), maintain JS behavior state |
 | `extension/src/shared/nrs.ts` | Add `jsBehaviorScore` to `NavigationContext`, add NRS factor |
 | `extension/src/shared/scoring.ts` | No changes (CDS is click-geometry only) |
