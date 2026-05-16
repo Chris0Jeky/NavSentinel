@@ -147,17 +147,17 @@ interface NetworkRequestRecord {
   api: "fetch" | "xhr" | "beacon";
 }
 
-// These are declared but unused until implementation slices 2-4.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 let _recentFormSubmits: FormSubmitRecord[] = [];
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 let _recentNetworkRequests: NetworkRequestRecord[] = [];
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 let _lastCredentialReadTs = 0;
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 let _isInsideFormSubmit = false;
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 let _config: JsBehaviorMonitorConfig | null = null;
+
+// Suppress unused warnings - state vars used in implementation slices (#106)
+void _recentFormSubmits;
+void _recentNetworkRequests;
+void _lastCredentialReadTs;
+void _isInsideFormSubmit;
 
 // ============================================================================
 // Public API
@@ -167,21 +167,13 @@ let _config: JsBehaviorMonitorConfig | null = null;
  * Initialize the JS behavior monitor. Called once from main_guard.ts after
  * all existing patches are applied.
  *
- * Installs prototype patches for:
+ * When fully implemented (#106 Slices 2-4), installs:
  * - fetch() wrapper
  * - XMLHttpRequest.prototype.open() and .send()
  * - navigator.sendBeacon()
  * - HTMLInputElement.prototype.value getter (for password fields)
  *
- * Also registers a capturing 'submit' event listener for form monitoring.
- *
  * @param config - Monitor configuration including bridge post function
- *
- * TODO: Implement fetch() wrapper (Slice 3)
- * TODO: Implement XHR open/send wrapper (Slice 3)
- * TODO: Implement sendBeacon wrapper (Slice 3)
- * TODO: Implement value getter patch (Slice 4)
- * TODO: Implement form submit listener (Slice 2)
  */
 export function initJsBehaviorMonitor(config: JsBehaviorMonitorConfig): void {
   _config = config;
@@ -190,11 +182,12 @@ export function initJsBehaviorMonitor(config: JsBehaviorMonitorConfig): void {
     // Debug logging will use config.postSignal in implementation
   }
 
-  // TODO (Slice 2): patchFormSubmitMonitoring(config);
-  // TODO (Slice 3): patchFetchMonitoring(config);
-  // TODO (Slice 3): patchXHRMonitoring(config);
-  // TODO (Slice 3): patchBeaconMonitoring(config);
-  // TODO (Slice 4): patchCredentialValueGetter(config);
+  // Patches installed by implementation slices (#106):
+  // Slice 2: patchFormSubmitMonitoring(config);
+  // Slice 3: patchFetchMonitoring(config);
+  // Slice 3: patchXHRMonitoring(config);
+  // Slice 3: patchBeaconMonitoring(config);
+  // Slice 4: patchCredentialValueGetter(config);
 }
 
 /**
@@ -205,8 +198,7 @@ export function initJsBehaviorMonitor(config: JsBehaviorMonitorConfig): void {
  *
  * @param form - The form element to inspect
  * @returns true if the form contains password inputs
- *
- * TODO: Implement (Slice 2)
+ * @see https://github.com/Chris0Jeky/NavSentinel/issues/106 Slice 2
  */
 export function formHasCredentialFields(form: HTMLFormElement): boolean {
   // Stub: will check for input[type="password"] within the form
@@ -222,8 +214,7 @@ export function formHasCredentialFields(form: HTMLFormElement): boolean {
  *
  * @param url - The URL to check (absolute or relative)
  * @returns true if the URL resolves to a different origin
- *
- * TODO: Implement (Slice 2)
+ * @see https://github.com/Chris0Jeky/NavSentinel/issues/106 Slice 2
  */
 export function isCrossOriginUrl(url: string): boolean {
   void url;
@@ -238,8 +229,7 @@ export function isCrossOriginUrl(url: string): boolean {
  *
  * @param url - The URL to extract origin from
  * @returns The origin string, or empty string on failure
- *
- * TODO: Implement (Slice 2)
+ * @see https://github.com/Chris0Jeky/NavSentinel/issues/106 Slice 2
  */
 export function extractOrigin(url: string): string {
   void url;
@@ -254,8 +244,7 @@ export function extractOrigin(url: string): string {
  *
  * @param requestTs - Timestamp of the network request
  * @returns Whether the request correlates with a credential form submit
- *
- * TODO: Implement (Slice 3)
+ * @see https://github.com/Chris0Jeky/NavSentinel/issues/106 Slice 3
  */
 export function correlatesWithFormSubmit(requestTs: number): boolean {
   void requestTs;
@@ -270,8 +259,7 @@ export function correlatesWithFormSubmit(requestTs: number): boolean {
  *
  * @param state - Current aggregated behavior state
  * @returns Computed score (0 to NRS_WEIGHT_JS_BEHAVIOR_CAP)
- *
- * TODO: Implement (Slice 5)
+ * @see https://github.com/Chris0Jeky/NavSentinel/issues/106 Slice 5
  */
 export function computeJsBehaviorScore(state: JsBehaviorState): number {
   void state;
@@ -321,7 +309,7 @@ export function _resetState(): void {
 }
 
 // ============================================================================
-// TODO List - Implementation Plan
+// Implementation Plan (#106)
 // ============================================================================
 //
 // Slice 2 - Form Submit Monitoring:
@@ -348,6 +336,7 @@ export function _resetState(): void {
 //   [ ] Emit ns-js-credential-read signal (metadata only, never the value)
 //
 // Slice 5 - NRS Integration:
+//   [ ] Extract scoring utilities to extension/src/shared/js_behavior_state.ts
 //   [ ] Add jsBehaviorScore to NavigationContext in nrs.ts
 //   [ ] Add NRS_WEIGHT_JS_BEHAVIOR_CAP constant and factor logic
 //   [ ] Handle bridge messages in capture_isolated.ts

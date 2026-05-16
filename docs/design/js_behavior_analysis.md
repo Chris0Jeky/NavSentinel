@@ -126,6 +126,7 @@ Signal emitted: `ns-js-credential-read`
 | Multiple exfil signals combined | 10 | 10 | 2+ of the above fire within 5s window |
 
 **Total cap: 35 points** (diminishing returns apply above this to prevent single-factor dominance)
+n**Score aggregation:** All applicable signal scores are summed and the total is clamped with `Math.min(sum, NRS_WEIGHT_JS_BEHAVIOR_CAP)`. Individual signal caps prevent repeated signals from inflating the sum. There is no priority ordering; all triggered signals contribute equally up to the cap.
 
 The factor is added to `NavigationContext` as:
 ```typescript
