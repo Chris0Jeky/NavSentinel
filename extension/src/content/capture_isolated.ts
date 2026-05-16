@@ -64,7 +64,6 @@ import { getDomainRisk, recordNavigation } from "../shared/domain_profile";
 import { recordNavigationAnomaly, getAnomalyScoreSync } from "../shared/nav_anomaly";
 
 const CDS_SMART_BLOCK_THRESHOLD = 70;
-const CDS_STRICT_BLOCK_THRESHOLD = 50;
 const NS_SOURCE = "__navsentinel__";
 const BRIDGE_INIT_TYPE = "ns-port-init";
 const PROTOCOL_VERSION = 1;
@@ -446,6 +445,8 @@ function handleBridgeMessage(message: unknown): void {
     return;
   }
 
+  // Forwarded from MAIN world — not gated on mode because allowed navigations
+  // must be pre-approved in the SW even when the guard is "off".
   if (data.type === "ns-allow-target-nav") {
     const url = typeof data.url === "string" ? data.url : "";
     const ttlMs = typeof data.ttlMs === "number" ? data.ttlMs : NAV_TARGET_ALLOW_TTL_MS;
@@ -480,21 +481,6 @@ function handleBridgeMessage(message: unknown): void {
       }
       return;
     }
-  }
-
-  // Forwarded from MAIN world — not gated on mode because allowed navigations
-  // must be pre-approved in the SW even when the guard is "off", to prevent
-  // false rollbacks on subsequent commits.
-  if (data.type === "ns-allow-target-nav") {
-    const url = typeof data.url === "string" ? data.url : "";
-    if (url) {
-      chrome.runtime.sendMessage({
-        type: "ns-allow-target-nav",
-        url,
-        ttlMs: typeof data.ttlMs === "number" ? data.ttlMs : NAV_TARGET_ALLOW_TTL_MS
-      }).catch(() => {});
-    }
-    return;
   }
 
   // --- PushState abuse bridge messages from main_guard ---

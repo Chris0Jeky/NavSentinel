@@ -9,7 +9,7 @@ import {
   type OAuthFlowState,
 } from "../content/oauth_monitor";
 import { swState } from "../shared/session_state";
-import { updateTabIcon, clearTabIcon, setAllTabsGray, type IconState } from "./icon_manager";
+import { updateTabIcon, clearTabIcon, setAllTabsGray } from "./icon_manager";
 
 const BASELINE_RULESET_ID = "baseline";
 

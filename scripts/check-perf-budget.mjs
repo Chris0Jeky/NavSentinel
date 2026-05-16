@@ -82,12 +82,12 @@ const budgets = [
     maxKB: 5,
   },
   // C-02: Separate budget for the reputation bloom filter.
-  // ~170 KB in production builds, tiny stub in dev.
+  // Must match SIZE_BUDGET_BYTES in build-bloom-filter.mjs (150KB).
   // See also: scripts/check-bloom-size.mjs (2 MB absolute max).
   {
     label: "reputation_data.bin",
     glob: "reputation_data.bin",
-    maxKB: 175,
+    maxKB: 150,
   },
   {
     label: "total dist",

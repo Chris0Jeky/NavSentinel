@@ -151,10 +151,11 @@ let _config: JsBehaviorMonitorConfig | null = null;
 let _formSubmitPatched = false;
 
 /** Tracks original form action values at DOM parse time. */
-const _originalFormActions = new WeakMap<HTMLFormElement, string>();
+let _originalFormActions = new WeakMap<HTMLFormElement, string>();
 
 let _formObserver: MutationObserver | null = null;
 let _originalSubmitFn: typeof HTMLFormElement.prototype.submit | null = null;
+let _submitListener: ((e: Event) => void) | null = null;
 
 // ============================================================================
 // Form Submit Monitoring (Slice 2)
@@ -176,11 +177,13 @@ function snapshotExistingForms(): void {
 }
 
 /** Handle a form submit event and emit signals if suspicious. */
-function handleFormSubmit(form: HTMLFormElement): void {
+function handleFormSubmit(form: HTMLFormElement, submitter?: HTMLElement | null): void {
   if (!_config || _config.mode === "off") return;
 
+  recordOriginalAction(form);
   const hasCredentials = formHasCredentialFields(form);
-  const action = form.action || location.href;
+  const submitterFormAction = submitter?.getAttribute("formaction") ?? "";
+  const action = submitterFormAction || form.action || location.href;
   const crossOrigin = isCrossOriginUrl(action);
   const originalAction = _originalFormActions.get(form) ?? "";
   const resolvedOriginal = originalAction
@@ -202,7 +205,7 @@ function handleFormSubmit(form: HTMLFormElement): void {
   }
 
   _isInsideFormSubmit = true;
-  setTimeout(() => { _isInsideFormSubmit = false; }, 0);
+  queueMicrotask(() => { _isInsideFormSubmit = false; });
 
   const isSuspicious =
     (hasCredentials && crossOrigin) || actionDynamicallyChanged;
@@ -245,14 +248,15 @@ function patchFormSubmitMonitoring(): void {
   });
   _formObserver.observe(document.documentElement, { childList: true, subtree: true });
 
-  // Capturing submit event listener — uses _config (module-level) so it
-  // always references the latest configuration after re-initialization.
-  document.addEventListener("submit", (e) => {
+  // Capturing submit event listener
+  _submitListener = (e) => {
     const form = e.target;
     if (form instanceof HTMLFormElement) {
-      handleFormSubmit(form);
+      const submitter = (e as SubmitEvent).submitter ?? null;
+      handleFormSubmit(form, submitter);
     }
-  }, true);
+  };
+  document.addEventListener("submit", _submitListener, true);
 
   // Patch HTMLFormElement.prototype.submit for programmatic submits
   _originalSubmitFn = HTMLFormElement.prototype.submit;
@@ -263,7 +267,7 @@ function patchFormSubmitMonitoring(): void {
   };
 
   // Note: requestSubmit() fires a 'submit' event which the capturing listener
-  // above already handles. No prototype patch needed — patching it would double-fire.
+  // above already handles. No prototype patch needed; patching it would double-fire.
 }
 
 // ============================================================================
@@ -433,55 +437,57 @@ function patchCredentialValueGetter(_cfg: JsBehaviorMonitorConfig): void {
     "value"
   );
   if (!descriptor || !descriptor.get) return;
-  _credentialGetterPatched = true;
-
-  _credentialGetterPatched = true;
 
   const originalGetter = descriptor.get;
   const originalSetter = descriptor.set;
 
-  Object.defineProperty(HTMLInputElement.prototype, "value", {
-    get(this: HTMLInputElement) {
-      const val = originalGetter.call(this);
+  try {
+    Object.defineProperty(HTMLInputElement.prototype, "value", {
+      get(this: HTMLInputElement) {
+        const val = originalGetter.call(this);
 
-      try {
-        if (
-          this.type === "password" &&
-          val.length > 0 &&
-          !_isInsideFormSubmit &&
-          _config &&
-          _config.mode !== "off"
-        ) {
-          const now = Date.now();
-          const lastRead = _credReadDebounceMap.get(this) ?? 0;
-          if (now - lastRead > CREDENTIAL_READ_DEBOUNCE_MS) {
-            _credReadDebounceMap.set(this, now);
-            _lastCredentialReadTs = now;
-            const signal: JsCredentialReadSignal = {
-              ts: now,
-              isInsideSubmitHandler: false,
-              fieldCount: document.querySelectorAll('input[type="password"]').length,
-            };
-            _config.postSignal(
-              "ns-js-credential-read",
-              signal as unknown as Record<string, unknown>
-            );
+        try {
+          if (
+            this.type === "password" &&
+            val.length > 0 &&
+            !_isInsideFormSubmit &&
+            _config &&
+            _config.mode !== "off"
+          ) {
+            const now = Date.now();
+            const lastRead = _credReadDebounceMap.get(this) ?? 0;
+            if (now - lastRead > CREDENTIAL_READ_DEBOUNCE_MS) {
+              _credReadDebounceMap.set(this, now);
+              _lastCredentialReadTs = now;
+              const signal: JsCredentialReadSignal = {
+                ts: now,
+                isInsideSubmitHandler: false,
+                fieldCount: document.querySelectorAll('input[type="password"]').length,
+              };
+              _config.postSignal(
+                "ns-js-credential-read",
+                signal as unknown as Record<string, unknown>
+              );
+            }
           }
+        } catch {
+          // Never break page scripts; swallow monitoring errors.
         }
-      } catch {
-        // Never break page scripts — swallow monitoring errors
-      }
 
-      return val;
-    },
-    set(this: HTMLInputElement, v: string) {
-      if (originalSetter) {
-        originalSetter.call(this, v);
-      }
-    },
-    enumerable: descriptor.enumerable ?? true,
-    configurable: true,
-  });
+        return val;
+      },
+      set(this: HTMLInputElement, v: string) {
+        if (originalSetter) {
+          originalSetter.call(this, v);
+        }
+      },
+      enumerable: descriptor.enumerable ?? true,
+      configurable: true,
+    });
+    _credentialGetterPatched = true;
+  } catch {
+    // Non-configurable or frozen prototypes should degrade without breaking page code.
+  }
 }
 
 // ============================================================================
@@ -489,8 +495,9 @@ function patchCredentialValueGetter(_cfg: JsBehaviorMonitorConfig): void {
 // ============================================================================
 
 /**
- * Initialize the JS behavior monitor. Called once from main_guard.ts after
- * all existing patches are applied.
+ * Initialize the JS behavior monitor from main_guard.ts. Form submit
+ * observation must install before main_guard hardens form prototypes; network
+ * and credential-read wrappers install with the rest of the monitor patches.
  *
  * Installs prototype patches for:
  * - fetch() wrapper
@@ -498,15 +505,7 @@ function patchCredentialValueGetter(_cfg: JsBehaviorMonitorConfig): void {
  * - navigator.sendBeacon()
  * - HTMLInputElement.prototype.value getter (for password fields)
  *
- * Also registers a capturing 'submit' event listener for form monitoring.
- *
  * @param config - Monitor configuration including bridge post function
- *
- * TODO: Implement fetch() wrapper (Slice 3)
- * TODO: Implement XHR open/send wrapper (Slice 3)
- * TODO: Implement sendBeacon wrapper (Slice 3)
- * TODO: Implement value getter patch (Slice 4)
- * TODO: Implement form submit listener (Slice 2)
  */
 export function initJsBehaviorMonitor(config: JsBehaviorMonitorConfig): void {
   _config = config;
@@ -574,8 +573,13 @@ export function isCrossOriginUrl(url: string): boolean {
  */
 export function extractOrigin(url: string): string {
   if (!url) return "";
+  const lc = url.trimStart().toLowerCase();
+  if (lc.startsWith("data:") || lc.startsWith("javascript:") || lc.startsWith("blob:")) {
+    return "";
+  }
   try {
     const resolved = new URL(url, location.href);
+    if (resolved.origin === "null") return "";
     return resolved.origin;
   } catch {
     return "";
@@ -663,10 +667,15 @@ export function _resetState(): void {
     _formObserver.disconnect();
     _formObserver = null;
   }
+  if (_submitListener) {
+    document.removeEventListener("submit", _submitListener, true);
+    _submitListener = null;
+  }
   if (_originalSubmitFn) {
     HTMLFormElement.prototype.submit = _originalSubmitFn;
     _originalSubmitFn = null;
   }
+  _originalFormActions = new WeakMap<HTMLFormElement, string>();
   _formSubmitPatched = false;
 }
 
