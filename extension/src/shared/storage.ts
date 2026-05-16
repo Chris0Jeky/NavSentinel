@@ -182,7 +182,7 @@ export function onCredentialSettingsChange(cb: (s: CredentialSettings) => void):
   onSuiteSettingsChange((s) => cb(s.credential));
 }
 
-export function normalizeTrustedDomain(value: unknown): string {
+function normalizeTrustedDomain(value: unknown): string {
   if (typeof value !== "string") return "";
   const trimmed = value.trim();
   if (!trimmed) return "";
