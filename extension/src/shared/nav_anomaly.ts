@@ -36,7 +36,6 @@ export type NavCategory =
   | "education"
   | "cloud"
   | "vpn_proxy"
-  | "adult"
   | "unknown";
 
 /**
@@ -204,18 +203,18 @@ const DOMAIN_CATEGORY_MAP: Record<string, NavCategory> = {
  * in the static map, we check for these keyword patterns in the hostname.
  */
 const KEYWORD_PATTERNS: Array<{ pattern: RegExp; category: NavCategory }> = [
-  { pattern: /wallet|metamask|defi|swap|nft|crypto|coin|token|eth|btc|blockchain/i, category: "crypto" },
-  { pattern: /bank|credit-union|savings|mortgage|loan/i, category: "banking" },
-  { pattern: /social|chat|messenger|forum/i, category: "social" },
+  { pattern: /wallet|metamask|defi|(?:^|[.-])swap(?:[.-]|$)|(?:^|[.-])nft(?:[.-]|$)|crypto|(?:^|[.-])coin(?:[.-]|$)|token|ethereum|etherscan|bitcoin|blockchain/i, category: "crypto" },
+  { pattern: /(?:^|[.-])bank(?:ing)?(?:[.-]|$)|credit-union|savings|mortgage|(?:^|[.-])loan(?:[.-]|$)/i, category: "banking" },
+  { pattern: /social|(?:^|[.-])chat(?:[.-]|$)|messenger|forum/i, category: "social" },
   { pattern: /mail|inbox|webmail/i, category: "email" },
-  { pattern: /shop|store|buy|cart|deal|market/i, category: "shopping" },
-  { pattern: /github|gitlab|code|dev|npm|pip|crate|docker/i, category: "developer" },
-  { pattern: /stream|video|music|game|play|movie|watch/i, category: "entertainment" },
+  { pattern: /shop|store|(?:^|[.-])buy(?:[.-]|$)|(?:^|[.-])cart(?:[.-]|$)|(?:^|[.-])deal(?:[.-]|$)|market/i, category: "shopping" },
+  { pattern: /github|gitlab|(?:^|[.-])code(?:[.-]|$)|(?:^|[.-])dev(?:[.-]|$)|(?:^|[.-])npm(?:[.-]|$)|(?:^|[.-])pip(?:[.-]|$)|docker/i, category: "developer" },
+  { pattern: /stream|video|music|(?:^|[.-])game(?:[.-]|$)|movie|(?:^|[.-])watch(?:[.-]|$)/i, category: "entertainment" },
   { pattern: /news|press|journal|gazette|herald|tribune/i, category: "news" },
   { pattern: /\.gov(\.[a-z]{2})?$/i, category: "government" },
   { pattern: /health|medical|clinic|hospital|pharma/i, category: "healthcare" },
   { pattern: /\.edu(\.[a-z]{2})?$|university|college|school|academy/i, category: "education" },
-  { pattern: /cloud|storage|drive|sync/i, category: "cloud" },
+  { pattern: /cloud|storage|drive|(?:^|[.-])sync(?:[.-]|$)/i, category: "cloud" },
   { pattern: /vpn|proxy|tunnel/i, category: "vpn_proxy" },
 ];
 
@@ -290,6 +289,7 @@ export const MIN_NAVIGATIONS_FOR_ANOMALY = 20;
 
 const recentNavs: RecentNav[] = [];
 const MAX_RECENT_NAVS = 100;
+let sessionNavCount = 0;
 
 function pruneRecentNavs(now: number): void {
   const cutoff = now - BURST_WINDOW_MS;
@@ -326,15 +326,16 @@ export function classifyDomain(hostname: string): NavCategory {
   if (!hostname) return "unknown";
   const lower = hostname.toLowerCase();
 
-  // Try registrable domain first
+  // Try full hostname first (handles subdomain-specific overrides
+  // like mail.google.com → email vs google.com → cloud)
+  if (DOMAIN_CATEGORY_MAP[lower]) {
+    return DOMAIN_CATEGORY_MAP[lower]!;
+  }
+
+  // Then try registrable domain
   const regDomain = getRegistrableDomain(lower);
   if (regDomain && DOMAIN_CATEGORY_MAP[regDomain]) {
     return DOMAIN_CATEGORY_MAP[regDomain]!;
-  }
-
-  // Try full hostname
-  if (DOMAIN_CATEGORY_MAP[lower]) {
-    return DOMAIN_CATEGORY_MAP[lower]!;
   }
 
   // Keyword-based fallback
@@ -553,6 +554,7 @@ export function recordNavigationAnomaly(
     // Update category count
     profile.categoryCounts[category] = (profile.categoryCounts[category] ?? 0) + 1;
     profile.totalNavigations += 1;
+    sessionNavCount = Math.max(sessionNavCount, profile.totalNavigations);
     profile.lastUpdated = now;
 
     // Normalize if cap exceeded
@@ -584,9 +586,7 @@ export function getAnomalyScoreSync(
   pruneRecentNavs(ts);
   const recentCount = countRecentCategory(category, ts);
 
-  // We need the profile, but this is sync. Use a cached version or return 0.
-  // The async path (recordNavigationAnomaly) provides the authoritative score.
-  // This sync path provides a best-effort check using in-memory state only.
+  if (sessionNavCount < MIN_NAVIGATIONS_FOR_ANOMALY) return 0;
   return recentCount >= BURST_MIN_COUNT && category !== "unknown" ? BASE_ANOMALY_SCORE : 0;
 }
 
@@ -603,6 +603,7 @@ export async function clearNavProfile(): Promise<void> {
  */
 export function _resetRecentNavs(): void {
   recentNavs.length = 0;
+  sessionNavCount = 0;
 }
 
 /**

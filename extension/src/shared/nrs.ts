@@ -182,7 +182,7 @@ export function computeNRS(cdsResult: ScoreResult, navCtx: NavigationContext): N
     nrsFactors.push("nrs_domain_repeat_offender");
   }
 
-  if (navCtx.navAnomalyScore && navCtx.navAnomalyScore > 0) {
+  if (navCtx.navAnomalyScore && navCtx.navAnomalyScore > 0 && nrs > NRS_CSP_MODIFIER_THRESHOLD) {
     nrs += Math.min(navCtx.navAnomalyScore, NRS_WEIGHT_NAV_ANOMALY_CAP);
     nrsFactors.push("nrs_nav_anomaly");
   }
