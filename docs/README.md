@@ -23,7 +23,11 @@ This folder documents the current merged `main` branch.
 ## Project planning
 
 - `docs/Project_Roadmap.md`
-  - **The active planning document.** 41 tasks across 5 phases, decision log, phase gates, success criteria. Supersedes `Execution_Tracker.md` and `Implementation_Roadmap.md`.
+  - **The active planning document.** 47 tasks across 5 phases, decision log, phase gates, success criteria. Supersedes `Execution_Tracker.md` and `Implementation_Roadmap.md`.
+- `docs/REDESIGN_ORCHESTRATION.md`
+  - UI redesign plan (9 phases, R1–R9). Complete as of 2026-05-16.
+- `docs/STORE_LISTING.md`
+  - Chrome Web Store listing copy, description, and promotional asset requirements.
 
 ## Active operational docs
 

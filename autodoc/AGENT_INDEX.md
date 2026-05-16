@@ -38,9 +38,9 @@ This is a fast orientation layer for coding agents. It should point to interface
 | Credential guard | `credential_guard.ts`, `credential_guard_model.ts` | `credential_modal.ts`, `domain.ts`, `allowlist.ts` | credential/domain/allowlist tests, credential-guard E2E. |
 | Service worker state and rollback | `sw.ts`, `session_state.ts` | `redirect_chain.ts`, `icon_manager.ts` | sw-rollback, session-state, redirect-chain tests, rollback/stress E2E. |
 | Reputation and content analysis | `reputation.ts`, `content_analyzer.ts`, `domain_profile.ts` | `sri_checker.ts`, `csp_analyzer.ts`, `build-bloom-filter.mjs` | reputation/domain-profile/sri/csp tests, corpus E2E. |
-| Popup/options UI | `popup.ts`, `popup_model.ts`, `options.ts` | popup/options CSS/HTML, `event_tone.ts`, `explanations.ts`, `smart_defaults.ts` | popup/options unit tests, suite-ui E2E. |
-| Onboarding | `onboarding/onboarding.ts` | onboarding HTML/CSS | `tests/onboarding.test.ts`, `npm run build`. |
-| Toast and state display | `ui_toast.ts` | `stateMachine.ts`, `types.ts`, `popup_test.ts` | statemachine-timing tests, `npm run build`. |
+| Popup/options UI | `popup.ts`, `popup_model.ts`, `options.ts` | popup/options CSS/HTML, `design_tokens.css`, `icons.ts`, `event_tone.ts`, `explanations.ts`, `smart_defaults.ts` | popup/options unit tests, suite-ui E2E. UI uses segmented controls (`#navModeSeg`/`#credModeSeg` with `.seg-btn[data-value]` + `aria-pressed`), toggle buttons (`aria-checked`), and sidebar nav (`data-section`). |
+| Onboarding | `onboarding/onboarding.ts` | onboarding HTML/CSS, imports `icons.ts` | `tests/onboarding.test.ts`, `npm run build`. |
+| Toast and state display | `ui_toast.ts` | `stateMachine.ts`, `types.ts`, `popup_test.ts` | statemachine-timing tests, `npm run build`. Toast uses Shadow DOM with self-contained brass-palette styles. |
 | Gym and E2E harness | `gym/index.html`, `tests/e2e/extension_test_utils.ts` | 52 gym HTML fixtures, 10 E2E specs under `tests/e2e/` | Playwright spec, `npm run gym:serve`. |
 | Build/release | `package.json`, `vite.config.ts`, `extension/manifest.json` | `scripts/package.mjs`, `scripts/release.mjs`, `scripts/check_versions.mjs`, `scripts/check-perf-budget.mjs` | `npm run verify:versions`, `npm run build`, `npm run package:ext`. |
 | Data pipeline | `scripts/build-bloom-filter.mjs`, `scripts/fetch-phishing-corpus.mjs` | `scripts/build-test-bloom-filter.mjs`, `scripts/measure-fp.mjs`, `scripts/check-bloom-size.mjs`, `scripts/update-psl.mjs` | `npm run build:bloom`, `npm run check:bloom-size`. |
@@ -50,13 +50,15 @@ All paths above are relative to repo root. Content scripts live under `extension
 
 ## Current Agent-Readiness Observations
 
-- NavSentinel v0.4.0, Phases 0-3 complete, 994 tests (37 unit + 10 E2E files), 40 source files, 52 gym fixtures.
+- NavSentinel v0.4.0, Phases 0-3 complete + Phase 4 partial (4/8), 996 tests (37 unit + 10 E2E files), 40+ source files, 52 gym fixtures.
+- **UI redesign complete** (2026-05-16): brass/jade design system, design tokens, 26-icon SVG system, segmented controls replacing selects, sidebar nav options page, ShieldArc popup gauge. See `docs/REDESIGN_ORCHESTRATION.md`.
 - The active planning source is `docs/Project_Roadmap.md`; archived execution trackers are historical only.
 - `docs/Comprehensive_Project_Analysis.md` is a historical snapshot from 2026-04-09 — do not treat it as current.
 - Codex has a matching `.agents/skills` layer and should use `AGENTS.md`, Codex-native planning, parallel reads, patching, and verification tools.
 - Build output and generated data are easy context traps. Agents should edit source under `extension/src/` and avoid `extension/dist/`.
 - The highest-risk seams are main-world patching, bridge messages, service-worker lifecycle state, and credential/data privacy behavior.
 - All branches have been cleaned; only `main` and `origin/main` exist.
+- Open issues: #86 (bridge session race), #90 (bridge retry race) — both in `main_guard.ts` bridge initialization.
 
 ## Interface-On-Top Convention
 
