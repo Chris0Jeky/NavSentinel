@@ -14,6 +14,7 @@ export type DebugInfo = {
   mutationAlerts?: number;
   cspInfo?: { hasCSP: boolean; score: number; isStrict: boolean; reasons: string[] };
   adaptiveAdj?: number;
+  navAnomalyScore?: number;
 };
 
 let enabled = false;
@@ -114,7 +115,8 @@ export function updateDebugOverlay(info: DebugInfo): void {
     `ExplicitNewTab: ${info.ctx.explicitNewTabIntent ? "yes" : "no"}`,
     `MutationAlerts: ${info.mutationAlerts ?? 0}`,
     `CSP: ${info.cspInfo ? (info.cspInfo.hasCSP ? `yes (score=${info.cspInfo.score}, strict=${info.cspInfo.isStrict})` : `none (score=${info.cspInfo.score})`) : "n/a"}`,
-    `AdaptiveAdj: ${info.adaptiveAdj ?? 0}`
+    `AdaptiveAdj: ${info.adaptiveAdj ?? 0}`,
+    `NavAnomaly: ${info.navAnomalyScore ?? 0}`
   ];
 
   pre.textContent = lines.join("\n");

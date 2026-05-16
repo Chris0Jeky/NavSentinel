@@ -38,6 +38,7 @@ const KNOWN_NRS_CODES = [
   "nrs_pushstate_abuse",
   "nrs_csp_weakness",
   "nrs_domain_repeat_offender",
+  "nrs_nav_anomaly",
 ];
 
 const KNOWN_CLICKFIX_CODES = [
