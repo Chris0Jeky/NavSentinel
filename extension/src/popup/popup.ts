@@ -30,7 +30,7 @@ const navModeEl = document.getElementById("navMode") as HTMLSelectElement;
 const credModeEl = document.getElementById("credMode") as HTMLSelectElement;
 const eventsEl = document.getElementById("events") as HTMLDivElement;
 const refreshBtn = document.getElementById("refreshBtn") as HTMLButtonElement;
-const openOptions = document.getElementById("openOptions") as HTMLAnchorElement;
+const openOptions = document.getElementById("openOptions") as HTMLButtonElement;
 
 async function getActiveTabUrl(): Promise<string> {
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true });

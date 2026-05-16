@@ -25,9 +25,17 @@ const PUSHSTATE_RAPID_WINDOW_MS = 1000;
 
 let bridgePort: MessagePort | null = null;
 let bridgeSession: string | null = null;
+const MAX_PENDING_OUTBOUND = 32;
+const pendingOutbound: Array<{ type: string; payload?: Record<string, unknown> }> = [];
 
 function postToIsolated(type: string, payload?: Record<string, unknown>): void {
-  if (!bridgePort || !bridgeSession) return;
+  if (!bridgePort || !bridgeSession) {
+    pendingOutbound.push({ type, ...(payload !== undefined ? { payload } : {}) });
+    if (pendingOutbound.length > MAX_PENDING_OUTBOUND) {
+      pendingOutbound.splice(0, pendingOutbound.length - MAX_PENDING_OUTBOUND);
+    }
+    return;
+  }
   bridgePort.postMessage({
     source: NS_SOURCE,
     type,
@@ -35,6 +43,13 @@ function postToIsolated(type: string, payload?: Record<string, unknown>): void {
     session: bridgeSession,
     ...(payload ?? {})
   });
+}
+
+function flushPendingOutbound(): void {
+  const snapshot = pendingOutbound.splice(0);
+  for (const msg of snapshot) {
+    postToIsolated(msg.type, msg.payload);
+  }
 }
 
 let mode: "off" | "smart" | "strict" = "off";
@@ -82,14 +97,12 @@ function nowMs(): number {
 
 function recordNav(status: NavStatus, params: { kind: string; url?: string }): void {
   if (!debug) return;
-  (window as any).__navsentinelLastNav = {
+  postToIsolated("ns-debug-nav-record", {
     status,
     kind: params.kind,
     url: params.url ?? "",
     ts: nowMs(),
-    allowOpenUntil,
-    allowRedirectUntil
-  };
+  });
 }
 
 function markAllowance(params: { allowOpen: boolean; allowRedirect: boolean }): void {
@@ -302,10 +315,11 @@ function postAllowed(params: { kind: string; url?: string }): void {
 }
 
 function notifyAllowedTarget(url: string | URL | undefined): void {
-  if (url === undefined) return;
+  if (url === undefined || String(url) === "") return;
   try {
     const href = new URL(String(url), location.href).toString();
-    chrome.runtime.sendMessage({ type: "ns-allow-target-nav", url: href, ttlMs: TARGET_NAV_TTL_MS });
+    if (!href.startsWith("http:") && !href.startsWith("https:")) return;
+    postToIsolated("ns-allow-target-nav", { url: href, ttlMs: TARGET_NAV_TTL_MS });
   } catch {
     // ignore
   }
@@ -343,6 +357,29 @@ const nativeAssign = Location.prototype.assign;
 const nativeReplace = Location.prototype.replace;
 const nativeFormSubmit = HTMLFormElement.prototype.submit;
 const nativeFormRequestSubmit = HTMLFormElement.prototype.requestSubmit;
+
+/** Best-effort defineProperty on a prototype; falls back to simple assignment. */
+function hardenProto(
+  proto: object,
+  prop: string,
+  value: Function,
+  label: string
+): void {
+  try {
+    Object.defineProperty(proto, prop, {
+      value,
+      writable: false,
+      configurable: false,
+    });
+  } catch {
+    try {
+      (proto as any)[prop] = value;
+    } catch { /* ignore � already patched or frozen */ }
+    if (debug) {
+      console.debug(`[NavSentinel] defineProperty failed for ${label}, used assignment fallback`);
+    }
+  }
+}
 
 // Clipboard API natives (may not exist in all contexts)
 const nativeClipboardWriteText =
@@ -406,6 +443,7 @@ function patchedOpen(
 ): Window | null {
   if (isOff() || (isSubframe() && isSubframeSelfTarget(target))) {
     postAllowed({ kind: "window_open", ...(url !== undefined ? { url: String(url) } : {}) });
+    notifyAllowedTarget(url);
     recordWindowOpen();
     return callNativeOpen(this, url, target, features);
   }
@@ -413,12 +451,14 @@ function patchedOpen(
   const allowance = consumeOpenAllowance();
   if (allowance !== "none") {
     postAllowed({ kind: "window_open", ...(url !== undefined ? { url: String(url) } : {}) });
+    notifyAllowedTarget(url);
     recordWindowOpen();
     return callNativeOpen(this, url, target, features);
   }
 
   if (consumePopupIntentAllowance(target, features)) {
     postAllowed({ kind: "window_open", ...(url !== undefined ? { url: String(url) } : {}) });
+    notifyAllowedTarget(url);
     recordWindowOpen();
     return callNativeOpen(this, url, target, features);
   }
@@ -494,59 +534,51 @@ function patchLocation(): void {
     });
   };
 
-  Location.prototype.assign = patchedAssign;
-  Location.prototype.replace = patchedReplace;
+  hardenProto(Location.prototype, "assign", patchedAssign, "Location.prototype.assign");
+  hardenProto(Location.prototype, "replace", patchedReplace, "Location.prototype.replace");
 
   try {
     Object.defineProperty(window.location, "assign", {
       value: patchedAssign,
-      writable: true,
-      configurable: true
+      writable: false,
+      configurable: false
     });
   } catch {
     try {
       (window.location as any).assign = patchedAssign;
-    } catch {
-      // ignore
+    } catch { /* ignore */ }
+    if (debug) {
+      console.debug("[NavSentinel] defineProperty failed for window.location.assign, used assignment fallback");
     }
   }
 
   try {
     Object.defineProperty(window.location, "replace", {
       value: patchedReplace,
-      writable: true,
-      configurable: true
+      writable: false,
+      configurable: false
     });
   } catch {
     try {
       (window.location as any).replace = patchedReplace;
-    } catch {
-      // ignore
+    } catch { /* ignore */ }
+    if (debug) {
+      console.debug("[NavSentinel] defineProperty failed for window.location.replace, used assignment fallback");
     }
   }
 
-  (window as any).__navsentinelLocationPatch = {
-    protoAssign: Location.prototype.assign === patchedAssign,
-    protoReplace: Location.prototype.replace === patchedReplace,
-    locAssign: window.location.assign === patchedAssign,
-    locReplace: window.location.replace === patchedReplace,
-    locAssignDesc: (() => {
-      const desc = Object.getOwnPropertyDescriptor(window.location, "assign");
-      return desc
-        ? { configurable: !!desc.configurable, writable: !!(desc as any).writable }
-        : null;
-    })(),
-    locReplaceDesc: (() => {
-      const desc = Object.getOwnPropertyDescriptor(window.location, "replace");
-      return desc
-        ? { configurable: !!desc.configurable, writable: !!(desc as any).writable }
-        : null;
-    })()
-  };
+  if (debug) {
+    postToIsolated("ns-location-patch-info", {
+      protoAssign: Location.prototype.assign === patchedAssign,
+      protoReplace: Location.prototype.replace === patchedReplace,
+      locAssign: window.location.assign === patchedAssign,
+      locReplace: window.location.replace === patchedReplace,
+    });
+  }
 }
 
 function patchForms(): void {
-  HTMLFormElement.prototype.submit = function (): void {
+  const patchedFormSubmit = function (this: HTMLFormElement): void {
     const actionUrl = resolveFormAction(this);
     if (isOff() || (isSubframe() && isFormSelfTarget(this.target))) {
       postAllowed({ kind: "form_submit", ...(actionUrl !== undefined ? { url: actionUrl } : {}) });
@@ -569,9 +601,10 @@ function patchForms(): void {
       action: () => nativeFormSubmit.call(this)
     });
   };
+  hardenProto(HTMLFormElement.prototype, "submit", patchedFormSubmit, "HTMLFormElement.prototype.submit");
 
   if (nativeFormRequestSubmit) {
-    HTMLFormElement.prototype.requestSubmit = function (submitter?: HTMLElement | null): void {
+    const patchedFormRequestSubmit = function (this: HTMLFormElement, submitter?: HTMLElement | null): void {
       const actionUrl = resolveFormAction(this);
       if (isOff() || (isSubframe() && isFormSelfTarget(this.target))) {
         postAllowed({
@@ -600,6 +633,7 @@ function patchForms(): void {
         action: () => nativeFormRequestSubmit.call(this, submitter as any)
       });
     };
+    hardenProto(HTMLFormElement.prototype, "requestSubmit", patchedFormRequestSubmit, "HTMLFormElement.prototype.requestSubmit");
   }
 }
 
@@ -607,15 +641,18 @@ function patchOpen(): void {
   try {
     Object.defineProperty(window, "open", {
       value: patchedOpen,
-      writable: true,
-      configurable: true
+      writable: false,
+      configurable: true,
     });
   } catch {
     window.open = patchedOpen as any;
+    if (debug) {
+      console.debug("[NavSentinel] defineProperty failed for window.open, used assignment fallback");
+    }
   }
 
   if (Window.prototype.open !== patchedOpen) {
-    Window.prototype.open = function (
+    const protoWrapper = function (
       this: Window,
       url?: string | URL,
       target?: string,
@@ -623,6 +660,7 @@ function patchOpen(): void {
     ): Window | null {
       return patchedOpen.call(this, url, target, features);
     } as any;
+    hardenProto(Window.prototype, "open", protoWrapper, "Window.prototype.open");
   }
 }
 
@@ -773,6 +811,7 @@ window.addEventListener(
     bridgePort.onmessage = (bridgeEvent) => handleBridgeMessage(bridgeEvent.data);
     bridgePort.start?.();
     postToIsolated("ns-bridge-ready");
+    flushPendingOutbound();
   },
   true
 );
@@ -959,7 +998,8 @@ const nativePushState = History.prototype.pushState;
 const nativeReplaceState = History.prototype.replaceState;
 
 function patchHistory(): void {
-  History.prototype.pushState = function (
+  const patchedPushState = function (
+    this: History,
     data: any,
     unused: string,
     url?: string | URL | null,
@@ -980,7 +1020,8 @@ function patchHistory(): void {
     return result;
   };
 
-  History.prototype.replaceState = function (
+  const patchedReplaceState = function (
+    this: History,
     data: any,
     unused: string,
     url?: string | URL | null,
@@ -1000,6 +1041,8 @@ function patchHistory(): void {
     }
     return result;
   };
+  hardenProto(History.prototype, "pushState", patchedPushState, "History.prototype.pushState");
+  hardenProto(History.prototype, "replaceState", patchedReplaceState, "History.prototype.replaceState");
 }
 
 /**
@@ -1212,4 +1255,4 @@ patchLocation();
 patchForms();
 patchClipboard();
 patchHistory();
-(window as any).__navsentinelMainGuard = true;
+postToIsolated("ns-main-guard-ready");

@@ -55,6 +55,7 @@ import {
 } from "./pushstate_guard";
 import { analyzeCSP, type CSPAnalysis } from "./csp_analyzer";
 import { getDomainRisk, recordNavigation } from "../shared/domain_profile";
+import { recordNavigationAnomaly, getAnomalyScoreSync } from "../shared/nav_anomaly";
 
 const CDS_SMART_BLOCK_THRESHOLD = 70;
 const CDS_STRICT_BLOCK_THRESHOLD = 50;
@@ -364,6 +365,8 @@ function handleBridgeMessage(message: unknown): void {
     // PushState abuse metadata (ns-pushstate-suspicious)
     reason?: string;
     method?: string;
+    // Allow-target-nav relay (ns-allow-target-nav)
+    ttlMs?: number;
   };
   if (!data || data.source !== NS_SOURCE || data.v !== PROTOCOL_VERSION) return;
   if (data.session !== bridgeSession) return;
@@ -422,6 +425,13 @@ function handleBridgeMessage(message: unknown): void {
     return;
   }
 
+  if (data.type === "ns-allow-target-nav") {
+    const url = typeof data.url === "string" ? data.url : "";
+    const ttlMs = typeof data.ttlMs === "number" ? data.ttlMs : NAV_TARGET_ALLOW_TTL_MS;
+    if (url) notifyAllowedTarget(url, ttlMs);
+    return;
+  }
+
   if (data.type === "ns-clipboard-write") {
     const ts = typeof data.ts === "number" ? data.ts : Date.now();
     const contentLength = typeof data.contentLength === "number" ? data.contentLength : -1;
@@ -449,6 +459,21 @@ function handleBridgeMessage(message: unknown): void {
       }
       return;
     }
+  }
+
+  // Forwarded from MAIN world — not gated on mode because allowed navigations
+  // must be pre-approved in the SW even when the guard is "off", to prevent
+  // false rollbacks on subsequent commits.
+  if (data.type === "ns-allow-target-nav") {
+    const url = typeof data.url === "string" ? data.url : "";
+    if (url) {
+      chrome.runtime.sendMessage({
+        type: "ns-allow-target-nav",
+        url,
+        ttlMs: typeof data.ttlMs === "number" ? data.ttlMs : NAV_TARGET_ALLOW_TTL_MS
+      }).catch(() => {});
+    }
+    return;
   }
 
   // --- PushState abuse bridge messages from main_guard ---
@@ -675,16 +700,7 @@ function initMutationMonitor(): void {
 }
 
 function scheduleMutationMonitor(): void {
-  // Only run the mutation monitor in the top frame. Sub-frames run with
-  // all_frames:true but the monitor is most valuable in the top frame, and
-  // cross-origin iframes already cannot be observed from the parent. Wrapped
-  // in try/catch because accessing window.top throws in sandboxed iframes.
-  try {
-    if (window !== window.top) return;
-  } catch {
-    // Sandboxed iframe -- skip monitoring
-    return;
-  }
+  if (!isTopFrame()) return;
 
   // Use the `load` event (readyState "complete") as the baseline instead of
   // `DOMContentLoaded`. This avoids false positives from SPA hydration that
@@ -733,7 +749,6 @@ function showRollbackPrompt(url: string): void {
       return url || "destination";
     }
   })();
-  (window as any).__navsentinelRollbackPrompt = { url, ts: now };
   sendIconUpdate("yellow");
   appendEventSafely({ kind: "nav_rollback", site: siteKeyFromLocation(), url, destHost: host });
   showToast({
@@ -743,8 +758,10 @@ function showRollbackPrompt(url: string): void {
         label: "Proceed",
         onClick: () => {
           try {
-            notifyNavAllow();
-            location.assign(url);
+            if (/^https?:\/\//i.test(url)) {
+              notifyNavAllow();
+              location.assign(url);
+            }
           } catch {
             // ignore
           }
@@ -774,7 +791,7 @@ function handleRollback(url: string, prevUrl?: string): void {
     }
   })();
   const target = prevUrl && prevUrl !== url ? prevUrl : referrerTarget;
-  if (target) {
+  if (target && /^https?:\/\//i.test(target)) {
     try {
       chrome.runtime.sendMessage({ type: "ns-begin-rollback", returnUrl: target });
       chrome.runtime.sendMessage({ type: "ns-store-forward", url, returnUrl: target });
@@ -1079,7 +1096,7 @@ if (chrome?.runtime?.onMessage) {
     if (!isTopFrame()) return;
     if (settings.defaultMode === "off") return;
     const url = typeof message.url === "string" ? message.url : "";
-    if (!url) return;
+    if (!url || !/^https?:\/\//i.test(url)) return;
     showRollbackPrompt(url);
   });
 
@@ -1093,15 +1110,19 @@ if (chrome?.runtime?.onMessage) {
   // OAuth monitoring: delegate to oauth_monitor module for
   // ns-oauth-flow-update, ns-oauth-redirect-mismatch, ns-oauth-opener-manipulation.
   chrome.runtime.onMessage.addListener((message) => {
-    if (window.top !== window) return;
+    if (!isTopFrame()) return;
     handleOAuthRuntimeMessage(message);
   });
 }
 
 if (chrome?.runtime?.sendMessage && isTopFrame()) {
   // -- Rollback polling --
-  const run = (retries = 4) => {
+  const run = (polls = 4, errorBudget = 3) => {
     chrome.runtime.sendMessage({ type: "ns-check-rollback" }, (resp) => {
+      if (chrome.runtime.lastError) {
+        if (errorBudget > 0) window.setTimeout(() => run(polls, errorBudget - 1), 200);
+        return;
+      }
       if (resp?.shouldRollback) {
         if (settings.defaultMode === "off") return;
         const url = typeof resp.entry?.url === "string" ? resp.entry.url : "";
@@ -1109,8 +1130,8 @@ if (chrome?.runtime?.sendMessage && isTopFrame()) {
         handleRollback(url, prevUrl);
         return;
       }
-      if (retries > 0) {
-        window.setTimeout(() => run(retries - 1), 200);
+      if (polls > 0) {
+        window.setTimeout(() => run(polls - 1, errorBudget), 200);
       }
     });
   };
@@ -1122,24 +1143,31 @@ if (chrome?.runtime?.sendMessage && isTopFrame()) {
   }
 
   // -- Forward polling --
-  const runForward = (retries = 1) => {
+  const runForward = (retries = 1, errorBudget = 3) => {
     if (forwardCheckInFlight) return;
     if (forwardCheckTimer) {
       window.clearTimeout(forwardCheckTimer);
       forwardCheckTimer = 0;
     }
     forwardCheckInFlight = true;
+    const inflightGuard = window.setTimeout(() => { forwardCheckInFlight = false; }, 2000);
     chrome.runtime.sendMessage({ type: "ns-check-forward", currentUrl: location.href }, (resp) => {
+      window.clearTimeout(inflightGuard);
       forwardCheckInFlight = false;
+      if (chrome.runtime.lastError) {
+        if (errorBudget > 0) forwardCheckTimer = window.setTimeout(() => runForward(retries, errorBudget - 1), 200);
+        return;
+      }
       const status = typeof resp?.status === "string" ? resp.status : "";
       const url = typeof resp?.url === "string" ? resp.url : "";
       if (status === "offer" && url) {
         if (settings.defaultMode === "off") return;
+        if (!/^https?:\/\//i.test(url)) return;
         showRollbackPrompt(url);
         return;
       }
       if (!resp && retries > 0) {
-        forwardCheckTimer = window.setTimeout(() => runForward(retries - 1), 200);
+        forwardCheckTimer = window.setTimeout(() => runForward(retries - 1, errorBudget), 200);
       }
     });
   };
@@ -1284,6 +1312,10 @@ window.addEventListener(
     const cfScore = getClickfixScoreForNRS();
     const pushStateAbuse = isPushStateAbuseActive();
 
+    // Sync best-effort anomaly score (uses in-memory sliding window only).
+    // The authoritative async path runs after the decision is made.
+    const navAnomalyScore = destHost ? getAnomalyScoreSync(destHost) : 0;
+
     const navCtx: NavigationContext = {
       isNewTabOrWindow: isBlankAnchor,
       isCrossSite,
@@ -1311,6 +1343,7 @@ window.addEventListener(
       pushStateAbuse,
       cspWeaknessScore: cachedCSPAnalysis?.score,
       domainRepeatOffender: cachedDomainRepeatOffender,
+      navAnomalyScore: navAnomalyScore > 0 ? navAnomalyScore : undefined,
     };
 
     if (dblClickHijack) {
@@ -1416,7 +1449,7 @@ window.addEventListener(
       });
     }
 
-    lastDebug = { mode, decision, cds, nrs, reasonCodes, nrsFactors, ctx, adaptiveAdj: adaptiveAdjustment };
+    lastDebug = { mode, decision, cds, nrs, reasonCodes, nrsFactors, ctx, adaptiveAdj: adaptiveAdjustment, navAnomalyScore };
     refreshDebug();
 
     if (settings.debug) {
@@ -1434,6 +1467,14 @@ window.addEventListener(
       void recordNavigation(site, baseNrs, baseReasons, getNrsBlockThreshold(mode))
         .then((risk) => { cachedDomainRepeatOffender = risk.isRepeatOffender; })
         .catch((err) => { console.warn("[NavSentinel] domain profile write failed:", err); });
+    }
+
+    // --- Record navigation anomaly profile (async, non-blocking) ---
+    // Records the destination in the nav pattern profile and updates
+    // the in-memory sliding window for burst detection.
+    if (mode !== "off" && destHost) {
+      void recordNavigationAnomaly(destHost)
+        .catch((err) => { console.warn("[NavSentinel] nav anomaly write failed:", err); });
     }
 
     // --- Child-frame async reputation check ---

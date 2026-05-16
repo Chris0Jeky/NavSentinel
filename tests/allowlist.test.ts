@@ -1,128 +1,271 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it, beforeEach, vi } from "vitest";
 import {
   normalizeAllowlist,
+  getAllowlist,
+  setAllowlist,
+  addAllowlistEntry,
+  removeAllowlistEntry,
+  clearAllowlist,
   isAllowlisted,
+  onAllowlistChange,
   ALLOWLIST_KEY,
   type Allowlist,
 } from "../extension/src/shared/allowlist";
 
+const LEGACY_KEY = "navsentinel:allowlist";
+
+const store: Record<string, unknown> = {};
+
+function mockGet(keys: string | string[]) {
+  const ks = Array.isArray(keys) ? keys : [keys];
+  const result: Record<string, unknown> = {};
+  for (const k of ks) {
+    if (k in store) result[k] = structuredClone(store[k]);
+  }
+  return Promise.resolve(result);
+}
+
+function mockSet(items: Record<string, unknown>) {
+  for (const [k, v] of Object.entries(items)) {
+    store[k] = structuredClone(v);
+  }
+  return Promise.resolve();
+}
+
+function mockRemove(keys: string | string[]) {
+  const ks = Array.isArray(keys) ? keys : [keys];
+  for (const k of ks) delete store[k];
+  return Promise.resolve();
+}
+
+(globalThis as any).chrome = {
+  storage: {
+    local: {
+      get: vi.fn(mockGet),
+      set: vi.fn(mockSet),
+      remove: vi.fn(mockRemove),
+    },
+    onChanged: {
+      addListener: vi.fn(),
+    },
+  },
+};
+
+beforeEach(() => {
+  for (const k of Object.keys(store)) delete store[k];
+  vi.clearAllMocks();
+});
+
 describe("normalizeAllowlist", () => {
-  it("returns empty object for null/undefined", () => {
+  it("returns empty object for null/undefined/non-object", () => {
     expect(normalizeAllowlist(null)).toEqual({});
     expect(normalizeAllowlist(undefined)).toEqual({});
-  });
-
-  it("returns empty object for non-object types", () => {
-    expect(normalizeAllowlist(42)).toEqual({});
     expect(normalizeAllowlist("string")).toEqual({});
-    expect(normalizeAllowlist(true)).toEqual({});
+    expect(normalizeAllowlist(42)).toEqual({});
+    expect(normalizeAllowlist([])).toEqual({});
   });
 
-  it("returns empty object for arrays", () => {
-    expect(normalizeAllowlist([1, 2, 3])).toEqual({});
+  it("normalizes keys to lowercase trimmed", () => {
+    const result = normalizeAllowlist({ " Example.COM ": ["foo.com"] });
+    expect(result).toEqual({ "example.com": ["foo.com"] });
   });
 
-  it("normalizes valid allowlist", () => {
-    const input = { "example.com": ["foo.com", "bar.com"] };
-    expect(normalizeAllowlist(input)).toEqual({
-      "example.com": ["bar.com", "foo.com"],
+  it("normalizes hosts to lowercase, deduped, and sorted", () => {
+    const result = normalizeAllowlist({
+      "site.com": ["Zeta.com", "alpha.com", "Zeta.com", " Beta.COM "],
     });
+    expect(result).toEqual({ "site.com": ["alpha.com", "beta.com", "zeta.com"] });
   });
 
-  it("lowercases keys and values", () => {
-    const input = { "Example.COM": ["FOO.com"] };
-    expect(normalizeAllowlist(input)).toEqual({
-      "example.com": ["foo.com"],
-    });
+  it("drops entries with empty site key", () => {
+    const result = normalizeAllowlist({ "": ["foo.com"], "real.com": ["bar.com"] });
+    expect(result).toEqual({ "real.com": ["bar.com"] });
   });
 
-  it("trims whitespace", () => {
-    const input = { "  example.com  ": ["  foo.com  "] };
-    expect(normalizeAllowlist(input)).toEqual({
-      "example.com": ["foo.com"],
-    });
+  it("drops entries where hosts is not an array", () => {
+    const result = normalizeAllowlist({ "a.com": "not-array", "b.com": ["c.com"] });
+    expect(result).toEqual({ "b.com": ["c.com"] });
   });
 
-  it("deduplicates hosts", () => {
-    const input = { "example.com": ["foo.com", "foo.com", "FOO.com"] };
-    expect(normalizeAllowlist(input)).toEqual({
-      "example.com": ["foo.com"],
-    });
+  it("drops entries where all hosts are empty after filtering", () => {
+    const result = normalizeAllowlist({ "a.com": [42, null, ""], "b.com": ["c.com"] });
+    expect(result).toEqual({ "b.com": ["c.com"] });
   });
 
-  it("drops entries with empty host arrays", () => {
-    const input = { "example.com": [] as string[] };
-    expect(normalizeAllowlist(input)).toEqual({});
-  });
-
-  it("drops non-array host values", () => {
-    const input = { "example.com": "not-an-array" };
-    expect(normalizeAllowlist(input)).toEqual({});
-  });
-
-  it("filters non-string entries from host arrays", () => {
-    const input = { "example.com": ["foo.com", 42, null, "bar.com"] };
-    expect(normalizeAllowlist(input)).toEqual({
-      "example.com": ["bar.com", "foo.com"],
-    });
-  });
-
-  it("drops empty-string keys", () => {
-    const input = { "": ["foo.com"], "example.com": ["bar.com"] };
-    expect(normalizeAllowlist(input)).toEqual({
-      "example.com": ["bar.com"],
-    });
-  });
-
-  it("drops blank-only string hosts", () => {
-    const input = { "example.com": ["  ", "foo.com"] };
-    expect(normalizeAllowlist(input)).toEqual({
-      "example.com": ["foo.com"],
-    });
-  });
-
-  it("sorts hosts alphabetically", () => {
-    const input = { "example.com": ["z.com", "a.com", "m.com"] };
-    const result = normalizeAllowlist(input);
-    expect(result["example.com"]).toEqual(["a.com", "m.com", "z.com"]);
+  it("filters non-string host entries", () => {
+    const result = normalizeAllowlist({ "a.com": ["good.com", 42, null, "ok.com"] });
+    expect(result).toEqual({ "a.com": ["good.com", "ok.com"] });
   });
 });
 
 describe("isAllowlisted", () => {
-  const list: Allowlist = {
-    "example.com": ["foo.com", "bar.com"],
-    "other.com": ["baz.com"],
-  };
-
-  it("returns true for allowlisted pair", () => {
-    expect(isAllowlisted(list, "example.com", "foo.com")).toBe(true);
-  });
-
-  it("returns false for non-allowlisted host", () => {
-    expect(isAllowlisted(list, "example.com", "unknown.com")).toBe(false);
-  });
-
-  it("returns false for non-allowlisted site key", () => {
-    expect(isAllowlisted(list, "missing.com", "foo.com")).toBe(false);
+  it("returns true for exact match", () => {
+    const list: Allowlist = { "site.com": ["dest.com"] };
+    expect(isAllowlisted(list, "site.com", "dest.com")).toBe(true);
   });
 
   it("is case-insensitive", () => {
-    expect(isAllowlisted(list, "EXAMPLE.COM", "FOO.COM")).toBe(true);
+    const list: Allowlist = { "site.com": ["dest.com"] };
+    expect(isAllowlisted(list, "SITE.COM", "DEST.COM")).toBe(true);
   });
 
-  it("returns false for empty list", () => {
-    expect(isAllowlisted({}, "example.com", "foo.com")).toBe(false);
+  it("returns false for non-matching host", () => {
+    const list: Allowlist = { "site.com": ["dest.com"] };
+    expect(isAllowlisted(list, "site.com", "other.com")).toBe(false);
   });
 
-  it("requires pre-normalized list (mixed-case keys won't match lowercase query)", () => {
-    const mixedCase: Allowlist = { "Example.COM": ["foo.com"] };
-    expect(isAllowlisted(mixedCase, "example.com", "foo.com")).toBe(false);
+  it("returns false for non-matching site key", () => {
+    const list: Allowlist = { "site.com": ["dest.com"] };
+    expect(isAllowlisted(list, "other.com", "dest.com")).toBe(false);
+  });
+
+  it("returns false for empty allowlist", () => {
+    expect(isAllowlisted({}, "site.com", "dest.com")).toBe(false);
   });
 });
 
-describe("ALLOWLIST_KEY", () => {
-  it("is a non-empty string", () => {
-    expect(typeof ALLOWLIST_KEY).toBe("string");
-    expect(ALLOWLIST_KEY.length).toBeGreaterThan(0);
+describe("getAllowlist", () => {
+  it("returns empty object when storage is empty", async () => {
+    const result = await getAllowlist();
+    expect(result).toEqual({});
+  });
+
+  it("returns current allowlist from new key", async () => {
+    store[ALLOWLIST_KEY] = { "site.com": ["dest.com"] };
+    const result = await getAllowlist();
+    expect(result).toEqual({ "site.com": ["dest.com"] });
+  });
+
+  it("migrates legacy key to new key", async () => {
+    store[LEGACY_KEY] = { "old.com": ["target.com"] };
+    const result = await getAllowlist();
+    expect(result).toEqual({ "old.com": ["target.com"] });
+    expect(store[ALLOWLIST_KEY]).toEqual({ "old.com": ["target.com"] });
+    expect(store[LEGACY_KEY]).toBeUndefined();
+  });
+
+  it("prefers new key over legacy key", async () => {
+    store[ALLOWLIST_KEY] = { "new.com": ["a.com"] };
+    store[LEGACY_KEY] = { "old.com": ["b.com"] };
+    const result = await getAllowlist();
+    expect(result).toEqual({ "new.com": ["a.com"] });
+  });
+});
+
+describe("setAllowlist", () => {
+  it("writes normalized allowlist and removes legacy key", async () => {
+    store[LEGACY_KEY] = { "leftover.com": ["x.com"] };
+    await setAllowlist({ " MixedCase.COM ": ["Host.Com"] });
+    expect(store[ALLOWLIST_KEY]).toEqual({ "mixedcase.com": ["host.com"] });
+    expect(store[LEGACY_KEY]).toBeUndefined();
+  });
+});
+
+describe("addAllowlistEntry", () => {
+  it("adds a new site+host pair", async () => {
+    const result = await addAllowlistEntry("site.com", "dest.com");
+    expect(isAllowlisted(result, "site.com", "dest.com")).toBe(true);
+  });
+
+  it("appends to existing site key", async () => {
+    store[ALLOWLIST_KEY] = { "site.com": ["a.com"] };
+    const result = await addAllowlistEntry("site.com", "b.com");
+    expect(isAllowlisted(result, "site.com", "a.com")).toBe(true);
+    expect(isAllowlisted(result, "site.com", "b.com")).toBe(true);
+  });
+
+  it("does not duplicate existing host", async () => {
+    store[ALLOWLIST_KEY] = { "site.com": ["dest.com"] };
+    const result = await addAllowlistEntry("site.com", "dest.com");
+    expect(result["site.com"]!.filter((h) => h === "dest.com")).toHaveLength(1);
+  });
+
+  it("is case-insensitive", async () => {
+    const result = await addAllowlistEntry("SITE.COM", "DEST.COM");
+    expect(isAllowlisted(result, "site.com", "dest.com")).toBe(true);
+  });
+});
+
+describe("removeAllowlistEntry", () => {
+  it("removes a specific host from a site key", async () => {
+    store[ALLOWLIST_KEY] = { "site.com": ["a.com", "b.com"] };
+    const result = await removeAllowlistEntry("site.com", "a.com");
+    expect(isAllowlisted(result, "site.com", "a.com")).toBe(false);
+    expect(isAllowlisted(result, "site.com", "b.com")).toBe(true);
+  });
+
+  it("removes site key entirely when last host is removed", async () => {
+    store[ALLOWLIST_KEY] = { "site.com": ["only.com"] };
+    const result = await removeAllowlistEntry("site.com", "only.com");
+    expect(result["site.com"]).toBeUndefined();
+  });
+
+  it("no-ops for non-existent site key", async () => {
+    store[ALLOWLIST_KEY] = { "other.com": ["a.com"] };
+    const result = await removeAllowlistEntry("missing.com", "a.com");
+    expect(result).toEqual({ "other.com": ["a.com"] });
+  });
+
+  it("no-ops for non-existent host under existing key", async () => {
+    store[ALLOWLIST_KEY] = { "site.com": ["a.com"] };
+    const result = await removeAllowlistEntry("site.com", "missing.com");
+    expect(isAllowlisted(result, "site.com", "a.com")).toBe(true);
+  });
+
+  it("is case-insensitive", async () => {
+    store[ALLOWLIST_KEY] = { "site.com": ["dest.com"] };
+    const result = await removeAllowlistEntry("SITE.COM", "DEST.COM");
+    expect(result["site.com"]).toBeUndefined();
+  });
+});
+
+describe("clearAllowlist", () => {
+  it("sets allowlist to empty object and removes legacy key", async () => {
+    store[ALLOWLIST_KEY] = { "site.com": ["a.com"] };
+    store[LEGACY_KEY] = { "old.com": ["b.com"] };
+    await clearAllowlist();
+    expect(store[ALLOWLIST_KEY]).toEqual({});
+    expect(store[LEGACY_KEY]).toBeUndefined();
+  });
+});
+
+describe("onAllowlistChange", () => {
+  it("registers a storage change listener", () => {
+    const cb = vi.fn();
+    onAllowlistChange(cb);
+    expect(chrome.storage.onChanged.addListener).toHaveBeenCalled();
+  });
+
+  it("calls callback with normalized allowlist on change", () => {
+    let handler: ((changes: any, area: string) => void) | undefined;
+    (chrome.storage.onChanged.addListener as any).mockImplementation((fn: any) => {
+      handler = fn;
+    });
+    const cb = vi.fn();
+    onAllowlistChange(cb);
+    handler!({ [ALLOWLIST_KEY]: { newValue: { "A.COM": ["B.COM"] } } }, "local");
+    expect(cb).toHaveBeenCalledWith({ "a.com": ["b.com"] });
+  });
+
+  it("ignores changes to other storage areas", () => {
+    let handler: ((changes: any, area: string) => void) | undefined;
+    (chrome.storage.onChanged.addListener as any).mockImplementation((fn: any) => {
+      handler = fn;
+    });
+    const cb = vi.fn();
+    onAllowlistChange(cb);
+    handler!({ [ALLOWLIST_KEY]: { newValue: { "a.com": ["b.com"] } } }, "sync");
+    expect(cb).not.toHaveBeenCalled();
+  });
+
+  it("ignores changes to other keys", () => {
+    let handler: ((changes: any, area: string) => void) | undefined;
+    (chrome.storage.onChanged.addListener as any).mockImplementation((fn: any) => {
+      handler = fn;
+    });
+    const cb = vi.fn();
+    onAllowlistChange(cb);
+    handler!({ "other_key": { newValue: "something" } }, "local");
+    expect(cb).not.toHaveBeenCalled();
   });
 });

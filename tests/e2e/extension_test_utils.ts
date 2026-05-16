@@ -117,6 +117,18 @@ export async function assertNoToastFor(page: Page, durationMs = 1200): Promise<v
     });
   }, durationMs);
 }
+export async function dismissOnboarding(context: BrowserContext, timeout = 5000): Promise<void> {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    const onboarding = context.pages().find((p) => p.url().includes("onboarding.html"));
+    if (onboarding) {
+      await onboarding.close();
+      return;
+    }
+    await new Promise((r) => setTimeout(r, 200));
+  }
+}
+
 export function getGymBaseUrlOverride(): string | undefined {
   const raw = process.env.GYM_BASE_URL?.trim();
   return raw ? raw : undefined;

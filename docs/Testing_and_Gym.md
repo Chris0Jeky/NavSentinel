@@ -83,6 +83,18 @@ Current unit coverage lives in:
 - `tests/smart-defaults.test.ts`
 - `tests/content-analyzer.test.ts`
 - `tests/keyword-sync.test.ts`
+- `tests/nrs-ceiling.test.ts`
+- `tests/nrs-clickfix.test.ts`
+- `tests/redirect-chain.test.ts`
+- `tests/oauth-monitor.test.ts`
+- `tests/mutation-monitor.test.ts`
+- `tests/domain-groups.test.ts`
+- `tests/domain-profile.test.ts`
+- `tests/adaptive-scoring.test.ts`
+- `tests/explanations.test.ts`
+- `tests/icon-manager.test.ts`
+- `tests/csp-analyzer.test.ts`
+- `tests/sri-checker.test.ts`
 
 These currently cover:
 
@@ -100,6 +112,20 @@ These currently cover:
 - DoubleClickjacking NRS factor (+40 weight, factor combinations, allowlist interaction)
 - Bloom filter reputation: MurmurHash3, binary format parsing, known-bad domain lookup, false positive verification, and NRS integration (+50 weight)
 - PushState abuse NRS factor (+20 weight, gesture correlation, rapid-fire detection)
+- NRS scoring ceiling (diminishing returns above 100, compound FP mitigation, opener-allowed factor)
+- ClickFix NRS integration (clickfix score cap at 40, combined scoring with navigation factors)
+- Redirect chain correlation (per-hop scoring, known redirector detection, chain cap, stale pruning)
+- OAuth consent flow monitoring (flow detection, redirect mismatch, opener manipulation, multi-tab)
+- DOM mutation monitoring (debounce, alert cap, auto-disconnect, cookie/chat/ARIA exclusions)
+- Same-organization domain groups (cross-site exemption for multi-domain companies)
+- Per-domain behavioral profiling (visit tracking, decay, LRU eviction, risk assessment)
+- Adaptive scoring (per-domain threshold adjustment, bounded ±15, telemetry integration)
+- Plain-English explanations (reason code to user-friendly message mapping)
+- Icon manager (badge color/text updates, severity gating, mode-change handling)
+- CSP analysis (header/meta parsing, directive scoring, weakness cap in NRS)
+- SRI awareness (integrity attribute checking, cross-origin script scanning)
+- Allowlist (normalization, dedup, case-insensitivity, legacy migration)
+- Event tone classification (credential/config/navigation prefix routing)
 - PushState guard bridge message handling, TTL expiration, URL tracking
 - Session state manager: hydration, persistence, round-tripping across SW restarts, tab isolation
 - Smart defaults: pattern detection, consecutive-allow threshold, cooldown logic, storage integration
