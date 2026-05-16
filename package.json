@@ -34,7 +34,8 @@
     "release:major": "node scripts/release.mjs major",
     "release:dry": "node scripts/release.mjs patch --dry-run",
     "agent:hooks:smoke": "python scripts/agent_hooks/smoke_test.py",
-    "agent:skills:validate": "python scripts/agent_hooks/validate_skills.py"
+    "agent:skills:validate": "python scripts/agent_hooks/validate_skills.py",
+    "benchmark": "node scripts/benchmark.mjs"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.3.0",

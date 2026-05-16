@@ -1,0 +1,34 @@
+{
+  "updatedAt": "2026-05-09T00:00:00.000Z",
+  "thresholds": {
+    "clickjacking": {
+      "minTpRate": 80,
+      "maxFpRate": 10
+    },
+    "clickfix": {
+      "minTpRate": 80,
+      "maxFpRate": 10
+    },
+    "doubleclickjacking": {
+      "minTpRate": 80,
+      "maxFpRate": 10
+    },
+    "dom_mutation": {
+      "minTpRate": 80,
+      "maxFpRate": 10
+    },
+    "redirect_chain": {
+      "minTpRate": 60,
+      "maxFpRate": 10
+    },
+    "pushstate": {
+      "minTpRate": 60,
+      "maxFpRate": 10
+    },
+    "credential_theft": {
+      "minTpRate": 50,
+      "maxFpRate": 10
+    }
+  },
+  "lastRun": null
+}
