@@ -26,6 +26,8 @@ npm run test:e2e:corpus
 npm run measure:fp
 npm run demo:showcase
 npm run demo:showcase:record
+npm run agent:hooks:smoke
+npm run agent:skills:validate
 ```
 
 To run the Gym locally:
@@ -40,6 +42,21 @@ The older Python flow still works when needed:
 cd gym
 python -m http.server 5173
 ```
+
+## Agentic tooling smoke checks
+
+Run these from the repo root in PowerShell after changing `AGENTS.md`, `CLAUDE.md`, `.mcp.json`, `.agents/`, `.claude/`, `docs/agentic/`, `autodoc/AGENT_INDEX.md`, or `scripts/agent_hooks/`:
+
+```powershell
+npm run agent:hooks:smoke
+npm run agent:skills:validate
+python -m py_compile scripts\agent_hooks\pre_tool_use.py scripts\agent_hooks\post_tool_use.py scripts\agent_hooks\post_tool_failure.py scripts\agent_hooks\session_start.py scripts\agent_hooks\render_failure_ledger.py scripts\agent_hooks\smoke_test.py scripts\agent_hooks\validate_skills.py
+python scripts\agent_hooks\render_failure_ledger.py
+git diff --exit-code -- docs\agentic\FAILURE_LEDGER.md
+rg -n "options_limits_backtest|series_tools_python|TODO|FIXME|PLACEHOLDER" AGENTS.md CLAUDE.md .agents .claude docs\agentic autodoc scripts\agent_hooks .mcp.json
+```
+
+`npm run agent:hooks:smoke` parses `.claude/settings.json` and `.mcp.json`, checks hook event shape and referenced scripts, exercises dangerous-command blocking, verifies PostToolUse context, writes a fake failure ledger entry to a temp path to test redaction, and confirms SessionStart output.
 
 ## Test layers
 

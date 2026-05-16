@@ -40,15 +40,15 @@ describe("parseCSP", () => {
     expect(result.get("default-src")).toEqual(["'none'"]);
   });
 
-  it("parses form-action", () => {
+  it("does not parse form-action (not scored)", () => {
     const result = parseCSP("form-action 'self' https://example.com");
-    expect(result.get("form-action")).toEqual(["'self'", "https://example.com"]);
+    expect(result.has("form-action")).toBe(false);
   });
 
   it("does not parse frame-ancestors (not enforceable in meta tags)", () => {
-    const result = parseCSP("frame-ancestors 'self'; form-action 'self'");
+    const result = parseCSP("frame-ancestors 'self'; script-src 'self'");
     expect(result.has("frame-ancestors")).toBe(false);
-    expect(result.get("form-action")).toEqual(["'self'"]);
+    expect(result.get("script-src")).toEqual(["'self'"]);
   });
 
   it("lowercases directive names", () => {

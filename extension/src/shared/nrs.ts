@@ -59,6 +59,7 @@ const NRS_WEIGHT_OPENER_PREVIOUSLY_ALLOWED = -20;
 const NRS_WEIGHT_PUSHSTATE_ABUSE = 20;
 /** Minimum base NRS before CSP weakness is applied as a modifier. */
 const NRS_CSP_MODIFIER_THRESHOLD = 20;
+const NRS_WEIGHT_CSP_CAP = 10;
 
 /** Raw scores above this get 50% weight on the excess. */
 const NRS_DIMINISHING_RETURNS_THRESHOLD = 100;
@@ -171,7 +172,7 @@ export function computeNRS(cdsResult: ScoreResult, navCtx: NavigationContext): N
   // safety signal. Only apply positive scores when the base NRS already
   // exceeds the threshold.
   if (navCtx.cspWeaknessScore && navCtx.cspWeaknessScore > 0 && nrs > NRS_CSP_MODIFIER_THRESHOLD) {
-    nrs += navCtx.cspWeaknessScore;
+    nrs += Math.min(navCtx.cspWeaknessScore, NRS_WEIGHT_CSP_CAP);
     nrsFactors.push("nrs_csp_weakness");
   }
 

@@ -42,7 +42,6 @@ export interface CSPAnalysis {
 const SCORED_DIRECTIVES = new Set([
   "default-src",
   "script-src",
-  "form-action",
 ]);
 
 /**

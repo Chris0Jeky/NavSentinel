@@ -13,6 +13,7 @@ export type DebugInfo = {
   lastNav?: { kind: string; url: string; status: "allowed" | "blocked" };
   mutationAlerts?: number;
   cspInfo?: { hasCSP: boolean; score: number; isStrict: boolean; reasons: string[] };
+  adaptiveAdj?: number;
 };
 
 let enabled = false;
@@ -111,7 +112,8 @@ export function updateDebugOverlay(info: DebugInfo): void {
     `LegitBackdrop: ${info.ctx.isLegitModalBackdrop ? "yes" : "no"}`,
     `ExplicitNewTab: ${info.ctx.explicitNewTabIntent ? "yes" : "no"}`,
     `MutationAlerts: ${info.mutationAlerts ?? 0}`,
-    `CSP: ${info.cspInfo ? (info.cspInfo.hasCSP ? `yes (score=${info.cspInfo.score}, strict=${info.cspInfo.isStrict})` : `none (score=${info.cspInfo.score})`) : "n/a"}`
+    `CSP: ${info.cspInfo ? (info.cspInfo.hasCSP ? `yes (score=${info.cspInfo.score}, strict=${info.cspInfo.isStrict})` : `none (score=${info.cspInfo.score})`) : "n/a"}`,
+    `AdaptiveAdj: ${info.adaptiveAdj ?? 0}`
   ];
 
   pre.textContent = lines.join("\n");
