@@ -218,9 +218,10 @@ test("Level 10 delayed form submit prompts @regression", async () => {
 
       await waitForNavSentinelBridge(page);
 
-      const patchInfo = await page.evaluate(() => (window as any).__navsentinelLocationPatch);
-      expect(patchInfo, "Expected location patch info").toBeTruthy();
-      expect(patchInfo.protoAssign, "Expected Location.prototype.assign to be patched").toBe(true);
+      const bridgeReady = await page.evaluate(
+        () => document.documentElement.getAttribute("data-navsentinel-bridge-ready") === "1"
+      );
+      expect(bridgeReady, "Expected bridge to be ready (patches applied)").toBe(true);
 
       await page.click("#submitDelayed");
       await page.waitForTimeout(2600);

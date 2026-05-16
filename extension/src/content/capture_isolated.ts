@@ -364,6 +364,8 @@ function handleBridgeMessage(message: unknown): void {
     // PushState abuse metadata (ns-pushstate-suspicious)
     reason?: string;
     method?: string;
+    // Allow-target-nav relay (ns-allow-target-nav)
+    ttlMs?: number;
   };
   if (!data || data.source !== NS_SOURCE || data.v !== PROTOCOL_VERSION) return;
   if (data.session !== bridgeSession) return;
@@ -419,6 +421,13 @@ function handleBridgeMessage(message: unknown): void {
   if (data.type === "ns-nav-allowed") {
     lastNav = { kind: data.kind ?? "unknown", url: data.url ?? "", status: "allowed" };
     refreshDebug();
+    return;
+  }
+
+  if (data.type === "ns-allow-target-nav") {
+    const url = typeof data.url === "string" ? data.url : "";
+    const ttlMs = typeof data.ttlMs === "number" ? data.ttlMs : NAV_TARGET_ALLOW_TTL_MS;
+    if (url) notifyAllowedTarget(url, ttlMs);
     return;
   }
 

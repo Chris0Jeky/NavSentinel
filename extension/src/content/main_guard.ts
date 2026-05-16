@@ -82,14 +82,12 @@ function nowMs(): number {
 
 function recordNav(status: NavStatus, params: { kind: string; url?: string }): void {
   if (!debug) return;
-  (window as any).__navsentinelLastNav = {
+  postToIsolated("ns-debug-nav-record", {
     status,
     kind: params.kind,
     url: params.url ?? "",
     ts: nowMs(),
-    allowOpenUntil,
-    allowRedirectUntil
-  };
+  });
 }
 
 function markAllowance(params: { allowOpen: boolean; allowRedirect: boolean }): void {
@@ -305,7 +303,7 @@ function notifyAllowedTarget(url: string | URL | undefined): void {
   if (url === undefined) return;
   try {
     const href = new URL(String(url), location.href).toString();
-    chrome.runtime.sendMessage({ type: "ns-allow-target-nav", url: href, ttlMs: TARGET_NAV_TTL_MS });
+    postToIsolated("ns-allow-target-nav", { url: href, ttlMs: TARGET_NAV_TTL_MS });
   } catch {
     // ignore
   }
@@ -500,8 +498,8 @@ function patchLocation(): void {
   try {
     Object.defineProperty(window.location, "assign", {
       value: patchedAssign,
-      writable: true,
-      configurable: true
+      writable: false,
+      configurable: false
     });
   } catch {
     try {
@@ -514,8 +512,8 @@ function patchLocation(): void {
   try {
     Object.defineProperty(window.location, "replace", {
       value: patchedReplace,
-      writable: true,
-      configurable: true
+      writable: false,
+      configurable: false
     });
   } catch {
     try {
@@ -525,24 +523,14 @@ function patchLocation(): void {
     }
   }
 
-  (window as any).__navsentinelLocationPatch = {
-    protoAssign: Location.prototype.assign === patchedAssign,
-    protoReplace: Location.prototype.replace === patchedReplace,
-    locAssign: window.location.assign === patchedAssign,
-    locReplace: window.location.replace === patchedReplace,
-    locAssignDesc: (() => {
-      const desc = Object.getOwnPropertyDescriptor(window.location, "assign");
-      return desc
-        ? { configurable: !!desc.configurable, writable: !!(desc as any).writable }
-        : null;
-    })(),
-    locReplaceDesc: (() => {
-      const desc = Object.getOwnPropertyDescriptor(window.location, "replace");
-      return desc
-        ? { configurable: !!desc.configurable, writable: !!(desc as any).writable }
-        : null;
-    })()
-  };
+  if (debug) {
+    postToIsolated("ns-location-patch-info", {
+      protoAssign: Location.prototype.assign === patchedAssign,
+      protoReplace: Location.prototype.replace === patchedReplace,
+      locAssign: window.location.assign === patchedAssign,
+      locReplace: window.location.replace === patchedReplace,
+    });
+  }
 }
 
 function patchForms(): void {
@@ -607,8 +595,8 @@ function patchOpen(): void {
   try {
     Object.defineProperty(window, "open", {
       value: patchedOpen,
-      writable: true,
-      configurable: true
+      writable: false,
+      configurable: false
     });
   } catch {
     window.open = patchedOpen as any;
@@ -1212,4 +1200,4 @@ patchLocation();
 patchForms();
 patchClipboard();
 patchHistory();
-(window as any).__navsentinelMainGuard = true;
+postToIsolated("ns-main-guard-ready");
