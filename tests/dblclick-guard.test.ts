@@ -275,6 +275,48 @@ describe("dblclick_guard", () => {
 
       expect(isDoubleClickHijackActive()).toBe(true);
     });
+
+    it("expires second-click signal after DBLCLICK_HIJACK_STALE_MS", () => {
+      const now = Date.now();
+      handleDblclickBridgeMessage("ns-dblclick-window-open", { ts: now });
+      handleDblclickRuntimeMessage({
+        type: "ns-dblclick-opener-nav-from-child",
+        url: "https://bank.example.com",
+        ts: now - 5100,
+      });
+      handleDblclickBridgeMessage("ns-dblclick-second-click", {
+        ts: Date.now(),
+      });
+      expect(isDoubleClickHijackActive()).toBe(true);
+
+      vi.advanceTimersByTime(5001);
+      expect(isDoubleClickHijackActive()).toBe(false);
+    });
+
+    it("new window-open cycle clears stale childClosed flag", () => {
+      const now = Date.now();
+      handleDblclickBridgeMessage("ns-dblclick-window-open", { ts: now });
+      handleDblclickRuntimeMessage({
+        type: "ns-dblclick-opener-nav-from-child",
+        url: "https://bank.example.com",
+        ts: now + 50,
+      });
+      handleDblclickRuntimeMessage({ type: "ns-dblclick-child-closed" });
+      expect(isDoubleClickHijackActive()).toBe(true);
+
+      handleDblclickBridgeMessage("ns-dblclick-window-open", {
+        ts: now + 200,
+      });
+      expect(isDoubleClickHijackActive()).toBe(false);
+
+      handleDblclickBridgeMessage("ns-dblclick-opener-nav", {
+        ts: now + 300,
+        url: "https://other.example.com",
+      });
+      expect(isDoubleClickHijackActive()).toBe(true);
+      handleDblclickRuntimeMessage({ type: "ns-dblclick-child-closed" });
+      expect(isDoubleClickHijackActive()).toBe(true);
+    });
   });
 
   describe("getDblclickOpenerNavUrl", () => {
