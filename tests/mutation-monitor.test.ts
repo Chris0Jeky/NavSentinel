@@ -18,15 +18,6 @@ import {
 } from "../extension/src/content/mutation_monitor";
 
 // ---------------------------------------------------------------------------
-// Helper to collect alerts
-// ---------------------------------------------------------------------------
-
-function collectAlerts(): MutationAlert[] {
-  const collected: MutationAlert[] = [];
-  return collected;
-}
-
-// ---------------------------------------------------------------------------
 // Unit tests that work WITHOUT a full DOM
 // ---------------------------------------------------------------------------
 
