@@ -1,0 +1,153 @@
+/* NavSentinel Design Tokens v2 — Brass instrument, deep night, ivory annotations
+   Source of truth: RESOURCES/redesign/styles/tokens.css
+   Fonts: system stack (no external imports in extension context) */
+
+:root {
+  color-scheme: dark;
+
+  /* Surfaces — deep ink, cool undertone for real contrast against warm accents */
+  --ns-bg: #08070a;
+  --ns-bg-2: #030206;
+  --ns-surface: #110f13;
+  --ns-surface-2: #17141a;
+  --ns-surface-3: #1f1b22;
+  --ns-border: #2a2530;
+  --ns-border-soft: #1c181f;
+
+  /* Text — bright warm ivory for real punch */
+  --ns-text: #f6efe1;
+  --ns-text-2: #c4b69c;
+  --ns-text-3: #756a5a;
+  --ns-text-4: #463e34;
+
+  /* Accents — saturated, brass + jade + terracotta */
+  --ns-cyan: #f5a623;
+  --ns-green: #7ab787;
+  --ns-orange: #ed7a31;
+  --ns-red: #d04531;
+  --ns-purple: #e4c544;
+
+  /* Semantic aliases */
+  --ns-amber: var(--ns-cyan);
+  --ns-brass: var(--ns-cyan);
+  --ns-jade: var(--ns-green);
+  --ns-sage: var(--ns-green);
+  --ns-ember: var(--ns-orange);
+  --ns-terracotta: var(--ns-red);
+  --ns-gold: var(--ns-purple);
+
+  /* Glows */
+  --ns-cyan-glow: rgba(245, 166, 35, 0.26);
+  --ns-green-glow: rgba(122, 183, 135, 0.20);
+  --ns-orange-glow: rgba(237, 122, 49, 0.22);
+  --ns-red-glow: rgba(208, 69, 49, 0.24);
+
+  /* Type — system stacks (no external font loading in extension) */
+  --ns-serif: 'Iowan Old Style', 'Palatino Linotype', 'Newsreader', Georgia, 'Times New Roman', serif;
+  --ns-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+  --ns-mono: 'SF Mono', 'Cascadia Code', 'JetBrains Mono', Menlo, Consolas, monospace;
+}
+
+/* Root element styling */
+.ns-root {
+  font-family: var(--ns-sans);
+  color: var(--ns-text);
+  background: var(--ns-bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Typography utility classes */
+.ns-serif {
+  font-family: var(--ns-serif);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+.ns-serif-i {
+  font-family: var(--ns-serif);
+  font-style: italic;
+  font-weight: 400;
+}
+
+.ns-mono {
+  font-family: var(--ns-mono);
+}
+
+.ns-uc {
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* Background patterns */
+.ns-grid-bg {
+  background-image:
+    linear-gradient(rgba(246, 239, 225, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(246, 239, 225, 0.02) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.ns-dot-bg {
+  background-image: radial-gradient(circle at 1px 1px, rgba(246, 239, 225, 0.05) 1px, transparent 0);
+  background-size: 18px 18px;
+}
+
+.ns-scan {
+  background-image: repeating-linear-gradient(
+    180deg, rgba(245, 166, 35, 0.012) 0 1px, transparent 1px 3px
+  );
+}
+
+/* Pill component */
+.ns-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-family: var(--ns-mono);
+  font-size: 11px;
+  background: rgba(246, 239, 225, 0.04);
+  border: 1px solid var(--ns-border-soft);
+  color: var(--ns-text-2);
+}
+
+/* Focus ring */
+.ns-focus:focus-visible {
+  outline: 2px solid var(--ns-amber);
+  outline-offset: 2px;
+}
+
+/* Hidden scrollbars */
+.ns-noscroll::-webkit-scrollbar { display: none; }
+.ns-noscroll { scrollbar-width: none; }
+
+/* Animations */
+@keyframes ns-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+@keyframes ns-blink {
+  50% { opacity: 0; }
+}
+
+@keyframes ns-slide-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ns-fill {
+  from { width: 0; }
+}
+
+@keyframes ns-glow-pulse {
+  0%, 100% { filter: drop-shadow(0 0 8px rgba(245, 166, 35, 0.5)); }
+  50% { filter: drop-shadow(0 0 14px rgba(245, 166, 35, 0.7)); }
+}
+
+.ns-blink { animation: ns-blink 1s steps(2) infinite; }
+.ns-pulse { animation: ns-pulse 2s ease-in-out infinite; }
+.ns-glow { animation: ns-glow-pulse 3.4s ease-in-out infinite; }

@@ -21,6 +21,8 @@ know it's done. It synthesizes the findings from
 
 Total: **47 tasks** across 5 phases. **43/47 complete** (remaining 4 are XL Phase 4 features).
 
+**Active cross-cutting initiative:** UI Redesign (9 phases, R1–R9). See [REDESIGN_ORCHESTRATION.md](REDESIGN_ORCHESTRATION.md) for full plan.
+
 Last updated: 2026-05-16
 
 ---

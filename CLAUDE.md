@@ -120,6 +120,50 @@ When a review is performed on a PR (unless the user explicitly says otherwise):
 5. If a finding drifts genuinely out of scope (different extension layer, unrelated seam, pre-existing tech debt), document it and seed a fix: open a GitHub issue, add a roadmap entry, or append to `docs/agentic/FAILURE_LEDGER.md` with a concrete future-fix path.
 6. Tech debt accrual from reviews is not acceptable. "Non-blocking" means "fix it now, not later."
 
+## PR Merge Protocol
+
+Every PR must pass the following gates before merge. No exceptions.
+
+### Gate 1: Two Adversarial Review Rounds
+
+Each PR receives **two independent adversarial review rounds**:
+
+1. **Round 1** — Initial structured review covering: correctness, security, performance, style, test coverage, accessibility, and design adherence. All findings must be fixed before Round 2.
+2. **Round 2** — Fresh adversarial review of the updated PR. Reviewers actively try to break the implementation: edge cases, race conditions, state corruption, visual regressions, and interaction failures. All findings must be fixed.
+
+Between rounds, all bot comments (CI bots, linters, type-checkers) must be checked and addressed.
+
+### Gate 2: CI and Tests
+
+- All CI checks green (typecheck, lint, build).
+- All unit tests passing (`npm run test`).
+- All E2E tests passing (`npm run test:e2e`).
+- No new test failures introduced.
+- New code has corresponding test coverage.
+
+### Gate 3: Manual Testing
+
+- Feature tested manually in a real Chrome browser with the extension loaded.
+- Golden path verified (primary user flow works end-to-end).
+- Edge cases tested (empty states, overflow, rapid interactions, error states).
+- No regressions in adjacent features.
+- Visual output matches design spec (for UI PRs).
+
+### Gate 4: Zero Tech Debt
+
+- No TODO comments without a linked GitHub issue.
+- No workarounds without documented fix paths.
+- No skipped tests or disabled checks.
+- No "we'll fix this later" deferrals — fix now or seed a concrete follow-up.
+- Every finding from reviews is either resolved or has a seeded GitHub issue with a fix path.
+
+### Gate 5: Documentation Sync
+
+- Roadmap updated if phase status changed.
+- AGENT_INDEX.md updated if public interfaces changed.
+- Failure ledger updated if new recurring issues discovered.
+- Design docs updated if implementation diverged from spec.
+
 ## Verification Protocol
 
 Before final response:
