@@ -740,4 +740,47 @@ describe("NRS integration", () => {
     expect(result.nrs).toBe(30);
     expect(result.nrsFactors).not.toContain("nrs_nav_anomaly");
   });
+
+  it("nrs_nav_anomaly is NOT applied when NRS <= 20 (threshold gate)", async () => {
+    const { computeNRS } = await import("../extension/src/shared/nrs");
+    // CDS of 20 means base NRS is exactly at the threshold -- should NOT apply
+    const result = computeNRS(
+      { cds: 20, reasonCodes: [] },
+      {
+        isNewTabOrWindow: false,
+        isCrossSite: false,
+        navAnomalyScore: 15,
+      },
+    );
+    expect(result.nrs).toBe(20);
+    expect(result.nrsFactors).not.toContain("nrs_nav_anomaly");
+  });
+
+  it("nrs_nav_anomaly is NOT applied when NRS < 20 (below threshold)", async () => {
+    const { computeNRS } = await import("../extension/src/shared/nrs");
+    const result = computeNRS(
+      { cds: 10, reasonCodes: [] },
+      {
+        isNewTabOrWindow: false,
+        isCrossSite: false,
+        navAnomalyScore: 15,
+      },
+    );
+    expect(result.nrs).toBe(10);
+    expect(result.nrsFactors).not.toContain("nrs_nav_anomaly");
+  });
+
+  it("nrs_nav_anomaly IS applied when NRS > 20 (above threshold)", async () => {
+    const { computeNRS } = await import("../extension/src/shared/nrs");
+    const result = computeNRS(
+      { cds: 21, reasonCodes: [] },
+      {
+        isNewTabOrWindow: false,
+        isCrossSite: false,
+        navAnomalyScore: 15,
+      },
+    );
+    expect(result.nrs).toBe(36); // 21 + 15
+    expect(result.nrsFactors).toContain("nrs_nav_anomaly");
+  });
 });
