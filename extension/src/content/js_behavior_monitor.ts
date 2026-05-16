@@ -50,14 +50,14 @@ export interface JsExfilNetworkSignal {
   credentialFieldsPresent: boolean;
 }
 
-/** Signal emitted when a credential field value is read. */
+/** Signal emitted when a credential field value is read outside form submission. */
 export interface JsCredentialReadSignal {
   /** Timestamp of the read */
   ts: number;
-  /** Input field type (always 'password' in initial implementation) */
-  fieldType: string;
   /** Whether the read occurred during a form submit event */
-  duringSubmit: boolean;
+  isInsideSubmitHandler: boolean;
+  /** Number of password fields on the page */
+  fieldCount: number;
 }
 
 /** Aggregated JS behavior state tracked in the isolated world. */
@@ -93,7 +93,7 @@ export interface JsBehaviorMonitorConfig {
 const FORM_SUBMIT_CORRELATION_WINDOW_MS = 2000;
 
 /** Debounce window for credential field value reads (ms). */
-const CREDENTIAL_READ_DEBOUNCE_MS = 500;
+export const CREDENTIAL_READ_DEBOUNCE_MS = 500;
 
 /** Maximum tracked recent form submissions. */
 const MAX_RECENT_FORM_SUBMITS = 10;
@@ -259,17 +259,72 @@ function patchFormSubmitMonitoring(config: JsBehaviorMonitorConfig): void {
     return originalSubmit.call(this);
   };
 
-  // Patch HTMLFormElement.prototype.requestSubmit for programmatic submits
-  if (HTMLFormElement.prototype.requestSubmit) {
-    const originalRequestSubmit = HTMLFormElement.prototype.requestSubmit;
-    HTMLFormElement.prototype.requestSubmit = function (
-      this: HTMLFormElement,
-      submitter?: HTMLElement | null
-    ) {
-      handleFormSubmit(this, config);
-      return originalRequestSubmit.call(this, submitter);
-    };
-  }
+  // Note: requestSubmit() fires a 'submit' event which the capturing listener
+  // above already handles. No prototype patch needed — patching it would double-fire.
+}
+
+// ============================================================================
+// Credential Field Value Monitoring (Slice 4)
+// ============================================================================
+
+/** Per-input debounce tracking for credential reads. */
+const _credReadDebounceMap = new WeakMap<HTMLInputElement, number>();
+
+let _credentialGetterPatched = false;
+
+/** Install value getter patch on HTMLInputElement to detect credential reads. */
+function patchCredentialValueGetter(_cfg: JsBehaviorMonitorConfig): void {
+  if (_credentialGetterPatched) return;
+  _credentialGetterPatched = true;
+  void _cfg;
+
+  const descriptor = Object.getOwnPropertyDescriptor(
+    HTMLInputElement.prototype,
+    "value"
+  );
+  if (!descriptor || !descriptor.get) return;
+
+  const originalGetter = descriptor.get;
+  const originalSetter = descriptor.set;
+
+  Object.defineProperty(HTMLInputElement.prototype, "value", {
+    get(this: HTMLInputElement) {
+      const val = originalGetter.call(this);
+
+      if (
+        this.type === "password" &&
+        val.length > 0 &&
+        !_isInsideFormSubmit &&
+        _config &&
+        _config.mode !== "off"
+      ) {
+        const now = Date.now();
+        const lastRead = _credReadDebounceMap.get(this) ?? 0;
+        if (now - lastRead > CREDENTIAL_READ_DEBOUNCE_MS) {
+          _credReadDebounceMap.set(this, now);
+          _lastCredentialReadTs = now;
+          const signal: JsCredentialReadSignal = {
+            ts: now,
+            isInsideSubmitHandler: false,
+            fieldCount: document.querySelectorAll('input[type="password"]').length,
+          };
+          _config.postSignal(
+            "ns-js-credential-read",
+            signal as unknown as Record<string, unknown>
+          );
+        }
+      }
+
+      return val;
+    },
+    set(this: HTMLInputElement, v: string) {
+      if (originalSetter) {
+        originalSetter.call(this, v);
+      }
+    },
+    enumerable: descriptor.enumerable ?? true,
+    configurable: true,
+  });
 }
 
 // ============================================================================
@@ -305,7 +360,7 @@ export function initJsBehaviorMonitor(config: JsBehaviorMonitorConfig): void {
   // TODO (Slice 3): patchFetchMonitoring(config);
   // TODO (Slice 3): patchXHRMonitoring(config);
   // TODO (Slice 3): patchBeaconMonitoring(config);
-  // TODO (Slice 4): patchCredentialValueGetter(config);
+  patchCredentialValueGetter(config);
 }
 
 /**
@@ -336,8 +391,13 @@ export function formHasCredentialFields(form: HTMLFormElement): boolean {
  */
 export function isCrossOriginUrl(url: string): boolean {
   if (!url) return false;
+  const lc = url.trimStart().toLowerCase();
+  if (lc.startsWith("data:") || lc.startsWith("javascript:") || lc.startsWith("blob:")) {
+    return false;
+  }
   try {
     const resolved = new URL(url, location.href);
+    if (resolved.origin === "null") return false;
     return resolved.origin !== location.origin;
   } catch {
     return false;
@@ -378,9 +438,10 @@ export function extractOrigin(url: string): string {
  */
 export function correlatesWithFormSubmit(requestTs: number): boolean {
   return _recentFormSubmits.some(
-    (rec) =>
-      rec.hasCredentials &&
-      requestTs - rec.ts <= FORM_SUBMIT_CORRELATION_WINDOW_MS
+    (rec) => {
+      const delta = requestTs - rec.ts;
+      return rec.hasCredentials && delta >= 0 && delta <= FORM_SUBMIT_CORRELATION_WINDOW_MS;
+    }
   );
 }
 
@@ -498,8 +559,7 @@ export function _resetState(): void {
 //   [ ] Verify total per-navigation overhead stays under 100ms budget
 //
 
-// Suppress unused variable warnings for constants used in implementation slices
+// Suppress unused variable warnings for constants used in future implementation slices
 void FORM_SUBMIT_CORRELATION_WINDOW_MS;
-void CREDENTIAL_READ_DEBOUNCE_MS;
 void MAX_RECENT_FORM_SUBMITS;
 void MAX_RECENT_NETWORK_REQUESTS;
