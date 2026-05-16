@@ -147,17 +147,130 @@ interface NetworkRequestRecord {
   api: "fetch" | "xhr" | "beacon";
 }
 
-// These are declared but unused until implementation slices 2-4.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 let _recentFormSubmits: FormSubmitRecord[] = [];
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 let _recentNetworkRequests: NetworkRequestRecord[] = [];
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 let _lastCredentialReadTs = 0;
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 let _isInsideFormSubmit = false;
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 let _config: JsBehaviorMonitorConfig | null = null;
+
+/** Tracks original form action values at DOM parse time. */
+const _originalFormActions = new WeakMap<HTMLFormElement, string>();
+
+// ============================================================================
+// Form Submit Monitoring (Slice 2)
+// ============================================================================
+
+/** Record a form's initial action attribute for later comparison. */
+function recordOriginalAction(form: HTMLFormElement): void {
+  if (!_originalFormActions.has(form)) {
+    _originalFormActions.set(form, form.getAttribute("action") ?? "");
+  }
+}
+
+/** Scan existing forms on page and record their initial actions. */
+function snapshotExistingForms(): void {
+  const forms = document.querySelectorAll("form");
+  for (let i = 0; i < forms.length; i++) {
+    recordOriginalAction(forms[i] as HTMLFormElement);
+  }
+}
+
+/** Handle a form submit event and emit signals if suspicious. */
+function handleFormSubmit(form: HTMLFormElement, config: JsBehaviorMonitorConfig): void {
+  if (config.mode === "off") return;
+
+  const hasCredentials = formHasCredentialFields(form);
+  const action = form.action || location.href;
+  const crossOrigin = isCrossOriginUrl(action);
+  const originalAction = _originalFormActions.get(form) ?? "";
+  const resolvedOriginal = originalAction
+    ? extractOrigin(originalAction)
+    : location.origin;
+  const resolvedCurrent = extractOrigin(action);
+  const actionDynamicallyChanged =
+    resolvedOriginal !== resolvedCurrent && originalAction !== (form.getAttribute("action") ?? "");
+
+  const now = Date.now();
+
+  _recentFormSubmits.push({
+    ts: now,
+    actionOrigin: resolvedCurrent,
+    hasCredentials,
+  });
+  if (_recentFormSubmits.length > MAX_RECENT_FORM_SUBMITS) {
+    _recentFormSubmits.shift();
+  }
+
+  _isInsideFormSubmit = true;
+  setTimeout(() => { _isInsideFormSubmit = false; }, 0);
+
+  const isSuspicious =
+    (hasCredentials && crossOrigin) || actionDynamicallyChanged;
+
+  if (isSuspicious) {
+    const signal: JsFormSubmitSignal = {
+      ts: now,
+      hasCredentialFields: hasCredentials,
+      isCrossOrigin: crossOrigin,
+      actionDynamicallyChanged,
+      destinationOrigin: resolvedCurrent,
+    };
+    config.postSignal("ns-js-form-submit-suspicious", signal as unknown as Record<string, unknown>);
+  }
+}
+
+/** Install form submit monitoring: capturing listener + prototype patch. */
+function patchFormSubmitMonitoring(config: JsBehaviorMonitorConfig): void {
+  snapshotExistingForms();
+
+  // Observe newly added forms via MutationObserver
+  const observer = new MutationObserver((mutations) => {
+    for (let mi = 0; mi < mutations.length; mi++) {
+      const added = mutations[mi]!.addedNodes;
+      for (let ni = 0; ni < added.length; ni++) {
+        const node = added[ni];
+        if (node instanceof HTMLFormElement) {
+          recordOriginalAction(node);
+        } else if (node instanceof HTMLElement) {
+          const forms = node.querySelectorAll("form");
+          for (let fi = 0; fi < forms.length; fi++) {
+            recordOriginalAction(forms[fi] as HTMLFormElement);
+          }
+        }
+      }
+    }
+  });
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+
+  // Capturing submit event listener
+  document.addEventListener("submit", (e) => {
+    const form = e.target;
+    if (form instanceof HTMLFormElement) {
+      handleFormSubmit(form, config);
+    }
+  }, true);
+
+  // Patch HTMLFormElement.prototype.submit for programmatic submits
+  const originalSubmit = HTMLFormElement.prototype.submit;
+  HTMLFormElement.prototype.submit = function (this: HTMLFormElement) {
+    handleFormSubmit(this, config);
+    return originalSubmit.call(this);
+  };
+
+  // Patch HTMLFormElement.prototype.requestSubmit for programmatic submits
+  if (HTMLFormElement.prototype.requestSubmit) {
+    const originalRequestSubmit = HTMLFormElement.prototype.requestSubmit;
+    HTMLFormElement.prototype.requestSubmit = function (
+      this: HTMLFormElement,
+      submitter?: HTMLElement | null
+    ) {
+      handleFormSubmit(this, config);
+      return originalRequestSubmit.call(this, submitter);
+    };
+  }
+}
 
 // ============================================================================
 // Public API
@@ -186,11 +299,9 @@ let _config: JsBehaviorMonitorConfig | null = null;
 export function initJsBehaviorMonitor(config: JsBehaviorMonitorConfig): void {
   _config = config;
 
-  if (config.debug) {
-    // Debug logging will use config.postSignal in implementation
-  }
+  if (config.mode === "off") return;
 
-  // TODO (Slice 2): patchFormSubmitMonitoring(config);
+  patchFormSubmitMonitoring(config);
   // TODO (Slice 3): patchFetchMonitoring(config);
   // TODO (Slice 3): patchXHRMonitoring(config);
   // TODO (Slice 3): patchBeaconMonitoring(config);
@@ -209,9 +320,7 @@ export function initJsBehaviorMonitor(config: JsBehaviorMonitorConfig): void {
  * TODO: Implement (Slice 2)
  */
 export function formHasCredentialFields(form: HTMLFormElement): boolean {
-  // Stub: will check for input[type="password"] within the form
-  void form;
-  return false;
+  return form.querySelector('input[type="password"]') !== null;
 }
 
 /**
@@ -226,8 +335,13 @@ export function formHasCredentialFields(form: HTMLFormElement): boolean {
  * TODO: Implement (Slice 2)
  */
 export function isCrossOriginUrl(url: string): boolean {
-  void url;
-  return false;
+  if (!url) return false;
+  try {
+    const resolved = new URL(url, location.href);
+    return resolved.origin !== location.origin;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -242,8 +356,13 @@ export function isCrossOriginUrl(url: string): boolean {
  * TODO: Implement (Slice 2)
  */
 export function extractOrigin(url: string): string {
-  void url;
-  return "";
+  if (!url) return "";
+  try {
+    const resolved = new URL(url, location.href);
+    return resolved.origin;
+  } catch {
+    return "";
+  }
 }
 
 /**
@@ -258,8 +377,11 @@ export function extractOrigin(url: string): string {
  * TODO: Implement (Slice 3)
  */
 export function correlatesWithFormSubmit(requestTs: number): boolean {
-  void requestTs;
-  return false;
+  return _recentFormSubmits.some(
+    (rec) =>
+      rec.hasCredentials &&
+      requestTs - rec.ts <= FORM_SUBMIT_CORRELATION_WINDOW_MS
+  );
 }
 
 /**
