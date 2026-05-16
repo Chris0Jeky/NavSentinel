@@ -1571,6 +1571,35 @@ describe("service worker rollback gating", () => {
         { tab: { id: 80 } }
       );
 
+      // Intermediate: at T+15s the clamped allowance (30s) is still active
+      // Use a separate tab to avoid consuming the target allowance on tab 80
+      mock.dispatchRuntimeMessage(
+        { type: "ns-allow-nav", ttlMs: 1200 },
+        { tab: { id: 180 } }
+      );
+      vi.setSystemTime(new Date("2026-03-17T12:00:00.100Z"));
+      mock.emitCommitted({
+        tabId: 180, frameId: 0,
+        url: "https://origin.test/page",
+        transitionType: "link", transitionQualifiers: []
+      });
+      mock.dispatchRuntimeMessage(
+        { type: "ns-allow-target-nav", url: "https://evil.test/slow", ttlMs: 120_000 },
+        { tab: { id: 180 } }
+      );
+      vi.setSystemTime(new Date("2026-03-17T12:00:15.000Z"));
+      mock.emitCommitted({
+        tabId: 180, frameId: 0,
+        url: "https://evil.test/slow",
+        transitionType: "link", transitionQualifiers: []
+      });
+      const midResponse = mock.dispatchRuntimeMessage(
+        { type: "ns-check-rollback" },
+        { tab: { id: 180 } }
+      ) as { shouldRollback: boolean };
+      expect(midResponse.shouldRollback).toBe(false);
+
+      // At T+31s the clamped TTL (30s, not 120s) has expired on tab 80
       vi.setSystemTime(new Date("2026-03-17T12:00:31.000Z"));
       mock.emitCommitted({
         tabId: 80, frameId: 0,
@@ -1652,7 +1681,7 @@ describe("service worker rollback gating", () => {
       vi.setSystemTime(new Date("2026-03-17T12:00:00.100Z"));
       mock.emitCommitted({
         tabId: 83, frameId: 0,
-        url: "https://example.test/origin",
+        url: "https://origin.test/page",
         transitionType: "link", transitionQualifiers: []
       });
 
@@ -1664,7 +1693,7 @@ describe("service worker rollback gating", () => {
       vi.setSystemTime(new Date("2026-03-17T12:00:02.000Z"));
       mock.emitCommitted({
         tabId: 83, frameId: 0,
-        url: "https://example.test/redirected",
+        url: "https://evil.test/redirected",
         transitionType: "link", transitionQualifiers: []
       });
 
@@ -1688,7 +1717,7 @@ describe("service worker rollback gating", () => {
       vi.setSystemTime(new Date("2026-03-17T12:00:00.100Z"));
       mock.emitCommitted({
         tabId: 84, frameId: 0,
-        url: "https://example.test/origin",
+        url: "https://origin.test/page",
         transitionType: "link", transitionQualifiers: []
       });
 
@@ -1700,7 +1729,7 @@ describe("service worker rollback gating", () => {
       vi.setSystemTime(new Date("2026-03-17T12:00:02.000Z"));
       mock.emitCommitted({
         tabId: 84, frameId: 0,
-        url: "https://example.test/redirected",
+        url: "https://evil.test/redirected",
         transitionType: "link", transitionQualifiers: []
       });
 
