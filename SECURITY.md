@@ -18,6 +18,8 @@ The most security-sensitive code lives in:
 ### Main-world and isolated-world bridge
 
 - extension-runtime relaying scoped to the current tab/frame
+- challenge-response handshake verifies port ownership before trusting the connection
+- per-document session nonce rejects cross-document message replay
 - explicit inbound message-type allowlists
 - replayable blocked actions with short-lived ids
 - no trust in arbitrary page-originated messages
