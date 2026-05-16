@@ -733,7 +733,6 @@ function showRollbackPrompt(url: string): void {
       return url || "destination";
     }
   })();
-  (window as any).__navsentinelRollbackPrompt = { url, ts: now };
   sendIconUpdate("yellow");
   appendEventSafely({ kind: "nav_rollback", site: siteKeyFromLocation(), url, destHost: host });
   showToast({
@@ -743,8 +742,10 @@ function showRollbackPrompt(url: string): void {
         label: "Proceed",
         onClick: () => {
           try {
-            notifyNavAllow();
-            location.assign(url);
+            if (/^https?:\/\//i.test(url)) {
+              notifyNavAllow();
+              location.assign(url);
+            }
           } catch {
             // ignore
           }
@@ -774,7 +775,7 @@ function handleRollback(url: string, prevUrl?: string): void {
     }
   })();
   const target = prevUrl && prevUrl !== url ? prevUrl : referrerTarget;
-  if (target) {
+  if (target && /^https?:\/\//i.test(target)) {
     try {
       chrome.runtime.sendMessage({ type: "ns-begin-rollback", returnUrl: target });
       chrome.runtime.sendMessage({ type: "ns-store-forward", url, returnUrl: target });
