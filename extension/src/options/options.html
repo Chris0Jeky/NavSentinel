@@ -3,296 +3,308 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>NavSentinel Options</title>
+    <title>NavSentinel — Control Panel</title>
     <link rel="stylesheet" href="../shared/design_tokens.css" />
     <link rel="stylesheet" href="./options.css" />
   </head>
   <body>
-    <div class="page-shell">
-      <header class="hero">
-        <div class="eyebrow">Operator Console</div>
-        <div class="hero-row">
-          <div>
-            <h1>NavSentinel</h1>
-            <p class="subtitle">
-              Tune the navigation firewall and credential guard with a local-first control surface
-              built for review, testing, and incident-style inspection.
-            </p>
+    <div class="shell ns-root">
+      <!-- Top bar -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <div id="logoSlot" aria-hidden="true"></div>
+          <div class="topbar-title">
+            <div class="topbar-name ns-serif">NavSentinel</div>
+            <div class="topbar-meta ns-mono">
+              <span class="dot dot--green ns-pulse"></span>
+              Control Panel · <span id="version"></span>
+            </div>
           </div>
-          <div class="hero-mark" aria-hidden="true">NS</div>
         </div>
-        <div class="hero-grid">
-          <div class="hero-stat">
-            <span class="hero-label">Navigation posture</span>
-            <span class="hero-value">Prompt, block, roll back</span>
+        <div class="topbar-right">
+          <div class="topbar-pills">
+            <div class="topbar-pill"><span class="topbar-pill-label">sentinel</span><span class="topbar-pill-value topbar-pill-value--green">armed</span></div>
+            <div class="topbar-pill"><span class="topbar-pill-label">network</span><span class="topbar-pill-value topbar-pill-value--green">0 calls</span></div>
+            <div class="topbar-pill"><span class="topbar-pill-label">log</span><span id="logUsage" class="topbar-pill-value topbar-pill-value--amber">--</span></div>
           </div>
-          <div class="hero-stat">
-            <span class="hero-label">Credential posture</span>
-            <span class="hero-value">Local risk scoring and trust controls</span>
-          </div>
-          <div class="hero-stat">
-            <span class="hero-label">Operator loop</span>
-            <span class="hero-value">Review events, export state, test in the Gym</span>
+          <div class="topbar-actions">
+            <button id="exportBtn" class="btn btn--ghost"><span id="downloadIcon"></span> Export</button>
+            <label class="btn btn--ghost file-label">
+              Import
+              <input id="importFile" type="file" accept="application/json" hidden />
+            </label>
+            <button id="save" class="btn btn--primary">Save changes</button>
           </div>
         </div>
       </header>
 
-      <main class="layout">
-        <section class="section">
-          <div class="section-head">
-            <div>
-              <div class="section-kicker">Navigation firewall</div>
-              <h2>Navigation protection</h2>
+      <div class="body">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+          <div class="sidebar-label ns-uc">navigate</div>
+          <nav class="sidebar-nav" id="sidebarNav">
+            <button class="nav-btn active" data-section="protect"><span id="navShieldIcon"></span> Protection</button>
+            <button class="nav-btn" data-section="analytics"><span id="navChartIcon"></span> Analytics</button>
+            <button class="nav-btn" data-section="log"><span id="navListIcon"></span> Event log</button>
+            <button class="nav-btn" data-section="trust"><span id="navLockIcon"></span> Trust</button>
+            <button class="nav-btn" data-section="allowlist"><span id="navGlobeIcon"></span> Allowlist</button>
+          </nav>
+          <div class="sidebar-info">
+            <div class="sidebar-info-head">
+              <span id="sidebarLockIcon"></span>
+              <span class="ns-uc">local-only</span>
             </div>
-            <p class="section-copy">
-              Configure how aggressively NavSentinel intervenes when clicks, redirects, and new-tab
-              flows look deceptive.
-            </p>
+            <p>0 network calls. All data in chrome.storage.local.</p>
           </div>
+        </aside>
 
-          <div class="control-grid">
-            <div class="field-card">
-              <label for="navMode">Default mode</label>
-              <select id="navMode">
-                <option value="off">Off</option>
-                <option value="smart">Smart</option>
-                <option value="strict">Strict</option>
-              </select>
-            </div>
-
-            <div class="field-card field-card-wide">
-              <label class="checkbox">
-                <input type="checkbox" id="navDebug" />
-                Show debug overlay on pages
-              </label>
-              <label class="checkbox">
-                <input type="checkbox" id="navDnrEnabled" />
-                Enable DNR backstop (experimental hard blocklist)
-              </label>
-            </div>
-          </div>
-        </section>
-
-        <section class="section">
-          <div class="section-head">
-            <div>
-              <div class="section-kicker">Credential guard</div>
-              <h2>Credential protection</h2>
-            </div>
-            <p class="section-copy">
-              Decide when submits and paste actions should prompt, especially on untrusted or
-              lookalike destinations.
-            </p>
-          </div>
-
-          <div class="control-grid">
-            <div class="field-card">
-              <label for="credMode">Mode</label>
-              <select id="credMode">
-                <option value="off">Off</option>
-                <option value="smart">Smart</option>
-                <option value="strict">Strict</option>
-              </select>
-            </div>
-
-            <div class="field-card">
-              <label for="mediumRiskThreshold">Medium risk threshold</label>
-              <div class="inline-field">
-                <input id="mediumRiskThreshold" type="number" min="0" max="100" step="1" />
-                <span class="hint-inline">0-100</span>
+        <!-- Main content -->
+        <main class="main" id="mainContent">
+          <!-- Protection section -->
+          <section class="pane" id="pane-protect">
+            <div class="pane-head">
+              <div>
+                <h2>Protection Settings</h2>
+                <p class="pane-sub">Configure navigation and credential defenses</p>
               </div>
             </div>
 
-            <div class="field-card field-card-wide">
-              <div class="grid2">
-                <label class="checkbox">
-                  <input type="checkbox" id="blockHttpPasswordSubmit" />
-                  Block non-HTTPS credential submits (prompt)
-                </label>
-                <label class="checkbox">
-                  <input type="checkbox" id="warnOnPaste" />
-                  Warn on paste into password fields (toast)
-                </label>
-                <label class="checkbox">
-                  <input type="checkbox" id="promptOnUntrustedDomain" />
-                  Prompt on untrusted domains
-                </label>
-                <label class="checkbox">
-                  <input type="checkbox" id="promptOnMediumRisk" />
-                  Prompt on medium risk
-                </label>
+            <div class="card-grid">
+              <!-- Navigation firewall -->
+              <div class="card">
+                <div class="card-head">
+                  <span class="card-accent card-accent--amber"></span>
+                  <div class="card-title">Navigation firewall</div>
+                  <div class="card-sub">Blocks deceptive interactions</div>
+                </div>
+                <div class="card-body">
+                  <div class="field">
+                    <label class="field-label ns-uc">Mode</label>
+                    <div class="seg" id="navModeSeg">
+                      <button class="seg-btn" data-value="off">Off</button>
+                      <button class="seg-btn" data-value="smart">Smart</button>
+                      <button class="seg-btn" data-value="strict">Strict</button>
+                    </div>
+                  </div>
+                  <div class="toggle-row">
+                    <div class="toggle-info">
+                      <div class="toggle-label">Debug overlay</div>
+                      <div class="toggle-sub">Show CDS/NRS on page</div>
+                    </div>
+                    <button class="toggle" id="navDebug" role="switch" aria-checked="false"><span class="toggle-thumb"></span></button>
+                  </div>
+                  <div class="toggle-row">
+                    <div class="toggle-info">
+                      <div class="toggle-label">DNR backstop</div>
+                      <div class="toggle-sub">Experimental hard blocklist</div>
+                    </div>
+                    <button class="toggle" id="navDnrEnabled" role="switch" aria-checked="false"><span class="toggle-thumb"></span></button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Credential guard -->
+              <div class="card">
+                <div class="card-head">
+                  <span class="card-accent card-accent--green"></span>
+                  <div class="card-title">Credential guard</div>
+                  <div class="card-sub">Phishing & lookalike protection</div>
+                </div>
+                <div class="card-body">
+                  <div class="field">
+                    <label class="field-label ns-uc">Mode</label>
+                    <div class="seg seg--green" id="credModeSeg">
+                      <button class="seg-btn" data-value="off">Off</button>
+                      <button class="seg-btn" data-value="smart">Smart</button>
+                      <button class="seg-btn" data-value="strict">Strict</button>
+                    </div>
+                  </div>
+                  <div class="toggle-row">
+                    <div class="toggle-info">
+                      <div class="toggle-label">Block HTTP submit</div>
+                      <div class="toggle-sub">Refuse non-HTTPS form actions</div>
+                    </div>
+                    <button class="toggle" id="blockHttpPasswordSubmit" role="switch" aria-checked="false"><span class="toggle-thumb"></span></button>
+                  </div>
+                  <div class="toggle-row">
+                    <div class="toggle-info">
+                      <div class="toggle-label">Paste warnings</div>
+                      <div class="toggle-sub">Warn on password paste</div>
+                    </div>
+                    <button class="toggle" id="warnOnPaste" role="switch" aria-checked="false"><span class="toggle-thumb"></span></button>
+                  </div>
+                  <div class="toggle-row">
+                    <div class="toggle-info">
+                      <div class="toggle-label">Prompt untrusted</div>
+                      <div class="toggle-sub">Prompt on untrusted domains</div>
+                    </div>
+                    <button class="toggle" id="promptOnUntrustedDomain" role="switch" aria-checked="false"><span class="toggle-thumb"></span></button>
+                  </div>
+                  <div class="toggle-row">
+                    <div class="toggle-info">
+                      <div class="toggle-label">Prompt medium risk</div>
+                      <div class="toggle-sub">Prompt on medium risk scores</div>
+                    </div>
+                    <button class="toggle" id="promptOnMediumRisk" role="switch" aria-checked="false"><span class="toggle-thumb"></span></button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Thresholds card -->
+              <div class="card card--wide">
+                <div class="card-head">
+                  <span class="card-accent card-accent--amber"></span>
+                  <div class="card-title">Thresholds & tuning</div>
+                </div>
+                <div class="card-body card-body--grid">
+                  <div class="field">
+                    <label class="field-label" for="mediumRiskThreshold">Medium risk threshold</label>
+                    <div class="input-row">
+                      <input id="mediumRiskThreshold" type="number" min="0" max="100" step="1" class="input ns-mono" />
+                      <span class="input-hint">0–100</span>
+                    </div>
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="logLimit">Log ring buffer</label>
+                    <div class="input-row">
+                      <input id="logLimit" type="number" min="50" max="5000" step="10" class="input ns-mono" />
+                      <span class="input-hint">50–5000</span>
+                    </div>
+                  </div>
+                  <div class="field">
+                    <label class="field-label">Lookalike similarity</label>
+                    <div class="toggle-row toggle-row--compact">
+                      <button class="toggle" id="similarityEnabled" role="switch" aria-checked="false"><span class="toggle-thumb"></span></button>
+                      <div class="input-row">
+                        <input id="similarityMaxDistance" type="number" min="0" max="8" step="1" class="input input--sm ns-mono" aria-label="Max edit distance" />
+                        <span class="input-hint">max dist</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Analytics section -->
+          <section class="pane" id="pane-analytics" hidden>
+            <div class="pane-head">
+              <div>
+                <h2>Threat Analytics</h2>
+                <p class="pane-sub">Local-only telemetry · no data leaves the browser</p>
+              </div>
+              <div class="pane-actions">
+                <button id="refreshStats" class="btn btn--ghost">Refresh</button>
+                <button id="clearStats" class="btn btn--ghost btn--danger">Clear stats</button>
               </div>
             </div>
 
-            <div class="field-card field-card-wide">
-              <label class="checkbox" for="similarityEnabled">
-                <input type="checkbox" id="similarityEnabled" />
-                Lookalike similarity (edit distance)
-              </label>
-              <div class="inline-field">
-                <input id="similarityMaxDistance" type="number" min="0" max="8" step="1" aria-label="Maximum lookalike edit distance" />
-                <span class="hint-inline">0-8</span>
+            <div class="stat-grid">
+              <div class="stat-card">
+                <div class="stat-label ns-uc">Total prompts</div>
+                <div class="stat-value ns-mono" id="statTotal">--</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label ns-uc">Allow rate</div>
+                <div class="stat-value stat-value--green ns-mono" id="statAllowRate">--</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label ns-uc">Block rate</div>
+                <div class="stat-value stat-value--red ns-mono" id="statBlockRate">--</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label ns-uc">Trust rate</div>
+                <div class="stat-value stat-value--amber ns-mono" id="statTrustRate">--</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label ns-uc">Dismiss rate</div>
+                <div class="stat-value ns-mono" id="statDismissRate">--</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label ns-uc">Avg score (allow)</div>
+                <div class="stat-value stat-value--green ns-mono" id="statAvgScoreAllow">--</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label ns-uc">Avg score (block)</div>
+                <div class="stat-value stat-value--red ns-mono" id="statAvgScoreBlock">--</div>
               </div>
             </div>
-          </div>
-        </section>
 
-        <section class="section">
-          <div class="section-head">
-            <div>
-              <div class="section-kicker">Analytics</div>
-              <h2>Prompt statistics</h2>
+            <div class="card-grid card-grid--2col">
+              <div class="card">
+                <div class="card-head">
+                  <div class="card-title">Top prompted domains</div>
+                </div>
+                <div class="card-body" id="topDomains"></div>
+              </div>
+              <div class="card">
+                <div class="card-head">
+                  <div class="card-title">Domain risk profiles</div>
+                  <div class="card-head-actions">
+                    <button id="refreshProfiles" class="btn btn--xs">Refresh</button>
+                    <button id="clearProfiles" class="btn btn--xs btn--danger">Clear</button>
+                  </div>
+                </div>
+                <div class="card-body" id="domainProfiles"></div>
+              </div>
             </div>
-            <p class="section-copy">
-              Local-only prompt outcome tracking for evidence-based threshold tuning.
-              No data leaves your machine.
-            </p>
-          </div>
+          </section>
 
-          <div class="control-grid">
-            <div class="field-card">
-              <div class="stat-label">Total prompts</div>
-              <div id="statTotal" class="stat-value mono">--</div>
-            </div>
-            <div class="field-card">
-              <div class="stat-label">Allow rate</div>
-              <div id="statAllowRate" class="stat-value mono">--</div>
-            </div>
-            <div class="field-card">
-              <div class="stat-label">Block/cancel rate</div>
-              <div id="statBlockRate" class="stat-value mono">--</div>
-            </div>
-            <div class="field-card">
-              <div class="stat-label">Trust rate</div>
-              <div id="statTrustRate" class="stat-value mono">--</div>
-            </div>
-            <div class="field-card">
-              <div class="stat-label">Dismiss rate</div>
-              <div id="statDismissRate" class="stat-value mono">--</div>
-            </div>
-            <div class="field-card">
-              <div class="stat-label">Avg score at allow</div>
-              <div id="statAvgScoreAllow" class="stat-value mono">--</div>
-            </div>
-            <div class="field-card">
-              <div class="stat-label">Avg score at block/cancel</div>
-              <div id="statAvgScoreBlock" class="stat-value mono">--</div>
-            </div>
-          </div>
-
-          <div class="toolbar">
-            <div class="toolbar-actions">
-              <button id="refreshStats">Refresh stats</button>
-              <button id="clearStats">Clear stats</button>
-            </div>
-          </div>
-
-          <div id="topDomains" class="events"></div>
-        </section>
-
-        <section class="section">
-          <div class="section-head">
-            <div>
-              <div class="section-kicker">Behavioral profiling</div>
-              <h2>Domain activity</h2>
-            </div>
-            <p class="section-copy">
-              Domains that consistently trigger suspicious navigation signals accumulate a risk
-              profile. Repeat offenders receive an additional NRS penalty.
-            </p>
-          </div>
-
-          <div id="domainProfiles" class="events"></div>
-          <div class="toolbar">
-            <div class="toolbar-actions">
-              <button id="refreshProfiles">Refresh</button>
-              <button id="clearProfiles">Clear profiles</button>
-            </div>
-          </div>
-        </section>
-
-        <section class="section">
-          <div class="section-head">
-            <div>
-              <div class="section-kicker">Signals</div>
-              <h2>Event log</h2>
-            </div>
-            <p class="section-copy">
-              Review the most recent local decisions, export/import operator state, and keep the log
-              ring buffer sized for your workflow.
-            </p>
-          </div>
-
-          <div class="toolbar">
-            <div class="inline-field">
-              <label for="logLimit">Log limit</label>
-              <input id="logLimit" type="number" min="50" max="5000" step="10" />
-              <span class="hint-inline">ring buffer</span>
+          <!-- Event log section -->
+          <section class="pane" id="pane-log" hidden>
+            <div class="pane-head">
+              <div>
+                <h2>Event Log</h2>
+                <p class="pane-sub">Review recent local decisions</p>
+              </div>
+              <div class="pane-actions">
+                <button id="refreshLog" class="btn btn--ghost">Refresh</button>
+                <button id="clearLog" class="btn btn--ghost btn--danger">Clear</button>
+              </div>
             </div>
 
-            <div class="toolbar-actions">
-              <button id="refreshLog">Refresh</button>
-              <button id="clearLog">Clear</button>
-              <button id="exportBtn">Export JSON</button>
-              <label class="file">
-                Import JSON
-                <input id="importFile" type="file" accept="application/json" />
-              </label>
-              <span id="status" class="status" role="status" aria-live="polite"></span>
+            <div id="eventLog" class="event-list"></div>
+          </section>
+
+          <!-- Trust section -->
+          <section class="pane" id="pane-trust" hidden>
+            <div class="pane-head">
+              <div>
+                <h2>Trusted Domains</h2>
+                <p class="pane-sub">Domains allowed to receive credentials without prompts</p>
+              </div>
             </div>
-          </div>
 
-          <div id="eventLog" class="events"></div>
-        </section>
-
-        <section class="section">
-          <div class="section-head">
-            <div>
-              <div class="section-kicker">Navigation exceptions</div>
-              <h2>Navigation allowlist</h2>
+            <div class="trust-toolbar">
+              <input id="trustedInput" class="input ns-mono" placeholder="example.com" aria-label="Trusted domain" />
+              <button id="addTrusted" class="btn btn--primary">Add</button>
+              <button id="clearTrusted" class="btn btn--ghost btn--danger">Clear all</button>
             </div>
-            <p class="section-copy">
-              Per-site destination exemptions for flows you intentionally allow after a block.
-            </p>
-          </div>
 
-          <div id="allowlist" class="allowlist"></div>
-          <div class="row">
-            <button id="clearAllowlist">Clear all</button>
-          </div>
-        </section>
+            <div id="trustedList" class="list-panel"></div>
+          </section>
 
-        <section class="section">
-          <div class="section-head">
-            <div>
-              <div class="section-kicker">Credential exceptions</div>
-              <h2>Trusted domains</h2>
+          <!-- Allowlist section -->
+          <section class="pane" id="pane-allowlist" hidden>
+            <div class="pane-head">
+              <div>
+                <h2>Navigation Allowlist</h2>
+                <p class="pane-sub">Per-site destination exemptions for flows you intentionally allow</p>
+              </div>
+              <div class="pane-actions">
+                <button id="clearAllowlist" class="btn btn--ghost btn--danger">Clear all</button>
+              </div>
             </div>
-            <p class="section-copy">
-              Domains that are allowed to receive credentials without untrusted-domain prompts.
-            </p>
-          </div>
 
-          <div class="toolbar">
-            <div class="toolbar-actions trusted-actions">
-              <input id="trustedInput" class="mono" placeholder="example.com" aria-label="Trusted domain" />
-              <button id="addTrusted">Add</button>
-              <button id="clearTrusted">Clear all</button>
-            </div>
-          </div>
+            <div id="allowlist" class="list-panel"></div>
+          </section>
+        </main>
+      </div>
 
-          <div id="trustedList" class="allowlist"></div>
-        </section>
-      </main>
-
-      <div class="row sticky">
-        <div class="hint save-hint">
-          Tip: validate behavior in the Gym after changing protection modes or trust state.
-        </div>
-        <div class="sticky-actions">
-          <span id="saveStatus" class="status" role="status" aria-live="polite"></span>
-          <button id="save" class="primary">Save settings</button>
-        </div>
+      <!-- Status bar -->
+      <div class="statusbar">
+        <span id="status" class="status-msg" role="status" aria-live="polite"></span>
+        <span id="saveStatus" class="status-msg" role="status" aria-live="polite"></span>
       </div>
     </div>
 

@@ -1,6 +1,7 @@
 import type { Mode } from "../shared/types";
 import type { CredMode, EventLogEntry, SuiteSettings } from "../shared/storage";
 import { classifyEventTone } from "../shared/event_tone";
+import { icon, logoSentinel } from "../shared/icons";
 import {
   addTrustedDomainWithResult,
   appendEvent,
@@ -29,18 +30,35 @@ import {
   getTopSuspiciousDomains,
   type DomainProfile,
 } from "../shared/domain_profile";
-const navModeEl = document.getElementById("navMode") as HTMLSelectElement;
-const navDebugEl = document.getElementById("navDebug") as HTMLInputElement;
-const navDnrEl = document.getElementById("navDnrEnabled") as HTMLInputElement;
-const credModeEl = document.getElementById("credMode") as HTMLSelectElement;
-const blockHttpEl = document.getElementById("blockHttpPasswordSubmit") as HTMLInputElement;
-const warnPasteEl = document.getElementById("warnOnPaste") as HTMLInputElement;
-const promptUntrustedEl = document.getElementById("promptOnUntrustedDomain") as HTMLInputElement;
-const promptMediumEl = document.getElementById("promptOnMediumRisk") as HTMLInputElement;
+
+// Icons
+document.getElementById("logoSlot")!.innerHTML = logoSentinel(30, true);
+document.getElementById("downloadIcon")!.innerHTML = icon("download", 13);
+document.getElementById("navShieldIcon")!.innerHTML = icon("shield", 14);
+document.getElementById("navChartIcon")!.innerHTML = icon("chart", 14);
+document.getElementById("navListIcon")!.innerHTML = icon("list", 14);
+document.getElementById("navLockIcon")!.innerHTML = icon("lock", 14);
+document.getElementById("navGlobeIcon")!.innerHTML = icon("globe", 14);
+document.getElementById("sidebarLockIcon")!.innerHTML = icon("lock", 12, "var(--ns-green)");
+
+// Version
+const versionEl = document.getElementById("version") as HTMLSpanElement;
+versionEl.textContent = `v${chrome.runtime.getManifest().version}`;
+
+// DOM references
+const navModeSeg = document.getElementById("navModeSeg") as HTMLDivElement;
+const navDebugEl = document.getElementById("navDebug") as HTMLButtonElement;
+const navDnrEl = document.getElementById("navDnrEnabled") as HTMLButtonElement;
+const credModeSeg = document.getElementById("credModeSeg") as HTMLDivElement;
+const blockHttpEl = document.getElementById("blockHttpPasswordSubmit") as HTMLButtonElement;
+const warnPasteEl = document.getElementById("warnOnPaste") as HTMLButtonElement;
+const promptUntrustedEl = document.getElementById("promptOnUntrustedDomain") as HTMLButtonElement;
+const promptMediumEl = document.getElementById("promptOnMediumRisk") as HTMLButtonElement;
 const mediumThresholdEl = document.getElementById("mediumRiskThreshold") as HTMLInputElement;
-const similarityEnabledEl = document.getElementById("similarityEnabled") as HTMLInputElement;
+const similarityEnabledEl = document.getElementById("similarityEnabled") as HTMLButtonElement;
 const similarityMaxDistEl = document.getElementById("similarityMaxDistance") as HTMLInputElement;
 const logLimitEl = document.getElementById("logLimit") as HTMLInputElement;
+const logUsageEl = document.getElementById("logUsage") as HTMLSpanElement;
 const allowlistEl = document.getElementById("allowlist") as HTMLDivElement;
 const clearAllowlistBtn = document.getElementById("clearAllowlist") as HTMLButtonElement;
 const trustedInputEl = document.getElementById("trustedInput") as HTMLInputElement;
@@ -68,6 +86,73 @@ const topDomainsEl = document.getElementById("topDomains") as HTMLDivElement;
 const domainProfilesEl = document.getElementById("domainProfiles") as HTMLDivElement;
 const refreshProfilesBtn = document.getElementById("refreshProfiles") as HTMLButtonElement;
 const clearProfilesBtn = document.getElementById("clearProfiles") as HTMLButtonElement;
+const sidebarNav = document.getElementById("sidebarNav") as HTMLElement;
+
+// Sidebar navigation
+sidebarNav.addEventListener("click", (e) => {
+  const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".nav-btn");
+  if (!btn) return;
+  const section = btn.dataset.section;
+  if (!section) return;
+
+  for (const b of Array.from(sidebarNav.querySelectorAll<HTMLButtonElement>(".nav-btn"))) {
+    b.classList.toggle("active", b === btn);
+  }
+
+  const panes = document.querySelectorAll<HTMLElement>(".pane");
+  for (const pane of Array.from(panes)) {
+    pane.hidden = pane.id !== `pane-${section}`;
+  }
+});
+
+// Segmented control helpers
+function setSegValue(seg: HTMLDivElement, value: string): void {
+  for (const btn of Array.from(seg.querySelectorAll<HTMLButtonElement>(".seg-btn"))) {
+    btn.setAttribute("aria-pressed", String(btn.dataset.value === value.toLowerCase()));
+  }
+}
+
+function getSegValue(seg: HTMLDivElement): string {
+  for (const btn of Array.from(seg.querySelectorAll<HTMLButtonElement>(".seg-btn"))) {
+    if (btn.getAttribute("aria-pressed") === "true") return btn.dataset.value ?? "smart";
+  }
+  return "smart";
+}
+
+navModeSeg.addEventListener("click", (e) => {
+  const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".seg-btn");
+  if (btn) setSegValue(navModeSeg, btn.dataset.value ?? "smart");
+});
+
+credModeSeg.addEventListener("click", (e) => {
+  const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".seg-btn");
+  if (btn) setSegValue(credModeSeg, btn.dataset.value ?? "smart");
+});
+
+// Toggle helpers
+function setToggle(el: HTMLButtonElement, checked: boolean): void {
+  el.setAttribute("aria-checked", String(checked));
+}
+
+function getToggle(el: HTMLButtonElement): boolean {
+  return el.getAttribute("aria-checked") === "true";
+}
+
+function initToggle(el: HTMLButtonElement): void {
+  el.addEventListener("click", () => {
+    setToggle(el, !getToggle(el));
+  });
+}
+
+initToggle(navDebugEl);
+initToggle(navDnrEl);
+initToggle(blockHttpEl);
+initToggle(warnPasteEl);
+initToggle(promptUntrustedEl);
+initToggle(promptMediumEl);
+initToggle(similarityEnabledEl);
+
+// Status flash
 const statusTimers = new WeakMap<HTMLElement, number>();
 
 function flashStatus(
@@ -76,9 +161,7 @@ function flashStatus(
   tone: "success" | "warning" | "error" = "success"
 ): void {
   const existing = statusTimers.get(el);
-  if (existing !== undefined) {
-    window.clearTimeout(existing);
-  }
+  if (existing !== undefined) window.clearTimeout(existing);
   el.textContent = message;
   el.dataset.tone = tone;
   const timer = window.setTimeout(() => {
@@ -89,6 +172,7 @@ function flashStatus(
   statusTimers.set(el, timer);
 }
 
+// Rendering functions
 function renderAllowlist(list: Allowlist): void {
   allowlistEl.innerHTML = "";
   const sites = Object.keys(list).sort();
@@ -96,7 +180,7 @@ function renderAllowlist(list: Allowlist): void {
 
   if (sites.length === 0) {
     const empty = document.createElement("div");
-    empty.className = "allowlist-empty";
+    empty.className = "list-empty";
     empty.textContent = "No allowlist entries yet.";
     allowlistEl.appendChild(empty);
     return;
@@ -104,33 +188,32 @@ function renderAllowlist(list: Allowlist): void {
 
   for (const site of sites) {
     const siteRow = document.createElement("div");
-    siteRow.className = "allowlist-site";
+    siteRow.className = "list-site";
 
     const title = document.createElement("div");
-    title.className = "allowlist-site-title mono";
+    title.className = "list-site-title";
     title.textContent = site;
 
     const hostList = document.createElement("div");
-    hostList.className = "allowlist-hosts";
+    hostList.className = "list-hosts";
 
     for (const host of (list[site] ?? []).slice().sort()) {
       const hostRow = document.createElement("div");
-      hostRow.className = "allowlist-host";
+      hostRow.className = "list-host";
 
       const hostLabel = document.createElement("span");
-      hostLabel.className = "mono";
+      hostLabel.className = "list-host-label";
       hostLabel.textContent = host;
 
       const removeBtn = document.createElement("button");
+      removeBtn.className = "btn btn--xs btn--danger";
       removeBtn.textContent = "Remove";
       removeBtn.setAttribute("aria-label", `Remove ${host} from allowlist`);
       removeBtn.addEventListener("click", async () => {
         await removeAllowlistEntry(site, host);
         try {
           await appendEvent({ kind: "nav_allowlist_remove", site, destHost: host });
-        } catch {
-          // ignore
-        }
+        } catch { /* ignore */ }
         await refreshAllowlist();
         flashStatus(saveStatusEl, "Allowlist updated.");
       });
@@ -157,32 +240,31 @@ function renderTrusted(domains: string[]): void {
 
   if (list.length === 0) {
     const empty = document.createElement("div");
-    empty.className = "allowlist-empty";
+    empty.className = "list-empty";
     empty.textContent = "No trusted domains yet.";
     trustedListEl.appendChild(empty);
     return;
   }
 
   const wrap = document.createElement("div");
-  wrap.className = "allowlist-hosts";
+  wrap.className = "list-hosts";
   for (const domain of list) {
     const row = document.createElement("div");
-    row.className = "allowlist-host";
+    row.className = "list-host";
 
     const label = document.createElement("span");
-    label.className = "mono";
+    label.className = "list-host-label";
     label.textContent = domain;
 
     const removeBtn = document.createElement("button");
+    removeBtn.className = "btn btn--xs btn--danger";
     removeBtn.textContent = "Remove";
     removeBtn.setAttribute("aria-label", `Remove ${domain} from trusted`);
     removeBtn.addEventListener("click", async () => {
       await removeTrustedDomain(domain);
       try {
         await appendEvent({ kind: "cred_untrust_domain", site: domain });
-      } catch {
-        // ignore
-      }
+      } catch { /* ignore */ }
       await refreshTrusted();
       flashStatus(saveStatusEl, "Trusted list updated.");
     });
@@ -210,49 +292,43 @@ function fmtTime(ts: number): string {
 function renderEventLog(log: EventLogEntry[]): void {
   eventLogEl.innerHTML = "";
   const list = (log ?? []).slice().reverse();
+  logUsageEl.textContent = `${list.length}/${logLimitEl.value || "300"}`;
 
   if (list.length === 0) {
     const empty = document.createElement("div");
-    empty.className = "allowlist-empty";
+    empty.className = "list-empty";
     empty.textContent = "No events yet.";
     eventLogEl.appendChild(empty);
     return;
   }
 
   for (const event of list) {
+    const tone = classifyEventTone(event.kind);
     const row = document.createElement("div");
-    row.className = "event";
-    row.dataset.tone = classifyEventTone(event.kind);
-
-    const head = document.createElement("div");
-    head.className = "event-head";
+    row.className = "event-row-opt";
 
     const badge = document.createElement("span");
-    badge.className = "badge mono";
+    badge.className = `event-badge event-badge--${tone}`;
     badge.textContent = event.kind;
 
-    const time = document.createElement("span");
-    time.className = "event-time mono";
-    time.textContent = fmtTime(event.ts);
-
-    head.appendChild(badge);
-    head.appendChild(time);
-
-    const meta = document.createElement("div");
-    meta.className = "mono";
+    const meta = document.createElement("span");
+    meta.className = "event-meta";
     const parts: string[] = [];
-    if (event.site) parts.push(`site=${event.site}`);
-    if (event.destHost) parts.push(`dest=${event.destHost}`);
+    if (event.site) parts.push(event.site);
+    if (event.destHost) parts.push(`→ ${event.destHost}`);
     if (typeof event.score === "number") parts.push(`score=${event.score}`);
     if (event.reasons?.length) {
-      parts.push(
-        `reasons=${event.reasons.slice(0, 6).join(",")}${event.reasons.length > 6 ? "..." : ""}`
-      );
+      parts.push(event.reasons.slice(0, 4).join(", "));
     }
-    meta.textContent = parts.join(" | ");
+    meta.textContent = parts.join(" · ");
 
-    row.appendChild(head);
-    if (meta.textContent) row.appendChild(meta);
+    const time = document.createElement("span");
+    time.className = "event-time-opt";
+    time.textContent = fmtTime(event.ts);
+
+    row.appendChild(badge);
+    row.appendChild(meta);
+    row.appendChild(time);
     eventLogEl.appendChild(row);
   }
 }
@@ -287,7 +363,6 @@ function renderStats(outcomes: PromptOutcomeEntry[]): void {
   statAvgScoreAllowEl.textContent = avg(allows);
   statAvgScoreBlockEl.textContent = avg(blocks);
 
-  // Top 5 domains
   const domainCounts = new Map<string, number>();
   for (const e of outcomes) {
     domainCounts.set(e.domain, (domainCounts.get(e.domain) ?? 0) + 1);
@@ -299,29 +374,26 @@ function renderStats(outcomes: PromptOutcomeEntry[]): void {
   topDomainsEl.innerHTML = "";
   if (top5.length === 0) {
     const empty = document.createElement("div");
-    empty.className = "allowlist-empty";
+    empty.className = "list-empty";
     empty.textContent = "No prompt outcomes recorded yet.";
     topDomainsEl.appendChild(empty);
     return;
   }
 
-  const heading = document.createElement("div");
-  heading.style.fontWeight = "700";
-  heading.style.marginBottom = "8px";
-  heading.textContent = "Top prompted domains";
-  topDomainsEl.appendChild(heading);
-
   for (const [domain, count] of top5) {
     const row = document.createElement("div");
-    row.className = "event-head";
-    const badge = document.createElement("span");
-    badge.className = "badge mono";
-    badge.textContent = domain;
-    const countSpan = document.createElement("span");
-    countSpan.className = "event-time mono";
-    countSpan.textContent = `${count} prompt${count === 1 ? "" : "s"}`;
-    row.appendChild(badge);
-    row.appendChild(countSpan);
+    row.className = "profile-row";
+    const head = document.createElement("div");
+    head.className = "profile-head";
+    const name = document.createElement("span");
+    name.className = "profile-domain";
+    name.textContent = domain;
+    const stats = document.createElement("span");
+    stats.className = "profile-stats";
+    stats.textContent = `${count} prompt${count === 1 ? "" : "s"}`;
+    head.appendChild(name);
+    head.appendChild(stats);
+    row.appendChild(head);
     topDomainsEl.appendChild(row);
   }
 }
@@ -335,44 +407,42 @@ function renderDomainProfiles(profiles: DomainProfile[]): void {
 
   if (profiles.length === 0) {
     const empty = document.createElement("div");
-    empty.className = "allowlist-empty";
+    empty.className = "list-empty";
     empty.textContent = "No domain profiles recorded yet.";
     domainProfilesEl.appendChild(empty);
     return;
   }
 
   for (const p of profiles) {
-    const row = document.createElement("div");
-    row.className = "event";
     const avgNRS = p.visits > 0 ? (p.totalNRS / p.visits).toFixed(1) : "0";
+    const row = document.createElement("div");
+    row.className = "profile-row";
 
     const head = document.createElement("div");
-    head.className = "event-head";
+    head.className = "profile-head";
+    const name = document.createElement("span");
+    name.className = "profile-domain";
+    name.textContent = p.domain;
+    const stats = document.createElement("span");
+    stats.className = "profile-stats";
+    stats.textContent = `visits=${p.visits} avgNRS=${avgNRS} triggers=${p.triggerCount}`;
+    head.appendChild(name);
+    head.appendChild(stats);
 
-    const badge = document.createElement("span");
-    badge.className = "badge mono";
-    badge.textContent = p.domain;
+    row.appendChild(head);
 
-    const meta = document.createElement("span");
-    meta.className = "event-time mono";
-    meta.textContent = `visits=${p.visits} avgNRS=${avgNRS} triggers=${p.triggerCount}`;
-
-    head.appendChild(badge);
-    head.appendChild(meta);
-
-    const details = document.createElement("div");
-    details.className = "mono";
     const topFactors = Object.entries(p.factors)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5)
       .map(([k, v]) => `${k}(${v})`)
       .join(", ");
     if (topFactors) {
-      details.textContent = `top factors: ${topFactors}`;
+      const factors = document.createElement("div");
+      factors.className = "profile-factors";
+      factors.textContent = topFactors;
+      row.appendChild(factors);
     }
 
-    row.appendChild(head);
-    if (details.textContent) row.appendChild(details);
     domainProfilesEl.appendChild(row);
   }
 }
@@ -388,16 +458,16 @@ function getInt(el: HTMLInputElement, fallback: number): number {
 
 async function init(): Promise<void> {
   const s = await getSuiteSettings();
-  navModeEl.value = s.nav.defaultMode;
-  navDebugEl.checked = s.nav.debug;
-  navDnrEl.checked = s.nav.dnrEnabled;
-  credModeEl.value = s.credential.mode;
-  blockHttpEl.checked = s.credential.blockHttpPasswordSubmit;
-  warnPasteEl.checked = s.credential.warnOnPaste;
-  promptUntrustedEl.checked = s.credential.promptOnUntrustedDomain;
-  promptMediumEl.checked = s.credential.promptOnMediumRisk;
+  setSegValue(navModeSeg, s.nav.defaultMode);
+  setToggle(navDebugEl, s.nav.debug);
+  setToggle(navDnrEl, s.nav.dnrEnabled);
+  setSegValue(credModeSeg, s.credential.mode);
+  setToggle(blockHttpEl, s.credential.blockHttpPasswordSubmit);
+  setToggle(warnPasteEl, s.credential.warnOnPaste);
+  setToggle(promptUntrustedEl, s.credential.promptOnUntrustedDomain);
+  setToggle(promptMediumEl, s.credential.promptOnMediumRisk);
   mediumThresholdEl.value = String(s.credential.mediumRiskThreshold);
-  similarityEnabledEl.checked = s.credential.similarity.enabled;
+  setToggle(similarityEnabledEl, s.credential.similarity.enabled);
   similarityMaxDistEl.value = String(s.credential.similarity.maxDistance);
   logLimitEl.value = String(s.logLimit);
   await refreshAllowlist();
@@ -410,19 +480,19 @@ async function init(): Promise<void> {
 saveBtn.addEventListener("click", async () => {
   try {
     const nav = {
-      defaultMode: navModeEl.value as Mode,
-      debug: navDebugEl.checked,
-      dnrEnabled: navDnrEl.checked
+      defaultMode: getSegValue(navModeSeg) as Mode,
+      debug: getToggle(navDebugEl),
+      dnrEnabled: getToggle(navDnrEl)
     };
     const credential = {
-      mode: credModeEl.value as CredMode,
-      promptOnUntrustedDomain: promptUntrustedEl.checked,
-      promptOnMediumRisk: promptMediumEl.checked,
+      mode: getSegValue(credModeSeg) as CredMode,
+      promptOnUntrustedDomain: getToggle(promptUntrustedEl),
+      promptOnMediumRisk: getToggle(promptMediumEl),
       mediumRiskThreshold: getInt(mediumThresholdEl, 40),
-      blockHttpPasswordSubmit: blockHttpEl.checked,
-      warnOnPaste: warnPasteEl.checked,
+      blockHttpPasswordSubmit: getToggle(blockHttpEl),
+      warnOnPaste: getToggle(warnPasteEl),
       similarity: {
-        enabled: similarityEnabledEl.checked,
+        enabled: getToggle(similarityEnabledEl),
         maxDistance: getInt(similarityMaxDistEl, 2)
       }
     };
@@ -431,9 +501,7 @@ saveBtn.addEventListener("click", async () => {
     await updateSuiteSettings({ nav, credential, logLimit } satisfies Partial<SuiteSettings>);
     try {
       await appendEvent({ kind: "suite_config_update", extra: { nav, credential, logLimit } });
-    } catch {
-      // ignore
-    }
+    } catch { /* ignore */ }
     flashStatus(saveStatusEl, "Saved.");
   } catch {
     flashStatus(saveStatusEl, "Save failed.", "error");
@@ -444,9 +512,7 @@ clearAllowlistBtn.addEventListener("click", async () => {
   await clearAllowlist();
   try {
     await appendEvent({ kind: "nav_allowlist_remove", extra: { cleared: true } });
-  } catch {
-    // ignore
-  }
+  } catch { /* ignore */ }
   await refreshAllowlist();
   flashStatus(saveStatusEl, "Allowlist cleared.");
 });
@@ -461,9 +527,7 @@ addTrustedBtn.addEventListener("click", async () => {
   trustedInputEl.value = "";
   try {
     await appendEvent({ kind: "cred_trust_domain", site: normalized });
-  } catch {
-    // ignore
-  }
+  } catch { /* ignore */ }
   await refreshTrusted();
   flashStatus(saveStatusEl, "Trusted domain added.");
 });
@@ -472,9 +536,7 @@ clearTrustedBtn.addEventListener("click", async () => {
   await clearTrustedDomains();
   try {
     await appendEvent({ kind: "cred_untrust_domain", extra: { cleared: true } });
-  } catch {
-    // ignore
-  }
+  } catch { /* ignore */ }
   await refreshTrusted();
   flashStatus(saveStatusEl, "Trusted list cleared.");
 });
