@@ -219,8 +219,13 @@ function handleFormSubmit(form: HTMLFormElement, config: JsBehaviorMonitorConfig
   }
 }
 
+let _formSubmitPatched = false;
+
 /** Install form submit monitoring: capturing listener + prototype patch. */
 function patchFormSubmitMonitoring(config: JsBehaviorMonitorConfig): void {
+  if (_formSubmitPatched) return;
+  _formSubmitPatched = true;
+
   snapshotExistingForms();
 
   // Observe newly added forms via MutationObserver
@@ -242,18 +247,19 @@ function patchFormSubmitMonitoring(config: JsBehaviorMonitorConfig): void {
   });
   observer.observe(document.documentElement, { childList: true, subtree: true });
 
-  // Capturing submit event listener
+  // Capturing submit event listener — uses _config (module-level) so it
+  // always references the latest configuration after re-initialization.
   document.addEventListener("submit", (e) => {
     const form = e.target;
-    if (form instanceof HTMLFormElement) {
-      handleFormSubmit(form, config);
+    if (form instanceof HTMLFormElement && _config) {
+      handleFormSubmit(form, _config);
     }
   }, true);
 
   // Patch HTMLFormElement.prototype.submit for programmatic submits
   const originalSubmit = HTMLFormElement.prototype.submit;
   HTMLFormElement.prototype.submit = function (this: HTMLFormElement) {
-    handleFormSubmit(this, config);
+    if (_config) handleFormSubmit(this, _config);
     return originalSubmit.call(this);
   };
 
@@ -316,10 +322,11 @@ function recordNetworkRequest(destinationOrigin: string, api: "fetch" | "xhr" | 
 
 function patchFetchMonitoring(_cfg: JsBehaviorMonitorConfig): void {
   if (_fetchPatched) return;
-  _fetchPatched = true;
   void _cfg;
 
   const originalFetch = window.fetch;
+  if (!originalFetch) return;
+  _fetchPatched = true;
   window.fetch = function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
     let url = "";
     if (typeof input === "string") {
@@ -341,8 +348,8 @@ function patchFetchMonitoring(_cfg: JsBehaviorMonitorConfig): void {
 
 function patchXHRMonitoring(_cfg: JsBehaviorMonitorConfig): void {
   if (_xhrPatched) return;
-  _xhrPatched = true;
   void _cfg;
+  _xhrPatched = true;
 
   const originalOpen = XMLHttpRequest.prototype.open;
   const xhrUrlMap = new WeakMap<XMLHttpRequest, string>();
@@ -376,8 +383,10 @@ function patchXHRMonitoring(_cfg: JsBehaviorMonitorConfig): void {
 
 function patchBeaconMonitoring(_cfg: JsBehaviorMonitorConfig): void {
   if (_beaconPatched) return;
-  _beaconPatched = true;
   void _cfg;
+
+  if (!navigator.sendBeacon) return;
+  _beaconPatched = true;
 
   const originalBeacon = navigator.sendBeacon.bind(navigator);
   navigator.sendBeacon = function (url: string | URL, data?: BodyInit | null): boolean {
@@ -402,7 +411,6 @@ let _credentialGetterPatched = false;
 /** Install value getter patch on HTMLInputElement to detect credential reads. */
 function patchCredentialValueGetter(_cfg: JsBehaviorMonitorConfig): void {
   if (_credentialGetterPatched) return;
-  _credentialGetterPatched = true;
   void _cfg;
 
   const descriptor = Object.getOwnPropertyDescriptor(
@@ -410,6 +418,7 @@ function patchCredentialValueGetter(_cfg: JsBehaviorMonitorConfig): void {
     "value"
   );
   if (!descriptor || !descriptor.get) return;
+  _credentialGetterPatched = true;
 
   const originalGetter = descriptor.get;
   const originalSetter = descriptor.set;
