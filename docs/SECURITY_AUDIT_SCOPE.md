@@ -24,8 +24,12 @@
 
 **Globals readable by page scripts (always present, not gated on debug mode):**
 - `window.__navsentinelMainGuard` (boolean — signals MAIN world script ran)
-- `window.__navsentinelLocationPatch` (object — exposes descriptor metadata: `configurable`, `writable` for Location assign/replace patches; written unconditionally in `patchLocation()` at `main_guard.ts:528`)
-- `window.__navsentinelRollbackPrompt` (object — written by ISOLATED world at `capture_isolated.ts:736`; contains `{ url, ts }` for rollback target; always written, not debug-gated)
+- `window.__navsentinelLocationPatch` (object — written unconditionally in `patchLocation()` at `main_guard.ts:528`; exposes 6 properties: `protoAssign` (bool — did `Location.prototype.assign` patch succeed?), `protoReplace` (bool — did `Location.prototype.replace` patch succeed?), `locAssign` (bool — does `window.location.assign` point to the patch?), `locReplace` (bool — does `window.location.replace` point to the patch?), `locAssignDesc` (`{configurable, writable}|null` — descriptor for `window.location.assign`), `locReplaceDesc` (`{configurable, writable}|null` — descriptor for `window.location.replace`))
+- `window.__navsentinelRollbackPrompt` (object — written on each rollback event (`capture_isolated.ts:736`), not debug-gated; contains `{ url, ts }` — only present after at least one rollback on the page)
+
+**DOM attributes readable by page scripts (always present, not gated on debug mode):**
+- `document.documentElement.dataset.navsentinelCaptureReady` (`data-navsentinel-capture-ready="1"` set at `capture_isolated.ts:240`) — signals ISOLATED world initialization complete; on `<html>` element with no shadow DOM protection, any page script can detect extension presence
+- `document.documentElement.dataset.navsentinelBridgeReady` (`data-navsentinel-bridge-ready="1"` set at `capture_isolated.ts:168`) — signals bridge is established; on `<html>` element with no shadow DOM protection, any page script can detect extension presence and bridge timing
 
 **Globals readable by page scripts (debug mode only):**
 - `window.__navsentinelLastNav` (debug mode only — exposes blocked/allowed status, kind, URL, timing, allow-window state)
@@ -57,7 +61,7 @@ Communication uses `MessageChannel`/`MessagePort` established via a one-time `wi
 ISOLATED world scripts inject UI elements into the host page:
 - Toast: `#__navsentinel_toast_host` with `attachShadow({ mode: "open" })` (`ui_toast.ts:22`)
 - Credential modal: `#__sentinelsuite_cred_modal_host__` with `attachShadow({ mode: "open" })` (`credential_modal.ts:32`)
-- Debug overlay: `#__navsentinel_debug_host` with `attachShadow({ mode: "open" })` (`debug_overlay.ts:28`) — host element exists regardless of debug mode
+- Debug overlay: `#__navsentinel_debug_host` with `attachShadow({ mode: "open" })` (`debug_overlay.ts:28`) — host element only exists while debug mode is enabled; removed on `setDebugEnabled(false)`
 
 **Audit questions:**
 - [ ] All three shadow roots use `mode: "open"` — page scripts can access them. Can a page auto-click "Always allow" or "Trust this site" buttons?
@@ -94,7 +98,7 @@ Communication via `chrome.runtime.sendMessage` / `chrome.runtime.onMessage`. All
 |-----|---------|-------------|
 | `sentinelsuite:settings_v1` | Mode, thresholds, debug | Low |
 | `sentinelsuite:trusted_domains_v1` | User-trusted registrable domains | Moderate |
-| `sentinelsuite:event_log_v1` | Event kind, hostname, score, **url field** (capped at 300) | Moderate — contains full URLs |
+| `sentinelsuite:event_log_v1` | Event kind, hostname, score, **url field** (default cap: 300 entries; configurable 50-5000 via `settings.logLimit`) | Moderate — contains full URLs |
 | `sentinelsuite:prompt_outcomes_v1` | Domain pairs + outcomes | Moderate |
 | `sentinelsuite:nav_allowlist_v1` | Allowlisted site pairs | Moderate |
 | `sentinelsuite:adaptive_scores_v1` | Per-domain NRS threshold adjustments | Moderate — fingerprints user behavior per domain |
@@ -119,7 +123,7 @@ Tab-indexed maps for allow windows, gestures, rollback state, OAuth flow state. 
 | Area | Files | Risk |
 |------|-------|------|
 | MAIN world API patches | `main_guard.ts` | Page can potentially bypass or manipulate patches |
-| Bridge integrity | `main_guard.ts:693-778`, `capture_isolated.ts:497-507` | Session token is sole integrity gate |
+| Bridge integrity | `main_guard.ts:629-691` (handleBridgeMessage), `main_guard.ts:750-778` (bridge init listener), `capture_isolated.ts:497-507` | Session token is sole integrity gate |
 | Shadow DOM UI security | `ui_toast.ts`, `credential_modal.ts`, `debug_overlay.ts` | `mode: "open"` allows page script access to all three |
 | Prototype hardening | `main_guard.ts` (inline `Object.defineProperty` at lines 501-526, 608-626, 1119-1135) | Patches must resist page-initiated override |
 
