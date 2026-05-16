@@ -207,14 +207,14 @@ const KEYWORD_PATTERNS: Array<{ pattern: RegExp; category: NavCategory }> = [
   { pattern: /(?:^|[.-])bank(?:ing)?(?:[.-]|$)|credit-union|savings|mortgage|(?:^|[.-])loan(?:[.-]|$)/i, category: "banking" },
   { pattern: /social|(?:^|[.-])chat(?:[.-]|$)|messenger|forum/i, category: "social" },
   { pattern: /mail|inbox|webmail/i, category: "email" },
-  { pattern: /shop|store|(?:^|[.-])buy(?:[.-]|$)|(?:^|[.-])cart(?:[.-]|$)|(?:^|[.-])deal(?:[.-]|$)|market/i, category: "shopping" },
+  { pattern: /(?:^|[.-])shop(?:[.-]|$)|(?:^|[.-])store(?:[.-]|$)|(?:^|[.-])buy(?:[.-]|$)|(?:^|[.-])cart(?:[.-]|$)|(?:^|[.-])deal(?:[.-]|$)|market/i, category: "shopping" },
   { pattern: /github|gitlab|(?:^|[.-])code(?:[.-]|$)|(?:^|[.-])dev(?:[.-]|$)|(?:^|[.-])npm(?:[.-]|$)|(?:^|[.-])pip(?:[.-]|$)|docker/i, category: "developer" },
   { pattern: /stream|video|music|(?:^|[.-])game(?:[.-]|$)|movie|(?:^|[.-])watch(?:[.-]|$)/i, category: "entertainment" },
-  { pattern: /news|press|journal|gazette|herald|tribune/i, category: "news" },
+  { pattern: /news|(?:^|[.-])press(?:[.-]|$)|journal|gazette|herald|tribune/i, category: "news" },
   { pattern: /\.gov(\.[a-z]{2})?$/i, category: "government" },
   { pattern: /health|medical|clinic|hospital|pharma/i, category: "healthcare" },
   { pattern: /\.edu(\.[a-z]{2})?$|university|college|school|academy/i, category: "education" },
-  { pattern: /cloud|storage|drive|(?:^|[.-])sync(?:[.-]|$)/i, category: "cloud" },
+  { pattern: /cloud|storage|(?:^|[.-])drive(?:[.-]|$)|(?:^|[.-])sync(?:[.-]|$)/i, category: "cloud" },
   { pattern: /vpn|proxy|tunnel/i, category: "vpn_proxy" },
 ];
 
