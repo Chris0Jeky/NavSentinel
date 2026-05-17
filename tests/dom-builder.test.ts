@@ -3,8 +3,6 @@ import { describe, expect, it, beforeEach } from "vitest";
 import {
   buildClickContextFromEvents,
   buildKeyboardClickContext,
-  capturePointerDown,
-  captureClick,
   type DownCapture,
   type ClickCapture,
 } from "../extension/src/content/dom_builder";

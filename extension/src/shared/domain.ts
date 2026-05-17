@@ -551,13 +551,6 @@ function isBrandAlias(brand: string, registrableDomain: string): boolean {
   return aliases ? aliases.has(registrableDomain) : false;
 }
 
-/**
- * Minimum brand keyword length for substring matching.
- * Keywords shorter than this threshold must match the full label exactly
- * (after separator stripping and homoglyph normalization) to avoid
- * false positives from common English words like "chase", "ebay", "hsbc".
- */
-const BRAND_SUBSTRING_MIN_LEN = 6;
 
 /**
  * Static table of visually confusable character replacements.

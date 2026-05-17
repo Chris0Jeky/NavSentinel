@@ -1,5 +1,5 @@
 /**
- * Visual Similarity Detection — Template Database (P4-01)
+ * Visual Similarity Detection - Template Database (P4-01)
  *
  * Manages the pre-computed brand template database for perceptual
  * hash comparison. Templates are bundled with the extension and
@@ -19,7 +19,7 @@ let _templates: BrandTemplate[] = [];
 let _loaded = false;
 
 export function getTemplates(): BrandTemplate[] {
-  return _templates;
+  return _templates.slice();
 }
 
 export function isLoaded(): boolean {
@@ -28,7 +28,15 @@ export function isLoaded(): boolean {
 
 export function loadTemplates(templates: BrandTemplate[]): void {
   const max = DEFAULT_VISUAL_SIM_CONFIG.maxTemplates;
-  _templates = templates.length > max ? templates.slice(0, max) : templates;
+  for (const template of templates) {
+    if (template.aHash.length !== 8) {
+      throw new Error(`loadTemplates: ${template.id} has ${template.aHash.length}-byte aHash, expected 8 bytes`);
+    }
+    if (template.bHash.length !== 32) {
+      throw new Error(`loadTemplates: ${template.id} has ${template.bHash.length}-byte bHash, expected 32 bytes`);
+    }
+  }
+  _templates = templates.length > max ? templates.slice(0, max) : templates.slice();
   _loaded = true;
 }
 
