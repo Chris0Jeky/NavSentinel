@@ -7,7 +7,7 @@ import {
   confirmBHashMatch,
   computeVisualSimScore,
 } from "../extension/src/shared/visual_sim_templates";
-import type { BrandTemplate, VisualSimMatch } from "../extension/src/shared/visual_sim_types";
+import { DEFAULT_VISUAL_SIM_CONFIG, type BrandTemplate, type VisualSimMatch } from "../extension/src/shared/visual_sim_types";
 
 function makeTemplate(id: string, aHashFill: number, bHashFill: number): BrandTemplate {
   const aHash = new Uint8Array(8).fill(aHashFill);
@@ -32,6 +32,34 @@ describe("visual_sim_templates", () => {
       expect(getTemplates()).toHaveLength(1);
       expect(getTemplates()[0]!.id).toBe("google");
       expect(isLoaded()).toBe(true);
+    });
+
+    it("returns a copy of loaded templates", () => {
+      loadTemplates([makeTemplate("google", 0xFF, 0xAA)]);
+      const copy = getTemplates();
+      copy.length = 0;
+      expect(getTemplates()).toHaveLength(1);
+    });
+
+    it("caps loaded templates at configured maximum", () => {
+      const templates = Array.from(
+        { length: DEFAULT_VISUAL_SIM_CONFIG.maxTemplates + 5 },
+        (_, i) => makeTemplate(`brand-${i}`, i & 0xFF, 0xAA)
+      );
+      loadTemplates(templates);
+      expect(getTemplates()).toHaveLength(DEFAULT_VISUAL_SIM_CONFIG.maxTemplates);
+    });
+
+    it("rejects invalid aHash lengths", () => {
+      const template = makeTemplate("bad", 0xFF, 0xAA);
+      template.aHash = new Uint8Array(7);
+      expect(() => loadTemplates([template])).toThrow(/expected 8 bytes/);
+    });
+
+    it("rejects invalid bHash lengths", () => {
+      const template = makeTemplate("bad", 0xFF, 0xAA);
+      template.bHash = new Uint8Array(31);
+      expect(() => loadTemplates([template])).toThrow(/expected 32 bytes/);
     });
   });
 
@@ -86,6 +114,10 @@ describe("visual_sim_templates", () => {
       const query = new Uint8Array(8).fill(0xFF);
       expect(findAHashCandidates(query)).toHaveLength(0);
     });
+
+    it("rejects invalid query hash lengths", () => {
+      expect(() => findAHashCandidates(new Uint8Array(7))).toThrow(/expected 8-byte aHash/);
+    });
   });
 
   describe("confirmBHashMatch", () => {
@@ -111,6 +143,11 @@ describe("visual_sim_templates", () => {
       const result = confirmBHashMatch(queryBHash, template, 40);
       expect(result.distance).toBe(32);
       expect(result.matched).toBe(true);
+    });
+
+    it("rejects invalid query hash lengths", () => {
+      const template = makeTemplate("stripe", 0x00, 0xFF);
+      expect(() => confirmBHashMatch(new Uint8Array(31), template)).toThrow(/expected 32-byte bHash/);
     });
   });
 

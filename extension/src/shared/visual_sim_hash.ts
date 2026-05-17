@@ -1,5 +1,5 @@
 /**
- * Visual Similarity Detection — Hash Algorithms (P4-01)
+ * Visual Similarity Detection - Hash Algorithms (P4-01)
  *
  * Implements Average Hash (aHash) and Block Mean Hash (bHash) for
  * perceptual image comparison. Operates on raw pixel data from canvas.
@@ -8,6 +8,14 @@
 const AHASH_SIZE = 8;
 const BHASH_SIZE = 16;
 const BHASH_BLOCK = 4;
+
+function isUniformGrayscale(grayscale: Uint8Array): boolean {
+  const first = grayscale[0];
+  for (let i = 1; i < grayscale.length; i++) {
+    if (grayscale[i] !== first) return false;
+  }
+  return true;
+}
 
 /**
  * Compute Average Hash (aHash) from an 8x8 grayscale image.
@@ -36,6 +44,11 @@ export function computeAHash(pixels: Uint8ClampedArray, width: number, height: n
   }
 
   const mean = sum / (AHASH_SIZE * AHASH_SIZE);
+
+  // Uniform images have no perceptual structure; return all-zeros sentinel
+  // to avoid false-positive collisions with any template.
+  if (isUniformGrayscale(grayscale)) return new Uint8Array(8);
+
   const hash = new Uint8Array(8);
 
   for (let i = 0; i < 64; i++) {
@@ -92,6 +105,8 @@ export function computeBHash(pixels: Uint8ClampedArray, width: number, height: n
   }
 
   const overallMean = sum / (BHASH_SIZE * BHASH_SIZE);
+  if (isUniformGrayscale(grayscale)) return new Uint8Array(32);
+
   const hash = new Uint8Array(32);
 
   for (let i = 0; i < BHASH_SIZE * BHASH_SIZE; i++) {
