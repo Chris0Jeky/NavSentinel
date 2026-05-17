@@ -104,8 +104,7 @@ const MAX_RECENT_NETWORK_REQUESTS = 20;
 /** TTL for JS behavior score state (ms). Matches ClickFix TTL. */
 export const JS_BEHAVIOR_STATE_TTL_MS = 30_000;
 
-/** Maximum NRS points from JS behavior analysis. */
-export const NRS_WEIGHT_JS_BEHAVIOR_CAP = 35;
+export { NRS_WEIGHT_JS_BEHAVIOR_CAP } from "../shared/js_behavior_state";
 
 // ============================================================================
 // Score weights (used by isolated world to compute jsBehaviorScore)
@@ -113,9 +112,6 @@ export const NRS_WEIGHT_JS_BEHAVIOR_CAP = 35;
 
 /** Cross-origin form action on a form with credential fields. */
 export const SCORE_CROSS_ORIGIN_CREDENTIAL_FORM = 15;
-
-/** Form action attribute dynamically changed from its initial HTML value. */
-export const SCORE_DYNAMIC_FORM_ACTION = 10;
 
 /** Network request (fetch/XHR) to third-party within correlation window of form submit. */
 export const SCORE_NETWORK_EXFIL_DURING_SUBMIT = 20;

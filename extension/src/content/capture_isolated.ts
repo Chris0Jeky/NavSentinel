@@ -20,6 +20,12 @@ import { getRegistrableDomain } from "../shared/domain";
 import { areSameOrganization } from "../shared/domain_groups";
 import { computeNRS, NRS_BLOCK_THRESHOLD, NRS_STRICT_BLOCK_THRESHOLD } from "../shared/nrs";
 import type { NavigationContext } from "../shared/nrs";
+import {
+  createEmptyState,
+  isStateExpired,
+  computeJsBehaviorScore,
+  type JsBehaviorState,
+} from "../shared/js_behavior_state";
 import type { RedirectChainInfo } from "../shared/redirect_chain";
 import { initReputation, isKnownBadDomain, checkReputationViaMessage } from "../shared/reputation";
 import { showToast } from "./ui_toast";
@@ -489,6 +495,19 @@ function handleBridgeMessage(message: unknown): void {
     }
     return;
   }
+
+  // --- JS Behavior Analysis signals from main_guard ---
+  if (
+    data.type === "ns-js-form-submit-suspicious" ||
+    data.type === "ns-js-exfil-network" ||
+    data.type === "ns-js-exfil-beacon" ||
+    data.type === "ns-js-credential-read"
+  ) {
+    if (settings.defaultMode !== "off") {
+        handleJsBehaviorSignal(data.type, data as Record<string, unknown>);
+    }
+    return;
+  }
 }
 
 function ensureBridge(): void {
@@ -619,6 +638,59 @@ function getClickfixScoreForNRS(): number {
     return 0;
   }
   return clickfixState.score;
+}
+
+// --- JS Behavior state (accumulated from main-world signals) ---
+let _jsBehaviorState: JsBehaviorState = createEmptyState();
+
+function getJsBehaviorScoreForNRS(): number {
+  if (isStateExpired(_jsBehaviorState)) {
+    _jsBehaviorState = createEmptyState();
+    return 0;
+  }
+  return computeJsBehaviorScore(_jsBehaviorState);
+}
+
+function handleJsBehaviorSignal(type: string, payload: Record<string, unknown>): void {
+  const now = Date.now();
+  if (isStateExpired(_jsBehaviorState)) {
+    _jsBehaviorState = createEmptyState();
+  }
+  _jsBehaviorState.lastSignalTs = now;
+
+  const recordSignal = (key: keyof JsBehaviorState["signalCounts"]) => {
+    _jsBehaviorState.signalCounts[key]++;
+    _jsBehaviorState.signalLastTs[key] = now;
+  };
+
+  switch (type) {
+    case "ns-js-form-submit-suspicious": {
+      const hasCredentialFields = payload.hasCredentialFields === true;
+      const isCrossOrigin = payload.isCrossOrigin === true;
+      const actionDynamicallyChanged = payload.actionDynamicallyChanged === true;
+      if (hasCredentialFields && isCrossOrigin) {
+        recordSignal("formSubmitSuspicious");
+      }
+      if (actionDynamicallyChanged) {
+        recordSignal("dynamicFormAction");
+      }
+      if (!hasCredentialFields && !isCrossOrigin && !actionDynamicallyChanged) {
+        recordSignal("formSubmitSuspicious");
+      }
+      break;
+    }
+    case "ns-js-exfil-network":
+      recordSignal("exfilNetwork");
+      break;
+    case "ns-js-exfil-beacon":
+      recordSignal("exfilBeacon");
+      break;
+    case "ns-js-credential-read":
+      recordSignal("credentialRead");
+      break;
+  }
+
+  _jsBehaviorState.score = computeJsBehaviorScore(_jsBehaviorState);
 }
 
 function handleClickFixScan(): void {
@@ -1320,6 +1392,7 @@ window.addEventListener(
     const oauthRedirectMismatch = isOAuthRedirectMismatch();
     const oauthOpenerManip = isOAuthOpenerManipulation();
     const cfScore = getClickfixScoreForNRS();
+    const jsBehaviorScore = getJsBehaviorScoreForNRS();
     const pushStateAbuse = isPushStateAbuseActive();
 
     // Sync best-effort anomaly score (uses in-memory sliding window only).
@@ -1354,6 +1427,7 @@ window.addEventListener(
       cspWeaknessScore: cachedCSPAnalysis?.score,
       domainRepeatOffender: cachedDomainRepeatOffender,
       navAnomalyScore: navAnomalyScore > 0 ? navAnomalyScore : undefined,
+      jsBehaviorScore: jsBehaviorScore > 0 ? jsBehaviorScore : undefined,
     };
 
     if (dblClickHijack) {
