@@ -111,5 +111,5 @@ const templates = BRANDS.map((brand) => ({
 const output = JSON.stringify({ version: 1, generated: new Date().toISOString().split("T")[0], templates }, null, 2);
 
 writeFileSync(OUTPUT_PATH, output, "utf-8");
-console.log(`Generated ${templates.length} brand templates → ${OUTPUT_PATH}`);
+console.log(`Generated ${templates.length} brand templates -> ${OUTPUT_PATH}`);
 console.log(`File size: ${Buffer.byteLength(output)} bytes`);
