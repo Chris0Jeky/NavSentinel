@@ -26,6 +26,7 @@ export async function waitForNavSentinelBridge(page: Page, timeout = 15000): Pro
     null,
     { timeout }
   );
+  await dismissOnboarding(page.context(), 1000);
 }
 
 export async function waitForToastText(page: Page, text: string, timeout = 4000): Promise<void> {
