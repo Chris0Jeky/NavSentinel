@@ -436,6 +436,7 @@ test("RW-06 legit auth popup allows the first window and blocks the second @regr
       });
 
       await waitForNavSentinelBridge(page);
+      await dismissOnboarding(context);
 
       const beforePages = context.pages().length;
       const popupPromise = context.waitForEvent("page", { timeout: 5000 }).catch(() => null);
@@ -518,6 +519,7 @@ test("Level 8 legit OAuth popup opens without prompting @regression", async () =
       });
 
       await waitForNavSentinelBridge(page);
+      await dismissOnboarding(context);
 
       const beforePages = context.pages().length;
       const popupPromise = context.waitForEvent("page", { timeout: 5000 }).catch(() => null);
@@ -560,6 +562,7 @@ test("Level 8 keyboard-triggered legit OAuth popup opens without prompting @regr
       });
 
       await waitForNavSentinelBridge(page);
+      await dismissOnboarding(context);
 
       const beforePages = context.pages().length;
       const popupPromise = context.waitForEvent("page", { timeout: 5000 }).catch(() => null);
@@ -603,6 +606,7 @@ test("Level 8 input-triggered legit OAuth popup opens without prompting @regress
       });
 
       await waitForNavSentinelBridge(page);
+      await dismissOnboarding(context);
 
       const beforePages = context.pages().length;
       const popupPromise = context.waitForEvent("page", { timeout: 5000 }).catch(() => null);
@@ -699,6 +703,7 @@ test("Level 8 plain button-triggered new tab opens without prompting @regression
       });
 
       await waitForNavSentinelBridge(page);
+      await dismissOnboarding(context);
 
       const beforePages = context.pages().length;
       const popupPromise = context.waitForEvent("page", { timeout: 5000 }).catch(() => null);
@@ -741,6 +746,7 @@ test("Level 8 legit OAuth popup does not spill into a second popup @regression",
       });
 
       await waitForNavSentinelBridge(page);
+      await dismissOnboarding(context);
 
       const beforePages = context.pages().length;
       const popupPromise = context.waitForEvent("page", { timeout: 5000 }).catch(() => null);
@@ -1049,6 +1055,7 @@ test("RW-09 mixed empty-target and named-target auth launches with delayed reuse
       });
 
       await waitForNavSentinelBridge(page);
+      await dismissOnboarding(context);
 
       const firstPopupPromise = context.waitForEvent("page", { timeout: 5000 }).catch(() => null);
       await page.click("#rw09Start");

@@ -1,5 +1,5 @@
 /**
- * Visual Similarity Detection — Shared Types (P4-01)
+ * Visual Similarity Detection - Shared Types (P4-01)
  *
  * Type definitions shared across the capture pipeline, hash algorithms,
  * and template database.

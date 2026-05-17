@@ -103,6 +103,12 @@ describe("computeBHash", () => {
     expect(hash.length).toBe(32);
   });
 
+  it("uniform image produces all-zeros sentinel bHash", () => {
+    const pixels = makePixels(16, 16, 180);
+    const hash = computeBHash(pixels, 16, 16);
+    expect(hash.every(b => b === 0)).toBe(true);
+  });
+
   it("identical images produce identical bHashes", () => {
     const pixels = makeGradientPixels(16, 16);
     const h1 = computeBHash(pixels, 16, 16);

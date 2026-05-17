@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>JS Behavior 06 - Legitimate Login Form (FP Check)</title>
+  <style>
+    body { font-family: sans-serif; padding: 24px; background: #f5f5f5; }
+    h1 { margin-top: 0; }
+    .description { background: #d4edda; border: 1px solid #28a745; padding: 12px; border-radius: 4px; margin-bottom: 20px; }
+    form { background: #fff; padding: 20px; border-radius: 8px; border: 1px solid #ddd; max-width: 400px; }
+    label { display: block; margin-bottom: 12px; }
+    input { width: 200px; padding: 4px; }
+    #status { margin-top: 16px; padding: 8px 12px; border-radius: 4px; font-size: 14px; background: #d4edda; }
+  </style>
+</head>
+<body>
+  <h1>JS Behavior 06 - Legitimate Login Form</h1>
+  <div class="description">
+    <strong>Scenario:</strong> A standard same-origin login form with no malicious behavior.
+    The form action stays the same, no external network calls during submission, no
+    credential reads outside the submit handler.
+    <br><br>
+    <strong>Expected:</strong> NavSentinel JS behavior monitor does NOT fire any signals.
+    This is a false-positive check.
+  </div>
+
+  <form id="login-form" action="/api/auth/login" method="POST">
+    <h3>Welcome Back</h3>
+    <label>Username: <input type="text" name="username" /></label>
+    <label>Password: <input type="password" name="password" /></label>
+    <button type="submit" id="submit-btn">Sign In</button>
+  </form>
+
+  <div id="status">Status: Normal login form. No suspicious behavior present.</div>
+
+  <script>
+    document.getElementById("login-form").addEventListener("submit", function(e) {
+      e.preventDefault();
+      document.getElementById("status").textContent =
+        "Status: Form submitted normally (same-origin, no dynamic changes). No signal expected.";
+    });
+  </script>
+</body>
+</html>
