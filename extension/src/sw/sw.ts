@@ -497,6 +497,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return;
   }
 
+  if (message.type === "ns-capture-viewport") {
+    const tabId = sender.tab?.id;
+    if (typeof tabId !== "number") {
+      sendResponse?.({ dataUrl: null });
+      return;
+    }
+    chrome.tabs.captureVisibleTab(
+      sender.tab!.windowId!,
+      { format: "png" },
+      (dataUrl) => {
+        if (chrome.runtime.lastError || !dataUrl) {
+          sendResponse?.({ dataUrl: null });
+          return;
+        }
+        sendResponse?.({ dataUrl });
+      }
+    );
+    return true;
+  }
+
   if (message.type === "ns-tab-risk-update") {
     const tabId = sender.tab?.id;
     if (tabId === undefined) return;
