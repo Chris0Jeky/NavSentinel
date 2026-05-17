@@ -107,7 +107,7 @@ Signal emitted: `ns-js-credential-read`
 | Network exfil during submit | 20 | 20 | fetch/XHR/beacon to 3P within 2s of form submit |
 | Beacon to 3P on credential page | 15 | 15 | sendBeacon to cross-origin while password fields present |
 | Credential field read by non-form code | 10 | 10 | value getter called outside submit event flow |
-| Multiple exfil signals combined | 10 | 10 | 2+ of the above fire within the 5s score-correlation window |
+| Multiple exfil signals combined | 10 | 10 | 2+ of the above fire within 5s window |
 
 **Total cap: 35 points** (diminishing returns apply above this to prevent single-factor dominance)
 
@@ -119,7 +119,8 @@ jsBehaviorScore?: number | undefined;
 NRS integration (in `nrs.ts`):
 ```typescript
 const NRS_WEIGHT_JS_BEHAVIOR_CAP = 35;
-if (navCtx.jsBehaviorScore && navCtx.jsBehaviorScore > 0) {
+// Applied when base NRS > 20 (same threshold as CSP weakness)
+if (navCtx.jsBehaviorScore && navCtx.jsBehaviorScore > 0 && nrs > NRS_CSP_MODIFIER_THRESHOLD) {
   nrs += Math.min(navCtx.jsBehaviorScore, NRS_WEIGHT_JS_BEHAVIOR_CAP);
   nrsFactors.push("nrs_js_behavior_suspicious");
 }
@@ -150,7 +151,6 @@ if (navCtx.jsBehaviorScore && navCtx.jsBehaviorScore > 0) {
 - **Network requests**: 2000ms correlation window after form submit. Only requests within this window are flagged.
 - **Beacon calls**: No debounce (beacons are infrequent by nature).
 - **Score TTL**: JS behavior score expires after 30s (same as ClickFix state TTL), preventing stale signals from affecting unrelated navigations.
-- **Multiple-signal bonus**: Requires two or more distinct signal classes whose latest timestamps are within the 5s score-correlation window.
 
 ### Memory
 
@@ -232,14 +232,6 @@ export interface JsBehaviorState {
   /** Individual signal counts within the current TTL window */
   signalCounts: {
     formSubmitSuspicious: number;
-    dynamicFormAction: number;
-    exfilNetwork: number;
-    exfilBeacon: number;
-    credentialRead: number;
-  };
-  signalLastTs: {
-    formSubmitSuspicious: number;
-    dynamicFormAction: number;
     exfilNetwork: number;
     exfilBeacon: number;
     credentialRead: number;

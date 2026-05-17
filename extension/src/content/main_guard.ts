@@ -1,3 +1,5 @@
+import { initJsBehaviorMonitor } from "./js_behavior_monitor";
+
 const NS_SOURCE = "__navsentinel__";
 const BRIDGE_INIT_TYPE = "ns-port-init";
 const OPEN_TTL_MS = 800;
@@ -56,6 +58,14 @@ function flushPendingOutbound(): void {
 
 let mode: "off" | "smart" | "strict" = "off";
 let debug = false;
+
+function syncJsBehaviorMonitor(): void {
+  initJsBehaviorMonitor({
+    mode,
+    debug,
+    postSignal: postToIsolated,
+  });
+}
 
 let openCount = 0;
 let redirectCount = 0;
@@ -689,6 +699,7 @@ function handleBridgeMessage(message: unknown): void {
   if (data.type === "ns-config") {
     if (data.mode) mode = data.mode;
     if (typeof data.debug === "boolean") debug = data.debug;
+    syncJsBehaviorMonitor();
     postToIsolated("ns-config-ack", { mode, debug });
     return;
   }

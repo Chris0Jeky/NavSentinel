@@ -37,7 +37,7 @@ This is a fast orientation layer for coding agents. It should point to interface
 | Main-world guard and bridge | `main_guard.ts`, `pushstate_guard.ts`, `dblclick_guard.ts` | `clickfix_detector.ts`, `mutation_monitor.ts`, `oauth_monitor.ts` | `npm run build`, phase2-detections E2E, pushstate/dblclick/clickfix unit tests. |
 | Credential guard | `credential_guard.ts`, `credential_guard_model.ts` | `credential_modal.ts`, `domain.ts`, `allowlist.ts` | credential/domain/allowlist tests, credential-guard E2E. |
 | Service worker state and rollback | `sw.ts`, `session_state.ts` | `redirect_chain.ts`, `icon_manager.ts` | sw-rollback, session-state, redirect-chain tests, rollback/stress E2E. |
-| JS behavior analysis | `js_behavior_monitor.ts` | (future: integrated into `main_guard.ts`, `capture_isolated.ts`, `nrs.ts`) | js-behavior-monitor tests (Slice 6), gym fixtures (Slice 7). Design: `docs/design/js_behavior_analysis.md`. |
+| JS behavior analysis | `js_behavior_monitor.ts` | Integrated: `main_guard.ts` (init), `capture_isolated.ts` (bridge + state), `nrs.ts` (scoring), `js_behavior_state.ts` (shared state) | js-behavior-monitor tests, js-behavior-state tests, js-behavior-integration tests, gym fixtures (01-07). Design: `docs/design/js_behavior_analysis.md`. |
 | Reputation and content analysis | `reputation.ts`, `content_analyzer.ts`, `domain_profile.ts` | `sri_checker.ts`, `csp_analyzer.ts`, `build-bloom-filter.mjs` | reputation/domain-profile/sri/csp tests, corpus E2E. |
 | Popup/options UI | `popup.ts`, `popup_model.ts`, `options.ts` | popup/options CSS/HTML, `design_tokens.css`, `icons.ts`, `event_tone.ts`, `explanations.ts`, `smart_defaults.ts` | popup/options unit tests, suite-ui E2E. UI uses segmented controls (`#navModeSeg`/`#credModeSeg` with `.seg-btn[data-value]` + `aria-pressed`), toggle buttons (`aria-checked`), and sidebar nav (`data-section`). |
 | Onboarding | `onboarding/onboarding.ts` | onboarding HTML/CSS, imports `icons.ts` | `tests/onboarding.test.ts`, `npm run build`. |
@@ -51,7 +51,7 @@ All paths above are relative to repo root. Content scripts live under `extension
 
 ## Current Agent-Readiness Observations
 
-- NavSentinel v0.4.0, Phases 0-3 complete + Phase 4 partial (4/8), 1003 tests (38 unit test files + 10 E2E spec files), 48 source files, 112 gym fixtures.
+- NavSentinel v0.4.0, Phases 0-3 complete + Phase 4 partial (4/8), 1037 tests (41 unit test files + 11 E2E spec files), 47 source files (43 TS + 4 CSS), 119 gym fixtures.
 - **UI redesign complete** (2026-05-16): brass/jade design system, design tokens, 26-icon SVG system, segmented controls replacing selects, sidebar nav options page, ShieldArc popup gauge. See `docs/REDESIGN_ORCHESTRATION.md`.
 - The active planning source is `docs/Project_Roadmap.md`; archived execution trackers are historical only.
 - `docs/Comprehensive_Project_Analysis.md` is a historical snapshot from 2026-04-09 — do not treat it as current.
@@ -59,7 +59,7 @@ All paths above are relative to repo root. Content scripts live under `extension
 - Build output and generated data are easy context traps. Agents should edit source under `extension/src/` and avoid `extension/dist/`.
 - The highest-risk seams are main-world patching, bridge messages, service-worker lifecycle state, and credential/data privacy behavior.
 - All branches have been cleaned; only `main` and `origin/main` exist.
-- Open issues: None. (#86 and #90 were fixed in fb72412.)
+- Open issues: #86 (bridge session race), #90 (bridge retry race) — both in `main_guard.ts` bridge initialization.
 
 ## Interface-On-Top Convention
 
