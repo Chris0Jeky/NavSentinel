@@ -17,6 +17,12 @@
     "tabs"
   ],
   "host_permissions": ["<all_urls>"],
+  "web_accessible_resources": [
+    {
+      "resources": ["brand_templates.json"],
+      "matches": ["<all_urls>"]
+    }
+  ],
   "background": {
     "service_worker": "src/sw/sw.ts",
     "type": "module"
