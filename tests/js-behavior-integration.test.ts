@@ -41,15 +41,19 @@ function simulateSignalAccumulation(signals: string[]): JsBehaviorState {
     switch (signal) {
       case "ns-js-form-submit-suspicious":
         state.signalCounts.formSubmitSuspicious++;
+        state.signalLastTs.formSubmitSuspicious = now;
         break;
       case "ns-js-exfil-network":
         state.signalCounts.exfilNetwork++;
+        state.signalLastTs.exfilNetwork = now;
         break;
       case "ns-js-exfil-beacon":
         state.signalCounts.exfilBeacon++;
+        state.signalLastTs.exfilBeacon = now;
         break;
       case "ns-js-credential-read":
         state.signalCounts.credentialRead++;
+        state.signalLastTs.credentialRead = now;
         break;
     }
   }
@@ -58,7 +62,7 @@ function simulateSignalAccumulation(signals: string[]): JsBehaviorState {
   return state;
 }
 
-describe("JS Behavior → NRS Integration", () => {
+describe("JS Behavior to NRS Integration", () => {
   describe("signal accumulation mimics capture_isolated handler", () => {
     it("single form-submit-suspicious signal yields SCORE_CROSS_ORIGIN_CREDENTIAL_FORM", () => {
       const state = simulateSignalAccumulation(["ns-js-form-submit-suspicious"]);
@@ -162,7 +166,7 @@ describe("JS Behavior → NRS Integration", () => {
           jsBehaviorScore: NRS_WEIGHT_JS_BEHAVIOR_CAP,
         })
       );
-      // 30 + 20 + 20 + 35 = 105 → diminishing returns: 100 + (5 * 0.5) = 102.5
+      // 30 + 20 + 20 + 35 = 105; diminishing returns: 100 + (5 * 0.5) = 102.5
       expect(result.nrs).toBe(102.5);
     });
 
@@ -174,7 +178,7 @@ describe("JS Behavior → NRS Integration", () => {
           destinationAllowlisted: true,
         })
       );
-      // 30 + 20 - 100 = -50 → clamped to 0
+      // 30 + 20 - 100 = -50; clamped to 0
       expect(result.nrs).toBe(0);
     });
 
@@ -186,7 +190,7 @@ describe("JS Behavior → NRS Integration", () => {
           jsBehaviorScore: NRS_WEIGHT_JS_BEHAVIOR_CAP,
         })
       );
-      // 30 + 20 + 35 = 85 → diminishing: 100 + (85-100)*0.5 ... wait 85 < 100
+      // 30 + 20 + 35 = 85; diminishing: 100 + (85-100)*0.5 ... wait 85 < 100
       // Actually: 85 < 100, so no diminishing returns. nrs = 85
       expect(result.nrs).toBe(85);
       expect(result.nrs).toBeGreaterThanOrEqual(70); // block threshold

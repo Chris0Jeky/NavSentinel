@@ -64,7 +64,6 @@ import { getDomainRisk, recordNavigation } from "../shared/domain_profile";
 import { recordNavigationAnomaly, getAnomalyScoreSync } from "../shared/nav_anomaly";
 
 const CDS_SMART_BLOCK_THRESHOLD = 70;
-const CDS_STRICT_BLOCK_THRESHOLD = 50;
 const NS_SOURCE = "__navsentinel__";
 const BRIDGE_INIT_TYPE = "ns-port-init";
 const PROTOCOL_VERSION = 1;
@@ -446,6 +445,8 @@ function handleBridgeMessage(message: unknown): void {
     return;
   }
 
+  // Forwarded from MAIN world — not gated on mode because allowed navigations
+  // must be pre-approved in the SW even when the guard is "off".
   if (data.type === "ns-allow-target-nav") {
     const url = typeof data.url === "string" ? data.url : "";
     const ttlMs = typeof data.ttlMs === "number" ? data.ttlMs : NAV_TARGET_ALLOW_TTL_MS;
@@ -482,21 +483,6 @@ function handleBridgeMessage(message: unknown): void {
     }
   }
 
-  // Forwarded from MAIN world — not gated on mode because allowed navigations
-  // must be pre-approved in the SW even when the guard is "off", to prevent
-  // false rollbacks on subsequent commits.
-  if (data.type === "ns-allow-target-nav") {
-    const url = typeof data.url === "string" ? data.url : "";
-    if (url) {
-      chrome.runtime.sendMessage({
-        type: "ns-allow-target-nav",
-        url,
-        ttlMs: typeof data.ttlMs === "number" ? data.ttlMs : NAV_TARGET_ALLOW_TTL_MS
-      }).catch(() => {});
-    }
-    return;
-  }
-
   // --- PushState abuse bridge messages from main_guard ---
   if (handlePushStateBridgeMessage(data.type ?? "", data)) {
     if (settings.defaultMode !== "off") {
@@ -518,7 +504,7 @@ function handleBridgeMessage(message: unknown): void {
     data.type === "ns-js-credential-read"
   ) {
     if (settings.defaultMode !== "off") {
-      handleJsBehaviorSignal(data.type);
+        handleJsBehaviorSignal(data.type, data as Record<string, unknown>);
     }
     return;
   }
@@ -665,25 +651,42 @@ function getJsBehaviorScoreForNRS(): number {
   return computeJsBehaviorScore(_jsBehaviorState);
 }
 
-function handleJsBehaviorSignal(type: string): void {
+function handleJsBehaviorSignal(type: string, payload: Record<string, unknown>): void {
   const now = Date.now();
   if (isStateExpired(_jsBehaviorState)) {
     _jsBehaviorState = createEmptyState();
   }
   _jsBehaviorState.lastSignalTs = now;
 
+  const recordSignal = (key: keyof JsBehaviorState["signalCounts"]) => {
+    _jsBehaviorState.signalCounts[key]++;
+    _jsBehaviorState.signalLastTs[key] = now;
+  };
+
   switch (type) {
-    case "ns-js-form-submit-suspicious":
-      _jsBehaviorState.signalCounts.formSubmitSuspicious++;
+    case "ns-js-form-submit-suspicious": {
+      const hasCredentialFields = payload.hasCredentialFields === true;
+      const isCrossOrigin = payload.isCrossOrigin === true;
+      const actionDynamicallyChanged = payload.actionDynamicallyChanged === true;
+      if (hasCredentialFields && isCrossOrigin) {
+        recordSignal("formSubmitSuspicious");
+      }
+      if (actionDynamicallyChanged) {
+        recordSignal("dynamicFormAction");
+      }
+      if (!hasCredentialFields && !isCrossOrigin && !actionDynamicallyChanged) {
+        recordSignal("formSubmitSuspicious");
+      }
       break;
+    }
     case "ns-js-exfil-network":
-      _jsBehaviorState.signalCounts.exfilNetwork++;
+      recordSignal("exfilNetwork");
       break;
     case "ns-js-exfil-beacon":
-      _jsBehaviorState.signalCounts.exfilBeacon++;
+      recordSignal("exfilBeacon");
       break;
     case "ns-js-credential-read":
-      _jsBehaviorState.signalCounts.credentialRead++;
+      recordSignal("credentialRead");
       break;
   }
 
