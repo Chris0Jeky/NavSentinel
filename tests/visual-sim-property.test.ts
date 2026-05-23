@@ -7,7 +7,6 @@ import {
 } from "../extension/src/shared/visual_sim_hash";
 
 const arbHash8 = fc.uint8Array({ minLength: 8, maxLength: 8 });
-const arbHash32 = fc.uint8Array({ minLength: 32, maxLength: 32 });
 const arbHashN = fc.integer({ min: 1, max: 64 }).chain((n) =>
   fc.uint8Array({ minLength: n, maxLength: n })
 );
@@ -26,6 +25,14 @@ function makeRGBA(width: number, height: number, grayscale: Uint8Array): Uint8Cl
 
 const arbAHashInput = fc.uint8Array({ minLength: 64, maxLength: 64 }).map((gray) =>
   makeRGBA(8, 8, gray)
+);
+
+const arbAHashColorInput = fc.uint8Array({ minLength: 8 * 8 * 4, maxLength: 8 * 8 * 4 }).map(
+  (raw) => {
+    const pixels = new Uint8ClampedArray(raw);
+    for (let i = 0; i < 64; i++) pixels[i * 4 + 3] = 255;
+    return pixels;
+  }
 );
 
 const arbBHashInput = fc.uint8Array({ minLength: 256, maxLength: 256 }).map((gray) =>
@@ -133,6 +140,16 @@ describe("computeAHash properties", () => {
         const h1 = computeAHash(p1, 8, 8);
         const h2 = computeAHash(p2, 8, 8);
         expect(hammingDistance(h1, h2)).toBeLessThanOrEqual(64);
+      })
+    );
+  });
+
+  it("is deterministic with varied RGB channels", () => {
+    fc.assert(
+      fc.property(arbAHashColorInput, (pixels) => {
+        const h1 = computeAHash(pixels, 8, 8);
+        const h2 = computeAHash(pixels, 8, 8);
+        expect(hammingDistance(h1, h2)).toBe(0);
       })
     );
   });
