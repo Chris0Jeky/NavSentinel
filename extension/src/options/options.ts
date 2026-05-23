@@ -96,7 +96,13 @@ sidebarNav.addEventListener("click", (e) => {
   if (!section) return;
 
   for (const b of Array.from(sidebarNav.querySelectorAll<HTMLButtonElement>(".nav-btn"))) {
-    b.classList.toggle("active", b === btn);
+    const isActive = b === btn;
+    b.classList.toggle("active", isActive);
+    if (isActive) {
+      b.setAttribute("aria-current", "page");
+    } else {
+      b.removeAttribute("aria-current");
+    }
   }
 
   const panes = document.querySelectorAll<HTMLElement>(".pane");
@@ -119,6 +125,21 @@ function getSegValue(seg: HTMLDivElement): string {
   return "smart";
 }
 
+function initSegKeyboard(seg: HTMLDivElement): void {
+  seg.addEventListener("keydown", (e) => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    const btns = Array.from(seg.querySelectorAll<HTMLButtonElement>(".seg-btn"));
+    const idx = btns.indexOf(e.target as HTMLButtonElement);
+    if (idx < 0) return;
+    e.preventDefault();
+    const next = e.key === "ArrowRight"
+      ? btns[(idx + 1) % btns.length]!
+      : btns[(idx - 1 + btns.length) % btns.length]!;
+    next.focus();
+    next.click();
+  });
+}
+
 navModeSeg.addEventListener("click", (e) => {
   const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".seg-btn");
   if (btn) setSegValue(navModeSeg, btn.dataset.value ?? "smart");
@@ -128,6 +149,9 @@ credModeSeg.addEventListener("click", (e) => {
   const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".seg-btn");
   if (btn) setSegValue(credModeSeg, btn.dataset.value ?? "smart");
 });
+
+initSegKeyboard(navModeSeg);
+initSegKeyboard(credModeSeg);
 
 // Toggle helpers
 function setToggle(el: HTMLButtonElement, checked: boolean): void {

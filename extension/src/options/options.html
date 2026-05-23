@@ -43,7 +43,7 @@
         <aside class="sidebar">
           <div class="sidebar-label ns-uc">navigate</div>
           <nav class="sidebar-nav" id="sidebarNav">
-            <button class="nav-btn active" data-section="protect"><span id="navShieldIcon"></span> Protection</button>
+            <button class="nav-btn active" data-section="protect" aria-current="page"><span id="navShieldIcon"></span> Protection</button>
             <button class="nav-btn" data-section="analytics"><span id="navChartIcon"></span> Analytics</button>
             <button class="nav-btn" data-section="log"><span id="navListIcon"></span> Event log</button>
             <button class="nav-btn" data-section="trust"><span id="navLockIcon"></span> Trust</button>
@@ -80,7 +80,7 @@
                 <div class="card-body">
                   <div class="field">
                     <label class="field-label ns-uc">Mode</label>
-                    <div class="seg" id="navModeSeg">
+                    <div class="seg" id="navModeSeg" role="group" aria-label="Navigation guard mode">
                       <button class="seg-btn" data-value="off">Off</button>
                       <button class="seg-btn" data-value="smart">Smart</button>
                       <button class="seg-btn" data-value="strict">Strict</button>
@@ -113,7 +113,7 @@
                 <div class="card-body">
                   <div class="field">
                     <label class="field-label ns-uc">Mode</label>
-                    <div class="seg seg--green" id="credModeSeg">
+                    <div class="seg seg--green" id="credModeSeg" role="group" aria-label="Credential guard mode">
                       <button class="seg-btn" data-value="off">Off</button>
                       <button class="seg-btn" data-value="smart">Smart</button>
                       <button class="seg-btn" data-value="strict">Strict</button>
