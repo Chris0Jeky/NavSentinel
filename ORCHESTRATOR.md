@@ -87,6 +87,15 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | T-56 | Add diagnostic logging to silent adaptive scoring catch blocks | S | — | #157 | done (2/2 reviews) |
 | T-57 | Fix missing sendResponse in sw.ts for undefined tabId | S | — | #158 | done (2/2 reviews) |
 | T-58 | Property tests for redirect_chain.ts (isKnownRedirector + RedirectChainTracker) | S | — | #159 | done (2/2 reviews) |
+| T-59 | Property tests for scoring.ts (computeCDS invariants) | S | — | #160 | done (2/2 reviews) |
+| T-60 | Property tests for content_analyzer.ts (analyzeSnapshot + domainMatchesBrand) | S | — | #161 | done (2/2 reviews) |
+| T-61 | Property tests for clickfix_detector.ts (looksLikeCommand, matchesCaptchaPattern, matchesInstructionPattern) | S | — | #162 | done (2/2 reviews) |
+| T-62 | Property tests for csp_analyzer.ts (parseCSP + scoreCSPStrings) | S | — | #163 | done (2/2 reviews) |
+| T-63 | Property tests for oauth_monitor.ts (isOAuthUrl, extractRedirectUri, isUnexpectedCallback) | S | — | #164 | done (2/2 reviews) |
+| T-64 | Fix prototype pollution in explainReasonCode + property tests for event_tone + explanations | S | — | #165 | done (2/2 reviews, seeded #166) |
+| T-65 | Fix domain_profile.ts prototype pollution + loadProfiles forward-compat guard | S | #166 | #167 | done (2/2 reviews) |
+| T-66 | Add diagnostic logging to silent catch blocks in options.ts + popup.ts | S | — | #168 | done (2/2 reviews) |
+| T-67 | Add diagnostic logging to silent catches in credential_guard.ts | S | — | #169 | done (2/2 reviews) |
 | T-12 | Reduce ESLint warnings (59 remaining) | M | — | — | seeded (needs #116 merged first) |
 | T-13 | Visual similarity detection (continue P4-01) | XL | — | — | pending |
 | T-14 | FP measurement re-run (Phase 2 gate) | M | — | — | pending |
@@ -99,6 +108,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | T-16 | P4-04: Community threat intelligence | XL | — | — | pending |
 | T-17 | Test coverage for sw.ts service worker | L | — | #121 | done |
 | T-18 | Test coverage for credential_modal.ts | M | — | #122 | done |
+| T-65 | Fix domain_profile.ts prototype pollution + deduplicate test known-code lists | S | #166 | #167 | done |
 
 ## PR Tracker
 
@@ -149,6 +159,15 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #157 | fix/capture-silent-catch | T-56 | 2/2 done, all findings fixed | open (ready for human) |
 | #158 | fix/sw-missing-sendresponse | T-57 | 2/2 done, all findings fixed | open (ready for human) |
 | #159 | test/redirect-chain-property-tests | T-58 | 2/2 done, all findings fixed | open (ready for human) |
+| #160 | test/scoring-property-tests | T-59 | 2/2 done, all findings fixed | open (ready for human) |
+| #161 | test/content-analyzer-property-tests | T-60 | 2/2 done, all findings fixed | open (ready for human) |
+| #162 | test/clickfix-detector-property-tests | T-61 | 2/2 done, all findings fixed | open (ready for human) |
+| #163 | test/csp-analyzer-property-tests | T-62 | 2/2 done, all findings fixed | open (ready for human) |
+| #164 | test/oauth-monitor-property-tests | T-63 | 2/2 done, all findings fixed | open (ready for human) |
+| #165 | test/event-tone-explanations-property-tests | T-64 | 2/2 done, all findings fixed | open (ready for human) |
+| #167 | fix/domain-profile-prototype-pollution | T-65 | 2/2 done, all findings fixed | open (ready for human) |
+| #168 | fix/options-silent-catch-logging | T-66 | 2/2 done, all findings fixed | open (ready for human) |
+| #169 | fix/cred-guard-catch-logging | T-67 | 2/2 done, all findings fixed | open (ready for human) |
 
 ## Review Log
 
@@ -248,6 +267,24 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #158 | R2 | Claude Opus | No actionable findings — response shapes, caller compatibility, test coverage all verified | Clean |
 | #159 | R1 | Claude Opus | Flaky allowlist test (open-redirect path collision), missing boundary (10000ms), missing open-redirect/stale-hasActiveChain/viaKnownRedirector tests | Fixed |
 | #159 | R2 | Claude Opus | Vacuous map size test (20s gaps = stale pruning), weak knownRedirectorHops (inequality only), missing same-URL-repeated/backingMap tests | Fixed |
+| #160 | R1 | Claude Opus | exactOptionalPropertyTypes violation (explicit undefined), duplicate test file (scoring-property vs scoring.property), retargeted test broken logic with unreachable branches | Fixed (merged into existing file, rewrote retargeted) |
+| #160 | R2 | Claude Opus | Same typecheck/duplicate issues, retargeted misleading title, composite escalation single-example not property, opacity range misses 0.3 boundary, missing cursor_pointer_no_affordance interaction test, zero-size rect input space | Fixed (all except zero-rect accepted as-is) |
+| #161 | R1 | Claude Opus | BRAND_DB[0] fragile index, vacuous common-word test (Apple/Chase), kit HTML/script tests silently skip 9+ kits, missing base64/meta/selector/cross-domain tests, arbDomain too narrow | Fixed |
+| #161 | R2 | Claude Opus | Vacuous brandDetected assertion, circular floor model, missing clean-page ceiling, isolated form score untested, score cap at 100 never exercised, data: URI only tests hasPassword:false | Fixed |
+| #162 | R1 | Claude Opus | Random-trigger test shrinking corruption (fc.sample fix), 19+ missing COMMAND_KEYWORDS, missing CAPTCHA_PATTERNS[6], missing INSTRUCTION_PATTERNS[2,7,10], narrow prepend/append seeds, vacuous "independent" test | Fixed |
+| #162 | R2 | Claude Opus | Random alphanumeric test still broken (sanitizer produces keywords), COMMAND_KEYWORDS not exhaustively covered, CAPTCHA_PATTERNS[6] missing, INSTRUCTION_PATTERNS gaps (⊞+R, win r, click..then), locale-sensitive case test, vacuous independent test, trivial determinism tests, missing clipboard invariant tests (out-of-scope) | Fixed |
+| #163 | R1 | Claude Opus | Vacuous scored-directive/lowercase/case tests (C1-C3), intersection `<=` should be `===` (I2), isStrict missing converse (I1), "reasons no dupes" structural (I3), missing mixed-empty test (I4), "score is integer" vacuous (I5), nonce semicolons (I6), filter rejection sampling (M1), misleading test name (M2), missing mutual exclusivity (M3) | Fixed |
+| #163 | R2 | Claude Opus | Intersection `<=` should be `===` (C1), isStrict missing converse (C2), arbCSPString rarely hits scored directives (C3), script-src precedence missing negative assertions (I4), no score<=6 upper bound (I5), unsafe tests `>=3` too loose (I6), nonce semicolons (I7) | Fixed |
+| #164 | R1 | Claude Opus | Trailing segment boundary untested (/{kw}extra), tautological determinism tests, localhost always http://, arbSafeDomain constantFrom(6) bias, query param case-sensitivity untested, non-null assertion fragility | Fixed |
+| #164 | R2 | Claude Opus | Non-localhost IP callbacks untested, trailing boundary mutation survives, query param case-sensitivity, arbSafeDomain bias, non-null assertion, duplicate same-name params, ccTLD mismatch gap | Fixed |
+| #165 | R1 | Claude Opus | domain_profile.ts:191 same-class prototype pollution (seeded #166), arbUnknownCode Unicode-collapse bias, hardcoded 4-key prototype test (should use computed set), misleading idempotence test name + weak property, ALL_KNOWN_CODES duplication (seeded #166) | Fixed (in-scope), Seeded (#166 for out-of-scope) |
+| #165 | R2 | Claude Opus | Add `__proto__` to prototype test, add guard test no explanation collides with code key | Fixed |
+| #167 | R1 | Claude Opus | loadProfiles missing factors validation (crash risk), applyDecay bracket inconsistency, __proto__ test missing postcondition, accumulation test missing Object.hasOwn | Fixed (factors guard, test assertions) / Acknowledged (applyDecay safe via Object.keys) |
+| #167 | R2 | Claude Opus | loadProfiles missing factors validation (crash risk), __proto__ test lacks postcondition, non-null assertion unsafe for corrupt storage, computeAssessment sort with non-number values | Fixed (factors guard, test assertions, dependent on F1 fix) |
+| #168 | R1 | Claude Opus | Identical appendEvent messages (no call-site context), capture_isolated.ts:586+247 missed (already in PR #157) | Fixed (event kind in messages) / Acknowledged (PR #157 covers capture_isolated.ts) |
+| #168 | R2 | Claude Opus | appendEventSafely wrapper missed (already in PR #157), refreshAdaptiveScores missed (already in PR #157), identical messages (no call-site context) | Fixed (event kind in messages) / Acknowledged (PR #157 covers capture_isolated.ts) |
+| #169 | R1 | Claude Opus | No findings above threshold — all 6 changes correct, consistent, no data leakage | Clean |
+| #169 | R2 | Claude Opus | resumeSubmit inner catch silent (user-facing failure path), variable shadowing in nested catch (original error lost) | Fixed (logging added, variable renamed to logErr) |
 
 ## Active Worktrees
 
@@ -298,6 +335,15 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | NavSentinel-wt-silent-catch | fix/capture-silent-catch | #157 | complete |
 | NavSentinel-wt-sw-sendresponse | fix/sw-missing-sendresponse | #158 | complete |
 | NavSentinel-wt-redirect-props | test/redirect-chain-property-tests | #159 | complete |
+| NavSentinel-wt-scoring-props | test/scoring-property-tests | #160 | complete |
+| NavSentinel-wt-content-props | test/content-analyzer-property-tests | #161 | complete |
+| NavSentinel-wt-clickfix-props | test/clickfix-detector-property-tests | #162 | complete |
+| NavSentinel-wt-csp-props | test/csp-analyzer-property-tests | #163 | complete |
+| NavSentinel-wt-oauth-props | test/oauth-monitor-property-tests | #164 | complete |
+| NavSentinel-wt-tone-explain-props | test/event-tone-explanations-property-tests | #165 | complete |
+| NavSentinel-wt-domain-profile-fix | fix/domain-profile-prototype-pollution | #167 | complete |
+| NavSentinel-wt-options-catch | fix/options-silent-catch-logging | #168 | complete |
+| cred-guard-catch | fix/cred-guard-catch-logging | #169 | complete |
 
 ## Notes
 
