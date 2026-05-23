@@ -63,6 +63,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | T-29 | Toggle switch aria-labelledby + aria-describedby | S | — | #133 | done (2/2 reviews) |
 | T-30 | Popup accessibility: ARIA labels, live regions, landmarks | S | — | #134 | done (2/2 reviews) |
 | T-31 | Decorative icon SVG aria-hidden + onboarding a11y | S | — | #135 | done (2/2 reviews) |
+| T-33 | Unit tests for computeCDS scoring — all factors + boundaries | M | — | #136 | done (2/2 reviews) |
 | T-12 | Reduce ESLint warnings (59 remaining) | M | — | — | seeded (needs #116 merged first) |
 | T-13 | Visual similarity detection (continue P4-01) | XL | — | — | pending |
 | T-14 | FP measurement re-run (Phase 2 gate) | M | — | — | pending |
@@ -101,6 +102,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #133 | fix/toggle-accessibility | T-29 | 2/2 done, all findings fixed | open (ready for human) |
 | #134 | fix/popup-accessibility | T-30 | 2/2 done, all findings fixed | open (ready for human) |
 | #135 | fix/icon-svg-accessibility | T-31 | 2/2 done, no actionable findings | open (ready for human) |
+| #136 | test/scoring-unit-coverage | T-33 | 2/2 done, all findings fixed | open (ready for human) |
 
 ## Review Log
 
@@ -152,6 +154,8 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #134 | R2 | Claude Opus | shieldArc aria-label doesn't include score value (hidden by R1 aria-hidden fix), missing test | Fixed |
 | #135 | R1 | Claude Opus | No actionable findings — pre-existing logo ID collision (low), test icon list manually maintained (low) | Clean |
 | #135 | R2 | Claude Opus | No actionable findings — all 20 icon call sites confirmed decorative | Clean |
+| #136 | R1 | Claude Opus | Missing titleLength tests, visibility:collapse, role=link, non-interactive cursor | Fixed |
+| #136 | R2 | Claude Opus | Missing viewport coverage boundary tests (20%/35%), rounding error in 35% rect | Fixed |
 
 ## Active Worktrees
 
@@ -178,6 +182,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | NavSentinel-wt-toggle-a11y | fix/toggle-accessibility | #133 | complete |
 | NavSentinel-wt-popup-a11y | fix/popup-accessibility | #134 | complete |
 | NavSentinel-wt-icon-a11y | fix/icon-svg-accessibility | #135 | complete |
+| NavSentinel-wt-scoring-tests | test/scoring-unit-coverage | #136 | complete |
 
 ## Notes
 
@@ -191,3 +196,4 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 - After PRs #130 + #131 merge: zero `as any` casts remain in extension/src/
 - PR #132: ARIA radiogroup pattern, shared seg_control.ts, 10 new unit tests (1164 total), static aria-checked
 - PR #134: Popup ARIA labels, live regions, landmarks, dynamic score label, 13 unit tests (1167 total)
+- PR #136: 52 unit tests for computeCDS scoring (all factors, boundaries, gradients, edge cases). Total 1199+52=1251 on branch.
