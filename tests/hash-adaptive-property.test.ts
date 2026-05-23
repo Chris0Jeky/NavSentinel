@@ -159,6 +159,20 @@ describe("computeAdjustment properties", () => {
     );
   });
 
+  it("high-score allows still produce non-negative adjustment", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 3, max: 15 }),
+        fc.integer({ min: 70, max: 100 }),
+        (count, score) => {
+          const outcomes = Array.from({ length: count }, () => makeOutcome("allow", score));
+          const result = computeAdjustment(outcomes, 70);
+          expect(result.adjustment).toBeGreaterThanOrEqual(0);
+        }
+      )
+    );
+  });
+
   it("all-block outcomes produce non-positive adjustment", () => {
     fc.assert(
       fc.property(fc.integer({ min: 3, max: 15 }), (count) => {
