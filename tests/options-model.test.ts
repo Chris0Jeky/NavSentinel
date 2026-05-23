@@ -54,10 +54,11 @@ describe("avg", () => {
 });
 
 describe("fmtTime", () => {
-  it("formats a valid timestamp", () => {
+  it("formats a valid timestamp as a locale string with digits", () => {
     const result = fmtTime(1716480000000);
     expect(result).toBeTruthy();
     expect(result).not.toBe("1716480000000");
+    expect(result).toMatch(/\d/);
   });
 
   it("formats timestamp 0 (epoch)", () => {
@@ -115,5 +116,9 @@ describe("parseIntSafe", () => {
 
   it("truncates negative fractional values toward zero", () => {
     expect(parseIntSafe("-3.9", 0)).toBe(-3);
+  });
+
+  it("handles leading zeros", () => {
+    expect(parseIntSafe("007", 0)).toBe(7);
   });
 });
