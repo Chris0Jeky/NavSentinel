@@ -66,6 +66,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | T-33 | Unit tests for computeCDS scoring — all factors + boundaries | M | — | #136 | done (2/2 reviews) |
 | T-34 | Unit tests for computeNRS — all factors, caps, thresholds, dedup | M | — | #137 | done (2/2 reviews) |
 | T-35 | Expand popup_model.ts test coverage (5→30 tests) | S | — | #138 | done (2/2 reviews) |
+| T-36 | Complete NRS property test generator + cap/threshold invariants | S | — | #139 | done (2/2 reviews) |
 | T-12 | Reduce ESLint warnings (59 remaining) | M | — | — | seeded (needs #116 merged first) |
 | T-13 | Visual similarity detection (continue P4-01) | XL | — | — | pending |
 | T-14 | FP measurement re-run (Phase 2 gate) | M | — | — | pending |
@@ -107,6 +108,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #136 | test/scoring-unit-coverage | T-33 | 2/2 done, all findings fixed | open (ready for human) |
 | #137 | test/nrs-factor-coverage | T-34 | 2/2 done, all findings fixed | open (ready for human) |
 | #138 | test/popup-model-coverage | T-35 | 2/2 done, all findings fixed | open (ready for human) |
+| #139 | test/nrs-property-coverage | T-36 | 2/2 done, all findings fixed | open (ready for human) |
 
 ## Review Log
 
@@ -164,6 +166,8 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #137 | R2 | Claude Opus | Missing dblclick in individual factors section, CSP threshold test lacked exact NRS assertion | Fixed |
 | #138 | R1 | Claude Opus | about:blank assertions too weak, missing empty site string test | Fixed |
 | #138 | R2 | Claude Opus | Missing URL-with-port test case | Fixed |
+| #139 | R1 | Claude Opus | Redirect chain missing threshold boundary, CSP/navAnomaly tests too narrow (only NRS=0), missing redirect chain cap test, missing pushStateAbuse monotonicity | Fixed |
+| #139 | R2 | Claude Opus | Missing navAnomaly cap (15) and CSP cap (10) property tests — inconsistent with clickfix/jsBehavior cap tests | Fixed |
 
 ## Active Worktrees
 
@@ -193,6 +197,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | NavSentinel-wt-scoring-tests | test/scoring-unit-coverage | #136 | complete |
 | NavSentinel-wt-nrs-factors | test/nrs-factor-coverage | #137 | complete |
 | NavSentinel-wt-popup-model | test/popup-model-coverage | #138 | complete |
+| NavSentinel-wt-nrs-property | test/nrs-property-coverage | #139 | complete |
 
 ## Notes
 
