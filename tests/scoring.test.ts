@@ -55,6 +55,11 @@ describe("computeCDS — accessible name checks", () => {
     expect(result.reasonCodes).toContain("no_accessible_name");
   });
 
+  it("recognizes role=link as interactive", () => {
+    const result = computeCDS(baseCtx({ tag: "DIV", role: "link" }));
+    expect(result.reasonCodes).toContain("no_accessible_name");
+  });
+
   it("recognizes hasOnClick as interactive", () => {
     const result = computeCDS(baseCtx({ tag: "SPAN", hasOnClick: true }));
     expect(result.reasonCodes).toContain("no_accessible_name");
@@ -100,6 +105,28 @@ describe("computeCDS — viewport coverage gradient", () => {
       rect: { w: 1920, h: 1080 },
     }));
     expect(result.reasonCodes).not.toContain("overlay_large_interactive");
+  });
+
+  it("boundary: exactly 20% coverage does not trigger medium", () => {
+    // 20% of 1920x1080 = 414720. rect 960*432 = 414720 => ratio = 0.20 exactly
+    const result = computeCDS(interactiveCtx({
+      rect: { w: 960, h: 432 },
+    }));
+    const ratio = (960 * 432) / (1920 * 1080);
+    expect(ratio).toBeCloseTo(0.20, 2);
+    expect(result.reasonCodes).not.toContain("overlay_medium_interactive");
+    expect(result.reasonCodes).not.toContain("overlay_large_interactive");
+  });
+
+  it("boundary: exactly 35% coverage does not trigger large", () => {
+    // 35% of 1920x1080 = 725760. Use rect that gives exactly 0.35
+    const result = computeCDS(interactiveCtx({
+      rect: { w: 1200, h: 604 },
+    }));
+    const ratio = (1200 * 604) / (1920 * 1080);
+    expect(ratio).toBeLessThanOrEqual(0.35);
+    expect(result.reasonCodes).not.toContain("overlay_large_interactive");
+    expect(result.reasonCodes).toContain("overlay_medium_interactive");
   });
 
   it("handles zero viewport gracefully", () => {
