@@ -125,18 +125,24 @@ function createPasswordInput(): HTMLInputElement {
   return input;
 }
 
+// All mocks resolve synchronously so the async handler's microtask chain
+// completes within a single macrotask tick. This flush is sufficient because
+// no mock introduces real async delays.
+async function flushMicrotasks(): Promise<void> {
+  await new Promise((r) => setTimeout(r, 0));
+}
+
 async function dispatchSubmit(form: HTMLFormElement): Promise<Event> {
   const event = new Event("submit", { bubbles: true, cancelable: true });
   form.dispatchEvent(event);
-  await new Promise((r) => setTimeout(r, 0));
+  await flushMicrotasks();
   return event;
 }
 
 async function dispatchPaste(el: HTMLElement): Promise<void> {
   const event = new Event("paste", { bubbles: true });
-  Object.defineProperty(event, "target", { value: el });
   el.dispatchEvent(event);
-  await new Promise((r) => setTimeout(r, 0));
+  await flushMicrotasks();
 }
 
 function defaultRisk() {
@@ -571,19 +577,129 @@ describe("credential_guard", () => {
       expect(actionIds).not.toContain("trust_dest");
     });
 
-    it("catches errors and logs them", async () => {
-      mockGetSettings.mockRejectedValue(new Error("storage failed"));
-      mockNormalizeHost.mockReturnValue("example.com");
+    it("falls back to form.submit() when requestSubmit throws", async () => {
+      mockShowModal.mockResolvedValue("proceed_once");
+      const form = createPasswordForm();
+      (form as any).requestSubmit = vi.fn(() => { throw new Error("requestSubmit failed"); });
+      const submitSpy = vi.spyOn(form, "submit").mockImplementation(() => {});
+
+      await dispatchSubmit(form);
+
+      expect(submitSpy).toHaveBeenCalled();
+    });
+
+    it("logs appendPromptOutcome with outcome trust for trust_site choice", async () => {
+      const risk = defaultRisk();
+      risk.page.registrableDomain = "example.com";
+      mockComputeRisk.mockReturnValue(risk);
+      mockShowModal.mockResolvedValue("trust_site");
+
+      const form = createPasswordForm();
+      (form as any).requestSubmit = vi.fn();
+      await dispatchSubmit(form);
+
+      expect(mockAppendOutcome).toHaveBeenCalledWith(
+        expect.objectContaining({
+          outcome: "trust",
+          domain: "example.com",
+          type: "cred",
+        }),
+      );
+    });
+
+    it("logs appendPromptOutcome with outcome trust for trust_dest choice", async () => {
+      const risk = defaultRisk();
+      risk.action.registrableDomain = "evil.com";
+      mockComputeRisk.mockReturnValue(risk);
+      mockShowModal.mockResolvedValue("trust_dest");
+
+      const form = createPasswordForm();
+      (form as any).requestSubmit = vi.fn();
+      await dispatchSubmit(form);
+
+      expect(mockAppendOutcome).toHaveBeenCalledWith(
+        expect.objectContaining({
+          outcome: "trust",
+          type: "cred",
+        }),
+      );
+    });
+
+    it("caps content analysis boost at exactly 100 - risk.score", async () => {
+      const risk = defaultRisk();
+      risk.page.isTrusted = false;
+      risk.score = 70;
+      mockComputeRisk.mockReturnValue(risk);
+      mockAnalyzeContent.mockReturnValue({ score: 50, reasons: ["Suspicious content"] });
 
       const form = createPasswordForm();
       await dispatchSubmit(form);
 
+      expect(risk.score).toBe(100);
+    });
+
+    it("appends multiple content analysis reasons as separate CONTENT_FP entries", async () => {
+      const risk = defaultRisk();
+      risk.page.isTrusted = false;
+      risk.score = 20;
+      mockComputeRisk.mockReturnValue(risk);
+      mockAnalyzeContent.mockReturnValue({
+        score: 15,
+        reasons: ["Fake login", "Suspicious URL", "Hidden iframe"],
+      });
+
+      const form = createPasswordForm();
+      await dispatchSubmit(form);
+
+      const contentReasons = risk.reasons.filter((r) => r.code === "CONTENT_FP");
+      expect(contentReasons).toHaveLength(3);
+      expect(contentReasons[0]!.label).toBe("Fake login");
+      expect(contentReasons[1]!.label).toBe("Suspicious URL");
+      expect(contentReasons[2]!.label).toBe("Hidden iframe");
+    });
+
+    it("modal spec includes kv entries, subtitle, and reason lines", async () => {
+      const risk = defaultRisk();
+      risk.page.registrableDomain = "example.com";
+      risk.action.registrableDomain = "evil.com";
+      risk.score = 55;
+      risk.severity = "high";
+      mockComputeRisk.mockReturnValue(risk);
+      mockGetReasonLines.mockReturnValue(["Domain mismatch", "Cross-site action"]);
+
+      const form = createPasswordForm();
+      await dispatchSubmit(form);
+
+      const modalSpec = mockShowModal.mock.calls[0]?.[0] as any;
+      expect(modalSpec.subtitle).toContain("password");
+      expect(modalSpec.kv).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ k: "Page", v: "example.com" }),
+          expect.objectContaining({ k: "Destination", v: "evil.com" }),
+          expect.objectContaining({ k: "Risk score", v: "55 (high)" }),
+        ]),
+      );
+      expect(modalSpec.reasons).toEqual(["Domain mismatch", "Cross-site action"]);
+    });
+
+    it("catches errors and logs them without resuming submit", async () => {
+      mockGetSettings.mockRejectedValue(new Error("storage failed"));
+      mockNormalizeHost.mockReturnValue("example.com");
+
+      const form = createPasswordForm();
+      const requestSubmitSpy = vi.fn();
+      (form as any).requestSubmit = requestSubmitSpy;
+
+      await dispatchSubmit(form);
+
+      expect(mockAppendEvent).toHaveBeenCalledTimes(1);
       expect(mockAppendEvent).toHaveBeenCalledWith(
         expect.objectContaining({
           kind: "cred_submit_prompt",
           extra: expect.objectContaining({ error: "storage failed" }),
         }),
       );
+      expect(requestSubmitSpy).not.toHaveBeenCalled();
     });
   });
 
@@ -691,6 +807,29 @@ describe("credential_guard", () => {
         expect.objectContaining({ kind: "cred_trust_domain" }),
       );
     });
+
+    it("toast onClick error catch does not throw", async () => {
+      mockGetRegDomain.mockReturnValue("suspicious-site.com");
+      mockDeriveCredPaste.mockReturnValue({
+        shouldWarn: true,
+        siteLabel: "suspicious-site.com",
+      });
+      mockAddTrusted.mockRejectedValue(new Error("storage write failed"));
+
+      const input = createPasswordInput();
+      await dispatchPaste(input);
+
+      const toastCall = mockShowToast.mock.calls[0]?.[0] as any;
+      await expect(toastCall.actions[0].onClick()).resolves.toBeUndefined();
+    });
+
+    it("handlePaste error catch does not throw", async () => {
+      mockGetSettings.mockRejectedValue(new Error("storage failed"));
+
+      const input = createPasswordInput();
+      await expect(dispatchPaste(input)).resolves.toBeUndefined();
+      expect(mockShowToast).not.toHaveBeenCalled();
+    });
   });
 
   describe("allowNextSubmit mechanism", () => {
@@ -703,10 +842,11 @@ describe("credential_guard", () => {
 
       expect(mockShowModal).toHaveBeenCalledTimes(1);
       vi.resetAllMocks();
-      mockGetSettings.mockResolvedValue(defaultConfig());
 
       const event2 = await dispatchSubmit(form);
 
+      expect(event2.defaultPrevented).toBe(false);
+      expect(mockGetSettings).not.toHaveBeenCalled();
       expect(mockShowModal).not.toHaveBeenCalled();
     });
   });
