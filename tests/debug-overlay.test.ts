@@ -228,8 +228,10 @@ describe("debug_overlay", () => {
         }),
       );
       const text = getPanel()!.textContent!;
-      expect(text).toContain("CDS reasons: TINY_ELEMENT");
-      expect(text).toContain("NRS factors: nrs_new_domain, nrs_no_tls");
+      const cdsLine = text.split("\n").find((l) => l.startsWith("CDS reasons:"));
+      expect(cdsLine).toBe("CDS reasons: TINY_ELEMENT");
+      const nrsLine = text.split("\n").find((l) => l.startsWith("NRS factors:"));
+      expect(nrsLine).toBe("NRS factors: nrs_new_domain, nrs_no_tls");
     });
 
     it("uses explicit nrsFactors over filtered reasonCodes", () => {
@@ -243,6 +245,7 @@ describe("debug_overlay", () => {
       const text = getPanel()!.textContent!;
       expect(text).toContain("NRS factors: explicit_factor");
       expect(text).not.toContain("NRS factors: nrs_new_domain");
+      expect(text).toContain("CDS reasons: none");
     });
 
     it("displays lastNav when present", () => {
@@ -482,7 +485,7 @@ describe("debug_overlay", () => {
       expect(getPanel()!.textContent).not.toContain("Decision: allow");
     });
 
-    it("creates host lazily on first update if enabled", () => {
+    it("updates overlay after enable-disable-enable cycle", () => {
       setDebugEnabled(true);
       setDebugEnabled(false);
       setDebugEnabled(true);
