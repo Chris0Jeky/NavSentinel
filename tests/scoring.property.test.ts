@@ -283,6 +283,35 @@ const arbNavigationContext: fc.Arbitrary<NavigationContext> = fc
       doubleClickHijackActive: fc.option(fc.boolean(), { nil: undefined }),
       knownBadDomain: fc.option(fc.boolean(), { nil: undefined }),
       openerWindowPreviouslyAllowed: fc.option(fc.boolean(), { nil: undefined }),
+      redirectChainDepth: fc.option(
+        fc.integer({ min: 0, max: 10 }),
+        { nil: undefined }
+      ),
+      redirectViaKnownRedirector: fc.option(fc.boolean(), { nil: undefined }),
+      knownRedirectorHops: fc.option(
+        fc.integer({ min: 1, max: 5 }),
+        { nil: undefined }
+      ),
+      oauthRedirectMismatch: fc.option(fc.boolean(), { nil: undefined }),
+      oauthOpenerManipulation: fc.option(fc.boolean(), { nil: undefined }),
+      clickfixScore: fc.option(
+        fc.integer({ min: 0, max: 60 }),
+        { nil: undefined }
+      ),
+      pushStateAbuse: fc.option(fc.boolean(), { nil: undefined }),
+      cspWeaknessScore: fc.option(
+        fc.integer({ min: 0, max: 50 }),
+        { nil: undefined }
+      ),
+      domainRepeatOffender: fc.option(fc.boolean(), { nil: undefined }),
+      navAnomalyScore: fc.option(
+        fc.integer({ min: 0, max: 30 }),
+        { nil: undefined }
+      ),
+      jsBehaviorScore: fc.option(
+        fc.integer({ min: 0, max: 60 }),
+        { nil: undefined }
+      ),
     },
     { requiredKeys: ["isNewTabOrWindow", "isCrossSite"] }
   )
@@ -293,8 +322,8 @@ const arbScoreResult: fc.Arbitrary<ScoreResult> = fc.record({
   reasonCodes: fc.constant([] as string[]),
 });
 
-/** Compute raw additive NRS (no ceiling, no floor) for comparison. */
-function rawAdditiveNrs(cds: ScoreResult, nav: NavigationContext): number {
+/** Compute raw NRS (no diminishing returns, no floor) mirroring computeNRS order exactly. */
+function rawNrsBeforeDiminishing(cds: ScoreResult, nav: NavigationContext): number {
   let raw = cds.cds;
   if (nav.isNewTabOrWindow) raw += 20;
   if (nav.isCrossSite) raw += 20;
@@ -305,7 +334,48 @@ function rawAdditiveNrs(cds: ScoreResult, nav: NavigationContext): number {
   if (nav.destinationAllowlisted) raw -= 100;
   if (nav.explicitNewTabIntent) raw -= 30;
   if (nav.knownBadDomain) raw += 50;
+
+  if (nav.redirectChainDepth !== undefined && nav.redirectChainDepth > 2) {
+    raw += Math.min((nav.redirectChainDepth - 2) * 5, 25);
+  }
+
+  if (nav.redirectViaKnownRedirector) {
+    raw += Math.min((nav.knownRedirectorHops ?? 1) * 15, 30);
+  }
+
+  if (nav.oauthRedirectMismatch) raw += 30;
+
+  if (nav.oauthOpenerManipulation) {
+    if (nav.doubleClickHijackActive) {
+      const delta = 45 - 40;
+      if (delta > 0) raw += delta;
+    } else {
+      raw += 45;
+    }
+  }
+
+  if (nav.clickfixScore !== undefined && nav.clickfixScore > 0) {
+    raw += Math.min(nav.clickfixScore, 40);
+  }
+
   if (nav.openerWindowPreviouslyAllowed) raw -= 20;
+
+  if (nav.pushStateAbuse) raw += 20;
+
+  if (nav.cspWeaknessScore && nav.cspWeaknessScore > 0 && raw > 20) {
+    raw += Math.min(nav.cspWeaknessScore, 10);
+  }
+
+  if (nav.domainRepeatOffender) raw += 10;
+
+  if (nav.navAnomalyScore && nav.navAnomalyScore > 0 && raw > 20) {
+    raw += Math.min(nav.navAnomalyScore, 15);
+  }
+
+  if (nav.jsBehaviorScore && nav.jsBehaviorScore > 0) {
+    raw += Math.min(nav.jsBehaviorScore, 35);
+  }
+
   return raw;
 }
 
@@ -324,7 +394,7 @@ describe("computeNRS property tests", () => {
     fc.assert(
       fc.property(arbScoreResult, arbNavigationContext, (cds, nav) => {
         const result = computeNRS(cds, nav);
-        const raw = Math.max(0, rawAdditiveNrs(cds, nav));
+        const raw = Math.max(0, rawNrsBeforeDiminishing(cds, nav));
         expect(result.nrs).toBeLessThanOrEqual(raw);
       }),
       { numRuns: 500 }
@@ -335,13 +405,151 @@ describe("computeNRS property tests", () => {
     fc.assert(
       fc.property(arbScoreResult, arbNavigationContext, (cds, nav) => {
         const result = computeNRS(cds, nav);
-        const raw = rawAdditiveNrs(cds, nav);
-        // If raw <= 100, the effective score equals the floored raw
+        const raw = rawNrsBeforeDiminishing(cds, nav);
         if (raw <= 100) {
           expect(result.nrs).toBe(Math.max(0, raw));
         }
       }),
       { numRuns: 500 }
+    );
+  });
+
+  it("allowlist always reduces or maintains score", () => {
+    fc.assert(
+      fc.property(arbScoreResult, arbNavigationContext, (cds, nav) => {
+        const without = computeNRS(cds, { ...nav, destinationAllowlisted: false });
+        const withAllowlist = computeNRS(cds, { ...nav, destinationAllowlisted: true });
+        expect(withAllowlist.nrs).toBeLessThanOrEqual(without.nrs);
+      }),
+      { numRuns: 500 }
+    );
+  });
+
+  it("redirect chain score is monotonic with depth", () => {
+    fc.assert(
+      fc.property(
+        arbScoreResult,
+        arbNavigationContext,
+        fc.integer({ min: 3, max: 15 }),
+        fc.integer({ min: 3, max: 15 }),
+        (cds, nav, depthA, depthB) => {
+          const lo = Math.min(depthA, depthB);
+          const hi = Math.max(depthA, depthB);
+          const rLo = computeNRS(cds, { ...nav, redirectChainDepth: lo });
+          const rHi = computeNRS(cds, { ...nav, redirectChainDepth: hi });
+          expect(rHi.nrs).toBeGreaterThanOrEqual(rLo.nrs);
+        }
+      ),
+      { numRuns: 300 }
+    );
+  });
+
+  it("CSP weakness has no effect when base NRS is zero", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 1, max: 50 }),
+        (cspScore) => {
+          const baseCds: ScoreResult = { cds: 0, reasonCodes: [] };
+          const nav: NavigationContext = {
+            isNewTabOrWindow: false,
+            isCrossSite: false,
+            cspWeaknessScore: cspScore,
+          };
+          const result = computeNRS(baseCds, nav);
+          expect(result.nrs).toBe(0);
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+
+  it("navAnomaly has no effect when base NRS is zero", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 1, max: 30 }),
+        (anomalyScore) => {
+          const baseCds: ScoreResult = { cds: 0, reasonCodes: [] };
+          const nav: NavigationContext = {
+            isNewTabOrWindow: false,
+            isCrossSite: false,
+            navAnomalyScore: anomalyScore,
+          };
+          const result = computeNRS(baseCds, nav);
+          expect(result.nrs).toBe(0);
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+
+  it("clickfix contribution is capped at 40", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 41, max: 100 }),
+        (clickfixScore) => {
+          const baseCds: ScoreResult = { cds: 0, reasonCodes: [] };
+          const base: NavigationContext = { isNewTabOrWindow: false, isCrossSite: false };
+          const at40 = computeNRS(baseCds, { ...base, clickfixScore: 40 });
+          const atHigher = computeNRS(baseCds, { ...base, clickfixScore });
+          expect(atHigher.nrs).toBe(at40.nrs);
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+
+  it("jsBehavior contribution is capped at 35", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 36, max: 100 }),
+        (jsBehaviorScore) => {
+          const baseCds: ScoreResult = { cds: 0, reasonCodes: [] };
+          const base: NavigationContext = { isNewTabOrWindow: false, isCrossSite: false };
+          const at35 = computeNRS(baseCds, { ...base, jsBehaviorScore: 35 });
+          const atHigher = computeNRS(baseCds, { ...base, jsBehaviorScore });
+          expect(atHigher.nrs).toBe(at35.nrs);
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+
+  it("oauth opener dedup: combined with dblclick adds at most 5 over dblclick alone", () => {
+    fc.assert(
+      fc.property(arbScoreResult, (cds) => {
+        const base: NavigationContext = { isNewTabOrWindow: false, isCrossSite: false };
+        const dblclickOnly = computeNRS(cds, { ...base, doubleClickHijackActive: true });
+        const combined = computeNRS(cds, {
+          ...base,
+          doubleClickHijackActive: true,
+          oauthOpenerManipulation: true,
+        });
+        expect(combined.nrs).toBeLessThanOrEqual(dblclickOnly.nrs + 5);
+      }),
+      { numRuns: 300 }
+    );
+  });
+
+  it("NRS factors array contains no duplicates", () => {
+    fc.assert(
+      fc.property(arbScoreResult, arbNavigationContext, (cds, nav) => {
+        const result = computeNRS(cds, nav);
+        const unique = new Set(result.nrsFactors);
+        expect(unique.size).toBe(result.nrsFactors.length);
+      }),
+      { numRuns: 500 }
+    );
+  });
+
+  it("NRS is deterministic", () => {
+    fc.assert(
+      fc.property(arbScoreResult, arbNavigationContext, (cds, nav) => {
+        const a = computeNRS(cds, nav);
+        const b = computeNRS(cds, nav);
+        expect(a.nrs).toBe(b.nrs);
+        expect(a.nrsFactors).toEqual(b.nrsFactors);
+      }),
+      { numRuns: 200 }
     );
   });
 });
