@@ -87,15 +87,22 @@ const arbEventLogEntry: fc.Arbitrary<EventLogEntry> = fc.record({
   id: fc.string({ minLength: 1, maxLength: 20 }),
   ts: fc.integer({ min: 0, max: 2_000_000_000_000 }),
   kind: arbEventKind,
+  site: fc.option(fc.constantFrom("example.com", "test.org"), { nil: undefined }),
+  url: fc.option(fc.constantFrom("https://example.com/page", "https://test.org/login"), { nil: undefined }),
+  destHost: fc.option(fc.constantFrom("evil.com", "phish.net"), { nil: undefined }),
+  score: fc.option(fc.integer({ min: 0, max: 100 }), { nil: undefined }),
+  reasons: fc.option(fc.array(fc.constantFrom("cross_site", "suspicious_url", "no_referrer"), { minLength: 1, maxLength: 3 }), { nil: undefined }),
 });
 
 const arbPromptOutcomeEntry: fc.Arbitrary<PromptOutcomeEntry> = fc.record({
   id: fc.string({ minLength: 1, maxLength: 20 }),
   ts: fc.integer({ min: 0, max: 2_000_000_000_000 }),
   domain: fc.constantFrom("example.com", "test.org", "bank.co.uk", "shop.net"),
+  destDomain: fc.option(fc.constantFrom("evil.com", "phish.net", "scam.org"), { nil: undefined }),
   type: arbPromptType,
   score: fc.integer({ min: 0, max: 100 }),
   outcome: arbPromptOutcome,
+  reasons: fc.option(fc.array(fc.constantFrom("cross_site", "suspicious_url"), { minLength: 1, maxLength: 2 }), { nil: undefined }),
 });
 
 const arbSuiteSettings: fc.Arbitrary<SuiteSettings> = fc.record({
@@ -328,17 +335,18 @@ describe("storage property tests", () => {
         fc.asyncProperty(
           fc.array(arbEventLogEntry, { minLength: 1, maxLength: 20 }),
           async (events) => {
+            const deduped = events.filter((e, i) => events.findIndex((x) => x.id === e.id) === i);
             vi.resetModules();
             const { chrome } = createChromeMock();
             vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
             const { importAll, exportAll } = await import("../extension/src/shared/storage");
-            await importAll({ eventLog: events });
+            await importAll({ eventLog: deduped });
             const exported = await exportAll();
 
-            expect(exported.eventLog.length).toBeLessThanOrEqual(events.length);
+            expect(exported.eventLog.length).toBe(Math.min(deduped.length, 300));
             for (const e of exported.eventLog) {
-              expect(events.some((orig) => orig.id === e.id)).toBe(true);
+              expect(deduped.some((orig) => orig.id === e.id)).toBe(true);
             }
 
             vi.unstubAllGlobals();
@@ -353,17 +361,18 @@ describe("storage property tests", () => {
         fc.asyncProperty(
           fc.array(arbPromptOutcomeEntry, { minLength: 1, maxLength: 20 }),
           async (outcomes) => {
+            const deduped = outcomes.filter((o, i) => outcomes.findIndex((x) => x.id === o.id) === i);
             vi.resetModules();
             const { chrome } = createChromeMock();
             vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
             const { importAll, exportAll } = await import("../extension/src/shared/storage");
-            await importAll({ promptOutcomes: outcomes });
+            await importAll({ promptOutcomes: deduped });
             const exported = await exportAll();
 
-            expect(exported.promptOutcomes.length).toBeLessThanOrEqual(outcomes.length);
+            expect(exported.promptOutcomes.length).toBe(Math.min(deduped.length, 500));
             for (const o of exported.promptOutcomes) {
-              expect(outcomes.some((orig) => orig.id === o.id)).toBe(true);
+              expect(deduped.some((orig) => orig.id === o.id)).toBe(true);
             }
 
             vi.unstubAllGlobals();
