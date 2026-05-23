@@ -17,9 +17,9 @@ know it's done. It synthesizes the findings from
 | 1 | Validate Foundation | 8 | 8 | **Done** (FP gate cleared via same-org domain groups) |
 | 2 | Target 2025-2026 Threats | 13 | 13 | **Done** |
 | 3 | Productize | 12 | 12 | **Done** |
-| 4 | Differentiate | 8 | 6 | In progress (P4-01 visual sim partially done, P4-02 JS behavior partially done, P4-03–P4-04 pending, P4-05–P4-08 done) |
+| 4 | Differentiate | 8 | 4 | In progress (P4-05–P4-08 done; P4-01 visual sim in progress, P4-02 JS behavior in progress, P4-03–P4-04 pending) |
 
-Total: **47 tasks** across 5 phases. **45/47 complete** (remaining: P4-03 Firefox port, P4-04 community intelligence; P4-01 and P4-02 have foundational PRs merged but need completion).
+Total: **47 tasks** across 5 phases. **43/47 complete**. P4-01 and P4-02 have foundational PRs merged but need completion work. P4-03 (Firefox port) and P4-04 (community intelligence) are pending.
 
 **Completed cross-cutting initiative:** UI Redesign (9 phases, R1–R9) — done 2026-05-16. See [REDESIGN_ORCHESTRATION.md](REDESIGN_ORCHESTRATION.md).
 
@@ -995,7 +995,7 @@ ordered by estimated impact. Timelines are intentionally open-ended.
 | ID | Title | Effort | Status | Depends On |
 |---|---|---|---|---|
 | P4-01 | Visual similarity detection | XL | in progress | P3 gate (cleared) | PRs #109 (architecture), #110 (capture), #111 (templates) merged |
-| P4-02 | JavaScript behavior analysis | XL | in progress | P3 gate (cleared) | PRs #98 (design), #101-#105 (slices 2-4), #107 (NRS), #108 (gym) merged; stale TODOs cleaned |
+| P4-02 | JavaScript behavior analysis | XL | in progress | P3 gate (cleared) | PRs #98 (design), #101 (forms), #104 (creds), #105 (exfil), #107 (NRS), #108 (gym) merged; stale TODOs cleaned |
 | P4-03 | Cross-browser port (Firefox MV3) | XL | pending | P3 gate (cleared) |
 | P4-04 | Community threat intelligence | XL | pending | P3 gate (cleared) |
 | P4-05 | CSP / permissions analysis | L | **done** | P2 gate | PR #71 |
