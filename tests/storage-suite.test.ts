@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 type Store = Record<string, unknown>;
 
@@ -69,6 +69,9 @@ describe("suite storage and allowlist migration", () => {
   beforeEach(() => {
     vi.resetModules();
   });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
 
   it("does not resurrect a legacy allowlist when the current key is explicitly empty", async () => {
     const { chrome } = createChromeMock({
@@ -77,7 +80,7 @@ describe("suite storage and allowlist migration", () => {
         "example.com": ["legacy.example"]
       }
     });
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { getAllowlist } = await import("../extension/src/shared/allowlist");
     const allowlist = await getAllowlist();
@@ -91,7 +94,7 @@ describe("suite storage and allowlist migration", () => {
         " Example.com ": [" Login.Example.com ", 7, "login.example.com"]
       }
     });
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { exportAll } = await import("../extension/src/shared/storage");
     const exported = await exportAll();
@@ -106,7 +109,7 @@ describe("suite storage and allowlist migration", () => {
 
   it("normalizes imported allowlist payloads before storage", async () => {
     const { chrome, store } = createChromeMock();
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { importAll } = await import("../extension/src/shared/storage");
     await importAll({
@@ -123,7 +126,7 @@ describe("suite storage and allowlist migration", () => {
 
   it("normalizes trusted domains during import to registrable domains", async () => {
     const { chrome, store } = createChromeMock();
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { importAll } = await import("../extension/src/shared/storage");
     await importAll({
@@ -144,7 +147,7 @@ describe("suite storage and allowlist migration", () => {
 
   it("normalizes trusted domain additions before storage", async () => {
     const { chrome, store } = createChromeMock();
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { addTrustedDomain, getTrustedDomains } = await import("../extension/src/shared/storage");
     await addTrustedDomain("https://Login.Example.com/account");
@@ -157,7 +160,7 @@ describe("suite storage and allowlist migration", () => {
 
   it("rejects invalid trusted domain inputs during import and add", async () => {
     const { chrome, store } = createChromeMock();
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { addTrustedDomain, getTrustedDomains, importAll } = await import(
       "../extension/src/shared/storage"
@@ -174,7 +177,7 @@ describe("suite storage and allowlist migration", () => {
 
   it("clamps imported event logs to the configured log limit", async () => {
     const { chrome, store } = createChromeMock();
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { importAll } = await import("../extension/src/shared/storage");
     await importAll({
@@ -194,7 +197,7 @@ describe("suite storage and allowlist migration", () => {
 
   it("clamps event log limit to minimum 50 when logLimit is below range", async () => {
     const { chrome, store } = createChromeMock();
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { importAll } = await import("../extension/src/shared/storage");
     await importAll({
@@ -213,7 +216,7 @@ describe("suite storage and allowlist migration", () => {
 
   it("imports prompt outcomes and updates adaptive scores in a single pass", async () => {
     const { chrome, store } = createChromeMock();
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { importAll } = await import("../extension/src/shared/storage");
     const outcomes = [
@@ -235,7 +238,7 @@ describe("suite storage and allowlist migration", () => {
     const { chrome, store } = createChromeMock({
       "sentinelsuite:adaptive_scores_v1": { "evil.com": { adjustment: 5, sampleCount: 3, lastUpdated: 1000 } },
     });
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { importAll } = await import("../extension/src/shared/storage");
     await importAll({ settings: { logLimit: 300 } });
@@ -246,7 +249,7 @@ describe("suite storage and allowlist migration", () => {
 
   it("caps imported prompt outcomes at 500", async () => {
     const { chrome, store } = createChromeMock();
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { importAll } = await import("../extension/src/shared/storage");
     const outcomes = Array.from({ length: 600 }, (_, i) => ({
@@ -261,7 +264,7 @@ describe("suite storage and allowlist migration", () => {
 
   it("rejects non-object import payloads", async () => {
     const { chrome } = createChromeMock();
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { importAll } = await import("../extension/src/shared/storage");
     await expect(importAll(null)).rejects.toThrow("Invalid import payload");
