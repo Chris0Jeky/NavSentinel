@@ -139,6 +139,7 @@ let previousMode = "";
 let gestureNavAttempts = 0;
 let gestureDownId: number | null = null;
 const CHAIN_INFO_TTL_MS = 30_000;
+const FORWARD_CHECK_INFLIGHT_TIMEOUT_MS = 2_000;
 let cachedChainInfo: RedirectChainInfo | null = null;
 let cachedChainInfoAt = 0;
 /** Cached CSP analysis for the current page (computed once after DOM ready). */
@@ -1232,7 +1233,7 @@ if (chrome?.runtime?.sendMessage && isTopFrame()) {
       forwardCheckTimer = 0;
     }
     forwardCheckInFlight = true;
-    const inflightGuard = window.setTimeout(() => { forwardCheckInFlight = false; }, 2000);
+    const inflightGuard = window.setTimeout(() => { forwardCheckInFlight = false; }, FORWARD_CHECK_INFLIGHT_TIMEOUT_MS);
     chrome.runtime.sendMessage({ type: "ns-check-forward", currentUrl: location.href }, (resp) => {
       window.clearTimeout(inflightGuard);
       forwardCheckInFlight = false;
@@ -1369,7 +1370,7 @@ window.addEventListener(
       ? performance.now() - downForClick.ts
       : undefined;
 
-    const userActivationActive = !!(navigator as any).userActivation?.isActive;
+    const userActivationActive = !!(navigator as unknown as { userActivation?: { isActive?: boolean } }).userActivation?.isActive;
 
     const dblClickHijack = isDoubleClickHijackActive();
 
