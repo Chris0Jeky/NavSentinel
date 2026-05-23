@@ -49,6 +49,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | T-20 | Test coverage for credential_guard.ts | M | — | #123 | done (2/2 reviews) |
 | T-21 | Test coverage for ui_toast.ts | S | — | #124 | done (2/2 reviews) |
 | T-22 | Test coverage for debug_overlay.ts | S | — | #125 | done (2/2 reviews) |
+| T-23 | Test coverage for stateMachine.ts (consolidate) | S | — | #126 | done (2/2 reviews) |
 
 ### Cycle 5: Next Up
 
@@ -83,6 +84,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #123 | test/credential-guard-coverage | T-20 | 2/2 done, all findings fixed | open (ready for human) |
 | #124 | test/ui-toast-coverage | T-21 | 2/2 done, all findings fixed | open (ready for human) |
 | #125 | test/debug-overlay-coverage | T-22 | 2/2 done, all findings fixed | open (ready for human) |
+| #126 | test/state-machine-coverage | T-23 | 2/2 done, all findings fixed | open (ready for human) |
 
 ## Review Log
 
@@ -116,6 +118,8 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #124 | R2 | Claude Opus | Source bug: double-dismiss calls onDismiss twice (no idempotency guard), replacement test missing getWraps assertion, auto-dismiss tests unpaired | Fixed (source + tests) |
 | #125 | R1 | Claude Opus | Missing isolation canary, enum gaps (off/prompt/no), no XSS test, no zero/negative rect, no keyboard input, no non-empty cspInfo.reasons, no external host removal test, no structural order test | Fixed |
 | #125 | R2 | Claude Opus | CDS/NRS separation assertions too weak (toContain vs exact line), nrsFactors test missing CDS-side check, misleading test name | Fixed |
+| #126 | R1 | Claude Opus | Cross-file contamination (statemachine-timing.test.ts), non-deterministic Math.random, missing aliasing/undefined-pointer tests, misleading test name | Fixed (consolidated files) |
+| #126 | R2 | Claude Opus | No findings above threshold | Clean |
 
 ## Active Worktrees
 
@@ -133,6 +137,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | NavSentinel-wt-cred-guard | test/credential-guard-coverage | #123 | complete |
 | NavSentinel-wt-toast | test/ui-toast-coverage | #124 | complete |
 | NavSentinel-wt-debug-overlay | test/debug-overlay-coverage | #125 | complete |
+| NavSentinel-wt-state-machine | test/state-machine-coverage | #126 | complete |
 
 ## Notes
 
