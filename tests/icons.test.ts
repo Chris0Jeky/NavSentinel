@@ -13,6 +13,10 @@ describe("icon", () => {
     expect(icon("nonexistent")).toBe("");
   });
 
+  it("returns empty string for empty string name", () => {
+    expect(icon("")).toBe("");
+  });
+
   it("applies default size of 16", () => {
     const svg = icon("shield");
     expect(svg).toContain('width="16"');
@@ -118,9 +122,13 @@ describe("logoSentinel", () => {
     expect(svg).toContain('viewBox="0 0 40 40"');
   });
 
-  it("includes animation by default", () => {
+  it("includes animation with correct parameters by default", () => {
     const svg = logoSentinel();
     expect(svg).toContain("animateTransform");
+    expect(svg).toContain('from="0 20 20"');
+    expect(svg).toContain('to="360 20 20"');
+    expect(svg).toContain('dur="3.6s"');
+    expect(svg).toContain('repeatCount="indefinite"');
   });
 
   it("excludes animation when animated=false", () => {
