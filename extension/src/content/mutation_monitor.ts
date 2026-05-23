@@ -12,18 +12,9 @@
  * - Batches mutations with a 100ms debounce window
  * - Caps at 50 alerts per page to prevent memory bloat
  * - Auto-disconnects after 5 minutes to save resources
+ * - Recursively observes open shadow DOM roots as they appear (#97)
  *
  * Runs in the ISOLATED content script world.
- *
- * Known limitation: Shadow DOM subtrees are NOT observed. An attacker could
- * create a custom element with `attachShadow({mode: "open"})` and inject
- * overlays, forms, or password fields inside the shadow tree without
- * triggering any alerts. The codebase already handles shadow DOM for click
- * detection (see `capture_isolated.ts` `tryOpenShadowRoot`), but recursively
- * observing shadow roots as they appear is non-trivial and deferred to a
- * follow-up task.
- * TODO(shadow-dom, #97): Observe shadow roots by listening for shadow host
- * attachment via a secondary MutationObserver or periodic polling.
  */
 
 // ---------------------------------------------------------------------------
@@ -124,6 +115,9 @@ let pendingMutations: MutationRecord[] = [];
 const alerts: MutationAlert[] = [];
 let pageHost: string = "";
 
+const observedShadowRoots = new Set<ShadowRoot>();
+const shadowObservers: MutationObserver[] = [];
+
 /**
  * Tracks original `action` attribute values for forms observed at startup.
  * Key: the form Element, Value: the original action string (or "" if absent).
@@ -159,6 +153,52 @@ function pushAlert(alert: MutationAlert): void {
   if (alerts.length >= MAX_ALERTS) return;
   alerts.push(alert);
   alertCallback?.(alert);
+}
+
+// ---------------------------------------------------------------------------
+// Shadow DOM observation
+// ---------------------------------------------------------------------------
+
+const OBSERVE_CONFIG: MutationObserverInit = {
+  childList: true,
+  subtree: true,
+  attributes: true,
+  attributeFilter: ["action", "type", "src", "style", "class"],
+};
+
+function tryGetShadowRoot(el: Element): ShadowRoot | null {
+  if (el.shadowRoot) return el.shadowRoot;
+  try {
+    return (globalThis as Record<string, unknown> as {
+      chrome?: { dom?: { openOrClosedShadowRoot?: (e: Element) => ShadowRoot | null } }
+    }).chrome?.dom?.openOrClosedShadowRoot?.(el) ?? null;
+  } catch { return null; }
+}
+
+function observeShadowRoot(sr: ShadowRoot): void {
+  if (observedShadowRoots.has(sr)) return;
+  observedShadowRoots.add(sr);
+
+  const shadowObs = new MutationObserver(onMutations);
+  shadowObs.observe(sr, OBSERVE_CONFIG);
+  shadowObservers.push(shadowObs);
+
+  snapshotFormActions(sr);
+
+  scanForShadowRoots(sr);
+}
+
+function scanForShadowRoots(root: Element | ShadowRoot | Document): void {
+  const elements = root.querySelectorAll("*");
+  for (let i = 0; i < elements.length; i++) {
+    const sr = tryGetShadowRoot(elements[i]!);
+    if (sr) observeShadowRoot(sr);
+  }
+}
+
+function checkAndObserveShadowRoot(el: Element): void {
+  const sr = tryGetShadowRoot(el);
+  if (sr) observeShadowRoot(sr);
 }
 
 // ---------------------------------------------------------------------------
@@ -251,7 +291,7 @@ function checkOverlay(el: Element): void {
 // Detection: form action changes
 // ---------------------------------------------------------------------------
 
-function snapshotFormActions(doc: Document): void {
+function snapshotFormActions(doc: Document | ShadowRoot): void {
   const forms = doc.querySelectorAll("form");
   for (let i = 0; i < forms.length; i++) {
     const form = forms[i]!;
@@ -364,6 +404,7 @@ function processAddedNode(node: Node): void {
   checkOverlay(node);
   checkPasswordInjection(node);
   checkSuspiciousIframe(node);
+  checkAndObserveShadowRoot(node);
 
   // Check descendants (e.g., a wrapper div containing a password field)
   const passwords = node.querySelectorAll('input[type="password"]');
@@ -374,6 +415,12 @@ function processAddedNode(node: Node): void {
   const iframes = node.querySelectorAll("iframe");
   for (let i = 0; i < iframes.length; i++) {
     checkSuspiciousIframe(iframes[i]!);
+  }
+
+  // Check descendants for shadow roots
+  const descendants = node.querySelectorAll("*");
+  for (let i = 0; i < descendants.length; i++) {
+    checkAndObserveShadowRoot(descendants[i]!);
   }
 }
 
@@ -467,12 +514,10 @@ export function startMutationMonitor(
   snapshotFormActions(doc);
 
   observer = new MutationObserver(onMutations);
-  observer.observe(doc.documentElement, {
-    childList: true,
-    subtree: true,
-    attributes: true,
-    attributeFilter: ["action", "type", "src", "style", "class"],
-  });
+  observer.observe(doc.documentElement, OBSERVE_CONFIG);
+
+  // Scan existing DOM for shadow roots to observe
+  scanForShadowRoots(doc);
 
   // Auto-disconnect after 5 minutes
   disconnectTimer = setTimeout(() => {
@@ -488,6 +533,11 @@ export function stopMutationMonitor(): void {
     observer.disconnect();
     observer = null;
   }
+  for (const so of shadowObservers) {
+    so.disconnect();
+  }
+  shadowObservers.length = 0;
+  observedShadowRoots.clear();
   if (debounceTimer !== null) {
     clearTimeout(debounceTimer);
     debounceTimer = null;
