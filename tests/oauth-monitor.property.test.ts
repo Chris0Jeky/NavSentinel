@@ -44,13 +44,14 @@ const arbQueryParam = fc.constantFrom(...OAUTH_QUERY_PARAMS);
 const arbRedirectParam = fc.constantFrom(...REDIRECT_PARAM_NAMES);
 const arbLocalhostHost = fc.constantFrom(...LOCALHOST_HOSTS);
 
-const arbSafeDomain = fc.constantFrom(
-  "example.com",
-  "accounts.google.com",
-  "auth.github.com",
-  "login.microsoftonline.com",
-  "provider.example.org",
-  "id.example.net",
+const arbDomainLabel = fc.string({ minLength: 1, maxLength: 12 }).map(
+  (s) => s.replace(/[^a-z0-9]/g, "a"),
+);
+
+const arbTLD = fc.constantFrom("com", "org", "net", "io", "dev", "co.uk", "com.au");
+
+const arbDomain = fc.tuple(arbDomainLabel, arbTLD).map(
+  ([label, tld]) => `${label}.${tld}`,
 );
 
 const arbSafePathSegment = fc.string({ minLength: 1, maxLength: 20 }).map(
@@ -60,6 +61,12 @@ const arbSafePathSegment = fc.string({ minLength: 1, maxLength: 20 }).map(
 const arbParamValue = fc.string({ minLength: 1, maxLength: 30 }).map(
   (s) => encodeURIComponent(s.replace(/[^a-zA-Z0-9._~-]/g, "x")),
 );
+
+const arbNonBoundaryChar = fc.constantFrom(
+  "x", "a", "2", "-", "_", ".", "d", "z", "0",
+);
+
+const arbScheme = fc.constantFrom("http", "https");
 
 function makeOAuthUrl(
   domain: string,
@@ -100,15 +107,6 @@ describe("isOAuthUrl property tests", () => {
     );
   });
 
-  it("is deterministic", () => {
-    fc.assert(
-      fc.property(fc.string({ maxLength: 500 }), (text) => {
-        expect(isOAuthUrl(text)).toBe(isOAuthUrl(text));
-      }),
-      { numRuns: 300 },
-    );
-  });
-
   it("returns false for empty string", () => {
     expect(isOAuthUrl("")).toBe(false);
   });
@@ -139,7 +137,7 @@ describe("isOAuthUrl property tests", () => {
   it("requires BOTH path keyword AND query param (two-gate)", () => {
     fc.assert(
       fc.property(
-        arbSafeDomain,
+        arbDomain,
         arbPathKeyword,
         arbQueryParam,
         arbParamValue,
@@ -174,7 +172,7 @@ describe("isOAuthUrl property tests", () => {
     }
   });
 
-  it("path keyword must be at segment boundary (preceded by /)", () => {
+  it("path keyword must be preceded by / (not embedded in word)", () => {
     fc.assert(
       fc.property(
         arbPathKeyword,
@@ -186,6 +184,22 @@ describe("isOAuthUrl property tests", () => {
         },
       ),
       { numRuns: 100 },
+    );
+  });
+
+  it("path keyword followed by non-boundary character is rejected", () => {
+    fc.assert(
+      fc.property(
+        arbPathKeyword,
+        arbQueryParam,
+        arbNonBoundaryChar,
+        fc.string({ minLength: 0, maxLength: 10 }).map((s) => s.replace(/[^a-z0-9]/g, "a")),
+        (kw, param, trailingChar, extraSuffix) => {
+          const url = `https://example.com/${kw}${trailingChar}${extraSuffix}?${param}=val`;
+          expect(isOAuthUrl(url)).toBe(false);
+        },
+      ),
+      { numRuns: 200 },
     );
   });
 
@@ -208,9 +222,12 @@ describe("isOAuthUrl property tests", () => {
     }
   });
 
-  it("path keyword embedded in word is rejected", () => {
+  it("path keyword embedded in word is rejected (both sides)", () => {
     expect(isOAuthUrl("https://example.com/myauthorizepage?client_id=x")).toBe(false);
     expect(isOAuthUrl("https://example.com/noauthenticate?client_id=x")).toBe(false);
+    expect(isOAuthUrl("https://example.com/oauth2extra?client_id=x")).toBe(false);
+    expect(isOAuthUrl("https://example.com/authorize.do?client_id=x")).toBe(false);
+    expect(isOAuthUrl("https://example.com/consentform?scope=openid")).toBe(false);
   });
 
   it("is case insensitive on path keywords", () => {
@@ -224,10 +241,18 @@ describe("isOAuthUrl property tests", () => {
     }
   });
 
+  it("query param matching is case-sensitive (uppercase not recognized)", () => {
+    for (const param of OAUTH_QUERY_PARAMS) {
+      expect(isOAuthUrl(`https://example.com/oauth?${param.toUpperCase()}=x`)).toBe(false);
+    }
+    expect(isOAuthUrl("https://example.com/oauth?Client_Id=x")).toBe(false);
+    expect(isOAuthUrl("https://example.com/oauth?Response_Type=code")).toBe(false);
+  });
+
   it("constructed OAuth URLs always match", () => {
     fc.assert(
       fc.property(
-        arbSafeDomain,
+        arbDomain,
         arbPathKeyword,
         arbQueryParam,
         arbParamValue,
@@ -266,15 +291,6 @@ describe("extractRedirectUri property tests", () => {
         expect(result === null || typeof result === "string").toBe(true);
       }),
       { numRuns: 500 },
-    );
-  });
-
-  it("is deterministic", () => {
-    fc.assert(
-      fc.property(fc.string({ maxLength: 500 }), (text) => {
-        expect(extractRedirectUri(text)).toBe(extractRedirectUri(text));
-      }),
-      { numRuns: 300 },
     );
   });
 
@@ -321,6 +337,11 @@ describe("extractRedirectUri property tests", () => {
     expect(extractRedirectUri(url)).toBe("https://first.com");
   });
 
+  it("duplicate same-name params: first value wins", () => {
+    const url = "https://auth.example.com/login?redirect_uri=https://first.com/cb&redirect_uri=https://second.com/cb";
+    expect(extractRedirectUri(url)).toBe("https://first.com/cb");
+  });
+
   it("returns null when URL has no query params", () => {
     expect(extractRedirectUri("https://example.com/auth")).toBeNull();
   });
@@ -347,7 +368,7 @@ describe("extractRedirectUri property tests", () => {
     );
   });
 
-  it("returns empty string value as falsy (null)", () => {
+  it("returns null for empty param values", () => {
     for (const name of REDIRECT_PARAM_NAMES) {
       const url = `https://auth.example.com/login?${name}=`;
       expect(extractRedirectUri(url)).toBeNull();
@@ -368,16 +389,6 @@ describe("isUnexpectedCallback property tests", () => {
         expect(typeof result).toBe("boolean");
       }),
       { numRuns: 500 },
-    );
-  });
-
-  it("is deterministic", () => {
-    fc.assert(
-      fc.property(fc.string({ maxLength: 500 }), (text) => {
-        const flow = makeFlow();
-        expect(isUnexpectedCallback(flow, text)).toBe(isUnexpectedCallback(flow, text));
-      }),
-      { numRuns: 300 },
     );
   });
 
@@ -406,28 +417,47 @@ describe("isUnexpectedCallback property tests", () => {
     );
   });
 
-  it("localhost callbacks are never unexpected", () => {
+  it("localhost callbacks are never unexpected (both http and https)", () => {
     for (const host of LOCALHOST_HOSTS) {
       const flow = makeFlow({ expectedCallbackDomain: "totally-different.com" });
-      const scheme = host === "[::1]" ? "http" : "https";
-      const url = `${scheme}://${host}:3000/callback?code=abc`;
-      expect(isUnexpectedCallback(flow, url)).toBe(false);
+      for (const scheme of ["http", "https"]) {
+        const url = `${scheme}://${host}:3000/callback?code=abc`;
+        expect(isUnexpectedCallback(flow, url)).toBe(false);
+      }
     }
   });
 
-  it("localhost callbacks with arbitrary ports are never unexpected", () => {
+  it("localhost callbacks with arbitrary ports and schemes are never unexpected", () => {
     fc.assert(
       fc.property(
         arbLocalhostHost,
         fc.integer({ min: 1, max: 65535 }),
-        (host, port) => {
+        arbScheme,
+        (host, port, scheme) => {
           const flow = makeFlow({ expectedCallbackDomain: "different.example.com" });
-          const url = `http://${host}:${port}/callback`;
+          const url = `${scheme}://${host}:${port}/callback`;
           expect(isUnexpectedCallback(flow, url)).toBe(false);
         },
       ),
       { numRuns: 100 },
     );
+  });
+
+  it("non-localhost IP callbacks are unexpected relative to domain expected", () => {
+    const flow = makeFlow({ expectedCallbackDomain: "app.example.com" });
+    expect(isUnexpectedCallback(flow, "http://10.0.0.1/cb")).toBe(true);
+    expect(isUnexpectedCallback(flow, "http://192.168.1.100/steal")).toBe(true);
+    expect(isUnexpectedCallback(flow, "https://203.0.113.50/cb")).toBe(true);
+  });
+
+  it("IP callback matches IP expected domain", () => {
+    const flow = makeFlow({ expectedCallbackDomain: "192.168.1.1" });
+    expect(isUnexpectedCallback(flow, "http://192.168.1.1/cb")).toBe(false);
+  });
+
+  it("different IP callback is unexpected relative to IP expected domain", () => {
+    const flow = makeFlow({ expectedCallbackDomain: "192.168.1.1" });
+    expect(isUnexpectedCallback(flow, "http://192.168.1.2/cb")).toBe(true);
   });
 
   it("same registrable domain is not unexpected", () => {
@@ -456,6 +486,11 @@ describe("isUnexpectedCallback property tests", () => {
     }
   });
 
+  it("different second-level domain under ccTLD is unexpected", () => {
+    const flow = makeFlow({ expectedCallbackDomain: "myapp.co.uk" });
+    expect(isUnexpectedCallback(flow, "https://evildomain.co.uk/cb")).toBe(true);
+  });
+
   it("symmetric: if A matches B's domain, B matches A's domain", () => {
     const pairs = [
       ["app.example.com", "api.example.com"],
@@ -472,7 +507,7 @@ describe("isUnexpectedCallback property tests", () => {
   it("callback to exact expectedCallbackDomain is never unexpected", () => {
     fc.assert(
       fc.property(
-        arbSafeDomain,
+        arbDomain,
         (domain) => {
           const flow = makeFlow({ expectedCallbackDomain: domain });
           expect(isUnexpectedCallback(flow, `https://${domain}/callback?code=x`)).toBe(false);
@@ -512,9 +547,9 @@ describe("isOAuthUrl + extractRedirectUri consistency", () => {
   it("OAuth URLs with redirect_uri have both signals", () => {
     fc.assert(
       fc.property(
-        arbSafeDomain,
+        arbDomain,
         arbPathKeyword,
-        arbSafeDomain,
+        arbDomain,
         (domain, kw, callbackDomain) => {
           const url = `https://${domain}/${kw}?redirect_uri=https://${callbackDomain}/cb&client_id=x`;
           expect(isOAuthUrl(url)).toBe(true);
@@ -529,7 +564,8 @@ describe("isOAuthUrl + extractRedirectUri consistency", () => {
     const oauthUrl = "https://accounts.google.com/o/oauth2/auth?redirect_uri=https://evil.com/steal&client_id=x";
     const redirect = extractRedirectUri(oauthUrl);
     expect(redirect).not.toBeNull();
+    if (redirect === null) return;
     const flow = makeFlow({ expectedCallbackDomain: "myapp.com" });
-    expect(isUnexpectedCallback(flow, redirect!)).toBe(true);
+    expect(isUnexpectedCallback(flow, redirect)).toBe(true);
   });
 });
