@@ -332,6 +332,11 @@ describe("computeNRS", () => {
       const result = computeNRS(baseCds(0), baseNav({ redirectChainDepth: 0 }));
       expect(result.nrsFactors).not.toContain("nrs_redirect_chain_depth");
     });
+
+    it("does not add for depth 1 (below threshold)", () => {
+      const result = computeNRS(baseCds(0), baseNav({ redirectChainDepth: 1 }));
+      expect(result.nrsFactors).not.toContain("nrs_redirect_chain_depth");
+    });
   });
 
   describe("redirectViaKnownRedirector", () => {
@@ -365,6 +370,18 @@ describe("computeNRS", () => {
     it("does not add when redirectViaKnownRedirector is false", () => {
       const result = computeNRS(baseCds(0), baseNav({ redirectViaKnownRedirector: false }));
       expect(result.nrsFactors).not.toContain("nrs_redirect_via_known_redirector");
+    });
+
+    it("combines with redirectChainDepth independently", () => {
+      const result = computeNRS(baseCds(0), baseNav({
+        redirectChainDepth: 5,
+        redirectViaKnownRedirector: true,
+        knownRedirectorHops: 1,
+      }));
+      // chain: (5-2)*5=15, redirector: 1*15=15, total=30
+      expect(result.nrs).toBe(30);
+      expect(result.nrsFactors).toContain("nrs_redirect_chain_depth");
+      expect(result.nrsFactors).toContain("nrs_redirect_via_known_redirector");
     });
   });
 
@@ -461,6 +478,12 @@ describe("computeNRS", () => {
       }));
       expect(result.nrsFactors).toContain("nrs_csp_weakness");
     });
+
+    it("boundary: does not add CSP weakness when NRS is exactly 20", () => {
+      const result = computeNRS(baseCds(20), baseNav({ cspWeaknessScore: 5 }));
+      expect(result.nrs).toBe(20);
+      expect(result.nrsFactors).not.toContain("nrs_csp_weakness");
+    });
   });
 
   describe("domainRepeatOffender", () => {
@@ -496,6 +519,12 @@ describe("computeNRS", () => {
 
     it("does not add when navAnomalyScore is 0", () => {
       const result = computeNRS(baseCds(30), baseNav({ navAnomalyScore: 0 }));
+      expect(result.nrsFactors).not.toContain("nrs_nav_anomaly");
+    });
+
+    it("boundary: does not add nav anomaly when NRS is exactly 20", () => {
+      const result = computeNRS(baseCds(20), baseNav({ navAnomalyScore: 10 }));
+      expect(result.nrs).toBe(20);
       expect(result.nrsFactors).not.toContain("nrs_nav_anomaly");
     });
   });
