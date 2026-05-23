@@ -238,7 +238,7 @@ async function setNavMode(mode: Mode): Promise<void> {
   try {
     await appendEvent({ kind: "suite_config_update", extra: { navMode: mode } });
   } catch (e) {
-    console.warn("[NavSentinel] event log append failed:", e);
+    console.warn("[NavSentinel] event log append failed (suite_config_update):", e);
   }
   await refreshUi();
 }
@@ -249,7 +249,7 @@ async function setCredMode(mode: CredMode): Promise<void> {
   try {
     await appendEvent({ kind: "suite_config_update", extra: { credMode: mode } });
   } catch (e) {
-    console.warn("[NavSentinel] event log append failed:", e);
+    console.warn("[NavSentinel] event log append failed (suite_config_update):", e);
   }
   await refreshUi();
 }
@@ -263,7 +263,7 @@ async function trustCurrentSite(): Promise<void> {
   try {
     await appendEvent({ kind: "cred_trust_domain", site: reg });
   } catch (e) {
-    console.warn("[NavSentinel] event log append failed:", e);
+    console.warn("[NavSentinel] event log append failed (cred_trust_domain):", e);
   }
   await refreshUi();
 }
@@ -277,7 +277,7 @@ async function untrustCurrentSite(): Promise<void> {
   try {
     await appendEvent({ kind: "cred_untrust_domain", site: reg });
   } catch (e) {
-    console.warn("[NavSentinel] event log append failed:", e);
+    console.warn("[NavSentinel] event log append failed (cred_untrust_domain):", e);
   }
   await refreshUi();
 }

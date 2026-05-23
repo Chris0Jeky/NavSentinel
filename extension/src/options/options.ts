@@ -213,7 +213,7 @@ function renderAllowlist(list: Allowlist): void {
         await removeAllowlistEntry(site, host);
         try {
           await appendEvent({ kind: "nav_allowlist_remove", site, destHost: host });
-        } catch (e) { console.warn("[NavSentinel] event log append failed:", e); }
+        } catch (e) { console.warn("[NavSentinel] event log append failed (nav_allowlist_remove):", e); }
         await refreshAllowlist();
         flashStatus(saveStatusEl, "Allowlist updated.");
       });
@@ -264,7 +264,7 @@ function renderTrusted(domains: string[]): void {
       await removeTrustedDomain(domain);
       try {
         await appendEvent({ kind: "cred_untrust_domain", site: domain });
-      } catch (e) { console.warn("[NavSentinel] event log append failed:", e); }
+      } catch (e) { console.warn("[NavSentinel] event log append failed (cred_untrust_domain):", e); }
       await refreshTrusted();
       flashStatus(saveStatusEl, "Trusted list updated.");
     });
@@ -501,7 +501,7 @@ saveBtn.addEventListener("click", async () => {
     await updateSuiteSettings({ nav, credential, logLimit } satisfies Partial<SuiteSettings>);
     try {
       await appendEvent({ kind: "suite_config_update", extra: { nav, credential, logLimit } });
-    } catch (e) { console.warn("[NavSentinel] event log append failed:", e); }
+    } catch (e) { console.warn("[NavSentinel] event log append failed (suite_config_update):", e); }
     flashStatus(saveStatusEl, "Saved.");
   } catch (e) {
     console.warn("[NavSentinel] settings save failed:", e);
@@ -513,7 +513,7 @@ clearAllowlistBtn.addEventListener("click", async () => {
   await clearAllowlist();
   try {
     await appendEvent({ kind: "nav_allowlist_remove", extra: { cleared: true } });
-  } catch (e) { console.warn("[NavSentinel] event log append failed:", e); }
+  } catch (e) { console.warn("[NavSentinel] event log append failed (nav_allowlist_remove):", e); }
   await refreshAllowlist();
   flashStatus(saveStatusEl, "Allowlist cleared.");
 });
@@ -528,7 +528,7 @@ addTrustedBtn.addEventListener("click", async () => {
   trustedInputEl.value = "";
   try {
     await appendEvent({ kind: "cred_trust_domain", site: normalized });
-  } catch (e) { console.warn("[NavSentinel] event log append failed:", e); }
+  } catch (e) { console.warn("[NavSentinel] event log append failed (cred_trust_domain):", e); }
   await refreshTrusted();
   flashStatus(saveStatusEl, "Trusted domain added.");
 });
@@ -537,7 +537,7 @@ clearTrustedBtn.addEventListener("click", async () => {
   await clearTrustedDomains();
   try {
     await appendEvent({ kind: "cred_untrust_domain", extra: { cleared: true } });
-  } catch (e) { console.warn("[NavSentinel] event log append failed:", e); }
+  } catch (e) { console.warn("[NavSentinel] event log append failed (cred_untrust_domain):", e); }
   await refreshTrusted();
   flashStatus(saveStatusEl, "Trusted list cleared.");
 });
