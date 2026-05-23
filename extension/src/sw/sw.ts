@@ -426,6 +426,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         entry,
         prevUrl: entry?.prevUrl
       });
+    } else {
+      sendResponse?.({ shouldRollback: false });
     }
   }
 
@@ -480,6 +482,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         pendingForwardByTab.delete(tabId);
         swState.persistMap(pendingForwardByTab, "pendingForward");
       }
+      sendResponse?.({ status: "none", url: "" });
+    } else {
       sendResponse?.({ status: "none", url: "" });
     }
   }
