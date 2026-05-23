@@ -55,10 +55,10 @@
             <span id="navIcon" class="mode-icon"></span>
             <span class="mode-label ns-uc">nav</span>
           </div>
-          <div class="seg" id="navSeg">
-            <button class="seg-btn" data-value="off">Off</button>
-            <button class="seg-btn" data-value="smart">Smart</button>
-            <button class="seg-btn" data-value="strict">Strict</button>
+          <div class="seg" id="navSeg" role="radiogroup" aria-label="Navigation guard mode">
+            <button class="seg-btn" role="radio" data-value="off" tabindex="-1">Off</button>
+            <button class="seg-btn" role="radio" data-value="smart" tabindex="0">Smart</button>
+            <button class="seg-btn" role="radio" data-value="strict" tabindex="-1">Strict</button>
           </div>
         </div>
         <div class="mode-card mode-card--cred">
@@ -66,10 +66,10 @@
             <span id="credIcon" class="mode-icon"></span>
             <span class="mode-label ns-uc">cred</span>
           </div>
-          <div class="seg" id="credSeg">
-            <button class="seg-btn" data-value="off">Off</button>
-            <button class="seg-btn" data-value="smart">Smart</button>
-            <button class="seg-btn" data-value="strict">Strict</button>
+          <div class="seg" id="credSeg" role="radiogroup" aria-label="Credential guard mode">
+            <button class="seg-btn" role="radio" data-value="off" tabindex="-1">Off</button>
+            <button class="seg-btn" role="radio" data-value="smart" tabindex="0">Smart</button>
+            <button class="seg-btn" role="radio" data-value="strict" tabindex="-1">Strict</button>
           </div>
         </div>
       </section>

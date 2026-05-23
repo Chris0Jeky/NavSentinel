@@ -62,14 +62,15 @@ function setSegValue(seg: HTMLDivElement, value: string): void {
   const btns = Array.from(seg.querySelectorAll<HTMLButtonElement>(".seg-btn"));
   for (const btn of btns) {
     const active = btn.dataset.value === value.toLowerCase();
-    btn.setAttribute("aria-pressed", String(active));
+    btn.setAttribute("aria-checked", String(active));
+    btn.setAttribute("tabindex", active ? "0" : "-1");
   }
 }
 
 function getSegValue(seg: HTMLDivElement): string {
   const btns = Array.from(seg.querySelectorAll<HTMLButtonElement>(".seg-btn"));
   for (const btn of btns) {
-    if (btn.getAttribute("aria-pressed") === "true") {
+    if (btn.getAttribute("aria-checked") === "true") {
       return btn.dataset.value ?? "smart";
     }
   }
@@ -282,17 +283,37 @@ async function untrustCurrentSite(): Promise<void> {
   await refreshUi();
 }
 
+function initSegKeyboard(seg: HTMLDivElement): void {
+  seg.addEventListener("keydown", (e) => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    const btns = Array.from(seg.querySelectorAll<HTMLButtonElement>(".seg-btn"));
+    const idx = btns.indexOf(e.target as HTMLButtonElement);
+    if (idx < 0) return;
+    e.preventDefault();
+    const next = e.key === "ArrowRight"
+      ? btns[(idx + 1) % btns.length]!
+      : btns[(idx - 1 + btns.length) % btns.length]!;
+    next.focus();
+    if (next.getAttribute("aria-checked") !== "true") {
+      next.click();
+    }
+  });
+}
+
 navSeg.addEventListener("click", async (e) => {
   const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".seg-btn");
-  if (!btn || btn.getAttribute("aria-pressed") === "true") return;
+  if (!btn || btn.getAttribute("aria-checked") === "true") return;
   await setNavMode(btn.dataset.value as Mode);
 });
 
 credSeg.addEventListener("click", async (e) => {
   const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".seg-btn");
-  if (!btn || btn.getAttribute("aria-pressed") === "true") return;
+  if (!btn || btn.getAttribute("aria-checked") === "true") return;
   await setCredMode(btn.dataset.value as CredMode);
 });
+
+initSegKeyboard(navSeg);
+initSegKeyboard(credSeg);
 
 trustBtn.addEventListener("click", async () => {
   await trustCurrentSite();

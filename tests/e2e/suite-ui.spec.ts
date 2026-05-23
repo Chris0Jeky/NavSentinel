@@ -36,8 +36,8 @@ test("options normalizes trusted-domain input and persists mode changes @smoke",
         timeout: 20_000
       });
 
-      await expect(options.locator('#navModeSeg .seg-btn[data-value="smart"]')).toHaveAttribute("aria-pressed", "true");
-      await expect(options.locator('#credModeSeg .seg-btn[data-value="smart"]')).toHaveAttribute("aria-pressed", "true");
+      await expect(options.locator('#navModeSeg .seg-btn[data-value="smart"]')).toHaveAttribute("aria-checked", "true");
+      await expect(options.locator('#credModeSeg .seg-btn[data-value="smart"]')).toHaveAttribute("aria-checked", "true");
 
       await options.locator('#navModeSeg .seg-btn[data-value="strict"]').click();
       await options.locator('#credModeSeg .seg-btn[data-value="strict"]').click();
@@ -59,8 +59,8 @@ test("options normalizes trusted-domain input and persists mode changes @smoke",
       }, { settingsKey: SUITE_SETTINGS_KEY, trustedDomainsKey: TRUSTED_DOMAINS_KEY });
 
       await options.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
-      await expect(options.locator('#navModeSeg .seg-btn[data-value="strict"]')).toHaveAttribute("aria-pressed", "true");
-      await expect(options.locator('#credModeSeg .seg-btn[data-value="strict"]')).toHaveAttribute("aria-pressed", "true");
+      await expect(options.locator('#navModeSeg .seg-btn[data-value="strict"]')).toHaveAttribute("aria-checked", "true");
+      await expect(options.locator('#credModeSeg .seg-btn[data-value="strict"]')).toHaveAttribute("aria-checked", "true");
       await options.locator('.nav-btn[data-section="trust"]').click();
       await expect(options.locator("#trustedList")).toContainText("example.com");
     } finally {
@@ -121,8 +121,8 @@ test("options import and export preserve normalized trusted-domain and allowlist
       });
 
       await options.locator("#importFile").setInputFiles(importPath);
-      await expect(options.locator('#navModeSeg .seg-btn[data-value="off"]')).toHaveAttribute("aria-pressed", "true");
-      await expect(options.locator('#credModeSeg .seg-btn[data-value="strict"]')).toHaveAttribute("aria-pressed", "true");
+      await expect(options.locator('#navModeSeg .seg-btn[data-value="off"]')).toHaveAttribute("aria-checked", "true");
+      await expect(options.locator('#credModeSeg .seg-btn[data-value="strict"]')).toHaveAttribute("aria-checked", "true");
       await expect(options.locator("#logLimit")).toHaveValue("120");
       await expect(options.locator("#allowlist")).toContainText("example.com");
       await expect(options.locator("#allowlist")).toContainText("login.example.com");

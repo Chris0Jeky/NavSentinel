@@ -96,7 +96,13 @@ sidebarNav.addEventListener("click", (e) => {
   if (!section) return;
 
   for (const b of Array.from(sidebarNav.querySelectorAll<HTMLButtonElement>(".nav-btn"))) {
-    b.classList.toggle("active", b === btn);
+    const isActive = b === btn;
+    b.classList.toggle("active", isActive);
+    if (isActive) {
+      b.setAttribute("aria-current", "true");
+    } else {
+      b.removeAttribute("aria-current");
+    }
   }
 
   const panes = document.querySelectorAll<HTMLElement>(".pane");
@@ -108,26 +114,50 @@ sidebarNav.addEventListener("click", (e) => {
 // Segmented control helpers
 function setSegValue(seg: HTMLDivElement, value: string): void {
   for (const btn of Array.from(seg.querySelectorAll<HTMLButtonElement>(".seg-btn"))) {
-    btn.setAttribute("aria-pressed", String(btn.dataset.value === value.toLowerCase()));
+    const active = btn.dataset.value === value.toLowerCase();
+    btn.setAttribute("aria-checked", String(active));
+    btn.setAttribute("tabindex", active ? "0" : "-1");
   }
 }
 
 function getSegValue(seg: HTMLDivElement): string {
   for (const btn of Array.from(seg.querySelectorAll<HTMLButtonElement>(".seg-btn"))) {
-    if (btn.getAttribute("aria-pressed") === "true") return btn.dataset.value ?? "smart";
+    if (btn.getAttribute("aria-checked") === "true") return btn.dataset.value ?? "smart";
   }
   return "smart";
 }
 
+function initSegKeyboard(seg: HTMLDivElement): void {
+  seg.addEventListener("keydown", (e) => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    const btns = Array.from(seg.querySelectorAll<HTMLButtonElement>(".seg-btn"));
+    const idx = btns.indexOf(e.target as HTMLButtonElement);
+    if (idx < 0) return;
+    e.preventDefault();
+    const next = e.key === "ArrowRight"
+      ? btns[(idx + 1) % btns.length]!
+      : btns[(idx - 1 + btns.length) % btns.length]!;
+    next.focus();
+    if (next.getAttribute("aria-checked") !== "true") {
+      next.click();
+    }
+  });
+}
+
 navModeSeg.addEventListener("click", (e) => {
   const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".seg-btn");
-  if (btn) setSegValue(navModeSeg, btn.dataset.value ?? "smart");
+  if (!btn || btn.getAttribute("aria-checked") === "true") return;
+  setSegValue(navModeSeg, btn.dataset.value ?? "smart");
 });
 
 credModeSeg.addEventListener("click", (e) => {
   const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".seg-btn");
-  if (btn) setSegValue(credModeSeg, btn.dataset.value ?? "smart");
+  if (!btn || btn.getAttribute("aria-checked") === "true") return;
+  setSegValue(credModeSeg, btn.dataset.value ?? "smart");
 });
+
+initSegKeyboard(navModeSeg);
+initSegKeyboard(credModeSeg);
 
 // Toggle helpers
 function setToggle(el: HTMLButtonElement, checked: boolean): void {
