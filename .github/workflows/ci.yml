@@ -43,6 +43,9 @@ jobs:
       - name: Build extension
         run: npm run build
 
+      - name: Check performance budget
+        run: npm run check:perf-budget
+
       - name: Package extension
         run: npm run package:ext
 
