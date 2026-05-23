@@ -266,6 +266,29 @@ describe("bloom filter no-false-negatives guarantee", () => {
       }),
     );
   });
+
+  it("insertDomain on k=0 filter is safe and does not modify bits", () => {
+    fc.assert(
+      fc.property(arbDomain, (domain) => {
+        const f = { bits: new Uint8Array(128), m: 1024, k: 0 };
+        const before = new Uint8Array(f.bits);
+        insertDomain(f, domain);
+        expect(Array.from(f.bits)).toEqual(Array.from(before));
+      }),
+    );
+  });
+
+  it("inserting the same domain twice does not change the filter", () => {
+    fc.assert(
+      fc.property(arbDomain, (domain) => {
+        const f = createFilter(4096, 7);
+        insertDomain(f, domain);
+        const snapshot = new Uint8Array(f.bits);
+        insertDomain(f, domain);
+        expect(Array.from(f.bits)).toEqual(Array.from(snapshot));
+      }),
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -387,6 +410,33 @@ describe("bloom filter serialization round-trip", () => {
 
           const serialized = serializeFilter(f);
           const loaded = loadFilter(serialized.buffer as ArrayBuffer);
+          expect(loaded.m).toBe(f.m);
+          expect(loaded.k).toBe(f.k);
+          for (const d of unique) {
+            expect(checkDomain(loaded, d)).toBe(true);
+          }
+        },
+      ),
+    );
+  });
+
+  it("loadFilter handles Uint8Array with non-zero byteOffset", () => {
+    fc.assert(
+      fc.property(
+        fc.array(arbDomain, { minLength: 1, maxLength: 5 }),
+        fc.integer({ min: 1, max: 64 }),
+        (domains, padding) => {
+          const unique = [...new Set(domains)];
+          const { m, k } = optimalParams(unique.length, 0.001);
+          const f = createFilter(m, k);
+          for (const d of unique) insertDomain(f, d);
+
+          const serialized = serializeFilter(f);
+          const padded = new Uint8Array(padding + serialized.length);
+          padded.set(serialized, padding);
+          const subview = new Uint8Array(padded.buffer, padding, serialized.length);
+
+          const loaded = loadFilter(subview);
           expect(loaded.m).toBe(f.m);
           expect(loaded.k).toBe(f.k);
           for (const d of unique) {
