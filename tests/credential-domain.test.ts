@@ -6,10 +6,13 @@ import {
   detectSubdomainStuffing,
   findClosestLookalike,
   getRegistrableDomain,
+  isIPAddress,
   isMixedScript,
   levenshtein,
   normalizeHomoglyphs,
-  recalcSeverity
+  normalizeHost,
+  recalcSeverity,
+  safeUrlParse,
 } from "../extension/src/shared/domain";
 import type { CredentialSettings } from "../extension/src/shared/storage";
 
@@ -605,4 +608,171 @@ describe("recalcSeverity", () => {
   it("returns 'low' for score = 39", () => expect(recalcSeverity(39)).toBe("low"));
   it("returns 'none' for score < 15", () => expect(recalcSeverity(14)).toBe("none"));
   it("returns 'none' for score = 0", () => expect(recalcSeverity(0)).toBe("none"));
+});
+
+describe("normalizeHost", () => {
+  it("lowercases uppercase host", () => {
+    expect(normalizeHost("EXAMPLE.COM")).toBe("example.com");
+  });
+
+  it("removes trailing dot", () => {
+    expect(normalizeHost("example.com.")).toBe("example.com");
+  });
+
+  it("lowercases and removes trailing dot together", () => {
+    expect(normalizeHost("Example.COM.")).toBe("example.com");
+  });
+
+  it("returns empty string for empty input", () => {
+    expect(normalizeHost("")).toBe("");
+  });
+
+  it("passes through already-normalized host", () => {
+    expect(normalizeHost("example.com")).toBe("example.com");
+  });
+
+  it("handles single label", () => {
+    expect(normalizeHost("LOCALHOST")).toBe("localhost");
+  });
+
+  it("handles host with multiple trailing dots (removes only last)", () => {
+    expect(normalizeHost("example.com..")).toBe("example.com.");
+  });
+
+  it("handles mixed-case subdomain", () => {
+    expect(normalizeHost("Sub.Domain.Example.COM")).toBe("sub.domain.example.com");
+  });
+});
+
+describe("isIPAddress", () => {
+  it("detects valid IPv4", () => {
+    expect(isIPAddress("192.168.1.1")).toBe(true);
+  });
+
+  it("detects 0.0.0.0", () => {
+    expect(isIPAddress("0.0.0.0")).toBe(true);
+  });
+
+  it("detects 255.255.255.255", () => {
+    expect(isIPAddress("255.255.255.255")).toBe(true);
+  });
+
+  it("rejects IPv4 with octet > 255", () => {
+    expect(isIPAddress("256.0.0.1")).toBe(false);
+  });
+
+  it("rejects IPv4 with too few octets", () => {
+    expect(isIPAddress("192.168.1")).toBe(false);
+  });
+
+  it("rejects IPv4 with too many octets", () => {
+    expect(isIPAddress("192.168.1.1.1")).toBe(false);
+  });
+
+  it("detects IPv6 loopback", () => {
+    expect(isIPAddress("::1")).toBe(true);
+  });
+
+  it("detects full IPv6", () => {
+    expect(isIPAddress("2001:0db8:85a3:0000:0000:8a2e:0370:7334")).toBe(true);
+  });
+
+  it("detects IPv4-mapped IPv6", () => {
+    expect(isIPAddress("::ffff:192.168.1.1")).toBe(true);
+  });
+
+  it("rejects regular domain names", () => {
+    expect(isIPAddress("example.com")).toBe(false);
+  });
+
+  it("rejects empty string", () => {
+    expect(isIPAddress("")).toBe(false);
+  });
+
+  it("normalizes case before checking", () => {
+    expect(isIPAddress("2001:0DB8::1")).toBe(true);
+  });
+
+  it("rejects domain that looks like IP with letters", () => {
+    expect(isIPAddress("192.168.1.abc")).toBe(false);
+  });
+
+  it("rejects negative octets", () => {
+    expect(isIPAddress("-1.0.0.0")).toBe(false);
+  });
+
+  it("detects compressed IPv6", () => {
+    expect(isIPAddress("fe80::1")).toBe(true);
+  });
+});
+
+describe("safeUrlParse", () => {
+  it("parses valid absolute URL", () => {
+    const url = safeUrlParse("https://example.com/path?q=1");
+    expect(url).not.toBeNull();
+    expect(url!.hostname).toBe("example.com");
+    expect(url!.pathname).toBe("/path");
+    expect(url!.searchParams.get("q")).toBe("1");
+  });
+
+  it("returns null for invalid URL without base", () => {
+    expect(safeUrlParse("not a url")).toBeNull();
+  });
+
+  it("returns null for empty string without base", () => {
+    expect(safeUrlParse("")).toBeNull();
+  });
+
+  it("parses relative URL with base", () => {
+    const url = safeUrlParse("/path", "https://example.com");
+    expect(url).not.toBeNull();
+    expect(url!.href).toBe("https://example.com/path");
+  });
+
+  it("returns null for invalid base", () => {
+    expect(safeUrlParse("/path", "not-a-base")).toBeNull();
+  });
+
+  it("parses URL with port", () => {
+    const url = safeUrlParse("https://example.com:8080/api");
+    expect(url).not.toBeNull();
+    expect(url!.port).toBe("8080");
+  });
+
+  it("parses URL with fragment", () => {
+    const url = safeUrlParse("https://example.com/page#section");
+    expect(url).not.toBeNull();
+    expect(url!.hash).toBe("#section");
+  });
+
+  it("parses data URL", () => {
+    const url = safeUrlParse("data:text/html,<h1>Hello</h1>");
+    expect(url).not.toBeNull();
+    expect(url!.protocol).toBe("data:");
+  });
+
+  it("parses blob URL", () => {
+    const url = safeUrlParse("blob:https://example.com/uuid");
+    expect(url).not.toBeNull();
+    expect(url!.protocol).toBe("blob:");
+  });
+
+  it("parses javascript: URL", () => {
+    const url = safeUrlParse("javascript:void(0)");
+    expect(url).not.toBeNull();
+    expect(url!.protocol).toBe("javascript:");
+  });
+
+  it("handles URL with auth info", () => {
+    const url = safeUrlParse("https://user:pass@example.com");
+    expect(url).not.toBeNull();
+    expect(url!.username).toBe("user");
+    expect(url!.password).toBe("pass");
+  });
+
+  it("handles about:blank", () => {
+    const url = safeUrlParse("about:blank");
+    expect(url).not.toBeNull();
+    expect(url!.protocol).toBe("about:");
+  });
 });
