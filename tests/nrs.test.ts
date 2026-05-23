@@ -271,6 +271,315 @@ describe("computeNRS", () => {
     });
   });
 
+  describe("knownBadDomain", () => {
+    it("adds +50 for known bad domain", () => {
+      const result = computeNRS(baseCds(0), baseNav({ knownBadDomain: true }));
+      expect(result.nrs).toBe(50);
+      expect(result.nrsFactors).toContain("nrs_known_bad_domain");
+    });
+
+    it("does not add when knownBadDomain is false", () => {
+      const result = computeNRS(baseCds(0), baseNav({ knownBadDomain: false }));
+      expect(result.nrs).toBe(0);
+      expect(result.nrsFactors).not.toContain("nrs_known_bad_domain");
+    });
+
+    it("does not add when knownBadDomain is undefined", () => {
+      const result = computeNRS(baseCds(0), baseNav());
+      expect(result.nrsFactors).not.toContain("nrs_known_bad_domain");
+    });
+
+    it("known bad domain alone exceeds strict block threshold", () => {
+      const result = computeNRS(baseCds(0), baseNav({ knownBadDomain: true }));
+      expect(result.nrs).toBeGreaterThanOrEqual(NRS_STRICT_BLOCK_THRESHOLD);
+    });
+  });
+
+  describe("redirectChainDepth", () => {
+    it("does not add score for depth at threshold (2)", () => {
+      const result = computeNRS(baseCds(0), baseNav({ redirectChainDepth: 2 }));
+      expect(result.nrs).toBe(0);
+      expect(result.nrsFactors).not.toContain("nrs_redirect_chain_depth");
+    });
+
+    it("adds +5 per hop over threshold", () => {
+      const result = computeNRS(baseCds(0), baseNav({ redirectChainDepth: 3 }));
+      expect(result.nrs).toBe(5);
+      expect(result.nrsFactors).toContain("nrs_redirect_chain_depth");
+    });
+
+    it("adds +10 for 2 hops over threshold", () => {
+      const result = computeNRS(baseCds(0), baseNav({ redirectChainDepth: 4 }));
+      expect(result.nrs).toBe(10);
+    });
+
+    it("caps at 25 for many hops", () => {
+      const result = computeNRS(baseCds(0), baseNav({ redirectChainDepth: 10 }));
+      expect(result.nrs).toBe(25);
+    });
+
+    it("caps at exactly 25 for 7 hops over threshold", () => {
+      const result = computeNRS(baseCds(0), baseNav({ redirectChainDepth: 9 }));
+      expect(result.nrs).toBe(25);
+    });
+
+    it("does not add when redirectChainDepth is undefined", () => {
+      const result = computeNRS(baseCds(0), baseNav());
+      expect(result.nrsFactors).not.toContain("nrs_redirect_chain_depth");
+    });
+
+    it("does not add for depth 0", () => {
+      const result = computeNRS(baseCds(0), baseNav({ redirectChainDepth: 0 }));
+      expect(result.nrsFactors).not.toContain("nrs_redirect_chain_depth");
+    });
+  });
+
+  describe("redirectViaKnownRedirector", () => {
+    it("adds +15 for single known redirector hop", () => {
+      const result = computeNRS(baseCds(0), baseNav({ redirectViaKnownRedirector: true }));
+      expect(result.nrs).toBe(15);
+      expect(result.nrsFactors).toContain("nrs_redirect_via_known_redirector");
+    });
+
+    it("adds +15 per hop with explicit knownRedirectorHops", () => {
+      const result = computeNRS(baseCds(0), baseNav({
+        redirectViaKnownRedirector: true,
+        knownRedirectorHops: 2,
+      }));
+      expect(result.nrs).toBe(30);
+    });
+
+    it("caps at 30 for many redirector hops", () => {
+      const result = computeNRS(baseCds(0), baseNav({
+        redirectViaKnownRedirector: true,
+        knownRedirectorHops: 5,
+      }));
+      expect(result.nrs).toBe(30);
+    });
+
+    it("defaults to 1 hop when knownRedirectorHops is undefined", () => {
+      const result = computeNRS(baseCds(0), baseNav({ redirectViaKnownRedirector: true }));
+      expect(result.nrs).toBe(15);
+    });
+
+    it("does not add when redirectViaKnownRedirector is false", () => {
+      const result = computeNRS(baseCds(0), baseNav({ redirectViaKnownRedirector: false }));
+      expect(result.nrsFactors).not.toContain("nrs_redirect_via_known_redirector");
+    });
+  });
+
+  describe("oauthRedirectMismatch", () => {
+    it("adds +30 for OAuth redirect mismatch", () => {
+      const result = computeNRS(baseCds(0), baseNav({ oauthRedirectMismatch: true }));
+      expect(result.nrs).toBe(30);
+      expect(result.nrsFactors).toContain("nrs_oauth_redirect_mismatch");
+    });
+
+    it("does not add when oauthRedirectMismatch is false", () => {
+      const result = computeNRS(baseCds(0), baseNav({ oauthRedirectMismatch: false }));
+      expect(result.nrsFactors).not.toContain("nrs_oauth_redirect_mismatch");
+    });
+  });
+
+  describe("oauthOpenerManipulation", () => {
+    it("adds +45 when doubleClickHijack is not active", () => {
+      const result = computeNRS(baseCds(0), baseNav({ oauthOpenerManipulation: true }));
+      expect(result.nrs).toBe(45);
+      expect(result.nrsFactors).toContain("nrs_oauth_opener_manipulation");
+    });
+
+    it("deduplicates with doubleClickHijack — adds only delta (+5)", () => {
+      const result = computeNRS(baseCds(0), baseNav({
+        oauthOpenerManipulation: true,
+        doubleClickHijackActive: true,
+      }));
+      // doubleClickHijack: +40, oauthOpener dedup: +45-40 = +5, total = 45
+      expect(result.nrs).toBe(45);
+      expect(result.nrsFactors).toContain("nrs_double_click_hijack");
+      expect(result.nrsFactors).toContain("nrs_oauth_opener_manipulation");
+    });
+
+    it("does not double-count when both OAuth opener and dblclick fire", () => {
+      const bothResult = computeNRS(baseCds(0), baseNav({
+        oauthOpenerManipulation: true,
+        doubleClickHijackActive: true,
+      }));
+      const openerOnlyResult = computeNRS(baseCds(0), baseNav({
+        oauthOpenerManipulation: true,
+      }));
+      // Both should yield the same NRS (45) since opener > dblclick
+      expect(bothResult.nrs).toBe(openerOnlyResult.nrs);
+    });
+
+    it("does not add when oauthOpenerManipulation is false", () => {
+      const result = computeNRS(baseCds(0), baseNav({ oauthOpenerManipulation: false }));
+      expect(result.nrsFactors).not.toContain("nrs_oauth_opener_manipulation");
+    });
+  });
+
+  describe("pushStateAbuse", () => {
+    it("adds +20 for pushState abuse", () => {
+      const result = computeNRS(baseCds(0), baseNav({ pushStateAbuse: true }));
+      expect(result.nrs).toBe(20);
+      expect(result.nrsFactors).toContain("nrs_pushstate_abuse");
+    });
+
+    it("does not add when pushStateAbuse is false", () => {
+      const result = computeNRS(baseCds(0), baseNav({ pushStateAbuse: false }));
+      expect(result.nrsFactors).not.toContain("nrs_pushstate_abuse");
+    });
+  });
+
+  describe("cspWeaknessScore", () => {
+    it("adds CSP weakness when base NRS > 20", () => {
+      const result = computeNRS(baseCds(21), baseNav({ cspWeaknessScore: 5 }));
+      expect(result.nrs).toBe(26);
+      expect(result.nrsFactors).toContain("nrs_csp_weakness");
+    });
+
+    it("does not add CSP weakness when base NRS <= 20", () => {
+      const result = computeNRS(baseCds(10), baseNav({ cspWeaknessScore: 5 }));
+      expect(result.nrs).toBe(10);
+      expect(result.nrsFactors).not.toContain("nrs_csp_weakness");
+    });
+
+    it("caps CSP weakness at 10", () => {
+      const result = computeNRS(baseCds(30), baseNav({ cspWeaknessScore: 20 }));
+      expect(result.nrs).toBe(40);
+    });
+
+    it("does not add when cspWeaknessScore is 0", () => {
+      const result = computeNRS(baseCds(30), baseNav({ cspWeaknessScore: 0 }));
+      expect(result.nrsFactors).not.toContain("nrs_csp_weakness");
+    });
+
+    it("threshold gate checks accumulated NRS, not just CDS", () => {
+      // CDS=10, but +20 from new tab = 30 > 20 threshold
+      const result = computeNRS(baseCds(10), baseNav({
+        isNewTabOrWindow: true,
+        cspWeaknessScore: 5,
+      }));
+      expect(result.nrsFactors).toContain("nrs_csp_weakness");
+    });
+  });
+
+  describe("domainRepeatOffender", () => {
+    it("adds +10 for repeat offender domain", () => {
+      const result = computeNRS(baseCds(0), baseNav({ domainRepeatOffender: true }));
+      expect(result.nrs).toBe(10);
+      expect(result.nrsFactors).toContain("nrs_domain_repeat_offender");
+    });
+
+    it("does not add when domainRepeatOffender is false", () => {
+      const result = computeNRS(baseCds(0), baseNav({ domainRepeatOffender: false }));
+      expect(result.nrsFactors).not.toContain("nrs_domain_repeat_offender");
+    });
+  });
+
+  describe("navAnomalyScore", () => {
+    it("adds nav anomaly when base NRS > 20", () => {
+      const result = computeNRS(baseCds(21), baseNav({ navAnomalyScore: 10 }));
+      expect(result.nrs).toBe(31);
+      expect(result.nrsFactors).toContain("nrs_nav_anomaly");
+    });
+
+    it("does not add nav anomaly when base NRS <= 20", () => {
+      const result = computeNRS(baseCds(10), baseNav({ navAnomalyScore: 10 }));
+      expect(result.nrs).toBe(10);
+      expect(result.nrsFactors).not.toContain("nrs_nav_anomaly");
+    });
+
+    it("caps nav anomaly at 15", () => {
+      const result = computeNRS(baseCds(30), baseNav({ navAnomalyScore: 25 }));
+      expect(result.nrs).toBe(45);
+    });
+
+    it("does not add when navAnomalyScore is 0", () => {
+      const result = computeNRS(baseCds(30), baseNav({ navAnomalyScore: 0 }));
+      expect(result.nrsFactors).not.toContain("nrs_nav_anomaly");
+    });
+  });
+
+  describe("openerWindowPreviouslyAllowed", () => {
+    it("reduces score by 20", () => {
+      const result = computeNRS(baseCds(30), baseNav({ openerWindowPreviouslyAllowed: true }));
+      expect(result.nrs).toBe(10);
+      expect(result.nrsFactors).toContain("nrs_opener_previously_allowed");
+    });
+
+    it("does not apply when false", () => {
+      const result = computeNRS(baseCds(30), baseNav({ openerWindowPreviouslyAllowed: false }));
+      expect(result.nrsFactors).not.toContain("nrs_opener_previously_allowed");
+    });
+
+    it("clamps to 0 when reduction would go negative", () => {
+      const result = computeNRS(baseCds(10), baseNav({ openerWindowPreviouslyAllowed: true }));
+      expect(result.nrs).toBe(0);
+    });
+  });
+
+  describe("diminishing returns", () => {
+    it("applies 50% weight to points above 100", () => {
+      // CDS=80 + newTab(20) + crossSite(20) = 120 raw
+      // 100 + (120-100)*0.5 = 110
+      const result = computeNRS(baseCds(80), baseNav({
+        isNewTabOrWindow: true,
+        isCrossSite: true,
+      }));
+      expect(result.nrs).toBe(110);
+    });
+
+    it("does not apply at exactly 100", () => {
+      const result = computeNRS(baseCds(60), baseNav({
+        isNewTabOrWindow: true,
+        isCrossSite: true,
+      }));
+      expect(result.nrs).toBe(100);
+    });
+
+    it("does not apply below 100", () => {
+      const result = computeNRS(baseCds(50), baseNav({
+        isNewTabOrWindow: true,
+        isCrossSite: true,
+      }));
+      expect(result.nrs).toBe(90);
+    });
+
+    it("heavy compound scenario with diminishing returns", () => {
+      // CDS=50 + newTab(20) + crossSite(20) + knownBad(50) = 140
+      // 100 + (140-100)*0.5 = 120
+      const result = computeNRS(baseCds(50), baseNav({
+        isNewTabOrWindow: true,
+        isCrossSite: true,
+        knownBadDomain: true,
+      }));
+      expect(result.nrs).toBe(120);
+    });
+  });
+
+  describe("clickfixScore", () => {
+    it("adds clickfix score directly", () => {
+      const result = computeNRS(baseCds(0), baseNav({ clickfixScore: 20 }));
+      expect(result.nrs).toBe(20);
+      expect(result.nrsFactors).toContain("nrs_clickfix_active");
+    });
+
+    it("caps clickfix at 40", () => {
+      const result = computeNRS(baseCds(0), baseNav({ clickfixScore: 60 }));
+      expect(result.nrs).toBe(40);
+    });
+
+    it("does not add when clickfixScore is 0", () => {
+      const result = computeNRS(baseCds(0), baseNav({ clickfixScore: 0 }));
+      expect(result.nrsFactors).not.toContain("nrs_clickfix_active");
+    });
+
+    it("does not add when clickfixScore is undefined", () => {
+      const result = computeNRS(baseCds(0), baseNav());
+      expect(result.nrsFactors).not.toContain("nrs_clickfix_active");
+    });
+  });
+
   describe("jsBehaviorScore", () => {
     it("adds JS behavior score capped at 35", () => {
       const result = computeNRS(baseCds(0), baseNav({ jsBehaviorScore: 25 }));
