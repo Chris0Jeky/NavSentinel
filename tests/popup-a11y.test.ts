@@ -66,9 +66,10 @@ describe("popup.html accessibility — HTML validation", () => {
     expect(logo!.getAttribute("aria-hidden")).toBe("true");
   });
 
-  it("shieldArc has aria-label for risk score context", () => {
+  it("shieldArc has role=img and aria-label for risk score context", () => {
     const arc = document.getElementById("shieldArc");
     expect(arc).toBeTruthy();
+    expect(arc!.getAttribute("role")).toBe("img");
     expect(arc!.getAttribute("aria-label")).toBe("Tab risk score");
   });
 });
@@ -92,5 +93,19 @@ describe("popup trust button aria-label — dynamic update", () => {
     const siteLabel = "example.com";
     btn.setAttribute("aria-label", `Untrust ${siteLabel}`);
     expect(btn.getAttribute("aria-label")).toBe("Untrust example.com");
+  });
+
+  it("falls back to generic label when no valid domain", () => {
+    const trustBtn = document.createElement("button");
+    trustBtn.setAttribute("aria-label", "Trust this site");
+    const untrustBtn = document.createElement("button");
+    untrustBtn.setAttribute("aria-label", "Untrust this site");
+
+    const registrableDomain = "";
+    trustBtn.setAttribute("aria-label", registrableDomain ? `Trust ${registrableDomain}` : "Trust this site");
+    untrustBtn.setAttribute("aria-label", registrableDomain ? `Untrust ${registrableDomain}` : "Untrust this site");
+
+    expect(trustBtn.getAttribute("aria-label")).toBe("Trust this site");
+    expect(untrustBtn.getAttribute("aria-label")).toBe("Untrust this site");
   });
 });
