@@ -130,6 +130,15 @@ describe("levenshtein properties", () => {
       )
     );
   });
+
+  it("long inputs above LEVENSHTEIN_MAX_LEN return max(|a|, |b|)", () => {
+    const longString = fc.string({ minLength: 254, maxLength: 300 });
+    fc.assert(
+      fc.property(longString, longString, (a, b) => {
+        expect(levenshtein(a, b)).toBe(Math.max(a.length, b.length));
+      })
+    );
+  });
 });
 
 describe("normalizeHomoglyphs properties", () => {
@@ -236,7 +245,7 @@ describe("recalcSeverity properties", () => {
 });
 
 describe("safeUrlParse properties", () => {
-  it("valid https URLs always parse successfully", () => {
+  it("valid web URLs always parse successfully", () => {
     fc.assert(
       fc.property(
         fc.webUrl({ authoritySettings: { withPort: false } }),
