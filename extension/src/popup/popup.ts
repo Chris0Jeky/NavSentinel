@@ -207,6 +207,8 @@ async function refreshUi(): Promise<void> {
   untrustBtn.disabled = !siteState.canUntrust;
   trustBtn.hidden = siteState.isTrusted;
   untrustBtn.hidden = !siteState.isTrusted;
+  trustBtn.setAttribute("aria-label", `Trust ${siteState.siteLabel}`);
+  untrustBtn.setAttribute("aria-label", `Untrust ${siteState.siteLabel}`);
 
   const log = await getEventLog();
   renderEvents(log);
