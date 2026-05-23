@@ -427,7 +427,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         prevUrl: entry?.prevUrl
       });
     } else {
-      sendResponse?.({ shouldRollback: false });
+      sendResponse?.({ shouldRollback: false, entry: undefined, prevUrl: undefined });
     }
   }
 
