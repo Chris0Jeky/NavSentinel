@@ -58,7 +58,7 @@ const EXPLANATIONS: Record<string, string> = {
 };
 
 export function explainReasonCode(code: string): string {
-  return EXPLANATIONS[code] ?? code;
+  return Object.hasOwn(EXPLANATIONS, code) ? EXPLANATIONS[code]! : code;
 }
 
 export function explainReasonCodes(codes: string[]): string[] {
