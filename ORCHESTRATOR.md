@@ -84,6 +84,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | T-53 | Fix importAll bugs: duplicate promptOutcomes check + slice(-0) | S | — | #154 | done (2/2 reviews) |
 | T-54 | Property tests for storage.ts round-trip (exportAll/importAll) | S | — | #155 | done (2/2 reviews) |
 | T-55 | Fix optimalParams NaN/Infinity guard + remove dead exports | S | — | #156 | done (2/2 reviews) |
+| T-56 | Add diagnostic logging to silent adaptive scoring catch blocks | S | — | #157 | done (2/2 reviews) |
 | T-12 | Reduce ESLint warnings (59 remaining) | M | — | — | seeded (needs #116 merged first) |
 | T-13 | Visual similarity detection (continue P4-01) | XL | — | — | pending |
 | T-14 | FP measurement re-run (Phase 2 gate) | M | — | — | pending |
@@ -143,6 +144,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #154 | fix/importall-bugs | T-53 | 2/2 done, all findings fixed | open (ready for human) |
 | #155 | test/storage-property-tests | T-54 | 2/2 done, all findings fixed | open (ready for human) |
 | #156 | fix/optimalparams-guard | T-55 | 2/2 done, all findings fixed | open (ready for human) |
+| #157 | fix/capture-silent-catch | T-56 | 2/2 done, all findings fixed | open (ready for human) |
 
 ## Review Log
 
@@ -236,6 +238,8 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #155 | R2 | Claude Opus | Optional fields missing from generators (round-trip gap), weak event/outcome count assertions (<=), potential duplicate IDs | Fixed |
 | #156 | R1 | Claude Opus | Missing extreme-p test, isIPAddress still exported unnecessarily | Fixed |
 | #156 | R2 | Claude Opus | No actionable findings — -0 handling, MIN_VALUE, existing test compat all verified | Clean |
+| #157 | R1 | Claude Opus | ORCHESTRATOR.md T-54/T-55 in wrong PR (resolved by pushing main), inconsistent error message missing fallback description | Fixed |
+| #157 | R2 | Claude Opus | No actionable findings — message consistency, accuracy, log level, prefix, flooding risk all verified | Clean |
 
 ## Active Worktrees
 
@@ -283,6 +287,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | NavSentinel-wt-importall-fix | fix/importall-bugs | #154 | complete |
 | NavSentinel-wt-storage-props | test/storage-property-tests | #155 | complete |
 | NavSentinel-wt-optimalparams-fix | fix/optimalparams-guard | #156 | complete |
+| NavSentinel-wt-silent-catch | fix/capture-silent-catch | #157 | complete |
 
 ## Notes
 
