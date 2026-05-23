@@ -425,13 +425,13 @@ describe("computeNRS property tests", () => {
     );
   });
 
-  it("redirect chain score is monotonic with depth", () => {
+  it("redirect chain score is monotonic with depth (including threshold boundary)", () => {
     fc.assert(
       fc.property(
         arbScoreResult,
         arbNavigationContext,
-        fc.integer({ min: 3, max: 15 }),
-        fc.integer({ min: 3, max: 15 }),
+        fc.integer({ min: 0, max: 15 }),
+        fc.integer({ min: 0, max: 15 }),
         (cds, nav, depthA, depthB) => {
           const lo = Math.min(depthA, depthB);
           const hi = Math.max(depthA, depthB);
@@ -444,41 +444,69 @@ describe("computeNRS property tests", () => {
     );
   });
 
-  it("CSP weakness has no effect when base NRS is zero", () => {
+  it("redirect chain score caps at depth 7 (5 hops over threshold)", () => {
     fc.assert(
       fc.property(
-        fc.integer({ min: 1, max: 50 }),
-        (cspScore) => {
-          const baseCds: ScoreResult = { cds: 0, reasonCodes: [] };
-          const nav: NavigationContext = {
-            isNewTabOrWindow: false,
-            isCrossSite: false,
-            cspWeaknessScore: cspScore,
-          };
-          const result = computeNRS(baseCds, nav);
-          expect(result.nrs).toBe(0);
+        arbScoreResult,
+        fc.integer({ min: 8, max: 20 }),
+        (cds, depth) => {
+          const base: NavigationContext = { isNewTabOrWindow: false, isCrossSite: false };
+          const at7 = computeNRS(cds, { ...base, redirectChainDepth: 7 });
+          const atHigher = computeNRS(cds, { ...base, redirectChainDepth: depth });
+          expect(atHigher.nrs).toBe(at7.nrs);
         }
       ),
       { numRuns: 100 }
     );
   });
 
-  it("navAnomaly has no effect when base NRS is zero", () => {
+  it("CSP weakness has no effect when base NRS is <= 20 (threshold gate)", () => {
     fc.assert(
       fc.property(
+        fc.integer({ min: 0, max: 20 }),
+        fc.integer({ min: 1, max: 50 }),
+        (baseCdsScore, cspScore) => {
+          const baseCds: ScoreResult = { cds: baseCdsScore, reasonCodes: [] };
+          const nav: NavigationContext = {
+            isNewTabOrWindow: false,
+            isCrossSite: false,
+            cspWeaknessScore: cspScore,
+          };
+          const withoutCsp: NavigationContext = {
+            isNewTabOrWindow: false,
+            isCrossSite: false,
+          };
+          const result = computeNRS(baseCds, nav);
+          const baseline = computeNRS(baseCds, withoutCsp);
+          expect(result.nrs).toBe(baseline.nrs);
+        }
+      ),
+      { numRuns: 200 }
+    );
+  });
+
+  it("navAnomaly has no effect when base NRS is <= 20 (threshold gate)", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 0, max: 20 }),
         fc.integer({ min: 1, max: 30 }),
-        (anomalyScore) => {
-          const baseCds: ScoreResult = { cds: 0, reasonCodes: [] };
+        (baseCdsScore, anomalyScore) => {
+          const baseCds: ScoreResult = { cds: baseCdsScore, reasonCodes: [] };
           const nav: NavigationContext = {
             isNewTabOrWindow: false,
             isCrossSite: false,
             navAnomalyScore: anomalyScore,
           };
+          const withoutAnomaly: NavigationContext = {
+            isNewTabOrWindow: false,
+            isCrossSite: false,
+          };
           const result = computeNRS(baseCds, nav);
-          expect(result.nrs).toBe(0);
+          const baseline = computeNRS(baseCds, withoutAnomaly);
+          expect(result.nrs).toBe(baseline.nrs);
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 200 }
     );
   });
 
@@ -511,6 +539,17 @@ describe("computeNRS property tests", () => {
         }
       ),
       { numRuns: 100 }
+    );
+  });
+
+  it("pushStateAbuse always increases or maintains score", () => {
+    fc.assert(
+      fc.property(arbScoreResult, arbNavigationContext, (cds, nav) => {
+        const without = computeNRS(cds, { ...nav, pushStateAbuse: false });
+        const withPush = computeNRS(cds, { ...nav, pushStateAbuse: true });
+        expect(withPush.nrs).toBeGreaterThanOrEqual(without.nrs);
+      }),
+      { numRuns: 500 }
     );
   });
 
