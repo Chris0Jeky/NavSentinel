@@ -59,6 +59,11 @@ describe("debug_overlay", () => {
   }
 
   describe("setDebugEnabled", () => {
+    it("module state is fresh after resetModules (isolation canary)", () => {
+      updateDebugOverlay(defaultInfo());
+      expect(getHost()).toBeNull();
+    });
+
     it("creates host element when enabled", () => {
       expect(getHost()).toBeNull();
       setDebugEnabled(true);
@@ -484,6 +489,196 @@ describe("debug_overlay", () => {
       updateDebugOverlay(defaultInfo());
       expect(getHost()).not.toBeNull();
       expect(getPanel()!.textContent).toContain("NavSentinel Debug");
+    });
+
+    it("displays mode: off", () => {
+      setDebugEnabled(true);
+      updateDebugOverlay(defaultInfo({ mode: "off" }));
+      expect(getPanel()!.textContent).toContain("Mode: off");
+    });
+
+    it("displays decision: prompt", () => {
+      setDebugEnabled(true);
+      updateDebugOverlay(defaultInfo({ decision: "prompt" }));
+      expect(getPanel()!.textContent).toContain("Decision: prompt");
+    });
+
+    it("displays mainGuard: no", () => {
+      setDebugEnabled(true);
+      updateDebugOverlay(defaultInfo({ mainGuard: "no" }));
+      expect(getPanel()!.textContent).toContain("MainGuard: no");
+    });
+
+    it("handles zero-sized rect", () => {
+      setDebugEnabled(true);
+      updateDebugOverlay(
+        defaultInfo({
+          ctx: {
+            viewport: { w: 1280, h: 720 },
+            input: "pointer",
+            top: { tag: "A", rect: { w: 0, h: 0 } },
+          },
+        }),
+      );
+      expect(getPanel()!.textContent).toContain("Top: A (0x0)");
+    });
+
+    it("handles negative rect dimensions", () => {
+      setDebugEnabled(true);
+      updateDebugOverlay(
+        defaultInfo({
+          ctx: {
+            viewport: { w: 1280, h: 720 },
+            input: "pointer",
+            top: { tag: "A", rect: { w: -5, h: -10 } },
+          },
+        }),
+      );
+      expect(getPanel()!.textContent).toContain("Top: A (-5x-10)");
+    });
+
+    it("does not interpret HTML in reason codes or URLs (XSS safety)", () => {
+      setDebugEnabled(true);
+      updateDebugOverlay(
+        defaultInfo({
+          reasonCodes: ["<img src=x onerror=alert(1)>"],
+          lastNav: {
+            kind: "click",
+            url: "<script>alert(1)</script>",
+            status: "blocked",
+          },
+        }),
+      );
+      const panel = getPanel()!;
+      expect(panel.textContent).toContain("<img src=x onerror=alert(1)>");
+      expect(panel.innerHTML).not.toContain("<img");
+      expect(panel.children.length).toBe(0);
+    });
+
+    it("works with keyboard input context", () => {
+      setDebugEnabled(true);
+      updateDebugOverlay(
+        defaultInfo({
+          ctx: {
+            viewport: { w: 1280, h: 720 },
+            input: "keyboard",
+            top: { tag: "A", rect: { w: 100, h: 30 } },
+          },
+        }),
+      );
+      expect(getPanel()!.textContent).toContain("NavSentinel Debug");
+    });
+
+    it("renders non-empty cspInfo.reasons without breaking overlay", () => {
+      setDebugEnabled(true);
+      updateDebugOverlay(
+        defaultInfo({
+          cspInfo: {
+            hasCSP: true,
+            score: 60,
+            isStrict: false,
+            reasons: ["missing-nonce", "unsafe-inline"],
+          },
+        }),
+      );
+      const text = getPanel()!.textContent!;
+      expect(text).toContain("CSP: yes (score=60, strict=false)");
+    });
+
+    it("writes to detached host if externally removed (documents limitation)", () => {
+      setDebugEnabled(true);
+      const hostRef = getHost()!;
+      hostRef.remove();
+      expect(getHost()).toBeNull();
+      updateDebugOverlay(defaultInfo({ decision: "block" }));
+      expect(getHost()).toBeNull();
+      expect(hostRef.shadowRoot!.querySelector(".panel")!.textContent).toContain(
+        "Decision: block",
+      );
+    });
+
+    it("renders all lines in correct order with expected count", () => {
+      setDebugEnabled(true);
+      updateDebugOverlay(
+        defaultInfo({
+          nrs: 50,
+          mainGuard: "yes",
+          reasonCodes: ["TINY"],
+          nrsFactors: ["nrs_new"],
+          lastNav: { kind: "click", url: "https://x.com", status: "allowed" },
+          mutationAlerts: 3,
+          cspInfo: { hasCSP: true, score: 80, isStrict: true, reasons: [] },
+          adaptiveAdj: -5,
+          navAnomalyScore: 12,
+          ctx: {
+            viewport: { w: 1280, h: 720 },
+            input: "pointer",
+            top: { tag: "A", role: "link", rect: { w: 100, h: 30 } },
+            underlying: { tag: "DIV", rect: { w: 200, h: 50 } },
+            retargeted: true,
+            isLegitModalBackdrop: false,
+            explicitNewTabIntent: true,
+          },
+        }),
+      );
+      const lines = getPanel()!.textContent!.split("\n");
+      expect(lines).toHaveLength(17);
+      expect(lines[0]).toBe("NavSentinel Debug");
+      expect(lines[1]).toMatch(/^Mode:/);
+      expect(lines[2]).toMatch(/^MainGuard:/);
+      expect(lines[3]).toMatch(/^Decision:/);
+      expect(lines[4]).toMatch(/^NRS:.*CDS:/);
+      expect(lines[5]).toMatch(/^CDS reasons:/);
+      expect(lines[6]).toMatch(/^NRS factors:/);
+      expect(lines[7]).toMatch(/^LastNav:/);
+      expect(lines[8]).toMatch(/^Top:/);
+      expect(lines[9]).toMatch(/^Under:/);
+      expect(lines[10]).toMatch(/^Retargeted:/);
+      expect(lines[11]).toMatch(/^LegitBackdrop:/);
+      expect(lines[12]).toMatch(/^ExplicitNewTab:/);
+      expect(lines[13]).toMatch(/^MutationAlerts:/);
+      expect(lines[14]).toMatch(/^CSP:/);
+      expect(lines[15]).toMatch(/^AdaptiveAdj:/);
+      expect(lines[16]).toMatch(/^NavAnomaly:/);
+    });
+
+    it("renders all optional fields populated together", () => {
+      setDebugEnabled(true);
+      updateDebugOverlay({
+        mode: "strict",
+        decision: "block",
+        cds: 85,
+        nrs: 90,
+        reasonCodes: ["OPACITY_LOW", "nrs_fallback"],
+        nrsFactors: ["nrs_new_domain", "nrs_no_tls"],
+        mainGuard: "yes",
+        lastNav: { kind: "redirect", url: "https://evil.com/phish", status: "blocked" },
+        mutationAlerts: 7,
+        cspInfo: { hasCSP: true, score: 95, isStrict: true, reasons: ["strict-dynamic"] },
+        adaptiveAdj: -20,
+        navAnomalyScore: 55,
+        ctx: {
+          viewport: { w: 1920, h: 1080 },
+          input: "keyboard",
+          top: { tag: "BUTTON", role: "button", rect: { w: 120, h: 40 } },
+          underlying: { tag: "FORM", role: "form", rect: { w: 400, h: 300 } },
+          retargeted: true,
+          isLegitModalBackdrop: true,
+          explicitNewTabIntent: true,
+        },
+      });
+      const text = getPanel()!.textContent!;
+      expect(text).toContain("Mode: strict");
+      expect(text).toContain("Decision: block");
+      expect(text).toContain("NRS: 90");
+      expect(text).toContain("CDS: 85");
+      expect(text).toContain("MainGuard: yes");
+      expect(text).toContain("Retargeted: yes");
+      expect(text).toContain("LegitBackdrop: yes");
+      expect(text).toContain("ExplicitNewTab: yes");
+      expect(text).toContain("MutationAlerts: 7");
+      expect(text).toContain("AdaptiveAdj: -20");
+      expect(text).toContain("NavAnomaly: 55");
     });
   });
 });
