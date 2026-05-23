@@ -603,22 +603,6 @@ export function correlatesWithFormSubmit(requestTs: number): boolean {
 }
 
 /**
- * Compute the JS behavior score from accumulated signals.
- *
- * Called by the isolated world when integrating signals into NRS.
- * The score is capped at NRS_WEIGHT_JS_BEHAVIOR_CAP (35 points).
- *
- * @param state - Current aggregated behavior state
- * @returns Computed score (0 to NRS_WEIGHT_JS_BEHAVIOR_CAP)
- *
- * TODO(#127): Implement scoring logic with proper capping
- */
-export function computeJsBehaviorScore(state: JsBehaviorState): number {
-  void state;
-  return 0;
-}
-
-/**
  * Create a fresh (empty) JS behavior state object.
  *
  * Used by the isolated world to initialize state on page load.
