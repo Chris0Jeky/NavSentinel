@@ -586,7 +586,7 @@ async function refreshAdaptiveScores(baseThreshold?: number): Promise<void> {
     await updateAdaptiveScores(outcomes, threshold);
     adaptiveAdjustment = await getEffectiveThresholdAdjustment(siteKeyFromLocation());
   } catch (err) {
-    console.warn("[NavSentinel] Failed to refresh adaptive scores", err);
+    console.warn("[NavSentinel] Failed to refresh adaptive scores, using stale values", err);
   }
 }
 
