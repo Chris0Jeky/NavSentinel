@@ -132,8 +132,8 @@ async function flushMicrotasks(): Promise<void> {
   await new Promise((r) => setTimeout(r, 0));
 }
 
-async function dispatchSubmit(form: HTMLFormElement): Promise<Event> {
-  const event = new Event("submit", { bubbles: true, cancelable: true });
+async function dispatchSubmit(form: HTMLFormElement, submitter?: HTMLElement): Promise<Event> {
+  const event = new SubmitEvent("submit", { bubbles: true, cancelable: true, submitter: submitter ?? null });
   form.dispatchEvent(event);
   await flushMicrotasks();
   return event;
@@ -164,14 +164,19 @@ function defaultRisk() {
       isHttps: true,
       isTrusted: false,
     },
+    lookalike: null,
   };
 }
 
 function defaultConfig() {
   return {
     mode: "smart" as const,
+    promptOnUntrustedDomain: true,
+    promptOnMediumRisk: true,
+    mediumRiskThreshold: 20,
+    blockHttpPasswordSubmit: true,
     warnOnPaste: true,
-    promptThreshold: 20,
+    similarity: { enabled: true, maxDistance: 2 },
   };
 }
 
@@ -438,7 +443,7 @@ describe("credential_guard", () => {
       const form = createPasswordForm();
       await dispatchSubmit(form);
 
-      expect(risk.score).toBeLessThanOrEqual(100);
+      expect(risk.score).toBe(100);
     });
 
     it("clamps risk score floor at 0 when SRI bonus reduces it", async () => {
@@ -491,6 +496,33 @@ describe("credential_guard", () => {
           actionUrl: "https://example.com/login",
         }),
       );
+    });
+
+    it("resolves data: action URLs without fallback", async () => {
+      stubLocation("https://example.com/login");
+      const form = createPasswordForm("data:text/html,<h1>phish</h1>");
+
+      await dispatchSubmit(form);
+
+      expect(mockComputeRisk).toHaveBeenCalledWith(
+        expect.objectContaining({
+          actionUrl: "data:text/html,<h1>phish</h1>",
+        }),
+      );
+    });
+
+    it("passes submitter through to requestSubmit", async () => {
+      mockShowModal.mockResolvedValue("proceed_once");
+      const form = createPasswordForm();
+      const btn = document.createElement("button");
+      btn.type = "submit";
+      form.appendChild(btn);
+      const requestSubmitSpy = vi.fn();
+      (form as any).requestSubmit = requestSubmitSpy;
+
+      await dispatchSubmit(form, btn);
+
+      expect(requestSubmitSpy).toHaveBeenCalledWith(btn);
     });
 
     it("falls back to form.submit() when requestSubmit is unavailable", async () => {
@@ -620,6 +652,7 @@ describe("credential_guard", () => {
       expect(mockAppendOutcome).toHaveBeenCalledWith(
         expect.objectContaining({
           outcome: "trust",
+          domain: "example.com",
           type: "cred",
         }),
       );
@@ -693,12 +726,12 @@ describe("credential_guard", () => {
       await dispatchSubmit(form);
 
       expect(mockAppendEvent).toHaveBeenCalledTimes(1);
-      expect(mockAppendEvent).toHaveBeenCalledWith(
-        expect.objectContaining({
-          kind: "cred_submit_prompt",
-          extra: expect.objectContaining({ error: "storage failed" }),
-        }),
-      );
+      const errorEvent = mockAppendEvent.mock.calls[0]![0] as any;
+      expect(errorEvent.kind).toBe("cred_submit_prompt");
+      expect(errorEvent.extra.error).toBe("storage failed");
+      expect(errorEvent).not.toHaveProperty("score");
+      expect(errorEvent).not.toHaveProperty("reasons");
+      expect(errorEvent).not.toHaveProperty("destHost");
       expect(requestSubmitSpy).not.toHaveBeenCalled();
     });
   });
@@ -750,6 +783,7 @@ describe("credential_guard", () => {
       const input = createPasswordInput();
       await dispatchPaste(input);
 
+      expect(mockGetTrusted).toHaveBeenCalled();
       expect(mockShowToast).toHaveBeenCalledWith(
         expect.objectContaining({
           message: expect.stringContaining("suspicious-site.com"),
@@ -767,6 +801,7 @@ describe("credential_guard", () => {
       const input = createPasswordInput();
       await dispatchPaste(input);
 
+      expect(mockGetTrusted).toHaveBeenCalled();
       expect(mockShowToast).not.toHaveBeenCalled();
     });
 
@@ -832,6 +867,9 @@ describe("credential_guard", () => {
     });
   });
 
+  // The module-level WeakMap `allowNextSubmitUntil` persists across tests.
+  // Each test creates a fresh form, so entries from prior tests are GC-eligible
+  // and cannot leak. Do NOT reuse form references across `it` blocks.
   describe("allowNextSubmit mechanism", () => {
     it("second submit on same form within window proceeds without prompt", async () => {
       mockShowModal.mockResolvedValue("proceed_once");
@@ -848,6 +886,62 @@ describe("credential_guard", () => {
       expect(event2.defaultPrevented).toBe(false);
       expect(mockGetSettings).not.toHaveBeenCalled();
       expect(mockShowModal).not.toHaveBeenCalled();
+    });
+
+    it("bypass does not apply to a different form", async () => {
+      mockShowModal.mockResolvedValue("proceed_once");
+      const form1 = createPasswordForm();
+      (form1 as any).requestSubmit = vi.fn();
+
+      await dispatchSubmit(form1);
+      expect(mockShowModal).toHaveBeenCalledTimes(1);
+
+      const form2 = createPasswordForm();
+      const event2 = await dispatchSubmit(form2);
+
+      expect(event2.defaultPrevented).toBe(true);
+      expect(mockShowModal).toHaveBeenCalledTimes(2);
+    });
+
+    it("bypass expires after 5-second window", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        mockShowModal.mockResolvedValue("proceed_once");
+        const form = createPasswordForm();
+        (form as any).requestSubmit = vi.fn();
+
+        const event1 = new SubmitEvent("submit", { bubbles: true, cancelable: true, submitter: null });
+        form.dispatchEvent(event1);
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(mockShowModal).toHaveBeenCalledTimes(1);
+        vi.resetAllMocks();
+        mockGetSettings.mockResolvedValue(defaultConfig());
+        mockGetTrusted.mockResolvedValue([]);
+        mockComputeRisk.mockReturnValue(defaultRisk());
+        mockIsCrossSite.mockReturnValue(true);
+        mockGetReasonLines.mockReturnValue(["Domain mismatch"]);
+        mockShouldPrompt.mockReturnValue(true);
+        mockShowModal.mockResolvedValue("cancel");
+        mockAnalyzeContent.mockReturnValue({ score: 0, reasons: [] });
+        mockCheckSRI.mockReturnValue({ score: 0, reasons: [] });
+        mockAppendEvent.mockResolvedValue(undefined);
+        mockAppendOutcome.mockResolvedValue(undefined);
+        mockNormalizeHost.mockReturnValue("example.com");
+        mockGetRegDomain.mockReturnValue("example.com");
+        mockRecalcSeverity.mockReturnValue("medium");
+
+        vi.advanceTimersByTime(5001);
+
+        const event3 = new SubmitEvent("submit", { bubbles: true, cancelable: true, submitter: null });
+        form.dispatchEvent(event3);
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(event3.defaultPrevented).toBe(true);
+        expect(mockShowModal).toHaveBeenCalledTimes(1);
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });
