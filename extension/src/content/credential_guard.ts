@@ -57,11 +57,7 @@ function resumeSubmit(form: HTMLFormElement, submitter: HTMLElement | null): voi
   markAllowNext(form, 5000);
 
   try {
-    if (typeof form.requestSubmit === "function") {
-      form.requestSubmit(submitter);
-    } else {
-      form.submit();
-    }
+    form.requestSubmit(submitter);
   } catch {
     try {
       form.submit();
@@ -300,5 +296,5 @@ async function handlePaste(evt: ClipboardEvent): Promise<void> {
   }
 }
 
-document.addEventListener("submit", (e) => void handleSubmit(e as SubmitEvent), true);
-document.addEventListener("paste", (e) => void handlePaste(e as ClipboardEvent), true);
+document.addEventListener("submit", (e) => void handleSubmit(e), true);
+document.addEventListener("paste", (e) => void handlePaste(e), true);
