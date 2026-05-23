@@ -74,6 +74,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | T-43 | Property-based tests for domain.ts utilities (fast-check) | S | — | #144 | done (2/2 reviews) |
 | T-44 | Clean stale TODOs + remove dead stub in js_behavior_monitor | S | #127 | #145 | done (2/2 reviews) |
 | T-45 | Property tests for visual_sim_hash.ts (hammingDistance, aHash, bHash) | S | — | #146 | done (2/2 reviews) |
+| T-46 | Property tests for murmurhash3_32 and computeAdjustment | S | — | #147 | done (2/2 reviews) |
 | T-12 | Reduce ESLint warnings (59 remaining) | M | — | — | seeded (needs #116 merged first) |
 | T-13 | Visual similarity detection (continue P4-01) | XL | — | — | pending |
 | T-14 | FP measurement re-run (Phase 2 gate) | M | — | — | pending |
@@ -123,6 +124,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #144 | test/domain-property-tests | T-43 | 2/2 done, all findings fixed | open (ready for human) |
 | #145 | fix/jsb-stale-todos-and-tests | T-44 | 2/2 done, no actionable findings | open (ready for human) |
 | #146 | test/visual-sim-property-tests | T-45 | 2/2 done, all findings fixed | open (ready for human) |
+| #147 | test/hash-adaptive-property-tests | T-46 | 2/2 done, all findings fixed | open (ready for human) |
 
 ## Review Log
 
@@ -196,6 +198,8 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #145 | R2 | Claude Opus | No actionable findings — no stale TODOs remain, remaining items correctly retained | Clean |
 | #146 | R1 | Claude Opus | Unused arbHash32 arbitrary, missing color RGB test for grayscale conversion | Fixed |
 | #146 | R2 | Claude Opus | No actionable findings — alpha/sizing/division-by-zero all verified correct | Clean |
+| #147 | R1 | Claude Opus | Missing high-score allow test (0.3 weight discount path not exercised) | Fixed |
+| #147 | R2 | Claude Opus | No actionable findings — cancel neutrality, windowing, avalanche all verified | Clean |
 
 ## Active Worktrees
 
@@ -233,6 +237,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | NavSentinel-wt-domain-props | test/domain-property-tests | #144 | complete |
 | NavSentinel-wt-jsb-cleanup | fix/jsb-stale-todos-and-tests | #145 | complete |
 | NavSentinel-wt-vsim-props | test/visual-sim-property-tests | #146 | complete |
+| NavSentinel-wt-hash-adapt-props | test/hash-adaptive-property-tests | #147 | complete |
 
 ## Notes
 
