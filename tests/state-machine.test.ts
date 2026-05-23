@@ -27,7 +27,7 @@ describe("stateMachine", () => {
   });
 
   describe("makeToken", () => {
-    it("creates a token with correct fields", () => {
+    it("creates a token with all expected fields", () => {
       const token = makeToken({
         siteKey: "example.com",
         frameKey: "frame-1",
@@ -35,11 +35,17 @@ describe("stateMachine", () => {
         cds: 25,
         reasonCodes: ["TINY_ELEMENT"],
       });
-      expect(token.siteKey).toBe("example.com");
-      expect(token.frameKey).toBe("frame-1");
-      expect(token.mode).toBe("smart");
-      expect(token.cds).toBe(25);
-      expect(token.reasonCodes).toEqual(["TINY_ELEMENT"]);
+      expect(token).toMatchObject({
+        siteKey: "example.com",
+        frameKey: "frame-1",
+        mode: "smart",
+        cds: 25,
+        reasonCodes: ["TINY_ELEMENT"],
+        createdAt: 1000,
+        expiresAt: 1800,
+        type: "keyboard",
+      });
+      expect(token.id).toMatch(/^1000-/);
     });
 
     it("sets createdAt to current performance.now()", () => {
@@ -76,7 +82,9 @@ describe("stateMachine", () => {
       expect(token.id.length).toBeGreaterThan(5);
     });
 
-    it("generates different ids on successive calls", () => {
+    it("generates different ids on successive calls (deterministic)", () => {
+      let call = 0;
+      vi.spyOn(Math, "random").mockImplementation(() => 0.1 + 0.1 * call++);
       const t1 = makeToken({
         siteKey: "s",
         frameKey: "f",
@@ -92,6 +100,8 @@ describe("stateMachine", () => {
         reasonCodes: [],
       });
       expect(t1.id).not.toBe(t2.id);
+      expect(t1.id).toMatch(/^1000-/);
+      expect(t2.id).toMatch(/^1000-/);
     });
 
     it("sets type to 'pointer' when pointer data is provided", () => {
@@ -169,6 +179,32 @@ describe("stateMachine", () => {
         reasonCodes: reasons,
       });
       expect(token.reasonCodes).toEqual(reasons);
+    });
+
+    it("aliases reasonCodes array (no defensive copy)", () => {
+      const reasons = ["A", "B"];
+      const token = makeToken({
+        siteKey: "s",
+        frameKey: "f",
+        mode: "smart",
+        cds: 0,
+        reasonCodes: reasons,
+      });
+      reasons.push("C");
+      expect(token.reasonCodes).toEqual(["A", "B", "C"]);
+    });
+
+    it("treats explicit pointer: undefined the same as omitted", () => {
+      const token = makeToken({
+        siteKey: "s",
+        frameKey: "f",
+        mode: "smart",
+        cds: 0,
+        reasonCodes: [],
+        pointer: undefined,
+      });
+      expect(token.type).toBe("keyboard");
+      expect(token.pointer).toBeUndefined();
     });
 
     it("preserves pointer modifier keys", () => {
