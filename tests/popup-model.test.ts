@@ -70,6 +70,8 @@ describe("derivePopupSiteState", () => {
 
   it("handles about:blank URL", () => {
     const state = derivePopupSiteState("about:blank", []);
+    expect(state.siteLabel).toBe("(no host)");
+    expect(state.registrableDomain).toBe("");
     expect(state.canTrust).toBe(false);
   });
 
@@ -214,6 +216,14 @@ describe("formatPopupEventLine", () => {
       formatTime
     );
     expect(line).toBe("0s | nav_click_allow | score=0");
+  });
+
+  it("treats empty string site as absent", () => {
+    const line = formatPopupEventLine(
+      { id: "evt", ts: 1, kind: "nav_click_allow", site: "", score: 50 } as EventLogEntry,
+      formatTime
+    );
+    expect(line).toBe("1s | nav_click_allow | score=50");
   });
 
   it("uses the provided formatTime function", () => {
