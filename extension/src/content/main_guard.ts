@@ -374,6 +374,7 @@ const nativeFormRequestSubmit = HTMLFormElement.prototype.requestSubmit;
 function hardenProto(
   proto: object,
   prop: string,
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
   value: Function,
   label: string
 ): void {
@@ -1012,7 +1013,7 @@ function checkPushStateSuspicious(url: string | URL | null | undefined, _method:
   if (isOff()) return null;
 
   const now = nowMs();
-  const urlStr = url != null ? String(url) : "";
+  const urlStr = url !== null && url !== undefined ? String(url) : "";
 
   // --- Rapid-fire detection ---
   // Track timestamps and prune old entries
@@ -1049,7 +1050,7 @@ function patchHistory(): void {
     if (reason) {
       postToIsolated("ns-pushstate-suspicious", {
         ts: nowMs(),
-        url: url != null ? String(url) : "",
+        url: url !== null && url !== undefined ? String(url) : "",
         method: "pushState",
         reason,
       });
@@ -1071,7 +1072,7 @@ function patchHistory(): void {
     if (reason) {
       postToIsolated("ns-pushstate-suspicious", {
         ts: nowMs(),
-        url: url != null ? String(url) : "",
+        url: url !== null && url !== undefined ? String(url) : "",
         method: "replaceState",
         reason,
       });

@@ -35,7 +35,7 @@ export function deriveCredentialPasteState(
   pageUrl: string,
   trustedDomains: string[]
 ): { siteLabel: string; shouldWarn: boolean } {
-  let host = "";
+  let host: string;
   try {
     host = pageUrl ? new URL(pageUrl).hostname : "";
   } catch {
