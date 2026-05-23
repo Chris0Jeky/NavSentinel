@@ -296,6 +296,15 @@ describe("ui_toast", () => {
       expect(onDismiss).toHaveBeenCalledTimes(1);
     });
 
+    it("double-clicking Dismiss calls onDismiss only once", () => {
+      const onDismiss = vi.fn();
+      showToast({ message: "Test", onDismiss });
+      const dismissBtn = getButtons().find((b) => b.textContent === "Dismiss")!;
+      dismissBtn.click();
+      dismissBtn.click();
+      expect(onDismiss).toHaveBeenCalledTimes(1);
+    });
+
     it("clicking Dismiss without onDismiss does not throw", () => {
       showToast({ message: "Test" });
       const dismissBtn = getButtons().find((b) => b.textContent === "Dismiss")!;
@@ -319,30 +328,28 @@ describe("ui_toast", () => {
 
   describe("auto-dismiss timeout", () => {
     it("auto-dismisses after default 4000ms", () => {
-      showToast({ message: "Test" });
+      const onDismiss = vi.fn();
+      showToast({ message: "Test", onDismiss });
       expect(getWraps().length).toBe(1);
 
       vi.advanceTimersByTime(3999);
       expect(getWraps().length).toBe(1);
+      expect(onDismiss).not.toHaveBeenCalled();
 
       vi.advanceTimersByTime(1);
       expect(getWraps().length).toBe(0);
+      expect(onDismiss).toHaveBeenCalledTimes(1);
     });
 
     it("uses custom timeoutMs when provided", () => {
-      showToast({ message: "Test", timeoutMs: 10000 });
+      const onDismiss = vi.fn();
+      showToast({ message: "Test", timeoutMs: 10000, onDismiss });
       vi.advanceTimersByTime(9999);
       expect(getWraps().length).toBe(1);
+      expect(onDismiss).not.toHaveBeenCalled();
 
       vi.advanceTimersByTime(1);
       expect(getWraps().length).toBe(0);
-    });
-
-    it("calls onDismiss on auto-dismiss", () => {
-      const onDismiss = vi.fn();
-      showToast({ message: "Test", timeoutMs: 5000, onDismiss });
-
-      vi.advanceTimersByTime(5000);
       expect(onDismiss).toHaveBeenCalledTimes(1);
     });
 
@@ -406,6 +413,7 @@ describe("ui_toast", () => {
       vi.advanceTimersByTime(2000);
       expect(onDismiss2).toHaveBeenCalledTimes(1);
       expect(onDismiss1).not.toHaveBeenCalled();
+      expect(getWraps().length).toBe(0);
     });
   });
 });
