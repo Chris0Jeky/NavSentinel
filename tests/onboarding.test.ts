@@ -91,6 +91,38 @@ describe("onboarding TypeScript module", () => {
   });
 });
 
+describe("onboarding accessibility", () => {
+  const html = readFileSync(HTML_PATH, "utf-8");
+
+  it("logoSlot is hidden from assistive technology", () => {
+    expect(html).toContain('id="logoSlot" aria-hidden="true"');
+  });
+
+  it("feature icon containers are hidden from assistive technology", () => {
+    expect(html).toContain('id="iconCursor" aria-hidden="true"');
+    expect(html).toContain('id="iconBolt" aria-hidden="true"');
+    expect(html).toContain('id="iconLock" aria-hidden="true"');
+  });
+
+  it("has proper heading hierarchy (h1 > h2 > h3)", () => {
+    const h1Count = (html.match(/<h1[\s>]/g) ?? []).length;
+    const h2Count = (html.match(/<h2[\s>]/g) ?? []).length;
+    const h3Count = (html.match(/<h3[\s>]/g) ?? []).length;
+    expect(h1Count).toBe(1);
+    expect(h2Count).toBeGreaterThanOrEqual(3);
+    expect(h3Count).toBeGreaterThanOrEqual(3);
+  });
+
+  it("uses semantic section elements", () => {
+    const sectionCount = (html.match(/<section[\s>]/g) ?? []).length;
+    expect(sectionCount).toBeGreaterThanOrEqual(4);
+  });
+
+  it("has lang attribute on html element", () => {
+    expect(html).toContain('<html lang="en">');
+  });
+});
+
 describe("onboarding CSS", () => {
   const css = readFileSync(CSS_PATH, "utf-8");
 

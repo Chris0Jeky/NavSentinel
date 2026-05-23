@@ -32,12 +32,12 @@ const ICON_PATHS: Record<string, string> = {
 export function icon(name: string, size = 16, strokeColor = 'currentColor', strokeWidth = 1.6): string {
   const path = ICON_PATHS[name];
   if (!path) return '';
-  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${strokeColor}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round" style="display:block;flex-shrink:0">${path}</svg>`;
+  return `<svg aria-hidden="true" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${strokeColor}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round" style="display:block;flex-shrink:0">${path}</svg>`;
 }
 
 export function logoSentinel(size = 40, animated = true): string {
   const id = `ns-${Math.round(Math.random() * 9999)}`;
-  return `<svg width="${size}" height="${size}" viewBox="0 0 40 40" style="display:block">
+  return `<svg aria-hidden="true" width="${size}" height="${size}" viewBox="0 0 40 40" style="display:block">
     <defs>
       <linearGradient id="${id}-sweep" x1="0" y1="0" x2="1" y2="0.4">
         <stop offset="0%" stop-color="#f5a623" stop-opacity="0.7"/>
