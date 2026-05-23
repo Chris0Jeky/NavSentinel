@@ -15,6 +15,15 @@ const arbDomain = fc.string({ minLength: 1, maxLength: 30 })
 const arbPath = fc.string({ maxLength: 30 })
   .map((s) => "/" + s.replace(/[^a-zA-Z0-9/_.-]/g, ""));
 
+const OPEN_REDIRECT_SEGMENTS = ["/redirect", "/go", "/redir", "/out", "/link"];
+
+const arbSafePath = arbPath.filter((p) => {
+  const lower = p.toLowerCase();
+  return !OPEN_REDIRECT_SEGMENTS.some(
+    (rp) => lower === rp || lower.startsWith(rp + "/")
+  );
+});
+
 const arbHttpUrl = fc.tuple(
   fc.constantFrom("http", "https"),
   arbDomain,
@@ -103,7 +112,7 @@ describe("isKnownRedirector property tests", () => {
     );
   });
 
-  it("never flags allowlisted tracking-prefix domains", () => {
+  it("never flags allowlisted tracking-prefix domains (non-redirect paths)", () => {
     const allowlisted = [
       "go.microsoft.com", "go.dev", "go.googleprod.com",
       "go.google.com", "click.mailchimp.com", "click.convertkit.com",
@@ -112,7 +121,7 @@ describe("isKnownRedirector property tests", () => {
     fc.assert(
       fc.property(
         fc.constantFrom(...allowlisted),
-        arbPath,
+        arbSafePath,
         (domain, path) => {
           const url = `https://${domain}${path}`;
           expect(isKnownRedirector(url)).toBe(false);
@@ -142,6 +151,27 @@ describe("isKnownRedirector property tests", () => {
         }
       ),
       { numRuns: 100 }
+    );
+  });
+
+  it("always detects open-redirect path patterns", () => {
+    const openRedirectPaths = ["/redirect", "/go", "/redir", "/out", "/link"];
+    const shorteners = new Set(["bit.ly", "t.co", "goo.gl", "tinyurl.com", "ow.ly", "is.gd", "buff.ly", "rebrand.ly"]);
+    const trackingPrefixes = ["click.", "track.", "redirect.", "go.", "redir."];
+    fc.assert(
+      fc.property(
+        arbDomain.filter((d) =>
+          !shorteners.has(d) && !trackingPrefixes.some((p) => d.startsWith(p))
+        ),
+        fc.constantFrom(...openRedirectPaths),
+        fc.string({ maxLength: 20 }).map((s) => s.replace(/[^a-zA-Z0-9]/g, "")),
+        (domain, redirectPath, suffix) => {
+          const url = `https://${domain}${redirectPath}${suffix ? "/" + suffix : ""}`;
+          try { new URL(url); } catch { return; }
+          expect(isKnownRedirector(url)).toBe(true);
+        }
+      ),
+      { numRuns: 200 }
     );
   });
 
@@ -179,7 +209,7 @@ describe("RedirectChainTracker property tests", () => {
         arbTabId,
         arbHttpUrl, arbHttpUrl,
         arbTimestamp,
-        fc.integer({ min: 0, max: 9999 }),
+        fc.integer({ min: 0, max: 10000 }),
         arbTransitionType, arbTransitionType,
         (tabId, url1, url2, ts1, delta, tt1, tt2) => {
           const tracker = new RedirectChainTracker();
@@ -362,7 +392,28 @@ describe("RedirectChainTracker property tests", () => {
     );
   });
 
-  it("knownRedirectorHops count is always <= depth", () => {
+  it("hasActiveChain returns false when chain is stale even if getChainInfo is non-null", () => {
+    fc.assert(
+      fc.property(
+        arbTabId,
+        arbHttpUrl, arbHttpUrl,
+        arbTimestamp,
+        fc.integer({ min: 1, max: 5000 }),
+        arbTransitionType,
+        (tabId, url1, url2, ts, delta, tt) => {
+          const tracker = new RedirectChainTracker();
+          tracker.recordHop(tabId, url1, ts, tt);
+          tracker.recordHop(tabId, url2, ts + delta, tt);
+
+          const staleNow = ts + delta + 10001;
+          expect(tracker.hasActiveChain(tabId, staleNow)).toBe(false);
+        }
+      ),
+      { numRuns: 200 }
+    );
+  });
+
+  it("knownRedirectorHops count is always <= depth and viaKnownRedirector is consistent", () => {
     fc.assert(
       fc.property(
         arbTabId,
@@ -381,6 +432,7 @@ describe("RedirectChainTracker property tests", () => {
           const info = tracker.getChainInfo(tabId);
           if (info) {
             expect(info.knownRedirectorHops).toBeLessThanOrEqual(info.depth);
+            expect(info.viaKnownRedirector).toBe(info.knownRedirectorHops > 0);
           }
         }
       ),
