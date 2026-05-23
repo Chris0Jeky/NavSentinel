@@ -188,7 +188,8 @@ export function recordNavigation(
     }
 
     for (const reason of reasons) {
-      profile.factors[reason] = (profile.factors[reason] ?? 0) + 1;
+      const prev = Object.hasOwn(profile.factors, reason) ? profile.factors[reason]! : 0;
+      profile.factors[reason] = prev + 1;
     }
 
     evictLRU(profiles);
