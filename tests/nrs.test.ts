@@ -68,6 +68,12 @@ describe("computeNRS", () => {
       expect(result.nrsFactors).toContain("nrs_multiple_attempts");
     });
 
+    it("adds +40 for double-click hijack", () => {
+      const result = computeNRS(baseCds(0), baseNav({ doubleClickHijackActive: true }));
+      expect(result.nrs).toBe(40);
+      expect(result.nrsFactors).toContain("nrs_double_click_hijack");
+    });
+
     it("adds -100 for allowlisted destination", () => {
       const result = computeNRS(baseCds(50), baseNav({ destinationAllowlisted: true }));
       expect(result.nrs).toBe(0);
@@ -476,6 +482,7 @@ describe("computeNRS", () => {
         isNewTabOrWindow: true,
         cspWeaknessScore: 5,
       }));
+      expect(result.nrs).toBe(35);
       expect(result.nrsFactors).toContain("nrs_csp_weakness");
     });
 
