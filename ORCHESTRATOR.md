@@ -47,6 +47,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | T-17 | Test coverage for sw.ts service worker | L | — | #121 | done (2/2 reviews) |
 | T-18 | Test coverage for credential_modal.ts | M | — | #122 | done (2/2 reviews) |
 | T-20 | Test coverage for credential_guard.ts | M | — | #123 | done (2/2 reviews) |
+| T-21 | Test coverage for ui_toast.ts | S | — | — | in progress |
 
 ### Cycle 5: Next Up
 
