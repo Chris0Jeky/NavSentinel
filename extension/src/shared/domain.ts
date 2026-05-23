@@ -460,7 +460,7 @@ export function computeCredentialRisk(params: {
  * The brand keyword is used for substring matching; the canonical domain is used
  * for subdomain-stuffing checks.
  */
-export const BRAND_LIST: ReadonlyArray<readonly [brand: string, domain: string]> = [
+const BRAND_LIST: ReadonlyArray<readonly [brand: string, domain: string]> = [
   ["google", "google.com"],
   ["gmail", "gmail.com"],
   ["youtube", "youtube.com"],
@@ -514,7 +514,7 @@ export const BRAND_LIST: ReadonlyArray<readonly [brand: string, domain: string]>
  * This list is intentionally conservative -- only high-traffic domains
  * that users encounter daily are included.
  */
-export const BRAND_KNOWN_ALIASES: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+const BRAND_KNOWN_ALIASES: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ["google", new Set([
     "googleapis.com", "googleusercontent.com", "googlevideo.com",
     "googletagmanager.com", "googlesyndication.com", "googleadservices.com",

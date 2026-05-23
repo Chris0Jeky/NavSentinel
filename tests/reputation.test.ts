@@ -90,6 +90,47 @@ describe("optimalParams", () => {
     const relaxed = optimalParams(10_000, 0.01);
     expect(relaxed.m).toBeLessThan(strict.m);
   });
+
+  it("returns defaults for p=0 (would produce Infinity)", () => {
+    const { m, k } = optimalParams(1000, 0);
+    expect(m).toBe(8);
+    expect(k).toBe(1);
+  });
+
+  it("returns defaults for negative p (would produce NaN)", () => {
+    const { m, k } = optimalParams(1000, -0.5);
+    expect(m).toBe(8);
+    expect(k).toBe(1);
+  });
+
+  it("returns defaults for p=1 (log(1)=0, zero-size filter)", () => {
+    const { m, k } = optimalParams(1000, 1);
+    expect(m).toBe(8);
+    expect(k).toBe(1);
+  });
+
+  it("returns defaults for p>1 (invalid probability)", () => {
+    const { m, k } = optimalParams(1000, 2);
+    expect(m).toBe(8);
+    expect(k).toBe(1);
+  });
+
+  it("returns defaults for NaN inputs", () => {
+    expect(optimalParams(NaN, 0.0001)).toEqual({ m: 8, k: 1 });
+    expect(optimalParams(1000, NaN)).toEqual({ m: 8, k: 1 });
+    expect(optimalParams(NaN, NaN)).toEqual({ m: 8, k: 1 });
+  });
+
+  it("returns defaults for Infinity inputs", () => {
+    expect(optimalParams(Infinity, 0.0001)).toEqual({ m: 8, k: 1 });
+    expect(optimalParams(1000, Infinity)).toEqual({ m: 8, k: 1 });
+  });
+
+  it("returns defaults for negative n", () => {
+    const { m, k } = optimalParams(-100, 0.0001);
+    expect(m).toBe(8);
+    expect(k).toBe(1);
+  });
 });
 
 // ---------------------------------------------------------------------------
