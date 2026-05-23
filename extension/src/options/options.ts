@@ -2,6 +2,7 @@ import type { Mode } from "../shared/types";
 import type { CredMode, EventLogEntry, SuiteSettings } from "../shared/storage";
 import { classifyEventTone } from "../shared/event_tone";
 import { icon, logoSentinel } from "../shared/icons";
+import { pct, avg, fmtTime, parseIntSafe } from "./options_model";
 import {
   addTrustedDomainWithResult,
   appendEvent,
@@ -281,13 +282,6 @@ async function refreshTrusted(): Promise<void> {
   renderTrusted(await getTrustedDomains());
 }
 
-function fmtTime(ts: number): string {
-  try {
-    return new Date(ts).toLocaleString();
-  } catch {
-    return String(ts);
-  }
-}
 
 function renderEventLog(log: EventLogEntry[]): void {
   eventLogEl.innerHTML = "";
@@ -337,16 +331,6 @@ async function refreshEventLog(): Promise<void> {
   renderEventLog(await getEventLog());
 }
 
-function pct(n: number, total: number): string {
-  if (total === 0) return "--";
-  return `${((n / total) * 100).toFixed(1)}%`;
-}
-
-function avg(entries: PromptOutcomeEntry[]): string {
-  if (entries.length === 0) return "--";
-  const sum = entries.reduce((a, e) => a + e.score, 0);
-  return (sum / entries.length).toFixed(1);
-}
 
 function renderStats(outcomes: PromptOutcomeEntry[]): void {
   const total = outcomes.length;
@@ -360,8 +344,8 @@ function renderStats(outcomes: PromptOutcomeEntry[]): void {
   statBlockRateEl.textContent = pct(blocks.length, total);
   statTrustRateEl.textContent = pct(trusts.length, total);
   statDismissRateEl.textContent = pct(dismisses.length, total);
-  statAvgScoreAllowEl.textContent = avg(allows);
-  statAvgScoreBlockEl.textContent = avg(blocks);
+  statAvgScoreAllowEl.textContent = avg(allows.map((e) => e.score));
+  statAvgScoreBlockEl.textContent = avg(blocks.map((e) => e.score));
 
   const domainCounts = new Map<string, number>();
   for (const e of outcomes) {
@@ -451,10 +435,6 @@ async function refreshDomainProfiles(): Promise<void> {
   renderDomainProfiles(await getTopSuspiciousDomains(10));
 }
 
-function getInt(el: HTMLInputElement, fallback: number): number {
-  const n = Number(el.value);
-  return Number.isFinite(n) ? Math.trunc(n) : fallback;
-}
 
 async function init(): Promise<void> {
   const s = await getSuiteSettings();
@@ -488,15 +468,15 @@ saveBtn.addEventListener("click", async () => {
       mode: getSegValue(credModeSeg) as CredMode,
       promptOnUntrustedDomain: getToggle(promptUntrustedEl),
       promptOnMediumRisk: getToggle(promptMediumEl),
-      mediumRiskThreshold: getInt(mediumThresholdEl, 40),
+      mediumRiskThreshold: parseIntSafe(mediumThresholdEl.value, 40),
       blockHttpPasswordSubmit: getToggle(blockHttpEl),
       warnOnPaste: getToggle(warnPasteEl),
       similarity: {
         enabled: getToggle(similarityEnabledEl),
-        maxDistance: getInt(similarityMaxDistEl, 2)
+        maxDistance: parseIntSafe(similarityMaxDistEl.value, 2)
       }
     };
-    const logLimit = getInt(logLimitEl, 300);
+    const logLimit = parseIntSafe(logLimitEl.value, 300);
 
     await updateSuiteSettings({ nav, credential, logLimit } satisfies Partial<SuiteSettings>);
     try {
