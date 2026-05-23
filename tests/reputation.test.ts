@@ -131,6 +131,14 @@ describe("optimalParams", () => {
     expect(m).toBe(8);
     expect(k).toBe(1);
   });
+
+  it("handles extremely small valid p without NaN", () => {
+    const { m, k } = optimalParams(100, 1e-15);
+    expect(Number.isFinite(m)).toBe(true);
+    expect(m).toBeGreaterThan(0);
+    expect(Number.isFinite(k)).toBe(true);
+    expect(k).toBeGreaterThanOrEqual(1);
+  });
 });
 
 // ---------------------------------------------------------------------------
