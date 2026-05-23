@@ -76,6 +76,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | T-45 | Property tests for visual_sim_hash.ts (hammingDistance, aHash, bHash) | S | — | #146 | done (2/2 reviews) |
 | T-46 | Property tests for murmurhash3_32 and computeAdjustment | S | — | #147 | done (2/2 reviews) |
 | T-47 | Property tests for smart_defaults.ts (pairKey, analyzeOutcomesForPair, isPairOnCooldownPure) | S | — | #148 | done (2/2 reviews) |
+| T-48 | Property tests for nav_anomaly.ts (computeAnomalyScore, applyDecay, normalizeProfile, classifyDomain, pruneBurstRecords) | S | — | #149 | done (2/2 reviews) |
 | T-12 | Reduce ESLint warnings (59 remaining) | M | — | — | seeded (needs #116 merged first) |
 | T-13 | Visual similarity detection (continue P4-01) | XL | — | — | pending |
 | T-14 | FP measurement re-run (Phase 2 gate) | M | — | — | pending |
@@ -127,6 +128,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #146 | test/visual-sim-property-tests | T-45 | 2/2 done, all findings fixed | open (ready for human) |
 | #147 | test/hash-adaptive-property-tests | T-46 | 2/2 done, all findings fixed | open (ready for human) |
 | #148 | test/smart-defaults-property-tests | T-47 | 2/2 done, no actionable findings | open (ready for human) |
+| #149 | test/nav-anomaly-property-tests | T-48 | 2/2 done, all findings fixed | open (ready for human) |
 
 ## Review Log
 
@@ -204,6 +206,8 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #147 | R2 | Claude Opus | No actionable findings — cancel neutrality, windowing, avalanche all verified | Clean |
 | #148 | R1 | Claude Opus | No actionable findings — all 15 properties verified correct | Clean |
 | #148 | R2 | Claude Opus | No actionable findings — streak reset, cooldown expiry, case insensitivity all correct | Clean |
+| #149 | R1 | Claude Opus | Dead helper, weak if(score>0) guards, missing idempotence/monotonicity/keyword tests | Fixed |
+| #149 | R2 | Claude Opus | Tautological valid-domain test, missing MAX_DECAY_ITERATIONS cap test, dead parameter | Fixed |
 
 ## Active Worktrees
 
@@ -243,6 +247,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | NavSentinel-wt-vsim-props | test/visual-sim-property-tests | #146 | complete |
 | NavSentinel-wt-hash-adapt-props | test/hash-adaptive-property-tests | #147 | complete |
 | NavSentinel-wt-smart-props | test/smart-defaults-property-tests | #148 | complete |
+| NavSentinel-wt-nav-anomaly-props | test/nav-anomaly-property-tests | #149 | complete |
 
 ## Notes
 
