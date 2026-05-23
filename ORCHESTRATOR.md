@@ -50,6 +50,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | T-21 | Test coverage for ui_toast.ts | S | — | #124 | done (2/2 reviews) |
 | T-22 | Test coverage for debug_overlay.ts | S | — | #125 | done (2/2 reviews) |
 | T-23 | Test coverage for stateMachine.ts (consolidate) | S | — | #126 | done (2/2 reviews) |
+| T-24 | Clean stale TODOs + remove dead stub in js_behavior_monitor | S | #127 | #128 | done (2/2 reviews) |
 
 ### Cycle 5: Next Up
 
@@ -85,6 +86,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #124 | test/ui-toast-coverage | T-21 | 2/2 done, all findings fixed | open (ready for human) |
 | #125 | test/debug-overlay-coverage | T-22 | 2/2 done, all findings fixed | open (ready for human) |
 | #126 | test/state-machine-coverage | T-23 | 2/2 done, all findings fixed | open (ready for human) |
+| #128 | fix/js-behavior-stale-todos | T-24 | 2/2 done, all findings fixed | open (ready for human) |
 
 ## Review Log
 
@@ -120,6 +122,8 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #125 | R2 | Claude Opus | CDS/NRS separation assertions too weak (toContain vs exact line), nrsFactors test missing CDS-side check, misleading test name | Fixed |
 | #126 | R1 | Claude Opus | Cross-file contamination (statemachine-timing.test.ts), non-deterministic Math.random, missing aliasing/undefined-pointer tests, misleading test name | Fixed (consolidated files) |
 | #126 | R2 | Claude Opus | No findings above threshold | Clean |
+| #128 | R1 | Claude Opus | No findings | Clean |
+| #128 | R2 | Claude Opus | Dead computeJsBehaviorScore stub (real in shared/), inaccurate issue #127, duplicate JsBehaviorState types, lost perf targets, unaddressed Gemini comment | Fixed (stub removed, issue updated) |
 
 ## Active Worktrees
 
@@ -138,6 +142,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | NavSentinel-wt-toast | test/ui-toast-coverage | #124 | complete |
 | NavSentinel-wt-debug-overlay | test/debug-overlay-coverage | #125 | complete |
 | NavSentinel-wt-state-machine | test/state-machine-coverage | #126 | complete |
+| NavSentinel-wt-todo-cleanup | fix/js-behavior-stale-todos | #128 | complete |
 
 ## Notes
 
