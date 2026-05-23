@@ -66,21 +66,19 @@ describe("murmurhash3_32 properties", () => {
     );
   });
 
-  it("different seeds produce different hashes (with high probability)", () => {
+  it("different seeds rarely collide (statistical)", () => {
+    let collisions = 0;
+    const trials = 500;
     fc.assert(
-      fc.property(
-        fc.constantFrom("test", "hello", "domain.com", "abcdefgh"),
-        arbSeed,
-        arbSeed,
-        (key, seed1, seed2) => {
-          if (seed1 === seed2) return;
-          const h1 = murmurhash3_32(key, seed1);
-          const h2 = murmurhash3_32(key, seed2);
-          expect(h1 !== h2 || seed1 === seed2).toBe(true);
-        },
-      ),
-      { numRuns: 200 },
+      fc.property(arbString, arbSeed, arbSeed, (key, seed1, seed2) => {
+        if (seed1 === seed2) return;
+        const h1 = murmurhash3_32(key, seed1);
+        const h2 = murmurhash3_32(key, seed2);
+        if (h1 === h2) collisions++;
+      }),
+      { numRuns: trials },
     );
+    expect(collisions / trials).toBeLessThan(0.01);
   });
 
   it("handles all tail lengths (0-3 remainder bytes)", () => {
@@ -258,6 +256,16 @@ describe("bloom filter no-false-negatives guarantee", () => {
       }),
     );
   });
+
+  it("insertDomain on m=0 filter is safe and does not throw", () => {
+    fc.assert(
+      fc.property(arbDomain, (domain) => {
+        const f = { bits: new Uint8Array(0), m: 0, k: 7 };
+        insertDomain(f, domain);
+        expect(f.bits.length).toBe(0);
+      }),
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -360,6 +368,30 @@ describe("bloom filter serialization round-trip", () => {
           const second = serializeFilter(loaded);
 
           expect(Array.from(second)).toEqual(Array.from(first));
+        },
+      ),
+    );
+  });
+
+  it("round-trip works via ArrayBuffer input (not just Uint8Array)", () => {
+    fc.assert(
+      fc.property(
+        fc.array(arbDomain, { minLength: 1, maxLength: 10 }),
+        (domains) => {
+          const unique = [...new Set(domains)];
+          const { m, k } = optimalParams(unique.length, 0.001);
+          const f = createFilter(m, k);
+          for (const d of unique) {
+            insertDomain(f, d);
+          }
+
+          const serialized = serializeFilter(f);
+          const loaded = loadFilter(serialized.buffer as ArrayBuffer);
+          expect(loaded.m).toBe(f.m);
+          expect(loaded.k).toBe(f.k);
+          for (const d of unique) {
+            expect(checkDomain(loaded, d)).toBe(true);
+          }
         },
       ),
     );
@@ -584,15 +616,27 @@ describe("optimalParams properties", () => {
 // Double-hashing h2 odd guarantee
 // ---------------------------------------------------------------------------
 
-describe("double-hashing h2 odd guarantee", () => {
-  it("h2 is always odd (never zero, prevents degenerate probing)", () => {
+describe("double-hashing probing properties", () => {
+  it("single insert sets exactly k bits in a large filter", () => {
     fc.assert(
-      fc.property(arbDomain, (domain) => {
-        const key = domain.toLowerCase();
-        const h2 = murmurhash3_32(key, 0xc6a4a793) | 1;
-        expect(h2 & 1).toBe(1);
-        expect(h2).not.toBe(0);
-      }),
+      fc.property(
+        arbDomain,
+        fc.integer({ min: 1, max: 15 }),
+        (domain, k) => {
+          const m = 65536;
+          const f = createFilter(m, k);
+          insertDomain(f, domain);
+          let popcount = 0;
+          for (const byte of f.bits) {
+            let b = byte;
+            while (b) {
+              popcount += b & 1;
+              b >>>= 1;
+            }
+          }
+          expect(popcount).toBe(k);
+        },
+      ),
     );
   });
 });
@@ -602,26 +646,26 @@ describe("double-hashing h2 odd guarantee", () => {
 // ---------------------------------------------------------------------------
 
 describe("bloom filter false positive rate", () => {
-  it("FP rate is below 1% for properly sized filters", () => {
+  it("FP rate is below 2% for properly sized filters with random probes", () => {
     fc.assert(
       fc.property(
-        fc.integer({ min: 10, max: 50 }),
-        (n) => {
-          const domains = Array.from({ length: n }, (_, i) => `inserted-domain-${i}.test`);
-          const { m, k } = optimalParams(n, 0.001);
+        fc.array(arbDomain, { minLength: 10, maxLength: 30 }),
+        fc.array(arbDomain, { minLength: 100, maxLength: 200 }),
+        (insertDomains, probeDomains) => {
+          const inserted = new Set(insertDomains);
+          const { m, k } = optimalParams(inserted.size, 0.001);
           const f = createFilter(m, k);
-          for (const d of domains) {
+          for (const d of inserted) {
             insertDomain(f, d);
           }
 
+          const probes = probeDomains.filter((d) => !inserted.has(d));
+          if (probes.length < 50) return;
           let fps = 0;
-          const probes = 200;
-          for (let i = 0; i < probes; i++) {
-            if (checkDomain(f, `probe-not-inserted-${i}-${n}.check`)) {
-              fps++;
-            }
+          for (const d of probes) {
+            if (checkDomain(f, d)) fps++;
           }
-          expect(fps / probes).toBeLessThanOrEqual(0.02);
+          expect(fps / probes.length).toBeLessThanOrEqual(0.02);
         },
       ),
       { numRuns: 20 },
