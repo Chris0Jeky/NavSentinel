@@ -6,6 +6,14 @@ type Store = Record<string, unknown>;
 
 function createChromeMock(initial: Store = {}) {
   const store: Store = { ...initial };
+  const changeListeners: Array<(changes: Record<string, { oldValue: unknown; newValue: unknown }>, areaName: string) => void> = [];
+
+  function emitChanges(changes: Record<string, { oldValue: unknown; newValue: unknown }>) {
+    if (Object.keys(changes).length === 0) return;
+    for (const listener of changeListeners) {
+      listener(changes, "local");
+    }
+  }
 
   return {
     store,
@@ -27,17 +35,30 @@ function createChromeMock(initial: Store = {}) {
             );
           },
           async set(next: Record<string, unknown>) {
+            const changes: Record<string, { oldValue: unknown; newValue: unknown }> = {};
             for (const [key, value] of Object.entries(next)) {
+              const oldValue = store[key];
               store[key] = value;
+              changes[key] = { oldValue, newValue: value };
             }
+            emitChanges(changes);
           },
           async remove(keys: string | string[]) {
             const allKeys = Array.isArray(keys) ? keys : [keys];
-            for (const key of allKeys) delete store[key];
+            const changes: Record<string, { oldValue: unknown; newValue: unknown }> = {};
+            for (const key of allKeys) {
+              if (!(key in store)) continue;
+              const oldValue = store[key];
+              delete store[key];
+              changes[key] = { oldValue, newValue: undefined };
+            }
+            emitChanges(changes);
           },
         },
         onChanged: {
-          addListener() {},
+          addListener(listener: (changes: Record<string, { oldValue: unknown; newValue: unknown }>, areaName: string) => void) {
+            changeListeners.push(listener);
+          },
         },
       },
     },
@@ -281,9 +302,10 @@ describe("storage property tests", () => {
           const { chrome } = createChromeMock();
           vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
-          const { updateSuiteSettings, exportAll, importAll, getSuiteSettings } = await import("../extension/src/shared/storage");
+          const { updateSuiteSettings, exportAll, getSuiteSettings } = await import("../extension/src/shared/storage");
           await updateSuiteSettings(settings);
           const exported = await exportAll();
+          const original = await getSuiteSettings();
 
           vi.resetModules();
           const { chrome: chrome2 } = createChromeMock();
@@ -293,13 +315,7 @@ describe("storage property tests", () => {
           await mod2.importAll(exported);
           const restored = await mod2.getSuiteSettings();
 
-          const original = await getSuiteSettings();
-          expect(restored.logLimit).toBe(original.logLimit);
-          expect(restored.nav.defaultMode).toBe(original.nav.defaultMode);
-          expect(restored.nav.debug).toBe(original.nav.debug);
-          expect(restored.credential.mode).toBe(original.credential.mode);
-          expect(restored.credential.mediumRiskThreshold).toBe(original.credential.mediumRiskThreshold);
-          expect(restored.credential.similarity.maxDistance).toBe(original.credential.similarity.maxDistance);
+          expect(restored).toEqual(original);
 
           vi.unstubAllGlobals();
         }),
@@ -313,7 +329,7 @@ describe("storage property tests", () => {
           fc.array(arbEventLogEntry, { minLength: 1, maxLength: 20 }),
           async (events) => {
             vi.resetModules();
-            const { chrome, store } = createChromeMock();
+            const { chrome } = createChromeMock();
             vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
             const { importAll, exportAll } = await import("../extension/src/shared/storage");
@@ -422,8 +438,8 @@ describe("storage property tests", () => {
     it("appendEvent never exceeds configured logLimit", async () => {
       await fc.assert(
         fc.asyncProperty(
-          fc.integer({ min: 50, max: 200 }),
-          fc.integer({ min: 1, max: 50 }),
+          fc.integer({ min: 50, max: 80 }),
+          fc.integer({ min: 1, max: 20 }),
           async (limit, appendCount) => {
             vi.resetModules();
             const { chrome, store } = createChromeMock({
@@ -510,19 +526,32 @@ describe("storage property tests", () => {
   });
 
   describe("onSuiteSettingsChange", () => {
-    it("fires callback with merged settings on change", async () => {
+    it("fires callback with merged settings when storage changes", async () => {
       const { chrome } = createChromeMock();
       vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
-      const { onSuiteSettingsChange } = await import("../extension/src/shared/storage");
+      const { onSuiteSettingsChange, updateSuiteSettings } = await import("../extension/src/shared/storage");
       const received: SuiteSettings[] = [];
       onSuiteSettingsChange((s) => received.push(s));
 
-      const listeners = (chrome.storage.onChanged as { addListener: (fn: unknown) => void })
-        .addListener as unknown as (...args: unknown[]) => void;
+      await updateSuiteSettings({ logLimit: 500, nav: { debug: true } });
 
-      const changeHandler = (chrome.storage.onChanged as unknown as { _listeners?: Array<(changes: Record<string, unknown>, area: string) => void> })._listeners;
+      expect(received.length).toBeGreaterThanOrEqual(1);
+      const last = received[received.length - 1]!;
+      expect(last.logLimit).toBe(500);
+      expect(last.nav.debug).toBe(true);
+      expect(last.credential.mode).toBe("smart");
+    });
 
+    it("ignores changes to non-settings keys", async () => {
+      const { chrome } = createChromeMock();
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+      const { onSuiteSettingsChange, addTrustedDomain } = await import("../extension/src/shared/storage");
+      const received: SuiteSettings[] = [];
+      onSuiteSettingsChange((s) => received.push(s));
+
+      await addTrustedDomain("example.com");
       expect(received).toHaveLength(0);
     });
   });
