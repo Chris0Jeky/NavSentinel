@@ -92,26 +92,12 @@ export {
   NRS_WEIGHT_JS_BEHAVIOR_CAP,
   createEmptyState,
   isStateExpired,
+  SCORE_CROSS_ORIGIN_CREDENTIAL_FORM,
+  SCORE_NETWORK_EXFIL_DURING_SUBMIT,
+  SCORE_BEACON_EXFIL_CREDENTIAL_PAGE,
+  SCORE_CREDENTIAL_READ_OUTSIDE_SUBMIT,
+  SCORE_MULTIPLE_SIGNALS_BONUS,
 } from "../shared/js_behavior_state";
-
-// ============================================================================
-// Score weights (used by isolated world to compute jsBehaviorScore)
-// ============================================================================
-
-/** Cross-origin form action on a form with credential fields. */
-export const SCORE_CROSS_ORIGIN_CREDENTIAL_FORM = 15;
-
-/** Network request (fetch/XHR) to third-party within correlation window of form submit. */
-export const SCORE_NETWORK_EXFIL_DURING_SUBMIT = 20;
-
-/** sendBeacon to third-party while credential fields are present on page. */
-export const SCORE_BEACON_EXFIL_CREDENTIAL_PAGE = 15;
-
-/** Credential field value read outside of a form submit event flow. */
-export const SCORE_CREDENTIAL_READ_OUTSIDE_SUBMIT = 10;
-
-/** Bonus when 2+ independent signals fire within 5s. */
-export const SCORE_MULTIPLE_SIGNALS_BONUS = 10;
 
 // ============================================================================
 // Internal State (module-scoped, reset per page load)
