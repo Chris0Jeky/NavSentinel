@@ -20,6 +20,7 @@ describe("ui_toast", () => {
   });
 
   afterEach(() => {
+    vi.runAllTimers();
     vi.useRealTimers();
     document.documentElement.querySelectorAll("#__navsentinel_toast_host").forEach((n) => n.remove());
     document.body.innerHTML = "";
@@ -53,6 +54,7 @@ describe("ui_toast", () => {
       showToast({ message: "Test" });
       expect(getHost()).not.toBeNull();
       expect(getHost()!.id).toBe("__navsentinel_toast_host");
+      expect(getHost()!.parentElement).toBe(document.documentElement);
     });
 
     it("creates shadow root in open mode", () => {
@@ -60,9 +62,10 @@ describe("ui_toast", () => {
       expect(getRoot()).not.toBeNull();
     });
 
-    it("host has fixed positioning at bottom-right with max z-index", () => {
+    it("host has fixed positioning at bottom-right with max z-index and style isolation", () => {
       showToast({ message: "Test" });
       const h = getHost()!;
+      expect(h.style.all).toBe("initial");
       expect(h.style.position).toBe("fixed");
       expect(h.style.right).toBe("16px");
       expect(h.style.bottom).toBe("16px");
@@ -115,10 +118,12 @@ describe("ui_toast", () => {
       expect(label!.textContent).toBe("NavSentinel");
     });
 
-    it("renders pulsing dot in header", () => {
+    it("renders pulsing dot before label in header", () => {
       showToast({ message: "Test" });
-      const dot = getWrap()!.querySelector(".head-dot");
-      expect(dot).not.toBeNull();
+      const head = getWrap()!.querySelector(".head")!;
+      const children = Array.from(head.children);
+      expect(children[0]!.className).toBe("head-dot");
+      expect(children[1]!.className).toBe("head-label");
     });
 
     it("always renders a Dismiss button", () => {
@@ -134,6 +139,27 @@ describe("ui_toast", () => {
       const body = getWrap()!.querySelector(".body");
       expect(body!.textContent).toBe("<script>alert(1)</script>");
       expect(body!.innerHTML).not.toContain("<script>");
+    });
+
+    it("sets action label via textContent, not innerHTML (XSS-safe)", () => {
+      showToast({
+        message: "Test",
+        actions: [{ label: "<img src=x onerror=alert(1)>", onClick: vi.fn() }],
+      });
+      const actionBtn = getButtons().find((b) => b.textContent?.includes("<img"))!;
+      expect(actionBtn).toBeDefined();
+      expect(actionBtn.innerHTML).not.toContain("<img");
+    });
+
+    it("renders buttons inside the .row element", () => {
+      showToast({
+        message: "Test",
+        actions: [{ label: "Trust", onClick: vi.fn() }],
+      });
+      const row = getWrap()!.querySelector(".row");
+      expect(row).not.toBeNull();
+      const rowButtons = row!.querySelectorAll("button");
+      expect(rowButtons.length).toBe(2);
     });
 
     it("replaces previous toast when showing a new one", () => {
@@ -203,6 +229,20 @@ describe("ui_toast", () => {
       expect(getWraps().length).toBe(0);
     });
 
+    it("does not call onDismiss when action throws and timer fires", () => {
+      const onDismiss = vi.fn();
+      showToast({
+        message: "Test",
+        timeoutMs: 5000,
+        actions: [{ label: "Trust", onClick: () => { throw new Error("boom"); } }],
+        onDismiss,
+      });
+      const actionBtn = getButtons().find((b) => b.textContent === "Trust")!;
+      expect(() => actionBtn.click()).toThrow();
+      vi.advanceTimersByTime(5000);
+      expect(onDismiss).not.toHaveBeenCalled();
+    });
+
     it("renders no action buttons when actions is empty", () => {
       showToast({ message: "Test", actions: [] });
       const buttons = getButtons();
@@ -215,6 +255,19 @@ describe("ui_toast", () => {
       const buttons = getButtons();
       expect(buttons).toHaveLength(1);
       expect(buttons[0]!.textContent).toBe("Dismiss");
+    });
+
+    it("buttons are focusable with focus-visible styling defined", () => {
+      showToast({
+        message: "Test",
+        actions: [{ label: "Trust", onClick: vi.fn() }],
+      });
+      const styles = getRoot()!.querySelector("style")!.textContent!;
+      expect(styles).toContain("button:focus-visible");
+      const buttons = getButtons();
+      for (const btn of buttons) {
+        expect(btn.tabIndex).not.toBe(-1);
+      }
     });
 
     it("Dismiss button is last in the row", () => {
@@ -241,6 +294,13 @@ describe("ui_toast", () => {
       const dismissBtn = getButtons().find((b) => b.textContent === "Dismiss")!;
       dismissBtn.click();
       expect(onDismiss).toHaveBeenCalledTimes(1);
+    });
+
+    it("clicking Dismiss without onDismiss does not throw", () => {
+      showToast({ message: "Test" });
+      const dismissBtn = getButtons().find((b) => b.textContent === "Dismiss")!;
+      expect(() => dismissBtn.click()).not.toThrow();
+      expect(getWraps().length).toBe(0);
     });
 
     it("does not call onDismiss if an action was clicked before dismiss", () => {
@@ -314,27 +374,37 @@ describe("ui_toast", () => {
     });
 
     it("does not auto-dismiss when timeoutMs is 0", () => {
-      showToast({ message: "Test", timeoutMs: 0 });
+      const onDismiss = vi.fn();
+      showToast({ message: "Test", timeoutMs: 0, onDismiss });
       vi.advanceTimersByTime(100000);
       expect(getWraps().length).toBe(1);
+      expect(onDismiss).not.toHaveBeenCalled();
     });
 
     it("does not auto-dismiss when timeoutMs is negative", () => {
-      showToast({ message: "Test", timeoutMs: -1 });
+      const onDismiss = vi.fn();
+      showToast({ message: "Test", timeoutMs: -1, onDismiss });
       vi.advanceTimersByTime(100000);
       expect(getWraps().length).toBe(1);
+      expect(onDismiss).not.toHaveBeenCalled();
     });
   });
 
   describe("toast replacement interaction with timeout", () => {
-    it("replacing toast before timeout does not call onDismiss of replaced toast", () => {
+    it("replacing toast fires only the second onDismiss, not the first", () => {
       const onDismiss1 = vi.fn();
+      const onDismiss2 = vi.fn();
       showToast({ message: "First", timeoutMs: 5000, onDismiss: onDismiss1 });
 
-      showToast({ message: "Second" });
+      showToast({ message: "Second", timeoutMs: 7000, onDismiss: onDismiss2 });
       expect(onDismiss1).not.toHaveBeenCalled();
 
       vi.advanceTimersByTime(5000);
+      expect(onDismiss1).not.toHaveBeenCalled();
+      expect(onDismiss2).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(2000);
+      expect(onDismiss2).toHaveBeenCalledTimes(1);
       expect(onDismiss1).not.toHaveBeenCalled();
     });
   });
