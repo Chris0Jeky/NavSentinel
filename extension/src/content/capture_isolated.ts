@@ -1370,7 +1370,7 @@ window.addEventListener(
       ? performance.now() - downForClick.ts
       : undefined;
 
-    const userActivationActive = !!(navigator as unknown as { userActivation?: { isActive?: boolean } }).userActivation?.isActive;
+    const userActivationActive = (navigator as Navigator & { userActivation?: { isActive?: boolean } }).userActivation?.isActive;
 
     const dblClickHijack = isDoubleClickHijackActive();
 
