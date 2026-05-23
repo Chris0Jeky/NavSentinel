@@ -99,6 +99,12 @@ describe("derivePopupSiteState", () => {
     expect(state.canTrust).toBe(true);
   });
 
+  it("handles URL with port number", () => {
+    const state = derivePopupSiteState("http://example.com:8080/app", []);
+    expect(state.registrableDomain).toBe("example.com");
+    expect(state.canTrust).toBe(true);
+  });
+
   it("handles co.uk two-part TLD", () => {
     const state = derivePopupSiteState("https://shop.example.co.uk/", ["example.co.uk"]);
     expect(state.registrableDomain).toBe("example.co.uk");
