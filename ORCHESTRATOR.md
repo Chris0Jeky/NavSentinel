@@ -68,6 +68,10 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | T-35 | Expand popup_model.ts test coverage (5→30 tests) | S | — | #138 | done (2/2 reviews) |
 | T-36 | Complete NRS property test generator + cap/threshold invariants | S | — | #139 | done (2/2 reviews) |
 | T-37 | Unit tests for icons.ts (icon + logoSentinel) | S | — | #140 | done (2/2 reviews) |
+| T-38 | Extract + test options.ts pure utilities (options_model.ts) | S | — | #141 | done (2/2 reviews) |
+| T-40 | Tests for normalizeHost, isIPAddress, safeUrlParse in domain.ts | S | — | #142 | done (2/2 reviews) |
+| T-42 | Expand credential_guard_model.ts tests (5→34, all branches) | S | — | #143 | done (2/2 reviews) |
+| T-43 | Property-based tests for domain.ts utilities (fast-check) | S | — | #144 | done (2/2 reviews) |
 | T-12 | Reduce ESLint warnings (59 remaining) | M | — | — | seeded (needs #116 merged first) |
 | T-13 | Visual similarity detection (continue P4-01) | XL | — | — | pending |
 | T-14 | FP measurement re-run (Phase 2 gate) | M | — | — | pending |
@@ -111,6 +115,10 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #138 | test/popup-model-coverage | T-35 | 2/2 done, all findings fixed | open (ready for human) |
 | #139 | test/nrs-property-coverage | T-36 | 2/2 done, all findings fixed | open (ready for human) |
 | #140 | test/icons-coverage | T-37 | 2/2 done, all findings fixed | open (ready for human) |
+| #141 | refactor/options-model-extract | T-38 | 2/2 done, all findings fixed | open (ready for human) |
+| #142 | test/domain-utils-coverage | T-40 | 2/2 done, all findings fixed | open (ready for human) |
+| #143 | test/credential-guard-model-expand | T-42 | 2/2 done, all findings fixed | open (ready for human) |
+| #144 | test/domain-property-tests | T-43 | 2/2 done, all findings fixed | open (ready for human) |
 
 ## Review Log
 
@@ -172,6 +180,14 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #139 | R2 | Claude Opus | Missing navAnomaly cap (15) and CSP cap (10) property tests — inconsistent with clickfix/jsBehavior cap tests | Fixed |
 | #140 | R1 | Claude Opus | Missing CSS variable stroke color test, missing gradient URL/ID consistency test | Fixed |
 | #140 | R2 | Claude Opus | Animation test too shallow (missing rotation/duration/repeat params), missing empty string edge case | Fixed |
+| #141 | R1 | Claude Opus | Missing leading zeros test, fmtTime(NaN) assertion wrong (toLocaleString returns "Invalid Date", not "NaN") | Fixed |
+| #141 | R2 | Claude Opus | Double blank lines left by function extraction | Fixed |
+| #142 | R1 | Claude Opus | Missing leading-zeros IPv4, bracketed IPv6, whitespace-padded URL tests | Fixed |
+| #142 | R2 | Claude Opus | No actionable findings — loose IPv6 regex is design choice | Clean |
+| #143 | R1 | Claude Opus | Missing about:blank test for deriveCredentialPasteState, Infinity threshold fallback | Fixed |
+| #143 | R2 | Claude Opus | No actionable findings — all branches covered, test naming adequate | Clean |
+| #144 | R1 | Claude Opus | Missing LEVENSHTEIN_MAX_LEN guard test, misleading "valid https URLs" description | Fixed |
+| #144 | R2 | Claude Opus | Misleading "(up to max len)" parenthetical in test name | Fixed |
 
 ## Active Worktrees
 
@@ -203,6 +219,10 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | NavSentinel-wt-popup-model | test/popup-model-coverage | #138 | complete |
 | NavSentinel-wt-nrs-property | test/nrs-property-coverage | #139 | complete |
 | NavSentinel-wt-icons-tests | test/icons-coverage | #140 | complete |
+| NavSentinel-wt-options-model | refactor/options-model-extract | #141 | complete |
+| NavSentinel-wt-domain-utils | test/domain-utils-coverage | #142 | complete |
+| NavSentinel-wt-cred-model-expand | test/credential-guard-model-expand | #143 | complete |
+| NavSentinel-wt-domain-props | test/domain-property-tests | #144 | complete |
 
 ## Notes
 
@@ -216,6 +236,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 - After PRs #130 + #131 merge: 18 `as any` casts remain — 13 in main_guard.ts (dynamic patching), 3 in credential_guard.ts (DOM API compat), 1 in capture_isolated.ts (userActivation), 1 error handler
 - PR #132: ARIA radiogroup pattern, shared seg_control.ts, 10 new unit tests (1164 total), static aria-checked
 - PR #134: Popup ARIA labels, live regions, landmarks, dynamic score label, 13 unit tests (1167 total)
+- PR #141: options_model.ts extracted 4 pure functions (pct, avg, fmtTime, parseIntSafe) with 27 tests (1181 total on branch, 46 files)
 - PR #136: 52 unit tests for computeCDS scoring (all factors, boundaries, gradients, edge cases). Total 1199+52=1251 on branch.
 - PR #137: 51 new tests for computeNRS (was 33, now 84). All NavigationContext factors covered: redirect chains, OAuth, CSP, nav anomaly, diminishing returns. Total 1200+51=1251 on branch.
 - ORCHESTRATOR note correction: "zero `as any` casts" was inaccurate — 18 remain (13 main_guard.ts, 3 credential_guard.ts, 1 capture_isolated.ts, 1 credential_guard.ts error handling). Most are legitimate DOM API gaps.
