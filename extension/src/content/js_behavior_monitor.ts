@@ -60,21 +60,6 @@ export interface JsCredentialReadSignal {
   fieldCount: number;
 }
 
-/** Aggregated JS behavior state tracked in the isolated world. */
-export interface JsBehaviorState {
-  /** Computed score for NRS integration (0 to NRS_WEIGHT_JS_BEHAVIOR_CAP) */
-  score: number;
-  /** Timestamp of last signal received */
-  lastSignalTs: number;
-  /** Individual signal counts within the current TTL window */
-  signalCounts: {
-    formSubmitSuspicious: number;
-    exfilNetwork: number;
-    exfilBeacon: number;
-    credentialRead: number;
-  };
-}
-
 /** Configuration for the behavior monitor. */
 export interface JsBehaviorMonitorConfig {
   /** Whether debug logging is enabled */
@@ -101,10 +86,13 @@ const MAX_RECENT_FORM_SUBMITS = 10;
 /** Maximum tracked recent network requests for correlation. */
 const MAX_RECENT_NETWORK_REQUESTS = 20;
 
-/** TTL for JS behavior score state (ms). Matches ClickFix TTL. */
-export const JS_BEHAVIOR_STATE_TTL_MS = 30_000;
-
-export { NRS_WEIGHT_JS_BEHAVIOR_CAP } from "../shared/js_behavior_state";
+export {
+  type JsBehaviorState,
+  JS_BEHAVIOR_STATE_TTL_MS,
+  NRS_WEIGHT_JS_BEHAVIOR_CAP,
+  createEmptyState,
+  isStateExpired,
+} from "../shared/js_behavior_state";
 
 // ============================================================================
 // Score weights (used by isolated world to compute jsBehaviorScore)
@@ -600,37 +588,6 @@ export function correlatesWithFormSubmit(requestTs: number): boolean {
       return rec.hasCredentials && delta >= 0 && delta <= FORM_SUBMIT_CORRELATION_WINDOW_MS;
     }
   );
-}
-
-/**
- * Create a fresh (empty) JS behavior state object.
- *
- * Used by the isolated world to initialize state on page load.
- */
-export function createEmptyState(): JsBehaviorState {
-  return {
-    score: 0,
-    lastSignalTs: 0,
-    signalCounts: {
-      formSubmitSuspicious: 0,
-      exfilNetwork: 0,
-      exfilBeacon: 0,
-      credentialRead: 0,
-    },
-  };
-}
-
-/**
- * Check whether the JS behavior state has expired (past TTL).
- *
- * @param state - The state to check
- * @param now - Current timestamp (defaults to Date.now())
- * @returns true if the state is expired and should be reset
- */
-export function isStateExpired(state: JsBehaviorState, now?: number): boolean {
-  if (state.lastSignalTs === 0) return true;
-  const currentTime = now ?? Date.now();
-  return currentTime - state.lastSignalTs > JS_BEHAVIOR_STATE_TTL_MS;
 }
 
 /**
