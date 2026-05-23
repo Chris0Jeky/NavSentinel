@@ -251,19 +251,39 @@ describe("service worker handlers", () => {
   });
 
   describe("ns-tab-risk-update", () => {
-    it("accepts valid risk states and updates icon", async () => {
+    it("accepts valid risk states and updates icon with correct tabId", async () => {
       const mock = createChromeMock();
       await loadSw(mock);
 
-      for (const state of ["green", "yellow", "red", "gray"]) {
-        mock.dispatchRuntimeMessage(
-          { type: "ns-tab-risk-update", state, blockCount: 0 },
-          { tab: { id: 10 } },
-        );
-      }
+      mock.dispatchRuntimeMessage(
+        { type: "ns-tab-risk-update", state: "red", blockCount: 2 },
+        { tab: { id: 10 } },
+      );
 
       await vi.runAllTimersAsync();
-      expect(mock.chrome.action.setBadgeText).toHaveBeenCalled();
+      expect(mock.chrome.action.setBadgeText).toHaveBeenCalledWith(
+        expect.objectContaining({ tabId: 10, text: "2" }),
+      );
+      expect(mock.chrome.action.setBadgeBackgroundColor).toHaveBeenCalledWith(
+        expect.objectContaining({ tabId: 10, color: "#dc2626" }),
+      );
+    });
+
+    it("sets empty badge text for gray state", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+
+      mock.chrome.action.setBadgeText.mockClear();
+
+      mock.dispatchRuntimeMessage(
+        { type: "ns-tab-risk-update", state: "gray", blockCount: 0 },
+        { tab: { id: 10 } },
+      );
+
+      await vi.runAllTimersAsync();
+      expect(mock.chrome.action.setBadgeText).toHaveBeenCalledWith(
+        expect.objectContaining({ tabId: 10, text: "" }),
+      );
     });
 
     it("ignores invalid risk states", async () => {
@@ -297,9 +317,11 @@ describe("service worker handlers", () => {
       expect(mock.chrome.action.setBadgeText).not.toHaveBeenCalled();
     });
 
-    it("clamps non-finite blockCount to 0", async () => {
+    it("clamps non-finite blockCount to 0 and renders check mark", async () => {
       const mock = createChromeMock();
       await loadSw(mock);
+
+      mock.chrome.action.setBadgeText.mockClear();
 
       mock.dispatchRuntimeMessage(
         { type: "ns-tab-risk-update", state: "red", blockCount: NaN },
@@ -307,12 +329,23 @@ describe("service worker handlers", () => {
       );
 
       await vi.runAllTimersAsync();
-      expect(mock.chrome.action.setBadgeText).toHaveBeenCalled();
+      // blockCount clamped to 0 → icon_manager renders the state's default text
+      expect(mock.chrome.action.setBadgeText).toHaveBeenCalledWith(
+        expect.objectContaining({ tabId: 10 }),
+      );
+      const call = mock.chrome.action.setBadgeText.mock.calls.find(
+        (c: unknown[]) => (c[0] as { tabId: number }).tabId === 10,
+      );
+      expect(call).toBeDefined();
+      // With blockCount=0, red state renders "✕" (not a negative number)
+      expect((call![0] as { text: string }).text).toBe("✕");
     });
 
-    it("clamps negative blockCount to 0", async () => {
+    it("clamps negative blockCount to 0 and renders check mark", async () => {
       const mock = createChromeMock();
       await loadSw(mock);
+
+      mock.chrome.action.setBadgeText.mockClear();
 
       mock.dispatchRuntimeMessage(
         { type: "ns-tab-risk-update", state: "yellow", blockCount: -5 },
@@ -320,7 +353,12 @@ describe("service worker handlers", () => {
       );
 
       await vi.runAllTimersAsync();
-      expect(mock.chrome.action.setBadgeText).toHaveBeenCalled();
+      const call = mock.chrome.action.setBadgeText.mock.calls.find(
+        (c: unknown[]) => (c[0] as { tabId: number }).tabId === 10,
+      );
+      expect(call).toBeDefined();
+      // blockCount clamped to 0 → yellow state renders "!" (not "-5")
+      expect((call![0] as { text: string }).text).toBe("!");
     });
   });
 
@@ -462,6 +500,71 @@ describe("service worker handlers", () => {
       expect(closedMsg!.tabId).toBe(10);
     });
 
+    it("rejects opener nav after child tab is removed (tab ID reuse safety)", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+
+      mock.emitTabCreated({ id: 20, openerTabId: 10 });
+      mock.emitTabRemoved(20);
+
+      // Same tab ID reused — should be rejected since entry was deleted
+      mock.sentMessages.length = 0;
+      mock.dispatchRuntimeMessage(
+        { type: "ns-dblclick-opener-nav", url: "https://evil.test/phish", ts: Date.now() },
+        { tab: { id: 20 } },
+      );
+
+      const fwdMsg = mock.sentMessages.find(
+        (m) => (m.message as { type: string }).type === "ns-dblclick-opener-nav-from-child",
+      );
+      expect(fwdMsg).toBeUndefined();
+    });
+
+    it("does not send ns-oauth-opener-manipulation when flow is complete", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+
+      // Start and complete an OAuth flow on opener tab
+      const oauthUrl =
+        "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&redirect_uri=https%3A%2F%2Fapp.com%2Fcb&response_type=code";
+      mock.emitBeforeNavigate({ tabId: 10, frameId: 0, url: oauthUrl });
+      mock.emitCommitted({ tabId: 10, frameId: 0, url: oauthUrl, transitionType: "link" });
+
+      // Complete the flow by navigating to callback
+      mock.emitBeforeNavigate({
+        tabId: 10,
+        frameId: 0,
+        url: "https://app.com/cb?code=done",
+      });
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        url: "https://app.com/cb?code=done",
+        transitionType: "link",
+        transitionQualifiers: ["client_redirect"],
+      });
+
+      // Register child and send opener nav
+      mock.emitTabCreated({ id: 20, openerTabId: 10 });
+      mock.sentMessages.length = 0;
+
+      mock.dispatchRuntimeMessage(
+        { type: "ns-dblclick-opener-nav", url: "https://evil.test/steal", ts: Date.now() },
+        { tab: { id: 20 } },
+      );
+
+      // Should forward the opener nav but NOT send oauth-opener-manipulation
+      const oauthMsg = mock.sentMessages.find(
+        (m) => (m.message as { type: string }).type === "ns-oauth-opener-manipulation",
+      );
+      expect(oauthMsg).toBeUndefined();
+
+      const fwdMsg = mock.sentMessages.find(
+        (m) => (m.message as { type: string }).type === "ns-dblclick-opener-nav-from-child",
+      );
+      expect(fwdMsg).toBeDefined();
+    });
+
     it("sends ns-oauth-opener-manipulation when opener has active OAuth flow", async () => {
       const mock = createChromeMock();
       await loadSw(mock);
@@ -570,7 +673,7 @@ describe("service worker handlers", () => {
       expect(closedMsg).toBeUndefined();
     });
 
-    it("does NOT send ns-dblclick-child-closed if child is older than max age", async () => {
+    it("sends ns-dblclick-child-closed at exactly max age boundary (5000ms)", async () => {
       const mock = createChromeMock();
       await loadSw(mock);
 
@@ -581,8 +684,30 @@ describe("service worker handlers", () => {
         { tab: { id: 20 } },
       );
 
-      // Child closes after max age (5s)
-      vi.advanceTimersByTime(6000);
+      // age === DBLCLICK_CHILD_MAX_AGE_MS (5000ms) — condition is <=, should fire
+      vi.advanceTimersByTime(5000);
+      mock.sentMessages.length = 0;
+      mock.emitTabRemoved(20);
+
+      const closedMsg = mock.sentMessages.find(
+        (m) => (m.message as { type: string }).type === "ns-dblclick-child-closed",
+      );
+      expect(closedMsg).toBeDefined();
+    });
+
+    it("does NOT send ns-dblclick-child-closed 1ms past max age (5001ms)", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+
+      mock.emitTabCreated({ id: 20, openerTabId: 10 });
+
+      mock.dispatchRuntimeMessage(
+        { type: "ns-dblclick-opener-nav", url: "https://evil.test/phish", ts: Date.now() },
+        { tab: { id: 20 } },
+      );
+
+      // age === 5001ms, condition is <= 5000, should NOT fire
+      vi.advanceTimersByTime(5001);
       mock.sentMessages.length = 0;
       mock.emitTabRemoved(20);
 
@@ -642,6 +767,14 @@ describe("service worker handlers", () => {
       mock.dispatchRuntimeMessage(
         { type: "ns-dblclick-opener-nav", url: "https://test.test", ts: Date.now() },
         { tab: { id: 151 } },
+      );
+      expect(mock.sentMessages.length).toBeGreaterThan(0);
+
+      // Verify a middle entry (tab 125) also survived
+      mock.sentMessages.length = 0;
+      mock.dispatchRuntimeMessage(
+        { type: "ns-dblclick-opener-nav", url: "https://test.test", ts: Date.now() },
+        { tab: { id: 125 } },
       );
       expect(mock.sentMessages.length).toBeGreaterThan(0);
     });
@@ -714,24 +847,22 @@ describe("service worker handlers", () => {
       expect(flow.phase).toBe("consent");
     });
 
-    it("transitions non-OAuth consent page through callback to complete", async () => {
+    it("URL without OAuth params triggers callback→complete (not treated as consent)", async () => {
       const mock = createChromeMock();
       await loadSw(mock);
 
-      // Start OAuth flow
-      mock.emitBeforeNavigate({
-        tabId: 10,
-        frameId: 0,
-        url: "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&redirect_uri=https%3A%2F%2Fapp.test%2Fcb&response_type=code",
-      });
+      // Start OAuth flow with redirect_uri to app.com
+      const oauthUrl =
+        "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&redirect_uri=https%3A%2F%2Fapp.com%2Fcb&response_type=code";
+      mock.emitBeforeNavigate({ tabId: 10, frameId: 0, url: oauthUrl });
       mock.emitCommitted({
         tabId: 10,
         frameId: 0,
-        url: "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&redirect_uri=https%3A%2F%2Fapp.test%2Fcb&response_type=code",
+        url: oauthUrl,
         transitionType: "link",
       });
 
-      // Non-OAuth consent page (no OAuth query params) triggers callback→complete
+      // Navigate to same-domain page without OAuth query params — treated as callback
       mock.sentMessages.length = 0;
       mock.emitBeforeNavigate({
         tabId: 10,
@@ -752,6 +883,12 @@ describe("service worker handlers", () => {
       expect(flowMsg).toBeDefined();
       const flow = (flowMsg!.message as { flow: { phase: string } }).flow;
       expect(flow.phase).toBe("complete");
+
+      // Redirect-mismatch fires because accounts.google.com != app.com (redirect_uri)
+      const mismatchMsg = mock.sentMessages.find(
+        (m) => (m.message as { type: string }).type === "ns-oauth-redirect-mismatch",
+      );
+      expect(mismatchMsg).toBeDefined();
     });
 
     it("completes flow and sends ns-oauth-flow-update when navigating to callback", async () => {
@@ -796,9 +933,9 @@ describe("service worker handlers", () => {
       const mock = createChromeMock();
       await loadSw(mock);
 
-      // Start OAuth flow with redirect_uri to app.test
+      // Start OAuth flow with redirect_uri pointing to myapp.com
       const oauthUrl =
-        "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&redirect_uri=https%3A%2F%2Fapp.test%2Fcb&response_type=code";
+        "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&redirect_uri=https%3A%2F%2Fmyapp.com%2Fcb&response_type=code";
       mock.emitBeforeNavigate({ tabId: 10, frameId: 0, url: oauthUrl });
       mock.emitCommitted({
         tabId: 10,
@@ -807,17 +944,17 @@ describe("service worker handlers", () => {
         transitionType: "link",
       });
 
-      // Navigate to a DIFFERENT domain as callback (unexpected)
+      // Navigate to evil.com instead of myapp.com (domain mismatch)
       mock.sentMessages.length = 0;
       mock.emitBeforeNavigate({
         tabId: 10,
         frameId: 0,
-        url: "https://evil.test/steal?code=authcode123",
+        url: "https://evil.com/steal?code=authcode123",
       });
       mock.emitCommitted({
         tabId: 10,
         frameId: 0,
-        url: "https://evil.test/steal?code=authcode123",
+        url: "https://evil.com/steal?code=authcode123",
         transitionType: "link",
         transitionQualifiers: ["client_redirect"],
       });
@@ -827,6 +964,9 @@ describe("service worker handlers", () => {
       );
       expect(mismatchMsg).toBeDefined();
       expect(mismatchMsg!.tabId).toBe(10);
+      expect((mismatchMsg!.message as { callbackUrl: string }).callbackUrl).toBe(
+        "https://evil.com/steal?code=authcode123",
+      );
     });
 
     it("prunes stale OAuth flows older than max age", async () => {
@@ -937,8 +1077,38 @@ describe("service worker handlers", () => {
       mock.chrome.declarativeNetRequest.updateEnabledRulesets.mockClear();
 
       mock.emitStorageChanged(
-        { navSentinelSettings: { oldValue: {}, newValue: { nav: { defaultMode: "off" } } } },
+        { ["sentinelsuite:settings_v1"]: { oldValue: {}, newValue: { nav: { defaultMode: "off" } } } },
         "session",
+      );
+
+      await vi.runAllTimersAsync();
+      expect(mock.chrome.declarativeNetRequest.updateEnabledRulesets).not.toHaveBeenCalled();
+    });
+
+    it("storage.onChanged syncs DNR on local settings change", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+
+      mock.chrome.declarativeNetRequest.updateEnabledRulesets.mockClear();
+
+      mock.emitStorageChanged(
+        { ["sentinelsuite:settings_v1"]: { oldValue: {}, newValue: { nav: { defaultMode: "smart" } } } },
+        "local",
+      );
+
+      await vi.runAllTimersAsync();
+      expect(mock.chrome.declarativeNetRequest.updateEnabledRulesets).toHaveBeenCalled();
+    });
+
+    it("storage.onChanged ignores local changes to unrelated keys", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+
+      mock.chrome.declarativeNetRequest.updateEnabledRulesets.mockClear();
+
+      mock.emitStorageChanged(
+        { someOtherKey: { oldValue: null, newValue: "something" } },
+        "local",
       );
 
       await vi.runAllTimersAsync();
@@ -972,6 +1142,67 @@ describe("service worker handlers", () => {
 
       expect(res.shouldRollback).toBe(false);
       expect(res.entry).toBeUndefined();
+    });
+
+    it("clears oauthFlowByTab on tab removal", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+
+      // Start OAuth flow on tab 10
+      const oauthUrl =
+        "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&redirect_uri=https%3A%2F%2Fapp.com%2Fcb&response_type=code";
+      mock.emitBeforeNavigate({ tabId: 10, frameId: 0, url: oauthUrl });
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        url: oauthUrl,
+        transitionType: "link",
+      });
+
+      // Remove the tab
+      mock.emitTabRemoved(10);
+
+      // Navigate tab 10 to callback — flow should be gone, no completion msg
+      mock.sentMessages.length = 0;
+      mock.emitBeforeNavigate({
+        tabId: 10,
+        frameId: 0,
+        url: "https://app.com/cb?code=test",
+      });
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        url: "https://app.com/cb?code=test",
+        transitionType: "link",
+        transitionQualifiers: ["client_redirect"],
+      });
+
+      const flowMsg = mock.sentMessages.find(
+        (m) =>
+          (m.message as { type: string }).type === "ns-oauth-flow-update" &&
+          m.tabId === 10,
+      );
+      expect(flowMsg).toBeUndefined();
+    });
+
+    it("clears childWindowByTab on tab removal", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+
+      mock.emitTabCreated({ id: 20, openerTabId: 10 });
+      mock.emitTabRemoved(20);
+
+      // Opener nav from removed child should be rejected
+      mock.sentMessages.length = 0;
+      mock.dispatchRuntimeMessage(
+        { type: "ns-dblclick-opener-nav", url: "https://evil.test/x", ts: Date.now() },
+        { tab: { id: 20 } },
+      );
+
+      const fwdMsg = mock.sentMessages.find(
+        (m) => (m.message as { type: string }).type === "ns-dblclick-opener-nav-from-child",
+      );
+      expect(fwdMsg).toBeUndefined();
     });
 
     it("clears icon on tab removal", async () => {
