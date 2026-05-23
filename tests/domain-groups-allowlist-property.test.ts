@@ -66,10 +66,11 @@ describe("areSameOrganization properties", () => {
     );
   });
 
-  it("is deterministic", () => {
+  it("stable under subdomain prefix: result unchanged by adding a subdomain", () => {
     fc.assert(
-      fc.property(arbDomain, arbDomain, (a, b) => {
-        expect(areSameOrganization(a, b)).toBe(areSameOrganization(a, b));
+      fc.property(arbDomain, arbDomain, arbLabel, (a, b, sub) => {
+        const withSub = `${sub}.${a}`;
+        expect(areSameOrganization(withSub, b)).toBe(areSameOrganization(a, b));
       }),
     );
   });
@@ -250,7 +251,7 @@ describe("normalizeAllowlist properties", () => {
         for (const [rawKey, rawHosts] of Object.entries(input)) {
           const key = rawKey.trim().toLowerCase();
           if (!key || !Array.isArray(rawHosts)) continue;
-          if (!seen.has(key)) seen.set(key, new Set());
+          seen.set(key, new Set());
           for (const h of rawHosts) {
             if (typeof h === "string" && h.trim()) {
               seen.get(key)!.add(h.trim().toLowerCase());
@@ -340,12 +341,13 @@ describe("isAllowlisted properties", () => {
     );
   });
 
-  it("is deterministic", () => {
+  it("consistent after re-normalization of the list", () => {
     fc.assert(
-      fc.property(arbAllowlistInput, arbDomain, arbDomain, (input, siteKey, destHost) => {
+      fc.property(arbAllowlistInput, arbMixedCaseDomain, arbHostEntry, (input, siteKey, destHost) => {
         const normalized = normalizeAllowlist(input);
+        const reNormalized = normalizeAllowlist(normalized);
         expect(isAllowlisted(normalized, siteKey, destHost)).toBe(
-          isAllowlisted(normalized, siteKey, destHost),
+          isAllowlisted(reNormalized, siteKey, destHost),
         );
       }),
     );
