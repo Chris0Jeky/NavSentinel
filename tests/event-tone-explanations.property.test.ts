@@ -81,14 +81,15 @@ const OBJECT_PROTOTYPE_KEYS = new Set(
   Object.getOwnPropertyNames(Object.prototype),
 );
 
+const VALID_CODE_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789_".split("");
+
 const arbUnknownCode = fc
-  .string({ minLength: 1, maxLength: 50 })
-  .map((s) => s.replace(/[^a-z0-9_]/g, "x"))
+  .array(fc.constantFrom(...VALID_CODE_CHARS), { minLength: 1, maxLength: 50 })
+  .map((arr) => arr.join(""))
   .filter(
     (s) =>
       !ALL_KNOWN_CODES.includes(s as any) &&
-      !OBJECT_PROTOTYPE_KEYS.has(s) &&
-      s.length > 0,
+      !OBJECT_PROTOTYPE_KEYS.has(s),
   );
 
 // ---------------------------------------------------------------------------
@@ -223,9 +224,8 @@ describe("explainReasonCode property tests", () => {
     expect(explainReasonCode("")).toBe("");
   });
 
-  it("Object.prototype keys pass through unchanged (no prototype pollution)", () => {
-    const protoKeys = ["toString", "valueOf", "hasOwnProperty", "constructor"];
-    for (const key of protoKeys) {
+  it("all Object.prototype keys pass through unchanged (no prototype pollution)", () => {
+    for (const key of OBJECT_PROTOTYPE_KEYS) {
       expect(explainReasonCode(key)).toBe(key);
       expect(typeof explainReasonCode(key)).toBe("string");
     }
@@ -248,7 +248,7 @@ describe("explainReasonCode property tests", () => {
     );
   });
 
-  it("known codes are NOT idempotent (explaining an explanation returns the explanation itself since it won't match any code)", () => {
+  it("explaining a known code's explanation returns it unchanged (explanation is not a code key)", () => {
     fc.assert(
       fc.property(arbKnownCode, (code) => {
         const explanation = explainReasonCode(code);
@@ -257,6 +257,14 @@ describe("explainReasonCode property tests", () => {
       }),
       { numRuns: 100 },
     );
+  });
+
+  it("no explanation text is itself a known code key", () => {
+    const knownCodeSet = new Set(ALL_KNOWN_CODES);
+    for (const code of ALL_KNOWN_CODES) {
+      const explanation = explainReasonCode(code);
+      expect(knownCodeSet.has(explanation as any)).toBe(false);
+    }
   });
 });
 
