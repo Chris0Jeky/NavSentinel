@@ -134,11 +134,15 @@ describe("classifyDomain properties", () => {
     }
   });
 
-  it("valid domains without keywords return 'unknown'", () => {
+  it("structurally valid domains always produce consistent classification", () => {
     fc.assert(
       fc.property(arbValidDomain, (domain) => {
-        const result = classifyDomain(domain);
-        expect(ALL_CATEGORIES).toContain(result);
+        const r1 = classifyDomain(domain);
+        const r2 = classifyDomain(domain.toUpperCase());
+        expect(r1).toBe(r2);
+        if (domain.endsWith(".gov") || domain.endsWith(".edu")) {
+          expect(r1).not.toBe("unknown");
+        }
       }),
     );
   });
@@ -426,6 +430,26 @@ describe("applyDecay properties", () => {
     );
   });
 
+  it("caps iterations and sets lastUpdated = now when exceeding MAX_DECAY_ITERATIONS", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 0, max: 1_000_000 }),
+        arbNonUnknownCategory,
+        fc.integer({ min: 100, max: 10000 }),
+        (base, category, count) => {
+          const profile = makeProfile({
+            categoryCounts: { [category]: count },
+            totalNavigations: count,
+            lastUpdated: base,
+          });
+          const now = base + 100 * DECAY_INTERVAL_MS;
+          applyDecay(profile, now);
+          expect(profile.lastUpdated).toBe(now);
+        },
+      ),
+    );
+  });
+
   it("is idempotent on second call with same timestamp", () => {
     fc.assert(
       fc.property(
@@ -484,13 +508,12 @@ describe("normalizeProfile properties", () => {
   it("after normalization, totalNavigations <= MAX_TOTAL_NAVIGATIONS", () => {
     fc.assert(
       fc.property(
-        fc.integer({ min: MAX_TOTAL_NAVIGATIONS + 1, max: MAX_TOTAL_NAVIGATIONS * 5 }),
         fc.record({
-          crypto: fc.integer({ min: 100, max: 5000 }),
-          banking: fc.integer({ min: 100, max: 5000 }),
-          social: fc.integer({ min: 100, max: 5000 }),
+          crypto: fc.integer({ min: 3400, max: 20000 }),
+          banking: fc.integer({ min: 3400, max: 20000 }),
+          social: fc.integer({ min: 3400, max: 20000 }),
         }),
-        (_, counts) => {
+        (counts) => {
           const categoryCounts: Record<string, number> = { ...counts };
           const total = Object.values(categoryCounts).reduce((s, c) => s + c, 0);
           if (total <= MAX_TOTAL_NAVIGATIONS) return;
