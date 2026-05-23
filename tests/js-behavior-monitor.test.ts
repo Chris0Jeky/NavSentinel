@@ -13,6 +13,8 @@ import {
   _resetState,
 } from "../extension/src/content/js_behavior_monitor";
 
+type PostSignalFn = (type: string, payload?: Record<string, unknown>) => void;
+
 // Stub network APIs before any test calls initJsBehaviorMonitor (which patches them).
 // The patches wrap whatever is at window.fetch/navigator.sendBeacon at init time.
 beforeAll(() => {
@@ -116,7 +118,7 @@ describe("correlatesWithFormSubmit", () => {
   });
 
   it("returns true after credential form submit within window", () => {
-    const postSignal = vi.fn();
+    const postSignal = vi.fn<PostSignalFn>();
     initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
 
     const form = document.createElement("form");
@@ -161,7 +163,7 @@ describe("isStateExpired", () => {
 
 describe("initJsBehaviorMonitor form submit detection", () => {
   it("emits signal for cross-origin credential form submit", () => {
-    const postSignal = vi.fn();
+    const postSignal = vi.fn<PostSignalFn>();
     initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
 
     const form = document.createElement("form");
@@ -184,7 +186,7 @@ describe("initJsBehaviorMonitor form submit detection", () => {
   });
 
   it("does not emit signal for same-origin form submit", () => {
-    const postSignal = vi.fn();
+    const postSignal = vi.fn<PostSignalFn>();
     initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
 
     const form = document.createElement("form");
@@ -200,7 +202,7 @@ describe("initJsBehaviorMonitor form submit detection", () => {
   });
 
   it("does not emit signal when mode is off", () => {
-    const postSignal = vi.fn();
+    const postSignal = vi.fn<PostSignalFn>();
     initJsBehaviorMonitor({ debug: false, mode: "off", postSignal });
 
     const form = document.createElement("form");
@@ -216,7 +218,7 @@ describe("initJsBehaviorMonitor form submit detection", () => {
   });
 
   it("emits signal for non-credential form with dynamically changed action", () => {
-    const postSignal = vi.fn();
+    const postSignal = vi.fn<PostSignalFn>();
     const form = document.createElement("form");
     form.setAttribute("action", "/safe-endpoint");
     document.body.appendChild(form);
@@ -237,7 +239,7 @@ describe("initJsBehaviorMonitor form submit detection", () => {
   });
 
   it("does not mark an unobserved initial cross-origin action as dynamic", () => {
-    const postSignal = vi.fn();
+    const postSignal = vi.fn<PostSignalFn>();
     initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
 
     const form = document.createElement("form");
@@ -250,7 +252,7 @@ describe("initJsBehaviorMonitor form submit detection", () => {
   });
 
   it("uses submitter formaction as the effective destination", () => {
-    const postSignal = vi.fn();
+    const postSignal = vi.fn<PostSignalFn>();
     initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
 
     const form = document.createElement("form");
@@ -275,7 +277,7 @@ describe("initJsBehaviorMonitor form submit detection", () => {
   });
 
   it("does not stack submit listeners when initialized twice", () => {
-    const postSignal = vi.fn();
+    const postSignal = vi.fn<PostSignalFn>();
     initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
     initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
 
@@ -312,7 +314,7 @@ describe("isCrossOriginUrl data/javascript/blob URIs", () => {
 
 describe("correlatesWithFormSubmit bounds checking", () => {
   it("returns false when request timestamp is before the submit", () => {
-    const postSignal = vi.fn();
+    const postSignal = vi.fn<PostSignalFn>();
     initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
 
     const form = document.createElement("form");
@@ -331,7 +333,7 @@ describe("correlatesWithFormSubmit bounds checking", () => {
 
 describe("credential field value monitoring", () => {
   it("emits signal when password field value is read outside submit", () => {
-    const postSignal = vi.fn();
+    const postSignal = vi.fn<PostSignalFn>();
     initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
 
     const form = document.createElement("form");
@@ -357,7 +359,7 @@ describe("credential field value monitoring", () => {
   });
 
   it("returns password values even when signal emission throws", () => {
-    const postSignal = vi.fn(() => {
+    const postSignal = vi.fn<PostSignalFn>(() => {
       throw new Error("bridge unavailable");
     });
     initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
@@ -375,7 +377,7 @@ describe("credential field value monitoring", () => {
   });
 
   it("does not emit signal for non-password fields", () => {
-    const postSignal = vi.fn();
+    const postSignal = vi.fn<PostSignalFn>();
     initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
 
     const input = document.createElement("input");
@@ -393,7 +395,7 @@ describe("credential field value monitoring", () => {
   });
 
   it("does not emit signal when password value is empty", () => {
-    const postSignal = vi.fn();
+    const postSignal = vi.fn<PostSignalFn>();
     initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
 
     const input = document.createElement("input");
@@ -411,7 +413,7 @@ describe("credential field value monitoring", () => {
   });
 
   it("debounces rapid credential reads on the same field", () => {
-    const postSignal = vi.fn();
+    const postSignal = vi.fn<PostSignalFn>();
     initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
 
     const input = document.createElement("input");
@@ -430,7 +432,7 @@ describe("credential field value monitoring", () => {
   });
 
   it("emits again after debounce window expires", () => {
-    const postSignal = vi.fn();
+    const postSignal = vi.fn<PostSignalFn>();
     initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
 
     const input = document.createElement("input");
@@ -453,7 +455,7 @@ describe("credential field value monitoring", () => {
   });
 
   it("does not emit during form submit flow", () => {
-    const postSignal = vi.fn();
+    const postSignal = vi.fn<PostSignalFn>();
     initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
 
     const form = document.createElement("form");
@@ -474,13 +476,13 @@ describe("credential field value monitoring", () => {
 
     // The credential read signal should not have fired (form submit context)
     const credReadCalls = postSignal.mock.calls.filter(
-      (c: unknown[]) => c[0] === "ns-js-credential-read"
+      (c) => c[0] === "ns-js-credential-read"
     );
     expect(credReadCalls).toHaveLength(0);
   });
 
   it("does not emit when mode is off", () => {
-    const postSignal = vi.fn();
+    const postSignal = vi.fn<PostSignalFn>();
     initJsBehaviorMonitor({ debug: false, mode: "off", postSignal });
 
     const input = document.createElement("input");
@@ -496,7 +498,7 @@ describe("credential field value monitoring", () => {
 
 describe("network exfiltration monitoring fetch", () => {
   it("emits exfil signal when fetch to 3P correlates with credential form submit", () => {
-    const postSignal = vi.fn();
+    const postSignal = vi.fn<PostSignalFn>();
     initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
 
     const form = document.createElement("form");
@@ -520,7 +522,7 @@ describe("network exfiltration monitoring fetch", () => {
   });
 
   it("does not emit exfil signal for same-origin fetch", () => {
-    const postSignal = vi.fn();
+    const postSignal = vi.fn<PostSignalFn>();
     initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
 
     const form = document.createElement("form");
@@ -535,19 +537,19 @@ describe("network exfiltration monitoring fetch", () => {
     window.fetch("/api/data", { method: "POST" });
 
     const exfilCalls = postSignal.mock.calls.filter(
-      (c: unknown[]) => c[0] === "ns-js-exfil-network"
+      (c) => c[0] === "ns-js-exfil-network"
     );
     expect(exfilCalls).toHaveLength(0);
   });
 
   it("does not emit exfil signal when not correlated with submit", () => {
-    const postSignal = vi.fn();
+    const postSignal = vi.fn<PostSignalFn>();
     initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
 
     window.fetch("https://cdn.example.com/data.json");
 
     const exfilCalls = postSignal.mock.calls.filter(
-      (c: unknown[]) => c[0] === "ns-js-exfil-network"
+      (c) => c[0] === "ns-js-exfil-network"
     );
     expect(exfilCalls).toHaveLength(0);
   });
@@ -555,7 +557,7 @@ describe("network exfiltration monitoring fetch", () => {
 
 describe("network exfiltration monitoring XHR", () => {
   it("emits exfil signal when XHR to 3P correlates with credential form submit", () => {
-    const postSignal = vi.fn();
+    const postSignal = vi.fn<PostSignalFn>();
     initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
 
     const form = document.createElement("form");
@@ -583,7 +585,7 @@ describe("network exfiltration monitoring XHR", () => {
 
 describe("network exfiltration monitoring beacon", () => {
   it("emits beacon signal when sendBeacon to 3P on credential page", () => {
-    const postSignal = vi.fn();
+    const postSignal = vi.fn<PostSignalFn>();
     initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
 
     const form = document.createElement("form");
@@ -605,19 +607,19 @@ describe("network exfiltration monitoring beacon", () => {
   });
 
   it("does not emit beacon signal on non-credential page", () => {
-    const postSignal = vi.fn();
+    const postSignal = vi.fn<PostSignalFn>();
     initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
 
     navigator.sendBeacon("https://analytics.example.com/track", "data");
 
     const beaconCalls = postSignal.mock.calls.filter(
-      (c: unknown[]) => c[0] === "ns-js-exfil-beacon"
+      (c) => c[0] === "ns-js-exfil-beacon"
     );
     expect(beaconCalls).toHaveLength(0);
   });
 
   it("does not emit beacon signal for same-origin", () => {
-    const postSignal = vi.fn();
+    const postSignal = vi.fn<PostSignalFn>();
     initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
 
     const form = document.createElement("form");
@@ -629,7 +631,7 @@ describe("network exfiltration monitoring beacon", () => {
     navigator.sendBeacon("/internal/track", "data");
 
     const beaconCalls = postSignal.mock.calls.filter(
-      (c: unknown[]) => c[0] === "ns-js-exfil-beacon"
+      (c) => c[0] === "ns-js-exfil-beacon"
     );
     expect(beaconCalls).toHaveLength(0);
   });
