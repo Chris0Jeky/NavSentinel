@@ -576,8 +576,6 @@ export function correlatesWithFormSubmit(requestTs: number): boolean {
 }
 
 /**
- * Compute the JS behavior score from accumulated signals.
-/**
  * Reset internal module state. Exposed for testing only.
  */
 export function _resetState(): void {
