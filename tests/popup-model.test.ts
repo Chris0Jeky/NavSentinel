@@ -6,7 +6,7 @@ import {
   getRecentPopupEvents
 } from "../extension/src/popup/popup_model";
 
-describe("popup model", () => {
+describe("derivePopupSiteState", () => {
   it("derives trusted registrable-domain state from the active tab url", () => {
     const state = derivePopupSiteState("https://login.example.com/account", ["example.com"]);
 
@@ -20,29 +20,100 @@ describe("popup model", () => {
     });
   });
 
-  it("preserves ip hosts and disables trust actions when no host exists", () => {
-    expect(derivePopupSiteState("http://127.0.0.1:5173/demo", [])).toMatchObject({
+  it("derives untrusted state for domain not in trusted list", () => {
+    const state = derivePopupSiteState("https://login.example.com/", ["other.com"]);
+
+    expect(state).toEqual({
+      siteLabel: "example.com",
+      registrableDomain: "example.com",
+      isTrusted: false,
+      trustStatus: "Not trusted (credential prompts may appear).",
+      canTrust: true,
+      canUntrust: false
+    });
+  });
+
+  it("preserves IP hosts and allows trust actions", () => {
+    const state = derivePopupSiteState("http://127.0.0.1:5173/demo", []);
+    expect(state).toMatchObject({
       siteLabel: "127.0.0.1",
       registrableDomain: "127.0.0.1",
       canTrust: true,
       canUntrust: false
     });
+  });
 
-    expect(derivePopupSiteState("", [])).toMatchObject({
+  it("returns (no host) and disables trust for empty URL", () => {
+    const state = derivePopupSiteState("", []);
+    expect(state).toMatchObject({
       siteLabel: "(no host)",
       registrableDomain: "",
+      isTrusted: false,
       canTrust: false,
       canUntrust: false
     });
   });
 
-  it("returns the newest popup events first and caps the list", () => {
-    const events = Array.from({ length: 10 }, (_, index) => ({
+  it("handles malformed URL gracefully", () => {
+    const state = derivePopupSiteState("not a valid url", []);
+    expect(state.siteLabel).toBe("(no host)");
+    expect(state.registrableDomain).toBe("");
+    expect(state.canTrust).toBe(false);
+    expect(state.canUntrust).toBe(false);
+  });
+
+  it("handles chrome:// URL — hostname resolves but not a real domain", () => {
+    const state = derivePopupSiteState("chrome://extensions/", []);
+    expect(state.siteLabel).toBe("extensions");
+    expect(state.isTrusted).toBe(false);
+  });
+
+  it("handles about:blank URL", () => {
+    const state = derivePopupSiteState("about:blank", []);
+    expect(state.canTrust).toBe(false);
+  });
+
+  it("handles data: URI", () => {
+    const state = derivePopupSiteState("data:text/html,<h1>hi</h1>", []);
+    expect(state.canTrust).toBe(false);
+  });
+
+  it("handles trusted IP address", () => {
+    const state = derivePopupSiteState("http://192.168.1.1/admin", ["192.168.1.1"]);
+    expect(state.isTrusted).toBe(true);
+    expect(state.canUntrust).toBe(true);
+    expect(state.canTrust).toBe(false);
+  });
+
+  it("uses registrable domain for subdomain matching", () => {
+    const state = derivePopupSiteState("https://sub.deep.example.com/", ["example.com"]);
+    expect(state.isTrusted).toBe(true);
+    expect(state.registrableDomain).toBe("example.com");
+  });
+
+  it("handles empty trusted domains array", () => {
+    const state = derivePopupSiteState("https://example.com/", []);
+    expect(state.isTrusted).toBe(false);
+    expect(state.canTrust).toBe(true);
+  });
+
+  it("handles co.uk two-part TLD", () => {
+    const state = derivePopupSiteState("https://shop.example.co.uk/", ["example.co.uk"]);
+    expect(state.registrableDomain).toBe("example.co.uk");
+    expect(state.isTrusted).toBe(true);
+  });
+});
+
+describe("getRecentPopupEvents", () => {
+  const makeEvents = (count: number): EventLogEntry[] =>
+    Array.from({ length: count }, (_, index) => ({
       id: `evt-${index}`,
       ts: index,
-      kind: "suite_config_update"
+      kind: "suite_config_update" as const,
     })) as EventLogEntry[];
 
+  it("returns the newest events first with default limit of 8", () => {
+    const events = makeEvents(10);
     const recent = getRecentPopupEvents(events);
 
     expect(recent).toHaveLength(8);
@@ -50,29 +121,106 @@ describe("popup model", () => {
     expect(recent[7]?.id).toBe("evt-2");
   });
 
-  it("returns no popup events when the requested limit is zero or negative", () => {
-    const events = Array.from({ length: 3 }, (_, index) => ({
-      id: `evt-${index}`,
-      ts: index,
-      kind: "suite_config_update"
-    })) as EventLogEntry[];
-
-    expect(getRecentPopupEvents(events, 0)).toEqual([]);
-    expect(getRecentPopupEvents(events, -4)).toEqual([]);
+  it("returns no events when limit is zero", () => {
+    expect(getRecentPopupEvents(makeEvents(3), 0)).toEqual([]);
   });
 
-  it("formats popup event lines with optional site and score fields", () => {
+  it("returns no events when limit is negative", () => {
+    expect(getRecentPopupEvents(makeEvents(3), -4)).toEqual([]);
+  });
+
+  it("returns all events when fewer than limit", () => {
+    const events = makeEvents(3);
+    const recent = getRecentPopupEvents(events, 10);
+    expect(recent).toHaveLength(3);
+    expect(recent[0]?.id).toBe("evt-2");
+    expect(recent[2]?.id).toBe("evt-0");
+  });
+
+  it("returns exactly limit events when count equals limit", () => {
+    const events = makeEvents(5);
+    const recent = getRecentPopupEvents(events, 5);
+    expect(recent).toHaveLength(5);
+  });
+
+  it("handles empty event log", () => {
+    expect(getRecentPopupEvents([], 8)).toEqual([]);
+  });
+
+  it("truncates fractional limit", () => {
+    const events = makeEvents(5);
+    const recent = getRecentPopupEvents(events, 2.9);
+    expect(recent).toHaveLength(2);
+  });
+
+  it("defaults to 8 for NaN limit", () => {
+    const events = makeEvents(10);
+    const recent = getRecentPopupEvents(events, NaN);
+    expect(recent).toHaveLength(8);
+  });
+
+  it("defaults to 8 for Infinity limit", () => {
+    const events = makeEvents(10);
+    const recent = getRecentPopupEvents(events, Infinity);
+    expect(recent).toHaveLength(8);
+  });
+
+  it("returns single event for limit 1", () => {
+    const events = makeEvents(5);
+    const recent = getRecentPopupEvents(events, 1);
+    expect(recent).toHaveLength(1);
+    expect(recent[0]?.id).toBe("evt-4");
+  });
+});
+
+describe("formatPopupEventLine", () => {
+  const formatTime = (ts: number) => `${ts}s`;
+
+  it("formats event with site and score", () => {
     const line = formatPopupEventLine(
-      {
-        id: "evt",
-        ts: 10,
-        kind: "nav_click_block",
-        site: "example.com",
-        score: 72
-      },
+      { id: "evt", ts: 10, kind: "nav_click_block", site: "example.com", score: 72 },
       () => "10:00:00"
     );
-
     expect(line).toBe("10:00:00 | nav_click_block | example.com | score=72");
+  });
+
+  it("formats event without site or score", () => {
+    const line = formatPopupEventLine(
+      { id: "evt", ts: 5, kind: "suite_config_update" } as EventLogEntry,
+      formatTime
+    );
+    expect(line).toBe("5s | suite_config_update");
+  });
+
+  it("formats event with site but no score", () => {
+    const line = formatPopupEventLine(
+      { id: "evt", ts: 5, kind: "nav_click_warn", site: "test.com" } as EventLogEntry,
+      formatTime
+    );
+    expect(line).toBe("5s | nav_click_warn | test.com");
+  });
+
+  it("formats event with score but no site", () => {
+    const line = formatPopupEventLine(
+      { id: "evt", ts: 5, kind: "nav_click_block", score: 95 } as EventLogEntry,
+      formatTime
+    );
+    expect(line).toBe("5s | nav_click_block | score=95");
+  });
+
+  it("formats event with score of 0", () => {
+    const line = formatPopupEventLine(
+      { id: "evt", ts: 0, kind: "nav_click_allow", score: 0 } as EventLogEntry,
+      formatTime
+    );
+    expect(line).toBe("0s | nav_click_allow | score=0");
+  });
+
+  it("uses the provided formatTime function", () => {
+    const line = formatPopupEventLine(
+      { id: "evt", ts: 1716480000000, kind: "nav_click_block" } as EventLogEntry,
+      (ts) => new Date(ts).toISOString()
+    );
+    expect(line).toContain("2024-05-23");
   });
 });
