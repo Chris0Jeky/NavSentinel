@@ -58,6 +58,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | ID | Task | Effort | Issue | PR | Status |
 |---|---|---|---|---|---|
 | T-26 | Remove `as any` casts from credential_guard.ts | S | — | #130 | done (2/2 reviews) |
+| T-27 | Remove `as any` casts from main_guard.ts + capture_isolated.ts | M | — | #131 | done (2/2 reviews) |
 | T-12 | Reduce ESLint warnings (59 remaining) | M | — | — | seeded (needs #116 merged first) |
 | T-13 | Visual similarity detection (continue P4-01) | XL | — | — | pending |
 | T-14 | FP measurement re-run (Phase 2 gate) | M | — | — | pending |
@@ -91,6 +92,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #128 | fix/js-behavior-stale-todos | T-24 | 2/2 done, all findings fixed | open (ready for human) |
 | #129 | fix/dedup-js-behavior-state-v2 | T-25 | 2/2 done, all findings fixed | open (stacked on #128) |
 | #130 | fix/credential-guard-type-safety | T-26 | 2/2 done, all findings fixed | open (ready for human) |
+| #131 | fix/main-guard-type-safety | T-27 | 2/2 done, all findings fixed | open (ready for human) |
 
 ## Review Log
 
@@ -132,6 +134,10 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #129 | R2 | Claude Opus | No findings above threshold | Clean |
 | #130 | R1 | Claude Opus (x2) | Dead `typeof` guard on requestSubmit, unaddressed `as SubmitEvent`/`as ClipboardEvent` casts, DOMException instanceof Error (false alarm) | Fixed |
 | #130 | R2 | Claude Opus | No findings above threshold | Clean |
+| #131 | R1 | Claude Opus (x2) | Reflect.set returns false vs throws for non-writable properties (benign — empty catch blocks) | Acknowledged |
+| #131 | R2 | Claude Opus | Dead `?.` on navigator.userActivation (intentionally kept for future Firefox port) | Acknowledged |
+| #130 | R1 | Claude Opus (x2) | Dead `typeof` guard on requestSubmit, unaddressed `as SubmitEvent`/`as ClipboardEvent` casts, DOMException instanceof Error (false alarm) | Fixed |
+| #130 | R2 | Claude Opus | No findings above threshold | Clean |
 
 ## Active Worktrees
 
@@ -153,6 +159,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | NavSentinel-wt-todo-cleanup | fix/js-behavior-stale-todos | #128 | complete |
 | NavSentinel-wt-dedup-jsb | fix/dedup-js-behavior-state-v2 | #129 | complete |
 | NavSentinel-wt-type-safety | fix/credential-guard-type-safety | #130 | complete |
+| NavSentinel-wt-main-guard-types | fix/main-guard-type-safety | #131 | complete |
 
 ## Notes
 
@@ -163,3 +170,4 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 - ESLint warnings (59) need #116 merged before addressing
 - Codebase scan found: mostly UI entrypoint files (popup.ts, options.ts) lack unit tests — covered by E2E instead
 - T-12 (ESLint warnings) is blocked on PR #116 merge since ESLint config only exists on that branch
+- After PRs #130 + #131 merge: zero `as any` casts remain in extension/src/
