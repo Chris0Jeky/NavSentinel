@@ -2,6 +2,7 @@ import type { CredMode, EventLogEntry } from "../shared/storage";
 import type { Mode } from "../shared/types";
 import { classifyEventTone } from "../shared/event_tone";
 import { icon, logoSentinel } from "../shared/icons";
+import { getSegValue, initSegKeyboard, setSegValue } from "../shared/seg_control";
 import {
   POPUP_TEST_CRED_MODES,
   POPUP_TEST_NAV_MODES,
@@ -58,24 +59,6 @@ function renderShieldArc(value: number, size = 42): string {
   <span class="ns-mono" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:${col};transform:rotate(90deg)">${value}</span>`;
 }
 
-function setSegValue(seg: HTMLDivElement, value: string): void {
-  const btns = Array.from(seg.querySelectorAll<HTMLButtonElement>(".seg-btn"));
-  for (const btn of btns) {
-    const active = btn.dataset.value === value.toLowerCase();
-    btn.setAttribute("aria-checked", String(active));
-    btn.setAttribute("tabindex", active ? "0" : "-1");
-  }
-}
-
-function getSegValue(seg: HTMLDivElement): string {
-  const btns = Array.from(seg.querySelectorAll<HTMLButtonElement>(".seg-btn"));
-  for (const btn of btns) {
-    if (btn.getAttribute("aria-checked") === "true") {
-      return btn.dataset.value ?? "smart";
-    }
-  }
-  return "smart";
-}
 
 function severityClass(score: number): string {
   if (score >= 70) return "high";
@@ -283,22 +266,6 @@ async function untrustCurrentSite(): Promise<void> {
   await refreshUi();
 }
 
-function initSegKeyboard(seg: HTMLDivElement): void {
-  seg.addEventListener("keydown", (e) => {
-    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-    const btns = Array.from(seg.querySelectorAll<HTMLButtonElement>(".seg-btn"));
-    const idx = btns.indexOf(e.target as HTMLButtonElement);
-    if (idx < 0) return;
-    e.preventDefault();
-    const next = e.key === "ArrowRight"
-      ? btns[(idx + 1) % btns.length]!
-      : btns[(idx - 1 + btns.length) % btns.length]!;
-    next.focus();
-    if (next.getAttribute("aria-checked") !== "true") {
-      next.click();
-    }
-  });
-}
 
 navSeg.addEventListener("click", async (e) => {
   const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".seg-btn");
