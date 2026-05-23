@@ -469,4 +469,80 @@ describe("mutation_monitor shadow DOM observation", () => {
 
     host.remove();
   });
+
+  it("detects injection in nested shadow roots", async () => {
+    const alerts: MutationAlert[] = [];
+    const outerHost = document.createElement("div");
+    document.body.appendChild(outerHost);
+    const outerSr = outerHost.attachShadow({ mode: "open" });
+
+    const innerHost = document.createElement("div");
+    outerSr.appendChild(innerHost);
+    const innerSr = innerHost.attachShadow({ mode: "open" });
+
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    const input = document.createElement("input");
+    input.type = "password";
+    innerSr.appendChild(input);
+
+    await vi.advanceTimersByTimeAsync(200);
+
+    const passwordAlerts = alerts.filter((a) => a.type === "password_injected");
+    expect(passwordAlerts.length).toBeGreaterThanOrEqual(1);
+
+    outerHost.remove();
+    stopMutationMonitor();
+  });
+
+  it("skips NavSentinel's own shadow hosts", async () => {
+    const alerts: MutationAlert[] = [];
+    const host = document.createElement("div");
+    host.id = "__navsentinel_toast_host";
+    document.body.appendChild(host);
+    const sr = host.attachShadow({ mode: "open" });
+
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    const input = document.createElement("input");
+    input.type = "password";
+    sr.appendChild(input);
+
+    await vi.advanceTimersByTimeAsync(200);
+
+    // NavSentinel's own shadow root should NOT be observed
+    const passwordAlerts = alerts.filter((a) => a.type === "password_injected");
+    expect(passwordAlerts.length).toBe(0);
+
+    host.remove();
+    stopMutationMonitor();
+  });
+
+  it("disconnects shadow observer when host is removed from DOM", async () => {
+    const alerts: MutationAlert[] = [];
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const sr = host.attachShadow({ mode: "open" });
+
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    // Wait for initial observation
+    await vi.advanceTimersByTimeAsync(200);
+
+    // Remove the host from DOM
+    host.remove();
+    await vi.advanceTimersByTimeAsync(200);
+
+    // Inject into the now-detached shadow root — should NOT produce alert
+    const input = document.createElement("input");
+    input.type = "password";
+    sr.appendChild(input);
+
+    await vi.advanceTimersByTimeAsync(200);
+
+    const passwordAlerts = alerts.filter((a) => a.type === "password_injected");
+    expect(passwordAlerts.length).toBe(0);
+
+    stopMutationMonitor();
+  });
 });

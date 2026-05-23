@@ -115,8 +115,8 @@ let pendingMutations: MutationRecord[] = [];
 const alerts: MutationAlert[] = [];
 let pageHost: string = "";
 
-const observedShadowRoots = new Set<ShadowRoot>();
-const shadowObservers: MutationObserver[] = [];
+const observedShadowRoots = new WeakSet<ShadowRoot>();
+const shadowObserversByHost = new Map<Element, MutationObserver>();
 
 /**
  * Tracks original `action` attribute values for forms observed at startup.
@@ -175,13 +175,24 @@ function tryGetShadowRoot(el: Element): ShadowRoot | null {
   } catch { return null; }
 }
 
+const SELF_HOST_PATTERN = /^__(?:navsentinel|sentinelsuite)_/;
+
+function isNavSentinelHost(el: Element): boolean {
+  const id = el.id ?? "";
+  return SELF_HOST_PATTERN.test(id);
+}
+
 function observeShadowRoot(sr: ShadowRoot): void {
   if (observedShadowRoots.has(sr)) return;
+
+  const host = sr.host;
+  if (isNavSentinelHost(host)) return;
+
   observedShadowRoots.add(sr);
 
   const shadowObs = new MutationObserver(onMutations);
   shadowObs.observe(sr, OBSERVE_CONFIG);
-  shadowObservers.push(shadowObs);
+  shadowObserversByHost.set(host, shadowObs);
 
   snapshotFormActions(sr);
 
@@ -424,6 +435,27 @@ function processAddedNode(node: Node): void {
   }
 }
 
+function disconnectShadowObserver(host: Element): void {
+  const obs = shadowObserversByHost.get(host);
+  if (obs) {
+    obs.disconnect();
+    shadowObserversByHost.delete(host);
+    const sr = tryGetShadowRoot(host);
+    if (sr) observedShadowRoots.delete(sr);
+  }
+}
+
+function processRemovedNode(node: Node): void {
+  if (!(node instanceof Element)) return;
+
+  disconnectShadowObserver(node);
+
+  const descendants = node.querySelectorAll("*");
+  for (let i = 0; i < descendants.length; i++) {
+    disconnectShadowObserver(descendants[i]!);
+  }
+}
+
 function processAttributeChange(record: MutationRecord): void {
   const target = record.target;
   if (!(target instanceof Element)) return;
@@ -471,6 +503,9 @@ function processBatch(): void {
       for (let i = 0; i < record.addedNodes.length; i++) {
         if (alerts.length >= MAX_ALERTS) break;
         processAddedNode(record.addedNodes[i]!);
+      }
+      for (let i = 0; i < record.removedNodes.length; i++) {
+        processRemovedNode(record.removedNodes[i]!);
       }
     } else if (record.type === "attributes") {
       processAttributeChange(record);
@@ -533,11 +568,10 @@ export function stopMutationMonitor(): void {
     observer.disconnect();
     observer = null;
   }
-  for (const so of shadowObservers) {
-    so.disconnect();
+  for (const [, obs] of shadowObserversByHost) {
+    obs.disconnect();
   }
-  shadowObservers.length = 0;
-  observedShadowRoots.clear();
+  shadowObserversByHost.clear();
   if (debounceTimer !== null) {
     clearTimeout(debounceTimer);
     debounceTimer = null;
