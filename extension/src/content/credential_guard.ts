@@ -57,8 +57,8 @@ function resumeSubmit(form: HTMLFormElement, submitter: HTMLElement | null): voi
   markAllowNext(form, 5000);
 
   try {
-    if (typeof (form as any).requestSubmit === "function") {
-      (form as any).requestSubmit(submitter);
+    if (typeof form.requestSubmit === "function") {
+      form.requestSubmit(submitter);
     } else {
       form.submit();
     }
@@ -80,7 +80,7 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
     evt.preventDefault();
     evt.stopImmediatePropagation();
 
-    const submitter = (evt as any).submitter as HTMLElement | null;
+    const submitter = evt.submitter;
 
     const cfg = await getCredentialSettings();
     if (cfg.mode === "off") {
@@ -253,7 +253,7 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
         kind: "cred_submit_prompt",
         site: normalizeHost(location.hostname),
         url: location.href,
-        extra: { error: String((e as any)?.message ?? e) }
+        extra: { error: e instanceof Error ? e.message : String(e) }
       });
     } catch {
       // ignore
