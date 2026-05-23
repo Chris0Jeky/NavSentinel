@@ -237,8 +237,8 @@ async function setNavMode(mode: Mode): Promise<void> {
   await updateSuiteSettings({ nav: { defaultMode: mode } });
   try {
     await appendEvent({ kind: "suite_config_update", extra: { navMode: mode } });
-  } catch {
-    // ignore
+  } catch (e) {
+    console.warn("[NavSentinel] event log append failed:", e);
   }
   await refreshUi();
 }
@@ -248,8 +248,8 @@ async function setCredMode(mode: CredMode): Promise<void> {
   await updateSuiteSettings({ credential: { mode } });
   try {
     await appendEvent({ kind: "suite_config_update", extra: { credMode: mode } });
-  } catch {
-    // ignore
+  } catch (e) {
+    console.warn("[NavSentinel] event log append failed:", e);
   }
   await refreshUi();
 }
@@ -262,8 +262,8 @@ async function trustCurrentSite(): Promise<void> {
   await addTrustedDomain(reg);
   try {
     await appendEvent({ kind: "cred_trust_domain", site: reg });
-  } catch {
-    // ignore
+  } catch (e) {
+    console.warn("[NavSentinel] event log append failed:", e);
   }
   await refreshUi();
 }
@@ -276,8 +276,8 @@ async function untrustCurrentSite(): Promise<void> {
   await removeTrustedDomain(reg);
   try {
     await appendEvent({ kind: "cred_untrust_domain", site: reg });
-  } catch {
-    // ignore
+  } catch (e) {
+    console.warn("[NavSentinel] event log append failed:", e);
   }
   await refreshUi();
 }
