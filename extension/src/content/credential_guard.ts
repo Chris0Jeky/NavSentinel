@@ -65,8 +65,8 @@ function resumeSubmit(form: HTMLFormElement, submitter: HTMLElement | null): voi
   } catch {
     try {
       form.submit();
-    } catch {
-      // ignore
+    } catch (e) {
+      console.warn("[NavSentinel] form submit fallback failed:", e);
     }
   }
 }
@@ -255,8 +255,8 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
         url: location.href,
         extra: { error: String((e as any)?.message ?? e) }
       });
-    } catch (e) {
-      console.warn("[NavSentinel] event log append failed (cred_submit_prompt/error):", e);
+    } catch (logErr) {
+      console.warn("[NavSentinel] event log append failed (cred_submit_prompt/error):", logErr, "original:", e);
     }
   }
 }
