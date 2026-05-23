@@ -47,7 +47,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | T-17 | Test coverage for sw.ts service worker | L | — | #121 | done (2/2 reviews) |
 | T-18 | Test coverage for credential_modal.ts | M | — | #122 | done (2/2 reviews) |
 | T-20 | Test coverage for credential_guard.ts | M | — | #123 | done (2/2 reviews) |
-| T-21 | Test coverage for ui_toast.ts | S | — | — | in progress |
+| T-21 | Test coverage for ui_toast.ts | S | — | #124 | done (2/2 reviews) |
 
 ### Cycle 5: Next Up
 
@@ -80,6 +80,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #121 | test/sw-coverage | T-17 | 2/2 done, all findings fixed | open (ready for human) |
 | #122 | test/credential-modal-coverage | T-18 | 2/2 done, all findings fixed | open (ready for human) |
 | #123 | test/credential-guard-coverage | T-20 | 2/2 done, all findings fixed | open (ready for human) |
+| #124 | test/ui-toast-coverage | T-21 | 2/2 done, all findings fixed | open (ready for human) |
 
 ## Review Log
 
@@ -109,6 +110,8 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #122 | R2 | Claude Opus | Promise leak on modal replacement (source bug), premature focus restore, weak innerHTML/listener assertions | Fixed |
 | #123 | R1 | Claude Opus (x2) | Vacuous allowNextSubmit test, redundant dispatchPaste target setter, missing error-catch assertions, missing tests (requestSubmit fallback, paste/toast error, content boost cap, reasons, modal spec, trust outcome) | Fixed |
 | #123 | R2 | Claude Opus | Non-conformant defaultConfig/defaultRisk types, timer-expiry untested, SubmitEvent vs Event, WeakMap state docs, weak cap assertion, missing paste getTrusted assertion, error-path field assertions | Fixed |
+| #124 | R1 | Claude Opus (x2) | Timer leak in afterEach, replacement test missing second onDismiss, zero/negative timeout missing onDismiss, missing dismiss/throw/XSS/structure/focus/ordering tests, host parentElement/style.all unasserted | Fixed |
+| #124 | R2 | Claude Opus | Source bug: double-dismiss calls onDismiss twice (no idempotency guard), replacement test missing getWraps assertion, auto-dismiss tests unpaired | Fixed (source + tests) |
 
 ## Active Worktrees
 
@@ -124,6 +127,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | NavSentinel-wt-sw-tests | test/sw-coverage | #121 | complete |
 | NavSentinel-wt-cred-modal | test/credential-modal-coverage | #122 | complete |
 | NavSentinel-wt-cred-guard | test/credential-guard-coverage | #123 | complete |
+| NavSentinel-wt-toast | test/ui-toast-coverage | #124 | complete |
 
 ## Notes
 
