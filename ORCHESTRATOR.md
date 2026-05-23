@@ -86,6 +86,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | T-55 | Fix optimalParams NaN/Infinity guard + remove dead exports | S | — | #156 | done (2/2 reviews) |
 | T-56 | Add diagnostic logging to silent adaptive scoring catch blocks | S | — | #157 | done (2/2 reviews) |
 | T-57 | Fix missing sendResponse in sw.ts for undefined tabId | S | — | #158 | done (2/2 reviews) |
+| T-58 | Property tests for redirect_chain.ts (isKnownRedirector + RedirectChainTracker) | S | — | #159 | done (2/2 reviews) |
 | T-12 | Reduce ESLint warnings (59 remaining) | M | — | — | seeded (needs #116 merged first) |
 | T-13 | Visual similarity detection (continue P4-01) | XL | — | — | pending |
 | T-14 | FP measurement re-run (Phase 2 gate) | M | — | — | pending |
@@ -147,6 +148,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #156 | fix/optimalparams-guard | T-55 | 2/2 done, all findings fixed | open (ready for human) |
 | #157 | fix/capture-silent-catch | T-56 | 2/2 done, all findings fixed | open (ready for human) |
 | #158 | fix/sw-missing-sendresponse | T-57 | 2/2 done, all findings fixed | open (ready for human) |
+| #159 | test/redirect-chain-property-tests | T-58 | 2/2 done, all findings fixed | open (ready for human) |
 
 ## Review Log
 
@@ -244,6 +246,8 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #157 | R2 | Claude Opus | No actionable findings — message consistency, accuracy, log level, prefix, flooding risk all verified | Clean |
 | #158 | R1 | Claude Opus | Incomplete response shape — ns-check-rollback else missing entry/prevUrl fields (ns-get-chain-info returns full shape) | Fixed |
 | #158 | R2 | Claude Opus | No actionable findings — response shapes, caller compatibility, test coverage all verified | Clean |
+| #159 | R1 | Claude Opus | Flaky allowlist test (open-redirect path collision), missing boundary (10000ms), missing open-redirect/stale-hasActiveChain/viaKnownRedirector tests | Fixed |
+| #159 | R2 | Claude Opus | Vacuous map size test (20s gaps = stale pruning), weak knownRedirectorHops (inequality only), missing same-URL-repeated/backingMap tests | Fixed |
 
 ## Active Worktrees
 
@@ -293,6 +297,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | NavSentinel-wt-optimalparams-fix | fix/optimalparams-guard | #156 | complete |
 | NavSentinel-wt-silent-catch | fix/capture-silent-catch | #157 | complete |
 | NavSentinel-wt-sw-sendresponse | fix/sw-missing-sendresponse | #158 | complete |
+| NavSentinel-wt-redirect-props | test/redirect-chain-property-tests | #159 | complete |
 
 ## Notes
 
