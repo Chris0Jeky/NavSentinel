@@ -64,6 +64,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | T-30 | Popup accessibility: ARIA labels, live regions, landmarks | S | — | #134 | done (2/2 reviews) |
 | T-31 | Decorative icon SVG aria-hidden + onboarding a11y | S | — | #135 | done (2/2 reviews) |
 | T-33 | Unit tests for computeCDS scoring — all factors + boundaries | M | — | #136 | done (2/2 reviews) |
+| T-34 | Unit tests for computeNRS — all factors, caps, thresholds, dedup | M | — | #137 | done (2/2 reviews) |
 | T-12 | Reduce ESLint warnings (59 remaining) | M | — | — | seeded (needs #116 merged first) |
 | T-13 | Visual similarity detection (continue P4-01) | XL | — | — | pending |
 | T-14 | FP measurement re-run (Phase 2 gate) | M | — | — | pending |
@@ -103,6 +104,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #134 | fix/popup-accessibility | T-30 | 2/2 done, all findings fixed | open (ready for human) |
 | #135 | fix/icon-svg-accessibility | T-31 | 2/2 done, no actionable findings | open (ready for human) |
 | #136 | test/scoring-unit-coverage | T-33 | 2/2 done, all findings fixed | open (ready for human) |
+| #137 | test/nrs-factor-coverage | T-34 | 2/2 done, all findings fixed | open (ready for human) |
 
 ## Review Log
 
@@ -156,6 +158,8 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #135 | R2 | Claude Opus | No actionable findings — all 20 icon call sites confirmed decorative | Clean |
 | #136 | R1 | Claude Opus | Missing titleLength tests, visibility:collapse, role=link, non-interactive cursor | Fixed |
 | #136 | R2 | Claude Opus | Missing viewport coverage boundary tests (20%/35%), rounding error in 35% rect | Fixed |
+| #137 | R1 | Claude Opus | CSP/navAnomaly boundary at exactly 20 untested, redirect depth=1, missing redirect combination test | Fixed |
+| #137 | R2 | Claude Opus | Missing dblclick in individual factors section, CSP threshold test lacked exact NRS assertion | Fixed |
 
 ## Active Worktrees
 
@@ -183,6 +187,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | NavSentinel-wt-popup-a11y | fix/popup-accessibility | #134 | complete |
 | NavSentinel-wt-icon-a11y | fix/icon-svg-accessibility | #135 | complete |
 | NavSentinel-wt-scoring-tests | test/scoring-unit-coverage | #136 | complete |
+| NavSentinel-wt-nrs-factors | test/nrs-factor-coverage | #137 | complete |
 
 ## Notes
 
@@ -193,7 +198,9 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 - ESLint warnings (59) need #116 merged before addressing
 - Codebase scan found: mostly UI entrypoint files (popup.ts, options.ts) lack unit tests — covered by E2E instead
 - T-12 (ESLint warnings) is blocked on PR #116 merge since ESLint config only exists on that branch
-- After PRs #130 + #131 merge: zero `as any` casts remain in extension/src/
+- After PRs #130 + #131 merge: 18 `as any` casts remain — 13 in main_guard.ts (dynamic patching), 3 in credential_guard.ts (DOM API compat), 1 in capture_isolated.ts (userActivation), 1 error handler
 - PR #132: ARIA radiogroup pattern, shared seg_control.ts, 10 new unit tests (1164 total), static aria-checked
 - PR #134: Popup ARIA labels, live regions, landmarks, dynamic score label, 13 unit tests (1167 total)
 - PR #136: 52 unit tests for computeCDS scoring (all factors, boundaries, gradients, edge cases). Total 1199+52=1251 on branch.
+- PR #137: 51 new tests for computeNRS (was 33, now 84). All NavigationContext factors covered: redirect chains, OAuth, CSP, nav anomaly, diminishing returns. Total 1200+51=1251 on branch.
+- ORCHESTRATOR note correction: "zero `as any` casts" was inaccurate — 18 remain (13 main_guard.ts, 3 credential_guard.ts, 1 capture_isolated.ts, 1 credential_guard.ts error handling). Most are legitimate DOM API gaps.
