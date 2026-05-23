@@ -51,6 +51,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | T-22 | Test coverage for debug_overlay.ts | S | — | #125 | done (2/2 reviews) |
 | T-23 | Test coverage for stateMachine.ts (consolidate) | S | — | #126 | done (2/2 reviews) |
 | T-24 | Clean stale TODOs + remove dead stub in js_behavior_monitor | S | #127 | #128 | done (2/2 reviews) |
+| T-25 | Deduplicate JsBehaviorState from js_behavior_monitor.ts | S | #127 | #129 | done (2/2 reviews) |
 
 ### Cycle 5: Next Up
 
@@ -87,6 +88,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #125 | test/debug-overlay-coverage | T-22 | 2/2 done, all findings fixed | open (ready for human) |
 | #126 | test/state-machine-coverage | T-23 | 2/2 done, all findings fixed | open (ready for human) |
 | #128 | fix/js-behavior-stale-todos | T-24 | 2/2 done, all findings fixed | open (ready for human) |
+| #129 | fix/dedup-js-behavior-state-v2 | T-25 | 2/2 done, all findings fixed | open (stacked on #128) |
 
 ## Review Log
 
@@ -124,6 +126,8 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #126 | R2 | Claude Opus | No findings above threshold | Clean |
 | #128 | R1 | Claude Opus | No findings | Clean |
 | #128 | R2 | Claude Opus | Dead computeJsBehaviorScore stub (real in shared/), inaccurate issue #127, duplicate JsBehaviorState types, lost perf targets, unaddressed Gemini comment | Fixed (stub removed, issue updated) |
+| #129 | R1 | Claude Opus | Incomplete dedup: 5 SCORE_* constants still duplicated | Fixed (re-exported from shared) |
+| #129 | R2 | Claude Opus | No findings above threshold | Clean |
 
 ## Active Worktrees
 
@@ -143,6 +147,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | NavSentinel-wt-debug-overlay | test/debug-overlay-coverage | #125 | complete |
 | NavSentinel-wt-state-machine | test/state-machine-coverage | #126 | complete |
 | NavSentinel-wt-todo-cleanup | fix/js-behavior-stale-todos | #128 | complete |
+| NavSentinel-wt-dedup-jsb | fix/dedup-js-behavior-state-v2 | #129 | complete |
 
 ## Notes
 
