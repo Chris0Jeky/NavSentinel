@@ -62,6 +62,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | T-28 | ARIA accessibility + shared seg_control extraction | M | — | #132 | done (2/2 reviews) |
 | T-29 | Toggle switch aria-labelledby + aria-describedby | S | — | #133 | done (2/2 reviews) |
 | T-30 | Popup accessibility: ARIA labels, live regions, landmarks | S | — | #134 | done (2/2 reviews) |
+| T-31 | Decorative icon SVG aria-hidden + onboarding a11y | S | — | #135 | done (2/2 reviews) |
 | T-12 | Reduce ESLint warnings (59 remaining) | M | — | — | seeded (needs #116 merged first) |
 | T-13 | Visual similarity detection (continue P4-01) | XL | — | — | pending |
 | T-14 | FP measurement re-run (Phase 2 gate) | M | — | — | pending |
@@ -99,6 +100,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #132 | fix/a11y-and-function-type | T-28 | 2/2 done, all findings fixed | open (ready for human) |
 | #133 | fix/toggle-accessibility | T-29 | 2/2 done, all findings fixed | open (ready for human) |
 | #134 | fix/popup-accessibility | T-30 | 2/2 done, all findings fixed | open (ready for human) |
+| #135 | fix/icon-svg-accessibility | T-31 | 2/2 done, no actionable findings | open (ready for human) |
 
 ## Review Log
 
@@ -148,6 +150,8 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #133 | R2 | Claude Opus | No actionable findings — ID collision/JS reference/E2E impact checks clean | Clean |
 | #134 | R1 | Claude Opus | shieldArc needs role="img", SVG needs aria-hidden, dynamic label includes "(no host)", missing edge case test | Fixed |
 | #134 | R2 | Claude Opus | shieldArc aria-label doesn't include score value (hidden by R1 aria-hidden fix), missing test | Fixed |
+| #135 | R1 | Claude Opus | No actionable findings — pre-existing logo ID collision (low), test icon list manually maintained (low) | Clean |
+| #135 | R2 | Claude Opus | No actionable findings — all 20 icon call sites confirmed decorative | Clean |
 
 ## Active Worktrees
 
@@ -173,6 +177,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | NavSentinel-wt-a11y-types | fix/a11y-and-function-type | #132 | complete |
 | NavSentinel-wt-toggle-a11y | fix/toggle-accessibility | #133 | complete |
 | NavSentinel-wt-popup-a11y | fix/popup-accessibility | #134 | complete |
+| NavSentinel-wt-icon-a11y | fix/icon-svg-accessibility | #135 | complete |
 
 ## Notes
 
