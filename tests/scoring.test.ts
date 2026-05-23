@@ -59,6 +59,16 @@ describe("computeCDS — accessible name checks", () => {
     const result = computeCDS(baseCtx({ tag: "SPAN", hasOnClick: true }));
     expect(result.reasonCodes).toContain("no_accessible_name");
   });
+
+  it("treats titleLength >= 2 as accessible name", () => {
+    const result = computeCDS(baseCtx({ tag: "A", titleLength: 5 }));
+    expect(result.reasonCodes).not.toContain("no_accessible_name");
+  });
+
+  it("treats titleLength < 2 as absent", () => {
+    const result = computeCDS(baseCtx({ tag: "A", titleLength: 1 }));
+    expect(result.reasonCodes).toContain("no_accessible_name");
+  });
 });
 
 describe("computeCDS — viewport coverage gradient", () => {
@@ -269,6 +279,14 @@ describe("computeCDS — opacity gradient", () => {
     }));
     expect(result.reasonCodes).toContain("invisible_but_clickable");
   });
+
+  it("visibility:collapse counts as invisible", () => {
+    const result = computeCDS(baseCtx({
+      visibility: "collapse",
+      pointerEvents: "auto",
+    }));
+    expect(result.reasonCodes).toContain("invisible_but_clickable");
+  });
 });
 
 describe("computeCDS — cursor pointer no affordance", () => {
@@ -295,6 +313,15 @@ describe("computeCDS — cursor pointer no affordance", () => {
       tag: "A",
       cursor: "pointer",
       textLength: 10,
+      opacity: 0.20,
+    }));
+    expect(result.reasonCodes).not.toContain("cursor_pointer_no_affordance");
+  });
+
+  it("no penalty for non-interactive element even with pointer cursor and low opacity", () => {
+    const result = computeCDS(baseCtx({
+      tag: "DIV",
+      cursor: "pointer",
       opacity: 0.20,
     }));
     expect(result.reasonCodes).not.toContain("cursor_pointer_no_affordance");
