@@ -542,6 +542,38 @@ describe("computeNRS property tests", () => {
     );
   });
 
+  it("navAnomaly contribution is capped at 15", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 16, max: 50 }),
+        (anomalyScore) => {
+          const baseCds: ScoreResult = { cds: 25, reasonCodes: [] };
+          const base: NavigationContext = { isNewTabOrWindow: false, isCrossSite: false };
+          const at15 = computeNRS(baseCds, { ...base, navAnomalyScore: 15 });
+          const atHigher = computeNRS(baseCds, { ...base, navAnomalyScore: anomalyScore });
+          expect(atHigher.nrs).toBe(at15.nrs);
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+
+  it("CSP weakness contribution is capped at 10", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 11, max: 50 }),
+        (cspScore) => {
+          const baseCds: ScoreResult = { cds: 25, reasonCodes: [] };
+          const base: NavigationContext = { isNewTabOrWindow: false, isCrossSite: false };
+          const at10 = computeNRS(baseCds, { ...base, cspWeaknessScore: 10 });
+          const atHigher = computeNRS(baseCds, { ...base, cspWeaknessScore: cspScore });
+          expect(atHigher.nrs).toBe(at10.nrs);
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+
   it("pushStateAbuse always increases or maintains score", () => {
     fc.assert(
       fc.property(arbScoreResult, arbNavigationContext, (cds, nav) => {
