@@ -14,6 +14,13 @@ const arbLabel = fc
   )
   .map((chars) => chars.join(""));
 
+const arbMixedCaseLabel = fc
+  .array(
+    fc.constantFrom(..."abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".split("")),
+    { minLength: 1, maxLength: 12 },
+  )
+  .map((chars) => chars.join(""));
+
 const arbDomain = fc
   .tuple(arbLabel, fc.constantFrom("com", "org", "net", "io", "co.uk"))
   .map(([label, tld]) => `${label}.${tld}`);
@@ -106,6 +113,10 @@ describe("areSameOrganization properties", () => {
     expect(areSameOrganization("old.reddit.com", "cdn.redditmedia.com")).toBe(true);
   });
 
+  it("PSL wildcard limitation: raw.githubusercontent.com not matched (known edge case)", () => {
+    expect(areSameOrganization("github.com", "raw.githubusercontent.com")).toBe(false);
+  });
+
   it("unregistered random domains are not in the same org as each other", () => {
     fc.assert(
       fc.property(arbLabel, arbLabel, (a, b) => {
@@ -123,13 +134,17 @@ describe("areSameOrganization properties", () => {
 // normalizeAllowlist
 // ---------------------------------------------------------------------------
 
+const arbMixedCaseDomain = fc
+  .tuple(arbMixedCaseLabel, fc.constantFrom("com", "org", "net", "io"))
+  .map(([label, tld]) => `${label}.${tld}`);
+
 const arbHostEntry = fc
-  .tuple(arbLabel, fc.constantFrom("com", "org", "net"))
+  .tuple(arbMixedCaseLabel, fc.constantFrom("com", "org", "net"))
   .map(([label, tld]) => `${label}.${tld}`);
 
 const arbAllowlistInput = fc
   .array(
-    fc.tuple(arbDomain, fc.array(arbHostEntry, { minLength: 1, maxLength: 5 })),
+    fc.tuple(arbMixedCaseDomain, fc.array(arbHostEntry, { minLength: 1, maxLength: 5 })),
     { minLength: 0, maxLength: 5 },
   )
   .map((entries) => {
@@ -218,15 +233,48 @@ describe("normalizeAllowlist properties", () => {
     expect(normalizeAllowlist(true)).toEqual({});
   });
 
-  it("case-insensitive: upper and lower keys merge to same entry", () => {
+  it("duplicate-cased keys: last writer wins", () => {
     const input = {
       "EXAMPLE.COM": ["host-a.com"],
       "example.com": ["host-b.com"],
     };
     const result = normalizeAllowlist(input);
-    const hosts = result["example.com"];
-    expect(hosts).toBeDefined();
-    expect(hosts!.length).toBeGreaterThanOrEqual(1);
+    expect(result["example.com"]).toEqual(["host-b.com"]);
+  });
+
+  it("preserves all valid hosts when keys are unique", () => {
+    fc.assert(
+      fc.property(arbAllowlistInput, (input) => {
+        const normalized = normalizeAllowlist(input);
+        const seen = new Map<string, Set<string>>();
+        for (const [rawKey, rawHosts] of Object.entries(input)) {
+          const key = rawKey.trim().toLowerCase();
+          if (!key || !Array.isArray(rawHosts)) continue;
+          if (!seen.has(key)) seen.set(key, new Set());
+          for (const h of rawHosts) {
+            if (typeof h === "string" && h.trim()) {
+              seen.get(key)!.add(h.trim().toLowerCase());
+            }
+          }
+        }
+        for (const [key, expectedHosts] of seen) {
+          const actual = normalized[key];
+          if (actual) {
+            for (const h of expectedHosts) {
+              expect(actual).toContain(h);
+            }
+          }
+        }
+      }),
+    );
+  });
+
+  it("strips whitespace-only keys and hosts", () => {
+    expect(normalizeAllowlist({ "  ": ["valid.com"] })).toEqual({});
+    expect(normalizeAllowlist({ "key.com": ["  ", ""] })).toEqual({});
+    expect(normalizeAllowlist({ "key.com": ["  ", "valid.com"] })).toEqual({
+      "key.com": ["valid.com"],
+    });
   });
 });
 
@@ -267,6 +315,18 @@ describe("isAllowlisted properties", () => {
           for (const h of hosts) {
             expect(isAllowlisted(normalized, key.toUpperCase(), h.toUpperCase())).toBe(true);
           }
+        }
+      }),
+    );
+  });
+
+  it("does not cross-contaminate between siteKeys", () => {
+    fc.assert(
+      fc.property(arbMixedCaseDomain, arbMixedCaseDomain, arbHostEntry, (keyA, keyB, host) => {
+        if (keyA.toLowerCase() === keyB.toLowerCase()) return;
+        const list: Allowlist = normalizeAllowlist({ [keyA]: [host] });
+        if (!(keyB.toLowerCase() in list)) {
+          expect(isAllowlisted(list, keyB, host)).toBe(false);
         }
       }),
     );
