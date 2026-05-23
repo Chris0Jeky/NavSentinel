@@ -222,6 +222,20 @@ describe("shouldPromptCredentialSubmit", () => {
     ).toBe(true);
   });
 
+  it("falls back to 40 threshold when mediumRiskThreshold is Infinity", () => {
+    expect(
+      shouldPromptCredentialSubmit({
+        mode: "strict",
+        riskScore: 40,
+        pageTrusted: true,
+        actionTrusted: true,
+        isHttpsOk: true,
+        crossSite: false,
+        config: cfg({ mediumRiskThreshold: Infinity }),
+      })
+    ).toBe(true);
+  });
+
   it("does not prompt when all signals are safe", () => {
     expect(
       shouldPromptCredentialSubmit({
@@ -346,6 +360,12 @@ describe("deriveCredentialPasteState", () => {
 
   it("returns (unknown) and shouldWarn=false for empty string URL", () => {
     const result = deriveCredentialPasteState("", []);
+    expect(result.siteLabel).toBe("(unknown)");
+    expect(result.shouldWarn).toBe(false);
+  });
+
+  it("returns (unknown) and shouldWarn=false for about:blank", () => {
+    const result = deriveCredentialPasteState("about:blank", []);
     expect(result.siteLabel).toBe("(unknown)");
     expect(result.shouldWarn).toBe(false);
   });
