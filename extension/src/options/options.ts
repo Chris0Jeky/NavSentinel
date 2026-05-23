@@ -282,7 +282,6 @@ async function refreshTrusted(): Promise<void> {
   renderTrusted(await getTrustedDomains());
 }
 
-
 function renderEventLog(log: EventLogEntry[]): void {
   eventLogEl.innerHTML = "";
   const list = (log ?? []).slice().reverse();
@@ -330,7 +329,6 @@ function renderEventLog(log: EventLogEntry[]): void {
 async function refreshEventLog(): Promise<void> {
   renderEventLog(await getEventLog());
 }
-
 
 function renderStats(outcomes: PromptOutcomeEntry[]): void {
   const total = outcomes.length;
@@ -434,7 +432,6 @@ function renderDomainProfiles(profiles: DomainProfile[]): void {
 async function refreshDomainProfiles(): Promise<void> {
   renderDomainProfiles(await getTopSuspiciousDomains(10));
 }
-
 
 async function init(): Promise<void> {
   const s = await getSuiteSettings();
