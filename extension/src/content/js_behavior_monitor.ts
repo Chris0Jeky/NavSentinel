@@ -528,7 +528,6 @@ export function initJsBehaviorMonitor(config: JsBehaviorMonitorConfig): void {
  * @param form - The form element to inspect
  * @returns true if the form contains password inputs
  *
- * TODO: Implement (Slice 2)
  */
 export function formHasCredentialFields(form: HTMLFormElement): boolean {
   return form.querySelector('input[type="password"]') !== null;
@@ -543,7 +542,6 @@ export function formHasCredentialFields(form: HTMLFormElement): boolean {
  * @param url - The URL to check (absolute or relative)
  * @returns true if the URL resolves to a different origin
  *
- * TODO: Implement (Slice 2)
  */
 export function isCrossOriginUrl(url: string): boolean {
   if (!url) return false;
@@ -569,7 +567,6 @@ export function isCrossOriginUrl(url: string): boolean {
  * @param url - The URL to extract origin from
  * @returns The origin string, or empty string on failure
  *
- * TODO: Implement (Slice 2)
  */
 export function extractOrigin(url: string): string {
   if (!url) return "";
@@ -595,7 +592,6 @@ export function extractOrigin(url: string): string {
  * @param requestTs - Timestamp of the network request
  * @returns Whether the request correlates with a credential form submit
  *
- * TODO: Implement (Slice 3)
  */
 export function correlatesWithFormSubmit(requestTs: number): boolean {
   return _recentFormSubmits.some(
@@ -615,7 +611,7 @@ export function correlatesWithFormSubmit(requestTs: number): boolean {
  * @param state - Current aggregated behavior state
  * @returns Computed score (0 to NRS_WEIGHT_JS_BEHAVIOR_CAP)
  *
- * TODO: Implement (Slice 5)
+ * TODO(#127): Implement scoring logic with proper capping
  */
 export function computeJsBehaviorScore(state: JsBehaviorState): number {
   void state;
@@ -679,59 +675,5 @@ export function _resetState(): void {
   _formSubmitPatched = false;
 }
 
-// ============================================================================
-// TODO List - Implementation Plan
-// ============================================================================
-//
-// Slice 2 - Form Submit Monitoring:
-//   [ ] Add capturing 'submit' event listener on document
-//   [ ] Track form action at DOM parse time vs submit time (detect dynamic changes)
-//   [ ] Emit ns-js-form-submit-suspicious signal when cross-origin + credentials
-//   [ ] Maintain _recentFormSubmits ring buffer
-//   [ ] Handle both .submit() and 'submit' event (programmatic + user)
-//
-// Slice 3 - Network Exfiltration Monitoring:
-//   [ ] Patch window.fetch() to record destination + timing
-//   [ ] Patch XMLHttpRequest.prototype.open() to capture URL
-//   [ ] Patch XMLHttpRequest.prototype.send() to record timing + correlate
-//   [ ] Patch navigator.sendBeacon() to record destination + timing
-//   [ ] Correlate network requests with _recentFormSubmits window
-//   [ ] Emit ns-js-exfil-network / ns-js-exfil-beacon signals
-//   [ ] Maintain _recentNetworkRequests ring buffer
-//
-// Slice 4 - Credential Field Value Monitoring:
-//   [ ] Patch HTMLInputElement.prototype value getter via Object.getOwnPropertyDescriptor
-//   [ ] Only activate on type="password" elements
-//   [ ] Debounce reads (500ms per field instance)
-//   [ ] Track _isInsideFormSubmit flag for context
-//   [ ] Emit ns-js-credential-read signal (metadata only, never the value)
-//
-// Slice 5 - NRS Integration:
-//   [ ] Add jsBehaviorScore to NavigationContext in nrs.ts
-//   [ ] Add NRS_WEIGHT_JS_BEHAVIOR_CAP constant and factor logic
-//   [ ] Handle bridge messages in capture_isolated.ts
-//   [ ] Maintain JsBehaviorState in isolated world (with TTL expiry)
-//   [ ] Implement computeJsBehaviorScore() with proper capping
-//
-// Slice 6 - Unit Tests:
-//   [ ] Test formHasCredentialFields() with various form structures
-//   [ ] Test isCrossOriginUrl() edge cases (relative, blob:, data:)
-//   [ ] Test correlation logic timing windows
-//   [ ] Test score computation and capping
-//   [ ] Test state expiry
-//   [ ] Test debounce behavior for credential reads
-//
-// Slice 7 - E2E / Gym Tests:
-//   [ ] Gym fixture: legitimate form with same-origin action (no signal)
-//   [ ] Gym fixture: credential form with cross-origin action (signal)
-//   [ ] Gym fixture: fetch to 3P during submit (signal)
-//   [ ] Gym fixture: beacon exfiltration on credential page (signal)
-//   [ ] Gym fixture: legitimate SPA fetch on non-credential page (no signal)
-//   [ ] E2E test verifying NRS score elevation from JS behavior signals
-//
-// Performance validation:
-//   [ ] Benchmark patch overhead (target: < 0.1ms per fetch/XHR call)
-//   [ ] Benchmark value getter overhead (target: < 0.05ms per read)
-//   [ ] Verify total per-navigation overhead stays under 100ms budget
-//
+// Remaining implementation plan tracked in GitHub issue #127
 
