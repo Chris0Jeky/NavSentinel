@@ -72,6 +72,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | T-40 | Tests for normalizeHost, isIPAddress, safeUrlParse in domain.ts | S | — | #142 | done (2/2 reviews) |
 | T-42 | Expand credential_guard_model.ts tests (5→34, all branches) | S | — | #143 | done (2/2 reviews) |
 | T-43 | Property-based tests for domain.ts utilities (fast-check) | S | — | #144 | done (2/2 reviews) |
+| T-44 | Clean stale TODOs + remove dead stub in js_behavior_monitor | S | #127 | #145 | done (2/2 reviews) |
 | T-12 | Reduce ESLint warnings (59 remaining) | M | — | — | seeded (needs #116 merged first) |
 | T-13 | Visual similarity detection (continue P4-01) | XL | — | — | pending |
 | T-14 | FP measurement re-run (Phase 2 gate) | M | — | — | pending |
@@ -119,6 +120,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #142 | test/domain-utils-coverage | T-40 | 2/2 done, all findings fixed | open (ready for human) |
 | #143 | test/credential-guard-model-expand | T-42 | 2/2 done, all findings fixed | open (ready for human) |
 | #144 | test/domain-property-tests | T-43 | 2/2 done, all findings fixed | open (ready for human) |
+| #145 | fix/jsb-stale-todos-and-tests | T-44 | 2/2 done, no actionable findings | open (ready for human) |
 
 ## Review Log
 
@@ -188,6 +190,8 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #143 | R2 | Claude Opus | No actionable findings — all branches covered, test naming adequate | Clean |
 | #144 | R1 | Claude Opus | Missing LEVENSHTEIN_MAX_LEN guard test, misleading "valid https URLs" description | Fixed |
 | #144 | R2 | Claude Opus | Misleading "(up to max len)" parenthetical in test name | Fixed |
+| #145 | R1 | Claude Opus | No actionable findings — pure deletion, verified no imports of dead stub | Clean |
+| #145 | R2 | Claude Opus | No actionable findings — no stale TODOs remain, remaining items correctly retained | Clean |
 
 ## Active Worktrees
 
@@ -223,6 +227,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | NavSentinel-wt-domain-utils | test/domain-utils-coverage | #142 | complete |
 | NavSentinel-wt-cred-model-expand | test/credential-guard-model-expand | #143 | complete |
 | NavSentinel-wt-domain-props | test/domain-property-tests | #144 | complete |
+| NavSentinel-wt-jsb-cleanup | fix/jsb-stale-todos-and-tests | #145 | complete |
 
 ## Notes
 
