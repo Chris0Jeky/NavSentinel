@@ -60,6 +60,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | T-26 | Remove `as any` casts from credential_guard.ts | S | — | #130 | done (2/2 reviews) |
 | T-27 | Remove `as any` casts from main_guard.ts + capture_isolated.ts | M | — | #131 | done (2/2 reviews) |
 | T-28 | ARIA accessibility + shared seg_control extraction | M | — | #132 | done (2/2 reviews) |
+| T-29 | Toggle switch aria-labelledby + aria-describedby | S | — | #133 | done (2/2 reviews) |
 | T-12 | Reduce ESLint warnings (59 remaining) | M | — | — | seeded (needs #116 merged first) |
 | T-13 | Visual similarity detection (continue P4-01) | XL | — | — | pending |
 | T-14 | FP measurement re-run (Phase 2 gate) | M | — | — | pending |
@@ -95,6 +96,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #130 | fix/credential-guard-type-safety | T-26 | 2/2 done, all findings fixed | open (ready for human) |
 | #131 | fix/main-guard-type-safety | T-27 | 2/2 done, all findings fixed | open (ready for human) |
 | #132 | fix/a11y-and-function-type | T-28 | 2/2 done, all findings fixed | open (ready for human) |
+| #133 | fix/toggle-accessibility | T-29 | 2/2 done, all findings fixed | open (ready for human) |
 
 ## Review Log
 
@@ -140,6 +142,8 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #131 | R2 | Claude Opus | Dead `?.` on navigator.userActivation (intentionally kept for future Firefox port) | Acknowledged |
 | #132 | R1 | Claude Opus | Wrong ARIA pattern (group→radiogroup), missing roving tabindex, wrong aria-current token, keyboard race guard, asymmetric click guards, code duplication | Fixed |
 | #132 | R2 | Claude Opus | Missing static aria-checked, unmatched-value fallback, missing unit tests, rapid keyboard race (pre-existing), no keyboard E2E (unit-covered), auto-save asymmetry (pre-existing) | Fixed |
+| #133 | R1 | Claude Opus | aria-label→aria-labelledby, missing aria-describedby, similarity toggle label, tests not validating HTML, 3/7 toggles uncovered | Fixed |
+| #133 | R2 | Claude Opus | No actionable findings — ID collision/JS reference/E2E impact checks clean | Clean |
 
 ## Active Worktrees
 
@@ -163,6 +167,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | NavSentinel-wt-type-safety | fix/credential-guard-type-safety | #130 | complete |
 | NavSentinel-wt-main-guard-types | fix/main-guard-type-safety | #131 | complete |
 | NavSentinel-wt-a11y-types | fix/a11y-and-function-type | #132 | complete |
+| NavSentinel-wt-toggle-a11y | fix/toggle-accessibility | #133 | complete |
 
 ## Notes
 
