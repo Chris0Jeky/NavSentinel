@@ -53,10 +53,11 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | T-24 | Clean stale TODOs + remove dead stub in js_behavior_monitor | S | #127 | #128 | done (2/2 reviews) |
 | T-25 | Deduplicate JsBehaviorState from js_behavior_monitor.ts | S | #127 | #129 | done (2/2 reviews) |
 
-### Cycle 5: Next Up
+### Cycle 5: Type Safety & Next Up
 
 | ID | Task | Effort | Issue | PR | Status |
 |---|---|---|---|---|---|
+| T-26 | Remove `as any` casts from credential_guard.ts | S | — | #130 | done (2/2 reviews) |
 | T-12 | Reduce ESLint warnings (59 remaining) | M | — | — | seeded (needs #116 merged first) |
 | T-13 | Visual similarity detection (continue P4-01) | XL | — | — | pending |
 | T-14 | FP measurement re-run (Phase 2 gate) | M | — | — | pending |
@@ -89,6 +90,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #126 | test/state-machine-coverage | T-23 | 2/2 done, all findings fixed | open (ready for human) |
 | #128 | fix/js-behavior-stale-todos | T-24 | 2/2 done, all findings fixed | open (ready for human) |
 | #129 | fix/dedup-js-behavior-state-v2 | T-25 | 2/2 done, all findings fixed | open (stacked on #128) |
+| #130 | fix/credential-guard-type-safety | T-26 | 2/2 done, all findings fixed | open (ready for human) |
 
 ## Review Log
 
@@ -128,6 +130,8 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #128 | R2 | Claude Opus | Dead computeJsBehaviorScore stub (real in shared/), inaccurate issue #127, duplicate JsBehaviorState types, lost perf targets, unaddressed Gemini comment | Fixed (stub removed, issue updated) |
 | #129 | R1 | Claude Opus | Incomplete dedup: 5 SCORE_* constants still duplicated | Fixed (re-exported from shared) |
 | #129 | R2 | Claude Opus | No findings above threshold | Clean |
+| #130 | R1 | Claude Opus (x2) | Dead `typeof` guard on requestSubmit, unaddressed `as SubmitEvent`/`as ClipboardEvent` casts, DOMException instanceof Error (false alarm) | Fixed |
+| #130 | R2 | Claude Opus | No findings above threshold | Clean |
 
 ## Active Worktrees
 
@@ -148,6 +152,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | NavSentinel-wt-state-machine | test/state-machine-coverage | #126 | complete |
 | NavSentinel-wt-todo-cleanup | fix/js-behavior-stale-todos | #128 | complete |
 | NavSentinel-wt-dedup-jsb | fix/dedup-js-behavior-state-v2 | #129 | complete |
+| NavSentinel-wt-type-safety | fix/credential-guard-type-safety | #130 | complete |
 
 ## Notes
 
