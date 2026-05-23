@@ -80,6 +80,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | T-49 | Property tests for domain_groups.ts + allowlist.ts (areSameOrganization, normalizeAllowlist, isAllowlisted) | S | — | #150 | done (2/2 reviews) |
 | T-50 | Add missing nrs_js_behavior_suspicious explanation + test coverage | S | — | #151 | done (2/2 reviews) |
 | T-51 | Property tests for reputation.ts bloom filter functions | S | — | #152 | done (2/2 reviews) |
+| T-52 | Fix silent retry failure in storage append functions + tests | S | — | #153 | done (2/2 reviews) |
 | T-12 | Reduce ESLint warnings (59 remaining) | M | — | — | seeded (needs #116 merged first) |
 | T-13 | Visual similarity detection (continue P4-01) | XL | — | — | pending |
 | T-14 | FP measurement re-run (Phase 2 gate) | M | — | — | pending |
@@ -135,6 +136,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #150 | test/domain-groups-property-tests | T-49 | 2/2 done, all findings fixed | open (ready for human) |
 | #151 | fix/missing-explanation-code | T-50 | 2/2 done, no actionable findings | open (ready for human) |
 | #152 | test/reputation-property-tests | T-51 | 2/2 done, all findings fixed | open (ready for human) |
+| #153 | fix/storage-append-silent-failure | T-52 | 2/2 done, all findings fixed | open (ready for human) |
 
 ## Review Log
 
@@ -220,6 +222,8 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #151 | R2 | Claude Opus | No actionable findings — explanation accuracy, PSL codes, wording all verified | Clean |
 | #152 | R1 | Claude Opus | Tautological seed test, tautological h2-odd test, deterministic FP probes, missing m=0/ArrayBuffer/bit-uniqueness tests | Fixed |
 | #152 | R2 | Claude Opus | Missing insert-idempotency property, non-zero byteOffset untested, insertDomain(k=0) untested | Fixed |
+| #153 | R1 | Claude Opus | 24 TS errors (missing `as unknown`), missing afterEach cleanup, tautological logLimit test, no set()/get() throw tests, hardcoded key constants, missing setCount in prompt failure test | Fixed |
+| #153 | R2 | Claude Opus | Tautological logLimit (same), untested null/undefined item guard, unfaithful brokenChrome mock, no concurrent appends test, missing resolves assertion | Fixed |
 
 ## Active Worktrees
 
@@ -263,6 +267,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | NavSentinel-wt-domain-groups-props | test/domain-groups-property-tests | #150 | complete |
 | NavSentinel-wt-explanation-fix | fix/missing-explanation-code | #151 | complete |
 | NavSentinel-wt-reputation-props | test/reputation-property-tests | #152 | complete |
+| NavSentinel-wt-storage-fix | fix/storage-append-silent-failure | #153 | complete |
 
 ## Notes
 
