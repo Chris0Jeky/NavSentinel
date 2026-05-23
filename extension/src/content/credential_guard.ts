@@ -195,7 +195,7 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
         score: risk.score,
         outcome: "cancel",
         reasons: credReasons
-      }).catch(() => {});
+      }).catch((e) => { console.warn("[NavSentinel] prompt outcome append failed (cancel):", e); });
       return;
     }
 
@@ -206,7 +206,7 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
         score: risk.score,
         outcome: "trust",
         reasons: credReasons
-      }).catch(() => {});
+      }).catch((e) => { console.warn("[NavSentinel] prompt outcome append failed (trust):", e); });
     } else {
       void appendPromptOutcome({
         domain: credDomain,
@@ -214,7 +214,7 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
         score: risk.score,
         outcome: "allow_once",
         reasons: credReasons
-      }).catch(() => {});
+      }).catch((e) => { console.warn("[NavSentinel] prompt outcome append failed (allow_once):", e); });
     }
 
     if (choice === "trust_site" && risk.page.registrableDomain) {
@@ -255,8 +255,8 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
         url: location.href,
         extra: { error: String((e as any)?.message ?? e) }
       });
-    } catch {
-      // ignore
+    } catch (e) {
+      console.warn("[NavSentinel] event log append failed (cred_submit_prompt/error):", e);
     }
   }
 }
@@ -286,8 +286,8 @@ async function handlePaste(evt: ClipboardEvent): Promise<void> {
             try {
               if (reg) await addTrustedDomain(reg);
               await appendEvent({ kind: "cred_trust_domain", site: reg || host, url: location.href });
-            } catch {
-              // ignore
+            } catch (e) {
+              console.warn("[NavSentinel] event log append failed (cred_trust_domain/paste):", e);
             }
           }
         }
@@ -295,8 +295,8 @@ async function handlePaste(evt: ClipboardEvent): Promise<void> {
     });
 
     await appendEvent({ kind: "cred_paste_warn", site: pasteState.siteLabel, url: location.href });
-  } catch {
-    // ignore
+  } catch (e) {
+    console.warn("[NavSentinel] credential paste handler failed:", e);
   }
 }
 
