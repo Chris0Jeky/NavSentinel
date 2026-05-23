@@ -474,7 +474,7 @@ describe("credential field value monitoring", () => {
 
     // The credential read signal should not have fired (form submit context)
     const credReadCalls = postSignal.mock.calls.filter(
-      (c: [string, unknown]) => c[0] === "ns-js-credential-read"
+      (c: unknown[]) => c[0] === "ns-js-credential-read"
     );
     expect(credReadCalls).toHaveLength(0);
   });
@@ -535,7 +535,7 @@ describe("network exfiltration monitoring fetch", () => {
     window.fetch("/api/data", { method: "POST" });
 
     const exfilCalls = postSignal.mock.calls.filter(
-      (c: [string, unknown]) => c[0] === "ns-js-exfil-network"
+      (c: unknown[]) => c[0] === "ns-js-exfil-network"
     );
     expect(exfilCalls).toHaveLength(0);
   });
@@ -547,7 +547,7 @@ describe("network exfiltration monitoring fetch", () => {
     window.fetch("https://cdn.example.com/data.json");
 
     const exfilCalls = postSignal.mock.calls.filter(
-      (c: [string, unknown]) => c[0] === "ns-js-exfil-network"
+      (c: unknown[]) => c[0] === "ns-js-exfil-network"
     );
     expect(exfilCalls).toHaveLength(0);
   });
@@ -611,7 +611,7 @@ describe("network exfiltration monitoring beacon", () => {
     navigator.sendBeacon("https://analytics.example.com/track", "data");
 
     const beaconCalls = postSignal.mock.calls.filter(
-      (c: [string, unknown]) => c[0] === "ns-js-exfil-beacon"
+      (c: unknown[]) => c[0] === "ns-js-exfil-beacon"
     );
     expect(beaconCalls).toHaveLength(0);
   });
@@ -629,7 +629,7 @@ describe("network exfiltration monitoring beacon", () => {
     navigator.sendBeacon("/internal/track", "data");
 
     const beaconCalls = postSignal.mock.calls.filter(
-      (c: [string, unknown]) => c[0] === "ns-js-exfil-beacon"
+      (c: unknown[]) => c[0] === "ns-js-exfil-beacon"
     );
     expect(beaconCalls).toHaveLength(0);
   });
