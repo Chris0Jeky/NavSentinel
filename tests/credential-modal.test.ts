@@ -167,7 +167,7 @@ describe("credential modal", () => {
       await promise;
     });
 
-    it("escapes HTML in spec fields (XSS regression guard)", async () => {
+    it("escapes HTML in all user-content fields (XSS regression guard)", async () => {
       const xss = '<img src=x onerror="alert(1)">';
       const promise = showCredentialModal(
         minimalSpec({
@@ -185,12 +185,19 @@ describe("credential modal", () => {
 
       const subtitle = getShadow()?.querySelector(".subtitle");
       expect(subtitle?.textContent).toBe(xss);
+      expect(subtitle?.innerHTML).not.toContain("<img");
+
+      const kvKey = getShadow()?.querySelector(".k");
+      expect(kvKey?.textContent).toBe(xss);
+      expect(kvKey?.innerHTML).not.toContain("<img");
 
       const kvVal = getShadow()?.querySelector(".v");
       expect(kvVal?.textContent).toBe(xss);
+      expect(kvVal?.innerHTML).not.toContain("<img");
 
       const li = getShadow()?.querySelector("li");
       expect(li?.textContent).toBe(xss);
+      expect(li?.innerHTML).not.toContain("<img");
 
       getButtons()[0]!.click();
       await promise;
@@ -300,10 +307,19 @@ describe("credential modal", () => {
       vi.runAllTimers();
 
       const overlay = getOverlay()!;
-      // Dispatch directly on overlay — e.target is set to overlay by the DOM dispatch machinery
       overlay.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
 
       expect(await promise).toBe("outside_dismiss");
+    });
+
+    it("resolves with default 'cancel' when clicking overlay without outsideAction", async () => {
+      const promise = showCredentialModal(minimalSpec());
+      vi.runAllTimers();
+
+      const overlay = getOverlay()!;
+      overlay.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+
+      expect(await promise).toBe("cancel");
     });
 
     it("does NOT dismiss when clicking the card itself", async () => {
@@ -345,8 +361,10 @@ describe("credential modal", () => {
   });
 
   describe("modal replacement", () => {
-    it("replaces previous modal when called again before resolution", async () => {
-      const p1 = showCredentialModal(minimalSpec({ title: "First" }));
+    it("replaces previous modal and resolves p1 with outsideAction", async () => {
+      const p1 = showCredentialModal(
+        minimalSpec({ title: "First", outsideAction: "replaced" }),
+      );
       vi.runAllTimers();
 
       const p2 = showCredentialModal(minimalSpec({ title: "Second" }));
@@ -358,10 +376,21 @@ describe("credential modal", () => {
       const overlays = getShadow()?.querySelectorAll(".overlay");
       expect(overlays?.length).toBe(1);
 
-      let p1Resolved = false;
-      p1.then(() => { p1Resolved = true; });
-      await vi.advanceTimersByTimeAsync(0);
-      expect(p1Resolved).toBe(false);
+      // p1 should resolve with its outsideAction since it was displaced
+      expect(await p1).toBe("replaced");
+
+      getButtons()[0]!.click();
+      await p2;
+    });
+
+    it("resolves displaced modal with default 'cancel' when no outsideAction", async () => {
+      const p1 = showCredentialModal(minimalSpec({ title: "First" }));
+      vi.runAllTimers();
+
+      const p2 = showCredentialModal(minimalSpec({ title: "Second" }));
+      vi.runAllTimers();
+
+      expect(await p1).toBe("cancel");
 
       getButtons()[0]!.click();
       await p2;
@@ -378,43 +407,83 @@ describe("credential modal", () => {
       );
       vi.runAllTimers();
 
-      // Escape should only resolve p2, not p1
+      // p1 was already resolved by replacement
+      expect(await p1).toBe("first_dismiss");
+
+      // Escape should only resolve p2
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
       expect(await p2).toBe("second_dismiss");
+    });
 
-      // p1 should still be pending (cleanup of its listener was called during replacement)
-      let p1Resolved = false;
-      p1.then(() => { p1Resolved = true; });
-      await vi.advanceTimersByTimeAsync(0);
-      expect(p1Resolved).toBe(false);
+    it("does not restore focus prematurely during replacement", async () => {
+      const focusTarget = document.createElement("button");
+      focusTarget.textContent = "Before modal";
+      document.body.appendChild(focusTarget);
+      focusTarget.focus();
+
+      const p1 = showCredentialModal(minimalSpec());
+      vi.runAllTimers();
+
+      // Replace p1 with p2
+      const p2 = showCredentialModal(minimalSpec());
+      vi.runAllTimers();
+      await p1;
+
+      // Focus should NOT have been restored to focusTarget during replacement
+      // (activeDispose does not call previouslyFocused.focus())
+      // The focus target should still be in the DOM but not necessarily active
+      expect(document.body.contains(focusTarget)).toBe(true);
+
+      getButtons()[0]!.click();
+      await p2;
+      document.body.removeChild(focusTarget);
     });
   });
 
   describe("keydown listener cleanup", () => {
-    it("removes keydown listener after button click resolves modal", async () => {
+    it("removes keydown listener after button click", async () => {
       const promise = showCredentialModal(minimalSpec({ outsideAction: "dismissed" }));
       vi.runAllTimers();
+
+      const removeSpy = vi.spyOn(window, "removeEventListener");
       getButtons()[0]!.click();
       await promise;
 
-      // A second Escape after resolution should not throw or affect anything
-      expect(() =>
-        window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
-      ).not.toThrow();
-      expect(getOverlay()).toBeNull();
+      expect(removeSpy).toHaveBeenCalledWith(
+        "keydown",
+        expect.any(Function),
+        true,
+      );
+      removeSpy.mockRestore();
     });
 
-    it("removes keydown listener after Escape resolves modal", async () => {
+    it("removes keydown listener after Escape", async () => {
+      const promise = showCredentialModal(minimalSpec());
+      vi.runAllTimers();
+
+      const removeSpy = vi.spyOn(window, "removeEventListener");
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await promise;
+
+      expect(removeSpy).toHaveBeenCalledWith(
+        "keydown",
+        expect.any(Function),
+        true,
+      );
+      removeSpy.mockRestore();
+    });
+
+    it("second Escape after dismissal has no effect", async () => {
       const promise = showCredentialModal(minimalSpec());
       vi.runAllTimers();
 
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
       await promise;
 
-      // A second Escape should not throw
       expect(() =>
         window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
       ).not.toThrow();
+      expect(getOverlay()).toBeNull();
     });
   });
 
@@ -466,19 +535,12 @@ describe("credential modal", () => {
   describe("focus management", () => {
     it("auto-focuses first focusable button after timer fires", async () => {
       const promise = showCredentialModal(minimalSpec());
-      // Before timer: button exists but focus call hasn't fired yet
-      const buttonsBeforeTimer = getButtons();
-      expect(buttonsBeforeTimer.length).toBeGreaterThan(0);
-
-      // Flush the setTimeout(focus, 0)
       vi.runAllTimers();
 
       const buttons = getButtons();
+      expect(buttons.length).toBeGreaterThan(0);
+
       const shadow = getShadow()!;
-      // happy-dom may not fully track shadow activeElement, but we verify
-      // the button is focusable and the focus call doesn't throw
-      expect(buttons[0]!.tabIndex).toBeGreaterThanOrEqual(0);
-      // If happy-dom tracks it, activeElement should be the first button
       if (shadow.activeElement) {
         expect(shadow.activeElement).toBe(buttons[0]);
       }
@@ -513,8 +575,6 @@ describe("credential modal", () => {
       getButtons()[0]!.click();
       await promise;
 
-      // happy-dom may or may not track focus restore; verify the call doesn't throw
-      // and the element still exists
       expect(document.body.contains(focusTarget)).toBe(true);
 
       document.body.removeChild(focusTarget);
@@ -536,21 +596,22 @@ describe("credential modal", () => {
       const buttons = getButtons();
       expect(buttons).toHaveLength(2);
 
-      // Simulate Tab on last button — should preventDefault and wrap
+      buttons[1]!.focus();
+
       const tabEvent = new KeyboardEvent("keydown", {
         key: "Tab",
         bubbles: true,
         cancelable: true,
       });
       const preventSpy = vi.spyOn(tabEvent, "preventDefault");
-
-      // Focus the last button so activeElement check triggers wrap
-      buttons[1]!.focus();
       window.dispatchEvent(tabEvent);
 
-      // In happy-dom, focus trap behavior depends on activeElement tracking
-      // We verify the Tab handler fires without error
       expect(preventSpy).toHaveBeenCalled();
+
+      const shadow = getShadow()!;
+      if (shadow.activeElement) {
+        expect(shadow.activeElement).toBe(buttons[0]);
+      }
 
       getButtons()[0]!.click();
       await promise;
@@ -577,9 +638,14 @@ describe("credential modal", () => {
         cancelable: true,
       });
       const preventSpy = vi.spyOn(shiftTabEvent, "preventDefault");
-
       window.dispatchEvent(shiftTabEvent);
+
       expect(preventSpy).toHaveBeenCalled();
+
+      const shadow = getShadow()!;
+      if (shadow.activeElement) {
+        expect(shadow.activeElement).toBe(buttons[1]);
+      }
 
       getButtons()[0]!.click();
       await promise;

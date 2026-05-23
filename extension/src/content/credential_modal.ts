@@ -17,7 +17,7 @@ export type ModalSpec = {
 
 let host: HTMLElement | null = null;
 let root: ShadowRoot | null = null;
-let activeCleanup: (() => void) | null = null;
+let activeDispose: (() => void) | null = null;
 
 function listFocusable(rootNode: ParentNode): HTMLElement[] {
   return Array.from(
@@ -227,9 +227,8 @@ export function showCredentialModal(spec: ModalSpec): Promise<string> {
   if (!root) return Promise.resolve(spec.outsideAction ?? "cancel");
   const activeRoot = root;
 
-  if (activeCleanup) {
-    activeCleanup();
-    activeCleanup = null;
+  if (activeDispose) {
+    activeDispose();
   }
   removeModal();
 
@@ -318,19 +317,19 @@ export function showCredentialModal(spec: ModalSpec): Promise<string> {
     footer.className = "footer";
     const outside = spec.outsideAction ?? "cancel";
 
-    function cleanup(): void {
-      window.removeEventListener("keydown", onKeyDown, true);
-      activeCleanup = null;
-      previouslyFocused?.focus();
-    }
-
     function done(actionId: string): void {
-      cleanup();
+      window.removeEventListener("keydown", onKeyDown, true);
+      activeDispose = null;
       removeModal();
+      previouslyFocused?.focus();
       resolve(actionId);
     }
 
-    activeCleanup = cleanup;
+    activeDispose = () => {
+      window.removeEventListener("keydown", onKeyDown, true);
+      activeDispose = null;
+      resolve(outside);
+    };
 
     function onKeyDown(e: KeyboardEvent): void {
       if (e.key === "Escape") {
