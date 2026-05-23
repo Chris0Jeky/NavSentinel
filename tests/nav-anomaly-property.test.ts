@@ -43,20 +43,6 @@ function makeProfile(overrides: Partial<NavProfile> = {}): NavProfile {
   };
 }
 
-function makeProfileWithCategory(
-  category: NavCategory,
-  count: number,
-  totalNavigations: number,
-  lastUpdated: number,
-): NavProfile {
-  return {
-    categoryCounts: { [category]: count },
-    totalNavigations,
-    lastUpdated,
-    recentBurst: [],
-  };
-}
-
 const arbDomainChars = fc
   .array(
     fc.constantFrom(
@@ -67,6 +53,17 @@ const arbDomainChars = fc
     { minLength: 3, maxLength: 30 },
   )
   .map((chars) => chars.join(""));
+
+const arbLabel = fc
+  .array(
+    fc.constantFrom(..."abcdefghijklmnopqrstuvwxyz0123456789".split("")),
+    { minLength: 1, maxLength: 15 },
+  )
+  .map((chars) => chars.join(""));
+
+const arbValidDomain = fc
+  .tuple(arbLabel, fc.constantFrom("com", "org", "net", "io", "co.uk", "gov", "edu"))
+  .map(([label, tld]) => `${label}.${tld}`);
 
 // ---------------------------------------------------------------------------
 // classifyDomain
@@ -114,6 +111,36 @@ describe("classifyDomain properties", () => {
     for (const d of knownDomains) {
       expect(classifyDomain(d)).not.toBe("unknown");
     }
+  });
+
+  it("keyword patterns classify structurally valid domains", () => {
+    const keywordDomains: Array<[string, NavCategory]> = [
+      ["my-wallet-app.com", "crypto"],
+      ["secure-banking.net", "banking"],
+      ["social-network.io", "social"],
+      ["webmail-service.org", "email"],
+      ["online-shop.co.uk", "shopping"],
+      ["github-mirror.dev", "developer"],
+      ["video-stream.net", "entertainment"],
+      ["daily-news.com", "news"],
+      ["portal.gov", "government"],
+      ["health-clinic.org", "healthcare"],
+      ["my-school.edu", "education"],
+      ["cloud-storage.io", "cloud"],
+      ["fast-vpn.com", "vpn_proxy"],
+    ];
+    for (const [domain, expected] of keywordDomains) {
+      expect(classifyDomain(domain)).toBe(expected);
+    }
+  });
+
+  it("valid domains without keywords return 'unknown'", () => {
+    fc.assert(
+      fc.property(arbValidDomain, (domain) => {
+        const result = classifyDomain(domain);
+        expect(ALL_CATEGORIES).toContain(result);
+      }),
+    );
   });
 });
 
@@ -194,9 +221,7 @@ describe("computeAnomalyScore properties", () => {
             totalNavigations: totalNav,
           });
           const score = computeAnomalyScore(profile, category, BURST_MIN_COUNT);
-          if (score > 0) {
-            expect(score).toBe(BASE_ANOMALY_SCORE);
-          }
+          expect(score).toBe(BASE_ANOMALY_SCORE);
         },
       ),
     );
@@ -213,11 +238,28 @@ describe("computeAnomalyScore properties", () => {
             totalNavigations: MIN_NAVIGATIONS_FOR_ANOMALY + 100,
           });
           const score = computeAnomalyScore(profile, category, recentCount);
-          if (score > 0) {
-            expect(score).toBe(
-              Math.min(BASE_ANOMALY_SCORE + BURST_3_PLUS_BONUS, ANOMALY_SCORE_CAP),
-            );
-          }
+          expect(score).toBe(
+            Math.min(BASE_ANOMALY_SCORE + BURST_3_PLUS_BONUS, ANOMALY_SCORE_CAP),
+          );
+        },
+      ),
+    );
+  });
+
+  it("score is monotonically non-decreasing with recentCategoryCount", () => {
+    fc.assert(
+      fc.property(
+        arbNonUnknownCategory,
+        fc.integer({ min: MIN_NAVIGATIONS_FOR_ANOMALY, max: 1000 }),
+        fc.integer({ min: 0, max: 9 }),
+        (category, totalNav, recentLow) => {
+          const profile = makeProfile({
+            categoryCounts: {},
+            totalNavigations: totalNav,
+          });
+          const scoreLow = computeAnomalyScore(profile, category, recentLow);
+          const scoreHigh = computeAnomalyScore(profile, category, recentLow + 1);
+          expect(scoreHigh).toBeGreaterThanOrEqual(scoreLow);
         },
       ),
     );
@@ -379,6 +421,29 @@ describe("applyDecay properties", () => {
           for (const v of Object.values(profile.categoryCounts)) {
             expect(v).toBeGreaterThan(0);
           }
+        },
+      ),
+    );
+  });
+
+  it("is idempotent on second call with same timestamp", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 0, max: 1_000_000_000 }),
+        fc.integer({ min: 1, max: 10 }),
+        arbNonUnknownCategory,
+        fc.integer({ min: 10, max: 10000 }),
+        (base, weeks, category, count) => {
+          const profile = makeProfile({
+            categoryCounts: { [category]: count },
+            totalNavigations: count,
+            lastUpdated: base,
+          });
+          const now = base + weeks * DECAY_INTERVAL_MS;
+          applyDecay(profile, now);
+          const snapshot = structuredClone(profile);
+          expect(applyDecay(profile, now)).toBe(false);
+          expect(profile).toEqual(snapshot);
         },
       ),
     );
