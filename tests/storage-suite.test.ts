@@ -214,7 +214,7 @@ describe("suite storage and allowlist migration", () => {
     expect(storedLog[0]?.id).toBe("evt-30");
   });
 
-  it("imports prompt outcomes and updates adaptive scores in a single pass", async () => {
+  it("imports prompt outcomes and computes non-zero adaptive scores", async () => {
     const { chrome, store } = createChromeMock();
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
@@ -222,16 +222,19 @@ describe("suite storage and allowlist migration", () => {
     const outcomes = [
       { id: "o-1", ts: 1000, domain: "example.com", destDomain: "evil.com", type: "nav", score: 80, outcome: "block" },
       { id: "o-2", ts: 2000, domain: "example.com", destDomain: "evil.com", type: "nav", score: 85, outcome: "block" },
+      { id: "o-3", ts: 3000, domain: "example.com", destDomain: "evil.com", type: "nav", score: 90, outcome: "block" },
     ];
     await importAll({ promptOutcomes: outcomes });
 
     const storedOutcomes = store["sentinelsuite:prompt_outcomes_v1"] as Array<{ id: string }>;
-    expect(storedOutcomes).toHaveLength(2);
+    expect(storedOutcomes).toHaveLength(3);
     expect(storedOutcomes[0]?.id).toBe("o-1");
 
-    const adaptiveScores = store["sentinelsuite:adaptive_scores_v1"] as Record<string, unknown>;
-    expect(adaptiveScores).toBeDefined();
-    expect(typeof adaptiveScores).toBe("object");
+    const adaptiveScores = store["sentinelsuite:adaptive_scores_v1"] as Record<string, { adjustment: number }>;
+    expect(Object.keys(adaptiveScores).length).toBeGreaterThan(0);
+    const domainScore = adaptiveScores["example.com"];
+    expect(domainScore).toBeDefined();
+    expect(domainScore!.adjustment).toBeLessThan(0);
   });
 
   it("clears adaptive scores when no prompt outcomes are imported", async () => {
@@ -271,5 +274,71 @@ describe("suite storage and allowlist migration", () => {
     await expect(importAll(undefined)).rejects.toThrow("Invalid import payload");
     await expect(importAll("string")).rejects.toThrow("Invalid import payload");
     await expect(importAll(42)).rejects.toThrow("Invalid import payload");
+  });
+
+  it("uses default logLimit (300) when no settings are provided in import", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { importAll } = await import("../extension/src/shared/storage");
+    await importAll({
+      eventLog: Array.from({ length: 400 }, (_, i) => ({
+        id: `evt-${i}`, ts: i, kind: "suite_config_update"
+      }))
+    });
+
+    const storedLog = store["sentinelsuite:event_log_v1"] as Array<{ id: string }>;
+    expect(storedLog).toHaveLength(300);
+    expect(storedLog[0]?.id).toBe("evt-100");
+  });
+
+  it("clears adaptive scores when promptOutcomes is present but not an array", async () => {
+    const { chrome, store } = createChromeMock({
+      "sentinelsuite:adaptive_scores_v1": { "evil.com": { adjustment: 5, sampleCount: 3, lastUpdated: 1000 } },
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { importAll } = await import("../extension/src/shared/storage");
+    await importAll({ promptOutcomes: "not-an-array" });
+
+    const adaptiveScores = store["sentinelsuite:adaptive_scores_v1"] as Record<string, unknown>;
+    expect(adaptiveScores).toEqual({});
+  });
+
+  it("imports eventLog and promptOutcomes together", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { importAll } = await import("../extension/src/shared/storage");
+    await importAll({
+      eventLog: [
+        { id: "e-1", ts: 1, kind: "nav_click_block" },
+        { id: "e-2", ts: 2, kind: "nav_rollback" },
+      ],
+      promptOutcomes: [
+        { id: "o-1", ts: 1, domain: "a.com", type: "nav", score: 50, outcome: "allow" },
+      ],
+    });
+
+    const storedLog = store["sentinelsuite:event_log_v1"] as Array<{ id: string }>;
+    expect(storedLog).toHaveLength(2);
+    const storedOutcomes = store["sentinelsuite:prompt_outcomes_v1"] as Array<{ id: string }>;
+    expect(storedOutcomes).toHaveLength(1);
+  });
+
+  it("handles empty arrays for eventLog and promptOutcomes", async () => {
+    const { chrome, store } = createChromeMock({
+      "sentinelsuite:event_log_v1": [{ id: "old", ts: 1, kind: "nav_click_block" }],
+      "sentinelsuite:prompt_outcomes_v1": [{ id: "old-o", ts: 1, domain: "a.com", type: "nav", score: 10, outcome: "allow" }],
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { importAll } = await import("../extension/src/shared/storage");
+    await importAll({ eventLog: [], promptOutcomes: [] });
+
+    const storedLog = store["sentinelsuite:event_log_v1"] as Array<unknown>;
+    expect(storedLog).toEqual([]);
+    const storedOutcomes = store["sentinelsuite:prompt_outcomes_v1"] as Array<unknown>;
+    expect(storedOutcomes).toEqual([]);
   });
 });

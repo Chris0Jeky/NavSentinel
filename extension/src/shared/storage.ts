@@ -423,6 +423,9 @@ export async function importAll(payload: unknown): Promise<void> {
     const threshold = settings.defaultMode === "strict" ? NRS_STRICT_BLOCK_THRESHOLD : NRS_BLOCK_THRESHOLD;
     await updateAdaptiveScores(importedOutcomes, threshold);
   } else {
+    // Intentional: any import without valid outcomes resets adaptive scores
+    // to prevent stale data. adaptiveScores from payload are ignored —
+    // they are recomputed from outcomes to prevent injection.
     await chrome.storage.local.set({ [ADAPTIVE_SCORES_KEY]: {} });
   }
 }
