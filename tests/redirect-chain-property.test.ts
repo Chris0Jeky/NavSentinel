@@ -343,21 +343,11 @@ describe("RedirectChainTracker property tests", () => {
   it("map size never exceeds 100 entries", () => {
     fc.assert(
       fc.property(
-        fc.array(
-          fc.tuple(
-            fc.integer({ min: 1, max: 200 }),
-            arbHttpUrl,
-            arbTransitionType
-          ),
-          { minLength: 101, maxLength: 120 }
-        ),
         arbTimestamp,
-        (entries, startTs) => {
+        (startTs) => {
           const tracker = new RedirectChainTracker();
-          let ts = startTs;
-          for (const [tabId, url, tt] of entries) {
-            tracker.recordHop(tabId, url, ts, tt);
-            ts += 20000;
+          for (let i = 0; i < 120; i++) {
+            tracker.recordHop(i + 1, `https://tab${i}.example/`, startTs + i, "link");
           }
           expect(tracker.size).toBeLessThanOrEqual(100);
         }
@@ -413,7 +403,55 @@ describe("RedirectChainTracker property tests", () => {
     );
   });
 
-  it("knownRedirectorHops count is always <= depth and viaKnownRedirector is consistent", () => {
+  it("same URL repeated N times produces depth = min(N, 10) if within window", () => {
+    fc.assert(
+      fc.property(
+        arbTabId,
+        arbHttpUrl,
+        fc.integer({ min: 2, max: 15 }),
+        arbTimestamp,
+        arbTransitionType,
+        (tabId, url, count, ts, tt) => {
+          const tracker = new RedirectChainTracker();
+          for (let i = 0; i < count; i++) {
+            tracker.recordHop(tabId, url, ts + i * 100, tt);
+          }
+          const info = tracker.getChainInfo(tabId);
+          expect(info).not.toBeNull();
+          expect(info!.depth).toBe(Math.min(count, 10));
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+
+  it("backingMap reflects tracker operations", () => {
+    fc.assert(
+      fc.property(
+        arbTabId,
+        fc.array(
+          fc.tuple(arbHttpUrl, fc.integer({ min: 1, max: 100 }), arbTransitionType),
+          { minLength: 2, maxLength: 5 }
+        ),
+        arbTimestamp,
+        (tabId, hops, startTs) => {
+          const map = new Map();
+          const tracker = new RedirectChainTracker(map);
+          let ts = startTs;
+          for (const [url, delta, tt] of hops) {
+            tracker.recordHop(tabId, url, ts, tt);
+            ts += delta;
+          }
+          expect(map.has(tabId)).toBe(true);
+          tracker.deleteTab(tabId);
+          expect(map.has(tabId)).toBe(false);
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+
+  it("knownRedirectorHops matches manual isKnownRedirector count and viaKnownRedirector is consistent", () => {
     fc.assert(
       fc.property(
         arbTabId,
@@ -425,12 +463,17 @@ describe("RedirectChainTracker property tests", () => {
         (tabId, hops, startTs) => {
           const tracker = new RedirectChainTracker();
           let ts = startTs;
+          const urls: string[] = [];
           for (const [url, delta, tt] of hops) {
             tracker.recordHop(tabId, url, ts, tt);
+            urls.push(url);
             ts += delta;
           }
           const info = tracker.getChainInfo(tabId);
           if (info) {
+            const chainUrls = urls.slice(0, info.depth);
+            const expectedCount = chainUrls.filter((u) => isKnownRedirector(u)).length;
+            expect(info.knownRedirectorHops).toBe(expectedCount);
             expect(info.knownRedirectorHops).toBeLessThanOrEqual(info.depth);
             expect(info.viaKnownRedirector).toBe(info.knownRedirectorHops > 0);
           }
