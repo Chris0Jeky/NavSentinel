@@ -217,6 +217,7 @@ async function refreshUi(): Promise<void> {
   const tabRisk = lastEvent && typeof lastEvent.score === "number" ? lastEvent.score : 0;
   shieldArcEl.style.position = "relative";
   shieldArcEl.innerHTML = renderShieldArc(tabRisk);
+  shieldArcEl.setAttribute("aria-label", `Tab risk score: ${tabRisk}`);
   renderSignals(lastEvent?.reasons);
 }
 

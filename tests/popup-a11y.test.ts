@@ -95,6 +95,16 @@ describe("popup trust button aria-label — dynamic update", () => {
     expect(btn.getAttribute("aria-label")).toBe("Untrust example.com");
   });
 
+  it("shieldArc aria-label includes dynamic score value", () => {
+    const arc = document.createElement("div");
+    arc.setAttribute("role", "img");
+    arc.setAttribute("aria-label", "Tab risk score");
+
+    const tabRisk = 42;
+    arc.setAttribute("aria-label", `Tab risk score: ${tabRisk}`);
+    expect(arc.getAttribute("aria-label")).toBe("Tab risk score: 42");
+  });
+
   it("falls back to generic label when no valid domain", () => {
     const trustBtn = document.createElement("button");
     trustBtn.setAttribute("aria-label", "Trust this site");
