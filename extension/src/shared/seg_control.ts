@@ -1,8 +1,17 @@
 export function setSegValue(seg: HTMLDivElement, value: string): void {
+  let matched = false;
   for (const btn of Array.from(seg.querySelectorAll<HTMLButtonElement>(".seg-btn"))) {
     const active = btn.dataset.value === value.toLowerCase();
+    if (active) matched = true;
     btn.setAttribute("aria-checked", String(active));
     btn.setAttribute("tabindex", active ? "0" : "-1");
+  }
+  if (!matched) {
+    const first = seg.querySelector<HTMLButtonElement>(".seg-btn");
+    if (first) {
+      first.setAttribute("aria-checked", "true");
+      first.setAttribute("tabindex", "0");
+    }
   }
 }
 
