@@ -67,6 +67,12 @@ describe("icon", () => {
     expect(svg).toContain("flex-shrink:0");
   });
 
+  it("accepts CSS variable as stroke color", () => {
+    const svg = icon("lock", 12, "var(--ns-green)");
+    expect(svg).toContain('stroke="var(--ns-green)"');
+    expect(svg).toContain('width="12"');
+  });
+
   it("renders different path content for different icons", () => {
     const shield = icon("shield");
     const key = icon("key");
@@ -161,5 +167,16 @@ describe("logoSentinel", () => {
     expect(svg).toContain('r="15.5"');
     expect(svg).toContain('r="12"');
     expect(svg).toContain('r="7.5"');
+  });
+
+  it("gradient url() references match defined ids", () => {
+    const svg = logoSentinel();
+    const urlRefs = svg.match(/url\(#([^)]+)\)/g) ?? [];
+    const refIds = urlRefs.map((u) => u.replace("url(#", "").replace(")", ""));
+    const definedIds = (svg.match(/id="([^"]+)"/g) ?? []).map((m) => m.replace('id="', "").replace('"', ""));
+    expect(refIds.length).toBeGreaterThan(0);
+    for (const ref of refIds) {
+      expect(definedIds, `url(#${ref}) should reference a defined id`).toContain(ref);
+    }
   });
 });
