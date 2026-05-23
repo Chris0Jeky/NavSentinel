@@ -61,6 +61,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | T-27 | Remove `as any` casts from main_guard.ts + capture_isolated.ts | M | — | #131 | done (2/2 reviews) |
 | T-28 | ARIA accessibility + shared seg_control extraction | M | — | #132 | done (2/2 reviews) |
 | T-29 | Toggle switch aria-labelledby + aria-describedby | S | — | #133 | done (2/2 reviews) |
+| T-30 | Popup accessibility: ARIA labels, live regions, landmarks | S | — | #134 | done (2/2 reviews) |
 | T-12 | Reduce ESLint warnings (59 remaining) | M | — | — | seeded (needs #116 merged first) |
 | T-13 | Visual similarity detection (continue P4-01) | XL | — | — | pending |
 | T-14 | FP measurement re-run (Phase 2 gate) | M | — | — | pending |
@@ -97,6 +98,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #131 | fix/main-guard-type-safety | T-27 | 2/2 done, all findings fixed | open (ready for human) |
 | #132 | fix/a11y-and-function-type | T-28 | 2/2 done, all findings fixed | open (ready for human) |
 | #133 | fix/toggle-accessibility | T-29 | 2/2 done, all findings fixed | open (ready for human) |
+| #134 | fix/popup-accessibility | T-30 | 2/2 done, all findings fixed | open (ready for human) |
 
 ## Review Log
 
@@ -144,6 +146,8 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #132 | R2 | Claude Opus | Missing static aria-checked, unmatched-value fallback, missing unit tests, rapid keyboard race (pre-existing), no keyboard E2E (unit-covered), auto-save asymmetry (pre-existing) | Fixed |
 | #133 | R1 | Claude Opus | aria-label→aria-labelledby, missing aria-describedby, similarity toggle label, tests not validating HTML, 3/7 toggles uncovered | Fixed |
 | #133 | R2 | Claude Opus | No actionable findings — ID collision/JS reference/E2E impact checks clean | Clean |
+| #134 | R1 | Claude Opus | shieldArc needs role="img", SVG needs aria-hidden, dynamic label includes "(no host)", missing edge case test | Fixed |
+| #134 | R2 | Claude Opus | shieldArc aria-label doesn't include score value (hidden by R1 aria-hidden fix), missing test | Fixed |
 
 ## Active Worktrees
 
@@ -168,6 +172,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | NavSentinel-wt-main-guard-types | fix/main-guard-type-safety | #131 | complete |
 | NavSentinel-wt-a11y-types | fix/a11y-and-function-type | #132 | complete |
 | NavSentinel-wt-toggle-a11y | fix/toggle-accessibility | #133 | complete |
+| NavSentinel-wt-popup-a11y | fix/popup-accessibility | #134 | complete |
 
 ## Notes
 
@@ -180,3 +185,4 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 - T-12 (ESLint warnings) is blocked on PR #116 merge since ESLint config only exists on that branch
 - After PRs #130 + #131 merge: zero `as any` casts remain in extension/src/
 - PR #132: ARIA radiogroup pattern, shared seg_control.ts, 10 new unit tests (1164 total), static aria-checked
+- PR #134: Popup ARIA labels, live regions, landmarks, dynamic score label, 13 unit tests (1167 total)
