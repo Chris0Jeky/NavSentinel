@@ -77,6 +77,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | T-46 | Property tests for murmurhash3_32 and computeAdjustment | S | — | #147 | done (2/2 reviews) |
 | T-47 | Property tests for smart_defaults.ts (pairKey, analyzeOutcomesForPair, isPairOnCooldownPure) | S | — | #148 | done (2/2 reviews) |
 | T-48 | Property tests for nav_anomaly.ts (computeAnomalyScore, applyDecay, normalizeProfile, classifyDomain, pruneBurstRecords) | S | — | #149 | done (2/2 reviews) |
+| T-49 | Property tests for domain_groups.ts + allowlist.ts (areSameOrganization, normalizeAllowlist, isAllowlisted) | S | — | #150 | done (2/2 reviews) |
 | T-12 | Reduce ESLint warnings (59 remaining) | M | — | — | seeded (needs #116 merged first) |
 | T-13 | Visual similarity detection (continue P4-01) | XL | — | — | pending |
 | T-14 | FP measurement re-run (Phase 2 gate) | M | — | — | pending |
@@ -129,6 +130,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #147 | test/hash-adaptive-property-tests | T-46 | 2/2 done, all findings fixed | open (ready for human) |
 | #148 | test/smart-defaults-property-tests | T-47 | 2/2 done, no actionable findings | open (ready for human) |
 | #149 | test/nav-anomaly-property-tests | T-48 | 2/2 done, all findings fixed | open (ready for human) |
+| #150 | test/domain-groups-property-tests | T-49 | 2/2 done, all findings fixed | open (ready for human) |
 
 ## Review Log
 
@@ -208,6 +210,8 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #148 | R2 | Claude Opus | No actionable findings — streak reset, cooldown expiry, case insensitivity all correct | Clean |
 | #149 | R1 | Claude Opus | Dead helper, weak if(score>0) guards, missing idempotence/monotonicity/keyword tests | Fixed |
 | #149 | R2 | Claude Opus | Tautological valid-domain test, missing MAX_DECAY_ITERATIONS cap test, dead parameter | Fixed |
+| #150 | R1 | Claude Opus | Weak case-merge assertion, all-lowercase generators, missing key isolation/preservation/PSL/whitespace tests | Fixed |
+| #150 | R2 | Claude Opus | Preservation property case-collision bug (last-writer-wins mismatch), two tautological determinism tests | Fixed |
 
 ## Active Worktrees
 
@@ -248,6 +252,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | NavSentinel-wt-hash-adapt-props | test/hash-adaptive-property-tests | #147 | complete |
 | NavSentinel-wt-smart-props | test/smart-defaults-property-tests | #148 | complete |
 | NavSentinel-wt-nav-anomaly-props | test/nav-anomaly-property-tests | #149 | complete |
+| NavSentinel-wt-domain-groups-props | test/domain-groups-property-tests | #150 | complete |
 
 ## Notes
 
