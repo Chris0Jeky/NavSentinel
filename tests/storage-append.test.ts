@@ -1,4 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  EVENT_LOG_KEY,
+  PROMPT_OUTCOMES_KEY,
+} from "../extension/src/shared/storage";
 
 type Store = Record<string, unknown>;
 
@@ -42,17 +46,20 @@ function createChromeMock(initial: Store = {}) {
   };
 }
 
-const EVENT_LOG_KEY = "sentinelsuite:event_log_v1";
-const PROMPT_OUTCOMES_KEY = "sentinelsuite:prompt_outcomes_v1";
+const SETTINGS_KEY = "sentinelsuite:settings_v1";
 
 describe("appendEvent", () => {
   beforeEach(() => {
     vi.resetModules();
   });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
 
   it("appends a new event to an empty log", async () => {
     const { chrome, store } = createChromeMock();
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { appendEvent } = await import("../extension/src/shared/storage");
     await appendEvent({ kind: "nav_click_block", site: "example.com" });
@@ -67,7 +74,7 @@ describe("appendEvent", () => {
     const { chrome, store } = createChromeMock({
       [EVENT_LOG_KEY]: [{ id: "old-1", ts: 1000, kind: "suite_config_update" }],
     });
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { appendEvent } = await import("../extension/src/shared/storage");
     await appendEvent({ kind: "nav_rollback", site: "test.com" });
@@ -80,7 +87,7 @@ describe("appendEvent", () => {
     const { chrome, store } = createChromeMock({
       [EVENT_LOG_KEY]: [{ id: "dedup-1", ts: 1000, kind: "suite_config_update" }],
     });
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { appendEvent } = await import("../extension/src/shared/storage");
     await appendEvent({ id: "dedup-1", kind: "nav_click_block", site: "updated.com" });
@@ -91,25 +98,42 @@ describe("appendEvent", () => {
     expect(log[0]!.site).toBe("updated.com");
   });
 
-  it("respects log limit from settings", async () => {
+  it("enforces configured log limit", async () => {
     const { chrome, store } = createChromeMock({
-      "sentinelsuite:settings_v1": { logLimit: 3 },
+      [SETTINGS_KEY]: { logLimit: 100 },
     });
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { appendEvent } = await import("../extension/src/shared/storage");
 
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 120; i++) {
       await appendEvent({ id: `evt-${i}`, kind: "nav_click_block", ts: i });
     }
 
     const log = store[EVENT_LOG_KEY] as Array<{ id: string }>;
-    expect(log.length).toBeLessThanOrEqual(50);
+    expect(log).toHaveLength(100);
+    expect(log[0]!.id).toBe("evt-20");
+  });
+
+  it("clamps logLimit below minimum to 50", async () => {
+    const { chrome, store } = createChromeMock({
+      [SETTINGS_KEY]: { logLimit: 3 },
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { appendEvent } = await import("../extension/src/shared/storage");
+
+    for (let i = 0; i < 60; i++) {
+      await appendEvent({ id: `evt-${i}`, kind: "nav_click_block", ts: i });
+    }
+
+    const log = store[EVENT_LOG_KEY] as Array<{ id: string }>;
+    expect(log).toHaveLength(50);
   });
 
   it("auto-generates id and ts when not provided", async () => {
     const { chrome, store } = createChromeMock();
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { appendEvent } = await import("../extension/src/shared/storage");
     await appendEvent({ kind: "nav_click_block" });
@@ -122,7 +146,7 @@ describe("appendEvent", () => {
 
   it("preserves optional fields when provided", async () => {
     const { chrome, store } = createChromeMock();
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { appendEvent } = await import("../extension/src/shared/storage");
     await appendEvent({
@@ -147,7 +171,7 @@ describe("appendEvent", () => {
 
   it("omits optional fields when not provided", async () => {
     const { chrome, store } = createChromeMock();
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { appendEvent } = await import("../extension/src/shared/storage");
     await appendEvent({ kind: "suite_config_update" });
@@ -166,7 +190,7 @@ describe("appendEvent", () => {
     const { chrome, store } = createChromeMock({
       [EVENT_LOG_KEY]: "corrupted",
     });
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { appendEvent } = await import("../extension/src/shared/storage");
     await appendEvent({ kind: "nav_click_block" });
@@ -181,7 +205,10 @@ describe("appendEvent", () => {
     const brokenChrome = {
       storage: {
         local: {
-          async get() {
+          async get(keys?: string | string[]) {
+            const k = Array.isArray(keys) ? keys : typeof keys === "string" ? [keys] : [];
+            if (k.includes(EVENT_LOG_KEY)) return {};
+            if (k.includes(SETTINGS_KEY)) return { [SETTINGS_KEY]: { logLimit: 300 } };
             return {};
           },
           async set() {
@@ -191,18 +218,86 @@ describe("appendEvent", () => {
         onChanged: { addListener() {} },
       },
     };
-    vi.stubGlobal("chrome", brokenChrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", brokenChrome as unknown as typeof globalThis.chrome);
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
     const { appendEvent } = await import("../extension/src/shared/storage");
-    await appendEvent({ id: "fail-id", kind: "nav_click_block" });
+    const result = appendEvent({ id: "fail-id", kind: "nav_click_block" });
+    await expect(result).resolves.toBeUndefined();
 
     expect(setCount).toBe(3);
     expect(warnSpy).toHaveBeenCalledWith(
       "[NavSentinel] appendEvent: failed to persist after 3 attempts, id:",
       "fail-id",
     );
-    warnSpy.mockRestore();
+  });
+
+  it("survives null/undefined items in existing log array", async () => {
+    const { chrome, store } = createChromeMock({
+      [EVENT_LOG_KEY]: [null, undefined, { id: "valid-1", ts: 1, kind: "nav_click_block" }, { notAnId: true }],
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { appendEvent } = await import("../extension/src/shared/storage");
+    await appendEvent({ kind: "nav_rollback", site: "test.com" });
+
+    const log = store[EVENT_LOG_KEY] as Array<{ id?: string }>;
+    expect(log.length).toBeGreaterThanOrEqual(2);
+    expect(log.some((e) => e?.id === "valid-1")).toBe(true);
+  });
+
+  it("propagates exception when set() throws", async () => {
+    const throwingChrome = {
+      storage: {
+        local: {
+          async get() {
+            return {};
+          },
+          async set() {
+            throw new Error("QUOTA_BYTES exceeded");
+          },
+        },
+        onChanged: { addListener() {} },
+      },
+    };
+    vi.stubGlobal("chrome", throwingChrome as unknown as typeof globalThis.chrome);
+
+    const { appendEvent } = await import("../extension/src/shared/storage");
+    await expect(appendEvent({ kind: "nav_click_block" })).rejects.toThrow("QUOTA_BYTES exceeded");
+  });
+
+  it("propagates exception when get() throws", async () => {
+    const throwingChrome = {
+      storage: {
+        local: {
+          async get() {
+            throw new Error("Extension context invalidated");
+          },
+          async set() {},
+        },
+        onChanged: { addListener() {} },
+      },
+    };
+    vi.stubGlobal("chrome", throwingChrome as unknown as typeof globalThis.chrome);
+
+    const { appendEvent } = await import("../extension/src/shared/storage");
+    await expect(appendEvent({ kind: "nav_click_block" })).rejects.toThrow("Extension context invalidated");
+  });
+
+  it("handles concurrent appends without losing entries", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { appendEvent } = await import("../extension/src/shared/storage");
+    await Promise.all([
+      appendEvent({ id: "concurrent-1", kind: "nav_click_block", ts: 1 }),
+      appendEvent({ id: "concurrent-2", kind: "nav_rollback", ts: 2 }),
+      appendEvent({ id: "concurrent-3", kind: "suite_config_update", ts: 3 }),
+    ]);
+
+    const log = store[EVENT_LOG_KEY] as Array<{ id: string }>;
+    const ids = log.map((e) => e.id);
+    expect(ids).toContain("concurrent-3");
   });
 });
 
@@ -210,10 +305,14 @@ describe("appendPromptOutcome", () => {
   beforeEach(() => {
     vi.resetModules();
   });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
 
   it("appends a new outcome to an empty log", async () => {
     const { chrome, store } = createChromeMock();
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { appendPromptOutcome } = await import("../extension/src/shared/storage");
     await appendPromptOutcome({
@@ -235,7 +334,7 @@ describe("appendPromptOutcome", () => {
         { id: "old-1", ts: 1000, domain: "a.com", type: "nav", score: 50, outcome: "block" },
       ],
     });
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { appendPromptOutcome } = await import("../extension/src/shared/storage");
     await appendPromptOutcome({
@@ -255,7 +354,7 @@ describe("appendPromptOutcome", () => {
         { id: "dup-1", ts: 1000, domain: "a.com", type: "nav", score: 50, outcome: "block" },
       ],
     });
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { appendPromptOutcome } = await import("../extension/src/shared/storage");
     await appendPromptOutcome({
@@ -273,7 +372,7 @@ describe("appendPromptOutcome", () => {
 
   it("preserves optional destDomain and reasons", async () => {
     const { chrome, store } = createChromeMock();
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { appendPromptOutcome } = await import("../extension/src/shared/storage");
     await appendPromptOutcome({
@@ -292,7 +391,7 @@ describe("appendPromptOutcome", () => {
 
   it("omits optional fields when not provided", async () => {
     const { chrome, store } = createChromeMock();
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { appendPromptOutcome } = await import("../extension/src/shared/storage");
     await appendPromptOutcome({
@@ -319,7 +418,7 @@ describe("appendPromptOutcome", () => {
     const { chrome, store } = createChromeMock({
       [PROMPT_OUTCOMES_KEY]: existing,
     });
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { appendPromptOutcome } = await import("../extension/src/shared/storage");
     await appendPromptOutcome({
@@ -339,7 +438,7 @@ describe("appendPromptOutcome", () => {
     const { chrome, store } = createChromeMock({
       [PROMPT_OUTCOMES_KEY]: 42,
     });
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { appendPromptOutcome } = await import("../extension/src/shared/storage");
     await appendPromptOutcome({
@@ -355,34 +454,40 @@ describe("appendPromptOutcome", () => {
   });
 
   it("warns on console when all 3 verification attempts fail", async () => {
+    let setCount = 0;
     const brokenChrome = {
       storage: {
         local: {
-          async get() {
+          async get(keys?: string | string[]) {
+            const k = Array.isArray(keys) ? keys : typeof keys === "string" ? [keys] : [];
+            if (k.includes(PROMPT_OUTCOMES_KEY)) return {};
             return {};
           },
-          async set() {},
+          async set() {
+            setCount++;
+          },
         },
         onChanged: { addListener() {} },
       },
     };
-    vi.stubGlobal("chrome", brokenChrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", brokenChrome as unknown as typeof globalThis.chrome);
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
     const { appendPromptOutcome } = await import("../extension/src/shared/storage");
-    await appendPromptOutcome({
+    const result = appendPromptOutcome({
       id: "fail-outcome",
       domain: "example.com",
       type: "nav",
       score: 50,
       outcome: "block",
     });
+    await expect(result).resolves.toBeUndefined();
 
+    expect(setCount).toBe(3);
     expect(warnSpy).toHaveBeenCalledWith(
       "[NavSentinel] appendPromptOutcome: failed to persist after 3 attempts, id:",
       "fail-outcome",
     );
-    warnSpy.mockRestore();
   });
 });
 
@@ -390,10 +495,13 @@ describe("getEventLog", () => {
   beforeEach(() => {
     vi.resetModules();
   });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
 
   it("returns empty array when no log exists", async () => {
     const { chrome } = createChromeMock();
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { getEventLog } = await import("../extension/src/shared/storage");
     expect(await getEventLog()).toEqual([]);
@@ -403,7 +511,7 @@ describe("getEventLog", () => {
     const { chrome } = createChromeMock({
       [EVENT_LOG_KEY]: [{ id: "e1", ts: 1, kind: "nav_click_block" }],
     });
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { getEventLog } = await import("../extension/src/shared/storage");
     const log = await getEventLog();
@@ -415,7 +523,7 @@ describe("getEventLog", () => {
     const { chrome } = createChromeMock({
       [EVENT_LOG_KEY]: "not-an-array",
     });
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { getEventLog } = await import("../extension/src/shared/storage");
     expect(await getEventLog()).toEqual([]);
@@ -426,12 +534,15 @@ describe("clearEventLog", () => {
   beforeEach(() => {
     vi.resetModules();
   });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
 
   it("clears the event log", async () => {
     const { chrome, store } = createChromeMock({
       [EVENT_LOG_KEY]: [{ id: "e1", ts: 1, kind: "nav_click_block" }],
     });
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { clearEventLog, getEventLog } = await import("../extension/src/shared/storage");
     await clearEventLog();
@@ -444,10 +555,13 @@ describe("getPromptOutcomes and clearPromptOutcomes", () => {
   beforeEach(() => {
     vi.resetModules();
   });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
 
   it("returns empty array when no outcomes exist", async () => {
     const { chrome } = createChromeMock();
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { getPromptOutcomes } = await import("../extension/src/shared/storage");
     expect(await getPromptOutcomes()).toEqual([]);
@@ -457,7 +571,7 @@ describe("getPromptOutcomes and clearPromptOutcomes", () => {
     const { chrome, store } = createChromeMock({
       [PROMPT_OUTCOMES_KEY]: [{ id: "o1", ts: 1 }],
     });
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { clearPromptOutcomes } = await import("../extension/src/shared/storage");
     await clearPromptOutcomes();
@@ -471,7 +585,7 @@ describe("getPromptOutcomes and clearPromptOutcomes", () => {
     const { chrome } = createChromeMock({
       [PROMPT_OUTCOMES_KEY]: outcomes,
     });
-    vi.stubGlobal("chrome", chrome as typeof globalThis.chrome);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { getPromptOutcomes } = await import("../extension/src/shared/storage");
     const result = await getPromptOutcomes();
