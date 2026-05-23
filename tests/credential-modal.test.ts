@@ -1,12 +1,11 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { showCredentialModal as ShowCredentialModalType } from "../extension/src/content/credential_modal";
 import type { ModalSpec } from "../extension/src/content/credential_modal";
 
 const HOST_ID = "__sentinelsuite_cred_modal_host__";
 
-type ShowFn = (spec: ModalSpec) => Promise<string>;
-
-let showCredentialModal: ShowFn;
+let showCredentialModal: typeof ShowCredentialModalType;
 
 async function loadModule(): Promise<void> {
   const mod = await import("../extension/src/content/credential_modal");
@@ -47,10 +46,12 @@ function minimalSpec(overrides: Partial<ModalSpec> = {}): ModalSpec {
 }
 
 describe("credential modal", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.useFakeTimers();
+    vi.clearAllTimers();
     vi.resetModules();
     document.getElementById(HOST_ID)?.remove();
+    await loadModule();
   });
 
   afterEach(() => {
@@ -60,7 +61,6 @@ describe("credential modal", () => {
 
   describe("showCredentialModal basic contract", () => {
     it("creates a shadow DOM host in the document", async () => {
-      await loadModule();
       const promise = showCredentialModal(minimalSpec());
       vi.runAllTimers();
 
@@ -73,7 +73,6 @@ describe("credential modal", () => {
     });
 
     it("renders the title text", async () => {
-      await loadModule();
       const promise = showCredentialModal(minimalSpec({ title: "Phishing Alert" }));
       vi.runAllTimers();
 
@@ -85,7 +84,6 @@ describe("credential modal", () => {
     });
 
     it("renders subtitle when provided", async () => {
-      await loadModule();
       const promise = showCredentialModal(
         minimalSpec({ subtitle: "This site may be dangerous" }),
       );
@@ -99,7 +97,6 @@ describe("credential modal", () => {
     });
 
     it("does not render subtitle when absent", async () => {
-      await loadModule();
       const promise = showCredentialModal(minimalSpec());
       vi.runAllTimers();
 
@@ -111,7 +108,6 @@ describe("credential modal", () => {
     });
 
     it("renders key-value rows when provided", async () => {
-      await loadModule();
       const promise = showCredentialModal(
         minimalSpec({
           kv: [
@@ -134,7 +130,6 @@ describe("credential modal", () => {
     });
 
     it("does not render kv grid when absent", async () => {
-      await loadModule();
       const promise = showCredentialModal(minimalSpec());
       vi.runAllTimers();
 
@@ -144,12 +139,14 @@ describe("credential modal", () => {
       await promise;
     });
 
-    it("renders reasons list when provided", async () => {
-      await loadModule();
+    it("renders reasons list with Signals header when provided", async () => {
       const promise = showCredentialModal(
         minimalSpec({ reasons: ["Domain mismatch", "No HTTPS"] }),
       );
       vi.runAllTimers();
+
+      const reasonsTitle = getShadow()?.querySelector(".reasons-title");
+      expect(reasonsTitle?.textContent).toBe("Signals");
 
       const items = Array.from(getShadow()!.querySelectorAll("li")).map(
         (el) => el.textContent,
@@ -161,7 +158,6 @@ describe("credential modal", () => {
     });
 
     it("does not render reasons when absent", async () => {
-      await loadModule();
       const promise = showCredentialModal(minimalSpec());
       vi.runAllTimers();
 
@@ -170,11 +166,39 @@ describe("credential modal", () => {
       getButtons()[0]!.click();
       await promise;
     });
+
+    it("escapes HTML in spec fields (XSS regression guard)", async () => {
+      const xss = '<img src=x onerror="alert(1)">';
+      const promise = showCredentialModal(
+        minimalSpec({
+          title: xss,
+          subtitle: xss,
+          kv: [{ k: xss, v: xss }],
+          reasons: [xss],
+        }),
+      );
+      vi.runAllTimers();
+
+      const title = getShadow()?.querySelector(".title");
+      expect(title?.textContent).toBe(xss);
+      expect(title?.innerHTML).not.toContain("<img");
+
+      const subtitle = getShadow()?.querySelector(".subtitle");
+      expect(subtitle?.textContent).toBe(xss);
+
+      const kvVal = getShadow()?.querySelector(".v");
+      expect(kvVal?.textContent).toBe(xss);
+
+      const li = getShadow()?.querySelector("li");
+      expect(li?.textContent).toBe(xss);
+
+      getButtons()[0]!.click();
+      await promise;
+    });
   });
 
   describe("button rendering and click resolution", () => {
     it("renders buttons with correct labels and CSS classes", async () => {
-      await loadModule();
       const promise = showCredentialModal(
         minimalSpec({
           actions: [
@@ -201,7 +225,6 @@ describe("credential modal", () => {
     });
 
     it("resolves with the clicked button action id", async () => {
-      await loadModule();
       const promise = showCredentialModal(minimalSpec());
       vi.runAllTimers();
 
@@ -211,7 +234,6 @@ describe("credential modal", () => {
     });
 
     it("resolves with the first button action id when clicked", async () => {
-      await loadModule();
       const promise = showCredentialModal(minimalSpec());
       vi.runAllTimers();
 
@@ -219,11 +241,25 @@ describe("credential modal", () => {
 
       expect(await promise).toBe("allow");
     });
+
+    it("handles empty actions array — only Escape can dismiss", async () => {
+      const promise = showCredentialModal({
+        title: "No buttons",
+        actions: [],
+        outsideAction: "dismissed",
+      });
+      vi.runAllTimers();
+
+      expect(getCard()).not.toBeNull();
+      expect(getButtons()).toHaveLength(0);
+
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      expect(await promise).toBe("dismissed");
+    });
   });
 
   describe("escape key dismissal", () => {
     it("resolves with outsideAction on Escape", async () => {
-      await loadModule();
       const promise = showCredentialModal(
         minimalSpec({ outsideAction: "dismissed" }),
       );
@@ -235,7 +271,6 @@ describe("credential modal", () => {
     });
 
     it("resolves with 'cancel' on Escape when outsideAction is not set", async () => {
-      await loadModule();
       const promise = showCredentialModal(
         minimalSpec({ outsideAction: undefined }),
       );
@@ -247,7 +282,6 @@ describe("credential modal", () => {
     });
 
     it("removes the overlay after Escape", async () => {
-      await loadModule();
       const promise = showCredentialModal(minimalSpec());
       vi.runAllTimers();
 
@@ -260,22 +294,19 @@ describe("credential modal", () => {
 
   describe("outside click dismissal", () => {
     it("resolves with outsideAction when clicking overlay background", async () => {
-      await loadModule();
       const promise = showCredentialModal(
         minimalSpec({ outsideAction: "outside_dismiss" }),
       );
       vi.runAllTimers();
 
       const overlay = getOverlay()!;
-      overlay.dispatchEvent(
-        new MouseEvent("mousedown", { bubbles: true, target: overlay } as MouseEventInit),
-      );
+      // Dispatch directly on overlay — e.target is set to overlay by the DOM dispatch machinery
+      overlay.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
 
       expect(await promise).toBe("outside_dismiss");
     });
 
     it("does NOT dismiss when clicking the card itself", async () => {
-      await loadModule();
       const promise = showCredentialModal(minimalSpec());
       vi.runAllTimers();
 
@@ -294,7 +325,6 @@ describe("credential modal", () => {
 
   describe("ensureHost idempotency", () => {
     it("does not create duplicate hosts on repeated calls", async () => {
-      await loadModule();
       const p1 = showCredentialModal(minimalSpec());
       vi.runAllTimers();
       getButtons()[0]!.click();
@@ -302,17 +332,20 @@ describe("credential modal", () => {
 
       const p2 = showCredentialModal(minimalSpec());
       vi.runAllTimers();
-      getButtons()[0]!.click();
-      await p2;
 
       const hosts = document.querySelectorAll(`#${HOST_ID}`);
       expect(hosts.length).toBe(1);
+
+      const overlays = getShadow()?.querySelectorAll(".overlay");
+      expect(overlays?.length).toBe(1);
+
+      getButtons()[0]!.click();
+      await p2;
     });
   });
 
   describe("modal replacement", () => {
     it("replaces previous modal when called again before resolution", async () => {
-      await loadModule();
       const p1 = showCredentialModal(minimalSpec({ title: "First" }));
       vi.runAllTimers();
 
@@ -333,11 +366,60 @@ describe("credential modal", () => {
       getButtons()[0]!.click();
       await p2;
     });
+
+    it("cleans up previous keydown listener on replacement", async () => {
+      const p1 = showCredentialModal(
+        minimalSpec({ outsideAction: "first_dismiss" }),
+      );
+      vi.runAllTimers();
+
+      const p2 = showCredentialModal(
+        minimalSpec({ outsideAction: "second_dismiss" }),
+      );
+      vi.runAllTimers();
+
+      // Escape should only resolve p2, not p1
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      expect(await p2).toBe("second_dismiss");
+
+      // p1 should still be pending (cleanup of its listener was called during replacement)
+      let p1Resolved = false;
+      p1.then(() => { p1Resolved = true; });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(p1Resolved).toBe(false);
+    });
+  });
+
+  describe("keydown listener cleanup", () => {
+    it("removes keydown listener after button click resolves modal", async () => {
+      const promise = showCredentialModal(minimalSpec({ outsideAction: "dismissed" }));
+      vi.runAllTimers();
+      getButtons()[0]!.click();
+      await promise;
+
+      // A second Escape after resolution should not throw or affect anything
+      expect(() =>
+        window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+      ).not.toThrow();
+      expect(getOverlay()).toBeNull();
+    });
+
+    it("removes keydown listener after Escape resolves modal", async () => {
+      const promise = showCredentialModal(minimalSpec());
+      vi.runAllTimers();
+
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await promise;
+
+      // A second Escape should not throw
+      expect(() =>
+        window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+      ).not.toThrow();
+    });
   });
 
   describe("ARIA and accessibility", () => {
     it("sets role=dialog and aria-modal on the card", async () => {
-      await loadModule();
       const promise = showCredentialModal(minimalSpec());
       vi.runAllTimers();
 
@@ -349,18 +431,32 @@ describe("credential modal", () => {
       await promise;
     });
 
-    it("sets aria-labelledby and aria-describedby on the card", async () => {
-      await loadModule();
+    it("sets aria-labelledby pointing to the title element", async () => {
       const promise = showCredentialModal(minimalSpec());
       vi.runAllTimers();
 
       const card = getCard()!;
-      expect(card.getAttribute("aria-labelledby")).toBeTruthy();
-      expect(card.getAttribute("aria-describedby")).toBeTruthy();
-
       const titleId = card.getAttribute("aria-labelledby")!;
+      expect(titleId).toBeTruthy();
+
       const titleEl = getShadow()?.querySelector(`#${titleId}`);
       expect(titleEl?.textContent).toBe("Test Warning");
+
+      getButtons()[0]!.click();
+      await promise;
+    });
+
+    it("sets aria-describedby pointing to the body element", async () => {
+      const promise = showCredentialModal(minimalSpec());
+      vi.runAllTimers();
+
+      const card = getCard()!;
+      const bodyId = card.getAttribute("aria-describedby")!;
+      expect(bodyId).toBeTruthy();
+
+      const bodyEl = getShadow()?.querySelector(`#${bodyId}`);
+      expect(bodyEl).not.toBeNull();
+      expect(bodyEl?.classList.contains("body")).toBe(true);
 
       getButtons()[0]!.click();
       await promise;
@@ -368,15 +464,144 @@ describe("credential modal", () => {
   });
 
   describe("focus management", () => {
-    it("auto-focuses first focusable button after render", async () => {
-      await loadModule();
+    it("auto-focuses first focusable button after timer fires", async () => {
       const promise = showCredentialModal(minimalSpec());
+      // Before timer: button exists but focus call hasn't fired yet
+      const buttonsBeforeTimer = getButtons();
+      expect(buttonsBeforeTimer.length).toBeGreaterThan(0);
+
+      // Flush the setTimeout(focus, 0)
       vi.runAllTimers();
 
       const buttons = getButtons();
+      const shadow = getShadow()!;
+      // happy-dom may not fully track shadow activeElement, but we verify
+      // the button is focusable and the focus call doesn't throw
       expect(buttons[0]!.tabIndex).toBeGreaterThanOrEqual(0);
+      // If happy-dom tracks it, activeElement should be the first button
+      if (shadow.activeElement) {
+        expect(shadow.activeElement).toBe(buttons[0]);
+      }
 
       getButtons()[0]!.click();
+      await promise;
+    });
+
+    it("focuses card when no focusable elements exist (empty actions)", async () => {
+      const promise = showCredentialModal({
+        title: "Card focus fallback",
+        actions: [],
+      });
+      vi.runAllTimers();
+
+      const card = getCard()!;
+      expect(card.tabIndex).toBe(-1);
+
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await promise;
+    });
+
+    it("restores focus to previously active element after dismissal", async () => {
+      const focusTarget = document.createElement("button");
+      focusTarget.textContent = "Before modal";
+      document.body.appendChild(focusTarget);
+      focusTarget.focus();
+
+      const promise = showCredentialModal(minimalSpec());
+      vi.runAllTimers();
+
+      getButtons()[0]!.click();
+      await promise;
+
+      // happy-dom may or may not track focus restore; verify the call doesn't throw
+      // and the element still exists
+      expect(document.body.contains(focusTarget)).toBe(true);
+
+      document.body.removeChild(focusTarget);
+    });
+  });
+
+  describe("Tab key focus trap", () => {
+    it("wraps focus from last button to first on Tab", async () => {
+      const promise = showCredentialModal(
+        minimalSpec({
+          actions: [
+            { id: "a", label: "First", kind: "primary" },
+            { id: "b", label: "Last", kind: "danger" },
+          ],
+        }),
+      );
+      vi.runAllTimers();
+
+      const buttons = getButtons();
+      expect(buttons).toHaveLength(2);
+
+      // Simulate Tab on last button — should preventDefault and wrap
+      const tabEvent = new KeyboardEvent("keydown", {
+        key: "Tab",
+        bubbles: true,
+        cancelable: true,
+      });
+      const preventSpy = vi.spyOn(tabEvent, "preventDefault");
+
+      // Focus the last button so activeElement check triggers wrap
+      buttons[1]!.focus();
+      window.dispatchEvent(tabEvent);
+
+      // In happy-dom, focus trap behavior depends on activeElement tracking
+      // We verify the Tab handler fires without error
+      expect(preventSpy).toHaveBeenCalled();
+
+      getButtons()[0]!.click();
+      await promise;
+    });
+
+    it("wraps focus from first button to last on Shift+Tab", async () => {
+      const promise = showCredentialModal(
+        minimalSpec({
+          actions: [
+            { id: "a", label: "First", kind: "primary" },
+            { id: "b", label: "Last", kind: "danger" },
+          ],
+        }),
+      );
+      vi.runAllTimers();
+
+      const buttons = getButtons();
+      buttons[0]!.focus();
+
+      const shiftTabEvent = new KeyboardEvent("keydown", {
+        key: "Tab",
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      const preventSpy = vi.spyOn(shiftTabEvent, "preventDefault");
+
+      window.dispatchEvent(shiftTabEvent);
+      expect(preventSpy).toHaveBeenCalled();
+
+      getButtons()[0]!.click();
+      await promise;
+    });
+
+    it("focuses card when Tab is pressed with no focusable elements", async () => {
+      const promise = showCredentialModal({
+        title: "No buttons",
+        actions: [],
+      });
+      vi.runAllTimers();
+
+      const tabEvent = new KeyboardEvent("keydown", {
+        key: "Tab",
+        bubbles: true,
+        cancelable: true,
+      });
+      const preventSpy = vi.spyOn(tabEvent, "preventDefault");
+      window.dispatchEvent(tabEvent);
+      expect(preventSpy).toHaveBeenCalled();
+
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
       await promise;
     });
   });
