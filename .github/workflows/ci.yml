@@ -28,6 +28,9 @@ jobs:
       - name: Verify versions
         run: npm run verify:versions
 
+      - name: Lint
+        run: npm run lint
+
       - name: Typecheck
         run: npm run typecheck
 

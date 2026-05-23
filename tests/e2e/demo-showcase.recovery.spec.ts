@@ -20,7 +20,7 @@ const gymRoot = path.resolve(__dirname, "..", "..", "gym");
 
 test.setTimeout(240_000);
 
-test("guided recovery showcase for redirects and one-time recovery @demo @demo-recovery", async (_fixtures, testInfo) => {
+test("guided recovery showcase for redirects and one-time recovery @demo @demo-recovery", async ({}, testInfo) => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running the demo showcase.");
 
   const session = await launchDemoSession({ extensionPath, gymRoot, testInfo });

@@ -22,7 +22,7 @@ const gymRoot = path.resolve(__dirname, "..", "..", "gym");
 
 test.setTimeout(420_000);
 
-test("guided operator showcase with the real popup surface @demo @demo-operator", async (_fixtures, testInfo) => {
+test("guided operator showcase with the real popup surface @demo @demo-operator", async ({}, testInfo) => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running the demo showcase.");
 
   const session = await launchDemoSession({ extensionPath, gymRoot, testInfo });

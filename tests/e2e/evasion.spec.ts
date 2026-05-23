@@ -320,7 +320,6 @@ test("Evasion 07: pointer-events:none overlay relies on main_guard intercept @re
     // click listener. Assert the popup is blocked.
     expect(popup, "Expected main_guard to block the pointer-events:none bypass window.open").toBeNull();
     const toastText = await readToastText(page);
-    // eslint-disable-next-line no-console
     console.log(`[evasion-07] Toast: ${toastText ?? "none"}`);
   } finally {
     await cleanup();

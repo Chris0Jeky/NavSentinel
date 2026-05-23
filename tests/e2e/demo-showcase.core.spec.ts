@@ -21,7 +21,7 @@ const gymRoot = path.resolve(__dirname, "..", "..", "gym");
 
 test.setTimeout(420_000);
 
-test("guided core showcase of merged NavSentinel capabilities @demo @demo-core", async (_fixtures, testInfo) => {
+test("guided core showcase of merged NavSentinel capabilities @demo @demo-core", async ({}, testInfo) => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running the demo showcase.");
 
   const session = await launchDemoSession({ extensionPath, gymRoot, testInfo });

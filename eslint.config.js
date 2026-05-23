@@ -27,16 +27,10 @@ export default tseslint.config(
     },
   },
   {
-    files: ["extension/src/**/*.ts"],
-    rules: {
-      "no-console": "off",
-    },
-  },
-  {
     files: ["tests/**/*.ts"],
     rules: {
-      "no-console": "off",
-      "@typescript-eslint/no-explicit-any": "off",
+      "no-empty-pattern": "off",
+      "@typescript-eslint/no-explicit-any": "warn",
     },
   },
   {
@@ -49,8 +43,10 @@ export default tseslint.config(
       "artifacts/**",
       "gym/**",
       "scripts/**",
-      "*.config.*",
-      "*.mjs",
+      "eslint.config.js",
+      "vite.config.ts",
+      "playwright.*.config.ts",
+      "playwright.config.ts",
     ],
   }
 );
