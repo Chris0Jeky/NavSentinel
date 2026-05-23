@@ -109,7 +109,7 @@ describe("levenshtein properties", () => {
     );
   });
 
-  it("empty vs non-empty: levenshtein('', s) === s.length (up to max len)", () => {
+  it("empty vs non-empty: levenshtein('', s) === s.length", () => {
     fc.assert(
       fc.property(shortString, (s) => {
         expect(levenshtein("", s)).toBe(s.length);
