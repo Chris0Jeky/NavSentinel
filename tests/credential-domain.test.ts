@@ -704,6 +704,14 @@ describe("isIPAddress", () => {
   it("detects compressed IPv6", () => {
     expect(isIPAddress("fe80::1")).toBe(true);
   });
+
+  it("accepts leading-zeros IPv4 (Number coercion strips them)", () => {
+    expect(isIPAddress("192.168.001.001")).toBe(true);
+  });
+
+  it("rejects bracketed IPv6 (brackets not in character class)", () => {
+    expect(isIPAddress("[::1]")).toBe(false);
+  });
 });
 
 describe("safeUrlParse", () => {
@@ -774,5 +782,11 @@ describe("safeUrlParse", () => {
     const url = safeUrlParse("about:blank");
     expect(url).not.toBeNull();
     expect(url!.protocol).toBe("about:");
+  });
+
+  it("trims whitespace-padded URL per URL spec", () => {
+    const url = safeUrlParse("  https://example.com  ");
+    expect(url).not.toBeNull();
+    expect(url!.hostname).toBe("example.com");
   });
 });
