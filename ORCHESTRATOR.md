@@ -79,6 +79,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | T-48 | Property tests for nav_anomaly.ts (computeAnomalyScore, applyDecay, normalizeProfile, classifyDomain, pruneBurstRecords) | S | — | #149 | done (2/2 reviews) |
 | T-49 | Property tests for domain_groups.ts + allowlist.ts (areSameOrganization, normalizeAllowlist, isAllowlisted) | S | — | #150 | done (2/2 reviews) |
 | T-50 | Add missing nrs_js_behavior_suspicious explanation + test coverage | S | — | #151 | done (2/2 reviews) |
+| T-51 | Property tests for reputation.ts bloom filter functions | S | — | #152 | done (2/2 reviews) |
 | T-12 | Reduce ESLint warnings (59 remaining) | M | — | — | seeded (needs #116 merged first) |
 | T-13 | Visual similarity detection (continue P4-01) | XL | — | — | pending |
 | T-14 | FP measurement re-run (Phase 2 gate) | M | — | — | pending |
@@ -133,6 +134,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #149 | test/nav-anomaly-property-tests | T-48 | 2/2 done, all findings fixed | open (ready for human) |
 | #150 | test/domain-groups-property-tests | T-49 | 2/2 done, all findings fixed | open (ready for human) |
 | #151 | fix/missing-explanation-code | T-50 | 2/2 done, no actionable findings | open (ready for human) |
+| #152 | test/reputation-property-tests | T-51 | 2/2 done, all findings fixed | open (ready for human) |
 
 ## Review Log
 
@@ -216,6 +218,8 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | #150 | R2 | Claude Opus | Preservation property case-collision bug (last-writer-wins mismatch), two tautological determinism tests | Fixed |
 | #151 | R1 | Claude Opus | No actionable findings — exhaustive cross-reference confirmed all 48 reason codes covered | Clean |
 | #151 | R2 | Claude Opus | No actionable findings — explanation accuracy, PSL codes, wording all verified | Clean |
+| #152 | R1 | Claude Opus | Tautological seed test, tautological h2-odd test, deterministic FP probes, missing m=0/ArrayBuffer/bit-uniqueness tests | Fixed |
+| #152 | R2 | Claude Opus | Missing insert-idempotency property, non-zero byteOffset untested, insertDomain(k=0) untested | Fixed |
 
 ## Active Worktrees
 
@@ -258,6 +262,7 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 | NavSentinel-wt-nav-anomaly-props | test/nav-anomaly-property-tests | #149 | complete |
 | NavSentinel-wt-domain-groups-props | test/domain-groups-property-tests | #150 | complete |
 | NavSentinel-wt-explanation-fix | fix/missing-explanation-code | #151 | complete |
+| NavSentinel-wt-reputation-props | test/reputation-property-tests | #152 | complete |
 
 ## Notes
 
