@@ -7,6 +7,50 @@ import {
 } from "../extension/src/content/clickfix_detector";
 
 // ---------------------------------------------------------------------------
+// Complete keyword/phrase reference lists matching the implementation
+// ---------------------------------------------------------------------------
+
+const ALL_COMMAND_KEYWORDS = [
+  "powershell", "cmd /", "cmd.exe", "mshta", "msiexec", "certutil",
+  "bitsadmin", "rundll32", "regsvr32", "wscript", "cscript",
+  "forfiles", "pcalua", "schtasks", "installutil",
+  "curl ", "wget ", "bash", "sh ", "/bin/",
+  "osascript", "invoke-", "iex ", "iex(", "iwr ",
+  "start-process", "downloadstring", "downloadfile", "new-object",
+  "system.net", "frombase64", "base64", "-encodedcommand", "-enc ",
+];
+
+const ALL_CAPTCHA_PHRASES = [
+  "verify you are human",
+  "prove you're not a robot",
+  "i am not a robot",
+  "human verification required",
+  "security verification needed",
+  "captcha verification",
+  "verify you are not a bot",
+  "anti-bot verification",
+  "confirm you are human",
+];
+
+const ALL_INSTRUCTION_PHRASES = [
+  "press win+r",
+  "press ctrl+v",
+  "press ⊞+r",
+  "open run dialog",
+  "open a terminal window",
+  "open command prompt",
+  "paste into the run dialog",
+  "paste it in the terminal",
+  "cmd+space",
+  "windows+r",
+  "win r",
+  "copy and paste",
+  "press enter to verify",
+  "click the verify button then paste",
+  "right-click paste",
+];
+
+// ---------------------------------------------------------------------------
 // looksLikeCommand property tests
 // ---------------------------------------------------------------------------
 
@@ -43,7 +87,7 @@ describe("looksLikeCommand property tests", () => {
     expect(looksLikeCommand("")).toBe(false);
   });
 
-  it("is case insensitive", () => {
+  it("is case insensitive for random strings", () => {
     fc.assert(
       fc.property(fc.string({ minLength: 5, maxLength: 200 }), (text) => {
         expect(looksLikeCommand(text.toLowerCase())).toBe(looksLikeCommand(text.toUpperCase()));
@@ -52,22 +96,41 @@ describe("looksLikeCommand property tests", () => {
     );
   });
 
-  it("known command keywords always trigger detection", () => {
-    const keywords = [
-      "powershell", "cmd /c", "cmd.exe", "mshta", "certutil",
-      "curl http://evil.com", "wget http://evil.com", "bash -c",
-      "invoke-expression", "iex (something)", "downloadstring",
-      "start-process notepad", "system.net.webclient",
+  it("is case insensitive for known keywords", () => {
+    const seeds = [
+      "powershell", "cmd.exe", "certutil", "base64", "osascript",
+      "msiexec", "bitsadmin", "system.net",
     ];
-    for (const kw of keywords) {
-      expect(looksLikeCommand(kw)).toBe(true);
+    for (const kw of seeds) {
+      const mixed = kw.split("").map((c, i) =>
+        i % 2 === 0 ? c.toUpperCase() : c.toLowerCase()
+      ).join("");
+      expect(looksLikeCommand(mixed)).toBe(true);
+    }
+  });
+
+  it("all command keywords are detected", () => {
+    for (const kw of ALL_COMMAND_KEYWORDS) {
+      expect(looksLikeCommand("a" + kw + "b")).toBe(true);
+    }
+  });
+
+  it("short keywords alone return false due to length guard", () => {
+    const shortKeywords = ALL_COMMAND_KEYWORDS.filter((kw) => kw.length < 5);
+    expect(shortKeywords.length).toBeGreaterThan(0);
+    for (const kw of shortKeywords) {
+      expect(looksLikeCommand(kw)).toBe(false);
     }
   });
 
   it("prepending/appending text preserves detection when keyword present", () => {
     fc.assert(
       fc.property(
-        fc.constantFrom("powershell", "cmd.exe", "certutil", "invoke-expression", "curl http"),
+        fc.constantFrom(
+          "powershell", "cmd.exe", "certutil", "curl ",
+          "invoke-", "base64", "system.net", "/bin/",
+          "osascript", "-encodedcommand"
+        ),
         fc.string({ maxLength: 100 }),
         fc.string({ maxLength: 100 }),
         (keyword, prefix, suffix) => {
@@ -80,20 +143,14 @@ describe("looksLikeCommand property tests", () => {
   });
 
   it("random alphanumeric strings rarely trigger", () => {
-    let triggerCount = 0;
-    const runs = 500;
-    fc.assert(
-      fc.property(
-        fc.string({ minLength: 5, maxLength: 50 }).map((s) =>
-          s.replace(/[^a-zA-Z0-9 ]/g, "x")
-        ),
-        (text) => {
-          if (looksLikeCommand(text)) triggerCount++;
-        }
+    const samples = fc.sample(
+      fc.string({ minLength: 5, maxLength: 50 }).map((s) =>
+        s.replace(/[^a-zA-Z0-9 ]/g, "x")
       ),
-      { numRuns: runs }
+      500
     );
-    expect(triggerCount).toBeLessThan(runs * 0.1);
+    const triggerCount = samples.filter((s) => looksLikeCommand(s)).length;
+    expect(triggerCount).toBeLessThan(samples.length * 0.1);
   });
 });
 
@@ -126,32 +183,15 @@ describe("matchesCaptchaPattern property tests", () => {
   });
 
   it("is case insensitive", () => {
-    const phrases = [
-      "Verify you are human",
-      "Prove you're not a robot",
-      "I am not a robot",
-      "Human verification",
-      "Security verification",
-    ];
-    for (const phrase of phrases) {
+    for (const phrase of ALL_CAPTCHA_PHRASES) {
       expect(matchesCaptchaPattern(phrase.toLowerCase())).toBe(true);
       expect(matchesCaptchaPattern(phrase.toUpperCase())).toBe(true);
       expect(matchesCaptchaPattern(phrase)).toBe(true);
     }
   });
 
-  it("known captcha phrases always match", () => {
-    const phrases = [
-      "verify you are human",
-      "prove you're not a robot",
-      "i am not a robot",
-      "human verification required",
-      "security verification needed",
-      "captcha verification",
-      "anti-bot verification",
-      "confirm you are human",
-    ];
-    for (const phrase of phrases) {
+  it("all captcha phrases match", () => {
+    for (const phrase of ALL_CAPTCHA_PHRASES) {
       expect(matchesCaptchaPattern(phrase)).toBe(true);
     }
   });
@@ -159,18 +199,14 @@ describe("matchesCaptchaPattern property tests", () => {
   it("prepending/appending text preserves captcha match", () => {
     fc.assert(
       fc.property(
-        fc.constantFrom(
-          "verify you are human",
-          "i am not a robot",
-          "human verification"
-        ),
+        fc.constantFrom(...ALL_CAPTCHA_PHRASES),
         fc.string({ maxLength: 50 }),
         fc.string({ maxLength: 50 }),
         (phrase, prefix, suffix) => {
           expect(matchesCaptchaPattern(prefix + phrase + suffix)).toBe(true);
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 200 }
     );
   });
 
@@ -218,36 +254,15 @@ describe("matchesInstructionPattern property tests", () => {
   });
 
   it("is case insensitive", () => {
-    const phrases = [
-      "Press Win+R",
-      "Press Ctrl+V",
-      "Open a Run dialog",
-      "Paste into the terminal",
-      "Windows+R",
-    ];
-    for (const phrase of phrases) {
+    for (const phrase of ALL_INSTRUCTION_PHRASES) {
       expect(matchesInstructionPattern(phrase.toLowerCase())).toBe(true);
       expect(matchesInstructionPattern(phrase.toUpperCase())).toBe(true);
       expect(matchesInstructionPattern(phrase)).toBe(true);
     }
   });
 
-  it("known instruction phrases always match", () => {
-    const phrases = [
-      "press win+r",
-      "press ctrl+v",
-      "open run dialog",
-      "open a terminal window",
-      "open command prompt",
-      "paste into the run dialog",
-      "paste it in the terminal",
-      "cmd+space",
-      "windows+r",
-      "copy and paste",
-      "press enter to verify",
-      "right-click paste",
-    ];
-    for (const phrase of phrases) {
+  it("all instruction phrases match", () => {
+    for (const phrase of ALL_INSTRUCTION_PHRASES) {
       expect(matchesInstructionPattern(phrase)).toBe(true);
     }
   });
@@ -255,19 +270,14 @@ describe("matchesInstructionPattern property tests", () => {
   it("prepending/appending text preserves instruction match", () => {
     fc.assert(
       fc.property(
-        fc.constantFrom(
-          "press win+r",
-          "press ctrl+v",
-          "open terminal",
-          "copy and paste"
-        ),
+        fc.constantFrom(...ALL_INSTRUCTION_PHRASES),
         fc.string({ maxLength: 50 }),
         fc.string({ maxLength: 50 }),
         (phrase, prefix, suffix) => {
           expect(matchesInstructionPattern(prefix + phrase + suffix)).toBe(true);
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 200 }
     );
   });
 
@@ -286,15 +296,23 @@ describe("matchesInstructionPattern property tests", () => {
   });
 
   it("captcha patterns and instruction patterns are independent", () => {
-    fc.assert(
-      fc.property(fc.string({ maxLength: 200 }), (text) => {
-        const captcha = matchesCaptchaPattern(text);
-        const instruction = matchesInstructionPattern(text);
-        if (captcha && instruction) {
-          expect(text.length).toBeGreaterThan(0);
-        }
-      }),
-      { numRuns: 300 }
-    );
+    const captchaOnly = [
+      "verify you are human",
+      "i am not a robot",
+      "security verification",
+    ];
+    for (const phrase of captchaOnly) {
+      expect(matchesCaptchaPattern(phrase)).toBe(true);
+      expect(matchesInstructionPattern(phrase)).toBe(false);
+    }
+    const instructionOnly = [
+      "press win+r",
+      "open terminal",
+      "copy and paste",
+    ];
+    for (const phrase of instructionOnly) {
+      expect(matchesInstructionPattern(phrase)).toBe(true);
+      expect(matchesCaptchaPattern(phrase)).toBe(false);
+    }
   });
 });
