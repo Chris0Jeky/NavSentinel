@@ -1,6 +1,6 @@
 # Agent Index - NavSentinel
 
-Last reviewed: 2026-05-16.
+Last reviewed: 2026-05-23.
 
 This is a fast orientation layer for coding agents. It should point to interfaces and seams, not duplicate implementation details.
 
@@ -51,7 +51,7 @@ All paths above are relative to repo root. Content scripts live under `extension
 
 ## Current Agent-Readiness Observations
 
-- NavSentinel v0.4.0, Phases 0-3 complete + Phase 4 partial (4/8), 1037 tests (41 unit test files + 11 E2E spec files), 47 source files (43 TS + 4 CSS), 119 gym fixtures.
+- NavSentinel v0.4.0, Phases 0-3 complete + Phase 4 partial (6/8: P4-01 visual sim architecture + capture + templates done, P4-02 JS behavior slices 1-7 done), 1154 tests (45 unit test files + 11 E2E spec files), 47 source files (43 TS + 4 CSS), 119 gym fixtures.
 - **UI redesign complete** (2026-05-16): brass/jade design system, design tokens, 26-icon SVG system, segmented controls replacing selects, sidebar nav options page, ShieldArc popup gauge. See `docs/REDESIGN_ORCHESTRATION.md`.
 - The active planning source is `docs/Project_Roadmap.md`; archived execution trackers are historical only.
 - `docs/Comprehensive_Project_Analysis.md` is a historical snapshot from 2026-04-09 — do not treat it as current.
@@ -59,7 +59,7 @@ All paths above are relative to repo root. Content scripts live under `extension
 - Build output and generated data are easy context traps. Agents should edit source under `extension/src/` and avoid `extension/dist/`.
 - The highest-risk seams are main-world patching, bridge messages, service-worker lifecycle state, and credential/data privacy behavior.
 - All branches have been cleaned; only `main` and `origin/main` exist.
-- Open issues: #86 (bridge session race), #90 (bridge retry race) — both in `main_guard.ts` bridge initialization.
+- Open issues: #97 (shadow DOM mutation monitor), #106 (JS behavior slices — stale, all merged), #113 (toolchain migration for npm audit vulns).
 
 ## Interface-On-Top Convention
 
