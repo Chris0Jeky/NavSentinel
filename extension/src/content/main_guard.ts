@@ -385,7 +385,7 @@ function hardenProto(
     });
   } catch {
     try {
-      (proto as any)[prop] = value;
+      (proto as Record<string, unknown>)[prop] = value;
     } catch { /* ignore � already patched or frozen */ }
     if (debug) {
       console.debug(`[NavSentinel] defineProperty failed for ${label}, used assignment fallback`);
@@ -410,9 +410,9 @@ function callNativeOpen(
   features?: string
 ): Window | null {
   if (nativeProtoOpen) {
-    return nativeProtoOpen.call(thisArg, url as any, target, features);
+    return nativeProtoOpen.call(thisArg, url, target, features);
   }
-  return nativeOpen.call(thisArg, url as any, target, features);
+  return nativeOpen.call(thisArg, url, target, features);
 }
 
 const RESERVED_TARGETS = new Set(["_top", "_parent", "_blank"]);
@@ -557,7 +557,7 @@ function patchLocation(): void {
     });
   } catch {
     try {
-      (window.location as any).assign = patchedAssign;
+      (window.location as unknown as Record<string, unknown>).assign = patchedAssign;
     } catch { /* ignore */ }
     if (debug) {
       console.debug("[NavSentinel] defineProperty failed for window.location.assign, used assignment fallback");
@@ -572,7 +572,7 @@ function patchLocation(): void {
     });
   } catch {
     try {
-      (window.location as any).replace = patchedReplace;
+      (window.location as unknown as Record<string, unknown>).replace = patchedReplace;
     } catch { /* ignore */ }
     if (debug) {
       console.debug("[NavSentinel] defineProperty failed for window.location.replace, used assignment fallback");
@@ -624,7 +624,7 @@ function patchForms(): void {
           ...(actionUrl !== undefined ? { url: actionUrl } : {})
         });
         notifyAllowedTarget(actionUrl);
-        nativeFormRequestSubmit.call(this, submitter as any);
+        nativeFormRequestSubmit.call(this, submitter);
         return;
       }
 
@@ -635,14 +635,14 @@ function patchForms(): void {
           ...(actionUrl !== undefined ? { url: actionUrl } : {})
         });
         notifyAllowedTarget(actionUrl);
-        nativeFormRequestSubmit.call(this, submitter as any);
+        nativeFormRequestSubmit.call(this, submitter);
         return;
       }
 
       registerBlockedAction({
         kind: "form_request_submit",
         ...(actionUrl !== undefined ? { url: actionUrl } : {}),
-        action: () => nativeFormRequestSubmit.call(this, submitter as any)
+        action: () => nativeFormRequestSubmit.call(this, submitter)
       });
     };
     hardenProto(HTMLFormElement.prototype, "requestSubmit", patchedFormRequestSubmit, "HTMLFormElement.prototype.requestSubmit");
@@ -657,7 +657,7 @@ function patchOpen(): void {
       configurable: true,
     });
   } catch {
-    window.open = patchedOpen as any;
+    window.open = patchedOpen;
     if (debug) {
       console.debug("[NavSentinel] defineProperty failed for window.open, used assignment fallback");
     }
@@ -671,7 +671,7 @@ function patchOpen(): void {
       features?: string
     ): Window | null {
       return patchedOpen.call(this, url, target, features);
-    } as any;
+    };
     hardenProto(Window.prototype, "open", protoWrapper, "Window.prototype.open");
   }
 }
@@ -1128,7 +1128,7 @@ function patchOpenerLocation(): void {
             try { realLocation.href = value; } catch { /* cross-origin */ }
             return true;
           }
-          try { (realLocation as any)[prop] = value; } catch { /* ignore */ }
+          try { Reflect.set(realLocation, prop, value); } catch { /* ignore */ }
           return true;
         },
         get(_target, prop) {
@@ -1145,7 +1145,7 @@ function patchOpenerLocation(): void {
             };
           }
           try {
-            const val = (realLocation as any)[prop];
+            const val = Reflect.get(realLocation, prop);
             if (typeof val === "function") return val.bind(realLocation);
             return val;
           } catch {
@@ -1178,7 +1178,7 @@ function patchOpenerLocation(): void {
           return true;
         }
         try {
-          (realOpener as any)[prop] = value;
+          Reflect.set(realOpener, prop, value);
         } catch {
           // ignore cross-origin errors
         }
@@ -1190,7 +1190,7 @@ function patchOpenerLocation(): void {
           return locationProxy;
         }
         try {
-          const val = (realOpener as any)[prop];
+          const val = Reflect.get(realOpener, prop);
           if (typeof val === "function") return val.bind(realOpener);
           return val;
         } catch {
