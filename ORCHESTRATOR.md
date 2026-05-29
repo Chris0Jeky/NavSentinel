@@ -144,7 +144,8 @@ Final state: 2165 unit tests pass, tsc clean, lint 0 errors (70 warnings — T-1
 |---|---|---|---|---|---|
 | T-12 | Reduce ESLint warnings — source files (6 explicit-any) | S | — | #170 | done (2/2 reviews, merged) |
 | P4-01a | Visual similarity: wire capture into NRS scoring (+ brand-domain map) | M | — | #172 | done (R1 + R2 + verification review; R2's 2 MEDIUM + 3 LOW + bot findings all fixed: SPA reset, on-domain→0 FP, single-capture, SW throttle, delayed-pw MutationObserver, trailing-dot FQDN). Merged. 2206 tests |
-| P4-01b | Visual similarity: gym fixtures + E2E spec | M | — | — | seeded (PR B, follow-up to #172) |
+| P4-01b | Visual similarity: gym fixtures + E2E spec | M | — | TBD | done (2 fixtures + `tests/e2e/visual-sim.spec.ts`; 2 adversarial rounds; R1: race-free positive capture signal, dropped unreliable content-script console assertion, robust cleanup; R2: comment-accuracy. 10× parallel-clean. Seeds P4-01c) |
+| P4-01c | Visual similarity: true-positive E2E (needs real brand templates) | M | — | — | seeded (blocked on real perceptual templates — `build-brand-templates.mjs` ships PLACEHOLDER hashes, so no real gym page matches a brand; current E2E covers pipeline-fires + delayed-path + no-FP only) |
 | P4-03/FF-01 | Firefox port: browser.* shim + Firefox manifest (additive, single codebase) | M | — | #173 | done (2/2 reviews; R2 F1/F3 fixed → MV3 background.scripts; merged). Decisions: single codebase, FF128+ |
 | P4-03/FF-02..04 | Firefox: vite config, session_state compat, world:MAIN | L | — | — | seeded (stacked on FF-01) |
 | T-13 | Visual similarity detection (continue P4-01) | XL | — | — | pending |
@@ -335,6 +336,8 @@ Final state: 2165 unit tests pass, tsc clean, lint 0 errors (70 warnings — T-1
 | #168 | R2 | Claude Opus | appendEventSafely wrapper missed (already in PR #157), refreshAdaptiveScores missed (already in PR #157), identical messages (no call-site context) | Fixed (event kind in messages) / Acknowledged (PR #157 covers capture_isolated.ts) |
 | #169 | R1 | Claude Opus | No findings above threshold — all 6 changes correct, consistent, no data leakage | Clean |
 | #169 | R2 | Claude Opus | resumeSubmit inner catch silent (user-facing failure path), variable shadowing in nested catch (original error lost) | Fixed (logging added, variable renamed to logErr) |
+| P4-01b | R1 | Claude Opus | Test-2 console-listener assertion likely vacuous (content-script console.warn may not reach page.on("console")); template-load race with no retry; SW-eviction loses spy patch; no positive "pipeline ran" signal; parallel-focus deepens vacuity; cleanup-leak on early throw; P4-01 vs P4-01b label drift | Fixed (spy installed before goto → race-free positive capture signal in both tests; dropped console assertion; assert "no capture before password" then "capture after" on delayed path; null-guarded cleanup; label) |
+| P4-01b | R2 | Claude Opus | Inaccurate inline comment ("survives an early SW eviction" conflates in-memory patch with persisted flag); residual eviction-window flake (LOW, accepted); test-2 positive assertion implicitly coupled to template-load timing (LOW, accepted) | Fixed (comment); LOW items documented, no defect |
 
 ## Active Worktrees
 
