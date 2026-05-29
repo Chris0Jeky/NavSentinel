@@ -29,8 +29,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unit tests for dblclick_guard, allowlist, event_tone, dom_builder modules
 - Missing NRS explanation strings
 - Accessibility improvements across all UI surfaces
+- Visual similarity detection wired into NRS scoring -- a brand login surface rendered cross-origin (impersonation) adds up to +30; on-domain brand matches score 0 (#172, P4-01a)
+- Visual similarity gym fixtures + E2E coverage of the capture pipeline, including the delayed/multi-step password path (#174, P4-01b). Note: brand templates are placeholders; real spoof detection awaits real perceptual templates (P4-01c)
+- Firefox `browser.*` compatibility shim + `manifest.firefox.json` (single codebase, FF128+, MV3 background.scripts) -- additive, not yet wired into a build (#173, FF-01)
+- ESLint flat config + CI lint gate (#116); per-job performance-budget check in CI (#120)
+- Extensive unit + property-based test coverage across scoring, NRS, domain, storage, reputation, redirect-chain, content/CSP/clickfix/oauth analyzers, visual-sim hashing, nav-anomaly, smart-defaults, and UI models (Cycle 4-6 test PRs)
 
 ### Fixed
+- Visual-sim false positive: a legitimate brand login on the brand's own domain could score and stack toward a block -- on-domain matches now contribute 0 (only cross-origin impersonation scores); SPA navigation resets the capture cache; per-tab viewport-capture throttle added (#172)
+- `SuiteSettingsPatch.credential.similarity` was not truly partial (storage.ts)
+- `classifyDomain('__proto__')` returned `Object.prototype` -- guarded with `Object.hasOwn` (nav_anomaly.ts); same-class prototype-pollution guards added in `explainReasonCode` and `domain_profile.ts`
+- `normalizeHost` stripped only one trailing dot (not idempotent) -- now strips all (domain.ts)
+- Silent-failure hardening: storage append retry, `importAll` duplicate/`slice(-0)` bugs, `optimalParams` NaN/Infinity guard, SW missing `sendResponse` for undefined tabId, and diagnostic logging added to previously-silent catch blocks (capture, options, popup, credential guard, adaptive scoring)
 - Bridge retry race condition: stale retry could close successfully-established port (#90)
 - Bridge session race: MAIN world accepted any first ns-port-init sender (#86)
 - Protocol injection, lastError, and isTopFrame bugs in capture_isolated (#89)
@@ -44,6 +54,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Options page mode controls: `<select>` elements replaced with segmented button controls
 - E2E tests updated to use aria-pressed attribute verification for segmented controls
 - All UI surfaces now use shared design tokens (CSS custom properties)
+- Build toolchain migrated to Vite 8 / Vitest 4 / modern esbuild (#118); dev-dependency audit reduced 7 -> 2 vulnerabilities (remaining are upstream via @crxjs)
+- Removed all `explicit-any` from source and tests -- codebase is now lint-clean (0 errors, 0 warnings) (#170, #171)
 
 ## [0.4.0] - 2026-05-03
 

@@ -163,6 +163,8 @@ Final state: 2165 unit tests pass, tsc clean, lint 0 errors (70 warnings — T-1
 
 ## PR Tracker
 
+> **Historical (2026-05-29):** every PR below is **merged to main** (Cycles 6-7, #114-#174). The per-row "open (ready for human)" labels are the pre-merge state — retained as the review trail, not current status. 0 PRs are open. Latest: #172 (P4-01a), #173 (FF-01), #174 (P4-01b).
+
 | PR# | Branch | Task(s) | Reviews | Status |
 |---|---|---|---|---|
 | #114 | fix/hygiene-stale-todos | T-01 to T-05 | 2/2 done, all findings fixed | open (ready for human) |
@@ -340,6 +342,8 @@ Final state: 2165 unit tests pass, tsc clean, lint 0 errors (70 warnings — T-1
 | P4-01b | R2 | Claude Opus | Inaccurate inline comment ("survives an early SW eviction" conflates in-memory patch with persisted flag); residual eviction-window flake (LOW, accepted); test-2 positive assertion implicitly coupled to template-load timing (LOW, accepted) | Fixed (comment); LOW items documented, no defect |
 
 ## Active Worktrees
+
+> **Historical (2026-05-29):** all worktrees below have been **removed**; `git worktree list` shows only the primary `main` checkout. Table retained as a record of the Cycle 6-7 isolation strategy.
 
 | Worktree | Branch | PR | Status |
 |---|---|---|---|

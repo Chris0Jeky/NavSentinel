@@ -23,9 +23,11 @@ Total: **47 tasks** across 5 phases. **43/47 complete**. P4-01 and P4-02 have fo
 
 **Completed cross-cutting initiative:** UI Redesign (9 phases, R1–R9) — done 2026-05-16. See [REDESIGN_ORCHESTRATION.md](REDESIGN_ORCHESTRATION.md).
 
-**Open issues:** #97 (shadow DOM mutation monitor), #113 (toolchain migration).
+**Open issues:** #127 (JS behavior monitor — remaining slices: perf validation + residual type dedup). #97 (shadow-DOM monitor) and #113 (toolchain) closed via #115 / #118.
 
-Last updated: 2026-05-23
+**Repo state (2026-05-29):** 0 open PRs; #114-#174 merged across Cycles 6-7. 2206 tests, lint 0/0, tsc clean. See `ORCHESTRATOR.md`.
+
+Last updated: 2026-05-29
 
 ---
 
@@ -995,7 +997,7 @@ ordered by estimated impact. Timelines are intentionally open-ended.
 | ID | Title | Effort | Status | Depends On |
 |---|---|---|---|---|
 | P4-01 | Visual similarity detection | XL | in progress | P3 gate (cleared) | PRs #109 (architecture), #110 (capture), #111 (templates) merged; #172 (NRS scoring integration) merged; P4-01b gym fixtures + E2E (`tests/e2e/visual-sim.spec.ts`) merged. Remaining: real perceptual brand templates (P4-01c) — current templates are placeholders, so spoof detection is not yet live end-to-end |
-| P4-02 | JavaScript behavior analysis | XL | in progress | P3 gate (cleared) | PRs #98 (design), #101 (forms), #104 (creds), #105 (exfil), #107 (NRS), #108 (gym) merged; stale TODOs cleaned |
+| P4-02 | JavaScript behavior analysis | XL | in progress | P3 gate (cleared) | PRs #98 (design), #101 (forms), #104 (creds), #105 (exfil), #107 (NRS), #108 (gym) merged; type dedup via #128/#129. Remaining work tracked in **issue #127**: perf validation (patch/getter overhead budgets) + residual `JsBehaviorState` dedup in `js_behavior_monitor.ts` |
 | P4-03 | Cross-browser port (Firefox MV3) | XL | pending | P3 gate (cleared) |
 | P4-04 | Community threat intelligence | XL | pending | P3 gate (cleared) |
 | P4-05 | CSP / permissions analysis | L | **done** | P2 gate | PR #71 |
