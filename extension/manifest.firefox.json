@@ -1,0 +1,72 @@
+{
+  "manifest_version": 3,
+  "name": "NavSentinel",
+  "version": "0.4.0",
+  "description": "Navigation intent firewall plus local-first credential submission guardrails.",
+  "icons": {
+    "16": "assets/icon16.png",
+    "32": "assets/icon32.png",
+    "48": "assets/icon48.png",
+    "128": "assets/icon128.png"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "navsentinel@navsentinel.app",
+      "strict_min_version": "128.0"
+    }
+  },
+  "permissions": [
+    "storage",
+    "declarativeNetRequest",
+    "webNavigation",
+    "tabs"
+  ],
+  "host_permissions": ["<all_urls>"],
+  "web_accessible_resources": [
+    {
+      "resources": ["brand_templates.json"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "background": {
+    "scripts": ["src/sw/sw.ts"],
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content/capture_isolated.ts"],
+      "run_at": "document_start",
+      "world": "ISOLATED",
+      "all_frames": true
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content/credential_guard.ts"],
+      "run_at": "document_start",
+      "world": "ISOLATED",
+      "all_frames": true
+    }
+  ],
+  "options_ui": {
+    "page": "src/options/options.html",
+    "open_in_tab": true
+  },
+  "action": {
+    "default_icon": {
+      "16": "assets/icon16.png",
+      "32": "assets/icon32.png"
+    },
+    "default_popup": "src/popup/popup.html",
+    "default_title": "NavSentinel"
+  },
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "baseline",
+        "enabled": false,
+        "path": "rules/dnr_static.json"
+      }
+    ]
+  }
+}
