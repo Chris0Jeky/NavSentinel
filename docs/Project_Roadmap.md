@@ -1030,14 +1030,22 @@ during form submission.
 
 #### P4-03: Cross-browser port (Firefox MV3)
 
-When Firefox MV3 stabilizes, port the extension. The architecture is already mostly
-portable (TypeScript, Vite). Main differences: WebExtension API naming, popup behavior,
-content script injection timing.
+Port the extension to Firefox MV3. The architecture is already mostly portable
+(TypeScript, Vite). Main differences: WebExtension API naming, popup behavior,
+content-script injection timing, background model, and `world:"MAIN"` support.
 
-**Key decisions (deferred)**:
-- When Firefox MV3 is stable enough
-- Whether to maintain a single codebase or fork
-- Build system changes needed
+**Decisions (made 2026-05-29):**
+- **Single codebase** (no fork) — shared source, per-target manifest + build config.
+- **Firefox 128+** minimum (`strict_min_version`), `background.page` (HTML + ES module) model.
+- Ship without the `world:"MAIN"` navigation guard initially (documented gap, later slice).
+
+**Slice breakdown (stacked PRs):**
+- **FF-01** — `browser.*` compat shim (`extension/src/shared/browser.ts`) + `manifest.firefox.json` + tests. Purely additive; no Chrome change. (PR #173)
+- **FF-02** — Firefox Vite build config + `src/sw/background.html` entry (the `background.page` target referenced by `manifest.firefox.json`) + dual build scripts.
+- **FF-03** — `session_state` compatibility (Chrome `storage.session` → namespaced `storage.local` fallback via `storageSessionShim`) + restart-clear semantics for ephemerality.
+- **FF-04** — `world:"MAIN"` guard parity once Firefox baseline supports it; redirect/transition detection gaps (`transitionQualifiers` absent on Firefox).
+
+Note: `manifest.firefox.json` references `src/sw/background.html`, which is created in FF-02 (a tracked forward reference, not a broken ref — FF-01 is not wired into a build yet).
 
 #### P4-04: Community threat intelligence
 
