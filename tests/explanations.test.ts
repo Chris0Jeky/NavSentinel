@@ -39,6 +39,7 @@ const KNOWN_NRS_CODES = [
   "nrs_csp_weakness",
   "nrs_domain_repeat_offender",
   "nrs_nav_anomaly",
+  "nrs_js_behavior_suspicious",
 ];
 
 const KNOWN_CLICKFIX_CODES = [
