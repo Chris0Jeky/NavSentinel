@@ -88,17 +88,17 @@
                   </div>
                   <div class="toggle-row">
                     <div class="toggle-info">
-                      <div class="toggle-label">Debug overlay</div>
-                      <div class="toggle-sub">Show CDS/NRS on page</div>
+                      <div class="toggle-label" id="lbl-navDebug">Debug overlay</div>
+                      <div class="toggle-sub" id="desc-navDebug">Show CDS/NRS on page</div>
                     </div>
-                    <button class="toggle" id="navDebug" role="switch" aria-checked="false"><span class="toggle-thumb"></span></button>
+                    <button class="toggle" id="navDebug" role="switch" aria-checked="false" aria-labelledby="lbl-navDebug" aria-describedby="desc-navDebug"><span class="toggle-thumb"></span></button>
                   </div>
                   <div class="toggle-row">
                     <div class="toggle-info">
-                      <div class="toggle-label">DNR backstop</div>
-                      <div class="toggle-sub">Experimental hard blocklist</div>
+                      <div class="toggle-label" id="lbl-navDnrEnabled">DNR backstop</div>
+                      <div class="toggle-sub" id="desc-navDnrEnabled">Experimental hard blocklist</div>
                     </div>
-                    <button class="toggle" id="navDnrEnabled" role="switch" aria-checked="false"><span class="toggle-thumb"></span></button>
+                    <button class="toggle" id="navDnrEnabled" role="switch" aria-checked="false" aria-labelledby="lbl-navDnrEnabled" aria-describedby="desc-navDnrEnabled"><span class="toggle-thumb"></span></button>
                   </div>
                 </div>
               </div>
@@ -121,31 +121,31 @@
                   </div>
                   <div class="toggle-row">
                     <div class="toggle-info">
-                      <div class="toggle-label">Block HTTP submit</div>
-                      <div class="toggle-sub">Refuse non-HTTPS form actions</div>
+                      <div class="toggle-label" id="lbl-blockHttp">Block HTTP submit</div>
+                      <div class="toggle-sub" id="desc-blockHttp">Refuse non-HTTPS form actions</div>
                     </div>
-                    <button class="toggle" id="blockHttpPasswordSubmit" role="switch" aria-checked="false"><span class="toggle-thumb"></span></button>
+                    <button class="toggle" id="blockHttpPasswordSubmit" role="switch" aria-checked="false" aria-labelledby="lbl-blockHttp" aria-describedby="desc-blockHttp"><span class="toggle-thumb"></span></button>
                   </div>
                   <div class="toggle-row">
                     <div class="toggle-info">
-                      <div class="toggle-label">Paste warnings</div>
-                      <div class="toggle-sub">Warn on password paste</div>
+                      <div class="toggle-label" id="lbl-warnPaste">Paste warnings</div>
+                      <div class="toggle-sub" id="desc-warnPaste">Warn on password paste</div>
                     </div>
-                    <button class="toggle" id="warnOnPaste" role="switch" aria-checked="false"><span class="toggle-thumb"></span></button>
+                    <button class="toggle" id="warnOnPaste" role="switch" aria-checked="false" aria-labelledby="lbl-warnPaste" aria-describedby="desc-warnPaste"><span class="toggle-thumb"></span></button>
                   </div>
                   <div class="toggle-row">
                     <div class="toggle-info">
-                      <div class="toggle-label">Prompt untrusted</div>
-                      <div class="toggle-sub">Prompt on untrusted domains</div>
+                      <div class="toggle-label" id="lbl-promptUntrusted">Prompt untrusted</div>
+                      <div class="toggle-sub" id="desc-promptUntrusted">Prompt on untrusted domains</div>
                     </div>
-                    <button class="toggle" id="promptOnUntrustedDomain" role="switch" aria-checked="false"><span class="toggle-thumb"></span></button>
+                    <button class="toggle" id="promptOnUntrustedDomain" role="switch" aria-checked="false" aria-labelledby="lbl-promptUntrusted" aria-describedby="desc-promptUntrusted"><span class="toggle-thumb"></span></button>
                   </div>
                   <div class="toggle-row">
                     <div class="toggle-info">
-                      <div class="toggle-label">Prompt medium risk</div>
-                      <div class="toggle-sub">Prompt on medium risk scores</div>
+                      <div class="toggle-label" id="lbl-promptMedium">Prompt medium risk</div>
+                      <div class="toggle-sub" id="desc-promptMedium">Prompt on medium risk scores</div>
                     </div>
-                    <button class="toggle" id="promptOnMediumRisk" role="switch" aria-checked="false"><span class="toggle-thumb"></span></button>
+                    <button class="toggle" id="promptOnMediumRisk" role="switch" aria-checked="false" aria-labelledby="lbl-promptMedium" aria-describedby="desc-promptMedium"><span class="toggle-thumb"></span></button>
                   </div>
                 </div>
               </div>
@@ -172,9 +172,9 @@
                     </div>
                   </div>
                   <div class="field">
-                    <label class="field-label">Lookalike similarity</label>
+                    <label class="field-label" id="lbl-similarity">Lookalike similarity</label>
                     <div class="toggle-row toggle-row--compact">
-                      <button class="toggle" id="similarityEnabled" role="switch" aria-checked="false"><span class="toggle-thumb"></span></button>
+                      <button class="toggle" id="similarityEnabled" role="switch" aria-checked="false" aria-labelledby="lbl-similarity"><span class="toggle-thumb"></span></button>
                       <div class="input-row">
                         <input id="similarityMaxDistance" type="number" min="0" max="8" step="1" class="input input--sm ns-mono" aria-label="Max edit distance" />
                         <span class="input-hint">max dist</span>
