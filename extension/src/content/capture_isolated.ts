@@ -245,7 +245,9 @@ async function initSettings() {
   }
   try {
     adaptiveAdjustment = await getEffectiveThresholdAdjustment(siteKeyFromLocation());
-  } catch { /* ignore */ }
+  } catch (err) {
+    console.warn("[NavSentinel] Failed to load adaptive threshold, using default", err);
+  }
   document.documentElement.setAttribute("data-navsentinel-capture-ready", "1");
   setDebugEnabled(settings.debug);
   postToMain("ns-config", { mode: settings.defaultMode, debug: settings.debug });
@@ -584,7 +586,9 @@ async function refreshAdaptiveScores(baseThreshold?: number): Promise<void> {
     const outcomes = await getPromptOutcomes();
     await updateAdaptiveScores(outcomes, threshold);
     adaptiveAdjustment = await getEffectiveThresholdAdjustment(siteKeyFromLocation());
-  } catch { /* ignore */ }
+  } catch (err) {
+    console.warn("[NavSentinel] Failed to refresh adaptive scores, using stale values", err);
+  }
 }
 
 function appendOutcomeSafely(
