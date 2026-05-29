@@ -720,9 +720,58 @@ let _visualSimScheduled = false;
 // (in-page) navigations so a stale per-route score is not applied elsewhere.
 let _visualSimUrl = "";
 let _visualSimNavListenersBound = false;
+// Pending observer/timer waiting for a delayed (SPA / multi-step) password
+// field. Tracked so a navigation can cancel a stale wait.
+let _visualSimPwObserver: MutationObserver | null = null;
+let _visualSimPwTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** How long to watch for a delayed password field before giving up. */
+const VISUAL_SIM_PW_WAIT_MS = 30_000;
 
 function getVisualSimScoreForNRS(): number {
   return _cachedVisualSimScore;
+}
+
+function cancelVisualSimPasswordWait(): void {
+  if (_visualSimPwObserver) {
+    _visualSimPwObserver.disconnect();
+    _visualSimPwObserver = null;
+  }
+  if (_visualSimPwTimer) {
+    clearTimeout(_visualSimPwTimer);
+    _visualSimPwTimer = null;
+  }
+}
+
+/**
+ * When no password field is present yet, multi-step / SPA login flows (Google,
+ * Microsoft, etc.) often inject one after the user advances. Observe the DOM
+ * for a password field and run the check once it appears, bounded by a timeout
+ * so the observer never leaks. Returns true if a wait was armed.
+ */
+function waitForPasswordFieldThenRun(): boolean {
+  if (typeof MutationObserver === "undefined" || !document.documentElement) {
+    return false;
+  }
+  cancelVisualSimPasswordWait();
+  const armedUrl = location.href;
+  _visualSimPwObserver = new MutationObserver(() => {
+    // Abandon if the page navigated away while we were waiting.
+    if (location.href !== armedUrl) {
+      cancelVisualSimPasswordWait();
+      return;
+    }
+    if (document.querySelector('input[type="password"]')) {
+      cancelVisualSimPasswordWait();
+      void runVisualSimCheck();
+    }
+  });
+  _visualSimPwObserver.observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+  });
+  _visualSimPwTimer = setTimeout(() => cancelVisualSimPasswordWait(), VISUAL_SIM_PW_WAIT_MS);
+  return true;
 }
 
 /**
@@ -738,9 +787,12 @@ function getVisualSimScoreForNRS(): number {
 async function runVisualSimCheck(): Promise<void> {
   try {
     _visualSimUrl = location.href;
-    // Only meaningful on pages that ask for credentials.
+    // Only meaningful on pages that ask for credentials. If none is present
+    // yet, watch for one to be injected (multi-step / SPA login flows) rather
+    // than giving up permanently.
     if (!document.querySelector('input[type="password"]')) {
       _cachedVisualSimScore = 0;
+      waitForPasswordFieldThenRun();
       return;
     }
 
@@ -787,6 +839,7 @@ function onVisualSimSpaNavigation(): void {
   if (location.href === _visualSimUrl) return;
   _cachedVisualSimScore = 0;
   _visualSimScheduled = false;
+  cancelVisualSimPasswordWait();
   resetVisualSimState();
   scheduleVisualSimCheck();
 }

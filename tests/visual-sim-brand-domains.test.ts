@@ -25,6 +25,11 @@ describe("visual_sim_brand_domains", () => {
       expect(isBrandCanonicalDomain("google", "ACCOUNTS.GOOGLE.COM")).toBe(true);
     });
 
+    it("handles fully-qualified hostnames with a trailing dot", () => {
+      expect(isBrandCanonicalDomain("google", "google.com.")).toBe(true);
+      expect(isBrandCanonicalDomain("google", "accounts.google.com.")).toBe(true);
+    });
+
     it("rejects a spoof / look-alike domain", () => {
       expect(isBrandCanonicalDomain("google", "google.com.evil.test")).toBe(false);
       expect(isBrandCanonicalDomain("paypal", "paypal-secure.test")).toBe(false);
@@ -59,6 +64,11 @@ describe("visual_sim_brand_domains", () => {
   describe("isCurrentPageCrossOriginFromBrand", () => {
     it("returns false when the current page is on the brand's canonical domain", () => {
       vi.stubGlobal("location", { hostname: "accounts.google.com" });
+      expect(isCurrentPageCrossOriginFromBrand("google")).toBe(false);
+    });
+
+    it("treats a trailing-dot canonical hostname as on-domain (not cross-origin)", () => {
+      vi.stubGlobal("location", { hostname: "accounts.google.com." });
       expect(isCurrentPageCrossOriginFromBrand("google")).toBe(false);
     });
 

@@ -90,7 +90,10 @@ export function isBrandCanonicalDomain(templateId: string, hostname: string): bo
   const domains = BRAND_CANONICAL_DOMAINS[templateId];
   if (!domains) return false;
 
-  const host = hostname.trim().toLowerCase();
+  let host = hostname.trim().toLowerCase();
+  // A fully-qualified hostname may carry a trailing dot (e.g. "google.com.").
+  // Strip it so a legitimate canonical domain is not mistaken for a spoof.
+  if (host.endsWith(".")) host = host.slice(0, -1);
   if (!host) return false;
 
   for (const domain of domains) {
