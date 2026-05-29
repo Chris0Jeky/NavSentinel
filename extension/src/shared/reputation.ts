@@ -254,7 +254,9 @@ export function insertDomain(filter: BloomFilterState, domain: string): void {
  * @param p Target false positive rate (e.g. 0.0001 for 0.01%)
  */
 export function optimalParams(n: number, p: number): { m: number; k: number } {
-  if (n <= 0) return { m: 8, k: 1 };
+  if (!Number.isFinite(n) || n <= 0 || !Number.isFinite(p) || p <= 0 || p >= 1) {
+    return { m: 8, k: 1 };
+  }
   const m = Math.ceil((-n * Math.log(p)) / (Math.LN2 * Math.LN2));
   const k = Math.max(1, Math.round((m / n) * Math.LN2));
   return { m, k };
