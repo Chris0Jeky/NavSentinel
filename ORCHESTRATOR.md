@@ -143,7 +143,7 @@ Final state: 2165 unit tests pass, tsc clean, lint 0 errors (70 warnings — T-1
 | ID | Task | Effort | Issue | PR | Status |
 |---|---|---|---|---|---|
 | T-12 | Reduce ESLint warnings — source files (6 explicit-any) | S | — | #170 | done (2/2 reviews, merged) |
-| P4-01a | Visual similarity: wire capture into NRS scoring (+ brand-domain map) | M | — | #172 | R1 clean; R2 found 2 MEDIUM + 3 LOW (all fixed: SPA reset, on-domain→0 FP, single-capture, SW throttle) + bot findings (delayed/multi-step pw fields, trailing-dot FQDN). Verification review in progress |
+| P4-01a | Visual similarity: wire capture into NRS scoring (+ brand-domain map) | M | — | #172 | done (R1 + R2 + verification review; R2's 2 MEDIUM + 3 LOW + bot findings all fixed: SPA reset, on-domain→0 FP, single-capture, SW throttle, delayed-pw MutationObserver, trailing-dot FQDN). Merged. 2206 tests |
 | P4-01b | Visual similarity: gym fixtures + E2E spec | M | — | — | seeded (PR B, follow-up to #172) |
 | P4-03/FF-01 | Firefox port: browser.* shim + Firefox manifest (additive, single codebase) | M | — | #173 | done (2/2 reviews; R2 F1/F3 fixed → MV3 background.scripts; merged). Decisions: single codebase, FF128+ |
 | P4-03/FF-02..04 | Firefox: vite config, session_state compat, world:MAIN | L | — | — | seeded (stacked on FF-01) |
