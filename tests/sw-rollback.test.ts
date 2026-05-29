@@ -1741,4 +1741,64 @@ describe("service worker rollback gating", () => {
       expect(response.shouldRollback).toBe(true);
     });
   });
+
+  describe("defensive sendResponse for undefined tabId", () => {
+    it("ns-check-rollback responds with shouldRollback:false when sender has no tab", async () => {
+      const mock = createChromeMock();
+      vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+      await import("../extension/src/sw/sw");
+
+      const response = mock.dispatchRuntimeMessage(
+        { type: "ns-check-rollback" },
+        {}
+      ) as { shouldRollback: boolean } | undefined;
+
+      expect(response).toBeDefined();
+      expect(response!.shouldRollback).toBe(false);
+    });
+
+    it("ns-check-rollback responds with shouldRollback:false when sender.tab.id is undefined", async () => {
+      const mock = createChromeMock();
+      vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+      await import("../extension/src/sw/sw");
+
+      const response = mock.dispatchRuntimeMessage(
+        { type: "ns-check-rollback" },
+        { tab: {} }
+      ) as { shouldRollback: boolean } | undefined;
+
+      expect(response).toBeDefined();
+      expect(response!.shouldRollback).toBe(false);
+    });
+
+    it("ns-check-forward responds with status:none when sender has no tab", async () => {
+      const mock = createChromeMock();
+      vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+      await import("../extension/src/sw/sw");
+
+      const response = mock.dispatchRuntimeMessage(
+        { type: "ns-check-forward", currentUrl: "https://example.test/" },
+        {}
+      ) as { status: string; url: string } | undefined;
+
+      expect(response).toBeDefined();
+      expect(response!.status).toBe("none");
+      expect(response!.url).toBe("");
+    });
+
+    it("ns-check-forward responds with status:none when sender.tab.id is undefined", async () => {
+      const mock = createChromeMock();
+      vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+      await import("../extension/src/sw/sw");
+
+      const response = mock.dispatchRuntimeMessage(
+        { type: "ns-check-forward", currentUrl: "https://example.test/" },
+        { tab: {} }
+      ) as { status: string; url: string } | undefined;
+
+      expect(response).toBeDefined();
+      expect(response!.status).toBe("none");
+      expect(response!.url).toBe("");
+    });
+  });
 });
