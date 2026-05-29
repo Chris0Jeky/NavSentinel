@@ -28,6 +28,9 @@ import {
 } from "../shared/js_behavior_state";
 import type { RedirectChainInfo } from "../shared/redirect_chain";
 import { initReputation, isKnownBadDomain, checkReputationViaMessage } from "../shared/reputation";
+import { loadBrandTemplates } from "../shared/visual_sim_loader";
+import { triggerVisualSimCheck, waitForStability } from "./visual_sim_capture";
+import { isCurrentPageCrossOriginFromBrand } from "../shared/visual_sim_brand_domains";
 import { showToast } from "./ui_toast";
 import { explainReasonCode } from "../shared/explanations";
 import {
@@ -254,6 +257,14 @@ async function initSettings() {
   postToMain("ns-ping");
   // Load reputation bloom filter in the background (non-blocking)
   void loadReputationFilter();
+  // Load visual-similarity brand templates in the background (non-blocking)
+  // and schedule the brand-match capture once the page settles.
+  if (isTopFrame() && settings.defaultMode !== "off") {
+    void loadBrandTemplates().catch((err) => {
+      console.warn("[NavSentinel] Failed to load brand templates:", err);
+    });
+    scheduleVisualSimCheck();
+  }
   // Pre-fetch domain risk for the current site (non-blocking)
   void getDomainRisk(siteKeyFromLocation()).then((risk) => {
     cachedDomainRepeatOffender = risk.isRepeatOffender;
@@ -696,6 +707,73 @@ function handleJsBehaviorSignal(type: string, payload: Record<string, unknown>):
   }
 
   _jsBehaviorState.score = computeJsBehaviorScore(_jsBehaviorState);
+}
+
+// --- Visual similarity brand-match state (top frame only) ---
+let _cachedVisualSimScore = 0;
+let _visualSimScheduled = false;
+
+function getVisualSimScoreForNRS(): number {
+  return _cachedVisualSimScore;
+}
+
+/**
+ * Top-frame-only brand-match check. Runs at most once per page when a password
+ * field is present. Waits for the page to stabilize, then captures the
+ * viewport (via the service worker) and compares it against the brand template
+ * database. On a match it refines the score using the brand-canonical-domain
+ * map so that brand surfaces on their own domains are not penalized.
+ *
+ * Fully best-effort: any failure degrades to a score of 0 and never blocks the
+ * click-time decision path (the result is read synchronously from the cache).
+ */
+function scheduleVisualSimCheck(): void {
+  if (_visualSimScheduled) return;
+  if (!isTopFrame()) return;
+  if (settings.defaultMode === "off") return;
+  _visualSimScheduled = true;
+
+  const run = async (): Promise<void> => {
+    try {
+      // Only meaningful on pages that ask for credentials.
+      if (!document.querySelector('input[type="password"]')) return;
+
+      await waitForStability();
+
+      // First pass: do not assume cross-origin so we learn the matched brand
+      // without over-scoring. If we get a confident match, refine the score
+      // using the canonical-domain map for that specific brand.
+      const result = await triggerVisualSimCheck(false);
+      if (!result || !result.match) {
+        _cachedVisualSimScore = 0;
+        return;
+      }
+
+      const crossOrigin = isCurrentPageCrossOriginFromBrand(result.match.brandId);
+      const refined = crossOrigin ? await triggerVisualSimCheck(true) : result;
+      _cachedVisualSimScore = refined && refined.score > 0 ? refined.score : 0;
+
+      if (settings.debug) {
+        console.debug(
+          "[NavSentinel] Visual brand match:",
+          result.match.brandId,
+          "crossOrigin=", crossOrigin,
+          "score=", _cachedVisualSimScore
+        );
+      }
+    } catch (err) {
+      _cachedVisualSimScore = 0;
+      console.warn("[NavSentinel] Visual similarity check failed:", err);
+    }
+  };
+
+  // Defer off the critical path. Start from page load to avoid contending
+  // with initial render and SPA hydration.
+  if (document.readyState === "complete") {
+    void run();
+  } else {
+    window.addEventListener("load", () => { void run(); }, { once: true });
+  }
 }
 
 function handleClickFixScan(): void {
@@ -1398,6 +1476,7 @@ window.addEventListener(
     const oauthOpenerManip = isOAuthOpenerManipulation();
     const cfScore = getClickfixScoreForNRS();
     const jsBehaviorScore = getJsBehaviorScoreForNRS();
+    const visualSimScore = getVisualSimScoreForNRS();
     const pushStateAbuse = isPushStateAbuseActive();
 
     // Sync best-effort anomaly score (uses in-memory sliding window only).
@@ -1433,6 +1512,7 @@ window.addEventListener(
       domainRepeatOffender: cachedDomainRepeatOffender,
       navAnomalyScore: navAnomalyScore > 0 ? navAnomalyScore : undefined,
       jsBehaviorScore: jsBehaviorScore > 0 ? jsBehaviorScore : undefined,
+      visualSimilarityScore: visualSimScore > 0 ? visualSimScore : undefined,
     };
 
     if (dblClickHijack) {

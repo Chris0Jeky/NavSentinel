@@ -1,5 +1,6 @@
 import type { ScoreResult } from "./scoring";
 import { NRS_WEIGHT_JS_BEHAVIOR_CAP } from "./js_behavior_state";
+import { NRS_WEIGHT_VISUAL_SIM_CAP } from "./visual_sim_types";
 
 export interface NavigationContext {
   isNewTabOrWindow: boolean;
@@ -36,6 +37,8 @@ export interface NavigationContext {
   navAnomalyScore?: number | undefined;
   /** JS behavior analysis score (0-35 range) - credential exfil/form manipulation signals */
   jsBehaviorScore?: number | undefined;
+  /** Visual brand-match score (0-30 range) - page resembles a known brand login surface */
+  visualSimilarityScore?: number | undefined;
 }
 
 export interface NRSResult {
@@ -193,6 +196,11 @@ export function computeNRS(cdsResult: ScoreResult, navCtx: NavigationContext): N
   if (navCtx.jsBehaviorScore && navCtx.jsBehaviorScore > 0) {
     nrs += Math.min(navCtx.jsBehaviorScore, NRS_WEIGHT_JS_BEHAVIOR_CAP);
     nrsFactors.push("nrs_js_behavior_suspicious");
+  }
+
+  if (navCtx.visualSimilarityScore && navCtx.visualSimilarityScore > 0) {
+    nrs += Math.min(navCtx.visualSimilarityScore, NRS_WEIGHT_VISUAL_SIM_CAP);
+    nrsFactors.push("nrs_visual_brand_match");
   }
 
   // Diminishing returns: points above the threshold get reduced weight
