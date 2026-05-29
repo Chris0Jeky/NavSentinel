@@ -373,6 +373,7 @@ function patchXHRMonitoring(_cfg: JsBehaviorMonitorConfig): void {
     } catch (_) {
       // Never break XHR due to monitoring errors
     }
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
     return (originalOpen as Function).apply(this, [method, url, ...rest]);
   };
 
