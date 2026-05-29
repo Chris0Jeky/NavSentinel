@@ -44,7 +44,7 @@ let dblclickChildClosedTs = 0;
  */
 export function handleDblclickBridgeMessage(
   type: string,
-  data: any,
+  data: Record<string, unknown>,
 ): { handled: boolean; forwardToSW?: { type: string; url: string; ts: number } } {
   if (type === "ns-dblclick-window-open") {
     dblclickWindowOpenTs = typeof data.ts === "number" ? data.ts : Date.now();
@@ -90,7 +90,7 @@ export function handleDblclickBridgeMessage(
  *
  * Returns true if the message was handled, false otherwise.
  */
-export function handleDblclickRuntimeMessage(message: any): boolean {
+export function handleDblclickRuntimeMessage(message: Record<string, unknown> | null | undefined): boolean {
   if (!message) return false;
 
   if (message.type === "ns-dblclick-child-closed") {

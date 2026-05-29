@@ -1041,7 +1041,7 @@ const nativeReplaceState = History.prototype.replaceState;
 function patchHistory(): void {
   const patchedPushState = function (
     this: History,
-    data: any,
+    data: unknown,
     unused: string,
     url?: string | URL | null,
   ): void {
@@ -1063,7 +1063,7 @@ function patchHistory(): void {
 
   const patchedReplaceState = function (
     this: History,
-    data: any,
+    data: unknown,
     unused: string,
     url?: string | URL | null,
   ): void {
@@ -1229,7 +1229,7 @@ function patchOpenerLocation(): void {
 // Also intercept document.execCommand("copy") as an evasion vector
 const nativeExecCommand = document.execCommand.bind(document);
 try {
-  document.execCommand = function (command: string, ...rest: any[]): boolean {
+  document.execCommand = function (command: string, ...rest: [showUI?: boolean, value?: string]): boolean {
     const result = nativeExecCommand(command, ...rest);
     // Only emit clipboard event when the copy actually succeeded
     if (command.toLowerCase() === "copy" && result && !isOff()) {
