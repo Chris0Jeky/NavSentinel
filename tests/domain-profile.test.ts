@@ -436,6 +436,80 @@ describe("async mutex (serialization)", () => {
   });
 });
 
+describe("prototype pollution resistance", () => {
+  it("Object.prototype keys used as reason codes are stored as own properties", async () => {
+    const protoKeys = ["toString", "valueOf", "constructor", "hasOwnProperty", "isPrototypeOf"];
+    await recordNavigation("proto.com", 50, protoKeys);
+    const p = getStoredProfiles()["proto.com"]!;
+    for (const key of protoKeys) {
+      expect(Object.hasOwn(p.factors, key)).toBe(true);
+      expect(p.factors[key]).toBe(1);
+    }
+    expect(p.visits).toBe(1);
+  });
+
+  it("__proto__ as reason code does not corrupt the factors object", async () => {
+    await recordNavigation("proto-dunder.com", 50, ["__proto__", "nrs_cross_site"]);
+    const p = getStoredProfiles()["proto-dunder.com"]!;
+    expect(p.factors["nrs_cross_site"]).toBe(1);
+    expect(Object.getPrototypeOf(p.factors)).toBe(Object.prototype);
+    // V8's __proto__ setter swallows non-object assignments — no own property created
+    expect(Object.hasOwn(p.factors, "__proto__")).toBe(false);
+  });
+
+  it("prototype key factors accumulate correctly across multiple recordings", async () => {
+    await recordNavigation("proto2.com", 30, ["toString"]);
+    await recordNavigation("proto2.com", 40, ["toString"]);
+    const p = getStoredProfiles()["proto2.com"]!;
+    expect(Object.hasOwn(p.factors, "toString")).toBe(true);
+    expect(p.factors["toString"]).toBe(2);
+  });
+
+  it("factors object has no inherited prototype keys as own properties by default", async () => {
+    await recordNavigation("clean-factors.com", 20, ["nrs_cross_site"]);
+    const p = getStoredProfiles()["clean-factors.com"]!;
+    const ownKeys = Object.keys(p.factors);
+    expect(ownKeys).toEqual(["nrs_cross_site"]);
+  });
+});
+
+describe("loadProfiles forward-compat", () => {
+  it("missing factors field is initialized to empty object", async () => {
+    store[DOMAIN_PROFILES_KEY] = {
+      "old-schema.com": {
+        domain: "old-schema.com",
+        visits: 5,
+        totalNRS: 100,
+        maxNRS: 30,
+        triggerCount: 0,
+        lastSeen: Date.now(),
+        nrsHistory: [20, 20, 20, 20, 20],
+      },
+    };
+    await recordNavigation("old-schema.com", 25, ["nrs_cross_site"]);
+    const p = getStoredProfiles()["old-schema.com"]!;
+    expect(p.factors["nrs_cross_site"]).toBe(1);
+    expect(p.visits).toBe(6);
+  });
+
+  it("null factors field is replaced with empty object", async () => {
+    store[DOMAIN_PROFILES_KEY] = {
+      "null-factors.com": {
+        domain: "null-factors.com",
+        visits: 1,
+        totalNRS: 10,
+        maxNRS: 10,
+        triggerCount: 0,
+        lastSeen: Date.now(),
+        factors: null,
+        nrsHistory: [10],
+      },
+    };
+    const risk = await getDomainRisk("null-factors.com");
+    expect(risk.topFactors).toEqual([]);
+  });
+});
+
 describe("NRS integration", () => {
   it("domain_repeat_offender adds +10 to NRS", async () => {
     // This tests the NRS factor in isolation

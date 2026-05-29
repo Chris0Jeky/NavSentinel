@@ -103,6 +103,9 @@ async function loadProfiles(): Promise<Map<string, DomainProfile>> {
       if (!Array.isArray(p.nrsHistory)) {
         p.nrsHistory = [];
       }
+      if (!p.factors || typeof p.factors !== "object" || Array.isArray(p.factors)) {
+        p.factors = {};
+      }
       map.set(key, p);
     }
   }
@@ -188,7 +191,8 @@ export function recordNavigation(
     }
 
     for (const reason of reasons) {
-      profile.factors[reason] = (profile.factors[reason] ?? 0) + 1;
+      const prev = Object.hasOwn(profile.factors, reason) ? profile.factors[reason]! : 0;
+      profile.factors[reason] = prev + 1;
     }
 
     evictLRU(profiles);
