@@ -635,8 +635,8 @@ describe("normalizeHost", () => {
     expect(normalizeHost("LOCALHOST")).toBe("localhost");
   });
 
-  it("handles host with multiple trailing dots (removes only last)", () => {
-    expect(normalizeHost("example.com..")).toBe("example.com.");
+  it("handles host with multiple trailing dots (removes all)", () => {
+    expect(normalizeHost("example.com..")).toBe("example.com");
   });
 
   it("handles mixed-case subdomain", () => {

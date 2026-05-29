@@ -47,12 +47,12 @@ describe("normalizeHost properties", () => {
     );
   });
 
-  it("strips at most one trailing dot", () => {
+  it("strips all trailing dots (idempotent)", () => {
     fc.assert(
       fc.property(arbDomainChars, (h) => {
         const lower = h.toLowerCase();
         const result = normalizeHost(h);
-        expect(result).toBe(lower.replace(/\.$/, ""));
+        expect(result).toBe(lower.replace(/\.+$/, ""));
       })
     );
   });

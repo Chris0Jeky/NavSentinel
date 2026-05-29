@@ -327,14 +327,16 @@ export function classifyDomain(hostname: string): NavCategory {
   const lower = hostname.toLowerCase();
 
   // Try full hostname first (handles subdomain-specific overrides
-  // like mail.google.com → email vs google.com → cloud)
-  if (DOMAIN_CATEGORY_MAP[lower]) {
+  // like mail.google.com → email vs google.com → cloud).
+  // Use Object.hasOwn so inherited keys like "__proto__" can't return a
+  // prototype object instead of a real NavCategory.
+  if (Object.hasOwn(DOMAIN_CATEGORY_MAP, lower)) {
     return DOMAIN_CATEGORY_MAP[lower]!;
   }
 
   // Then try registrable domain
   const regDomain = getRegistrableDomain(lower);
-  if (regDomain && DOMAIN_CATEGORY_MAP[regDomain]) {
+  if (regDomain && Object.hasOwn(DOMAIN_CATEGORY_MAP, regDomain)) {
     return DOMAIN_CATEGORY_MAP[regDomain]!;
   }
 

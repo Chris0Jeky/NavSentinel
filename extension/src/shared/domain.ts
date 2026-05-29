@@ -6,7 +6,9 @@ const PSL_ROOT: TrieNode = pslTrie as TrieNode;
 
 export function normalizeHost(host: string): string {
   if (!host) return "";
-  return host.toLowerCase().replace(/\.$/, "");
+  // Strip all trailing dots (not just one) so the function is idempotent:
+  // normalizeHost("a..") must equal normalizeHost(normalizeHost("a..")).
+  return host.toLowerCase().replace(/\.+$/, "");
 }
 
 function isIPv4(host: string): boolean {
