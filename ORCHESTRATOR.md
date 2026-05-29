@@ -8,8 +8,46 @@ Mode: Continuous end-to-end task cycle with adversarial reviews
 - Small incremental commits
 - Worktrees for isolation
 - Stacked branches when tasks depend on each other
-- No PR merges — all PRs left open for human review
+- **PRs are now merged systematically** (user directive 2026-05-29) — see Merge Phase below
 - Pre-existing errors and bugs addressed alongside new work
+
+## Merge Phase — Cycle 6 (2026-05-29, COMPLETE)
+
+User directive: re-check open PRs (comments/reviews + address findings) and
+merge them systematically. **All 49 open PRs (#114–#169) resolved → 0 open.**
+
+Approach (local integration to avoid cascading conflicts + per-PR CI waits):
+1. **Infra first** (reset the build/lint/test baseline): #118 (vite 5→8, vitest
+   1→4), #116 (ESLint flat config + CI lint gate), #120 (perf-budget CI).
+   Validated each merge-result locally (npm ci + tsc + lint + full suite).
+2. **Integration batches**: merge clean CI-green PRs into a throwaway branch,
+   run tsc + lint + full suite once, then fast-forward `main` (GitHub marks PRs
+   merged via commit reachability). 7 batches, ORCHESTRATOR.md conflicts always
+   resolved to main's canonical tracker.
+3. **Failing PRs fixed** (#122,#123,#125,#138,#144,#155,#164): real type/lint
+   errors under vitest 4 / exactOptionalPropertyTypes / the new lint gate —
+   fixed in-place, see commit "resolve type/lint errors across … tests".
+4. **Conflict/stacked PRs**: #131 (userActivation cast), #140 (icons test union
+   of #135 a11y + #140 coverage), #141+#133 (options.ts import merge),
+   #129/#128 (js_behavior dedup — superset), #114→#115 (kept #115 shadow-DOM
+   feature; #114 obsolete bits resolved to main).
+5. **Superseded**: #145 closed (its T-44 cleanup already on main via #128/#129).
+
+### Real bugs fixed during merge (pre-existing, would have shipped):
+- `SuiteSettingsPatch.credential.similarity` was not truly partial (intersection
+  forced `enabled` required); runtime already handled partial. [storage.ts]
+- `classifyDomain('__proto__')` returned `Object.prototype` (bogus NavCategory)
+  — guarded with `Object.hasOwn`. [nav_anomaly.ts]
+- `normalizeHost` stripped only one trailing dot → not idempotent; now strips
+  all. [domain.ts]
+- `isIPAddress` export removed by #156 but used by #142 tests → re-exported.
+- Flaky property tests made deterministic/robust: oauth keyword-collision
+  guard, reputation FP-rate small-sample slack. Suite green ×5 consecutive runs.
+
+Note: #115 and #129 show CLOSED/OPEN (not "merged") only because their stacked
+base branches were deleted after the content landed; both are verified on main.
+
+Final state: 2165 unit tests pass, tsc clean, lint 0 errors (70 warnings — T-12).
 
 ## Task Backlog
 
