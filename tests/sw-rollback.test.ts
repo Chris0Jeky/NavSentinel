@@ -6,7 +6,7 @@ type SendResponse = (response?: unknown) => void;
 
 type _ChromeMock = ReturnType<typeof createChromeMock>;
 
-function createEvent<T extends (...args: any[]) => void>() {
+function createEvent<T extends (...args: never[]) => void>() {
   const listeners: T[] = [];
   return {
     addListener(listener: T) {
