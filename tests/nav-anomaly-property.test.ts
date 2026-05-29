@@ -7,7 +7,6 @@ import {
   pruneBurstRecords,
   computeAnomalyScore,
   DECAY_INTERVAL_MS,
-  DECAY_FACTOR,
   MAX_TOTAL_NAVIGATIONS,
   MAX_BURST_RECORDS,
   BURST_RECORD_TTL_MS,
