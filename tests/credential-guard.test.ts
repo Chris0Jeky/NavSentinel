@@ -148,7 +148,7 @@ async function dispatchPaste(el: HTMLElement): Promise<void> {
 function defaultRisk() {
   return {
     score: 30,
-    severity: "medium" as const,
+    severity: "medium" as "none" | "low" | "medium" | "high",
     reasons: [{ code: "DOMAIN_MISMATCH", label: "Domain mismatch" }],
     page: {
       url: "https://example.com/login",
@@ -183,6 +183,14 @@ function defaultConfig() {
 // Import module under test — registers event listeners on document
 import "../extension/src/content/credential_guard";
 
+// Required-field defaults so mock returns satisfy the full result interfaces.
+const SRI_BASE = { totalExternal: 0, withSRI: 0, withoutSRI: 0 };
+const CONTENT_BASE = {
+  brandMismatch: false,
+  phishingKitMatch: false,
+  suspiciousFormAction: false,
+};
+
 describe("credential_guard", () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -190,7 +198,7 @@ describe("credential_guard", () => {
 
     mockGetSettings.mockResolvedValue(defaultConfig());
     mockGetTrusted.mockResolvedValue([]);
-    mockAddTrusted.mockResolvedValue(undefined);
+    mockAddTrusted.mockResolvedValue([]);
     mockAppendEvent.mockResolvedValue(undefined);
     mockAppendOutcome.mockResolvedValue(undefined);
     mockComputeRisk.mockReturnValue(defaultRisk());
@@ -201,8 +209,8 @@ describe("credential_guard", () => {
     mockGetReasonLines.mockReturnValue(["Domain mismatch"]);
     mockShouldPrompt.mockReturnValue(true);
     mockShowModal.mockResolvedValue("cancel");
-    mockAnalyzeContent.mockReturnValue({ score: 0, reasons: [] });
-    mockCheckSRI.mockReturnValue({ score: 0, reasons: [] });
+    mockAnalyzeContent.mockReturnValue({ ...CONTENT_BASE, score: 0, reasons: [] });
+    mockCheckSRI.mockReturnValue({ ...SRI_BASE, score: 0, reasons: [], totalExternal: 0, withSRI: 0, withoutSRI: 0 });
   });
 
   afterEach(() => {
@@ -356,7 +364,7 @@ describe("credential_guard", () => {
       risk.page.isTrusted = false;
       risk.score = 30;
       mockComputeRisk.mockReturnValue(risk);
-      mockAnalyzeContent.mockReturnValue({
+      mockAnalyzeContent.mockReturnValue({ ...CONTENT_BASE,
         score: 25,
         reasons: ["Fake login form detected"],
       });
@@ -388,7 +396,7 @@ describe("credential_guard", () => {
       risk.page.isTrusted = false;
       risk.score = 30;
       mockComputeRisk.mockReturnValue(risk);
-      mockCheckSRI.mockReturnValue({
+      mockCheckSRI.mockReturnValue({ ...SRI_BASE,
         score: 10,
         reasons: ["Missing SRI on scripts"],
       });
@@ -407,7 +415,7 @@ describe("credential_guard", () => {
       risk.page.isTrusted = false;
       risk.score = 30;
       mockComputeRisk.mockReturnValue(risk);
-      mockCheckSRI.mockReturnValue({
+      mockCheckSRI.mockReturnValue({ ...SRI_BASE,
         score: -5,
         reasons: ["All scripts have SRI"],
       });
@@ -437,8 +445,8 @@ describe("credential_guard", () => {
       risk.page.isTrusted = false;
       risk.score = 80;
       mockComputeRisk.mockReturnValue(risk);
-      mockAnalyzeContent.mockReturnValue({ score: 50, reasons: ["Suspicious"] });
-      mockCheckSRI.mockReturnValue({ score: 50, reasons: ["Missing SRI"] });
+      mockAnalyzeContent.mockReturnValue({ ...CONTENT_BASE, score: 50, reasons: ["Suspicious"] });
+      mockCheckSRI.mockReturnValue({ ...SRI_BASE, score: 50, reasons: ["Missing SRI"] });
 
       const form = createPasswordForm();
       await dispatchSubmit(form);
@@ -451,7 +459,7 @@ describe("credential_guard", () => {
       risk.page.isTrusted = false;
       risk.score = 3;
       mockComputeRisk.mockReturnValue(risk);
-      mockCheckSRI.mockReturnValue({ score: -10, reasons: ["SRI present"] });
+      mockCheckSRI.mockReturnValue({ ...SRI_BASE, score: -10, reasons: ["SRI present"] });
 
       const form = createPasswordForm();
       await dispatchSubmit(form);
@@ -663,7 +671,7 @@ describe("credential_guard", () => {
       risk.page.isTrusted = false;
       risk.score = 70;
       mockComputeRisk.mockReturnValue(risk);
-      mockAnalyzeContent.mockReturnValue({ score: 50, reasons: ["Suspicious content"] });
+      mockAnalyzeContent.mockReturnValue({ ...CONTENT_BASE, score: 50, reasons: ["Suspicious content"] });
 
       const form = createPasswordForm();
       await dispatchSubmit(form);
@@ -676,7 +684,7 @@ describe("credential_guard", () => {
       risk.page.isTrusted = false;
       risk.score = 20;
       mockComputeRisk.mockReturnValue(risk);
-      mockAnalyzeContent.mockReturnValue({
+      mockAnalyzeContent.mockReturnValue({ ...CONTENT_BASE,
         score: 15,
         reasons: ["Fake login", "Suspicious URL", "Hidden iframe"],
       });
@@ -923,8 +931,8 @@ describe("credential_guard", () => {
         mockGetReasonLines.mockReturnValue(["Domain mismatch"]);
         mockShouldPrompt.mockReturnValue(true);
         mockShowModal.mockResolvedValue("cancel");
-        mockAnalyzeContent.mockReturnValue({ score: 0, reasons: [] });
-        mockCheckSRI.mockReturnValue({ score: 0, reasons: [] });
+        mockAnalyzeContent.mockReturnValue({ ...CONTENT_BASE, score: 0, reasons: [] });
+        mockCheckSRI.mockReturnValue({ ...SRI_BASE, score: 0, reasons: [], totalExternal: 0, withSRI: 0, withoutSRI: 0 });
         mockAppendEvent.mockResolvedValue(undefined);
         mockAppendOutcome.mockResolvedValue(undefined);
         mockNormalizeHost.mockReturnValue("example.com");

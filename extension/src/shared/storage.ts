@@ -38,7 +38,7 @@ export interface SuiteSettings {
 
 export type SuiteSettingsPatch = Partial<Omit<SuiteSettings, "nav" | "credential">> & {
   nav?: Partial<NavSettings>;
-  credential?: Partial<CredentialSettings> & {
+  credential?: Partial<Omit<CredentialSettings, "similarity">> & {
     similarity?: Partial<CredentialSettings["similarity"]>;
   };
 };

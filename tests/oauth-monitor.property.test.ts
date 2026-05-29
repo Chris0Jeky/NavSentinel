@@ -492,7 +492,7 @@ describe("isUnexpectedCallback property tests", () => {
   });
 
   it("symmetric: if A matches B's domain, B matches A's domain", () => {
-    const pairs = [
+    const pairs: Array<[string, string]> = [
       ["app.example.com", "api.example.com"],
       ["sub.test.org", "other.test.org"],
     ];

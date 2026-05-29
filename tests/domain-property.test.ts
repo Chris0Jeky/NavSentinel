@@ -227,7 +227,7 @@ describe("recalcSeverity properties", () => {
         (a, b) => {
           if (a <= b) {
             expect(severityRank[recalcSeverity(a)]).toBeLessThanOrEqual(
-              severityRank[recalcSeverity(b)]
+              severityRank[recalcSeverity(b)]!
             );
           }
         }

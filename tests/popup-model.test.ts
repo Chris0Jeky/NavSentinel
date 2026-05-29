@@ -202,10 +202,10 @@ describe("formatPopupEventLine", () => {
 
   it("formats event with site but no score", () => {
     const line = formatPopupEventLine(
-      { id: "evt", ts: 5, kind: "nav_click_warn", site: "test.com" } as EventLogEntry,
+      { id: "evt", ts: 5, kind: "nav_reputation_late_warn", site: "test.com" } as EventLogEntry,
       formatTime
     );
-    expect(line).toBe("5s | nav_click_warn | test.com");
+    expect(line).toBe("5s | nav_reputation_late_warn | test.com");
   });
 
   it("formats event with score but no site", () => {
@@ -218,18 +218,18 @@ describe("formatPopupEventLine", () => {
 
   it("formats event with score of 0", () => {
     const line = formatPopupEventLine(
-      { id: "evt", ts: 0, kind: "nav_click_allow", score: 0 } as EventLogEntry,
+      { id: "evt", ts: 0, kind: "nav_click_block", score: 0 } as EventLogEntry,
       formatTime
     );
-    expect(line).toBe("0s | nav_click_allow | score=0");
+    expect(line).toBe("0s | nav_click_block | score=0");
   });
 
   it("treats empty string site as absent", () => {
     const line = formatPopupEventLine(
-      { id: "evt", ts: 1, kind: "nav_click_allow", site: "", score: 50 } as EventLogEntry,
+      { id: "evt", ts: 1, kind: "nav_click_block", site: "", score: 50 } as EventLogEntry,
       formatTime
     );
-    expect(line).toBe("1s | nav_click_allow | score=50");
+    expect(line).toBe("1s | nav_click_block | score=50");
   });
 
   it("uses the provided formatTime function", () => {

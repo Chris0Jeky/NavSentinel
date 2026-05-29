@@ -188,7 +188,7 @@ describe("debug_overlay", () => {
 
     it("displays NRS as n/a when absent", () => {
       setDebugEnabled(true);
-      updateDebugOverlay(defaultInfo({ nrs: undefined }));
+      updateDebugOverlay(defaultInfo());
       expect(getPanel()!.textContent).toContain("NRS: n/a");
     });
 

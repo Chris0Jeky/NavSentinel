@@ -279,7 +279,7 @@ describe("credential modal", () => {
 
     it("resolves with 'cancel' on Escape when outsideAction is not set", async () => {
       const promise = showCredentialModal(
-        minimalSpec({ outsideAction: undefined }),
+        minimalSpec(),
       );
       vi.runAllTimers();
 

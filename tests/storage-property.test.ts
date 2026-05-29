@@ -83,27 +83,36 @@ const arbEventKind = fc.constantFrom(...EVENT_KINDS);
 const arbPromptOutcome = fc.constantFrom(...PROMPT_OUTCOMES);
 const arbPromptType = fc.constantFrom(...PROMPT_TYPES);
 
-const arbEventLogEntry: fc.Arbitrary<EventLogEntry> = fc.record({
-  id: fc.string({ minLength: 1, maxLength: 20 }),
-  ts: fc.integer({ min: 0, max: 2_000_000_000_000 }),
-  kind: arbEventKind,
-  site: fc.option(fc.constantFrom("example.com", "test.org"), { nil: undefined }),
-  url: fc.option(fc.constantFrom("https://example.com/page", "https://test.org/login"), { nil: undefined }),
-  destHost: fc.option(fc.constantFrom("evil.com", "phish.net"), { nil: undefined }),
-  score: fc.option(fc.integer({ min: 0, max: 100 }), { nil: undefined }),
-  reasons: fc.option(fc.array(fc.constantFrom("cross_site", "suspicious_url", "no_referrer"), { minLength: 1, maxLength: 3 }), { nil: undefined }),
-});
+// Optional fields use `requiredKeys` so they are either present with a
+// concrete value or omitted entirely — never an explicit `undefined`, which
+// would violate the interface under `exactOptionalPropertyTypes`.
+const arbEventLogEntry: fc.Arbitrary<EventLogEntry> = fc.record(
+  {
+    id: fc.string({ minLength: 1, maxLength: 20 }),
+    ts: fc.integer({ min: 0, max: 2_000_000_000_000 }),
+    kind: arbEventKind,
+    site: fc.constantFrom("example.com", "test.org"),
+    url: fc.constantFrom("https://example.com/page", "https://test.org/login"),
+    destHost: fc.constantFrom("evil.com", "phish.net"),
+    score: fc.integer({ min: 0, max: 100 }),
+    reasons: fc.array(fc.constantFrom("cross_site", "suspicious_url", "no_referrer"), { minLength: 1, maxLength: 3 }),
+  },
+  { requiredKeys: ["id", "ts", "kind"] }
+);
 
-const arbPromptOutcomeEntry: fc.Arbitrary<PromptOutcomeEntry> = fc.record({
-  id: fc.string({ minLength: 1, maxLength: 20 }),
-  ts: fc.integer({ min: 0, max: 2_000_000_000_000 }),
-  domain: fc.constantFrom("example.com", "test.org", "bank.co.uk", "shop.net"),
-  destDomain: fc.option(fc.constantFrom("evil.com", "phish.net", "scam.org"), { nil: undefined }),
-  type: arbPromptType,
-  score: fc.integer({ min: 0, max: 100 }),
-  outcome: arbPromptOutcome,
-  reasons: fc.option(fc.array(fc.constantFrom("cross_site", "suspicious_url"), { minLength: 1, maxLength: 2 }), { nil: undefined }),
-});
+const arbPromptOutcomeEntry: fc.Arbitrary<PromptOutcomeEntry> = fc.record(
+  {
+    id: fc.string({ minLength: 1, maxLength: 20 }),
+    ts: fc.integer({ min: 0, max: 2_000_000_000_000 }),
+    domain: fc.constantFrom("example.com", "test.org", "bank.co.uk", "shop.net"),
+    destDomain: fc.constantFrom("evil.com", "phish.net", "scam.org"),
+    type: arbPromptType,
+    score: fc.integer({ min: 0, max: 100 }),
+    outcome: arbPromptOutcome,
+    reasons: fc.array(fc.constantFrom("cross_site", "suspicious_url"), { minLength: 1, maxLength: 2 }),
+  },
+  { requiredKeys: ["id", "ts", "domain", "type", "score", "outcome"] }
+);
 
 const arbSuiteSettings: fc.Arbitrary<SuiteSettings> = fc.record({
   nav: fc.record({
@@ -387,7 +396,7 @@ describe("storage property tests", () => {
       const { chrome } = createChromeMock();
       vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
-      const { addTrustedDomain, exportAll, importAll, getTrustedDomains } = await import("../extension/src/shared/storage");
+      const { addTrustedDomain, exportAll } = await import("../extension/src/shared/storage");
       await addTrustedDomain("example.com");
       await addTrustedDomain("test.org");
       await addTrustedDomain("bank.co.uk");
