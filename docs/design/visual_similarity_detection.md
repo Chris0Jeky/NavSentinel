@@ -7,6 +7,20 @@ evade URL-based and DOM-structure-based detection. A visual similarity check com
 the user *sees* against known brand login templates, catching copy-paste phishing kits
 regardless of domain, URL path, or HTML structure.
 
+## Implementation Status (2026-05-29)
+
+The full pipeline is **built and wired**: capture (`visual_sim_capture.ts`), two-pass
+hashing (`visual_sim_hash.ts`), template DB + loader, the brand-canonical-domain map, and
+NRS integration (cross-origin brand match contributes up to +30; on-domain matches score 0).
+Browser-level coverage exists in `tests/e2e/visual-sim.spec.ts` (P4-01b).
+
+**However, detection is not yet live end-to-end.** `scripts/build-brand-templates.mjs` ships
+**deterministic placeholder hashes** (seeded PRNG), not hashes of real brand login
+screenshots. With placeholders, no real captured page matches a brand, so the pipeline runs
+but never fires a true positive. Making spoof detection real requires generating templates
+from actual brand login pages — tracked as **P4-01c** in `docs/Project_Roadmap.md` /
+`ORCHESTRATOR.md`. Until then, treat visual-sim as plumbing-complete, detection-pending.
+
 ## Constraints
 
 | Constraint | Requirement |
