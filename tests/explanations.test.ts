@@ -40,6 +40,7 @@ const KNOWN_NRS_CODES = [
   "nrs_domain_repeat_offender",
   "nrs_nav_anomaly",
   "nrs_js_behavior_suspicious",
+  "nrs_visual_brand_match",
 ];
 
 const KNOWN_CLICKFIX_CODES = [

@@ -161,9 +161,24 @@ if (navCtx.visualSimilarityScore && navCtx.visualSimilarityScore > 0) {
 ```
 
 ### Score calculation:
-- aHash match only (bHash fails): +10 (possible match, lower confidence)
-- bHash confirmed match: +25
-- bHash match + cross-origin from brand domain: +30 (maximum)
+
+A visual brand match only contributes risk when the page impersonates a brand
+on a **non-canonical (cross-origin) domain**. A brand login rendered on the
+brand's own canonical domain is legitimate and **scores 0** — this avoids
+false positives where a real login would otherwise stack toward a block
+(e.g. new-tab + cross-site + fast click).
+
+- On-canonical-domain match (any confidence): **0** (legitimate, never contributes)
+- Cross-origin from brand domain, aHash-only (bHash fails): **+10**
+  (deliberately weak signal — aHash is coarse 8x8 and matches loosely)
+- Cross-origin from brand domain, bHash-confirmed: **+30** (maximum)
+
+The two-pass flow first runs with the cross-origin flag false to learn *which*
+brand matched (the match object is populated even though the score is 0), looks
+up that brand's canonical domain, and only then re-scores with the cross-origin
+flag set when the current page is off the canonical domain. The screenshot,
+hashes, and match are cached by URL so the second pass only re-scores (no
+re-capture).
 
 ## Performance Budget
 
@@ -217,6 +232,9 @@ extension/src/
 
 3. **SPA login pages**: Some logins load in stages (Google shows email first, then password).
    The capture triggers on password field visibility, so it will see the final state.
+   In-page (SPA) navigations — popstate, hashchange, and pushState/replaceState
+   route changes — reset the cached per-route score and re-run the check for the
+   new route, so a score from one route never leaks into another.
 
 4. **Template staleness**: Brands update their UIs. Ship updates with extension versions.
    Stale templates won't cause false positives (they just won't match), only missed detections.

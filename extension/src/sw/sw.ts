@@ -56,6 +56,41 @@ const DBLCLICK_CHILD_PRUNE_LIMIT = 50;
 const OAUTH_FLOW_MAX_AGE_MS = 60_000;
 const OAUTH_FLOW_PRUNE_LIMIT = 50;
 
+// Defensive per-tab rate limit for viewport captures (visual-sim). Capturing
+// the viewport is comparatively expensive and should be bounded even if a page
+// somehow drives repeated requests. Best-effort: state is in SW memory and
+// resets if the (ephemeral) worker restarts, which is acceptable for a guard.
+const CAPTURE_RATE_WINDOW_MS = 60_000;
+const CAPTURE_RATE_MAX_PER_WINDOW = 3;
+const CAPTURE_RATE_PRUNE_LIMIT = 200;
+const captureTimestampsByTab = new Map<number, number[]>();
+
+/**
+ * Returns true if a viewport capture is allowed for this tab right now, and
+ * records the attempt. Drops requests beyond CAPTURE_RATE_MAX_PER_WINDOW within
+ * CAPTURE_RATE_WINDOW_MS.
+ */
+function allowViewportCapture(tabId: number, now = Date.now()): boolean {
+  const cutoff = now - CAPTURE_RATE_WINDOW_MS;
+  const recent = (captureTimestampsByTab.get(tabId) ?? []).filter((ts) => ts >= cutoff);
+  if (recent.length >= CAPTURE_RATE_MAX_PER_WINDOW) {
+    captureTimestampsByTab.set(tabId, recent);
+    return false;
+  }
+  recent.push(now);
+  captureTimestampsByTab.set(tabId, recent);
+  // Bound the map size against tab churn (entries are cleared on tab removal,
+  // but prune defensively in case a removal event is missed).
+  if (captureTimestampsByTab.size > CAPTURE_RATE_PRUNE_LIMIT) {
+    for (const [id, list] of captureTimestampsByTab) {
+      const live = list.filter((ts) => ts >= cutoff);
+      if (live.length === 0) captureTimestampsByTab.delete(id);
+      else captureTimestampsByTab.set(id, live);
+    }
+  }
+  return true;
+}
+
 // --- Session-backed state (write-through cache) ---
 // In-memory Maps are the primary read path (synchronous).
 // Writes are mirrored to chrome.storage.session for SW restart resilience.
@@ -507,6 +542,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse?.({ dataUrl: null });
       return;
     }
+    // Defensive per-tab throttle: drop excess captures and return null safely.
+    if (!allowViewportCapture(tabId)) {
+      sendResponse?.({ dataUrl: null });
+      return;
+    }
     chrome.tabs.captureVisibleTab(
       sender.tab!.windowId!,
       { format: "png" },
@@ -798,6 +838,7 @@ function onRemovedHandler(tabId: number): void {
   typedOriginByTab.delete(tabId);
   redirectChainTracker.deleteTab(tabId);
   oauthFlowByTab.delete(tabId);
+  captureTimestampsByTab.delete(tabId);
   clearPendingTabState(tabId);
   lastUrlByTab.delete(tabId);
   // Batch persist all cleanup in one storage write

@@ -11,7 +11,6 @@ import type { BrandTemplate, VisualSimMatch } from "./visual_sim_types";
 import {
   DEFAULT_VISUAL_SIM_CONFIG,
   VISUAL_SIM_SCORE_AHASH_ONLY,
-  VISUAL_SIM_SCORE_BHASH_CONFIRMED,
   VISUAL_SIM_SCORE_BHASH_CROSS_ORIGIN,
 } from "./visual_sim_types";
 
@@ -74,15 +73,30 @@ export function confirmBHashMatch(
   return { matched: dist <= t, distance: dist };
 }
 
+/**
+ * Score a visual brand match for NRS.
+ *
+ * Threat model: a brand login page rendered on the brand's OWN canonical
+ * domain is legitimate and must NOT contribute risk — only impersonation on a
+ * NON-canonical (cross-origin) domain is suspicious. So when
+ * `isCrossOriginFromBrand` is false we return 0 for both confidence tiers.
+ *
+ * When cross-origin from the brand:
+ *   - bHash-confirmed (high confidence): +30
+ *   - aHash-only (low confidence): +10 — a deliberately weak signal. aHash is
+ *     coarse (8x8) and matches loosely, so on its own it only nudges the score
+ *     rather than driving a block.
+ */
 export function computeVisualSimScore(
   match: VisualSimMatch,
   isCrossOriginFromBrand: boolean
 ): number {
-  if (match.confidence === "high" && isCrossOriginFromBrand) {
-    return VISUAL_SIM_SCORE_BHASH_CROSS_ORIGIN;
+  // On-domain (canonical) brand surfaces are legitimate -> never contribute.
+  if (!isCrossOriginFromBrand) {
+    return 0;
   }
   if (match.confidence === "high") {
-    return VISUAL_SIM_SCORE_BHASH_CONFIRMED;
+    return VISUAL_SIM_SCORE_BHASH_CROSS_ORIGIN;
   }
   return VISUAL_SIM_SCORE_AHASH_ONLY;
 }

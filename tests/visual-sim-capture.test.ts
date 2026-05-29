@@ -92,21 +92,45 @@ describe("visual_sim_capture", () => {
   });
 
   describe("triggerVisualSimCheck", () => {
-    it("does not reuse a same-URL cache entry across cross-origin brand context", async () => {
+    it("captures once per URL and only re-scores across the cross-origin flag", async () => {
+      // FIX 3: the screenshot/hash/match are flag-independent, so the same URL
+      // must capture exactly once even though the two passes use different flags.
       const sameOrigin = await triggerVisualSimCheck(false);
       const crossOrigin = await triggerVisualSimCheck(true);
 
       expect(sameOrigin.score).toBe(25);
       expect(crossOrigin.score).toBe(30);
-      expect(chrome.runtime.sendMessage).toHaveBeenCalledTimes(2);
+      // Both passes share the URL-keyed capture cache: one capture only.
+      expect(chrome.runtime.sendMessage).toHaveBeenCalledTimes(1);
+      // The match object is populated on both passes (so the caller can look up
+      // the canonical domain even when the score would be 0).
+      expect(sameOrigin.match?.brandId).toBe("brand-login");
+      expect(crossOrigin.match?.brandId).toBe("brand-login");
     });
 
-    it("reuses a same-URL cache entry when cross-origin brand context is unchanged", async () => {
-      const first = await triggerVisualSimCheck(true);
-      const second = await triggerVisualSimCheck(true);
+    it("reuses a same-URL cache entry when the cross-origin flag is unchanged", async () => {
+      await triggerVisualSimCheck(true);
+      await triggerVisualSimCheck(true);
 
-      expect(second).toBe(first);
       expect(chrome.runtime.sendMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it("re-captures and recomputes after an SPA navigation clears the cache", async () => {
+      // FIX 1: a route change resets the capture cache, so the next check for
+      // the new URL must re-capture rather than serve a stale cached score.
+      const first = await triggerVisualSimCheck(true);
+      expect(first.score).toBe(30);
+      expect(chrome.runtime.sendMessage).toHaveBeenCalledTimes(1);
+
+      // Simulate an in-page navigation: new route + state reset.
+      vi.stubGlobal("location", { href: "https://login.example.test/other" });
+      resetVisualSimState();
+      expect(getLastVisualSimResult()).toBeNull();
+
+      const second = await triggerVisualSimCheck(true);
+      expect(second.score).toBe(30);
+      // A fresh capture happened for the new route (no stale reuse).
+      expect(chrome.runtime.sendMessage).toHaveBeenCalledTimes(2);
     });
   });
 

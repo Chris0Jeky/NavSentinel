@@ -429,6 +429,35 @@ describe("service worker handlers", () => {
 
       expect(res.dataUrl).toBeNull();
     });
+
+    it("throttles to 3 captures per tab and drops the 4th safely", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+      const sender = { tab: { id: 42, windowId: 1 } };
+
+      for (let i = 0; i < 3; i++) {
+        const ok = mock.dispatchRuntimeMessage(
+          { type: "ns-capture-viewport" },
+          sender,
+        ) as { dataUrl: string | null };
+        expect(ok.dataUrl).toBe("data:image/png;base64,mockdata");
+      }
+
+      // 4th within the window is dropped: returns null without capturing.
+      const dropped = mock.dispatchRuntimeMessage(
+        { type: "ns-capture-viewport" },
+        sender,
+      ) as { dataUrl: string | null };
+      expect(dropped.dataUrl).toBeNull();
+      expect(mock.chrome.tabs.captureVisibleTab).toHaveBeenCalledTimes(3);
+
+      // A different tab has its own independent budget.
+      const otherTab = mock.dispatchRuntimeMessage(
+        { type: "ns-capture-viewport" },
+        { tab: { id: 99, windowId: 1 } },
+      ) as { dataUrl: string | null };
+      expect(otherTab.dataUrl).toBe("data:image/png;base64,mockdata");
+    });
   });
 
   describe("ns-dblclick-opener-nav (security-critical)", () => {
