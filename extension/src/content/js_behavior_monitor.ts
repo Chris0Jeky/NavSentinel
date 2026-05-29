@@ -92,6 +92,11 @@ export {
   NRS_WEIGHT_JS_BEHAVIOR_CAP,
   createEmptyState,
   isStateExpired,
+  SCORE_CROSS_ORIGIN_CREDENTIAL_FORM,
+  SCORE_NETWORK_EXFIL_DURING_SUBMIT,
+  SCORE_BEACON_EXFIL_CREDENTIAL_PAGE,
+  SCORE_CREDENTIAL_READ_OUTSIDE_SUBMIT,
+  SCORE_MULTIPLE_SIGNALS_BONUS,
 } from "../shared/js_behavior_state";
 
 // ============================================================================
@@ -498,7 +503,6 @@ export function initJsBehaviorMonitor(config: JsBehaviorMonitorConfig): void {
  * @param form - The form element to inspect
  * @returns true if the form contains password inputs
  *
- * TODO: Implement (Slice 2)
  */
 export function formHasCredentialFields(form: HTMLFormElement): boolean {
   return form.querySelector('input[type="password"]') !== null;
@@ -513,7 +517,6 @@ export function formHasCredentialFields(form: HTMLFormElement): boolean {
  * @param url - The URL to check (absolute or relative)
  * @returns true if the URL resolves to a different origin
  *
- * TODO: Implement (Slice 2)
  */
 export function isCrossOriginUrl(url: string): boolean {
   if (!url) return false;
@@ -539,7 +542,6 @@ export function isCrossOriginUrl(url: string): boolean {
  * @param url - The URL to extract origin from
  * @returns The origin string, or empty string on failure
  *
- * TODO: Implement (Slice 2)
  */
 export function extractOrigin(url: string): string {
   if (!url) return "";
@@ -565,7 +567,6 @@ export function extractOrigin(url: string): string {
  * @param requestTs - Timestamp of the network request
  * @returns Whether the request correlates with a credential form submit
  *
- * TODO: Implement (Slice 3)
  */
 export function correlatesWithFormSubmit(requestTs: number): boolean {
   return _recentFormSubmits.some(
@@ -601,3 +602,5 @@ export function _resetState(): void {
   _originalFormActions = new WeakMap<HTMLFormElement, string>();
   _formSubmitPatched = false;
 }
+
+// Remaining implementation plan tracked in GitHub issue #127
