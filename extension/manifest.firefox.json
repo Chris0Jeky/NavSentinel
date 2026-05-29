@@ -29,7 +29,8 @@
     }
   ],
   "background": {
-    "page": "src/sw/background.html"
+    "scripts": ["src/sw/sw.ts"],
+    "type": "module"
   },
   "content_scripts": [
     {

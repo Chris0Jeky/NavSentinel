@@ -106,8 +106,11 @@ function normalizeGetKeys(
 }
 
 // storage.local-backed implementation used when storage.session is unavailable.
-// Keys are namespaced with SESSION_PREFIX so they cannot collide with the
-// extension's persistent local data.
+// Keys are namespaced with SESSION_PREFIX to avoid collision with the
+// extension's persistent local data. This is a convention, not an enforced
+// invariant: callers must never write a real persistent local key beginning
+// with SESSION_PREFIX. FF-03 (which wires the real consumers) must uphold this
+// and is also where session-ephemerality (clear-on-restart) is handled.
 const localBackedSession: SessionShim = {
   async get(
     keys?: string | string[] | Record<string, unknown> | null,
