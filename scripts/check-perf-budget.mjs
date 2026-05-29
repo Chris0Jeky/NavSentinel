@@ -81,9 +81,9 @@ const budgets = [
     glob: "assets/ui_toast-*.js",
     maxKB: 5,
   },
-  // C-02: Separate budget for the reputation bloom filter.
-  // Must match SIZE_BUDGET_BYTES in build-bloom-filter.mjs (150KB).
-  // See also: scripts/check-bloom-size.mjs (2 MB absolute max).
+  // C-02: Separate budget for the reputation bloom filter (150 KB).
+  // check-bloom-size.mjs enforces a coarse 2 MB absolute max on the source
+  // file; this budget gates the copy in dist/ at a tighter per-build limit.
   {
     label: "reputation_data.bin",
     glob: "reputation_data.bin",
@@ -104,7 +104,11 @@ const budgets = [
  */
 function findFiles(dir, pattern) {
   const regex = new RegExp(
-    "^" + pattern.replace(/\./g, "\\.").replace(/\*/g, ".*") + "$"
+    "^" +
+      pattern
+        .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
+        .replace(/\*/g, ".*") +
+      "$"
   );
   try {
     return fs
@@ -180,7 +184,9 @@ for (const budget of budgets) {
       continue;
     }
 
-    sizeBytes = files.reduce((sum, f) => sum + fs.statSync(f).size, 0);
+    sizeBytes = files.reduce((sum, f) => {
+      try { return sum + fs.statSync(f).size; } catch { return sum; }
+    }, 0);
     matchInfo = files.map((f) => path.relative(distDir, f)).join(", ");
   }
 
