@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Visual Sim 01 - Brand Login (password present at load)</title>
+    <style>
+      /*
+        P4-01b visual-similarity fixture.
+
+        A generic brand-style sign-in surface rendered on a NON-brand origin
+        (the gym is served from 127.0.0.1). A password field is present at load,
+        so NavSentinel's visual-sim scheduler runs the capture -> hash -> compare
+        pipeline immediately after load + stability.
+
+        With the shipped (placeholder) brand templates this page does not match
+        any brand, so the visual-sim score stays 0 and no intervention fires.
+        The fixture exists to exercise the real-browser capture pipeline and to
+        guard against a visual-sim false positive on a benign login page. A
+        true-positive variant requires real perceptual brand templates (seeded
+        follow-up P4-01c).
+      */
+      :root {
+        color-scheme: light;
+      }
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: #f3f5f9;
+      }
+      .card {
+        width: 360px;
+        padding: 32px;
+        background: #ffffff;
+        border: 1px solid #d8dde6;
+        border-radius: 12px;
+        box-shadow: 0 8px 28px rgba(20, 30, 60, 0.08);
+      }
+      .logo {
+        width: 56px;
+        height: 56px;
+        margin: 0 auto 16px;
+        border-radius: 14px;
+        background: linear-gradient(135deg, #2563eb, #1e40af);
+      }
+      h1 {
+        text-align: center;
+        font-size: 20px;
+        margin: 0 0 24px;
+        color: #1f2937;
+      }
+      form {
+        display: grid;
+        gap: 14px;
+      }
+      label {
+        display: grid;
+        gap: 6px;
+        font-size: 13px;
+        color: #4b5563;
+      }
+      input {
+        font: inherit;
+        padding: 10px 12px;
+        border: 1px solid #cbd2dc;
+        border-radius: 8px;
+      }
+      button {
+        font: inherit;
+        padding: 11px 12px;
+        margin-top: 6px;
+        border: none;
+        border-radius: 8px;
+        background: #2563eb;
+        color: #fff;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <div class="logo" aria-hidden="true"></div>
+      <h1>Sign in to Acme Cloud</h1>
+      <form id="loginForm" action="#" method="post" onsubmit="return false">
+        <label>
+          Email
+          <input id="username" name="username" type="email" autocomplete="username" value="user@example.com" />
+        </label>
+        <label>
+          Password
+          <input
+            id="password"
+            name="password"
+            type="password"
+            autocomplete="current-password"
+          />
+        </label>
+        <button id="submitBtn" type="submit">Sign in</button>
+      </form>
+    </main>
+  </body>
+</html>
