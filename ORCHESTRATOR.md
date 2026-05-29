@@ -134,7 +134,8 @@ Final state: 2165 unit tests pass, tsc clean, lint 0 errors (70 warnings — T-1
 | T-65 | Fix domain_profile.ts prototype pollution + loadProfiles forward-compat guard | S | #166 | #167 | done (2/2 reviews) |
 | T-66 | Add diagnostic logging to silent catch blocks in options.ts + popup.ts | S | — | #168 | done (2/2 reviews) |
 | T-67 | Add diagnostic logging to silent catches in credential_guard.ts | S | — | #169 | done (2/2 reviews) |
-| T-12 | Reduce ESLint warnings (59 remaining) | M | — | — | seeded (needs #116 merged first) |
+| T-12 | Reduce ESLint warnings — source files (6 explicit-any) | S | — | #170 | done (2/2 reviews, auto-merge) |
+| T-12b | Reduce ESLint warnings — test-file explicit-any (64 in tests/) | M | — | — | seeded (next cycle; mostly mock typing, lower priority) |
 | T-13 | Visual similarity detection (continue P4-01) | XL | — | — | pending |
 | T-14 | FP measurement re-run (Phase 2 gate) | M | — | — | pending |
 
