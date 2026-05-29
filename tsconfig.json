@@ -11,5 +11,5 @@
     "types": ["chrome", "node"],
     "skipLibCheck": true
   },
-  "include": ["extension/src", "tests", "vite.config.ts"]
+  "include": ["extension/src", "tests", "vite.config.ts", "vitest.config.ts"]
 }
