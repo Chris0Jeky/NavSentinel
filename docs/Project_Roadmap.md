@@ -994,7 +994,7 @@ ordered by estimated impact. Timelines are intentionally open-ended.
 
 | ID | Title | Effort | Status | Depends On |
 |---|---|---|---|---|
-| P4-01 | Visual similarity detection | XL | in progress | P3 gate (cleared) | PRs #109 (architecture), #110 (capture), #111 (templates) merged |
+| P4-01 | Visual similarity detection | XL | in progress | P3 gate (cleared) | PRs #109 (architecture), #110 (capture), #111 (templates) merged; #172 (NRS scoring integration) merged; P4-01b gym fixtures + E2E (`tests/e2e/visual-sim.spec.ts`) merged. Remaining: real perceptual brand templates (P4-01c) — current templates are placeholders, so spoof detection is not yet live end-to-end |
 | P4-02 | JavaScript behavior analysis | XL | in progress | P3 gate (cleared) | PRs #98 (design), #101 (forms), #104 (creds), #105 (exfil), #107 (NRS), #108 (gym) merged; stale TODOs cleaned |
 | P4-03 | Cross-browser port (Firefox MV3) | XL | pending | P3 gate (cleared) |
 | P4-04 | Community threat intelligence | XL | pending | P3 gate (cleared) |
@@ -1016,6 +1016,20 @@ URL. Libraries like `blockhash` work entirely client-side.
 - Hash algorithm: blockhash vs. pHash vs. dHash
 - Performance budget: how often to capture/compare
 - Storage: where to keep the template database
+
+**Sub-slices:**
+- **W3 (merged):** capture pipeline (`visual_sim_capture.ts`), hashing (`visual_sim_hash.ts`),
+  template DB + loader, brand-canonical-domain map. NRS integration via #172
+  (cross-origin brand match feeds `visualSimilarityScore`, capped at +30).
+- **P4-01b (merged):** gym fixtures (`gym/visual-sim-01-brand-login.html`,
+  `gym/visual-sim-02-delayed-password.html`) + E2E (`tests/e2e/visual-sim.spec.ts`)
+  proving the capture→SW pipeline fires end-to-end (immediate and delayed-password
+  paths) with no error or false positive on benign login pages.
+- **P4-01c (pending, blocked):** true-positive E2E ("spoof page scores → blocks").
+  Blocked on **real perceptual brand templates** — `scripts/build-brand-templates.mjs`
+  currently emits deterministic PLACEHOLDER hashes (seeded PRNG), so no real
+  captured page matches a brand. Until real templates are built from actual brand
+  login screenshots, spoof detection is wired but cannot fire on a real page.
 
 #### P4-02: JavaScript behavior analysis
 
