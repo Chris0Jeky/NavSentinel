@@ -308,6 +308,7 @@ export async function appendEvent(
       return;
     }
   }
+  console.warn("[NavSentinel] appendEvent: failed to persist after 3 attempts, id:", entry.id);
 }
 
 export async function clearEventLog(): Promise<void> {
@@ -353,6 +354,7 @@ export async function appendPromptOutcome(
       return;
     }
   }
+  console.warn("[NavSentinel] appendPromptOutcome: failed to persist after 3 attempts, id:", entry.id);
 }
 
 export async function clearPromptOutcomes(): Promise<void> {
