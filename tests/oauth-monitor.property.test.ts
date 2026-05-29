@@ -195,7 +195,12 @@ describe("isOAuthUrl property tests", () => {
         arbNonBoundaryChar,
         fc.string({ minLength: 0, maxLength: 10 }).map((s) => s.replace(/[^a-z0-9]/g, "a")),
         (kw, param, trailingChar, extraSuffix) => {
-          const url = `https://example.com/${kw}${trailingChar}${extraSuffix}?${param}=val`;
+          const segment = `${kw}${trailingChar}${extraSuffix}`;
+          // Skip cases where appending the trailing char/suffix coincidentally
+          // forms another valid keyword (e.g. "oauth" + "2" === "oauth2"),
+          // which would legitimately be detected as an OAuth path.
+          fc.pre(!(OAUTH_PATH_KEYWORDS as readonly string[]).includes(segment));
+          const url = `https://example.com/${segment}?${param}=val`;
           expect(isOAuthUrl(url)).toBe(false);
         },
       ),
