@@ -225,7 +225,9 @@ let oauthOpenerManipulationAt = 0;
  *
  * Returns true if the message was handled, false otherwise.
  */
-export function handleOAuthRuntimeMessage(message: any): boolean {
+export function handleOAuthRuntimeMessage(
+  message: { type?: string; flow?: OAuthFlowState | null; [key: string]: unknown } | null | undefined,
+): boolean {
   if (!message) return false;
 
   if (message.type === "ns-oauth-flow-update") {
