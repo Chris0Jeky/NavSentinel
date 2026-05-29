@@ -656,7 +656,7 @@ function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitio
   if (isUserTyped) { swState.persistAll(); return; }
   if (!isRedirect && !isLinkish) { swState.persistAll(); return; }
 
-  const inTypedOriginWindow = typedOriginEntry != null
+  const inTypedOriginWindow = typedOriginEntry !== null && typedOriginEntry !== undefined
     && now - typedOriginEntry.ts < TYPED_ORIGIN_TTL_MS
     && now < typedOriginEntry.deadline;
   if (inTypedOriginWindow) {

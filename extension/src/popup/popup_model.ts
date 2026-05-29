@@ -11,7 +11,7 @@ export interface PopupSiteState {
 }
 
 export function derivePopupSiteState(activeTabUrl: string, trustedDomains: string[]): PopupSiteState {
-  let host = "";
+  let host: string;
   try {
     host = activeTabUrl ? new URL(activeTabUrl).hostname : "";
   } catch {
