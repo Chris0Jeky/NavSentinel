@@ -323,3 +323,226 @@ describe("mutation_monitor DOM integration", () => {
     input.remove();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Shadow DOM observation tests
+// ---------------------------------------------------------------------------
+
+describe("mutation_monitor shadow DOM observation", () => {
+  beforeEach(() => {
+    _resetMutationState();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    _resetMutationState();
+    vi.useRealTimers();
+  });
+
+  it("detects password field injected into an open shadow root", async () => {
+    const alerts: MutationAlert[] = [];
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const sr = host.attachShadow({ mode: "open" });
+
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    const input = document.createElement("input");
+    input.type = "password";
+    sr.appendChild(input);
+
+    await vi.advanceTimersByTimeAsync(200);
+
+    const passwordAlerts = alerts.filter((a) => a.type === "password_injected");
+    expect(passwordAlerts.length).toBeGreaterThanOrEqual(1);
+
+    host.remove();
+    stopMutationMonitor();
+  });
+
+  it("detects suspicious iframe injected into shadow root", async () => {
+    const alerts: MutationAlert[] = [];
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const sr = host.attachShadow({ mode: "open" });
+
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    const iframe = document.createElement("iframe");
+    iframe.style.display = "none";
+    iframe.src = "https://evil.example.com/exfil";
+    sr.appendChild(iframe);
+
+    await vi.advanceTimersByTimeAsync(200);
+
+    const iframeAlerts = alerts.filter((a) => a.type === "suspicious_iframe");
+    expect(iframeAlerts.length).toBeGreaterThanOrEqual(1);
+
+    host.remove();
+    stopMutationMonitor();
+  });
+
+  it("observes shadow root on element added after monitor starts", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    const host = document.createElement("div");
+    const sr = host.attachShadow({ mode: "open" });
+    document.body.appendChild(host);
+
+    // Wait for the observer to process the host addition
+    await vi.advanceTimersByTimeAsync(200);
+
+    const input = document.createElement("input");
+    input.type = "password";
+    sr.appendChild(input);
+
+    await vi.advanceTimersByTimeAsync(200);
+
+    const passwordAlerts = alerts.filter((a) => a.type === "password_injected");
+    expect(passwordAlerts.length).toBeGreaterThanOrEqual(1);
+
+    host.remove();
+    stopMutationMonitor();
+  });
+
+  it("observes pre-existing shadow root at monitor start", async () => {
+    const alerts: MutationAlert[] = [];
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const sr = host.attachShadow({ mode: "open" });
+
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    const input = document.createElement("input");
+    input.type = "password";
+    sr.appendChild(input);
+
+    await vi.advanceTimersByTimeAsync(200);
+
+    const passwordAlerts = alerts.filter((a) => a.type === "password_injected");
+    expect(passwordAlerts.length).toBeGreaterThanOrEqual(1);
+
+    host.remove();
+    stopMutationMonitor();
+  });
+
+  it("does not observe the same shadow root twice", async () => {
+    const alerts: MutationAlert[] = [];
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const sr = host.attachShadow({ mode: "open" });
+
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    // Force a re-check of the host — should not create duplicate observers
+    const wrapper = document.createElement("div");
+    wrapper.appendChild(host);
+    document.body.appendChild(wrapper);
+
+    await vi.advanceTimersByTimeAsync(200);
+
+    const input = document.createElement("input");
+    input.type = "password";
+    sr.appendChild(input);
+
+    await vi.advanceTimersByTimeAsync(200);
+
+    // Should still only get one alert, not duplicates from multiple observers
+    const passwordAlerts = alerts.filter((a) => a.type === "password_injected");
+    expect(passwordAlerts.length).toBe(1);
+
+    wrapper.remove();
+    stopMutationMonitor();
+  });
+
+  it("cleans up shadow observers on stop", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    host.attachShadow({ mode: "open" });
+
+    startMutationMonitor(document, () => {});
+    stopMutationMonitor();
+
+    // Verify no errors when stopping (observers cleaned up properly)
+    expect(getMutationAlertCount()).toBe(0);
+
+    host.remove();
+  });
+
+  it("detects injection in nested shadow roots", async () => {
+    const alerts: MutationAlert[] = [];
+    const outerHost = document.createElement("div");
+    document.body.appendChild(outerHost);
+    const outerSr = outerHost.attachShadow({ mode: "open" });
+
+    const innerHost = document.createElement("div");
+    outerSr.appendChild(innerHost);
+    const innerSr = innerHost.attachShadow({ mode: "open" });
+
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    const input = document.createElement("input");
+    input.type = "password";
+    innerSr.appendChild(input);
+
+    await vi.advanceTimersByTimeAsync(200);
+
+    const passwordAlerts = alerts.filter((a) => a.type === "password_injected");
+    expect(passwordAlerts.length).toBeGreaterThanOrEqual(1);
+
+    outerHost.remove();
+    stopMutationMonitor();
+  });
+
+  it("skips NavSentinel's own shadow hosts", async () => {
+    const alerts: MutationAlert[] = [];
+    const host = document.createElement("div");
+    host.id = "__navsentinel_toast_host";
+    document.body.appendChild(host);
+    const sr = host.attachShadow({ mode: "open" });
+
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    const input = document.createElement("input");
+    input.type = "password";
+    sr.appendChild(input);
+
+    await vi.advanceTimersByTimeAsync(200);
+
+    // NavSentinel's own shadow root should NOT be observed
+    const passwordAlerts = alerts.filter((a) => a.type === "password_injected");
+    expect(passwordAlerts.length).toBe(0);
+
+    host.remove();
+    stopMutationMonitor();
+  });
+
+  it("disconnects shadow observer when host is removed from DOM", async () => {
+    const alerts: MutationAlert[] = [];
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const sr = host.attachShadow({ mode: "open" });
+
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    // Wait for initial observation
+    await vi.advanceTimersByTimeAsync(200);
+
+    // Remove the host from DOM
+    host.remove();
+    await vi.advanceTimersByTimeAsync(200);
+
+    // Inject into the now-detached shadow root — should NOT produce alert
+    const input = document.createElement("input");
+    input.type = "password";
+    sr.appendChild(input);
+
+    await vi.advanceTimersByTimeAsync(200);
+
+    const passwordAlerts = alerts.filter((a) => a.type === "password_injected");
+    expect(passwordAlerts.length).toBe(0);
+
+    stopMutationMonitor();
+  });
+});
