@@ -29,7 +29,7 @@ import {
 import type { RedirectChainInfo } from "../shared/redirect_chain";
 import { initReputation, isKnownBadDomain, checkReputationViaMessage } from "../shared/reputation";
 import { loadBrandTemplates } from "../shared/visual_sim_loader";
-import { triggerVisualSimCheck, waitForStability } from "./visual_sim_capture";
+import { triggerVisualSimCheck, waitForStability, resetVisualSimState } from "./visual_sim_capture";
 import { isCurrentPageCrossOriginFromBrand } from "../shared/visual_sim_brand_domains";
 import { showToast } from "./ui_toast";
 import { explainReasonCode } from "../shared/explanations";
@@ -506,6 +506,10 @@ function handleBridgeMessage(message: unknown): void {
         url: typeof data.url === "string" ? data.url : location.href,
         reasons: [typeof data.reason === "string" ? data.reason : "unknown"],
       });
+      // A pushState/replaceState is an in-page (SPA) navigation: the cached
+      // visual-sim score is route-specific and must be re-evaluated for the
+      // new route rather than carried over.
+      onVisualSimSpaNavigation();
     }
     return;
   }
@@ -712,67 +716,110 @@ function handleJsBehaviorSignal(type: string, payload: Record<string, unknown>):
 // --- Visual similarity brand-match state (top frame only) ---
 let _cachedVisualSimScore = 0;
 let _visualSimScheduled = false;
+// URL the cached visual-sim score was computed for. Used to detect SPA
+// (in-page) navigations so a stale per-route score is not applied elsewhere.
+let _visualSimUrl = "";
+let _visualSimNavListenersBound = false;
 
 function getVisualSimScoreForNRS(): number {
   return _cachedVisualSimScore;
 }
 
 /**
- * Top-frame-only brand-match check. Runs at most once per page when a password
- * field is present. Waits for the page to stabilize, then captures the
- * viewport (via the service worker) and compares it against the brand template
- * database. On a match it refines the score using the brand-canonical-domain
- * map so that brand surfaces on their own domains are not penalized.
+ * Run the brand-match check for the current route. Waits for the page to
+ * stabilize, then captures the viewport (via the service worker) and compares
+ * it against the brand template database. On a match it refines the score
+ * using the brand-canonical-domain map so brand surfaces on their own domains
+ * are not penalized (cross-origin impersonation is the only thing that scores).
  *
  * Fully best-effort: any failure degrades to a score of 0 and never blocks the
  * click-time decision path (the result is read synchronously from the cache).
  */
-function scheduleVisualSimCheck(): void {
-  if (_visualSimScheduled) return;
+async function runVisualSimCheck(): Promise<void> {
+  try {
+    _visualSimUrl = location.href;
+    // Only meaningful on pages that ask for credentials.
+    if (!document.querySelector('input[type="password"]')) {
+      _cachedVisualSimScore = 0;
+      return;
+    }
+
+    await waitForStability();
+
+    // First pass: do not assume cross-origin so we learn the matched brand
+    // without over-scoring. The match object is populated even when this pass
+    // scores 0, so we can still look up the canonical domain for the brand.
+    const result = await triggerVisualSimCheck(false);
+    if (!result || !result.match) {
+      _cachedVisualSimScore = 0;
+      return;
+    }
+
+    const crossOrigin = isCurrentPageCrossOriginFromBrand(result.match.brandId);
+    // On-domain matches score 0; only re-score (cross-origin) when off-domain.
+    const refined = crossOrigin ? await triggerVisualSimCheck(true) : result;
+    _cachedVisualSimScore = refined && refined.score > 0 ? refined.score : 0;
+
+    if (settings.debug) {
+      console.debug(
+        "[NavSentinel] Visual brand match:",
+        result.match.brandId,
+        "crossOrigin=", crossOrigin,
+        "score=", _cachedVisualSimScore
+      );
+    }
+  } catch (err) {
+    _cachedVisualSimScore = 0;
+    console.warn("[NavSentinel] Visual similarity check failed:", err);
+  }
+}
+
+/**
+ * Reset and re-evaluate visual-similarity state after an in-page (SPA)
+ * navigation. The cached score is route-specific, so a score from one route
+ * must not leak into a later route. Clears the cached score, the capture cache
+ * (so the new route is re-captured), and re-runs the check for the new URL.
+ */
+function onVisualSimSpaNavigation(): void {
   if (!isTopFrame()) return;
   if (settings.defaultMode === "off") return;
+  // No-op if the URL has not actually changed (e.g. duplicate events).
+  if (location.href === _visualSimUrl) return;
+  _cachedVisualSimScore = 0;
+  _visualSimScheduled = false;
+  resetVisualSimState();
+  scheduleVisualSimCheck();
+}
+
+function bindVisualSimNavListeners(): void {
+  if (_visualSimNavListenersBound) return;
+  if (!isTopFrame()) return;
+  _visualSimNavListenersBound = true;
+  // popstate (back/forward) and hashchange (hash routing) fire in the isolated
+  // world. Suspicious pushState/replaceState arrive via the main-world bridge
+  // (ns-pushstate-suspicious) and are also routed here.
+  window.addEventListener("popstate", () => onVisualSimSpaNavigation());
+  window.addEventListener("hashchange", () => onVisualSimSpaNavigation());
+}
+
+/**
+ * Top-frame-only brand-match scheduler. Schedules the check once per route and
+ * defers it off the critical path. Re-invoked on SPA navigations so each route
+ * is re-evaluated.
+ */
+function scheduleVisualSimCheck(): void {
+  if (!isTopFrame()) return;
+  if (settings.defaultMode === "off") return;
+  bindVisualSimNavListeners();
+  if (_visualSimScheduled) return;
   _visualSimScheduled = true;
-
-  const run = async (): Promise<void> => {
-    try {
-      // Only meaningful on pages that ask for credentials.
-      if (!document.querySelector('input[type="password"]')) return;
-
-      await waitForStability();
-
-      // First pass: do not assume cross-origin so we learn the matched brand
-      // without over-scoring. If we get a confident match, refine the score
-      // using the canonical-domain map for that specific brand.
-      const result = await triggerVisualSimCheck(false);
-      if (!result || !result.match) {
-        _cachedVisualSimScore = 0;
-        return;
-      }
-
-      const crossOrigin = isCurrentPageCrossOriginFromBrand(result.match.brandId);
-      const refined = crossOrigin ? await triggerVisualSimCheck(true) : result;
-      _cachedVisualSimScore = refined && refined.score > 0 ? refined.score : 0;
-
-      if (settings.debug) {
-        console.debug(
-          "[NavSentinel] Visual brand match:",
-          result.match.brandId,
-          "crossOrigin=", crossOrigin,
-          "score=", _cachedVisualSimScore
-        );
-      }
-    } catch (err) {
-      _cachedVisualSimScore = 0;
-      console.warn("[NavSentinel] Visual similarity check failed:", err);
-    }
-  };
 
   // Defer off the critical path. Start from page load to avoid contending
   // with initial render and SPA hydration.
   if (document.readyState === "complete") {
-    void run();
+    void runVisualSimCheck();
   } else {
-    window.addEventListener("load", () => { void run(); }, { once: true });
+    window.addEventListener("load", () => { void runVisualSimCheck(); }, { once: true });
   }
 }
 

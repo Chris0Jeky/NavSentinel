@@ -21,7 +21,20 @@ const MAX_STABILITY_WAIT_MS = STABILITY_WAIT_MS * 6;
 const AHASH_SIZE = 8;
 const BHASH_SIZE = 16;
 
-let _lastCaptureKey = "";
+/**
+ * Cached capture for the current URL. The captured screenshot, computed hashes,
+ * and the brand MATCH are independent of the cross-origin flag (the flag only
+ * affects the final score), so we cache by URL alone and re-score cheaply.
+ */
+interface CaptureCacheEntry {
+  url: string;
+  match: VisualSimMatch | undefined;
+  captureMs: number;
+  hashMs: number;
+  compareMs: number;
+}
+
+let _captureCache: CaptureCacheEntry | null = null;
 let _lastResult: VisualSimResult | null = null;
 let _captureInProgress = false;
 
@@ -30,7 +43,7 @@ export function getLastVisualSimResult(): VisualSimResult | null {
 }
 
 export function resetVisualSimState(): void {
-  _lastCaptureKey = "";
+  _captureCache = null;
   _lastResult = null;
   _captureInProgress = false;
 }
@@ -39,14 +52,15 @@ export async function triggerVisualSimCheck(
   isCrossOriginFromBrand: boolean
 ): Promise<VisualSimResult> {
   const pageUrl = location.href;
-  const cacheKey = getCaptureCacheKey(pageUrl, isCrossOriginFromBrand);
 
   if (_captureInProgress) {
     return _lastResult ?? emptyResult();
   }
 
-  if (_lastCaptureKey === cacheKey && _lastResult) {
-    return _lastResult;
+  // Reuse the URL-keyed capture cache when available: the screenshot/hash/match
+  // are flag-independent, so only re-score (cheap, no re-capture).
+  if (_captureCache && _captureCache.url === pageUrl) {
+    return rescoreFromCache(_captureCache, isCrossOriginFromBrand);
   }
 
   if (!isLoaded()) {
@@ -73,16 +87,10 @@ export async function triggerVisualSimCheck(
       const hashMs = performance.now() - t1;
 
       if (candidates.length === 0) {
-        const result: VisualSimResult = {
-          matched: false,
-          score: 0,
-          captureMs,
-          hashMs,
-          compareMs: 0,
-        };
-        _lastResult = result;
-        _lastCaptureKey = cacheKey;
-        return result;
+        return cacheAndScore(
+          { url: pageUrl, match: undefined, captureMs, hashMs, compareMs: 0 },
+          isCrossOriginFromBrand
+        );
       }
 
       const t2 = performance.now();
@@ -115,20 +123,11 @@ export async function triggerVisualSimCheck(
       }
 
       const compareMs = performance.now() - t2;
-      const score = bestMatch ? computeVisualSimScore(bestMatch, isCrossOriginFromBrand) : 0;
 
-      const result: VisualSimResult = {
-        matched: !!bestMatch && bestMatch.confidence === "high",
-        ...(bestMatch ? { match: bestMatch } : {}),
-        score,
-        captureMs,
-        hashMs,
-        compareMs,
-      };
-
-      _lastResult = result;
-      _lastCaptureKey = cacheKey;
-      return result;
+      return cacheAndScore(
+        { url: pageUrl, match: bestMatch, captureMs, hashMs, compareMs },
+        isCrossOriginFromBrand
+      );
     } finally {
       img.close();
     }
@@ -139,12 +138,41 @@ export async function triggerVisualSimCheck(
   }
 }
 
-function emptyResult(): VisualSimResult {
-  return { matched: false, score: 0, captureMs: 0, hashMs: 0, compareMs: 0 };
+/**
+ * Store a fresh capture entry (screenshot/hash/match) keyed by URL and produce
+ * the scored result for the given cross-origin flag.
+ */
+function cacheAndScore(
+  entry: CaptureCacheEntry,
+  isCrossOriginFromBrand: boolean
+): VisualSimResult {
+  _captureCache = entry;
+  return rescoreFromCache(entry, isCrossOriginFromBrand);
 }
 
-function getCaptureCacheKey(pageUrl: string, isCrossOriginFromBrand: boolean): string {
-  return `${pageUrl}|brandCrossOrigin=${isCrossOriginFromBrand ? "1" : "0"}`;
+/**
+ * Re-derive the scored result from a cached capture entry without re-capturing
+ * or re-hashing. Only the flag-dependent score changes between passes.
+ */
+function rescoreFromCache(
+  entry: CaptureCacheEntry,
+  isCrossOriginFromBrand: boolean
+): VisualSimResult {
+  const score = entry.match ? computeVisualSimScore(entry.match, isCrossOriginFromBrand) : 0;
+  const result: VisualSimResult = {
+    matched: !!entry.match && entry.match.confidence === "high",
+    ...(entry.match ? { match: entry.match } : {}),
+    score,
+    captureMs: entry.captureMs,
+    hashMs: entry.hashMs,
+    compareMs: entry.compareMs,
+  };
+  _lastResult = result;
+  return result;
+}
+
+function emptyResult(): VisualSimResult {
+  return { matched: false, score: 0, captureMs: 0, hashMs: 0, compareMs: 0 };
 }
 
 function drawToSize(img: ImageBitmap, size: number): Uint8ClampedArray {

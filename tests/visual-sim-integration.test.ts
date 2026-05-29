@@ -16,6 +16,12 @@ function baseNav(overrides: Partial<NavigationContext> = {}): NavigationContext 
   };
 }
 
+// NOTE: These tests exercise how NRS consumes an already-computed
+// visualSimilarityScore (NRS treats it as an opaque non-negative number).
+// The score *values* themselves are produced by computeVisualSimScore, which
+// (post FIX 2) only emits non-zero scores for cross-origin impersonation:
+// on-domain matches score 0, cross-origin aHash-only is +10, cross-origin
+// bHash-confirmed is +30. Intermediate values here just verify NRS arithmetic.
 describe("NRS visual similarity integration", () => {
   describe("visualSimilarityScore feeds into NRS correctly", () => {
     it("does not add the factor when score is 0", () => {

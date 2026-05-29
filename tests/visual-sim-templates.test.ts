@@ -152,7 +152,7 @@ describe("visual_sim_templates", () => {
   });
 
   describe("computeVisualSimScore", () => {
-    it("returns 30 for high confidence + cross-origin", () => {
+    it("returns 30 for high confidence + cross-origin (impersonation)", () => {
       const match: VisualSimMatch = {
         brandId: "google",
         brandName: "Google",
@@ -163,7 +163,8 @@ describe("visual_sim_templates", () => {
       expect(computeVisualSimScore(match, true)).toBe(30);
     });
 
-    it("returns 25 for high confidence + same origin", () => {
+    it("returns 0 for high confidence on the canonical (same-origin) domain", () => {
+      // A legit brand login on its OWN domain must not contribute risk.
       const match: VisualSimMatch = {
         brandId: "google",
         brandName: "Google",
@@ -171,10 +172,10 @@ describe("visual_sim_templates", () => {
         aHashDistance: 3,
         bHashDistance: 10,
       };
-      expect(computeVisualSimScore(match, false)).toBe(25);
+      expect(computeVisualSimScore(match, false)).toBe(0);
     });
 
-    it("returns 10 for low confidence (aHash only)", () => {
+    it("returns 10 for low confidence (aHash only) only when cross-origin", () => {
       const match: VisualSimMatch = {
         brandId: "paypal",
         brandName: "PayPal",
@@ -182,8 +183,10 @@ describe("visual_sim_templates", () => {
         aHashDistance: 8,
         bHashDistance: 50,
       };
+      // Cross-origin aHash-only is a deliberate weak signal (+10).
       expect(computeVisualSimScore(match, true)).toBe(10);
-      expect(computeVisualSimScore(match, false)).toBe(10);
+      // On-domain aHash-only contributes nothing.
+      expect(computeVisualSimScore(match, false)).toBe(0);
     });
   });
 });
