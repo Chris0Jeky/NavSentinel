@@ -34,7 +34,7 @@ function mockSet(items: Record<string, unknown>) {
   return Promise.resolve();
 }
 
-(globalThis as any).chrome = {
+(globalThis as { chrome?: unknown }).chrome = {
   storage: {
     local: {
       get: vi.fn(mockGet),

@@ -4,7 +4,7 @@ type RuntimeMessage = Record<string, unknown>;
 type RuntimeSender = { tab?: { id?: number; windowId?: number }; frameId?: number };
 type SendResponse = (response?: unknown) => void;
 
-function createEvent<T extends (...args: any[]) => void>() {
+function createEvent<T extends (...args: never[]) => void>() {
   const listeners: T[] = [];
   return {
     addListener(listener: T) {

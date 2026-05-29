@@ -125,6 +125,13 @@ function createPasswordInput(): HTMLInputElement {
   return input;
 }
 
+// Stub/override the form.requestSubmit DOM method (or remove it) for tests
+// that exercise the requestSubmit-vs-submit fallback path. Accepts a spy,
+// vi.fn(), or undefined.
+function stubRequestSubmit(form: HTMLFormElement, value: unknown): void {
+  (form as unknown as { requestSubmit: unknown }).requestSubmit = value;
+}
+
 // All mocks resolve synchronously so the async handler's microtask chain
 // completes within a single macrotask tick. This flush is sufficient because
 // no mock introduces real async delays.
@@ -249,7 +256,7 @@ describe("credential_guard", () => {
       mockGetSettings.mockResolvedValue({ ...defaultConfig(), mode: "off" });
       const form = createPasswordForm();
       const requestSubmitSpy = vi.fn();
-      (form as any).requestSubmit = requestSubmitSpy;
+      stubRequestSubmit(form, requestSubmitSpy);
 
       await dispatchSubmit(form);
 
@@ -261,7 +268,7 @@ describe("credential_guard", () => {
       mockShouldPrompt.mockReturnValue(false);
       const form = createPasswordForm();
       const requestSubmitSpy = vi.fn();
-      (form as any).requestSubmit = requestSubmitSpy;
+      stubRequestSubmit(form, requestSubmitSpy);
 
       await dispatchSubmit(form);
 
@@ -297,7 +304,7 @@ describe("credential_guard", () => {
       mockShowModal.mockResolvedValue("cancel");
       const form = createPasswordForm();
       const requestSubmitSpy = vi.fn();
-      (form as any).requestSubmit = requestSubmitSpy;
+      stubRequestSubmit(form, requestSubmitSpy);
 
       await dispatchSubmit(form);
 
@@ -311,7 +318,7 @@ describe("credential_guard", () => {
       mockShowModal.mockResolvedValue("proceed_once");
       const form = createPasswordForm();
       const requestSubmitSpy = vi.fn();
-      (form as any).requestSubmit = requestSubmitSpy;
+      stubRequestSubmit(form, requestSubmitSpy);
 
       await dispatchSubmit(form);
 
@@ -329,7 +336,7 @@ describe("credential_guard", () => {
 
       const form = createPasswordForm();
       const requestSubmitSpy = vi.fn();
-      (form as any).requestSubmit = requestSubmitSpy;
+      stubRequestSubmit(form, requestSubmitSpy);
 
       await dispatchSubmit(form);
 
@@ -348,7 +355,7 @@ describe("credential_guard", () => {
 
       const form = createPasswordForm();
       const requestSubmitSpy = vi.fn();
-      (form as any).requestSubmit = requestSubmitSpy;
+      stubRequestSubmit(form, requestSubmitSpy);
 
       await dispatchSubmit(form);
 
@@ -526,7 +533,7 @@ describe("credential_guard", () => {
       btn.type = "submit";
       form.appendChild(btn);
       const requestSubmitSpy = vi.fn();
-      (form as any).requestSubmit = requestSubmitSpy;
+      stubRequestSubmit(form, requestSubmitSpy);
 
       await dispatchSubmit(form, btn);
 
@@ -536,7 +543,7 @@ describe("credential_guard", () => {
     it("falls back to form.submit() when requestSubmit is unavailable", async () => {
       mockShowModal.mockResolvedValue("proceed_once");
       const form = createPasswordForm();
-      (form as any).requestSubmit = undefined;
+      stubRequestSubmit(form, undefined);
       const submitSpy = vi.spyOn(form, "submit").mockImplementation(() => {});
 
       await dispatchSubmit(form);
@@ -547,7 +554,7 @@ describe("credential_guard", () => {
     it("logs cred_submit_allow_once event after allowing submit", async () => {
       mockShowModal.mockResolvedValue("proceed_once");
       const form = createPasswordForm();
-      (form as any).requestSubmit = vi.fn();
+      stubRequestSubmit(form, vi.fn());
 
       await dispatchSubmit(form);
 
@@ -571,7 +578,7 @@ describe("credential_guard", () => {
       await dispatchSubmit(form);
 
       const modalSpec = mockShowModal.mock.calls[0]?.[0];
-      const actionIds = modalSpec?.actions.map((a: any) => a.id);
+      const actionIds = modalSpec?.actions.map((a) => a.id);
       expect(actionIds).toContain("trust_site");
     });
 
@@ -584,7 +591,7 @@ describe("credential_guard", () => {
       await dispatchSubmit(form);
 
       const modalSpec = mockShowModal.mock.calls[0]?.[0];
-      const actionIds = modalSpec?.actions.map((a: any) => a.id);
+      const actionIds = modalSpec?.actions.map((a) => a.id);
       expect(actionIds).not.toContain("trust_site");
     });
 
@@ -599,7 +606,7 @@ describe("credential_guard", () => {
       await dispatchSubmit(form);
 
       const modalSpec = mockShowModal.mock.calls[0]?.[0];
-      const actionIds = modalSpec?.actions.map((a: any) => a.id);
+      const actionIds = modalSpec?.actions.map((a) => a.id);
       expect(actionIds).toContain("trust_dest");
     });
 
@@ -613,14 +620,14 @@ describe("credential_guard", () => {
       await dispatchSubmit(form);
 
       const modalSpec = mockShowModal.mock.calls[0]?.[0];
-      const actionIds = modalSpec?.actions.map((a: any) => a.id);
+      const actionIds = modalSpec?.actions.map((a) => a.id);
       expect(actionIds).not.toContain("trust_dest");
     });
 
     it("falls back to form.submit() when requestSubmit throws", async () => {
       mockShowModal.mockResolvedValue("proceed_once");
       const form = createPasswordForm();
-      (form as any).requestSubmit = vi.fn(() => { throw new Error("requestSubmit failed"); });
+      stubRequestSubmit(form, vi.fn(() => { throw new Error("requestSubmit failed"); }));
       const submitSpy = vi.spyOn(form, "submit").mockImplementation(() => {});
 
       await dispatchSubmit(form);
@@ -635,7 +642,7 @@ describe("credential_guard", () => {
       mockShowModal.mockResolvedValue("trust_site");
 
       const form = createPasswordForm();
-      (form as any).requestSubmit = vi.fn();
+      stubRequestSubmit(form, vi.fn());
       await dispatchSubmit(form);
 
       expect(mockAppendOutcome).toHaveBeenCalledWith(
@@ -654,7 +661,7 @@ describe("credential_guard", () => {
       mockShowModal.mockResolvedValue("trust_dest");
 
       const form = createPasswordForm();
-      (form as any).requestSubmit = vi.fn();
+      stubRequestSubmit(form, vi.fn());
       await dispatchSubmit(form);
 
       expect(mockAppendOutcome).toHaveBeenCalledWith(
@@ -711,7 +718,7 @@ describe("credential_guard", () => {
       const form = createPasswordForm();
       await dispatchSubmit(form);
 
-      const modalSpec = mockShowModal.mock.calls[0]?.[0] as any;
+      const modalSpec = mockShowModal.mock.calls[0]![0];
       expect(modalSpec.subtitle).toContain("password");
       expect(modalSpec.kv).toEqual(
         expect.arrayContaining([
@@ -729,14 +736,14 @@ describe("credential_guard", () => {
 
       const form = createPasswordForm();
       const requestSubmitSpy = vi.fn();
-      (form as any).requestSubmit = requestSubmitSpy;
+      stubRequestSubmit(form, requestSubmitSpy);
 
       await dispatchSubmit(form);
 
       expect(mockAppendEvent).toHaveBeenCalledTimes(1);
-      const errorEvent = mockAppendEvent.mock.calls[0]![0] as any;
+      const errorEvent = mockAppendEvent.mock.calls[0]![0];
       expect(errorEvent.kind).toBe("cred_submit_prompt");
-      expect(errorEvent.extra.error).toBe("storage failed");
+      expect(errorEvent.extra!.error).toBe("storage failed");
       expect(errorEvent).not.toHaveProperty("score");
       expect(errorEvent).not.toHaveProperty("reasons");
       expect(errorEvent).not.toHaveProperty("destHost");
@@ -840,10 +847,10 @@ describe("credential_guard", () => {
       const input = createPasswordInput();
       await dispatchPaste(input);
 
-      const toastCall = mockShowToast.mock.calls[0]?.[0] as any;
+      const toastCall = mockShowToast.mock.calls[0]![0];
       expect(toastCall.actions).toHaveLength(1);
 
-      await toastCall.actions[0].onClick();
+      await toastCall.actions![0]!.onClick();
 
       expect(mockAddTrusted).toHaveBeenCalledWith("suspicious-site.com");
       expect(mockAppendEvent).toHaveBeenCalledWith(
@@ -862,8 +869,8 @@ describe("credential_guard", () => {
       const input = createPasswordInput();
       await dispatchPaste(input);
 
-      const toastCall = mockShowToast.mock.calls[0]?.[0] as any;
-      await expect(toastCall.actions[0].onClick()).resolves.toBeUndefined();
+      const toastCall = mockShowToast.mock.calls[0]![0];
+      await expect(toastCall.actions![0]!.onClick()).resolves.toBeUndefined();
     });
 
     it("handlePaste error catch does not throw", async () => {
@@ -882,7 +889,7 @@ describe("credential_guard", () => {
     it("second submit on same form within window proceeds without prompt", async () => {
       mockShowModal.mockResolvedValue("proceed_once");
       const form = createPasswordForm();
-      (form as any).requestSubmit = vi.fn();
+      stubRequestSubmit(form, vi.fn());
 
       await dispatchSubmit(form);
 
@@ -899,7 +906,7 @@ describe("credential_guard", () => {
     it("bypass does not apply to a different form", async () => {
       mockShowModal.mockResolvedValue("proceed_once");
       const form1 = createPasswordForm();
-      (form1 as any).requestSubmit = vi.fn();
+      stubRequestSubmit(form1, vi.fn());
 
       await dispatchSubmit(form1);
       expect(mockShowModal).toHaveBeenCalledTimes(1);
@@ -916,7 +923,7 @@ describe("credential_guard", () => {
       try {
         mockShowModal.mockResolvedValue("proceed_once");
         const form = createPasswordForm();
-        (form as any).requestSubmit = vi.fn();
+        stubRequestSubmit(form, vi.fn());
 
         const event1 = new SubmitEvent("submit", { bubbles: true, cancelable: true, submitter: null });
         form.dispatchEvent(event1);
