@@ -135,7 +135,18 @@ Final state: 2165 unit tests pass, tsc clean, lint 0 errors (70 warnings — T-1
 | T-66 | Add diagnostic logging to silent catch blocks in options.ts + popup.ts | S | — | #168 | done (2/2 reviews) |
 | T-67 | Add diagnostic logging to silent catches in credential_guard.ts | S | — | #169 | done (2/2 reviews) |
 | T-12 | Reduce ESLint warnings — source files (6 explicit-any) | S | — | #170 | done (2/2 reviews, auto-merge) |
-| T-12b | Reduce ESLint warnings — test-file explicit-any (64 in tests/) | M | — | — | seeded (next cycle; mostly mock typing, lower priority) |
+| T-12b | Reduce ESLint warnings — test-file explicit-any (64 in tests/) | M | — | #171 | done (2/2 reviews). Codebase now lint-clean: 0 errors, 0 warnings |
+| T-12c | Harmonize chrome-mock idiom in tests (vi.stubGlobal vs globalThis cast) | S | — | — | seeded (optional, R2 note on #171; pre-existing drift, not a defect) |
+
+### Cycle 7: Feature Work (in progress)
+
+| ID | Task | Effort | Issue | PR | Status |
+|---|---|---|---|---|---|
+| T-12 | Reduce ESLint warnings — source files (6 explicit-any) | S | — | #170 | done (2/2 reviews, merged) |
+| P4-01a | Visual similarity: wire capture into NRS scoring (+ brand-domain map) | M | — | #172 | R1 clean; R2 found 2 MEDIUM + 3 LOW (SPA stale cache, on-domain +25 FP, double-capture, SW throttle, aHash weak) — fixing before merge |
+| P4-01b | Visual similarity: gym fixtures + E2E spec | M | — | — | seeded (PR B, follow-up to #172) |
+| P4-03/FF-01 | Firefox port: browser.* shim + Firefox manifest (additive, single codebase) | M | — | #173 | open; 2 reviews pending. Decisions: single codebase, FF128+, background.page |
+| P4-03/FF-02..04 | Firefox: vite config, session_state compat, world:MAIN | L | — | — | seeded (stacked on FF-01) |
 | T-13 | Visual similarity detection (continue P4-01) | XL | — | — | pending |
 | T-14 | FP measurement re-run (Phase 2 gate) | M | — | — | pending |
 
