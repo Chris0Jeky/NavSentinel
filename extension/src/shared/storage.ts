@@ -412,25 +412,22 @@ export async function importAll(payload: unknown): Promise<void> {
   }
 
   if (Array.isArray(p.eventLog)) {
-    const boundedLogLimit = Math.max(0, Math.min(importLogLimit, 5000));
+    const boundedLogLimit = clampInt(importLogLimit, 50, 5000, DEFAULT_SUITE_SETTINGS.logLimit);
     await chrome.storage.local.set({
       [EVENT_LOG_KEY]: (p.eventLog as EventLogEntry[]).slice(-boundedLogLimit)
     });
   }
 
   if (Array.isArray(p.promptOutcomes)) {
-    await chrome.storage.local.set({
-      [PROMPT_OUTCOMES_KEY]: (p.promptOutcomes as PromptOutcomeEntry[]).slice(-PROMPT_OUTCOMES_LIMIT)
-    });
-  }
-
-  if (Array.isArray(p.promptOutcomes)) {
     const importedOutcomes = (p.promptOutcomes as PromptOutcomeEntry[]).slice(-PROMPT_OUTCOMES_LIMIT);
+    await chrome.storage.local.set({ [PROMPT_OUTCOMES_KEY]: importedOutcomes });
     const settings = await getNavSettings();
     const threshold = settings.defaultMode === "strict" ? NRS_STRICT_BLOCK_THRESHOLD : NRS_BLOCK_THRESHOLD;
     await updateAdaptiveScores(importedOutcomes, threshold);
   } else {
-    // No outcomes imported — clear adaptive scores to avoid stale data
+    // Intentional: any import without valid outcomes resets adaptive scores
+    // to prevent stale data. adaptiveScores from payload are ignored —
+    // they are recomputed from outcomes to prevent injection.
     await chrome.storage.local.set({ [ADAPTIVE_SCORES_KEY]: {} });
   }
 }
