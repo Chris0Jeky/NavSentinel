@@ -2,6 +2,7 @@ import type { Mode } from "../shared/types";
 import type { CredMode, EventLogEntry, SuiteSettings } from "../shared/storage";
 import { classifyEventTone } from "../shared/event_tone";
 import { icon, logoSentinel } from "../shared/icons";
+import { getSegValue, initSegKeyboard, setSegValue } from "../shared/seg_control";
 import {
   addTrustedDomainWithResult,
   appendEvent,
@@ -96,7 +97,13 @@ sidebarNav.addEventListener("click", (e) => {
   if (!section) return;
 
   for (const b of Array.from(sidebarNav.querySelectorAll<HTMLButtonElement>(".nav-btn"))) {
-    b.classList.toggle("active", b === btn);
+    const isActive = b === btn;
+    b.classList.toggle("active", isActive);
+    if (isActive) {
+      b.setAttribute("aria-current", "true");
+    } else {
+      b.removeAttribute("aria-current");
+    }
   }
 
   const panes = document.querySelectorAll<HTMLElement>(".pane");
@@ -105,29 +112,21 @@ sidebarNav.addEventListener("click", (e) => {
   }
 });
 
-// Segmented control helpers
-function setSegValue(seg: HTMLDivElement, value: string): void {
-  for (const btn of Array.from(seg.querySelectorAll<HTMLButtonElement>(".seg-btn"))) {
-    btn.setAttribute("aria-pressed", String(btn.dataset.value === value.toLowerCase()));
-  }
-}
-
-function getSegValue(seg: HTMLDivElement): string {
-  for (const btn of Array.from(seg.querySelectorAll<HTMLButtonElement>(".seg-btn"))) {
-    if (btn.getAttribute("aria-pressed") === "true") return btn.dataset.value ?? "smart";
-  }
-  return "smart";
-}
 
 navModeSeg.addEventListener("click", (e) => {
   const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".seg-btn");
-  if (btn) setSegValue(navModeSeg, btn.dataset.value ?? "smart");
+  if (!btn || btn.getAttribute("aria-checked") === "true") return;
+  setSegValue(navModeSeg, btn.dataset.value ?? "smart");
 });
 
 credModeSeg.addEventListener("click", (e) => {
   const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".seg-btn");
-  if (btn) setSegValue(credModeSeg, btn.dataset.value ?? "smart");
+  if (!btn || btn.getAttribute("aria-checked") === "true") return;
+  setSegValue(credModeSeg, btn.dataset.value ?? "smart");
 });
+
+initSegKeyboard(navModeSeg);
+initSegKeyboard(credModeSeg);
 
 // Toggle helpers
 function setToggle(el: HTMLButtonElement, checked: boolean): void {
