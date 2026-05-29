@@ -190,8 +190,8 @@ describe("computeCDS property tests", () => {
     // never increase the opacity-related penalty
     fc.assert(
       fc.property(
-        fc.double({ min: 0.08, max: 0.3, noNaN: true }),
-        fc.double({ min: 0.08, max: 0.3, noNaN: true }),
+        fc.double({ min: 0.08, max: 0.35, noNaN: true }),
+        fc.double({ min: 0.08, max: 0.35, noNaN: true }),
         (opA, opB) => {
           const lo = Math.min(opA, opB);
           const hi = Math.max(opA, opB);
@@ -255,6 +255,271 @@ describe("computeCDS property tests", () => {
         expect(a.reasonCodes).toEqual(b.reasonCodes);
       }),
       { numRuns: 200 }
+    );
+  });
+
+  it("never throws on arbitrary inputs", () => {
+    fc.assert(
+      fc.property(arbClickContext, (ctx) => {
+        const result = computeCDS(ctx);
+        expect(typeof result.cds).toBe("number");
+        expect(Array.isArray(result.reasonCodes)).toBe(true);
+      }),
+      { numRuns: 500 }
+    );
+  });
+
+  it("non-interactive elements never get interactive-only penalties", () => {
+    const arbNonInteractiveHint: fc.Arbitrary<ElementHint> = fc
+      .record(
+        {
+          tag: fc.constantFrom("DIV", "SPAN", "P", "SECTION", "IMG"),
+          role: fc.option(fc.constantFrom("presentation", "none", ""), { nil: undefined }),
+          hasOnClick: fc.constant(false),
+          cursor: fc.option(fc.constantFrom("pointer", "default", "auto"), { nil: undefined }),
+          textLength: fc.option(fc.integer({ min: 0, max: 200 }), { nil: undefined }),
+          ariaLabelLength: fc.option(fc.integer({ min: 0, max: 200 }), { nil: undefined }),
+          titleLength: fc.option(fc.integer({ min: 0, max: 200 }), { nil: undefined }),
+          rect: fc.option(arbRectHint, { nil: undefined }),
+          opacity: fc.option(fc.double({ min: 0, max: 1, noNaN: true }), { nil: undefined }),
+          visibility: fc.option(fc.constantFrom("visible", "hidden", "collapse", ""), { nil: undefined }),
+          display: fc.option(fc.constantFrom("block", "inline", "none", "flex", ""), { nil: undefined }),
+          pointerEvents: fc.option(fc.constantFrom("auto", "none", ""), { nil: undefined }),
+          position: fc.option(fc.constantFrom("static", "relative", "absolute", "fixed"), { nil: undefined }),
+          zIndex: fc.option(fc.integer({ min: -100, max: 100000 }), { nil: undefined }),
+        },
+        { requiredKeys: ["tag", "hasOnClick"] }
+      )
+      .map(stripUndefined) as fc.Arbitrary<ElementHint>;
+
+    fc.assert(
+      fc.property(
+        arbClickContext.chain((ctx) =>
+          arbNonInteractiveHint.map((top) => ({ ...ctx, top }))
+        ),
+        (ctx) => {
+          const { reasonCodes } = computeCDS(ctx);
+          const interactiveOnlyReasons = [
+            "no_accessible_name",
+            "minimal_accessible_name",
+            "overlay_large_interactive",
+            "overlay_medium_interactive",
+            "overlay_high_zindex",
+            "overlay_elevated_zindex",
+            "cursor_pointer_no_affordance",
+          ];
+          for (const reason of interactiveOnlyReasons) {
+            expect(reasonCodes).not.toContain(reason);
+          }
+        }
+      ),
+      { numRuns: 300 }
+    );
+  });
+
+  it("invisible_but_clickable only fires when pointerEvents != none", () => {
+    fc.assert(
+      fc.property(arbClickContext, (ctx) => {
+        const { reasonCodes } = computeCDS(ctx);
+        if (reasonCodes.includes("invisible_but_clickable")) {
+          const pe = (ctx.top.pointerEvents ?? "auto").toLowerCase();
+          expect(pe).not.toBe("none");
+        }
+      }),
+      { numRuns: 500 }
+    );
+  });
+
+  it("z-index gradient is monotonic for positioned interactive elements", () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom("fixed" as const, "absolute" as const),
+        fc.integer({ min: 5000, max: 20000 }),
+        fc.integer({ min: 5000, max: 20000 }),
+        (position, z1, z2) => {
+          const lower = Math.min(z1, z2);
+          const higher = Math.max(z1, z2);
+          if (lower === higher) return;
+
+          const base: ClickContext = {
+            viewport: { w: 1920, h: 1080 },
+            input: "pointer",
+            top: { tag: "BUTTON", position, zIndex: lower, opacity: 1 },
+          };
+          const high: ClickContext = {
+            ...base,
+            top: { tag: "BUTTON", position, zIndex: higher, opacity: 1 },
+          };
+          expect(computeCDS(high).cds).toBeGreaterThanOrEqual(computeCDS(base).cds);
+        }
+      ),
+      { numRuns: 300 }
+    );
+  });
+
+  it("coverage ratio gradient: larger overlay yields >= score for interactive elements", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 1, max: 1920 }),
+        fc.integer({ min: 1, max: 1080 }),
+        fc.integer({ min: 1, max: 1920 }),
+        fc.integer({ min: 1, max: 1080 }),
+        (w1, h1, w2, h2) => {
+          const area1 = w1 * h1;
+          const area2 = w2 * h2;
+          if (area1 === area2) return;
+
+          const smaller = area1 < area2 ? { w: w1, h: h1 } : { w: w2, h: h2 };
+          const larger = area1 < area2 ? { w: w2, h: h2 } : { w: w1, h: h1 };
+          const viewport = { w: 1920, h: 1080 };
+          const ctx1: ClickContext = {
+            viewport,
+            input: "pointer",
+            top: { tag: "BUTTON", rect: smaller, opacity: 1 },
+          };
+          const ctx2: ClickContext = {
+            viewport,
+            input: "pointer",
+            top: { tag: "BUTTON", rect: larger, opacity: 1 },
+          };
+          expect(computeCDS(ctx2).cds).toBeGreaterThanOrEqual(computeCDS(ctx1).cds);
+        }
+      ),
+      { numRuns: 300 }
+    );
+  });
+
+  it("intent mismatch fires when interactive underlying has name but top is non-intentful", () => {
+    fc.assert(
+      fc.property(arbViewport, (viewport) => {
+        const ctx: ClickContext = {
+          viewport,
+          input: "pointer",
+          top: { tag: "DIV", opacity: 1 },
+          underlying: { tag: "A", textLength: 10, opacity: 1 },
+        };
+        const { reasonCodes } = computeCDS(ctx);
+        expect(reasonCodes).toContain("intent_mismatch_under_interactive");
+      }),
+      { numRuns: 50 }
+    );
+  });
+
+  it("reason codes include at least one entry when score > 0", () => {
+    fc.assert(
+      fc.property(arbClickContext, (ctx) => {
+        const { cds, reasonCodes } = computeCDS(ctx);
+        if (cds > 0) {
+          expect(reasonCodes.length).toBeGreaterThan(0);
+        }
+      }),
+      { numRuns: 500 }
+    );
+  });
+
+  it("all reason codes are known strings", () => {
+    const knownReasons = new Set([
+      "no_accessible_name",
+      "minimal_accessible_name",
+      "overlay_large_interactive",
+      "overlay_medium_interactive",
+      "intent_mismatch_under_interactive",
+      "retargeted_target_mismatch",
+      "overlay_high_zindex",
+      "overlay_elevated_zindex",
+      "invisible_but_clickable",
+      "near_invisible_opacity",
+      "low_opacity",
+      "cursor_pointer_no_affordance",
+      "keyboard_activation",
+      "legit_modal_backdrop",
+      "composite_escalation",
+    ]);
+    fc.assert(
+      fc.property(arbClickContext, (ctx) => {
+        const { reasonCodes } = computeCDS(ctx);
+        for (const code of reasonCodes) {
+          expect(knownReasons.has(code)).toBe(true);
+        }
+      }),
+      { numRuns: 500 }
+    );
+  });
+
+  it("composite escalation triggers iff 3+ positive reason codes present", () => {
+    fc.assert(
+      fc.property(arbClickContext, (ctx) => {
+        const { reasonCodes } = computeCDS(ctx);
+        const mitigating = new Set(["keyboard_activation", "legit_modal_backdrop"]);
+        const positiveCount = reasonCodes.filter(
+          (r) => !mitigating.has(r) && r !== "composite_escalation"
+        ).length;
+        if (positiveCount >= 3) {
+          expect(reasonCodes).toContain("composite_escalation");
+        } else {
+          expect(reasonCodes).not.toContain("composite_escalation");
+        }
+      }),
+      { numRuns: 500 }
+    );
+  });
+
+  it("retargeted adds exactly its weight plus any composite escalation tier change", () => {
+    fc.assert(
+      fc.property(
+        arbClickContext.filter((ctx) => ctx.input === "pointer" && !ctx.isLegitModalBackdrop),
+        (ctx) => {
+          const without = { ...ctx, retargeted: false };
+          const withR = { ...ctx, retargeted: true };
+          const baseResult = computeCDS(without);
+          const retResult = computeCDS(withR);
+
+          const mitigating = new Set(["keyboard_activation", "legit_modal_backdrop", "composite_escalation"]);
+          const basePosCount = baseResult.reasonCodes.filter((r) => !mitigating.has(r)).length;
+          const retPosCount = retResult.reasonCodes.filter((r) => !mitigating.has(r)).length;
+
+          let expectedDiff = 20;
+          const baseEscalation = basePosCount >= 4 ? 15 : basePosCount >= 3 ? 10 : 0;
+          const retEscalation = retPosCount >= 4 ? 15 : retPosCount >= 3 ? 10 : 0;
+          expectedDiff += retEscalation - baseEscalation;
+
+          expect(retResult.cds - baseResult.cds).toBe(expectedDiff);
+        }
+      ),
+      { numRuns: 500 }
+    );
+  });
+
+  it("cursor_pointer_no_affordance fires iff interactive + pointer cursor + no name + opacity < 0.3", () => {
+    fc.assert(
+      fc.property(
+        fc.double({ min: 0, max: 1, noNaN: true }),
+        fc.boolean(),
+        fc.constantFrom("pointer", "default", "auto", ""),
+        fc.constantFrom("BUTTON", "DIV"),
+        (opacity, hasName, cursor, tag) => {
+          const top: ElementHint = {
+            tag,
+            cursor,
+            opacity,
+            ...(hasName ? { textLength: 10 } : {}),
+          };
+          const ctx: ClickContext = {
+            viewport: { w: 1920, h: 1080 },
+            input: "pointer",
+            top,
+          };
+          const { reasonCodes } = computeCDS(ctx);
+          const isTopInteractive = tag === "BUTTON";
+          const expectFire = isTopInteractive && cursor === "pointer" && !hasName && opacity < 0.3;
+          if (expectFire) {
+            expect(reasonCodes).toContain("cursor_pointer_no_affordance");
+          } else {
+            expect(reasonCodes).not.toContain("cursor_pointer_no_affordance");
+          }
+        }
+      ),
+      { numRuns: 300 }
     );
   });
 });
