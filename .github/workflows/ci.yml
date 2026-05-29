@@ -46,6 +46,9 @@ jobs:
       - name: Build extension
         run: npm run build
 
+      - name: Check performance budget
+        run: npm run check:perf-budget
+
       - name: Package extension
         run: npm run package:ext
 
@@ -78,6 +81,9 @@ jobs:
 
       - name: Build extension
         run: npm run build
+
+      - name: Check performance budget
+        run: npm run check:perf-budget
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
@@ -118,6 +124,7 @@ jobs:
 
       - run: npm run verify:versions
       - run: npm run build
+      - run: npm run check:perf-budget
 
       - name: Package extension
         run: npm run package:ext
