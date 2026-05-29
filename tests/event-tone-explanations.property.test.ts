@@ -88,7 +88,7 @@ const arbUnknownCode = fc
   .map((arr) => arr.join(""))
   .filter(
     (s) =>
-      !ALL_KNOWN_CODES.includes(s as any) &&
+      !(ALL_KNOWN_CODES as readonly string[]).includes(s) &&
       !OBJECT_PROTOTYPE_KEYS.has(s),
   );
 
@@ -110,7 +110,7 @@ describe("classifyEventTone property tests", () => {
   it("always returns a valid EventTone for arbitrary inputs", () => {
     fc.assert(
       fc.property(fc.anything(), (input) => {
-        const result = classifyEventTone(input as any);
+        const result = classifyEventTone(input as string);
         expect(VALID_TONES.has(result)).toBe(true);
       }),
       { numRuns: 300 },
@@ -165,7 +165,7 @@ describe("classifyEventTone property tests", () => {
   it("non-string inputs return navigation", () => {
     const nonStrings = [42, null, undefined, true, false, {}, [], NaN, 0];
     for (const input of nonStrings) {
-      expect(classifyEventTone(input as any)).toBe("navigation");
+      expect(classifyEventTone(input as string)).toBe("navigation");
     }
   });
 
@@ -263,7 +263,7 @@ describe("explainReasonCode property tests", () => {
     const knownCodeSet = new Set(ALL_KNOWN_CODES);
     for (const code of ALL_KNOWN_CODES) {
       const explanation = explainReasonCode(code);
-      expect(knownCodeSet.has(explanation as any)).toBe(false);
+      expect((knownCodeSet as Set<string>).has(explanation)).toBe(false);
     }
   });
 });
@@ -330,7 +330,7 @@ describe("explainReasonCodes property tests", () => {
           const result = explainReasonCodes(codes);
           expect(result).toHaveLength(codes.length);
           for (let i = 0; i < codes.length; i++) {
-            if (ALL_KNOWN_CODES.includes(codes[i] as any)) {
+            if ((ALL_KNOWN_CODES as readonly string[]).includes(codes[i]!)) {
               expect(result[i]).not.toBe(codes[i]);
             } else {
               expect(result[i]).toBe(codes[i]);

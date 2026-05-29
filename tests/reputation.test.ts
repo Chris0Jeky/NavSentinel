@@ -481,7 +481,7 @@ describe("checkReputationViaMessage", () => {
 
   beforeEach(() => {
     sendMessageMock = vi.fn();
-    (globalThis as any).chrome = {
+    (globalThis as { chrome?: unknown }).chrome = {
       runtime: {
         lastError: null,
         sendMessage: sendMessageMock,
@@ -490,11 +490,11 @@ describe("checkReputationViaMessage", () => {
   });
 
   afterEach(() => {
-    delete (globalThis as any).chrome;
+    delete (globalThis as { chrome?: unknown }).chrome;
   });
 
   it("resolves knownBad: true and filterReady: true when SW responds accordingly", async () => {
-    sendMessageMock.mockImplementation((_msg: any, cb: any) => {
+    sendMessageMock.mockImplementation((_msg: unknown, cb: (resp: unknown) => void) => {
       cb({ knownBad: true, filterReady: true });
     });
     const result = await checkReputationViaMessage("evil.example");
@@ -507,7 +507,7 @@ describe("checkReputationViaMessage", () => {
   });
 
   it("resolves knownBad: false, filterReady: true when domain is clean", async () => {
-    sendMessageMock.mockImplementation((_msg: any, cb: any) => {
+    sendMessageMock.mockImplementation((_msg: unknown, cb: (resp: unknown) => void) => {
       cb({ knownBad: false, filterReady: true });
     });
     const result = await checkReputationViaMessage("safe.example");
@@ -516,7 +516,7 @@ describe("checkReputationViaMessage", () => {
   });
 
   it("resolves knownBad: false, filterReady: false when SW returns null response", async () => {
-    sendMessageMock.mockImplementation((_msg: any, cb: any) => {
+    sendMessageMock.mockImplementation((_msg: unknown, cb: (resp: unknown) => void) => {
       cb(null);
     });
     const result = await checkReputationViaMessage("any.example");
@@ -525,10 +525,10 @@ describe("checkReputationViaMessage", () => {
   });
 
   it("resolves knownBad: false, filterReady: false when runtime.lastError is set", async () => {
-    sendMessageMock.mockImplementation((_msg: any, cb: any) => {
-      (globalThis as any).chrome.runtime.lastError = { message: "disconnected" };
+    sendMessageMock.mockImplementation((_msg: unknown, cb: (resp: unknown) => void) => {
+      (chrome.runtime as { lastError: unknown }).lastError = { message: "disconnected" };
       cb(undefined);
-      (globalThis as any).chrome.runtime.lastError = null;
+      (chrome.runtime as { lastError: unknown }).lastError = null;
     });
     const result = await checkReputationViaMessage("any.example");
     expect(result.knownBad).toBe(false);
@@ -545,7 +545,7 @@ describe("checkReputationViaMessage", () => {
   });
 
   it("resolves knownBad: false, filterReady: false when chrome.runtime is undefined", async () => {
-    delete (globalThis as any).chrome;
+    delete (globalThis as { chrome?: unknown }).chrome;
     // Re-import is not needed; the function accesses chrome at call time
     // but the try/catch should handle the missing global.
     const result = await checkReputationViaMessage("any.example");
@@ -555,7 +555,7 @@ describe("checkReputationViaMessage", () => {
 
   it("distinguishes 'domain clean' from 'filter not ready'", async () => {
     // Filter not ready: SW responds without filterReady
-    sendMessageMock.mockImplementation((_msg: any, cb: any) => {
+    sendMessageMock.mockImplementation((_msg: unknown, cb: (resp: unknown) => void) => {
       cb({ knownBad: false, filterReady: false });
     });
     const notReady = await checkReputationViaMessage("any.example");
@@ -563,7 +563,7 @@ describe("checkReputationViaMessage", () => {
     expect(notReady.filterReady).toBe(false);
 
     // Filter ready, domain clean
-    sendMessageMock.mockImplementation((_msg: any, cb: any) => {
+    sendMessageMock.mockImplementation((_msg: unknown, cb: (resp: unknown) => void) => {
       cb({ knownBad: false, filterReady: true });
     });
     const clean = await checkReputationViaMessage("safe.example");

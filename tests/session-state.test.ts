@@ -455,7 +455,7 @@ describe("SW integration: state persistence through session storage", () => {
   type RuntimeSender = { tab?: { id?: number }; frameId?: number };
   type SendResponse = (response?: unknown) => void;
 
-  function createEvent<T extends (...args: any[]) => void>() {
+  function createEvent<T extends (...args: never[]) => void>() {
     const listeners: T[] = [];
     return {
       addListener(listener: T) { listeners.push(listener); },

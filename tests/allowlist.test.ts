@@ -38,7 +38,7 @@ function mockRemove(keys: string | string[]) {
   return Promise.resolve();
 }
 
-(globalThis as any).chrome = {
+(globalThis as { chrome?: unknown }).chrome = {
   storage: {
     local: {
       get: vi.fn(mockGet),
@@ -237,8 +237,8 @@ describe("onAllowlistChange", () => {
   });
 
   it("calls callback with normalized allowlist on change", () => {
-    let handler: ((changes: any, area: string) => void) | undefined;
-    (chrome.storage.onChanged.addListener as any).mockImplementation((fn: any) => {
+    let handler: Parameters<typeof chrome.storage.onChanged.addListener>[0] | undefined;
+    vi.mocked(chrome.storage.onChanged.addListener).mockImplementation((fn) => {
       handler = fn;
     });
     const cb = vi.fn();
@@ -248,8 +248,8 @@ describe("onAllowlistChange", () => {
   });
 
   it("ignores changes to other storage areas", () => {
-    let handler: ((changes: any, area: string) => void) | undefined;
-    (chrome.storage.onChanged.addListener as any).mockImplementation((fn: any) => {
+    let handler: Parameters<typeof chrome.storage.onChanged.addListener>[0] | undefined;
+    vi.mocked(chrome.storage.onChanged.addListener).mockImplementation((fn) => {
       handler = fn;
     });
     const cb = vi.fn();
@@ -259,8 +259,8 @@ describe("onAllowlistChange", () => {
   });
 
   it("ignores changes to other keys", () => {
-    let handler: ((changes: any, area: string) => void) | undefined;
-    (chrome.storage.onChanged.addListener as any).mockImplementation((fn: any) => {
+    let handler: Parameters<typeof chrome.storage.onChanged.addListener>[0] | undefined;
+    vi.mocked(chrome.storage.onChanged.addListener).mockImplementation((fn) => {
       handler = fn;
     });
     const cb = vi.fn();

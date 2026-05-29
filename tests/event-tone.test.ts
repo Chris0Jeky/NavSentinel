@@ -32,9 +32,9 @@ describe("classifyEventTone", () => {
   });
 
   it('returns "navigation" for non-string input', () => {
-    expect(classifyEventTone(42 as any)).toBe("navigation");
-    expect(classifyEventTone(null as any)).toBe("navigation");
-    expect(classifyEventTone(undefined as any)).toBe("navigation");
+    expect(classifyEventTone(42 as unknown as string)).toBe("navigation");
+    expect(classifyEventTone(null as unknown as string)).toBe("navigation");
+    expect(classifyEventTone(undefined as unknown as string)).toBe("navigation");
   });
 
   it('returns "navigation" for empty string', () => {
