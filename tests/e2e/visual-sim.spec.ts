@@ -79,8 +79,10 @@ test("visual-sim capture fires only after a delayed password field appears @regr
       args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
     });
 
-    // Install the spy before the page exists so it is in place before any
-    // capture can occur (no load-time race, survives an early SW eviction).
+    // Install the spy before the page exists so the patch is in place before
+    // any capture can occur (no load-time race). Note: the in-memory patch
+    // itself does not survive a service-worker eviction — only the already-
+    // written storage.session flag does (see installCaptureSpy).
     const sw = await getServiceWorker(context);
     await installCaptureSpy(sw);
 
