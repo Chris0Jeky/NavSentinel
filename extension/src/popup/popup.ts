@@ -50,13 +50,13 @@ function renderShieldArc(value: number, size = 42): string {
   const r = size / 2 - 4;
   const c = 2 * Math.PI * r;
   const col = value >= 70 ? "var(--ns-red)" : value >= 40 ? "var(--ns-orange)" : "var(--ns-green)";
-  return `<svg width="${size}" height="${size}" style="transform:rotate(-90deg)">
+  return `<svg aria-hidden="true" width="${size}" height="${size}" style="transform:rotate(-90deg)">
     <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="3"/>
     <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${col}" stroke-width="3"
             stroke-dasharray="${(value / 100) * c} ${c}" stroke-linecap="round"
             style="transition:stroke-dasharray 0.4s ease-out"/>
   </svg>
-  <span class="ns-mono" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:${col};transform:rotate(90deg)">${value}</span>`;
+  <span aria-hidden="true" class="ns-mono" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:${col};transform:rotate(90deg)">${value}</span>`;
 }
 
 
@@ -191,6 +191,8 @@ async function refreshUi(): Promise<void> {
   untrustBtn.disabled = !siteState.canUntrust;
   trustBtn.hidden = siteState.isTrusted;
   untrustBtn.hidden = !siteState.isTrusted;
+  trustBtn.setAttribute("aria-label", siteState.registrableDomain ? `Trust ${siteState.siteLabel}` : "Trust this site");
+  untrustBtn.setAttribute("aria-label", siteState.registrableDomain ? `Untrust ${siteState.siteLabel}` : "Untrust this site");
 
   const log = await getEventLog();
   renderEvents(log);
@@ -199,6 +201,7 @@ async function refreshUi(): Promise<void> {
   const tabRisk = lastEvent && typeof lastEvent.score === "number" ? lastEvent.score : 0;
   shieldArcEl.style.position = "relative";
   shieldArcEl.innerHTML = renderShieldArc(tabRisk);
+  shieldArcEl.setAttribute("aria-label", `Tab risk score: ${tabRisk}`);
   renderSignals(lastEvent?.reasons);
 }
 

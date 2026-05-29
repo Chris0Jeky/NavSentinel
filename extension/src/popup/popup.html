@@ -28,7 +28,7 @@
         <!-- Current page card -->
         <div class="site-card">
           <div class="site-card-row">
-            <div id="shieldArc" class="shield-arc" aria-label="Tab risk score"></div>
+            <div id="shieldArc" class="shield-arc" role="img" aria-label="Tab risk score"></div>
             <div class="site-info">
               <div class="site-host-row">
                 <span id="trustDot" class="status-dot"></span>
@@ -39,8 +39,8 @@
                 <span id="sessionMeta" class="session-meta ns-mono"></span>
               </div>
             </div>
-            <button id="trustBtn" class="trust-btn trust-btn--trust">Trust</button>
-            <button id="untrustBtn" class="trust-btn trust-btn--untrust" hidden>Untrust</button>
+            <button id="trustBtn" class="trust-btn trust-btn--trust" aria-label="Trust this site">Trust</button>
+            <button id="untrustBtn" class="trust-btn trust-btn--untrust" hidden aria-label="Untrust this site">Untrust</button>
           </div>
 
           <!-- Active signals -->
@@ -49,7 +49,7 @@
       </header>
 
       <!-- Mode strip -->
-      <section class="mode-strip">
+      <section class="mode-strip" aria-label="Protection modes">
         <div class="mode-card mode-card--nav">
           <div class="mode-card-head">
             <span id="navIcon" class="mode-icon"></span>
@@ -75,14 +75,14 @@
       </section>
 
       <!-- Activity feed -->
-      <section class="activity">
+      <section class="activity" aria-label="Recent activity">
         <div class="activity-head">
           <span class="activity-label ns-uc">activity</span>
           <div class="activity-sparkline">
             <span id="eventCount" class="event-count ns-mono"></span>
           </div>
         </div>
-        <div id="events" class="events">Loading...</div>
+        <div id="events" class="events" role="log" aria-live="polite" aria-label="Event log">Loading...</div>
       </section>
 
       <!-- Footer -->
