@@ -134,11 +134,14 @@ export function showToast(opts: ToastOptions) {
   row.className = "row";
 
   let actionClicked = false;
+  let dismissed = false;
 
   const dismiss = document.createElement("button");
   dismiss.className = "danger";
   dismiss.textContent = "Dismiss";
   dismiss.addEventListener("click", () => {
+    if (dismissed) return;
+    dismissed = true;
     wrap.remove();
     if (!actionClicked && opts.onDismiss) {
       opts.onDismiss();
