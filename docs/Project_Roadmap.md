@@ -25,9 +25,9 @@ Total: **47 tasks** across 5 phases. **43/47 complete**. P4-01 and P4-02 have fo
 
 **Open issues:** #127 (JS behavior monitor — remaining slices). Discovery-seeded (2026-05-30): #175 (bridge heartbeat), #176 (URL minimization), #178 (SRI partial coverage), #179 (CSP header blindness), #181 (domain_profile cross-context lost-update). #97/#113 closed via #115/#118.
 
-**Repo state (2026-05-30):** 1 open PR (**#180** D-PROF concurrency fix — both adversarial rounds passed, CI green, aging for merge). 2211 tests, lint 0/0, tsc clean. A codebase discovery pass confirmed 14 bugs/risks; 6 are queued as PRs (D-STORE/D-FOCUS/D-BRIDGE/D-SWRATE/D-ANOM/D-IFRAME), rest seeded as issues.
+**Repo state (2026-05-30):** 2 open PRs: **#180** D-PROF concurrency fix and **#182** D-STORE prompt-outcome storage fix. GitHub reports both PRs open and mergeable, but they must remain unmerged until the hard merge gate is clean at the current head. Pickup verification found #180 still had unresolved bot review threads and a stale base before this housekeeping refresh; #182 has its Gemini thread resolved/outdated, CI green at `155693b`, and is aging. A codebase discovery pass confirmed 14 bugs/risks; 5 remain queued as PRs (D-FOCUS/D-BRIDGE/D-SWRATE/D-ANOM/D-IFRAME), rest seeded as issues.
 
-> **Picking up the autonomous loop? Start with [`docs/agentic/HANDOFF.md`](agentic/HANDOFF.md)** (point-in-time handoff) and [`docs/agentic/ORCHESTRATOR.md`](agentic/ORCHESTRATOR.md) (living backlog/cycle log). Next slice: **D-STORE**.
+> **Picking up the autonomous loop? Start with [`docs/agentic/HANDOFF.md`](agentic/HANDOFF.md)** (point-in-time handoff) and [`docs/agentic/ORCHESTRATOR.md`](agentic/ORCHESTRATOR.md) (living backlog/cycle log). PRs #180 and #182 are open and must not be merged unless GitHub comments, checks, review gates, docs, and aging are all clean at the current head. Next implementation slice: **D-FOCUS**.
 
 Last updated: 2026-05-30
 
