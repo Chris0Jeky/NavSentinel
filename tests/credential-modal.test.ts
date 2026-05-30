@@ -796,5 +796,43 @@ describe("credential modal", () => {
         outside.remove();
       }
     });
+
+    it("recaptures focus before a page focusin listener registered before modal open can stop propagation", async () => {
+      const outside = document.createElement("button");
+      outside.textContent = "Outside";
+      document.body.appendChild(outside);
+      const stopFocusIn = vi.fn((event: Event) => event.stopImmediatePropagation());
+      window.addEventListener("focusin", stopFocusIn, true);
+      let promise: Promise<string> | null = null;
+
+      try {
+        promise = showCredentialModal(
+          minimalSpec({
+            actions: [
+              { id: "a", label: "First", kind: "primary" },
+              { id: "b", label: "Last", kind: "danger" },
+            ],
+          }),
+        );
+        vi.runAllTimers();
+
+        const buttons = getButtons();
+        stopFocusIn.mockClear();
+        outside.focus();
+
+        expect(stopFocusIn).toHaveBeenCalled();
+        expect(getShadow()!.activeElement).toBe(buttons[0]);
+
+        getButtons()[0]!.click();
+        await promise;
+      } finally {
+        window.removeEventListener("focusin", stopFocusIn, true);
+        if (getOverlay()) {
+          window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+          await promise;
+        }
+        outside.remove();
+      }
+    });
   });
 });

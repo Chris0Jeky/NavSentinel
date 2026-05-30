@@ -19,6 +19,62 @@ let host: HTMLElement | null = null;
 let root: ShadowRoot | null = null;
 let activeDispose: (() => void) | null = null;
 
+const FOCUS_TRAP_STATE_KEY = "__sentinelsuite_cred_modal_focus_trap_state__";
+
+type FocusTrapState = {
+  card: HTMLElement | null;
+  getFallback: (() => HTMLElement) | null;
+  installed: boolean;
+};
+
+type FocusTrapWindow = Window &
+  typeof globalThis & {
+    [FOCUS_TRAP_STATE_KEY]?: FocusTrapState;
+  };
+
+function getFocusTrapState(): FocusTrapState {
+  const target = window as FocusTrapWindow;
+  target[FOCUS_TRAP_STATE_KEY] ??= {
+    card: null,
+    getFallback: null,
+    installed: false
+  };
+  return target[FOCUS_TRAP_STATE_KEY];
+}
+
+function onGlobalFocusIn(e: FocusEvent): void {
+  const { card, getFallback } = getFocusTrapState();
+  if (!card || !getFallback || !card.isConnected) return;
+
+  const path = e.composedPath();
+  const isInsideCard = path.some((node) => node instanceof Node && card.contains(node));
+  if (!isInsideCard) {
+    getFallback().focus();
+  }
+}
+
+function installGlobalFocusTrap(): void {
+  const state = getFocusTrapState();
+  if (state.installed) return;
+  window.addEventListener("focusin", onGlobalFocusIn, true);
+  state.installed = true;
+}
+
+function activateFocusTrap(card: HTMLElement, getFallback: () => HTMLElement): void {
+  const state = getFocusTrapState();
+  state.card = card;
+  state.getFallback = getFallback;
+}
+
+function clearFocusTrap(card: HTMLElement): void {
+  const state = getFocusTrapState();
+  if (state.card !== card) return;
+  state.card = null;
+  state.getFallback = null;
+}
+
+installGlobalFocusTrap();
+
 function listFocusable(rootNode: ParentNode): HTMLElement[] {
   return Array.from(
     rootNode.querySelectorAll<HTMLElement>(
@@ -324,7 +380,7 @@ export function showCredentialModal(spec: ModalSpec): Promise<string> {
 
     function cleanupListeners(): void {
       window.removeEventListener("keydown", onKeyDown, true);
-      window.removeEventListener("focusin", onFocusIn, true);
+      clearFocusTrap(card);
     }
 
     function done(actionId: string): void {
@@ -340,15 +396,6 @@ export function showCredentialModal(spec: ModalSpec): Promise<string> {
       activeDispose = null;
       resolve(outside);
     };
-
-    function onFocusIn(e: FocusEvent): void {
-      if (!activeRoot.contains(card)) return;
-      const path = e.composedPath();
-      const isInsideCard = path.some((node) => node instanceof Node && card.contains(node));
-      if (!isInsideCard) {
-        focusFallback().focus();
-      }
-    }
 
     function onKeyDown(e: KeyboardEvent): void {
       if (e.key === "Escape") {
@@ -394,7 +441,6 @@ export function showCredentialModal(spec: ModalSpec): Promise<string> {
     }
 
     window.addEventListener("keydown", onKeyDown, true);
-    window.addEventListener("focusin", onFocusIn, true);
     overlay.addEventListener("mousedown", (e) => {
       if (e.target === overlay) done(outside);
     });
@@ -414,6 +460,7 @@ export function showCredentialModal(spec: ModalSpec): Promise<string> {
     card.appendChild(footer);
     overlay.appendChild(card);
     activeRoot.appendChild(overlay);
+    activateFocusTrap(card, focusFallback);
 
     window.setTimeout(() => {
       const firstFocusable = listFocusable(card)[0];
