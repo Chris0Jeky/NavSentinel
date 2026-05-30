@@ -540,3 +540,52 @@ describe("NRS integration", () => {
     expect(result.nrsFactors).not.toContain("nrs_domain_repeat_offender");
   });
 });
+
+describe("read-modify-write serialization (regression: discovery D-PROF wf_c7d868c7-3b1)", () => {
+  it("getDomainRisk observes writes queued just before it (reads chain through pending)", async () => {
+    // Fire navigations WITHOUT awaiting, then read immediately. getDomainRisk
+    // now shares recordNavigation's pending chain, so the read runs only after
+    // the writes complete. Before the fix the reader raced loadProfiles and
+    // returned zeros.
+    for (let i = 0; i < 4; i++) void recordNavigation("serial.test", 50, ["nrs_cross_site"]);
+    const risk = await getDomainRisk("serial.test");
+    expect(risk.avgNRS).toBe(50);
+    expect(risk.topFactors).toContain("nrs_cross_site");
+  });
+
+  it("getTopSuspiciousDomains observes writes queued just before it", async () => {
+    for (let i = 0; i < 3; i++) void recordNavigation("serial2.test", 60, []);
+    const top = await getTopSuspiciousDomains(10);
+    const entry = top.find((p) => p.domain === "serial2.test");
+    expect(entry).toBeDefined();
+    expect(entry!.visits).toBe(3);
+  });
+
+  it("a decaying reader does not clobber a concurrent navigation write", async () => {
+    // Seed a stale profile so the reader's applyDecay fires and persists a
+    // snapshot. A concurrently-issued navigation to a different domain must
+    // survive the reader's save.
+    const staleTs = Date.now() - DECAY_AGE_MS - 1000;
+    store[DOMAIN_PROFILES_KEY] = {
+      "stale.com": {
+        domain: "stale.com",
+        visits: 10,
+        totalNRS: 500,
+        maxNRS: 80,
+        triggerCount: 6,
+        lastSeen: staleTs,
+        factors: { nrs_cross_site: 5 },
+        nrsHistory: [50, 50, 50, 50, 50, 50, 50, 50, 50, 50],
+      },
+    };
+
+    const reader = getTopSuspiciousDomains(10); // decays stale.com + saves
+    const writer = recordNavigation("fresh.com", 40, ["nrs_new_tab_window"]);
+    await Promise.all([reader, writer]);
+
+    const profiles = getStoredProfiles();
+    expect(profiles["fresh.com"]).toBeDefined();
+    expect(profiles["fresh.com"]!.visits).toBe(1);
+    expect(profiles["stale.com"]!.visits).toBeLessThan(10);
+  });
+});
