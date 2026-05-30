@@ -317,8 +317,18 @@ export function showCredentialModal(spec: ModalSpec): Promise<string> {
     footer.className = "footer";
     const outside = spec.outsideAction ?? "cancel";
 
-    function done(actionId: string): void {
+    function focusFallback(preferLast = false): HTMLElement {
+      const focusable = listFocusable(card);
+      return (preferLast ? focusable[focusable.length - 1] : focusable[0]) ?? card;
+    }
+
+    function cleanupListeners(): void {
       window.removeEventListener("keydown", onKeyDown, true);
+      window.removeEventListener("focusin", onFocusIn, true);
+    }
+
+    function done(actionId: string): void {
+      cleanupListeners();
       activeDispose = null;
       removeModal();
       previouslyFocused?.focus();
@@ -326,10 +336,19 @@ export function showCredentialModal(spec: ModalSpec): Promise<string> {
     }
 
     activeDispose = () => {
-      window.removeEventListener("keydown", onKeyDown, true);
+      cleanupListeners();
       activeDispose = null;
       resolve(outside);
     };
+
+    function onFocusIn(e: FocusEvent): void {
+      if (!activeRoot.contains(card)) return;
+      const path = e.composedPath();
+      const isInsideCard = path.some((node) => node instanceof Node && card.contains(node));
+      if (!isInsideCard) {
+        focusFallback().focus();
+      }
+    }
 
     function onKeyDown(e: KeyboardEvent): void {
       if (e.key === "Escape") {
@@ -375,6 +394,7 @@ export function showCredentialModal(spec: ModalSpec): Promise<string> {
     }
 
     window.addEventListener("keydown", onKeyDown, true);
+    window.addEventListener("focusin", onFocusIn, true);
     overlay.addEventListener("mousedown", (e) => {
       if (e.target === overlay) done(outside);
     });
