@@ -45,15 +45,19 @@ When slice B depends on unmerged slice A: branch B off A (`slice/<A>` → `slice
 
 Status legend: `TODO` · `IN-PROGRESS` · `IN-REVIEW` · `MERGE-READY` · `DONE` · `BLOCKED`
 
+Roadmap truth verified against `docs/Project_Roadmap.md` (Phases 0-3 done; Phase 4: P4-05–P4-08 done, P4-01/P4-02 in progress, P4-03/P4-04 pending). Baseline 2026-05-30: typecheck clean, lint 0/0, 2206 tests pass.
+
 | ID | Slice | Source | Priority | Status | Depends on | Notes |
 |----|-------|--------|----------|--------|-----------|-------|
-| ORCH-DISCOVERY | Codebase analysis → seed bug/improvement backlog | this turn | P1 | TODO | — | fan-out review of hot-spot files |
-| P4-01c | Real spoof-detection templates (replace placeholders) | Roadmap | P2 | TODO | — | visual_sim.ts uses synthetic fingerprints |
-| P4-02 | Behavioral anomaly heuristics | Roadmap | P3 | BLOCKED | capture telemetry | needs P4-05 signal store |
-| P4-05 | Telemetry-free behavioral signal store (IndexedDB ring buffer) | Roadmap | P3 | TODO | — | design pending; unblocks P4-02 |
-| P4-03 | Cross-tab correlation | Roadmap | P4 | TODO | — | planned |
-| P4-04 | Reputation feed refresh | Roadmap | P4 | TODO | — | planned |
-| P4-06 | Adaptive threshold tuning (FP < 2% on corpus) | Roadmap | P4 | BLOCKED | P4-02 | |
+| ORCH-DISCOVERY | Codebase analysis → seed bug/improvement backlog | this turn | P1 | IN-PROGRESS | — | discovery workflow `wf_c7d868c7-3b1` running; confirmed findings become rows below |
+| ORCH-HYGIENE | Prune merged local branches + 2 orphaned `worktree-agent-*` | analysis | P2 | TODO | — | all locals merged into main except `fix/jsb-stale-todos-and-tests`; `git branch -d` safe-deletes |
+| FF-02 | Firefox Vite build config + `src/sw/background.html` + dual build scripts | Roadmap P4-03 | P2 | TODO | FF-01 (#173, merged) | base of FF stack |
+| FF-03 | `session_state` Firefox compat (`storage.session`→namespaced `storage.local` shim) | Roadmap P4-03 | P3 | TODO | FF-02 | **stacked on FF-02** |
+| FF-04 | `world:"MAIN"` guard parity for Firefox + transition-qualifier gaps | Roadmap P4-03 | P4 | TODO | FF-03 | **stacked on FF-03** |
+| JSB-127 | JS behavior monitor: perf validation (patch/getter overhead budgets) + residual `JsBehaviorState` dedup | issue #127 | P3 | TODO | — | unmerged branch `fix/jsb-stale-todos-and-tests` may hold partial work — inspect before branching |
+| P4-01c | Real perceptual brand templates (replace placeholder hashes) | Roadmap P4-01 | P4 | BLOCKED | real brand login screenshots | `scripts/build-brand-templates.mjs` emits seeded-PRNG placeholders; spoof detection wired but cannot fire. Needs a sanctioned source of brand screenshots — product decision. |
+| P2-GATE-FP | Re-run FP/TP measurement after P4 additions (Phase 2 gate open item) | Roadmap | P4 | TODO | — | `npm run measure:fp`; confirm < 0.1% still holds |
+| P4-04 | Community threat intelligence | Roadmap | P5 | BLOCKED | protocol/privacy product decisions | XL, deferred — not an autonomous pick |
 
 ---
 
@@ -69,4 +73,6 @@ Status legend: `TODO` · `IN-PROGRESS` · `IN-REVIEW` · `MERGE-READY` · `DONE`
 
 | # | Date | Slice | Action | Result |
 |---|------|-------|--------|--------|
-| 0 | 2026-05-30 | bootstrap | Created orchestrator; baseline = typecheck clean, lint 0/0, 2206 tests pass (1 skip) | OK |
+| 0 | 2026-05-30 | bootstrap | Created orchestrator; baseline = typecheck clean, lint 0/0, 2206 tests pass | OK |
+| 1 | 2026-05-30 | ORCH-HYGIENE | Pruned 55 merged local branches + 2 orphaned `worktree-agent-*` via `git branch -d` (refuses unmerged, so no work lost); `git worktree prune`. Kept `main` + unmerged `fix/jsb-stale-todos-and-tests`. Note: `origin/feat/ff-browser-shim` still on remote (FF-01 merged via #173) — remote cleanup deferred. | DONE |
+| 2 | 2026-05-30 | ORCH-DISCOVERY | Launched fan-out discovery workflow `wf_c7d868c7-3b1` (7 subsystems → adversarial verify). Awaiting results. | IN-PROGRESS |
