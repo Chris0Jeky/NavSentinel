@@ -489,6 +489,120 @@ describe("appendPromptOutcome", () => {
       "fail-outcome",
     );
   });
+
+  it("serializes concurrent appends without losing outcomes", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { appendPromptOutcome } = await import("../extension/src/shared/storage");
+    const ids = Array.from({ length: 8 }, (_, i) => `outcome-${i}`);
+    await Promise.all(
+      ids.map((id, i) =>
+        appendPromptOutcome({
+          id,
+          domain: `site-${i}.example`,
+          type: "nav",
+          score: 40 + i,
+          outcome: "allow",
+          ts: i,
+        }),
+      ),
+    );
+
+    const log = store[PROMPT_OUTCOMES_KEY] as Array<{ id: string }>;
+    expect(log).toHaveLength(ids.length);
+    expect(new Set(log.map((entry) => entry.id))).toEqual(new Set(ids));
+  });
+
+  it("does not accept verification that clobbers existing outcomes", async () => {
+    let getCount = 0;
+    let setCount = 0;
+    const existingOutcome = {
+      id: "existing-outcome",
+      ts: 1,
+      domain: "existing.example",
+      type: "nav",
+      score: 50,
+      outcome: "block",
+    };
+    const otherOutcome = {
+      id: "other-outcome",
+      ts: 2,
+      domain: "other.example",
+      type: "cred",
+      score: 30,
+      outcome: "trust",
+    };
+    const brokenChrome = {
+      storage: {
+        local: {
+          async get(keys?: string | string[]) {
+            const k = Array.isArray(keys) ? keys : typeof keys === "string" ? [keys] : [];
+            if (!k.includes(PROMPT_OUTCOMES_KEY)) return {};
+            getCount++;
+            return {
+              [PROMPT_OUTCOMES_KEY]: getCount % 2 === 1
+                ? [existingOutcome, otherOutcome]
+                : [{
+                  id: "replacement-outcome",
+                  ts: 3,
+                  domain: "replacement.example",
+                  type: "nav",
+                  score: 55,
+                  outcome: "dismiss",
+                }, otherOutcome, {
+                  id: "new-outcome",
+                  ts: 4,
+                  domain: "new.example",
+                  type: "nav",
+                  score: 60,
+                  outcome: "allow",
+                }],
+            };
+          },
+          async set() {
+            setCount++;
+          },
+        },
+        onChanged: { addListener() {} },
+      },
+    };
+    vi.stubGlobal("chrome", brokenChrome as unknown as typeof globalThis.chrome);
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const { appendPromptOutcome } = await import("../extension/src/shared/storage");
+    await appendPromptOutcome({
+      id: "new-outcome",
+      domain: "new.example",
+      type: "nav",
+      score: 60,
+      outcome: "allow",
+    });
+
+    expect(setCount).toBe(3);
+    expect(warnSpy).toHaveBeenCalledWith(
+      "[NavSentinel] appendPromptOutcome: failed to persist after 3 attempts, id:",
+      "new-outcome",
+    );
+  });
+
+  it("serializes clear after a queued append so the clear wins", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { appendPromptOutcome, clearPromptOutcomes } = await import("../extension/src/shared/storage");
+    const append = appendPromptOutcome({
+      id: "clear-race",
+      domain: "example.com",
+      type: "nav",
+      score: 70,
+      outcome: "block",
+    });
+    const clear = clearPromptOutcomes();
+    await Promise.all([append, clear]);
+
+    expect(store[PROMPT_OUTCOMES_KEY]).toEqual([]);
+  });
 });
 
 describe("getEventLog", () => {

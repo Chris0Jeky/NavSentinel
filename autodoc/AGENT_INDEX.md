@@ -1,12 +1,12 @@
 # Agent Index - NavSentinel
 
-Last reviewed: 2026-05-29.
+Last reviewed: 2026-05-30.
 
 This is a fast orientation layer for coding agents. It should point to interfaces and seams, not duplicate implementation details.
 
 ## Start Here
 
-0. **Resuming the autonomous work loop?** Read `docs/agentic/HANDOFF.md` (latest session handoff) + `docs/agentic/ORCHESTRATOR.md` (living backlog/cycle log) first. As of 2026-05-30: PR #180 (D-PROF) aging for merge; next slice is **D-STORE**.
+0. **Resuming the autonomous work loop?** Read `docs/agentic/HANDOFF.md` (latest session handoff) + `docs/agentic/ORCHESTRATOR.md` (living backlog/cycle log) first. As of 2026-05-30: PR #180 (D-PROF) aging for merge; **D-STORE** is implemented locally on `fix/prompt-outcome-race` and needs PR/review rounds next.
 1. `AGENTS.md` - repo operating rules.
 2. `CLAUDE.md` - Claude-specific compact contract.
 3. `docs/Project_Roadmap.md` - active phase status, gates, decisions, and next tasks.
@@ -60,7 +60,7 @@ All paths above are relative to repo root. Content scripts live under `extension
 - Codex has a matching `.agents/skills` layer and should use `AGENTS.md`, Codex-native planning, parallel reads, patching, and verification tools.
 - Build output and generated data are easy context traps. Agents should edit source under `extension/src/` and avoid `extension/dist/`.
 - The highest-risk seams are main-world patching, bridge messages, service-worker lifecycle state, and credential/data privacy behavior.
-- **0 open PRs.** #114-#174 merged across Cycles 6-7 (2026-05-29): hygiene/bug fixes, toolchain migration (vite 8 / vitest 4), ESLint flat-config + CI lint gate, perf-budget CI, ~40 test-coverage + property-test PRs, type safety, accessibility (#132-#135), silent-catch logging, prototype-pollution guards, P4-01a visual-sim NRS integration (#172), P4-01b visual-sim gym+E2E (#174), FF-01 Firefox `browser.*` shim (#173). Lint is 0 errors / 0 warnings.
+- **1 open PR.** #180 (`fix/domain-profile-concurrency`, tip `e6036ab`) is mergeable and CI green; it is aging for merge and should not be merged yet. GitHub has early automated review records from Gemini/Codex/Copilot on the opening commit; the actionable Gemini status/ledger feedback was addressed in the D-PROF cycle. #114-#174 merged across Cycles 6-7 (2026-05-29): hygiene/bug fixes, toolchain migration (vite 8 / vitest 4), ESLint flat-config + CI lint gate, perf-budget CI, ~40 test-coverage + property-test PRs, type safety, accessibility (#132-#135), silent-catch logging, prototype-pollution guards, P4-01a visual-sim NRS integration (#172), P4-01b visual-sim gym+E2E (#174), FF-01 Firefox `browser.*` shim (#173). Lint is 0 errors / 0 warnings.
 - All icon SVGs from `icon()` and `logoSentinel()` include `aria-hidden="true"` (#135 merged).
 - **Open issue: #127** (JS behavior monitor — remaining slices: perf validation + residual type dedup in `js_behavior_monitor.ts`). #86, #90 (bridge), #97 (shadow-DOM monitor → #115), #113 (toolchain → #118), #106 closed.
 

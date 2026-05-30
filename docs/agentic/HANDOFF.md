@@ -11,24 +11,24 @@
 - The user asked for a **continuous, end-to-end autonomous work loop**: pick a slice → small commits → PR → **two independent adversarial review rounds** → fix every finding (all severities) → address all bot comments → docs sync → next slice. Use stacked branches for dependent work. Don't merge the newest PR; a PR becomes merge-eligible only once it's ~3 PRs old, both rounds passed, bots addressed, and aged.
 - One full cycle is done: **PR #180 (D-PROF)** — a HIGH-severity concurrency fix — passed both review rounds with all findings fixed, **CI fully green**, and is now **aging for merge** (do NOT merge it yet; it's the newest PR).
 - A **discovery workflow** found and adversarially confirmed **14 real bugs/risks** across the codebase. 6 are queued as ready-to-implement PRs (D-STORE, D-FOCUS, D-BRIDGE, D-SWRATE, D-ANOM, D-IFRAME); 5 lower/architectural ones are seeded as GitHub issues.
-- **Two caveats** the next session must know: (1) the harness intermittently **fabricated tool outputs** this session — verify everything via file-redirect + git SHA; (2) `npm run agent:hooks:smoke` has **one failing check** unrelated to our work — needs classification.
+- **Two caveats** the next session must know: (1) the harness intermittently **fabricated tool outputs** this session — verify everything via file-redirect + git SHA; (2) the pickup note reports local agent checks green on `main`; rerunning `npm run agent:hooks:smoke` from a feature branch can still fail because the smoke test expects hard denial for branch-aware commands that the hook intentionally only hard-denies on protected branches.
 
-**Recommended next action:** implement **D-STORE** (`appendPromptOutcome` race in `extension/src/shared/storage.ts`). See "Where to start next."
+**Recommended next action:** open a PR for **D-STORE** from `fix/prompt-outcome-race`, then run the two adversarial review rounds. Do not merge PR #180 yet.
 
 ---
 
 ## Exact current state (git-verified 2026-05-30)
 
-- **`main`** == `origin/main` == `3de179f`. Working tree clean.
-- **Branches:** `main`; `fix/domain-profile-concurrency` (PR #180, tip `e6036ab`); `fix/jsb-stale-todos-and-tests` (**pre-existing, unmerged** — predates this session; may hold partial #127 work, inspect before reusing).
-- **Baseline health:** `npm run typecheck` clean · `npm run lint` 0/0 · `npm run test` **2211 pass** (was 2206 at session start; +5 from D-PROF).
+- **`main`** == `origin/main` == `3eaf382`. Working tree clean at pickup.
+- **Branches:** `main`; `fix/domain-profile-concurrency` (PR #180, tip `e6036ab`); `fix/prompt-outcome-race` (D-STORE local implementation, PR not opened); `fix/jsb-stale-todos-and-tests` (**pre-existing, unmerged** — predates this session; may hold partial #127 work, inspect before reusing).
+- **Verification counts:** PR #180's D-PROF branch verified **2211** Vitest tests; current `fix/prompt-outcome-race` D-STORE branch verifies typecheck clean, lint 0/0, and **2209** Vitest tests.
 
 ### PR #180 — `fix/domain-profile-concurrency` (D-PROF)
 - **State:** OPEN, MERGEABLE, tip `e6036ab` (local == remote, SHA-verified).
 - **What it fixes:** `getDomainRisk`, `getTopSuspiciousDomains`, and `clearDomainProfiles` in `extension/src/shared/domain_profile.ts` did read-modify-write (decay + save) **outside** the module-level `pending` promise chain that serializes `recordNavigation`. A concurrent navigation write could be silently lost when a reader saved its stale pre-write snapshot. Fix routes all of them through the same chain.
 - **Reviews:** Round 1 (2 independent reviewers: 1 approve / 1 changes-requested) + Round 2 (fresh pass, changes-requested). **Every finding fixed:** clearDomainProfiles serialization, test-isolation reset (`_resetSerializationForTests` + `beforeEach`), replaced a timing-dependent test with a deterministic no-interleave invariant, added same-domain coverage, `afterEach` mock restoration, and documented the reset caveat.
-- **CI:** Build/Unit pass (46s), **E2E pass (1m51s)** — fully green.
-- **Bots:** none commented. Only PR comments are the two review summaries (by repo owner account).
+- **CI:** Build/Unit pass, **E2E pass**, release skipped as expected — fully green on the latest PR tip.
+- **Bots:** GitHub has early automated review records on the opening commit from Gemini, Codex, and Copilot. Gemini's actionable status/ledger feedback was addressed by the D-PROF updates; the Codex review was informational, and Copilot reported a review error. No unresolved actionable bot item remains.
 - **MERGE POSTURE: hold.** It's the newest PR. Per the user's aging rule, merge only once it's ~3 PRs old. Bottom of the merge queue.
 - **Known residual (out of scope, seeded as #181):** `pending` is per content-script context; with `all_frames: true` two frames racing the same domain can still lose an update at the shared `chrome.storage.local` layer. Documented inline in `domain_profile.ts`.
 
@@ -46,21 +46,20 @@
 
 ---
 
-## Where to start next — D-STORE
+## D-STORE local progress
 
 **Slice:** `appendPromptOutcome` get-modify-write race in `extension/src/shared/storage.ts` (~lines 341-358). Adversary-adjusted **HIGH**.
 
 **Problem:** Two concurrent fire-and-forget `appendPromptOutcome(...)` calls (e.g. two credential decisions) can both read the same list, append, and write back — one entry is silently lost. The verify check only confirms "my entry exists," not that the length grew, so it doesn't catch the loss.
 
-**Fix direction:** Serialize through a `pending`-style promise chain (mirror the pattern just established in `domain_profile.ts` — that's now the house pattern for chrome.storage read-modify-write). Strengthen the verify to assert the log length increased. Add a concurrent-append regression test (the existing `appendEvent` concurrency test is too weak — it only checks for one entry; consider hardening it too).
+**Local implementation:** `appendPromptOutcome` and `clearPromptOutcomes` now serialize through a prompt-outcome `pending` chain. Verification requires the new entry, bounded length, and intended IDs to persist, so a write that only preserves "my id exists" cannot silently clobber prior outcomes. Regression tests cover 8 concurrent appends, clobber-detect verification, and clear-after-append ordering.
+
+**Verified on `fix/prompt-outcome-race`:** `npm run typecheck` clean; `npm run lint` clean; `npm run test -- tests/storage-append.test.ts` 32 passed; `npm run test` 74 files / 2209 tests passed. Vitest still prints existing happy-dom aborted/network fetch noise after the pass summary.
 
 **Cycle steps (follow ORCHESTRATOR.md operating loop):**
-1. Branch `fix/prompt-outcome-race` off `main`.
-2. Small commits: fix, then test.
-3. Verify: `npm run typecheck`, `npm run lint`, `npm run test`.
-4. PR with factual summary + verification evidence.
-5. Two independent adversarial review rounds (use the Workflow harness; see "How reviews were run").
-6. Fix every finding; address bots; docs sync; update ORCHESTRATOR.md cycle log.
+1. Open PR from `fix/prompt-outcome-race` with factual summary + verification evidence.
+2. Run two independent adversarial review rounds (use the Workflow harness; see "How reviews were run").
+3. Fix every finding; address bots; docs sync; update ORCHESTRATOR.md cycle log.
 
 ---
 
@@ -69,7 +68,7 @@
 ### Discovery findings → ready-to-implement PRs (independent unless noted; branch each off `main`)
 | Slice | File(s) | Sev | One-line |
 |-------|---------|-----|----------|
-| **D-STORE** | `storage.ts` | HIGH | `appendPromptOutcome` race → lost outcomes; verify check too weak *(start here)* |
+| **D-STORE** | `storage.ts` | HIGH | local implementation on `fix/prompt-outcome-race`; PR/review pending |
 | **D-FOCUS** | `credential_modal.ts` (~356-359) | HIGH | Tab focus-trap escapes to untrusted page when focus leaves ShadowRoot |
 | **D-BRIDGE** | `main_guard.ts` (~35-50, ~831-847) | HIGH×2 | pendingOutbound FIFO-discards oldest (drops early alerts); challenge handshake has no timeout (bridge dead-locks queuing forever) |
 | **D-SWRATE** | `sw.ts` (~66), `session_state.ts` | HIGH | `captureTimestampsByTab` rate-limit Map not in SessionStateManager → resets on SW restart → rate-limit bypass |
@@ -112,5 +111,5 @@ Each PR got two **independent adversarial review rounds** via the `Workflow` too
 - **Create gh issues/PRs via `--body-file`** (inline vulnerability-description text trips the secret scanner).
 - Note: doc files viewed on a feature branch may legitimately differ from `main` (the orchestrator/handoff docs are committed on `main`); that's branch divergence, not fabrication.
 
-## ⚠️ Open failure — needs classification
-`npm run agent:hooks:smoke` reports **`FAIL - PreToolUse guardrails: PreToolUse did not deny: git reset --hard`**. This is **not** from D-PROF (which touched only `domain_profile.ts`, its test, and `docs/agentic/*`). Likely pre-existing or sandbox-specific (the guardrail may not be exercisable headlessly). Verify on a clean checkout and classify (pre-existing noise vs real hook regression) before relying on the smoke test as a gate. `npm run agent:skills:validate` passes (16 Claude + 16 Codex skills aligned).
+## Agent checks
+The earlier blanket hook-smoke failure note was stale for the verified `main` pickup state. Re-run context matters: `npm run agent:skills:validate` passes here, while `npm run agent:hooks:smoke` fails on this feature branch at `PreToolUse did not deny: git reset --hard` because `pre_tool_use.py` only hard-denies that branch-aware command on protected branches. Track this as a smoke-test expectation mismatch, not a D-PROF or D-STORE product regression.

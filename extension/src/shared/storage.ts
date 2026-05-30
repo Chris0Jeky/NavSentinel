@@ -316,6 +316,7 @@ export async function clearEventLog(): Promise<void> {
 }
 
 const PROMPT_OUTCOMES_LIMIT = 500;
+let promptOutcomePending: Promise<unknown> = Promise.resolve();
 
 export async function getPromptOutcomes(): Promise<PromptOutcomeEntry[]> {
   const res = await chrome.storage.local.get(PROMPT_OUTCOMES_KEY);
@@ -324,7 +325,43 @@ export async function getPromptOutcomes(): Promise<PromptOutcomeEntry[]> {
   return log.slice(-PROMPT_OUTCOMES_LIMIT) as PromptOutcomeEntry[];
 }
 
-export async function appendPromptOutcome(
+function queuePromptOutcomeWrite<T>(operation: () => Promise<T>): Promise<T> {
+  const next = promptOutcomePending.then(operation);
+  promptOutcomePending = next.catch((err) => {
+    console.warn("[NavSentinel] prompt outcome serialization error:", err);
+  });
+  return next;
+}
+
+async function persistPromptOutcome(entry: PromptOutcomeEntry): Promise<void> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await chrome.storage.local.get(PROMPT_OUTCOMES_KEY);
+    const cur = Array.isArray(res[PROMPT_OUTCOMES_KEY])
+      ? (res[PROMPT_OUTCOMES_KEY] as PromptOutcomeEntry[])
+      : [];
+    const withoutEntry = cur.filter((item) => item?.id !== entry.id);
+    const expectedLength = Math.min(PROMPT_OUTCOMES_LIMIT, withoutEntry.length + 1);
+    const next = [...withoutEntry, entry].slice(-PROMPT_OUTCOMES_LIMIT);
+    const expectedIds = new Set(next.map((item) => item?.id).filter((id): id is string => typeof id === "string"));
+    await chrome.storage.local.set({ [PROMPT_OUTCOMES_KEY]: next });
+
+    const verify = await chrome.storage.local.get(PROMPT_OUTCOMES_KEY);
+    const verifyLog = Array.isArray(verify[PROMPT_OUTCOMES_KEY])
+      ? (verify[PROMPT_OUTCOMES_KEY] as PromptOutcomeEntry[])
+      : [];
+    const verifyIds = new Set(verifyLog.map((item) => item?.id).filter((id): id is string => typeof id === "string"));
+    if (
+      verifyIds.has(entry.id) &&
+      verifyLog.length >= expectedLength &&
+      [...expectedIds].every((id) => verifyIds.has(id))
+    ) {
+      return;
+    }
+  }
+  console.warn("[NavSentinel] appendPromptOutcome: failed to persist after 3 attempts, id:", entry.id);
+}
+
+export function appendPromptOutcome(
   partial: Omit<PromptOutcomeEntry, "id" | "ts"> & { id?: string; ts?: number }
 ): Promise<void> {
   const entry: PromptOutcomeEntry = {
@@ -338,27 +375,13 @@ export async function appendPromptOutcome(
     ...(partial.reasons !== undefined ? { reasons: partial.reasons } : {})
   };
 
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const res = await chrome.storage.local.get(PROMPT_OUTCOMES_KEY);
-    const cur = Array.isArray(res[PROMPT_OUTCOMES_KEY])
-      ? (res[PROMPT_OUTCOMES_KEY] as PromptOutcomeEntry[])
-      : [];
-    const next = [...cur.filter((item) => item?.id !== entry.id), entry].slice(-PROMPT_OUTCOMES_LIMIT);
-    await chrome.storage.local.set({ [PROMPT_OUTCOMES_KEY]: next });
-
-    const verify = await chrome.storage.local.get(PROMPT_OUTCOMES_KEY);
-    const verifyLog = Array.isArray(verify[PROMPT_OUTCOMES_KEY])
-      ? (verify[PROMPT_OUTCOMES_KEY] as PromptOutcomeEntry[])
-      : [];
-    if (verifyLog.some((item) => item?.id === entry.id)) {
-      return;
-    }
-  }
-  console.warn("[NavSentinel] appendPromptOutcome: failed to persist after 3 attempts, id:", entry.id);
+  return queuePromptOutcomeWrite(() => persistPromptOutcome(entry));
 }
 
-export async function clearPromptOutcomes(): Promise<void> {
-  await chrome.storage.local.set({ [PROMPT_OUTCOMES_KEY]: [] });
+export function clearPromptOutcomes(): Promise<void> {
+  return queuePromptOutcomeWrite(async () => {
+    await chrome.storage.local.set({ [PROMPT_OUTCOMES_KEY]: [] });
+  });
 }
 
 export async function exportAll(): Promise<{
