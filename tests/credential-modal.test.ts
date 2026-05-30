@@ -670,5 +670,76 @@ describe("credential modal", () => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
       await promise;
     });
+
+    it("recaptures focus from the page to the first modal button on Tab", async () => {
+      const outside = document.createElement("button");
+      outside.textContent = "Outside";
+      document.body.appendChild(outside);
+
+      const promise = showCredentialModal(
+        minimalSpec({
+          actions: [
+            { id: "a", label: "First", kind: "primary" },
+            { id: "b", label: "Last", kind: "danger" },
+          ],
+        }),
+      );
+      vi.runAllTimers();
+
+      const buttons = getButtons();
+      outside.focus();
+      expect(document.activeElement).toBe(outside);
+
+      const tabEvent = new KeyboardEvent("keydown", {
+        key: "Tab",
+        bubbles: true,
+        cancelable: true,
+      });
+      const preventSpy = vi.spyOn(tabEvent, "preventDefault");
+      window.dispatchEvent(tabEvent);
+
+      expect(preventSpy).toHaveBeenCalled();
+      expect(getShadow()!.activeElement).toBe(buttons[0]);
+
+      getButtons()[0]!.click();
+      await promise;
+      document.body.removeChild(outside);
+    });
+
+    it("recaptures focus from the page to the last modal button on Shift+Tab", async () => {
+      const outside = document.createElement("button");
+      outside.textContent = "Outside";
+      document.body.appendChild(outside);
+
+      const promise = showCredentialModal(
+        minimalSpec({
+          actions: [
+            { id: "a", label: "First", kind: "primary" },
+            { id: "b", label: "Last", kind: "danger" },
+          ],
+        }),
+      );
+      vi.runAllTimers();
+
+      const buttons = getButtons();
+      outside.focus();
+      expect(document.activeElement).toBe(outside);
+
+      const tabEvent = new KeyboardEvent("keydown", {
+        key: "Tab",
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      const preventSpy = vi.spyOn(tabEvent, "preventDefault");
+      window.dispatchEvent(tabEvent);
+
+      expect(preventSpy).toHaveBeenCalled();
+      expect(getShadow()!.activeElement).toBe(buttons[1]);
+
+      getButtons()[0]!.click();
+      await promise;
+      document.body.removeChild(outside);
+    });
   });
 });
