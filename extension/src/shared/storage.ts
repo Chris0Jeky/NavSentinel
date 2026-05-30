@@ -325,6 +325,80 @@ export async function getPromptOutcomes(): Promise<PromptOutcomeEntry[]> {
   return log.slice(-PROMPT_OUTCOMES_LIMIT) as PromptOutcomeEntry[];
 }
 
+export type PromptOutcomeStorageMessage =
+  | { type: "ns-prompt-outcome-append"; entry: PromptOutcomeEntry }
+  | { type: "ns-prompt-outcome-clear" }
+  | { type: "ns-prompt-outcome-replace"; outcomes: PromptOutcomeEntry[] };
+
+type PromptOutcomeStorageResponse = { ok: true } | { ok: false; error: string };
+
+function isPromptOutcomeEntry(value: unknown): value is PromptOutcomeEntry {
+  if (!value || typeof value !== "object") return false;
+  const entry = value as Record<string, unknown>;
+  const type = entry.type;
+  const outcome = entry.outcome;
+  return typeof entry.id === "string" &&
+    typeof entry.ts === "number" &&
+    Number.isFinite(entry.ts) &&
+    typeof entry.domain === "string" &&
+    (entry.destDomain === undefined || typeof entry.destDomain === "string") &&
+    (type === "nav" || type === "cred") &&
+    typeof entry.score === "number" &&
+    Number.isFinite(entry.score) &&
+    (
+      outcome === "allow" ||
+      outcome === "allow_once" ||
+      outcome === "always_allow" ||
+      outcome === "block" ||
+      outcome === "trust" ||
+      outcome === "dismiss" ||
+      outcome === "cancel"
+    ) &&
+    (entry.reasons === undefined || (Array.isArray(entry.reasons) && entry.reasons.every((reason) => typeof reason === "string")));
+}
+
+export function isPromptOutcomeStorageMessage(message: unknown): message is PromptOutcomeStorageMessage {
+  if (!message || typeof message !== "object") return false;
+  const candidate = message as Record<string, unknown>;
+  if (candidate.type === "ns-prompt-outcome-clear") return true;
+  if (candidate.type === "ns-prompt-outcome-append") return isPromptOutcomeEntry(candidate.entry);
+  if (candidate.type === "ns-prompt-outcome-replace") return Array.isArray(candidate.outcomes);
+  return false;
+}
+
+function isExtensionServiceWorkerContext(): boolean {
+  const scope = globalThis as { clients?: unknown; document?: unknown; registration?: unknown };
+  return typeof scope.document === "undefined" &&
+    typeof scope.clients !== "undefined" &&
+    typeof scope.registration !== "undefined";
+}
+
+function shouldDelegatePromptOutcomeWrite(): boolean {
+  const runtime = (globalThis as { chrome?: typeof chrome }).chrome?.runtime;
+  return !isExtensionServiceWorkerContext() && typeof runtime?.sendMessage === "function";
+}
+
+function sendPromptOutcomeStorageMessage(message: PromptOutcomeStorageMessage): Promise<void> {
+  return new Promise((resolve, reject) => {
+    try {
+      chrome.runtime.sendMessage(message, (response?: PromptOutcomeStorageResponse) => {
+        const lastError = chrome.runtime.lastError;
+        if (lastError) {
+          reject(new Error(lastError.message ?? "runtime.sendMessage failed"));
+          return;
+        }
+        if (response?.ok) {
+          resolve();
+          return;
+        }
+        reject(new Error(response?.error ?? "Prompt outcome storage write failed"));
+      });
+    } catch (err) {
+      reject(err instanceof Error ? err : new Error(String(err)));
+    }
+  });
+}
+
 function queuePromptOutcomeWrite<T>(operation: () => Promise<T>): Promise<T> {
   const next = promptOutcomePending.then(operation);
   promptOutcomePending = next.catch((err) => {
@@ -334,14 +408,25 @@ function queuePromptOutcomeWrite<T>(operation: () => Promise<T>): Promise<T> {
 }
 
 async function persistPromptOutcome(entry: PromptOutcomeEntry): Promise<void> {
+  // Keep the intended snapshot across retries so a clobbered verify does not
+  // become the new baseline on the next attempt.
+  const requiredEntries = new Map<string, PromptOutcomeEntry>();
+
   for (let attempt = 0; attempt < 3; attempt++) {
     const res = await chrome.storage.local.get(PROMPT_OUTCOMES_KEY);
     const cur = Array.isArray(res[PROMPT_OUTCOMES_KEY])
       ? (res[PROMPT_OUTCOMES_KEY] as PromptOutcomeEntry[])
       : [];
-    const withoutEntry = cur.filter((item) => item?.id !== entry.id);
-    const expectedLength = Math.min(PROMPT_OUTCOMES_LIMIT, withoutEntry.length + 1);
-    const next = [...withoutEntry, entry].slice(-PROMPT_OUTCOMES_LIMIT);
+    const mergedEntries = new Map<string, PromptOutcomeEntry>();
+    for (const item of requiredEntries.values()) mergedEntries.set(item.id, item);
+    for (const item of cur) {
+      if (typeof item?.id === "string") mergedEntries.set(item.id, item);
+    }
+    mergedEntries.delete(entry.id);
+    const next = [...mergedEntries.values(), entry].slice(-PROMPT_OUTCOMES_LIMIT);
+    requiredEntries.clear();
+    for (const item of next) requiredEntries.set(item.id, item);
+    const expectedLength = next.length;
     const expectedIds = new Set(next.map((item) => item?.id).filter((id): id is string => typeof id === "string"));
     await chrome.storage.local.set({ [PROMPT_OUTCOMES_KEY]: next });
 
@@ -361,6 +446,10 @@ async function persistPromptOutcome(entry: PromptOutcomeEntry): Promise<void> {
   console.warn("[NavSentinel] appendPromptOutcome: failed to persist after 3 attempts, id:", entry.id);
 }
 
+function appendPromptOutcomeDirect(entry: PromptOutcomeEntry): Promise<void> {
+  return queuePromptOutcomeWrite(() => persistPromptOutcome(entry));
+}
+
 export function appendPromptOutcome(
   partial: Omit<PromptOutcomeEntry, "id" | "ts"> & { id?: string; ts?: number }
 ): Promise<void> {
@@ -375,13 +464,57 @@ export function appendPromptOutcome(
     ...(partial.reasons !== undefined ? { reasons: partial.reasons } : {})
   };
 
-  return queuePromptOutcomeWrite(() => persistPromptOutcome(entry));
+  if (shouldDelegatePromptOutcomeWrite()) {
+    return sendPromptOutcomeStorageMessage({ type: "ns-prompt-outcome-append", entry });
+  }
+  return appendPromptOutcomeDirect(entry);
 }
 
-export function clearPromptOutcomes(): Promise<void> {
+function clearPromptOutcomesDirect(): Promise<void> {
   return queuePromptOutcomeWrite(async () => {
     await chrome.storage.local.set({ [PROMPT_OUTCOMES_KEY]: [] });
   });
+}
+
+export function clearPromptOutcomes(): Promise<void> {
+  if (shouldDelegatePromptOutcomeWrite()) {
+    return sendPromptOutcomeStorageMessage({ type: "ns-prompt-outcome-clear" });
+  }
+  return clearPromptOutcomesDirect();
+}
+
+async function replacePromptOutcomesDirect(outcomes: PromptOutcomeEntry[]): Promise<void> {
+  const importedOutcomes = outcomes.slice(-PROMPT_OUTCOMES_LIMIT);
+  await queuePromptOutcomeWrite(async () => {
+    await chrome.storage.local.set({ [PROMPT_OUTCOMES_KEY]: importedOutcomes });
+    const settings = await getNavSettings();
+    const threshold = settings.defaultMode === "strict" ? NRS_STRICT_BLOCK_THRESHOLD : NRS_BLOCK_THRESHOLD;
+    await updateAdaptiveScores(importedOutcomes, threshold);
+  });
+}
+
+async function replacePromptOutcomes(outcomes: PromptOutcomeEntry[]): Promise<void> {
+  if (shouldDelegatePromptOutcomeWrite()) {
+    return sendPromptOutcomeStorageMessage({ type: "ns-prompt-outcome-replace", outcomes });
+  }
+  return replacePromptOutcomesDirect(outcomes);
+}
+
+export async function handlePromptOutcomeStorageMessage(
+  message: PromptOutcomeStorageMessage
+): Promise<PromptOutcomeStorageResponse> {
+  try {
+    if (message.type === "ns-prompt-outcome-append") {
+      await appendPromptOutcomeDirect(message.entry);
+    } else if (message.type === "ns-prompt-outcome-clear") {
+      await clearPromptOutcomesDirect();
+    } else {
+      await replacePromptOutcomesDirect(message.outcomes);
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 export async function exportAll(): Promise<{
@@ -442,11 +575,7 @@ export async function importAll(payload: unknown): Promise<void> {
   }
 
   if (Array.isArray(p.promptOutcomes)) {
-    const importedOutcomes = (p.promptOutcomes as PromptOutcomeEntry[]).slice(-PROMPT_OUTCOMES_LIMIT);
-    await chrome.storage.local.set({ [PROMPT_OUTCOMES_KEY]: importedOutcomes });
-    const settings = await getNavSettings();
-    const threshold = settings.defaultMode === "strict" ? NRS_STRICT_BLOCK_THRESHOLD : NRS_BLOCK_THRESHOLD;
-    await updateAdaptiveScores(importedOutcomes, threshold);
+    await replacePromptOutcomes(p.promptOutcomes as PromptOutcomeEntry[]);
   } else {
     // Intentional: any import without valid outcomes resets adaptive scores
     // to prevent stale data. adaptiveScores from payload are ignored —

@@ -9,19 +9,20 @@
 ## TL;DR — where we stand
 
 - The user asked for a **continuous, end-to-end autonomous work loop**: pick a slice → small commits → PR → **two independent adversarial review rounds** → fix every finding (all severities) → address all bot comments → docs sync → next slice. Use stacked branches for dependent work. Don't merge the newest PR; a PR becomes merge-eligible only once it's ~3 PRs old, both rounds passed, bots addressed, and aged.
-- One full cycle is done: **PR #180 (D-PROF)** — a HIGH-severity concurrency fix — passed both review rounds with all findings fixed, **CI fully green**, and is now **aging for merge** (do NOT merge it yet; it's the newest PR).
-- A **discovery workflow** found and adversarially confirmed **14 real bugs/risks** across the codebase. 6 are queued as ready-to-implement PRs (D-STORE, D-FOCUS, D-BRIDGE, D-SWRATE, D-ANOM, D-IFRAME); 5 lower/architectural ones are seeded as GitHub issues.
+- One full cycle is done: **PR #180 (D-PROF)** — a HIGH-severity concurrency fix — passed both review rounds with all findings fixed, **CI fully green**, and is now **aging for merge** (do NOT merge it yet).
+- **PR #182 (D-STORE)** is open on `fix/prompt-outcome-race`. Round 1 found MV3 cross-context prompt-outcome races and stale status docs; both are addressed locally. Round 2 is pending.
+- A **discovery workflow** found and adversarially confirmed **14 real bugs/risks** across the codebase. 5 remain queued as ready-to-implement PRs (D-FOCUS, D-BRIDGE, D-SWRATE, D-ANOM, D-IFRAME); 5 lower/architectural ones are seeded as GitHub issues.
 - **Two caveats** the next session must know: (1) the harness intermittently **fabricated tool outputs** this session — verify everything via file-redirect + git SHA; (2) the pickup note reports local agent checks green on `main`; rerunning `npm run agent:hooks:smoke` from a feature branch can still fail because the smoke test expects hard denial for branch-aware commands that the hook intentionally only hard-denies on protected branches.
 
-**Recommended next action:** open a PR for **D-STORE** from `fix/prompt-outcome-race`, then run the two adversarial review rounds. Do not merge PR #180 yet.
+**Recommended next action:** finish **D-STORE** PR #182's review gate: push the Round 1 fixes, run Round 2, fix every finding, inspect all comments/checks, and leave #180/#182 unmerged.
 
 ---
 
 ## Exact current state (git-verified 2026-05-30)
 
 - **`main`** == `origin/main` == `3eaf382`. Working tree clean at pickup.
-- **Branches:** `main`; `fix/domain-profile-concurrency` (PR #180, tip `e6036ab`); `fix/prompt-outcome-race` (D-STORE local implementation, PR not opened); `fix/jsb-stale-todos-and-tests` (**pre-existing, unmerged** — predates this session; may hold partial #127 work, inspect before reusing).
-- **Verification counts:** PR #180's D-PROF branch verified **2211** Vitest tests; current `fix/prompt-outcome-race` D-STORE branch verifies typecheck clean, lint 0/0, and **2209** Vitest tests.
+- **Branches:** `main`; `fix/domain-profile-concurrency` (PR #180, tip `e6036ab`); `fix/prompt-outcome-race` (PR #182, D-STORE); `fix/jsb-stale-todos-and-tests` (**pre-existing, unmerged** — predates this session; may hold partial #127 work, inspect before reusing).
+- **Verification counts:** PR #180's D-PROF branch verified **2211** Vitest tests; current `fix/prompt-outcome-race` D-STORE branch verifies typecheck clean, lint 0/0, build clean, targeted storage **34 passed**, and full Vitest **2211 passed**.
 
 ### PR #180 — `fix/domain-profile-concurrency` (D-PROF)
 - **State:** OPEN, MERGEABLE, tip `e6036ab` (local == remote, SHA-verified).
@@ -46,19 +47,19 @@
 
 ---
 
-## D-STORE local progress
+## D-STORE PR progress
 
 **Slice:** `appendPromptOutcome` get-modify-write race in `extension/src/shared/storage.ts` (~lines 341-358). Adversary-adjusted **HIGH**.
 
 **Problem:** Two concurrent fire-and-forget `appendPromptOutcome(...)` calls (e.g. two credential decisions) can both read the same list, append, and write back — one entry is silently lost. The verify check only confirms "my entry exists," not that the length grew, so it doesn't catch the loss.
 
-**Local implementation:** `appendPromptOutcome` and `clearPromptOutcomes` now serialize through a prompt-outcome `pending` chain. Verification requires the new entry, bounded length, and intended IDs to persist, so a write that only preserves "my id exists" cannot silently clobber prior outcomes. Regression tests cover 8 concurrent appends, clobber-detect verification, and clear-after-append ordering.
+**Current implementation:** `appendPromptOutcome`, `clearPromptOutcomes`, and prompt-outcome import replacement route through the service worker as a single writer when runtime messaging is available, with direct local fallback for tests/unavailable runtime contexts. The worker-side mutation still uses a prompt-outcome `pending` chain. Verification requires the new entry, bounded length, and intended IDs to persist across retries, so a write that only preserves "my id exists" cannot silently clobber prior outcomes. Regression tests cover 8 concurrent appends, clobber-detect verification, retry preservation after a clobbered verify, independent module callers routed through one runtime writer, and clear-after-append ordering.
 
-**Verified on `fix/prompt-outcome-race`:** `npm run typecheck` clean; `npm run lint` clean; `npm run test -- tests/storage-append.test.ts` 32 passed; `npm run test` 74 files / 2209 tests passed. Vitest still prints existing happy-dom aborted/network fetch noise after the pass summary.
+**Verified on `fix/prompt-outcome-race`:** `npm run typecheck` clean; `npm run lint` clean; `npm run test -- tests/storage-append.test.ts` 34 passed; `npm run test` 74 files / 2211 tests passed; `npm run build` clean. Vitest still prints existing happy-dom aborted/network fetch noise after the pass summary.
 
 **Cycle steps (follow ORCHESTRATOR.md operating loop):**
-1. Open PR from `fix/prompt-outcome-race` with factual summary + verification evidence.
-2. Run two independent adversarial review rounds (use the Workflow harness; see "How reviews were run").
+1. Push the Round 1 fixes to PR #182 and update its body/comment trail.
+2. Run Round 2 adversarial review (use the Workflow harness/subagent path).
 3. Fix every finding; address bots; docs sync; update ORCHESTRATOR.md cycle log.
 
 ---
@@ -68,7 +69,7 @@
 ### Discovery findings → ready-to-implement PRs (independent unless noted; branch each off `main`)
 | Slice | File(s) | Sev | One-line |
 |-------|---------|-----|----------|
-| **D-STORE** | `storage.ts` | HIGH | local implementation on `fix/prompt-outcome-race`; PR/review pending |
+| **D-STORE** | `storage.ts`, `sw.ts` | HIGH | PR #182 open; Round 1 findings addressed locally; Round 2 pending |
 | **D-FOCUS** | `credential_modal.ts` (~356-359) | HIGH | Tab focus-trap escapes to untrusted page when focus leaves ShadowRoot |
 | **D-BRIDGE** | `main_guard.ts` (~35-50, ~831-847) | HIGH×2 | pendingOutbound FIFO-discards oldest (drops early alerts); challenge handshake has no timeout (bridge dead-locks queuing forever) |
 | **D-SWRATE** | `sw.ts` (~66), `session_state.ts` | HIGH | `captureTimestampsByTab` rate-limit Map not in SessionStateManager → resets on SW restart → rate-limit bypass |

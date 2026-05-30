@@ -586,6 +586,107 @@ describe("appendPromptOutcome", () => {
     );
   });
 
+  it("retries without forgetting outcomes observed before a clobbered verify", async () => {
+    let setCount = 0;
+    const existingOutcome = {
+      id: "existing-outcome",
+      ts: 1,
+      domain: "existing.example",
+      type: "nav",
+      score: 50,
+      outcome: "block",
+    };
+    const otherOutcome = {
+      id: "other-outcome",
+      ts: 2,
+      domain: "other.example",
+      type: "cred",
+      score: 30,
+      outcome: "trust",
+    };
+    const newOutcome = {
+      id: "new-outcome",
+      ts: 4,
+      domain: "new.example",
+      type: "nav" as const,
+      score: 60,
+      outcome: "allow" as const,
+    };
+    const store: Store = {
+      [PROMPT_OUTCOMES_KEY]: [existingOutcome, otherOutcome],
+    };
+    const clobberingChrome = {
+      storage: {
+        local: {
+          async get(keys?: string | string[]) {
+            const k = Array.isArray(keys) ? keys : typeof keys === "string" ? [keys] : [];
+            return k.includes(PROMPT_OUTCOMES_KEY) ? { [PROMPT_OUTCOMES_KEY]: store[PROMPT_OUTCOMES_KEY] } : {};
+          },
+          async set(next: Record<string, unknown>) {
+            setCount++;
+            store[PROMPT_OUTCOMES_KEY] = next[PROMPT_OUTCOMES_KEY];
+            if (setCount === 1) {
+              store[PROMPT_OUTCOMES_KEY] = [otherOutcome, newOutcome];
+            }
+          },
+        },
+        onChanged: { addListener() {} },
+      },
+    };
+    vi.stubGlobal("chrome", clobberingChrome as unknown as typeof globalThis.chrome);
+
+    const { appendPromptOutcome } = await import("../extension/src/shared/storage");
+    await appendPromptOutcome(newOutcome);
+
+    const ids = (store[PROMPT_OUTCOMES_KEY] as Array<{ id: string }>).map((item) => item.id);
+    expect(setCount).toBe(2);
+    expect(new Set(ids)).toEqual(new Set(["existing-outcome", "other-outcome", "new-outcome"]));
+  });
+
+  it("routes independent module callers through one runtime writer", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const workerStorage = await import("../extension/src/shared/storage");
+    const runtimeChrome = chrome as unknown as {
+      runtime: {
+        lastError?: { message?: string };
+        sendMessage(message: unknown, callback?: (response: unknown) => void): void;
+      };
+    };
+    runtimeChrome.runtime = {
+      sendMessage(message, callback) {
+        void workerStorage.handlePromptOutcomeStorageMessage(
+          message as Parameters<typeof workerStorage.handlePromptOutcomeStorageMessage>[0]
+        ).then((response) => callback?.(response));
+      },
+    };
+
+    vi.resetModules();
+    const contentStorageA = await import("../extension/src/shared/storage");
+    vi.resetModules();
+    const contentStorageB = await import("../extension/src/shared/storage");
+
+    await Promise.all([
+      contentStorageA.appendPromptOutcome({
+        id: "context-a",
+        domain: "a.example",
+        type: "nav",
+        score: 55,
+        outcome: "allow",
+      }),
+      contentStorageB.appendPromptOutcome({
+        id: "context-b",
+        domain: "b.example",
+        type: "cred",
+        score: 75,
+        outcome: "block",
+      }),
+    ]);
+
+    const ids = (store[PROMPT_OUTCOMES_KEY] as Array<{ id: string }>).map((entry) => entry.id);
+    expect(new Set(ids)).toEqual(new Set(["context-a", "context-b"]));
+  });
+
   it("serializes clear after a queued append so the clear wins", async () => {
     const { chrome, store } = createChromeMock();
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
