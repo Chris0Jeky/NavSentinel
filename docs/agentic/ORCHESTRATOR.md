@@ -85,7 +85,7 @@ PRs D-* are independent (different files) → parallel branches off `main`, **no
 
 | Slice | Branch | Base | Worktree | PR | Round 1 | Round 2 | Bots | Opened |
 |-------|--------|------|----------|----|---------|---------|------|--------|
-| _(none yet)_ | | | | | | | | |
+| D-PROF | `fix/domain-profile-concurrency` | `main` | no | #180 | done (1 approve / 1 changes-req → all fixed) | done (changes-req → all fixed) | none (no bots commented) | 2026-05-30, aging for merge |
 
 ---
 
@@ -95,4 +95,6 @@ PRs D-* are independent (different files) → parallel branches off `main`, **no
 |---|------|-------|--------|--------|
 | 0 | 2026-05-30 | bootstrap | Created orchestrator; baseline = typecheck clean, lint 0/0, 2206 tests pass | OK |
 | 1 | 2026-05-30 | ORCH-HYGIENE | Pruned 55 merged local branches + 2 orphaned `worktree-agent-*` via `git branch -d` (refuses unmerged, so no work lost); `git worktree prune`. Kept `main` + unmerged `fix/jsb-stale-todos-and-tests`. Note: `origin/feat/ff-browser-shim` still on remote (FF-01 merged via #173) — remote cleanup deferred. | DONE |
-| 2 | 2026-05-30 | ORCH-DISCOVERY | Launched fan-out discovery workflow `wf_c7d868c7-3b1` (7 subsystems → adversarial verify). Awaiting results. | IN-PROGRESS |
+| 2 | 2026-05-30 | ORCH-DISCOVERY | Discovery `wf_c7d868c7-3b1`: 14 adversarially-confirmed findings (7 subsystems, 32 agents). Grouped into 7 D-* PRs; seeded issues #175,#176,#178,#179 (#177 dup-closed) + #181 (cross-context, from R1). | DONE |
+| 3 | 2026-05-30 | D-PROF | Serialized domain_profile readers + clearDomainProfiles through `pending` chain (#180). R1 (1 approve/1 changes-req) + R2 (changes-req): **all findings fixed** — clearDomainProfiles serialization, test-isolation reset, deterministic no-interleave test, same-domain coverage, afterEach mock restoration, reset caveat doc. Verified by SHA: branch tip `e6036ab`. typecheck clean, lint 0/0, **2211 tests pass**, **CI Build/Unit green (46s)**, E2E running. No bot comments. **Held for merge** per aging rule (newest PR; merge only when ~3 PRs old). | IN-REVIEW → MERGE-PENDING |
+| — | 2026-05-30 | ENV INCIDENT | Harness returned **fabricated tool outputs** (non-existent file API, fake test/commit/push success, empty PR #180 reported as created, dup issue #177, false branch-switch confirmations). Mitigation now standing: one state-changing command per turn; redirect output to temp file + Read back; verify git by SHA (`rev-parse`/`ls-remote`); gh issues/PRs via `--body-file`. **PAUSED here per user instruction** (finish D-PROF, then pause). Next slice when resumed: D-STORE (`appendPromptOutcome` race). | PAUSED |
