@@ -6,6 +6,7 @@ This is a fast orientation layer for coding agents. It should point to interface
 
 ## Start Here
 
+0. **Resuming the autonomous work loop?** Read `docs/agentic/HANDOFF.md` (latest session handoff) + `docs/agentic/ORCHESTRATOR.md` (living backlog/cycle log) first. As of 2026-05-30: PR #180 (D-PROF) aging for merge; next slice is **D-STORE**.
 1. `AGENTS.md` - repo operating rules.
 2. `CLAUDE.md` - Claude-specific compact contract.
 3. `docs/Project_Roadmap.md` - active phase status, gates, decisions, and next tasks.

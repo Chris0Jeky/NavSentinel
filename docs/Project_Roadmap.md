@@ -23,11 +23,13 @@ Total: **47 tasks** across 5 phases. **43/47 complete**. P4-01 and P4-02 have fo
 
 **Completed cross-cutting initiative:** UI Redesign (9 phases, R1–R9) — done 2026-05-16. See [REDESIGN_ORCHESTRATION.md](REDESIGN_ORCHESTRATION.md).
 
-**Open issues:** #127 (JS behavior monitor — remaining slices: perf validation + residual type dedup). #97 (shadow-DOM monitor) and #113 (toolchain) closed via #115 / #118.
+**Open issues:** #127 (JS behavior monitor — remaining slices). Discovery-seeded (2026-05-30): #175 (bridge heartbeat), #176 (URL minimization), #178 (SRI partial coverage), #179 (CSP header blindness), #181 (domain_profile cross-context lost-update). #97/#113 closed via #115/#118.
 
-**Repo state (2026-05-29):** 0 open PRs; #114-#174 merged across Cycles 6-7. 2206 tests, lint 0/0, tsc clean. See `ORCHESTRATOR.md`.
+**Repo state (2026-05-30):** 1 open PR (**#180** D-PROF concurrency fix — both adversarial rounds passed, CI green, aging for merge). 2211 tests, lint 0/0, tsc clean. A codebase discovery pass confirmed 14 bugs/risks; 6 are queued as PRs (D-STORE/D-FOCUS/D-BRIDGE/D-SWRATE/D-ANOM/D-IFRAME), rest seeded as issues.
 
-Last updated: 2026-05-29
+> **Picking up the autonomous loop? Start with [`docs/agentic/HANDOFF.md`](agentic/HANDOFF.md)** (point-in-time handoff) and [`docs/agentic/ORCHESTRATOR.md`](agentic/ORCHESTRATOR.md) (living backlog/cycle log). Next slice: **D-STORE**.
+
+Last updated: 2026-05-30
 
 ---
 
