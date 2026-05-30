@@ -61,6 +61,26 @@ Roadmap truth verified against `docs/Project_Roadmap.md` (Phases 0-3 done; Phase
 
 ---
 
+## Discovery Findings (Cycle 2, `wf_c7d868c7-3b1`) → PR grouping
+
+14 adversarially-confirmed findings. Grouped into coherent, single-seam PRs. Severity = adversary-adjusted.
+
+| PR | Findings | Files | Sev | Status |
+|----|----------|-------|-----|--------|
+| **D-PROF** | getDomainRisk + getTopSuspiciousDomains read-modify-write not serialized through `pending` chain → lost decay/visit mutations | `domain_profile.ts` | HIGH×2 | TODO |
+| **D-STORE** | `appendPromptOutcome` get-modify-write race → silent prompt-outcome loss; verify check too weak | `storage.ts` | HIGH | TODO |
+| **D-BRIDGE** | pendingOutbound FIFO-discards oldest (drops early alerts); challenge handshake has no timeout (bridge dead-locks queuing forever) | `main_guard.ts` | HIGH×2 | TODO |
+| **D-FOCUS** | credential modal Tab focus-trap escapes to untrusted page when focus leaves ShadowRoot | `credential_modal.ts` | HIGH | TODO |
+| **D-SWRATE** | `captureTimestampsByTab` rate-limit Map not in SessionStateManager → resets on SW restart, rate-limit bypass | `sw.ts`, `session_state.ts` | HIGH | TODO |
+| **D-ANOM** | getAnomalyScoreSync burst window lags async writer by 1 nav (under-scores bursts); sessionNavCount not initialized from stored profile on fresh content-script load | `nav_anomaly.ts` | HIGH+MED | TODO |
+| **D-IFRAME** | mutation_monitor doesn't flag `data:`/`blob:` iframes (cross-domain check returns false on empty host) | `mutation_monitor.ts` | MED | TODO |
+| **#issue: heartbeat** | main_guard module globals have no recovery/heartbeat after content-script reload | `main_guard.ts` | MED | SEED ISSUE (medium, architectural — needs design) |
+| **#issue: url-min** | full URLs (w/ query) persisted in `storage.session` (lastUrlByTab/oauth/rollback) — minimal-persistence violation | `sw.ts` | LOW | SEED ISSUE (touches rollback; needs care) |
+| **#issue: sri-partial** | SRI scorer gives 0 penalty for 0.5–1.0 partial coverage; no script/style weighting | `sri_checker.ts` | LOW | SEED ISSUE (FP-risk; needs threat-validation measurement) |
+| **#issue: csp-headers** | CSP analyzer only sees meta-tag CSP, blind to HTTP-header CSP → FP source | `csp_analyzer.ts` | LOW | SEED ISSUE (MV3 limitation; needs SW webRequest design) |
+
+PRs D-* are independent (different files) → parallel branches off `main`, **not** stacked. FF-02→FF-03→FF-04 are the stacked set.
+
 ## In-Flight
 
 | Slice | Branch | Base | Worktree | PR | Round 1 | Round 2 | Bots | Opened |
