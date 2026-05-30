@@ -1,6 +1,6 @@
 # Session Handoff — NavSentinel autonomous loop
 
-**Last updated:** 2026-05-30 · **Author:** Claude (orchestrator session) · **Status at pause:** D-PROF cycle complete, loop paused at user request.
+**Last updated:** 2026-05-30 · **Author:** Codex follow-up · **Status at pause:** D-STORE review gate passed, PR aging.
 
 > Read this first if you are picking up the autonomous work loop. It is a point-in-time snapshot. The living control file is [`ORCHESTRATOR.md`](ORCHESTRATOR.md) (backlog, in-flight, cycle log). Product truth is still `docs/Project_Roadmap.md` and `autodoc/AGENT_INDEX.md`. When this handoff and git disagree, **trust git** — see the reliability note at the bottom.
 
@@ -10,11 +10,11 @@
 
 - The user asked for a **continuous, end-to-end autonomous work loop**: pick a slice → small commits → PR → **two independent adversarial review rounds** → fix every finding (all severities) → address all bot comments → docs sync → next slice. Use stacked branches for dependent work. Don't merge the newest PR; a PR becomes merge-eligible only once it's ~3 PRs old, both rounds passed, bots addressed, and aged.
 - One full cycle is done: **PR #180 (D-PROF)** — a HIGH-severity concurrency fix — passed both review rounds with all findings fixed, **CI fully green**, and is now **aging for merge** (do NOT merge it yet).
-- **PR #182 (D-STORE)** is open on `fix/prompt-outcome-race`. Round 1 found MV3 cross-context prompt-outcome races and stale status docs; Round 2 found delayed append reset ordering and import message bounding issues. All findings are addressed locally; recheck is pending.
+- **PR #182 (D-STORE)** is open on `fix/prompt-outcome-race`. Round 1 found MV3 cross-context prompt-outcome races and stale status docs; Round 2 found delayed append reset ordering and import message bounding issues; recheck found a same-millisecond stale-append gap. Every finding is fixed, Gemini is resolved/outdated, Copilot's review-error record was checked with no actionable finding, CI is green, and the PR is aging for merge (do NOT merge it yet).
 - A **discovery workflow** found and adversarially confirmed **14 real bugs/risks** across the codebase. 5 remain queued as ready-to-implement PRs (D-FOCUS, D-BRIDGE, D-SWRATE, D-ANOM, D-IFRAME); 5 lower/architectural ones are seeded as GitHub issues.
 - **Two caveats** the next session must know: (1) the harness intermittently **fabricated tool outputs** this session — verify everything via file-redirect + git SHA; (2) the pickup note reports local agent checks green on `main`; rerunning `npm run agent:hooks:smoke` from a feature branch can still fail because the smoke test expects hard denial for branch-aware commands that the hook intentionally only hard-denies on protected branches.
 
-**Recommended next action:** finish **D-STORE** PR #182's review gate: push the Round 2 fixes, run the recheck, inspect all comments/checks, and leave #180/#182 unmerged.
+**Recommended next action:** leave **#180** and **#182** unmerged while they age; start the next safe implementation slice (**D-FOCUS**) unless the user redirects.
 
 ---
 
@@ -57,10 +57,7 @@
 
 **Verified on `fix/prompt-outcome-race`:** `npm run typecheck` clean; `npm run lint` clean; `npm run test -- tests/storage-append.test.ts` 41 passed; `npm run test` 74 files / 2218 tests passed; `npm run build` clean. Vitest still prints existing happy-dom aborted/network fetch noise after the pass summary.
 
-**Cycle steps (follow ORCHESTRATOR.md operating loop):**
-1. Push the Round 2 fixes to PR #182 and update its body/comment trail.
-2. Run the Round 2 recheck (use the Workflow harness/subagent path).
-3. Address any remaining comments/checks; docs sync; update ORCHESTRATOR.md cycle log.
+**Review gate result:** Round 1, Round 2, bot review/comment disposition, final recheck, local verification, and GitHub CI are complete. PR #182 remains unmerged only because the project aging gate still applies.
 
 ---
 
@@ -69,7 +66,7 @@
 ### Discovery findings → ready-to-implement PRs (independent unless noted; branch each off `main`)
 | Slice | File(s) | Sev | One-line |
 |-------|---------|-----|----------|
-| **D-STORE** | `storage.ts`, `sw.ts` | HIGH | PR #182 open; Round 1/Round 2 findings addressed locally; recheck pending |
+| **D-STORE** | `storage.ts`, `sw.ts` | HIGH | PR #182 open; review gate passed, CI green, aging for merge |
 | **D-FOCUS** | `credential_modal.ts` (~356-359) | HIGH | Tab focus-trap escapes to untrusted page when focus leaves ShadowRoot |
 | **D-BRIDGE** | `main_guard.ts` (~35-50, ~831-847) | HIGH×2 | pendingOutbound FIFO-discards oldest (drops early alerts); challenge handshake has no timeout (bridge dead-locks queuing forever) |
 | **D-SWRATE** | `sw.ts` (~66), `session_state.ts` | HIGH | `captureTimestampsByTab` rate-limit Map not in SessionStateManager → resets on SW restart → rate-limit bypass |
