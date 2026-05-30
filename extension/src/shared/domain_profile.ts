@@ -272,7 +272,31 @@ export function getTopSuspiciousDomains(limit: number): Promise<DomainProfile[]>
 
 /**
  * Clear all stored domain profiles.
+ *
+ * Serialized through the `pending` chain so it cannot interleave with a
+ * recordNavigation read-modify-write (otherwise a clear issued between a
+ * navigation's load and save would be silently resurrected, or a navigation's
+ * update would survive a clear the user just requested).
  */
-export async function clearDomainProfiles(): Promise<void> {
-  await chrome.storage.local.set({ [DOMAIN_PROFILES_KEY]: {} });
+export function clearDomainProfiles(): Promise<void> {
+  const next = pending.then(async (): Promise<void> => {
+    await chrome.storage.local.set({ [DOMAIN_PROFILES_KEY]: {} });
+  });
+  pending = next.catch((err) => { console.warn("[NavSentinel] profile serialization error:", err); });
+  return next;
+}
+
+/**
+ * Test-only: reset the module-level serialization chain so that fire-and-forget
+ * operations queued by one test cannot leak into the next. Not part of the
+ * runtime API.
+ *
+ * NOTE (known limitation): `pending` is per-content-script-context. With
+ * `all_frames: true`, each frame has its own chain, so two frames racing
+ * recordNavigation for the same domain can still lose an update at the shared
+ * chrome.storage.local layer. Cross-context serialization is tracked separately
+ * (out of scope for this single-context fix).
+ */
+export function _resetSerializationForTests(): void {
+  pending = Promise.resolve();
 }
