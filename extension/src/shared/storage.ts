@@ -318,7 +318,7 @@ export async function clearEventLog(): Promise<void> {
 const PROMPT_OUTCOMES_LIMIT = 500;
 const PROMPT_OUTCOME_RESET_TS_KEY = "ns_sw:promptOutcomeResetTs";
 let promptOutcomePending: Promise<unknown> = Promise.resolve();
-let promptOutcomeResetCutoffTs = 0;
+let promptOutcomeResetCutoffTs = Number.NEGATIVE_INFINITY;
 let promptOutcomeResetHydrate: Promise<void> | null = null;
 
 export async function getPromptOutcomes(): Promise<PromptOutcomeEntry[]> {
@@ -397,7 +397,7 @@ function getPromptOutcomeBarrierStorage(): PromptOutcomeBarrierStorage | null {
 }
 
 function normalizeResetCutoff(value: unknown): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+  return typeof value === "number" && Number.isFinite(value) ? value : Number.NEGATIVE_INFINITY;
 }
 
 function hydratePromptOutcomeResetCutoff(): Promise<void> {
@@ -496,7 +496,7 @@ async function persistPromptOutcome(entry: PromptOutcomeEntry): Promise<void> {
 function appendPromptOutcomeDirect(entry: PromptOutcomeEntry): Promise<void> {
   return queuePromptOutcomeWrite(async () => {
     await hydratePromptOutcomeResetCutoff();
-    if (entry.ts < promptOutcomeResetCutoffTs) return;
+    if (entry.ts <= promptOutcomeResetCutoffTs) return;
     await persistPromptOutcome(entry);
   });
 }

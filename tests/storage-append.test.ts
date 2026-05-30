@@ -741,6 +741,28 @@ describe("appendPromptOutcome", () => {
     expect(store[PROMPT_OUTCOMES_KEY]).toEqual([]);
   });
 
+  it("drops a delayed runtime append with the same timestamp as a clear reset", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    vi.spyOn(Date, "now").mockReturnValue(1000);
+
+    const { handlePromptOutcomeStorageMessage } = await import("../extension/src/shared/storage");
+    await handlePromptOutcomeStorageMessage({ type: "ns-prompt-outcome-clear" });
+    await handlePromptOutcomeStorageMessage({
+      type: "ns-prompt-outcome-append",
+      entry: {
+        id: "same-ms-before-clear",
+        ts: 1000,
+        domain: "late.example",
+        type: "nav",
+        score: 70,
+        outcome: "allow",
+      },
+    });
+
+    expect(store[PROMPT_OUTCOMES_KEY]).toEqual([]);
+  });
+
   it("drops a delayed runtime append created before an import replacement", async () => {
     const { chrome, store } = createChromeMock();
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
@@ -762,6 +784,39 @@ describe("appendPromptOutcome", () => {
       entry: {
         id: "delayed-before-import",
         ts: 1,
+        domain: "late.example",
+        type: "nav",
+        score: 70,
+        outcome: "allow",
+      },
+    });
+
+    const ids = (store[PROMPT_OUTCOMES_KEY] as Array<{ id: string }>).map((entry) => entry.id);
+    expect(ids).toEqual(["imported-outcome"]);
+  });
+
+  it("drops a delayed runtime append with the same timestamp as an import replacement", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    vi.spyOn(Date, "now").mockReturnValue(2000);
+
+    const { handlePromptOutcomeStorageMessage } = await import("../extension/src/shared/storage");
+    await handlePromptOutcomeStorageMessage({
+      type: "ns-prompt-outcome-replace",
+      outcomes: [{
+        id: "imported-outcome",
+        ts: 1,
+        domain: "imported.example",
+        type: "cred",
+        score: 45,
+        outcome: "trust",
+      }],
+    });
+    await handlePromptOutcomeStorageMessage({
+      type: "ns-prompt-outcome-append",
+      entry: {
+        id: "same-ms-before-import",
+        ts: 2000,
         domain: "late.example",
         type: "nav",
         score: 70,
