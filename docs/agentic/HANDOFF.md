@@ -22,7 +22,7 @@
 
 - **`main`** == `origin/main` == `3eaf382`. Working tree clean at pickup.
 - **Branches:** `main`; `fix/domain-profile-concurrency` (PR #180, tip `e6036ab`); `fix/prompt-outcome-race` (PR #182, D-STORE); `fix/jsb-stale-todos-and-tests` (**pre-existing, unmerged** — predates this session; may hold partial #127 work, inspect before reusing).
-- **Verification counts:** PR #180's D-PROF branch verified **2211** Vitest tests; current `fix/prompt-outcome-race` D-STORE branch verifies typecheck clean, lint 0/0, build clean, targeted storage **34 passed**, and full Vitest **2211 passed**.
+- **Verification counts:** PR #180's D-PROF branch verified **2211** Vitest tests; current `fix/prompt-outcome-race` D-STORE branch verifies typecheck clean, lint 0/0, build clean, targeted storage **36 passed**, and full Vitest **2213 passed**.
 
 ### PR #180 — `fix/domain-profile-concurrency` (D-PROF)
 - **State:** OPEN, MERGEABLE, tip `e6036ab` (local == remote, SHA-verified).
@@ -55,7 +55,7 @@
 
 **Current implementation:** `appendPromptOutcome`, `clearPromptOutcomes`, and prompt-outcome import replacement route through the service worker as a single writer when runtime messaging is available, with direct local fallback for tests/unavailable runtime contexts. The worker-side mutation still uses a prompt-outcome `pending` chain. Verification requires the new entry, bounded length, and intended IDs to persist across retries, so a write that only preserves "my id exists" cannot silently clobber prior outcomes. Regression tests cover 8 concurrent appends, clobber-detect verification, retry preservation after a clobbered verify, independent module callers routed through one runtime writer, and clear-after-append ordering.
 
-**Verified on `fix/prompt-outcome-race`:** `npm run typecheck` clean; `npm run lint` clean; `npm run test -- tests/storage-append.test.ts` 34 passed; `npm run test` 74 files / 2211 tests passed; `npm run build` clean. Vitest still prints existing happy-dom aborted/network fetch noise after the pass summary.
+**Verified on `fix/prompt-outcome-race`:** `npm run typecheck` clean; `npm run lint` clean; `npm run test -- tests/storage-append.test.ts` 36 passed; `npm run test` 74 files / 2213 tests passed; `npm run build` clean. Vitest still prints existing happy-dom aborted/network fetch noise after the pass summary.
 
 **Cycle steps (follow ORCHESTRATOR.md operating loop):**
 1. Push the Round 1 fixes to PR #182 and update its body/comment trail.

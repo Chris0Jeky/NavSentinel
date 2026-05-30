@@ -321,8 +321,7 @@ let promptOutcomePending: Promise<unknown> = Promise.resolve();
 export async function getPromptOutcomes(): Promise<PromptOutcomeEntry[]> {
   const res = await chrome.storage.local.get(PROMPT_OUTCOMES_KEY);
   const log = res[PROMPT_OUTCOMES_KEY];
-  if (!Array.isArray(log)) return [];
-  return log.slice(-PROMPT_OUTCOMES_LIMIT) as PromptOutcomeEntry[];
+  return normalizePromptOutcomeLog(log).slice(-PROMPT_OUTCOMES_LIMIT);
 }
 
 export type PromptOutcomeStorageMessage =
@@ -355,6 +354,10 @@ function isPromptOutcomeEntry(value: unknown): value is PromptOutcomeEntry {
       outcome === "cancel"
     ) &&
     (entry.reasons === undefined || (Array.isArray(entry.reasons) && entry.reasons.every((reason) => typeof reason === "string")));
+}
+
+function normalizePromptOutcomeLog(value: unknown): PromptOutcomeEntry[] {
+  return Array.isArray(value) ? value.filter(isPromptOutcomeEntry) : [];
 }
 
 export function isPromptOutcomeStorageMessage(message: unknown): message is PromptOutcomeStorageMessage {
@@ -414,9 +417,7 @@ async function persistPromptOutcome(entry: PromptOutcomeEntry): Promise<void> {
 
   for (let attempt = 0; attempt < 3; attempt++) {
     const res = await chrome.storage.local.get(PROMPT_OUTCOMES_KEY);
-    const cur = Array.isArray(res[PROMPT_OUTCOMES_KEY])
-      ? (res[PROMPT_OUTCOMES_KEY] as PromptOutcomeEntry[])
-      : [];
+    const cur = normalizePromptOutcomeLog(res[PROMPT_OUTCOMES_KEY]);
     const mergedEntries = new Map<string, PromptOutcomeEntry>();
     for (const item of requiredEntries.values()) mergedEntries.set(item.id, item);
     for (const item of cur) {
@@ -427,14 +428,12 @@ async function persistPromptOutcome(entry: PromptOutcomeEntry): Promise<void> {
     requiredEntries.clear();
     for (const item of next) requiredEntries.set(item.id, item);
     const expectedLength = next.length;
-    const expectedIds = new Set(next.map((item) => item?.id).filter((id): id is string => typeof id === "string"));
+    const expectedIds = new Set(next.map((item) => item.id));
     await chrome.storage.local.set({ [PROMPT_OUTCOMES_KEY]: next });
 
     const verify = await chrome.storage.local.get(PROMPT_OUTCOMES_KEY);
-    const verifyLog = Array.isArray(verify[PROMPT_OUTCOMES_KEY])
-      ? (verify[PROMPT_OUTCOMES_KEY] as PromptOutcomeEntry[])
-      : [];
-    const verifyIds = new Set(verifyLog.map((item) => item?.id).filter((id): id is string => typeof id === "string"));
+    const verifyLog = normalizePromptOutcomeLog(verify[PROMPT_OUTCOMES_KEY]);
+    const verifyIds = new Set(verifyLog.map((item) => item.id));
     if (
       verifyIds.has(entry.id) &&
       verifyLog.length >= expectedLength &&
@@ -484,7 +483,7 @@ export function clearPromptOutcomes(): Promise<void> {
 }
 
 async function replacePromptOutcomesDirect(outcomes: PromptOutcomeEntry[]): Promise<void> {
-  const importedOutcomes = outcomes.slice(-PROMPT_OUTCOMES_LIMIT);
+  const importedOutcomes = normalizePromptOutcomeLog(outcomes).slice(-PROMPT_OUTCOMES_LIMIT);
   await queuePromptOutcomeWrite(async () => {
     await chrome.storage.local.set({ [PROMPT_OUTCOMES_KEY]: importedOutcomes });
     const settings = await getNavSettings();

@@ -25,7 +25,7 @@ Total: **47 tasks** across 5 phases. **43/47 complete**. P4-01 and P4-02 have fo
 
 **Open issues:** #127 (JS behavior monitor — remaining slices). Discovery-seeded (2026-05-30): #175 (bridge heartbeat), #176 (URL minimization), #178 (SRI partial coverage), #179 (CSP header blindness), #181 (domain_profile cross-context lost-update). #97/#113 closed via #115/#118.
 
-**Repo state (2026-05-30):** 2 open PRs: **#180** D-PROF concurrency fix (both adversarial rounds passed, CI green, aging for merge) and **#182** D-STORE prompt-outcome storage fix (open, Round 1 findings addressed locally, Round 2 pending). Local D-STORE verification is tsc clean, lint 0/0, build clean, and 2211 Vitest tests passed. A codebase discovery pass confirmed 14 bugs/risks; 5 remain queued as PRs (D-FOCUS/D-BRIDGE/D-SWRATE/D-ANOM/D-IFRAME), rest seeded as issues.
+**Repo state (2026-05-30):** 2 open PRs: **#180** D-PROF concurrency fix (both adversarial rounds passed, CI green, aging for merge) and **#182** D-STORE prompt-outcome storage fix (open, Round 1 findings addressed locally, Round 2 pending). Local D-STORE verification is tsc clean, lint 0/0, build clean, and 2213 Vitest tests passed. A codebase discovery pass confirmed 14 bugs/risks; 5 remain queued as PRs (D-FOCUS/D-BRIDGE/D-SWRATE/D-ANOM/D-IFRAME), rest seeded as issues.
 
 > **Picking up the autonomous loop? Start with [`docs/agentic/HANDOFF.md`](agentic/HANDOFF.md)** (point-in-time handoff) and [`docs/agentic/ORCHESTRATOR.md`](agentic/ORCHESTRATOR.md) (living backlog/cycle log). D-STORE is PR #182; next action is Round 2 adversarial review and comment/check inspection.
 

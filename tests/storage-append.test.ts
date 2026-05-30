@@ -453,6 +453,39 @@ describe("appendPromptOutcome", () => {
     expect(log[0]!.domain).toBe("example.com");
   });
 
+  it("drops corrupt stored outcomes before appending", async () => {
+    const validOutcome = {
+      id: "valid-outcome",
+      ts: 1,
+      domain: "valid.example",
+      type: "nav",
+      score: 40,
+      outcome: "allow",
+    };
+    const { chrome, store } = createChromeMock({
+      [PROMPT_OUTCOMES_KEY]: [
+        null,
+        validOutcome,
+        { id: "missing-required-fields" },
+        undefined,
+        "not-an-outcome",
+      ],
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { appendPromptOutcome } = await import("../extension/src/shared/storage");
+    await appendPromptOutcome({
+      id: "new-valid-outcome",
+      domain: "new.example",
+      type: "cred",
+      score: 65,
+      outcome: "block",
+    });
+
+    const log = store[PROMPT_OUTCOMES_KEY] as Array<{ id: string }>;
+    expect(log.map((entry) => entry.id)).toEqual(["valid-outcome", "new-valid-outcome"]);
+  });
+
   it("warns on console when all 3 verification attempts fail", async () => {
     let setCount = 0;
     const brokenChrome = {
@@ -780,6 +813,23 @@ describe("getPromptOutcomes and clearPromptOutcomes", () => {
 
     const { getPromptOutcomes } = await import("../extension/src/shared/storage");
     expect(await getPromptOutcomes()).toEqual([]);
+  });
+
+  it("filters corrupt stored outcomes when reading", async () => {
+    const { chrome } = createChromeMock({
+      [PROMPT_OUTCOMES_KEY]: [
+        null,
+        { id: "missing-required-fields" },
+        { id: "valid", ts: 2, domain: "valid.example", type: "nav", score: 80, outcome: "block" },
+        undefined,
+      ],
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { getPromptOutcomes } = await import("../extension/src/shared/storage");
+    expect(await getPromptOutcomes()).toEqual([
+      { id: "valid", ts: 2, domain: "valid.example", type: "nav", score: 80, outcome: "block" },
+    ]);
   });
 
   it("clears outcomes", async () => {
