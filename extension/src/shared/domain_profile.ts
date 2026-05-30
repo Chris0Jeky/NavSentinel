@@ -291,11 +291,17 @@ export function clearDomainProfiles(): Promise<void> {
  * operations queued by one test cannot leak into the next. Not part of the
  * runtime API.
  *
+ * CAVEAT: this reassigns `pending` to a fresh resolved promise; it does NOT
+ * cancel `.then()` callbacks already queued on the previous chain. A test that
+ * issues a fire-and-forget op (e.g. `void recordNavigation(...)`) MUST await it
+ * to completion before relying on this reset — otherwise the prior op can still
+ * run and mutate shared state after the next test begins.
+ *
  * NOTE (known limitation): `pending` is per-content-script-context. With
  * `all_frames: true`, each frame has its own chain, so two frames racing
  * recordNavigation for the same domain can still lose an update at the shared
  * chrome.storage.local layer. Cross-context serialization is tracked separately
- * (out of scope for this single-context fix).
+ * (out of scope for this single-context fix; see issue #181).
  */
 export function _resetSerializationForTests(): void {
   pending = Promise.resolve();

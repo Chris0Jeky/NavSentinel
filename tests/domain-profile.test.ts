@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach, vi } from "vitest";
+import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import {
   recordNavigation,
   getDomainRisk,
@@ -56,11 +56,26 @@ function getStoredProfiles(): Record<string, DomainProfile> {
 // Tests
 // ---------------------------------------------------------------------------
 
+/** Restore the default (un-instrumented) storage mock implementations. */
+function restoreStorageMocks(): void {
+  (chrome.storage.local.get as ReturnType<typeof vi.fn>).mockImplementation(mockGet);
+  (chrome.storage.local.set as ReturnType<typeof vi.fn>).mockImplementation(mockSet);
+}
+
 beforeEach(() => {
   for (const k of Object.keys(store)) delete store[k];
   // Reset the module-level serialization chain so fire-and-forget operations
   // queued by one test cannot leak into the next (R1 test-isolation finding).
   _resetSerializationForTests();
+  // Ensure a clean, un-instrumented storage mock at the start of every test
+  // (some tests temporarily wrap get/set to observe call ordering).
+  restoreStorageMocks();
+});
+
+afterEach(() => {
+  // R2 finding: tests that call mockImplementation on get/set to instrument
+  // storage-call ordering must not leak those wrappers into later tests.
+  restoreStorageMocks();
 });
 
 describe("recordNavigation", () => {
