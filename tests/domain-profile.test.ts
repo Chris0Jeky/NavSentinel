@@ -4,6 +4,7 @@ import {
   getDomainRisk,
   getTopSuspiciousDomains,
   clearDomainProfiles,
+  _resetSerializationForTests,
   DOMAIN_PROFILES_KEY,
   MAX_PROFILES,
   DECAY_AGE_MS,
@@ -57,6 +58,9 @@ function getStoredProfiles(): Record<string, DomainProfile> {
 
 beforeEach(() => {
   for (const k of Object.keys(store)) delete store[k];
+  // Reset the module-level serialization chain so fire-and-forget operations
+  // queued by one test cannot leak into the next (R1 test-isolation finding).
+  _resetSerializationForTests();
 });
 
 describe("recordNavigation", () => {
@@ -561,10 +565,26 @@ describe("read-modify-write serialization (regression: discovery D-PROF wf_c7d86
     expect(entry!.visits).toBe(3);
   });
 
-  it("a decaying reader does not clobber a concurrent navigation write", async () => {
-    // Seed a stale profile so the reader's applyDecay fires and persists a
-    // snapshot. A concurrently-issued navigation to a different domain must
-    // survive the reader's save.
+  it("serializes a reader and a writer (no interleaving) — deterministic via storage-call ordering", async () => {
+    // R1 finding: the previous "last writer wins" assertion could pass with the
+    // OLD code by timing luck. Instead assert the *invariant* the fix provides:
+    // a reader and a concurrently-issued writer never interleave their
+    // load/save pairs. We instrument the storage mock to record an ordered log
+    // of get/set calls; serialized operations must appear as complete,
+    // non-overlapping [get...set] segments.
+    const callLog: string[] = [];
+    const origGet = chrome.storage.local.get as ReturnType<typeof vi.fn>;
+    const origSet = chrome.storage.local.set as ReturnType<typeof vi.fn>;
+    origGet.mockImplementation((keys: string | string[]) => {
+      callLog.push("get");
+      return mockGet(keys);
+    });
+    origSet.mockImplementation((items: Record<string, unknown>) => {
+      callLog.push("set");
+      return mockSet(items);
+    });
+
+    // Seed a stale profile so the reader actually performs a save (decay path).
     const staleTs = Date.now() - DECAY_AGE_MS - 1000;
     store[DOMAIN_PROFILES_KEY] = {
       "stale.com": {
@@ -579,13 +599,45 @@ describe("read-modify-write serialization (regression: discovery D-PROF wf_c7d86
       },
     };
 
-    const reader = getTopSuspiciousDomains(10); // decays stale.com + saves
+    const reader = getTopSuspiciousDomains(10);
     const writer = recordNavigation("fresh.com", 40, ["nrs_new_tab_window"]);
     await Promise.all([reader, writer]);
 
+    // Both operations ran; both writes survive (the real-world payoff).
     const profiles = getStoredProfiles();
-    expect(profiles["fresh.com"]).toBeDefined();
     expect(profiles["fresh.com"]!.visits).toBe(1);
     expect(profiles["stale.com"]!.visits).toBeLessThan(10);
+
+    // Invariant: no overlap. Walking the call log, every "get" must be followed
+    // by its own operation's "set" before the next "get" appears — i.e. the
+    // sequence is a series of [get, set] pairs, never [get, get, ...].
+    let openGets = 0;
+    for (const c of callLog) {
+      if (c === "get") {
+        openGets += 1;
+        expect(openGets).toBe(1); // never two concurrent reads-in-flight
+      } else {
+        openGets -= 1;
+      }
+    }
+  });
+
+  it("getDomainRisk and a same-domain writer queued before it do not lose the write", async () => {
+    // R1 gap: explicit same-domain reader-after-writer coverage.
+    void recordNavigation("same.test", 80, ["nrs_cross_site"], 70);
+    void recordNavigation("same.test", 80, ["nrs_cross_site"], 70);
+    const risk = await getDomainRisk("same.test");
+    expect(risk.avgNRS).toBe(80);
+    const stored = getStoredProfiles()["same.test"]!;
+    expect(stored.visits).toBe(2);
+    expect(stored.factors["nrs_cross_site"]).toBe(2);
+  });
+
+  it("clearDomainProfiles is serialized: a navigation queued before it is cleared, not resurrected", async () => {
+    // clearDomainProfiles now runs through the pending chain, so a navigation
+    // queued before it completes first, then the clear wins deterministically.
+    void recordNavigation("doomed.test", 50, []);
+    await clearDomainProfiles();
+    expect(Object.keys(getStoredProfiles()).length).toBe(0);
   });
 });
