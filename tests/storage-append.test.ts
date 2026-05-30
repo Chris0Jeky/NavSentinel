@@ -720,6 +720,99 @@ describe("appendPromptOutcome", () => {
     expect(new Set(ids)).toEqual(new Set(["context-a", "context-b"]));
   });
 
+  it("drops a delayed runtime append created before a clear reset", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { handlePromptOutcomeStorageMessage } = await import("../extension/src/shared/storage");
+    await handlePromptOutcomeStorageMessage({ type: "ns-prompt-outcome-clear" });
+    await handlePromptOutcomeStorageMessage({
+      type: "ns-prompt-outcome-append",
+      entry: {
+        id: "delayed-before-clear",
+        ts: 1,
+        domain: "late.example",
+        type: "nav",
+        score: 70,
+        outcome: "allow",
+      },
+    });
+
+    expect(store[PROMPT_OUTCOMES_KEY]).toEqual([]);
+  });
+
+  it("drops a delayed runtime append created before an import replacement", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { handlePromptOutcomeStorageMessage } = await import("../extension/src/shared/storage");
+    await handlePromptOutcomeStorageMessage({
+      type: "ns-prompt-outcome-replace",
+      outcomes: [{
+        id: "imported-outcome",
+        ts: 1,
+        domain: "imported.example",
+        type: "cred",
+        score: 45,
+        outcome: "trust",
+      }],
+    });
+    await handlePromptOutcomeStorageMessage({
+      type: "ns-prompt-outcome-append",
+      entry: {
+        id: "delayed-before-import",
+        ts: 1,
+        domain: "late.example",
+        type: "nav",
+        score: 70,
+        outcome: "allow",
+      },
+    });
+
+    const ids = (store[PROMPT_OUTCOMES_KEY] as Array<{ id: string }>).map((entry) => entry.id);
+    expect(ids).toEqual(["imported-outcome"]);
+  });
+
+  it("bounds and filters import outcomes before runtime delegation", async () => {
+    const { chrome } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    let sentMessage: unknown;
+    const runtimeChrome = chrome as unknown as {
+      runtime: {
+        sendMessage(message: unknown, callback?: (response: unknown) => void): void;
+      };
+    };
+    runtimeChrome.runtime = {
+      sendMessage(message, callback) {
+        sentMessage = message;
+        callback?.({ ok: true });
+      },
+    };
+
+    vi.resetModules();
+    const { importAll } = await import("../extension/src/shared/storage");
+    const outcomes = [
+      null,
+      { id: "invalid" },
+      ...Array.from({ length: 520 }, (_, i) => ({
+        id: `valid-${i}`,
+        ts: i,
+        domain: "valid.example",
+        type: "nav" as const,
+        score: 40,
+        outcome: "allow" as const,
+      })),
+    ];
+
+    await importAll({ promptOutcomes: outcomes });
+
+    expect(sentMessage).toMatchObject({ type: "ns-prompt-outcome-replace" });
+    const sentOutcomes = (sentMessage as { outcomes: Array<{ id: string }> }).outcomes;
+    expect(sentOutcomes).toHaveLength(500);
+    expect(sentOutcomes[0]!.id).toBe("valid-20");
+    expect(sentOutcomes[sentOutcomes.length - 1]!.id).toBe("valid-519");
+  });
+
   it("serializes clear after a queued append so the clear wins", async () => {
     const { chrome, store } = createChromeMock();
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);

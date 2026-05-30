@@ -316,12 +316,15 @@ export async function clearEventLog(): Promise<void> {
 }
 
 const PROMPT_OUTCOMES_LIMIT = 500;
+const PROMPT_OUTCOME_RESET_TS_KEY = "ns_sw:promptOutcomeResetTs";
 let promptOutcomePending: Promise<unknown> = Promise.resolve();
+let promptOutcomeResetCutoffTs = 0;
+let promptOutcomeResetHydrate: Promise<void> | null = null;
 
 export async function getPromptOutcomes(): Promise<PromptOutcomeEntry[]> {
   const res = await chrome.storage.local.get(PROMPT_OUTCOMES_KEY);
   const log = res[PROMPT_OUTCOMES_KEY];
-  return normalizePromptOutcomeLog(log).slice(-PROMPT_OUTCOMES_LIMIT);
+  return boundPromptOutcomeLog(log);
 }
 
 export type PromptOutcomeStorageMessage =
@@ -360,6 +363,10 @@ function normalizePromptOutcomeLog(value: unknown): PromptOutcomeEntry[] {
   return Array.isArray(value) ? value.filter(isPromptOutcomeEntry) : [];
 }
 
+function boundPromptOutcomeLog(value: unknown): PromptOutcomeEntry[] {
+  return normalizePromptOutcomeLog(value).slice(-PROMPT_OUTCOMES_LIMIT);
+}
+
 export function isPromptOutcomeStorageMessage(message: unknown): message is PromptOutcomeStorageMessage {
   if (!message || typeof message !== "object") return false;
   const candidate = message as Record<string, unknown>;
@@ -379,6 +386,47 @@ function isExtensionServiceWorkerContext(): boolean {
 function shouldDelegatePromptOutcomeWrite(): boolean {
   const runtime = (globalThis as { chrome?: typeof chrome }).chrome?.runtime;
   return !isExtensionServiceWorkerContext() && typeof runtime?.sendMessage === "function";
+}
+
+type PromptOutcomeBarrierStorage = Pick<chrome.storage.StorageArea, "get" | "set">;
+
+function getPromptOutcomeBarrierStorage(): PromptOutcomeBarrierStorage | null {
+  const storage = (globalThis as { chrome?: { storage?: { session?: PromptOutcomeBarrierStorage } } })
+    .chrome?.storage?.session;
+  return typeof storage?.get === "function" && typeof storage.set === "function" ? storage : null;
+}
+
+function normalizeResetCutoff(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function hydratePromptOutcomeResetCutoff(): Promise<void> {
+  if (promptOutcomeResetHydrate) return promptOutcomeResetHydrate;
+  promptOutcomeResetHydrate = (async () => {
+    const session = getPromptOutcomeBarrierStorage();
+    if (!session) return;
+    try {
+      const res = await session.get(PROMPT_OUTCOME_RESET_TS_KEY);
+      promptOutcomeResetCutoffTs = Math.max(
+        promptOutcomeResetCutoffTs,
+        normalizeResetCutoff(res[PROMPT_OUTCOME_RESET_TS_KEY])
+      );
+    } catch (err) {
+      console.warn("[NavSentinel] prompt outcome reset barrier hydration failed:", err);
+    }
+  })();
+  return promptOutcomeResetHydrate;
+}
+
+async function setPromptOutcomeResetCutoff(ts = Date.now()): Promise<void> {
+  promptOutcomeResetCutoffTs = Math.max(promptOutcomeResetCutoffTs, ts);
+  const session = getPromptOutcomeBarrierStorage();
+  if (!session) return;
+  try {
+    await session.set({ [PROMPT_OUTCOME_RESET_TS_KEY]: promptOutcomeResetCutoffTs });
+  } catch (err) {
+    console.warn("[NavSentinel] prompt outcome reset barrier persist failed:", err);
+  }
 }
 
 function sendPromptOutcomeStorageMessage(message: PromptOutcomeStorageMessage): Promise<void> {
@@ -417,7 +465,7 @@ async function persistPromptOutcome(entry: PromptOutcomeEntry): Promise<void> {
 
   for (let attempt = 0; attempt < 3; attempt++) {
     const res = await chrome.storage.local.get(PROMPT_OUTCOMES_KEY);
-    const cur = normalizePromptOutcomeLog(res[PROMPT_OUTCOMES_KEY]);
+    const cur = boundPromptOutcomeLog(res[PROMPT_OUTCOMES_KEY]);
     const mergedEntries = new Map<string, PromptOutcomeEntry>();
     for (const item of requiredEntries.values()) mergedEntries.set(item.id, item);
     for (const item of cur) {
@@ -446,7 +494,11 @@ async function persistPromptOutcome(entry: PromptOutcomeEntry): Promise<void> {
 }
 
 function appendPromptOutcomeDirect(entry: PromptOutcomeEntry): Promise<void> {
-  return queuePromptOutcomeWrite(() => persistPromptOutcome(entry));
+  return queuePromptOutcomeWrite(async () => {
+    await hydratePromptOutcomeResetCutoff();
+    if (entry.ts < promptOutcomeResetCutoffTs) return;
+    await persistPromptOutcome(entry);
+  });
 }
 
 export function appendPromptOutcome(
@@ -471,7 +523,9 @@ export function appendPromptOutcome(
 
 function clearPromptOutcomesDirect(): Promise<void> {
   return queuePromptOutcomeWrite(async () => {
+    const resetTs = Date.now();
     await chrome.storage.local.set({ [PROMPT_OUTCOMES_KEY]: [] });
+    await setPromptOutcomeResetCutoff(resetTs);
   });
 }
 
@@ -483,9 +537,11 @@ export function clearPromptOutcomes(): Promise<void> {
 }
 
 async function replacePromptOutcomesDirect(outcomes: PromptOutcomeEntry[]): Promise<void> {
-  const importedOutcomes = normalizePromptOutcomeLog(outcomes).slice(-PROMPT_OUTCOMES_LIMIT);
+  const importedOutcomes = boundPromptOutcomeLog(outcomes);
   await queuePromptOutcomeWrite(async () => {
+    const resetTs = Date.now();
     await chrome.storage.local.set({ [PROMPT_OUTCOMES_KEY]: importedOutcomes });
+    await setPromptOutcomeResetCutoff(resetTs);
     const settings = await getNavSettings();
     const threshold = settings.defaultMode === "strict" ? NRS_STRICT_BLOCK_THRESHOLD : NRS_BLOCK_THRESHOLD;
     await updateAdaptiveScores(importedOutcomes, threshold);
@@ -493,10 +549,11 @@ async function replacePromptOutcomesDirect(outcomes: PromptOutcomeEntry[]): Prom
 }
 
 async function replacePromptOutcomes(outcomes: PromptOutcomeEntry[]): Promise<void> {
+  const boundedOutcomes = boundPromptOutcomeLog(outcomes);
   if (shouldDelegatePromptOutcomeWrite()) {
-    return sendPromptOutcomeStorageMessage({ type: "ns-prompt-outcome-replace", outcomes });
+    return sendPromptOutcomeStorageMessage({ type: "ns-prompt-outcome-replace", outcomes: boundedOutcomes });
   }
-  return replacePromptOutcomesDirect(outcomes);
+  return replacePromptOutcomesDirect(boundedOutcomes);
 }
 
 export async function handlePromptOutcomeStorageMessage(
