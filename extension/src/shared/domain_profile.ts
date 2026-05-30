@@ -206,51 +206,68 @@ export function recordNavigation(
 
 /**
  * Compute a risk assessment for the given domain.
+ *
+ * Serialized through the same `pending` chain as recordNavigation: this reader
+ * can apply decay and persist the result, so it must not interleave with a
+ * concurrent navigation's read-modify-write (whose update would otherwise be
+ * lost when this function saves its pre-write snapshot).
  */
-export async function getDomainRisk(domain: string): Promise<DomainRiskAssessment> {
-  const profiles = await loadProfiles();
-  const profile = profiles.get(domain);
+export function getDomainRisk(domain: string): Promise<DomainRiskAssessment> {
+  const next = pending.then(async (): Promise<DomainRiskAssessment> => {
+    const profiles = await loadProfiles();
+    const profile = profiles.get(domain);
 
-  if (!profile || profile.visits === 0) {
-    return { avgNRS: 0, consistency: 0, isRepeatOffender: false, topFactors: [] };
-  }
+    if (!profile || profile.visits === 0) {
+      return { avgNRS: 0, consistency: 0, isRepeatOffender: false, topFactors: [] };
+    }
 
-  const now = Date.now();
-  const decayed = applyDecay(profile, now);
+    const now = Date.now();
+    const decayed = applyDecay(profile, now);
 
-  if (decayed) {
-    await saveProfiles(profiles);
-  }
+    if (decayed) {
+      await saveProfiles(profiles);
+    }
 
-  return computeAssessment(profile);
+    return computeAssessment(profile);
+  });
+  pending = next.catch((err) => { console.warn("[NavSentinel] profile serialization error:", err); });
+  return next;
 }
 
 /**
  * Return the top N most suspicious domain profiles, ordered by avgNRS desc.
+ *
+ * Serialized through the `pending` chain: it applies decay across all profiles
+ * and may persist that snapshot, so it must not interleave with a concurrent
+ * recordNavigation (whose update would be overwritten by this stale snapshot).
  */
-export async function getTopSuspiciousDomains(limit: number): Promise<DomainProfile[]> {
-  const profiles = await loadProfiles();
-  const now = Date.now();
+export function getTopSuspiciousDomains(limit: number): Promise<DomainProfile[]> {
+  const next = pending.then(async (): Promise<DomainProfile[]> => {
+    const profiles = await loadProfiles();
+    const now = Date.now();
 
-  let anyDecayed = false;
-  for (const profile of profiles.values()) {
-    if (applyDecay(profile, now)) {
-      anyDecayed = true;
+    let anyDecayed = false;
+    for (const profile of profiles.values()) {
+      if (applyDecay(profile, now)) {
+        anyDecayed = true;
+      }
     }
-  }
 
-  if (anyDecayed) {
-    await saveProfiles(profiles);
-  }
+    if (anyDecayed) {
+      await saveProfiles(profiles);
+    }
 
-  return [...profiles.values()]
-    .filter((p) => p.visits > 0)
-    .sort((a, b) => {
-      const avgA = a.totalNRS / a.visits;
-      const avgB = b.totalNRS / b.visits;
-      return avgB - avgA;
-    })
-    .slice(0, limit);
+    return [...profiles.values()]
+      .filter((p) => p.visits > 0)
+      .sort((a, b) => {
+        const avgA = a.totalNRS / a.visits;
+        const avgB = b.totalNRS / b.visits;
+        return avgB - avgA;
+      })
+      .slice(0, limit);
+  });
+  pending = next.catch((err) => { console.warn("[NavSentinel] profile serialization error:", err); });
+  return next;
 }
 
 /**
