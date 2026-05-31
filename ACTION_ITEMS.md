@@ -21,8 +21,8 @@
 
 ## Current state snapshot (verified 2026-05-31)
 
-- `main` == `origin/main` == **`3eaf382`**. Nothing unmerged into main this session.
-- **Three open PRs**, all `MERGEABLE`/`CLEAN`, based on current main, **CI green**, both adversarial review rounds done, all bot threads resolved/outdated, **none merged (aging)**:
+- `main` == `origin/main` == **`d5670b0`** (this session's only commit to main: the docs/process files; no code changed). The three PRs below are based on the prior main `3eaf382` — one commit behind, but conflict-free/`MERGEABLE` (no file overlap with the docs commit).
+- **Three open PRs**, all `MERGEABLE`/`CLEAN`, **CI green**, both adversarial review rounds done, all bot threads resolved/outdated, **none merged (aging)**:
 
   | PR | Slice | Branch | Head | What it fixes |
   |----|-------|--------|------|----------------|
