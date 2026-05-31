@@ -15,15 +15,28 @@ When sources conflict, follow the higher source and report the conflict.
 
 ## First 5 Minutes
 
-1. Read `AGENTS.md`.
-2. Read `docs/Project_Roadmap.md`.
-3. Read `autodoc/AGENT_INDEX.md`.
-4. Read `CONTRIBUTING.md` or the relevant docs named by the index.
-5. Select one primary skill and, at most, one support skill.
-6. Identify the smallest safe, reviewable change.
-7. State blockers, assumptions, verification target, and docs-sync target before editing.
+1. Read `ACTION_ITEMS.md` (human-owned tasks + current-state snapshot — see Human Action Items below).
+2. Read `AGENTS.md`.
+3. Read `docs/Project_Roadmap.md`.
+4. Read `autodoc/AGENT_INDEX.md`.
+5. Read `CONTRIBUTING.md` or the relevant docs named by the index.
+6. Select one primary skill and, at most, one support skill.
+7. Identify the smallest safe, reviewable change.
+8. State blockers, assumptions, verification target, and docs-sync target before editing.
 
 Do not bulk-read archives, generated build output, large dumps, `node_modules`, or previous artifacts unless the task explicitly requires them.
+
+## Human Action Items
+
+`ACTION_ITEMS.md` (repo root) is the running list of tasks only the user (Chris) can do — manual browser testing, merge go/no-go, product decisions — plus a verified current-state snapshot for session continuity. It exists because some gates (e.g. Gate 3 manual Chrome testing) cannot be cleared from the agent sandbox.
+
+Rules:
+
+1. **Read it at session start** (it is step 1 of First 5 Minutes).
+2. **Flag every OPEN / BLOCKED item** near the top of any summary, status report, handoff, or "where do things stand" answer you give the user. Never let an open item go unmentioned — the user is relying on you so they never forget.
+3. **Clear an item only on explicit user confirmation** (e.g. "AI-1 is done"). Move it to the Completed log with the date and a one-line result. Never self-clear or assume completion.
+4. **Keep the current-state snapshot accurate** when verified truth changes. While the status docs on `main` are stale/conflicted by open PRs, this file plus persistent memory are the source of truth.
+5. When you discover a new human-only task, add it as a new `AI-N` item with a step-by-step guide and tell the user.
 
 ## Git Workflow
 
