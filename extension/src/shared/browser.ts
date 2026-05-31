@@ -44,6 +44,9 @@ export function isFirefox(): boolean {
  * promise that rejects with an `Error` on failure.
  */
 export function sendMessageP<T>(msg: object): Promise<T> {
+  if (isFirefox()) {
+    return ext.runtime.sendMessage(msg) as Promise<T>;
+  }
   return new Promise<T>((resolve, reject) => {
     try {
       ext.runtime.sendMessage(msg, (response: T) => {
@@ -55,8 +58,6 @@ export function sendMessageP<T>(msg: object): Promise<T> {
         resolve(response);
       });
     } catch (err) {
-      // Firefox (and Chrome during teardown) can throw synchronously instead of
-      // invoking the callback; normalize to a rejected promise.
       reject(err instanceof Error ? err : new Error(String(err)));
     }
   });
@@ -77,8 +78,6 @@ export interface SessionStorageShim {
   set(items: Record<string, unknown>): Promise<void>;
   remove(keys: string | string[]): Promise<void>;
 }
-
-type SessionShim = SessionStorageShim;
 
 // `storage.session` may be absent on Firefox MV3. We detect it defensively
 // rather than relying solely on `isFirefox()` so the shim stays correct if a
@@ -111,7 +110,7 @@ function normalizeGetKeys(
 // invariant: callers must never write a real persistent local key beginning
 // with SESSION_PREFIX. FF-03 (which wires the real consumers) must uphold this
 // and is also where session-ephemerality (clear-on-restart) is handled.
-const localBackedSession: SessionShim = {
+const localBackedSession: SessionStorageShim = {
   async get(
     keys?: string | string[] | Record<string, unknown> | null,
   ): Promise<Record<string, unknown>> {
@@ -163,6 +162,6 @@ const localBackedSession: SessionShim = {
  * browser restart the way real session storage is; FF-03 (session_state
  * compat) tracks closing that semantic gap.
  */
-export const storageSessionShim: SessionShim = hasSessionArea()
+export const storageSessionShim: SessionStorageShim = hasSessionArea()
   ? ext.storage.session
   : localBackedSession;

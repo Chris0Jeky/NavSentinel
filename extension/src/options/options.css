@@ -346,13 +346,13 @@ body {
   outline-offset: -1px;
 }
 
-.seg-btn[aria-pressed="true"] {
+.seg-btn[aria-checked="true"] {
   background: var(--ns-cyan);
   color: #08070a;
   font-weight: 600;
 }
 
-.seg--green .seg-btn[aria-pressed="true"] {
+.seg--green .seg-btn[aria-checked="true"] {
   background: var(--ns-green);
 }
 

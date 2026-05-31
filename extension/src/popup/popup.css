@@ -326,16 +326,16 @@ body {
   outline-offset: -1px;
 }
 
-.seg-btn[aria-pressed="true"] {
+.seg-btn[aria-checked="true"] {
   font-weight: 600;
   color: #08070a;
 }
 
-.mode-card--nav .seg-btn[aria-pressed="true"] {
+.mode-card--nav .seg-btn[aria-checked="true"] {
   background: var(--ns-cyan);
 }
 
-.mode-card--cred .seg-btn[aria-pressed="true"] {
+.mode-card--cred .seg-btn[aria-checked="true"] {
   background: var(--ns-green);
 }
 
