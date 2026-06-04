@@ -58,12 +58,19 @@ const OAUTH_FLOW_PRUNE_LIMIT = 50;
 
 // Defensive per-tab rate limit for viewport captures (visual-sim). Capturing
 // the viewport is comparatively expensive and should be bounded even if a page
-// somehow drives repeated requests. Best-effort: state is in SW memory and
-// resets if the (ephemeral) worker restarts, which is acceptable for a guard.
+// somehow drives repeated requests. Session-backed via SessionStateManager so
+// the limit survives a SW restart — otherwise a page could force the ephemeral
+// worker to recycle between bursts to reset the counter and bypass the cap.
+// The capture handler gates on swState.hydrated so a restarted worker reads the
+// persisted counts before deciding. Residual: persistMap is fire-and-forget, so
+// if the worker dies between the in-memory push and the session.set flush, one
+// attempt can be lost (at most a small slack within a window) — best-effort, not
+// a hard guarantee; the handler awaits captureVisibleTab which keeps the worker
+// alive long enough to flush in practice.
 const CAPTURE_RATE_WINDOW_MS = 60_000;
 const CAPTURE_RATE_MAX_PER_WINDOW = 3;
 const CAPTURE_RATE_PRUNE_LIMIT = 200;
-const captureTimestampsByTab = new Map<number, number[]>();
+const captureTimestampsByTab = swState.captureTimestampsByTab;
 
 /**
  * Returns true if a viewport capture is allowed for this tab right now, and
@@ -72,9 +79,13 @@ const captureTimestampsByTab = new Map<number, number[]>();
  */
 function allowViewportCapture(tabId: number, now = Date.now()): boolean {
   const cutoff = now - CAPTURE_RATE_WINDOW_MS;
-  const recent = (captureTimestampsByTab.get(tabId) ?? []).filter((ts) => ts >= cutoff);
+  // Defensive: a corrupt session value could restore as a non-array (SessionState
+  // _restoreMap does not validate per-entry shape), which would throw on .filter.
+  const stored = captureTimestampsByTab.get(tabId);
+  const recent = (Array.isArray(stored) ? stored : []).filter((ts) => ts >= cutoff);
   if (recent.length >= CAPTURE_RATE_MAX_PER_WINDOW) {
     captureTimestampsByTab.set(tabId, recent);
+    swState.persistMap(captureTimestampsByTab, "captureTimestamps");
     return false;
   }
   recent.push(now);
@@ -83,11 +94,14 @@ function allowViewportCapture(tabId: number, now = Date.now()): boolean {
   // but prune defensively in case a removal event is missed).
   if (captureTimestampsByTab.size > CAPTURE_RATE_PRUNE_LIMIT) {
     for (const [id, list] of captureTimestampsByTab) {
-      const live = list.filter((ts) => ts >= cutoff);
+      // Same defensive guard as above: a corrupt non-array entry for any tab
+      // must not throw here and hang the (synchronous-path) message port.
+      const live = (Array.isArray(list) ? list : []).filter((ts) => ts >= cutoff);
       if (live.length === 0) captureTimestampsByTab.delete(id);
       else captureTimestampsByTab.set(id, live);
     }
   }
+  swState.persistMap(captureTimestampsByTab, "captureTimestamps");
   return true;
 }
 
@@ -538,26 +552,37 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === "ns-capture-viewport") {
     const tabId = sender.tab?.id;
-    if (typeof tabId !== "number") {
+    const windowId = sender.tab?.windowId;
+    if (typeof tabId !== "number" || typeof windowId !== "number") {
       sendResponse?.({ dataUrl: null });
       return;
     }
-    // Defensive per-tab throttle: drop excess captures and return null safely.
-    if (!allowViewportCapture(tabId)) {
-      sendResponse?.({ dataUrl: null });
-      return;
-    }
-    chrome.tabs.captureVisibleTab(
-      sender.tab!.windowId!,
-      { format: "png" },
-      (dataUrl) => {
+    const runCapture = (): void => {
+      // Defensive per-tab throttle: drop excess captures and return null safely.
+      if (!allowViewportCapture(tabId)) {
+        sendResponse?.({ dataUrl: null });
+        return;
+      }
+      chrome.tabs.captureVisibleTab(windowId, { format: "png" }, (dataUrl) => {
         if (chrome.runtime.lastError || !dataUrl) {
           sendResponse?.({ dataUrl: null });
           return;
         }
         sendResponse?.({ dataUrl });
-      }
-    );
+      });
+    };
+    // Gate on hydration: a freshly-restarted worker must see the persisted
+    // per-tab counts before deciding, otherwise a capture in the pre-hydrate
+    // window reads an empty map (allowed) and its write is discarded when
+    // _restoreMap merges the persisted entry back (overwriting the tab's key) —
+    // reopening the recycle-between-bursts bypass this slice closes. Defer until
+    // hydrated (keeps the port open). The .catch closes the port on any
+    // unexpected throw so the response promise can never hang.
+    if (!swState.hydrated) {
+      void hydrateReady.then(runCapture).catch(() => sendResponse?.({ dataUrl: null }));
+    } else {
+      runCapture();
+    }
     return true;
   }
 

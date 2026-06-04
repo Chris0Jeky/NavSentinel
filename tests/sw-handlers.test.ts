@@ -458,6 +458,88 @@ describe("service worker handlers", () => {
       ) as { dataUrl: string | null };
       expect(otherTab.dataUrl).toBe("data:image/png;base64,mockdata");
     });
+
+    it("honors the persisted per-tab count after a restart (D-SWRATE: limit survives recycle)", async () => {
+      const mock = createChromeMock();
+      const now = Date.now();
+      // A prior worker used all 3 captures this window; the counts were persisted
+      // to session storage. A restarted worker hydrates them, and (because the
+      // handler gates on hydration) the next capture is denied — recycling the
+      // worker mid-window cannot reset the counter.
+      (mock.chrome.storage.session as unknown as { _store: Record<string, unknown> })._store[
+        "ns_sw:captureTimestamps"
+      ] = { "42": [now - 3000, now - 2000, now - 1000] };
+      await loadSw(mock);
+
+      const res = mock.dispatchRuntimeMessage(
+        { type: "ns-capture-viewport" },
+        { tab: { id: 42, windowId: 1 } },
+      ) as { dataUrl: string | null };
+      expect(res.dataUrl).toBeNull();
+      expect(mock.chrome.tabs.captureVisibleTab).not.toHaveBeenCalled();
+    });
+
+    it("defers the capture decision until hydration when the worker is not yet hydrated", async () => {
+      const mock = createChromeMock();
+      const now = Date.now();
+      const session = mock.chrome.storage.session as unknown as {
+        _store: Record<string, unknown>;
+        get: (keys?: string | string[]) => Promise<Record<string, unknown>>;
+      };
+      // Persisted counts already at the cap for tab 42.
+      session._store["ns_sw:captureTimestamps"] = { "42": [now - 3000, now - 2000, now - 1000] };
+
+      // Block hydration so the handler must take the deferred (!hydrated) branch.
+      let releaseHydration!: () => void;
+      const gate = new Promise<void>((r) => { releaseHydration = r; });
+      const realGet = session.get.bind(mock.chrome.storage.session);
+      session.get = async (keys?: string | string[]) => {
+        await gate;
+        return realGet(keys);
+      };
+
+      await loadSw(mock);
+
+      let captured: unknown = "NOT_CALLED";
+      mock.chrome.runtime.onMessage.emit(
+        { type: "ns-capture-viewport" },
+        { tab: { id: 42, windowId: 1 } },
+        (v: unknown) => { captured = v; },
+      );
+
+      // Pre-hydrate: the handler returned true and has NOT responded or captured.
+      expect(captured).toBe("NOT_CALLED");
+      expect(mock.chrome.tabs.captureVisibleTab).not.toHaveBeenCalled();
+
+      // Release hydration; the deferred capture now decides against the restored
+      // 3-timestamp count and is denied (no recycle bypass).
+      releaseHydration();
+      for (let i = 0; i < 12; i++) await Promise.resolve();
+
+      expect(captured).toEqual({ dataUrl: null });
+      expect(mock.chrome.tabs.captureVisibleTab).not.toHaveBeenCalled();
+    });
+
+    it("prunes safely over a corrupt non-array entry without throwing/hanging the port", async () => {
+      const mock = createChromeMock();
+      const now = Date.now();
+      const session = mock.chrome.storage.session as unknown as { _store: Record<string, unknown> };
+      const counts: Record<string, unknown> = {};
+      // Exceed CAPTURE_RATE_PRUNE_LIMIT (200) so the prune loop runs, including a
+      // corrupt non-array entry that must not throw out of the synchronous handler.
+      for (let i = 0; i < 205; i++) counts[String(i)] = [now - 1000];
+      counts["999"] = "corrupt-not-an-array";
+      session._store["ns_sw:captureTimestamps"] = counts;
+      await loadSw(mock);
+
+      const res = mock.dispatchRuntimeMessage(
+        { type: "ns-capture-viewport" },
+        { tab: { id: 4242, windowId: 1 } },
+      ) as { dataUrl: string | null };
+
+      // Reached a normal decision (not a thrown/hung port) and captured.
+      expect(res.dataUrl).toBe("data:image/png;base64,mockdata");
+    });
   });
 
   describe("ns-dblclick-opener-nav (security-critical)", () => {
