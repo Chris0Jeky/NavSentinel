@@ -266,6 +266,42 @@ describe("mutation_monitor DOM integration", () => {
     stopMutationMonitor();
   });
 
+  it("flags an injected data: iframe by its opaque scheme (D-IFRAME)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    // A data: iframe is its own opaque origin with no hostname, so the
+    // cross-domain check can't catch it; the scheme check must.
+    const iframe = document.createElement("iframe");
+    iframe.src = "data:text/html,<form><input type=password></form>";
+    document.body.appendChild(iframe);
+
+    await vi.advanceTimersByTimeAsync(150);
+
+    const iframeAlerts = alerts.filter((a) => a.type === "suspicious_iframe");
+    expect(iframeAlerts.some((a) => a.details.includes("data-scheme src"))).toBe(true);
+
+    iframe.remove();
+    stopMutationMonitor();
+  });
+
+  it("flags an injected blob: iframe by its opaque scheme (D-IFRAME)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    const iframe = document.createElement("iframe");
+    iframe.src = "blob:https://evil.example/0e8c2b1a-uuid";
+    document.body.appendChild(iframe);
+
+    await vi.advanceTimersByTimeAsync(150);
+
+    const iframeAlerts = alerts.filter((a) => a.type === "suspicious_iframe");
+    expect(iframeAlerts.some((a) => a.details.includes("blob-scheme src"))).toBe(true);
+
+    iframe.remove();
+    stopMutationMonitor();
+  });
+
   it("caps alerts at 50", async () => {
     const alerts: MutationAlert[] = [];
     startMutationMonitor(document, (a) => alerts.push(a));

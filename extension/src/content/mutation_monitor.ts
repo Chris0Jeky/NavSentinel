@@ -149,6 +149,17 @@ function isLegitIframeSrc(src: string): boolean {
   return false;
 }
 
+// Opaque / script-bearing iframe URL schemes. An iframe injected after load with
+// one of these runs attacker-controlled content (data:/blob: are their own
+// opaque origin; javascript: executes in-page) but carries no hostname, so the
+// cross-domain check (which keys off the URL host) never flags them.
+const SUSPICIOUS_IFRAME_SCHEME_RE = /^\s*(data|blob|javascript):/i;
+
+function suspiciousIframeScheme(src: string): string | null {
+  const m = SUSPICIOUS_IFRAME_SCHEME_RE.exec(src);
+  return m ? m[1]!.toLowerCase() : null;
+}
+
 function pushAlert(alert: MutationAlert): void {
   if (alerts.length >= MAX_ALERTS) return;
   alerts.push(alert);
@@ -388,8 +399,14 @@ function checkSuspiciousIframe(el: Element): void {
     reasons.push(`tiny (${Math.round(rect.width)}x${Math.round(rect.height)})`);
   }
 
-  // Check for cross-domain src
-  if (src && isCrossDomain(src)) {
+  // Check for opaque/script-scheme src (data:/blob:/javascript:). These have no
+  // hostname so isCrossDomain can't flag them, but an injected one runs
+  // attacker-controlled content.
+  const scheme = src ? suspiciousIframeScheme(src) : null;
+  if (scheme) {
+    reasons.push(`${scheme}-scheme src`);
+  } else if (src && isCrossDomain(src)) {
+    // Check for cross-domain src (only meaningful for host-bearing URLs).
     reasons.push(`cross-domain src: ${src}`);
   }
 
