@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 describe("bridge race condition fixes", () => {
   describe("issue #90: retry generation counter prevents closing active port", () => {
@@ -166,6 +166,122 @@ describe("bridge race condition fixes", () => {
       expect(response!.type).toBe("ns-challenge-response");
       expect(response!.challenge).toBe(challenge);
       expect(response!.session).toBe(session);
+    });
+  });
+
+  // D-BRIDGE: the MAIN-world guard had no timeout on the challenge handshake.
+  // A port whose peer never echoes the challenge (a dead isolated context, or a
+  // hostile page that posts a bridge init first then stalls) pinned bridgeSession
+  // forever, so the `bridgeSession && data.session !== bridgeSession` guard then
+  // rejected the real isolated world's init — permanently disabling the bridge.
+  // These tests model main_guard.ts's handshake state machine + failBridgeHandshake.
+  describe("D-BRIDGE: handshake timeout releases a half-open bridge", () => {
+    interface FakePort {
+      closed: boolean;
+    }
+    interface BridgeState {
+      port: FakePort | null;
+      session: string | null;
+      verified: boolean;
+      challenge: string | null;
+      timer: number;
+    }
+    let s: BridgeState;
+
+    const clearTimer = (): void => {
+      if (s.timer) {
+        clearTimeout(s.timer);
+        s.timer = 0;
+      }
+    };
+
+    const failHandshake = (): void => {
+      s.timer = 0;
+      if (s.verified) return;
+      if (s.port) s.port.closed = true;
+      s.port = null;
+      s.session = null;
+      s.challenge = null;
+      s.verified = false;
+    };
+
+    // Models the BRIDGE_INIT branch of main_guard's message handler.
+    const onInit = (session: string, port: FakePort = { closed: false }): boolean => {
+      if (s.session && session !== s.session) return false; // session-pinning guard
+      clearTimer();
+      if (s.port) s.port.closed = true;
+      s.port = port;
+      s.session = session;
+      s.verified = false;
+      s.challenge = `challenge-${session}`;
+      s.timer = setTimeout(failHandshake, 3000) as unknown as number;
+      return true;
+    };
+
+    const onChallengeResponse = (challenge: string): void => {
+      if (s.verified) return;
+      if (challenge === s.challenge) {
+        clearTimer();
+        s.verified = true;
+        s.challenge = null;
+      }
+    };
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      s = { port: null, session: null, verified: false, challenge: null, timer: 0 };
+    });
+    afterEach(() => {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    });
+
+    it("a stalled init pins the session and would lock out the real bridge", () => {
+      expect(onInit("attacker")).toBe(true);
+      expect(onInit("real")).toBe(false); // rejected while pinned
+      expect(s.session).toBe("attacker");
+      expect(s.verified).toBe(false);
+    });
+
+    it("the timeout releases the half-open bridge so a fresh init re-establishes", () => {
+      expect(onInit("attacker")).toBe(true);
+      const attackerPort = s.port!;
+      vi.advanceTimersByTime(3000);
+      expect(s.session).toBeNull();
+      expect(s.port).toBeNull();
+      expect(attackerPort.closed).toBe(true);
+      expect(onInit("real")).toBe(true); // now accepted
+      expect(s.session).toBe("real");
+    });
+
+    it("does not tear down an already-verified bridge", () => {
+      expect(onInit("real")).toBe(true);
+      onChallengeResponse("challenge-real");
+      expect(s.verified).toBe(true);
+      failHandshake(); // a stale teardown must be a no-op once verified
+      expect(s.verified).toBe(true);
+      expect(s.session).toBe("real");
+      expect(s.port).not.toBeNull();
+    });
+
+    it("successful verification clears the timer (no later teardown)", () => {
+      expect(onInit("real")).toBe(true);
+      onChallengeResponse("challenge-real");
+      vi.advanceTimersByTime(10000);
+      expect(s.verified).toBe(true);
+      expect(s.session).toBe("real");
+    });
+
+    it("a superseding init (isolated retry, same session) resets the timer", () => {
+      expect(onInit("real")).toBe(true);
+      const firstPort = s.port!;
+      vi.advanceTimersByTime(2000); // first timer would fire at 3000
+      expect(onInit("real")).toBe(true); // retry resets the timer
+      expect(firstPort.closed).toBe(true);
+      vi.advanceTimersByTime(2000); // 4000 total, but new timer set at 2000 → fires at 5000
+      expect(s.session).toBe("real"); // not yet torn down
+      vi.advanceTimersByTime(1000); // reach 5000
+      expect(s.session).toBeNull(); // now torn down
     });
   });
 });
