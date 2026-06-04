@@ -397,7 +397,13 @@ function checkSuspiciousIframe(el: Element): void {
   const iframe = el as HTMLIFrameElement;
   const src = iframe.getAttribute("src") ?? "";
   const hasSrcdoc = iframe.hasAttribute("srcdoc");
-  const srcIsLegit = src !== "" && isLegitIframeSrc(src);
+
+  // Resolve the opaque/script scheme (data:/blob:/javascript:) FIRST. Its payload
+  // is fully attacker-controlled, so it must NEVER be whitelisted by the legit-src
+  // allowlist — isLegitIframeSrc is an unanchored substring match, and embedding
+  // e.g. "recaptcha" inside a data: URL would otherwise exempt it from detection.
+  const scheme = src ? suspiciousIframeScheme(src) : null;
+  const srcIsLegit = src !== "" && !scheme && isLegitIframeSrc(src);
 
   // A legitimate src with NO srcdoc is safe. But per the HTML spec srcdoc renders
   // OVER src (src is only a fallback), so a legit src paired with a malicious
@@ -416,20 +422,17 @@ function checkSuspiciousIframe(el: Element): void {
     reasons.push(`tiny (${Math.round(rect.width)}x${Math.round(rect.height)})`);
   }
 
-  // src-based checks only when the src is not a known-legit pattern (a legit src
-  // here only reaches this point because srcdoc is the live document).
-  if (!srcIsLegit) {
-    // Opaque/script-scheme src (data:/blob:/javascript:) has no hostname so
-    // isCrossDomain can't flag it, but an injected one runs attacker-controlled
-    // content. (Trade-off: a legitimate post-load data:/blob: preview iframe is
-    // also flagged; acceptable for a medium informational alert since injecting
-    // such an iframe after load is uncommon.)
-    const scheme = src ? suspiciousIframeScheme(src) : null;
-    if (scheme) {
-      reasons.push(`${scheme}-scheme src`);
-    } else if (src && isCrossDomain(src)) {
-      reasons.push(`cross-domain src: ${src}`);
-    }
+  // Opaque/script-scheme src (data:/blob:/javascript:) has no hostname so
+  // isCrossDomain can't flag it, but an injected one runs attacker-controlled
+  // content. Flagged unconditionally (never exempted by the legit-src allowlist).
+  // (Trade-off: a legitimate post-load data:/blob: preview iframe is also
+  // flagged; acceptable for a medium informational alert since injecting such an
+  // iframe after load is uncommon.)
+  if (scheme) {
+    reasons.push(`${scheme}-scheme src`);
+  } else if (!srcIsLegit && src && isCrossDomain(src)) {
+    // Cross-domain src (only meaningful for host-bearing, non-legit URLs).
+    reasons.push(`cross-domain src: ${src}`);
   }
 
   // srcdoc runs attacker-provided inline HTML in an opaque origin with no src to
