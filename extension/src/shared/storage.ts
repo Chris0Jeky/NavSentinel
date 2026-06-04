@@ -332,7 +332,9 @@ export type PromptOutcomeStorageMessage =
   | { type: "ns-prompt-outcome-clear" }
   | { type: "ns-prompt-outcome-replace"; outcomes: PromptOutcomeEntry[] };
 
-type PromptOutcomeStorageResponse = { ok: true } | { ok: false; error: string };
+type PromptOutcomeStorageResponse =
+  | { ok: true }
+  | { ok: false; error: string; code?: "unauthorized" };
 
 function isPromptOutcomeEntry(value: unknown): value is PromptOutcomeEntry {
   if (!value || typeof value !== "object") return false;
@@ -440,7 +442,11 @@ async function setPromptOutcomeResetCutoff(ts = Date.now()): Promise<void> {
 // context invalidation) — which is retryable and safe to fall back from — from
 // a deliberate `{ ok: false }` refusal by the service worker (e.g. an
 // unauthorized clear/replace), which must NOT be retried or fallen back from.
-class PromptOutcomeTransportError extends Error {}
+// A retryable failure: the SW is momentarily unreachable (cold-start "no
+// receiving end" race, a transient SW-side storage error, or a thrown channel).
+class PromptOutcomeRetryableError extends Error {}
+// A definitive refusal by the SW (the sender is not authorized). Never retried.
+class PromptOutcomeUnauthorizedError extends Error {}
 
 function sendPromptOutcomeStorageMessage(message: PromptOutcomeStorageMessage): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -448,60 +454,66 @@ function sendPromptOutcomeStorageMessage(message: PromptOutcomeStorageMessage): 
       chrome.runtime.sendMessage(message, (response?: PromptOutcomeStorageResponse) => {
         const lastError = chrome.runtime.lastError;
         if (lastError) {
-          reject(new PromptOutcomeTransportError(lastError.message ?? "runtime.sendMessage failed"));
+          reject(new PromptOutcomeRetryableError(lastError.message ?? "runtime.sendMessage failed"));
           return;
         }
         if (response?.ok) {
           resolve();
           return;
         }
-        // The SW received and deliberately refused the write.
-        reject(new Error(response?.error ?? "Prompt outcome storage write failed"));
+        if (response?.code === "unauthorized") {
+          // The SW deliberately refused (sender not authorized) — not retryable.
+          reject(new PromptOutcomeUnauthorizedError(response.error));
+          return;
+        }
+        // A genuine SW-side failure (e.g. a transient storage error) — retryable.
+        reject(new PromptOutcomeRetryableError(response?.error ?? "Prompt outcome storage write failed"));
       });
     } catch (err) {
       // Synchronous throw === the messaging channel is gone (context invalidated).
-      reject(new PromptOutcomeTransportError(err instanceof Error ? err.message : String(err)));
+      reject(new PromptOutcomeRetryableError(err instanceof Error ? err.message : String(err)));
     }
   });
 }
 
-const PROMPT_OUTCOME_DELEGATE_RETRY_DELAYS_MS = [50, 150];
+const PROMPT_OUTCOME_DELEGATE_RETRY_DELAYS_MS = [50, 150, 400];
 
 function delayMs(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
- * Delegate a prompt-outcome write to the service worker, where all writes are
- * serialized. On a transient transport failure (SW waking from cold start, or a
- * momentary "no receiving end"), retry a bounded number of times. If every
- * attempt fails the SW is unreachable, so fall back to a direct local write
- * rather than silently losing the outcome — with the SW down there is no
- * concurrent SW writer to race. A deliberate refusal (e.g. an unauthorized
- * clear/replace) is rethrown without retry or fallback so the SW's sender
- * check cannot be bypassed.
+ * Delegate a prompt-outcome write to the service worker, which is the single
+ * serialized writer. On a retryable failure (SW waking from cold start, a
+ * momentary "no receiving end", or a transient SW-side error) retry a bounded
+ * number of times. An unauthorized refusal is rethrown immediately (no retry).
+ *
+ * If every attempt fails the SW is persistently unreachable — in MV3 that means
+ * the extension is being reloaded/updated and this context is itself about to be
+ * torn down. We do NOT fall back to a direct content-script write: that would
+ * bypass the SW's serialization, cannot read the SW-side reset barrier from a
+ * content script on Chrome (risking resurrection of cleared data), and could
+ * race a concurrent SW write. Prompt outcomes are best-effort adaptive-scoring
+ * input, so we surface the loss loudly instead of corrupting state silently.
  */
-async function delegatePromptOutcomeWrite(
-  message: PromptOutcomeStorageMessage,
-  fallback: () => Promise<void>
-): Promise<void> {
+async function delegatePromptOutcomeWrite(message: PromptOutcomeStorageMessage): Promise<void> {
   let lastErr: unknown;
   for (let attempt = 0; attempt <= PROMPT_OUTCOME_DELEGATE_RETRY_DELAYS_MS.length; attempt++) {
     try {
       await sendPromptOutcomeStorageMessage(message);
       return;
     } catch (err) {
-      if (!(err instanceof PromptOutcomeTransportError)) throw err;
+      if (err instanceof PromptOutcomeUnauthorizedError) throw err;
       lastErr = err;
       const delay = PROMPT_OUTCOME_DELEGATE_RETRY_DELAYS_MS[attempt];
       if (delay !== undefined) await delayMs(delay);
     }
   }
   console.warn(
-    "[NavSentinel] prompt outcome delegation failed after retries; writing directly:",
+    "[NavSentinel] prompt outcome dropped — service worker unreachable after retries:",
+    message.type,
     lastErr
   );
-  await fallback();
 }
 
 function queuePromptOutcomeWrite<T>(operation: () => Promise<T>): Promise<T> {
@@ -580,10 +592,7 @@ export function appendPromptOutcome(
   };
 
   if (shouldDelegatePromptOutcomeWrite()) {
-    return delegatePromptOutcomeWrite(
-      { type: "ns-prompt-outcome-append", entry },
-      () => appendPromptOutcomeDirect(entry)
-    );
+    return delegatePromptOutcomeWrite({ type: "ns-prompt-outcome-append", entry });
   }
   return appendPromptOutcomeDirect(entry);
 }
@@ -598,10 +607,7 @@ function clearPromptOutcomesDirect(): Promise<void> {
 
 export function clearPromptOutcomes(): Promise<void> {
   if (shouldDelegatePromptOutcomeWrite()) {
-    return delegatePromptOutcomeWrite(
-      { type: "ns-prompt-outcome-clear" },
-      () => clearPromptOutcomesDirect()
-    );
+    return delegatePromptOutcomeWrite({ type: "ns-prompt-outcome-clear" });
   }
   return clearPromptOutcomesDirect();
 }
@@ -621,10 +627,7 @@ async function replacePromptOutcomesDirect(outcomes: PromptOutcomeEntry[]): Prom
 async function replacePromptOutcomes(outcomes: PromptOutcomeEntry[]): Promise<void> {
   const boundedOutcomes = boundPromptOutcomeLog(outcomes);
   if (shouldDelegatePromptOutcomeWrite()) {
-    return delegatePromptOutcomeWrite(
-      { type: "ns-prompt-outcome-replace", outcomes: boundedOutcomes },
-      () => replacePromptOutcomesDirect(boundedOutcomes)
-    );
+    return delegatePromptOutcomeWrite({ type: "ns-prompt-outcome-replace", outcomes: boundedOutcomes });
   }
   return replacePromptOutcomesDirect(boundedOutcomes);
 }
@@ -659,7 +662,11 @@ export async function handlePromptOutcomeStorageMessage(
     (message.type === "ns-prompt-outcome-clear" || message.type === "ns-prompt-outcome-replace") &&
     !isTrustedExtensionPageSender(sender)
   ) {
-    return { ok: false, error: "Unauthorized prompt-outcome mutation from untrusted sender" };
+    return {
+      ok: false,
+      error: "Unauthorized prompt-outcome mutation from untrusted sender",
+      code: "unauthorized",
+    };
   }
   try {
     if (message.type === "ns-prompt-outcome-append") {

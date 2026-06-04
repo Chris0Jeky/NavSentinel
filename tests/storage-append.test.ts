@@ -1092,22 +1092,25 @@ describe("prompt outcome storage — sender authorization", () => {
   });
 });
 
-describe("prompt outcome delegation — transport failure vs refusal", () => {
+describe("prompt outcome delegation — retry, drop, and refusal", () => {
   beforeEach(() => {
     vi.resetModules();
   });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
 
-  it("falls back to a direct local write when the service worker is unreachable", async () => {
+  it("drops and logs (no direct write) when the SW is persistently unreachable", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { chrome, store } = createChromeMock();
-    // A content-script context whose every sendMessage fails (no receiving end).
+    let calls = 0;
     const runtime: {
       lastError?: { message?: string };
       sendMessage: (message: unknown, callback?: (response: unknown) => void) => void;
     } = {
       sendMessage(_message, callback) {
-        runtime.lastError = {
-          message: "Could not establish connection. Receiving end does not exist.",
-        };
+        calls++;
+        runtime.lastError = { message: "Could not establish connection. Receiving end does not exist." };
         callback?.(undefined);
         delete runtime.lastError;
       },
@@ -1116,41 +1119,69 @@ describe("prompt outcome delegation — transport failure vs refusal", () => {
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { appendPromptOutcome } = await import("../extension/src/shared/storage");
-    await appendPromptOutcome({
-      id: "fallback-1",
-      domain: "cs.example",
-      type: "nav",
-      score: 40,
-      outcome: "allow",
-    });
+    await appendPromptOutcome({ id: "dropped-1", domain: "cs.example", type: "nav", score: 40, outcome: "allow" });
 
-    const ids = (store[PROMPT_OUTCOMES_KEY] as Array<{ id: string }>).map((e) => e.id);
-    expect(ids).toContain("fallback-1");
+    // No direct-write fallback: the outcome is NOT persisted (bypassing SW
+    // serialization could resurrect cleared data / race a concurrent write).
+    expect(store[PROMPT_OUTCOMES_KEY]).toBeUndefined();
+    // It retried (initial + 3 backoff attempts) and surfaced the loss loudly.
+    expect(calls).toBe(4);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("prompt outcome dropped"),
+      expect.anything(),
+      expect.anything()
+    );
   });
 
-  it("does NOT fall back to a direct write when the SW deliberately refuses", async () => {
-    const seedForRefusal = {
-      id: "keep-1",
-      ts: 10,
-      domain: "keep.example",
-      type: "nav" as const,
-      score: 30,
-      outcome: "allow" as const,
+  it("retries and succeeds once the SW becomes reachable", async () => {
+    const { chrome, store } = createChromeMock();
+    const worker = await import("../extension/src/shared/storage");
+    let calls = 0;
+    const runtime: {
+      lastError?: { message?: string };
+      sendMessage: (message: unknown, callback?: (response: unknown) => void) => void;
+    } = {
+      sendMessage(message, callback) {
+        calls++;
+        if (calls === 1) {
+          runtime.lastError = { message: "Could not establish connection." };
+          callback?.(undefined);
+          delete runtime.lastError;
+          return;
+        }
+        void worker.handlePromptOutcomeStorageMessage(
+          message as Parameters<typeof worker.handlePromptOutcomeStorageMessage>[0]
+        ).then((r) => callback?.(r));
+      },
     };
-    const { chrome, store } = createChromeMock({ [PROMPT_OUTCOMES_KEY]: [seedForRefusal] });
-    // sendMessage succeeds at the transport layer but returns a refusal — a
-    // content script attempting a clear must not be able to wipe the log via
-    // the fallback path.
+    (chrome as unknown as { runtime: unknown }).runtime = runtime;
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    vi.resetModules();
+    const contentScript = await import("../extension/src/shared/storage");
+    await contentScript.appendPromptOutcome({ id: "retry-1", domain: "cs.example", type: "nav", score: 40, outcome: "allow" });
+
+    expect(calls).toBeGreaterThanOrEqual(2);
+    const ids = (store[PROMPT_OUTCOMES_KEY] as Array<{ id: string }>).map((e) => e.id);
+    expect(ids).toContain("retry-1");
+  });
+
+  it("does NOT retry an unauthorized refusal and never writes", async () => {
+    const seed = { id: "keep-1", ts: 10, domain: "keep.example", type: "nav" as const, score: 30, outcome: "allow" as const };
+    const { chrome, store } = createChromeMock({ [PROMPT_OUTCOMES_KEY]: [seed] });
+    let calls = 0;
     (chrome as unknown as { runtime: unknown }).runtime = {
       sendMessage(_message: unknown, callback?: (response: unknown) => void) {
-        callback?.({ ok: false, error: "Unauthorized prompt-outcome mutation from untrusted sender" });
+        calls++;
+        callback?.({ ok: false, error: "Unauthorized prompt-outcome mutation from untrusted sender", code: "unauthorized" });
       },
     };
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { clearPromptOutcomes } = await import("../extension/src/shared/storage");
     await expect(clearPromptOutcomes()).rejects.toThrow(/Unauthorized/);
-    expect(store[PROMPT_OUTCOMES_KEY]).toEqual([seedForRefusal]);
+    expect(calls).toBe(1); // definitive refusal — not retried
+    expect(store[PROMPT_OUTCOMES_KEY]).toEqual([seed]); // and not wiped via any fallback
   });
 });
 
