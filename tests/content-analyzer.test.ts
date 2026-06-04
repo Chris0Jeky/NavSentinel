@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   analyzeSnapshot,
   BRAND_DB,
+  HTML_SNIPPET_MAX,
   KIT_FINGERPRINTS,
   domainMatchesBrand,
   type PageSnapshot,
@@ -246,6 +247,14 @@ describe("content_analyzer - phishing kit detection", () => {
     const result = analyzeSnapshot(snap, "phish.com");
     expect(result.phishingKitMatch).toBe(true);
     expect(result.kitName).toBe("Exfil-Hidden-Form");
+  });
+
+  it("derives the exfil htmlPattern bounds from HTML_SNIPPET_MAX so they can't drift from the slice (D-REDOS)", () => {
+    const cap = `{0,${HTML_SNIPPET_MAX}}`;
+    const form = KIT_FINGERPRINTS.find((k) => k.name === "Exfil-Hidden-Form");
+    const iframe = KIT_FINGERPRINTS.find((k) => k.name === "Data-Exfil-Iframe");
+    expect(form?.htmlPatterns?.[0]?.source).toContain(cap);
+    expect(iframe?.htmlPatterns?.[0]?.source).toContain(cap);
   });
 
   it("detects a data-exfil iframe by an src keyword via the bounded regex (D-REDOS)", () => {
