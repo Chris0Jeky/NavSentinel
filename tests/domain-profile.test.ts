@@ -587,6 +587,18 @@ describe("read-modify-write serialization (regression: discovery D-PROF wf_c7d86
     // load/save pairs. We instrument the storage mock to record an ordered log
     // of get/set calls; serialized operations must appear as complete,
     // non-overlapping [get...set] segments.
+    //
+    // R2 note (realism): getTopSuspiciousDomains and clearDomainProfiles run only
+    // in the OPTIONS-page realm in production (options.ts), while recordNavigation
+    // runs in the content script — separate module instances with separate
+    // `pending` chains, so this exact same-chain interleave is an in-realm
+    // illustration. The production-relevant serialization is getDomainRisk vs
+    // recordNavigation (both in the content script), covered by the tests above.
+    // The cross-frame (all_frames) shared-storage race is tracked as #181.
+    //
+    // The invariant below relies on the seeded stale profile (added next) forcing
+    // the reader down its decay-save path so every operation does a [get,set]
+    // pair; without that save the balanced-pairs assumption would not hold.
     const callLog: string[] = [];
     const origGet = chrome.storage.local.get as ReturnType<typeof vi.fn>;
     const origSet = chrome.storage.local.set as ReturnType<typeof vi.fn>;
