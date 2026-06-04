@@ -207,7 +207,9 @@ describe("bridge race condition fixes", () => {
 
     // Models the BRIDGE_INIT branch of main_guard's message handler.
     const onInit = (session: string, port: FakePort = { closed: false }): boolean => {
-      if (s.session && session !== s.session) return false; // session-pinning guard
+      // Only a VERIFIED bridge pins its session; an unverified session can be
+      // taken over by a fresh init (the re-pin lockout fix).
+      if (s.verified && s.session && session !== s.session) return false;
       clearTimer();
       if (s.port) s.port.closed = true;
       s.port = port;
@@ -236,11 +238,46 @@ describe("bridge race condition fixes", () => {
       vi.useRealTimers();
     });
 
-    it("a stalled init pins the session and would lock out the real bridge", () => {
+    it("an unverified hostile pin does NOT lock out the real bridge (takeover allowed)", () => {
       expect(onInit("attacker")).toBe(true);
-      expect(onInit("real")).toBe(false); // rejected while pinned
-      expect(s.session).toBe("attacker");
+      // The real isolated init arrives; because the attacker's session is
+      // unverified it can take over rather than being rejected.
+      expect(onInit("real")).toBe(true);
+      expect(s.session).toBe("real");
+      // and the real side verifies, establishing the bridge.
+      onChallengeResponse("challenge-real");
+      expect(s.verified).toBe(true);
+    });
+
+    it("a verified bridge rejects a different-session init (no post-verification hijack)", () => {
+      expect(onInit("real")).toBe(true);
+      onChallengeResponse("challenge-real");
+      expect(s.verified).toBe(true);
+      expect(onInit("attacker")).toBe(false); // verified session is pinned
+      expect(s.session).toBe("real");
+      expect(s.verified).toBe(true);
+    });
+
+    it("repeated re-pinning before the timeout cannot lock out the real bridge", () => {
+      // Attacker re-inits every 2s (faster than the 3s timeout) to keep the
+      // handshake alive. The real init can still take over (unverified) and verify.
+      expect(onInit("attacker")).toBe(true);
+      vi.advanceTimersByTime(2000);
+      expect(onInit("attacker")).toBe(true); // re-pin
+      vi.advanceTimersByTime(2000);
+      expect(onInit("real")).toBe(true); // real takes over the unverified handshake
+      onChallengeResponse("challenge-real");
+      expect(s.verified).toBe(true);
+      expect(s.session).toBe("real");
+    });
+
+    it("a stale challenge response (for a superseded handshake) does not verify", () => {
+      expect(onInit("attacker")).toBe(true);
+      expect(onInit("real")).toBe(true); // supersedes; challenge is now challenge-real
+      onChallengeResponse("challenge-attacker"); // stale echo for the old handshake
       expect(s.verified).toBe(false);
+      onChallengeResponse("challenge-real");
+      expect(s.verified).toBe(true);
     });
 
     it("the timeout releases the half-open bridge so a fresh init re-establishes", () => {

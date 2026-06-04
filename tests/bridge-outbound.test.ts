@@ -77,7 +77,7 @@ describe("OutboundQueue (D-BRIDGE: pre-verification bridge buffer)", () => {
     expect(items[1]).toEqual({ type: "ns-bridge-ready" });
   });
 
-  it("handles a zero/negative capacity by dropping everything (no crash)", () => {
+  it("handles a zero/negative/non-finite capacity by dropping everything (no crash)", () => {
     const q = new OutboundQueue(0);
     q.enqueue(msg("a"));
     q.enqueue(msg("b"));
@@ -88,5 +88,61 @@ describe("OutboundQueue (D-BRIDGE: pre-verification bridge buffer)", () => {
     qn.enqueue(msg("a"));
     expect(qn.size).toBe(0);
     expect(qn.droppedCount).toBe(1);
+
+    // NaN cap must not leave the queue effectively unbounded (Math.floor(NaN)=NaN
+    // would make `length < cap` always false).
+    const qnan = new OutboundQueue(Number.NaN);
+    qnan.enqueue(msg("a"));
+    qnan.enqueue(msg("b"));
+    expect(qnan.size).toBe(0);
+    expect(qnan.droppedCount).toBe(2);
+  });
+});
+
+describe("OutboundQueue priority (D-BRIDGE R2: alerts survive routine pressure)", () => {
+  it("a buffered alert is never evicted by a flood of routine traffic", () => {
+    const q = new OutboundQueue(4);
+    q.enqueue(msg("ns-nav-blocked", { id: "alert" }), true); // priority
+    for (let i = 0; i < 100; i++) q.enqueue(msg("ns-ping", { i })); // routine flood
+
+    const { items } = q.drain();
+    expect(items.some((m) => m.type === "ns-nav-blocked")).toBe(true);
+  });
+
+  it("a late alert is admitted by displacing the oldest routine message", () => {
+    const q = new OutboundQueue(3);
+    // Pre-fill with routine noise (the drop-newest weakness this defends).
+    q.enqueue(msg("noise1"));
+    q.enqueue(msg("noise2"));
+    q.enqueue(msg("noise3"));
+    // A real alert arrives after the buffer is already full.
+    q.enqueue(msg("ns-dblclick-second-click", { ts: 1 }), true);
+
+    const { items, dropped } = q.drain();
+    expect(items.some((m) => m.type === "ns-dblclick-second-click")).toBe(true);
+    expect(dropped).toBe(1); // one routine displaced
+    expect(items.length).toBe(3);
+  });
+
+  it("routine messages cannot displace each other once full (earliest kept)", () => {
+    const q = new OutboundQueue(2);
+    q.enqueue(msg("a"));
+    q.enqueue(msg("b"));
+    q.enqueue(msg("c")); // routine, full → dropped
+
+    const { items, dropped } = q.drain();
+    expect(items.map((m) => m.type)).toEqual(["a", "b"]);
+    expect(dropped).toBe(1);
+  });
+
+  it("when full of alerts, the earliest alerts are kept and a new one is dropped", () => {
+    const q = new OutboundQueue(2);
+    q.enqueue(msg("alert1"), true);
+    q.enqueue(msg("alert2"), true);
+    q.enqueue(msg("alert3"), true); // all-alert overflow → dropped
+
+    const { items, dropped } = q.drain();
+    expect(items.map((m) => m.type)).toEqual(["alert1", "alert2"]);
+    expect(dropped).toBe(1);
   });
 });

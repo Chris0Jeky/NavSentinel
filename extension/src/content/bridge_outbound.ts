@@ -1,49 +1,75 @@
 /**
- * Bounded outbound buffer for MAIN-world → isolated-world bridge messages that
- * are produced before the bridge handshake is verified.
+ * Bounded outbound buffer for cross-world bridge messages produced before the
+ * bridge handshake is verified (used in both directions: main_guard → isolated
+ * and capture_isolated → main).
  *
- * Overflow policy: PRESERVE THE EARLIEST messages, drop the newest overflow.
+ * Overflow policy: ALERTS are never evicted by routine traffic, and among items
+ * of equal priority the EARLIEST are preserved (newest overflow dropped).
  *
  * Rationale: the pre-verification window buffers attack-onset evidence — the
- * first `ns-nav-blocked`, `ns-dblclick-second-click`, or JS-exfil signals a page
- * emits. The previous policy dropped the OLDEST entries on overflow, which let a
- * page flood the guard with post-onset noise to evict the first — and most
- * security-relevant — alerts before the bridge verified. Keeping the earliest
- * messages preserves that evidence; the brief pre-verify window (bounded by the
- * isolated side's bridge-init timeout) makes losing the freshest few acceptable.
- *
- * Dropped messages are counted rather than silently discarded so the count can
- * be surfaced (e.g. via a debug log) once the bridge is ready.
+ * first `ns-nav-blocked`, `ns-dblclick-second-click`, exfil, or relay signals.
+ * A pure drop-oldest policy let a page flood post-onset noise to evict the first
+ * alerts; a pure drop-newest policy is the mirror weakness (pre-fill the buffer
+ * with noise so a later real alert is dropped). Tagging detection/relay messages
+ * as priority and evicting routine messages first defeats both: routine noise
+ * can never push out a buffered alert. Dropped messages are counted (not
+ * silently discarded) so the count can be surfaced once the bridge is ready.
  */
 export interface OutboundMessage {
   type: string;
   payload?: Record<string, unknown>;
 }
 
+interface QueuedMessage {
+  message: OutboundMessage;
+  priority: boolean;
+}
+
 export class OutboundQueue {
   private readonly cap: number;
-  private readonly items: OutboundMessage[] = [];
+  private readonly items: QueuedMessage[] = [];
   private dropped = 0;
 
   constructor(cap: number) {
-    this.cap = Math.max(0, Math.floor(cap));
-  }
-
-  /** Buffer a message, or count it as dropped when the queue is at capacity. */
-  enqueue(message: OutboundMessage): void {
-    if (this.items.length >= this.cap) {
-      this.dropped++;
-      return;
-    }
-    this.items.push(message);
+    // Guard against a non-finite cap (e.g. NaN), which would otherwise make the
+    // length comparison always false and leave the queue effectively unbounded.
+    this.cap = Number.isFinite(cap) ? Math.max(0, Math.floor(cap)) : 0;
   }
 
   /**
-   * Remove and return all buffered messages plus the number of messages dropped
+   * Buffer a message. `priority` marks security-relevant alerts that must not be
+   * evicted by routine traffic. On overflow the oldest routine message is
+   * dropped to make room; if every buffered message is priority, the earliest
+   * are kept and this incoming one is dropped.
+   */
+  enqueue(message: OutboundMessage, priority = false): void {
+    if (this.items.length < this.cap) {
+      this.items.push({ message, priority });
+      return;
+    }
+    if (!priority) {
+      // Routine overflow: keep the earliest buffered messages, drop this one.
+      this.dropped++;
+      return;
+    }
+    // An alert must be admitted: displace the oldest routine message. If the
+    // buffer is entirely alerts, keep the earliest and drop this one.
+    const routineIdx = this.items.findIndex((q) => !q.priority);
+    if (routineIdx === -1) {
+      this.dropped++;
+      return;
+    }
+    this.items.splice(routineIdx, 1);
+    this.dropped++;
+    this.items.push({ message, priority });
+  }
+
+  /**
+   * Remove and return all buffered messages (in order) plus the number dropped
    * since the last drain, resetting both. Safe to call when empty.
    */
   drain(): { items: OutboundMessage[]; dropped: number } {
-    const items = this.items.splice(0, this.items.length);
+    const items = this.items.splice(0, this.items.length).map((q) => q.message);
     const dropped = this.dropped;
     this.dropped = 0;
     return { items, dropped };

@@ -38,13 +38,36 @@ let bridgeChallenge: string | null = null;
 let bridgeHandshakeTimer = 0;
 const MAX_PENDING_OUTBOUND = 32;
 // Buffers messages produced before the bridge is verified. On overflow it keeps
-// the EARLIEST messages (attack-onset evidence) and drops the newest — see
-// bridge_outbound.ts for the rationale.
+// security-relevant alerts (never evicted by routine traffic) and the earliest
+// of equal-priority messages — see bridge_outbound.ts for the rationale.
 const pendingOutbound = new OutboundQueue(MAX_PENDING_OUTBOUND);
+
+// MAIN-world detection signals that must survive pre-verification buffer
+// pressure. Routine traffic (ns-main-guard-ready, ns-config-ack, ns-pong,
+// ns-debug-nav-record, ns-bridge-ready, ns-bridge-overflow) is droppable.
+const ALERT_OUTBOUND_TYPES = new Set<string>([
+  "ns-nav-blocked",
+  "ns-nav-allowed",
+  "ns-dblclick-second-click",
+  "ns-dblclick-opener-nav",
+  "ns-clipboard-write",
+  "ns-pushstate-suspicious",
+  "ns-js-form-submit-suspicious",
+  "ns-js-exfil-network",
+  "ns-js-exfil-beacon",
+  "ns-js-credential-read",
+]);
+
+function isAlertOutbound(type: string): boolean {
+  return ALERT_OUTBOUND_TYPES.has(type) || type.startsWith("ns-js-");
+}
 
 function postToIsolated(type: string, payload?: Record<string, unknown>): void {
   if (!bridgePort || !bridgeSession || !bridgeVerified) {
-    pendingOutbound.enqueue({ type, ...(payload !== undefined ? { payload } : {}) });
+    pendingOutbound.enqueue(
+      { type, ...(payload !== undefined ? { payload } : {}) },
+      isAlertOutbound(type)
+    );
     return;
   }
   bridgePort.postMessage({
@@ -58,13 +81,16 @@ function postToIsolated(type: string, payload?: Record<string, unknown>): void {
 
 function flushPendingOutbound(): void {
   const { items, dropped } = pendingOutbound.drain();
-  if (dropped > 0 && debug) {
-    console.debug(
-      `[NavSentinel] dropped ${dropped} pre-verification bridge message(s) on buffer overflow`
-    );
-  }
   for (const msg of items) {
     postToIsolated(msg.type, msg.payload);
+  }
+  // Surface any drop through the (now-verified) bridge so the isolated side can
+  // record it in the trusted event log — not silently discarded in production.
+  if (dropped > 0) {
+    if (debug) {
+      console.debug(`[NavSentinel] dropped ${dropped} pre-verification bridge message(s) on overflow`);
+    }
+    postToIsolated("ns-bridge-overflow", { dropped });
   }
 }
 
@@ -858,7 +884,11 @@ window.addEventListener(
     };
     if (!data || data.source !== NS_SOURCE || data.v !== PROTOCOL_VERSION) return;
     if (data.type !== BRIDGE_INIT_TYPE || typeof data.session !== "string" || !data.session) return;
-    if (bridgeSession && data.session !== bridgeSession) return;
+    // Only a VERIFIED bridge pins its session — that prevents post-verification
+    // hijack. An unverified session has not proven legitimacy, so a fresh init
+    // (e.g. the real isolated world arriving after a hostile page raced an init
+    // first) is allowed to take over the handshake instead of being locked out.
+    if (bridgeVerified && bridgeSession && data.session !== bridgeSession) return;
 
     const nextPort = event.ports?.[0];
     if (!(nextPort instanceof MessagePort)) return;
