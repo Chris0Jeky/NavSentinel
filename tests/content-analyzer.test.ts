@@ -257,15 +257,19 @@ describe("content_analyzer - phishing kit detection", () => {
     expect(result.kitName).toBe("Data-Exfil-Iframe");
   });
 
-  it("completes without catastrophic backtracking on a crafted oversized form snippet (D-REDOS)", () => {
-    // Pre-bound, a long unterminated style value forced O(n^2) backtracking over
-    // the two sequential [^...]* runs. The bounded quantifiers keep it ~linear and
-    // it must NOT match (no display:none / visibility:hidden keyword present).
+  it("still matches a heavily-padded hidden form within the snippet cap (no FN regression, D-REDOS)", () => {
+    // ~1.6KB of attributes before `style` + whitespace `display: none` (missed by
+    // the [style*="display:none"] selector). The {0,10000} ceiling equals the
+    // htmlSnippet cap, so this still matches — it would FAIL if the bound were
+    // re-tightened below the realistic range, guarding against a detection-
+    // narrowing regression while keeping the quantifiers non-unbounded.
+    const pad = 'data-x="1" '.repeat(150); // ~1650 chars, well under the 10KB cap
     const snap = loginSnapshot({
-      htmlSnippet: `<form style="${"a".repeat(9000)}`,
+      htmlSnippet: `<form ${pad}style="display: none"><input type="password" /></form>`,
     });
     const result = analyzeSnapshot(snap, "phish.com");
-    expect(result.kitName).not.toBe("Exfil-Hidden-Form");
+    expect(result.phishingKitMatch).toBe(true);
+    expect(result.kitName).toBe("Exfil-Hidden-Form");
   });
 
   it("detects Gophish meta tag", () => {

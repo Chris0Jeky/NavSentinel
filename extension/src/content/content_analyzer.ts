@@ -268,17 +268,23 @@ export const KIT_FINGERPRINTS: ReadonlyArray<KitFingerprint> = [
   {
     name: "Exfil-Hidden-Form",
     selectors: ['form[style*="display:none"]', 'form[style*="visibility:hidden"]'],
-    // Bounded quantifiers ({0,N} instead of *) cap the per-start-position scan so
-    // the two sequential `[^…]*` runs can't combine into O(n²) backtracking on a
-    // crafted snippet. The bounds are generous vs any real tag/style, so realistic
-    // matches (incl. whitespace variants the selectors miss) are unchanged.
-    htmlPatterns: [/<form[^>]{0,400}style\s*=\s*["'][^"']{0,200}(?:display\s*:\s*none|visibility\s*:\s*hidden)/i],
+    // These two patterns each had two sequential UNBOUNDED runs ([^>]* then [^"']*)
+    // before an alternation — the O(n²)-backtracking shape #192 flagged. The work
+    // was already bounded in practice (htmlSnippet is sliced to 10000 chars below
+    // and each pattern runs once per page → sub-ms on V8), so this is defense-in-
+    // depth: replace the unbounded `*` with an explicit ceiling EQUAL to that 10000
+    // cap. Because every input is ≤ 10000 chars, {0,10000} matches exactly what `*`
+    // did — zero detection change — while the quantifiers are no longer unbounded.
+    // Keep these {0,10000} literals in sync with the htmlSnippet slice.
+    htmlPatterns: [/<form[^>]{0,10000}style\s*=\s*["'][^"']{0,10000}(?:display\s*:\s*none|visibility\s*:\s*hidden)/i],
   },
   {
     name: "Data-Exfil-Iframe",
-    // Bounded quantifiers (see Exfil-Hidden-Form) to avoid O(n²) backtracking; the
-    // bounds exceed any realistic iframe tag / exfil URL prefix.
-    htmlPatterns: [/<iframe[^>]{0,400}src\s*=\s*["']https?:\/\/[^"']{0,2000}(?:collect|exfil|log|grab|steal|capture)/i],
+    // Same unbounded-run hardening as Exfil-Hidden-Form (bound = HTML_SNIPPET_MAX,
+    // so behavior is identical to the prior `*`). No selector fallback exists for
+    // this one, so the ceiling is deliberately the full snippet cap to avoid any
+    // false negative from an attacker-padded src.
+    htmlPatterns: [/<iframe[^>]{0,10000}src\s*=\s*["']https?:\/\/[^"']{0,10000}(?:collect|exfil|log|grab|steal|capture)/i],
   },
   {
     name: "Telegram-Exfil",
