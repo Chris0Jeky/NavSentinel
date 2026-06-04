@@ -373,9 +373,12 @@ export function showCredentialModal(spec: ModalSpec): Promise<string> {
     footer.className = "footer";
     const outside = spec.outsideAction ?? "cancel";
 
-    function focusFallback(preferLast = false): HTMLElement {
+    // The focusin recapture has no reliable direction, so the fallback always
+    // lands on the first focusable element (keyboard Tab/Shift+Tab direction is
+    // handled separately in onKeyDown before native focus moves).
+    function focusFallback(): HTMLElement {
       const focusable = listFocusable(card);
-      return (preferLast ? focusable[focusable.length - 1] : focusable[0]) ?? card;
+      return focusable[0] ?? card;
     }
 
     function cleanupListeners(): void {
