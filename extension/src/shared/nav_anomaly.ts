@@ -291,6 +291,26 @@ const recentNavs: RecentNav[] = [];
 const MAX_RECENT_NAVS = 100;
 let sessionNavCount = 0;
 
+// Synchronous snapshot of the stored profile's category frequencies, refreshed
+// by recordNavigationAnomaly and primeAnomalySession. Lets getAnomalyScoreSync
+// apply the same rarity gate as computeAnomalyScore (which needs the profile)
+// without an async load — without it the sync path would flag bursts to
+// categories the user visits frequently (false positives into the live NRS).
+let cachedTotalNavigations = 0;
+let cachedCategoryCounts: Record<string, number> = {};
+
+function refreshFrequencyCache(profile: NavProfile): void {
+  cachedTotalNavigations = Number.isFinite(profile.totalNavigations)
+    ? profile.totalNavigations
+    : 0;
+  cachedCategoryCounts = { ...profile.categoryCounts };
+}
+
+function resetFrequencyCache(): void {
+  cachedTotalNavigations = 0;
+  cachedCategoryCounts = {};
+}
+
 function pruneRecentNavs(now: number): void {
   const cutoff = now - BURST_WINDOW_MS;
   while (recentNavs.length > 0 && recentNavs[0]!.ts < cutoff) {
@@ -564,6 +584,9 @@ export function recordNavigationAnomaly(
 
     await saveProfile(profile);
 
+    // Refresh the synchronous frequency snapshot the sync rarity gate reads.
+    refreshFrequencyCache(profile);
+
     return anomalyScore;
   });
 
@@ -597,6 +620,16 @@ export function getAnomalyScoreSync(
   if (sessionNavCount < MIN_NAVIGATIONS_FOR_ANOMALY) return 0;
   if (recentCount < BURST_MIN_COUNT) return 0;
 
+  // Rarity gate (mirrors computeAnomalyScore) against the cached profile
+  // snapshot: do NOT flag a burst to a category the user visits regularly
+  // (>= RARE_CATEGORY_THRESHOLD of navigations). The burst itself is subtracted
+  // so it cannot inflate the category's frequency and self-defeat the gate.
+  const storedCount = cachedCategoryCounts[category] ?? 0;
+  const burstInflation = Math.max(0, recentCount - 1);
+  const preBurstCount = Math.max(0, storedCount - burstInflation);
+  const preBurstTotal = Math.max(1, cachedTotalNavigations - burstInflation);
+  if (preBurstCount / preBurstTotal >= RARE_CATEGORY_THRESHOLD) return 0;
+
   let score = BASE_ANOMALY_SCORE;
   if (recentCount >= 3) {
     score += BURST_3_PLUS_BONUS;
@@ -612,12 +645,17 @@ export function getAnomalyScoreSync(
  *
  * Serialized through the same `pending` chain as recordNavigationAnomaly. It is
  * read-only (no save), and Math.max keeps sessionNavCount monotonic, so even a
- * stale read can only under-seed (never lose a higher in-session count).
+ * stale read can only under-seed (never lose a higher in-session count). A
+ * non-finite stored totalNavigations (corrupt storage) is ignored so it cannot
+ * poison the gate (NaN would make `< MIN` false and silently enable scoring).
  */
 export function primeAnomalySession(): Promise<void> {
   const next = pending.then(async (): Promise<void> => {
     const profile = await loadProfile();
-    sessionNavCount = Math.max(sessionNavCount, profile.totalNavigations);
+    if (Number.isFinite(profile.totalNavigations)) {
+      sessionNavCount = Math.max(sessionNavCount, profile.totalNavigations);
+    }
+    refreshFrequencyCache(profile);
   });
   pending = next.catch((err) => {
     console.warn("[NavSentinel] nav anomaly prime error:", err);
@@ -631,6 +669,10 @@ export function primeAnomalySession(): Promise<void> {
 export async function clearNavProfile(): Promise<void> {
   await chrome.storage.local.set({ [NAV_PROFILE_KEY]: null });
   recentNavs.length = 0;
+  // Reset the session gate + frequency cache so a stale high seed doesn't keep
+  // anomaly scoring active against a now-empty profile.
+  sessionNavCount = 0;
+  resetFrequencyCache();
 }
 
 /**
@@ -639,6 +681,7 @@ export async function clearNavProfile(): Promise<void> {
 export function _resetRecentNavs(): void {
   recentNavs.length = 0;
   sessionNavCount = 0;
+  resetFrequencyCache();
 }
 
 /**

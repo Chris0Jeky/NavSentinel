@@ -816,6 +816,60 @@ describe("primeAnomalySession", () => {
   });
 });
 
+describe("getAnomalyScoreSync rarity gate (D-ANOM R2: sync path matches async rarity check)", () => {
+  it("rarity-gates a burst to a frequently-visited category (no false positive into NRS)", async () => {
+    const now = Date.now();
+    // Heavy crypto history: crypto is ~50% of navigations, NOT rare.
+    store[NAV_PROFILE_KEY] = makeProfile({
+      categoryCounts: { crypto: 50, entertainment: 50 },
+      totalNavigations: 100,
+      lastUpdated: now,
+    });
+    _resetRecentNavs();
+    await primeAnomalySession(); // seeds sessionNavCount + frequency cache
+
+    // 1 prior crypto + current = 2: burst threshold is met, but because crypto
+    // is a frequently-visited category the rarity gate must blank the score.
+    // (Without the gate the sync path would return BASE=10 — a false positive.)
+    await recordNavigationAnomaly("binance.com", now + 50000);
+    const score = getAnomalyScoreSync("coinbase.com", now + 51000);
+    expect(score).toBe(0);
+  });
+
+  it("still scores a burst to a rare category for the same heavy-history user", async () => {
+    const now = Date.now();
+    store[NAV_PROFILE_KEY] = makeProfile({
+      categoryCounts: { entertainment: 100 }, // no crypto history → crypto is rare
+      totalNavigations: 100,
+      lastUpdated: now,
+    });
+    _resetRecentNavs();
+    await primeAnomalySession();
+
+    await recordNavigationAnomaly("binance.com", now + 50000);
+    const score = getAnomalyScoreSync("coinbase.com", now + 51000);
+    expect(score).toBe(BASE_ANOMALY_SCORE);
+  });
+
+  it("clearNavProfile resets the session gate so a stale seed cannot keep scoring active", async () => {
+    const now = Date.now();
+    store[NAV_PROFILE_KEY] = makeEstablishedProfile(now);
+    for (let i = 0; i < MIN_NAVIGATIONS_FOR_ANOMALY + 1; i++) {
+      await recordNavigationAnomaly("youtube.com", now + i * 100);
+    }
+    // sessionNavCount is now high. Clear the profile.
+    await clearNavProfile();
+
+    // After clear, priming reads the (now-empty) profile; the gate must be reset,
+    // so an early burst is not scored against a profile that no longer exists.
+    await primeAnomalySession();
+    await recordNavigationAnomaly("binance.com", now + 60000);
+    const score = getAnomalyScoreSync("coinbase.com", now + 61000);
+    // Only 1 in-session nav after clear → sessionNavCount below MIN → gated.
+    expect(score).toBe(0);
+  });
+});
+
 // ========================================================================
 // NRS integration
 // ========================================================================
