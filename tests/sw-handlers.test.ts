@@ -629,6 +629,63 @@ describe("service worker handlers", () => {
     });
   });
 
+  describe("onCreated hydration deferral", () => {
+    it("defers a pre-hydration onCreated and does not clobber the hydrated child map", async () => {
+      const mock = createChromeMock();
+      // Seed a hydrated child-window entry (tab 30 -> opener 40).
+      const now = Date.now();
+      mock.chrome.storage.session._store["ns_sw:childWindow"] = {
+        "30": { openerTabId: 40, createdAt: now, openerNavObserved: false },
+      };
+
+      // Gate the first session.get (the hydrate read) so hydration stays pending.
+      let releaseHydration!: () => void;
+      const gate = new Promise<void>((r) => {
+        releaseHydration = r;
+      });
+      const session = mock.chrome.storage.session;
+      const realGet = session.get.bind(session);
+      let gated = true;
+      session.get = (async (keys?: string | string[]) => {
+        if (gated) {
+          gated = false;
+          await gate;
+        }
+        return realGet(keys);
+      }) as typeof session.get;
+
+      await loadSw(mock); // module imported; hydrate() is pending on the gate
+
+      // onCreated fires BEFORE hydration completes — must be deferred, not run
+      // against the empty in-memory map (which would persist {20} and discard 30).
+      mock.emitTabCreated({ id: 20, openerTabId: 10 });
+
+      releaseHydration();
+      for (let i = 0; i < 12; i++) await Promise.resolve();
+
+      // Both the hydrated child (30->40) and the deferred onCreated child (20->10)
+      // must be tracked: opener-nav from each maps to the correct opener.
+      mock.sentMessages.length = 0;
+      mock.dispatchRuntimeMessage(
+        { type: "ns-dblclick-opener-nav", url: "https://evil.test/a", ts: Date.now() },
+        { tab: { id: 20 } },
+      );
+      mock.dispatchRuntimeMessage(
+        { type: "ns-dblclick-opener-nav", url: "https://evil.test/b", ts: Date.now() },
+        { tab: { id: 30 } },
+      );
+
+      const toOpener = (openerId: number) =>
+        mock.sentMessages.find(
+          (m) =>
+            (m.message as { type: string }).type === "ns-dblclick-opener-nav-from-child" &&
+            m.tabId === openerId,
+        );
+      expect(toOpener(10), "deferred onCreated child (20->10) tracked").toBeDefined();
+      expect(toOpener(40), "hydrated child (30->40) not clobbered").toBeDefined();
+    });
+  });
+
   describe("dblclick child window lifecycle", () => {
     it("tracks child tab creation with openerTabId", async () => {
       const mock = createChromeMock();

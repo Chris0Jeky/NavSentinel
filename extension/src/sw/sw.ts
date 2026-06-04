@@ -792,15 +792,28 @@ function onErrorOccurredHandler(details: { tabId: number; frameId: number; url?:
 chrome.tabs.onCreated.addListener((tab) => {
   if (typeof tab.id !== "number") return;
   if (typeof tab.openerTabId !== "number") return;
-  if (!swState.hydrated) { void hydrateReady.then(() => { /* tab already tracked by next event */ }); }
+  const tabId = tab.id;
+  const openerTabId = tab.openerTabId;
+  // Before hydration the in-memory Maps are empty; defer the real tracking to
+  // after restore (matching onRemoved/onBeforeNavigate) instead of falling
+  // through and writing/persisting against the un-hydrated Map — which would be
+  // discarded by the restore (or race the hydration write), losing the opener
+  // relationship and breaking DoubleClickjacking protection for this tab.
+  if (!swState.hydrated) {
+    void hydrateReady.then(() => onCreatedHandler(tabId, openerTabId));
+    return;
+  }
+  onCreatedHandler(tabId, openerTabId);
+});
+function onCreatedHandler(tabId: number, openerTabId: number): void {
   pruneStaleChildWindows();
-  childWindowByTab.set(tab.id, {
-    openerTabId: tab.openerTabId,
+  childWindowByTab.set(tabId, {
+    openerTabId,
     createdAt: Date.now(),
     openerNavObserved: false
   });
   swState.persistMap(childWindowByTab, "childWindow");
-});
+}
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   if (!swState.hydrated) { void hydrateReady.then(() => onRemovedHandler(tabId)); return; }
