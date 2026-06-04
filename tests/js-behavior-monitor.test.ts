@@ -292,6 +292,44 @@ describe("initJsBehaviorMonitor form submit detection", () => {
 
     expect(postSignal).toHaveBeenCalledTimes(1);
   });
+
+  it("does not throw and still detects submits when prototype.submit is non-writable (main_guard-hardened)", () => {
+    // main_guard.patchForms() hardens HTMLFormElement.prototype.submit with a
+    // non-writable defineProperty, and its bootstrap runs before this init. The
+    // monitor's prototype assignment must not throw uncaught (which would abort
+    // the rest of init and drop the other JS-behavior API patches).
+    const postSignal = vi.fn<PostSignalFn>();
+    const native = HTMLFormElement.prototype.submit;
+    Object.defineProperty(HTMLFormElement.prototype, "submit", {
+      value: native,
+      writable: false,
+      configurable: true,
+    });
+    try {
+      expect(() =>
+        initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal }),
+      ).not.toThrow();
+
+      // init completed past the (un-patchable) prototype.submit, and the
+      // capturing 'submit' listener still detects event-based submits.
+      const form = document.createElement("form");
+      form.action = "https://evil.com/steal";
+      const pw = document.createElement("input");
+      pw.type = "password";
+      form.appendChild(pw);
+      document.body.appendChild(form);
+      form.dispatchEvent(new Event("submit", { bubbles: true }));
+
+      expect(postSignal).toHaveBeenCalledTimes(1);
+    } finally {
+      Object.defineProperty(HTMLFormElement.prototype, "submit", {
+        value: native,
+        writable: true,
+        configurable: true,
+      });
+      _resetState();
+    }
+  });
 });
 
 describe("isCrossOriginUrl data/javascript/blob URIs", () => {

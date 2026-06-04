@@ -1,0 +1,183 @@
+import { describe, expect, it } from "vitest";
+import { OutboundQueue, isMainGuardAlertType, type OutboundMessage } from "../extension/src/content/bridge_outbound";
+
+const msg = (type: string, payload?: Record<string, unknown>): OutboundMessage =>
+  payload !== undefined ? { type, payload } : { type };
+
+describe("OutboundQueue (D-BRIDGE: pre-verification bridge buffer)", () => {
+  it("retains all messages in order while under capacity", () => {
+    const q = new OutboundQueue(4);
+    q.enqueue(msg("a"));
+    q.enqueue(msg("b"));
+    q.enqueue(msg("c"));
+
+    expect(q.size).toBe(3);
+    expect(q.droppedCount).toBe(0);
+
+    const { items, dropped } = q.drain();
+    expect(items.map((m) => m.type)).toEqual(["a", "b", "c"]);
+    expect(dropped).toBe(0);
+  });
+
+  it("preserves the EARLIEST messages and drops the newest overflow", () => {
+    const q = new OutboundQueue(3);
+    // 5 messages into a cap-3 queue.
+    for (const t of ["onset", "second", "third", "noise1", "noise2"]) {
+      q.enqueue(msg(t));
+    }
+
+    expect(q.size).toBe(3);
+    expect(q.droppedCount).toBe(2);
+
+    const { items, dropped } = q.drain();
+    // Regression guard for the original bug: the OLD policy dropped the oldest,
+    // evicting "onset" (the attack-onset signal). The fix keeps it.
+    expect(items.map((m) => m.type)).toEqual(["onset", "second", "third"]);
+    expect(dropped).toBe(2);
+  });
+
+  it("a flood of post-onset noise cannot evict the first alert", () => {
+    const q = new OutboundQueue(32);
+    q.enqueue(msg("ns-nav-blocked", { id: "1" }));
+    for (let i = 0; i < 1000; i++) {
+      q.enqueue(msg("noise", { i }));
+    }
+
+    const { items, dropped } = q.drain();
+    expect(items[0]).toEqual({ type: "ns-nav-blocked", payload: { id: "1" } });
+    expect(items.length).toBe(32);
+    expect(dropped).toBe(1000 - 31); // 969 newest dropped
+  });
+
+  it("drain resets size and dropped count", () => {
+    const q = new OutboundQueue(2);
+    q.enqueue(msg("a"));
+    q.enqueue(msg("b"));
+    q.enqueue(msg("c")); // dropped
+
+    q.drain();
+    expect(q.size).toBe(0);
+    expect(q.droppedCount).toBe(0);
+
+    const again = q.drain();
+    expect(again.items).toEqual([]);
+    expect(again.dropped).toBe(0);
+  });
+
+  it("preserves message payloads exactly", () => {
+    const q = new OutboundQueue(8);
+    q.enqueue(msg("ns-dblclick-second-click", { ts: 123, firstClickTs: 100 }));
+    q.enqueue(msg("ns-bridge-ready"));
+
+    const { items } = q.drain();
+    expect(items[0]).toEqual({
+      type: "ns-dblclick-second-click",
+      payload: { ts: 123, firstClickTs: 100 }
+    });
+    expect(items[1]).toEqual({ type: "ns-bridge-ready" });
+  });
+
+  it("handles a zero/negative/non-finite capacity by dropping everything (no crash)", () => {
+    const q = new OutboundQueue(0);
+    q.enqueue(msg("a"));
+    q.enqueue(msg("b"));
+    expect(q.size).toBe(0);
+    expect(q.droppedCount).toBe(2);
+
+    const qn = new OutboundQueue(-5);
+    qn.enqueue(msg("a"));
+    expect(qn.size).toBe(0);
+    expect(qn.droppedCount).toBe(1);
+
+    // NaN cap must not leave the queue effectively unbounded (Math.floor(NaN)=NaN
+    // would make `length < cap` always false).
+    const qnan = new OutboundQueue(Number.NaN);
+    qnan.enqueue(msg("a"));
+    qnan.enqueue(msg("b"));
+    expect(qnan.size).toBe(0);
+    expect(qnan.droppedCount).toBe(2);
+  });
+});
+
+describe("OutboundQueue priority (D-BRIDGE R2: alerts survive routine pressure)", () => {
+  it("a buffered alert is never evicted by a flood of routine traffic", () => {
+    const q = new OutboundQueue(4);
+    q.enqueue(msg("ns-nav-blocked", { id: "alert" }), true); // priority
+    for (let i = 0; i < 100; i++) q.enqueue(msg("ns-ping", { i })); // routine flood
+
+    const { items } = q.drain();
+    expect(items.some((m) => m.type === "ns-nav-blocked")).toBe(true);
+  });
+
+  it("a late alert is admitted by displacing the oldest routine message", () => {
+    const q = new OutboundQueue(3);
+    // Pre-fill with routine noise (the drop-newest weakness this defends).
+    q.enqueue(msg("noise1"));
+    q.enqueue(msg("noise2"));
+    q.enqueue(msg("noise3"));
+    // A real alert arrives after the buffer is already full.
+    q.enqueue(msg("ns-dblclick-second-click", { ts: 1 }), true);
+
+    const { items, dropped } = q.drain();
+    expect(items.some((m) => m.type === "ns-dblclick-second-click")).toBe(true);
+    expect(dropped).toBe(1); // one routine displaced
+    expect(items.length).toBe(3);
+  });
+
+  it("routine messages cannot displace each other once full (earliest kept)", () => {
+    const q = new OutboundQueue(2);
+    q.enqueue(msg("a"));
+    q.enqueue(msg("b"));
+    q.enqueue(msg("c")); // routine, full → dropped
+
+    const { items, dropped } = q.drain();
+    expect(items.map((m) => m.type)).toEqual(["a", "b"]);
+    expect(dropped).toBe(1);
+  });
+
+  it("when full of alerts, the earliest alerts are kept and a new one is dropped", () => {
+    const q = new OutboundQueue(2);
+    q.enqueue(msg("alert1"), true);
+    q.enqueue(msg("alert2"), true);
+    q.enqueue(msg("alert3"), true); // all-alert overflow → dropped
+
+    const { items, dropped } = q.drain();
+    expect(items.map((m) => m.type)).toEqual(["alert1", "alert2"]);
+    expect(dropped).toBe(1);
+  });
+});
+
+describe("isMainGuardAlertType (main->isolated priority classification)", () => {
+  it("treats detection signals as priority", () => {
+    for (const t of ["ns-nav-blocked", "ns-nav-allowed", "ns-clipboard-write", "ns-pushstate-suspicious"]) {
+      expect(isMainGuardAlertType(t)).toBe(true);
+    }
+  });
+
+  it("treats the full DoubleClickjacking chain as priority (incl. the window-open precondition)", () => {
+    for (const t of ["ns-dblclick-window-open", "ns-dblclick-opener-nav", "ns-dblclick-second-click"]) {
+      expect(isMainGuardAlertType(t)).toBe(true);
+    }
+  });
+
+  it("treats control relays (ns-allow*) as priority — a dropped pre-auth re-blocks an allowed nav", () => {
+    for (const t of ["ns-allow-target-nav", "ns-allow", "ns-allow-once", "ns-allow-action"]) {
+      expect(isMainGuardAlertType(t)).toBe(true);
+    }
+  });
+
+  it("treats JS-behavior signals as priority", () => {
+    for (const t of ["ns-js-exfil-network", "ns-js-credential-read", "ns-js-form-submit-suspicious"]) {
+      expect(isMainGuardAlertType(t)).toBe(true);
+    }
+  });
+
+  it("treats routine control/diagnostic messages as droppable", () => {
+    for (const t of [
+      "ns-config-ack", "ns-pong", "ns-bridge-ready", "ns-bridge-overflow",
+      "ns-main-guard-ready", "ns-debug-nav-record", "ns-location-patch-info",
+    ]) {
+      expect(isMainGuardAlertType(t)).toBe(false);
+    }
+  });
+});
