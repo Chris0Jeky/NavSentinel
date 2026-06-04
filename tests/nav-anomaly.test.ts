@@ -868,6 +868,28 @@ describe("getAnomalyScoreSync rarity gate (D-ANOM R2: sync path matches async ra
     // Only 1 in-session nav after clear → sessionNavCount below MIN → gated.
     expect(score).toBe(0);
   });
+
+  it("clearNavProfile is serialized: a concurrent in-flight record cannot resurrect it", async () => {
+    const now = Date.now();
+    store[NAV_PROFILE_KEY] = makeEstablishedProfile(now);
+    for (let i = 0; i < MIN_NAVIGATIONS_FOR_ANOMALY + 1; i++) {
+      await recordNavigationAnomaly("youtube.com", now + i * 100);
+    }
+
+    // Fire a record WITHOUT awaiting, then clear immediately. Both run through
+    // the `pending` chain, so clear runs AFTER the record completes and wins —
+    // the profile is not resurrected by the record's post-clear save.
+    const recordP = recordNavigationAnomaly("binance.com", now + 50000);
+    const clearP = clearNavProfile();
+    await Promise.all([recordP, clearP]);
+
+    expect(store[NAV_PROFILE_KEY]).toBeNull();
+
+    // Gate + cache were reset by the clear: a subsequent burst is not scored
+    // against the cleared profile (only 1 in-session nav → below MIN gate).
+    await recordNavigationAnomaly("coinbase.com", now + 51000);
+    expect(getAnomalyScoreSync("metamask.io", now + 52000)).toBe(0);
+  });
 });
 
 // ========================================================================

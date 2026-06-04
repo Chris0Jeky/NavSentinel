@@ -576,7 +576,6 @@ export function recordNavigationAnomaly(
     // Update category count
     profile.categoryCounts[category] = (profile.categoryCounts[category] ?? 0) + 1;
     profile.totalNavigations += 1;
-    sessionNavCount = Math.max(sessionNavCount, profile.totalNavigations);
     profile.lastUpdated = now;
 
     // Normalize if cap exceeded
@@ -584,7 +583,10 @@ export function recordNavigationAnomaly(
 
     await saveProfile(profile);
 
-    // Refresh the synchronous frequency snapshot the sync rarity gate reads.
+    // Update the session gate + frequency snapshot ONLY after a successful save,
+    // so a rejected save can't leave sessionNavCount armed against a stale cache
+    // (which would bias the sync path toward over-detection).
+    sessionNavCount = Math.max(sessionNavCount, profile.totalNavigations);
     refreshFrequencyCache(profile);
 
     return anomalyScore;
@@ -665,14 +667,25 @@ export function primeAnomalySession(): Promise<void> {
 
 /**
  * Clear the navigation profile and in-memory state.
+ *
+ * Serialized through the same `pending` chain as recordNavigationAnomaly /
+ * primeAnomalySession so a concurrent in-flight record cannot resurrect the
+ * cleared profile (its load-compute-save would otherwise complete after the
+ * clear and re-persist the stale profile + re-arm the gate/cache).
  */
-export async function clearNavProfile(): Promise<void> {
-  await chrome.storage.local.set({ [NAV_PROFILE_KEY]: null });
-  recentNavs.length = 0;
-  // Reset the session gate + frequency cache so a stale high seed doesn't keep
-  // anomaly scoring active against a now-empty profile.
-  sessionNavCount = 0;
-  resetFrequencyCache();
+export function clearNavProfile(): Promise<void> {
+  const next = pending.then(async (): Promise<void> => {
+    await chrome.storage.local.set({ [NAV_PROFILE_KEY]: null });
+    recentNavs.length = 0;
+    // Reset the session gate + frequency cache so a stale high seed doesn't keep
+    // anomaly scoring active against a now-empty profile.
+    sessionNavCount = 0;
+    resetFrequencyCache();
+  });
+  pending = next.catch((err) => {
+    console.warn("[NavSentinel] nav anomaly clear error:", err);
+  });
+  return next;
 }
 
 /**
