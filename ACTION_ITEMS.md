@@ -19,27 +19,30 @@
 
 ---
 
-## Current state snapshot (verified 2026-05-31)
+## Current state snapshot (verified 2026-06-04)
 
-- `main` == `origin/main` == **`d5670b0`** (this session's only commit to main: the docs/process files; no code changed). The three PRs below are based on the prior main `3eaf382` — one commit behind, but conflict-free/`MERGEABLE` (no file overlap with the docs commit).
-- **Three open PRs**, all `MERGEABLE`/`CLEAN`, **CI green**, both adversarial review rounds done, all bot threads resolved/outdated, **none merged (aging)**:
+- `main` == `origin/main` == **`0c9f693`**. This session made **no commits to main** — all work is on PR branches. The 5 PRs below are based on `3eaf382` (a few commits behind main) but `MERGEABLE`.
+- **FIVE open PRs**, all **CI green**, each with **two independent adversarial review rounds done this session and ALL findings (every severity) fixed**, **none merged (aging)**:
 
   | PR | Slice | Branch | Head | What it fixes |
   |----|-------|--------|------|----------------|
-  | **#180** | D-PROF | `fix/domain-profile-concurrency` | `db0a86c` | `domain_profile.ts` reader serialization through `pending` chain (lost-update race) |
-  | **#182** | D-STORE | `fix/prompt-outcome-race` | `155693b` | `storage.ts` prompt-outcome get-modify-write race + weak verify |
-  | **#183** | D-FOCUS | `fix/credential-modal-focus-trap` | `dd4647f` | `credential_modal.ts` module-level focus trap (focus can't escape the modal to the page) |
+  | **#180** | D-PROF | `fix/domain-profile-concurrency` | `2e26e18` | `domain_profile.ts` reader serialization (lost-update race) |
+  | **#182** | D-STORE | `fix/prompt-outcome-race` | `ec3ecdc` | `storage.ts` prompt-outcome SW-delegated writes: serialized, sender-validated, retry-only (no resurrection/race) |
+  | **#183** | D-FOCUS | `fix/credential-modal-focus-trap` | `131e6d0` | `credential_modal.ts` module-level focus trap |
+  | **#185** | D-BRIDGE | `fix/bridge-queue-and-handshake` | `3a60843` | `main_guard.ts` alert-priority outbound buffer (both directions) + 3s handshake timeout + verified-only session pin |
+  | **#187** | D-SWRATE | `fix/sw-capture-ratelimit-persist` | `b80609f` | `sw.ts` capture rate-limit Map persisted via SessionStateManager (survives SW restart) |
 
-- **All three are merge-ready except Gate 3 (manual Chrome test)** — see AI-1. That is the *only* outstanding gate.
-- **Agent sandbox cannot run a browser or spawn threads** — `npm run test:e2e` and `npm run agent:hooks:smoke` fail with launch/teardown timeouts + `Thread failed to start`. The same E2E specs **pass on GitHub CI**. So Gate 3 is genuinely a human task.
-- **Next implementation slices** (not yet started, independent, branch off `main`): **D-BRIDGE** (main_guard FIFO-drop + handshake timeout, HIGH×2), **D-SWRATE** (sw rate-limit Map not persisted, HIGH), **D-ANOM** (nav_anomaly burst lag, HIGH+MED), **D-IFRAME** (mutation_monitor `data:`/`blob:` iframes, MED).
-- Open issues: #175 #176 #178 #179 #181 (discovery seeds) + #127 (JS behavior) + **#184** (this session's housekeeping).
+- **All five are merge-ready except Gate 3 (manual Chrome test) — see AI-1.** That is the *only* outstanding gate. **The manual test now covers all 5 PRs.**
+- **Agent sandbox cannot run a browser or spawn threads** — `npm run test:e2e`/`agent:hooks:smoke` fail with launch/thread errors; the same E2E passes on GitHub CI. Gate 3 is genuinely a human task.
+- **Remaining implementation slices** (not yet PR'd): **D-ANOM** (`fix/nav-anomaly-sync-lag` branch exists, no commits) — nav_anomaly sync-score lag + sessionNavCount init; **D-IFRAME** (mutation_monitor `data:`/`blob:` iframes); then FF-02→03→04 (stacked), JSB-127, fresh discovery.
+- Open issues: #175 #176 #178 #179 #181 (discovery) + #127 (JS behavior) + #184 (housekeeping) + **#186** (bridge init-auth: echo-verify/replay-repin/thrash — needs SW-vouched token) + **#188** (options should surface prompt-outcome import/clear failure).
+- **Open question for Chris (deferred per the loop instruction):** the "merge systematically after aged/comments/CI/reviews" instruction vs. the contract's Gate 3 (manual Chrome test, AI-1) — does it authorize merging without the manual test, or hold all merges until AI-1 is cleared? Default assumption: **HOLD** until you confirm.
 
 ---
 
 ## OPEN action items
 
-### AI-1 — Manual Chrome test (Gate 3) for #180, #182, #183 · **OPEN · BLOCKS ALL MERGES**
+### AI-1 — Manual Chrome test (Gate 3) for #180, #182, #183, #185, #187 · **OPEN · BLOCKS ALL MERGES**
 
 **Why it's yours:** the contract requires manual testing in a real Chrome (PR Merge Protocol Gate 3), and the agent sandbox can't launch a browser. Everything else for these PRs is already green.
 
@@ -63,9 +66,10 @@
      - **Esc** and the outside/cancel action must still dismiss the modal and return focus sensibly.
 5. **#182 D-STORE — prompt outcomes persist:** trigger several credential prompts and choose actions (trust/block) rapidly across reloads; confirm the choices persist and the popup/options reflect them (no lost outcomes). Multiple tabs/frames at once is the stress case.
 6. **#180 D-PROF — no console errors under repeated navigation:** browse several risky/benign fixtures repeatedly; confirm no domain-profile errors in the service-worker console and risk state stays consistent.
-7. **Record the result on each PR:** `gh pr comment <#> --body "Gate 3 manual Chrome test: PASS — <notes>"` (or FAIL with what broke). Then tell me "AI-1 done for #NNN" and I'll proceed to merge per AI-2.
+7. **#185 D-BRIDGE + #187 D-SWRATE — regression smoke (internals, not directly UI-visible):** with each loaded, browse a mix of gym fixtures (nav blocks, dblclick, clipboard/ClickFix, pushstate) and confirm the guard still fires normally and there are **no service-worker or page console errors**. These two change bridge buffering/handshake (#185) and the visual-sim capture rate-limit persistence (#187), so the check is "no regression + no errors" rather than a single golden path.
+8. **Record the result on each PR:** `gh pr comment <#> --body "Gate 3 manual Chrome test: PASS — <notes>"` (or FAIL with what broke). Then tell me "AI-1 done for #NNN" and I'll proceed to merge per AI-2.
 
-**Done when:** you've manually verified all three and recorded PASS (or sent fixes back). Tell me which passed.
+**Done when:** you've manually verified all five and recorded PASS (or sent fixes back). Tell me which passed.
 
 ---
 
