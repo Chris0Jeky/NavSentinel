@@ -232,13 +232,25 @@ function patchFormSubmitMonitoring(): void {
   };
   document.addEventListener("submit", _submitListener, true);
 
-  // Patch HTMLFormElement.prototype.submit for programmatic submits
-  _originalSubmitFn = HTMLFormElement.prototype.submit;
-  const originalSubmit = _originalSubmitFn;
-  HTMLFormElement.prototype.submit = function (this: HTMLFormElement) {
-    handleFormSubmit(this);
-    return originalSubmit.call(this);
-  };
+  // Patch HTMLFormElement.prototype.submit for programmatic submits.
+  // main_guard.patchForms() hardens this same prototype method with a
+  // non-writable defineProperty, and its bootstrap runs BEFORE the async
+  // ns-config that triggers this init — so this assignment can throw "Cannot
+  // assign to read only property 'submit'". Degrade gracefully: the capturing
+  // 'submit' listener above already covers event-based submits, so catch the
+  // throw rather than letting it abort the rest of initJsBehaviorMonitor (which
+  // would drop the other JS-behavior API patches). Leave _originalSubmitFn null
+  // on failure so teardown skips a restore that would also throw.
+  const originalSubmit = HTMLFormElement.prototype.submit;
+  try {
+    HTMLFormElement.prototype.submit = function (this: HTMLFormElement) {
+      handleFormSubmit(this);
+      return originalSubmit.call(this);
+    };
+    _originalSubmitFn = originalSubmit;
+  } catch {
+    _originalSubmitFn = null;
+  }
 
   // Note: requestSubmit() fires a 'submit' event which the capturing listener
   // above already handles. No prototype patch needed; patching it would double-fire.
