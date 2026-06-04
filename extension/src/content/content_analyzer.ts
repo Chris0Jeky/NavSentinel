@@ -268,11 +268,17 @@ export const KIT_FINGERPRINTS: ReadonlyArray<KitFingerprint> = [
   {
     name: "Exfil-Hidden-Form",
     selectors: ['form[style*="display:none"]', 'form[style*="visibility:hidden"]'],
-    htmlPatterns: [/<form[^>]*style\s*=\s*["'][^"']*(?:display\s*:\s*none|visibility\s*:\s*hidden)/i],
+    // Bounded quantifiers ({0,N} instead of *) cap the per-start-position scan so
+    // the two sequential `[^…]*` runs can't combine into O(n²) backtracking on a
+    // crafted snippet. The bounds are generous vs any real tag/style, so realistic
+    // matches (incl. whitespace variants the selectors miss) are unchanged.
+    htmlPatterns: [/<form[^>]{0,400}style\s*=\s*["'][^"']{0,200}(?:display\s*:\s*none|visibility\s*:\s*hidden)/i],
   },
   {
     name: "Data-Exfil-Iframe",
-    htmlPatterns: [/<iframe[^>]*src\s*=\s*["'](?:https?:\/\/[^"']*(?:collect|exfil|log|grab|steal|capture))/i],
+    // Bounded quantifiers (see Exfil-Hidden-Form) to avoid O(n²) backtracking; the
+    // bounds exceed any realistic iframe tag / exfil URL prefix.
+    htmlPatterns: [/<iframe[^>]{0,400}src\s*=\s*["']https?:\/\/[^"']{0,2000}(?:collect|exfil|log|grab|steal|capture)/i],
   },
   {
     name: "Telegram-Exfil",

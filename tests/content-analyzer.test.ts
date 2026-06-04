@@ -236,6 +236,38 @@ describe("content_analyzer - phishing kit detection", () => {
     expect(result.kitName).toBe("Phish-Hidden-Iframe");
   });
 
+  it("detects a hidden exfil form with whitespace in the style via the bounded regex (D-REDOS)", () => {
+    // "display: none" (with space) is missed by the [style*="display:none"]
+    // selector, so only the htmlPattern can catch it — confirms the bounded
+    // quantifiers did not drop this realistic match.
+    const snap = loginSnapshot({
+      htmlSnippet: '<form style="display: none"><input type="password" /></form>',
+    });
+    const result = analyzeSnapshot(snap, "phish.com");
+    expect(result.phishingKitMatch).toBe(true);
+    expect(result.kitName).toBe("Exfil-Hidden-Form");
+  });
+
+  it("detects a data-exfil iframe by an src keyword via the bounded regex (D-REDOS)", () => {
+    const snap = loginSnapshot({
+      htmlSnippet: '<iframe src="https://evil.example/api/exfil/data"></iframe>',
+    });
+    const result = analyzeSnapshot(snap, "phish.com");
+    expect(result.phishingKitMatch).toBe(true);
+    expect(result.kitName).toBe("Data-Exfil-Iframe");
+  });
+
+  it("completes without catastrophic backtracking on a crafted oversized form snippet (D-REDOS)", () => {
+    // Pre-bound, a long unterminated style value forced O(n^2) backtracking over
+    // the two sequential [^...]* runs. The bounded quantifiers keep it ~linear and
+    // it must NOT match (no display:none / visibility:hidden keyword present).
+    const snap = loginSnapshot({
+      htmlSnippet: `<form style="${"a".repeat(9000)}`,
+    });
+    const result = analyzeSnapshot(snap, "phish.com");
+    expect(result.kitName).not.toBe("Exfil-Hidden-Form");
+  });
+
   it("detects Gophish meta tag", () => {
     const snap = loginSnapshot({
       metaTags: [{ name: "generator", content: "gophish" }],
