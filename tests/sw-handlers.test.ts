@@ -519,6 +519,27 @@ describe("service worker handlers", () => {
       expect(captured).toEqual({ dataUrl: null });
       expect(mock.chrome.tabs.captureVisibleTab).not.toHaveBeenCalled();
     });
+
+    it("prunes safely over a corrupt non-array entry without throwing/hanging the port", async () => {
+      const mock = createChromeMock();
+      const now = Date.now();
+      const session = mock.chrome.storage.session as unknown as { _store: Record<string, unknown> };
+      const counts: Record<string, unknown> = {};
+      // Exceed CAPTURE_RATE_PRUNE_LIMIT (200) so the prune loop runs, including a
+      // corrupt non-array entry that must not throw out of the synchronous handler.
+      for (let i = 0; i < 205; i++) counts[String(i)] = [now - 1000];
+      counts["999"] = "corrupt-not-an-array";
+      session._store["ns_sw:captureTimestamps"] = counts;
+      await loadSw(mock);
+
+      const res = mock.dispatchRuntimeMessage(
+        { type: "ns-capture-viewport" },
+        { tab: { id: 4242, windowId: 1 } },
+      ) as { dataUrl: string | null };
+
+      // Reached a normal decision (not a thrown/hung port) and captured.
+      expect(res.dataUrl).toBe("data:image/png;base64,mockdata");
+    });
   });
 
   describe("ns-dblclick-opener-nav (security-critical)", () => {

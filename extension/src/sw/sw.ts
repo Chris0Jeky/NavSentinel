@@ -94,7 +94,9 @@ function allowViewportCapture(tabId: number, now = Date.now()): boolean {
   // but prune defensively in case a removal event is missed).
   if (captureTimestampsByTab.size > CAPTURE_RATE_PRUNE_LIMIT) {
     for (const [id, list] of captureTimestampsByTab) {
-      const live = list.filter((ts) => ts >= cutoff);
+      // Same defensive guard as above: a corrupt non-array entry for any tab
+      // must not throw here and hang the (synchronous-path) message port.
+      const live = (Array.isArray(list) ? list : []).filter((ts) => ts >= cutoff);
       if (live.length === 0) captureTimestampsByTab.delete(id);
       else captureTimestampsByTab.set(id, live);
     }
