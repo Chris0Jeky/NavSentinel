@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { OutboundQueue, type OutboundMessage } from "../extension/src/content/bridge_outbound";
+import { OutboundQueue, isMainGuardAlertType, type OutboundMessage } from "../extension/src/content/bridge_outbound";
 
 const msg = (type: string, payload?: Record<string, unknown>): OutboundMessage =>
   payload !== undefined ? { type, payload } : { type };
@@ -144,5 +144,40 @@ describe("OutboundQueue priority (D-BRIDGE R2: alerts survive routine pressure)"
     const { items, dropped } = q.drain();
     expect(items.map((m) => m.type)).toEqual(["alert1", "alert2"]);
     expect(dropped).toBe(1);
+  });
+});
+
+describe("isMainGuardAlertType (main->isolated priority classification)", () => {
+  it("treats detection signals as priority", () => {
+    for (const t of ["ns-nav-blocked", "ns-nav-allowed", "ns-clipboard-write", "ns-pushstate-suspicious"]) {
+      expect(isMainGuardAlertType(t)).toBe(true);
+    }
+  });
+
+  it("treats the full DoubleClickjacking chain as priority (incl. the window-open precondition)", () => {
+    for (const t of ["ns-dblclick-window-open", "ns-dblclick-opener-nav", "ns-dblclick-second-click"]) {
+      expect(isMainGuardAlertType(t)).toBe(true);
+    }
+  });
+
+  it("treats control relays (ns-allow*) as priority — a dropped pre-auth re-blocks an allowed nav", () => {
+    for (const t of ["ns-allow-target-nav", "ns-allow", "ns-allow-once", "ns-allow-action"]) {
+      expect(isMainGuardAlertType(t)).toBe(true);
+    }
+  });
+
+  it("treats JS-behavior signals as priority", () => {
+    for (const t of ["ns-js-exfil-network", "ns-js-credential-read", "ns-js-form-submit-suspicious"]) {
+      expect(isMainGuardAlertType(t)).toBe(true);
+    }
+  });
+
+  it("treats routine control/diagnostic messages as droppable", () => {
+    for (const t of [
+      "ns-config-ack", "ns-pong", "ns-bridge-ready", "ns-bridge-overflow",
+      "ns-main-guard-ready", "ns-debug-nav-record", "ns-location-patch-info",
+    ]) {
+      expect(isMainGuardAlertType(t)).toBe(false);
+    }
   });
 });

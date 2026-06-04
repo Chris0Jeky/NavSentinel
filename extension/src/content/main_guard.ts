@@ -1,5 +1,5 @@
 import { initJsBehaviorMonitor } from "./js_behavior_monitor";
-import { OutboundQueue } from "./bridge_outbound";
+import { OutboundQueue, isMainGuardAlertType } from "./bridge_outbound";
 
 const NS_SOURCE = "__navsentinel__";
 const BRIDGE_INIT_TYPE = "ns-port-init";
@@ -42,31 +42,11 @@ const MAX_PENDING_OUTBOUND = 32;
 // of equal-priority messages — see bridge_outbound.ts for the rationale.
 const pendingOutbound = new OutboundQueue(MAX_PENDING_OUTBOUND);
 
-// MAIN-world detection signals that must survive pre-verification buffer
-// pressure. Routine traffic (ns-main-guard-ready, ns-config-ack, ns-pong,
-// ns-debug-nav-record, ns-bridge-ready, ns-bridge-overflow) is droppable.
-const ALERT_OUTBOUND_TYPES = new Set<string>([
-  "ns-nav-blocked",
-  "ns-nav-allowed",
-  "ns-dblclick-second-click",
-  "ns-dblclick-opener-nav",
-  "ns-clipboard-write",
-  "ns-pushstate-suspicious",
-  "ns-js-form-submit-suspicious",
-  "ns-js-exfil-network",
-  "ns-js-exfil-beacon",
-  "ns-js-credential-read",
-]);
-
-function isAlertOutbound(type: string): boolean {
-  return ALERT_OUTBOUND_TYPES.has(type) || type.startsWith("ns-js-");
-}
-
 function postToIsolated(type: string, payload?: Record<string, unknown>): void {
   if (!bridgePort || !bridgeSession || !bridgeVerified) {
     pendingOutbound.enqueue(
       { type, ...(payload !== undefined ? { payload } : {}) },
-      isAlertOutbound(type)
+      isMainGuardAlertType(type)
     );
     return;
   }
@@ -885,9 +865,18 @@ window.addEventListener(
     if (!data || data.source !== NS_SOURCE || data.v !== PROTOCOL_VERSION) return;
     if (data.type !== BRIDGE_INIT_TYPE || typeof data.session !== "string" || !data.session) return;
     // Only a VERIFIED bridge pins its session — that prevents post-verification
-    // hijack. An unverified session has not proven legitimacy, so a fresh init
-    // (e.g. the real isolated world arriving after a hostile page raced an init
-    // first) is allowed to take over the handshake instead of being locked out.
+    // hijack by a *different* session. An unverified session has not proven
+    // legitimacy, so a fresh init (e.g. the real isolated world arriving after a
+    // hostile page raced an init first) is allowed to take over the handshake
+    // instead of being locked out.
+    //
+    // Residual init-auth limits (best-effort; the session travels in a
+    // page-visible postMessage and the challenge is echoable, so this is not a
+    // hard boundary — all tracked in #186): a main-world attacker can (a) replay
+    // the known session to re-pin even a verified bridge, and (b) thrash repeated
+    // inits to keep the bridge unverified until the isolated side disables the
+    // guard (~10s). Both are strictly less severe than the permanent lockout this
+    // change replaced; the real fix is SW-vouched init authentication (#186).
     if (bridgeVerified && bridgeSession && data.session !== bridgeSession) return;
 
     const nextPort = event.ports?.[0];

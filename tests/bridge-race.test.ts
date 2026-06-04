@@ -175,6 +175,14 @@ describe("bridge race condition fixes", () => {
   // forever, so the `bridgeSession && data.session !== bridgeSession` guard then
   // rejected the real isolated world's init — permanently disabling the bridge.
   // These tests model main_guard.ts's handshake state machine + failBridgeHandshake.
+  // NOTE (model limitation): main_guard installs the handshake inside a window
+  // "message" listener at module load (import-time side effects), so it is not
+  // imported here. This is a faithful behavioral model, with one approximation —
+  // the production defense against a stale challenge response is that the
+  // superseded port is CLOSED (so its onmessage can't fire); the model expresses
+  // that as a challenge-value mismatch instead. A regression that left an old
+  // port open would not be caught here; an integration test driving the real
+  // listener via a MessageChannel would close that gap (tracked informally).
   describe("D-BRIDGE: handshake timeout releases a half-open bridge", () => {
     interface FakePort {
       closed: boolean;
@@ -256,6 +264,18 @@ describe("bridge race condition fixes", () => {
       expect(onInit("attacker")).toBe(false); // verified session is pinned
       expect(s.session).toBe("real");
       expect(s.verified).toBe(true);
+    });
+
+    it("a same-session re-init resets a verified bridge (known limitation, tracked in #186)", () => {
+      expect(onInit("real")).toBe(true);
+      onChallengeResponse("challenge-real");
+      expect(s.verified).toBe(true);
+      // The verified-pin only blocks DIFFERENT sessions. Because the session
+      // travels in a page-visible postMessage, a re-init reusing it is accepted
+      // and resets verification — replay/thrash. The real fix is SW-vouched init
+      // authentication (#186); this test documents the current behavior.
+      expect(onInit("real")).toBe(true);
+      expect(s.verified).toBe(false);
     });
 
     it("repeated re-pinning before the timeout cannot lock out the real bridge", () => {

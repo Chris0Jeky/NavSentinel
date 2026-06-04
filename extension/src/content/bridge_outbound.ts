@@ -85,3 +85,33 @@ export class OutboundQueue {
     return this.dropped;
   }
 }
+
+// Non-droppable detection signals on the MAIN-world → isolated direction.
+const MAIN_GUARD_ALERT_TYPES = new Set<string>([
+  "ns-nav-blocked",
+  "ns-nav-allowed",
+  "ns-clipboard-write",
+  "ns-pushstate-suspicious",
+]);
+
+/**
+ * Whether a MAIN-world → isolated message must survive pre-verification buffer
+ * pressure. Priority = detection signals AND control relays:
+ *  - `ns-js-*`        JS-behavior signals.
+ *  - `ns-dblclick-*`  the DoubleClickjacking chain — including the
+ *                     `ns-dblclick-window-open` precondition, without which the
+ *                     priority second-click/opener-nav correlations are useless.
+ *  - `ns-allow*`      control relays (e.g. `ns-allow-target-nav`) that
+ *                     pre-authorize a user-approved navigation in the SW;
+ *                     dropping one makes the SW re-block an allowed action.
+ * Routine (config-ack, pong, bridge-ready/overflow, debug, location-patch-info)
+ * is droppable.
+ */
+export function isMainGuardAlertType(type: string): boolean {
+  return (
+    MAIN_GUARD_ALERT_TYPES.has(type) ||
+    type.startsWith("ns-js-") ||
+    type.startsWith("ns-dblclick-") ||
+    type.startsWith("ns-allow")
+  );
+}
