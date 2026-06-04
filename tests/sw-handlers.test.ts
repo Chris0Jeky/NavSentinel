@@ -478,6 +478,47 @@ describe("service worker handlers", () => {
       expect(res.dataUrl).toBeNull();
       expect(mock.chrome.tabs.captureVisibleTab).not.toHaveBeenCalled();
     });
+
+    it("defers the capture decision until hydration when the worker is not yet hydrated", async () => {
+      const mock = createChromeMock();
+      const now = Date.now();
+      const session = mock.chrome.storage.session as unknown as {
+        _store: Record<string, unknown>;
+        get: (keys?: string | string[]) => Promise<Record<string, unknown>>;
+      };
+      // Persisted counts already at the cap for tab 42.
+      session._store["ns_sw:captureTimestamps"] = { "42": [now - 3000, now - 2000, now - 1000] };
+
+      // Block hydration so the handler must take the deferred (!hydrated) branch.
+      let releaseHydration!: () => void;
+      const gate = new Promise<void>((r) => { releaseHydration = r; });
+      const realGet = session.get.bind(mock.chrome.storage.session);
+      session.get = async (keys?: string | string[]) => {
+        await gate;
+        return realGet(keys);
+      };
+
+      await loadSw(mock);
+
+      let captured: unknown = "NOT_CALLED";
+      mock.chrome.runtime.onMessage.emit(
+        { type: "ns-capture-viewport" },
+        { tab: { id: 42, windowId: 1 } },
+        (v: unknown) => { captured = v; },
+      );
+
+      // Pre-hydrate: the handler returned true and has NOT responded or captured.
+      expect(captured).toBe("NOT_CALLED");
+      expect(mock.chrome.tabs.captureVisibleTab).not.toHaveBeenCalled();
+
+      // Release hydration; the deferred capture now decides against the restored
+      // 3-timestamp count and is denied (no recycle bypass).
+      releaseHydration();
+      for (let i = 0; i < 12; i++) await Promise.resolve();
+
+      expect(captured).toEqual({ dataUrl: null });
+      expect(mock.chrome.tabs.captureVisibleTab).not.toHaveBeenCalled();
+    });
   });
 
   describe("ns-dblclick-opener-nav (security-critical)", () => {

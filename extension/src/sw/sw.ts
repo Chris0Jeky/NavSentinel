@@ -79,7 +79,10 @@ const captureTimestampsByTab = swState.captureTimestampsByTab;
  */
 function allowViewportCapture(tabId: number, now = Date.now()): boolean {
   const cutoff = now - CAPTURE_RATE_WINDOW_MS;
-  const recent = (captureTimestampsByTab.get(tabId) ?? []).filter((ts) => ts >= cutoff);
+  // Defensive: a corrupt session value could restore as a non-array (SessionState
+  // _restoreMap does not validate per-entry shape), which would throw on .filter.
+  const stored = captureTimestampsByTab.get(tabId);
+  const recent = (Array.isArray(stored) ? stored : []).filter((ts) => ts >= cutoff);
   if (recent.length >= CAPTURE_RATE_MAX_PER_WINDOW) {
     captureTimestampsByTab.set(tabId, recent);
     swState.persistMap(captureTimestampsByTab, "captureTimestamps");
@@ -569,10 +572,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // Gate on hydration: a freshly-restarted worker must see the persisted
     // per-tab counts before deciding, otherwise a capture in the pre-hydrate
     // window reads an empty map (allowed) and its write is discarded when
-    // _restoreMap overwrites the map — reopening the recycle-between-bursts
-    // bypass this slice closes. Defer until hydrated (keeps the port open).
+    // _restoreMap merges the persisted entry back (overwriting the tab's key) —
+    // reopening the recycle-between-bursts bypass this slice closes. Defer until
+    // hydrated (keeps the port open). The .catch closes the port on any
+    // unexpected throw so the response promise can never hang.
     if (!swState.hydrated) {
-      void hydrateReady.then(runCapture);
+      void hydrateReady.then(runCapture).catch(() => sendResponse?.({ dataUrl: null }));
     } else {
       runCapture();
     }
