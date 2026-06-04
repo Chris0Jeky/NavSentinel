@@ -58,12 +58,13 @@ const OAUTH_FLOW_PRUNE_LIMIT = 50;
 
 // Defensive per-tab rate limit for viewport captures (visual-sim). Capturing
 // the viewport is comparatively expensive and should be bounded even if a page
-// somehow drives repeated requests. Best-effort: state is in SW memory and
-// resets if the (ephemeral) worker restarts, which is acceptable for a guard.
+// somehow drives repeated requests. Session-backed via SessionStateManager so
+// the limit survives a SW restart — otherwise a page could force the ephemeral
+// worker to recycle between bursts to reset the counter and bypass the cap.
 const CAPTURE_RATE_WINDOW_MS = 60_000;
 const CAPTURE_RATE_MAX_PER_WINDOW = 3;
 const CAPTURE_RATE_PRUNE_LIMIT = 200;
-const captureTimestampsByTab = new Map<number, number[]>();
+const captureTimestampsByTab = swState.captureTimestampsByTab;
 
 /**
  * Returns true if a viewport capture is allowed for this tab right now, and
@@ -75,6 +76,7 @@ function allowViewportCapture(tabId: number, now = Date.now()): boolean {
   const recent = (captureTimestampsByTab.get(tabId) ?? []).filter((ts) => ts >= cutoff);
   if (recent.length >= CAPTURE_RATE_MAX_PER_WINDOW) {
     captureTimestampsByTab.set(tabId, recent);
+    swState.persistMap(captureTimestampsByTab, "captureTimestamps");
     return false;
   }
   recent.push(now);
@@ -88,6 +90,7 @@ function allowViewportCapture(tabId: number, now = Date.now()): boolean {
       else captureTimestampsByTab.set(id, live);
     }
   }
+  swState.persistMap(captureTimestampsByTab, "captureTimestamps");
   return true;
 }
 

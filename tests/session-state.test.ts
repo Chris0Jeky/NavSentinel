@@ -327,6 +327,8 @@ describe("SessionStateManager", () => {
     });
     mgr.redirectChainData.set(7, { hops: [], startedAt: 0 });
     mgr.redirectChainData.set(8, { hops: [], startedAt: 0 });
+    mgr.captureTimestampsByTab.set(7, [1, 2, 3]);
+    mgr.captureTimestampsByTab.set(8, [4, 5, 6]);
 
     // Delete tab 7
     mgr.deleteTab(7);
@@ -340,6 +342,7 @@ describe("SessionStateManager", () => {
     expect(mgr.childWindowByTab.has(7)).toBe(false);
     expect(mgr.oauthFlowByTab.has(7)).toBe(false);
     expect(mgr.redirectChainData.has(7)).toBe(false);
+    expect(mgr.captureTimestampsByTab.has(7)).toBe(false);
 
     // Tab 8 state should be untouched
     expect(mgr.allowUntilByTab.get(8)).toBe(200);
@@ -347,6 +350,7 @@ describe("SessionStateManager", () => {
     expect(mgr.readyTabs.has(8)).toBe(true);
     expect(mgr.lastUrlByTab.get(8)).toBe("https://b.test/");
     expect(mgr.redirectChainData.has(8)).toBe(true);
+    expect(mgr.captureTimestampsByTab.get(8)).toEqual([4, 5, 6]);
 
     // Verify session storage also persisted the cleanup
     const stored = await sessionStorage.mock.get("ns_sw:allowUntil");
@@ -445,6 +449,23 @@ describe("SessionStateManager", () => {
     expect(restored!.url).toBe("https://evil.test/");
     expect(restored!.prevUrl).toBeUndefined();
     expect(restored!.qualifiers).toEqual(["server_redirect"]);
+  });
+
+  it("round-trips captureTimestampsByTab so the capture rate limit survives a SW restart (D-SWRATE)", async () => {
+    const mgr = new SessionStateManager();
+    await mgr.hydrate();
+
+    // Three captures already used in the window for tab 7.
+    mgr.captureTimestampsByTab.set(7, [100, 200, 300]);
+    mgr.persistMap(mgr.captureTimestampsByTab, "captureTimestamps");
+    await new Promise((r) => setTimeout(r, 0));
+
+    // Simulated restart: a fresh manager must see the prior counts, so the
+    // rate limit cannot be reset by forcing the worker to recycle.
+    const mgr2 = new SessionStateManager();
+    expect(mgr2.captureTimestampsByTab.size).toBe(0); // empty before hydration
+    await mgr2.hydrate();
+    expect(mgr2.captureTimestampsByTab.get(7)).toEqual([100, 200, 300]);
   });
 });
 
