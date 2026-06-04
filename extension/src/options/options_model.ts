@@ -21,3 +21,29 @@ export function parseIntSafe(value: string, fallback: number): number {
   const n = Number(value);
   return Number.isFinite(n) ? Math.trunc(n) : fallback;
 }
+
+/**
+ * Wrap an async click handler so re-entrant invocations are ignored while one is
+ * in flight (prevents a double/triple-click from firing overlapping
+ * read-modify-write saves). `isBusy`/`setBusy` are injected so the busy state can
+ * live on the DOM element (e.g. `button.disabled`) while the logic stays pure and
+ * unit-testable. The busy flag is always cleared in a `finally`, even if `fn`
+ * rejects — so the control never gets stuck "busy". A rejection from `fn`
+ * propagates (it is not swallowed); callers should handle user-facing errors
+ * inside `fn` (the save handler does, in its own try/catch).
+ */
+export function withReentrancyGuard(
+  isBusy: () => boolean,
+  setBusy: (busy: boolean) => void,
+  fn: () => Promise<void>,
+): () => Promise<void> {
+  return async () => {
+    if (isBusy()) return;
+    setBusy(true);
+    try {
+      await fn();
+    } finally {
+      setBusy(false);
+    }
+  };
+}
