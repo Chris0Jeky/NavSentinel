@@ -585,17 +585,44 @@ export function getAnomalyScoreSync(
 ): number {
   const ts = now ?? Date.now();
   const category = classifyDomain(hostname);
+  if (category === "unknown") return 0;
   pruneRecentNavs(ts);
-  const recentCount = countRecentCategory(category, ts);
+  // +1 for the current navigation. recordNavigationAnomaly pushes this nav into
+  // the window before counting, but it runs asynchronously AFTER this sync read,
+  // so the window here is missing the current nav. Counting it aligns the sync
+  // burst check with what the async path computes — otherwise the burst is
+  // flagged one navigation late (under-scoring the nav that completes the burst).
+  const recentCount = countRecentCategory(category, ts) + 1;
 
   if (sessionNavCount < MIN_NAVIGATIONS_FOR_ANOMALY) return 0;
-  if (recentCount < BURST_MIN_COUNT || category === "unknown") return 0;
+  if (recentCount < BURST_MIN_COUNT) return 0;
 
   let score = BASE_ANOMALY_SCORE;
   if (recentCount >= 3) {
     score += BURST_3_PLUS_BONUS;
   }
   return Math.min(score, ANOMALY_SCORE_CAP);
+}
+
+/**
+ * Seed sessionNavCount from the stored profile so getAnomalyScoreSync works for
+ * a returning user on a fresh content-script load, instead of returning 0 until
+ * MIN_NAVIGATIONS_FOR_ANOMALY navigations accrue in THIS session (which would
+ * blind anomaly detection on the first navigations of every page load).
+ *
+ * Serialized through the same `pending` chain as recordNavigationAnomaly. It is
+ * read-only (no save), and Math.max keeps sessionNavCount monotonic, so even a
+ * stale read can only under-seed (never lose a higher in-session count).
+ */
+export function primeAnomalySession(): Promise<void> {
+  const next = pending.then(async (): Promise<void> => {
+    const profile = await loadProfile();
+    sessionNavCount = Math.max(sessionNavCount, profile.totalNavigations);
+  });
+  pending = next.catch((err) => {
+    console.warn("[NavSentinel] nav anomaly prime error:", err);
+  });
+  return next;
 }
 
 /**

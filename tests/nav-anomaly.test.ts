@@ -7,6 +7,7 @@ import {
   pruneBurstRecords,
   computeAnomalyScore,
   recordNavigationAnomaly,
+  primeAnomalySession,
   clearNavProfile,
   _resetRecentNavs,
   _getRecentNavs,
@@ -714,7 +715,7 @@ describe("getAnomalyScoreSync", () => {
     expect(score).toBe(0);
   });
 
-  it("returns BASE_ANOMALY_SCORE (10) for exactly 2 crypto navs in window", async () => {
+  it("returns BASE_ANOMALY_SCORE (10) for 1 prior crypto nav + the current one (=2)", async () => {
     const now = Date.now();
     store[NAV_PROFILE_KEY] = makeEstablishedProfile(now);
     // Build up sessionNavCount via recordNavigationAnomaly
@@ -723,16 +724,34 @@ describe("getAnomalyScoreSync", () => {
     }
     _resetRecentNavs();
 
-    // Record exactly 2 crypto navs into the sliding window
+    // One crypto nav already in the window; the current nav is the 2nd.
+    await recordNavigationAnomaly("binance.com", now + 50000);
+
+    // getAnomalyScoreSync counts the current nav (+1): 1 prior + current = 2 =>
+    // BASE, no 3+ bonus.
+    const score = getAnomalyScoreSync("metamask.io", now + 51000);
+    expect(score).toBe(BASE_ANOMALY_SCORE);
+    expect(score).toBe(10);
+  });
+
+  it("counts the current nav so a completing 3rd crypto nav scores the bonus (no 1-nav lag)", async () => {
+    // Regression guard for the D-ANOM sync lag fix: 2 crypto already in window,
+    // scoring the current (3rd) nav. Before the fix the sync score saw only the
+    // 2 already-recorded and returned BASE (10) — one nav behind what
+    // recordNavigationAnomaly computes for the very same navigation (15).
+    const now = Date.now();
+    store[NAV_PROFILE_KEY] = makeEstablishedProfile(now);
+    for (let i = 0; i < MIN_NAVIGATIONS_FOR_ANOMALY + 1; i++) {
+      await recordNavigationAnomaly("youtube.com", now + i * 100);
+    }
+    _resetRecentNavs();
+
     await recordNavigationAnomaly("binance.com", now + 50000);
     await recordNavigationAnomaly("coinbase.com", now + 51000);
 
-    // getAnomalyScoreSync reads the window without adding to it.
-    // countRecentCategory sees 2 crypto entries => recentCount = 2.
     const score = getAnomalyScoreSync("metamask.io", now + 52000);
-    // recentCount = 2 (only the 2 already recorded; sync does not push).
-    expect(score).toBe(BASE_ANOMALY_SCORE);
-    expect(score).toBe(10);
+    expect(score).toBe(BASE_ANOMALY_SCORE + BURST_3_PLUS_BONUS);
+    expect(score).toBe(15);
   });
 
   it("returns 15 for 3+ crypto navs already in the window", async () => {
@@ -767,6 +786,33 @@ describe("getAnomalyScoreSync", () => {
 
     const score = getAnomalyScoreSync("yet-another-random.net", now + 52000);
     expect(score).toBe(0);
+  });
+});
+
+describe("primeAnomalySession", () => {
+  it("seeds sessionNavCount from the stored profile so a returning user is not gated on fresh load", async () => {
+    const now = Date.now();
+    // Returning user with plenty of history; fresh content-script load (no
+    // in-session records yet, sessionNavCount reset to 0).
+    store[NAV_PROFILE_KEY] = makeEstablishedProfile(now);
+    _resetRecentNavs();
+
+    await primeAnomalySession();
+
+    // sessionNavCount is now seeded from the stored profile (>= MIN), so a burst
+    // detected early in the session is scored rather than blanked by the gate.
+    await recordNavigationAnomaly("binance.com", now + 50000);
+    await recordNavigationAnomaly("coinbase.com", now + 51000);
+    const score = getAnomalyScoreSync("metamask.io", now + 52000);
+    expect(score).toBe(BASE_ANOMALY_SCORE + BURST_3_PLUS_BONUS);
+  });
+
+  it("is a no-op-safe read when there is no stored profile (new user)", async () => {
+    delete store[NAV_PROFILE_KEY];
+    _resetRecentNavs();
+    await expect(primeAnomalySession()).resolves.toBeUndefined();
+    // No history → still gated, score stays 0.
+    expect(getAnomalyScoreSync("binance.com", Date.now())).toBe(0);
   });
 });
 

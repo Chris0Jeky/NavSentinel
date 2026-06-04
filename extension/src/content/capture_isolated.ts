@@ -64,7 +64,7 @@ import {
 } from "./pushstate_guard";
 import { analyzeCSP, type CSPAnalysis } from "./csp_analyzer";
 import { getDomainRisk, recordNavigation } from "../shared/domain_profile";
-import { recordNavigationAnomaly, getAnomalyScoreSync } from "../shared/nav_anomaly";
+import { recordNavigationAnomaly, getAnomalyScoreSync, primeAnomalySession } from "../shared/nav_anomaly";
 
 const CDS_SMART_BLOCK_THRESHOLD = 70;
 const NS_SOURCE = "__navsentinel__";
@@ -269,6 +269,11 @@ async function initSettings() {
   void getDomainRisk(siteKeyFromLocation()).then((risk) => {
     cachedDomainRepeatOffender = risk.isRepeatOffender;
   }).catch((err) => { console.warn("[NavSentinel] domain profile pre-fetch failed:", err); });
+  // Seed the nav-anomaly session count from the stored profile so the sync
+  // anomaly score works for a returning user on this fresh content-script load.
+  void primeAnomalySession().catch((err) => {
+    console.warn("[NavSentinel] nav anomaly prime failed:", err);
+  });
   previousMode = settings.defaultMode;
   if (isTopFrame()) {
     sendIconUpdate(settings.defaultMode === "off" ? "gray" : "green");
