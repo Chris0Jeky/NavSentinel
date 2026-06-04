@@ -30,7 +30,9 @@ export function parseIntSafe(value: string, fallback: number): number {
  * unit-testable. The busy flag is always cleared in a `finally`, even if `fn`
  * rejects — so the control never gets stuck "busy". A rejection from `fn`
  * propagates (it is not swallowed); callers should handle user-facing errors
- * inside `fn` (the save handler does, in its own try/catch).
+ * inside `fn` (the save handler does, in its own try/catch). `isBusy`/`setBusy`
+ * are assumed not to throw — the only caller backs them with `button.disabled`,
+ * which never throws; a throwing accessor is out of contract.
  */
 export function withReentrancyGuard(
   isBusy: () => boolean,
