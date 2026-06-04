@@ -61,6 +61,12 @@ const OAUTH_FLOW_PRUNE_LIMIT = 50;
 // somehow drives repeated requests. Session-backed via SessionStateManager so
 // the limit survives a SW restart — otherwise a page could force the ephemeral
 // worker to recycle between bursts to reset the counter and bypass the cap.
+// The capture handler gates on swState.hydrated so a restarted worker reads the
+// persisted counts before deciding. Residual: persistMap is fire-and-forget, so
+// if the worker dies between the in-memory push and the session.set flush, one
+// attempt can be lost (at most a small slack within a window) — best-effort, not
+// a hard guarantee; the handler awaits captureVisibleTab which keeps the worker
+// alive long enough to flush in practice.
 const CAPTURE_RATE_WINDOW_MS = 60_000;
 const CAPTURE_RATE_MAX_PER_WINDOW = 3;
 const CAPTURE_RATE_PRUNE_LIMIT = 200;
@@ -541,26 +547,35 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === "ns-capture-viewport") {
     const tabId = sender.tab?.id;
-    if (typeof tabId !== "number") {
+    const windowId = sender.tab?.windowId;
+    if (typeof tabId !== "number" || typeof windowId !== "number") {
       sendResponse?.({ dataUrl: null });
       return;
     }
-    // Defensive per-tab throttle: drop excess captures and return null safely.
-    if (!allowViewportCapture(tabId)) {
-      sendResponse?.({ dataUrl: null });
-      return;
-    }
-    chrome.tabs.captureVisibleTab(
-      sender.tab!.windowId!,
-      { format: "png" },
-      (dataUrl) => {
+    const runCapture = (): void => {
+      // Defensive per-tab throttle: drop excess captures and return null safely.
+      if (!allowViewportCapture(tabId)) {
+        sendResponse?.({ dataUrl: null });
+        return;
+      }
+      chrome.tabs.captureVisibleTab(windowId, { format: "png" }, (dataUrl) => {
         if (chrome.runtime.lastError || !dataUrl) {
           sendResponse?.({ dataUrl: null });
           return;
         }
         sendResponse?.({ dataUrl });
-      }
-    );
+      });
+    };
+    // Gate on hydration: a freshly-restarted worker must see the persisted
+    // per-tab counts before deciding, otherwise a capture in the pre-hydrate
+    // window reads an empty map (allowed) and its write is discarded when
+    // _restoreMap overwrites the map — reopening the recycle-between-bursts
+    // bypass this slice closes. Defer until hydrated (keeps the port open).
+    if (!swState.hydrated) {
+      void hydrateReady.then(runCapture);
+    } else {
+      runCapture();
+    }
     return true;
   }
 

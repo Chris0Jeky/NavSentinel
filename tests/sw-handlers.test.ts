@@ -458,6 +458,26 @@ describe("service worker handlers", () => {
       ) as { dataUrl: string | null };
       expect(otherTab.dataUrl).toBe("data:image/png;base64,mockdata");
     });
+
+    it("honors the persisted per-tab count after a restart (D-SWRATE: limit survives recycle)", async () => {
+      const mock = createChromeMock();
+      const now = Date.now();
+      // A prior worker used all 3 captures this window; the counts were persisted
+      // to session storage. A restarted worker hydrates them, and (because the
+      // handler gates on hydration) the next capture is denied — recycling the
+      // worker mid-window cannot reset the counter.
+      (mock.chrome.storage.session as unknown as { _store: Record<string, unknown> })._store[
+        "ns_sw:captureTimestamps"
+      ] = { "42": [now - 3000, now - 2000, now - 1000] };
+      await loadSw(mock);
+
+      const res = mock.dispatchRuntimeMessage(
+        { type: "ns-capture-viewport" },
+        { tab: { id: 42, windowId: 1 } },
+      ) as { dataUrl: string | null };
+      expect(res.dataUrl).toBeNull();
+      expect(mock.chrome.tabs.captureVisibleTab).not.toHaveBeenCalled();
+    });
   });
 
   describe("ns-dblclick-opener-nav (security-critical)", () => {
