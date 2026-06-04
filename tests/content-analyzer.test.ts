@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   analyzeSnapshot,
   BRAND_DB,
+  HTML_SNIPPET_MAX,
   KIT_FINGERPRINTS,
   domainMatchesBrand,
   type PageSnapshot,
@@ -234,6 +235,50 @@ describe("content_analyzer - phishing kit detection", () => {
     const result = analyzeSnapshot(snap, "phish.com");
     expect(result.phishingKitMatch).toBe(true);
     expect(result.kitName).toBe("Phish-Hidden-Iframe");
+  });
+
+  it("detects a hidden exfil form with whitespace in the style via the bounded regex (D-REDOS)", () => {
+    // "display: none" (with space) is missed by the [style*="display:none"]
+    // selector, so only the htmlPattern can catch it — confirms the bounded
+    // quantifiers did not drop this realistic match.
+    const snap = loginSnapshot({
+      htmlSnippet: '<form style="display: none"><input type="password" /></form>',
+    });
+    const result = analyzeSnapshot(snap, "phish.com");
+    expect(result.phishingKitMatch).toBe(true);
+    expect(result.kitName).toBe("Exfil-Hidden-Form");
+  });
+
+  it("derives the exfil htmlPattern bounds from HTML_SNIPPET_MAX so they can't drift from the slice (D-REDOS)", () => {
+    const cap = `{0,${HTML_SNIPPET_MAX}}`;
+    const form = KIT_FINGERPRINTS.find((k) => k.name === "Exfil-Hidden-Form");
+    const iframe = KIT_FINGERPRINTS.find((k) => k.name === "Data-Exfil-Iframe");
+    expect(form?.htmlPatterns?.[0]?.source).toContain(cap);
+    expect(iframe?.htmlPatterns?.[0]?.source).toContain(cap);
+  });
+
+  it("detects a data-exfil iframe by an src keyword via the bounded regex (D-REDOS)", () => {
+    const snap = loginSnapshot({
+      htmlSnippet: '<iframe src="https://evil.example/api/exfil/data"></iframe>',
+    });
+    const result = analyzeSnapshot(snap, "phish.com");
+    expect(result.phishingKitMatch).toBe(true);
+    expect(result.kitName).toBe("Data-Exfil-Iframe");
+  });
+
+  it("still matches a heavily-padded hidden form within the snippet cap (no FN regression, D-REDOS)", () => {
+    // ~1.6KB of attributes before `style` + whitespace `display: none` (missed by
+    // the [style*="display:none"] selector). The {0,10000} ceiling equals the
+    // htmlSnippet cap, so this still matches — it would FAIL if the bound were
+    // re-tightened below the realistic range, guarding against a detection-
+    // narrowing regression while keeping the quantifiers non-unbounded.
+    const pad = 'data-x="1" '.repeat(150); // ~1650 chars, well under the 10KB cap
+    const snap = loginSnapshot({
+      htmlSnippet: `<form ${pad}style="display: none"><input type="password" /></form>`,
+    });
+    const result = analyzeSnapshot(snap, "phish.com");
+    expect(result.phishingKitMatch).toBe(true);
+    expect(result.kitName).toBe("Exfil-Hidden-Form");
   });
 
   it("detects Gophish meta tag", () => {

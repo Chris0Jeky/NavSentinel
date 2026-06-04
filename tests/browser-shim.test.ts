@@ -159,6 +159,29 @@ describe("sendMessageP", () => {
 
     await expect(sendMessageP({ type: "ping" })).rejects.toThrow("boom");
   });
+
+  it("uses the promise form on Firefox (no callback)", async () => {
+    const sendMessage = vi.fn(() => Promise.resolve({ pong: true }));
+    const ns = { runtime: { sendMessage }, storage: {} };
+    g.browser = ns;
+    g.chrome = ns;
+    vi.resetModules();
+    const { sendMessageP } = await import("../extension/src/shared/browser");
+
+    await expect(sendMessageP<{ pong: boolean }>({ type: "ping" })).resolves.toEqual({ pong: true });
+    expect(sendMessage).toHaveBeenCalledWith({ type: "ping" });
+  });
+
+  it("rejects with the native promise rejection on Firefox", async () => {
+    const sendMessage = vi.fn(() => Promise.reject(new Error("ff error")));
+    const ns = { runtime: { sendMessage }, storage: {} };
+    g.browser = ns;
+    g.chrome = ns;
+    vi.resetModules();
+    const { sendMessageP } = await import("../extension/src/shared/browser");
+
+    await expect(sendMessageP({ type: "ping" })).rejects.toThrow("ff error");
+  });
 });
 
 // ---------------------------------------------------------------------------

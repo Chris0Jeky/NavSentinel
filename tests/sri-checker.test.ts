@@ -63,6 +63,35 @@ describe("sri_checker - non-credential pages", () => {
     expect(result.withSRI).toBe(0);
     expect(result.withoutSRI).toBe(0);
   });
+
+  // Pre-fix, hasPasswordField counted any non-disabled field, so a hidden-only
+  // password page was wrongly scanned (totalExternal=1, score=8). Cover all four
+  // inline-hidden substring branches independently so dropping any one of them
+  // re-introduces the #192 regression and fails here.
+  it.each([
+    "display:none",
+    "display: none",
+    "visibility:hidden",
+    "visibility: hidden",
+  ])("does not scan when the only password field is hidden via style=%j (#192)", (style) => {
+    const html =
+      `<!doctype html><html><head>${scriptTag(`${EXTERNAL_ORIGIN}/app.js`)}</head>` +
+      `<body><form><input type="password" name="pw" style="${style}"></form></body></html>`;
+    const result = checkSRI(makeDoc(html), PAGE_URL, PAGE_ORIGIN);
+    expect(result.totalExternal).toBe(0);
+    expect(result.score).toBe(0);
+  });
+
+  it("DOES scan when a visible password field coexists with a hidden one (#192)", () => {
+    // Guard the fix's specificity: a real (visible) credential field still gates
+    // SRI on, even if a decoy hidden password field is also present.
+    const html =
+      `<!doctype html><html><head>${scriptTag(`${EXTERNAL_ORIGIN}/app.js`)}</head>` +
+      `<body><form><input type="password" name="hidden" style="display:none">` +
+      `<input type="password" name="real"></form></body></html>`;
+    const result = checkSRI(makeDoc(html), PAGE_URL, PAGE_ORIGIN);
+    expect(result.totalExternal).toBe(1);
+  });
 });
 
 // ---------------------------------------------------------------------------

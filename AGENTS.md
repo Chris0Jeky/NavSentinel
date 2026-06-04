@@ -31,13 +31,24 @@ Do not rely on Claude-only `.claude/settings.json` hooks for Codex safety. Apply
 
 ## First 5 Minutes
 
-1. Read `docs/Project_Roadmap.md`.
-2. Read `autodoc/AGENT_INDEX.md`.
-3. Select one primary `.agents/skills/*` workflow and at most one support workflow.
-4. Identify the smallest safe, reviewable change.
-5. State blockers, assumptions, verification target, and docs-sync target before editing.
+1. Read `ACTION_ITEMS.md` (human-owned tasks + current-state snapshot — see Human Action Items below).
+2. Read `docs/Project_Roadmap.md`.
+3. Read `autodoc/AGENT_INDEX.md`.
+4. Select one primary `.agents/skills/*` workflow and at most one support workflow.
+5. Identify the smallest safe, reviewable change.
+6. State blockers, assumptions, verification target, and docs-sync target before editing.
 
 Do not bulk-read `node_modules`, build output, generated data, archive docs, or research dumps unless the task explicitly requires them.
+
+## Human Action Items
+
+`ACTION_ITEMS.md` (repo root) is the running list of tasks only the user (Chris) can do — manual browser testing, merge go/no-go, product decisions — plus a verified current-state snapshot. It exists because some gates (e.g. Gate 3 manual Chrome testing) cannot be cleared from the agent sandbox.
+
+1. Read it at session start (step 1 above).
+2. Flag every OPEN / BLOCKED item near the top of any summary, status report, or handoff. Never let an open item go unmentioned.
+3. Clear an item only on explicit user confirmation; move it to the Completed log with date + one-line result. Never self-clear.
+4. Keep the current-state snapshot accurate when verified truth changes. While `main`'s status docs are stale/conflicted by open PRs, this file plus session memory are the source of truth.
+5. When you find a new human-only task, add it as a new `AI-N` item with a step-by-step guide and tell the user.
 
 ## Project Structure
 

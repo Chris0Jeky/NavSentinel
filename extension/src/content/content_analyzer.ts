@@ -182,6 +182,16 @@ export const BRAND_DB: ReadonlyArray<BrandEntry> = [
 // Phishing kit fingerprints
 // ---------------------------------------------------------------------------
 
+/**
+ * Max chars of innerHTML serialized into the snapshot's htmlSnippet. The two
+ * "exfil" htmlPatterns below derive their quantifier ceilings from this so a
+ * bounded `{0,HTML_SNIPPET_MAX}` run matches exactly what an unbounded `*` would
+ * (every snippet is ≤ this many chars) — keeping the regexes free of the
+ * unbounded-quantifier ReDoS shape (#192) with zero detection change, and with
+ * no risk of the slice and the bounds silently diverging.
+ */
+export const HTML_SNIPPET_MAX = 10000;
+
 export interface KitFingerprint {
   name: string;
   /** CSS selectors or attribute patterns to look for */
@@ -268,11 +278,28 @@ export const KIT_FINGERPRINTS: ReadonlyArray<KitFingerprint> = [
   {
     name: "Exfil-Hidden-Form",
     selectors: ['form[style*="display:none"]', 'form[style*="visibility:hidden"]'],
-    htmlPatterns: [/<form[^>]*style\s*=\s*["'][^"']*(?:display\s*:\s*none|visibility\s*:\s*hidden)/i],
+    // Built from HTML_SNIPPET_MAX (see above) so the ceiling can never drift from
+    // the htmlSnippet slice: the prior `[^>]*`/`[^"']*` were the unbounded-run
+    // shape #192 flagged, and a `{0,HTML_SNIPPET_MAX}` run matches exactly what `*`
+    // did for any ≤-cap input — zero detection change, defense-in-depth only.
+    htmlPatterns: [
+      new RegExp(
+        String.raw`<form[^>]{0,${HTML_SNIPPET_MAX}}style\s*=\s*["'][^"']{0,${HTML_SNIPPET_MAX}}(?:display\s*:\s*none|visibility\s*:\s*hidden)`,
+        "i",
+      ),
+    ],
   },
   {
     name: "Data-Exfil-Iframe",
-    htmlPatterns: [/<iframe[^>]*src\s*=\s*["'](?:https?:\/\/[^"']*(?:collect|exfil|log|grab|steal|capture))/i],
+    // Same HTML_SNIPPET_MAX-derived ceiling as Exfil-Hidden-Form. This one has no
+    // selector fallback, so the bound is the full snippet cap to avoid any false
+    // negative from an attacker-padded src.
+    htmlPatterns: [
+      new RegExp(
+        String.raw`<iframe[^>]{0,${HTML_SNIPPET_MAX}}src\s*=\s*["']https?://[^"']{0,${HTML_SNIPPET_MAX}}(?:collect|exfil|log|grab|steal|capture)`,
+        "i",
+      ),
+    ],
   },
   {
     name: "Telegram-Exfil",
@@ -387,8 +414,9 @@ export function buildPageSnapshot(doc: Document): PageSnapshot {
     ? (body.innerText ?? body.textContent ?? "").slice(0, 5000).toLowerCase()
     : "";
 
-  // HTML snippet -- limited to 10 KB to avoid serializing the entire DOM
-  const htmlSnippet = doc.documentElement.innerHTML.slice(0, 10000);
+  // HTML snippet -- limited to HTML_SNIPPET_MAX chars to avoid serializing the
+  // entire DOM (the exfil htmlPatterns derive their quantifier bounds from this).
+  const htmlSnippet = doc.documentElement.innerHTML.slice(0, HTML_SNIPPET_MAX);
 
   // Script text
   const scripts = doc.querySelectorAll("script");

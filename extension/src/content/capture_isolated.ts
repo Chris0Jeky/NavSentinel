@@ -42,6 +42,7 @@ import {
 } from "./dom_builder";
 import { setDebugEnabled, updateDebugOverlay, type DebugInfo } from "./debug_overlay";
 import { recordClipboardWrite, scanForClickFix } from "./clickfix_detector";
+import { OutboundQueue } from "./bridge_outbound";
 import {
   handleDblclickBridgeMessage,
   handleDblclickRuntimeMessage,
@@ -64,7 +65,7 @@ import {
 } from "./pushstate_guard";
 import { analyzeCSP, type CSPAnalysis } from "./csp_analyzer";
 import { getDomainRisk, recordNavigation } from "../shared/domain_profile";
-import { recordNavigationAnomaly, getAnomalyScoreSync } from "../shared/nav_anomaly";
+import { recordNavigationAnomaly, getAnomalyScoreSync, primeAnomalySession } from "../shared/nav_anomaly";
 
 const CDS_SMART_BLOCK_THRESHOLD = 70;
 const NS_SOURCE = "__navsentinel__";
@@ -127,7 +128,18 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 let bridgePort: MessagePort | null = null;
 let bridgeReady = false;
 const bridgeSession = makeBridgeSession();
-const pendingBridgeMessages: Array<{ type: string; payload?: Record<string, unknown> }> = [];
+// Pre-ready buffer for isolated → main messages. On overflow it keeps control
+// relays (mode config + allow decisions) that change guard behavior over routine
+// pings — see bridge_outbound.ts.
+const pendingBridgeMessages = new OutboundQueue(MAX_PENDING_BRIDGE_MESSAGES);
+// Isolated → main control messages that must survive buffer pressure.
+const PRIORITY_BRIDGE_TYPES = new Set<string>([
+  "ns-config",
+  "ns-allow",
+  "ns-allow-once",
+  "ns-allow-action",
+  "ns-allow-target-nav",
+]);
 let mainGuard: "unknown" | "yes" | "no" = "unknown";
 let lastNav: { kind: string; url: string; status: "allowed" | "blocked" } | null = null;
 let lastDebug: Omit<DebugInfo, "mainGuard" | "lastNav"> | null = null;
@@ -269,6 +281,11 @@ async function initSettings() {
   void getDomainRisk(siteKeyFromLocation()).then((risk) => {
     cachedDomainRepeatOffender = risk.isRepeatOffender;
   }).catch((err) => { console.warn("[NavSentinel] domain profile pre-fetch failed:", err); });
+  // Seed the nav-anomaly session count from the stored profile so the sync
+  // anomaly score works for a returning user on this fresh content-script load.
+  void primeAnomalySession().catch((err) => {
+    console.warn("[NavSentinel] nav anomaly prime failed:", err);
+  });
   previousMode = settings.defaultMode;
   if (isTopFrame()) {
     sendIconUpdate(settings.defaultMode === "off" ? "gray" : "green");
@@ -329,14 +346,10 @@ function frameKey(): string {
 function postToMain(type: string, payload?: Record<string, unknown>): void {
   if (mainGuard === "no") return;
   if (!bridgeReady) {
-    pendingBridgeMessages.push(
-      payload !== undefined
-        ? { type, payload }
-        : { type }
+    pendingBridgeMessages.enqueue(
+      payload !== undefined ? { type, payload } : { type },
+      PRIORITY_BRIDGE_TYPES.has(type)
     );
-    if (pendingBridgeMessages.length > MAX_PENDING_BRIDGE_MESSAGES) {
-      pendingBridgeMessages.splice(0, pendingBridgeMessages.length - MAX_PENDING_BRIDGE_MESSAGES);
-    }
     ensureBridge();
     return;
   }
@@ -345,15 +358,21 @@ function postToMain(type: string, payload?: Record<string, unknown>): void {
 
 function flushBridgeMessages(): void {
   if (!bridgeReady || !bridgePort) return;
-  while (pendingBridgeMessages.length > 0) {
-    const next = pendingBridgeMessages.shift();
-    if (!next) break;
+  const { items, dropped } = pendingBridgeMessages.drain();
+  for (const next of items) {
     bridgePort.postMessage({
       source: NS_SOURCE,
       type: next.type,
       v: PROTOCOL_VERSION,
       session: bridgeSession,
       ...(next.payload ?? {})
+    });
+  }
+  if (dropped > 0) {
+    appendEventSafely({
+      kind: "bridge_buffer_overflow",
+      site: siteKeyFromLocation(),
+      extra: { direction: "isolated_to_main", dropped },
     });
   }
 }
@@ -389,6 +408,8 @@ function handleBridgeMessage(message: unknown): void {
     method?: string;
     // Allow-target-nav relay (ns-allow-target-nav)
     ttlMs?: number;
+    // Pre-verification buffer overflow count (ns-bridge-overflow)
+    dropped?: number;
   };
   if (!data || data.source !== NS_SOURCE || data.v !== PROTOCOL_VERSION) return;
 
@@ -412,6 +433,20 @@ function handleBridgeMessage(message: unknown): void {
 
   if (data.type === "ns-pong" || data.type === "ns-config-ack") {
     markMainGuardReady();
+    return;
+  }
+
+  if (data.type === "ns-bridge-overflow") {
+    // MAIN-world guard dropped buffered messages before the bridge verified;
+    // record it in the trusted event log rather than discarding it silently.
+    const dropped = typeof data.dropped === "number" ? data.dropped : 0;
+    if (dropped > 0) {
+      appendEventSafely({
+        kind: "bridge_buffer_overflow",
+        site: siteKeyFromLocation(),
+        extra: { direction: "main_to_isolated", dropped },
+      });
+    }
     return;
   }
 
@@ -546,7 +581,7 @@ function ensureBridge(): void {
       mainGuard = "no";
       bridgeRetryDelayMs = BRIDGE_RETRY_MS;
       bridgeInitStartedAt = 0;
-      pendingBridgeMessages.length = 0;
+      pendingBridgeMessages.drain(); // discard buffered messages; guard is disabled
       refreshDebug();
       return;
     }

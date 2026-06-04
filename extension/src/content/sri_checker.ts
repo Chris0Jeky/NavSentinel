@@ -59,13 +59,24 @@ function isCrossOrigin(resourceUrl: string, pageOrigin: string, pageUrl: string)
 }
 
 /**
- * Check whether the page has at least one non-disabled password input.
+ * Check whether the page has at least one non-disabled, non-(inline-)hidden
+ * password input. The hidden check mirrors content_analyzer.ts buildPageSnapshot
+ * so SRI analysis and content fingerprinting agree on what counts as a "real"
+ * credential field — a display:none / visibility:hidden password input should not
+ * trigger SRI checks (#192). (The two copies of this style check are intentionally
+ * kept in sync; a shared helper could DRY them up in a follow-up.)
  */
 function hasPasswordField(doc: Document): boolean {
   const inputs = doc.querySelectorAll('input[type="password"]');
   for (let i = 0; i < inputs.length; i++) {
     const input = inputs[i] as HTMLInputElement;
-    if (!input.disabled) return true;
+    if (input.disabled) continue;
+    const style = input.getAttribute("style") || "";
+    if (style.includes("display:none") || style.includes("display: none") ||
+        style.includes("visibility:hidden") || style.includes("visibility: hidden")) {
+      continue;
+    }
+    return true;
   }
   return false;
 }

@@ -1,4 +1,5 @@
 import { initJsBehaviorMonitor } from "./js_behavior_monitor";
+import { OutboundQueue, isMainGuardAlertType } from "./bridge_outbound";
 
 const NS_SOURCE = "__navsentinel__";
 const BRIDGE_INIT_TYPE = "ns-port-init";
@@ -11,6 +12,11 @@ const ALLOW_ONCE_TTL_MS = 1200;
 const BLOCKED_ACTION_TTL_MS = 5000;
 const MAX_POPUP_INTENT_VIEWPORT_SHARE = 0.35;
 const PROTOCOL_VERSION = 1;
+// Max time to wait for the isolated world to echo the bridge challenge before
+// the half-open handshake is torn down. Must be shorter than the isolated
+// side's total bridge-init budget (MAX_BRIDGE_INIT_MS = 10s) so a legitimate
+// retry can still re-establish after a dead or hostile first init is released.
+const BRIDGE_HANDSHAKE_TIMEOUT_MS = 3000;
 // 800ms covers accessibility settings with wider double-click windows (up to 900ms+).
 // Combined with window.open + opener.location correlation, FP risk from the wider
 // window is minimal.
@@ -29,15 +35,19 @@ let bridgePort: MessagePort | null = null;
 let bridgeSession: string | null = null;
 let bridgeVerified = false;
 let bridgeChallenge: string | null = null;
+let bridgeHandshakeTimer = 0;
 const MAX_PENDING_OUTBOUND = 32;
-const pendingOutbound: Array<{ type: string; payload?: Record<string, unknown> }> = [];
+// Buffers messages produced before the bridge is verified. On overflow it keeps
+// security-relevant alerts (never evicted by routine traffic) and the earliest
+// of equal-priority messages — see bridge_outbound.ts for the rationale.
+const pendingOutbound = new OutboundQueue(MAX_PENDING_OUTBOUND);
 
 function postToIsolated(type: string, payload?: Record<string, unknown>): void {
   if (!bridgePort || !bridgeSession || !bridgeVerified) {
-    pendingOutbound.push({ type, ...(payload !== undefined ? { payload } : {}) });
-    if (pendingOutbound.length > MAX_PENDING_OUTBOUND) {
-      pendingOutbound.splice(0, pendingOutbound.length - MAX_PENDING_OUTBOUND);
-    }
+    pendingOutbound.enqueue(
+      { type, ...(payload !== undefined ? { payload } : {}) },
+      isMainGuardAlertType(type)
+    );
     return;
   }
   bridgePort.postMessage({
@@ -50,10 +60,48 @@ function postToIsolated(type: string, payload?: Record<string, unknown>): void {
 }
 
 function flushPendingOutbound(): void {
-  const snapshot = pendingOutbound.splice(0);
-  for (const msg of snapshot) {
+  const { items, dropped } = pendingOutbound.drain();
+  for (const msg of items) {
     postToIsolated(msg.type, msg.payload);
   }
+  // Surface any drop through the (now-verified) bridge so the isolated side can
+  // record it in the trusted event log — not silently discarded in production.
+  if (dropped > 0) {
+    if (debug) {
+      console.debug(`[NavSentinel] dropped ${dropped} pre-verification bridge message(s) on overflow`);
+    }
+    postToIsolated("ns-bridge-overflow", { dropped });
+  }
+}
+
+function clearBridgeHandshakeTimer(): void {
+  if (bridgeHandshakeTimer) {
+    clearTimeout(bridgeHandshakeTimer);
+    bridgeHandshakeTimer = 0;
+  }
+}
+
+/**
+ * Tear down a bridge handshake that never completed. Without this, a port whose
+ * peer never echoes the challenge (a dead isolated context, or a hostile page
+ * that posts a bridge init first and then stalls) would pin `bridgeSession`
+ * forever — the `bridgeSession && data.session !== bridgeSession` guard would
+ * then reject the real isolated world's init, permanently disabling the bridge
+ * while messages buffer and drop. Releasing the half-open state lets a fresh
+ * init (any session) re-establish. Buffered messages are preserved for it.
+ */
+function failBridgeHandshake(): void {
+  bridgeHandshakeTimer = 0;
+  if (bridgeVerified) return;
+  try {
+    bridgePort?.close();
+  } catch {
+    /* port may already be closed */
+  }
+  bridgePort = null;
+  bridgeSession = null;
+  bridgeChallenge = null;
+  bridgeVerified = false;
 }
 
 let mode: "off" | "smart" | "strict" = "off";
@@ -816,7 +864,20 @@ window.addEventListener(
     };
     if (!data || data.source !== NS_SOURCE || data.v !== PROTOCOL_VERSION) return;
     if (data.type !== BRIDGE_INIT_TYPE || typeof data.session !== "string" || !data.session) return;
-    if (bridgeSession && data.session !== bridgeSession) return;
+    // Only a VERIFIED bridge pins its session — that prevents post-verification
+    // hijack by a *different* session. An unverified session has not proven
+    // legitimacy, so a fresh init (e.g. the real isolated world arriving after a
+    // hostile page raced an init first) is allowed to take over the handshake
+    // instead of being locked out.
+    //
+    // Residual init-auth limits (best-effort; the session travels in a
+    // page-visible postMessage and the challenge is echoable, so this is not a
+    // hard boundary — all tracked in #186): a main-world attacker can (a) replay
+    // the known session to re-pin even a verified bridge, and (b) thrash repeated
+    // inits to keep the bridge unverified until the isolated side disables the
+    // guard (~10s). Both are strictly less severe than the permanent lockout this
+    // change replaced; the real fix is SW-vouched init authentication (#186).
+    if (bridgeVerified && bridgeSession && data.session !== bridgeSession) return;
 
     const nextPort = event.ports?.[0];
     if (!(nextPort instanceof MessagePort)) return;
@@ -824,6 +885,8 @@ window.addEventListener(
     event.stopImmediatePropagation();
     event.stopPropagation();
 
+    // A new init supersedes any handshake already in progress; drop its timer.
+    clearBridgeHandshakeTimer();
     bridgePort?.close();
     bridgePort = nextPort;
     bridgeSession = data.session;
@@ -834,6 +897,7 @@ window.addEventListener(
       const msg = bridgeEvent.data as { source?: string; type?: string; challenge?: string };
       if (!bridgeVerified) {
         if (msg && msg.source === NS_SOURCE && msg.type === "ns-challenge-response" && msg.challenge === bridgeChallenge) {
+          clearBridgeHandshakeTimer();
           bridgeVerified = true;
           bridgeChallenge = null;
           bridgePort!.onmessage = (e) => handleBridgeMessage(e.data);
@@ -853,6 +917,10 @@ window.addEventListener(
       session: bridgeSession,
       challenge: bridgeChallenge
     });
+
+    // If the peer never echoes the challenge, release the half-open handshake
+    // so a fresh init can re-establish the bridge instead of deadlocking.
+    bridgeHandshakeTimer = window.setTimeout(failBridgeHandshake, BRIDGE_HANDSHAKE_TIMEOUT_MS);
   },
   true
 );

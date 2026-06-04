@@ -206,56 +206,103 @@ export function recordNavigation(
 
 /**
  * Compute a risk assessment for the given domain.
+ *
+ * Serialized through the same `pending` chain as recordNavigation: this reader
+ * can apply decay and persist the result, so it must not interleave with a
+ * concurrent navigation's read-modify-write (whose update would otherwise be
+ * lost when this function saves its pre-write snapshot).
  */
-export async function getDomainRisk(domain: string): Promise<DomainRiskAssessment> {
-  const profiles = await loadProfiles();
-  const profile = profiles.get(domain);
+export function getDomainRisk(domain: string): Promise<DomainRiskAssessment> {
+  const next = pending.then(async (): Promise<DomainRiskAssessment> => {
+    const profiles = await loadProfiles();
+    const profile = profiles.get(domain);
 
-  if (!profile || profile.visits === 0) {
-    return { avgNRS: 0, consistency: 0, isRepeatOffender: false, topFactors: [] };
-  }
+    if (!profile || profile.visits === 0) {
+      return { avgNRS: 0, consistency: 0, isRepeatOffender: false, topFactors: [] };
+    }
 
-  const now = Date.now();
-  const decayed = applyDecay(profile, now);
+    const now = Date.now();
+    const decayed = applyDecay(profile, now);
 
-  if (decayed) {
-    await saveProfiles(profiles);
-  }
+    if (decayed) {
+      await saveProfiles(profiles);
+    }
 
-  return computeAssessment(profile);
+    return computeAssessment(profile);
+  });
+  pending = next.catch((err) => { console.warn("[NavSentinel] profile serialization error:", err); });
+  return next;
 }
 
 /**
  * Return the top N most suspicious domain profiles, ordered by avgNRS desc.
+ *
+ * Serialized through the `pending` chain: it applies decay across all profiles
+ * and may persist that snapshot, so it must not interleave with a concurrent
+ * recordNavigation (whose update would be overwritten by this stale snapshot).
  */
-export async function getTopSuspiciousDomains(limit: number): Promise<DomainProfile[]> {
-  const profiles = await loadProfiles();
-  const now = Date.now();
+export function getTopSuspiciousDomains(limit: number): Promise<DomainProfile[]> {
+  const next = pending.then(async (): Promise<DomainProfile[]> => {
+    const profiles = await loadProfiles();
+    const now = Date.now();
 
-  let anyDecayed = false;
-  for (const profile of profiles.values()) {
-    if (applyDecay(profile, now)) {
-      anyDecayed = true;
+    let anyDecayed = false;
+    for (const profile of profiles.values()) {
+      if (applyDecay(profile, now)) {
+        anyDecayed = true;
+      }
     }
-  }
 
-  if (anyDecayed) {
-    await saveProfiles(profiles);
-  }
+    if (anyDecayed) {
+      await saveProfiles(profiles);
+    }
 
-  return [...profiles.values()]
-    .filter((p) => p.visits > 0)
-    .sort((a, b) => {
-      const avgA = a.totalNRS / a.visits;
-      const avgB = b.totalNRS / b.visits;
-      return avgB - avgA;
-    })
-    .slice(0, limit);
+    return [...profiles.values()]
+      .filter((p) => p.visits > 0)
+      .sort((a, b) => {
+        const avgA = a.totalNRS / a.visits;
+        const avgB = b.totalNRS / b.visits;
+        return avgB - avgA;
+      })
+      .slice(0, limit);
+  });
+  pending = next.catch((err) => { console.warn("[NavSentinel] profile serialization error:", err); });
+  return next;
 }
 
 /**
  * Clear all stored domain profiles.
+ *
+ * Serialized through the `pending` chain so it cannot interleave with a
+ * recordNavigation read-modify-write (otherwise a clear issued between a
+ * navigation's load and save would be silently resurrected, or a navigation's
+ * update would survive a clear the user just requested).
  */
-export async function clearDomainProfiles(): Promise<void> {
-  await chrome.storage.local.set({ [DOMAIN_PROFILES_KEY]: {} });
+export function clearDomainProfiles(): Promise<void> {
+  const next = pending.then(async (): Promise<void> => {
+    await chrome.storage.local.set({ [DOMAIN_PROFILES_KEY]: {} });
+  });
+  pending = next.catch((err) => { console.warn("[NavSentinel] profile serialization error:", err); });
+  return next;
+}
+
+/**
+ * Test-only: reset the module-level serialization chain so that fire-and-forget
+ * operations queued by one test cannot leak into the next. Not part of the
+ * runtime API.
+ *
+ * CAVEAT: this reassigns `pending` to a fresh resolved promise; it does NOT
+ * cancel `.then()` callbacks already queued on the previous chain. A test that
+ * issues a fire-and-forget op (e.g. `void recordNavigation(...)`) MUST await it
+ * to completion before relying on this reset — otherwise the prior op can still
+ * run and mutate shared state after the next test begins.
+ *
+ * NOTE (known limitation): `pending` is per-content-script-context. With
+ * `all_frames: true`, each frame has its own chain, so two frames racing
+ * recordNavigation for the same domain can still lose an update at the shared
+ * chrome.storage.local layer. Cross-context serialization is tracked separately
+ * (out of scope for this single-context fix; see issue #181).
+ */
+export function _resetSerializationForTests(): void {
+  pending = Promise.resolve();
 }

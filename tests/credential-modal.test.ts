@@ -670,5 +670,169 @@ describe("credential modal", () => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
       await promise;
     });
+
+    it("recaptures programmatic page focus to the first modal button", async () => {
+      const outside = document.createElement("button");
+      outside.textContent = "Outside";
+      document.body.appendChild(outside);
+      let promise: Promise<string> | null = null;
+
+      try {
+        promise = showCredentialModal(
+          minimalSpec({
+            actions: [
+              { id: "a", label: "First", kind: "primary" },
+              { id: "b", label: "Last", kind: "danger" },
+            ],
+          }),
+        );
+        vi.runAllTimers();
+
+        const buttons = getButtons();
+        outside.focus();
+
+        expect(getShadow()!.activeElement).toBe(buttons[0]);
+
+        getButtons()[0]!.click();
+        await promise;
+      } finally {
+        if (getOverlay()) {
+          window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+          await promise;
+        }
+        outside.remove();
+      }
+    });
+
+    it("keeps Shift+Tab wrapping after recapturing page focus", async () => {
+      const outside = document.createElement("button");
+      outside.textContent = "Outside";
+      document.body.appendChild(outside);
+      let promise: Promise<string> | null = null;
+
+      try {
+        promise = showCredentialModal(
+          minimalSpec({
+            actions: [
+              { id: "a", label: "First", kind: "primary" },
+              { id: "b", label: "Last", kind: "danger" },
+            ],
+          }),
+        );
+        vi.runAllTimers();
+
+        const buttons = getButtons();
+        outside.focus();
+        expect(getShadow()!.activeElement).toBe(buttons[0]);
+
+        const tabEvent = new KeyboardEvent("keydown", {
+          key: "Tab",
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        });
+        const preventSpy = vi.spyOn(tabEvent, "preventDefault");
+        window.dispatchEvent(tabEvent);
+
+        expect(preventSpy).toHaveBeenCalled();
+        expect(getShadow()!.activeElement).toBe(buttons[1]);
+
+        getButtons()[0]!.click();
+        await promise;
+      } finally {
+        if (getOverlay()) {
+          window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+          await promise;
+        }
+        outside.remove();
+      }
+    });
+
+    it("recaptures programmatic page focus before outside Enter handlers run", async () => {
+      const outside = document.createElement("button");
+      outside.textContent = "Outside";
+      const outsideKeydown = vi.fn();
+      outside.addEventListener("keydown", outsideKeydown);
+      document.body.appendChild(outside);
+      let promise: Promise<string> | null = null;
+
+      try {
+        promise = showCredentialModal(
+          minimalSpec({
+            actions: [
+              { id: "a", label: "First", kind: "primary" },
+              { id: "b", label: "Last", kind: "danger" },
+            ],
+          }),
+        );
+        vi.runAllTimers();
+
+        const buttons = getButtons();
+        outside.focus();
+
+        expect(getShadow()!.activeElement).toBe(buttons[0]);
+
+        const activeTarget =
+          (getShadow()!.activeElement as HTMLElement | null) ??
+          (document.activeElement as HTMLElement | null);
+        activeTarget?.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key: "Enter",
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+          }),
+        );
+
+        expect(outsideKeydown).not.toHaveBeenCalled();
+
+        getButtons()[0]!.click();
+        await promise;
+      } finally {
+        if (getOverlay()) {
+          window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+          await promise;
+        }
+        outside.remove();
+      }
+    });
+
+    it("recaptures focus before a page focusin listener registered before modal open can stop propagation", async () => {
+      const outside = document.createElement("button");
+      outside.textContent = "Outside";
+      document.body.appendChild(outside);
+      const stopFocusIn = vi.fn((event: Event) => event.stopImmediatePropagation());
+      window.addEventListener("focusin", stopFocusIn, true);
+      let promise: Promise<string> | null = null;
+
+      try {
+        promise = showCredentialModal(
+          minimalSpec({
+            actions: [
+              { id: "a", label: "First", kind: "primary" },
+              { id: "b", label: "Last", kind: "danger" },
+            ],
+          }),
+        );
+        vi.runAllTimers();
+
+        const buttons = getButtons();
+        stopFocusIn.mockClear();
+        outside.focus();
+
+        expect(stopFocusIn).toHaveBeenCalled();
+        expect(getShadow()!.activeElement).toBe(buttons[0]);
+
+        getButtons()[0]!.click();
+        await promise;
+      } finally {
+        window.removeEventListener("focusin", stopFocusIn, true);
+        if (getOverlay()) {
+          window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+          await promise;
+        }
+        outside.remove();
+      }
+    });
   });
 });

@@ -91,6 +91,7 @@ const KEYS = {
   childWindow: `${PREFIX}childWindow`,
   oauthFlow: `${PREFIX}oauthFlow`,
   redirectChains: `${PREFIX}redirectChains`,
+  captureTimestamps: `${PREFIX}captureTimestamps`,
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -160,6 +161,11 @@ export class SessionStateManager {
   // Redirect chain data (separate because RedirectChainTracker has its own class)
   readonly redirectChainData = new Map<number, RedirectChain>();
 
+  // Per-tab viewport-capture timestamps (visual-sim rate limit). Session-backed
+  // so the rate limit survives SW restart and cannot be bypassed by forcing a
+  // worker recycle between bursts.
+  readonly captureTimestampsByTab = new Map<number, number[]>();
+
   private _hydrated = false;
   private _hydratePromise: Promise<void> | null = null;
 
@@ -200,6 +206,7 @@ export class SessionStateManager {
       this._restoreMap(this.childWindowByTab, data[KEYS.childWindow]);
       this._restoreMap(this.oauthFlowByTab, data[KEYS.oauthFlow]);
       this._restoreRedirectChains(data[KEYS.redirectChains]);
+      this._restoreMap(this.captureTimestampsByTab, data[KEYS.captureTimestamps]);
     } catch (err) {
       console.warn("[NavSentinel] session storage hydration failed:", err);
     }
@@ -247,6 +254,7 @@ export class SessionStateManager {
       [KEYS.childWindow]: mapToObj(this.childWindowByTab),
       [KEYS.oauthFlow]: mapToObj(this.oauthFlowByTab),
       [KEYS.redirectChains]: mapToObj(this.redirectChainData),
+      [KEYS.captureTimestamps]: mapToObj(this.captureTimestampsByTab),
     };
     void chrome.storage.session.set(data).catch((err) => {
       console.warn("[NavSentinel] session persistAll failed:", err);
@@ -274,6 +282,7 @@ export class SessionStateManager {
     this.childWindowByTab.delete(tabId);
     this.oauthFlowByTab.delete(tabId);
     this.redirectChainData.delete(tabId);
+    this.captureTimestampsByTab.delete(tabId);
     // Batch persist after bulk delete
     this.persistAll();
   }

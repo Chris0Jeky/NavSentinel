@@ -3,7 +3,7 @@ import type { CredMode, EventLogEntry, SuiteSettings } from "../shared/storage";
 import { classifyEventTone } from "../shared/event_tone";
 import { icon, logoSentinel } from "../shared/icons";
 import { getSegValue, initSegKeyboard, setSegValue } from "../shared/seg_control";
-import { pct, avg, fmtTime, parseIntSafe } from "./options_model";
+import { pct, avg, fmtTime, parseIntSafe, withReentrancyGuard } from "./options_model";
 import {
   addTrustedDomainWithResult,
   appendEvent,
@@ -453,7 +453,14 @@ async function init(): Promise<void> {
   await refreshDomainProfiles();
 }
 
-saveBtn.addEventListener("click", async () => {
+saveBtn.addEventListener("click", withReentrancyGuard(
+  () => saveBtn.disabled,
+  (busy) => { saveBtn.disabled = busy; },
+  async () => {
+  // Guarded against concurrent saves (withReentrancyGuard): a double/triple-click
+  // before the first updateSuiteSettings() resolves would otherwise fire
+  // overlapping read-modify-write calls. The inner try/catch drives the
+  // user-facing status; the guard owns the busy flag + reset.
   try {
     const nav = {
       defaultMode: getSegValue(navModeSeg) as Mode,
@@ -483,7 +490,7 @@ saveBtn.addEventListener("click", async () => {
     console.warn("[NavSentinel] settings save failed:", e);
     flashStatus(saveStatusEl, "Save failed.", "error");
   }
-});
+}));
 
 clearAllowlistBtn.addEventListener("click", async () => {
   await clearAllowlist();

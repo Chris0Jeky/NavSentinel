@@ -1,5 +1,11 @@
-import { describe, expect, it } from "vitest";
-import { pct, avg, fmtTime, parseIntSafe } from "../extension/src/options/options_model";
+import { describe, expect, it, vi } from "vitest";
+import {
+  pct,
+  avg,
+  fmtTime,
+  parseIntSafe,
+  withReentrancyGuard,
+} from "../extension/src/options/options_model";
 
 describe("pct", () => {
   it("formats percentage with one decimal", () => {
@@ -120,5 +126,43 @@ describe("parseIntSafe", () => {
 
   it("handles leading zeros", () => {
     expect(parseIntSafe("007", 0)).toBe(7);
+  });
+});
+
+describe("withReentrancyGuard", () => {
+  it("ignores a re-entrant call while one is in flight (fn runs once)", async () => {
+    let busy = false;
+    let resolveFn!: () => void;
+    const fn = vi.fn(() => new Promise<void>((r) => { resolveFn = r; }));
+    const guarded = withReentrancyGuard(() => busy, (b) => { busy = b; }, fn);
+
+    const first = guarded(); // runs synchronously up to the await: sets busy, calls fn once
+    expect(busy).toBe(true);
+    await guarded(); // re-entrant while busy → ignored
+    expect(fn).toHaveBeenCalledTimes(1);
+
+    resolveFn();
+    await first;
+    expect(busy).toBe(false); // reset after completion
+  });
+
+  it("can run again after the previous call completes", async () => {
+    let busy = false;
+    const fn = vi.fn(() => Promise.resolve());
+    const guarded = withReentrancyGuard(() => busy, (b) => { busy = b; }, fn);
+
+    await guarded();
+    await guarded();
+    expect(fn).toHaveBeenCalledTimes(2);
+    expect(busy).toBe(false);
+  });
+
+  it("clears the busy flag even if fn rejects, and propagates the rejection", async () => {
+    let busy = false;
+    const fn = vi.fn(() => Promise.reject(new Error("boom")));
+    const guarded = withReentrancyGuard(() => busy, (b) => { busy = b; }, fn);
+
+    await expect(guarded()).rejects.toThrow("boom");
+    expect(busy).toBe(false); // not stuck busy
   });
 });
