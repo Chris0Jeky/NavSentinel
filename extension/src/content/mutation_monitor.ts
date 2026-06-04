@@ -156,13 +156,19 @@ function isLegitIframeSrc(src: string): boolean {
 const SUSPICIOUS_IFRAME_SCHEME_RE = /^(data|blob|javascript):/i;
 
 function suspiciousIframeScheme(src: string): string | null {
-  // Browsers strip whitespace/control chars (tab, newline, CR, and leading C0
-  // controls/space) from a URL before parsing, so "da\tta:..." or a src with a
-  // leading control char still resolves to a data: URL. Strip every char
-  // <= U+0020 before scheme-matching so obfuscation can't bypass the check.
+  // Mirror how browsers sanitize a URL before parsing: strip ASCII tab/newline/CR
+  // from ANYWHERE (so "da\tta:..." still resolves to data:), and trim LEADING
+  // control/space chars (so "data:" or " data:" resolve to data:). Interior
+  // spaces are NOT stripped — a space inside a would-be scheme makes it invalid,
+  // so the browser treats e.g. "da ta:" as a relative URL and we must not flag it.
   let normalized = "";
+  let trimmingLeading = true;
   for (const ch of src) {
-    if (ch.charCodeAt(0) > 0x20) normalized += ch;
+    const code = ch.charCodeAt(0);
+    if (code === 0x09 || code === 0x0a || code === 0x0d) continue; // tab / LF / CR, anywhere
+    if (trimmingLeading && code <= 0x20) continue; // leading control / space
+    trimmingLeading = false;
+    normalized += ch;
   }
   const m = SUSPICIOUS_IFRAME_SCHEME_RE.exec(normalized);
   return m ? m[1]!.toLowerCase() : null;
@@ -182,7 +188,7 @@ const OBSERVE_CONFIG: MutationObserverInit = {
   childList: true,
   subtree: true,
   attributes: true,
-  attributeFilter: ["action", "type", "src", "style", "class"],
+  attributeFilter: ["action", "type", "src", "srcdoc", "style", "class"],
 };
 
 function tryGetShadowRoot(el: Element): ShadowRoot | null {
@@ -390,39 +396,49 @@ function checkSuspiciousIframe(el: Element): void {
   if (el.tagName !== "IFRAME") return;
   const iframe = el as HTMLIFrameElement;
   const src = iframe.getAttribute("src") ?? "";
+  const hasSrcdoc = iframe.hasAttribute("srcdoc");
+  const srcIsLegit = src !== "" && isLegitIframeSrc(src);
 
-  // Skip known-legitimate iframes
-  if (src && isLegitIframeSrc(src)) return;
+  // A legitimate src with NO srcdoc is safe. But per the HTML spec srcdoc renders
+  // OVER src (src is only a fallback), so a legit src paired with a malicious
+  // srcdoc must still be inspected — don't short-circuit when srcdoc is present.
+  if (srcIsLegit && !hasSrcdoc) return;
 
   const reasons: string[] = [];
 
-  // Check for hidden iframes
+  // Rendering checks apply regardless of src legitimacy.
   const cs = getComputedStyle(iframe);
   if (cs.display === "none") reasons.push("display:none");
   if (cs.visibility === "hidden") reasons.push("visibility:hidden");
 
-  // Check for tiny iframes
   const rect = iframe.getBoundingClientRect();
   if (rect && rect.width < TINY_IFRAME_PX && rect.height < TINY_IFRAME_PX && rect.width >= 0 && rect.height >= 0) {
     reasons.push(`tiny (${Math.round(rect.width)}x${Math.round(rect.height)})`);
   }
 
-  // Check for opaque/script-scheme src (data:/blob:/javascript:). These have no
-  // hostname so isCrossDomain can't flag them, but an injected one runs
-  // attacker-controlled content. (Trade-off: a legitimate post-load data:/blob:
-  // preview iframe is also flagged; acceptable for a medium informational alert
-  // since injecting such an iframe after load is uncommon.)
-  const scheme = src ? suspiciousIframeScheme(src) : null;
-  if (scheme) {
-    reasons.push(`${scheme}-scheme src`);
-  } else if (src && isCrossDomain(src)) {
-    // Check for cross-domain src (only meaningful for host-bearing URLs).
-    reasons.push(`cross-domain src: ${src}`);
+  // src-based checks only when the src is not a known-legit pattern (a legit src
+  // here only reaches this point because srcdoc is the live document).
+  if (!srcIsLegit) {
+    // Opaque/script-scheme src (data:/blob:/javascript:) has no hostname so
+    // isCrossDomain can't flag it, but an injected one runs attacker-controlled
+    // content. (Trade-off: a legitimate post-load data:/blob: preview iframe is
+    // also flagged; acceptable for a medium informational alert since injecting
+    // such an iframe after load is uncommon.)
+    const scheme = src ? suspiciousIframeScheme(src) : null;
+    if (scheme) {
+      reasons.push(`${scheme}-scheme src`);
+    } else if (src && isCrossDomain(src)) {
+      reasons.push(`cross-domain src: ${src}`);
+    }
   }
 
   // srcdoc runs attacker-provided inline HTML in an opaque origin with no src to
-  // scheme-check — the same content-injection vector as a data: iframe.
-  if (iframe.hasAttribute("srcdoc")) {
+  // scheme-check — the same content-injection vector as a data: iframe. Checked
+  // independently of the legit-src short-circuit above. (Trade-off: legitimate
+  // post-load srcdoc usage exists — sandboxed previews, rich-text/email
+  // renderers, code playgrounds — so this is a medium informational alert, not a
+  // block; tracked for a possible benign-srcdoc allowlist if it proves noisy.)
+  if (hasSrcdoc) {
     reasons.push("srcdoc (inline HTML)");
   }
 
@@ -510,7 +526,11 @@ function processAttributeChange(record: MutationRecord): void {
     }
   }
 
-  if (record.attributeName === "src" && target.tagName === "IFRAME") {
+  if (
+    (record.attributeName === "src" || record.attributeName === "srcdoc") &&
+    target.tagName === "IFRAME"
+  ) {
+    // Re-check on srcdoc too, so a two-step inject-then-set-srcdoc can't evade.
     checkSuspiciousIframe(target);
   }
 
