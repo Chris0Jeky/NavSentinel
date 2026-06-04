@@ -711,6 +711,77 @@ describe("service worker handlers", () => {
     });
   });
 
+  describe("onCreated hydration deferral", () => {
+    it("persists a pre-hydration onCreated child entry after hydration (survives a later restart)", async () => {
+      // Genuine regression guard. Because _restoreMap MERGES (never clears) and
+      // persistMap early-returns while !hydrated, the *in-memory* map ends as
+      // {20,30} either way — so an in-memory/behavioral assertion does NOT detect
+      // the bug. The real defect is durability: pre-fix the synchronous set(20)'s
+      // persistMap is skipped (!hydrated) and the empty .then never re-persists,
+      // so STORAGE stays {30} and tab 20 is lost on the next SW restart. Post-fix
+      // the deferred onCreatedHandler runs persistMap AFTER hydration → STORAGE
+      // holds {20,30}. Hydration itself never persists, so storage distinguishes.
+      const mock = createChromeMock();
+      const now = Date.now();
+      mock.chrome.storage.session._store["ns_sw:childWindow"] = {
+        "30": { openerTabId: 40, createdAt: now, openerNavObserved: false },
+      };
+
+      // Gate the first session.get (the hydrate read) so hydration stays pending.
+      let releaseHydration!: () => void;
+      const gate = new Promise<void>((r) => {
+        releaseHydration = r;
+      });
+      const session = mock.chrome.storage.session;
+      const realGet = session.get.bind(session);
+      let gated = true;
+      session.get = (async (keys?: string | string[]) => {
+        if (gated) {
+          gated = false;
+          await gate;
+        }
+        return realGet(keys);
+      }) as typeof session.get;
+
+      await loadSw(mock); // module imported; hydrate() is pending on the gate
+
+      // onCreated fires BEFORE hydration completes — must be deferred, not run
+      // synchronously against the un-hydrated Map (where its persist is dropped).
+      mock.emitTabCreated({ id: 20, openerTabId: 10 });
+
+      releaseHydration();
+      for (let i = 0; i < 20; i++) await Promise.resolve();
+
+      // The deferred entry must be PERSISTED (this is what fails pre-fix), and the
+      // hydrated entry retained.
+      const stored = mock.chrome.storage.session._store["ns_sw:childWindow"] as
+        | Record<string, unknown>
+        | undefined;
+      expect(stored, "childWindow persisted after hydration").toBeDefined();
+      expect(stored, "deferred onCreated entry (20) persisted post-hydration").toHaveProperty("20");
+      expect(stored, "hydrated entry (30) retained").toHaveProperty("30");
+
+      // Sanity: both children are tracked in memory (opener-nav maps correctly).
+      mock.sentMessages.length = 0;
+      mock.dispatchRuntimeMessage(
+        { type: "ns-dblclick-opener-nav", url: "https://evil.test/a", ts: Date.now() },
+        { tab: { id: 20 } },
+      );
+      mock.dispatchRuntimeMessage(
+        { type: "ns-dblclick-opener-nav", url: "https://evil.test/b", ts: Date.now() },
+        { tab: { id: 30 } },
+      );
+      const toOpener = (openerId: number) =>
+        mock.sentMessages.find(
+          (m) =>
+            (m.message as { type: string }).type === "ns-dblclick-opener-nav-from-child" &&
+            m.tabId === openerId,
+        );
+      expect(toOpener(10), "deferred onCreated child (20->10) tracked").toBeDefined();
+      expect(toOpener(40), "hydrated child (30->40) tracked").toBeDefined();
+    });
+  });
+
   describe("dblclick child window lifecycle", () => {
     it("tracks child tab creation with openerTabId", async () => {
       const mock = createChromeMock();
