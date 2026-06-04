@@ -394,7 +394,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message !== "object") return;
 
   if (isPromptOutcomeStorageMessage(message)) {
-    void handlePromptOutcomeStorageMessage(message)
+    void handlePromptOutcomeStorageMessage(message, sender)
       .then((response) => sendResponse?.(response))
       .catch((err) => {
         sendResponse?.({ ok: false, error: err instanceof Error ? err.message : String(err) });

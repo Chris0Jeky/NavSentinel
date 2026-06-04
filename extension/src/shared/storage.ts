@@ -390,6 +390,13 @@ function shouldDelegatePromptOutcomeWrite(): boolean {
 
 type PromptOutcomeBarrierStorage = Pick<chrome.storage.StorageArea, "get" | "set">;
 
+// The reset barrier persists the cutoff to chrome.storage.session so it survives
+// SW restarts. On engines without storage.session (Firefox MV3), this returns
+// null and the cutoff is in-memory only — a clear/import followed by a
+// background restart followed by a delayed append could then resurrect stale
+// data. Wiring this through `storageSessionShim` (browser.ts), whose own doc
+// defers "wiring the real consumers" to FF-03, is tracked as part of the FF-03
+// session_state compatibility slice; on Chrome the behavior is unaffected.
 function getPromptOutcomeBarrierStorage(): PromptOutcomeBarrierStorage | null {
   const storage = (globalThis as { chrome?: { storage?: { session?: PromptOutcomeBarrierStorage } } })
     .chrome?.storage?.session;
@@ -429,25 +436,72 @@ async function setPromptOutcomeResetCutoff(ts = Date.now()): Promise<void> {
   }
 }
 
+// Distinguishes a transport failure (no receiving end, SW cold-start race,
+// context invalidation) — which is retryable and safe to fall back from — from
+// a deliberate `{ ok: false }` refusal by the service worker (e.g. an
+// unauthorized clear/replace), which must NOT be retried or fallen back from.
+class PromptOutcomeTransportError extends Error {}
+
 function sendPromptOutcomeStorageMessage(message: PromptOutcomeStorageMessage): Promise<void> {
   return new Promise((resolve, reject) => {
     try {
       chrome.runtime.sendMessage(message, (response?: PromptOutcomeStorageResponse) => {
         const lastError = chrome.runtime.lastError;
         if (lastError) {
-          reject(new Error(lastError.message ?? "runtime.sendMessage failed"));
+          reject(new PromptOutcomeTransportError(lastError.message ?? "runtime.sendMessage failed"));
           return;
         }
         if (response?.ok) {
           resolve();
           return;
         }
+        // The SW received and deliberately refused the write.
         reject(new Error(response?.error ?? "Prompt outcome storage write failed"));
       });
     } catch (err) {
-      reject(err instanceof Error ? err : new Error(String(err)));
+      // Synchronous throw === the messaging channel is gone (context invalidated).
+      reject(new PromptOutcomeTransportError(err instanceof Error ? err.message : String(err)));
     }
   });
+}
+
+const PROMPT_OUTCOME_DELEGATE_RETRY_DELAYS_MS = [50, 150];
+
+function delayMs(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Delegate a prompt-outcome write to the service worker, where all writes are
+ * serialized. On a transient transport failure (SW waking from cold start, or a
+ * momentary "no receiving end"), retry a bounded number of times. If every
+ * attempt fails the SW is unreachable, so fall back to a direct local write
+ * rather than silently losing the outcome — with the SW down there is no
+ * concurrent SW writer to race. A deliberate refusal (e.g. an unauthorized
+ * clear/replace) is rethrown without retry or fallback so the SW's sender
+ * check cannot be bypassed.
+ */
+async function delegatePromptOutcomeWrite(
+  message: PromptOutcomeStorageMessage,
+  fallback: () => Promise<void>
+): Promise<void> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= PROMPT_OUTCOME_DELEGATE_RETRY_DELAYS_MS.length; attempt++) {
+    try {
+      await sendPromptOutcomeStorageMessage(message);
+      return;
+    } catch (err) {
+      if (!(err instanceof PromptOutcomeTransportError)) throw err;
+      lastErr = err;
+      const delay = PROMPT_OUTCOME_DELEGATE_RETRY_DELAYS_MS[attempt];
+      if (delay !== undefined) await delayMs(delay);
+    }
+  }
+  console.warn(
+    "[NavSentinel] prompt outcome delegation failed after retries; writing directly:",
+    lastErr
+  );
+  await fallback();
 }
 
 function queuePromptOutcomeWrite<T>(operation: () => Promise<T>): Promise<T> {
@@ -496,6 +550,12 @@ async function persistPromptOutcome(entry: PromptOutcomeEntry): Promise<void> {
 function appendPromptOutcomeDirect(entry: PromptOutcomeEntry): Promise<void> {
   return queuePromptOutcomeWrite(async () => {
     await hydratePromptOutcomeResetCutoff();
+    // The `<=` boundary deliberately drops an append whose ts equals a
+    // clear/import cutoff: not-resurrecting-stale-data is prioritized over the
+    // rare case of a genuinely-new outcome created in the same millisecond as a
+    // user-initiated wipe. Impact is bounded to that one-ms wipe boundary; the
+    // in-process queue already orders an append issued after a clear strictly
+    // after it, so this only affects a delayed/cross-message append.
     if (entry.ts <= promptOutcomeResetCutoffTs) return;
     await persistPromptOutcome(entry);
   });
@@ -504,19 +564,26 @@ function appendPromptOutcomeDirect(entry: PromptOutcomeEntry): Promise<void> {
 export function appendPromptOutcome(
   partial: Omit<PromptOutcomeEntry, "id" | "ts"> & { id?: string; ts?: number }
 ): Promise<void> {
+  // Sanitize ts/score so the writer and the verify-step validator
+  // (isPromptOutcomeEntry, which requires Number.isFinite) agree. A non-finite
+  // value would otherwise be written, filtered out on verify, and silently
+  // dropped after burning all retries.
   const entry: PromptOutcomeEntry = {
     id: partial.id ?? makeId(),
-    ts: partial.ts ?? Date.now(),
+    ts: Number.isFinite(partial.ts) ? (partial.ts as number) : Date.now(),
     domain: partial.domain,
     ...(partial.destDomain !== undefined ? { destDomain: partial.destDomain } : {}),
     type: partial.type,
-    score: partial.score,
+    score: Number.isFinite(partial.score) ? partial.score : 0,
     outcome: partial.outcome,
     ...(partial.reasons !== undefined ? { reasons: partial.reasons } : {})
   };
 
   if (shouldDelegatePromptOutcomeWrite()) {
-    return sendPromptOutcomeStorageMessage({ type: "ns-prompt-outcome-append", entry });
+    return delegatePromptOutcomeWrite(
+      { type: "ns-prompt-outcome-append", entry },
+      () => appendPromptOutcomeDirect(entry)
+    );
   }
   return appendPromptOutcomeDirect(entry);
 }
@@ -531,7 +598,10 @@ function clearPromptOutcomesDirect(): Promise<void> {
 
 export function clearPromptOutcomes(): Promise<void> {
   if (shouldDelegatePromptOutcomeWrite()) {
-    return sendPromptOutcomeStorageMessage({ type: "ns-prompt-outcome-clear" });
+    return delegatePromptOutcomeWrite(
+      { type: "ns-prompt-outcome-clear" },
+      () => clearPromptOutcomesDirect()
+    );
   }
   return clearPromptOutcomesDirect();
 }
@@ -551,14 +621,46 @@ async function replacePromptOutcomesDirect(outcomes: PromptOutcomeEntry[]): Prom
 async function replacePromptOutcomes(outcomes: PromptOutcomeEntry[]): Promise<void> {
   const boundedOutcomes = boundPromptOutcomeLog(outcomes);
   if (shouldDelegatePromptOutcomeWrite()) {
-    return sendPromptOutcomeStorageMessage({ type: "ns-prompt-outcome-replace", outcomes: boundedOutcomes });
+    return delegatePromptOutcomeWrite(
+      { type: "ns-prompt-outcome-replace", outcomes: boundedOutcomes },
+      () => replacePromptOutcomesDirect(boundedOutcomes)
+    );
   }
   return replacePromptOutcomesDirect(boundedOutcomes);
 }
 
+/**
+ * A clear/replace wipes or overwrites the entire prompt-outcome history (and the
+ * replace path recomputes adaptive scores), so those operations are restricted
+ * to trusted extension-page senders — the options/popup pages. Content scripts
+ * are injected on <all_urls> and always carry `sender.tab`; they may only
+ * append. We additionally require the sender to be this extension's own origin.
+ */
+function isTrustedExtensionPageSender(sender?: chrome.runtime.MessageSender): boolean {
+  if (!sender) return false;
+  // Primary boundary: content scripts (injected on <all_urls>) always carry
+  // sender.tab; extension pages (options/popup) do not.
+  if (sender.tab !== undefined) return false;
+  // Defense-in-depth: when we can identify our own extension origin, require the
+  // sender to match it. These checks only constrain when the info is available;
+  // they do not fail-closed if getURL/id are absent (e.g. some test runtimes).
+  const runtime = (globalThis as { chrome?: typeof chrome }).chrome?.runtime;
+  if (sender.id && runtime?.id && sender.id !== runtime.id) return false;
+  const base = runtime?.getURL?.("");
+  if (base && sender.url && !sender.url.startsWith(base)) return false;
+  return true;
+}
+
 export async function handlePromptOutcomeStorageMessage(
-  message: PromptOutcomeStorageMessage
+  message: PromptOutcomeStorageMessage,
+  sender?: chrome.runtime.MessageSender
 ): Promise<PromptOutcomeStorageResponse> {
+  if (
+    (message.type === "ns-prompt-outcome-clear" || message.type === "ns-prompt-outcome-replace") &&
+    !isTrustedExtensionPageSender(sender)
+  ) {
+    return { ok: false, error: "Unauthorized prompt-outcome mutation from untrusted sender" };
+  }
   try {
     if (message.type === "ns-prompt-outcome-append") {
       await appendPromptOutcomeDirect(message.entry);
