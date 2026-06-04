@@ -153,10 +153,18 @@ function isLegitIframeSrc(src: string): boolean {
 // one of these runs attacker-controlled content (data:/blob: are their own
 // opaque origin; javascript: executes in-page) but carries no hostname, so the
 // cross-domain check (which keys off the URL host) never flags them.
-const SUSPICIOUS_IFRAME_SCHEME_RE = /^\s*(data|blob|javascript):/i;
+const SUSPICIOUS_IFRAME_SCHEME_RE = /^(data|blob|javascript):/i;
 
 function suspiciousIframeScheme(src: string): string | null {
-  const m = SUSPICIOUS_IFRAME_SCHEME_RE.exec(src);
+  // Browsers strip whitespace/control chars (tab, newline, CR, and leading C0
+  // controls/space) from a URL before parsing, so "da\tta:..." or a src with a
+  // leading control char still resolves to a data: URL. Strip every char
+  // <= U+0020 before scheme-matching so obfuscation can't bypass the check.
+  let normalized = "";
+  for (const ch of src) {
+    if (ch.charCodeAt(0) > 0x20) normalized += ch;
+  }
+  const m = SUSPICIOUS_IFRAME_SCHEME_RE.exec(normalized);
   return m ? m[1]!.toLowerCase() : null;
 }
 
@@ -401,13 +409,21 @@ function checkSuspiciousIframe(el: Element): void {
 
   // Check for opaque/script-scheme src (data:/blob:/javascript:). These have no
   // hostname so isCrossDomain can't flag them, but an injected one runs
-  // attacker-controlled content.
+  // attacker-controlled content. (Trade-off: a legitimate post-load data:/blob:
+  // preview iframe is also flagged; acceptable for a medium informational alert
+  // since injecting such an iframe after load is uncommon.)
   const scheme = src ? suspiciousIframeScheme(src) : null;
   if (scheme) {
     reasons.push(`${scheme}-scheme src`);
   } else if (src && isCrossDomain(src)) {
     // Check for cross-domain src (only meaningful for host-bearing URLs).
     reasons.push(`cross-domain src: ${src}`);
+  }
+
+  // srcdoc runs attacker-provided inline HTML in an opaque origin with no src to
+  // scheme-check — the same content-injection vector as a data: iframe.
+  if (iframe.hasAttribute("srcdoc")) {
+    reasons.push("srcdoc (inline HTML)");
   }
 
   if (reasons.length === 0) return;

