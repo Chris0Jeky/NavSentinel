@@ -618,7 +618,11 @@ describe("read-modify-write serialization (regression: discovery D-PROF wf_c7d86
     const writer = recordNavigation("fresh.com", 40, ["nrs_new_tab_window"]);
     await Promise.all([reader, writer]);
 
-    // Both operations ran; both writes survive (the real-world payoff).
+    // Both operations ran; both writes survive. NOTE: these two assertions are
+    // illustrative of the real-world payoff but are not the load-bearing proof —
+    // under synchronous storage mocks they can pass on the unfixed code by
+    // microtask-timing luck. The no-overlap invariant below is the deterministic
+    // guarantee (and the post-loop balance checks make it non-vacuous).
     const profiles = getStoredProfiles();
     expect(profiles["fresh.com"]!.visits).toBe(1);
     expect(profiles["stale.com"]!.visits).toBeLessThan(10);
@@ -635,6 +639,11 @@ describe("read-modify-write serialization (regression: discovery D-PROF wf_c7d86
         openGets -= 1;
       }
     }
+    // Guard against a vacuous pass: storage activity must have happened, and
+    // every get must be balanced by a set (no dangling in-flight read that
+    // would leave openGets > 0 and slip past the loop check above).
+    expect(callLog.length).toBeGreaterThan(0);
+    expect(openGets).toBe(0);
   });
 
   it("getDomainRisk and a same-domain writer queued before it do not lose the write", async () => {
