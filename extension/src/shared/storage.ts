@@ -600,6 +600,11 @@ export function appendPromptOutcome(
 function clearPromptOutcomesDirect(): Promise<void> {
   return queuePromptOutcomeWrite(async () => {
     const resetTs = Date.now();
+    // Non-transactional: the log is emptied, then the reset cutoff is persisted.
+    // A crash between the two leaves the log cleared but the barrier
+    // unpersisted — the safe direction (no stale resurrection; a subsequent
+    // clear re-establishes the barrier). chrome.storage has no multi-key
+    // transaction, so this window is inherent.
     await chrome.storage.local.set({ [PROMPT_OUTCOMES_KEY]: [] });
     await setPromptOutcomeResetCutoff(resetTs);
   });
@@ -624,6 +629,11 @@ async function replacePromptOutcomesDirect(outcomes: PromptOutcomeEntry[]): Prom
   });
 }
 
+// NOTE: a user-initiated import goes through delegatePromptOutcomeWrite, which
+// (by design) drops + logs rather than rejecting if the SW is persistently
+// unreachable. For an import that means a silent no-op the options page may
+// report as success. Surfacing delegation failure in the import UI is
+// options-layer work tracked as a follow-up issue (see #188).
 async function replacePromptOutcomes(outcomes: PromptOutcomeEntry[]): Promise<void> {
   const boundedOutcomes = boundPromptOutcomeLog(outcomes);
   if (shouldDelegatePromptOutcomeWrite()) {
