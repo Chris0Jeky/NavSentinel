@@ -1,9 +1,10 @@
-import { describe, expect, it, beforeEach, vi } from "vitest";
+import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import {
   recordNavigation,
   getDomainRisk,
   getTopSuspiciousDomains,
   clearDomainProfiles,
+  _resetSerializationForTests,
   DOMAIN_PROFILES_KEY,
   MAX_PROFILES,
   DECAY_AGE_MS,
@@ -55,8 +56,26 @@ function getStoredProfiles(): Record<string, DomainProfile> {
 // Tests
 // ---------------------------------------------------------------------------
 
+/** Restore the default (un-instrumented) storage mock implementations. */
+function restoreStorageMocks(): void {
+  (chrome.storage.local.get as ReturnType<typeof vi.fn>).mockImplementation(mockGet);
+  (chrome.storage.local.set as ReturnType<typeof vi.fn>).mockImplementation(mockSet);
+}
+
 beforeEach(() => {
   for (const k of Object.keys(store)) delete store[k];
+  // Reset the module-level serialization chain so fire-and-forget operations
+  // queued by one test cannot leak into the next (R1 test-isolation finding).
+  _resetSerializationForTests();
+  // Ensure a clean, un-instrumented storage mock at the start of every test
+  // (some tests temporarily wrap get/set to observe call ordering).
+  restoreStorageMocks();
+});
+
+afterEach(() => {
+  // R2 finding: tests that call mockImplementation on get/set to instrument
+  // storage-call ordering must not leak those wrappers into later tests.
+  restoreStorageMocks();
 });
 
 describe("recordNavigation", () => {
@@ -538,5 +557,123 @@ describe("NRS integration", () => {
     );
     expect(result.nrs).toBe(30);
     expect(result.nrsFactors).not.toContain("nrs_domain_repeat_offender");
+  });
+});
+
+describe("read-modify-write serialization (regression: discovery D-PROF wf_c7d868c7-3b1)", () => {
+  it("getDomainRisk observes writes queued just before it (reads chain through pending)", async () => {
+    // Fire navigations WITHOUT awaiting, then read immediately. getDomainRisk
+    // now shares recordNavigation's pending chain, so the read runs only after
+    // the writes complete. Before the fix the reader raced loadProfiles and
+    // returned zeros.
+    for (let i = 0; i < 4; i++) void recordNavigation("serial.test", 50, ["nrs_cross_site"]);
+    const risk = await getDomainRisk("serial.test");
+    expect(risk.avgNRS).toBe(50);
+    expect(risk.topFactors).toContain("nrs_cross_site");
+  });
+
+  it("getTopSuspiciousDomains observes writes queued just before it", async () => {
+    for (let i = 0; i < 3; i++) void recordNavigation("serial2.test", 60, []);
+    const top = await getTopSuspiciousDomains(10);
+    const entry = top.find((p) => p.domain === "serial2.test");
+    expect(entry).toBeDefined();
+    expect(entry!.visits).toBe(3);
+  });
+
+  it("serializes a reader and a writer (no interleaving) — deterministic via storage-call ordering", async () => {
+    // R1 finding: the previous "last writer wins" assertion could pass with the
+    // OLD code by timing luck. Instead assert the *invariant* the fix provides:
+    // a reader and a concurrently-issued writer never interleave their
+    // load/save pairs. We instrument the storage mock to record an ordered log
+    // of get/set calls; serialized operations must appear as complete,
+    // non-overlapping [get...set] segments.
+    //
+    // R2 note (realism): getTopSuspiciousDomains and clearDomainProfiles run only
+    // in the OPTIONS-page realm in production (options.ts), while recordNavigation
+    // runs in the content script — separate module instances with separate
+    // `pending` chains, so this exact same-chain interleave is an in-realm
+    // illustration. The production-relevant serialization is getDomainRisk vs
+    // recordNavigation (both in the content script), covered by the tests above.
+    // The cross-frame (all_frames) shared-storage race is tracked as #181.
+    //
+    // The invariant below relies on the seeded stale profile (added next) forcing
+    // the reader down its decay-save path so every operation does a [get,set]
+    // pair; without that save the balanced-pairs assumption would not hold.
+    const callLog: string[] = [];
+    const origGet = chrome.storage.local.get as ReturnType<typeof vi.fn>;
+    const origSet = chrome.storage.local.set as ReturnType<typeof vi.fn>;
+    origGet.mockImplementation((keys: string | string[]) => {
+      callLog.push("get");
+      return mockGet(keys);
+    });
+    origSet.mockImplementation((items: Record<string, unknown>) => {
+      callLog.push("set");
+      return mockSet(items);
+    });
+
+    // Seed a stale profile so the reader actually performs a save (decay path).
+    const staleTs = Date.now() - DECAY_AGE_MS - 1000;
+    store[DOMAIN_PROFILES_KEY] = {
+      "stale.com": {
+        domain: "stale.com",
+        visits: 10,
+        totalNRS: 500,
+        maxNRS: 80,
+        triggerCount: 6,
+        lastSeen: staleTs,
+        factors: { nrs_cross_site: 5 },
+        nrsHistory: [50, 50, 50, 50, 50, 50, 50, 50, 50, 50],
+      },
+    };
+
+    const reader = getTopSuspiciousDomains(10);
+    const writer = recordNavigation("fresh.com", 40, ["nrs_new_tab_window"]);
+    await Promise.all([reader, writer]);
+
+    // Both operations ran; both writes survive. NOTE: these two assertions are
+    // illustrative of the real-world payoff but are not the load-bearing proof —
+    // under synchronous storage mocks they can pass on the unfixed code by
+    // microtask-timing luck. The no-overlap invariant below is the deterministic
+    // guarantee (and the post-loop balance checks make it non-vacuous).
+    const profiles = getStoredProfiles();
+    expect(profiles["fresh.com"]!.visits).toBe(1);
+    expect(profiles["stale.com"]!.visits).toBeLessThan(10);
+
+    // Invariant: no overlap. Walking the call log, every "get" must be followed
+    // by its own operation's "set" before the next "get" appears — i.e. the
+    // sequence is a series of [get, set] pairs, never [get, get, ...].
+    let openGets = 0;
+    for (const c of callLog) {
+      if (c === "get") {
+        openGets += 1;
+        expect(openGets).toBe(1); // never two concurrent reads-in-flight
+      } else {
+        openGets -= 1;
+      }
+    }
+    // Guard against a vacuous pass: storage activity must have happened, and
+    // every get must be balanced by a set (no dangling in-flight read that
+    // would leave openGets > 0 and slip past the loop check above).
+    expect(callLog.length).toBeGreaterThan(0);
+    expect(openGets).toBe(0);
+  });
+
+  it("getDomainRisk and a same-domain writer queued before it do not lose the write", async () => {
+    // R1 gap: explicit same-domain reader-after-writer coverage.
+    void recordNavigation("same.test", 80, ["nrs_cross_site"], 70);
+    void recordNavigation("same.test", 80, ["nrs_cross_site"], 70);
+    const risk = await getDomainRisk("same.test");
+    expect(risk.avgNRS).toBe(80);
+    const stored = getStoredProfiles()["same.test"]!;
+    expect(stored.visits).toBe(2);
+    expect(stored.factors["nrs_cross_site"]).toBe(2);
+  });
+
+  it("clearDomainProfiles is serialized: a navigation queued before it is cleared, not resurrected", async () => {
+    // clearDomainProfiles now runs through the pending chain, so a navigation
+    // queued before it completes first, then the clear wins deterministically.
+    void recordNavigation("doomed.test", 50, []);
+    await clearDomainProfiles();
+    expect(Object.keys(getStoredProfiles()).length).toBe(0);
   });
 });
