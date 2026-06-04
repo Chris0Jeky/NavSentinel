@@ -8,7 +8,7 @@
 
 **Purpose:** the running list of things only *you* (Chris) can do — and the context an agent needs to not lose the thread between sessions. Agents flag the open items in every summary; you clear them by saying so.
 
-**Last updated:** 2026-06-04 · by Claude (autonomous loop — discovery program + follow-up audit; 9 PRs reviewed/green: #191 D-ONCREATE, #193 D-REDOS; issue #192 findings 1+2 resolved, 3+4 open)
+**Last updated:** 2026-06-04 · by Claude (autonomous loop — discovery + follow-up audit COMPLETE; 11 PRs reviewed/green; issue #192 closed (all 4 findings → #193/#194/#195); #196 seeded)
 
 > **Why this file exists separately from the usual docs:** the status docs on `main`
 > (`docs/agentic/HANDOFF.md`, `docs/agentic/ORCHESTRATOR.md`, `docs/Project_Roadmap.md`,
@@ -21,8 +21,8 @@
 
 ## Current state snapshot (verified 2026-06-04)
 
-- `main` == `origin/main` (latest commit on `main` is this ACTION_ITEMS update; the only `main` commits this session are to this file). **All code is on the 9 PR branches below.**
-- **NINE open PRs** — the 7-slice discovery program + 2 from the follow-up read-only audit (#191, #193). Each is **CI green (Build/Unit + E2E)**, each has **two or more independent adversarial review rounds with ALL findings (every severity) fixed and a clean final round**, **none merged (aging + awaiting Gate 3)**:
+- `main` == `origin/main` (latest commit on `main` is this ACTION_ITEMS update; the only `main` commits this session are to this file). **All code is on the 11 PR branches below.**
+- **ELEVEN open PRs** — the 7-slice discovery program + 4 from the follow-up read-only audit (#191, #193, #194, #195). Each is **CI green (Build/Unit + E2E)**, each has **two or more independent adversarial review rounds with ALL findings (every severity) fixed and a clean final round**, **none merged (aging + awaiting Gate 3)**:
 
   | PR | Slice | Branch | Head | Rounds | What it fixes |
   |----|-------|--------|------|--------|----------------|
@@ -35,12 +35,14 @@
   | **#190** | D-IFRAME | `fix/mutation-data-blob-iframes` | `d5abc52` | R1–R4 | `mutation_monitor.ts` flag injected `data:`/`blob:`/`javascript:` + `srcdoc` iframes; scheme normalized + resolved before the legit-src allowlist (bypass-proof) |
   | **#191** | D-ONCREATE | `fix/sw-oncreated-hydration` | `00f8859` | R1–R2 | `sw.ts` defer pre-hydration `tabs.onCreated` child-window tracking (its persist was skipped while `!hydrated` → lost on the next SW restart). From the read-only discovery audit. |
   | **#193** | D-REDOS | `fix/content-analyzer-redos` | `3d58751` | R1–R3 | `content_analyzer.ts` bound the two exfil htmlPatterns (derive `{0,HTML_SNIPPET_MAX}` from the snippet cap) to drop the unbounded-quantifier ReDoS shape with zero detection change. Resolves #192 findings 1+2. |
+  | **#194** | D-OPTRACE | `fix/options-save-race` | `26d8886` | R1–R2 | `options.ts` guard the Save button against concurrent saves via a testable `withReentrancyGuard` helper. Resolves #192 finding 4. |
+  | **#195** | D-SRIHIDE | `fix/sri-hidden-password-field` | `88abd4e` | R1–R2 | `sri_checker.ts` skip inline-hidden password fields in the credential gate (mirrors content_analyzer). Resolves #192 finding 3. |
 
-- **All nine are merge-ready except Gate 3 (manual Chrome test) — see AI-1.** That is the *only* outstanding gate. **The manual test now covers all 9 PRs.**
-- **Follow-up audit (read-only, 2026-06-04):** scoring/NRS, reputation/bloom, and credential/domain/allowlist audited **clean**; the HIGH became #191; the 4 lower findings were seeded in **issue #192** — findings 1+2 (ReDoS ×2) are now **resolved by #193**; findings **3 (SRI hidden-field accuracy)** and **4 (options Save-button race)** remain open as small follow-up slices.
+- **All eleven are merge-ready except Gate 3 (manual Chrome test) — see AI-1.** That is the *only* outstanding gate. **The manual test now covers all 11 PRs.**
+- **Follow-up audit (read-only, 2026-06-04):** scoring/NRS, reputation/bloom, and credential/domain/allowlist audited **clean**; the HIGH became #191; the 4 lower findings (issue **#192**) are now **all resolved** (1+2→#193, 3→#195, 4→#194) and **#192 is closed**. A DRY/tighten refactor of the inline-hidden password detection (shared helper across `sri_checker` + `content_analyzer`) is seeded in **issue #196**.
 - **Pre-existing bug found + fixed this session (on #185, `9da8bcc`):** `main_guard.patchForms()` hardens `HTMLFormElement.prototype.submit` **non-writable**; `js_behavior_monitor` then did a plain assignment to it, which threw and aborted JS-behavior init (lost signals + a page error). Latent on `main`; #185's bridge timing made it fire reliably, turning E2E red. Now guarded (try/catch + graceful degrade). This reaches `main` when #185 merges; until then the other 6 branches *could* flake on `js-behavior-07`/`visual-sim` E2E — a re-run usually passes. The on-repo `failure_ledger.jsonl` should get an entry post-merge.
 - **Agent sandbox cannot run a browser or spawn threads** — `npm run test:e2e` / `agent:hooks:smoke` fail with launch/thread errors locally; the same E2E passes on GitHub CI. Gate 3 is genuinely a human task.
-- **Remaining backlog (next, not yet started):** issue **#192 findings 3 (SRI hidden-field accuracy)** + **4 (options Save-button race)** — small follow-up slices; then FF-02 → FF-03 → FF-04 (stacked; FF-02 = Vite Firefox build config using `manifest.firefox.json` + dual build scripts — note `@crxjs/vite-plugin` is v2.4.0 and its Firefox support is experimental, so this may need a tooling decision; runtime verification is human-gated like Gate 3); then JSB-127 (inspect local `fix/jsb-stale-todos-and-tests` first — AI-3); then another fresh discovery pass.
+- **Remaining backlog (next, not yet started):** issue **#196** (DRY/tighten the inline-hidden password detection into a shared helper across `sri_checker` + `content_analyzer`) — small; then **FF-02 → FF-03 → FF-04** (stacked; FF-02 = Vite Firefox build config using `manifest.firefox.json` + dual build scripts — **needs a tooling decision**: `@crxjs/vite-plugin` is v2.4.0 and its Firefox support is experimental; runtime verification is human-gated like Gate 3); then **JSB-127** (inspect local `fix/jsb-stale-todos-and-tests` first — AI-3); then another fresh discovery pass.
 - Open issues: #175 #176 #178 #179 #181 (discovery) + #127 (JS behavior) + #184 (housekeeping) + **#186** (bridge init-auth: echo-verify/replay-repin/thrash — needs SW-vouched token) + **#188** (options should surface prompt-outcome import/clear failure).
 - **Open question for Chris (deferred per the loop instruction):** the "merge systematically after aged/comments/CI/reviews" instruction vs. the contract's Gate 3 (manual Chrome test, AI-1) — does it authorize merging without the manual test, or hold all merges until AI-1 is cleared? Default assumption: **HOLD** until you confirm.
 
@@ -48,7 +50,7 @@
 
 ## OPEN action items
 
-### AI-1 — Manual Chrome test (Gate 3) for #180, #182, #183, #185, #187, #189, #190, #191, #193 · **OPEN · BLOCKS ALL MERGES**
+### AI-1 — Manual Chrome test (Gate 3) for #180, #182, #183, #185, #187, #189, #190, #191, #193, #194, #195 · **OPEN · BLOCKS ALL MERGES**
 
 **Why it's yours:** the contract requires manual testing in a real Chrome (PR Merge Protocol Gate 3), and the agent sandbox can't launch a browser. Everything else for these PRs is already green.
 
@@ -75,7 +77,7 @@
 11. **#193 D-REDOS — content fingerprinting unchanged (internals):** browse phishing-kit gym fixtures (hidden exfil form/iframe pages) and confirm the content-analysis kit detection still fires as before; no page/SW console errors. This is a regex-internals hardening with zero intended detection change, so the check is "still detects + no errors."
 12. **Record the result on each PR:** `gh pr comment <#> --body "Gate 3 manual Chrome test: PASS — <notes>"` (or FAIL with what broke). Then tell me "AI-1 done for #NNN" and I'll proceed to merge per AI-2.
 
-**Done when:** you've manually verified all nine and recorded PASS (or sent fixes back). Tell me which passed.
+**Done when:** you've manually verified all eleven and recorded PASS (or sent fixes back). Tell me which passed.
 
 ---
 
@@ -83,7 +85,7 @@
 
 **Why it's yours:** merging is an irreversible product action; the contract leaves the go/no-go and order to you.
 
-**Guide:** once AI-1 passes, tell me the order (recommended: oldest-first **#180 → #182 → #183 → #185 → #187 → #189 → #190 → #191 → #193**). I will, per PR: confirm gates, merge, verify `main` afterward by SHA, then move to the next. Note all 7 branch off a slightly older `main`, so each should `git merge main` (not rebase) before merge if conflicts appear. After the last merge I run the post-merge docs reconciliation (issue #184) and add the `failure_ledger.jsonl` entry for the form-submit patch-order bug.
+**Guide:** once AI-1 passes, tell me the order (recommended: oldest-first **#180 → #182 → #183 → #185 → #187 → #189 → #190 → #191 → #193 → #194 → #195**). I will, per PR: confirm gates, merge, verify `main` afterward by SHA, then move to the next. Note all 7 branch off a slightly older `main`, so each should `git merge main` (not rebase) before merge if conflicts appear. After the last merge I run the post-merge docs reconciliation (issue #184) and add the `failure_ledger.jsonl` entry for the form-submit patch-order bug.
 
 **Done when:** the verified PRs are merged and `main` is confirmed.
 
