@@ -794,11 +794,12 @@ chrome.tabs.onCreated.addListener((tab) => {
   if (typeof tab.openerTabId !== "number") return;
   const tabId = tab.id;
   const openerTabId = tab.openerTabId;
-  // Before hydration the in-memory Maps are empty; defer the real tracking to
-  // after restore (matching onRemoved/onBeforeNavigate) instead of falling
-  // through and writing/persisting against the un-hydrated Map — which would be
-  // discarded by the restore (or race the hydration write), losing the opener
-  // relationship and breaking DoubleClickjacking protection for this tab.
+  // Before hydration, persistMap() early-returns (SessionStateManager skips
+  // writes while !hydrated), so a synchronous set here would NOT be persisted —
+  // the entry would live only in memory and be lost on the next SW restart,
+  // silently dropping the opener relationship for DoubleClickjacking. Defer the
+  // real tracking to after restore (matching onRemoved/onBeforeNavigate) so the
+  // handler runs once hydrated and its persistMap actually writes.
   if (!swState.hydrated) {
     void hydrateReady.then(() => onCreatedHandler(tabId, openerTabId));
     return;
