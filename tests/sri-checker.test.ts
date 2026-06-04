@@ -64,21 +64,19 @@ describe("sri_checker - non-credential pages", () => {
     expect(result.withoutSRI).toBe(0);
   });
 
-  it("does not scan when the only password field is hidden via display:none (#192)", () => {
-    // Pre-fix, hasPasswordField counted disabled-only; a display:none password
-    // field incorrectly made SRI treat this as a credential page and scan.
+  // Pre-fix, hasPasswordField counted any non-disabled field, so a hidden-only
+  // password page was wrongly scanned (totalExternal=1, score=8). Cover all four
+  // inline-hidden substring branches independently so dropping any one of them
+  // re-introduces the #192 regression and fails here.
+  it.each([
+    "display:none",
+    "display: none",
+    "visibility:hidden",
+    "visibility: hidden",
+  ])("does not scan when the only password field is hidden via style=%j (#192)", (style) => {
     const html =
       `<!doctype html><html><head>${scriptTag(`${EXTERNAL_ORIGIN}/app.js`)}</head>` +
-      `<body><form><input type="password" name="pw" style="display:none"></form></body></html>`;
-    const result = checkSRI(makeDoc(html), PAGE_URL, PAGE_ORIGIN);
-    expect(result.totalExternal).toBe(0);
-    expect(result.score).toBe(0);
-  });
-
-  it("does not scan when the only password field is hidden via visibility:hidden with a space (#192)", () => {
-    const html =
-      `<!doctype html><html><head>${scriptTag(`${EXTERNAL_ORIGIN}/app.js`)}</head>` +
-      `<body><form><input type="password" name="pw" style="visibility: hidden"></form></body></html>`;
+      `<body><form><input type="password" name="pw" style="${style}"></form></body></html>`;
     const result = checkSRI(makeDoc(html), PAGE_URL, PAGE_ORIGIN);
     expect(result.totalExternal).toBe(0);
     expect(result.score).toBe(0);
