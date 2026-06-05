@@ -51,7 +51,8 @@ Roadmap truth verified against `docs/Project_Roadmap.md` (Phases 0-3 done; Phase
 |----|-------|--------|----------|--------|-----------|-------|
 | ORCH-DISCOVERY | Codebase analysis → seed bug/improvement backlog | this turn | P1 | DONE | — | discovery `wf_c7d868c7-3b1` + follow-up audit complete; all 11 resulting D-series PRs merged 2026-06-05 |
 | ORCH-HYGIENE | Prune merged local branches + 2 orphaned `worktree-agent-*` | analysis | P2 | DONE | — | completed in Cycle 1; remote cleanup remains separate housekeeping |
-| FF-02 | Firefox Vite build config + `src/sw/background.html` + dual build scripts | Roadmap P4-03 | P2 | TODO | FF-01 (#173, merged) | base of FF stack |
+| D-HELPER | Shared `isVisiblePasswordField` helper across `sri_checker` + `content_analyzer`; tighten hidden-detection to match CSS *declarations*, not raw substring (+ decoy test) | issue #196 | P2 | TODO | — | **NEXT pick.** Small single-seam; #193/#195 created the duplication. Full spec in issue #196. |
+| FF-02 | Firefox Vite build config + `src/sw/background.html` + dual build scripts | Roadmap P4-03 | P2 | TODO | FF-01 (#173, merged) + **AI-4 tooling decision** | base of FF stack; needs maintainer tooling choice first |
 | FF-03 | `session_state` Firefox compat (`storage.session`→namespaced `storage.local` shim) | Roadmap P4-03 | P3 | TODO | FF-02 | **stacked on FF-02** |
 | FF-04 | `world:"MAIN"` guard parity for Firefox + transition-qualifier gaps | Roadmap P4-03 | P4 | TODO | FF-03 | **stacked on FF-03** |
 | JSB-127 | JS behavior monitor: perf validation (patch/getter overhead budgets) + residual `JsBehaviorState` dedup | issue #127 | P3 | TODO | — | unmerged branch `fix/jsb-stale-todos-and-tests` may hold partial work — inspect before branching |

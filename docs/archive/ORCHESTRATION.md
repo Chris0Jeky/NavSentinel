@@ -1,5 +1,7 @@
 # NavSentinel Autonomous Orchestration
 
+> **⚠️ ARCHIVED 2026-06-05** — redesign-era (2026-05-16) orchestration doc. **Superseded by `docs/agentic/ORCHESTRATOR.md` + `docs/agentic/HANDOFF.md`** (current autonomous loop) and `docs/Project_Roadmap.md` (phase truth). Kept for history only.
+
 **Purpose**: This file is the single source of truth for the autonomous multi-session workflow. Read this FIRST after any context compaction or session restart. It survives wipes because it's on disk.
 
 **Last updated**: 2026-05-16T21:00:00Z

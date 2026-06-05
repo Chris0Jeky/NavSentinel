@@ -18,6 +18,10 @@ Archived here:
   - post-merge batch tracker (Batches 1-7), superseded by `docs/Project_Roadmap.md`
 - `docs/archive/Implementation_Roadmap.md`
   - post-merge follow-up themes, superseded by `docs/Project_Roadmap.md`
+- `docs/archive/ORCHESTRATOR.md`
+  - Cycle 1–7 work orchestrator (UI redesign + the #114–#174 systematic merge); archived 2026-06-05, superseded by the canonical living orchestrator `docs/agentic/ORCHESTRATOR.md`
+- `docs/archive/ORCHESTRATION.md`
+  - redesign-era (2026-05-16) autonomous-orchestration doc; archived 2026-06-05, superseded by `docs/agentic/ORCHESTRATOR.md` + `docs/agentic/HANDOFF.md`
 
 For the current implementation, start with:
 

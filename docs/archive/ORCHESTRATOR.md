@@ -1,5 +1,7 @@
 # NavSentinel Work Orchestrator
 
+> **⚠️ ARCHIVED 2026-06-05** — historical record of the Cycle 1–7 work program (UI redesign + the #114–#174 systematic merge). **Superseded by the canonical living orchestrator `docs/agentic/ORCHESTRATOR.md`** (autonomous discovery loop, 2026-05-30 onward). Kept for history only; not current operator guidance.
+
 Started: 2026-05-23
 Mode: Continuous end-to-end task cycle with adversarial reviews
 

@@ -26,6 +26,7 @@
 - **Gate 3 (manual Chrome test) was explicitly WAIVED by Chris for this batch** (decision 2026-06-05) and the merges proceeded. The waiver did **not** discard the manual checks — they are **deferred** to a regression watchlist: **`docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md`**. Accepted risk = time/difficulty if debugging is needed, not silent regressions. **Run that checklist next time you build & load the extension** (see AI-1 in the Completed log; the watchlist supersedes it).
 - **#182 needed a docs-only conflict resolution** (status files diverged once the other 10 landed). Resolved by taking `main`'s side, then verified locally: **tsc clean, lint 0/0, 2298 unit tests pass**; CI re-ran **green (Build/Unit + E2E)** on the merge head before merge.
 - **Docs reconciliation (#184) done in this pass:** `docs/Project_Roadmap.md`, `autodoc/AGENT_INDEX.md`, `docs/agentic/HANDOFF.md`, `docs/agentic/ORCHESTRATOR.md` brought to current truth. The form-submit patch-order bug (fixed in #185) is now recorded in `docs/agentic/failure_ledger.jsonl`.
+- **Spring cleaning (2026-06-05):** archived the two stale root orchestration docs → `docs/archive/ORCHESTRATOR.md` + `docs/archive/ORCHESTRATION.md` (the ONE canonical orchestrator is now unambiguously `docs/agentic/ORCHESTRATOR.md`); pruned 60 shell-typo junk entries from `failure_ledger.jsonl` (138→78 lines, every real entry kept, all valid JSON); removed the stale `%TEMP%\ns-review` git worktree; triaged git stashes (13 noise/superseded dropped, **4 `feat/js-behavior-*` WIP kept for JSB-127**). Remote branches + tags were already clean; working tree clean.
 - **#192** is closed (findings 1+2→#193, 3→#195, 4→#194). **#196** seeded (DRY the inline-hidden password detection into a shared helper across `sri_checker` + `content_analyzer`).
 - **Agent sandbox cannot run a browser or spawn threads** — `npm run test:e2e` / `agent:hooks:smoke` fail with launch/thread errors locally; the same E2E passes on GitHub CI. That is *why* Gate 3 is a human task and why the deferred watchlist exists.
 - **Remaining backlog (next, not yet started):** **#196** (small DRY refactor) → **FF-02 → FF-03 → FF-04** (stacked Firefox port; FF-02 = Vite Firefox build config — **needs a tooling decision**: `@crxjs/vite-plugin` Firefox support is experimental; runtime verification is human-gated) → **JSB-127** (inspect local `fix/jsb-stale-todos-and-tests` first — AI-3) → another fresh discovery pass.
@@ -36,7 +37,7 @@
 
 ## Action items
 
-**Only AI-3 is OPEN.** AI-1 and AI-2 are ✅ **resolved 2026-06-05** (see Completed log). The deferred manual checks now live in `docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md`.
+**OPEN: AI-3, AI-4, AI-5.** AI-1 and AI-2 are ✅ **resolved 2026-06-05** (see Completed log). The deferred manual checks now live in `docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md`.
 
 ### AI-1 — Manual Chrome test (Gate 3) · ✅ **RESOLVED 2026-06-05 — Gate 3 WAIVED by Chris; manual checks deferred to the watchlist**
 
@@ -94,6 +95,31 @@
 - **Revive the intent:** branch off current `main`, re-check whether those markers + the dead stub still exist, and re-apply just that cleanup as a fresh small PR (relates to #127).
 
 **Done when:** you tell me to delete it, or to revive its intent as a fresh slice.
+
+---
+
+### AI-4 — Decide Firefox build tooling for FF-02 · **OPEN** · (blocks the FF-02 → FF-03 → FF-04 stack)
+
+**Why it's yours:** a tooling/architecture choice with trade-offs that shapes the whole Firefox port.
+
+**Context:** FF-01 (`browser.*` shim) merged (#173). FF-02 needs a Vite Firefox build, but `@crxjs/vite-plugin` (v2.4.0) Firefox support is experimental. Options:
+- (a) crxjs Firefox target (least new tooling, but experimental/risky);
+- (b) `web-ext` + a separate `manifest.firefox.json` and build script (battle-tested for Firefox; more moving parts);
+- (c) a hand-rolled second Vite config consuming `manifest.firefox.json` + dual build scripts.
+
+Runtime verification will be human-gated (like Gate 3 — sandbox can't drive Firefox).
+
+**Done when:** you pick the approach; I implement FF-02 against it (then FF-03/FF-04 stack on top).
+
+---
+
+### AI-5 — Provide sanctioned brand login screenshots for P4-01c · **OPEN** · (unblocks real visual-sim spoof detection)
+
+**Why it's yours:** the visual-similarity pipeline is fully built and wired but ships **PLACEHOLDER** template hashes (`scripts/build-brand-templates.mjs` emits seeded-PRNG values), so it can never fire a true positive. Replacing them needs hashes built from **real brand login pages** — sourcing/sanctioning those screenshots is a product/legal call only you can make.
+
+**Context:** P4-01c in `docs/Project_Roadmap.md` + `docs/agentic/ORCHESTRATOR.md` (BLOCKED). Until real templates exist, visual-sim is plumbing-complete, detection-pending.
+
+**Done when:** you supply (or point me to) a sanctioned set of brand login screenshots, or decide to defer P4-01c indefinitely.
 
 ---
 

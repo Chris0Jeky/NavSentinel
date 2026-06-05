@@ -19,7 +19,7 @@ Browser-level coverage exists in `tests/e2e/visual-sim.spec.ts` (P4-01b).
 screenshots. With placeholders, no real captured page matches a brand, so the pipeline runs
 but never fires a true positive. Making spoof detection real requires generating templates
 from actual brand login pages — tracked as **P4-01c** in `docs/Project_Roadmap.md` /
-`ORCHESTRATOR.md`. Until then, treat visual-sim as plumbing-complete, detection-pending.
+`docs/agentic/ORCHESTRATOR.md`. Until then, treat visual-sim as plumbing-complete, detection-pending.
 
 ## Constraints
 

@@ -1,6 +1,6 @@
 # NavSentinel: Comprehensive Project Analysis
 
-> **HISTORICAL SNAPSHOT** — Generated 2026-04-09 from `main` after PR #15. Since then, 22 PRs merged (through PR #94), completing Phases 0-3 and partial Phase 4. Sections referencing missing Wave 5 fixtures, stress tests, "(Dev)" branding, or incomplete work are **outdated**. For current state, see `docs/Project_Roadmap.md` and `ORCHESTRATION.md`.
+> **HISTORICAL SNAPSHOT** — Generated 2026-04-09 from `main` after PR #15. Since then, 22 PRs merged (through PR #94), completing Phases 0-3 and partial Phase 4. Sections referencing missing Wave 5 fixtures, stress tests, "(Dev)" branding, or incomplete work are **outdated**. For current state, see `docs/Project_Roadmap.md`, `ACTION_ITEMS.md`, and `docs/agentic/ORCHESTRATOR.md`.
 
 *Generated 2026-04-09 from the current `main` branch state after PR #15 merge.*
 
