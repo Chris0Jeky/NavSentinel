@@ -26,3 +26,25 @@ describe("buildPageSnapshot htmlSnippet cap", () => {
     expect(snap.htmlSnippet).toContain("password");
   });
 });
+
+describe("buildPageSnapshot credential-page gate (#196)", () => {
+  it("flags a plain visible password field", () => {
+    document.documentElement.innerHTML =
+      "<head></head><body><form><input type=\"password\"></form></body>";
+    expect(buildPageSnapshot(document).hasPasswordField).toBe(true);
+  });
+
+  it("does not flag an inline-hidden password field", () => {
+    document.documentElement.innerHTML =
+      "<head></head><body><form><input type=\"password\" style=\"display:none\"></form></body>";
+    expect(buildPageSnapshot(document).hasPasswordField).toBe(false);
+  });
+
+  it("still flags a visible field carrying a decoy hiding substring (#196)", () => {
+    // Pre-#196 the substring check matched "display:none" inside the unrelated
+    // `content` property and wrongly cleared hasPasswordField on a real field.
+    document.documentElement.innerHTML =
+      "<head></head><body><form><input type=\"password\" style=\"content:'display:none'\"></form></body>";
+    expect(buildPageSnapshot(document).hasPasswordField).toBe(true);
+  });
+});
