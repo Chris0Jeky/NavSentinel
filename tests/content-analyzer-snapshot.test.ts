@@ -47,4 +47,11 @@ describe("buildPageSnapshot credential-page gate (#196)", () => {
       "<head></head><body><form><input type=\"password\" style=\"content:'display:none'\"></form></body>";
     expect(buildPageSnapshot(document).hasPasswordField).toBe(true);
   });
+
+  it("still flags a field with a CSS-invalid multi-token value (#196 R1)", () => {
+    // `display:none none` is invalid CSS -> dropped by the engine -> visible.
+    document.documentElement.innerHTML =
+      "<head></head><body><form><input type=\"password\" style=\"display:none none\"></form></body>";
+    expect(buildPageSnapshot(document).hasPasswordField).toBe(true);
+  });
 });
