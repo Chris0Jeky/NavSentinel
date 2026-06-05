@@ -31,9 +31,16 @@
  * Tests run under happy-dom, whose inline-CSS parser is a close but imperfect
  * match for Chrome (naive about `;` inside quoted values, does not strip CSS
  * comments, does not lowercase property names). The cases happy-dom matches
- * Chrome on are asserted in password-field.test.ts; the few it diverges on are
- * correct in the real extension runtime (Chrome) but cannot be pinned at the
- * unit level.
+ * Chrome on are asserted in password-field.test.ts; the engine-distinguishing
+ * cases it diverges on (embedded `;`-in-quotes, uppercase property, CSS
+ * comments) are correct in the real runtime (Chrome) and are pinned by a
+ * Chrome-backed E2E tracked in #201.
+ *
+ * Scope note: hiding via the `hidden` attribute, a class/stylesheet, computed
+ * style, `visibility:collapse`, `opacity:0`, or off-screen positioning is
+ * intentionally NOT consulted here (inline `display`/`visibility` only). Tests
+ * that assert such fields "visible" are residual-scope markers, not correctness
+ * claims; broadening the model (with FP/TP measurement) is tracked in #199.
  */
 
 /**

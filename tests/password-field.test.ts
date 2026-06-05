@@ -31,13 +31,17 @@ describe("isVisiblePasswordField", () => {
     expect(isVisiblePasswordField(pwInput(`style="${style}"`))).toBe(false);
   });
 
+  // `visibility:collapse` and `opacity:0` render the field invisible in Chrome
+  // but are intentionally out of the inline-`display`/`visibility` scope, so the
+  // helper reports them visible. These are residual-scope markers (broadening is
+  // tracked in #199), not correctness claims.
   it.each([
     "display:block",
     "visibility:visible",
-    "visibility:collapse", // not 'hidden' -> visible (mirrors prior scope)
-    "opacity:0", // opacity hiding is out of scope
+    "visibility:collapse",
+    "opacity:0",
     "color:red",
-  ])("is visible with non-hiding style=%j", (style) => {
+  ])("is visible with non-hiding (or out-of-scope) style=%j", (style) => {
     expect(isVisiblePasswordField(pwInput(`style="${style}"`))).toBe(true);
   });
 
@@ -63,10 +67,11 @@ describe("isVisiblePasswordField", () => {
     expect(isVisiblePasswordField(pwInput(`style="${style}"`))).toBe(true);
   });
 
-  // Inline-only scope (R1 nit): hiding via the `hidden` attribute or a class is
-  // intentionally NOT consulted — element.style reflects inline styles only. A
-  // future change that broadened scope to getComputedStyle/`hidden` would flip
-  // this and fail here, flagging the scope change.
+  // Inline-only scope: hiding via the `hidden` attribute or a class is
+  // intentionally NOT consulted — element.style reflects inline styles only.
+  // Residual-scope marker (broadening tracked in #199); a future change that
+  // honored getComputedStyle/`hidden` would flip this and fail here, flagging
+  // the scope change.
   it("treats a `hidden`-attribute field as visible (inline-only scope)", () => {
     expect(isVisiblePasswordField(pwInput("hidden"))).toBe(true);
   });
