@@ -830,7 +830,10 @@ describe("content_analyzer - IPv6-literal page form actions (#208 R1)", () => {
     const snap = loginSnapshot({ formAction: "https://evil.com/steal" });
     const result = analyzeSnapshot(snap, "::1");
     expect(result.suspiciousFormAction).toBe(true);
-    expect(result.reasons.join(" ")).toMatch(/different domain/i);
+    // Discriminating: this is the cross-domain branch (names evil.com), NOT the
+    // catch/parse-failure branch — so it fails if hostForUrl is reverted (#208 R2).
+    expect(result.reasons.join(" ")).toMatch(/different domain.*evil\.com/i);
+    expect(result.reasons.join(" ")).not.toMatch(/could not be parsed/i);
   });
 
   it("does not spuriously fail to parse a relative form action on an IPv6-literal page", () => {

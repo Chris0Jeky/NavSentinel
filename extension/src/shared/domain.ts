@@ -699,15 +699,18 @@ export function detectBrandInDomain(
   // Normalize homoglyphs in the label for comparison
   const normalizedLabel = normalizeHomoglyphs(label);
   const strippedLabel = stripSeparators(normalizedLabel);
-  // True when homoglyph normalization and/or separator stripping rewrote the
-  // label (e.g. "paypa1" -> "paypal", "pay-pal" -> "paypal", "g00gle" ->
-  // "google"). Such a label is a deliberate obfuscated rendering of the brand, so
-  // an EXACT brand match must still be flagged — brandKeywordMatch rejects it via
-  // its strict length guard (it only catches brand-plus-extra like
-  // "paypal-secure"). A legitimate clean label (e.g. "ebay", or "paypal" on a
-  // different TLD) is UNCHANGED here and is NOT newly flagged, keeping false
-  // positives near zero. (#discovery cycle 3; separator case added in #208 R1.)
-  const labelMutated = strippedLabel !== label.toLowerCase();
+  // True when HOMOGLYPH normalization rewrote the label (e.g. "paypa1"->"paypal",
+  // "g00gle"->"google", "arnazon"->"amazon"). Such a label is a deliberate
+  // confusable spoof, so an EXACT brand match must still be flagged —
+  // brandKeywordMatch rejects it via its strict length guard (it only catches
+  // brand-plus-extra like "paypal-secure"). The comparison strips separators on
+  // BOTH sides, so it is SPECIFIC to homoglyph substitution: a clean label
+  // (paypal.org) OR a merely-hyphenated generic/multi-word brand
+  // ("block-chain"->"blockchain", "bank-of-america") is NOT flagged — avoiding
+  // false positives on legitimate hyphenated dictionary-word domains (#208 R2).
+  // Separator-only exact spoofs (pay-pal.com) need a coined-vs-generic-brand
+  // distinction + FP measurement and are tracked as a follow-up. (#discovery cycle 3)
+  const homoglyphRewrote = strippedLabel !== stripSeparators(label.toLowerCase());
 
   for (const [brand, canonical] of BRAND_LIST) {
     const canonicalReg = getBrandRegDomain(canonical);
@@ -719,9 +722,10 @@ export function detectBrandInDomain(
     if (brandKeywordMatch(strippedLabel, brand)) {
       return { brand, canonicalDomain: canonicalReg, exact: false };
     }
-    // Exact obfuscated spelling (no extra characters) — only when the label was
-    // actually mutated, so a clean exact spelling (paypal.org) stays unflagged.
-    if (labelMutated && strippedLabel === brand) {
+    // Exact homoglyph spoof (no extra characters) — only when homoglyph
+    // normalization rewrote the label, so a clean or merely-hyphenated label
+    // stays unflagged.
+    if (homoglyphRewrote && strippedLabel === brand) {
       return { brand, canonicalDomain: canonicalReg, exact: true };
     }
   }

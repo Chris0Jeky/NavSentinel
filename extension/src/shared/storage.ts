@@ -1,6 +1,6 @@
 import type { Mode } from "./types";
 import { ALLOWLIST_KEY, getAllowlist, normalizeAllowlist, type Allowlist } from "./allowlist";
-import { getRegistrableDomain, normalizeHost, safeUrlParse } from "./domain";
+import { getRegistrableDomain, hostForUrl, normalizeHost, safeUrlParse } from "./domain";
 import {
   ADAPTIVE_SCORES_KEY,
   getAdaptiveScores,
@@ -173,7 +173,10 @@ function normalizeTrustedDomain(value: unknown): string {
 
   const parsed =
     safeUrlParse(trimmed) ??
-    (trimmed.includes("://") ? null : safeUrlParse(`https://${trimmed}`));
+    // hostForUrl re-brackets a bare IPv6 literal so the authority parses; since
+    // normalizeHost emits IPv6 unbracketed, a persisted "2001:db8::1" must
+    // round-trip back through this fallback without being dropped (#208 R2).
+    (trimmed.includes("://") ? null : safeUrlParse(`https://${hostForUrl(trimmed)}`));
   const host = parsed?.hostname;
   if (!host) return "";
   const normalized = normalizeHost(host);

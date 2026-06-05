@@ -214,14 +214,19 @@ describe("detectBrandInDomain", () => {
     expect(detectBrandInDomain("paypal.org")).toBeNull();
   });
 
-  it("catches a separator-only exact brand spoof (pay-pal.com -> paypal) (#208 R1)", () => {
-    const result = detectBrandInDomain("pay-pal.com");
-    expect(result).not.toBeNull();
-    expect(result!.brand).toBe("paypal");
-    expect(result!.exact).toBe(true);
+  it("does NOT flag separator-only or hyphenated generic/multi-word brands (FP-safety; #208 R2)", () => {
+    // Only homoglyph substitution triggers the exact path. Separator-only spoofs
+    // (pay-pal.com) and legitimate hyphenations of generic/multi-word brands
+    // (block-chain.com -> "blockchain", bank-of-america.com -> "bankofamerica")
+    // must stay null. Separator coverage needs a coined-vs-generic distinction +
+    // FP measurement and is tracked as a follow-up.
+    expect(detectBrandInDomain("pay-pal.com")).toBeNull();
+    expect(detectBrandInDomain("block-chain.com")).toBeNull();
+    expect(detectBrandInDomain("bank-of-america.com")).toBeNull();
+    expect(detectBrandInDomain("drop-box.com")).toBeNull();
   });
 
-  it("marks obfuscated exact spoofs exact=true and brand-plus-extra exact=false", () => {
+  it("marks homoglyph exact spoofs exact=true and brand-plus-extra exact=false", () => {
     expect(detectBrandInDomain("paypa1.com")!.exact).toBe(true); // homoglyph, no extra
     expect(detectBrandInDomain("paypal-secure.com")!.exact).toBe(false); // extra chars
   });
@@ -378,6 +383,8 @@ describe("computeCredentialRisk enhanced detection", () => {
 
     expect(risk.reasons.map((r) => r.code)).toContain("BRAND_KEYWORD_DOMAIN");
     expect(risk.severity).toBe("medium");
+    // Brand-plus-extra keeps the "with extra characters" wording (#208 R1).
+    expect(risk.reasons.find((r) => r.code === "BRAND_KEYWORD_DOMAIN")!.label).toMatch(/with extra characters/i);
   });
 
   it("flags apple-verify.net with BRAND_KEYWORD_DOMAIN", () => {
@@ -403,6 +410,20 @@ describe("computeCredentialRisk enhanced detection", () => {
 
     expect(risk.reasons.map((r) => r.code)).toContain("BRAND_KEYWORD_DOMAIN");
     expect(risk.severity).toBe("medium");
+    // Exact-spoof copy, not the "with extra characters" wording (#208 R1).
+    const bk = risk.reasons.find((r) => r.code === "BRAND_KEYWORD_DOMAIN");
+    expect(bk!.label).toMatch(/look-alike domain spoofing/i);
+  });
+
+  it("fires IP_HOST for an IPv6-literal page URL (#208 R1 end-to-end)", () => {
+    // URL.hostname -> normalizeHost (unwraps brackets) -> isIPAddress -> +35 IP_HOST.
+    const risk = computeCredentialRisk({
+      pageUrl: "https://[2001:db8::1]/login",
+      actionUrl: "https://[2001:db8::1]/post",
+      trustedDomains: [],
+      config: baseConfig
+    });
+    expect(risk.reasons.map((r) => r.code)).toContain("IP_HOST");
   });
 
   it("flags paypal.login.example.com with SUBDOMAIN_STUFFING", () => {
