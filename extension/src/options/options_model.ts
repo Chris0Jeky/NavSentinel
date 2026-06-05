@@ -27,30 +27,83 @@ export interface ImportErrorOutcome {
   message: string;
   /** Status tone for flashStatus. */
   tone: "error";
-  /**
-   * Whether the page should still refresh after the error. True for a partial
-   * import (only the last, prompt-outcome step failed) so the UI reflects the
-   * sections that DID apply.
-   */
-  reinit: boolean;
 }
 
 /**
- * Decide how the options page reports a failed import. `importAll` is non-atomic
- * and writes the prompt-outcome history LAST; a *delivery* failure of that step
- * (the SW was unreachable) means the earlier settings/allowlist/eventLog sections
- * already applied, so report a partial result and still refresh the UI. Any other
- * error (e.g. invalid JSON) happens before any write — report a total failure and
- * leave the UI showing the unchanged config (#188 R1).
+ * Pick the status message for a failed import. `importAll` is non-atomic and
+ * writes the prompt-outcome history LAST; a *delivery* failure of that step (the
+ * SW was unreachable) means the earlier settings/allowlist/eventLog sections
+ * already applied, so word it as a partial result. Any other error may be a clean
+ * failure (e.g. invalid JSON, before any write) OR a mid-import storage failure
+ * that already applied some sections — `runImportFlow` ALWAYS refreshes the UI
+ * afterward so the displayed config matches actual state regardless (#188 R1/R2).
  */
 export function classifyImportError(isDeliveryFailure: boolean): ImportErrorOutcome {
   return isDeliveryFailure
-    ? {
-        message: "Imported, but prompt history wasn't updated — try again.",
-        tone: "error",
-        reinit: true,
-      }
-    : { message: "Import failed.", tone: "error", reinit: false };
+    ? { message: "Imported, but prompt history wasn't updated — try again.", tone: "error" }
+    : { message: "Import failed.", tone: "error" };
+}
+
+/** Shared UI hooks for the stats/import orchestrations (injected for testing). */
+export interface StatsUiDeps {
+  flash: (message: string, tone?: "error") => void;
+  refresh: () => Promise<void>;
+}
+
+/**
+ * Orchestrate "Clear stats". Only `clearOutcomes` is delegated to the service
+ * worker and can reject when it is persistently unreachable (#188); scope the
+ * failure to it so the message is accurate and `clearAdaptive` runs only after a
+ * successful prompt-outcome clear (on failure nothing changed — a consistent
+ * no-op the user can retry).
+ */
+export async function runClearStats(
+  deps: StatsUiDeps & {
+    clearOutcomes: () => Promise<void>;
+    clearAdaptive: () => Promise<void>;
+  },
+): Promise<void> {
+  try {
+    await deps.clearOutcomes();
+  } catch (e) {
+    console.warn("[NavSentinel] clear stats failed:", e);
+    await deps.refresh();
+    deps.flash("Couldn't clear stats — try again.", "error");
+    return;
+  }
+  await deps.clearAdaptive();
+  await deps.refresh();
+  deps.flash("Stats cleared.");
+}
+
+/**
+ * Orchestrate a suite import. `importAll` is non-atomic, so on ANY failure refresh
+ * the UI (best-effort, guarded) so it reflects whatever actually persisted, then
+ * report a partial result for a prompt-outcome delivery failure or a total failure
+ * otherwise (#188 R1/R2).
+ */
+export async function runImportFlow(
+  deps: StatsUiDeps & {
+    importPayload: () => Promise<void>;
+    isDeliveryFailure: (error: unknown) => boolean;
+  },
+): Promise<void> {
+  try {
+    await deps.importPayload();
+    await deps.refresh();
+    deps.flash("Imported.");
+  } catch (e) {
+    console.warn("[NavSentinel] import failed:", e);
+    // Guard the refresh so a failed re-render can neither mask the status nor
+    // escape the (un-awaited) event handler as an unhandled rejection.
+    try {
+      await deps.refresh();
+    } catch (refreshErr) {
+      console.warn("[NavSentinel] post-import refresh failed:", refreshErr);
+    }
+    const outcome = classifyImportError(deps.isDeliveryFailure(e));
+    deps.flash(outcome.message, outcome.tone);
+  }
 }
 
 /**
