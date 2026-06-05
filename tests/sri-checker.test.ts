@@ -92,6 +92,17 @@ describe("sri_checker - non-credential pages", () => {
     const result = checkSRI(makeDoc(html), PAGE_URL, PAGE_ORIGIN);
     expect(result.totalExternal).toBe(1);
   });
+
+  it("DOES scan a visible field whose style carries a decoy hiding substring (#196)", () => {
+    // Pre-#196 the raw substring check matched "display:none" inside the
+    // unrelated `content` property and wrongly skipped the gate. The shared
+    // declaration-parsing helper keeps the field visible, so SRI still gates on.
+    const html =
+      `<!doctype html><html><head>${scriptTag(`${EXTERNAL_ORIGIN}/app.js`)}</head>` +
+      `<body><form><input type="password" name="pw" style="content:'display:none'"></form></body></html>`;
+    const result = checkSRI(makeDoc(html), PAGE_URL, PAGE_ORIGIN);
+    expect(result.totalExternal).toBe(1);
+  });
 });
 
 // ---------------------------------------------------------------------------
