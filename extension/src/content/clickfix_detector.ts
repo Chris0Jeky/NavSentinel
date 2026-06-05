@@ -153,66 +153,68 @@ const INSTRUCTION_PATTERNS: RegExp[] = [
 ];
 
 /**
- * Known legitimate CAPTCHA provider iframe sources. These are the strong
- * signals — a cross-origin iframe from these domains is hard to fake.
+ * Known legitimate CAPTCHA provider hosts. An iframe counts as a real provider
+ * frame only when its parsed src hostname matches one of these on a suffix
+ * boundary (so "evil-google.com" / "google.com.evil.com" do NOT match) and, where
+ * required, its path carries the provider sub-path. We validate the parsed URL
+ * rather than a raw `src` substring: a `[src*="recaptcha"]` selector matches any
+ * attacker-controlled string (e.g. `src="recaptcha"` or
+ * `src="https://evil.cdn/recaptcha.png"`), which let a phishing page suppress the
+ * whole ClickFix detector by adding one hidden iframe (#206).
  */
-const LEGIT_CAPTCHA_IFRAME_SELECTORS = [
-  'iframe[src*="google.com/recaptcha"]',
-  'iframe[src*="recaptcha"]',
-  'iframe[src*="hcaptcha.com"]',
-  'iframe[src*="challenges.cloudflare.com"]',
-  'iframe[src*="funcaptcha.com"]',
-  'iframe[src*="arkoselabs.com"]',
+const CAPTCHA_PROVIDERS: Array<{ host: string; pathIncludes?: string }> = [
+  { host: "google.com", pathIncludes: "/recaptcha" },
+  { host: "recaptcha.net" },
+  { host: "gstatic.com", pathIncludes: "/recaptcha" },
+  { host: "hcaptcha.com" },
+  { host: "challenges.cloudflare.com" },
+  { host: "funcaptcha.com" },
+  { host: "arkoselabs.com" },
 ];
 
-/**
- * Class-name markers for CAPTCHA providers. These are weaker signals
- * because an attacker can trivially add a class name to any element.
- * We only trust these if the matching element also contains a cross-origin
- * iframe (or is itself an iframe from the provider domain).
- */
-const LEGIT_CAPTCHA_CLASS_SELECTORS: { selector: string; iframeDomain: string }[] = [
-  { selector: ".g-recaptcha", iframeDomain: "google.com/recaptcha" },
-  { selector: "#recaptcha", iframeDomain: "google.com/recaptcha" },
-  { selector: ".h-captcha", iframeDomain: "hcaptcha.com" },
-  { selector: ".cf-turnstile", iframeDomain: "challenges.cloudflare.com" },
-];
+/** True when an iframe's src is a real http(s) URL hosted by a CAPTCHA provider. */
+function isProviderCaptchaIframe(iframe: Element): boolean {
+  const src = iframe.getAttribute("src");
+  if (!src) return false;
+  let url: URL;
+  try {
+    // Resolve against the page URL so relative srcs are evaluated correctly; this
+    // also rejects opaque/script schemes (data:, blob:, javascript:) below.
+    url = new URL(src, typeof location !== "undefined" ? location.href : undefined);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") return false;
+  const hostname = url.hostname.toLowerCase();
+  const pathname = url.pathname.toLowerCase();
+  for (const provider of CAPTCHA_PROVIDERS) {
+    const hostMatch = hostname === provider.host || hostname.endsWith("." + provider.host);
+    if (!hostMatch) continue;
+    if (provider.pathIncludes && !pathname.includes(provider.pathIncludes)) continue;
+    return true;
+  }
+  return false;
+}
 
 /**
  * Check whether a known legitimate CAPTCHA provider is present on the page.
  * If so, ClickFix detection should be suppressed to avoid false positives.
  *
- * To prevent attackers from adding a bare class name to suppress detection,
- * class-name-only matches are validated by checking for a cross-origin
- * iframe from the expected provider domain within the matched element.
+ * Detection is by validated provider HOSTNAME (see isProviderCaptchaIframe), not a
+ * raw `src` substring an attacker can spoof (#206). A provider class marker
+ * (.g-recaptcha, .cf-turnstile, …) without a validated provider iframe is NOT
+ * trusted; and any provider iframe near such a marker is already found by this
+ * root-wide scan, so a separate class-backed path would be redundant.
  */
 export function hasLegitCaptcha(root: Document | Element = document): boolean {
-  // Strong signal: cross-origin iframe from a known CAPTCHA provider
-  for (const selector of LEGIT_CAPTCHA_IFRAME_SELECTORS) {
-    try {
-      if (root.querySelector(selector)) return true;
-    } catch {
-      // invalid selector in this context — skip
-    }
+  let iframes: ArrayLike<Element>;
+  try {
+    iframes = root.querySelectorAll("iframe");
+  } catch {
+    return false;
   }
-
-  // Weaker signal: class name must be backed by a provider iframe
-  for (const { selector, iframeDomain } of LEGIT_CAPTCHA_CLASS_SELECTORS) {
-    try {
-      const el = root.querySelector(selector);
-      if (!el) continue;
-      // Check if this element or its descendants contain a real provider iframe
-      const iframe = el.querySelector(`iframe[src*="${iframeDomain}"]`);
-      if (iframe) return true;
-      // Also check siblings (some providers inject the iframe as a sibling)
-      const parent = el.parentElement;
-      if (parent) {
-        const siblingIframe = parent.querySelector(`iframe[src*="${iframeDomain}"]`);
-        if (siblingIframe) return true;
-      }
-    } catch {
-      // invalid selector in this context — skip
-    }
+  for (let i = 0; i < iframes.length; i++) {
+    if (isProviderCaptchaIframe(iframes[i]!)) return true;
   }
   return false;
 }
