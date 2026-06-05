@@ -1206,7 +1206,12 @@ describe("prompt outcome delegation — retry, drop, and refusal", () => {
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { clearPromptOutcomes, PromptOutcomeDeliveryError } = await import("../extension/src/shared/storage");
-    await expect(clearPromptOutcomes()).rejects.toBeInstanceOf(PromptOutcomeDeliveryError);
+    const err = await clearPromptOutcomes().catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(PromptOutcomeDeliveryError);
+    // R1 fix: the underlying transport error is preserved as `cause`, matching the
+    // diagnostic the append drop-path logs.
+    expect((err as Error).cause).toBeDefined();
+    expect(String((err as { cause?: unknown }).cause)).toMatch(/establish connection|receiving end/i);
     expect(calls).toBe(4); // initial + 3 retries, then reject (no silent drop)
     expect(store[PROMPT_OUTCOMES_KEY]).toEqual([seed]); // not wiped via any fallback
     // The control op rejects rather than taking the append "dropped" log path.
