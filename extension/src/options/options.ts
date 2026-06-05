@@ -3,7 +3,7 @@ import type { CredMode, EventLogEntry, SuiteSettings } from "../shared/storage";
 import { classifyEventTone } from "../shared/event_tone";
 import { icon, logoSentinel } from "../shared/icons";
 import { getSegValue, initSegKeyboard, setSegValue } from "../shared/seg_control";
-import { pct, avg, fmtTime, parseIntSafe, withReentrancyGuard } from "./options_model";
+import { pct, avg, fmtTime, parseIntSafe, withReentrancyGuard, classifyImportError } from "./options_model";
 import {
   addTrustedDomainWithResult,
   appendEvent,
@@ -16,6 +16,7 @@ import {
   getSuiteSettings,
   getTrustedDomains,
   importAll,
+  PromptOutcomeDeliveryError,
   removeTrustedDomain,
   updateSuiteSettings,
   type PromptOutcomeEntry
@@ -559,7 +560,13 @@ importFileEl.addEventListener("change", async () => {
     flashStatus(statusEl, "Imported.");
   } catch (e) {
     console.warn("[NavSentinel] import failed:", e);
-    flashStatus(statusEl, "Import failed.", "error");
+    // importAll is non-atomic and writes prompt outcomes last: a delivery failure
+    // there means the rest applied, so report a partial result and still refresh
+    // the UI to reflect what landed. Any other error (e.g. invalid JSON) happens
+    // before any write — a clean total failure (#188 R1).
+    const outcome = classifyImportError(e instanceof PromptOutcomeDeliveryError);
+    if (outcome.reinit) await init();
+    flashStatus(statusEl, outcome.message, outcome.tone);
   } finally {
     importFileEl.value = "";
   }
@@ -571,19 +578,21 @@ refreshStatsBtn.addEventListener("click", async () => {
 });
 
 clearStatsBtn.addEventListener("click", async () => {
+  // Only clearPromptOutcomes is delegated to the SW and can reject when it is
+  // persistently unreachable (#188); scope the failure report to it so the error
+  // message is accurate. On failure nothing changed (adaptive scores are not
+  // cleared) — a consistent no-op the user can retry.
   try {
     await clearPromptOutcomes();
-    await clearAdaptiveScores();
-    await refreshStats();
-    flashStatus(statusEl, "Stats cleared.");
   } catch (e) {
-    // clearPromptOutcomes rejects if the service worker (the serialized writer)
-    // is persistently unreachable (#188). Surface it instead of a phantom
-    // success; adaptive scores are left untouched to avoid a half-cleared state.
     console.warn("[NavSentinel] clear stats failed:", e);
     await refreshStats();
     flashStatus(statusEl, "Couldn't clear stats — try again.", "error");
+    return;
   }
+  await clearAdaptiveScores();
+  await refreshStats();
+  flashStatus(statusEl, "Stats cleared.");
 });
 
 refreshProfilesBtn.addEventListener("click", async () => {

@@ -22,6 +22,37 @@ export function parseIntSafe(value: string, fallback: number): number {
   return Number.isFinite(n) ? Math.trunc(n) : fallback;
 }
 
+export interface ImportErrorOutcome {
+  /** User-facing status message. */
+  message: string;
+  /** Status tone for flashStatus. */
+  tone: "error";
+  /**
+   * Whether the page should still refresh after the error. True for a partial
+   * import (only the last, prompt-outcome step failed) so the UI reflects the
+   * sections that DID apply.
+   */
+  reinit: boolean;
+}
+
+/**
+ * Decide how the options page reports a failed import. `importAll` is non-atomic
+ * and writes the prompt-outcome history LAST; a *delivery* failure of that step
+ * (the SW was unreachable) means the earlier settings/allowlist/eventLog sections
+ * already applied, so report a partial result and still refresh the UI. Any other
+ * error (e.g. invalid JSON) happens before any write — report a total failure and
+ * leave the UI showing the unchanged config (#188 R1).
+ */
+export function classifyImportError(isDeliveryFailure: boolean): ImportErrorOutcome {
+  return isDeliveryFailure
+    ? {
+        message: "Imported, but prompt history wasn't updated — try again.",
+        tone: "error",
+        reinit: true,
+      }
+    : { message: "Import failed.", tone: "error", reinit: false };
+}
+
 /**
  * Wrap an async click handler so re-entrant invocations are ignored while one is
  * in flight (prevents a double/triple-click from firing overlapping

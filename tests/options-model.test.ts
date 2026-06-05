@@ -5,6 +5,7 @@ import {
   fmtTime,
   parseIntSafe,
   withReentrancyGuard,
+  classifyImportError,
 } from "../extension/src/options/options_model";
 
 describe("pct", () => {
@@ -164,5 +165,25 @@ describe("withReentrancyGuard", () => {
 
     await expect(guarded()).rejects.toThrow("boom");
     expect(busy).toBe(false); // not stuck busy
+  });
+});
+
+describe("classifyImportError (#188 R1)", () => {
+  it("reports a partial result and refreshes when the prompt-outcome write failed", () => {
+    // importAll is non-atomic; a delivery failure means the rest of the import
+    // applied, so the UI must reflect that and report a partial failure.
+    const outcome = classifyImportError(true);
+    expect(outcome.reinit).toBe(true);
+    expect(outcome.tone).toBe("error");
+    expect(outcome.message).toMatch(/prompt history/i);
+    expect(outcome.message).not.toBe("Import failed.");
+  });
+
+  it("reports a total failure without refreshing for any other error", () => {
+    // e.g. invalid JSON — happens before any write, nothing applied.
+    const outcome = classifyImportError(false);
+    expect(outcome.reinit).toBe(false);
+    expect(outcome.tone).toBe("error");
+    expect(outcome.message).toBe("Import failed.");
   });
 });
