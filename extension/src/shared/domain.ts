@@ -8,7 +8,15 @@ export function normalizeHost(host: string): string {
   if (!host) return "";
   // Strip all trailing dots (not just one) so the function is idempotent:
   // normalizeHost("a..") must equal normalizeHost(normalizeHost("a..")).
-  return host.toLowerCase().replace(/\.+$/, "");
+  let h = host.toLowerCase().replace(/\.+$/, "");
+  // Unwrap a bracketed IPv6 literal ("[2001:db8::1]" -> "2001:db8::1"). URL
+  // hostnames bracket IPv6 literals, but the brackets are not part of the
+  // canonical host: leaving them would defeat isIPv6 (so the +35 IP_HOST
+  // credential signal never fires for IPv6-literal phishing pages) and make
+  // getRegistrableDomain return the bracketed string. Idempotent: the unwrapped
+  // form has no brackets.
+  if (h.startsWith("[") && h.endsWith("]")) h = h.slice(1, -1);
+  return h;
 }
 
 function isIPv4(host: string): boolean {
@@ -660,6 +668,14 @@ export function detectBrandInDomain(
   // Normalize homoglyphs in the label for comparison
   const normalizedLabel = normalizeHomoglyphs(label);
   const strippedLabel = stripSeparators(normalizedLabel);
+  // True when homoglyph normalization actually rewrote the label (e.g. "paypa1"
+  // -> "paypal", "g00gle" -> "google", "arnazon" -> "amazon"). Such a label is a
+  // deliberate confusable spoof, so an EXACT brand match must still be flagged —
+  // brandKeywordMatch rejects it via its strict length guard (it only catches
+  // brand-plus-extra like "paypal-secure"). A legitimate same-length label (e.g.
+  // "ebay", or "paypal" on a different TLD) normalizes UNCHANGED and is NOT newly
+  // flagged, keeping false positives near zero. (#discovery cycle 3)
+  const homoglyphRewrote = strippedLabel !== stripSeparators(label.toLowerCase());
 
   for (const [brand, canonical] of BRAND_LIST) {
     const canonicalReg = getBrandRegDomain(canonical);
@@ -668,7 +684,10 @@ export function detectBrandInDomain(
     // Skip known legitimate brand-owned aliases (e.g. microsoftonline.com)
     if (isBrandAlias(brand, reg)) continue;
 
-    if (brandKeywordMatch(strippedLabel, brand)) {
+    if (
+      brandKeywordMatch(strippedLabel, brand) ||
+      (homoglyphRewrote && strippedLabel === brand)
+    ) {
       return { brand, canonicalDomain: canonicalReg };
     }
   }

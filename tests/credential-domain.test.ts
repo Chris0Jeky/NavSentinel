@@ -186,6 +186,33 @@ describe("detectBrandInDomain", () => {
     expect(result!.brand).toBe("paypal");
   });
 
+  // #discovery cycle 3: pure homoglyph spoofs that normalize to EXACTLY a brand
+  // (no extra characters). brandKeywordMatch's length guard rejects these, so the
+  // homoglyph-rewrote exact-match path catches them.
+  it("catches a pure ASCII-homoglyph brand spoof (paypa1.com -> paypal)", () => {
+    const result = detectBrandInDomain("paypa1.com");
+    expect(result).not.toBeNull();
+    expect(result!.brand).toBe("paypal");
+  });
+
+  it("catches a digit-homoglyph brand spoof (g00gle.com -> google)", () => {
+    const result = detectBrandInDomain("g00gle.com");
+    expect(result).not.toBeNull();
+    expect(result!.brand).toBe("google");
+  });
+
+  it("catches an rn->m homoglyph brand spoof (arnazon.com -> amazon)", () => {
+    const result = detectBrandInDomain("arnazon.com");
+    expect(result).not.toBeNull();
+    expect(result!.brand).toBe("amazon");
+  });
+
+  it("does NOT newly flag the exact brand spelling on another TLD (no homoglyph change)", () => {
+    // FP-safety: the exact-match path only fires when homoglyph normalization
+    // actually rewrote the label, so paypal.org (real characters) stays null here.
+    expect(detectBrandInDomain("paypal.org")).toBeNull();
+  });
+
   // False-positive guards for short keywords
   it("does NOT flag livestream.com (removed 'live' keyword)", () => {
     expect(detectBrandInDomain("livestream.com")).toBeNull();
@@ -642,6 +669,13 @@ describe("normalizeHost", () => {
   it("handles mixed-case subdomain", () => {
     expect(normalizeHost("Sub.Domain.Example.COM")).toBe("sub.domain.example.com");
   });
+
+  it("unwraps a bracketed IPv6 literal (#discovery cycle 3)", () => {
+    expect(normalizeHost("[2001:db8::1]")).toBe("2001:db8::1");
+    expect(normalizeHost("[::1]")).toBe("::1");
+    // Idempotent: the unwrapped form has no brackets.
+    expect(normalizeHost(normalizeHost("[2001:DB8::1]"))).toBe("2001:db8::1");
+  });
 });
 
 describe("isIPAddress", () => {
@@ -709,8 +743,11 @@ describe("isIPAddress", () => {
     expect(isIPAddress("192.168.001.001")).toBe(true);
   });
 
-  it("rejects bracketed IPv6 (brackets not in character class)", () => {
-    expect(isIPAddress("[::1]")).toBe(false);
+  it("accepts bracketed IPv6 literals (URL.hostname form) — #discovery cycle 3", () => {
+    // URL.hostname brackets IPv6 literals; normalizeHost now unwraps them so the
+    // +35 IP_HOST credential signal fires for IPv6-literal pages, matching IPv4.
+    expect(isIPAddress("[::1]")).toBe(true);
+    expect(isIPAddress("[2001:db8::1]")).toBe(true);
   });
 });
 

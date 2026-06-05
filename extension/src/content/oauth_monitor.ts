@@ -72,8 +72,12 @@ const REDIRECT_PARAM_NAMES = [
 /** TTL for OAuth flag expiry (ms). Flags auto-expire after this period. */
 const OAUTH_FLAG_TTL_MS = 60_000;
 
-/** Hosts treated as local development callbacks (never flag as mismatch). */
-const LOCALHOST_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+/**
+ * Hosts treated as local development callbacks (never flag as mismatch). The
+ * IPv6 loopback is stored UNbracketed because the membership test runs against
+ * normalizeHost(hostname), which unwraps a bracketed "[::1]" to "::1".
+ */
+const LOCALHOST_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
 
 // --- URL analysis helpers ---
 
