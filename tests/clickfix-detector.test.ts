@@ -446,22 +446,48 @@ describe("hasLegitCaptcha", () => {
     b.innerHTML = '<iframe src="https://newassets.hcaptcha.com/captcha/v1/foo"></iframe>';
     expect(hasLegitCaptcha(b)).toBe(true);
   });
+
+  // #206 R1: a hidden iframe pointing at a REAL provider URL is a suppressor decoy
+  // (the attacker controls the DOM). A genuine CAPTCHA the user solves is rendered.
+  it.each(['style="display:none"', "hidden", 'width="0" height="0"', 'style="visibility:hidden"'])(
+    "rejects a real-provider iframe hidden via %s",
+    (attrs) => {
+      const div = document.createElement("div");
+      div.innerHTML = `<iframe src="https://www.google.com/recaptcha/api2/anchor" ${attrs}></iframe>`;
+      expect(hasLegitCaptcha(div)).toBe(false);
+    },
+  );
+
+  it("rejects a path-less recaptcha.net root (#206 R1)", () => {
+    const div = document.createElement("div");
+    div.innerHTML = '<iframe src="https://www.recaptcha.net/"></iframe>';
+    expect(hasLegitCaptcha(div)).toBe(false);
+  });
+
+  it("accepts a trailing-dot provider hostname (#206 R1)", () => {
+    const div = document.createElement("div");
+    div.innerHTML = '<iframe src="https://hcaptcha.com./challenge"></iframe>';
+    expect(hasLegitCaptcha(div)).toBe(true);
+  });
 });
 
 // --- #206: a spoofed captcha iframe must NOT suppress ClickFix scoring ---
 
-describe("scanForClickFix not suppressed by a spoofed captcha iframe (#206)", () => {
+describe("scanForClickFix not suppressed by a hidden/spoofed captcha iframe (#206)", () => {
   beforeEach(() => {
     _resetClipboardEvents();
   });
 
-  it("still scores a ClickFix page that hides a fake recaptcha iframe to dodge the gate", () => {
+  it("still scores a ClickFix page that hides a real-provider iframe to dodge the gate", () => {
+    // R1 PoC: a hidden iframe pointing at a REAL provider URL. The visibility gate
+    // rejects it, so the detector is not suppressed. (The score here comes from the
+    // captcha+instruction text branch; happy-dom does no layout, so the overlay /
+    // clipboard branches don't contribute — text alone proves non-suppression.)
     recordClipboardWrite({ ts: Date.now(), contentLength: 120, looksLikeCommand: true });
     const root = document.implementation.createHTMLDocument("t");
     root.body.innerHTML =
-      '<iframe src="recaptcha" style="display:none"></iframe>' +
-      '<div style="position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:99999">' +
-      "Verify you are human: press Win+R, then Ctrl+V and press Enter</div>";
+      '<iframe src="https://www.google.com/recaptcha/api2/anchor" style="display:none"></iframe>' +
+      "<div>Verify you are human: press Win+R, then Ctrl+V and press Enter</div>";
     const result = scanForClickFix(root);
     expect(result.reasons).not.toContain("legit_captcha_present");
     expect(result.score).toBeGreaterThan(0);
