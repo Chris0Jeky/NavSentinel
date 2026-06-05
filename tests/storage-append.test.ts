@@ -1183,6 +1183,66 @@ describe("prompt outcome delegation — retry, drop, and refusal", () => {
     expect(calls).toBe(1); // definitive refusal — not retried
     expect(store[PROMPT_OUTCOMES_KEY]).toEqual([seed]); // and not wiped via any fallback
   });
+
+  it("clearPromptOutcomes REJECTS when the SW is persistently unreachable (#188 control op)", async () => {
+    // Append drops + resolves on exhaustion (covered above); a user-initiated
+    // control op must instead reject so the options UI can surface the failure.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const seed = { id: "keep-1", ts: 10, domain: "keep.example", type: "nav" as const, score: 30, outcome: "allow" as const };
+    const { chrome, store } = createChromeMock({ [PROMPT_OUTCOMES_KEY]: [seed] });
+    let calls = 0;
+    const runtime: {
+      lastError?: { message?: string };
+      sendMessage: (message: unknown, callback?: (response: unknown) => void) => void;
+    } = {
+      sendMessage(_message, callback) {
+        calls++;
+        runtime.lastError = { message: "Could not establish connection. Receiving end does not exist." };
+        callback?.(undefined);
+        delete runtime.lastError;
+      },
+    };
+    (chrome as unknown as { runtime: unknown }).runtime = runtime;
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { clearPromptOutcomes } = await import("../extension/src/shared/storage");
+    await expect(clearPromptOutcomes()).rejects.toThrow(/unreachable/i);
+    expect(calls).toBe(4); // initial + 3 retries, then reject (no silent drop)
+    expect(store[PROMPT_OUTCOMES_KEY]).toEqual([seed]); // not wiped via any fallback
+    // The control op rejects rather than taking the append "dropped" log path.
+    expect(warn).not.toHaveBeenCalledWith(
+      expect.stringContaining("prompt outcome dropped"),
+      expect.anything(),
+      expect.anything()
+    );
+  });
+
+  it("importAll (replace) REJECTS when the SW is persistently unreachable (#188 control op)", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { chrome } = createChromeMock();
+    let calls = 0;
+    const runtime: {
+      lastError?: { message?: string };
+      sendMessage: (message: unknown, callback?: (response: unknown) => void) => void;
+    } = {
+      sendMessage(_message, callback) {
+        calls++;
+        runtime.lastError = { message: "Could not establish connection. Receiving end does not exist." };
+        callback?.(undefined);
+        delete runtime.lastError;
+      },
+    };
+    (chrome as unknown as { runtime: unknown }).runtime = runtime;
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { importAll } = await import("../extension/src/shared/storage");
+    await expect(
+      importAll({
+        promptOutcomes: [{ id: "imp-1", ts: 5, domain: "d.example", type: "nav", score: 10, outcome: "allow" }],
+      })
+    ).rejects.toThrow(/unreachable/i);
+    expect(calls).toBe(4);
+  });
 });
 
 describe("prompt outcome append — non-finite sanitization", () => {

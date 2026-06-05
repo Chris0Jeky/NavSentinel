@@ -448,6 +448,10 @@ async function setPromptOutcomeResetCutoff(ts = Date.now()): Promise<void> {
 class PromptOutcomeRetryableError extends Error {}
 // A definitive refusal by the SW (the sender is not authorized). Never retried.
 class PromptOutcomeUnauthorizedError extends Error {}
+// A user-initiated control op (clear/replace) whose delegation exhausted retries
+// with the SW persistently unreachable. Surfaced to the caller (options UI) so a
+// bulk op is never reported as a phantom success (#188). Append never throws this.
+class PromptOutcomeDeliveryError extends Error {}
 
 function sendPromptOutcomeStorageMessage(message: PromptOutcomeStorageMessage): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -496,8 +500,16 @@ function delayMs(ms: number): Promise<void> {
  * content script on Chrome (risking resurrection of cleared data), and could
  * race a concurrent SW write. Prompt outcomes are best-effort adaptive-scoring
  * input, so we surface the loss loudly instead of corrupting state silently.
+ *
+ * @param options.throwOnExhaustion when true (a user-initiated clear/replace),
+ * reject with PromptOutcomeDeliveryError on exhaustion instead of dropping, so
+ * the caller can surface the failure in the UI (#188). The append path leaves it
+ * unset and keeps the fire-and-forget drop + log contract.
  */
-async function delegatePromptOutcomeWrite(message: PromptOutcomeStorageMessage): Promise<void> {
+async function delegatePromptOutcomeWrite(
+  message: PromptOutcomeStorageMessage,
+  options?: { throwOnExhaustion?: boolean }
+): Promise<void> {
   let lastErr: unknown;
   for (let attempt = 0; attempt <= PROMPT_OUTCOME_DELEGATE_RETRY_DELAYS_MS.length; attempt++) {
     try {
@@ -509,6 +521,14 @@ async function delegatePromptOutcomeWrite(message: PromptOutcomeStorageMessage):
       const delay = PROMPT_OUTCOME_DELEGATE_RETRY_DELAYS_MS[attempt];
       if (delay !== undefined) await delayMs(delay);
     }
+  }
+  // Persistently unreachable. A user-initiated control op rejects so the options
+  // UI can surface the failure; a best-effort append drops + logs (its loss is
+  // bounded adaptive-scoring input) (#188).
+  if (options?.throwOnExhaustion) {
+    throw new PromptOutcomeDeliveryError(
+      `Prompt outcome ${message.type} not delivered — service worker unreachable after retries`
+    );
   }
   console.warn(
     "[NavSentinel] prompt outcome dropped — service worker unreachable after retries:",
@@ -613,7 +633,7 @@ function clearPromptOutcomesDirect(): Promise<void> {
 
 export function clearPromptOutcomes(): Promise<void> {
   if (shouldDelegatePromptOutcomeWrite()) {
-    return delegatePromptOutcomeWrite({ type: "ns-prompt-outcome-clear" });
+    return delegatePromptOutcomeWrite({ type: "ns-prompt-outcome-clear" }, { throwOnExhaustion: true });
   }
   return clearPromptOutcomesDirect();
 }
@@ -630,15 +650,18 @@ async function replacePromptOutcomesDirect(outcomes: PromptOutcomeEntry[]): Prom
   });
 }
 
-// NOTE: a user-initiated import goes through delegatePromptOutcomeWrite, which
-// (by design) drops + logs rather than rejecting if the SW is persistently
-// unreachable. For an import that means a silent no-op the options page may
-// report as success. Surfacing delegation failure in the import UI is
-// options-layer work tracked as a follow-up issue (see #188).
+// A user-initiated import/clear delegates with { throwOnExhaustion: true }:
+// unlike the best-effort append path (drop + log), a control op REJECTS if the
+// SW is persistently unreachable, so the options page surfaces the failure
+// instead of reporting a phantom success (#188). The append contract is
+// unchanged.
 async function replacePromptOutcomes(outcomes: PromptOutcomeEntry[]): Promise<void> {
   const boundedOutcomes = boundPromptOutcomeLog(outcomes);
   if (shouldDelegatePromptOutcomeWrite()) {
-    return delegatePromptOutcomeWrite({ type: "ns-prompt-outcome-replace", outcomes: boundedOutcomes });
+    return delegatePromptOutcomeWrite(
+      { type: "ns-prompt-outcome-replace", outcomes: boundedOutcomes },
+      { throwOnExhaustion: true }
+    );
   }
   return replacePromptOutcomesDirect(boundedOutcomes);
 }
