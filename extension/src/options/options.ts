@@ -571,10 +571,19 @@ refreshStatsBtn.addEventListener("click", async () => {
 });
 
 clearStatsBtn.addEventListener("click", async () => {
-  await clearPromptOutcomes();
-  await clearAdaptiveScores();
-  await refreshStats();
-  flashStatus(statusEl, "Stats cleared.");
+  try {
+    await clearPromptOutcomes();
+    await clearAdaptiveScores();
+    await refreshStats();
+    flashStatus(statusEl, "Stats cleared.");
+  } catch (e) {
+    // clearPromptOutcomes rejects if the service worker (the serialized writer)
+    // is persistently unreachable (#188). Surface it instead of a phantom
+    // success; adaptive scores are left untouched to avoid a half-cleared state.
+    console.warn("[NavSentinel] clear stats failed:", e);
+    await refreshStats();
+    flashStatus(statusEl, "Couldn't clear stats — try again.", "error");
+  }
 });
 
 refreshProfilesBtn.addEventListener("click", async () => {
