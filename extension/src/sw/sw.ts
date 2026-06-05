@@ -1,6 +1,11 @@
 import { getRegistrableDomain, normalizeHost } from "../shared/domain";
 import { initReputation, isKnownBadDomain, reputationReady } from "../shared/reputation";
-import { getNavSettings, SUITE_SETTINGS_KEY } from "../shared/storage";
+import {
+  getNavSettings,
+  handlePromptOutcomeStorageMessage,
+  isPromptOutcomeStorageMessage,
+  SUITE_SETTINGS_KEY,
+} from "../shared/storage";
 import { RedirectChainTracker } from "../shared/redirect_chain";
 import {
   isOAuthUrl,
@@ -401,6 +406,15 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message !== "object") return;
+
+  if (isPromptOutcomeStorageMessage(message)) {
+    void handlePromptOutcomeStorageMessage(message, sender)
+      .then((response) => sendResponse?.(response))
+      .catch((err) => {
+        sendResponse?.({ ok: false, error: err instanceof Error ? err.message : String(err) });
+      });
+    return true;
+  }
 
   if (message.type === "ns-reputation-check") {
     const domain = typeof message.domain === "string" ? message.domain : "";
