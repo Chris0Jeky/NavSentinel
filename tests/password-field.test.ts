@@ -2,71 +2,15 @@
 import { describe, expect, it } from "vitest";
 import {
   hasVisiblePasswordField,
-  isInlineHidden,
   isVisiblePasswordField,
 } from "../extension/src/content/password_field";
 
-describe("isInlineHidden (CSS declaration parsing)", () => {
-  it("returns false for empty/whitespace style", () => {
-    expect(isInlineHidden("")).toBe(false);
-    expect(isInlineHidden("   ")).toBe(false);
-  });
-
-  it.each([
-    "display:none",
-    "display: none",
-    "display:none;",
-    "DISPLAY:NONE",
-    "Display: None",
-    "display :none",
-    "display:none !important",
-    "display:none!important",
-    "color:red; display:none",
-    "visibility:hidden",
-    "visibility: hidden",
-    "VISIBILITY:HIDDEN",
-    "visibility:hidden !important",
-    "color:red;visibility:hidden;",
-  ])("treats %j as hidden", (style) => {
-    expect(isInlineHidden(style)).toBe(true);
-  });
-
-  it.each([
-    "display:block",
-    "display:flex",
-    "visibility:visible",
-    "visibility:collapse", // not 'hidden' — out of scope, mirrors prior behavior
-    "color:red",
-    "opacity:0", // opacity hiding is not a display/visibility declaration
-    "width:0;height:0",
-  ])("treats %j as visible", (style) => {
-    expect(isInlineHidden(style)).toBe(false);
-  });
-
-  it("does not fire on a decoy value that merely contains the hiding substring (#196)", () => {
-    // The pre-#196 substring check wrongly flagged these as hidden.
-    expect(isInlineHidden("content:'display:none'")).toBe(false);
-    expect(isInlineHidden('content:"visibility:hidden"')).toBe(false);
-    expect(isInlineHidden("background:url(/x?display:none)")).toBe(false);
-    expect(isInlineHidden("font-family:'display:none'")).toBe(false);
-  });
-
-  it("honors the CSS cascade (last declaration of a property wins)", () => {
-    // display resolves to block -> visible, even though 'none' appears first.
-    expect(isInlineHidden("display:none;display:block")).toBe(false);
-    // display resolves to none -> hidden.
-    expect(isInlineHidden("display:block;display:none")).toBe(true);
-    // visibility resolves to visible -> not hidden.
-    expect(isInlineHidden("visibility:hidden;visibility:visible")).toBe(false);
-  });
-});
+function pwInput(attrs: string): HTMLInputElement {
+  document.body.innerHTML = `<input type="password" ${attrs}>`;
+  return document.querySelector('input[type="password"]') as HTMLInputElement;
+}
 
 describe("isVisiblePasswordField", () => {
-  function pwInput(attrs: string): HTMLInputElement {
-    document.body.innerHTML = `<input type="password" ${attrs}>`;
-    return document.querySelector('input[type="password"]') as HTMLInputElement;
-  }
-
   it("is visible for a plain password input", () => {
     expect(isVisiblePasswordField(pwInput(""))).toBe(true);
   });
@@ -75,13 +19,56 @@ describe("isVisiblePasswordField", () => {
     expect(isVisiblePasswordField(pwInput("disabled"))).toBe(false);
   });
 
-  it("is not visible when inline display:none / visibility:hidden", () => {
-    expect(isVisiblePasswordField(pwInput('style="display:none"'))).toBe(false);
-    expect(isVisiblePasswordField(pwInput('style="visibility:hidden"'))).toBe(false);
+  it.each([
+    "display:none",
+    "display: none",
+    "display: none !important",
+    "visibility:hidden",
+    "visibility: hidden",
+    "color:red;display:none",
+    "display:block;display:none", // cascade: last valid declaration wins -> none
+  ])("is not visible when inline-hidden via style=%j", (style) => {
+    expect(isVisiblePasswordField(pwInput(`style="${style}"`))).toBe(false);
   });
 
-  it("stays visible despite a decoy hiding substring in a non-hiding property (#196)", () => {
-    expect(isVisiblePasswordField(pwInput("style=\"content:'display:none'\""))).toBe(true);
+  it.each([
+    "display:block",
+    "visibility:visible",
+    "visibility:collapse", // not 'hidden' -> visible (mirrors prior scope)
+    "opacity:0", // opacity hiding is out of scope
+    "color:red",
+  ])("is visible with non-hiding style=%j", (style) => {
+    expect(isVisiblePasswordField(pwInput(`style="${style}"`))).toBe(true);
+  });
+
+  // #196: decoys that merely *contain* a hiding substring inside an unrelated
+  // property must NOT hide the field. The CSS engine attributes the keyword to
+  // its real property, so these stay visible.
+  it.each([
+    "content:'display:none'",
+    "background:url(/x?display:none)",
+    "font-family:'visibility:hidden'",
+  ])("stays visible for decoy style=%j (#196)", (style) => {
+    expect(isVisiblePasswordField(pwInput(`style="${style}"`))).toBe(true);
+  });
+
+  // #196 R1: CSS-invalid multi-token values are dropped by the engine, so the
+  // field renders (visible). The earlier hand-parser wrongly took the first
+  // token and treated these as hidden, suppressing the gate on a real field.
+  it.each([
+    "display:none none",
+    "display:none x",
+    "visibility:hidden foo",
+  ])("stays visible for CSS-invalid value style=%j (#196 R1)", (style) => {
+    expect(isVisiblePasswordField(pwInput(`style="${style}"`))).toBe(true);
+  });
+
+  // Inline-only scope (R1 nit): hiding via the `hidden` attribute or a class is
+  // intentionally NOT consulted — element.style reflects inline styles only. A
+  // future change that broadened scope to getComputedStyle/`hidden` would flip
+  // this and fail here, flagging the scope change.
+  it("treats a `hidden`-attribute field as visible (inline-only scope)", () => {
+    expect(isVisiblePasswordField(pwInput("hidden"))).toBe(true);
   });
 });
 
