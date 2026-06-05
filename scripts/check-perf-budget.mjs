@@ -33,7 +33,11 @@ const budgets = [
   {
     label: "capture_isolated (content script)",
     glob: "assets/capture_isolated.ts-*.js",
-    maxKB: 60,
+    // Bumped 60 -> 62 (#206): the ClickFix legit-CAPTCHA gate now validates iframe
+    // hostnames + render state instead of a spoofable src substring, a small but
+    // necessary security addition that took the chunk just over 60KB. Total-dist
+    // budget (500KB) remains the aggregate guard and has ample room (~447KB).
+    maxKB: 62,
   },
   {
     label: "main_guard (MAIN world)",

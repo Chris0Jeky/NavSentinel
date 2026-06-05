@@ -164,7 +164,7 @@ const INSTRUCTION_PATTERNS: RegExp[] = [
  */
 const CAPTCHA_PROVIDERS: Array<{ host: string; pathIncludes?: string }> = [
   { host: "google.com", pathIncludes: "/recaptcha" },
-  { host: "recaptcha.net" },
+  { host: "recaptcha.net", pathIncludes: "/recaptcha" },
   { host: "gstatic.com", pathIncludes: "/recaptcha" },
   { host: "hcaptcha.com" },
   { host: "challenges.cloudflare.com" },
@@ -172,7 +172,35 @@ const CAPTCHA_PROVIDERS: Array<{ host: string; pathIncludes?: string }> = [
   { host: "arkoselabs.com" },
 ];
 
-/** True when an iframe's src is a real http(s) URL hosted by a CAPTCHA provider. */
+/**
+ * True when the iframe is actually RENDERED (not hidden). A genuine CAPTCHA the
+ * user is meant to solve is visible; a hidden/zero-size iframe pointing at a real
+ * provider URL is a suppressor decoy, so it must not count as a legit CAPTCHA
+ * (#206 R1). Checks the `hidden` attribute, zero width/height attributes, and the
+ * inline AND computed display/visibility (computed catches class/stylesheet
+ * hiding on the live page; the inline + attribute checks remain decisive in a
+ * layout-less test environment).
+ */
+function isRenderedIframe(iframe: Element): boolean {
+  const el = iframe as HTMLElement;
+  // A genuine CAPTCHA the user solves is rendered; reject the inline hiding an
+  // attacker uses to plant a suppressor frame (hidden attribute, zero width/
+  // height, inline display:none/visibility:hidden) AND class/stylesheet hiding via
+  // computed style on the live page (the inline checks remain decisive in a
+  // layout-less test environment).
+  if (el.hasAttribute("hidden") || iframe.getAttribute("width") === "0" || iframe.getAttribute("height") === "0") {
+    return false;
+  }
+  if (el.style?.display === "none" || el.style?.visibility === "hidden") return false;
+  const cs = el.ownerDocument?.defaultView?.getComputedStyle?.(el);
+  return !cs || (cs.display !== "none" && cs.visibility !== "hidden");
+}
+
+/**
+ * True when an iframe's src is a real http(s) URL hosted by a CAPTCHA provider
+ * AND the iframe is rendered (so a hidden provider-URL decoy cannot suppress the
+ * detector, #206 R1).
+ */
 function isProviderCaptchaIframe(iframe: Element): boolean {
   const src = iframe.getAttribute("src");
   if (!src) return false;
@@ -185,13 +213,15 @@ function isProviderCaptchaIframe(iframe: Element): boolean {
     return false;
   }
   if (url.protocol !== "https:" && url.protocol !== "http:") return false;
-  const hostname = url.hostname.toLowerCase();
+  // Strip a single trailing dot ("hcaptcha.com." is the same host) so a fully
+  // qualified provider name still matches.
+  const hostname = url.hostname.toLowerCase().replace(/\.$/, "");
   const pathname = url.pathname.toLowerCase();
   for (const provider of CAPTCHA_PROVIDERS) {
     const hostMatch = hostname === provider.host || hostname.endsWith("." + provider.host);
     if (!hostMatch) continue;
     if (provider.pathIncludes && !pathname.includes(provider.pathIncludes)) continue;
-    return true;
+    return isRenderedIframe(iframe);
   }
   return false;
 }
