@@ -70,6 +70,15 @@ describe("isVisiblePasswordField", () => {
   it("treats a `hidden`-attribute field as visible (inline-only scope)", () => {
     expect(isVisiblePasswordField(pwInput("hidden"))).toBe(true);
   });
+
+  // R2 regression guard: a password input matched in a non-HTML document is a
+  // plain Element with no `.style`. The helper must stay total (not throw) the
+  // way the old getAttribute path was, and classify such an element not-visible.
+  it("returns false (no throw) for an element lacking inline style (non-HTML)", () => {
+    const nonHtml = { disabled: false } as unknown as HTMLInputElement;
+    expect(() => isVisiblePasswordField(nonHtml)).not.toThrow();
+    expect(isVisiblePasswordField(nonHtml)).toBe(false);
+  });
 });
 
 describe("hasVisiblePasswordField", () => {

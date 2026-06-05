@@ -43,7 +43,14 @@
  */
 export function isVisiblePasswordField(input: HTMLInputElement): boolean {
   if (input.disabled) return false;
+  // `.style` (ElementCSSInlineStyle) is mixed into HTML/SVG/MathML elements but
+  // NOT a plain Element. A password input matched inside a non-HTML document
+  // (e.g. an application/xml page under the <all_urls> match) is such a plain
+  // element: it is not a rendered HTML credential field and has no inline style.
+  // Treat it as not-visible rather than dereferencing undefined — the old
+  // getAttribute("style") path was total over any Element and never threw.
   const style = input.style;
+  if (!style) return false;
   return style.display !== "none" && style.visibility !== "hidden";
 }
 
