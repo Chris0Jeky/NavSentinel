@@ -3,7 +3,7 @@ import type { CredMode, EventLogEntry, SuiteSettings } from "../shared/storage";
 import { classifyEventTone } from "../shared/event_tone";
 import { icon, logoSentinel } from "../shared/icons";
 import { getSegValue, initSegKeyboard, setSegValue } from "../shared/seg_control";
-import { pct, avg, fmtTime, parseIntSafe, withReentrancyGuard, classifyImportError } from "./options_model";
+import { pct, avg, fmtTime, parseIntSafe, withReentrancyGuard, runClearStats, runImportFlow } from "./options_model";
 import {
   addTrustedDomainWithResult,
   appendEvent,
@@ -555,18 +555,16 @@ importFileEl.addEventListener("change", async () => {
   const f = importFileEl.files?.[0];
   if (!f) return;
   try {
-    await importAll(JSON.parse(await f.text()));
-    await init();
-    flashStatus(statusEl, "Imported.");
-  } catch (e) {
-    console.warn("[NavSentinel] import failed:", e);
-    // importAll is non-atomic and writes prompt outcomes last: a delivery failure
-    // there means the rest applied, so report a partial result and still refresh
-    // the UI to reflect what landed. Any other error (e.g. invalid JSON) happens
-    // before any write — a clean total failure (#188 R1).
-    const outcome = classifyImportError(e instanceof PromptOutcomeDeliveryError);
-    if (outcome.reinit) await init();
-    flashStatus(statusEl, outcome.message, outcome.tone);
+    // Thin adapter: orchestration (import → refresh → status, with the non-atomic
+    // partial-vs-total failure handling) lives in the unit-tested runImportFlow.
+    await runImportFlow({
+      importPayload: async () => {
+        await importAll(JSON.parse(await f.text()));
+      },
+      refresh: init,
+      flash: (msg, tone) => flashStatus(statusEl, msg, tone),
+      isDeliveryFailure: (e) => e instanceof PromptOutcomeDeliveryError,
+    });
   } finally {
     importFileEl.value = "";
   }
@@ -577,23 +575,16 @@ refreshStatsBtn.addEventListener("click", async () => {
   flashStatus(statusEl, "Stats refreshed.");
 });
 
-clearStatsBtn.addEventListener("click", async () => {
-  // Only clearPromptOutcomes is delegated to the SW and can reject when it is
-  // persistently unreachable (#188); scope the failure report to it so the error
-  // message is accurate. On failure nothing changed (adaptive scores are not
-  // cleared) — a consistent no-op the user can retry.
-  try {
-    await clearPromptOutcomes();
-  } catch (e) {
-    console.warn("[NavSentinel] clear stats failed:", e);
-    await refreshStats();
-    flashStatus(statusEl, "Couldn't clear stats — try again.", "error");
-    return;
-  }
-  await clearAdaptiveScores();
-  await refreshStats();
-  flashStatus(statusEl, "Stats cleared.");
-});
+clearStatsBtn.addEventListener("click", () =>
+  // Thin adapter: orchestration (scoped failure handling so a half-clear is never
+  // reported, adaptive scores cleared only on success) lives in runClearStats.
+  runClearStats({
+    clearOutcomes: clearPromptOutcomes,
+    clearAdaptive: clearAdaptiveScores,
+    refresh: refreshStats,
+    flash: (msg, tone) => flashStatus(statusEl, msg, tone),
+  }),
+);
 
 refreshProfilesBtn.addEventListener("click", async () => {
   await refreshDomainProfiles();

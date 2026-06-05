@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   pct,
   avg,
@@ -6,6 +6,8 @@ import {
   parseIntSafe,
   withReentrancyGuard,
   classifyImportError,
+  runClearStats,
+  runImportFlow,
 } from "../extension/src/options/options_model";
 
 describe("pct", () => {
@@ -168,22 +170,111 @@ describe("withReentrancyGuard", () => {
   });
 });
 
-describe("classifyImportError (#188 R1)", () => {
-  it("reports a partial result and refreshes when the prompt-outcome write failed", () => {
-    // importAll is non-atomic; a delivery failure means the rest of the import
-    // applied, so the UI must reflect that and report a partial failure.
+describe("classifyImportError (#188)", () => {
+  it("words a delivery failure as a partial result", () => {
     const outcome = classifyImportError(true);
-    expect(outcome.reinit).toBe(true);
     expect(outcome.tone).toBe("error");
     expect(outcome.message).toMatch(/prompt history/i);
     expect(outcome.message).not.toBe("Import failed.");
   });
 
-  it("reports a total failure without refreshing for any other error", () => {
-    // e.g. invalid JSON — happens before any write, nothing applied.
+  it("words any other failure as a total failure", () => {
     const outcome = classifyImportError(false);
-    expect(outcome.reinit).toBe(false);
     expect(outcome.tone).toBe("error");
     expect(outcome.message).toBe("Import failed.");
+  });
+});
+
+describe("runClearStats (#188)", () => {
+  beforeEach(() => { vi.spyOn(console, "warn").mockImplementation(() => {}); });
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it("clears outcomes then adaptive, refreshes, and flashes success", async () => {
+    const order: string[] = [];
+    const flash = vi.fn();
+    await runClearStats({
+      clearOutcomes: vi.fn(async () => { order.push("outcomes"); }),
+      clearAdaptive: vi.fn(async () => { order.push("adaptive"); }),
+      refresh: vi.fn(async () => { order.push("refresh"); }),
+      flash,
+    });
+    expect(order).toEqual(["outcomes", "adaptive", "refresh"]);
+    expect(flash).toHaveBeenCalledWith("Stats cleared.");
+  });
+
+  it("on a failed outcome clear: skips the adaptive clear (no half-clear), refreshes, flashes error", async () => {
+    const clearAdaptive = vi.fn(async () => {});
+    const refresh = vi.fn(async () => {});
+    const flash = vi.fn();
+    await runClearStats({
+      clearOutcomes: vi.fn(async () => { throw new Error("SW unreachable"); }),
+      clearAdaptive,
+      refresh,
+      flash,
+    });
+    expect(clearAdaptive).not.toHaveBeenCalled();
+    expect(refresh).toHaveBeenCalled();
+    expect(flash).toHaveBeenCalledWith("Couldn't clear stats — try again.", "error");
+  });
+});
+
+describe("runImportFlow (#188)", () => {
+  beforeEach(() => { vi.spyOn(console, "warn").mockImplementation(() => {}); });
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  // A delivery failure is modeled by a sentinel-message error here; in production
+  // the predicate is `e instanceof PromptOutcomeDeliveryError`.
+  const isDelivery = (e: unknown) => e instanceof Error && e.message === "DELIVERY";
+
+  it("imports, refreshes, and flashes success", async () => {
+    const refresh = vi.fn(async () => {});
+    const flash = vi.fn();
+    await runImportFlow({
+      importPayload: vi.fn(async () => {}),
+      refresh,
+      flash,
+      isDeliveryFailure: isDelivery,
+    });
+    expect(refresh).toHaveBeenCalled();
+    expect(flash).toHaveBeenCalledWith("Imported.");
+  });
+
+  it("on a delivery failure: refreshes and reports a partial result", async () => {
+    const refresh = vi.fn(async () => {});
+    const flash = vi.fn();
+    await runImportFlow({
+      importPayload: vi.fn(async () => { throw new Error("DELIVERY"); }),
+      refresh,
+      flash,
+      isDeliveryFailure: isDelivery,
+    });
+    expect(refresh).toHaveBeenCalled();
+    expect(flash).toHaveBeenCalledWith(expect.stringMatching(/prompt history/i), "error");
+  });
+
+  it("on any other failure: still refreshes (import is non-atomic) and reports total failure", async () => {
+    const refresh = vi.fn(async () => {});
+    const flash = vi.fn();
+    await runImportFlow({
+      importPayload: vi.fn(async () => { throw new Error("bad json"); }),
+      refresh,
+      flash,
+      isDeliveryFailure: isDelivery,
+    });
+    expect(refresh).toHaveBeenCalled();
+    expect(flash).toHaveBeenCalledWith("Import failed.", "error");
+  });
+
+  it("does not let a failed post-error refresh mask the status or escape", async () => {
+    const flash = vi.fn();
+    await expect(
+      runImportFlow({
+        importPayload: vi.fn(async () => { throw new Error("bad json"); }),
+        refresh: vi.fn(async () => { throw new Error("refresh boom"); }),
+        flash,
+        isDeliveryFailure: isDelivery,
+      }),
+    ).resolves.toBeUndefined();
+    expect(flash).toHaveBeenCalledWith("Import failed.", "error");
   });
 });
