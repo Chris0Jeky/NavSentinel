@@ -8,7 +8,7 @@
 
 **Purpose:** the running list of things only *you* (Chris) can do — and the context an agent needs to not lose the thread between sessions. Agents flag the open items in every summary; you clear them by saying so.
 
-**Last updated:** 2026-06-04 · by Claude (autonomous loop — discovery + follow-up audit COMPLETE; 11 PRs reviewed/green; issue #192 closed (all 4 findings → #193/#194/#195); #196 seeded)
+**Last updated:** 2026-06-05 · by Claude — **ALL 11 PRs MERGED** (Chris waived Gate 3 for the batch; deferred to a manual-verification watchlist). `main` @ `4bd60ce`, 0 open PRs. Docs reconciled (#184).
 
 > **Why this file exists separately from the usual docs:** the status docs on `main`
 > (`docs/agentic/HANDOFF.md`, `docs/agentic/ORCHESTRATOR.md`, `docs/Project_Roadmap.md`,
@@ -19,38 +19,28 @@
 
 ---
 
-## Current state snapshot (verified 2026-06-04)
+## Current state snapshot (verified 2026-06-05)
 
-- `main` == `origin/main` (latest commit on `main` is this ACTION_ITEMS update; the only `main` commits this session are to this file). **All code is on the 11 PR branches below.**
-- **ELEVEN open PRs** — the 7-slice discovery program + 4 from the follow-up read-only audit (#191, #193, #194, #195). Each is **CI green (Build/Unit + E2E)**, each has **two or more independent adversarial review rounds with ALL findings (every severity) fixed and a clean final round**, **none merged (aging + awaiting Gate 3)**:
-
-  | PR | Slice | Branch | Head | Rounds | What it fixes |
-  |----|-------|--------|------|--------|----------------|
-  | **#180** | D-PROF | `fix/domain-profile-concurrency` | `2e26e18` | R1–R2 | `domain_profile.ts` reader serialization (lost-update race) |
-  | **#182** | D-STORE | `fix/prompt-outcome-race` | `ec3ecdc` | R1–R3 | `storage.ts` prompt-outcome SW-delegated writes: serialized, sender-validated, retry-only (no resurrection/race) |
-  | **#183** | D-FOCUS | `fix/credential-modal-focus-trap` | `131e6d0` | R1–R2 | `credential_modal.ts` module-level focus trap |
-  | **#185** | D-BRIDGE | `fix/bridge-queue-and-handshake` | `9da8bcc` | R1–R3 | `main_guard`/`capture_isolated` alert-priority outbound buffer (both directions) + 3s handshake timeout + verified-only session pin. **Also fixed a pre-existing CI-breaking bug it surfaced (see note).** |
-  | **#187** | D-SWRATE | `fix/sw-capture-ratelimit-persist` | `55f22c1` | R1–R3 | `sw.ts` capture rate-limit Map persisted via SessionStateManager + hydration-gated handler + corrupt-array guards (read + prune) |
-  | **#189** | D-ANOM | `fix/nav-anomaly-sync-lag` | `12aac0c` | R1–R2 | `nav_anomaly.ts` sync-score +1 lag + sync rarity gate (no FP) + `primeAnomalySession` + serialized `clearNavProfile` |
-  | **#190** | D-IFRAME | `fix/mutation-data-blob-iframes` | `d5abc52` | R1–R4 | `mutation_monitor.ts` flag injected `data:`/`blob:`/`javascript:` + `srcdoc` iframes; scheme normalized + resolved before the legit-src allowlist (bypass-proof) |
-  | **#191** | D-ONCREATE | `fix/sw-oncreated-hydration` | `00f8859` | R1–R2 | `sw.ts` defer pre-hydration `tabs.onCreated` child-window tracking (its persist was skipped while `!hydrated` → lost on the next SW restart). From the read-only discovery audit. |
-  | **#193** | D-REDOS | `fix/content-analyzer-redos` | `3d58751` | R1–R3 | `content_analyzer.ts` bound the two exfil htmlPatterns (derive `{0,HTML_SNIPPET_MAX}` from the snippet cap) to drop the unbounded-quantifier ReDoS shape with zero detection change. Resolves #192 findings 1+2. |
-  | **#194** | D-OPTRACE | `fix/options-save-race` | `26d8886` | R1–R2 | `options.ts` guard the Save button against concurrent saves via a testable `withReentrancyGuard` helper. Resolves #192 finding 4. |
-  | **#195** | D-SRIHIDE | `fix/sri-hidden-password-field` | `88abd4e` | R1–R2 | `sri_checker.ts` skip inline-hidden password fields in the credential gate (mirrors content_analyzer). Resolves #192 finding 3. |
-
-- **All eleven are merge-ready except Gate 3 (manual Chrome test) — see AI-1.** That is the *only* outstanding gate. **The manual test now covers all 11 PRs.**
-- **Follow-up audit (read-only, 2026-06-04):** scoring/NRS, reputation/bloom, and credential/domain/allowlist audited **clean**; the HIGH became #191; the 4 lower findings (issue **#192**) are now **all resolved** (1+2→#193, 3→#195, 4→#194) and **#192 is closed**. A DRY/tighten refactor of the inline-hidden password detection (shared helper across `sri_checker` + `content_analyzer`) is seeded in **issue #196**.
-- **Pre-existing bug found + fixed this session (on #185, `9da8bcc`):** `main_guard.patchForms()` hardens `HTMLFormElement.prototype.submit` **non-writable**; `js_behavior_monitor` then did a plain assignment to it, which threw and aborted JS-behavior init (lost signals + a page error). Latent on `main`; #185's bridge timing made it fire reliably, turning E2E red. Now guarded (try/catch + graceful degrade). This reaches `main` when #185 merges; until then the other 6 branches *could* flake on `js-behavior-07`/`visual-sim` E2E — a re-run usually passes. The on-repo `failure_ledger.jsonl` should get an entry post-merge.
-- **Agent sandbox cannot run a browser or spawn threads** — `npm run test:e2e` / `agent:hooks:smoke` fail with launch/thread errors locally; the same E2E passes on GitHub CI. Gate 3 is genuinely a human task.
-- **Remaining backlog (next, not yet started):** issue **#196** (DRY/tighten the inline-hidden password detection into a shared helper across `sri_checker` + `content_analyzer`) — small; then **FF-02 → FF-03 → FF-04** (stacked; FF-02 = Vite Firefox build config using `manifest.firefox.json` + dual build scripts — **needs a tooling decision**: `@crxjs/vite-plugin` is v2.4.0 and its Firefox support is experimental; runtime verification is human-gated like Gate 3); then **JSB-127** (inspect local `fix/jsb-stale-todos-and-tests` first — AI-3); then another fresh discovery pass.
-- Open issues: #175 #176 #178 #179 #181 (discovery) + #127 (JS behavior) + #184 (housekeeping) + **#186** (bridge init-auth: echo-verify/replay-repin/thrash — needs SW-vouched token) + **#188** (options should surface prompt-outcome import/clear failure).
-- **Open question for Chris (deferred per the loop instruction):** the "merge systematically after aged/comments/CI/reviews" instruction vs. the contract's Gate 3 (manual Chrome test, AI-1) — does it authorize merging without the manual test, or hold all merges until AI-1 is cleared? Default assumption: **HOLD** until you confirm.
+- `main` == `origin/main` == **`4bd60ce`**, working tree clean. **0 open PRs.** Only local branch besides `main` is `fix/jsb-stale-todos-and-tests` (AI-3, untouched).
+- **ALL 11 D-series discovery PRs MERGED 2026-06-05** (oldest-first, merge commits): **#180, #182, #183, #185, #187, #189, #190, #191, #193, #194, #195.** Each had **fresh-green CI (Build/Unit + E2E)** + **two or more independent adversarial review rounds with ALL findings (every severity) fixed**.
+- **Gate 3 (manual Chrome test) was explicitly WAIVED by Chris for this batch** (decision 2026-06-05) and the merges proceeded. The waiver did **not** discard the manual checks — they are **deferred** to a regression watchlist: **`docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md`**. Accepted risk = time/difficulty if debugging is needed, not silent regressions. **Run that checklist next time you build & load the extension** (see AI-1 in the Completed log; the watchlist supersedes it).
+- **#182 needed a docs-only conflict resolution** (status files diverged once the other 10 landed). Resolved by taking `main`'s side, then verified locally: **tsc clean, lint 0/0, 2298 unit tests pass**; CI re-ran **green (Build/Unit + E2E)** on the merge head before merge.
+- **Docs reconciliation (#184) done in this pass:** `docs/Project_Roadmap.md`, `autodoc/AGENT_INDEX.md`, `docs/agentic/HANDOFF.md`, `docs/agentic/ORCHESTRATOR.md` brought to current truth. The form-submit patch-order bug (fixed in #185) is now recorded in `docs/agentic/failure_ledger.jsonl`.
+- **#192** is closed (findings 1+2→#193, 3→#195, 4→#194). **#196** seeded (DRY the inline-hidden password detection into a shared helper across `sri_checker` + `content_analyzer`).
+- **Agent sandbox cannot run a browser or spawn threads** — `npm run test:e2e` / `agent:hooks:smoke` fail with launch/thread errors locally; the same E2E passes on GitHub CI. That is *why* Gate 3 is a human task and why the deferred watchlist exists.
+- **Remaining backlog (next, not yet started):** **#196** (small DRY refactor) → **FF-02 → FF-03 → FF-04** (stacked Firefox port; FF-02 = Vite Firefox build config — **needs a tooling decision**: `@crxjs/vite-plugin` Firefox support is experimental; runtime verification is human-gated) → **JSB-127** (inspect local `fix/jsb-stale-todos-and-tests` first — AI-3) → another fresh discovery pass.
+- Open issues: #175 #176 #178 #179 #181 (discovery) + #127 (JS behavior) + #184 (housekeeping — substantially done this pass) + **#186** (bridge init-auth: echo-verify/replay-repin/thrash — needs SW-vouched token) + **#188** (options should surface prompt-outcome import/clear failure) + **#196** (shared hidden-password helper).
+- **Resolved question:** the "merge systematically" vs. Gate 3 tension is settled — Chris waived Gate 3 for the 2026-06-05 batch and authorized the merges, with manual checks deferred to the watchlist. (For *future* batches, confirm the posture again unless told it's standing.)
 
 ---
 
-## OPEN action items
+## Action items
 
-### AI-1 — Manual Chrome test (Gate 3) for #180, #182, #183, #185, #187, #189, #190, #191, #193, #194, #195 · **OPEN · BLOCKS ALL MERGES**
+**Only AI-3 is OPEN.** AI-1 and AI-2 are ✅ **resolved 2026-06-05** (see Completed log). The deferred manual checks now live in `docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md`.
+
+### AI-1 — Manual Chrome test (Gate 3) · ✅ **RESOLVED 2026-06-05 — Gate 3 WAIVED by Chris; manual checks deferred to the watchlist**
+
+> Closed: the 11 PRs merged 2026-06-05 after Chris waived the manual-test gate (green CI + 2× adversarial review). The step-by-step guide below is retained for reference only; the live deferred-check list is **`docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md`** — run it next time you build and load the extension.
 
 **Why it's yours:** the contract requires manual testing in a real Chrome (PR Merge Protocol Gate 3), and the agent sandbox can't launch a browser. Everything else for these PRs is already green.
 
@@ -81,7 +71,9 @@
 
 ---
 
-### AI-2 — Merge order decision + execution after Gate 3 · **BLOCKED on AI-1**
+### AI-2 — Merge order decision + execution · ✅ **DONE 2026-06-05**
+
+> Executed: all 11 merged oldest-first (#180 → … → #195; #182 merged last after a docs-only conflict resolution). `main` @ `4bd60ce`, independently verified (0 open PRs). Original guide retained below for reference.
 
 **Why it's yours:** merging is an irreversible product action; the contract leaves the go/no-go and order to you.
 
@@ -107,4 +99,5 @@
 
 ## Completed log
 
-_(empty — items move here with a date + one-line result when you confirm them done)_
+- **AI-1 — Gate 3 manual Chrome test · WAIVED → DEFERRED · 2026-06-05.** Chris waived the manual-test gate for the 11-PR batch; merges proceeded on fresh-green CI + 2× independent adversarial review. Manual checks preserved as a deferred regression watchlist in `docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md` (run on next build + load).
+- **AI-2 — Merge order + execution · DONE · 2026-06-05.** All 11 D-series PRs merged oldest-first (#180, #182, #183, #185, #187, #189, #190, #191, #193, #194, #195). #182 merged last after a docs-only conflict (resolved by taking `main`; verified tsc clean / lint 0/0 / 2298 unit tests + green CI on the merge head). `main` @ `4bd60ce`, 0 open PRs, branches pruned.

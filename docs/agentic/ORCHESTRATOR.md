@@ -49,7 +49,7 @@ Roadmap truth verified against `docs/Project_Roadmap.md` (Phases 0-3 done; Phase
 
 | ID | Slice | Source | Priority | Status | Depends on | Notes |
 |----|-------|--------|----------|--------|-----------|-------|
-| ORCH-DISCOVERY | Codebase analysis → seed bug/improvement backlog | this turn | P1 | IN-PROGRESS | — | discovery workflow `wf_c7d868c7-3b1` running; confirmed findings become rows below |
+| ORCH-DISCOVERY | Codebase analysis → seed bug/improvement backlog | this turn | P1 | DONE | — | discovery `wf_c7d868c7-3b1` + follow-up audit complete; all 11 resulting D-series PRs merged 2026-06-05 |
 | ORCH-HYGIENE | Prune merged local branches + 2 orphaned `worktree-agent-*` | analysis | P2 | DONE | — | completed in Cycle 1; remote cleanup remains separate housekeeping |
 | FF-02 | Firefox Vite build config + `src/sw/background.html` + dual build scripts | Roadmap P4-03 | P2 | TODO | FF-01 (#173, merged) | base of FF stack |
 | FF-03 | `session_state` Firefox compat (`storage.session`→namespaced `storage.local` shim) | Roadmap P4-03 | P3 | TODO | FF-02 | **stacked on FF-02** |
@@ -67,13 +67,17 @@ Roadmap truth verified against `docs/Project_Roadmap.md` (Phases 0-3 done; Phase
 
 | PR | Findings | Files | Sev | Status |
 |----|----------|-------|-----|--------|
-| **D-PROF** | getDomainRisk + getTopSuspiciousDomains read-modify-write not serialized through `pending` chain → lost decay/visit mutations | `domain_profile.ts` | HIGH×2 | IN-REVIEW |
-| **D-STORE** | `appendPromptOutcome` get-modify-write race → silent prompt-outcome loss; verify check too weak | `storage.ts` | HIGH | IN-REVIEW |
-| **D-BRIDGE** | pendingOutbound FIFO-discards oldest (drops early alerts); challenge handshake has no timeout (bridge dead-locks queuing forever) | `main_guard.ts` | HIGH×2 | TODO |
-| **D-FOCUS** | credential modal Tab focus-trap escapes to untrusted page when focus leaves ShadowRoot | `credential_modal.ts` | HIGH | TODO |
-| **D-SWRATE** | `captureTimestampsByTab` rate-limit Map not in SessionStateManager → resets on SW restart, rate-limit bypass | `sw.ts`, `session_state.ts` | HIGH | TODO |
-| **D-ANOM** | getAnomalyScoreSync burst window lags async writer by 1 nav (under-scores bursts); sessionNavCount not initialized from stored profile on fresh content-script load | `nav_anomaly.ts` | HIGH+MED | TODO |
-| **D-IFRAME** | mutation_monitor doesn't flag `data:`/`blob:` iframes (cross-domain check returns false on empty host) | `mutation_monitor.ts` | MED | TODO |
+| **D-PROF** | getDomainRisk + getTopSuspiciousDomains read-modify-write not serialized through `pending` chain → lost decay/visit mutations | `domain_profile.ts` | HIGH×2 | **MERGED (#180, 2026-06-05)** |
+| **D-STORE** | `appendPromptOutcome` get-modify-write race → silent prompt-outcome loss; verify check too weak | `storage.ts` | HIGH | **MERGED (#182, 2026-06-05)** |
+| **D-BRIDGE** | pendingOutbound FIFO-discards oldest (drops early alerts); challenge handshake has no timeout (bridge dead-locks queuing forever) | `main_guard.ts` | HIGH×2 | **MERGED (#185, 2026-06-05)** |
+| **D-FOCUS** | credential modal Tab focus-trap escapes to untrusted page when focus leaves ShadowRoot | `credential_modal.ts` | HIGH | **MERGED (#183, 2026-06-05)** |
+| **D-SWRATE** | `captureTimestampsByTab` rate-limit Map not in SessionStateManager → resets on SW restart, rate-limit bypass | `sw.ts`, `session_state.ts` | HIGH | **MERGED (#187, 2026-06-05)** |
+| **D-ANOM** | getAnomalyScoreSync burst window lags async writer by 1 nav (under-scores bursts); sessionNavCount not initialized from stored profile on fresh content-script load | `nav_anomaly.ts` | HIGH+MED | **MERGED (#189, 2026-06-05)** |
+| **D-IFRAME** | mutation_monitor doesn't flag `data:`/`blob:` iframes (cross-domain check returns false on empty host) | `mutation_monitor.ts` | MED | **MERGED (#190, 2026-06-05)** |
+| **D-ONCREATE** | pre-hydration `tabs.onCreated` child-window tracking persist skipped while `!hydrated` → lost on next SW restart (read-only audit) | `sw.ts` | HIGH | **MERGED (#191, 2026-06-05)** |
+| **D-REDOS** | two exfil htmlPatterns had unbounded quantifiers (ReDoS shape) | `content_analyzer.ts` | (from #192) | **MERGED (#193, 2026-06-05)** |
+| **D-OPTRACE** | options Save button unguarded against concurrent saves | `options.ts` | (from #192) | **MERGED (#194, 2026-06-05)** |
+| **D-SRIHIDE** | SRI credential gate didn't skip inline-hidden password fields | `sri_checker.ts` | (from #192) | **MERGED (#195, 2026-06-05)** |
 | **#issue: heartbeat** | main_guard module globals have no recovery/heartbeat after content-script reload | `main_guard.ts` | MED | SEED ISSUE (medium, architectural — needs design) |
 | **#issue: url-min** | full URLs (w/ query) persisted in `storage.session` (lastUrlByTab/oauth/rollback) — minimal-persistence violation | `sw.ts` | LOW | SEED ISSUE (touches rollback; needs care) |
 | **#issue: sri-partial** | SRI scorer gives 0 penalty for 0.5–1.0 partial coverage; no script/style weighting | `sri_checker.ts` | LOW | SEED ISSUE (FP-risk; needs threat-validation measurement) |
@@ -85,8 +89,7 @@ PRs D-* are independent (different files) → parallel branches off `main`, **no
 
 | Slice | Branch | Base | Worktree | PR | Round 1 | Round 2 | Bots | Opened |
 |-------|--------|------|----------|----|---------|---------|------|--------|
-| D-PROF | `fix/domain-profile-concurrency` | `main` | no | #180 | done (1 approve / 1 changes-req → all fixed) | done (changes-req → all fixed) | pickup found unresolved Gemini/Codex status-doc threads; this refresh addresses them | 2026-05-30, open; not merge-eligible until current-head comments/checks are clean and aging is satisfied |
-| D-STORE | `fix/prompt-outcome-race` | `main` | no | #182 | done (all findings fixed) | done + recheck (all findings fixed) | Gemini resolved/outdated; Copilot review-error only | 2026-05-30, open and aging |
+| _(none)_ | — | — | — | — | — | — | — | All 11 D-series PRs merged 2026-06-05; 0 in-flight. Next slice: #196. |
 
 ---
 
@@ -100,3 +103,5 @@ PRs D-* are independent (different files) → parallel branches off `main`, **no
 | 3 | 2026-05-30 | D-PROF | Serialized domain_profile readers + clearDomainProfiles through `pending` chain (#180). R1 (1 approve/1 changes-req) + R2 (changes-req): **all findings fixed** — clearDomainProfiles serialization, test-isolation reset, deterministic no-interleave test, same-domain coverage, afterEach mock restoration, reset caveat doc. Verified by SHA: branch tip `e6036ab`. Prior CI was green, but pickup later found unresolved bot status-doc threads and a stale base. | IN-REVIEW |
 | 4 | 2026-05-30 | GATE-CHECK | Pickup verified `main` == `origin/main` == `3eaf3828dff3466937d05c37da457eacdba1df94`. GitHub showed #180 and #182 open/mergeable with green prior CI, but #180 still had three unresolved non-outdated bot review threads and a stale base. Merged current `main` into #180, regenerated `FAILURE_LEDGER.md`, and refreshed roadmap/handoff/orchestrator/index status docs. Local verification: domain-profile focused tests, typecheck, lint, and build passed. #182 remains open and aging. | LOCAL-VERIFIED |
 | — | 2026-05-30 | ENV INCIDENT | Harness returned **fabricated tool outputs** (non-existent file API, fake test/commit/push success, empty PR #180 reported as created, dup issue #177, false branch-switch confirmations). Mitigation now standing: one state-changing command per turn; redirect output to temp file + Read back; verify git by SHA (`rev-parse`/`ls-remote`); gh issues/PRs via `--body-file`. **PAUSED here per user instruction** (finish D-PROF, then pause). Next slice when resumed: D-STORE (`appendPromptOutcome` race). | PAUSED |
+| 5 | 2026-06-05 | MERGE-BATCH | Maintainer (Chris) **waived Gate 3** (manual Chrome test) for the 11-PR D-series batch; merged oldest-first (#180→#195) as merge commits with `--delete-branch`. 10 merged clean; **#182** conflicted post-#180 on status docs only (`storage.ts`/`sw.ts` auto-merged clean) — resolved by taking `main`, verified locally (tsc clean, lint 0/0, **2298** unit tests pass), CI re-ran **green** (Build/Unit + E2E) on the merge head, then merged. Verified `main`==`origin/main`==`4bd60ce`, 0 open PRs, branches pruned. Deferred manual checks → `docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md`. | DONE |
+| 6 | 2026-06-05 | DOCS-RECONCILE (#184) | Brought roadmap / AGENT_INDEX / HANDOFF / ORCHESTRATOR / failure_ledger to current truth post-merge; recorded the form-submit patch-order bug (fixed in #185) in `failure_ledger.jsonl`. | DONE |

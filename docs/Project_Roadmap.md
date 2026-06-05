@@ -23,13 +23,13 @@ Total: **47 tasks** across 5 phases. **43/47 complete**. P4-01 and P4-02 have fo
 
 **Completed cross-cutting initiative:** UI Redesign (9 phases, R1–R9) — done 2026-05-16. See [REDESIGN_ORCHESTRATION.md](REDESIGN_ORCHESTRATION.md).
 
-**Open issues:** #127 (JS behavior monitor — remaining slices). Discovery-seeded (2026-05-30): #175 (bridge heartbeat), #176 (URL minimization), #178 (SRI partial coverage), #179 (CSP header blindness), #181 (domain_profile cross-context lost-update). #97/#113 closed via #115/#118.
+**Open issues:** #127 (JS behavior monitor — remaining slices). Discovery-seeded: #175 (bridge heartbeat), #176 (URL minimization), #178 (SRI partial coverage), #179 (CSP header blindness), #181 (domain_profile cross-context lost-update), #186 (bridge init-auth), #188 (options surface prompt-outcome import/clear failure), #196 (shared inline-hidden-password helper), #184 (docs reconciliation — substantially done 2026-06-05). #192 closed (→#193/#194/#195). #97/#113 closed via #115/#118.
 
-**Repo state (2026-05-30):** 2 open PRs: **#180** D-PROF concurrency fix and **#182** D-STORE prompt-outcome storage fix. GitHub reports both PRs open and mergeable, but they must remain unmerged until the hard merge gate is clean at the current head. Pickup verification found #180 still had unresolved bot review threads and a stale base before this housekeeping refresh; #182 has its Gemini thread resolved/outdated, CI green at `155693b`, and is aging. A codebase discovery pass confirmed 14 bugs/risks; 5 remain queued as PRs (D-FOCUS/D-BRIDGE/D-SWRATE/D-ANOM/D-IFRAME), rest seeded as issues.
+**Repo state (2026-06-05):** **0 open PRs.** `main` @ `4bd60ce`. The full D-series discovery program — **all 11 PRs (#180, #182, #183, #185, #187, #189, #190, #191, #193, #194, #195)** — merged 2026-06-05, each with fresh-green CI (Build/Unit + E2E) + two independent adversarial review rounds (all findings fixed). Gate 3 (manual Chrome test) was waived by the maintainer for the batch and deferred to `docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md`. Next slice: **#196**, then the **FF-02→FF-03→FF-04** Firefox stack.
 
-> **Picking up the autonomous loop? Start with [`docs/agentic/HANDOFF.md`](agentic/HANDOFF.md)** (point-in-time handoff) and [`docs/agentic/ORCHESTRATOR.md`](agentic/ORCHESTRATOR.md) (living backlog/cycle log). PRs #180 and #182 are open and must not be merged unless GitHub comments, checks, review gates, docs, and aging are all clean at the current head. Next implementation slice: **D-FOCUS**.
+> **Picking up the autonomous loop? Start with [`docs/agentic/HANDOFF.md`](agentic/HANDOFF.md)** (point-in-time handoff) and [`docs/agentic/ORCHESTRATOR.md`](agentic/ORCHESTRATOR.md) (living backlog/cycle log). 0 open PRs as of 2026-06-05; next implementation slice is **#196** (shared inline-hidden-password helper). Also see `ACTION_ITEMS.md` for the human-owned task list (the deferred manual-verification watchlist).
 
-Last updated: 2026-05-30
+Last updated: 2026-06-05
 
 ---
 

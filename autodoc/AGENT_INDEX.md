@@ -1,12 +1,12 @@
 # Agent Index - NavSentinel
 
-Last reviewed: 2026-05-30.
+Last reviewed: 2026-06-05.
 
 This is a fast orientation layer for coding agents. It should point to interfaces and seams, not duplicate implementation details.
 
 ## Start Here
 
-0. **Resuming the autonomous work loop?** Read `docs/agentic/HANDOFF.md` (latest session handoff) + `docs/agentic/ORCHESTRATOR.md` (living backlog/cycle log) first. As of 2026-05-30: PR #180 (D-PROF) and PR #182 (D-STORE) are both open and must remain unmerged unless GitHub comments, checks, review gates, docs, and aging are clean at the current head; next implementation slice is **D-FOCUS**.
+0. **Resuming the autonomous work loop?** Read `docs/agentic/HANDOFF.md` (latest session handoff) + `docs/agentic/ORCHESTRATOR.md` (living backlog/cycle log) + `ACTION_ITEMS.md` (human-owned tasks) first. As of 2026-06-05: the full D-series discovery program (11 PRs) is **merged**; `main` @ `4bd60ce`, **0 open PRs**; next implementation slice is **#196** (shared inline-hidden-password helper across `sri_checker` + `content_analyzer`).
 1. `AGENTS.md` - repo operating rules.
 2. `CLAUDE.md` - Claude-specific compact contract.
 3. `docs/Project_Roadmap.md` - active phase status, gates, decisions, and next tasks.
@@ -53,14 +53,14 @@ All paths above are relative to repo root. Content scripts live under `extension
 
 ## Current Agent-Readiness Observations
 
-- NavSentinel v0.4.0, Phases 0-3 complete + Phase 4 partial (4/8 fully done; P4-01 visual-sim and P4-02 JS-behavior wired-but-not-complete). 2206 tests (74 unit test files + 12 E2E spec files), 55 source files (51 TS + 4 CSS), 121 gym fixtures.
+- NavSentinel v0.4.0, Phases 0-3 complete + Phase 4 partial (4/8 fully done; P4-01 visual-sim and P4-02 JS-behavior wired-but-not-complete). ~2298 tests (76 unit test files + 12 E2E spec files), 121 gym fixtures.
 - **UI redesign complete** (2026-05-16): brass/jade design system, design tokens, 26-icon SVG system, segmented controls replacing selects, sidebar nav options page, ShieldArc popup gauge. See `docs/REDESIGN_ORCHESTRATION.md`.
 - The active planning source is `docs/Project_Roadmap.md`; archived execution trackers are historical only.
 - `docs/Comprehensive_Project_Analysis.md` is a historical snapshot from 2026-04-09 — do not treat it as current.
 - Codex has a matching `.agents/skills` layer and should use `AGENTS.md`, Codex-native planning, parallel reads, patching, and verification tools.
 - Build output and generated data are easy context traps. Agents should edit source under `extension/src/` and avoid `extension/dist/`.
 - The highest-risk seams are main-world patching, bridge messages, service-worker lifecycle state, and credential/data privacy behavior.
-- **2 open PRs.** #180 (`fix/domain-profile-concurrency`) is the D-PROF concurrency fix; pickup verification found unresolved bot review threads and a stale base, so this housekeeping refresh merged current `main` into the branch and updates status docs. #182 (`fix/prompt-outcome-race`) is the D-STORE prompt-outcome storage fix; its Gemini thread is resolved/outdated, GitHub CI was green at `155693b`, and it is still aging. #114-#174 merged across Cycles 6-7 (2026-05-29): hygiene/bug fixes, toolchain migration (vite 8 / vitest 4), ESLint flat-config + CI lint gate, perf-budget CI, ~40 test-coverage + property-test PRs, type safety, accessibility (#132-#135), silent-catch logging, prototype-pollution guards, P4-01a visual-sim NRS integration (#172), P4-01b visual-sim gym+E2E (#174), FF-01 Firefox `browser.*` shim (#173). Lint is 0 errors / 0 warnings.
+- **0 open PRs (2026-06-05).** The full D-series discovery program merged 2026-06-05: #180 (D-PROF domain_profile reader serialization), #182 (D-STORE prompt-outcome SW-delegated writes), #183 (D-FOCUS credential-modal focus trap), #185 (D-BRIDGE outbound buffer + handshake timeout; also fixed the form-submit patch-order bug), #187 (D-SWRATE capture rate-limit persistence), #189 (D-ANOM sync-lag), #190 (D-IFRAME injected data:/blob:/srcdoc iframes), #191 (D-ONCREATE pre-hydration child-window tracking), #193 (D-REDOS content-analyzer regex bounding), #194 (D-OPTRACE options Save reentrancy guard), #195 (D-SRIHIDE inline-hidden password skip). #114-#174 merged across Cycles 6-7 (2026-05-29): toolchain migration (vite 8 / vitest 4), ESLint flat-config + CI lint gate, perf-budget CI, test-coverage + property tests, accessibility (#132-#135), prototype-pollution guards, P4-01a/b visual-sim (#172/#174), FF-01 Firefox `browser.*` shim (#173). Lint is 0 errors / 0 warnings.
 - All icon SVGs from `icon()` and `logoSentinel()` include `aria-hidden="true"` (#135 merged).
 - **Open issue: #127** (JS behavior monitor — remaining slices: perf validation + residual type dedup in `js_behavior_monitor.ts`). #86, #90 (bridge), #97 (shadow-DOM monitor → #115), #113 (toolchain → #118), #106 closed.
 
