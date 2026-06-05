@@ -12,7 +12,7 @@
  * No form values or page content are stored or transmitted.
  */
 
-import { getRegistrableDomain, normalizeHost } from "../shared/domain";
+import { getRegistrableDomain, hostForUrl, normalizeHost } from "../shared/domain";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -647,7 +647,9 @@ function checkFormActions(snapshot: PageSnapshot, currentDomain: string): Suspic
 
     // Cross-domain form action
     try {
-      const actionUrl = new URL(rawAction, "https://" + currentDomain);
+      // Re-bracket an IPv6-literal host so the base URL is valid: currentDomain is
+      // an unbracketed registrable domain and "https://::1" would throw (#208 R1).
+      const actionUrl = new URL(rawAction, "https://" + hostForUrl(currentDomain));
       const actionHost = normalizeHost(actionUrl.hostname);
       const actionReg = getRegistrableDomain(actionHost);
       if (actionReg && currentReg && actionReg !== currentReg) {

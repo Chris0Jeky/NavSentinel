@@ -818,3 +818,25 @@ describe("content_analyzer - SSO and social login FP guards", () => {
     expect(result.score).toBeLessThanOrEqual(10);
   });
 });
+
+// ---------------------------------------------------------------------------
+// IPv6-literal pages (#208 R1): the registrable domain is an unbracketed IPv6
+// literal ("::1"), which must be re-bracketed before URL-base concatenation —
+// otherwise "https://::1" throws and form-action analysis silently breaks.
+// ---------------------------------------------------------------------------
+
+describe("content_analyzer - IPv6-literal page form actions (#208 R1)", () => {
+  it("detects a cross-domain password form action on an IPv6-literal page", () => {
+    const snap = loginSnapshot({ formAction: "https://evil.com/steal" });
+    const result = analyzeSnapshot(snap, "::1");
+    expect(result.suspiciousFormAction).toBe(true);
+    expect(result.reasons.join(" ")).toMatch(/different domain/i);
+  });
+
+  it("does not spuriously fail to parse a relative form action on an IPv6-literal page", () => {
+    const snap = loginSnapshot({ formAction: "login.php" });
+    const result = analyzeSnapshot(snap, "::1");
+    // Pre-fix the "https://::1" base threw -> "Form action URL could not be parsed".
+    expect(result.reasons.join(" ")).not.toMatch(/could not be parsed/i);
+  });
+});

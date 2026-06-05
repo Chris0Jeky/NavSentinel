@@ -33,6 +33,11 @@ const REDIRECT_PARAM_NAMES = [
   "return_url",
 ] as const;
 
+// These are URL-host INPUT forms used to build authorities like
+// `https://[::1]:3000/cb` (the bracketed IPv6 form is required for a valid URL).
+// The implementation's LOCALHOST_HOSTS set stores the normalized "::1", which
+// normalizeHost(hostname) produces from this bracketed input — so the bracketed
+// entry must stay here even though the impl constant is unbracketed (#208 R1).
 const LOCALHOST_HOSTS = ["localhost", "127.0.0.1", "[::1]"] as const;
 
 // ---------------------------------------------------------------------------
