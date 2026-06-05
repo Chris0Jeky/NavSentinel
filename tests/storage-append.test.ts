@@ -1205,8 +1205,8 @@ describe("prompt outcome delegation — retry, drop, and refusal", () => {
     (chrome as unknown as { runtime: unknown }).runtime = runtime;
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
-    const { clearPromptOutcomes } = await import("../extension/src/shared/storage");
-    await expect(clearPromptOutcomes()).rejects.toThrow(/unreachable/i);
+    const { clearPromptOutcomes, PromptOutcomeDeliveryError } = await import("../extension/src/shared/storage");
+    await expect(clearPromptOutcomes()).rejects.toBeInstanceOf(PromptOutcomeDeliveryError);
     expect(calls).toBe(4); // initial + 3 retries, then reject (no silent drop)
     expect(store[PROMPT_OUTCOMES_KEY]).toEqual([seed]); // not wiped via any fallback
     // The control op rejects rather than taking the append "dropped" log path.
@@ -1217,9 +1217,10 @@ describe("prompt outcome delegation — retry, drop, and refusal", () => {
     );
   });
 
-  it("importAll (replace) REJECTS when the SW is persistently unreachable (#188 control op)", async () => {
+  it("importAll REJECTS (delivery error) on SW exhaustion but is non-atomic — earlier sections persist (#188 R1)", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
-    const { chrome } = createChromeMock();
+    const seed = { id: "keep-1", ts: 10, domain: "keep.example", type: "nav" as const, score: 30, outcome: "allow" as const };
+    const { chrome, store } = createChromeMock({ [PROMPT_OUTCOMES_KEY]: [seed] });
     let calls = 0;
     const runtime: {
       lastError?: { message?: string };
@@ -1235,13 +1236,19 @@ describe("prompt outcome delegation — retry, drop, and refusal", () => {
     (chrome as unknown as { runtime: unknown }).runtime = runtime;
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
-    const { importAll } = await import("../extension/src/shared/storage");
+    const { importAll, PromptOutcomeDeliveryError } = await import("../extension/src/shared/storage");
     await expect(
       importAll({
+        eventLog: [{ kind: "nav_block" }],
         promptOutcomes: [{ id: "imp-1", ts: 5, domain: "d.example", type: "nav", score: 10, outcome: "allow" }],
       })
-    ).rejects.toThrow(/unreachable/i);
+    ).rejects.toBeInstanceOf(PromptOutcomeDeliveryError);
     expect(calls).toBe(4);
+    // Non-atomic: eventLog (written before the prompt-outcome step) IS committed,
+    // which is why the options handler must report a *partial* failure (#188 R1)...
+    expect(store[EVENT_LOG_KEY]).toEqual([{ kind: "nav_block" }]);
+    // ...but the delegated prompt-outcome write never reached storage (seed intact).
+    expect(store[PROMPT_OUTCOMES_KEY]).toEqual([seed]);
   });
 });
 
