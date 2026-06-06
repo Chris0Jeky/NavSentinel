@@ -20,7 +20,10 @@ import {
 } from "../shared/storage";
 import {
   derivePopupSiteState,
-  getRecentPopupEvents
+  eventIconName,
+  getRecentPopupEvents,
+  pickSiteRiskEvent,
+  signalChipClass
 } from "./popup_model";
 
 const logoSlot = document.getElementById("logoSlot") as HTMLDivElement;
@@ -70,12 +73,6 @@ function severityLabel(score: number): string {
   if (score >= 70) return "high";
   if (score >= 40) return "med";
   return "low";
-}
-
-function eventIconName(kind: string): string {
-  if (kind.startsWith("nav_")) return "shield";
-  if (kind.startsWith("cred_")) return "key";
-  return "gear";
 }
 
 function eventLabel(kind: string): string {
@@ -157,7 +154,7 @@ function renderSignals(reasons: string[] | undefined): void {
 
   for (const r of reasons.slice(0, 5)) {
     const chip = document.createElement("span");
-    chip.className = `signal-chip ${r.startsWith("-") ? "signal-chip--ok" : "signal-chip--warn"}`;
+    chip.className = `signal-chip ${signalChipClass(r)}`;
     chip.textContent = r;
     signalsEl.appendChild(chip);
   }
@@ -197,12 +194,16 @@ async function refreshUi(): Promise<void> {
   const log = await getEventLog();
   renderEvents(log);
 
-  const lastEvent = log.length > 0 ? log[log.length - 1] : null;
-  const tabRisk = lastEvent && typeof lastEvent.score === "number" ? lastEvent.score : 0;
+  // Scope the "Current page" gauge/signals to the ACTIVE site. The event log is
+  // global (every tab/frame writes to it), so log[last] could be a different site's
+  // event — showing a previous site's risk (false alarm) or a background tab's
+  // green (false reassurance). (#205)
+  const siteEvent = pickSiteRiskEvent(log, siteState.registrableDomain);
+  const tabRisk = siteEvent && typeof siteEvent.score === "number" ? siteEvent.score : 0;
   shieldArcEl.style.position = "relative";
   shieldArcEl.innerHTML = renderShieldArc(tabRisk);
   shieldArcEl.setAttribute("aria-label", `Tab risk score: ${tabRisk}`);
-  renderSignals(lastEvent?.reasons);
+  renderSignals(siteEvent?.reasons);
 }
 
 function getPopupSnapshot(): PopupSnapshot {

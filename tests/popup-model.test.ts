@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { EventLogEntry } from "../extension/src/shared/storage";
 import {
   derivePopupSiteState,
+  eventIconName,
   formatPopupEventLine,
-  getRecentPopupEvents
+  getRecentPopupEvents,
+  pickSiteRiskEvent,
+  signalChipClass
 } from "../extension/src/popup/popup_model";
 
 describe("derivePopupSiteState", () => {
@@ -238,5 +241,92 @@ describe("formatPopupEventLine", () => {
       (ts) => new Date(ts).toISOString()
     );
     expect(line).toContain("2024-05-23");
+  });
+});
+
+describe("signalChipClass (#205)", () => {
+  it("classifies risk-reducing reason codes as ok (green)", () => {
+    for (const r of [
+      "nrs_allowlisted",
+      "nrs_user_activation_active",
+      "nrs_explicit_new_tab_intent",
+      "nrs_opener_previously_allowed",
+      "keyboard_activation",
+      "legit_captcha_present",
+      "legit_modal_backdrop",
+    ]) {
+      expect(signalChipClass(r)).toBe("signal-chip--ok");
+    }
+  });
+
+  it("classifies threat/neutral reason codes as warn (orange)", () => {
+    for (const r of [
+      "clickfix_command_with_overlay",
+      "nav_anomaly",
+      "high_entropy_subdomain",
+      "reputation_unknown",
+    ]) {
+      expect(signalChipClass(r)).toBe("signal-chip--warn");
+    }
+  });
+
+  it("is case-insensitive and treats empty input as a warning", () => {
+    expect(signalChipClass("NRS_ALLOWLISTED")).toBe("signal-chip--ok");
+    expect(signalChipClass("")).toBe("signal-chip--warn");
+  });
+});
+
+describe("eventIconName (#205)", () => {
+  it("maps credential events to the key glyph", () => {
+    expect(eventIconName("cred_prompt_shown")).toBe("key");
+  });
+
+  it("maps suite/config events to the gear glyph", () => {
+    expect(eventIconName("suite_config_update")).toBe("gear");
+  });
+
+  it("maps navigation-toned events, including threat alerts, to the shield glyph", () => {
+    expect(eventIconName("nav_click_block")).toBe("shield");
+    // Threat alerts are navigation-toned and must not show a settings gear.
+    expect(eventIconName("clickfix_detected")).toBe("shield");
+    expect(eventIconName("mutation_alert")).toBe("shield");
+  });
+});
+
+describe("pickSiteRiskEvent (#205)", () => {
+  const ev = (id: string, site: string, score: number): EventLogEntry =>
+    ({ id, ts: Number(id), kind: "nav_click_block", site, score }) as EventLogEntry;
+
+  it("returns the most recent event matching the active registrable domain", () => {
+    const log = [
+      ev("1", "example.com", 80),
+      ev("2", "other.com", 90),
+      ev("3", "sub.example.com", 40),
+    ];
+    const picked = pickSiteRiskEvent(log, "example.com");
+    // sub.example.com reduces to example.com and is the most recent match.
+    expect(picked?.id).toBe("3");
+    expect(picked?.score).toBe(40);
+  });
+
+  it("returns null when no event matches the active site (no other-site risk shown)", () => {
+    const log = [ev("1", "other.com", 90), ev("2", "evil.test", 95)];
+    expect(pickSiteRiskEvent(log, "example.com")).toBeNull();
+  });
+
+  it("returns null for an empty registrable domain", () => {
+    expect(pickSiteRiskEvent([ev("1", "example.com", 80)], "")).toBeNull();
+  });
+
+  it("ignores events without a site", () => {
+    const log = [
+      { id: "1", ts: 1, kind: "suite_config_update" } as EventLogEntry,
+      ev("2", "example.com", 60),
+    ];
+    expect(pickSiteRiskEvent(log, "example.com")?.id).toBe("2");
+  });
+
+  it("handles an empty log", () => {
+    expect(pickSiteRiskEvent([], "example.com")).toBeNull();
   });
 });
