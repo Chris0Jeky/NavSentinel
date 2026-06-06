@@ -338,6 +338,50 @@ describe("mutation_monitor DOM integration", () => {
     stopMutationMonitor();
   });
 
+  // #211 R1: host-confusion spoofs that the old substring allowlist exempted but the
+  // parsed-hostname + suffix-boundary check must flag.
+  it.each([
+    ["userinfo authority spoof", "https://hcaptcha.com@evil.example/login"],
+    ["left-label suffix spoof", "https://hcaptcha.com.evil.example/anchor"],
+    ["sibling-domain spoof", "https://evil-hcaptcha.com/x"],
+    ["non-widget path on a path-gated host", "https://www.google.com/recaptcha-evil/x"],
+  ])("flags a hidden %s (#211 R1)", async (_label, src) => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    const iframe = document.createElement("iframe");
+    iframe.style.display = "none";
+    iframe.src = src;
+    document.body.appendChild(iframe);
+
+    await vi.advanceTimersByTimeAsync(150);
+
+    const iframeAlerts = alerts.filter((a) => a.type === "suspicious_iframe");
+    expect(iframeAlerts.length).toBeGreaterThanOrEqual(1);
+
+    iframe.remove();
+    stopMutationMonitor();
+  });
+
+  it("still exempts a legit provider listed AFTER a path-gated entry it shares a suffix with (continue-fallthrough) (#211 R1)", async () => {
+    // apis.google.com matches the "google.com" + /recaptcha entry on host but not
+    // path; the loop must `continue` to its own entry, not reject early.
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    const iframe = document.createElement("iframe");
+    iframe.src = "https://apis.google.com/js/api.js";
+    document.body.appendChild(iframe);
+
+    await vi.advanceTimersByTimeAsync(150);
+
+    const iframeAlerts = alerts.filter((a) => a.type === "suspicious_iframe");
+    expect(iframeAlerts.length).toBe(0);
+
+    iframe.remove();
+    stopMutationMonitor();
+  });
+
   it("flags an injected data: iframe by its opaque scheme (D-IFRAME)", async () => {
     const alerts: MutationAlert[] = [];
     startMutationMonitor(document, (a) => alerts.push(a));

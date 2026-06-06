@@ -70,6 +70,7 @@ const LEGIT_IFRAME_HOSTS: Array<{ host: string; pathPrefix?: string }> = [
   { host: "googlesyndication.com" },
   { host: "doubleclick.net" },
   { host: "youtube.com", pathPrefix: "/embed" },
+  { host: "youtube-nocookie.com", pathPrefix: "/embed" },
   { host: "facebook.com", pathPrefix: "/plugins" },
   { host: "connect.facebook.net" },
   { host: "twitter.com", pathPrefix: "/widgets" },
@@ -163,7 +164,10 @@ function isLegitIframeSrc(src: string): boolean {
   for (const entry of LEGIT_IFRAME_HOSTS) {
     const hostMatch = hostname === entry.host || hostname.endsWith("." + entry.host);
     if (!hostMatch) continue;
-    if (entry.pathPrefix && !pathname.startsWith(entry.pathPrefix)) continue;
+    // Path prefix is segment-anchored (=== prefix or prefix + "/"), mirroring the
+    // host suffix-boundary so "/recaptcha-evil/x" cannot satisfy "/recaptcha". (#211 R1)
+    const pp = entry.pathPrefix;
+    if (pp && pathname !== pp && !pathname.startsWith(pp + "/")) continue;
     return true;
   }
   return false;
