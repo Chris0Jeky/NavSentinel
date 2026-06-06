@@ -49,28 +49,33 @@ const MIN_OVERLAY_ZINDEX = 100;
 const TINY_IFRAME_PX = 10;
 
 /**
- * Legitimate iframe source patterns to ignore (reCAPTCHA, analytics, ad frames).
- * Matched case-insensitively against the iframe src attribute.
+ * Legitimate iframe providers to ignore (reCAPTCHA, analytics, ad frames, embeds).
+ * Matched by the iframe src's parsed HOSTNAME at a registrable-suffix boundary
+ * (host === entry.host or endsWith "." + entry.host), with an optional path prefix
+ * for providers that share a host with non-embed content. This replaces the prior
+ * unanchored substring regexes, which a spoofed src could satisfy by merely
+ * embedding a provider name anywhere in the URL — e.g. evil.example/?u=hcaptcha.com
+ * or attacker-cdn/recaptcha-badge.png (the same hostname-spoof class as #206). (#211)
  */
-const LEGIT_IFRAME_PATTERNS: RegExp[] = [
-  /google\.com\/recaptcha/i,
-  /recaptcha/i,
-  /hcaptcha\.com/i,
-  /challenges\.cloudflare\.com/i,
-  /funcaptcha\.com/i,
-  /arkoselabs\.com/i,
-  /googletagmanager\.com/i,
-  /google-analytics\.com/i,
-  /googlesyndication\.com/i,
-  /doubleclick\.net/i,
-  /youtube\.com\/embed/i,
-  /facebook\.com\/plugins/i,
-  /twitter\.com\/widgets/i,
-  /platform\.twitter\.com/i,
-  /connect\.facebook\.net/i,
-  /apis\.google\.com/i,
-  /accounts\.google\.com/i,
-  /gstatic\.com/i,
+const LEGIT_IFRAME_HOSTS: Array<{ host: string; pathPrefix?: string }> = [
+  { host: "google.com", pathPrefix: "/recaptcha" },
+  { host: "recaptcha.net" },
+  { host: "gstatic.com" },
+  { host: "hcaptcha.com" },
+  { host: "challenges.cloudflare.com" },
+  { host: "funcaptcha.com" },
+  { host: "arkoselabs.com" },
+  { host: "googletagmanager.com" },
+  { host: "google-analytics.com" },
+  { host: "googlesyndication.com" },
+  { host: "doubleclick.net" },
+  { host: "youtube.com", pathPrefix: "/embed" },
+  { host: "facebook.com", pathPrefix: "/plugins" },
+  { host: "connect.facebook.net" },
+  { host: "twitter.com", pathPrefix: "/widgets" },
+  { host: "platform.twitter.com" },
+  { host: "apis.google.com" },
+  { host: "accounts.google.com" },
 ];
 
 /**
@@ -143,8 +148,23 @@ function isCrossDomain(href: string): boolean {
 }
 
 function isLegitIframeSrc(src: string): boolean {
-  for (const pattern of LEGIT_IFRAME_PATTERNS) {
-    if (pattern.test(src)) return true;
+  let url: URL;
+  try {
+    // Resolve relative srcs against the page; opaque/script schemes are rejected by
+    // the protocol check below (and handled separately by suspiciousIframeScheme).
+    url = new URL(src, typeof location !== "undefined" ? location.href : undefined);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") return false;
+  // Strip a single trailing dot ("hcaptcha.com." is the same host).
+  const hostname = url.hostname.toLowerCase().replace(/\.$/, "");
+  const pathname = url.pathname.toLowerCase();
+  for (const entry of LEGIT_IFRAME_HOSTS) {
+    const hostMatch = hostname === entry.host || hostname.endsWith("." + entry.host);
+    if (!hostMatch) continue;
+    if (entry.pathPrefix && !pathname.startsWith(entry.pathPrefix)) continue;
+    return true;
   }
   return false;
 }
@@ -400,8 +420,8 @@ function checkSuspiciousIframe(el: Element): void {
 
   // Resolve the opaque/script scheme (data:/blob:/javascript:) FIRST. Its payload
   // is fully attacker-controlled, so it must NEVER be whitelisted by the legit-src
-  // allowlist — isLegitIframeSrc is an unanchored substring match, and embedding
-  // e.g. "recaptcha" inside a data: URL would otherwise exempt it from detection.
+  // allowlist; isLegitIframeSrc now only accepts http(s) provider hostnames, but
+  // checking the scheme first keeps that guarantee explicit and defensive.
   const scheme = src ? suspiciousIframeScheme(src) : null;
   const srcIsLegit = src !== "" && !scheme && isLegitIframeSrc(src);
 

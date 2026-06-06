@@ -266,6 +266,78 @@ describe("mutation_monitor DOM integration", () => {
     stopMutationMonitor();
   });
 
+  it("flags a hidden iframe that merely embeds a provider name in its query (hostname-spoof) (#211)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    // The provider name is in the query, not the host — the old unanchored substring
+    // allowlist exempted this; the parsed-hostname check must not.
+    const iframe = document.createElement("iframe");
+    iframe.style.display = "none";
+    iframe.src = "https://evil.example/x?ref=hcaptcha.com";
+    document.body.appendChild(iframe);
+
+    await vi.advanceTimersByTimeAsync(150);
+
+    const iframeAlerts = alerts.filter((a) => a.type === "suspicious_iframe");
+    expect(iframeAlerts.length).toBeGreaterThanOrEqual(1);
+
+    iframe.remove();
+    stopMutationMonitor();
+  });
+
+  it("flags a hidden iframe whose path embeds a provider name (#211)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    const iframe = document.createElement("iframe");
+    iframe.style.display = "none";
+    iframe.src = "https://attacker-cdn.example/recaptcha-badge.png";
+    document.body.appendChild(iframe);
+
+    await vi.advanceTimersByTimeAsync(150);
+
+    const iframeAlerts = alerts.filter((a) => a.type === "suspicious_iframe");
+    expect(iframeAlerts.length).toBeGreaterThanOrEqual(1);
+
+    iframe.remove();
+    stopMutationMonitor();
+  });
+
+  it("still ignores a legitimate provider on a subdomain (suffix-boundary) (#211)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    const iframe = document.createElement("iframe");
+    iframe.src = "https://newassets.hcaptcha.com/captcha/v1/anchor";
+    document.body.appendChild(iframe);
+
+    await vi.advanceTimersByTimeAsync(150);
+
+    const iframeAlerts = alerts.filter((a) => a.type === "suspicious_iframe");
+    expect(iframeAlerts.length).toBe(0);
+
+    iframe.remove();
+    stopMutationMonitor();
+  });
+
+  it("still ignores a legitimate analytics iframe (#211)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    const iframe = document.createElement("iframe");
+    iframe.src = "https://www.googletagmanager.com/ns.html?id=GTM-XX";
+    document.body.appendChild(iframe);
+
+    await vi.advanceTimersByTimeAsync(150);
+
+    const iframeAlerts = alerts.filter((a) => a.type === "suspicious_iframe");
+    expect(iframeAlerts.length).toBe(0);
+
+    iframe.remove();
+    stopMutationMonitor();
+  });
+
   it("flags an injected data: iframe by its opaque scheme (D-IFRAME)", async () => {
     const alerts: MutationAlert[] = [];
     startMutationMonitor(document, (a) => alerts.push(a));
