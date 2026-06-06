@@ -344,12 +344,21 @@ describe("pickSiteRiskEvent (#205)", () => {
     expect(pickSiteRiskEvent([ev("1", "example.com", 80)], "")).toBeNull();
   });
 
-  it("ignores events without a site", () => {
-    const log = [
-      { id: "1", ts: 1, kind: "suite_config_update" } as EventLogEntry,
+  it("ignores events without a site even when they are the most recent scored entry (#214 R2)", () => {
+    const log: EventLogEntry[] = [
       ev("2", "example.com", 60),
+      // Most recent AND scored, but NO site — must be skipped by the site guard,
+      // not merely by the scoreless check. A removed site guard would return "1".
+      { id: "1", ts: 3, kind: "nav_click_block", score: 50 } as EventLogEntry,
     ];
     expect(pickSiteRiskEvent(log, "example.com")?.id).toBe("2");
+  });
+
+  it("selects a score-0 event (0 is a real score, not 'scoreless') (#214 R2)", () => {
+    const log: EventLogEntry[] = [
+      { id: "1", ts: 1, kind: "nav_click_block", site: "example.com", score: 0, reasons: ["x"] } as EventLogEntry,
+    ];
+    expect(pickSiteRiskEvent(log, "example.com")?.id).toBe("1");
   });
 
   it("handles an empty log", () => {
@@ -389,5 +398,14 @@ describe("derivePopupTabRisk (#205 R1)", () => {
       tabRisk: 0,
       reasons: undefined,
     });
+  });
+
+  it("treats a score-0 event as a real scored event — surfaces tabRisk 0 WITH its reasons (#214 R2)", () => {
+    // Guards the typeof-vs-truthiness distinction: a truthiness skip (`if (!ev.score)`)
+    // would wrongly drop this scored event and return reasons: undefined.
+    const log: EventLogEntry[] = [
+      { id: "1", ts: 1, kind: "nav_click_block", site: "example.com", score: 0, reasons: ["x"] } as EventLogEntry,
+    ];
+    expect(derivePopupTabRisk(log, "example.com")).toEqual({ tabRisk: 0, reasons: ["x"] });
   });
 });
