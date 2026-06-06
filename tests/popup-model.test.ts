@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { EventLogEntry } from "../extension/src/shared/storage";
 import {
   derivePopupSiteState,
+  derivePopupTabRisk,
   eventIconName,
   formatPopupEventLine,
   getRecentPopupEvents,
+  isRiskReducingReason,
   pickSiteRiskEvent,
   signalChipClass
 } from "../extension/src/popup/popup_model";
@@ -270,9 +272,33 @@ describe("signalChipClass (#205)", () => {
     }
   });
 
-  it("is case-insensitive and treats empty input as a warning", () => {
-    expect(signalChipClass("NRS_ALLOWLISTED")).toBe("signal-chip--ok");
+  it("treats empty input as a warning", () => {
     expect(signalChipClass("")).toBe("signal-chip--warn");
+  });
+});
+
+describe("isRiskReducingReason (#205 R1: exact predicate, mirrors buildPlainMessage)", () => {
+  it("matches the risk-reducing reason codes the toast filters out", () => {
+    for (const r of [
+      "nrs_allowlisted",
+      "nrs_user_activation_active",
+      "nrs_explicit_new_tab_intent",
+      "nrs_opener_previously_allowed",
+      "keyboard_activation",
+      "legit_captcha_present",
+      "legit_modal_backdrop",
+    ]) {
+      expect(isRiskReducingReason(r)).toBe(true);
+    }
+  });
+
+  it("does NOT green a risk-increasing code that merely contains a token (startsWith/exact, not substring)", () => {
+    // user_activation is matched EXACTLY, keyboard_/legit_ via startsWith — so a
+    // hypothetical spoof/fake variant stays a warning (no false reassurance).
+    expect(isRiskReducingReason("spoofed_user_activation")).toBe(false);
+    expect(isRiskReducingReason("fake_legit_overlay")).toBe(false);
+    expect(isRiskReducingReason("no_keyboard_activation")).toBe(false);
+    expect(isRiskReducingReason("clickfix_command_with_overlay")).toBe(false);
   });
 });
 
@@ -328,5 +354,40 @@ describe("pickSiteRiskEvent (#205)", () => {
 
   it("handles an empty log", () => {
     expect(pickSiteRiskEvent([], "example.com")).toBeNull();
+  });
+
+  it("skips scoreless events so a later scoreless alert can't mask an earlier scored block (#205 R1)", () => {
+    const log: EventLogEntry[] = [
+      ev("1", "example.com", 80),
+      // A later same-domain scoreless threat alert (e.g. mutation_alert) must not win.
+      { id: "2", ts: 2, kind: "mutation_alert", site: "example.com", reasons: ["dom_mutation"] } as EventLogEntry,
+    ];
+    const picked = pickSiteRiskEvent(log, "example.com");
+    expect(picked?.id).toBe("1");
+    expect(picked?.score).toBe(80);
+  });
+});
+
+describe("derivePopupTabRisk (#205 R1)", () => {
+  const ev = (id: string, site: string, score: number): EventLogEntry =>
+    ({ id, ts: Number(id), kind: "nav_click_block", site, score, reasons: ["x"] }) as EventLogEntry;
+
+  it("returns the scored same-domain event's risk + reasons", () => {
+    const log = [ev("1", "other.com", 90), ev("2", "example.com", 55)];
+    expect(derivePopupTabRisk(log, "example.com")).toEqual({ tabRisk: 55, reasons: ["x"] });
+  });
+
+  it("returns 0 / no reasons when the active site has only a scoreless alert (no green-gauge-with-orange-chips contradiction)", () => {
+    const log: EventLogEntry[] = [
+      { id: "1", ts: 1, kind: "mutation_alert", site: "example.com", reasons: ["dom_mutation"] } as EventLogEntry,
+    ];
+    expect(derivePopupTabRisk(log, "example.com")).toEqual({ tabRisk: 0, reasons: undefined });
+  });
+
+  it("returns 0 / no reasons when no event matches the active site", () => {
+    expect(derivePopupTabRisk([ev("1", "other.com", 90)], "example.com")).toEqual({
+      tabRisk: 0,
+      reasons: undefined,
+    });
   });
 });
