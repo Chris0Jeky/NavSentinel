@@ -20,9 +20,9 @@ import {
 } from "../shared/storage";
 import {
   derivePopupSiteState,
+  derivePopupTabRisk,
   eventIconName,
   getRecentPopupEvents,
-  pickSiteRiskEvent,
   signalChipClass
 } from "./popup_model";
 
@@ -194,16 +194,13 @@ async function refreshUi(): Promise<void> {
   const log = await getEventLog();
   renderEvents(log);
 
-  // Scope the "Current page" gauge/signals to the ACTIVE site. The event log is
-  // global (every tab/frame writes to it), so log[last] could be a different site's
-  // event — showing a previous site's risk (false alarm) or a background tab's
-  // green (false reassurance). (#205)
-  const siteEvent = pickSiteRiskEvent(log, siteState.registrableDomain);
-  const tabRisk = siteEvent && typeof siteEvent.score === "number" ? siteEvent.score : 0;
+  // Scope the "Current page" gauge/signals to the ACTIVE site's most recent scored
+  // event (not log[last], which is global). See derivePopupTabRisk. (#205)
+  const { tabRisk, reasons } = derivePopupTabRisk(log, siteState.registrableDomain);
   shieldArcEl.style.position = "relative";
   shieldArcEl.innerHTML = renderShieldArc(tabRisk);
   shieldArcEl.setAttribute("aria-label", `Tab risk score: ${tabRisk}`);
-  renderSignals(siteEvent?.reasons);
+  renderSignals(reasons);
 }
 
 function getPopupSnapshot(): PopupSnapshot {
