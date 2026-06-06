@@ -26,6 +26,10 @@ export function computeAdjustment(
   domainOutcomes: PromptOutcomeEntry[],
   baseThreshold = 70
 ): AdjustmentResult {
+  // Contract: allowCount/blockCount are only meaningful on a nonzero adjustment.
+  // The early returns report 0/0 (this length gate, pre-count) or the windowed
+  // counts (decisive-count gate below); the sole caller reads them only when
+  // adjustment !== 0. (#204 R2)
   if (domainOutcomes.length < MIN_OUTCOMES) return { adjustment: 0, allowCount: 0, blockCount: 0 };
 
   const recent = domainOutcomes.slice(-RECENT_WINDOW);

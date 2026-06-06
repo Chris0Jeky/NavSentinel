@@ -233,11 +233,28 @@ describe("adaptive scoring", () => {
       const { computeAdjustment } = await import("../extension/src/shared/adaptive_scoring");
 
       // Symmetry: the gate keys on allowCount + blockCount, so one decisive block
-      // amid cancels must not drive the maximum -15 tightening either.
+      // amid cancels must not drive the maximum -15 tightening either. Uses the
+      // canonical "block" outcome so the fail-on-revert discrimination doesn't
+      // depend on dismiss staying block-classed (#204 R2).
       const outcomes: PromptOutcomeEntry[] = [
         makeOutcome("example.com", "cancel"),
         makeOutcome("example.com", "cancel"),
-        makeOutcome("example.com", "dismiss"),
+        makeOutcome("example.com", "block"),
+      ];
+
+      expect(computeAdjustment(outcomes).adjustment).toBe(0);
+    });
+
+    it("does NOT adjust at the just-below boundary of 2 decisive outcomes (#204 R2)", async () => {
+      const { chrome } = createChromeMock();
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+      const { computeAdjustment } = await import("../extension/src/shared/adaptive_scoring");
+
+      // 2 decisive (one allow + one block) amid cancels is below MIN_OUTCOMES(3).
+      const outcomes: PromptOutcomeEntry[] = [
+        makeOutcome("example.com", "cancel"),
+        makeOutcome("example.com", "allow"),
+        makeOutcome("example.com", "block"),
       ];
 
       expect(computeAdjustment(outcomes).adjustment).toBe(0);
