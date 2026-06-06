@@ -345,7 +345,10 @@ describe("mutation_monitor DOM integration", () => {
     ["left-label suffix spoof", "https://hcaptcha.com.evil.example/anchor"],
     ["sibling-domain spoof", "https://evil-hcaptcha.com/x"],
     ["non-widget path on a path-gated host", "https://www.google.com/recaptcha-evil/x"],
-  ])("flags a hidden %s (#211 R1)", async (_label, src) => {
+    ["youtube non-embed path", "https://www.youtube.com/watch?v=evil"],
+    ["youtube /embed prefix-but-not-segment", "https://www.youtube.com/embedxyz"],
+    ["provider host with a non-http(s) scheme", "ftp://hcaptcha.com/widget"],
+  ])("flags a hidden %s (#211)", async (_label, src) => {
     const alerts: MutationAlert[] = [];
     startMutationMonitor(document, (a) => alerts.push(a));
 
@@ -371,6 +374,26 @@ describe("mutation_monitor DOM integration", () => {
 
     const iframe = document.createElement("iframe");
     iframe.src = "https://apis.google.com/js/api.js";
+    document.body.appendChild(iframe);
+
+    await vi.advanceTimersByTimeAsync(150);
+
+    const iframeAlerts = alerts.filter((a) => a.type === "suspicious_iframe");
+    expect(iframeAlerts.length).toBe(0);
+
+    iframe.remove();
+    stopMutationMonitor();
+  });
+
+  it.each([
+    "https://www.youtube.com/embed/dQw4w9WgXcQ",
+    "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ",
+  ])("still ignores a legitimate YouTube embed (%s) (#211 R2)", async (src) => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    const iframe = document.createElement("iframe");
+    iframe.src = src;
     document.body.appendChild(iframe);
 
     await vi.advanceTimersByTimeAsync(150);
