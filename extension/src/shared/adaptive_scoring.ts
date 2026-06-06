@@ -67,6 +67,9 @@ export function computeAdjustment(
   }
 
   const total = allowWeight + blockWeight;
+  // Defensive backstop: now unreachable given the decisive-count gate above (>= 3
+  // decisive outcomes => total >= 3 * 0.3 = 0.9), but retained to guard the ratio
+  // divisions below against a future change that could let total reach 0 (#204 R1).
   if (total === 0) return { adjustment: 0, allowCount, blockCount };
 
   const allowRatio = allowWeight / total;

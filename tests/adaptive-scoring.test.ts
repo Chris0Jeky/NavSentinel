@@ -227,6 +227,39 @@ describe("adaptive scoring", () => {
       expect(computeAdjustment(outcomes).adjustment).toBeGreaterThan(0);
     });
 
+    it("gates the block-tightening direction symmetrically ([cancel, cancel, block] -> 0) (#204 R1)", async () => {
+      const { chrome } = createChromeMock();
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+      const { computeAdjustment } = await import("../extension/src/shared/adaptive_scoring");
+
+      // Symmetry: the gate keys on allowCount + blockCount, so one decisive block
+      // amid cancels must not drive the maximum -15 tightening either.
+      const outcomes: PromptOutcomeEntry[] = [
+        makeOutcome("example.com", "cancel"),
+        makeOutcome("example.com", "cancel"),
+        makeOutcome("example.com", "dismiss"),
+      ];
+
+      expect(computeAdjustment(outcomes).adjustment).toBe(0);
+    });
+
+    it("characterization: 3 high-score allows still drive max +15 (discount nullified, tracked in #213)", async () => {
+      const { chrome } = createChromeMock();
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+      const { computeAdjustment } = await import("../extension/src/shared/adaptive_scoring");
+
+      // Pre-existing residual surfaced in #204 R1: the high-score discount (0.3
+      // weight) is nullified for a pure-allow sequence because allowRatio =
+      // allowWeight/allowWeight = 1.0 with no blocks. Tracked for a real fix in #213.
+      const outcomes: PromptOutcomeEntry[] = [
+        makeOutcome("example.com", "allow", 80),
+        makeOutcome("example.com", "allow", 80),
+        makeOutcome("example.com", "allow", 80),
+      ];
+
+      expect(computeAdjustment(outcomes, 70).adjustment).toBe(15);
+    });
+
     it("only considers last 10 outcomes", async () => {
       const { chrome } = createChromeMock();
       vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
