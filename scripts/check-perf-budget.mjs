@@ -33,11 +33,13 @@ const budgets = [
   {
     label: "capture_isolated (content script)",
     glob: "assets/capture_isolated.ts-*.js",
-    // Bumped 60 -> 62 (#206): the ClickFix legit-CAPTCHA gate now validates iframe
-    // hostnames + render state instead of a spoofable src substring, a small but
-    // necessary security addition that took the chunk just over 60KB. Total-dist
-    // budget (500KB) remains the aggregate guard and has ample room (~447KB).
-    maxKB: 62,
+    // Bumped 60 -> 61 (#206): capture_isolated was already sitting at ~60KB from
+    // accumulated detection logic, and the ClickFix legit-CAPTCHA hardening
+    // (hostname + render-state validation instead of a spoofable src substring)
+    // tipped it just over. Kept tight at 61KB (chunk is ~60.3KB); the total-dist
+    // budget (500KB) remains the aggregate guard with ample room (~447KB). The
+    // chunk is repeatedly near its cap — track its growth as a follow-up.
+    maxKB: 61,
   },
   {
     label: "main_guard (MAIN world)",

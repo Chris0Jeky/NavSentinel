@@ -469,6 +469,13 @@ describe("hasLegitCaptcha", () => {
     div.innerHTML = '<iframe src="https://hcaptcha.com./challenge"></iframe>';
     expect(hasLegitCaptcha(div)).toBe(true);
   });
+
+  it("rejects a provider host at a non-widget path (path-prefix anchor, #206 R2)", () => {
+    // /recaptcha must be a path PREFIX, not just a substring anywhere in the path.
+    const div = document.createElement("div");
+    div.innerHTML = '<iframe src="https://www.google.com/maps/x/recaptcha-not-real"></iframe>';
+    expect(hasLegitCaptcha(div)).toBe(false);
+  });
 });
 
 // --- #206: a spoofed captcha iframe must NOT suppress ClickFix scoring ---
