@@ -153,66 +153,104 @@ const INSTRUCTION_PATTERNS: RegExp[] = [
 ];
 
 /**
- * Known legitimate CAPTCHA provider iframe sources. These are the strong
- * signals — a cross-origin iframe from these domains is hard to fake.
+ * Known legitimate CAPTCHA provider hosts. An iframe counts as a real provider
+ * frame only when its parsed src hostname matches one of these on a suffix
+ * boundary (so "evil-google.com" / "google.com.evil.com" do NOT match) and, where
+ * required, its path carries the provider sub-path. We validate the parsed URL
+ * rather than a raw `src` substring: a `[src*="recaptcha"]` selector matches any
+ * attacker-controlled string (e.g. `src="recaptcha"` or
+ * `src="https://evil.cdn/recaptcha.png"`), which let a phishing page suppress the
+ * whole ClickFix detector by adding one hidden iframe (#206).
  */
-const LEGIT_CAPTCHA_IFRAME_SELECTORS = [
-  'iframe[src*="google.com/recaptcha"]',
-  'iframe[src*="recaptcha"]',
-  'iframe[src*="hcaptcha.com"]',
-  'iframe[src*="challenges.cloudflare.com"]',
-  'iframe[src*="funcaptcha.com"]',
-  'iframe[src*="arkoselabs.com"]',
+const CAPTCHA_PROVIDERS: Array<{ host: string; pathPrefix?: string }> = [
+  { host: "google.com", pathPrefix: "/recaptcha" },
+  { host: "recaptcha.net", pathPrefix: "/recaptcha" },
+  { host: "gstatic.com", pathPrefix: "/recaptcha" },
+  { host: "hcaptcha.com" },
+  { host: "challenges.cloudflare.com" },
+  { host: "funcaptcha.com" },
+  { host: "arkoselabs.com" },
 ];
 
 /**
- * Class-name markers for CAPTCHA providers. These are weaker signals
- * because an attacker can trivially add a class name to any element.
- * We only trust these if the matching element also contains a cross-origin
- * iframe (or is itself an iframe from the provider domain).
+ * True when the iframe is actually RENDERED (not hidden). A genuine CAPTCHA the
+ * user is meant to solve is visible; a hidden/zero-size iframe pointing at a real
+ * provider URL is a suppressor decoy, so it must not count as a legit CAPTCHA
+ * (#206 R1). Checks the `hidden` attribute, zero width/height attributes, and the
+ * inline AND computed display/visibility (computed catches class/stylesheet
+ * hiding on the live page; the inline + attribute checks remain decisive in a
+ * layout-less test environment).
  */
-const LEGIT_CAPTCHA_CLASS_SELECTORS: { selector: string; iframeDomain: string }[] = [
-  { selector: ".g-recaptcha", iframeDomain: "google.com/recaptcha" },
-  { selector: "#recaptcha", iframeDomain: "google.com/recaptcha" },
-  { selector: ".h-captcha", iframeDomain: "hcaptcha.com" },
-  { selector: ".cf-turnstile", iframeDomain: "challenges.cloudflare.com" },
-];
+function isRenderedIframe(iframe: Element): boolean {
+  const el = iframe as HTMLElement;
+  // A genuine CAPTCHA the user solves is rendered; reject the hiding an attacker
+  // uses to plant a suppressor frame. The `hidden` attribute and zero width/height
+  // attributes are checked directly (parsed, so "0"/"00" both count).
+  if (el.hasAttribute("hidden")) return false;
+  const w = el.getAttribute("width");
+  const h = el.getAttribute("height");
+  if ((w !== null && Number(w) === 0) || (h !== null && Number(h) === 0)) return false;
+  // On the live page, checkVisibility accounts for ANCESTOR display:none,
+  // visibility, and opacity:0 — none of which getComputedStyle on the iframe alone
+  // catches. Fall back to the iframe's own inline display/visibility where
+  // checkVisibility is unavailable (older engines / layout-less test env). Residual
+  // off-screen / sub-pixel hiding only suppresses the captcha-text signal (see
+  // scanForClickFix), not the whole detector. (#206 R2)
+  if (typeof el.checkVisibility === "function") {
+    return el.checkVisibility({ checkVisibilityCSS: true, checkOpacity: true });
+  }
+  return el.style?.display !== "none" && el.style?.visibility !== "hidden";
+}
+
+/**
+ * True when an iframe's src is a real http(s) URL hosted by a CAPTCHA provider
+ * AND the iframe is rendered (so a hidden provider-URL decoy cannot suppress the
+ * detector, #206 R1).
+ */
+function isProviderCaptchaIframe(iframe: Element): boolean {
+  const src = iframe.getAttribute("src");
+  if (!src) return false;
+  let url: URL;
+  try {
+    // Resolve against the page URL so relative srcs are evaluated correctly; this
+    // also rejects opaque/script schemes (data:, blob:, javascript:) below.
+    url = new URL(src, typeof location !== "undefined" ? location.href : undefined);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") return false;
+  // Strip a single trailing dot ("hcaptcha.com." is the same host) so a fully
+  // qualified provider name still matches.
+  const hostname = url.hostname.toLowerCase().replace(/\.$/, "");
+  const pathname = url.pathname.toLowerCase();
+  for (const provider of CAPTCHA_PROVIDERS) {
+    const hostMatch = hostname === provider.host || hostname.endsWith("." + provider.host);
+    if (!hostMatch) continue;
+    if (provider.pathPrefix && !pathname.startsWith(provider.pathPrefix)) continue;
+    return isRenderedIframe(iframe);
+  }
+  return false;
+}
 
 /**
  * Check whether a known legitimate CAPTCHA provider is present on the page.
  * If so, ClickFix detection should be suppressed to avoid false positives.
  *
- * To prevent attackers from adding a bare class name to suppress detection,
- * class-name-only matches are validated by checking for a cross-origin
- * iframe from the expected provider domain within the matched element.
+ * Detection is by validated provider HOSTNAME (see isProviderCaptchaIframe), not a
+ * raw `src` substring an attacker can spoof (#206). A provider class marker
+ * (.g-recaptcha, .cf-turnstile, …) without a validated provider iframe is NOT
+ * trusted; and any provider iframe near such a marker is already found by this
+ * root-wide scan, so a separate class-backed path would be redundant.
  */
 export function hasLegitCaptcha(root: Document | Element = document): boolean {
-  // Strong signal: cross-origin iframe from a known CAPTCHA provider
-  for (const selector of LEGIT_CAPTCHA_IFRAME_SELECTORS) {
-    try {
-      if (root.querySelector(selector)) return true;
-    } catch {
-      // invalid selector in this context — skip
-    }
+  let iframes: ArrayLike<Element>;
+  try {
+    iframes = root.querySelectorAll("iframe");
+  } catch {
+    return false;
   }
-
-  // Weaker signal: class name must be backed by a provider iframe
-  for (const { selector, iframeDomain } of LEGIT_CAPTCHA_CLASS_SELECTORS) {
-    try {
-      const el = root.querySelector(selector);
-      if (!el) continue;
-      // Check if this element or its descendants contain a real provider iframe
-      const iframe = el.querySelector(`iframe[src*="${iframeDomain}"]`);
-      if (iframe) return true;
-      // Also check siblings (some providers inject the iframe as a sibling)
-      const parent = el.parentElement;
-      if (parent) {
-        const siblingIframe = parent.querySelector(`iframe[src*="${iframeDomain}"]`);
-        if (siblingIframe) return true;
-      }
-    } catch {
-      // invalid selector in this context — skip
-    }
+  for (let i = 0; i < iframes.length; i++) {
+    if (isProviderCaptchaIframe(iframes[i]!)) return true;
   }
   return false;
 }
@@ -335,10 +373,16 @@ export function scanForClickFix(root: Document = document): ClickFixScanResult {
   const reasons: string[] = [];
   let score = 0;
 
-  // Early exit: if a legitimate CAPTCHA provider is present, do not flag
-  if (hasLegitCaptcha(root)) {
-    return { detected: false, reasons: ["legit_captcha_present"], score: 0 };
-  }
+  // A legitimate, rendered CAPTCHA provider legitimately shows "verify you are
+  // human"-style text, so we suppress the captcha-TEXT signal to avoid false
+  // positives on real captcha pages. We do NOT suppress the whole scan: a real
+  // CAPTCHA never writes a shell command to the clipboard or instructs the user to
+  // paste into Win+R, so the clipboard-command and paste-instruction signals must
+  // keep scoring even when a (possibly attacker-planted) provider iframe is present
+  // (#206 R2). A hidden-iframe bypass of the visibility gate can therefore at most
+  // suppress the captcha-text signal, never the whole detector.
+  const legitCaptcha = hasLegitCaptcha(root);
+  if (legitCaptcha) reasons.push("legit_captcha_present");
 
   // Signal 1: clipboard write
   const hadClipboardWrite = hasRecentClipboardWrite();
@@ -356,7 +400,11 @@ export function scanForClickFix(root: Document = document): ClickFixScanResult {
 
   const bodyText = (root.body?.textContent ?? "").slice(0, 5000);
 
-  const hasCaptchaText = matchesCaptchaPattern(overlayText) || matchesCaptchaPattern(bodyText);
+  // Captcha-text is the only ClickFix signal a legitimate CAPTCHA legitimately
+  // trips, so it is the one (and only) signal suppressed when a real provider
+  // CAPTCHA is present (#206 R2).
+  const hasCaptchaText =
+    !legitCaptcha && (matchesCaptchaPattern(overlayText) || matchesCaptchaPattern(bodyText));
   const hasInstructionText = matchesInstructionPattern(overlayText) || matchesInstructionPattern(bodyText);
 
   // Build score from combination of signals.

@@ -3,7 +3,7 @@ import type { CredMode, EventLogEntry, SuiteSettings } from "../shared/storage";
 import { classifyEventTone } from "../shared/event_tone";
 import { icon, logoSentinel } from "../shared/icons";
 import { getSegValue, initSegKeyboard, setSegValue } from "../shared/seg_control";
-import { pct, avg, fmtTime, parseIntSafe, withReentrancyGuard } from "./options_model";
+import { pct, avg, fmtTime, parseIntSafe, withReentrancyGuard, runClearStats, runImportFlow } from "./options_model";
 import {
   addTrustedDomainWithResult,
   appendEvent,
@@ -16,6 +16,7 @@ import {
   getSuiteSettings,
   getTrustedDomains,
   importAll,
+  PromptOutcomeDeliveryError,
   removeTrustedDomain,
   updateSuiteSettings,
   type PromptOutcomeEntry
@@ -554,12 +555,16 @@ importFileEl.addEventListener("change", async () => {
   const f = importFileEl.files?.[0];
   if (!f) return;
   try {
-    await importAll(JSON.parse(await f.text()));
-    await init();
-    flashStatus(statusEl, "Imported.");
-  } catch (e) {
-    console.warn("[NavSentinel] import failed:", e);
-    flashStatus(statusEl, "Import failed.", "error");
+    // Thin adapter: orchestration (import → refresh → status, with the non-atomic
+    // partial-vs-total failure handling) lives in the unit-tested runImportFlow.
+    await runImportFlow({
+      importPayload: async () => {
+        await importAll(JSON.parse(await f.text()));
+      },
+      refresh: init,
+      flash: (msg, tone) => flashStatus(statusEl, msg, tone),
+      isDeliveryFailure: (e) => e instanceof PromptOutcomeDeliveryError,
+    });
   } finally {
     importFileEl.value = "";
   }
@@ -570,12 +575,16 @@ refreshStatsBtn.addEventListener("click", async () => {
   flashStatus(statusEl, "Stats refreshed.");
 });
 
-clearStatsBtn.addEventListener("click", async () => {
-  await clearPromptOutcomes();
-  await clearAdaptiveScores();
-  await refreshStats();
-  flashStatus(statusEl, "Stats cleared.");
-});
+clearStatsBtn.addEventListener("click", () =>
+  // Thin adapter: orchestration (scoped failure handling so a half-clear is never
+  // reported, adaptive scores cleared only on success) lives in runClearStats.
+  runClearStats({
+    clearOutcomes: clearPromptOutcomes,
+    clearAdaptive: clearAdaptiveScores,
+    refresh: refreshStats,
+    flash: (msg, tone) => flashStatus(statusEl, msg, tone),
+  }),
+);
 
 refreshProfilesBtn.addEventListener("click", async () => {
   await refreshDomainProfiles();

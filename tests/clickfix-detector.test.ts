@@ -9,6 +9,7 @@ import {
   hasRecentClipboardWrite,
   hasRecentCommandClipboardWrite,
   _resetClipboardEvents,
+  scanForClickFix,
 } from "../extension/src/content/clickfix_detector";
 
 // --- looksLikeCommand ---
@@ -418,5 +419,84 @@ describe("hasLegitCaptcha", () => {
     const wrapper = document.createElement("div");
     wrapper.innerHTML = '<div><div class="g-recaptcha"></div><iframe src="https://www.google.com/recaptcha/api2/anchor"></iframe></div>';
     expect(hasLegitCaptcha(wrapper)).toBe(true);
+  });
+
+  // #206: the gate must validate the iframe HOSTNAME, not a raw `src` substring an
+  // attacker can spoof. Each of these would have suppressed the whole detector
+  // under the old `iframe[src*="recaptcha"]` selector.
+  it.each([
+    'iframe src="recaptcha"',
+    'iframe src="https://attacker-cdn.example/recaptcha-badge.png"',
+    'iframe src="https://evil.example/?u=hcaptcha.com"',
+    'iframe src="https://evil-google.com/recaptcha"',
+    'iframe src="https://google.com.evil.example/recaptcha"',
+    'iframe src="data:text/html,recaptcha"',
+    'iframe src="https://www.google.com/maps"',
+  ])("returns false for a spoofed/non-provider iframe (%s) (#206)", (frag) => {
+    const div = document.createElement("div");
+    div.innerHTML = `<${frag} style="display:none"></iframe>`;
+    expect(hasLegitCaptcha(div)).toBe(false);
+  });
+
+  it("still accepts a real provider iframe on a subdomain (recaptcha.net, www.google.com)", () => {
+    const a = document.createElement("div");
+    a.innerHTML = '<iframe src="https://www.recaptcha.net/recaptcha/api2/anchor"></iframe>';
+    expect(hasLegitCaptcha(a)).toBe(true);
+    const b = document.createElement("div");
+    b.innerHTML = '<iframe src="https://newassets.hcaptcha.com/captcha/v1/foo"></iframe>';
+    expect(hasLegitCaptcha(b)).toBe(true);
+  });
+
+  // #206 R1: a hidden iframe pointing at a REAL provider URL is a suppressor decoy
+  // (the attacker controls the DOM). A genuine CAPTCHA the user solves is rendered.
+  it.each(['style="display:none"', "hidden", 'width="0" height="0"', 'style="visibility:hidden"'])(
+    "rejects a real-provider iframe hidden via %s",
+    (attrs) => {
+      const div = document.createElement("div");
+      div.innerHTML = `<iframe src="https://www.google.com/recaptcha/api2/anchor" ${attrs}></iframe>`;
+      expect(hasLegitCaptcha(div)).toBe(false);
+    },
+  );
+
+  it("rejects a path-less recaptcha.net root (#206 R1)", () => {
+    const div = document.createElement("div");
+    div.innerHTML = '<iframe src="https://www.recaptcha.net/"></iframe>';
+    expect(hasLegitCaptcha(div)).toBe(false);
+  });
+
+  it("accepts a trailing-dot provider hostname (#206 R1)", () => {
+    const div = document.createElement("div");
+    div.innerHTML = '<iframe src="https://hcaptcha.com./challenge"></iframe>';
+    expect(hasLegitCaptcha(div)).toBe(true);
+  });
+
+  it("rejects a provider host at a non-widget path (path-prefix anchor, #206 R2)", () => {
+    // /recaptcha must be a path PREFIX, not just a substring anywhere in the path.
+    const div = document.createElement("div");
+    div.innerHTML = '<iframe src="https://www.google.com/maps/x/recaptcha-not-real"></iframe>';
+    expect(hasLegitCaptcha(div)).toBe(false);
+  });
+});
+
+// --- #206: a spoofed captcha iframe must NOT suppress ClickFix scoring ---
+
+describe("scanForClickFix not suppressed by a hidden/spoofed captcha iframe (#206)", () => {
+  beforeEach(() => {
+    _resetClipboardEvents();
+  });
+
+  it("still scores a ClickFix page that hides a real-provider iframe to dodge the gate", () => {
+    // R1 PoC: a hidden iframe pointing at a REAL provider URL. The visibility gate
+    // rejects it, so the detector is not suppressed. (The score here comes from the
+    // captcha+instruction text branch; happy-dom does no layout, so the overlay /
+    // clipboard branches don't contribute — text alone proves non-suppression.)
+    recordClipboardWrite({ ts: Date.now(), contentLength: 120, looksLikeCommand: true });
+    const root = document.implementation.createHTMLDocument("t");
+    root.body.innerHTML =
+      '<iframe src="https://www.google.com/recaptcha/api2/anchor" style="display:none"></iframe>' +
+      "<div>Verify you are human: press Win+R, then Ctrl+V and press Enter</div>";
+    const result = scanForClickFix(root);
+    expect(result.reasons).not.toContain("legit_captcha_present");
+    expect(result.score).toBeGreaterThan(0);
   });
 });

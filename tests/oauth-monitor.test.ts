@@ -2,6 +2,7 @@ import { describe, expect, it, beforeEach, vi, afterEach } from "vitest";
 import {
   isOAuthUrl,
   extractRedirectUri,
+  hasOAuthResponseParams,
   isUnexpectedCallback,
   handleOAuthRuntimeMessage,
   isOAuthRedirectMismatch,
@@ -535,5 +536,39 @@ describe("legitimate OAuth flows", () => {
       expectedCallbackDomain: "myapp.com",
     });
     expect(isUnexpectedCallback(flow, "http://localhost:3000/callback?code=abc")).toBe(false);
+  });
+});
+
+describe("hasOAuthResponseParams (#207)", () => {
+  it("detects an authorization-code callback (?code=)", () => {
+    expect(hasOAuthResponseParams("https://app.com/cb?code=abc&state=x")).toBe(true);
+  });
+
+  it("detects an error callback (?error=)", () => {
+    expect(hasOAuthResponseParams("https://app.com/cb?error=access_denied&state=x")).toBe(true);
+  });
+
+  it("detects an implicit/hybrid token callback in the fragment (#access_token / #id_token)", () => {
+    expect(hasOAuthResponseParams("https://app.com/cb#access_token=t&token_type=bearer")).toBe(true);
+    expect(hasOAuthResponseParams("https://app.com/cb#id_token=jwt&state=x")).toBe(true);
+  });
+
+  it("does NOT treat an authorization REQUEST (client_id/response_type/state, no code) as a response", () => {
+    // Genuine provider hop — state is a CSRF echo that requests carry too.
+    expect(
+      hasOAuthResponseParams(
+        "https://login.live.com/oauth20_authorize.srf?client_id=x&response_type=code&scope=openid&state=abc",
+      ),
+    ).toBe(false);
+  });
+
+  it("does NOT treat state alone as a response indicator", () => {
+    expect(hasOAuthResponseParams("https://example.com/page?state=abc")).toBe(false);
+  });
+
+  it("returns false for unrelated navigations and malformed URLs", () => {
+    expect(hasOAuthResponseParams("https://gmail.com/")).toBe(false);
+    expect(hasOAuthResponseParams("https://shop.example/promo")).toBe(false);
+    expect(hasOAuthResponseParams("not a url")).toBe(false);
   });
 });

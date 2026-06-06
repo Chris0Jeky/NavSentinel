@@ -200,6 +200,47 @@ export function isUnexpectedCallback(
   return actualReg !== expectedReg;
 }
 
+/**
+ * Whether a URL carries an OAuth *response* — i.e. it is an actual callback, as
+ * opposed to an authorization *request* or an unrelated navigation. The
+ * distinguishing payload is an authorization `code` / `error` in the query, or an
+ * `access_token` / `id_token` in the fragment (implicit/hybrid flows).
+ *
+ * `state` is deliberately NOT treated as a response indicator: it is a CSRF echo
+ * that authorization REQUESTS also carry (e.g. a genuine provider hop such as
+ * login.live.com/oauth20_authorize.srf?...&state=...), so keying on it would
+ * mis-classify legitimate intermediate hops as callbacks and fire a false
+ * redirect-mismatch. (#207)
+ *
+ * Limitation: this inspects only the URL (query + fragment). `response_mode=form_post`
+ * delivers the response in the POST body, and a platform may omit the fragment from a
+ * committed-navigation URL, so those callbacks are not detected here (URL-only by
+ * design — see the module header). Tracked as a follow-up (#221).
+ */
+export function hasOAuthResponseParams(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+
+  const responseKeys = ["code", "error", "access_token", "id_token"];
+  for (const key of responseKeys) {
+    if (parsed.searchParams.has(key)) return true;
+  }
+
+  const fragment = parsed.hash.startsWith("#") ? parsed.hash.slice(1) : parsed.hash;
+  if (fragment) {
+    const fragParams = new URLSearchParams(fragment);
+    for (const key of responseKeys) {
+      if (fragParams.has(key)) return true;
+    }
+  }
+
+  return false;
+}
+
 // --- Content-script-side state ---
 
 /** Current OAuth flow state for this tab, forwarded from the SW. */

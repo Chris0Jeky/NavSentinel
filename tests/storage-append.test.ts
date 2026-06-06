@@ -1183,6 +1183,78 @@ describe("prompt outcome delegation — retry, drop, and refusal", () => {
     expect(calls).toBe(1); // definitive refusal — not retried
     expect(store[PROMPT_OUTCOMES_KEY]).toEqual([seed]); // and not wiped via any fallback
   });
+
+  it("clearPromptOutcomes REJECTS when the SW is persistently unreachable (#188 control op)", async () => {
+    // Append drops + resolves on exhaustion (covered above); a user-initiated
+    // control op must instead reject so the options UI can surface the failure.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const seed = { id: "keep-1", ts: 10, domain: "keep.example", type: "nav" as const, score: 30, outcome: "allow" as const };
+    const { chrome, store } = createChromeMock({ [PROMPT_OUTCOMES_KEY]: [seed] });
+    let calls = 0;
+    const runtime: {
+      lastError?: { message?: string };
+      sendMessage: (message: unknown, callback?: (response: unknown) => void) => void;
+    } = {
+      sendMessage(_message, callback) {
+        calls++;
+        runtime.lastError = { message: "Could not establish connection. Receiving end does not exist." };
+        callback?.(undefined);
+        delete runtime.lastError;
+      },
+    };
+    (chrome as unknown as { runtime: unknown }).runtime = runtime;
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { clearPromptOutcomes, PromptOutcomeDeliveryError } = await import("../extension/src/shared/storage");
+    const err = await clearPromptOutcomes().catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(PromptOutcomeDeliveryError);
+    // R1 fix: the underlying transport error is preserved as `cause`, matching the
+    // diagnostic the append drop-path logs.
+    expect((err as Error).cause).toBeDefined();
+    expect(String((err as { cause?: unknown }).cause)).toMatch(/establish connection|receiving end/i);
+    expect(calls).toBe(4); // initial + 3 retries, then reject (no silent drop)
+    expect(store[PROMPT_OUTCOMES_KEY]).toEqual([seed]); // not wiped via any fallback
+    // The control op rejects rather than taking the append "dropped" log path.
+    expect(warn).not.toHaveBeenCalledWith(
+      expect.stringContaining("prompt outcome dropped"),
+      expect.anything(),
+      expect.anything()
+    );
+  });
+
+  it("importAll REJECTS (delivery error) on SW exhaustion but is non-atomic — earlier sections persist (#188 R1)", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const seed = { id: "keep-1", ts: 10, domain: "keep.example", type: "nav" as const, score: 30, outcome: "allow" as const };
+    const { chrome, store } = createChromeMock({ [PROMPT_OUTCOMES_KEY]: [seed] });
+    let calls = 0;
+    const runtime: {
+      lastError?: { message?: string };
+      sendMessage: (message: unknown, callback?: (response: unknown) => void) => void;
+    } = {
+      sendMessage(_message, callback) {
+        calls++;
+        runtime.lastError = { message: "Could not establish connection. Receiving end does not exist." };
+        callback?.(undefined);
+        delete runtime.lastError;
+      },
+    };
+    (chrome as unknown as { runtime: unknown }).runtime = runtime;
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { importAll, PromptOutcomeDeliveryError } = await import("../extension/src/shared/storage");
+    await expect(
+      importAll({
+        eventLog: [{ kind: "nav_block" }],
+        promptOutcomes: [{ id: "imp-1", ts: 5, domain: "d.example", type: "nav", score: 10, outcome: "allow" }],
+      })
+    ).rejects.toBeInstanceOf(PromptOutcomeDeliveryError);
+    expect(calls).toBe(4);
+    // Non-atomic: eventLog (written before the prompt-outcome step) IS committed,
+    // which is why the options handler must report a *partial* failure (#188 R1)...
+    expect(store[EVENT_LOG_KEY]).toEqual([{ kind: "nav_block" }]);
+    // ...but the delegated prompt-outcome write never reached storage (seed intact).
+    expect(store[PROMPT_OUTCOMES_KEY]).toEqual([seed]);
+  });
 });
 
 describe("prompt outcome append — non-finite sanitization", () => {

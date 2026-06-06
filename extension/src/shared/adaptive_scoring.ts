@@ -26,6 +26,10 @@ export function computeAdjustment(
   domainOutcomes: PromptOutcomeEntry[],
   baseThreshold = 70
 ): AdjustmentResult {
+  // Contract: allowCount/blockCount are only meaningful on a nonzero adjustment.
+  // The early returns report 0/0 (this length gate, pre-count) or the windowed
+  // counts (decisive-count gate below); the sole caller reads them only when
+  // adjustment !== 0. (#204 R2)
   if (domainOutcomes.length < MIN_OUTCOMES) return { adjustment: 0, allowCount: 0, blockCount: 0 };
 
   const recent = domainOutcomes.slice(-RECENT_WINDOW);
@@ -56,7 +60,20 @@ export function computeAdjustment(
     }
   }
 
+  // Require at least MIN_OUTCOMES DECISIVE outcomes (allow/block) in the recent
+  // window. The initial length gate counts non-decisive `cancel` outcomes that the
+  // ratio below ignores, so without this a single decisive allow padded with
+  // cancels (e.g. [cancel, cancel, allow]) would pass the gate and drive the
+  // maximum threshold relaxation — making the extension least protective on the
+  // strength of one data point (#204).
+  if (allowCount + blockCount < MIN_OUTCOMES) {
+    return { adjustment: 0, allowCount, blockCount };
+  }
+
   const total = allowWeight + blockWeight;
+  // Defensive backstop: now unreachable given the decisive-count gate above (>= 3
+  // decisive outcomes => total >= 3 * 0.3 = 0.9), but retained to guard the ratio
+  // divisions below against a future change that could let total reach 0 (#204 R1).
   if (total === 0) return { adjustment: 0, allowCount, blockCount };
 
   const allowRatio = allowWeight / total;

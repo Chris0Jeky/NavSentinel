@@ -13,6 +13,7 @@
  */
 
 import { getRegistrableDomain, hostForUrl, normalizeHost } from "../shared/domain";
+import { hasVisiblePasswordField } from "./password_field";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -393,20 +394,10 @@ export function domainMatchesBrand(currentDomain: string, brand: BrandEntry): bo
 
 /** Build a PageSnapshot from a live Document. Called in content script context. */
 export function buildPageSnapshot(doc: Document): PageSnapshot {
-  // Password field check
-  let hasPassword = false;
-  const pwInputs = doc.querySelectorAll('input[type="password"]');
-  for (let i = 0; i < pwInputs.length; i++) {
-    const input = pwInputs[i] as HTMLInputElement;
-    if (input.disabled) continue;
-    const style = input.getAttribute("style") || "";
-    if (style.includes("display:none") || style.includes("display: none") ||
-        style.includes("visibility:hidden") || style.includes("visibility: hidden")) {
-      continue;
-    }
-    hasPassword = true;
-    break;
-  }
+  // Credential-page gate: shared visible-credential-field helper (#196).
+  // Inline-hidden (display:none / visibility:hidden) fields are skipped so a
+  // hidden honeypot doesn't trip the credential signals (#192).
+  const hasPassword = hasVisiblePasswordField(doc);
 
   // Body text
   const body = doc.body;

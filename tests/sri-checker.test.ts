@@ -64,10 +64,10 @@ describe("sri_checker - non-credential pages", () => {
     expect(result.withoutSRI).toBe(0);
   });
 
-  // Pre-fix, hasPasswordField counted any non-disabled field, so a hidden-only
-  // password page was wrongly scanned (totalExternal=1, score=8). Cover all four
-  // inline-hidden substring branches independently so dropping any one of them
-  // re-introduces the #192 regression and fails here.
+  // The credential gate skips inline-hidden password fields (#192) via the
+  // shared visible-credential-field helper, which reads the element's inline
+  // CSSStyleDeclaration (not a substring match). Pin the canonical inline-hidden
+  // spellings end-to-end so a helper regression re-introduces the #192 over-scan.
   it.each([
     "display:none",
     "display: none",
@@ -91,6 +91,36 @@ describe("sri_checker - non-credential pages", () => {
       `<input type="password" name="real"></form></body></html>`;
     const result = checkSRI(makeDoc(html), PAGE_URL, PAGE_ORIGIN);
     expect(result.totalExternal).toBe(1);
+  });
+
+  it("DOES scan a visible field whose style carries a decoy hiding substring (#196)", () => {
+    // Pre-#196 the raw substring check matched "display:none" inside the
+    // unrelated `content` property and wrongly skipped the gate. The shared
+    // declaration-parsing helper keeps the field visible, so SRI still gates on.
+    const html =
+      `<!doctype html><html><head>${scriptTag(`${EXTERNAL_ORIGIN}/app.js`)}</head>` +
+      `<body><form><input type="password" name="pw" style="content:'display:none'"></form></body></html>`;
+    const result = checkSRI(makeDoc(html), PAGE_URL, PAGE_ORIGIN);
+    expect(result.totalExternal).toBe(1);
+  });
+
+  it("DOES scan a CSS-invalid multi-token value the engine drops to visible (#196 R1)", () => {
+    // `display:none none` is invalid CSS -> the engine drops the declaration ->
+    // the field renders (visible). The earlier hand-parser wrongly treated it as
+    // hidden and suppressed the gate on a real credential field.
+    const html =
+      `<!doctype html><html><head>${scriptTag(`${EXTERNAL_ORIGIN}/app.js`)}</head>` +
+      `<body><form><input type="password" name="pw" style="display:none none"></form></body></html>`;
+    expect(checkSRI(makeDoc(html), PAGE_URL, PAGE_ORIGIN).totalExternal).toBe(1);
+  });
+
+  it("DOES scan a field whose inline cascade resolves to visible (#196 R1)", () => {
+    // display:none;display:block -> last valid declaration (block) wins ->
+    // visible -> the credential gate stays on.
+    const html =
+      `<!doctype html><html><head>${scriptTag(`${EXTERNAL_ORIGIN}/app.js`)}</head>` +
+      `<body><form><input type="password" name="pw" style="display:none;display:block"></form></body></html>`;
+    expect(checkSRI(makeDoc(html), PAGE_URL, PAGE_ORIGIN).totalExternal).toBe(1);
   });
 });
 

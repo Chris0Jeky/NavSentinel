@@ -10,6 +10,7 @@ import { RedirectChainTracker } from "../shared/redirect_chain";
 import {
   isOAuthUrl,
   extractRedirectUri,
+  hasOAuthResponseParams,
   isUnexpectedCallback,
   type OAuthFlowState,
 } from "../content/oauth_monitor";
@@ -159,10 +160,31 @@ function pruneStaleOAuthFlows(): void {
   swState.persistMap(oauthFlowByTab, "oauthFlow");
 }
 
-function processOAuthNavigation(tabId: number, url: string): void {
+function processOAuthNavigation(
+  tabId: number,
+  url: string,
+  initiatorUrl: string,
+  isUserTyped: boolean,
+): void {
   if (!isOAuthUrl(url)) {
     const existingFlow = oauthFlowByTab.get(tabId);
     if (existingFlow && (existingFlow.phase === "redirect" || existingFlow.phase === "consent")) {
+      // Only treat a non-OAuth commit as the OAuth CALLBACK when it (a) was NOT a
+      // user-typed/bookmarked navigation — a real callback arrives via a redirect,
+      // link click, or form submit, so we exclude only deliberate address entry —
+      // AND (b) carries an OAuth response (code/error in query, or access_token/
+      // id_token in query or fragment). Genuine intermediate provider hops (e.g.
+      // login.live.com), and benign typed/bookmarked pages that merely carry a
+      // generic ?code=/?error=, therefore do not trip a false redirect-mismatch
+      // (+30 NRS). A real attacker callback (redirect/link/form to its domain,
+      // carrying code) still satisfies both. (#207)
+      //
+      // Residual: a benign redirect/link page on another domain that happens to
+      // carry a generic ?code=/?error= during an active flow can still mismatch
+      // (tracked as a follow-up). And an abandoned flow now lingers in redirect/
+      // consent until the 60s age-prune rather than being forced to "complete"
+      // (bounded by OAUTH_FLOW_MAX_AGE_MS).
+      if (isUserTyped || !hasOAuthResponseParams(url)) return;
       existingFlow.phase = "callback";
       if (isUnexpectedCallback(existingFlow, url)) {
         chrome.tabs.sendMessage(
@@ -201,9 +223,12 @@ function processOAuthNavigation(tabId: number, url: string): void {
     }
   } else {
     pruneStaleOAuthFlows();
-    const prevUrl = lastUrlByTab.get(tabId) ?? "";
     const flow: OAuthFlowState = {
-      initiatorUrl: prevUrl,
+      // The page that initiated the flow — the URL committed BEFORE this consent
+      // navigation. Passed in from onCommittedHandler, which captures it before
+      // overwriting lastUrlByTab; re-reading the map here would yield the consent
+      // URL itself. (#207)
+      initiatorUrl,
       consentUrl: url,
       expectedCallbackDomain,
       startedAt: Date.now(),
@@ -703,9 +728,6 @@ function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitio
   // Uses synchronous cached mode to avoid racing with content-script threat escalation.
   void updateTabIcon(details.tabId, cachedDefaultMode === "off" ? "gray" : "green");
 
-  // --- OAuth flow tracking ---
-  processOAuthNavigation(details.tabId, details.url);
-
   const qualifiers = details.transitionQualifiers ?? [];
   const isRedirect =
     qualifiers.includes("client_redirect") || qualifiers.includes("server_redirect");
@@ -714,6 +736,16 @@ function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitio
     details.transitionType === "auto_bookmark" ||
     qualifiers.includes("from_address_bar");
   const isLinkish = details.transitionType === "link";
+
+  // --- OAuth flow tracking ---
+  // Pass prevUrl (captured above, before the lastUrlByTab overwrite) so a new flow's
+  // initiatorUrl is the initiating page, not the consent URL; and whether this commit
+  // was user-initiated address entry (typed / bookmark / address-bar). A real OAuth
+  // callback arrives via a redirect, a link click, or a form submit — never a typed
+  // URL — so excluding ONLY the user-typed transitions stops a benign typed/bookmarked
+  // ?code= page from tripping a false redirect-mismatch, while still accepting
+  // link-click and gesture-driven JS callbacks (which carry no redirect qualifier). (#207)
+  processOAuthNavigation(details.tabId, details.url, prevUrl ?? "", isUserTyped);
 
   // Only record hops that are redirect-driven OR that extend an existing
   // chain (a non-redirect commit arriving within the chain window).
