@@ -10,6 +10,7 @@ import { RedirectChainTracker } from "../shared/redirect_chain";
 import {
   isOAuthUrl,
   extractRedirectUri,
+  hasOAuthResponseParams,
   isUnexpectedCallback,
   type OAuthFlowState,
 } from "../content/oauth_monitor";
@@ -159,10 +160,17 @@ function pruneStaleOAuthFlows(): void {
   swState.persistMap(oauthFlowByTab, "oauthFlow");
 }
 
-function processOAuthNavigation(tabId: number, url: string): void {
+function processOAuthNavigation(tabId: number, url: string, initiatorUrl: string): void {
   if (!isOAuthUrl(url)) {
     const existingFlow = oauthFlowByTab.get(tabId);
     if (existingFlow && (existingFlow.phase === "redirect" || existingFlow.phase === "consent")) {
+      // Only treat a non-OAuth commit as the OAuth CALLBACK when it actually
+      // carries an OAuth response (code/error in query, or access_token/id_token in
+      // fragment). Genuine intermediate provider hops (e.g. login.live.com) and
+      // unrelated navigations (user-cancel, clicking a bookmark) do not, and must
+      // not trip a false redirect-mismatch (+30 NRS). A real attacker callback
+      // still carries these. (#207)
+      if (!hasOAuthResponseParams(url)) return;
       existingFlow.phase = "callback";
       if (isUnexpectedCallback(existingFlow, url)) {
         chrome.tabs.sendMessage(
@@ -201,9 +209,12 @@ function processOAuthNavigation(tabId: number, url: string): void {
     }
   } else {
     pruneStaleOAuthFlows();
-    const prevUrl = lastUrlByTab.get(tabId) ?? "";
     const flow: OAuthFlowState = {
-      initiatorUrl: prevUrl,
+      // The page that initiated the flow — the URL committed BEFORE this consent
+      // navigation. Passed in from onCommittedHandler, which captures it before
+      // overwriting lastUrlByTab; re-reading the map here would yield the consent
+      // URL itself. (#207)
+      initiatorUrl,
       consentUrl: url,
       expectedCallbackDomain,
       startedAt: Date.now(),
@@ -704,7 +715,9 @@ function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitio
   void updateTabIcon(details.tabId, cachedDefaultMode === "off" ? "gray" : "green");
 
   // --- OAuth flow tracking ---
-  processOAuthNavigation(details.tabId, details.url);
+  // Pass prevUrl (captured above, before the lastUrlByTab overwrite) so a new
+  // flow's initiatorUrl is the initiating page, not the consent URL. (#207)
+  processOAuthNavigation(details.tabId, details.url, prevUrl ?? "");
 
   const qualifiers = details.transitionQualifiers ?? [];
   const isRedirect =

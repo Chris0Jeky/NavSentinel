@@ -1029,7 +1029,7 @@ describe("service worker handlers", () => {
       expect(flow.phase).toBe("consent");
     });
 
-    it("URL without OAuth params triggers callback→complete (not treated as consent)", async () => {
+    it("a non-OAuth commit WITHOUT OAuth response params is not treated as the callback (no false mismatch) (#207)", async () => {
       const mock = createChromeMock();
       await loadSw(mock);
 
@@ -1044,7 +1044,10 @@ describe("service worker handlers", () => {
         transitionType: "link",
       });
 
-      // Navigate to same-domain page without OAuth query params — treated as callback
+      // An intermediate same-provider step with no OAuth RESPONSE params (authuser
+      // switch). Previously this was unconditionally treated as the callback and
+      // fired a false redirect-mismatch (accounts.google.com != app.com). It must
+      // not now.
       mock.sentMessages.length = 0;
       mock.emitBeforeNavigate({
         tabId: 10,
@@ -1059,18 +1062,96 @@ describe("service worker handlers", () => {
         transitionQualifiers: ["server_redirect"],
       });
 
-      const flowMsg = mock.sentMessages.find(
-        (m) => (m.message as { type: string }).type === "ns-oauth-flow-update",
-      );
-      expect(flowMsg).toBeDefined();
-      const flow = (flowMsg!.message as { flow: { phase: string } }).flow;
-      expect(flow.phase).toBe("complete");
-
-      // Redirect-mismatch fires because accounts.google.com != app.com (redirect_uri)
+      // No mismatch, and the flow is NOT completed (the non-callback commit returns early).
       const mismatchMsg = mock.sentMessages.find(
         (m) => (m.message as { type: string }).type === "ns-oauth-redirect-mismatch",
       );
-      expect(mismatchMsg).toBeDefined();
+      expect(mismatchMsg).toBeUndefined();
+      const completeMsg = mock.sentMessages.find(
+        (m) =>
+          (m.message as { type: string }).type === "ns-oauth-flow-update" &&
+          (m.message as { flow: { phase: string } }).flow.phase === "complete",
+      );
+      expect(completeMsg).toBeUndefined();
+    });
+
+    it("a genuine cross-domain provider hop (no response params) does not fire a redirect-mismatch (#207)", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+
+      // Microsoft flow; redirect_uri -> app.contoso.com
+      const consentUrl =
+        "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=x&redirect_uri=https%3A%2F%2Fapp.contoso.com%2Fcb&response_type=code&scope=openid";
+      mock.emitCommitted({ tabId: 10, frameId: 0, url: consentUrl, transitionType: "link" });
+
+      // Genuine Microsoft hop on a DIFFERENT registrable domain, carrying an
+      // authorization REQUEST (client_id/response_type/state) but no response payload.
+      mock.sentMessages.length = 0;
+      const hopUrl =
+        "https://login.live.com/oauth20_authorize.srf?client_id=x&response_type=code&scope=openid&state=abc";
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        url: hopUrl,
+        transitionType: "link",
+        transitionQualifiers: ["server_redirect"],
+      });
+
+      const mismatchMsg = mock.sentMessages.find(
+        (m) => (m.message as { type: string }).type === "ns-oauth-redirect-mismatch",
+      );
+      expect(mismatchMsg).toBeUndefined();
+    });
+
+    it("navigating away mid-consent (user cancel) does not fire a redirect-mismatch (#207)", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+
+      const oauthUrl =
+        "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&redirect_uri=https%3A%2F%2Fapp.com%2Fcb&response_type=code";
+      mock.emitCommitted({ tabId: 10, frameId: 0, url: oauthUrl, transitionType: "link" });
+
+      // User clicks a bookmark to an unrelated site.
+      mock.sentMessages.length = 0;
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        url: "https://gmail.com/",
+        transitionType: "auto_bookmark",
+      });
+
+      const mismatchMsg = mock.sentMessages.find(
+        (m) => (m.message as { type: string }).type === "ns-oauth-redirect-mismatch",
+      );
+      expect(mismatchMsg).toBeUndefined();
+    });
+
+    it("records the initiating page (not the consent URL) as initiatorUrl (#207)", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+
+      // The page that initiates the sign-in commits first.
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        url: "https://app.example/start",
+        transitionType: "link",
+      });
+
+      // Then the OAuth consent navigation.
+      mock.sentMessages.length = 0;
+      const consentUrl =
+        "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&redirect_uri=https%3A%2F%2Fapp.example%2Fcb&response_type=code&scope=openid";
+      mock.emitCommitted({ tabId: 10, frameId: 0, url: consentUrl, transitionType: "link" });
+
+      const flowMsg = mock.sentMessages.find(
+        (m) =>
+          (m.message as { type: string }).type === "ns-oauth-flow-update" && m.tabId === 10,
+      );
+      expect(flowMsg).toBeDefined();
+      const flow = (flowMsg!.message as { flow: { initiatorUrl: string; consentUrl: string } }).flow;
+      expect(flow.initiatorUrl).toBe("https://app.example/start");
+      expect(flow.consentUrl).toBe(consentUrl);
     });
 
     it("completes flow and sends ns-oauth-flow-update when navigating to callback", async () => {
