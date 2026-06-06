@@ -160,17 +160,28 @@ function pruneStaleOAuthFlows(): void {
   swState.persistMap(oauthFlowByTab, "oauthFlow");
 }
 
-function processOAuthNavigation(tabId: number, url: string, initiatorUrl: string): void {
+function processOAuthNavigation(
+  tabId: number,
+  url: string,
+  initiatorUrl: string,
+  isRedirect: boolean,
+): void {
   if (!isOAuthUrl(url)) {
     const existingFlow = oauthFlowByTab.get(tabId);
     if (existingFlow && (existingFlow.phase === "redirect" || existingFlow.phase === "consent")) {
-      // Only treat a non-OAuth commit as the OAuth CALLBACK when it actually
-      // carries an OAuth response (code/error in query, or access_token/id_token in
-      // fragment). Genuine intermediate provider hops (e.g. login.live.com) and
-      // unrelated navigations (user-cancel, clicking a bookmark) do not, and must
-      // not trip a false redirect-mismatch (+30 NRS). A real attacker callback
-      // still carries these. (#207)
-      if (!hasOAuthResponseParams(url)) return;
+      // Only treat a non-OAuth commit as the OAuth CALLBACK when it (a) arrived via
+      // a redirect — a real callback is an IdP redirect to the redirect_uri, never a
+      // typed/bookmarked navigation — AND (b) carries an OAuth response (code/error
+      // in query, or access_token/id_token in fragment). Genuine intermediate
+      // provider hops (e.g. login.live.com), user-cancel/bookmark navigations, and
+      // benign pages that merely carry a generic ?code=/?error= therefore do not
+      // trip a false redirect-mismatch (+30 NRS). A real attacker callback still
+      // satisfies both. (#207)
+      //
+      // Note: an abandoned flow (user navigates away without a real callback) now
+      // lingers in redirect/consent until the 60s age-prune rather than being forced
+      // to "complete"; this is bounded by OAUTH_FLOW_MAX_AGE_MS.
+      if (!isRedirect || !hasOAuthResponseParams(url)) return;
       existingFlow.phase = "callback";
       if (isUnexpectedCallback(existingFlow, url)) {
         chrome.tabs.sendMessage(
@@ -714,14 +725,18 @@ function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitio
   // Uses synchronous cached mode to avoid racing with content-script threat escalation.
   void updateTabIcon(details.tabId, cachedDefaultMode === "off" ? "gray" : "green");
 
-  // --- OAuth flow tracking ---
-  // Pass prevUrl (captured above, before the lastUrlByTab overwrite) so a new
-  // flow's initiatorUrl is the initiating page, not the consent URL. (#207)
-  processOAuthNavigation(details.tabId, details.url, prevUrl ?? "");
-
   const qualifiers = details.transitionQualifiers ?? [];
   const isRedirect =
     qualifiers.includes("client_redirect") || qualifiers.includes("server_redirect");
+
+  // --- OAuth flow tracking ---
+  // Pass prevUrl (captured above, before the lastUrlByTab overwrite) so a new
+  // flow's initiatorUrl is the initiating page, not the consent URL; and whether
+  // this commit is redirect-driven — a real OAuth callback always arrives via a
+  // redirect, never a typed/bookmarked URL, so a benign typed/bookmarked page
+  // carrying a generic ?code= cannot trip a false redirect-mismatch. (#207)
+  processOAuthNavigation(details.tabId, details.url, prevUrl ?? "", isRedirect);
+
   const isUserTyped =
     details.transitionType === "typed" ||
     details.transitionType === "auto_bookmark" ||
