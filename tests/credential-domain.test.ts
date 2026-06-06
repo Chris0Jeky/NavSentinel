@@ -6,6 +6,7 @@ import {
   detectSubdomainStuffing,
   findClosestLookalike,
   getRegistrableDomain,
+  hostForUrl,
   isIPAddress,
   isMixedScript,
   levenshtein,
@@ -186,6 +187,50 @@ describe("detectBrandInDomain", () => {
     expect(result!.brand).toBe("paypal");
   });
 
+  // #discovery cycle 3: pure homoglyph spoofs that normalize to EXACTLY a brand
+  // (no extra characters). brandKeywordMatch's length guard rejects these, so the
+  // homoglyph-rewrote exact-match path catches them.
+  it("catches a pure ASCII-homoglyph brand spoof (paypa1.com -> paypal)", () => {
+    const result = detectBrandInDomain("paypa1.com");
+    expect(result).not.toBeNull();
+    expect(result!.brand).toBe("paypal");
+  });
+
+  it("catches a digit-homoglyph brand spoof (g00gle.com -> google)", () => {
+    const result = detectBrandInDomain("g00gle.com");
+    expect(result).not.toBeNull();
+    expect(result!.brand).toBe("google");
+  });
+
+  it("catches an rn->m homoglyph brand spoof (arnazon.com -> amazon)", () => {
+    const result = detectBrandInDomain("arnazon.com");
+    expect(result).not.toBeNull();
+    expect(result!.brand).toBe("amazon");
+  });
+
+  it("does NOT newly flag the exact brand spelling on another TLD (no obfuscation)", () => {
+    // FP-safety: the exact-match path only fires when the label was actually
+    // obfuscated (homoglyphs and/or separators), so paypal.org stays null here.
+    expect(detectBrandInDomain("paypal.org")).toBeNull();
+  });
+
+  it("does NOT flag separator-only or hyphenated generic/multi-word brands (FP-safety; #208 R2)", () => {
+    // Only homoglyph substitution triggers the exact path. Separator-only spoofs
+    // (pay-pal.com) and legitimate hyphenations of generic/multi-word brands
+    // (block-chain.com -> "blockchain", bank-of-america.com -> "bankofamerica")
+    // must stay null. Separator coverage needs a coined-vs-generic distinction +
+    // FP measurement and is tracked as a follow-up.
+    expect(detectBrandInDomain("pay-pal.com")).toBeNull();
+    expect(detectBrandInDomain("block-chain.com")).toBeNull();
+    expect(detectBrandInDomain("bank-of-america.com")).toBeNull();
+    expect(detectBrandInDomain("drop-box.com")).toBeNull();
+  });
+
+  it("marks homoglyph exact spoofs exact=true and brand-plus-extra exact=false", () => {
+    expect(detectBrandInDomain("paypa1.com")!.exact).toBe(true); // homoglyph, no extra
+    expect(detectBrandInDomain("paypal-secure.com")!.exact).toBe(false); // extra chars
+  });
+
   // False-positive guards for short keywords
   it("does NOT flag livestream.com (removed 'live' keyword)", () => {
     expect(detectBrandInDomain("livestream.com")).toBeNull();
@@ -338,6 +383,8 @@ describe("computeCredentialRisk enhanced detection", () => {
 
     expect(risk.reasons.map((r) => r.code)).toContain("BRAND_KEYWORD_DOMAIN");
     expect(risk.severity).toBe("medium");
+    // Brand-plus-extra keeps the "with extra characters" wording (#208 R1).
+    expect(risk.reasons.find((r) => r.code === "BRAND_KEYWORD_DOMAIN")!.label).toMatch(/with extra characters/i);
   });
 
   it("flags apple-verify.net with BRAND_KEYWORD_DOMAIN", () => {
@@ -349,6 +396,34 @@ describe("computeCredentialRisk enhanced detection", () => {
     });
 
     expect(risk.reasons.map((r) => r.code)).toContain("BRAND_KEYWORD_DOMAIN");
+  });
+
+  it("flags a pure homoglyph spoof (paypa1.com) with NO trusted domains -> medium (#208 R1)", () => {
+    // The user-visible payoff: even with the brand NOT on the trusted list, the
+    // exact-homoglyph path raises BRAND_KEYWORD_DOMAIN (+40) -> medium severity.
+    const risk = computeCredentialRisk({
+      pageUrl: "https://paypa1.com/login",
+      actionUrl: "https://paypa1.com/post",
+      trustedDomains: [],
+      config: baseConfig
+    });
+
+    expect(risk.reasons.map((r) => r.code)).toContain("BRAND_KEYWORD_DOMAIN");
+    expect(risk.severity).toBe("medium");
+    // Exact-spoof copy, not the "with extra characters" wording (#208 R1).
+    const bk = risk.reasons.find((r) => r.code === "BRAND_KEYWORD_DOMAIN");
+    expect(bk!.label).toMatch(/look-alike domain spoofing/i);
+  });
+
+  it("fires IP_HOST for an IPv6-literal page URL (#208 R1 end-to-end)", () => {
+    // URL.hostname -> normalizeHost (unwraps brackets) -> isIPAddress -> +35 IP_HOST.
+    const risk = computeCredentialRisk({
+      pageUrl: "https://[2001:db8::1]/login",
+      actionUrl: "https://[2001:db8::1]/post",
+      trustedDomains: [],
+      config: baseConfig
+    });
+    expect(risk.reasons.map((r) => r.code)).toContain("IP_HOST");
   });
 
   it("flags paypal.login.example.com with SUBDOMAIN_STUFFING", () => {
@@ -642,6 +717,13 @@ describe("normalizeHost", () => {
   it("handles mixed-case subdomain", () => {
     expect(normalizeHost("Sub.Domain.Example.COM")).toBe("sub.domain.example.com");
   });
+
+  it("unwraps a bracketed IPv6 literal (#discovery cycle 3)", () => {
+    expect(normalizeHost("[2001:db8::1]")).toBe("2001:db8::1");
+    expect(normalizeHost("[::1]")).toBe("::1");
+    // Idempotent: the unwrapped form has no brackets.
+    expect(normalizeHost(normalizeHost("[2001:DB8::1]"))).toBe("2001:db8::1");
+  });
 });
 
 describe("isIPAddress", () => {
@@ -709,8 +791,37 @@ describe("isIPAddress", () => {
     expect(isIPAddress("192.168.001.001")).toBe(true);
   });
 
-  it("rejects bracketed IPv6 (brackets not in character class)", () => {
-    expect(isIPAddress("[::1]")).toBe(false);
+  it("accepts bracketed IPv6 literals (URL.hostname form) — #discovery cycle 3", () => {
+    // URL.hostname brackets IPv6 literals; normalizeHost now unwraps them so the
+    // +35 IP_HOST credential signal fires for IPv6-literal pages, matching IPv4.
+    expect(isIPAddress("[::1]")).toBe(true);
+    expect(isIPAddress("[2001:db8::1]")).toBe(true);
+  });
+
+  it("does NOT unwrap brackets around a non-IPv6 string (#208 R1 defensive)", () => {
+    // normalizeHost only strips brackets when the inner value is a real IPv6
+    // literal, so a future caller passing a bracketed non-IP string is unaffected.
+    expect(normalizeHost("[evil]")).toBe("[evil]");
+  });
+});
+
+describe("hostForUrl + IPv6 registrable domain (#208 R1)", () => {
+  it("re-brackets an unbracketed IPv6 literal for a URL authority", () => {
+    expect(hostForUrl("2001:db8::1")).toBe("[2001:db8::1]");
+    expect(hostForUrl("::1")).toBe("[::1]");
+  });
+
+  it("leaves hostnames and IPv4 literals unchanged", () => {
+    expect(hostForUrl("example.com")).toBe("example.com");
+    expect(hostForUrl("127.0.0.1")).toBe("127.0.0.1");
+  });
+
+  it("does not double-bracket an already-bracketed host", () => {
+    expect(hostForUrl("[::1]")).toBe("[::1]");
+  });
+
+  it("getRegistrableDomain returns the unbracketed IPv6 literal", () => {
+    expect(getRegistrableDomain("[2001:db8::1]")).toBe("2001:db8::1");
   });
 });
 

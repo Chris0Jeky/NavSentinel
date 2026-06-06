@@ -158,6 +158,18 @@ describe("suite storage and allowlist migration", () => {
     expect(store["sentinelsuite:trusted_domains_v1"]).toEqual(["127.0.0.1", "example.com"]);
   });
 
+  it("round-trips an IPv6-literal trusted domain (does not drop it on re-read) (#208 R2)", async () => {
+    // normalizeHost emits IPv6 unbracketed; normalizeTrustedDomain must re-bracket
+    // it for its fallback URL parse, else the stored value vanishes on re-read.
+    const { chrome } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { addTrustedDomain, getTrustedDomains } = await import("../extension/src/shared/storage");
+    await addTrustedDomain("https://[2001:db8::1]/app");
+
+    expect(await getTrustedDomains()).toContain("2001:db8::1"); // survives the re-read
+  });
+
   it("rejects invalid trusted domain inputs during import and add", async () => {
     const { chrome, store } = createChromeMock();
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);

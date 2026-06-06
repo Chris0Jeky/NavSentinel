@@ -8,7 +8,21 @@ export function normalizeHost(host: string): string {
   if (!host) return "";
   // Strip all trailing dots (not just one) so the function is idempotent:
   // normalizeHost("a..") must equal normalizeHost(normalizeHost("a..")).
-  return host.toLowerCase().replace(/\.+$/, "");
+  let h = host.toLowerCase().replace(/\.+$/, "");
+  // Unwrap a bracketed IPv6 literal ("[2001:db8::1]" -> "2001:db8::1"). URL
+  // hostnames bracket IPv6 literals, but the brackets are not part of the
+  // canonical host: leaving them would defeat isIPv6 (so the +35 IP_HOST
+  // credential signal never fires for IPv6-literal phishing pages) and make
+  // getRegistrableDomain return the bracketed string. Only unwrap when the inner
+  // value is an actual IPv6 literal, so a future caller passing an
+  // attacker-influenced bracketed string can't have brackets silently stripped
+  // (URL.hostname only ever brackets a real IPv6 address). Idempotent: the
+  // unwrapped form has no brackets.
+  if (h.startsWith("[") && h.endsWith("]")) {
+    const inner = h.slice(1, -1);
+    if (isIPv6(inner)) h = inner;
+  }
+  return h;
 }
 
 function isIPv4(host: string): boolean {
@@ -26,6 +40,20 @@ function isIPv6(host: string): boolean {
 export function isIPAddress(host: string): boolean {
   const h = normalizeHost(host);
   return isIPv4(h) || isIPv6(h);
+}
+
+/**
+ * Render a host for safe insertion into a URL authority. normalizeHost /
+ * getRegistrableDomain return IPv6 literals UNbracketed ("2001:db8::1"), but a
+ * URL authority requires them bracketed ("https://[2001:db8::1]/"); concatenating
+ * the bare form yields an invalid URL that throws. Re-bracket an unbracketed IPv6
+ * literal; leave hostnames and IPv4 literals unchanged.
+ */
+export function hostForUrl(host: string): string {
+  if (host && !host.startsWith("[") && host.includes(":") && isIPv6(host)) {
+    return `[${host}]`;
+  }
+  return host;
 }
 
 function splitLabels(host: string): string[] {
@@ -399,12 +427,16 @@ export function computeCredentialRisk(params: {
       });
     }
 
-    // Brand keyword in registrable domain (catches paypal-secure.com)
+    // Brand keyword in registrable domain (catches paypal-secure.com and
+    // obfuscated exact spoofs like paypa1.com / pay-pal.com).
     if (enhanced.brandKeyword) {
+      const bk = enhanced.brandKeyword;
       score += 40;
       reasons.push({
         code: "BRAND_KEYWORD_DOMAIN",
-        label: `Domain contains brand keyword "${enhanced.brandKeyword.brand}" with extra characters (impersonating ${enhanced.brandKeyword.canonicalDomain}).`
+        label: bk.exact
+          ? `Look-alike domain spoofing brand "${bk.brand}" (impersonating ${bk.canonicalDomain}).`
+          : `Domain contains brand keyword "${bk.brand}" with extra characters (impersonating ${bk.canonicalDomain}).`
       });
     }
 
@@ -603,6 +635,13 @@ function stripSeparators(s: string): string {
 export interface BrandMatch {
   brand: string;
   canonicalDomain: string;
+  /**
+   * True when the label IS an obfuscated spelling of the brand with NO extra
+   * characters (homoglyph and/or separator substitution, e.g. paypa1 / pay-pal),
+   * as opposed to a brand-plus-extra match (e.g. paypal-secure). Lets callers pick
+   * accurate risk-explanation copy.
+   */
+  exact?: boolean;
 }
 
 /**
@@ -660,6 +699,18 @@ export function detectBrandInDomain(
   // Normalize homoglyphs in the label for comparison
   const normalizedLabel = normalizeHomoglyphs(label);
   const strippedLabel = stripSeparators(normalizedLabel);
+  // True when HOMOGLYPH normalization rewrote the label (e.g. "paypa1"->"paypal",
+  // "g00gle"->"google", "arnazon"->"amazon"). Such a label is a deliberate
+  // confusable spoof, so an EXACT brand match must still be flagged —
+  // brandKeywordMatch rejects it via its strict length guard (it only catches
+  // brand-plus-extra like "paypal-secure"). The comparison strips separators on
+  // BOTH sides, so it is SPECIFIC to homoglyph substitution: a clean label
+  // (paypal.org) OR a merely-hyphenated generic/multi-word brand
+  // ("block-chain"->"blockchain", "bank-of-america") is NOT flagged — avoiding
+  // false positives on legitimate hyphenated dictionary-word domains (#208 R2).
+  // Separator-only exact spoofs (pay-pal.com) need a coined-vs-generic-brand
+  // distinction + FP measurement and are tracked as a follow-up. (#discovery cycle 3)
+  const homoglyphRewrote = strippedLabel !== stripSeparators(label.toLowerCase());
 
   for (const [brand, canonical] of BRAND_LIST) {
     const canonicalReg = getBrandRegDomain(canonical);
@@ -669,7 +720,13 @@ export function detectBrandInDomain(
     if (isBrandAlias(brand, reg)) continue;
 
     if (brandKeywordMatch(strippedLabel, brand)) {
-      return { brand, canonicalDomain: canonicalReg };
+      return { brand, canonicalDomain: canonicalReg, exact: false };
+    }
+    // Exact homoglyph spoof (no extra characters) — only when homoglyph
+    // normalization rewrote the label, so a clean or merely-hyphenated label
+    // stays unflagged.
+    if (homoglyphRewrote && strippedLabel === brand) {
+      return { brand, canonicalDomain: canonicalReg, exact: true };
     }
   }
 

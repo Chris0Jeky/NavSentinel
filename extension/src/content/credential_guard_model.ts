@@ -1,4 +1,4 @@
-import { getRegistrableDomain, normalizeHost } from "../shared/domain";
+import { getRegistrableDomain, hostForUrl, normalizeHost } from "../shared/domain";
 import type { CredMode, CredentialSettings } from "../shared/storage";
 import type { RiskReason, RiskResult } from "../shared/domain";
 
@@ -44,7 +44,10 @@ export function deriveCredentialPasteState(
 
   const normalizedHost = normalizeHost(host);
   const registrableDomain = getRegistrableDomain(normalizedHost);
-  const siteLabel = registrableDomain || normalizedHost || "(unknown)";
+  // Re-bracket an IPv6 literal for display only ("[::1]" is the standard authority
+  // notation; normalizeHost emits it unbracketed). Trust matching below still uses
+  // the unbracketed registrableDomain. (#208 R2)
+  const siteLabel = hostForUrl(registrableDomain || normalizedHost) || "(unknown)";
   const isTrusted = !!(registrableDomain && trustedDomains.includes(registrableDomain));
 
   return {
