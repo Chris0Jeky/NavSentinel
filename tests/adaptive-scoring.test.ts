@@ -195,6 +195,38 @@ describe("adaptive scoring", () => {
       expect(computeAdjustment(outcomes).adjustment).toBe(0);
     });
 
+    it("does NOT adjust when decisive outcomes are below MIN_OUTCOMES despite enough total entries (#204)", async () => {
+      const { chrome } = createChromeMock();
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+      const { computeAdjustment } = await import("../extension/src/shared/adaptive_scoring");
+
+      // The length gate counts cancels but the ratio ignores them, so
+      // [cancel, cancel, allow] passes the length gate yet has only ONE decisive
+      // outcome — it must not drive the maximum threshold relaxation.
+      const outcomes: PromptOutcomeEntry[] = [
+        makeOutcome("example.com", "cancel"),
+        makeOutcome("example.com", "cancel"),
+        makeOutcome("example.com", "allow"),
+      ];
+
+      expect(computeAdjustment(outcomes).adjustment).toBe(0);
+    });
+
+    it("adjusts once there are >= MIN_OUTCOMES decisive outcomes even amid cancels (#204)", async () => {
+      const { chrome } = createChromeMock();
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+      const { computeAdjustment } = await import("../extension/src/shared/adaptive_scoring");
+
+      const outcomes: PromptOutcomeEntry[] = [
+        makeOutcome("example.com", "cancel"),
+        makeOutcome("example.com", "allow"),
+        makeOutcome("example.com", "allow"),
+        makeOutcome("example.com", "allow"),
+      ];
+
+      expect(computeAdjustment(outcomes).adjustment).toBeGreaterThan(0);
+    });
+
     it("only considers last 10 outcomes", async () => {
       const { chrome } = createChromeMock();
       vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
