@@ -1212,6 +1212,63 @@ describe("service worker handlers", () => {
       expect(mismatch).toBeDefined();
     });
 
+    it("flags a LINK-CLICK callback to an unexpected domain (no redirect qualifier) (#207 R2)", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+
+      const consentUrl =
+        "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&redirect_uri=https%3A%2F%2Fapp.example.com%2Fcb&response_type=code&scope=openid";
+      mock.emitCommitted({ tabId: 10, frameId: 0, url: consentUrl, transitionType: "link" });
+
+      // The malicious callback is delivered via a victim-clicked link (transitionType
+      // "link", NO client_redirect/server_redirect qualifier). It still carries code
+      // and lands on an unexpected domain, so it must still be flagged — the gate
+      // excludes only user-typed/bookmarked navigations, not link clicks.
+      mock.sentMessages.length = 0;
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        url: "https://evil.example/cb?code=authcode",
+        transitionType: "link",
+      });
+
+      const mismatch = mock.sentMessages.find(
+        (m) => (m.message as { type: string }).type === "ns-oauth-redirect-mismatch",
+      );
+      expect(mismatch).toBeDefined();
+    });
+
+    it("does NOT fire a redirect-mismatch for a legit callback to the EXPECTED domain (#207 R2)", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+
+      const consentUrl =
+        "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&redirect_uri=https%3A%2F%2Fapp.example.com%2Fcb&response_type=code&scope=openid";
+      mock.emitCommitted({ tabId: 10, frameId: 0, url: consentUrl, transitionType: "link" });
+
+      // Legit callback to the EXPECTED domain via redirect, carrying code -> completes
+      // with NO mismatch (the primary no-false-positive guarantee).
+      mock.sentMessages.length = 0;
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        url: "https://app.example.com/cb?code=authcode&state=abc",
+        transitionType: "link",
+        transitionQualifiers: ["client_redirect"],
+      });
+
+      const mismatch = mock.sentMessages.find(
+        (m) => (m.message as { type: string }).type === "ns-oauth-redirect-mismatch",
+      );
+      expect(mismatch).toBeUndefined();
+      const complete = mock.sentMessages.find(
+        (m) =>
+          (m.message as { type: string }).type === "ns-oauth-flow-update" &&
+          (m.message as { flow: { phase: string } }).flow.phase === "complete",
+      );
+      expect(complete).toBeDefined();
+    });
+
     it("completes flow and sends ns-oauth-flow-update when navigating to callback", async () => {
       const mock = createChromeMock();
       await loadSw(mock);
