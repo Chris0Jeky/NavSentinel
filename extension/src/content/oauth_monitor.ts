@@ -207,6 +207,11 @@ export function isUnexpectedCallback(
  * login.live.com/oauth20_authorize.srf?...&state=...), so keying on it would
  * mis-classify legitimate intermediate hops as callbacks and fire a false
  * redirect-mismatch. (#207)
+ *
+ * Limitation: this inspects only the URL (query + fragment). `response_mode=form_post`
+ * delivers the response in the POST body, and a platform may omit the fragment from a
+ * committed-navigation URL, so those callbacks are not detected here (URL-only by
+ * design — see the module header). Tracked as a follow-up (#221).
  */
 export function hasOAuthResponseParams(url: string): boolean {
   let parsed: URL;
