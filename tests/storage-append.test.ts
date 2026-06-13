@@ -125,6 +125,48 @@ describe("appendEvent", () => {
     expect(log[0]!.id).toBe("evt-20");
   });
 
+  it("drops a NEW silent event (loud wins) on a loud-saturated log, without warning (#236)", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const loud = Array.from({ length: 50 }, (_, i) => ({ id: `loud-${i}`, ts: i, kind: "nav_click_block" }));
+    const { chrome, store } = createChromeMock({
+      [SETTINGS_KEY]: { logLimit: 50 },
+      [EVENT_LOG_KEY]: loud,
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { appendEvent } = await import("../extension/src/shared/storage");
+    await appendEvent({ id: "silent-new", kind: "nav_silent_allow", ts: 100, site: "x.com" });
+
+    const log = store[EVENT_LOG_KEY] as Array<{ id: string; kind: string }>;
+    // Loud events are protected: all 50 retained, the new silent event evicted.
+    expect(log).toHaveLength(50);
+    expect(log.some((e) => e.id === "silent-new")).toBe(false);
+    expect(log.every((e) => e.kind === "nav_click_block")).toBe(true);
+    // The intentional eviction must NOT be treated as a failed write (no retries/warn).
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it("keeps a NEW silent event while evicting an OLDER silent event at cap (#236)", async () => {
+    const entries = [
+      { id: "silent-old", ts: 0, kind: "nav_silent_allow" },
+      ...Array.from({ length: 49 }, (_, i) => ({ id: `loud-${i}`, ts: i + 1, kind: "nav_click_block" })),
+    ];
+    const { chrome, store } = createChromeMock({
+      [SETTINGS_KEY]: { logLimit: 50 },
+      [EVENT_LOG_KEY]: entries,
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { appendEvent } = await import("../extension/src/shared/storage");
+    await appendEvent({ id: "silent-new", kind: "nav_silent_allow", ts: 100, site: "x.com" });
+
+    const log = store[EVENT_LOG_KEY] as Array<{ id: string }>;
+    expect(log).toHaveLength(50);
+    // Oldest silent dropped; new silent kept; all loud retained.
+    expect(log.some((e) => e.id === "silent-old")).toBe(false);
+    expect(log.some((e) => e.id === "silent-new")).toBe(true);
+  });
+
   it("clamps logLimit below minimum to 50", async () => {
     const { chrome, store } = createChromeMock({
       [SETTINGS_KEY]: { logLimit: 3 },

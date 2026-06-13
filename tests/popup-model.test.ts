@@ -134,6 +134,17 @@ describe("getRecentPopupEvents", () => {
     expect(recent[7]?.id).toBe("evt-2");
   });
 
+  it("excludes silent-decision events so routine allows don't crowd the recent-signals feed (#236)", () => {
+    const log: EventLogEntry[] = [
+      { id: "loud-1", ts: 1, kind: "nav_click_block" } as EventLogEntry,
+      { id: "silent-1", ts: 2, kind: "nav_silent_allow", score: 10 } as EventLogEntry,
+      { id: "silent-2", ts: 3, kind: "cred_form_evaluated", score: 5 } as EventLogEntry,
+      { id: "loud-2", ts: 4, kind: "cred_submit_prompt" } as EventLogEntry,
+    ];
+    // Only the loud events remain, newest-first; silent allows never displace them.
+    expect(getRecentPopupEvents(log, 5).map((e) => e.id)).toEqual(["loud-2", "loud-1"]);
+  });
+
   it("returns no events when limit is zero", () => {
     expect(getRecentPopupEvents(makeEvents(3), 0)).toEqual([]);
   });
@@ -374,6 +385,32 @@ describe("pickSiteRiskEvent (#205)", () => {
     const picked = pickSiteRiskEvent(log, "example.com");
     expect(picked?.id).toBe("1");
     expect(picked?.score).toBe(80);
+  });
+
+  it("skips silent-decision nav_silent_allow events so a routine silent allow can't mask an earlier scored block (#236)", () => {
+    const log: EventLogEntry[] = [
+      ev("1", "example.com", 80), // earlier real block
+      // Later, scored, same-domain — but a silent allow. Must NOT win the gauge.
+      { id: "2", ts: 2, kind: "nav_silent_allow", site: "example.com", score: 12, reasons: ["nrs_new_tab_window"] } as EventLogEntry,
+    ];
+    const picked = pickSiteRiskEvent(log, "example.com");
+    expect(picked?.id).toBe("1");
+    expect(picked?.score).toBe(80);
+  });
+
+  it("skips silent-decision cred_form_evaluated events in the gauge (#236)", () => {
+    const log: EventLogEntry[] = [
+      ev("1", "example.com", 70),
+      { id: "2", ts: 2, kind: "cred_form_evaluated", site: "example.com", score: 5, reasons: ["x"] } as EventLogEntry,
+    ];
+    expect(pickSiteRiskEvent(log, "example.com")?.id).toBe("1");
+  });
+
+  it("returns null when the only same-domain scored events are silent decisions (#236)", () => {
+    const log: EventLogEntry[] = [
+      { id: "1", ts: 1, kind: "nav_silent_allow", site: "example.com", score: 10 } as EventLogEntry,
+    ];
+    expect(pickSiteRiskEvent(log, "example.com")).toBeNull();
   });
 });
 

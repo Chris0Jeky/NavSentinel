@@ -36,10 +36,15 @@ const budgets = [
     // Bumped 60 -> 61 (#206): capture_isolated was already sitting at ~60KB from
     // accumulated detection logic, and the ClickFix legit-CAPTCHA hardening
     // (hostname + render-state validation instead of a spoofable src substring)
-    // tipped it just over. Kept tight at 61KB (chunk is ~60.3KB); the total-dist
-    // budget (500KB) remains the aggregate guard with ample room (~447KB). The
-    // chunk is repeatedly near its cap — track its growth as a follow-up.
-    maxKB: 61,
+    // tipped it just over.
+    // Bumped 61 -> 62 (#236, P5-B1): silent-decision instrumentation — the
+    // nav_silent_allow emission plus the scoping/throttle helpers in
+    // silent_decision.ts (which inline into this chunk) — added ~0.9KB, landing
+    // the chunk at ~61.2KB. The total-dist budget (500KB) remains the aggregate
+    // guard with ample room (~449KB). NOTE: PR #249 (P5-C1) independently grows
+    // this chunk; when both land, re-measure — together they may need a trim or a
+    // further bump. The chunk is repeatedly near its cap — track its growth.
+    maxKB: 62,
   },
   {
     label: "main_guard (MAIN world)",

@@ -242,6 +242,7 @@ export async function clearTrustedDomains(): Promise<void> {
 export type EventKind =
   | "nav_blank_prompt"
   | "nav_click_block"
+  | "nav_silent_allow"
   | "nav_rollback"
   | "nav_allowlist_add"
   | "nav_allowlist_remove"
@@ -250,6 +251,7 @@ export type EventKind =
   | "cred_trust_domain"
   | "cred_untrust_domain"
   | "cred_paste_warn"
+  | "cred_form_evaluated"
   | "suite_config_update"
   | "clickfix_detected"
   | "dblclickjack_detected"
@@ -257,6 +259,21 @@ export type EventKind =
   | "mutation_alert"
   | "pushstate_abuse"
   | "bridge_buffer_overflow";
+
+/**
+ * Silent-decision event kinds (P5-B1 / #236): non-alarming records of decisions
+ * made WITHOUT a user prompt (silent nav allows, silently-passed credential
+ * forms). They populate the reviewable event stream + tuning corpus, but are
+ * deliberately excluded from the popup "Current page" gauge (pickSiteRiskEvent)
+ * so that a routine silent allow can never mask an earlier scored block on the
+ * same domain (preserving the #205 / #214 gauge-accuracy contract). Wiring the
+ * gauge to reflect these for the live page is the popup-consumer follow-up
+ * (#205 / #214 / #219).
+ */
+export const SILENT_DECISION_KINDS: ReadonlySet<EventKind> = new Set<EventKind>([
+  "nav_silent_allow",
+  "cred_form_evaluated",
+]);
 
 export interface EventLogEntry {
   id: string;
@@ -281,6 +298,29 @@ export async function getEventLog(): Promise<EventLogEntry[]> {
   return log.slice(-5000) as EventLogEntry[];
 }
 
+/**
+ * Trim the event log to `limit`, evicting the OLDEST silent-decision events
+ * first (P5-B1 / #236). High-frequency silent records (nav_silent_allow /
+ * cred_form_evaluated) must never push the rarer loud threat events out of the
+ * shared FIFO log — the journal and the popup "Current page" gauge depend on the
+ * loud events surviving (preserving the #205 / #214 gauge-accuracy contract).
+ * Loud events are only trimmed if loud events alone still exceed the cap. Order
+ * is preserved. (Per-store separation is the eventual P5-C4 / #240 end-state.)
+ */
+export function trimEventLog(entries: EventLogEntry[], limit: number): EventLogEntry[] {
+  if (entries.length <= limit) return entries;
+  let overflow = entries.length - limit;
+  const kept: EventLogEntry[] = [];
+  for (const entry of entries) {
+    if (overflow > 0 && SILENT_DECISION_KINDS.has(entry.kind)) {
+      overflow--;
+      continue;
+    }
+    kept.push(entry);
+  }
+  return kept.length > limit ? kept.slice(-limit) : kept;
+}
+
 export async function appendEvent(
   partial: Omit<EventLogEntry, "id" | "ts"> & { id?: string; ts?: number }
 ): Promise<void> {
@@ -301,8 +341,15 @@ export async function appendEvent(
   for (let attempt = 0; attempt < 3; attempt++) {
     const res = await chrome.storage.local.get(EVENT_LOG_KEY);
     const cur = Array.isArray(res[EVENT_LOG_KEY]) ? (res[EVENT_LOG_KEY] as EventLogEntry[]) : [];
-    const next = [...cur.filter((item) => item?.id !== entry.id), entry].slice(-limit);
+    const next = trimEventLog([...cur.filter((item) => item?.id !== entry.id), entry], limit);
     await chrome.storage.local.set({ [EVENT_LOG_KEY]: next });
+
+    // trimEventLog intentionally drops a brand-new silent-decision event when the
+    // log is saturated with loud events (loud must win). The set above already
+    // persisted the correct log, so that is success — not a failed write. Without
+    // this, appendEvent would burn all 3 retries and console.warn on every silent
+    // allow once the log fills with loud events. (#236)
+    if (!next.some((item) => item?.id === entry.id)) return;
 
     const verify = await chrome.storage.local.get(EVENT_LOG_KEY);
     const verifyLog = Array.isArray(verify[EVENT_LOG_KEY])

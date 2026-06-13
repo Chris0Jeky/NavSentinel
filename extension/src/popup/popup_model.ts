@@ -1,4 +1,5 @@
 import type { EventLogEntry } from "../shared/storage";
+import { SILENT_DECISION_KINDS } from "../shared/storage";
 import { getRegistrableDomain, normalizeHost } from "../shared/domain";
 
 export interface PopupSiteState {
@@ -38,7 +39,15 @@ export function derivePopupSiteState(activeTabUrl: string, trustedDomains: strin
 export function getRecentPopupEvents(log: EventLogEntry[], limit = 8): EventLogEntry[] {
   const cappedLimit = Number.isFinite(limit) ? Math.max(0, Math.trunc(limit)) : 8;
   if (cappedLimit === 0) return [];
-  return (log ?? []).slice(-cappedLimit).reverse();
+  // Silent-decision events (#236) populate the options audit log + tuning corpus
+  // but are excluded from the popup's at-a-glance "recent signals" feed — that
+  // surface is for notable events, not routine silent allows, and high-frequency
+  // silent events would otherwise crowd the small feed. (Surfacing them in the
+  // popup is the #205 / #214 / #219 consumer follow-up.)
+  return (log ?? [])
+    .filter((ev) => !SILENT_DECISION_KINDS.has(ev.kind))
+    .slice(-cappedLimit)
+    .reverse();
 }
 
 export function formatPopupEventLine(
@@ -122,6 +131,10 @@ export function pickSiteRiskEvent(
   for (let i = entries.length - 1; i >= 0; i--) {
     const ev = entries[i]!;
     if (typeof ev.score !== "number") continue;
+    // Silent-decision events (nav_silent_allow / cred_form_evaluated, #236) are
+    // scored but must never drive the gauge: a routine silent allow would
+    // otherwise mask an earlier scored block on the same domain (#205 / #214).
+    if (SILENT_DECISION_KINDS.has(ev.kind)) continue;
     const site = ev.site ? getRegistrableDomain(normalizeHost(ev.site)) : "";
     if (site && site === registrableDomain) return ev;
   }

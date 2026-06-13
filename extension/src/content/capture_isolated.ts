@@ -66,6 +66,12 @@ import {
 import { analyzeCSP, type CSPAnalysis } from "./csp_analyzer";
 import { getDomainRisk, recordNavigation } from "../shared/domain_profile";
 import { recordNavigationAnomaly, getAnomalyScoreSync, primeAnomalySession } from "../shared/nav_anomaly";
+import {
+  isSilentNavCandidate,
+  isDocumentNavigationHref,
+  silentNavThrottleAllows,
+  type SilentNavThrottleState,
+} from "./silent_decision";
 
 const CDS_SMART_BLOCK_THRESHOLD = 70;
 const NS_SOURCE = "__navsentinel__";
@@ -115,6 +121,14 @@ let lastDown: DownCapture | null = null;
 let settings: NavSettings = { defaultMode: "smart", debug: false, dnrEnabled: false };
 let allowlist: Allowlist = {};
 let adaptiveAdjustment = 0;
+
+// P5-B1 (#236): consecutive-destination throttle for nav_silent_allow events,
+// suppressing rapid repeats of the same destination within one document
+// lifetime (e.g. _blank re-clicks). It is module state, so a same-tab
+// navigation tears down the content script and resets it — bounding volume
+// there relies on appendEvent's loud-event-protecting trim, not this throttle.
+const silentNavThrottle: SilentNavThrottleState = { key: "", at: 0 };
+const SILENT_NAV_THROTTLE_MS = 10000;
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== "local") return;
@@ -1751,6 +1765,39 @@ window.addEventListener(
         allowOpen: mode === "off" || explicitNewTab,
         allowRedirect: true
       });
+
+      // P5-B1 (#236): record silent nav allows so the journal/corpus see normal
+      // browsing, not just the loud ~5%. Scoped to real top-frame cross-document
+      // navigations (not #fragment / javascript: / mailto:) and throttled per
+      // destination to bound volume.
+      if (
+        isSilentNavCandidate({
+          mode,
+          isTopFrame: isTopFrame(),
+          hasAnchor: !!anchor,
+          isDocumentNavigation: isDocumentNavigationHref(parsed?.href, destHost, location.href),
+          isBlankAnchor,
+          isSameTabAnchor
+        }) &&
+        silentNavThrottleAllows(
+          silentNavThrottle,
+          destRegDomain ?? destHost ?? "",
+          performance.now(),
+          SILENT_NAV_THROTTLE_MS
+        )
+      ) {
+        // Privacy: record the destination HOST only — never the full URL
+        // (path/query can carry tokens/PII) — so the local log does not become a
+        // browsing history. All of it stays local (D16); none is ever transmitted.
+        appendEventSafely({
+          kind: "nav_silent_allow",
+          site: siteKeyFromLocation(),
+          ...(destHost ? { destHost } : {}),
+          score: nrs,
+          reasons: reasonCodes,
+          extra: { nrsFactors, adaptiveAdj: adaptiveAdjustment, threshold: blockThreshold }
+        });
+      }
     }
 
     lastDebug = { mode, decision, cds, nrs, reasonCodes, nrsFactors, ctx, adaptiveAdj: adaptiveAdjustment, navAnomalyScore };
