@@ -1,16 +1,16 @@
 # Session Handoff - NavSentinel Autonomous Loop
 
-**Last updated:** 2026-06-05
-**Status:** All 11 D-series discovery PRs merged. `main` @ `4bd60ce`, 0 open PRs, tree clean. Gate 3 (manual Chrome test) waived by maintainer for this batch and deferred to a watchlist. Next slice: **#196** (shared hidden-password helper).
+**Last updated:** 2026-06-13
+**Status:** North-Star research+audit initiative complete — Phase 5 planned in [`docs/NORTHSTAR_ROADMAP.md`](../NORTHSTAR_ROADMAP.md); issues **#232–#246** filed (`north-star` label). `main` @ `da400fb`, **0 open PRs**, tree clean apart from the North-Star docs. Baseline (2026-06-13): typecheck clean, lint 0/0, **2426 unit tests pass**. Next: North-Star Phase 5 — start with **#238** (P5-C1, the keystone capture-enrichment) or **#233** (P5-A2, signal-level Smart-Mode gating).
 
 Trust live git and GitHub over this snapshot. Re-check `git status -sb`, `git rev-parse main`, `git rev-parse origin/main`, PR checks, review threads, and comments before merging or branching.
 
 ## Current Verified State
 
-- `main` == `origin/main` == **`4bd60ce64e796fae81bf55c437d8d94132005deb`**. Working tree clean.
-- **0 open PRs.** Local branches: `main` + `fix/jsb-stale-todos-and-tests` (pre-existing, unmerged, far behind — AI-3 decision pending; do not merge as-is).
-- **Merged 2026-06-05 (oldest-first, merge commits):** #180 D-PROF, #182 D-STORE, #183 D-FOCUS, #185 D-BRIDGE, #187 D-SWRATE, #189 D-ANOM, #190 D-IFRAME, #191 D-ONCREATE, #193 D-REDOS, #194 D-OPTRACE, #195 D-SRIHIDE. Each: fresh-green CI (Build/Unit + E2E) + 2× independent adversarial review, all findings fixed.
-- **#182** required a docs-only conflict resolution (status files diverged once the other 10 landed); resolved by taking `main`, then verified locally (tsc clean, lint 0/0, 2298 unit tests) and CI re-ran green on the merge head before merge.
+- `main` == **`da400fb`**. Working tree clean apart from the North-Star docs (`docs/NORTHSTAR_ROADMAP.md`, `docs/research/`) + this status re-hydration.
+- **0 open PRs.** Only `main` locally — `fix/jsb-stale-todos-and-tests` is gone (AI-3 ✅ resolved; its intent landed organically).
+- **Since the 2026-06-05 D-series batch (#180–#195):** discovery cycles 3–4 merged **2026-06-06** — #197 (#196 credential-field helper), #202 (#188 options-failure surfacing), #208 (homoglyph/IPv6 domain hardening), #210 (#206 clickfix CAPTCHA), #212 (#204 adaptive gate), #214 (#205 popup gauge), #220 (#207 oauth callback), #230 (#211 mutation-monitor iframe). Each: green CI + 2× adversarial review.
+- **North-Star (2026-06-13):** 153-finding internal audit + **4** deep-research passes (broad + 2 gap-fill + **GAP-D done**, 24 verified claims, unblocks P5-C5) → Phase-5 roadmap (`docs/NORTHSTAR_ROADMAP.md`) + 15 issues (#232–#246). Artifacts under `docs/research/NORTHSTAR_*`.
 
 ## Merge Gate Posture
 
@@ -19,15 +19,15 @@ Trust live git and GitHub over this snapshot. Re-check `git status -sb`, `git re
 
 ## Next Implementation Slice
 
-Prefer **#196** — DRY/tighten the inline-hidden password detection into a shared helper used by both `sri_checker.ts` and `content_analyzer.ts` (small, single-seam; the #195/#193 work created the duplication). Then the Firefox stack **FF-02 → FF-03 → FF-04** (FF-02 needs a tooling decision on `@crxjs/vite-plugin` Firefox support), then **JSB-127** (inspect `fix/jsb-stale-todos-and-tests` first), then a fresh discovery pass.
+Prefer **North-Star Phase 5** ([`docs/NORTHSTAR_ROADMAP.md`](../NORTHSTAR_ROADMAP.md)). Highest impact-per-effort, no dependencies: **#238 (P5-C1)** — enrich `PromptOutcomeEntry` to a replay-grade feature vector (the keystone; serves the advisor journal *and* the tuning corpus). Or **#233 (P5-A2)** — signal-level Smart-Mode gating (attacks the #1 FP cluster). Then #234 (top-sites tier), #236 (silent-decision events), #235 (intent_mismatch quick win). The Firefox stack **FF-02→FF-04** is now unblocked (**AI-4 = `web-ext`**); fix the `session_state.ts` `storageSessionShim` routing first (FF crashes on hydrate — see P5-D3).
 
 ## Active Backlog
 
-- #196: shared inline-hidden-password helper (sri_checker + content_analyzer).
-- FF-02 / FF-03 / FF-04: Firefox port (stacked; FF-01 shim merged #173).
-- JSB-127 (issue #127): JS behavior monitor perf validation + residual type dedup.
-- Issues: #175 #176 #178 #179 #181 (discovery), #186 (bridge init-auth), #188 (options surface prompt-outcome import/clear failure), #184 (docs reconciliation — substantially done 2026-06-05).
-- P4-01c: real perceptual brand templates (BLOCKED — needs sanctioned brand screenshots; product decision).
+- **North-Star Phase 5: #232–#246** (`north-star` label) — FP-Elimination (#232/#233/#234/#235), Friend-Advisor (#236/#237), Feedback-Capture (#238/#239/#240/#241), Architecture (#242/#243/#244/#245/#246). See `docs/NORTHSTAR_ROADMAP.md`.
+- **Firefox port FF-02→FF-04** — AI-4 decided (`web-ext`); FF-01 shim merged (#173). Prereq: `session_state.ts` shim routing (P5-D3; session_state tracked by **#228**). Note: **#245 is P5-D5 (on-device ML), not Firefox.**
+- **Discovery cycle 3–4 backlog (open):** popup #205/#215/#216/#218/#219, oauth #207/#221/#222/#223, adaptive #204/#213, scoring #209/#217, credential/storage #199/#200/#201/#203/#227, iframe #225/#226, session_state #228, icon #229.
+- Older: #127 (JS behavior), #175/#176/#178/#179/#181/#186 (discovery), #184 (docs reconciliation).
+- **P4-01c / AI-5:** visual-sim — research recommends the **logo-embedding pivot** (P5-D6 / #246); maintainer to confirm direction (AI-5).
 
 ## Reliability Notes
 

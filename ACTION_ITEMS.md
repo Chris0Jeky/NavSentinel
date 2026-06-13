@@ -8,7 +8,7 @@
 
 **Purpose:** the running list of things only *you* (Chris) can do — and the context an agent needs to not lose the thread between sessions. Agents flag the open items in every summary; you clear them by saying so.
 
-**Last updated:** 2026-06-05 · by Claude — **ALL 11 PRs MERGED** (Chris waived Gate 3 for the batch; deferred to a manual-verification watchlist). `main` @ `4bd60ce`, 0 open PRs. Docs reconciled (#184).
+**Last updated:** 2026-06-13 · by Claude — North-Star research+audit initiative complete (`docs/NORTHSTAR_ROADMAP.md`, issues #232–#246 filed). `main` @ `da400fb`, **0 open PRs**, typecheck/lint clean, **2426 unit tests pass**. Discovery cycles 3–4 merged 2026-06-06 (#197/#202/#208/#210/#212/#214/#220/#230). AI-3 ✅ resolved · AI-4 ✅ web-ext · **AI-5 open (visual-sim pivot decision ready)**.
 
 > **Why this file exists separately from the usual docs:** the status docs on `main`
 > (`docs/agentic/HANDOFF.md`, `docs/agentic/ORCHESTRATOR.md`, `docs/Project_Roadmap.md`,
@@ -19,9 +19,10 @@
 
 ---
 
-## Current state snapshot (verified 2026-06-05)
+## Current state snapshot (verified 2026-06-13)
 
-- `main` == `origin/main` == **`4bd60ce`**, working tree clean. **0 open PRs.** Only local branch besides `main` is `fix/jsb-stale-todos-and-tests` (AI-3, untouched).
+- `main` == **`da400fb`**, working tree clean apart from the North-Star docs (`docs/NORTHSTAR_ROADMAP.md`, `docs/research/`) + status-doc re-hydration. **0 open PRs.** The `fix/jsb-stale-todos-and-tests` branch is gone (AI-3 ✅ resolved). Baseline: typecheck clean, lint 0/0, **2426 unit tests pass**. **48 open issues**, incl. North-Star **#232–#246**.
+- *History (2026-06-05, superseded by the header above):* the snapshot below describes the D-series batch at `4bd60ce`; cycles 3–4 (2026-06-06, PRs #197/#202/#208/#210/#212/#214/#220/#230) and the North-Star initiative (2026-06-13) have since landed.
 - **ALL 11 D-series discovery PRs MERGED 2026-06-05** (oldest-first, merge commits): **#180, #182, #183, #185, #187, #189, #190, #191, #193, #194, #195.** Each had **fresh-green CI (Build/Unit + E2E)** + **two or more independent adversarial review rounds with ALL findings (every severity) fixed**.
 - **Gate 3 (manual Chrome test) was explicitly WAIVED by Chris for this batch** (decision 2026-06-05) and the merges proceeded. The waiver did **not** discard the manual checks — they are **deferred** to a regression watchlist: **`docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md`**. Accepted risk = time/difficulty if debugging is needed, not silent regressions. **Run that checklist next time you build & load the extension** (see AI-1 in the Completed log; the watchlist supersedes it).
 - **#182 needed a docs-only conflict resolution** (status files diverged once the other 10 landed). Resolved by taking `main`'s side, then verified locally: **tsc clean, lint 0/0, 2298 unit tests pass**; CI re-ran **green (Build/Unit + E2E)** on the merge head before merge.
@@ -32,12 +33,15 @@
 - **Remaining backlog (next, not yet started):** **#196** (small DRY refactor) → **FF-02 → FF-03 → FF-04** (stacked Firefox port; FF-02 = Vite Firefox build config — **needs a tooling decision**: `@crxjs/vite-plugin` Firefox support is experimental; runtime verification is human-gated) → **JSB-127** (inspect local `fix/jsb-stale-todos-and-tests` first — AI-3) → another fresh discovery pass.
 - Open issues: #175 #176 #178 #179 #181 (discovery) + #127 (JS behavior) + #184 (housekeeping — substantially done this pass) + **#186** (bridge init-auth: echo-verify/replay-repin/thrash — needs SW-vouched token) + **#188** (options should surface prompt-outcome import/clear failure) + **#196** (shared hidden-password helper).
 - **Resolved question:** the "merge systematically" vs. Gate 3 tension is settled — Chris waived Gate 3 for the 2026-06-05 batch and authorized the merges, with manual checks deferred to the watchlist. (For *future* batches, confirm the posture again unless told it's standing.)
+- **North-Star initiative (2026-06-13):** the research + audit initiative completed this session (main @ `da400fb`; discovery cycles 3–4 added issues up to #231). Internal audit = **153 verified findings**; **4** deep-research passes done (broad + 2 gap-fill + GAP-D). All artifacts persisted under **`docs/research/NORTHSTAR_*`**, and the program plan is **`docs/NORTHSTAR_ROADMAP.md`** (Phase 5: FP-Elimination / Friend-Advisor / Feedback-Capture / Architecture). **Top unblockers:** signal-level Smart-Mode gating (#233), enrich the capture record (#238), top-sites trust-tier prior (#234). The ~15 new P5 slices are **filed: #232–#246** (`north-star` label) — no go-ahead pending. **No open research gaps remain** (GAP-D done: conformal/rrweb/single-user loop, 24 verified claims, unblocks P5-C5).
 
 ---
 
 ## Action items
 
-**OPEN: AI-3, AI-4, AI-5.** AI-1 and AI-2 are ✅ **resolved 2026-06-05** (see Completed log). The deferred manual checks now live in `docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md`.
+**OPEN: AI-5 — supply/sanction a set of reference brand *logos* for the logo-embedding model** (or confirm using a public logo set, e.g. the Phishpedia reference list). The pHash-vs-logo *tech decision is already made* — the pivot to logo-embedding is confirmed (D24); this is now a small, low-stakes asset-approval task feeding P5-D6 (#246) / P5-D5 (#245), **not** a pending decision and **not** blocking near-term Phase-5 work. AI-1, AI-2 resolved 2026-06-05; **AI-3, AI-4 resolved 2026-06-13** (see Completed log). The deferred manual checks now live in `docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md`.
+
+> **Note (2026-06-13):** `main` has advanced to `da400fb` since the 2026-06-05 snapshot below (`#196`/FF/domain-impersonation work merged). The snapshot's PR-batch facts are historical; current open-item truth is in this section.
 
 ### AI-1 — Manual Chrome test (Gate 3) · ✅ **RESOLVED 2026-06-05 — Gate 3 WAIVED by Chris; manual checks deferred to the watchlist**
 
@@ -84,36 +88,36 @@
 
 ---
 
-### AI-3 — Decide the fate of `fix/jsb-stale-todos-and-tests` · **OPEN** · (tracked in #184)
+### AI-3 — Decide the fate of `fix/jsb-stale-todos-and-tests` · ✅ **RESOLVED 2026-06-13 — superseded by merged work; closed**
 
-**Why it's yours:** it's an old local branch with one trivial commit; deleting vs. reviving is a judgment call.
+> Closed 2026-06-13 (Chris: "mark done"). Verified on `main` @ `da400fb`: the branch no longer exists locally or on `origin` (it was deleted after the 2026-06-05 snapshot); the `TODO: Implement (Slice N)` markers are gone from `js_behavior_monitor.ts`; and `computeJsBehaviorScore` is **no longer a dead stub** — it's a live, implemented function in `extension/src/shared/js_behavior_state.ts:67`, called from `capture_isolated.ts`. Both intents of the branch landed organically through later merges. No action remained. Original context retained below.
 
-**Context:** branch is one commit `435597c` (2026-05-23) that removes stale "TODO: Implement (Slice N)" markers + a dead `computeJsBehaviorScore` stub from `js_behavior_monitor.ts`. It's branched off a *2026-05-23* `main`, so it's far behind — **do not merge it as-is** (would revert ~18.8k lines of since-merged work).
+**Why it was yours:** it was an old local branch with one trivial commit; deleting vs. reviving was a judgment call.
 
-**Guide — pick one:**
-- **Abandon:** `git branch -D fix/jsb-stale-todos-and-tests` (the cleanup can be redone fresh if still valid).
-- **Revive the intent:** branch off current `main`, re-check whether those markers + the dead stub still exist, and re-apply just that cleanup as a fresh small PR (relates to #127).
-
-**Done when:** you tell me to delete it, or to revive its intent as a fresh slice.
+**Context:** branch was one commit `435597c` (2026-05-23) that removed stale "TODO: Implement (Slice N)" markers + a then-dead `computeJsBehaviorScore` stub. Branched off a *2026-05-23* `main`, far behind — would have reverted ~18.8k lines if merged as-is.
 
 ---
 
-### AI-4 — Decide Firefox build tooling for FF-02 · **OPEN** · (blocks the FF-02 → FF-03 → FF-04 stack)
+### AI-4 — Decide Firefox build tooling for FF-02 · ✅ **DECIDED 2026-06-13 — option (b) `web-ext` + `manifest.firefox.json`**
 
-**Why it's yours:** a tooling/architecture choice with trade-offs that shapes the whole Firefox port.
+> Decided 2026-06-13 (Chris). **Chosen: (b) `web-ext` + a separate `manifest.firefox.json` and build script.** Rationale: runtime verification is human-gated (sandbox can't drive Firefox), which punishes experimental tooling — so the battle-tested Mozilla toolchain with a clean lint/build signal beats the experimental crxjs Firefox target (a) and the higher-maintenance hand-rolled Vite config (c). Also feeds the North-Star "Architecture" program (FF `blocking webRequest` escape hatch), arguing for the stable option. FF-02 should now be implemented against web-ext.
 
-**Context:** FF-01 (`browser.*` shim) merged (#173). FF-02 needs a Vite Firefox build, but `@crxjs/vite-plugin` (v2.4.0) Firefox support is experimental. Options:
-- (a) crxjs Firefox target (least new tooling, but experimental/risky);
-- (b) `web-ext` + a separate `manifest.firefox.json` and build script (battle-tested for Firefox; more moving parts);
-- (c) a hand-rolled second Vite config consuming `manifest.firefox.json` + dual build scripts.
+**Why it was yours:** a tooling/architecture choice with trade-offs that shapes the whole Firefox port.
 
-Runtime verification will be human-gated (like Gate 3 — sandbox can't drive Firefox).
+**Context:** FF-01 (`browser.*` shim) merged (#173). FF-02 needs a Vite Firefox build; `@crxjs/vite-plugin` (v2.4.0) Firefox support is experimental. Options considered: (a) crxjs Firefox target; **(b) `web-ext` + separate `manifest.firefox.json` — CHOSEN**; (c) hand-rolled second Vite config + dual build scripts.
 
-**Done when:** you pick the approach; I implement FF-02 against it (then FF-03/FF-04 stack on top).
+**Next:** implement FF-02 against web-ext, then FF-03/FF-04 stack on top.
 
 ---
 
-### AI-5 — Provide sanctioned brand login screenshots for P4-01c · **OPEN** · (unblocks real visual-sim spoof detection)
+### AI-5 — Visual-sim brand assets · ✅ **DECIDED 2026-06-13 — pivot to logo-embedding; re-scoped**
+
+> **DECIDED 2026-06-13 (Chris): pivot to logo-embedding (D24).** The original "sanctioned brand login *screenshots* for pHash" ask is **moot** — perceptual hashing is retired to a cheap pre-filter. **AI-5 re-scopes to:** supply/sanction a set of reference brand **logos** for the Siamese/CNN embedding model (or confirm using a public logo set, e.g. the Phishpedia reference list). This is now a smaller, lower-stakes asset task feeding **P5-D6 (#246)** + the on-device-ML host **P5-D5 (#245)**. Tracked as re-scoped-OPEN (logo set still to be confirmed), not blocking near-term Phase-5 work. Original deferral context retained below.
+
+> **Deferred 2026-06-13 (Chris):** do **not** source screenshots yet. The North-Star research (`docs/research/NORTHSTAR_RESEARCH_HANDOFF.md`, lines 192–196) finds perceptual hashing is weak/evadable for brand impersonation vs **logo CNN / Siamese embeddings** or an **on-device VLM**, and leans toward a pivot (pHash as a cheap pre-filter only). Collecting pHash source screenshots now risks gathering the wrong assets. **Hold AI-5 until the visual-sim tech direction (finish pHash vs. pivot to CNN/VLM) is finalized by the research program;** then this item is either re-scoped (training/reference images) or closed. Stays OPEN as a tracked dependency, not actionable yet.
+>
+> **DECISION INPUT READY 2026-06-13 (gap-fill research, 3-vote verified):** the visual-sim tech call is now answerable. **Recommend the PIVOT to logo-embedding.** Evidence: USENIX'21 **Phishpedia** (logo + Siamese embeddings) = **98.2% precision / 87.1% recall / 0.19s/page**, far above perceptual-hash/EMD/PhishZoo/LogoSENSE; a pure on-device pHash extension (PhishSnap) is feasible but low-accuracy. Plan: keep pHash only as a cheap pre-filter, pivot confirmation to a logo-embedding model (or on-device VLM in an offscreen doc). See **`docs/NORTHSTAR_ROADMAP.md` → P5-D6 + Decision D24**. **If Chris confirms the pivot, AI-5 re-scopes to "supply reference brand *logos*" (not login screenshots), or P4-01c-as-pHash is closed.** Caveat: Phishpedia is an *identification* system (assumes a page is already flagged) with limited in-the-wild brand coverage — pair it with the existing brand/domain-mismatch flag.
+
 
 **Why it's yours:** the visual-similarity pipeline is fully built and wired but ships **PLACEHOLDER** template hashes (`scripts/build-brand-templates.mjs` emits seeded-PRNG values), so it can never fire a true positive. Replacing them needs hashes built from **real brand login pages** — sourcing/sanctioning those screenshots is a product/legal call only you can make.
 
@@ -127,3 +131,5 @@ Runtime verification will be human-gated (like Gate 3 — sandbox can't drive Fi
 
 - **AI-1 — Gate 3 manual Chrome test · WAIVED → DEFERRED · 2026-06-05.** Chris waived the manual-test gate for the 11-PR batch; merges proceeded on fresh-green CI + 2× independent adversarial review. Manual checks preserved as a deferred regression watchlist in `docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md` (run on next build + load).
 - **AI-2 — Merge order + execution · DONE · 2026-06-05.** All 11 D-series PRs merged oldest-first (#180, #182, #183, #185, #187, #189, #190, #191, #193, #194, #195). #182 merged last after a docs-only conflict (resolved by taking `main`; verified tsc clean / lint 0/0 / 2298 unit tests + green CI on the merge head). `main` @ `4bd60ce`, 0 open PRs, branches pruned.
+- **AI-3 — Fate of `fix/jsb-stale-todos-and-tests` · RESOLVED (superseded) · 2026-06-13.** Verified on `main` @ `da400fb`: branch gone (local + origin), stale TODO markers gone from `js_behavior_monitor.ts`, and `computeJsBehaviorScore` now a live implemented function (`js_behavior_state.ts:67`). Both branch intents landed via later merges; nothing to do.
+- **AI-4 — Firefox build tooling for FF-02 · DECIDED · 2026-06-13.** Chose **(b) `web-ext` + separate `manifest.firefox.json`** over experimental crxjs Firefox (a) and hand-rolled Vite config (c), because FF runtime verification is human-gated and rewards a stable, well-documented toolchain. FF-02 to be implemented against web-ext.

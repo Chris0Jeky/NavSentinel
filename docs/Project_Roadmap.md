@@ -23,13 +23,18 @@ Total: **47 tasks** across 5 phases. **43/47 complete**. P4-01 and P4-02 have fo
 
 **Completed cross-cutting initiative:** UI Redesign (9 phases, R1–R9) — done 2026-05-16. See [REDESIGN_ORCHESTRATION.md](REDESIGN_ORCHESTRATION.md).
 
-**Open issues:** #127 (JS behavior monitor — remaining slices). Discovery-seeded: #175 (bridge heartbeat), #176 (URL minimization), #178 (SRI partial coverage), #179 (CSP header blindness), #181 (domain_profile cross-context lost-update), #186 (bridge init-auth), #188 (options surface prompt-outcome import/clear failure), #196 (shared inline-hidden-password helper), #184 (docs reconciliation — substantially done 2026-06-05). #192 closed (→#193/#194/#195). #97/#113 closed via #115/#118.
+**North-Star track (Phase 5):** the zero-FP / friend-advisor / feedback-capture / architecture
+programs derived from the 2026-06-13 research + audit initiative are tracked in
+[**`NORTHSTAR_ROADMAP.md`**](NORTHSTAR_ROADMAP.md) (4 programs as `P5-{prog}{seq}` slices; revisits
+**D08** "No ML" → conditional on-device ML). Source artifacts under `docs/research/NORTHSTAR_*`.
 
-**Repo state (2026-06-05):** **0 open PRs.** `main` @ `4bd60ce`. The full D-series discovery program — **all 11 PRs (#180, #182, #183, #185, #187, #189, #190, #191, #193, #194, #195)** — merged 2026-06-05, each with fresh-green CI (Build/Unit + E2E) + two independent adversarial review rounds (all findings fixed). Gate 3 (manual Chrome test) was waived by the maintainer for the batch and deferred to `docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md`. Next slice: **#196**, then the **FF-02→FF-03→FF-04** Firefox stack.
+**Open issues (2026-06-13):** **48 open.** North-Star Phase 5 (`north-star` label): **#232–#246** (see [`NORTHSTAR_ROADMAP.md`](NORTHSTAR_ROADMAP.md)). Discovery cycle 3–4 backlog: #198–#231 (popup/gauge #205/#215/#216/#218/#219, oauth #207/#221/#222/#223, adaptive #204/#213, scoring #209/#217, credential/storage #199/#200/#201/#203/#227, iframe #225/#226, session_state #228, icon #229, jsb cleanup #231). Older: #127 (JS behavior), #175/#176/#178/#179/#181/#186 (discovery), #184 (docs reconciliation). #196/#188/#206/#211 resolved by merged PRs #197/#202/#210/#230.
 
-> **Picking up the autonomous loop? Start with [`docs/agentic/HANDOFF.md`](agentic/HANDOFF.md)** (point-in-time handoff) and [`docs/agentic/ORCHESTRATOR.md`](agentic/ORCHESTRATOR.md) (living backlog/cycle log). 0 open PRs as of 2026-06-05; next implementation slice is **#196** (shared inline-hidden-password helper). Also see `ACTION_ITEMS.md` for the human-owned task list (the deferred manual-verification watchlist).
+**Repo state (2026-06-13):** **0 open PRs.** `main` @ `da400fb`. Since the 2026-06-05 D-series batch (#180–#195), **discovery cycles 3–4 landed 2026-06-06** — 8 PRs merged: **#197** (#196 credential-field helper), **#202** (#188 options failure surfacing), **#208** (homoglyph/IPv6 domain hardening), **#210** (#206 clickfix CAPTCHA), **#212** (#204 adaptive gate), **#214** (#205 popup gauge), **#220** (#207 oauth callback), **#230** (#211 mutation-monitor iframe) — each with green CI + 2× adversarial review. Baseline (verified 2026-06-13): **typecheck clean, lint 0/0, 2426 unit tests pass.** **Next: the North-Star Phase 5 track** (`NORTHSTAR_ROADMAP.md`) — start with #238 (P5-C1, the keystone capture-enrichment) or #233 (P5-A2, signal-level gating).
 
-Last updated: 2026-06-05
+> **Picking up the autonomous loop? Start with [`docs/agentic/HANDOFF.md`](agentic/HANDOFF.md)** (point-in-time handoff) and [`docs/agentic/ORCHESTRATOR.md`](agentic/ORCHESTRATOR.md) (living backlog/cycle log). 0 open PRs as of 2026-06-13; the next implementation work is the **North-Star Phase 5** slices (#232–#246). Also see `ACTION_ITEMS.md` for the human-owned task list (AI-5 visual-sim direction is the one open decision).
+
+Last updated: 2026-06-13
 
 ---
 
