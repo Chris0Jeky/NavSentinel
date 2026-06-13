@@ -47,18 +47,21 @@ Status legend: `TODO` · `IN-PROGRESS` · `IN-REVIEW` · `MERGE-READY` · `DONE`
 
 Roadmap truth verified against `docs/Project_Roadmap.md` (Phases 0-3 done; Phase 4: P4-05–P4-08 done, P4-01/P4-02 in progress, P4-03/P4-04 pending). Baseline 2026-05-30: typecheck clean, lint 0/0, 2206 tests pass.
 
+**Updated 2026-06-13:** `main` @ **`da400fb`**, **0 open PRs**, typecheck clean, lint 0/0, **2426 tests pass**. Active track = **North-Star Phase 5** (issues **#232–#246**, `north-star` label; see [`docs/NORTHSTAR_ROADMAP.md`](../NORTHSTAR_ROADMAP.md)). Discovery cycles 3–4 merged 2026-06-06 (#197/#202/#208/#210/#212/#214/#220/#230).
+
 | ID | Slice | Source | Priority | Status | Depends on | Notes |
 |----|-------|--------|----------|--------|-----------|-------|
 | ORCH-DISCOVERY | Codebase analysis → seed bug/improvement backlog | this turn | P1 | DONE | — | discovery `wf_c7d868c7-3b1` + follow-up audit complete; all 11 resulting D-series PRs merged 2026-06-05 |
 | ORCH-HYGIENE | Prune merged local branches + 2 orphaned `worktree-agent-*` | analysis | P2 | DONE | — | completed in Cycle 1; remote cleanup remains separate housekeeping |
-| D-HELPER | Shared `isVisiblePasswordField` helper across `sri_checker` + `content_analyzer`; tighten hidden-detection to match CSS *declarations*, not raw substring (+ decoy test) | issue #196 | P2 | TODO | — | **NEXT pick.** Small single-seam; #193/#195 created the duplication. Full spec in issue #196. |
-| FF-02 | Firefox Vite build config + `src/sw/background.html` + dual build scripts | Roadmap P4-03 | P2 | TODO | FF-01 (#173, merged) + **AI-4 tooling decision** | base of FF stack; needs maintainer tooling choice first |
+| D-HELPER | Shared `isVisiblePasswordField` helper across `sri_checker` + `content_analyzer` | issue #196 | P2 | **DONE** | — | merged as **#197** (2026-06-06). |
+| FF-02 | Firefox Vite build config + `src/sw/background.html` + dual build scripts | Roadmap P4-03 / **P5-D3 (#245-area)** | P2 | TODO | FF-01 (#173, merged); **AI-4 ✅ decided = `web-ext`** | base of FF stack — now unblocked. **Prereq:** route `session_state.ts` (191/224/232/259) through `storageSessionShim` (else FF crashes on hydrate). |
 | FF-03 | `session_state` Firefox compat (`storage.session`→namespaced `storage.local` shim) | Roadmap P4-03 | P3 | TODO | FF-02 | **stacked on FF-02** |
 | FF-04 | `world:"MAIN"` guard parity for Firefox + transition-qualifier gaps | Roadmap P4-03 | P4 | TODO | FF-03 | **stacked on FF-03** |
 | JSB-127 | JS behavior monitor: perf validation (patch/getter overhead budgets) + residual `JsBehaviorState` dedup | issue #127 | P3 | TODO | — | unmerged branch `fix/jsb-stale-todos-and-tests` may hold partial work — inspect before branching |
-| P4-01c | Real perceptual brand templates (replace placeholder hashes) | Roadmap P4-01 | P4 | BLOCKED | real brand login screenshots | `scripts/build-brand-templates.mjs` emits seeded-PRNG placeholders; spoof detection wired but cannot fire. Needs a sanctioned source of brand screenshots — product decision. |
-| P2-GATE-FP | Re-run FP/TP measurement after P4 additions (Phase 2 gate open item) | Roadmap | P4 | TODO | — | `npm run measure:fp`; confirm < 0.1% still holds |
+| P4-01c | Visual-sim → **logo-embedding pivot** (retires placeholder pHash to a pre-filter) | Roadmap P4-01 / **P5-D6 (#246)** | P4 | PIVOT ✅ (2026-06-13) | on-device-ML host #245; AI-5 reference logos | Pivot **confirmed by maintainer**; pHash→logo-embedding (Phishpedia 98.2% precision). AI-5 re-scoped to reference logos. |
+| P2-GATE-FP | Re-run FP/TP measurement after P4 additions (Phase 2 gate open item) | Roadmap | P4 | TODO | — | `npm run measure:fp`; confirm < 0.1% still holds. Subsumed by **P5-A1** (#232) Smart-Mode-Silence CI gate. |
 | P4-04 | Community threat intelligence | Roadmap | P5 | BLOCKED | protocol/privacy product decisions | XL, deferred — not an autonomous pick |
+| **NS-P5** | **North-Star Phase 5** — 4 programs (FP-elim / advisor / feedback / architecture) | `docs/NORTHSTAR_ROADMAP.md` | **P1** | TODO | — | **Active track.** Issues **#232–#246**. Best first picks: **#238** (P5-C1 keystone capture-enrichment), **#233** (P5-A2 signal-level gating), **#234** (P5-A3 top-sites tier). |
 
 ---
 
@@ -90,7 +93,7 @@ PRs D-* are independent (different files) → parallel branches off `main`, **no
 
 | Slice | Branch | Base | Worktree | PR | Round 1 | Round 2 | Bots | Opened |
 |-------|--------|------|----------|----|---------|---------|------|--------|
-| _(none)_ | — | — | — | — | — | — | — | All 11 D-series PRs merged 2026-06-05; 0 in-flight. Next slice: #196. |
+| _(none)_ | — | — | — | — | — | — | — | 0 in-flight (0 open PRs @ `da400fb`). **Next: North-Star Phase 5** — #238 (P5-C1) or #233 (P5-A2). |
 
 ---
 
@@ -106,3 +109,5 @@ PRs D-* are independent (different files) → parallel branches off `main`, **no
 | — | 2026-05-30 | ENV INCIDENT | Harness returned **fabricated tool outputs** (non-existent file API, fake test/commit/push success, empty PR #180 reported as created, dup issue #177, false branch-switch confirmations). Mitigation now standing: one state-changing command per turn; redirect output to temp file + Read back; verify git by SHA (`rev-parse`/`ls-remote`); gh issues/PRs via `--body-file`. **PAUSED here per user instruction** (finish D-PROF, then pause). Next slice when resumed: D-STORE (`appendPromptOutcome` race). | PAUSED |
 | 5 | 2026-06-05 | MERGE-BATCH | Maintainer (Chris) **waived Gate 3** (manual Chrome test) for the 11-PR D-series batch; merged oldest-first (#180→#195) as merge commits with `--delete-branch`. 10 merged clean; **#182** conflicted post-#180 on status docs only (`storage.ts`/`sw.ts` auto-merged clean) — resolved by taking `main`, verified locally (tsc clean, lint 0/0, **2298** unit tests pass), CI re-ran **green** (Build/Unit + E2E) on the merge head, then merged. Verified `main`==`origin/main`==`4bd60ce`, 0 open PRs, branches pruned. Deferred manual checks → `docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md`. | DONE |
 | 6 | 2026-06-05 | DOCS-RECONCILE (#184) | Brought roadmap / AGENT_INDEX / HANDOFF / ORCHESTRATOR / failure_ledger to current truth post-merge; recorded the form-submit patch-order bug (fixed in #185) in `failure_ledger.jsonl`. | DONE |
+| 7 | 2026-06-06 | DISCOVERY CYCLES 3–4 | Further discovery + hardening passes (separate sessions). 8 PRs merged: **#197** (#196 shared credential-field helper), **#202** (#188 options import/clear failure), **#208** (homoglyph + IPv6-literal domain spoofs), **#210** (#206 clickfix CAPTCHA-iframe validation), **#212** (#204 adaptive decisive-outcome gate), **#214** (#205 popup gauge scope), **#220** (#207 oauth callback indicator), **#230** (#211 mutation-monitor iframe hostname). Seeded open issues #198–#231. `main` → `da400fb`. | DONE |
+| 8 | 2026-06-13 | NORTH-STAR RESEARCH+AUDIT | Re-ran the rate-limited research initiative fresh vs `da400fb`. Internal audit (95 agents, **153 verified findings**) + 3 deep-research passes (broad + 2 gap-fill; a 4th GAP-D pass running). Wrote Phase-5 program plan **`docs/NORTHSTAR_ROADMAP.md`** (D21–D25) + artifacts `docs/research/NORTHSTAR_*`. Filed **15 issues #232–#246** (`north-star`). Re-hydrated roadmap/HANDOFF/ORCHESTRATOR/ACTION_ITEMS to `da400fb`. Cleaned 6 agent-Bash-noise lines from `failure_ledger.jsonl`. AI-3 resolved, AI-4 = web-ext, AI-5 (visual-sim pivot) pending maintainer. Baseline: 2426 tests green. | DONE |
