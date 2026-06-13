@@ -1,6 +1,5 @@
 import { computeCDS } from "../shared/scoring";
-import { appendEvent, appendPromptOutcome, getPromptOutcomes, getNavSettings, onNavSettingsChange, type NavSettings } from "../shared/storage";
-import { buildNavOutcomeFeatures, type NavOutcomeFeatures } from "./nav_outcome_features";
+import { appendEvent, appendPromptOutcome, getPromptOutcomes, getNavSettings, onNavSettingsChange, buildNavOutcomeFeatures, type NavSettings, type NavOutcomeFeatures } from "../shared/storage";
 import { ADAPTIVE_SCORES_KEY, getEffectiveThresholdAdjustment, updateAdaptiveScores } from "../shared/adaptive_scoring";
 import {
   analyzeOutcomesForPair,

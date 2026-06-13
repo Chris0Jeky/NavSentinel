@@ -94,6 +94,43 @@ const MAX_REASON_CODE_LEN = 80;
 // monitor). Defends persisted replay records against extreme/negative values.
 const MAX_CLICK_CONTEXT_DIM = 32000;
 
+/**
+ * Replay-grade enrichment (P5-C1 / #238) attached to a nav PromptOutcome — the
+ * subset of PromptOutcomeEntry the nav decision path can populate. Lives here
+ * (not in the all-frames content-script chunk) so the heavy content bundle stays
+ * lean; capture_isolated only references it. Build it from the LOCAL decision
+ * scope at decision time, NOT from a global debug snapshot.
+ */
+export type NavOutcomeFeatures = Pick<
+  PromptOutcomeEntry,
+  "reasons" | "cds" | "nrsFactors" | "navAnomalyScore" | "adaptiveAdj" | "thresholdUsed" | "elementContext"
+>;
+
+/**
+ * Select which replay fields to attach to a nav outcome record, omitting empty
+ * or absent signals so thin records stay lean. `appendPromptOutcome` still
+ * sanitizes/bounds whatever this passes; this only decides inclusion. Pure +
+ * side-effect-free for unit-testability.
+ */
+export function buildNavOutcomeFeatures(input: {
+  reasonCodes?: string[];
+  nrsFactors?: string[];
+  cds?: number;
+  navAnomalyScore?: number;
+  adaptiveAdj?: number;
+  thresholdUsed: number;
+  ctx?: ClickContext;
+}): NavOutcomeFeatures {
+  const out: NavOutcomeFeatures = { thresholdUsed: input.thresholdUsed };
+  if (input.reasonCodes && input.reasonCodes.length > 0) out.reasons = input.reasonCodes;
+  if (input.nrsFactors && input.nrsFactors.length > 0) out.nrsFactors = input.nrsFactors;
+  if (typeof input.cds === "number" && Number.isFinite(input.cds)) out.cds = input.cds;
+  if (typeof input.navAnomalyScore === "number" && input.navAnomalyScore > 0) out.navAnomalyScore = input.navAnomalyScore;
+  if (typeof input.adaptiveAdj === "number" && Number.isFinite(input.adaptiveAdj)) out.adaptiveAdj = input.adaptiveAdj;
+  if (input.ctx) out.elementContext = input.ctx;
+  return out;
+}
+
 const DEFAULT_SUITE_SETTINGS: SuiteSettings = {
   nav: {
     defaultMode: "smart",

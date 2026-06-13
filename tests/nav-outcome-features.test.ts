@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildNavOutcomeFeatures } from "../extension/src/content/nav_outcome_features";
+import { buildNavOutcomeFeatures } from "../extension/src/shared/storage";
 import type { ClickContext } from "../extension/src/shared/scoring";
 
 const ctx: ClickContext = {
