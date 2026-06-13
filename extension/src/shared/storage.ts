@@ -90,6 +90,9 @@ export interface PromptOutcomeEntry {
 // Bounds for the enriched fields so a buggy/hostile caller can't bloat a record.
 const MAX_REASON_CODES = 32;
 const MAX_REASON_CODE_LEN = 80;
+// Max plausible viewport/element dimension in CSS px (generous; covers 8K/multi-
+// monitor). Defends persisted replay records against extreme/negative values.
+const MAX_CLICK_CONTEXT_DIM = 32000;
 
 const DEFAULT_SUITE_SETTINGS: SuiteSettings = {
   nav: {
@@ -388,11 +391,15 @@ function sanitizeCodeList(value: unknown): string[] | undefined {
     .slice(0, MAX_REASON_CODES);
 }
 
+// A non-negative, finite dimension within a sane magnitude bound.
+function isDim(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= MAX_CLICK_CONTEXT_DIM;
+}
+
 function sanitizeRectHint(value: unknown): { w: number; h: number } | undefined {
   if (!value || typeof value !== "object") return undefined;
   const r = value as Record<string, unknown>;
-  if (typeof r.w !== "number" || !Number.isFinite(r.w)) return undefined;
-  if (typeof r.h !== "number" || !Number.isFinite(r.h)) return undefined;
+  if (!isDim(r.w) || !isDim(r.h)) return undefined;
   return { w: r.w, h: r.h };
 }
 
@@ -434,8 +441,8 @@ function sanitizeClickContext(value: unknown): ClickContext | undefined {
   if (!top) return undefined;
   const vp = c.viewport && typeof c.viewport === "object" ? (c.viewport as Record<string, unknown>) : undefined;
   const viewport = {
-    w: typeof vp?.w === "number" && Number.isFinite(vp.w) ? vp.w : 0,
-    h: typeof vp?.h === "number" && Number.isFinite(vp.h) ? vp.h : 0,
+    w: isDim(vp?.w) ? vp!.w : 0,
+    h: isDim(vp?.h) ? vp!.h : 0,
   };
   const out: ClickContext = { viewport, input: c.input === "keyboard" ? "keyboard" : "pointer", top };
   const underlying = sanitizeElementHint(c.underlying);

@@ -1,5 +1,6 @@
 import { computeCDS } from "../shared/scoring";
-import { appendEvent, appendPromptOutcome, getPromptOutcomes, getNavSettings, onNavSettingsChange, type NavSettings, type PromptOutcomeEntry } from "../shared/storage";
+import { appendEvent, appendPromptOutcome, getPromptOutcomes, getNavSettings, onNavSettingsChange, type NavSettings } from "../shared/storage";
+import { buildNavOutcomeFeatures, type NavOutcomeFeatures } from "./nav_outcome_features";
 import { ADAPTIVE_SCORES_KEY, getEffectiveThresholdAdjustment, updateAdaptiveScores } from "../shared/adaptive_scoring";
 import {
   analyzeOutcomesForPair,
@@ -640,15 +641,6 @@ async function refreshAdaptiveScores(baseThreshold?: number): Promise<void> {
     console.warn("[NavSentinel] Failed to refresh adaptive scores, using stale values", err);
   }
 }
-
-/** Replay-grade enrichment (P5-C1 / #238) attached to a nav PromptOutcome.
- *  Snapshot it from the decision's LOCAL scope at decision time — NOT from the
- *  global `lastDebug`, which is only assigned after the decision branches run
- *  (so at the call sites it still holds the previous click's data). */
-type NavOutcomeFeatures = Pick<
-  PromptOutcomeEntry,
-  "reasons" | "cds" | "nrsFactors" | "navAnomalyScore" | "adaptiveAdj" | "thresholdUsed" | "elementContext"
->;
 
 function appendOutcomeSafely(
   partial: Parameters<typeof appendPromptOutcome>[0]
@@ -1695,15 +1687,15 @@ window.addEventListener(
     // Replay-grade feature snapshot (P5-C1 / #238). Built from LOCAL decision
     // scope here — `lastDebug` is only assigned below (after the branches), so
     // it would carry the previous click's data at the outcome call sites.
-    const navFeatures: NavOutcomeFeatures = {
+    const navFeatures: NavOutcomeFeatures = buildNavOutcomeFeatures({
+      reasonCodes,
+      nrsFactors,
+      cds,
+      navAnomalyScore,
+      adaptiveAdj: adaptiveAdjustment,
       thresholdUsed: blockThreshold,
-      ...(reasonCodes.length ? { reasons: reasonCodes } : {}),
-      ...(nrsFactors.length ? { nrsFactors } : {}),
-      ...(Number.isFinite(cds) ? { cds } : {}),
-      ...(navAnomalyScore > 0 ? { navAnomalyScore } : {}),
-      ...(Number.isFinite(adaptiveAdjustment) ? { adaptiveAdj: adaptiveAdjustment } : {}),
-      ...(ctx ? { elementContext: ctx } : {})
-    };
+      ...(ctx ? { ctx } : {})
+    });
     const smartAllowsBlank =
       mode === "smart" && !!anchor && isLegitBlankAnchor(anchor, ctx, cds, cdsReasons);
 

@@ -315,6 +315,32 @@ describe("prompt telemetry replay-grade enrichment (P5-C1 / #238)", () => {
     expect(ctx && "bogusTopLevel" in ctx).toBe(false);
   });
 
+  it("bounds elementContext dimensions (drops extreme rect, zeroes extreme viewport)", async () => {
+    const { chrome } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const { appendPromptOutcome, getPromptOutcomes } = await import("../extension/src/shared/storage");
+
+    const append = (p: unknown) => appendPromptOutcome(p as Parameters<typeof appendPromptOutcome>[0]);
+    await append({
+      domain: "dims.example",
+      type: "nav",
+      score: 30,
+      outcome: "block",
+      elementContext: {
+        viewport: { w: Number.MAX_VALUE, h: -10 },
+        input: "pointer",
+        top: { tag: "A", rect: { w: 1e9, h: 50 } }
+      }
+    });
+
+    const [entry] = await getPromptOutcomes();
+    // extreme/negative viewport dims fall back to 0
+    expect(entry!.elementContext?.viewport).toEqual({ w: 0, h: 0 });
+    // a rect with an out-of-range dimension is dropped entirely
+    expect(entry!.elementContext?.top.rect).toBeUndefined();
+    expect(entry!.elementContext?.top.tag).toBe("A");
+  });
+
   it("omits elementContext when there is no usable top element", async () => {
     const { chrome } = createChromeMock();
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);

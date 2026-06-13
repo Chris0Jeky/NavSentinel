@@ -309,8 +309,11 @@ describe("credential_guard", () => {
       await dispatchSubmit(form);
 
       expect(requestSubmitSpy).not.toHaveBeenCalled();
+      // P5-C1 (#238): cred records now carry the action host as destDomain
+      // (consistency with nav records). The fixture's action.registrableDomain
+      // is "evil.com".
       expect(mockAppendOutcome).toHaveBeenCalledWith(
-        expect.objectContaining({ outcome: "cancel" }),
+        expect.objectContaining({ outcome: "cancel", type: "cred", destDomain: "evil.com" }),
       );
     });
 
