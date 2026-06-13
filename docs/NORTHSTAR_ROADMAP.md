@@ -123,13 +123,14 @@ signals to allowlisted/payment origins are skipped; expand the marketing-redirec
 when:* each sub-fix has a benign+attack gym pair. *Files:* `main_guard.ts`, `pushstate_guard.ts`,
 `scoring.ts`, `js_behavior_monitor.ts`, `sw/*redirect_chain*`.
 
-**P5-A6 — Familiarity suppression + apply adaptive adjustment.** Use `domain_profile.ts` visit
-history to relax thresholds on habitual sites; **actually apply** the already-computed `adaptiveAdj`
-to the live decision threshold (audit: it is computed and logged but the threshold stays hard-coded —
-reconcile against `getNrsBlockThreshold` first) and surface it (P5-B). *Done when:* familiar-site
-prompts drop measurably on the P5-A1 gate without TP loss. *Files:* `adaptive_scoring.ts`,
-`nrs.ts`, `capture_isolated.ts`. *Cross-ref:* #213, #204 (fix the discount-nullification bugs as part
-of this).
+**P5-A6 — Familiarity suppression + surface/repair adaptive adjustment.** Use `domain_profile.ts`
+visit history to relax thresholds on habitual sites. **Note (verified against `main`):** `adaptiveAdj`
+is **already applied** to the live decision threshold — `getNrsBlockThreshold()` returns
+`base + adaptiveAdjustment` (`capture_isolated.ts:1177-1179`) and the click decision uses that value as
+`blockThreshold`. So the remaining work is **not** "apply it" but: **surface/explain** the effective
+threshold in the journal (P5-B) and **fix the discount-nullification bugs** (#213/#204) so the learning
+actually moves the threshold. *Done when:* familiar-site prompts drop measurably on the P5-A1 gate
+without TP loss. *Files:* `adaptive_scoring.ts`, `nrs.ts`, `capture_isolated.ts`. *Cross-ref:* #213, #204.
 
 ### Program A gate
 - [ ] P5-A1 silence gate green in CI across all named benign journeys (prompts/100 ≈ 0).
@@ -358,7 +359,7 @@ swallows all signals); route `recordNavigation` through the single-threaded SW t
 | 6 | **P5-B2** wire explanations everywhere | S–M | Dictionary already exists; stops raw codes. |
 | 7 | **P5-D2** bloom runtime refresh | M | Confirmed-critical TP erosion. |
 | 8 | **P5-C3** mislabel affordance | S | Turns the corpus into labeled training data. |
-| 9 | **P5-A6 / #213 / #204** apply + fix adaptive adjustment | S–M | Makes existing learning actually reduce FPs. |
+| 9 | **P5-A6 / #213 / #204** surface + fix adaptive adjustment | S–M | Adjustment is already applied; fixing the discount bugs makes the existing learning actually reduce FPs. |
 | 10 | **P5-D4** native-companion design spike | M | Highest-ceiling escape hatch; design now, build later. |
 
 **Quick wins (S-effort, immediate):** P5-A4, P5-C1 (partial — populate `reasonCodes`/`nrsFactors` at
@@ -414,6 +415,8 @@ Several audit findings already have issues — fold them into the relevant progr
 | | | | | P5-D6 | **#246** |
 
 Still-unfiled program sub-slices (folded into the program issues or existing issues for now; file
-when picked up): **P5-A5** (scorer FP bundle), **P5-A6** (familiarity + apply adaptive — fold #213/#204),
-**P5-B2** (wire `explainReasonCode` everywhere), **P5-B4** (verbose mode), **P5-B5** (block-toast
-recovery affordances), **P5-D7** (bridge/cross-frame hardening — tracked by #186/#175/#181).
+when picked up): **P5-A5** (scorer FP bundle), **P5-A6** (familiarity + surface/fix adaptive — fold
+#213/#204), **P5-B2** (wire `explainReasonCode` everywhere), **P5-B4** (verbose mode), **P5-B5**
+(block-toast recovery affordances), **P5-C3** (mislabel affordance — fold #213/#204), **P5-D3**
+(Firefox build FF-02→FF-04 — tracked under main-roadmap P4-03 + the `session_state` shim prereq #228),
+**P5-D7** (bridge/cross-frame hardening — tracked by #186/#175/#181).

@@ -6,8 +6,14 @@
 
 ## Executive summary
 
-A local-first MV3 near-zero-FP companion is feasible. On-device Gemini Nano via the Prompt API gives zero-network scam classification in extensions (Chrome 138+); near-zero FP is achievable (AV-C 2025: 95 percent block, ~zero FA) but alerts must be minimized per warning science; Tranco (filtered) is the benign prior and conformal rejection controls FP under drift; Chrome built-in lags and misses interaction-level attacks; the Side Panel API is the non-interruptive advisor surface. See findings for per-angle detail.</parameter>
-<parameter name="openQuestions">["Latency/memory/battery of Gemini Nano or TF.js/ONNX-runtime-web in an MV3 offscreen doc, and what share of users meet WebGPU/disk requirements (default vs opt-in)?", "Published TP/FP for interaction-level attacks (DoubleClickjacking, ClickFix, clipboard-hijack, redirect chains) and which extensions detect them?", "On-device feasibility of visual brand-impersonation detection (hashing vs Siamese/CNN embeddings vs on-device VLMs) within MV3 at acceptable FP?", "Best feature-vector snapshot + rrweb design feeding conformal-rejection calibration for a single-user local loop, and threshold adaptation to a one-person labeling budget?"]
+A local-first MV3 near-zero-FP companion is feasible. On-device Gemini Nano via the Prompt API gives zero-network scam classification in extensions (Chrome 138+); near-zero FP is achievable (AV-C 2025: 95 percent block, ~zero FA) but alerts must be minimized per warning science; Tranco (filtered) is the benign prior and conformal rejection controls FP under drift; Chrome built-in lags and misses interaction-level attacks; the Side Panel API is the non-interruptive advisor surface. See findings for per-angle detail.
+
+### Open questions
+
+- Latency/memory/battery of Gemini Nano or TF.js/ONNX-runtime-web in an MV3 offscreen doc, and what share of users meet WebGPU/disk requirements (default vs opt-in)?
+- Published TP/FP for interaction-level attacks (DoubleClickjacking, ClickFix, clipboard-hijack, redirect chains) and which extensions detect them?
+- On-device feasibility of visual brand-impersonation detection (hashing vs Siamese/CNN embeddings vs on-device VLMs) within MV3 at acceptable FP?
+- Best feature-vector snapshot + rrweb design feeding conformal-rejection calibration for a single-user local loop, and threshold adaptation to a one-person labeling budget?
 
 ## Confirmed findings (4)
 

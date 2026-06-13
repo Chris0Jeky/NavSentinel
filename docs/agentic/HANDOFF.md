@@ -10,7 +10,7 @@ Trust live git and GitHub over this snapshot. Re-check `git status -sb`, `git re
 - `main` == **`da400fb`**. Working tree clean apart from the North-Star docs (`docs/NORTHSTAR_ROADMAP.md`, `docs/research/`) + this status re-hydration.
 - **0 open PRs.** Only `main` locally — `fix/jsb-stale-todos-and-tests` is gone (AI-3 ✅ resolved; its intent landed organically).
 - **Since the 2026-06-05 D-series batch (#180–#195):** discovery cycles 3–4 merged **2026-06-06** — #197 (#196 credential-field helper), #202 (#188 options-failure surfacing), #208 (homoglyph/IPv6 domain hardening), #210 (#206 clickfix CAPTCHA), #212 (#204 adaptive gate), #214 (#205 popup gauge), #220 (#207 oauth callback), #230 (#211 mutation-monitor iframe). Each: green CI + 2× adversarial review.
-- **North-Star (2026-06-13):** 153-finding internal audit + 3 deep-research passes (a 4th GAP-D pass is running) → Phase-5 roadmap (`docs/NORTHSTAR_ROADMAP.md`) + 15 issues (#232–#246). Artifacts under `docs/research/NORTHSTAR_*`.
+- **North-Star (2026-06-13):** 153-finding internal audit + **4** deep-research passes (broad + 2 gap-fill + **GAP-D done**, 24 verified claims, unblocks P5-C5) → Phase-5 roadmap (`docs/NORTHSTAR_ROADMAP.md`) + 15 issues (#232–#246). Artifacts under `docs/research/NORTHSTAR_*`.
 
 ## Merge Gate Posture
 
@@ -24,7 +24,7 @@ Prefer **North-Star Phase 5** ([`docs/NORTHSTAR_ROADMAP.md`](../NORTHSTAR_ROADMA
 ## Active Backlog
 
 - **North-Star Phase 5: #232–#246** (`north-star` label) — FP-Elimination (#232/#233/#234/#235), Friend-Advisor (#236/#237), Feedback-Capture (#238/#239/#240/#241), Architecture (#242/#243/#244/#245/#246). See `docs/NORTHSTAR_ROADMAP.md`.
-- **Firefox port FF-02→FF-04** — AI-4 decided (`web-ext`); FF-01 shim merged (#173). Prereq: `session_state.ts` shim routing (P5-D3 / #245-area).
+- **Firefox port FF-02→FF-04** — AI-4 decided (`web-ext`); FF-01 shim merged (#173). Prereq: `session_state.ts` shim routing (P5-D3; session_state tracked by **#228**). Note: **#245 is P5-D5 (on-device ML), not Firefox.**
 - **Discovery cycle 3–4 backlog (open):** popup #205/#215/#216/#218/#219, oauth #207/#221/#222/#223, adaptive #204/#213, scoring #209/#217, credential/storage #199/#200/#201/#203/#227, iframe #225/#226, session_state #228, icon #229.
 - Older: #127 (JS behavior), #175/#176/#178/#179/#181/#186 (discovery), #184 (docs reconciliation).
 - **P4-01c / AI-5:** visual-sim — research recommends the **logo-embedding pivot** (P5-D6 / #246); maintainer to confirm direction (AI-5).
