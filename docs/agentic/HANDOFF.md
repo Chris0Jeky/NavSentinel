@@ -1,14 +1,15 @@
 # Session Handoff - NavSentinel Autonomous Loop
 
 **Last updated:** 2026-06-13
-**Status:** North-Star research+audit initiative complete — Phase 5 planned in [`docs/NORTHSTAR_ROADMAP.md`](../NORTHSTAR_ROADMAP.md); issues **#232–#246** filed (`north-star` label). `main` @ `da400fb`, **0 open PRs**, tree clean apart from the North-Star docs. Baseline (2026-06-13): typecheck clean, lint 0/0, **2426 unit tests pass**. Next: North-Star Phase 5 — start with **#238** (P5-C1, the keystone capture-enrichment) or **#233** (P5-A2, signal-level Smart-Mode gating).
+**Status (2026-06-13 session 2):** `main` @ **`02d8ded`**. Merged **#247** (North-Star docs) + **#248** (failure-ledger autolog hook fix). **#249 OPEN** = **P5-C1 / #238** (replay-grade `PromptOutcomeEntry`) — green CI + 2 adversarial review rounds, **2444 unit tests**, all perf budgets pass, **awaiting Gate-3 + merge**. Phase 5 plan: [`docs/NORTHSTAR_ROADMAP.md`](../NORTHSTAR_ROADMAP.md); issues **#232–#246** (`north-star`). Next after #249: **#233** (P5-A2 signal-level gating), **#234** (P5-A3 top-sites tier), **#236** (P5-B1 silent-decision events).
 
 Trust live git and GitHub over this snapshot. Re-check `git status -sb`, `git rev-parse main`, `git rev-parse origin/main`, PR checks, review threads, and comments before merging or branching.
 
 ## Current Verified State
 
-- `main` == **`da400fb`**. Working tree clean apart from the North-Star docs (`docs/NORTHSTAR_ROADMAP.md`, `docs/research/`) + this status re-hydration.
-- **0 open PRs.** Only `main` locally — `fix/jsb-stale-todos-and-tests` is gone (AI-3 ✅ resolved; its intent landed organically).
+- `main` == **`02d8ded`**. This session merged **#247** (North-Star docs; 10 bot review findings fixed) and **#248** (failure-ledger: auto-captures → gitignored `failure_autolog.jsonl`; curated ledger scrubbed 78→7 real entries; `agent:hooks:smoke` made branch-aware).
+- **1 open PR: #249** (P5-C1 / #238) — branch `feat/p5c1-enrich-prompt-outcome`, green CI (Build/Unit + E2E), CLEAN/mergeable, 2 review rounds resolved. **Blocked only on Gate-3 manual Chrome test** (sandbox can't run a browser). `fix/jsb-stale-todos-and-tests` gone (AI-3 ✅).
+- **Gotcha:** `npm run check:perf-budget` is a CI-only gate (not in `test`/`lint`/`typecheck`/`build`). It flagged a `capture_isolated` budget tip-over in #249; bumped 61→62KB (documented). Run it locally for extension changes.
 - **Since the 2026-06-05 D-series batch (#180–#195):** discovery cycles 3–4 merged **2026-06-06** — #197 (#196 credential-field helper), #202 (#188 options-failure surfacing), #208 (homoglyph/IPv6 domain hardening), #210 (#206 clickfix CAPTCHA), #212 (#204 adaptive gate), #214 (#205 popup gauge), #220 (#207 oauth callback), #230 (#211 mutation-monitor iframe). Each: green CI + 2× adversarial review.
 - **North-Star (2026-06-13):** 153-finding internal audit + **4** deep-research passes (broad + 2 gap-fill + **GAP-D done**, 24 verified claims, unblocks P5-C5) → Phase-5 roadmap (`docs/NORTHSTAR_ROADMAP.md`) + 15 issues (#232–#246). Artifacts under `docs/research/NORTHSTAR_*`.
 
