@@ -16,6 +16,7 @@ This track is grounded in a 2026-06-13 research + audit initiative (all artifact
 | [`NORTHSTAR_AUDIT_FINDINGS.md` / `.json`](research/NORTHSTAR_AUDIT_FINDINGS.md) | The full finding ledger with file:line evidence + verify verdicts. |
 | [`NORTHSTAR_RESEARCH_EXTERNAL.md`](research/NORTHSTAR_RESEARCH_EXTERNAL.md) | External SOTA (broad pass): on-device AI, warning science, Tranco/conformal, competitive landscape, Side Panel. |
 | [`NORTHSTAR_RESEARCH_GAPFILL.md`](research/NORTHSTAR_RESEARCH_GAPFILL.md) | External SOTA (gap-fill): on-device ML runtime cost, interaction-attack rates, visual-phishing SOTA. |
+| [`NORTHSTAR_RESEARCH_GAPD.md`](research/NORTHSTAR_RESEARCH_GAPD.md) | External SOTA (GAP-D, 24 verified claims): conformal rejection (Transcend/Transcendent), feature-snapshot + rrweb, active learning on a tiny labeling budget. (Synthesis cut by a session limit; claims stand.) |
 | [`NORTHSTAR_RESEARCH_HANDOFF.md`](research/NORTHSTAR_RESEARCH_HANDOFF.md) | The original framing + resume notes (superseded by the above, kept for history). |
 
 Every finding cited below was adversarially verified against the code (internal) or by 3-vote
@@ -200,11 +201,15 @@ semantics. Reuse the underutilized `ui_toast.ts` multi-action framework. *Files:
 **Goal:** every decision writes a **replay-grade** labeled record to a local corpus, so weights and
 thresholds can be re-tuned offline and validated by replay before shipping (per **D25**).
 
-> **Research caveat (honest):** the gap-fill pass on conformal calibration / rrweb / single-user
-> active learning (**GAP D**) returned **zero surviving claims** — it is *unresearched externally*.
-> P5-C5's conformal design leans on the **broad pass's** verified Transcend finding (per-class
-> credibility p-values, abstention under bounded rejection — IEEE EuroS&P'22) plus the audit's
-> engineering design. **A targeted GAP-D research re-run is itself a Phase-5 task (see Open Research).**
+> **Research status:** the targeted **GAP-D re-run completed** (24 verified claims,
+> [`NORTHSTAR_RESEARCH_GAPD.md`](research/NORTHSTAR_RESEARCH_GAPD.md)) — P5-C5's conformal design is now
+> externally grounded. Key results: split/**inductive conformal** (Transcend ICE) with **NCM = the
+> detector's own decision score / distance-to-threshold** (algorithm-agnostic, no retraining);
+> **credibility** = p-value of the chosen label, **confidence** = 1 − max p-value of the others;
+> **quarantine low-credibility** decisions for the human; per-class thresholds via constrained random
+> search (maximize kept-F1, minimize rejected-F1, **bounded rejection ≤ ~25%**); margin/uncertainty
+> sampling μ(θ,x)=1/(1+μ|θᵀx|) for the tiny labeling budget; rrweb = deterministic DOM snapshot +
+> timestamped mutations (sampling config to bound size).
 
 ### Task table
 
@@ -214,7 +219,7 @@ thresholds can be re-tuned offline and validated by replay before shipping (per 
 | P5-C2 | Capture the full distribution (silent allows + ignore/timeout outcomes) | M | P5-C1, P5-B1 | #188 residual |
 | P5-C3 | "This was wrong" mislabel affordance → labeled corpus | S | P5-C1 | #213, #204 |
 | P5-C4 | Storage + export for the flywheel (IndexedDB + event↔outcome linkage) | M | P5-C1 | #203 (atomic import) |
-| P5-C5 | Offline tuning + corpus-replay harness + conformal calibration | L | P5-C1..C4 | depends on GAP-D re-run |
+| P5-C5 | Offline tuning + corpus-replay harness + conformal calibration | L | P5-C1..C4 | GAP-D ✅ researched |
 
 ### Details
 
@@ -250,7 +255,7 @@ exported corpus, re-tunes NRS/CDS weights (logistic regression over feature→ve
 **replays** the corpus to measure FP/TP delta before any scoring change ships (the D25 gate). Layer
 **conformal rejection** (Transcend-style per-class credibility + p-values; abstain/defer under drift)
 calibrated to a single human's tiny labeling budget. *Files:* new `scripts/replay-corpus.mjs`,
-new `scripts/tune-weights.mjs`, `adaptive_scoring.ts`. *Blocked on:* GAP-D research re-run.
+new `scripts/tune-weights.mjs`, `adaptive_scoring.ts`. *Design grounded by* [`NORTHSTAR_RESEARCH_GAPD.md`](research/NORTHSTAR_RESEARCH_GAPD.md): Transcend **ICE** (NCM = NavSentinel's own NRS/CDS score — no retraining; credibility/confidence p-values; quarantine low-credibility prompts into the mislabel loop; bounded-rejection threshold search) + margin sampling μ(θ,x)=1/(1+μ|θᵀx|) to pick the few events worth labeling.
 
 ### Program C gate
 - [ ] A stored record offline-reproduces its live decision (replay parity).
@@ -383,10 +388,11 @@ dictionary), `debug_overlay.ts` (repurpose for the journal card), `ui_toast.ts` 
   `computeJsBehaviorScore` is now a live function, not a dead stub). No action remains. (#231 tracks any
   residual cleanup.)
 
-## Open research (the one unfilled gap)
-**GAP D re-run** — conformal calibration (Transcend-style), rrweb/feature-vector snapshot schemas, and
-single-user active-learning design returned zero verified external claims this pass. **P5-C5 depends on
-it.** Re-run the deep-research harness narrowly on GAP D before building the offline tuning loop.
+## Open research
+**GAP-D — ✅ DONE (2026-06-13).** The targeted re-run completed (24 verified claims,
+[`NORTHSTAR_RESEARCH_GAPD.md`](research/NORTHSTAR_RESEARCH_GAPD.md)); P5-C5 is now externally grounded.
+No open research gaps remain in the North-Star track. (Re-verify the fast-moving Chrome built-in-AI
+specs at implementation time, per the gap-fill caveats.)
 
 ## Mapping to existing GitHub issues (avoid duplicates)
 Several audit findings already have issues — fold them into the relevant program rather than re-filing:
