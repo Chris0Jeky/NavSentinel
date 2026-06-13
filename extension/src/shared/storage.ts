@@ -8,6 +8,7 @@ import {
   type DomainAdjustment,
 } from "./adaptive_scoring";
 import { NRS_BLOCK_THRESHOLD, NRS_STRICT_BLOCK_THRESHOLD } from "./nrs";
+import type { ClickContext, ElementHint } from "./scoring";
 
 export type CredMode = "off" | "smart" | "strict";
 
@@ -60,8 +61,35 @@ export interface PromptOutcomeEntry {
   type: PromptType;
   score: number;
   outcome: PromptOutcome;
+  /** Reason codes behind the decision. Populated on BOTH nav and cred paths
+   *  (P5-C1 fixed the prior inconsistency where the nav path dropped them). */
   reasons?: string[];
+
+  // --- Replay-grade feature vector (P5-C1 / #238). All optional for backward
+  // compatibility: older records and the main-world bridge prompt path omit them.
+  // These capture the decision inputs/outputs so a stored record can be
+  // offline re-scored to reproduce the live decision (advisor journal + tuning
+  // corpus). Nav-decision fields; the cred path leaves the scorer-specific ones
+  // unset. ElementHint context carries only structural DOM signals (tags, roles,
+  // capped name *lengths*, dims, styles) — no text content, URLs, or PII.
+  /** CDS sub-score at decision time (nav). */
+  cds?: number;
+  /** NRS factor names that contributed (nav). */
+  nrsFactors?: string[];
+  /** Navigation-anomaly contribution (nav). */
+  navAnomalyScore?: number;
+  /** Adaptive threshold adjustment applied at decision time (nav). */
+  adaptiveAdj?: number;
+  /** Effective block threshold used for the decision = base + adaptiveAdj (nav). */
+  thresholdUsed?: number;
+  /** Serialized click context (top/underlying ElementHint, viewport, input) for
+   *  offline computeCDS replay (nav). */
+  elementContext?: ClickContext;
 }
+
+// Bounds for the enriched fields so a buggy/hostile caller can't bloat a record.
+const MAX_REASON_CODES = 32;
+const MAX_REASON_CODE_LEN = 80;
 
 const DEFAULT_SUITE_SETTINGS: SuiteSettings = {
   nav: {
@@ -340,6 +368,84 @@ type PromptOutcomeStorageResponse =
   | { ok: true }
   | { ok: false; error: string; code?: "unauthorized" };
 
+function isOptionalFiniteNumber(value: unknown): boolean {
+  return value === undefined || (typeof value === "number" && Number.isFinite(value));
+}
+
+function isOptionalStringArray(value: unknown): boolean {
+  return value === undefined || (Array.isArray(value) && value.every((v) => typeof v === "string"));
+}
+
+// Cap and string-filter a reason/factor code list. Returns the (possibly empty)
+// array when the input is an array, else undefined (so callers can omit it).
+// Keeps the writer and the verify-step validator in agreement so a record is
+// never written-then-filtered-then-silently-dropped.
+function sanitizeCodeList(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value
+    .filter((v): v is string => typeof v === "string")
+    .map((s) => (s.length > MAX_REASON_CODE_LEN ? s.slice(0, MAX_REASON_CODE_LEN) : s))
+    .slice(0, MAX_REASON_CODES);
+}
+
+function sanitizeRectHint(value: unknown): { w: number; h: number } | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const r = value as Record<string, unknown>;
+  if (typeof r.w !== "number" || !Number.isFinite(r.w)) return undefined;
+  if (typeof r.h !== "number" || !Number.isFinite(r.h)) return undefined;
+  return { w: r.w, h: r.h };
+}
+
+function clampStr(value: unknown): string | undefined {
+  return typeof value === "string" ? value.slice(0, MAX_REASON_CODE_LEN) : undefined;
+}
+
+// Whitelist the known ElementHint scalar fields. Defends the persisted record
+// against unexpected/oversized shapes and guarantees JSON-safety for replay.
+function sanitizeElementHint(value: unknown): ElementHint | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const e = value as Record<string, unknown>;
+  if (typeof e.tag !== "string") return undefined;
+  const out: ElementHint = { tag: e.tag.slice(0, MAX_REASON_CODE_LEN) };
+  const role = clampStr(e.role); if (role !== undefined) out.role = role;
+  if (typeof e.hasOnClick === "boolean") out.hasOnClick = e.hasOnClick;
+  const cursor = clampStr(e.cursor); if (cursor !== undefined) out.cursor = cursor;
+  if (typeof e.textLength === "number" && Number.isFinite(e.textLength)) out.textLength = e.textLength;
+  if (typeof e.ariaLabelLength === "number" && Number.isFinite(e.ariaLabelLength)) out.ariaLabelLength = e.ariaLabelLength;
+  if (typeof e.titleLength === "number" && Number.isFinite(e.titleLength)) out.titleLength = e.titleLength;
+  if (typeof e.targetBlank === "boolean") out.targetBlank = e.targetBlank;
+  const rect = sanitizeRectHint(e.rect); if (rect) out.rect = rect;
+  if (typeof e.opacity === "number" && Number.isFinite(e.opacity)) out.opacity = e.opacity;
+  const visibility = clampStr(e.visibility); if (visibility !== undefined) out.visibility = visibility;
+  const display = clampStr(e.display); if (display !== undefined) out.display = display;
+  const pointerEvents = clampStr(e.pointerEvents); if (pointerEvents !== undefined) out.pointerEvents = pointerEvents;
+  const position = clampStr(e.position); if (position !== undefined) out.position = position;
+  if (typeof e.zIndex === "number" && Number.isFinite(e.zIndex)) out.zIndex = e.zIndex;
+  return out;
+}
+
+// Rebuild a JSON-safe, bounded ClickContext from arbitrary input (the live
+// ctx is already clean, but this keeps the persisted schema stable and guards
+// imports). Returns undefined when there is no usable top-element hint.
+function sanitizeClickContext(value: unknown): ClickContext | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const c = value as Record<string, unknown>;
+  const top = sanitizeElementHint(c.top);
+  if (!top) return undefined;
+  const vp = c.viewport && typeof c.viewport === "object" ? (c.viewport as Record<string, unknown>) : undefined;
+  const viewport = {
+    w: typeof vp?.w === "number" && Number.isFinite(vp.w) ? vp.w : 0,
+    h: typeof vp?.h === "number" && Number.isFinite(vp.h) ? vp.h : 0,
+  };
+  const out: ClickContext = { viewport, input: c.input === "keyboard" ? "keyboard" : "pointer", top };
+  const underlying = sanitizeElementHint(c.underlying);
+  if (underlying) out.underlying = underlying;
+  if (typeof c.retargeted === "boolean") out.retargeted = c.retargeted;
+  if (typeof c.explicitNewTabIntent === "boolean") out.explicitNewTabIntent = c.explicitNewTabIntent;
+  if (typeof c.isLegitModalBackdrop === "boolean") out.isLegitModalBackdrop = c.isLegitModalBackdrop;
+  return out;
+}
+
 function isPromptOutcomeEntry(value: unknown): value is PromptOutcomeEntry {
   if (!value || typeof value !== "object") return false;
   const entry = value as Record<string, unknown>;
@@ -362,7 +468,15 @@ function isPromptOutcomeEntry(value: unknown): value is PromptOutcomeEntry {
       outcome === "dismiss" ||
       outcome === "cancel"
     ) &&
-    (entry.reasons === undefined || (Array.isArray(entry.reasons) && entry.reasons.every((reason) => typeof reason === "string")));
+    isOptionalStringArray(entry.reasons) &&
+    // Enriched replay fields (P5-C1) — all optional; validate shape so the
+    // verify-step never rejects a record the (sanitized) writer produced.
+    isOptionalFiniteNumber(entry.cds) &&
+    isOptionalFiniteNumber(entry.navAnomalyScore) &&
+    isOptionalFiniteNumber(entry.adaptiveAdj) &&
+    isOptionalFiniteNumber(entry.thresholdUsed) &&
+    isOptionalStringArray(entry.nrsFactors) &&
+    (entry.elementContext === undefined || (typeof entry.elementContext === "object" && entry.elementContext !== null));
 }
 
 function normalizePromptOutcomeLog(value: unknown): PromptOutcomeEntry[] {
@@ -609,7 +723,11 @@ export function appendPromptOutcome(
   // Sanitize ts/score so the writer and the verify-step validator
   // (isPromptOutcomeEntry, which requires Number.isFinite) agree. A non-finite
   // value would otherwise be written, filtered out on verify, and silently
-  // dropped after burning all retries.
+  // dropped after burning all retries. The enriched replay fields (P5-C1) are
+  // sanitized for the same reason and to bound per-record size.
+  const reasons = sanitizeCodeList(partial.reasons);
+  const nrsFactors = sanitizeCodeList(partial.nrsFactors);
+  const elementContext = sanitizeClickContext(partial.elementContext);
   const entry: PromptOutcomeEntry = {
     id: partial.id ?? makeId(),
     ts: Number.isFinite(partial.ts) ? (partial.ts as number) : Date.now(),
@@ -618,7 +736,13 @@ export function appendPromptOutcome(
     type: partial.type,
     score: Number.isFinite(partial.score) ? partial.score : 0,
     outcome: partial.outcome,
-    ...(partial.reasons !== undefined ? { reasons: partial.reasons } : {})
+    ...(reasons !== undefined ? { reasons } : {}),
+    ...(nrsFactors !== undefined && nrsFactors.length > 0 ? { nrsFactors } : {}),
+    ...(Number.isFinite(partial.cds) ? { cds: partial.cds } : {}),
+    ...(Number.isFinite(partial.navAnomalyScore) ? { navAnomalyScore: partial.navAnomalyScore } : {}),
+    ...(Number.isFinite(partial.adaptiveAdj) ? { adaptiveAdj: partial.adaptiveAdj } : {}),
+    ...(Number.isFinite(partial.thresholdUsed) ? { thresholdUsed: partial.thresholdUsed } : {}),
+    ...(elementContext !== undefined ? { elementContext } : {})
   };
 
   if (shouldDelegatePromptOutcomeWrite()) {

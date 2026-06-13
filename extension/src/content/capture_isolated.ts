@@ -1,5 +1,5 @@
 import { computeCDS } from "../shared/scoring";
-import { appendEvent, appendPromptOutcome, getPromptOutcomes, getNavSettings, onNavSettingsChange, type NavSettings } from "../shared/storage";
+import { appendEvent, appendPromptOutcome, getPromptOutcomes, getNavSettings, onNavSettingsChange, type NavSettings, type PromptOutcomeEntry } from "../shared/storage";
 import { ADAPTIVE_SCORES_KEY, getEffectiveThresholdAdjustment, updateAdaptiveScores } from "../shared/adaptive_scoring";
 import {
   analyzeOutcomesForPair,
@@ -641,6 +641,15 @@ async function refreshAdaptiveScores(baseThreshold?: number): Promise<void> {
   }
 }
 
+/** Replay-grade enrichment (P5-C1 / #238) attached to a nav PromptOutcome.
+ *  Snapshot it from the decision's LOCAL scope at decision time — NOT from the
+ *  global `lastDebug`, which is only assigned after the decision branches run
+ *  (so at the call sites it still holds the previous click's data). */
+type NavOutcomeFeatures = Pick<
+  PromptOutcomeEntry,
+  "reasons" | "cds" | "nrsFactors" | "navAnomalyScore" | "adaptiveAdj" | "thresholdUsed" | "elementContext"
+>;
+
 function appendOutcomeSafely(
   partial: Parameters<typeof appendPromptOutcome>[0]
 ): void {
@@ -956,6 +965,7 @@ function handleClickFixScan(): void {
             type: "nav",
             score: result.score,
             outcome: "dismiss",
+            ...(result.reasons?.length ? { reasons: result.reasons } : {}),
           });
         },
       },
@@ -1313,10 +1323,14 @@ function showAllowPrompt(params: {
   features?: string;
   actionId?: string | null;
   promptScore?: number;
+  /** Replay-grade enrichment captured at decision time (P5-C1). Absent for the
+   *  main-world bridge prompt path, which has no CDS/NRS decision context. */
+  outcomeFeatures?: NavOutcomeFeatures;
 }): void {
   const promptScore = params.promptScore ?? lastDebug?.cds ?? 0;
   const sourceDomain = siteKeyFromLocation();
   const destDomain = params.host ?? undefined;
+  const outcomeFeatures = params.outcomeFeatures ?? {};
   const actions = [
     {
       label: "Allow once",
@@ -1327,7 +1341,8 @@ function showAllowPrompt(params: {
           ...(destDomain !== undefined ? { destDomain } : {}),
           type: "nav",
           score: promptScore,
-          outcome: "allow_once"
+          outcome: "allow_once",
+          ...outcomeFeatures
         }).then(() => {
           refreshAdaptiveScores();
           if (destDomain) {
@@ -1347,7 +1362,8 @@ function showAllowPrompt(params: {
           ...(destDomain !== undefined ? { destDomain } : {}),
           type: "nav",
           score: promptScore,
-          outcome: "always_allow"
+          outcome: "always_allow",
+          ...outcomeFeatures
         });
         void allowAlways(sourceDomain, params.host as string, {
           ...(params.actionId !== undefined ? { actionId: params.actionId } : {}),
@@ -1375,7 +1391,8 @@ function showAllowPrompt(params: {
         ...(destDomain !== undefined ? { destDomain } : {}),
         type: "nav",
         score: promptScore,
-        outcome: "dismiss"
+        outcome: "dismiss",
+        ...outcomeFeatures
       });
     }
   });
@@ -1675,6 +1692,18 @@ window.addEventListener(
 
     let decision: "allow" | "prompt" | "block" = "allow";
     const blockThreshold = getNrsBlockThreshold(mode);
+    // Replay-grade feature snapshot (P5-C1 / #238). Built from LOCAL decision
+    // scope here — `lastDebug` is only assigned below (after the branches), so
+    // it would carry the previous click's data at the outcome call sites.
+    const navFeatures: NavOutcomeFeatures = {
+      thresholdUsed: blockThreshold,
+      ...(reasonCodes.length ? { reasons: reasonCodes } : {}),
+      ...(nrsFactors.length ? { nrsFactors } : {}),
+      ...(Number.isFinite(cds) ? { cds } : {}),
+      ...(navAnomalyScore > 0 ? { navAnomalyScore } : {}),
+      ...(Number.isFinite(adaptiveAdjustment) ? { adaptiveAdj: adaptiveAdjustment } : {}),
+      ...(ctx ? { elementContext: ctx } : {})
+    };
     const smartAllowsBlank =
       mode === "smart" && !!anchor && isLegitBlankAnchor(anchor, ctx, cds, cdsReasons);
 
@@ -1699,7 +1728,8 @@ window.addEventListener(
             url: parsed.href,
             host: parsed.host,
             target: "_blank",
-            promptScore: nrs
+            promptScore: nrs,
+            outcomeFeatures: navFeatures
           });
           // Suppress standalone ClickFix toast — unified prompt covers it
           if (hasClickfix) clickFixAlertedAt = Date.now();
@@ -1725,7 +1755,8 @@ window.addEventListener(
           domain: siteKeyFromLocation(),
           type: "nav",
           score: nrs,
-          outcome: "block"
+          outcome: "block",
+          ...navFeatures
         });
         const blockPrefix = hasClickfix
           ? "NavSentinel blocked a deceptive click with fake dialog"

@@ -183,10 +183,14 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
 
     const credDomain = risk.page.registrableDomain || risk.page.host;
     const credReasons = risk.reasons.map((r) => r.code);
+    // Capture the action (destination) host so cred records carry the same
+    // source->dest pairing as nav records (P5-C1 / #238 consistency fix).
+    const credDest = risk.action.registrableDomain || risk.action.host || undefined;
 
     if (choice === "cancel") {
       void appendPromptOutcome({
         domain: credDomain,
+        ...(credDest ? { destDomain: credDest } : {}),
         type: "cred",
         score: risk.score,
         outcome: "cancel",
@@ -198,6 +202,7 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
     if (choice === "trust_site" || choice === "trust_dest") {
       void appendPromptOutcome({
         domain: credDomain,
+        ...(credDest ? { destDomain: credDest } : {}),
         type: "cred",
         score: risk.score,
         outcome: "trust",
@@ -206,6 +211,7 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
     } else {
       void appendPromptOutcome({
         domain: credDomain,
+        ...(credDest ? { destDomain: credDest } : {}),
         type: "cred",
         score: risk.score,
         outcome: "allow_once",
