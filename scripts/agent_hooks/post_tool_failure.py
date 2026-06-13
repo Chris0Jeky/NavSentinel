@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Record sanitized Claude Code tool failures for later review.
+"""Record sanitized Claude Code tool failures to a raw, gitignored autolog.
+
+Raw machine-captured failures are appended to ``docs/agentic/failure_autolog.jsonl``
+(gitignored) so routine diagnostic-command failures never pollute the curated,
+git-tracked ledger (``docs/agentic/failure_ledger.jsonl``). Promote genuinely
+recurring or instructive entries from the autolog into the curated ledger
+*deliberately*, per ``docs/agentic/GUIDE_UPDATE_PROTOCOL.md``. The sink path is
+overridable via the ``NAVSENTINEL_FAILURE_LEDGER`` env var (used by the smoke test).
 
 This records enough context to prevent recurring silent failures while
 minimizing secret and transcript leakage.
@@ -19,7 +26,9 @@ ROOT = Path(os.environ.get("CLAUDE_PROJECT_DIR", ".")).resolve()
 LEDGER = Path(
     os.environ.get(
         "NAVSENTINEL_FAILURE_LEDGER",
-        str(ROOT / "docs" / "agentic" / "failure_ledger.jsonl"),
+        # Raw auto-capture sink (gitignored). NOT the curated failure_ledger.jsonl —
+        # promote real recurring failures into the curated ledger deliberately.
+        str(ROOT / "docs" / "agentic" / "failure_autolog.jsonl"),
     )
 ).resolve()
 SECRET_RE = re.compile(

@@ -37,7 +37,7 @@ Claude should use:
 - `.claude/skills/*/SKILL.md` for lazy-loaded workflows.
 - `.claude/settings.json` for conservative permissions and hooks.
 - `scripts/agent_hooks/pre_tool_use.py` to block destructive Bash commands.
-- `scripts/agent_hooks/post_tool_failure.py` to capture sanitized tool failures.
+- `scripts/agent_hooks/post_tool_failure.py` to capture sanitized tool failures to the gitignored raw autolog (`docs/agentic/failure_autolog.jsonl`), keeping the curated `failure_ledger.jsonl` clean.
 
 Claude-specific strengths:
 

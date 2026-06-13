@@ -141,9 +141,25 @@ def is_denied(stdout: str) -> bool:
     return output.get("permissionDecision") == "deny"
 
 
+PROTECTED_BRANCHES = {"main", "master", "develop", "release"}
+
+
+def current_branch() -> str | None:
+    """Mirror pre_tool_use.get_current_branch so the test expects what the hook does."""
+    try:
+        result = subprocess.run(
+            ["git", "branch", "--show-current"],
+            capture_output=True, text=True, cwd=ROOT, timeout=5,
+        )
+        return result.stdout.strip() or None
+    except Exception:
+        return None
+
+
 def test_pre_tool_use(settings: dict) -> None:
     hook = hook_command(settings, "PreToolUse")
-    deny_cases = [
+    # Tier 1: unconditional denies — blocked regardless of the current branch.
+    always_deny = [
         "rm -rf dist",
         "rm -fr dist",
         "rm -r -f dist",
@@ -151,16 +167,6 @@ def test_pre_tool_use(settings: dict) -> None:
         "rm --recursive dist",
         "Remove-Item -LiteralPath dist -Recurse -Force",
         "Remove-Item -LiteralPath dist -Force -Recurse",
-        "git reset --hard",
-        "git reset --soft HEAD~10",
-        "git reset --mixed HEAD~5",
-        "git rebase -i HEAD~5",
-        "git rebase --interactive HEAD~10",
-        "git clean -fdx",
-        "git clean -xdf",
-        "git clean --force",
-        "git clean -n dist; git clean -f dist",
-        "git checkout -- extension/src/sw/sw.ts",
         "git push --force origin main",
         "git push -f origin main",
         "sudo npm install",
@@ -174,17 +180,49 @@ def test_pre_tool_use(settings: dict) -> None:
         "Set-Content .env token=abc",
         "echo API_KEY=abc > .env",
     ]
+    # Tier 2: branch-aware denies — blocked on protected (or detached-HEAD)
+    # branches, allowed elsewhere so the user can approve with context. The hook
+    # reads `git branch --show-current` in ROOT, so the expectation follows the
+    # branch the test actually runs on. (Resolves failure_ledger invalid_signal:
+    # this used to hard-assert deny and failed when run from a feature branch.)
+    branch_aware_deny = [
+        "git reset --hard",
+        "git reset --soft HEAD~10",
+        "git reset --mixed HEAD~5",
+        "git rebase -i HEAD~5",
+        "git rebase --interactive HEAD~10",
+        "git clean -fdx",
+        "git clean -xdf",
+        "git clean --force",
+        "git clean -n dist; git clean -f dist",
+        "git checkout -- extension/src/sw/sw.ts",
+    ]
     allow_cases = [
         "npm run test",
         "git status --short",
         "rg token extension/src",
         "python scripts/agent_hooks/render_failure_ledger.py",
     ]
-    for command in deny_cases:
+    branch = current_branch()
+    on_protected = branch is None or branch in PROTECTED_BRANCHES
+
+    for command in always_deny:
         payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": command}}
         result = run_configured_hook(hook, payload)
         if result.returncode != 0 or not is_denied(result.stdout):
-            raise AssertionError(f"PreToolUse did not deny: {command}; stdout={result.stdout!r}; stderr={result.stderr!r}")
+            raise AssertionError(f"PreToolUse did not deny (always): {command}; stdout={result.stdout!r}; stderr={result.stderr!r}")
+
+    for command in branch_aware_deny:
+        payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": command}}
+        result = run_configured_hook(hook, payload)
+        if result.returncode != 0:
+            raise AssertionError(f"PreToolUse errored on branch-aware case: {command}; stderr={result.stderr!r}")
+        denied = is_denied(result.stdout)
+        if on_protected and not denied:
+            raise AssertionError(f"PreToolUse must deny branch-aware command on protected branch {branch!r}: {command}")
+        if not on_protected and denied:
+            raise AssertionError(f"PreToolUse must allow branch-aware command on non-protected branch {branch!r} (got deny): {command}")
+
     for command in allow_cases:
         payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": command}}
         result = run_configured_hook(hook, payload)

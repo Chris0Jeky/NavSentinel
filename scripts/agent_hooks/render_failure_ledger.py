@@ -12,7 +12,7 @@ MD = ROOT / "docs" / "agentic" / "FAILURE_LEDGER.md"
 
 HEADER = """# Agent Failure Ledger
 
-This file is the human-readable view of recurring agent, tool, and workflow failures. Machine-appended raw entries live in `docs/agentic/failure_ledger.jsonl` and can be rendered with:
+This file is the human-readable view of recurring agent, tool, and workflow failures. The curated source is `docs/agentic/failure_ledger.jsonl` (git-tracked; deliberately-promoted entries only). Raw machine-captured failures go to the gitignored `docs/agentic/failure_autolog.jsonl` — promote genuinely recurring ones into the curated ledger per `GUIDE_UPDATE_PROTOCOL.md`. Render with:
 
 ```bash
 python scripts/agent_hooks/render_failure_ledger.py
