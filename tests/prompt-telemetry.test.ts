@@ -392,4 +392,53 @@ describe("prompt telemetry replay-grade enrichment (P5-C1 / #238)", () => {
     expect(restored!.destDomain).toBe("trip.example");
     expect(restored!.elementContext?.top.tag).toBe("FORM");
   });
+
+  it("drops a custom cursor: url(...) but keeps keyword cursors (privacy)", async () => {
+    const { chrome } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const { appendPromptOutcome, getPromptOutcomes } = await import("../extension/src/shared/storage");
+
+    const append = (p: unknown) => appendPromptOutcome(p as Parameters<typeof appendPromptOutcome>[0]);
+    await append({
+      domain: "cur1.example", type: "nav", score: 30, outcome: "block",
+      elementContext: { viewport: { w: 100, h: 100 }, input: "pointer", top: { tag: "A", cursor: 'url("https://evil.example/c.png"), auto' } }
+    });
+    await append({
+      domain: "cur2.example", type: "nav", score: 30, outcome: "block",
+      elementContext: { viewport: { w: 100, h: 100 }, input: "pointer", top: { tag: "A", cursor: "pointer" } }
+    });
+
+    const outcomes = await getPromptOutcomes();
+    expect(outcomes[0]!.elementContext?.top.cursor).toBeUndefined();
+    expect(outcomes[1]!.elementContext?.top.cursor).toBe("pointer");
+  });
+
+  it("re-sanitizes enriched fields on import (not just append)", async () => {
+    const { chrome } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const { importAll, getPromptOutcomes } = await import("../extension/src/shared/storage");
+
+    const payload = {
+      promptOutcomes: [
+        {
+          id: "imp", ts: 1, domain: "i.example", type: "nav", score: 50, outcome: "block",
+          nrsFactors: Array.from({ length: 64 }, () => "X".repeat(200)),
+          elementContext: {
+            viewport: { w: 1e9, h: -5 },
+            input: "pointer",
+            top: { tag: "A", junkField: "DROP", cursor: 'url("https://evil/x")' }
+          }
+        }
+      ]
+    } as unknown as Parameters<typeof importAll>[0];
+    await importAll(payload);
+
+    const [entry] = await getPromptOutcomes();
+    expect(entry!.nrsFactors!.length).toBe(32);
+    expect(entry!.nrsFactors!.every((s) => s.length <= 80)).toBe(true);
+    expect(entry!.elementContext?.viewport).toEqual({ w: 0, h: 0 });
+    const top = entry!.elementContext?.top as unknown as Record<string, unknown>;
+    expect(top && "junkField" in top).toBe(false);
+    expect(top?.cursor).toBeUndefined();
+  });
 });

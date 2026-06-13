@@ -453,7 +453,11 @@ function sanitizeElementHint(value: unknown): ElementHint | undefined {
   const out: ElementHint = { tag: e.tag.slice(0, MAX_REASON_CODE_LEN) };
   const role = clampStr(e.role); if (role !== undefined) out.role = role;
   if (typeof e.hasOnClick === "boolean") out.hasOnClick = e.hasOnClick;
-  const cursor = clampStr(e.cursor); if (cursor !== undefined) out.cursor = cursor;
+  // Drop custom `cursor: url(...)` values — they can embed a page-controlled URL
+  // or data-URI. Replay only cares whether the cursor is "pointer", so keyword
+  // cursors are kept and a url() cursor (never "pointer") is safely omitted.
+  const cursor = clampStr(e.cursor);
+  if (cursor !== undefined && !/url\(/i.test(cursor)) out.cursor = cursor;
   if (typeof e.textLength === "number" && Number.isFinite(e.textLength)) out.textLength = e.textLength;
   if (typeof e.ariaLabelLength === "number" && Number.isFinite(e.ariaLabelLength)) out.ariaLabelLength = e.ariaLabelLength;
   if (typeof e.titleLength === "number" && Number.isFinite(e.titleLength)) out.titleLength = e.titleLength;
@@ -761,18 +765,19 @@ function appendPromptOutcomeDirect(entry: PromptOutcomeEntry): Promise<void> {
   });
 }
 
-export function appendPromptOutcome(
+// Build a fully sanitized, bounded PromptOutcomeEntry from a partial. Used by
+// BOTH the live append path and the import/replace path so they apply identical
+// privacy + size guarantees (enriched fields don't bypass sanitization on
+// import). Keeping the writer and the verify-step validator (isPromptOutcomeEntry,
+// which requires Number.isFinite) in agreement prevents a record being
+// written, filtered out on verify, then silently dropped after burning retries.
+function buildPromptOutcomeRecord(
   partial: Omit<PromptOutcomeEntry, "id" | "ts"> & { id?: string; ts?: number }
-): Promise<void> {
-  // Sanitize ts/score so the writer and the verify-step validator
-  // (isPromptOutcomeEntry, which requires Number.isFinite) agree. A non-finite
-  // value would otherwise be written, filtered out on verify, and silently
-  // dropped after burning all retries. The enriched replay fields (P5-C1) are
-  // sanitized for the same reason and to bound per-record size.
+): PromptOutcomeEntry {
   const reasons = sanitizeCodeList(partial.reasons);
   const nrsFactors = sanitizeCodeList(partial.nrsFactors);
   const elementContext = sanitizeClickContext(partial.elementContext);
-  const entry: PromptOutcomeEntry = {
+  return {
     id: partial.id ?? makeId(),
     ts: Number.isFinite(partial.ts) ? (partial.ts as number) : Date.now(),
     domain: partial.domain,
@@ -788,7 +793,12 @@ export function appendPromptOutcome(
     ...(Number.isFinite(partial.thresholdUsed) ? { thresholdUsed: partial.thresholdUsed } : {}),
     ...(elementContext !== undefined ? { elementContext } : {})
   };
+}
 
+export function appendPromptOutcome(
+  partial: Omit<PromptOutcomeEntry, "id" | "ts"> & { id?: string; ts?: number }
+): Promise<void> {
+  const entry = buildPromptOutcomeRecord(partial);
   if (shouldDelegatePromptOutcomeWrite()) {
     return delegatePromptOutcomeWrite({ type: "ns-prompt-outcome-append", entry });
   }
@@ -816,7 +826,12 @@ export function clearPromptOutcomes(): Promise<void> {
 }
 
 async function replacePromptOutcomesDirect(outcomes: PromptOutcomeEntry[]): Promise<void> {
-  const importedOutcomes = boundPromptOutcomeLog(outcomes);
+  // Re-sanitize enriched replay fields on import: validation (isPromptOutcomeEntry)
+  // is intentionally permissive on optional fields, so an imported backup could
+  // otherwise carry an unbounded/malformed elementContext or oversized
+  // nrsFactors that never passed through appendPromptOutcome. Routing through
+  // buildPromptOutcomeRecord enforces the same privacy + size guarantees.
+  const importedOutcomes = boundPromptOutcomeLog(outcomes).map(buildPromptOutcomeRecord);
   await queuePromptOutcomeWrite(async () => {
     const resetTs = Date.now();
     await chrome.storage.local.set({ [PROMPT_OUTCOMES_KEY]: importedOutcomes });

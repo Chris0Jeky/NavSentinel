@@ -310,10 +310,26 @@ describe("credential_guard", () => {
 
       expect(requestSubmitSpy).not.toHaveBeenCalled();
       // P5-C1 (#238): cred records now carry the action host as destDomain
-      // (consistency with nav records). The fixture's action.registrableDomain
-      // is "evil.com".
+      // (consistency with nav records). The fixture's action.host is "evil.com".
       expect(mockAppendOutcome).toHaveBeenCalledWith(
         expect.objectContaining({ outcome: "cancel", type: "cred", destDomain: "evil.com" }),
+      );
+    });
+
+    it("preserves the action host (subdomain) in destDomain, not the registrable domain", async () => {
+      // #249 review: a same-registrable-domain host mismatch must not be hidden.
+      const risk = defaultRisk();
+      risk.action.host = "login.evil.com";
+      risk.action.registrableDomain = "evil.com";
+      mockComputeRisk.mockReturnValue(risk);
+      mockShowModal.mockResolvedValue("cancel");
+      const form = createPasswordForm();
+      stubRequestSubmit(form, vi.fn());
+
+      await dispatchSubmit(form);
+
+      expect(mockAppendOutcome).toHaveBeenCalledWith(
+        expect.objectContaining({ outcome: "cancel", type: "cred", destDomain: "login.evil.com" }),
       );
     });
 

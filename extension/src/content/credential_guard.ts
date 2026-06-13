@@ -183,9 +183,12 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
 
     const credDomain = risk.page.registrableDomain || risk.page.host;
     const credReasons = risk.reasons.map((r) => r.code);
-    // Capture the action (destination) host so cred records carry the same
-    // source->dest pairing as nav records (P5-C1 / #238 consistency fix).
-    const credDest = risk.action.registrableDomain || risk.action.host || undefined;
+    // Capture the action (destination) HOST so cred records carry the same
+    // source->dest pairing as nav records (which store the hostname), preserving
+    // any subdomain that triggered the prompt — a same-registrable-domain host
+    // mismatch (login.x.com -> secure.x.com) would be hidden by registrableDomain
+    // (P5-C1 / #238 consistency fix).
+    const credDest = risk.action.host || risk.action.registrableDomain || undefined;
 
     if (choice === "cancel") {
       void appendPromptOutcome({

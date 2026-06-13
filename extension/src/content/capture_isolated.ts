@@ -1744,6 +1744,7 @@ window.addEventListener(
         });
         appendOutcomeSafely({
           domain: siteKeyFromLocation(),
+          ...(destHost ? { destDomain: destHost } : {}),
           type: "nav",
           score: nrs,
           outcome: "block",

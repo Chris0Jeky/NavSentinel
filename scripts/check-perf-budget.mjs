@@ -33,13 +33,17 @@ const budgets = [
   {
     label: "capture_isolated (content script)",
     glob: "assets/capture_isolated.ts-*.js",
-    // Bumped 60 -> 61 (#206): capture_isolated was already sitting at ~60KB from
-    // accumulated detection logic, and the ClickFix legit-CAPTCHA hardening
-    // (hostname + render-state validation instead of a spoofable src substring)
-    // tipped it just over. Kept tight at 61KB (chunk is ~60.3KB); the total-dist
-    // budget (500KB) remains the aggregate guard with ample room (~447KB). The
-    // chunk is repeatedly near its cap — track its growth as a follow-up.
-    maxKB: 61,
+    // Bumped 60 -> 61 (#206): ClickFix legit-CAPTCHA hardening tipped it over.
+    // Bumped 61 -> 62 (#238 / P5-C1): the replay-grade decision-capture wiring
+    // (snapshot + threading the nav feature vector through the block/prompt/
+    // clickfix outcome sites, incl. recording the destination host on blocks)
+    // added ~1KB to the all-frames content script. The pure feature-selection
+    // builder was deliberately moved into the storage chunk to keep this one
+    // lean; the residual is the call-site wiring. total-dist (500KB) remains the
+    // aggregate guard with ample room (~452KB / 90%). The chunk is repeatedly
+    // near its cap — the Phase-5 program adds more here (P5-A2/P5-B1); a future
+    // slice should split capture_isolated into smaller lazy chunks.
+    maxKB: 62,
   },
   {
     label: "main_guard (MAIN world)",
