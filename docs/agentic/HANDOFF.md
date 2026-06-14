@@ -1,13 +1,13 @@
 # Session Handoff - NavSentinel Autonomous Loop
 
 **Last updated:** 2026-06-14
-**Status (2026-06-14 post-#258 checkpoint):** `main` @ **`bc06c65`** after #254 (Codex contract/status), #256 (P5-A4), #257 (P5-A3), and #258 (post-merge status sync) merged. Open PR gate: **#249** at `3e0389e`, green/clean and still blocked only by AI-6 manual Gate-3. Phase 5 plan: [`docs/NORTHSTAR_ROADMAP.md`](../NORTHSTAR_ROADMAP.md); live open North-Star issues are **#232**, **#237–#246**, and **#252**.
+**Status (2026-06-14 durable live-state checkpoint):** exact `main` SHA is intentionally not hardcoded here; verify with `git rev-parse origin/main`. Merged status includes #254 (Codex contract/status), #256 (P5-A4), #257 (P5-A3), #258 (post-merge status sync), and later docs cleanup. Open PR gate: **#249** at `3e0389e`, green/clean and still blocked only by AI-6 manual Gate-3. Phase 5 plan: [`docs/NORTHSTAR_ROADMAP.md`](../NORTHSTAR_ROADMAP.md); live open North-Star issues are **#232**, **#237–#246**, and **#252**.
 
 Trust live git and GitHub over this snapshot. Re-check `git status -sb`, `git rev-parse main`, `git rev-parse origin/main`, PR checks, review threads, and comments before merging or branching.
 
 ## Codex Pickup Addendum (2026-06-14)
 
-- `main` == **`bc06c65`** after #254, #256, #257, and #258 merged; issues #234 and #235 are complete via merged PRs, and post-merge status docs were synchronized by #258.
+- Exact `main` SHA is live-state only; run `git rev-parse origin/main` before branching or merging. Issues #234 and #235 are complete via merged PRs, and post-merge status docs were synchronized after #258.
 - **#249** (P5-C1 / #238) is refreshed from the post-#257 feature base in `3e0389e` and remains open/clean/green against current `main`. It remains blocked only on AI-6 manual Chrome Gate-3 + merge. Conflict resolution preserved both replay-grade `PromptOutcomeEntry` fields and top-sites tier-adjusted threshold recording. Local verification after the refresh: `build:topsites`, `check:topsites`, focused replay/storage/silent/Smart/OAuth/scoring/top-sites/dom-builder tests 483 pass, typecheck, build, lint, perf budget 12/12 (`capture_isolated` 65.0KB / 66KB; total dist 459.7KB / 500KB), and `git diff --check`. Fresh GitHub Build/Unit + E2E are green.
 - **#253** (P5-B1 / #236) merged into `main` as `db63192` after clean merge state, green Build/Unit + E2E, and all 14 audited review threads resolved. The merged branch persists same-tab silent navigation decisions only after matching top-frame commits, covers JS-driven allowed same-tab navigations, filters non-web schemes, avoids duplicate `_self`/`_top`/`_parent` logging, logs explicit-new-tab silent allows immediately, restricts queued target allowance to top-frame same-tab document commits, and gives GET form submissions query-prefix commit matching without widening ordinary exact target matching. Two delegated supplemental review agents failed on Codex usage limits; the failure is ledgered and replaced by direct local review plus review-thread audit.
 - **#254** (Codex contract/status refresh) merged as `6faa856`; its docs/workflow branch and worktree were pruned.
