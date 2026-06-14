@@ -8,7 +8,7 @@
 
 **Purpose:** the running list of things only *you* (Chris) can do — and the context an agent needs to not lose the thread between sessions. Agents flag the open items in every summary; you clear them by saying so.
 
-**Last updated:** 2026-06-14 (Codex checkpoint) · `main` @ `db63192` after merging **#253** / P5-B1. Open PRs: **#249** latest `47e4fb9`, green/clean but still blocked on **AI-6** manual Gate-3; **#254** draft docs/CI refresh; **#256** latest `1890ef0`, green/clean with all review threads resolved. **AI-5 open (reference brand logos)** · **AI-6 open (Gate-3 #249)**.
+**Last updated:** 2026-06-14 (Codex checkpoint) · `main` @ `db63192` after merging **#253** / P5-B1. Open PRs: **#249** latest `47e4fb9`, green/clean but still blocked on **AI-6** manual Gate-3; **#254** draft docs/status refresh, green/clean; **#256** latest `1890ef0`, green/clean with all review threads resolved; **#257** latest `46a0c0d`, top-sites tier hardening complete, all review threads resolved, Build/Unit green and E2E running at the checkpoint. **AI-5 open (reference brand logos)** · **AI-6 open (Gate-3 #249)**.
 
 > **Why this file exists separately from the usual docs:** the status docs on `main`
 > (`docs/agentic/HANDOFF.md`, `docs/agentic/ORCHESTRATOR.md`, `docs/Project_Roadmap.md`,
@@ -20,6 +20,8 @@
 ---
 
 ## Current state snapshot (verified 2026-06-14)
+
+- **(2026-06-14 Codex checkpoint - P5-A3 opened):** PR **#257** (P5-A3 / #234 top-sites trust tier) is open at **`46a0c0d`** on `feat/p5a3-top-sites-tier`. Scope: filtered generated top-sites tier data, exact-host top-site trust policy with explicit `includeSubdomains` future opt-in, top-frame-only benign top-site relief, known-bad precedence, Smart Mode low-risk blank-prompt suppression for trusted top sites, CI `check:topsites`, and stricter generated-data validation. Review findings fixed: removed dead `seenBeforeBenign` tier, removed top-site NRS/threshold relaxation, removed shared-hosting/infrastructure/user-content entries, replaced blob lookup with generated sorted entries, fixed delayed silent-log threshold recording, resolved quoted-CSV/cwd path issues, closed tenant subdomain trust, preserved child-frame known-bad precedence, and made CSV category/column handling fail closed. Local verification: focused tests 129 pass, `typecheck`, `lint`, `build`, `check:topsites`, `check:perf-budget` 12/12 (`capture_isolated` 65.1KB / 66KB; total dist 457.5KB / 500KB), full unit 2511 pass with known happy-dom/network stderr, and `git diff --check`. Two independent final adversarial reviews found no remaining findings. GitHub Build/Unit is green; E2E is running at this checkpoint. Human-owned OPEN items remain **AI-5** and **AI-6**.
 
 - **(2026-06-14 Codex pickup - #253 merged / branch refresh):** PR **#253** (P5-B1 / #236) merged into `main` as **`db63192`** after clean merge state, green Build/Unit + E2E, and all 14 audited review threads resolved. Issue **#236** is closed. The local merged feature branch and temporary helper `main` worktree were pruned. PR **#249** was refreshed from `main` in **`47e4fb9`**; conflicts were resolved in `capture_isolated.ts` and `scripts/check-perf-budget.mjs`, focused tests 248 pass, `typecheck`, `build`, `lint`, perf budget 12/12 (`capture_isolated` 65.0KB / 66KB; total dist 459.7KB / 500KB), full unit 2510 pass, and fresh GitHub Build/Unit + E2E are green. PR **#256** was refreshed from `main` in **`b69bf69`**, then review finding `PRRT_kwDOQ8ajA86JXkh5` was fixed in **`1890ef0`** by limiting structural-nav mismatch suppression to small contained nav footprints; focused tests 122 pass, `typecheck`, `build`, `lint`, perf budget 12/12 (`capture_isolated` 65.2KB / 66KB; total dist 456.8KB / 500KB), full unit 2501 pass, review threads are resolved, and fresh GitHub Build/Unit + E2E are green. Human-owned OPEN items remain **AI-5** and **AI-6**.
 
@@ -52,7 +54,7 @@
 
 ## Action items
 
-**OPEN: AI-6 — manual Gate-3 on PR #249 (P5-C1 / #238) + merge.** The only open PR; green CI + 2 adversarial review rounds resolved; the only thing left is the real-browser check the sandbox can't run. Walkthrough: `docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md` → "Pending PRE-merge: #249", and AI-6 below. (`npm run gym:serve` was fixed for Vite 8 this session, so the Gym works again.)
+**OPEN: AI-6 — manual Gate-3 on PR #249 (P5-C1 / #238) + merge.** This is the only human-gated PR; green CI + 2 adversarial review rounds resolved; the remaining gate is the real-browser check the sandbox can't run. Walkthrough: `docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md` → "Pending PRE-merge: #249", and AI-6 below. (`npm run gym:serve` was fixed for Vite 8 this session, so the Gym works again.)
 
 **OPEN: AI-5 — supply/sanction a set of reference brand *logos* for the logo-embedding model** (or confirm using a public logo set, e.g. the Phishpedia reference list). The pHash-vs-logo *tech decision is already made* — the pivot to logo-embedding is confirmed (D24); this is now a small, low-stakes asset-approval task feeding P5-D6 (#246) / P5-D5 (#245), **not** a pending decision and **not** blocking near-term Phase-5 work. AI-1, AI-2 resolved 2026-06-05; **AI-3, AI-4 resolved 2026-06-13** (see Completed log). The deferred manual checks live in `docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md`.
 
