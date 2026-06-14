@@ -2,6 +2,7 @@ import { getRegistrableDomain, normalizeHost } from "../shared/domain";
 import { initReputation, isKnownBadDomain, reputationReady } from "../shared/reputation";
 import {
   getNavSettings,
+  appendEvent,
   handleEventLogAppendMessage,
   handlePromptOutcomeStorageMessage,
   isEventLogAppendMessage,
@@ -496,7 +497,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const ttl = clampTtl(message.ttlMs, NAV_TARGET_ALLOW_TTL_MS);
         allowTargetByTab.set(tabId, {
           url: message.url,
-          expiresAt: Date.now() + ttl
+          expiresAt: Date.now() + ttl,
+          ...(isEventLogAppendMessage({ type: "ns-event-log-append", entry: message.silentEvent })
+            ? { silentEvent: message.silentEvent }
+            : {})
         });
         swState.persistMap(allowTargetByTab, "allowTarget");
       }
@@ -730,6 +734,9 @@ function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitio
     targetAllowance.url === details.url;
   if (targetAllowance) {
     allowTargetByTab.delete(details.tabId);
+  }
+  if (targetAllowed && targetAllowance?.silentEvent) {
+    void appendEvent(targetAllowance.silentEvent);
   }
   const prevUrl = lastUrlByTab.get(details.tabId);
   lastUrlByTab.set(details.tabId, details.url);

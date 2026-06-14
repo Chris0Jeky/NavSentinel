@@ -57,7 +57,14 @@ export function isDocumentNavigationHref(
   currentHref: string
 ): boolean {
   if (!destHref || !destHost) return false;
-  return destHref.split("#")[0] !== currentHref.split("#")[0];
+  let parsed: URL;
+  try {
+    parsed = new URL(destHref);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
+  return parsed.href.split("#")[0] !== currentHref.split("#")[0];
 }
 
 /** Mutable throttle state, held by the caller so the gate stays pure/testable. */

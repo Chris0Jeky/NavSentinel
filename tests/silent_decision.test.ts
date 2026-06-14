@@ -77,6 +77,12 @@ describe("isDocumentNavigationHref (#236)", () => {
     expect(isDocumentNavigationHref("data:text/html,x", "", here)).toBe(false);
   });
 
+  it("rejects host-bearing non-web schemes", () => {
+    expect(isDocumentNavigationHref("ftp://example.com/file", "example.com", here)).toBe(false);
+    expect(isDocumentNavigationHref("ws://example.com/socket", "example.com", here)).toBe(false);
+    expect(isDocumentNavigationHref("chrome://extensions", "extensions", here)).toBe(false);
+  });
+
   it("rejects null/empty href or host", () => {
     expect(isDocumentNavigationHref(null, "example.com", here)).toBe(false);
     expect(isDocumentNavigationHref("", "example.com", here)).toBe(false);

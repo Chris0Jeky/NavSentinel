@@ -364,12 +364,12 @@ function postBlocked(params: {
   });
 }
 
-function postAllowed(params: { kind: string; url?: string }): void {
+function postAllowed(params: { kind: string; url?: string; target?: string }): void {
   recordNav("allowed", params);
-  if (!debug) return;
   postToIsolated("ns-nav-allowed", {
     kind: params.kind,
     url: params.url ?? "",
+    ...(params.target !== undefined ? { target: params.target } : {}),
     ts: nowMs()
   });
 }
@@ -503,7 +503,11 @@ function patchedOpen(
   features?: string
 ): Window | null {
   if (isOff() || (isSubframe() && isSubframeSelfTarget(target))) {
-    postAllowed({ kind: "window_open", ...(url !== undefined ? { url: String(url) } : {}) });
+    postAllowed({
+      kind: "window_open",
+      ...(url !== undefined ? { url: String(url) } : {}),
+      ...(target !== undefined ? { target } : {})
+    });
     notifyAllowedTarget(url);
     recordWindowOpen();
     return callNativeOpen(this, url, target, features);
@@ -511,14 +515,22 @@ function patchedOpen(
 
   const allowance = consumeOpenAllowance();
   if (allowance !== "none") {
-    postAllowed({ kind: "window_open", ...(url !== undefined ? { url: String(url) } : {}) });
+    postAllowed({
+      kind: "window_open",
+      ...(url !== undefined ? { url: String(url) } : {}),
+      ...(target !== undefined ? { target } : {})
+    });
     notifyAllowedTarget(url);
     recordWindowOpen();
     return callNativeOpen(this, url, target, features);
   }
 
   if (consumePopupIntentAllowance(target, features)) {
-    postAllowed({ kind: "window_open", ...(url !== undefined ? { url: String(url) } : {}) });
+    postAllowed({
+      kind: "window_open",
+      ...(url !== undefined ? { url: String(url) } : {}),
+      ...(target !== undefined ? { target } : {})
+    });
     notifyAllowedTarget(url);
     recordWindowOpen();
     return callNativeOpen(this, url, target, features);

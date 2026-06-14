@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { EVENT_LOG_KEY, type EventLogEntry } from "../extension/src/shared/storage";
 
 type RuntimeMessage = Record<string, unknown>;
 type RuntimeSender = { tab?: { id?: number }; frameId?: number };
@@ -54,6 +55,7 @@ function createChromeMock() {
     message: unknown;
     options?: { frameId?: number };
   }> = [];
+  const localStore: Record<string, unknown> = {};
 
   return {
     chrome: {
@@ -65,15 +67,18 @@ function createChromeMock() {
       storage: {
         local: {
           async get(keys?: string | string[]) {
-            if (keys === undefined) return {};
-            if (typeof keys === "string") return {};
-            return Object.fromEntries(keys.map((key) => [key, undefined]));
+            if (keys === undefined) return { ...localStore };
+            if (typeof keys === "string") return { [keys]: localStore[keys] };
+            return Object.fromEntries(keys.map((key) => [key, localStore[key]]));
           },
-          async set() {
-            // not needed in these tests
+          async set(items: Record<string, unknown>) {
+            Object.assign(localStore, items);
           },
-          async remove() {
-            // not needed in these tests
+          async remove(keys: string | string[]) {
+            const keyList = typeof keys === "string" ? [keys] : keys;
+            for (const key of keyList) {
+              delete localStore[key];
+            }
           }
         },
         session: {
@@ -169,8 +174,15 @@ function createChromeMock() {
       });
       return response;
     },
-    sentMessages
+    sentMessages,
+    localStore
   };
+}
+
+async function flushMicrotasks(): Promise<void> {
+  for (let i = 0; i < 8; i++) {
+    await Promise.resolve();
+  }
 }
 
 describe("service worker rollback gating", () => {
@@ -319,6 +331,85 @@ describe("service worker rollback gating", () => {
 
     expect(response.shouldRollback).toBe(false);
     expect(response.entry?.allowedAtCommit).toBe(true);
+  });
+
+  it("persists a same-tab silent allow only after its approved target commits", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+
+    const silentEvent: EventLogEntry = {
+      id: "silent-commit-1",
+      ts: Date.now(),
+      kind: "nav_silent_allow",
+      site: "origin.test",
+      destHost: "example.test",
+      score: 18,
+      reasons: ["nrs_host_mismatch"],
+      extra: { threshold: 60 }
+    };
+
+    mock.dispatchRuntimeMessage(
+      {
+        type: "ns-allow-target-nav",
+        url: "https://example.test/slow",
+        ttlMs: 10_000,
+        silentEvent
+      },
+      { tab: { id: 113 } }
+    );
+    await flushMicrotasks();
+    expect(mock.localStore[EVENT_LOG_KEY]).toBeUndefined();
+
+    vi.setSystemTime(new Date("2026-03-17T12:00:03.500Z"));
+    mock.emitCommitted({
+      tabId: 113,
+      frameId: 0,
+      url: "https://example.test/slow",
+      transitionType: "link",
+      transitionQualifiers: []
+    });
+    await flushMicrotasks();
+
+    expect(mock.localStore[EVENT_LOG_KEY]).toEqual([silentEvent]);
+  });
+
+  it("does not persist a same-tab silent allow when a different URL commits", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+
+    const silentEvent: EventLogEntry = {
+      id: "silent-commit-2",
+      ts: Date.now(),
+      kind: "nav_silent_allow",
+      site: "origin.test",
+      destHost: "example.test",
+      score: 18,
+      reasons: ["nrs_host_mismatch"]
+    };
+
+    mock.dispatchRuntimeMessage(
+      {
+        type: "ns-allow-target-nav",
+        url: "https://example.test/slow",
+        ttlMs: 10_000,
+        silentEvent
+      },
+      { tab: { id: 114 } }
+    );
+
+    vi.setSystemTime(new Date("2026-03-17T12:00:03.500Z"));
+    mock.emitCommitted({
+      tabId: 114,
+      frameId: 0,
+      url: "https://other.test/page",
+      transitionType: "link",
+      transitionQualifiers: []
+    });
+    await flushMicrotasks();
+
+    expect(mock.localStore[EVENT_LOG_KEY]).toBeUndefined();
   });
 
   it("does not treat a newly opened child tab's first commit as same-tab rollback", async () => {

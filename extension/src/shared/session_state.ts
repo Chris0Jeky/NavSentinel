@@ -17,6 +17,7 @@
 
 import type { OAuthFlowState } from "../content/oauth_monitor";
 import type { RedirectChain } from "./redirect_chain";
+import type { EventLogEntry } from "./storage";
 
 // ---------------------------------------------------------------------------
 // Storage key prefix to avoid collisions with other session data.
@@ -37,6 +38,7 @@ export interface ChildWindowEntry {
 export interface AllowTargetEntry {
   url: string;
   expiresAt: number;
+  silentEvent?: EventLogEntry;
 }
 
 export interface TypedOriginEntry {

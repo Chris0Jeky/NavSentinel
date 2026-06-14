@@ -1,5 +1,5 @@
 import { computeCDS } from "../shared/scoring";
-import { appendEvent, appendPromptOutcome, getPromptOutcomes, getNavSettings, onNavSettingsChange, type NavSettings } from "../shared/storage";
+import { appendEvent, appendPromptOutcome, getPromptOutcomes, getNavSettings, onNavSettingsChange, type EventLogEntry, type NavSettings } from "../shared/storage";
 import { ADAPTIVE_SCORES_KEY, getEffectiveThresholdAdjustment, updateAdaptiveScores } from "../shared/adaptive_scoring";
 import {
   analyzeOutcomesForPair,
@@ -155,7 +155,7 @@ const PRIORITY_BRIDGE_TYPES = new Set<string>([
   "ns-allow-target-nav",
 ]);
 let mainGuard: "unknown" | "yes" | "no" = "unknown";
-let lastNav: { kind: string; url: string; status: "allowed" | "blocked" } | null = null;
+let lastNav: { kind: string; url: string; status: "allowed" | "blocked"; target?: string } | null = null;
 let lastDebug: Omit<DebugInfo, "mainGuard" | "lastNav"> | null = null;
 let rollbackShownAt = 0;
 let bridgeRetryTimer = 0;
@@ -465,7 +465,12 @@ function handleBridgeMessage(message: unknown): void {
   }
 
   if (data.type === "ns-nav-blocked") {
-    lastNav = { kind: data.kind ?? "unknown", url: data.url ?? "", status: "blocked" };
+    lastNav = {
+      kind: data.kind ?? "unknown",
+      url: data.url ?? "",
+      status: "blocked",
+      ...(typeof data.target === "string" ? { target: data.target } : {})
+    };
     refreshDebug();
 
     if (settings.defaultMode === "off") {
@@ -503,8 +508,24 @@ function handleBridgeMessage(message: unknown): void {
   }
 
   if (data.type === "ns-nav-allowed") {
-    lastNav = { kind: data.kind ?? "unknown", url: data.url ?? "", status: "allowed" };
+    lastNav = {
+      kind: data.kind ?? "unknown",
+      url: data.url ?? "",
+      status: "allowed",
+      ...(typeof data.target === "string" ? { target: data.target } : {})
+    };
     refreshDebug();
+    if (data.kind === "window_open" && isImmediateWindowOpenTarget(data.target) && lastDebug?.decision === "allow") {
+      const parsed = parseDestination(data.url);
+      appendImmediateSilentNav(buildSilentNavEvent({
+        destHref: parsed.href,
+        destHost: parsed.host,
+        nrs: lastDebug.nrs ?? 0,
+        reasonCodes: lastDebug.reasonCodes,
+        nrsFactors: lastDebug.nrsFactors ?? [],
+        blockThreshold: getNrsBlockThreshold(settings.defaultMode),
+      }));
+    }
     return;
   }
 
@@ -513,7 +534,23 @@ function handleBridgeMessage(message: unknown): void {
   if (data.type === "ns-allow-target-nav") {
     const url = typeof data.url === "string" ? data.url : "";
     const ttlMs = typeof data.ttlMs === "number" ? data.ttlMs : NAV_TARGET_ALLOW_TTL_MS;
-    if (url) notifyAllowedTarget(url, ttlMs);
+    if (url) {
+      const parsed = parseDestination(url);
+      const shouldAttachSilentEvent = !(
+        lastNav?.kind === "window_open" && isImmediateWindowOpenTarget(lastNav.target)
+      );
+      const silentEvent = shouldAttachSilentEvent && lastDebug?.decision === "allow"
+        ? buildSilentNavEvent({
+          destHref: parsed.href,
+          destHost: parsed.host,
+          nrs: lastDebug.nrs ?? 0,
+          reasonCodes: lastDebug.reasonCodes,
+          nrsFactors: lastDebug.nrsFactors ?? [],
+          blockThreshold: getNrsBlockThreshold(settings.defaultMode),
+        })
+        : null;
+      notifyAllowedTarget(url, ttlMs, silentEvent ?? undefined);
+    }
     return;
   }
 
@@ -681,13 +718,66 @@ function notifyNavGesture(ttlMs = NAV_GESTURE_TTL_MS): void {
   }
 }
 
-function notifyAllowedTarget(url: string, ttlMs = NAV_TARGET_ALLOW_TTL_MS): void {
+function notifyAllowedTarget(url: string, ttlMs = NAV_TARGET_ALLOW_TTL_MS, silentEvent?: EventLogEntry): void {
   if (!url) return;
   try {
-    chrome.runtime.sendMessage({ type: "ns-allow-target-nav", url, ttlMs });
+    chrome.runtime.sendMessage({
+      type: "ns-allow-target-nav",
+      url,
+      ttlMs,
+      ...(silentEvent ? { silentEvent } : {})
+    });
   } catch {
     // ignore
   }
+}
+
+function buildSilentNavEvent(params: {
+  destHref: string | null | undefined;
+  destHost: string | null | undefined;
+  nrs: number;
+  reasonCodes: string[];
+  nrsFactors: string[];
+  blockThreshold: number;
+}): EventLogEntry | null {
+  if (settings.defaultMode === "off") return null;
+  if (!isTopFrame()) return null;
+  if (!isDocumentNavigationHref(params.destHref, params.destHost, location.href)) return null;
+  return {
+    id: `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`,
+    ts: Date.now(),
+    kind: "nav_silent_allow",
+    site: siteKeyFromLocation(),
+    ...(params.destHost ? { destHost: params.destHost } : {}),
+    score: params.nrs,
+    reasons: params.reasonCodes,
+    extra: {
+      nrsFactors: params.nrsFactors,
+      adaptiveAdj: adaptiveAdjustment,
+      threshold: params.blockThreshold
+    }
+  };
+}
+
+function isImmediateWindowOpenTarget(target: unknown): boolean {
+  if (typeof target !== "string" || target === "") return true;
+  const normalized = target.toLowerCase();
+  if (normalized === "_blank") return true;
+  if (normalized === "_self" || normalized === "_top" || normalized === "_parent") return false;
+  try {
+    return target !== window.name;
+  } catch {
+    return true;
+  }
+}
+
+function appendImmediateSilentNav(event: EventLogEntry | null): void {
+  if (!event) return;
+  const throttleKey = getRegistrableDomain(event.destHost ?? "") ?? event.destHost ?? "";
+  if (!silentNavThrottleAllows(silentNavThrottle, throttleKey, performance.now(), SILENT_NAV_THROTTLE_MS)) {
+    return;
+  }
+  appendEventSafely(event);
 }
 
 let clickFixAlertedAt = 0;
@@ -1756,8 +1846,16 @@ window.addEventListener(
     }
 
     if (decision === "allow") {
+      const silentNavEvent = buildSilentNavEvent({
+        destHref: parsed?.href,
+        destHost,
+        nrs,
+        reasonCodes,
+        nrsFactors,
+        blockThreshold,
+      });
       if (isSameTabAnchor && parsed?.href) {
-        notifyAllowedTarget(parsed.href);
+        notifyAllowedTarget(parsed.href, NAV_TARGET_ALLOW_TTL_MS, silentNavEvent ?? undefined);
       }
       notifyNavGesture();
       notifyNavAllow();
@@ -1766,37 +1864,24 @@ window.addEventListener(
         allowRedirect: true
       });
 
-      // P5-B1 (#236): record silent nav allows so the journal/corpus see normal
-      // browsing, not just the loud ~5%. Scoped to real top-frame cross-document
-      // navigations (not #fragment / javascript: / mailto:) and throttled per
-      // destination to bound volume.
+      // Same-tab candidates are persisted from the SW after the navigation
+      // actually commits. A _blank anchor needs immediate logging because the
+      // commit belongs to the newly opened child tab, not this opener tab.
       if (
+        isBlankAnchor &&
         isSilentNavCandidate({
           mode,
           isTopFrame: isTopFrame(),
           hasAnchor: !!anchor,
-          isDocumentNavigation: isDocumentNavigationHref(parsed?.href, destHost, location.href),
+          isDocumentNavigation: silentNavEvent !== null,
           isBlankAnchor,
           isSameTabAnchor
-        }) &&
-        silentNavThrottleAllows(
-          silentNavThrottle,
-          destRegDomain ?? destHost ?? "",
-          performance.now(),
-          SILENT_NAV_THROTTLE_MS
-        )
+        })
       ) {
         // Privacy: record the destination HOST only — never the full URL
         // (path/query can carry tokens/PII) — so the local log does not become a
         // browsing history. All of it stays local (D16); none is ever transmitted.
-        appendEventSafely({
-          kind: "nav_silent_allow",
-          site: siteKeyFromLocation(),
-          ...(destHost ? { destHost } : {}),
-          score: nrs,
-          reasons: reasonCodes,
-          extra: { nrsFactors, adaptiveAdj: adaptiveAdjustment, threshold: blockThreshold }
-        });
+        appendImmediateSilentNav(silentNavEvent);
       }
     }
 
