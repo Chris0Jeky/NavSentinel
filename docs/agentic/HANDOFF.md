@@ -1,19 +1,20 @@
 # Session Handoff - NavSentinel Autonomous Loop
 
 **Last updated:** 2026-06-14
-**Status (2026-06-14 post-merge checkpoint):** `main` @ **`213ebcb`** after #254 (Codex contract/status), #256 (P5-A4), and #257 (P5-A3) merged. Open PR gate: **#249** at `3e0389e`, green/clean and still blocked only by AI-6 manual Gate-3. Phase 5 plan: [`docs/NORTHSTAR_ROADMAP.md`](../NORTHSTAR_ROADMAP.md); issues **#232–#246** (`north-star`).
+**Status (2026-06-14 post-#258 checkpoint):** `main` @ **`bc06c65`** after #254 (Codex contract/status), #256 (P5-A4), #257 (P5-A3), and #258 (post-merge status sync) merged. Open PR gate: **#249** at `3e0389e`, green/clean and still blocked only by AI-6 manual Gate-3. Phase 5 plan: [`docs/NORTHSTAR_ROADMAP.md`](../NORTHSTAR_ROADMAP.md); issues **#232–#246** (`north-star`).
 
 Trust live git and GitHub over this snapshot. Re-check `git status -sb`, `git rev-parse main`, `git rev-parse origin/main`, PR checks, review threads, and comments before merging or branching.
 
 ## Codex Pickup Addendum (2026-06-14)
 
-- `main` == **`213ebcb`** after #254, #256, and #257 merged; issues #234 and #235 are complete via merged PRs.
+- `main` == **`bc06c65`** after #254, #256, #257, and #258 merged; issues #234 and #235 are complete via merged PRs, and post-merge status docs were synchronized by #258.
 - **#249** (P5-C1 / #238) is refreshed from current `main` in `3e0389e`. It remains blocked only on AI-6 manual Chrome Gate-3 + merge. Conflict resolution preserved both replay-grade `PromptOutcomeEntry` fields and top-sites tier-adjusted threshold recording. Local verification after the refresh: `build:topsites`, `check:topsites`, focused replay/storage/silent/Smart/OAuth/scoring/top-sites/dom-builder tests 483 pass, typecheck, build, lint, perf budget 12/12 (`capture_isolated` 65.0KB / 66KB; total dist 459.7KB / 500KB), and `git diff --check`. Fresh GitHub Build/Unit + E2E are green.
 - **#253** (P5-B1 / #236) merged into `main` as `db63192` after clean merge state, green Build/Unit + E2E, and all 14 audited review threads resolved. The merged branch persists same-tab silent navigation decisions only after matching top-frame commits, covers JS-driven allowed same-tab navigations, filters non-web schemes, avoids duplicate `_self`/`_top`/`_parent` logging, logs explicit-new-tab silent allows immediately, restricts queued target allowance to top-frame same-tab document commits, and gives GET form submissions query-prefix commit matching without widening ordinary exact target matching. Two delegated supplemental review agents failed on Codex usage limits; the failure is ledgered and replaced by direct local review plus review-thread audit.
 - **#254** (Codex contract/status refresh) merged as `6faa856`; its docs/workflow branch and worktree were pruned.
 - **#255** (P5-A2 / #233) merged into `main` as `69400fc` after green Build/Unit + E2E, latest Codex clean on `4a77b39`, and all six fixed review threads resolved.
 - **#256** (P5-A4 / #235) merged as `c63f832`; its branch and worktree were pruned.
 - **#257** (P5-A3 / #234) merged as `213ebcb`; its branch and worktree were pruned.
+- **#258** (post-merge status sync) merged as `bc06c65`; its branch was pruned.
 - Human-owned OPEN items remain **AI-5** (reference brand logos) and **AI-6** (manual Gate-3 on #249).
 
 ## Historical Snapshot (Superseded)

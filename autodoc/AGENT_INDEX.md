@@ -6,7 +6,7 @@ This is a fast orientation layer for coding agents. It should point to interface
 
 ## Start Here
 
-0. **Resuming the autonomous work loop?** Read `ACTION_ITEMS.md` (human-owned tasks + current-state snapshot), `docs/agentic/HANDOFF.md` (latest session handoff), and `docs/agentic/ORCHESTRATOR.md` (living backlog/cycle log) first. As of the 2026-06-14 post-merge checkpoint: `main` @ `213ebcb`; #254, #256, and #257 are merged; the active PR gate is #249 (human Gate-3) at `3e0389e`. Do not start duplicate work for #233/#234/#235/#236/#238; after #249 settles, likely next candidates are #232 or #237.
+0. **Resuming the autonomous work loop?** Read `ACTION_ITEMS.md` (human-owned tasks + current-state snapshot), `docs/agentic/HANDOFF.md` (latest session handoff), and `docs/agentic/ORCHESTRATOR.md` (living backlog/cycle log) first. As of the 2026-06-14 post-#258 checkpoint: `main` @ `bc06c65`; #254, #256, #257, and #258 are merged; the active PR gate is #249 (human Gate-3) at `3e0389e`. Do not start duplicate work for #233/#234/#235/#236/#238; after #249 settles, likely next candidates are #232 or #237.
 1. `AGENTS.md` - repo operating rules.
 2. `CLAUDE.md` - Claude-specific compact contract.
 3. `docs/Project_Roadmap.md` - active phase status, gates, decisions, and next tasks.
