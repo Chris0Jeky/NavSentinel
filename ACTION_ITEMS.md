@@ -8,7 +8,7 @@
 
 **Purpose:** the running list of things only *you* (Chris) can do — and the context an agent needs to not lose the thread between sessions. Agents flag the open items in every summary; you clear them by saying so.
 
-**Last updated:** 2026-06-14 (Codex checkpoint) · `main` @ `69400fc` after merging **#255**. Open PRs: **#249** green/clean but blocked on **AI-6** manual Gate-3; **#253** latest `fafb870`, all review threads resolved, fresh GitHub Build/Unit + E2E green; **#254** draft docs/CI refresh; **#256** green/clean and aging. **AI-5 open (reference brand logos)** · **AI-6 open (Gate-3 #249)**.
+**Last updated:** 2026-06-14 (Codex checkpoint) · `main` @ `db63192` after merging **#253** / P5-B1. Open PRs: **#249** latest `47e4fb9`, still blocked on **AI-6** manual Gate-3 and CI rerunning after base refresh; **#254** draft docs/CI refresh; **#256** latest `b69bf69`, CI rerunning after base refresh. **AI-5 open (reference brand logos)** · **AI-6 open (Gate-3 #249)**.
 
 > **Why this file exists separately from the usual docs:** the status docs on `main`
 > (`docs/agentic/HANDOFF.md`, `docs/agentic/ORCHESTRATOR.md`, `docs/Project_Roadmap.md`,
@@ -20,6 +20,8 @@
 ---
 
 ## Current state snapshot (verified 2026-06-14)
+
+- **(2026-06-14 Codex pickup - #253 merged / branch refresh):** PR **#253** (P5-B1 / #236) merged into `main` as **`db63192`** after clean merge state, green Build/Unit + E2E, and all 14 audited review threads resolved. Issue **#236** is closed. The local merged feature branch and temporary helper `main` worktree were pruned. PR **#249** was refreshed from `main` in **`47e4fb9`**; conflicts were resolved in `capture_isolated.ts` and `scripts/check-perf-budget.mjs`, focused tests 248 pass, `typecheck`, `build`, `lint`, perf budget 12/12 (`capture_isolated` 65.0KB / 66KB; total dist 459.7KB / 500KB), full unit 2510 pass, and GitHub Build/Unit is green with E2E running. PR **#256** was refreshed from `main` in **`b69bf69`**; the only conflict was `scripts/check-perf-budget.mjs`, focused tests 287 pass, `typecheck`, `build`, `lint`, perf budget 12/12 (`capture_isolated` 65.0KB / 66KB; total dist 456.6KB / 500KB), full unit 2499 pass, and GitHub CI is running. Human-owned OPEN items remain **AI-5** and **AI-6**.
 
 - **(2026-06-14 Codex pickup - P5-B1 latest):** PR **#253** now includes merge commit `ad91b16` on top of `main` after **#255**, budget follow-up `b52f7f6`, and review follow-up `fafb870`. The branch persists same-tab silent navigation decisions only after matching top-frame commits, covers JS-driven allowed same-tab navigations, filters non-web schemes, avoids duplicate `_self`/`_top`/`_parent` logging, logs explicit-new-tab silent allows immediately, restricts queued target allowance to top-frame same-tab document commits, and gives GET form submissions query-prefix commit matching without widening ordinary exact target matching. All previously unresolved #253 review threads are resolved. Local verification for `fafb870`: focused silent/SW/storage/popup tests 195 pass, `typecheck`, `build`, `lint`, perf budget 12/12 (`capture_isolated` 64.8KB / 65KB, total dist 456.3KB / 500KB), full unit 2492 pass with known happy-dom/network stderr, and `git diff --check` with only Windows line-ending warnings. Fresh GitHub Build/Unit + E2E are green on `fafb870`. Human-owned OPEN items remain **AI-5** and **AI-6**.
 
