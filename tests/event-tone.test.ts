@@ -8,6 +8,7 @@ describe("classifyEventTone", () => {
     expect(classifyEventTone("cred_trust_domain")).toBe("credential");
     expect(classifyEventTone("cred_untrust_domain")).toBe("credential");
     expect(classifyEventTone("cred_paste_warn")).toBe("credential");
+    expect(classifyEventTone("cred_form_evaluated")).toBe("credential");
   });
 
   it('returns "config" for suite_ prefixed kinds', () => {
@@ -18,6 +19,7 @@ describe("classifyEventTone", () => {
   it('returns "navigation" for nav_ prefixed kinds', () => {
     expect(classifyEventTone("nav_blank_prompt")).toBe("navigation");
     expect(classifyEventTone("nav_click_block")).toBe("navigation");
+    expect(classifyEventTone("nav_silent_allow")).toBe("navigation");
     expect(classifyEventTone("nav_rollback")).toBe("navigation");
     expect(classifyEventTone("nav_allowlist_add")).toBe("navigation");
     expect(classifyEventTone("nav_allowlist_remove")).toBe("navigation");

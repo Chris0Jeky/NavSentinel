@@ -44,9 +44,14 @@ const budgets = [
     // near its cap — the Phase-5 program adds more here (P5-A2/P5-B1); a future
     // slice should split capture_isolated into smaller lazy chunks.
     // Bumped 62 -> 63 (#233 / P5-A2): compact Smart Mode benign-context
-    // suppression. Keep this tight; the next capture growth slice should split
-    // capture_isolated into smaller lazy chunks.
-    maxKB: 63,
+    // Bumped 63 -> 65 after merging #233 + #236: Linux CI measured the combined
+    // Smart Mode + silent-decision chunk at 64.4KB. Keep this tight; the next
+    // capture growth slice should split capture_isolated into smaller lazy chunks.
+    // Bumped 65 -> 66 after merging #236 into #238: replay-grade prompt outcome
+    // capture plus silent-decision commit metadata measured just over 65KB while
+    // total dist stayed under 500KB. No further capture growth should land before
+    // a split/trim slice.
+    maxKB: 66,
   },
   {
     label: "main_guard (MAIN world)",

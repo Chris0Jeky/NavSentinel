@@ -66,11 +66,12 @@ function createChromeMock(initial: Store = {}) {
 }
 
 const EVENT_KINDS: EventKind[] = [
-  "nav_blank_prompt", "nav_click_block", "nav_rollback", "nav_allowlist_add",
-  "nav_allowlist_remove", "cred_submit_prompt", "cred_submit_allow_once",
-  "cred_trust_domain", "cred_untrust_domain", "cred_paste_warn",
-  "suite_config_update", "clickfix_detected", "dblclickjack_detected",
-  "nav_reputation_late_warn", "mutation_alert", "pushstate_abuse",
+  "nav_blank_prompt", "nav_click_block", "nav_silent_allow", "nav_rollback",
+  "nav_allowlist_add", "nav_allowlist_remove", "cred_submit_prompt",
+  "cred_submit_allow_once", "cred_trust_domain", "cred_untrust_domain",
+  "cred_paste_warn", "cred_form_evaluated", "suite_config_update",
+  "clickfix_detected", "dblclickjack_detected", "nav_reputation_late_warn",
+  "mutation_alert", "pushstate_abuse", "bridge_buffer_overflow",
 ];
 
 const PROMPT_OUTCOMES: PromptOutcome[] = [

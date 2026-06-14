@@ -137,6 +137,21 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
         config: cfg
       })
     ) {
+      // P5-B1 (#236): record the silently-passed credential form so the journal
+      // and tuning corpus capture safe-form ground truth, not just blocked
+      // submits. Await the SW-backed append before resubmitting so the normal
+      // form navigation cannot tear down the content-script context first.
+      await appendEvent({
+        kind: "cred_form_evaluated",
+        site: risk.page.registrableDomain || risk.page.host,
+        url: risk.page.url,
+        destHost: risk.action.registrableDomain || risk.action.host,
+        score: risk.score,
+        reasons: risk.reasons.map((r) => r.code),
+        extra: { severity: risk.severity, crossSite, threshold: cfg.mediumRiskThreshold }
+      }).catch((err) => {
+        console.warn("[NavSentinel] event log append failed (cred_form_evaluated):", err);
+      });
       resumeSubmit(form, submitter);
       return;
     }
