@@ -61,7 +61,7 @@ Roadmap truth verified against `docs/Project_Roadmap.md` (Phases 0-3 done; Phase
 | P4-01c | Visual-sim → **logo-embedding pivot** (retires placeholder pHash to a pre-filter) | Roadmap P4-01 / **P5-D6 (#246)** | P4 | PIVOT ✅ (2026-06-13) | on-device-ML host #245; AI-5 reference logos | Pivot **confirmed by maintainer**; pHash→logo-embedding (Phishpedia 98.2% precision). AI-5 re-scoped to reference logos. |
 | P2-GATE-FP | Re-run FP/TP measurement after P4 additions (Phase 2 gate open item) | Roadmap | P4 | TODO | — | `npm run measure:fp`; confirm < 0.1% still holds. Subsumed by **P5-A1** (#232) Smart-Mode-Silence CI gate. |
 | P4-04 | Community threat intelligence | Roadmap | P5 | BLOCKED | protocol/privacy product decisions | XL, deferred — not an autonomous pick |
-| **NS-P5** | **North-Star Phase 5** — 4 programs (FP-elim / advisor / feedback / architecture) | `docs/NORTHSTAR_ROADMAP.md` | **P1** | TODO | — | **Active track.** Issues **#232–#246**. Best first picks: **#238** (P5-C1 keystone capture-enrichment), **#233** (P5-A2 signal-level gating), **#234** (P5-A3 top-sites tier). |
+| **NS-P5** | **North-Star Phase 5** — 4 programs (FP-elim / advisor / feedback / architecture) | `docs/NORTHSTAR_ROADMAP.md` | **P1** | IN-PROGRESS | — | **Active track.** Do not duplicate active/merged slices: #238 is #249 / human Gate-3, #233 merged as #255, #234 is #257 / green-clean aging, #235 is #256 / green-clean aging, #236 merged as #253. Next unstarted candidates after PR gates settle: **#232** (P5-A1 Smart-Mode silence CI gate) or **#237** (P5-B3 journal view). |
 
 ---
 
@@ -91,7 +91,7 @@ PRs D-* are independent (different files) → parallel branches off `main`, **no
 
 ## In-Flight
 
-**Codex pickup status (verified 2026-06-14):** `main` @ **`db63192`** after merging **#253** (P5-B1 silent-decision events; issue #236 closed). Open PRs: **#249** (P5-C1 / #238, latest `47e4fb9`, green/clean, human Gate-3), **#254** (draft Codex contract/status refresh plus CI Xvfb apt hardening; CI rerunning after status sync), **#256** (P5-A4 / #235 container intent heuristic, latest `1890ef0`, green/clean with all review threads resolved), **#257** (P5-A3 / #234 top-sites trust tier, latest `46a0c0d`, review threads resolved, green/clean).
+**Codex pickup status (verified 2026-06-14):** `main` @ **`db63192`** after merging **#253** (P5-B1 silent-decision events; issue #236 closed). Open PRs: **#249** (P5-C1 / #238, latest `47e4fb9`, green/clean, human Gate-3), **#254** (draft Codex contract/status refresh plus CI Xvfb apt hardening; check live GitHub status after each status commit), **#256** (P5-A4 / #235 container intent heuristic, latest `1890ef0`, green/clean with all review threads resolved), **#257** (P5-A3 / #234 top-sites trust tier, latest `46a0c0d`, review threads resolved, green/clean).
 
 | Slice | Branch | Base | Worktree | PR | Round 1 | Round 2 | Bots | Opened |
 |-------|--------|------|----------|----|---------|---------|------|--------|
