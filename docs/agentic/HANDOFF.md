@@ -10,7 +10,8 @@ Trust live git and GitHub over this snapshot. Re-check `git status -sb`, `git re
 - `main` == **`a68958c`** after #251 (`gym:serve` Vite-8 fix).
 - **#249** (P5-C1 / #238) is green, clean, and still blocked only on AI-6 manual Chrome Gate-3 + merge.
 - **#253** (P5-B1 / #236) has all Gemini/Codex review findings addressed in `da6eb35`: null-safe event log handling, SW-backed `ns-event-log-append`, and awaited credential silent write before resume. Local verification: targeted tests 117 pass, typecheck pass, build pass, perf-budget 12/12 pass, full unit 2461 pass, lint pass. CI and fresh Codex review are running.
-- **#254** (Codex contract refresh) is a draft docs PR. `AGENTS.md` was aligned with `CLAUDE.md`; Gemini formatting feedback was fixed in `e0fa07c`; `agent:skills:validate` passes. CI and fresh Codex review are running.
+- **#254** (Codex contract/status refresh) is a draft docs PR. `AGENTS.md` was aligned with `CLAUDE.md`; Gemini formatting feedback was fixed in `e0fa07c`; status sync landed in `addeb59`; CI is green and Codex re-review found no visible issues.
+- **#255** (P5-A2 / #233) is open from `feat/p5a2-signal-smart-gating` at `e28c3bf`. Scope: Smart Mode blank-anchor prompt suppression for narrow benign contexts with trusted pointer/click gating, NRS block/factor safeguards, curated IdP/payment matching, and Gym/E2E regression. Local verification: typecheck, lint, build, focused unit 15 pass, targeted E2E 2 pass, perf budget 12/12 (`capture_isolated` 62.5KB / 63KB), full unit 2441 pass with known happy-dom/network stderr. Two independent local adversarial reviews completed and all findings were addressed; CI/GitHub review are running.
 - Human-owned OPEN items remain **AI-5** (reference brand logos) and **AI-6** (manual Gate-3 on #249).
 
 ## Current Verified State
