@@ -91,8 +91,13 @@ PRs D-* are independent (different files) → parallel branches off `main`, **no
 
 ## In-Flight
 
+**Codex pickup status (verified 2026-06-14):** `main` @ **`a68958c`** after #251 (`gym:serve` Vite-8 fix). Open PRs: **#249** (P5-C1 / #238, human Gate-3), **#253** (P5-B1 / #236, review fixes pushed in `da6eb35`, CI/re-review running), **#254** (draft Codex contract refresh, review fix pushed in `e0fa07c`, CI/re-review running).
+
 | Slice | Branch | Base | Worktree | PR | Round 1 | Round 2 | Bots | Opened |
 |-------|--------|------|----------|----|---------|---------|------|--------|
+| P5-C1 / #238 replay-grade `PromptOutcomeEntry` | `feat/p5c1-enrich-prompt-outcome` | `main` | existing branch | #249 | done | done | green | 2026-06-13; waiting on AI-6 manual Chrome Gate-3 + merge |
+| P5-B1 / #236 silent-decision events | `feat/p5b1-silent-decision-events` | `main` | root checkout | #253 | done | done | pending after `da6eb35` | Review comments fixed: null-safe logs + SW-backed event append durability; local verification green |
+| Codex contract refresh | `docs/codex-contract-refresh` | `origin/main` | `../NavSentinel-codex-contract` | #254 | Gemini done | Codex requested | pending after `e0fa07c` | Draft docs-only PR; aligns `AGENTS.md` with `CLAUDE.md` |
 | _(none)_ | — | — | — | — | — | — | — | 0 in-flight (0 open PRs @ `da400fb`). **Next: North-Star Phase 5** — #238 (P5-C1) or #233 (P5-A2). |
 
 ---
@@ -101,6 +106,7 @@ PRs D-* are independent (different files) → parallel branches off `main`, **no
 
 | # | Date | Slice | Action | Result |
 |---|------|-------|--------|--------|
+| 10 | 2026-06-14 | CODEX PICKUP | Reused canonical orchestrator. Refreshed `AGENTS.md` against `CLAUDE.md` on docs PR **#254** (`71b1e29`, then Gemini formatting fix `e0fa07c`; `agent:skills:validate` pass). Rechecked open PRs. On **#253**, addressed all Gemini/Codex review findings in `da6eb35`: null-safe event log handling, SW-backed `ns-event-log-append`, and awaited credential silent write before resume. Local verification: targeted tests 117 pass, typecheck pass, build pass, perf-budget 12/12 pass, full unit 2461 pass, lint pass. #253/#254 CI and fresh Codex review requested; #249 still human Gate-3 blocked. | IN-REVIEW |
 | 0 | 2026-05-30 | bootstrap | Created orchestrator; baseline = typecheck clean, lint 0/0, 2206 tests pass | OK |
 | 1 | 2026-05-30 | ORCH-HYGIENE | Pruned 55 merged local branches + 2 orphaned `worktree-agent-*` via `git branch -d` (refuses unmerged, so no work lost); `git worktree prune`. Kept `main` + unmerged `fix/jsb-stale-todos-and-tests`. Note: `origin/feat/ff-browser-shim` still on remote (FF-01 merged via #173) — remote cleanup deferred. | DONE |
 | 2 | 2026-05-30 | ORCH-DISCOVERY | Discovery `wf_c7d868c7-3b1`: 14 adversarially-confirmed findings (7 subsystems, 32 agents). Grouped into 7 D-* PRs; seeded issues #175,#176,#178,#179 (#177 dup-closed) + #181 (cross-context, from R1). | DONE |

@@ -1,9 +1,17 @@
 # Session Handoff - NavSentinel Autonomous Loop
 
-**Last updated:** 2026-06-13
+**Last updated:** 2026-06-14
 **Status (2026-06-13 session 2):** `main` @ **`02d8ded`**. Merged **#247** (North-Star docs) + **#248** (failure-ledger autolog hook fix). **#249 OPEN** = **P5-C1 / #238** (replay-grade `PromptOutcomeEntry`) — green CI + 2 adversarial review rounds, **2444 unit tests**, all perf budgets pass, **awaiting Gate-3 + merge**. Phase 5 plan: [`docs/NORTHSTAR_ROADMAP.md`](../NORTHSTAR_ROADMAP.md); issues **#232–#246** (`north-star`). Next after #249: **#233** (P5-A2 signal-level gating), **#234** (P5-A3 top-sites tier), **#236** (P5-B1 silent-decision events).
 
 Trust live git and GitHub over this snapshot. Re-check `git status -sb`, `git rev-parse main`, `git rev-parse origin/main`, PR checks, review threads, and comments before merging or branching.
+
+## Codex Pickup Addendum (2026-06-14)
+
+- `main` == **`a68958c`** after #251 (`gym:serve` Vite-8 fix).
+- **#249** (P5-C1 / #238) is green, clean, and still blocked only on AI-6 manual Chrome Gate-3 + merge.
+- **#253** (P5-B1 / #236) has all Gemini/Codex review findings addressed in `da6eb35`: null-safe event log handling, SW-backed `ns-event-log-append`, and awaited credential silent write before resume. Local verification: targeted tests 117 pass, typecheck pass, build pass, perf-budget 12/12 pass, full unit 2461 pass, lint pass. CI and fresh Codex review are running.
+- **#254** (Codex contract refresh) is a draft docs PR. `AGENTS.md` was aligned with `CLAUDE.md`; Gemini formatting feedback was fixed in `e0fa07c`; `agent:skills:validate` passes. CI and fresh Codex review are running.
+- Human-owned OPEN items remain **AI-5** (reference brand logos) and **AI-6** (manual Gate-3 on #249).
 
 ## Current Verified State
 
