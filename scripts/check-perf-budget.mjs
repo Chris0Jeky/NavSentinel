@@ -44,7 +44,10 @@ const budgets = [
     // guard with ample room (~449KB). NOTE: PR #249 (P5-C1) independently grows
     // this chunk; when both land, re-measure — together they may need a trim or a
     // further bump. The chunk is repeatedly near its cap — track its growth.
-    maxKB: 62,
+    // Bumped 62 -> 63 (#236 review fix): commit-confirmed silent-nav logging
+    // carries event metadata through the MAIN/isolated/SW path; Linux CI measures
+    // this chunk at ~62.6KB while total dist remains comfortably under 500KB.
+    maxKB: 63,
   },
   {
     label: "main_guard (MAIN world)",
