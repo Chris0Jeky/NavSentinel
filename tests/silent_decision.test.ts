@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   isSilentNavCandidate,
   isDocumentNavigationHref,
+  shouldLogImmediateSilentNav,
+  shouldQueueSameTabSilentCommit,
   silentNavThrottleAllows,
   type SilentNavThrottleState,
 } from "../extension/src/content/silent_decision";
@@ -46,6 +48,62 @@ describe("isSilentNavCandidate (#236)", () => {
 
   it("rejects an anchor that is neither _blank nor same-tab", () => {
     expect(isSilentNavCandidate({ ...base, isBlankAnchor: false, isSameTabAnchor: false })).toBe(false);
+  });
+});
+
+describe("shouldQueueSameTabSilentCommit (#236)", () => {
+  it("queues only top-frame same-tab document navigations without explicit new-tab intent", () => {
+    expect(shouldQueueSameTabSilentCommit({
+      isTopFrame: true,
+      isDocumentNavigation: true,
+      isSameTabAnchor: true,
+      explicitNewTab: false
+    })).toBe(true);
+  });
+
+  it("rejects explicit new-tab same-tab anchors to avoid stale opener allowances", () => {
+    expect(shouldQueueSameTabSilentCommit({
+      isTopFrame: true,
+      isDocumentNavigation: true,
+      isSameTabAnchor: true,
+      explicitNewTab: true
+    })).toBe(false);
+  });
+
+  it("rejects child-frame same-tab anchors because their commits are not top-frame commits", () => {
+    expect(shouldQueueSameTabSilentCommit({
+      isTopFrame: false,
+      isDocumentNavigation: true,
+      isSameTabAnchor: true,
+      explicitNewTab: false
+    })).toBe(false);
+  });
+});
+
+describe("shouldLogImmediateSilentNav (#236)", () => {
+  it("logs _blank anchor navigations immediately", () => {
+    expect(shouldLogImmediateSilentNav({
+      ...base,
+      isBlankAnchor: true,
+      isSameTabAnchor: false,
+      explicitNewTab: false
+    })).toBe(true);
+  });
+
+  it("logs modifier/middle-click same-tab anchors immediately because they commit in a child tab", () => {
+    expect(shouldLogImmediateSilentNav({
+      ...base,
+      isBlankAnchor: false,
+      isSameTabAnchor: true,
+      explicitNewTab: true
+    })).toBe(true);
+  });
+
+  it("does not immediately log ordinary same-tab anchors that wait for SW commit confirmation", () => {
+    expect(shouldLogImmediateSilentNav({
+      ...base,
+      explicitNewTab: false
+    })).toBe(false);
   });
 });
 

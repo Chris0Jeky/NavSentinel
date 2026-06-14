@@ -38,6 +38,7 @@ export interface ChildWindowEntry {
 export interface AllowTargetEntry {
   url: string;
   expiresAt: number;
+  matchQueryPrefix?: boolean;
   silentEvent?: EventLogEntry;
 }
 

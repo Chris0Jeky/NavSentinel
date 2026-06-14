@@ -374,6 +374,83 @@ describe("service worker rollback gating", () => {
     expect(mock.localStore[EVENT_LOG_KEY]).toEqual([silentEvent]);
   });
 
+  it("persists a GET-form silent allow when the committed URL adds a serialized query", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+
+    const silentEvent: EventLogEntry = {
+      id: "silent-get-form-1",
+      ts: Date.now(),
+      kind: "nav_silent_allow",
+      site: "origin.test",
+      destHost: "example.test",
+      score: 8,
+      reasons: ["nrs_form_submit"]
+    };
+
+    mock.dispatchRuntimeMessage(
+      {
+        type: "ns-allow-target-nav",
+        url: "https://example.test/search",
+        ttlMs: 10_000,
+        matchQueryPrefix: true,
+        silentEvent
+      },
+      { tab: { id: 115 } }
+    );
+
+    vi.setSystemTime(new Date("2026-03-17T12:00:03.500Z"));
+    mock.emitCommitted({
+      tabId: 115,
+      frameId: 0,
+      url: "https://example.test/search?q=navsentinel",
+      transitionType: "form_submit",
+      transitionQualifiers: []
+    });
+    await flushMicrotasks();
+
+    expect(mock.localStore[EVENT_LOG_KEY]).toEqual([silentEvent]);
+  });
+
+  it("keeps exact target matching by default for non-form allowances", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+
+    const silentEvent: EventLogEntry = {
+      id: "silent-exact-only",
+      ts: Date.now(),
+      kind: "nav_silent_allow",
+      site: "origin.test",
+      destHost: "example.test",
+      score: 8,
+      reasons: ["nrs_link"]
+    };
+
+    mock.dispatchRuntimeMessage(
+      {
+        type: "ns-allow-target-nav",
+        url: "https://example.test/search",
+        ttlMs: 10_000,
+        silentEvent
+      },
+      { tab: { id: 116 } }
+    );
+
+    vi.setSystemTime(new Date("2026-03-17T12:00:03.500Z"));
+    mock.emitCommitted({
+      tabId: 116,
+      frameId: 0,
+      url: "https://example.test/search?q=navsentinel",
+      transitionType: "link",
+      transitionQualifiers: []
+    });
+    await flushMicrotasks();
+
+    expect(mock.localStore[EVENT_LOG_KEY]).toBeUndefined();
+  });
+
   it("does not persist a same-tab silent allow when a different URL commits", async () => {
     const mock = createChromeMock();
     vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);

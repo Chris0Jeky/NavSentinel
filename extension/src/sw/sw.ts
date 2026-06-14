@@ -498,6 +498,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         allowTargetByTab.set(tabId, {
           url: message.url,
           expiresAt: Date.now() + ttl,
+          ...(message.matchQueryPrefix === true ? { matchQueryPrefix: true } : {}),
           ...(isEventLogAppendMessage({ type: "ns-event-log-append", entry: message.silentEvent })
             ? { silentEvent: message.silentEvent }
             : {})
@@ -731,7 +732,7 @@ function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitio
   const targetAllowed =
     !!targetAllowance &&
     now <= targetAllowance.expiresAt &&
-    targetAllowance.url === details.url;
+    allowTargetMatchesCommit(targetAllowance, details.url);
   if (targetAllowance) {
     allowTargetByTab.delete(details.tabId);
   }
@@ -858,6 +859,25 @@ function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitio
     });
   }
   swState.persistAll();
+}
+
+function allowTargetMatchesCommit(
+  targetAllowance: { url: string; matchQueryPrefix?: boolean },
+  committedUrl: string
+): boolean {
+  if (targetAllowance.url === committedUrl) return true;
+  if (!targetAllowance.matchQueryPrefix) return false;
+  try {
+    const allowed = new URL(targetAllowance.url);
+    const committed = new URL(committedUrl);
+    if (allowed.protocol !== committed.protocol || allowed.host !== committed.host) return false;
+    if (allowed.pathname !== committed.pathname) return false;
+    if (allowed.hash && allowed.hash !== committed.hash) return false;
+    if (!allowed.search) return true;
+    return committed.search === allowed.search || committed.search.startsWith(`${allowed.search}&`);
+  } catch {
+    return false;
+  }
 }
 
 chrome.webNavigation.onErrorOccurred?.addListener((details) => {

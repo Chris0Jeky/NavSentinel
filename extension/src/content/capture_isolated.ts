@@ -68,8 +68,9 @@ import { analyzeCSP, type CSPAnalysis } from "./csp_analyzer";
 import { getDomainRisk, recordNavigation } from "../shared/domain_profile";
 import { recordNavigationAnomaly, getAnomalyScoreSync, primeAnomalySession } from "../shared/nav_anomaly";
 import {
-  isSilentNavCandidate,
   isDocumentNavigationHref,
+  shouldLogImmediateSilentNav,
+  shouldQueueSameTabSilentCommit,
   silentNavThrottleAllows,
   type SilentNavThrottleState,
 } from "./silent_decision";
@@ -423,6 +424,7 @@ function handleBridgeMessage(message: unknown): void {
     method?: string;
     // Allow-target-nav relay (ns-allow-target-nav)
     ttlMs?: number;
+    matchQueryPrefix?: boolean;
     // Pre-verification buffer overflow count (ns-bridge-overflow)
     dropped?: number;
   };
@@ -535,11 +537,11 @@ function handleBridgeMessage(message: unknown): void {
   if (data.type === "ns-allow-target-nav") {
     const url = typeof data.url === "string" ? data.url : "";
     const ttlMs = typeof data.ttlMs === "number" ? data.ttlMs : NAV_TARGET_ALLOW_TTL_MS;
-    if (url) {
-      const parsed = parseDestination(url);
-      const shouldAttachSilentEvent = !(
-        lastNav?.kind === "window_open" && isImmediateWindowOpenTarget(lastNav.target)
-      );
+      if (url) {
+        const parsed = parseDestination(url);
+        const shouldAttachSilentEvent = !(
+          lastNav?.kind === "window_open" && isImmediateWindowOpenTarget(lastNav.target)
+        );
       const silentEvent = shouldAttachSilentEvent && lastDebug?.decision === "allow"
         ? buildSilentNavEvent({
           destHref: parsed.href,
@@ -547,10 +549,15 @@ function handleBridgeMessage(message: unknown): void {
           nrs: lastDebug.nrs ?? 0,
           reasonCodes: lastDebug.reasonCodes,
           nrsFactors: lastDebug.nrsFactors ?? [],
-          blockThreshold: getNrsBlockThreshold(settings.defaultMode),
-        })
+            blockThreshold: getNrsBlockThreshold(settings.defaultMode),
+          })
         : null;
-      notifyAllowedTarget(url, ttlMs, silentEvent ?? undefined);
+      notifyAllowedTarget(
+        url,
+        ttlMs,
+        silentEvent ?? undefined,
+        { matchQueryPrefix: data.matchQueryPrefix === true }
+      );
     }
     return;
   }
@@ -719,13 +726,19 @@ function notifyNavGesture(ttlMs = NAV_GESTURE_TTL_MS): void {
   }
 }
 
-function notifyAllowedTarget(url: string, ttlMs = NAV_TARGET_ALLOW_TTL_MS, silentEvent?: EventLogEntry): void {
+function notifyAllowedTarget(
+  url: string,
+  ttlMs = NAV_TARGET_ALLOW_TTL_MS,
+  silentEvent?: EventLogEntry,
+  options?: { matchQueryPrefix?: boolean }
+): void {
   if (!url) return;
   try {
     chrome.runtime.sendMessage({
       type: "ns-allow-target-nav",
       url,
       ttlMs,
+      ...(options?.matchQueryPrefix ? { matchQueryPrefix: true } : {}),
       ...(silentEvent ? { silentEvent } : {})
     });
   } catch {
@@ -1868,6 +1881,7 @@ window.addEventListener(
     }
 
     if (decision === "allow") {
+      const topFrame = isTopFrame();
       const silentNavEvent = buildSilentNavEvent({
         destHref: parsed?.href,
         destHost,
@@ -1876,7 +1890,12 @@ window.addEventListener(
         nrsFactors,
         blockThreshold,
       });
-      if (isSameTabAnchor && parsed?.href) {
+      if (parsed?.href && shouldQueueSameTabSilentCommit({
+        isTopFrame: topFrame,
+        isDocumentNavigation: silentNavEvent !== null,
+        isSameTabAnchor,
+        explicitNewTab
+      })) {
         notifyAllowedTarget(parsed.href, NAV_TARGET_ALLOW_TTL_MS, silentNavEvent ?? undefined);
       }
       notifyNavGesture();
@@ -1890,14 +1909,14 @@ window.addEventListener(
       // actually commits. A _blank anchor needs immediate logging because the
       // commit belongs to the newly opened child tab, not this opener tab.
       if (
-        isBlankAnchor &&
-        isSilentNavCandidate({
+        shouldLogImmediateSilentNav({
           mode,
-          isTopFrame: isTopFrame(),
+          isTopFrame: topFrame,
           hasAnchor: !!anchor,
           isDocumentNavigation: silentNavEvent !== null,
           isBlankAnchor,
-          isSameTabAnchor
+          isSameTabAnchor,
+          explicitNewTab
         })
       ) {
         // Privacy: record the destination HOST only — never the full URL

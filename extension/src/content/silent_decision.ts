@@ -27,6 +27,18 @@ export interface SilentNavInputs {
   isSameTabAnchor: boolean;
 }
 
+export interface SilentNavCommitInputs {
+  isTopFrame: boolean;
+  isDocumentNavigation: boolean;
+  isSameTabAnchor: boolean;
+  explicitNewTab: boolean;
+}
+
+export interface ImmediateSilentNavInputs extends SilentNavInputs {
+  /** Browser modifier/middle-click intent that sends a same-tab anchor to a new tab. */
+  explicitNewTab: boolean;
+}
+
 /**
  * True when a silently-allowed click is an actual navigation worth recording.
  * Excludes off-mode, child frames, and non-navigation clicks (buttons, text,
@@ -38,6 +50,29 @@ export function isSilentNavCandidate(opts: SilentNavInputs): boolean {
   if (!opts.isTopFrame) return false;
   if (!opts.hasAnchor || !opts.isDocumentNavigation) return false;
   return opts.isBlankAnchor || opts.isSameTabAnchor;
+}
+
+/**
+ * Same-tab silent nav events are committed by the service worker only when the
+ * current top-frame tab later commits the allowed target. Modifier/middle clicks
+ * and child-frame navigations commit somewhere else, so queuing them on this tab
+ * would leave a stale allowance behind.
+ */
+export function shouldQueueSameTabSilentCommit(opts: SilentNavCommitInputs): boolean {
+  return opts.isTopFrame &&
+    opts.isDocumentNavigation &&
+    opts.isSameTabAnchor &&
+    !opts.explicitNewTab;
+}
+
+/**
+ * New-tab anchor navigations commit in another tab, so the opener has no commit
+ * event to wait for. Record them immediately, including modifier/middle-clicks
+ * on otherwise same-tab anchors.
+ */
+export function shouldLogImmediateSilentNav(opts: ImmediateSilentNavInputs): boolean {
+  return isSilentNavCandidate(opts) &&
+    (opts.isBlankAnchor || (opts.isSameTabAnchor && opts.explicitNewTab));
 }
 
 /**
