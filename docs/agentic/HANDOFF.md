@@ -31,9 +31,9 @@ The following section is retained as session history. The live pickup state is t
 - **Gate 3 was WAIVED for the 2026-06-05 batch by the maintainer (Chris)** on the strength of green CI + 2× adversarial review. Manual checks were not dropped — they are deferred to **`docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md`** (run on next build + load).
 - For *future* batches, re-confirm the posture unless the maintainer says the waiver is standing. The sandbox cannot launch a browser, so manual/behavioral verification remains a human task.
 
-## Next Implementation Slice
+## Next Safe Action
 
-Prefer **North-Star Phase 5** ([`docs/NORTHSTAR_ROADMAP.md`](../NORTHSTAR_ROADMAP.md)). Highest impact-per-effort, no dependencies: **#238 (P5-C1)** — enrich `PromptOutcomeEntry` to a replay-grade feature vector (the keystone; serves the advisor journal *and* the tuning corpus). Or **#233 (P5-A2)** — signal-level Smart-Mode gating (attacks the #1 FP cluster). Then #234 (top-sites tier), #236 (silent-decision events), #235 (intent_mismatch quick win). The Firefox stack **FF-02→FF-04** is now unblocked (**AI-4 = `web-ext`**); fix the `session_state.ts` `storageSessionShim` routing first (FF crashes on hydrate — see P5-D3).
+Do not start duplicate Phase-5 slices while the current PR set is open. First keep the merge/review gates moving for **#249** (human Gate-3), **#254** (draft docs/status), **#256** (green/clean, aging), and **#257** (green/clean, aging). After those settle, pick the next unstarted North-Star slice from [`docs/NORTHSTAR_ROADMAP.md`](../NORTHSTAR_ROADMAP.md), likely **#232** (P5-A1 Smart-Mode silence CI gate) or **#237** (P5-B2 decision journal view), unless a higher-priority review/CI failure appears. The Firefox stack **FF-02→FF-04** is unblocked (**AI-4 = `web-ext`**) but should wait behind the active Phase-5 PR gates.
 
 ## Active Backlog
 
