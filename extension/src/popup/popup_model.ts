@@ -45,7 +45,7 @@ export function getRecentPopupEvents(log: EventLogEntry[], limit = 8): EventLogE
   // silent events would otherwise crowd the small feed. (Surfacing them in the
   // popup is the #205 / #214 / #219 consumer follow-up.)
   return (log ?? [])
-    .filter((ev) => !SILENT_DECISION_KINDS.has(ev.kind))
+    .filter((ev) => ev?.kind && !SILENT_DECISION_KINDS.has(ev.kind))
     .slice(-cappedLimit)
     .reverse();
 }
@@ -129,7 +129,8 @@ export function pickSiteRiskEvent(
   if (!registrableDomain) return null;
   const entries = log ?? [];
   for (let i = entries.length - 1; i >= 0; i--) {
-    const ev = entries[i]!;
+    const ev = entries[i];
+    if (!ev?.kind) continue;
     if (typeof ev.score !== "number") continue;
     // Silent-decision events (nav_silent_allow / cred_form_evaluated, #236) are
     // scored but must never drive the gauge: a routine silent allow would

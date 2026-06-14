@@ -99,7 +99,7 @@ function renderEvents(log: EventLogEntry[]): void {
   // events (#236) are excluded from the popup surfaces (they remain in the
   // options audit log). Otherwise the count would inflate while the feed shows
   // nothing new.
-  eventCountEl.textContent = String(log.filter((e) => !SILENT_DECISION_KINDS.has(e.kind)).length);
+  eventCountEl.textContent = String(log.filter((e) => e?.kind && !SILENT_DECISION_KINDS.has(e.kind)).length);
 
   if (list.length === 0) {
     eventsEl.innerHTML = "";

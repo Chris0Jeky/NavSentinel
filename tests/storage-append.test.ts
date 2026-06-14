@@ -167,6 +167,50 @@ describe("appendEvent", () => {
     expect(log.some((e) => e.id === "silent-new")).toBe(true);
   });
 
+  it("delegates event-log appends through the service worker when runtime messaging is available", async () => {
+    const { chrome, store } = createChromeMock();
+    const sent: unknown[] = [];
+    (chrome as unknown as { runtime: unknown }).runtime = {
+      sendMessage(message: unknown, callback?: (response: unknown) => void) {
+        sent.push(message);
+        callback?.({ ok: true });
+      },
+    };
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { appendEvent } = await import("../extension/src/shared/storage");
+    await appendEvent({ id: "delegated-1", kind: "nav_silent_allow", ts: 10, site: "example.com" });
+
+    expect(store[EVENT_LOG_KEY]).toBeUndefined();
+    expect(sent).toEqual([
+      {
+        type: "ns-event-log-append",
+        entry: { id: "delegated-1", ts: 10, kind: "nav_silent_allow", site: "example.com" },
+      },
+    ]);
+  });
+
+  it("handles delegated event-log appends in the service-worker path", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", {
+      ...chrome,
+      clients: {},
+      registration: {},
+    } as unknown as typeof globalThis.chrome);
+
+    const { handleEventLogAppendMessage } = await import("../extension/src/shared/storage");
+    await expect(
+      handleEventLogAppendMessage({
+        type: "ns-event-log-append",
+        entry: { id: "sw-1", ts: 10, kind: "cred_form_evaluated", site: "example.com" },
+      })
+    ).resolves.toEqual({ ok: true });
+
+    expect(store[EVENT_LOG_KEY]).toEqual([
+      { id: "sw-1", ts: 10, kind: "cred_form_evaluated", site: "example.com" },
+    ]);
+  });
+
   it("clamps logLimit below minimum to 50", async () => {
     const { chrome, store } = createChromeMock({
       [SETTINGS_KEY]: { logLimit: 3 },

@@ -260,6 +260,28 @@ export type EventKind =
   | "pushstate_abuse"
   | "bridge_buffer_overflow";
 
+const EVENT_KINDS: ReadonlySet<EventKind> = new Set<EventKind>([
+  "nav_blank_prompt",
+  "nav_click_block",
+  "nav_silent_allow",
+  "nav_rollback",
+  "nav_allowlist_add",
+  "nav_allowlist_remove",
+  "cred_submit_prompt",
+  "cred_submit_allow_once",
+  "cred_trust_domain",
+  "cred_untrust_domain",
+  "cred_paste_warn",
+  "cred_form_evaluated",
+  "suite_config_update",
+  "clickfix_detected",
+  "dblclickjack_detected",
+  "nav_reputation_late_warn",
+  "mutation_alert",
+  "pushstate_abuse",
+  "bridge_buffer_overflow",
+]);
+
 /**
  * Silent-decision event kinds (P5-B1 / #236): non-alarming records of decisions
  * made WITHOUT a user prompt (silent nav allows, silently-passed credential
@@ -287,6 +309,37 @@ export interface EventLogEntry {
   extra?: Record<string, unknown>;
 }
 
+export type EventLogAppendMessage = { type: "ns-event-log-append"; entry: EventLogEntry };
+
+type EventLogAppendResponse =
+  | { ok: true }
+  | { ok: false; error: string };
+
+function isEventKind(value: unknown): value is EventKind {
+  return typeof value === "string" && EVENT_KINDS.has(value as EventKind);
+}
+
+function isEventLogEntry(value: unknown): value is EventLogEntry {
+  if (!value || typeof value !== "object") return false;
+  const entry = value as Record<string, unknown>;
+  return typeof entry.id === "string" &&
+    typeof entry.ts === "number" &&
+    Number.isFinite(entry.ts) &&
+    isEventKind(entry.kind) &&
+    (entry.site === undefined || typeof entry.site === "string") &&
+    (entry.url === undefined || typeof entry.url === "string") &&
+    (entry.destHost === undefined || typeof entry.destHost === "string") &&
+    (entry.score === undefined || (typeof entry.score === "number" && Number.isFinite(entry.score))) &&
+    (entry.reasons === undefined || (Array.isArray(entry.reasons) && entry.reasons.every((reason) => typeof reason === "string"))) &&
+    (entry.extra === undefined || (typeof entry.extra === "object" && entry.extra !== null && !Array.isArray(entry.extra)));
+}
+
+export function isEventLogAppendMessage(message: unknown): message is EventLogAppendMessage {
+  if (!message || typeof message !== "object") return false;
+  const candidate = message as Record<string, unknown>;
+  return candidate.type === "ns-event-log-append" && isEventLogEntry(candidate.entry);
+}
+
 function makeId(): string {
   return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -312,7 +365,7 @@ export function trimEventLog(entries: EventLogEntry[], limit: number): EventLogE
   let overflow = entries.length - limit;
   const kept: EventLogEntry[] = [];
   for (const entry of entries) {
-    if (overflow > 0 && SILENT_DECISION_KINDS.has(entry.kind)) {
+    if (overflow > 0 && entry?.kind && SILENT_DECISION_KINDS.has(entry.kind)) {
       overflow--;
       continue;
     }
@@ -321,22 +374,25 @@ export function trimEventLog(entries: EventLogEntry[], limit: number): EventLogE
   return kept.length > limit ? kept.slice(-limit) : kept;
 }
 
-export async function appendEvent(
-  partial: Omit<EventLogEntry, "id" | "ts"> & { id?: string; ts?: number }
-): Promise<void> {
-  const settings = await getSuiteSettings();
-  const limit = clampInt(settings.logLimit, 50, 5000, DEFAULT_SUITE_SETTINGS.logLimit);
-  const entry: EventLogEntry = {
+type EventLogAppendPartial = Omit<EventLogEntry, "id" | "ts"> & { id?: string; ts?: number };
+
+function buildEventLogEntry(partial: EventLogAppendPartial): EventLogEntry {
+  return {
     id: partial.id ?? makeId(),
-    ts: partial.ts ?? Date.now(),
+    ts: Number.isFinite(partial.ts) ? (partial.ts as number) : Date.now(),
     kind: partial.kind,
     ...(partial.site !== undefined ? { site: partial.site } : {}),
     ...(partial.url !== undefined ? { url: partial.url } : {}),
     ...(partial.destHost !== undefined ? { destHost: partial.destHost } : {}),
-    ...(partial.score !== undefined ? { score: partial.score } : {}),
+    ...(partial.score !== undefined ? { score: Number.isFinite(partial.score) ? partial.score : 0 } : {}),
     ...(partial.reasons !== undefined ? { reasons: partial.reasons } : {}),
     ...(partial.extra !== undefined ? { extra: partial.extra } : {})
   };
+}
+
+async function appendEventDirect(entry: EventLogEntry): Promise<void> {
+  const settings = await getSuiteSettings();
+  const limit = clampInt(settings.logLimit, 50, 5000, DEFAULT_SUITE_SETTINGS.logLimit);
 
   for (let attempt = 0; attempt < 3; attempt++) {
     const res = await chrome.storage.local.get(EVENT_LOG_KEY);
@@ -360,6 +416,49 @@ export async function appendEvent(
     }
   }
   console.warn("[NavSentinel] appendEvent: failed to persist after 3 attempts, id:", entry.id);
+}
+
+function shouldDelegateEventLogWrite(): boolean {
+  const runtime = (globalThis as { chrome?: typeof chrome }).chrome?.runtime;
+  return !isExtensionServiceWorkerContext() && typeof runtime?.sendMessage === "function";
+}
+
+function sendEventLogAppendMessage(message: EventLogAppendMessage): Promise<void> {
+  return new Promise((resolve, reject) => {
+    try {
+      chrome.runtime.sendMessage(message, (response?: EventLogAppendResponse) => {
+        const lastError = chrome.runtime.lastError;
+        if (lastError) {
+          reject(new Error(lastError.message ?? "runtime.sendMessage failed"));
+          return;
+        }
+        if (response?.ok) {
+          resolve();
+          return;
+        }
+        reject(new Error(response?.error ?? "Event log append failed"));
+      });
+    } catch (err) {
+      reject(err instanceof Error ? err : new Error(String(err)));
+    }
+  });
+}
+
+export async function appendEvent(partial: EventLogAppendPartial): Promise<void> {
+  const entry = buildEventLogEntry(partial);
+  if (shouldDelegateEventLogWrite()) {
+    return sendEventLogAppendMessage({ type: "ns-event-log-append", entry });
+  }
+  return appendEventDirect(entry);
+}
+
+export async function handleEventLogAppendMessage(message: EventLogAppendMessage): Promise<EventLogAppendResponse> {
+  try {
+    await appendEventDirect(message.entry);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 export async function clearEventLog(): Promise<void> {

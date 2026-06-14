@@ -46,4 +46,15 @@ describe("trimEventLog (#236 protected-tail eviction)", () => {
     const log = Array.from({ length: 5 }, (_, i) => ev(`l${i}`, "nav_click_block", i));
     expect(trimEventLog(log, 3).map((e) => e.id)).toEqual(["l2", "l3", "l4"]);
   });
+
+  it("does not throw when corrupted entries are present", () => {
+    const log = [
+      null,
+      ev("silent1", "nav_silent_allow", 1),
+      undefined,
+      ev("loud1", "nav_click_block", 2),
+    ] as unknown as EventLogEntry[];
+
+    expect(trimEventLog(log, 3).map((e) => e?.id)).toEqual([undefined, undefined, "loud1"]);
+  });
 });

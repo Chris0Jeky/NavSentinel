@@ -195,6 +195,18 @@ describe("getRecentPopupEvents", () => {
     expect(recent).toHaveLength(1);
     expect(recent[0]?.id).toBe("evt-4");
   });
+
+  it("skips corrupted entries while filtering silent decisions", () => {
+    const events = [
+      { id: "loud-1", ts: 1, kind: "nav_click_block" },
+      null,
+      { id: "silent-1", ts: 2, kind: "nav_silent_allow" },
+      undefined,
+      { id: "loud-2", ts: 3, kind: "cred_submit_prompt" },
+    ] as unknown as EventLogEntry[];
+
+    expect(getRecentPopupEvents(events, 5).map((e) => e.id)).toEqual(["loud-2", "loud-1"]);
+  });
 });
 
 describe("formatPopupEventLine", () => {
@@ -411,6 +423,17 @@ describe("pickSiteRiskEvent (#205)", () => {
       { id: "1", ts: 1, kind: "nav_silent_allow", site: "example.com", score: 10 } as EventLogEntry,
     ];
     expect(pickSiteRiskEvent(log, "example.com")).toBeNull();
+  });
+
+  it("ignores corrupted entries when picking the active-site risk event", () => {
+    const log = [
+      null,
+      { id: "1", ts: 1, kind: "nav_silent_allow", site: "example.com", score: 10 },
+      undefined,
+      { id: "2", ts: 2, kind: "nav_click_block", site: "example.com", score: 80 },
+    ] as unknown as EventLogEntry[];
+
+    expect(pickSiteRiskEvent(log, "example.com")?.id).toBe("2");
   });
 });
 

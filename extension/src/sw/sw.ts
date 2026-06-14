@@ -2,7 +2,9 @@ import { getRegistrableDomain, normalizeHost } from "../shared/domain";
 import { initReputation, isKnownBadDomain, reputationReady } from "../shared/reputation";
 import {
   getNavSettings,
+  handleEventLogAppendMessage,
   handlePromptOutcomeStorageMessage,
+  isEventLogAppendMessage,
   isPromptOutcomeStorageMessage,
   SUITE_SETTINGS_KEY,
 } from "../shared/storage";
@@ -434,6 +436,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (isPromptOutcomeStorageMessage(message)) {
     void handlePromptOutcomeStorageMessage(message, sender)
+      .then((response) => sendResponse?.(response))
+      .catch((err) => {
+        sendResponse?.({ ok: false, error: err instanceof Error ? err.message : String(err) });
+      });
+    return true;
+  }
+
+  if (isEventLogAppendMessage(message)) {
+    void handleEventLogAppendMessage(message)
       .then((response) => sendResponse?.(response))
       .catch((err) => {
         sendResponse?.({ ok: false, error: err instanceof Error ? err.message : String(err) });
