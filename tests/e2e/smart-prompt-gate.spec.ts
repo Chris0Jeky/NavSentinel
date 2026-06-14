@@ -85,6 +85,32 @@ test.describe("Smart prompt gate", () => {
     }
   });
 
+  test("allows trusted keyboard activation without a prompt @regression", async () => {
+    test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
+
+    const { page, context, cleanup } = await setupSmartPromptGate();
+
+    try {
+      await page.locator("#benign-link").focus();
+      const popupPromise = context.waitForEvent("page", { timeout: 3000 }).catch(() => null);
+      await page.keyboard.press("Enter");
+      const popup = await popupPromise;
+      const toastText = await readToastText(page);
+      const pageUrls = context.pages().map((p) => p.url()).join(", ");
+
+      if (!popup) {
+        throw new Error(`Expected keyboard-activated blank anchor popup; toast=${toastText ?? "<none>"} pages=${pageUrls}`);
+      }
+      await popup.waitForLoadState("domcontentloaded", { timeout: 5000 });
+
+      expect(popup.url()).toContain("opened=benign");
+      await assertNoToastFor(page, 800);
+      await popup.close();
+    } finally {
+      await cleanup();
+    }
+  });
+
   test("preserves block behavior when attack-grade NRS factors are present @regression", async () => {
     test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
 

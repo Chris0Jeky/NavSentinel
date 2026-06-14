@@ -12,7 +12,7 @@ const BENIGN_NRS_FACTORS = new Set([
   "nrs_fast_attempt",
   "nrs_user_activation_active",
 ]);
-const SAME_ORG_LOW_CDS_REASONS = new Set(["no_accessible_name"]);
+const SAME_ORG_LOW_CDS_REASONS = new Set(["no_accessible_name", "keyboard_activation"]);
 
 export interface SmartPromptSuppressionInput {
   mode: Mode;
@@ -26,6 +26,7 @@ export interface SmartPromptSuppressionInput {
   blockThreshold: number;
   pointerDownTrusted: boolean;
   clickTrusted: boolean;
+  keyboardActivation: boolean;
   timeSincePointerdownMs?: number | undefined;
   destHost: string | null;
   destHref: string | null;
@@ -72,13 +73,15 @@ export function shouldSuppressSmartBlankPrompt(input: SmartPromptSuppressionInpu
   if (!sameOrgLowCds && (input.cds > 0 || input.cdsReasons.length > 0)) return false;
   if (input.nrs >= input.blockThreshold) return false;
   if (input.nrsFactors.some((factor) => !BENIGN_NRS_FACTORS.has(factor))) return false;
-  if (!input.pointerDownTrusted || !input.clickTrusted) return false;
 
-  const shortActiveGesture =
+  const shortPointerGesture =
+    input.pointerDownTrusted &&
+    input.clickTrusted &&
     input.timeSincePointerdownMs !== undefined &&
     input.timeSincePointerdownMs >= 0 &&
     input.timeSincePointerdownMs <= SMART_GESTURE_WINDOW_MS;
-  if (!shortActiveGesture) return false;
+  const trustedKeyboardGesture = input.keyboardActivation && input.clickTrusted;
+  if (!shortPointerGesture && !trustedKeyboardGesture) return false;
 
   if (input.sameOrganization) return true;
 

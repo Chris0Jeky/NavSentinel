@@ -19,6 +19,7 @@ const baseInput = (overrides: Partial<SmartPromptSuppressionInput> = {}): SmartP
   blockThreshold: 70,
   pointerDownTrusted: true,
   clickTrusted: true,
+  keyboardActivation: false,
   timeSincePointerdownMs: 120,
   destHost: "app.example.com",
   destHref: "https://app.example.com/dashboard",
@@ -141,9 +142,26 @@ describe("shouldSuppressSmartBlankPrompt", () => {
     expect(shouldSuppressSmartBlankPrompt(baseInput({ timeSincePointerdownMs: 1501 }))).toBe(false);
   });
 
+  it("suppresses trusted keyboard activation without a pointerdown", () => {
+    expect(shouldSuppressSmartBlankPrompt(baseInput({
+      keyboardActivation: true,
+      pointerDownTrusted: false,
+      cds: 5,
+      cdsReasons: ["no_accessible_name", "keyboard_activation"],
+      nrs: 25,
+      timeSincePointerdownMs: undefined,
+    }))).toBe(true);
+  });
+
   it("does not suppress untrusted pointer or click events", () => {
     expect(shouldSuppressSmartBlankPrompt(baseInput({ pointerDownTrusted: false }))).toBe(false);
     expect(shouldSuppressSmartBlankPrompt(baseInput({ clickTrusted: false }))).toBe(false);
+    expect(shouldSuppressSmartBlankPrompt(baseInput({
+      keyboardActivation: true,
+      pointerDownTrusted: false,
+      clickTrusted: false,
+      timeSincePointerdownMs: undefined,
+    }))).toBe(false);
   });
 
   it("does not suppress IdP-shaped prompts when OAuth risk flags are active", () => {

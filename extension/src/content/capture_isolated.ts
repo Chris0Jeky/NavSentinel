@@ -1690,6 +1690,7 @@ window.addEventListener(
       blockThreshold,
       pointerDownTrusted: downForClick?.trusted === true,
       clickTrusted: e.isTrusted,
+      keyboardActivation: isKeyboardActivation,
       timeSincePointerdownMs,
       destHost,
       destHref: parsed?.href ?? null,
