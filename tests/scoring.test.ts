@@ -174,6 +174,42 @@ describe("computeCDS — intent mismatch", () => {
     const result = computeCDS(ctx);
     expect(result.reasonCodes).not.toContain("intent_mismatch_under_interactive");
   });
+
+  it("does not flag structural navigation containers over named links", () => {
+    const navCtx: ClickContext = {
+      viewport: { w: 1920, h: 1080 },
+      input: "pointer",
+      top: { tag: "NAV" },
+      underlying: { tag: "A", textLength: 10 },
+    };
+    const roleCtx: ClickContext = {
+      viewport: { w: 1920, h: 1080 },
+      input: "pointer",
+      top: { tag: "DIV", role: "navigation" },
+      underlying: { tag: "A", textLength: 10 },
+    };
+
+    expect(computeCDS(navCtx).reasonCodes).not.toContain("intent_mismatch_under_interactive");
+    expect(computeCDS(roleCtx).reasonCodes).not.toContain("intent_mismatch_under_interactive");
+  });
+
+  it("still flags navigation containers with action intent", () => {
+    const clickHandlerCtx: ClickContext = {
+      viewport: { w: 1920, h: 1080 },
+      input: "pointer",
+      top: { tag: "NAV", hasOnClick: true },
+      underlying: { tag: "A", textLength: 10 },
+    };
+    const pointerCtx: ClickContext = {
+      viewport: { w: 1920, h: 1080 },
+      input: "pointer",
+      top: { tag: "DIV", role: "navigation", cursor: "pointer" },
+      underlying: { tag: "A", textLength: 10 },
+    };
+
+    expect(computeCDS(clickHandlerCtx).reasonCodes).toContain("intent_mismatch_under_interactive");
+    expect(computeCDS(pointerCtx).reasonCodes).toContain("intent_mismatch_under_interactive");
+  });
 });
 
 describe("computeCDS — retargeting", () => {

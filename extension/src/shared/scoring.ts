@@ -63,12 +63,24 @@ function hasMinimalName(h: ElementHint): boolean {
 }
 
 function isInteractive(h: ElementHint): boolean {
-  const tag = h.tag;
+  const tag = h.tag.toUpperCase();
   if (tag === "A" || tag === "BUTTON") return true;
   const role = (h.role ?? "").toLowerCase();
   if (role === "link" || role === "button") return true;
   if (h.hasOnClick) return true;
   return false;
+}
+
+function hasActionIntent(h: ElementHint): boolean {
+  if (isInteractive(h)) return true;
+  return (h.cursor ?? "").toLowerCase() === "pointer";
+}
+
+function isContainerLikeWithoutActionIntent(h: ElementHint): boolean {
+  if (hasActionIntent(h)) return false;
+  const tag = h.tag.toUpperCase();
+  const role = (h.role ?? "").toLowerCase();
+  return tag === "NAV" || role === "navigation";
 }
 
 function coverageRatio(h: ElementHint, viewport: { w: number; h: number }): number | undefined {
@@ -130,7 +142,8 @@ export function computeCDS(ctx: ClickContext): ScoreResult {
     const underInteractive = isInteractive(under);
     const underHasName = nameLength(under) > 0;
     const topIntentful = topInteractive && topHasName;
-    if (underInteractive && underHasName && !topIntentful) {
+    const benignContainer = isContainerLikeWithoutActionIntent(top);
+    if (underInteractive && underHasName && !topIntentful && !benignContainer) {
       cds += 35;
       reasons.push("intent_mismatch_under_interactive");
     }

@@ -405,6 +405,26 @@ describe("computeCDS property tests", () => {
     );
   });
 
+  it("intent mismatch does not fire for structural navigation containers without action intent", () => {
+    fc.assert(
+      fc.property(
+        arbViewport,
+        fc.constantFrom<ElementHint>({ tag: "NAV" }, { tag: "DIV", role: "navigation" }),
+        (viewport, top) => {
+          const ctx: ClickContext = {
+            viewport,
+            input: "pointer",
+            top,
+            underlying: { tag: "A", textLength: 10, opacity: 1 },
+          };
+          const { reasonCodes } = computeCDS(ctx);
+          expect(reasonCodes).not.toContain("intent_mismatch_under_interactive");
+        }
+      ),
+      { numRuns: 50 }
+    );
+  });
+
   it("reason codes include at least one entry when score > 0", () => {
     fc.assert(
       fc.property(arbClickContext, (ctx) => {
