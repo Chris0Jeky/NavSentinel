@@ -409,7 +409,7 @@ describe("computeCDS property tests", () => {
   it("intent mismatch does not fire for structural navigation containers that contain the action", () => {
     fc.assert(
       fc.property(
-        arbViewport,
+        arbViewport.filter((viewport) => viewport.w >= 100 && viewport.h >= 100),
         fc.constantFrom<ElementHint>(
           { tag: "NAV" },
           { tag: "nav" },
@@ -417,10 +417,11 @@ describe("computeCDS property tests", () => {
           { tag: "DIV", role: "Navigation" }
         ),
         (viewport, top) => {
+          const navHeight = Math.max(1, Math.floor(viewport.h * 0.1));
           const ctx: ClickContext = {
             viewport,
             input: "pointer",
-            top,
+            top: { ...top, rect: { w: viewport.w, h: navHeight } },
             underlying: { tag: "A", textLength: 10, opacity: 1 },
             inTop: true,
           };
@@ -450,6 +451,37 @@ describe("computeCDS property tests", () => {
             top,
             underlying: { tag: "A", textLength: 10, opacity: 1 },
             ...containment,
+          };
+          const { reasonCodes } = computeCDS(ctx);
+          expect(reasonCodes).toContain("intent_mismatch_under_interactive");
+        }
+      ),
+      { numRuns: 50 }
+    );
+  });
+
+  it("intent mismatch fires for large contained structural navigation wrappers", () => {
+    fc.assert(
+      fc.property(
+        arbViewport.filter((viewport) => viewport.w > 0 && viewport.h > 0),
+        fc.constantFrom<ElementHint>(
+          { tag: "NAV" },
+          { tag: "nav" },
+          { tag: "DIV", role: "navigation" },
+          { tag: "DIV", role: "Navigation" }
+        ),
+        (viewport, top) => {
+          const ctx: ClickContext = {
+            viewport,
+            input: "pointer",
+            top: {
+              ...top,
+              rect: { w: viewport.w, h: viewport.h },
+              position: "fixed",
+              zIndex: 10000,
+            },
+            underlying: { tag: "A", textLength: 10, opacity: 1 },
+            inTop: true,
           };
           const { reasonCodes } = computeCDS(ctx);
           expect(reasonCodes).toContain("intent_mismatch_under_interactive");

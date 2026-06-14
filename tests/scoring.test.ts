@@ -179,14 +179,14 @@ describe("computeCDS — intent mismatch", () => {
     const navCtx: ClickContext = {
       viewport: { w: 1920, h: 1080 },
       input: "pointer",
-      top: { tag: "nav" },
+      top: { tag: "nav", rect: { w: 1920, h: 80 } },
       underlying: { tag: "A", textLength: 10 },
       inTop: true,
     };
     const roleCtx: ClickContext = {
       viewport: { w: 1920, h: 1080 },
       input: "pointer",
-      top: { tag: "DIV", role: "Navigation" },
+      top: { tag: "DIV", role: "Navigation", rect: { w: 1920, h: 80 } },
       underlying: { tag: "A", textLength: 10 },
       inTop: true,
     };
@@ -213,6 +213,25 @@ describe("computeCDS — intent mismatch", () => {
     const result = computeCDS(delegatedOverlayCtx);
     expect(result.reasonCodes).toContain("intent_mismatch_under_interactive");
     expect(result.cds).toBeGreaterThanOrEqual(35);
+  });
+
+  it("flags contained structural navigation wrappers with large overlay geometry", () => {
+    const delegatedWrapperCtx: ClickContext = {
+      viewport: { w: 1920, h: 1080 },
+      input: "pointer",
+      top: {
+        tag: "NAV",
+        rect: { w: 1920, h: 1080 },
+        pointerEvents: "auto",
+        position: "fixed",
+        zIndex: 10000,
+      },
+      underlying: { tag: "A", textLength: 10 },
+      inTop: true,
+    };
+
+    const result = computeCDS(delegatedWrapperCtx);
+    expect(result.reasonCodes).toContain("intent_mismatch_under_interactive");
   });
 
   it("still flags navigation containers with action intent", () => {

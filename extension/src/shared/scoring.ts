@@ -96,6 +96,15 @@ function coverageRatio(h: ElementHint, viewport: { w: number; h: number }): numb
   return (rect.w * rect.h) / (viewport.w * viewport.h);
 }
 
+function isBenignContainedNavigationContainer(h: ElementHint, ctx: ClickContext): boolean {
+  if (!isStructuralNavigationContainer(h) || ctx.inTop !== true) return false;
+  const ratio = coverageRatio(h, ctx.viewport);
+  if (ratio === undefined || ratio > 0.20) return false;
+  const pos = (h.position ?? "").toLowerCase();
+  const z = h.zIndex ?? 0;
+  return !(z >= 5000 && (pos === "fixed" || pos === "absolute"));
+}
+
 function isVisible(h: ElementHint): boolean {
   const rect = h.rect;
   if (rect && (rect.w <= 0 || rect.h <= 0)) return false;
@@ -148,7 +157,7 @@ export function computeCDS(ctx: ClickContext): ScoreResult {
     const underInteractive = isInteractive(under);
     const underHasName = nameLength(under) > 0;
     const topIntentful = topInteractive && topHasName;
-    const benignContainer = isStructuralNavigationContainer(top) && ctx.inTop === true;
+    const benignContainer = isBenignContainedNavigationContainer(top, ctx);
     if (underInteractive && underHasName && !topIntentful && !benignContainer) {
       cds += 35;
       reasons.push("intent_mismatch_under_interactive");
