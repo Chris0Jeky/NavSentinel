@@ -125,6 +125,153 @@ describe("appendEvent", () => {
     expect(log[0]!.id).toBe("evt-20");
   });
 
+  it("drops a NEW silent event (loud wins) on a loud-saturated log, without warning (#236)", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const loud = Array.from({ length: 50 }, (_, i) => ({ id: `loud-${i}`, ts: i, kind: "nav_click_block" }));
+    const { chrome, store } = createChromeMock({
+      [SETTINGS_KEY]: { logLimit: 50 },
+      [EVENT_LOG_KEY]: loud,
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { appendEvent } = await import("../extension/src/shared/storage");
+    await appendEvent({ id: "silent-new", kind: "nav_silent_allow", ts: 100, site: "x.com" });
+
+    const log = store[EVENT_LOG_KEY] as Array<{ id: string; kind: string }>;
+    // Loud events are protected: all 50 retained, the new silent event evicted.
+    expect(log).toHaveLength(50);
+    expect(log.some((e) => e.id === "silent-new")).toBe(false);
+    expect(log.every((e) => e.kind === "nav_click_block")).toBe(true);
+    // The intentional eviction must NOT be treated as a failed write (no retries/warn).
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it("keeps a NEW silent event while evicting an OLDER silent event at cap (#236)", async () => {
+    const entries = [
+      { id: "silent-old", ts: 0, kind: "nav_silent_allow" },
+      ...Array.from({ length: 49 }, (_, i) => ({ id: `loud-${i}`, ts: i + 1, kind: "nav_click_block" })),
+    ];
+    const { chrome, store } = createChromeMock({
+      [SETTINGS_KEY]: { logLimit: 50 },
+      [EVENT_LOG_KEY]: entries,
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { appendEvent } = await import("../extension/src/shared/storage");
+    await appendEvent({ id: "silent-new", kind: "nav_silent_allow", ts: 100, site: "x.com" });
+
+    const log = store[EVENT_LOG_KEY] as Array<{ id: string }>;
+    expect(log).toHaveLength(50);
+    // Oldest silent dropped; new silent kept; all loud retained.
+    expect(log.some((e) => e.id === "silent-old")).toBe(false);
+    expect(log.some((e) => e.id === "silent-new")).toBe(true);
+  });
+
+  it("delegates event-log appends through the service worker when runtime messaging is available", async () => {
+    const { chrome, store } = createChromeMock();
+    const sent: unknown[] = [];
+    (chrome as unknown as { runtime: unknown }).runtime = {
+      sendMessage(message: unknown, callback?: (response: unknown) => void) {
+        sent.push(message);
+        callback?.({ ok: true });
+      },
+    };
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { appendEvent } = await import("../extension/src/shared/storage");
+    await appendEvent({ id: "delegated-1", kind: "nav_silent_allow", ts: 10, site: "example.com" });
+
+    expect(store[EVENT_LOG_KEY]).toBeUndefined();
+    expect(sent).toEqual([
+      {
+        type: "ns-event-log-append",
+        entry: { id: "delegated-1", ts: 10, kind: "nav_silent_allow", site: "example.com" },
+      },
+    ]);
+  });
+
+  it("handles delegated event-log appends in the service-worker path", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", {
+      ...chrome,
+      clients: {},
+      registration: {},
+    } as unknown as typeof globalThis.chrome);
+
+    const { handleEventLogAppendMessage } = await import("../extension/src/shared/storage");
+    await expect(
+      handleEventLogAppendMessage({
+        type: "ns-event-log-append",
+        entry: { id: "sw-1", ts: 10, kind: "cred_form_evaluated", site: "example.com" },
+      })
+    ).resolves.toEqual({ ok: true });
+
+    expect(store[EVENT_LOG_KEY]).toEqual([
+      { id: "sw-1", ts: 10, kind: "cred_form_evaluated", site: "example.com" },
+    ]);
+  });
+
+  it("retries delegated event-log appends when the service worker is initially unreachable", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const worker = await import("../extension/src/shared/storage");
+    let calls = 0;
+    const runtime: {
+      lastError?: { message?: string };
+      sendMessage: (message: unknown, callback?: (response: unknown) => void) => void;
+    } = {
+      sendMessage(message, callback) {
+        calls++;
+        if (calls === 1) {
+          runtime.lastError = { message: "Could not establish connection." };
+          callback?.(undefined);
+          delete runtime.lastError;
+          return;
+        }
+        void worker.handleEventLogAppendMessage(
+          message as Parameters<typeof worker.handleEventLogAppendMessage>[0]
+        ).then((response) => callback?.(response));
+      },
+    };
+    (chrome as unknown as { runtime: unknown }).runtime = runtime;
+
+    vi.resetModules();
+    const contentScript = await import("../extension/src/shared/storage");
+    await contentScript.appendEvent({ id: "event-retry-1", kind: "nav_silent_allow", ts: 10, site: "example.com" });
+
+    expect(calls).toBeGreaterThanOrEqual(2);
+    const ids = (store[EVENT_LOG_KEY] as Array<{ id: string }>).map((entry) => entry.id);
+    expect(ids).toContain("event-retry-1");
+  });
+
+  it("serializes service-worker event-log appends without losing entries", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", {
+      ...chrome,
+      clients: {},
+      registration: {},
+    } as unknown as typeof globalThis.chrome);
+
+    const { handleEventLogAppendMessage } = await import("../extension/src/shared/storage");
+    await Promise.all([
+      handleEventLogAppendMessage({
+        type: "ns-event-log-append",
+        entry: { id: "sw-concurrent-1", ts: 1, kind: "nav_silent_allow" },
+      }),
+      handleEventLogAppendMessage({
+        type: "ns-event-log-append",
+        entry: { id: "sw-concurrent-2", ts: 2, kind: "cred_form_evaluated" },
+      }),
+      handleEventLogAppendMessage({
+        type: "ns-event-log-append",
+        entry: { id: "sw-concurrent-3", ts: 3, kind: "nav_click_block" },
+      }),
+    ]);
+
+    const ids = (store[EVENT_LOG_KEY] as Array<{ id: string }>).map((entry) => entry.id);
+    expect(ids).toEqual(["sw-concurrent-1", "sw-concurrent-2", "sw-concurrent-3"]);
+  });
+
   it("clamps logLimit below minimum to 50", async () => {
     const { chrome, store } = createChromeMock({
       [SETTINGS_KEY]: { logLimit: 3 },
@@ -252,8 +399,8 @@ describe("appendEvent", () => {
     await appendEvent({ kind: "nav_rollback", site: "test.com" });
 
     const log = store[EVENT_LOG_KEY] as Array<{ id?: string }>;
-    expect(log.length).toBeGreaterThanOrEqual(2);
-    expect(log.some((e) => e?.id === "valid-1")).toBe(true);
+    expect(log).toHaveLength(2);
+    expect(log.map((e) => e.id)).toEqual(["valid-1", expect.any(String)]);
   });
 
   it("propagates exception when set() throws", async () => {
@@ -307,7 +454,7 @@ describe("appendEvent", () => {
 
     const log = store[EVENT_LOG_KEY] as Array<{ id: string }>;
     const ids = log.map((e) => e.id);
-    expect(ids).toContain("concurrent-3");
+    expect(ids).toEqual(["concurrent-1", "concurrent-2", "concurrent-3"]);
   });
 });
 

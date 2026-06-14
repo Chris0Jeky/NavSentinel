@@ -23,7 +23,7 @@ NavSentinel protects users from interaction-level browser attacks (DoubleClickja
 - Extension settings (navigation mode, credential mode, thresholds)
 - Navigation allowlist (user-approved site pairs)
 - Trusted credential domains (user-configured)
-- Local event log (bounded, contains event kind, timestamp, site, risk scores)
+- Local event log (bounded, contains event kind, timestamp, site, risk scores). Routine navigations record the destination **host only** — never full URLs, paths, or query strings. Credential-form events record the submitting page's URL and the form-action host, the same as the existing prompted credential events.
 - Prompt outcome statistics (domain pairs, allow/block counts for smart defaults)
 - Ephemeral session state (gesture tokens, rollback state — cleared on browser close)
 

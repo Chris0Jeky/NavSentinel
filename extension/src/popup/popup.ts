@@ -16,6 +16,7 @@ import {
   getSuiteSettings,
   getTrustedDomains,
   removeTrustedDomain,
+  SILENT_DECISION_KINDS,
   updateSuiteSettings
 } from "../shared/storage";
 import {
@@ -94,7 +95,11 @@ function fmtTime(ts: number): string {
 
 function renderEvents(log: EventLogEntry[]): void {
   const list = getRecentPopupEvents(log, 5);
-  eventCountEl.textContent = String(log.length);
+  // Count notable events only, to match the filtered feed: silent-decision
+  // events (#236) are excluded from the popup surfaces (they remain in the
+  // options audit log). Otherwise the count would inflate while the feed shows
+  // nothing new.
+  eventCountEl.textContent = String(log.filter((e) => e?.kind && !SILENT_DECISION_KINDS.has(e.kind)).length);
 
   if (list.length === 0) {
     eventsEl.innerHTML = "";
