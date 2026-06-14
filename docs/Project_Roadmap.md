@@ -28,13 +28,13 @@ programs derived from the 2026-06-13 research + audit initiative are tracked in
 [**`NORTHSTAR_ROADMAP.md`**](NORTHSTAR_ROADMAP.md) (4 programs as `P5-{prog}{seq}` slices; revisits
 **D08** "No ML" → conditional on-device ML). Source artifacts under `docs/research/NORTHSTAR_*`.
 
-**Open issues (2026-06-13):** **48 open.** North-Star Phase 5 (`north-star` label): **#232–#246** (see [`NORTHSTAR_ROADMAP.md`](NORTHSTAR_ROADMAP.md)). Discovery cycle 3–4 backlog: #198–#231 (popup/gauge #205/#215/#216/#218/#219, oauth #207/#221/#222/#223, adaptive #204/#213, scoring #209/#217, credential/storage #199/#200/#201/#203/#227, iframe #225/#226, session_state #228, icon #229, jsb cleanup #231). Older: #127 (JS behavior), #175/#176/#178/#179/#181/#186 (discovery), #184 (docs reconciliation). #196/#188/#206/#211 resolved by merged PRs #197/#202/#210/#230.
+**Open issues (status checkpoint 2026-06-14):** North-Star Phase 5 (`north-star` label) remains tracked as **#232–#246** (see [`NORTHSTAR_ROADMAP.md`](NORTHSTAR_ROADMAP.md)); several slices are now merged or in active PRs. Use [`docs/agentic/HANDOFF.md`](agentic/HANDOFF.md), [`docs/agentic/ORCHESTRATOR.md`](agentic/ORCHESTRATOR.md), and live GitHub state for the current PR/issue inventory before branching.
 
-**Repo state (2026-06-13):** **0 open PRs.** `main` @ `da400fb`. Since the 2026-06-05 D-series batch (#180–#195), **discovery cycles 3–4 landed 2026-06-06** — 8 PRs merged: **#197** (#196 credential-field helper), **#202** (#188 options failure surfacing), **#208** (homoglyph/IPv6 domain hardening), **#210** (#206 clickfix CAPTCHA), **#212** (#204 adaptive gate), **#214** (#205 popup gauge), **#220** (#207 oauth callback), **#230** (#211 mutation-monitor iframe) — each with green CI + 2× adversarial review. Baseline (verified 2026-06-13): **typecheck clean, lint 0/0, 2426 unit tests pass.** **Next: the North-Star Phase 5 track** (`NORTHSTAR_ROADMAP.md`) — start with #238 (P5-C1, the keystone capture-enrichment) or #233 (P5-A2, signal-level gating).
+**Repo state (status checkpoint 2026-06-14):** `main` @ **`db63192`** after **#253** (P5-B1 / #236) merged. PR gate snapshot at this checkpoint: **#249** (P5-C1 / #238, green/clean, human Gate-3), **#254** (docs/status if still open; if merged, use the landed docs and remove it from active gates), **#256** (P5-A4 / #235, green/clean aging), and **#257** (P5-A3 / #234, green/clean aging). **#255** (P5-A2 / #233) is merged. Do not start duplicate work for #233/#234/#235/#236/#238. After current PR gates settle, likely next unstarted North-Star candidates are **#232** (P5-A1 Smart-Mode silence CI gate) or **#237** (P5-B3 Decision Journal UI).
 
-> **Picking up the autonomous loop? Start with [`docs/agentic/HANDOFF.md`](agentic/HANDOFF.md)** (point-in-time handoff) and [`docs/agentic/ORCHESTRATOR.md`](agentic/ORCHESTRATOR.md) (living backlog/cycle log). 0 open PRs as of 2026-06-13; the next implementation work is the **North-Star Phase 5** slices (#232–#246). Also see `ACTION_ITEMS.md` for the human-owned task list (AI-5 visual-sim direction is the one open decision).
+> **Picking up the autonomous loop? Start with [`docs/agentic/HANDOFF.md`](agentic/HANDOFF.md)** (point-in-time handoff) and [`docs/agentic/ORCHESTRATOR.md`](agentic/ORCHESTRATOR.md) (living backlog/cycle log). Also see `ACTION_ITEMS.md` for human-owned tasks: **AI-5** is now reference-logo supply/approval for the logo-embedding model, and **AI-6** is the manual Chrome Gate-3 check for #249.
 
-Last updated: 2026-06-13
+Last updated: 2026-06-14
 
 ---
 
