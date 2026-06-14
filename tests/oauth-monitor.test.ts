@@ -67,6 +67,12 @@ describe("isOAuthUrl", () => {
     expect(isOAuthUrl("https://example.com/oauth?redirect_uri=https://app.com/cb")).toBe(true);
   });
 
+  it("detects Microsoft consumer Live OAuth authorize endpoint", () => {
+    expect(
+      isOAuthUrl("https://login.live.com/oauth20_authorize.srf?client_id=abc&response_type=code"),
+    ).toBe(true);
+  });
+
   // --- False positive reduction (Critical 1) ---
 
   it("rejects /login without OAuth query params", () => {

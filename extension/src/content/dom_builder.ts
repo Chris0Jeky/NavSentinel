@@ -9,6 +9,7 @@ export interface DownCapture {
   shift: boolean;
   alt: boolean;
   meta: boolean;
+  trusted: boolean;
   stack: Element[];
   top: Element | null;
 }
@@ -134,6 +135,7 @@ export function capturePointerDown(e: PointerEvent): DownCapture {
     shift: e.shiftKey,
     alt: e.altKey,
     meta: e.metaKey,
+    trusted: e.isTrusted,
     stack,
     top: stack[0] ?? null
   };

@@ -43,7 +43,10 @@ const budgets = [
     // aggregate guard with ample room (~452KB / 90%). The chunk is repeatedly
     // near its cap — the Phase-5 program adds more here (P5-A2/P5-B1); a future
     // slice should split capture_isolated into smaller lazy chunks.
-    maxKB: 62,
+    // Bumped 62 -> 63 (#233 / P5-A2): compact Smart Mode benign-context
+    // suppression. Keep this tight; the next capture growth slice should split
+    // capture_isolated into smaller lazy chunks.
+    maxKB: 63,
   },
   {
     label: "main_guard (MAIN world)",

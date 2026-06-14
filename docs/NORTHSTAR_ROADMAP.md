@@ -258,6 +258,14 @@ exported corpus, re-tunes NRS/CDS weights (logistic regression over feature→ve
 calibrated to a single human's tiny labeling budget. *Files:* new `scripts/replay-corpus.mjs`,
 new `scripts/tune-weights.mjs`, `adaptive_scoring.ts`. *Design grounded by* [`NORTHSTAR_RESEARCH_GAPD.md`](research/NORTHSTAR_RESEARCH_GAPD.md): Transcend **ICE** (NCM = NavSentinel's own NRS/CDS score — no retraining; credibility/confidence p-values; quarantine low-credibility prompts into the mislabel loop; bounded-rejection threshold search) + margin sampling μ(θ,x)=1/(1+μ|θᵀx|) to pick the few events worth labeling.
 
+> **Follow-up carried from P5-C1 (#238 / PR #249):** the enriched record captures `cds`, the fired
+> `nrsFactors` *names*, the final NRS (`score`), `navAnomalyScore`, `adaptiveAdj`, `thresholdUsed`, and
+> the full CDS-replay `elementContext` — enough to reproduce the **decision** and replay **CDS** exactly.
+> Exact **NRS re-computation** additionally needs the **variable-weight signal magnitudes** (clickfix
+> score, redirect-chain hops, CSP weakness, JS-behavior, visual-sim; `navAnomalyScore` is already
+> captured). Persist these alongside the factor names as part of this harness — deferred from P5-C1 to
+> keep the all-frames `capture_isolated` content script within its perf budget. (Raised in #249 review.)
+
 ### Program C gate
 - [ ] A stored record offline-reproduces its live decision (replay parity).
 - [ ] Silent allows + ignore/timeout outcomes captured; corpus is label-able.

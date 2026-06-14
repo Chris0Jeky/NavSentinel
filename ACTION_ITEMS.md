@@ -8,7 +8,7 @@
 
 **Purpose:** the running list of things only *you* (Chris) can do — and the context an agent needs to not lose the thread between sessions. Agents flag the open items in every summary; you clear them by saying so.
 
-**Last updated:** 2026-06-13 · by Claude — North-Star research+audit initiative complete (`docs/NORTHSTAR_ROADMAP.md`, issues #232–#246 filed). `main` @ `da400fb`, **0 open PRs**, typecheck/lint clean, **2426 unit tests pass**. Discovery cycles 3–4 merged 2026-06-06 (#197/#202/#208/#210/#212/#214/#220/#230). AI-3 ✅ resolved · AI-4 ✅ web-ext · **AI-5 open (visual-sim pivot decision ready)**.
+**Last updated:** 2026-06-13 (session 2) · by Claude — merged **#247** (North-Star docs; 10 bot findings fixed) + **#248** (failure-ledger autolog hook fix) + **#250** (status-doc sync) + a `gym:serve` Vite-8 fix. **#249 OPEN** = P5-C1 / **#238** (replay-grade `PromptOutcomeEntry`): green CI + 2 adversarial review rounds, **2444 unit tests**, all perf budgets pass — **awaiting your Gate-3 manual Chrome test + merge (= AI-6).** `main` @ `1b0a4a9`. AI-3 ✅ · AI-4 ✅ web-ext · **AI-5 open (reference brand logos)** · **AI-6 open (Gate-3 #249)**.
 
 > **Why this file exists separately from the usual docs:** the status docs on `main`
 > (`docs/agentic/HANDOFF.md`, `docs/agentic/ORCHESTRATOR.md`, `docs/Project_Roadmap.md`,
@@ -21,7 +21,8 @@
 
 ## Current state snapshot (verified 2026-06-13)
 
-- `main` == **`da400fb`**, working tree clean apart from the North-Star docs (`docs/NORTHSTAR_ROADMAP.md`, `docs/research/`) + status-doc re-hydration. **0 open PRs.** The `fix/jsb-stale-todos-and-tests` branch is gone (AI-3 ✅ resolved). Baseline: typecheck clean, lint 0/0, **2426 unit tests pass**. **48 open issues**, incl. North-Star **#232–#246**.
+- **(2026-06-13 session 2 — CURRENT):** `main` == **`1b0a4a9`**. This session merged: **#247** (North-Star roadmap/research docs — fixed all 10 gemini+codex review findings first), **#248** (failure-ledger hygiene: `PostToolUseFailure` → **gitignored `failure_autolog.jsonl`**; curated `failure_ledger.jsonl` scrubbed 78→**7 real entries** [71 were `unclassified` noise]; `agent:hooks:smoke` made branch-aware), and **#250** (status-doc reconciliation). A follow-up PR fixed **`npm run gym:serve`** for Vite 8 (`vite --root gym` → `vite gym`; v8 dropped the `--root` flag, root is now positional — the Gym + Gate-3 testing work again). **#249 OPEN** = P5-C1 / **#238** (replay-grade `PromptOutcomeEntry`: adds `cds`/`nrsFactors`/`navAnomalyScore`/`adaptiveAdj`/`thresholdUsed`/`elementContext`, fixes nav-drops-`reasons` + cred-lacks-`destDomain`): **green CI (Build/Unit + E2E), 2 adversarial review rounds (self-run workflow + Codex) all fixed, 2444 unit tests, all 12 perf budgets pass** — **awaiting Gate-3 manual Chrome test + merge (= AI-6, walkthrough in `POST_MERGE_MANUAL_VERIFICATION.md`).** **Gotcha learned:** `npm run check:perf-budget` is a CI-only gate (not in `test`/`lint`/`typecheck`/`build`); run it locally for any extension change.
+- *(2026-06-13 session 1, superseded):* `main` == `da400fb`, working tree clean apart from the North-Star docs (`docs/NORTHSTAR_ROADMAP.md`, `docs/research/`) + status-doc re-hydration. **0 open PRs.** The `fix/jsb-stale-todos-and-tests` branch is gone (AI-3 ✅ resolved). Baseline: typecheck clean, lint 0/0, **2426 unit tests pass**. **48 open issues**, incl. North-Star **#232–#246**.
 - *History (2026-06-05, superseded by the header above):* the snapshot below describes the D-series batch at `4bd60ce`; cycles 3–4 (2026-06-06, PRs #197/#202/#208/#210/#212/#214/#220/#230) and the North-Star initiative (2026-06-13) have since landed.
 - **ALL 11 D-series discovery PRs MERGED 2026-06-05** (oldest-first, merge commits): **#180, #182, #183, #185, #187, #189, #190, #191, #193, #194, #195.** Each had **fresh-green CI (Build/Unit + E2E)** + **two or more independent adversarial review rounds with ALL findings (every severity) fixed**.
 - **Gate 3 (manual Chrome test) was explicitly WAIVED by Chris for this batch** (decision 2026-06-05) and the merges proceeded. The waiver did **not** discard the manual checks — they are **deferred** to a regression watchlist: **`docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md`**. Accepted risk = time/difficulty if debugging is needed, not silent regressions. **Run that checklist next time you build & load the extension** (see AI-1 in the Completed log; the watchlist supersedes it).
@@ -39,9 +40,24 @@
 
 ## Action items
 
-**OPEN: AI-5 — supply/sanction a set of reference brand *logos* for the logo-embedding model** (or confirm using a public logo set, e.g. the Phishpedia reference list). The pHash-vs-logo *tech decision is already made* — the pivot to logo-embedding is confirmed (D24); this is now a small, low-stakes asset-approval task feeding P5-D6 (#246) / P5-D5 (#245), **not** a pending decision and **not** blocking near-term Phase-5 work. AI-1, AI-2 resolved 2026-06-05; **AI-3, AI-4 resolved 2026-06-13** (see Completed log). The deferred manual checks now live in `docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md`.
+**OPEN: AI-6 — manual Gate-3 on PR #249 (P5-C1 / #238) + merge.** The only open PR; green CI + 2 adversarial review rounds resolved; the only thing left is the real-browser check the sandbox can't run. Walkthrough: `docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md` → "Pending PRE-merge: #249", and AI-6 below. (`npm run gym:serve` was fixed for Vite 8 this session, so the Gym works again.)
+
+**OPEN: AI-5 — supply/sanction a set of reference brand *logos* for the logo-embedding model** (or confirm using a public logo set, e.g. the Phishpedia reference list). The pHash-vs-logo *tech decision is already made* — the pivot to logo-embedding is confirmed (D24); this is now a small, low-stakes asset-approval task feeding P5-D6 (#246) / P5-D5 (#245), **not** a pending decision and **not** blocking near-term Phase-5 work. AI-1, AI-2 resolved 2026-06-05; **AI-3, AI-4 resolved 2026-06-13** (see Completed log). The deferred manual checks live in `docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md`.
 
 > **Note (2026-06-13):** `main` has advanced to `da400fb` since the 2026-06-05 snapshot below (`#196`/FF/domain-impersonation work merged). The snapshot's PR-batch facts are historical; current open-item truth is in this section.
+
+### AI-6 — Manual Gate-3 on PR #249 (P5-C1 / #238) + merge · 🔴 **OPEN (2026-06-13)**
+
+**Why it's yours:** #249 changes what is persisted to `chrome.storage.local` at every nav/cred decision (the replay-grade `PromptOutcomeEntry`: `cds`, `nrsFactors`, `navAnomalyScore`, `adaptiveAdj`, `thresholdUsed`, `elementContext`; plus nav `reasons` and cred `destDomain`). It is **green on CI (Build/Unit + E2E), CLEAN/mergeable, 2 adversarial review rounds resolved** — the only remaining gate is the manual Chrome test the sandbox can't run.
+
+**Guide** (full version in `docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md` → "Pending PRE-merge: #249"):
+1. `git fetch && git checkout feat/p5c1-enrich-prompt-outcome && npm run build`
+2. Load `extension/dist` unpacked in Chrome; second terminal `npm run gym:serve` (fixed for Vite 8 — serves `http://localhost:5173`).
+3. Trigger a blocked/prompted **nav** (suspicious blank-anchor / new-tab fixture) and a **credential** prompt (`level11-credential-guard.html`); make varied choices (allow/block/trust/cancel).
+4. Options page → **Export**; confirm the newest records carry the enriched fields — nav: `cds`/`nrsFactors`/`thresholdUsed`/`elementContext`/`reasons` (+`destDomain` on blocks); cred: `reasons`+`destDomain` (action host). Confirm `elementContext` has only structural fields (no text/URLs). No SW/page console errors.
+5. **Done when:** verified → `gh pr merge 249 --merge --delete-branch`, or tell me "AI-6 done / merge #249" (or "waive Gate-3" as on 2026-06-05) and I'll merge.
+
+---
 
 ### AI-1 — Manual Chrome test (Gate 3) · ✅ **RESOLVED 2026-06-05 — Gate 3 WAIVED by Chris; manual checks deferred to the watchlist**
 

