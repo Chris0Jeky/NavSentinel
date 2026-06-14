@@ -21,8 +21,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
 const checkOnly = process.argv.includes("--check");
 const args = process.argv.slice(2).filter((arg) => arg !== "--check");
-const inputPath = path.resolve(repoRoot, args[0] ?? "data/top_sites.filtered.csv");
-const outputPath = path.resolve(repoRoot, args[1] ?? "extension/src/shared/top_sites_data.ts");
+const inputPath = resolveCliPath(args[0], "data/top_sites.filtered.csv");
+const outputPath = resolveCliPath(args[1], "extension/src/shared/top_sites_data.ts");
 
 const BANNED_CATEGORIES = new Set([
   "adult",
@@ -40,8 +40,38 @@ function normalizeDomain(domain) {
   return String(domain ?? "").trim().toLowerCase().replace(/\.+$/, "");
 }
 
+function resolveCliPath(arg, defaultRepoRelativePath) {
+  return arg ? path.resolve(process.cwd(), arg) : path.resolve(repoRoot, defaultRepoRelativePath);
+}
+
 function parseCsvLine(line) {
-  return line.split(",").map((cell) => cell.trim());
+  const cells = [];
+  let cell = "";
+  let quoted = false;
+
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+    if (ch === "\"") {
+      if (quoted && line[i + 1] === "\"") {
+        cell += "\"";
+        i += 1;
+      } else {
+        quoted = !quoted;
+      }
+    } else if (ch === "," && !quoted) {
+      cells.push(cell.trim());
+      cell = "";
+    } else {
+      cell += ch;
+    }
+  }
+
+  if (quoted) {
+    throw new Error(`Unclosed quoted CSV field: ${line}`);
+  }
+
+  cells.push(cell.trim());
+  return cells;
 }
 
 function readDomains() {

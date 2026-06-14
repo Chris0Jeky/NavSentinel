@@ -527,7 +527,7 @@ function handleBridgeMessage(message: unknown): void {
         nrs: lastDebug.nrs ?? 0,
         reasonCodes: lastDebug.reasonCodes,
         nrsFactors: lastDebug.nrsFactors ?? [],
-        blockThreshold: getNrsBlockThreshold(settings.defaultMode),
+        blockThreshold: lastDebug.blockThreshold ?? getNrsBlockThreshold(settings.defaultMode),
       }));
     }
     return;
@@ -550,7 +550,7 @@ function handleBridgeMessage(message: unknown): void {
           nrs: lastDebug.nrs ?? 0,
           reasonCodes: lastDebug.reasonCodes,
           nrsFactors: lastDebug.nrsFactors ?? [],
-            blockThreshold: getNrsBlockThreshold(settings.defaultMode),
+          blockThreshold: lastDebug.blockThreshold ?? getNrsBlockThreshold(settings.defaultMode),
           })
         : null;
       notifyAllowedTarget(
@@ -1935,7 +1935,18 @@ window.addEventListener(
       }
     }
 
-    lastDebug = { mode, decision, cds, nrs, reasonCodes, nrsFactors, ctx, adaptiveAdj: adaptiveAdjustment, navAnomalyScore };
+    lastDebug = {
+      mode,
+      decision,
+      cds,
+      nrs,
+      blockThreshold,
+      reasonCodes,
+      nrsFactors,
+      ctx,
+      adaptiveAdj: adaptiveAdjustment,
+      navAnomalyScore
+    };
     refreshDebug();
 
     if (settings.debug) {
