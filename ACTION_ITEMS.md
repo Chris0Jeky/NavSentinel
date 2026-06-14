@@ -2,20 +2,20 @@
      - Read it at session start (it is in the CLAUDE.md / AGENTS.md First-5-Minutes list).
      - Surface every OPEN / BLOCKED item near the top of any summary, status report, or handoff you give Chris. Never let an open item go unmentioned.
      - Mark an item DONE *only* when Chris explicitly says so (e.g. "AI-1 is done"). Move it to the Completed log with the date and a one-line result. Do not self-clear.
-     - Keep the "Current state snapshot" accurate when verified truth changes. This file is the can't-lose-context store while the status docs on `main` are stale (see note). -->
+     - Keep the "Current state snapshot" accurate when verified truth changes. This file is the can't-lose-context store while status-doc PRs are in flight (see note). -->
 
 # ACTION ITEMS — Human-Owned Tasks (NavSentinel)
 
 **Purpose:** the running list of things only *you* (Chris) can do — and the context an agent needs to not lose the thread between sessions. Agents flag the open items in every summary; you clear them by saying so.
 
-**Last updated:** 2026-06-14 (Codex checkpoint) · `main` @ `db63192` after merging **#253** / P5-B1. Open PRs: **#249** latest `47e4fb9`, green/clean but still blocked on **AI-6** manual Gate-3; **#254** draft docs/status refresh (check live GitHub status after each status commit); **#256** latest `1890ef0`, green/clean with all review threads resolved; **#257** latest `46a0c0d`, top-sites tier hardening complete, all review threads resolved and green/clean. **AI-5 open (reference brand logos)** · **AI-6 open (Gate-3 #249)**.
+**Last updated:** 2026-06-14 (Codex checkpoint) · `main` @ `db63192` after merging **#253** / P5-B1. PR gate snapshot: **#249** latest `47e4fb9`, green/clean but still blocked on **AI-6** manual Gate-3; **#254** docs/status refresh if still open (if merged, drop it from the active gate set and use the landed docs); **#256** latest `1890ef0`, green/clean with all review threads resolved; **#257** latest `46a0c0d`, top-sites tier hardening complete, all review threads resolved and green/clean. **AI-5 open (reference brand logos)** · **AI-6 open (Gate-3 #249)**.
 
-> **Why this file exists separately from the usual docs:** the status docs on `main`
-> (`docs/agentic/HANDOFF.md`, `docs/agentic/ORCHESTRATOR.md`, `docs/Project_Roadmap.md`,
-> `autodoc/AGENT_INDEX.md`) are currently **stale** and **cannot be edited cleanly** because
-> open PRs already carry divergent edits to those same files. Editing them now = merge
-> conflicts. They get reconciled in one pass after the PRs merge (tracked in **issue #184**).
-> Until then, **this file + the persistent memory are the source of truth for current state.**
+> **Why this file exists separately from the usual docs:** it is the durable human-task
+> register while status-doc PRs are in flight. `docs/agentic/HANDOFF.md`,
+> `docs/agentic/ORCHESTRATOR.md`, `docs/Project_Roadmap.md`, and
+> `autodoc/AGENT_INDEX.md` may lag `main` or open PRs between sync commits. Use this
+> file plus live GitHub state as the source of truth, and reconcile the status docs when
+> verified truth changes.
 
 ---
 
