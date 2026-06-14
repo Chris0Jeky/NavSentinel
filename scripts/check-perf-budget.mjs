@@ -37,6 +37,8 @@ const budgets = [
     // accumulated detection logic, and the ClickFix legit-CAPTCHA hardening
     // (hostname + render-state validation instead of a spoofable src substring)
     // tipped it just over.
+    // P5-A4 adds one DOM containment hint to prevent structural navigation
+    // containers from becoming delegated-click evasions.
     // Bumped 61 -> 62 (#236, P5-B1): silent-decision instrumentation — the
     // nav_silent_allow emission plus the scoping/throttle helpers in
     // silent_decision.ts (which inline into this chunk) — added ~0.9KB, landing
@@ -53,7 +55,11 @@ const budgets = [
     // capture chunk at 64.4KB while total dist stayed under 500KB. Keep this
     // tight; the next capture growth slice should split capture_isolated into
     // smaller lazy chunks.
-    maxKB: 65,
+    // Bumped 65 -> 66 after merging #236 into #235: the container-intent hint
+    // plus silent-decision commit metadata measured just over 65KB while total
+    // dist stayed under 500KB. No further capture growth should land before a
+    // split/trim slice.
+    maxKB: 66,
   },
   {
     label: "main_guard (MAIN world)",

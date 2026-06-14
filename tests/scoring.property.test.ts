@@ -30,8 +30,8 @@ const arbRectHint = fc.record({
 const arbElementHint: fc.Arbitrary<ElementHint> = fc
   .record(
     {
-      tag: fc.constantFrom("DIV", "A", "BUTTON", "SPAN", "INPUT", "IMG", "FORM", "P"),
-      role: fc.option(fc.constantFrom("link", "button", "presentation", "none", ""), { nil: undefined }),
+      tag: fc.constantFrom("DIV", "A", "BUTTON", "SPAN", "INPUT", "IMG", "FORM", "P", "NAV", "nav"),
+      role: fc.option(fc.constantFrom("link", "button", "navigation", "Navigation", "presentation", "none", ""), { nil: undefined }),
       hasOnClick: fc.option(fc.boolean(), { nil: undefined }),
       cursor: fc.option(fc.constantFrom("pointer", "default", "auto", "text"), { nil: undefined }),
       textLength: fc.option(fc.integer({ min: 0, max: 200 }), { nil: undefined }),
@@ -62,6 +62,7 @@ const arbClickContext: fc.Arbitrary<ClickContext> = fc
       input: fc.constantFrom("pointer" as const, "keyboard" as const),
       top: arbElementHint,
       underlying: fc.option(arbElementHint, { nil: undefined }),
+      inTop: fc.option(fc.boolean(), { nil: undefined }),
       retargeted: fc.option(fc.boolean(), { nil: undefined }),
       explicitNewTabIntent: fc.option(fc.boolean(), { nil: undefined }),
       isLegitModalBackdrop: fc.option(fc.boolean(), { nil: undefined })
@@ -405,6 +406,91 @@ describe("computeCDS property tests", () => {
     );
   });
 
+  it("intent mismatch does not fire for structural navigation containers that contain the action", () => {
+    fc.assert(
+      fc.property(
+        arbViewport.filter((viewport) => viewport.w >= 100 && viewport.h >= 100),
+        fc.constantFrom<ElementHint>(
+          { tag: "NAV" },
+          { tag: "nav" },
+          { tag: "DIV", role: "navigation" },
+          { tag: "DIV", role: "Navigation" }
+        ),
+        (viewport, top) => {
+          const navHeight = Math.max(1, Math.floor(viewport.h * 0.1));
+          const ctx: ClickContext = {
+            viewport,
+            input: "pointer",
+            top: { ...top, rect: { w: viewport.w, h: navHeight } },
+            underlying: { tag: "A", textLength: 10, opacity: 1 },
+            inTop: true,
+          };
+          const { reasonCodes } = computeCDS(ctx);
+          expect(reasonCodes).not.toContain("intent_mismatch_under_interactive");
+        }
+      ),
+      { numRuns: 50 }
+    );
+  });
+
+  it("intent mismatch fires for structural navigation overlays without containment", () => {
+    fc.assert(
+      fc.property(
+        arbViewport,
+        fc.constantFrom<ElementHint>(
+          { tag: "NAV" },
+          { tag: "nav" },
+          { tag: "DIV", role: "navigation" },
+          { tag: "DIV", role: "Navigation" }
+        ),
+        fc.constantFrom<Partial<ClickContext>>({}, { inTop: false }),
+        (viewport, top, containment) => {
+          const ctx: ClickContext = {
+            viewport,
+            input: "pointer",
+            top,
+            underlying: { tag: "A", textLength: 10, opacity: 1 },
+            ...containment,
+          };
+          const { reasonCodes } = computeCDS(ctx);
+          expect(reasonCodes).toContain("intent_mismatch_under_interactive");
+        }
+      ),
+      { numRuns: 50 }
+    );
+  });
+
+  it("intent mismatch fires for large contained structural navigation wrappers", () => {
+    fc.assert(
+      fc.property(
+        arbViewport.filter((viewport) => viewport.w > 0 && viewport.h > 0),
+        fc.constantFrom<ElementHint>(
+          { tag: "NAV" },
+          { tag: "nav" },
+          { tag: "DIV", role: "navigation" },
+          { tag: "DIV", role: "Navigation" }
+        ),
+        (viewport, top) => {
+          const ctx: ClickContext = {
+            viewport,
+            input: "pointer",
+            top: {
+              ...top,
+              rect: { w: viewport.w, h: viewport.h },
+              position: "fixed",
+              zIndex: 10000,
+            },
+            underlying: { tag: "A", textLength: 10, opacity: 1 },
+            inTop: true,
+          };
+          const { reasonCodes } = computeCDS(ctx);
+          expect(reasonCodes).toContain("intent_mismatch_under_interactive");
+        }
+      ),
+      { numRuns: 50 }
+    );
+  });
+
   it("reason codes include at least one entry when score > 0", () => {
     fc.assert(
       fc.property(arbClickContext, (ctx) => {
@@ -495,7 +581,7 @@ describe("computeCDS property tests", () => {
       fc.property(
         fc.double({ min: 0, max: 1, noNaN: true }),
         fc.boolean(),
-        fc.constantFrom("pointer", "default", "auto", ""),
+        fc.constantFrom("pointer", "url(hand.cur), pointer", "default", "auto", ""),
         fc.constantFrom("BUTTON", "DIV"),
         (opacity, hasName, cursor, tag) => {
           const top: ElementHint = {
@@ -511,7 +597,10 @@ describe("computeCDS property tests", () => {
           };
           const { reasonCodes } = computeCDS(ctx);
           const isTopInteractive = tag === "BUTTON";
-          const expectFire = isTopInteractive && cursor === "pointer" && !hasName && opacity < 0.3;
+          const expectFire = isTopInteractive &&
+            cursor.trim().toLowerCase().endsWith("pointer") &&
+            !hasName &&
+            opacity < 0.3;
           if (expectFire) {
             expect(reasonCodes).toContain("cursor_pointer_no_affordance");
           } else {
