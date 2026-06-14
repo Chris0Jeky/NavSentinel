@@ -29,14 +29,27 @@ Use the best available Codex tools for the job:
 
 Do not rely on Claude-only `.claude/settings.json` hooks for Codex safety. Apply the same safety rules through this file, `.agents/skills`, and explicit command discipline.
 
+## Default Work Style
+
+- Prefer narrow diffs over rewrites.
+- Keep extension logic local-first: no runtime network calls, telemetry, credential exfiltration, or password-value storage.
+- Preserve existing behavior unless the task explicitly asks for a behavior change.
+- Do not mix navigation-guard, credential-guard, service-worker, and UI work in one slice unless the seam requires it.
+- Do not silently ignore failures. Classify them as blocker, non-blocking risk, pre-existing noise, or invalid signal.
+- Record any workaround and its future fix path.
+- Keep generated summaries short and factual.
+
 ## First 5 Minutes
 
 1. Read `ACTION_ITEMS.md` (human-owned tasks + current-state snapshot — see Human Action Items below).
-2. Read `docs/Project_Roadmap.md`.
-3. Read `autodoc/AGENT_INDEX.md`.
-4. Select one primary `.agents/skills/*` workflow and at most one support workflow.
-5. Identify the smallest safe, reviewable change.
-6. State blockers, assumptions, verification target, and docs-sync target before editing.
+2. Read this `AGENTS.md` if it was not provided in the prompt.
+3. Read `docs/Project_Roadmap.md`.
+4. Read `autodoc/AGENT_INDEX.md`.
+5. Read `CONTRIBUTING.md` or the relevant docs named by the index.
+6. When resuming the autonomous loop, read `docs/agentic/HANDOFF.md` and `docs/agentic/ORCHESTRATOR.md`.
+7. Select one primary `.agents/skills/*` workflow and at most one support workflow unless the user explicitly asks for broader workflow use.
+8. Identify the smallest safe, reviewable change.
+9. State blockers, assumptions, verification target, and docs-sync target before editing.
 
 Do not bulk-read `node_modules`, build output, generated data, archive docs, or research dumps unless the task explicitly requires them.
 
@@ -139,13 +152,35 @@ When a review is performed on a PR (unless the user explicitly says otherwise):
 5. If a finding drifts genuinely out of scope (different extension layer, unrelated seam, pre-existing tech debt), document it and seed a fix: open a GitHub issue, add a roadmap entry, or append to `docs/agentic/FAILURE_LEDGER.md` with a concrete future-fix path.
 6. Tech debt accrual from reviews is not acceptable. "Non-blocking" means "fix it now, not later."
 
+## PR Merge Protocol
+
+Every PR must pass these gates before merge unless the user explicitly changes the gate posture for that PR or batch:
+
+1. **Two independent adversarial review rounds.** Round 1 finds correctness, security, performance, style, test, accessibility, and design issues. Fix everything before Round 2. Round 2 is a fresh attempt to break the updated PR. Fix everything again.
+2. **CI and tests green.** Typecheck, lint, build, unit tests, E2E tests, and any seam-specific checks must pass. New code needs corresponding coverage.
+3. **Manual behavior check where applicable.** Browser-extension behavior, UI, and real Chrome checks remain human-gated when the sandbox cannot run them. Track these in `ACTION_ITEMS.md`.
+4. **Zero tech debt.** No TODO without a linked issue, skipped tests, undocumented workaround, or deferred review finding.
+5. **Docs/status sync.** Update roadmap, `autodoc/AGENT_INDEX.md`, orchestrator, handoff, or failure ledger only when their truth changed.
+
 ## Question, Failure, And Handoff Protocols
 
 - Use `docs/agentic/QUESTION_PROTOCOL.md` before asking for clarification.
 - Use `docs/agentic/FAILURE_LEDGER.md` and `scripts/agent_hooks/render_failure_ledger.py` for recurring or instructive failures.
 - Use `docs/agentic/GUIDE_UPDATE_PROTOCOL.md` before promoting lessons into root instructions.
 
+Ask only for true blockers: irreversible product decisions, destructive filesystem/git/package/release actions, missing credentials or private tokens, security/privacy boundary ambiguity, extension permission conflicts that cannot be resolved from code/docs, runtime network behavior, or ambiguous acceptance criteria that cannot be inferred. Otherwise proceed with a stated assumption and record it in the handoff.
+
 No finding or failure may be skipped because it is "non-blocking" or "minor." Every finding must be either fixed in the current work or seeded as a concrete follow-up (GitHub issue, roadmap entry, or failure ledger entry with a fix path). Tech debt accrual from skipped findings is not acceptable.
+
+Before final response:
+
+1. Re-read the requested outcome.
+2. Verify the exact changed seam.
+3. State commands run and results.
+4. State what was not verified and why.
+5. Update roadmap/status/ledger docs only if their truth changed.
+
+Do not claim tests passed unless they actually ran in the current environment.
 
 Minimum handoff:
 
@@ -189,3 +224,9 @@ Stop. Explain the situation and options (safest first). Let the user choose. Nev
 - Keep commits scoped to one change set.
 - PRs should include a brief summary, linked issues if any, and test results.
 - Add screenshots for UI changes.
+
+## Local Settings
+
+`.claude/settings.json` is Claude-only. Codex must follow the same safety intent through this file, `.agents/skills/*`, explicit command discipline, and the tools actually exposed in the current runtime.
+
+Project-scoped MCP defaults live in `.mcp.json` and are credential-free. Verify live MCP/tool availability before relying on any server or authenticated connector.
