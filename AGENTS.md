@@ -160,7 +160,7 @@ Every PR must pass these gates before merge unless the user explicitly changes t
 2. **CI and tests green.** Typecheck, lint, build, unit tests, E2E tests, and any seam-specific checks must pass. New code needs corresponding coverage.
 3. **Manual behavior check where applicable.** Browser-extension behavior, UI, and real Chrome checks remain human-gated when the sandbox cannot run them. Track these in `ACTION_ITEMS.md`.
 4. **Zero tech debt.** No TODO without a linked issue, skipped tests, undocumented workaround, or deferred review finding.
-5. **Docs/status sync.** Update roadmap, `autodoc/AGENT_INDEX.md`, orchestrator, handoff, or failure ledger only when their truth changed.
+5. **Docs/status sync.** Update `docs/Project_Roadmap.md`, `autodoc/AGENT_INDEX.md`, `docs/agentic/ORCHESTRATOR.md`, `docs/agentic/HANDOFF.md`, or `docs/agentic/failure_ledger.jsonl` only when their truth changed.
 
 ## Question, Failure, And Handoff Protocols
 
