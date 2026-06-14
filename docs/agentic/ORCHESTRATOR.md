@@ -99,7 +99,6 @@ PRs D-* are independent (different files) → parallel branches off `main`, **no
 | P5-B1 / #236 silent-decision events | `feat/p5b1-silent-decision-events` | `main` | root checkout | #253 | done | done | pending after `da6eb35` | Review comments fixed: null-safe logs + SW-backed event append durability; local verification green |
 | Codex contract/status refresh | `docs/codex-contract-refresh` | `origin/main` | `../NavSentinel-codex-contract` | #254 | Gemini done | Codex done | green before latest status sync | Draft docs-only PR; aligns `AGENTS.md` with `CLAUDE.md` and carries autonomous-loop status sync |
 | P5-A2 / #233 Smart Mode blank-prompt suppression | `feat/p5a2-signal-smart-gating` | `origin/main` | `../NavSentinel-p5a2-smart-gating` | #255 | local security review done | local runtime review done | pending after `df6d13b` | Gemini keyboard-activation feedback fixed; local verification: typecheck, lint, build, focused unit 16 pass, targeted E2E 3 pass, perf budget 12/12, full unit 2442 pass |
-| _(none)_ | — | — | — | — | — | — | — | 0 in-flight (0 open PRs @ `da400fb`). **Next: North-Star Phase 5** — #238 (P5-C1) or #233 (P5-A2). |
 
 ---
 

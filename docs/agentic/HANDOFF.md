@@ -10,11 +10,13 @@ Trust live git and GitHub over this snapshot. Re-check `git status -sb`, `git re
 - `main` == **`a68958c`** after #251 (`gym:serve` Vite-8 fix).
 - **#249** (P5-C1 / #238) is green, clean, and still blocked only on AI-6 manual Chrome Gate-3 + merge.
 - **#253** (P5-B1 / #236) has all Gemini/Codex review findings addressed in `da6eb35`: null-safe event log handling, SW-backed `ns-event-log-append`, and awaited credential silent write before resume. Local verification: targeted tests 117 pass, typecheck pass, build pass, perf-budget 12/12 pass, full unit 2461 pass, lint pass. CI and fresh Codex review are running.
-- **#254** (Codex contract/status refresh) is a draft docs PR. `AGENTS.md` was aligned with `CLAUDE.md`; Gemini formatting feedback was fixed in `e0fa07c`; status sync landed through `e60550c`; CI was green before the latest status sync and Codex re-review found no visible issues.
+- **#254** (Codex contract/status refresh) is a draft docs PR. `AGENTS.md` was aligned with `CLAUDE.md`; Gemini formatting feedback was fixed in `e0fa07c`; status sync is carried on the docs branch; CI was green before the latest status sync and Codex re-review found no visible issues.
 - **#255** (P5-A2 / #233) is open from `feat/p5a2-signal-smart-gating` at `df6d13b`. Scope: Smart Mode blank-anchor prompt suppression for narrow benign contexts with trusted pointer/click or keyboard gating, NRS block/factor safeguards, curated IdP/payment matching, and Gym/E2E regression. Local verification: typecheck, lint, build, focused unit 16 pass, targeted E2E 3 pass, perf budget 12/12 (`capture_isolated` 62.6KB / 63KB), full unit 2442 pass with known happy-dom/network stderr. Two independent local adversarial reviews completed and all findings were addressed; Gemini keyboard feedback was fixed and CI/GitHub review are running.
 - Human-owned OPEN items remain **AI-5** (reference brand logos) and **AI-6** (manual Gate-3 on #249).
 
-## Current Verified State
+## Historical Snapshot (Superseded)
+
+The following section is retained as session history. The live pickup state is the 2026-06-14 Codex Pickup Addendum above; do not treat this section as current.
 
 - `main` == **`1b0a4a9`**. This session merged **#247** (North-Star docs; 10 bot review findings fixed), **#248** (failure-ledger: auto-captures → gitignored `failure_autolog.jsonl`; curated ledger scrubbed 78→7 real entries; `agent:hooks:smoke` made branch-aware), and **#250** (status-doc reconciliation). A small follow-up PR fixes **`npm run gym:serve`** for Vite 8 (`vite --root gym` → `vite gym`; the `--root` CLI flag was dropped in v8 — root is now positional).
 - **1 open feature PR: #249** (P5-C1 / #238) — branch `feat/p5c1-enrich-prompt-outcome`, green CI (Build/Unit + E2E), CLEAN/mergeable, 2 review rounds resolved. **Blocked only on Gate-3 manual Chrome test** (sandbox can't run a browser) — see **AI-6** in `ACTION_ITEMS.md` + the "Pending PRE-merge: #249" walkthrough in `docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md`. `fix/jsb-stale-todos-and-tests` gone (AI-3 ✅).
