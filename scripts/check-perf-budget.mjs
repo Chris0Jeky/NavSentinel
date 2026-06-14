@@ -48,10 +48,12 @@ const budgets = [
     // carries event metadata through the MAIN/isolated/SW path; Linux CI measures
     // this chunk at ~62.6KB while total dist remains comfortably under 500KB.
     // Bumped 60 -> 61 (#206) for ClickFix legit-CAPTCHA hardening, then to 63
-    // (#233 / P5-A2) for compact Smart Mode benign-context suppression. Keep
-    // this tight; the next capture growth slice should split capture_isolated
-    // into smaller lazy chunks.
-    maxKB: 63,
+    // (#233 / P5-A2) for compact Smart Mode benign-context suppression.
+    // Bumped 63 -> 65 after merging #233 + #236: Linux CI measured the combined
+    // capture chunk at 64.4KB while total dist stayed under 500KB. Keep this
+    // tight; the next capture growth slice should split capture_isolated into
+    // smaller lazy chunks.
+    maxKB: 65,
   },
   {
     label: "main_guard (MAIN world)",
