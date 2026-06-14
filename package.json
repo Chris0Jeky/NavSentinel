@@ -32,6 +32,8 @@
     "measure:fp": "node scripts/measure-fp.mjs",
     "build:bloom": "node scripts/build-bloom-filter.mjs",
     "build:bloom:test": "node scripts/build-test-bloom-filter.mjs",
+    "build:topsites": "node scripts/build-topsites-tier.mjs",
+    "check:topsites": "node scripts/build-topsites-tier.mjs --check",
     "build:templates": "node scripts/build-brand-templates.mjs",
     "check:bloom-size": "node scripts/check-bloom-size.mjs",
     "release": "node scripts/release.mjs",

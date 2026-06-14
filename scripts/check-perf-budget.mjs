@@ -55,10 +55,10 @@ const budgets = [
     // capture chunk at 64.4KB while total dist stayed under 500KB. Keep this
     // tight; the next capture growth slice should split capture_isolated into
     // smaller lazy chunks.
-    // Bumped 65 -> 66 after merging #236 into #235: the container-intent hint
-    // plus silent-decision commit metadata measured just over 65KB while total
-    // dist stayed under 500KB. No further capture growth should land before a
-    // split/trim slice.
+    // Bumped 65 -> 66 after the P5-A3/P5-A4 line: top-sites trust-tier lookup,
+    // threshold wiring, container-intent hints, and silent-decision metadata
+    // measure just over 65KB while total dist stays under 500KB. No further
+    // capture growth should land before a split/trim slice.
     maxKB: 66,
   },
   {

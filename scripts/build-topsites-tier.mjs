@@ -1,0 +1,182 @@
+#!/usr/bin/env node
+
+/**
+ * Build a deterministic, filtered top-sites tier for NavSentinel.
+ *
+ * Default input is a checked-in starter seed. The same CSV shape can be fed by a
+ * larger vetted Tranco/CrUX export later:
+ *
+ *   domain,tier,source,category,include_subdomains
+ *   example.com,2,tranco,reference,false
+ *
+ * Banned categories are skipped at build time so raw popularity lists never
+ * become an allowlist by accident.
+ */
+
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(__dirname, "..");
+const checkOnly = process.argv.includes("--check");
+const args = process.argv.slice(2).filter((arg) => arg !== "--check");
+const inputPath = resolveCliPath(args[0], "data/top_sites.filtered.csv");
+const outputPath = resolveCliPath(args[1], "extension/src/shared/top_sites_data.ts");
+
+const BANNED_CATEGORIES = new Set([
+  "adult",
+  "gambling",
+  "hosting",
+  "infrastructure",
+  "parking",
+  "piracy",
+  "streaming",
+  "user_content",
+]);
+const ALLOWED_CATEGORIES = new Set([
+  "browser",
+  "business",
+  "cloud",
+  "commerce",
+  "developer",
+  "identity",
+  "payments",
+  "productivity",
+  "professional",
+  "reference",
+  "search",
+  "software",
+  "technology",
+  "video_platform",
+]);
+const ALLOWED_HEADERS = new Set(["domain", "tier", "source", "category", "include_subdomains"]);
+const DOMAIN_RE = /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,62}$/;
+
+function normalizeDomain(domain) {
+  return String(domain ?? "").trim().toLowerCase().replace(/\.+$/, "");
+}
+
+function resolveCliPath(arg, defaultRepoRelativePath) {
+  return arg ? path.resolve(process.cwd(), arg) : path.resolve(repoRoot, defaultRepoRelativePath);
+}
+
+function parseCsvLine(line) {
+  const cells = [];
+  let cell = "";
+  let quoted = false;
+
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+    if (ch === "\"") {
+      if (quoted && line[i + 1] === "\"") {
+        cell += "\"";
+        i += 1;
+      } else {
+        quoted = !quoted;
+      }
+    } else if (ch === "," && !quoted) {
+      cells.push(cell.trim());
+      cell = "";
+    } else {
+      cell += ch;
+    }
+  }
+
+  if (quoted) {
+    throw new Error(`Unclosed quoted CSV field: ${line}`);
+  }
+
+  cells.push(cell.trim());
+  return cells;
+}
+
+function parseIncludeSubdomains(value, domain) {
+  const normalized = String(value ?? "false").trim().toLowerCase();
+  if (normalized === "" || normalized === "false" || normalized === "0" || normalized === "no") return false;
+  if (normalized === "true" || normalized === "1" || normalized === "yes") return true;
+  throw new Error(`Invalid include_subdomains value for ${domain}: ${value}`);
+}
+
+function requireCell(cells, index, field, line) {
+  const value = cells[index];
+  if (value === undefined || value.trim() === "") {
+    throw new Error(`Missing ${field} in CSV row: ${line}`);
+  }
+  return value.trim();
+}
+
+function readEntries() {
+  const text = fs.readFileSync(inputPath, "utf8");
+  const rows = text.split(/\r?\n/).filter((line) => line.trim() && !line.trim().startsWith("#"));
+  if (rows.length === 0) throw new Error(`No rows in ${path.relative(repoRoot, inputPath)}`);
+
+  const header = parseCsvLine(rows[0]).map((cell) => cell.toLowerCase());
+  const unsupportedHeaders = header.filter((cell) => !ALLOWED_HEADERS.has(cell));
+  if (unsupportedHeaders.length > 0) {
+    throw new Error(`Unsupported CSV column(s): ${unsupportedHeaders.join(", ")}`);
+  }
+  const domainIdx = header.indexOf("domain");
+  const tierIdx = header.indexOf("tier");
+  const categoryIdx = header.indexOf("category");
+  const includeSubdomainsIdx = header.indexOf("include_subdomains");
+  if (domainIdx < 0 || tierIdx < 0 || categoryIdx < 0) {
+    throw new Error("CSV must include domain,tier,category columns");
+  }
+
+  const entries = new Map();
+  for (const line of rows.slice(1)) {
+    const cells = parseCsvLine(line);
+    if (cells.length !== header.length) {
+      throw new Error(`CSV row has ${cells.length} columns, expected ${header.length}: ${line}`);
+    }
+
+    const domain = normalizeDomain(requireCell(cells, domainIdx, "domain", line));
+    const tierText = requireCell(cells, tierIdx, "tier", line);
+    const category = requireCell(cells, categoryIdx, "category", line).toLowerCase();
+    const tier = Number(tierText);
+    if (!DOMAIN_RE.test(domain)) throw new Error(`Invalid domain: ${domain}`);
+    if (!Number.isInteger(tier)) throw new Error(`Invalid tier for ${domain}: ${tierText}`);
+    if (tier !== 2) continue;
+    if (BANNED_CATEGORIES.has(category)) continue;
+    if (!ALLOWED_CATEGORIES.has(category)) throw new Error(`Unsupported category for ${domain}: ${category}`);
+
+    const includeSubdomains = includeSubdomainsIdx >= 0
+      ? parseIncludeSubdomains(cells[includeSubdomainsIdx], domain)
+      : false;
+    entries.set(domain, {
+      domain,
+      includeSubdomains: Boolean(entries.get(domain)?.includeSubdomains) || includeSubdomains,
+    });
+  }
+  return [...entries.values()].sort((a, b) => a.domain.localeCompare(b.domain));
+}
+
+function render(entries) {
+  const values = entries.map((entry) => {
+    const fields = [`domain: ${JSON.stringify(entry.domain)}`];
+    if (entry.includeSubdomains) fields.push("includeSubdomains: true");
+    return `  { ${fields.join(", ")} },`;
+  }).join("\n");
+  return `/**\n` +
+    ` * Generated by scripts/build-topsites-tier.mjs from data/top_sites.filtered.csv.\n` +
+    ` * Starter seed only: keep the runtime code stable while the vetted Tranco/CrUX\n` +
+    ` * export grows behind the same build-time interface.\n` +
+    ` */\n` +
+    `export const TOP_SITE_TIER_ENTRIES = [\n${values}\n] as const;\n`;
+}
+
+const entries = readEntries();
+const rendered = render(entries);
+if (checkOnly) {
+  const current = fs.existsSync(outputPath) ? fs.readFileSync(outputPath, "utf8") : "";
+  if (current !== rendered) {
+    console.error(`${path.relative(repoRoot, outputPath)} is stale. Run npm run build:topsites.`);
+    process.exit(1);
+  }
+  console.log(`${path.relative(repoRoot, outputPath)} is up to date (${entries.length} domains).`);
+} else {
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  fs.writeFileSync(outputPath, rendered, "utf8");
+  console.log(`Wrote ${entries.length} filtered top-site domains to ${path.relative(repoRoot, outputPath)}`);
+}

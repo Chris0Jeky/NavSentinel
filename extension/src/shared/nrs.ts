@@ -1,5 +1,9 @@
 import type { ScoreResult } from "./scoring";
 import { NRS_WEIGHT_JS_BEHAVIOR_CAP } from "./js_behavior_state";
+import type { NavigationTrustTier } from "./top_sites";
+import {
+  TRUST_TIER_KNOWN_BAD,
+} from "./top_sites";
 import { NRS_WEIGHT_VISUAL_SIM_CAP } from "./visual_sim_types";
 
 export interface NavigationContext {
@@ -39,6 +43,8 @@ export interface NavigationContext {
   jsBehaviorScore?: number | undefined;
   /** Visual brand-match score (0-30 range) - page resembles a known brand login surface */
   visualSimilarityScore?: number | undefined;
+  /** Local trust tier for the destination; known-bad always overrides benign priors */
+  trustTier?: NavigationTrustTier | undefined;
 }
 
 export interface NRSResult {
@@ -79,6 +85,22 @@ const NRS_DIMINISHING_RETURNS_FACTOR = 0.5;
 
 export const NRS_BLOCK_THRESHOLD = 70;
 export const NRS_STRICT_BLOCK_THRESHOLD = 50;
+
+export function getTierAdjustedBlockThreshold(
+  baseThreshold: number,
+  trustTier?: NavigationTrustTier | undefined,
+): number {
+  const base = Number.isFinite(baseThreshold) ? baseThreshold : NRS_BLOCK_THRESHOLD;
+  const adjustment = (() => {
+    switch (trustTier) {
+      case TRUST_TIER_KNOWN_BAD:
+        return -20;
+      default:
+        return 0;
+    }
+  })();
+  return Math.max(30, Math.min(100, base + adjustment));
+}
 
 export function computeNRS(cdsResult: ScoreResult, navCtx: NavigationContext): NRSResult {
   let nrs = cdsResult.cds;
