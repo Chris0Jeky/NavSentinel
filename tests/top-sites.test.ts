@@ -15,9 +15,8 @@ describe("top-sites trust tier", () => {
     expect(isTopSiteDomain("google.com")).toBe(true);
   });
 
-  it("matches subdomains through their registrable domain", () => {
-    expect(isTopSiteDomain("www.github.com")).toBe(true);
-    expect(isTopSiteDomain("docs.github.com")).toBe(true);
+  it("matches exact filtered top-site subdomains", () => {
+    expect(isTopSiteDomain("login.microsoftonline.com")).toBe(true);
   });
 
   it("does not match lookalike or unknown domains", () => {
@@ -25,7 +24,13 @@ describe("top-sites trust tier", () => {
     expect(isTopSiteDomain("unknown.example")).toBe(false);
   });
 
-  it("does not treat shared-hosting tenant domains as top sites", () => {
+  it("does not treat subdomains as top sites without an explicit generated policy", () => {
+    expect(isTopSiteDomain("docs.github.com")).toBe(false);
+    expect(isTopSiteDomain("evil.auth0.com")).toBe(false);
+    expect(isTopSiteDomain("evil.okta.com")).toBe(false);
+    expect(isTopSiteDomain("evil.slack.com")).toBe(false);
+    expect(isTopSiteDomain("tenant.salesforce.com")).toBe(false);
+    expect(isTopSiteDomain("evil.shopify.com")).toBe(false);
     expect(isTopSiteDomain("evil.amazonaws.com")).toBe(false);
     expect(isTopSiteDomain("bucket.s3.amazonaws.com")).toBe(false);
     expect(isTopSiteDomain("evil.githubusercontent.com")).toBe(false);
@@ -64,6 +69,14 @@ describe("top-sites trust tier", () => {
       isTopFrame: false,
       destHost: "github.com",
     })).toBe(TRUST_TIER_UNKNOWN);
+  });
+
+  it("preserves known-bad precedence for child frames", () => {
+    expect(resolveFrameNavigationTrustTier({
+      isTopFrame: false,
+      destHost: "github.com",
+      knownBadDomain: true,
+    })).toBe(TRUST_TIER_KNOWN_BAD);
   });
 
   it("still lets known-bad override benign priors in top frames", () => {

@@ -1,5 +1,5 @@
 import { getRegistrableDomain, normalizeHost } from "./domain";
-import { TOP_SITE_TIER_DOMAINS } from "./top_sites_data";
+import { TOP_SITE_TIER_ENTRIES } from "./top_sites_data";
 
 export const TRUST_TIER_USER_ALLOWLISTED = 1;
 export const TRUST_TIER_TOP_SITE = 2;
@@ -12,25 +12,27 @@ export type NavigationTrustTier =
   | typeof TRUST_TIER_UNKNOWN
   | typeof TRUST_TIER_KNOWN_BAD;
 
-function hasTopSiteDomain(domain: string): boolean {
+function findTopSiteEntry(domain: string): (typeof TOP_SITE_TIER_ENTRIES)[number] | null {
   let lo = 0;
-  let hi = TOP_SITE_TIER_DOMAINS.length - 1;
+  let hi = TOP_SITE_TIER_ENTRIES.length - 1;
   while (lo <= hi) {
     const mid = (lo + hi) >> 1;
-    const candidate = TOP_SITE_TIER_DOMAINS[mid]!;
-    if (candidate === domain) return true;
-    if (candidate < domain) lo = mid + 1;
+    const candidate = TOP_SITE_TIER_ENTRIES[mid]!;
+    if (candidate.domain === domain) return candidate;
+    if (candidate.domain < domain) lo = mid + 1;
     else hi = mid - 1;
   }
-  return false;
+  return null;
 }
 
 export function isTopSiteDomain(host: string | null | undefined): boolean {
   const normalized = normalizeHost(host ?? "");
   if (!normalized) return false;
-  if (hasTopSiteDomain(normalized)) return true;
+  if (findTopSiteEntry(normalized)) return true;
   const registrable = getRegistrableDomain(normalized);
-  return !!registrable && hasTopSiteDomain(registrable);
+  if (!registrable || registrable === normalized) return false;
+  const entry = findTopSiteEntry(registrable);
+  return !!entry && "includeSubdomains" in entry && entry.includeSubdomains === true;
 }
 
 export function resolveNavigationTrustTier(input: {
@@ -50,6 +52,7 @@ export function resolveFrameNavigationTrustTier(input: {
   destinationAllowlisted?: boolean | undefined;
   knownBadDomain?: boolean | undefined;
 }): NavigationTrustTier {
+  if (input.knownBadDomain) return TRUST_TIER_KNOWN_BAD;
   if (!input.isTopFrame) return TRUST_TIER_UNKNOWN;
   return resolveNavigationTrustTier(input);
 }
