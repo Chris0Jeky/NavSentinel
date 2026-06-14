@@ -1,11 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
   computeNRS,
+  getTierAdjustedBlockThreshold,
   NRS_BLOCK_THRESHOLD,
   NRS_STRICT_BLOCK_THRESHOLD,
 } from "../extension/src/shared/nrs";
 import type { NavigationContext } from "../extension/src/shared/nrs";
 import type { ScoreResult } from "../extension/src/shared/scoring";
+import {
+  TRUST_TIER_KNOWN_BAD,
+  TRUST_TIER_SEEN_BENIGN,
+  TRUST_TIER_TOP_SITE,
+  TRUST_TIER_UNKNOWN,
+  TRUST_TIER_USER_ALLOWLISTED,
+} from "../extension/src/shared/top_sites";
 
 function baseCds(cds = 0, reasonCodes: string[] = []): ScoreResult {
   return { cds, reasonCodes };
@@ -298,6 +306,38 @@ describe("computeNRS", () => {
     it("known bad domain alone exceeds strict block threshold", () => {
       const result = computeNRS(baseCds(0), baseNav({ knownBadDomain: true }));
       expect(result.nrs).toBeGreaterThanOrEqual(NRS_STRICT_BLOCK_THRESHOLD);
+    });
+  });
+
+  describe("trust tiers", () => {
+    it("relaxes top-tier destinations as a benign prior", () => {
+      const result = computeNRS(baseCds(30), baseNav({ trustTier: TRUST_TIER_TOP_SITE }));
+      expect(result.nrs).toBe(15);
+      expect(result.nrsFactors).toContain("nrs_top_site_prior");
+    });
+
+    it("does not apply the top-site prior to known-bad domains", () => {
+      const result = computeNRS(baseCds(0), baseNav({
+        knownBadDomain: true,
+        trustTier: TRUST_TIER_TOP_SITE,
+      }));
+      expect(result.nrs).toBe(50);
+      expect(result.nrsFactors).toContain("nrs_known_bad_domain");
+      expect(result.nrsFactors).not.toContain("nrs_top_site_prior");
+    });
+
+    it("relaxes seen-before-benign destinations less than top-tier sites", () => {
+      const result = computeNRS(baseCds(30), baseNav({ trustTier: TRUST_TIER_SEEN_BENIGN }));
+      expect(result.nrs).toBe(20);
+      expect(result.nrsFactors).toContain("nrs_seen_benign_prior");
+    });
+
+    it("adjusts block thresholds by trust tier", () => {
+      expect(getTierAdjustedBlockThreshold(70, TRUST_TIER_USER_ALLOWLISTED)).toBe(100);
+      expect(getTierAdjustedBlockThreshold(70, TRUST_TIER_TOP_SITE)).toBe(85);
+      expect(getTierAdjustedBlockThreshold(70, TRUST_TIER_SEEN_BENIGN)).toBe(80);
+      expect(getTierAdjustedBlockThreshold(70, TRUST_TIER_UNKNOWN)).toBe(70);
+      expect(getTierAdjustedBlockThreshold(70, TRUST_TIER_KNOWN_BAD)).toBe(50);
     });
   });
 

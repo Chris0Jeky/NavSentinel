@@ -41,6 +41,8 @@ const KNOWN_NRS_CODES = [
   "nrs_nav_anomaly",
   "nrs_js_behavior_suspicious",
   "nrs_visual_brand_match",
+  "nrs_top_site_prior",
+  "nrs_seen_benign_prior",
 ];
 
 const KNOWN_CLICKFIX_CODES = [

@@ -18,8 +18,9 @@ import {
 } from "../shared/allowlist";
 import { getRegistrableDomain } from "../shared/domain";
 import { areSameOrganization } from "../shared/domain_groups";
-import { computeNRS, NRS_BLOCK_THRESHOLD, NRS_STRICT_BLOCK_THRESHOLD } from "../shared/nrs";
+import { computeNRS, getTierAdjustedBlockThreshold, NRS_BLOCK_THRESHOLD, NRS_STRICT_BLOCK_THRESHOLD } from "../shared/nrs";
 import type { NavigationContext } from "../shared/nrs";
+import { resolveNavigationTrustTier } from "../shared/top_sites";
 import {
   createEmptyState,
   isStateExpired,
@@ -1724,6 +1725,11 @@ window.addEventListener(
       ? isKnownBadDomain(destRegDomain) ||
         (destHost !== null && destHost !== destRegDomain && isKnownBadDomain(destHost))
       : false;
+    const trustTier = resolveNavigationTrustTier({
+      destHost,
+      destinationAllowlisted: isAllowed,
+      knownBadDomain: destDomainBad,
+    });
 
     const oauthRedirectMismatch = isOAuthRedirectMismatch();
     const oauthOpenerManip = isOAuthOpenerManipulation();
@@ -1766,6 +1772,7 @@ window.addEventListener(
       navAnomalyScore: navAnomalyScore > 0 ? navAnomalyScore : undefined,
       jsBehaviorScore: jsBehaviorScore > 0 ? jsBehaviorScore : undefined,
       visualSimilarityScore: visualSimScore > 0 ? visualSimScore : undefined,
+      trustTier,
     };
 
     if (dblClickHijack) {
@@ -1792,7 +1799,7 @@ window.addEventListener(
     setActiveToken(token);
 
     let decision: "allow" | "prompt" | "block" = "allow";
-    const blockThreshold = getNrsBlockThreshold(mode);
+    const blockThreshold = getTierAdjustedBlockThreshold(getNrsBlockThreshold(mode), trustTier);
     const smartAllowsBlank =
       mode === "smart" && !!anchor && isLegitBlankAnchor(anchor, ctx, cds, cdsReasons);
     const smartSuppressesBlankPrompt = shouldSuppressSmartBlankPrompt({
@@ -1815,6 +1822,7 @@ window.addEventListener(
         !!(siteRegDomain && destRegDomain && areSameOrganization(siteRegDomain, destRegDomain)),
       oauthRedirectMismatch,
       oauthOpenerManipulation: oauthOpenerManip,
+      trustTier,
     });
 
     if (mode !== "off") {
@@ -1941,7 +1949,7 @@ window.addEventListener(
       const site = siteKeyFromLocation();
       const baseReasons = reasonCodes.filter(r => r !== "nrs_domain_repeat_offender");
       const baseNrs = Math.max(0, cachedDomainRepeatOffender ? nrs - 10 : nrs);
-      void recordNavigation(site, baseNrs, baseReasons, getNrsBlockThreshold(mode))
+      void recordNavigation(site, baseNrs, baseReasons, blockThreshold)
         .then((risk) => { cachedDomainRepeatOffender = risk.isRepeatOffender; })
         .catch((err) => { console.warn("[NavSentinel] domain profile write failed:", err); });
     }

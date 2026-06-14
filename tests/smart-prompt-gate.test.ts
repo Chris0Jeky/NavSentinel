@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  TRUST_TIER_KNOWN_BAD,
+  TRUST_TIER_TOP_SITE,
+  TRUST_TIER_UNKNOWN,
+} from "../extension/src/shared/top_sites";
+import {
   isKnownIdpHost,
   isKnownPaymentOr3dsHost,
   looksLikeOAuthUrl,
@@ -26,6 +31,7 @@ const baseInput = (overrides: Partial<SmartPromptSuppressionInput> = {}): SmartP
   sameOrganization: true,
   oauthRedirectMismatch: false,
   oauthOpenerManipulation: false,
+  trustTier: TRUST_TIER_UNKNOWN,
   ...overrides,
 });
 
@@ -134,8 +140,34 @@ describe("shouldSuppressSmartBlankPrompt", () => {
       expect(shouldSuppressSmartBlankPrompt(baseInput({
         nrs: 45,
         nrsFactors: ["nrs_new_tab_window", factor],
+        trustTier: factor === "nrs_known_bad_domain" ? TRUST_TIER_KNOWN_BAD : TRUST_TIER_UNKNOWN,
       })), factor).toBe(false);
     }
+  });
+
+  it("suppresses filtered top-site blank prompts with only lone low-risk heuristics", () => {
+    expect(shouldSuppressSmartBlankPrompt(baseInput({
+      cds: 15,
+      cdsReasons: ["no_accessible_name"],
+      nrs: 35,
+      nrsFactors: ["nrs_new_tab_window", "nrs_fast_attempt", "nrs_user_activation_active", "nrs_top_site_prior"],
+      sameOrganization: false,
+      destHost: "github.com",
+      destHref: "https://github.com/features",
+      trustTier: TRUST_TIER_TOP_SITE,
+    }))).toBe(true);
+  });
+
+  it("does not suppress top-site prompts when high-confidence attack reasons are present", () => {
+    expect(shouldSuppressSmartBlankPrompt(baseInput({
+      cds: 35,
+      cdsReasons: ["intent_mismatch_under_interactive"],
+      nrs: 55,
+      nrsFactors: ["nrs_new_tab_window", "nrs_top_site_prior"],
+      sameOrganization: false,
+      destHost: "github.com",
+      trustTier: TRUST_TIER_TOP_SITE,
+    }))).toBe(false);
   });
 
   it("does not suppress without a recent captured pointer gesture", () => {

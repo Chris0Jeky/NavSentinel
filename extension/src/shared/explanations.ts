@@ -38,6 +38,8 @@ const EXPLANATIONS: Record<string, string> = {
   nrs_domain_repeat_offender: "This domain has a history of elevated risk scores",
   nrs_js_behavior_suspicious: "Suspicious JavaScript behavior detected on this page",
   nrs_visual_brand_match: "This page resembles a known brand's login on a different site",
+  nrs_top_site_prior: "Destination is in the filtered top-sites tier",
+  nrs_seen_benign_prior: "Destination has been seen as benign before",
 
   // ClickFix detector reason codes (clickfix_detector.ts)
   clipboard_command_with_overlay: "Clipboard was overwritten with a command while a dialog was active",
