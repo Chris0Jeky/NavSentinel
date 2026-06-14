@@ -144,9 +144,16 @@ function readEntries() {
     const includeSubdomains = includeSubdomainsIdx >= 0
       ? parseIncludeSubdomains(cells[includeSubdomainsIdx], domain)
       : false;
+    // Fail closed: a duplicate domain in a trust seed must be an explicit error,
+    // not a silent merge. The previous OR-merge let a second row quietly upgrade
+    // includeSubdomains to true, which would widen exact-host trust to every
+    // subdomain (e.g. attacker.github.com) without any reviewer noticing.
+    if (entries.has(domain)) {
+      throw new Error(`Duplicate domain in seed: ${domain}`);
+    }
     entries.set(domain, {
       domain,
-      includeSubdomains: Boolean(entries.get(domain)?.includeSubdomains) || includeSubdomains,
+      includeSubdomains,
     });
   }
   return [...entries.values()].sort((a, b) => a.domain.localeCompare(b.domain));

@@ -158,6 +158,22 @@ describe("shouldSuppressSmartBlankPrompt", () => {
     }))).toBe(true);
   });
 
+  it("suppresses filtered top-site blank prompts with only the weaker minimal_accessible_name signal", () => {
+    // minimal_accessible_name contributes a lower CDS (+8) than no_accessible_name (+15);
+    // the top-site low-CDS allowance intentionally covers it. This pins that lenient
+    // policy so a future CDS/threshold change cannot silently flip it.
+    expect(shouldSuppressSmartBlankPrompt(baseInput({
+      cds: 8,
+      cdsReasons: ["minimal_accessible_name"],
+      nrs: 50,
+      nrsFactors: ["nrs_new_tab_window", "nrs_fast_attempt", "nrs_user_activation_active"],
+      sameOrganization: false,
+      destHost: "github.com",
+      destHref: "https://github.com/features",
+      trustTier: TRUST_TIER_TOP_SITE,
+    }))).toBe(true);
+  });
+
   it("does not suppress top-site prompts when high-confidence attack reasons are present", () => {
     expect(shouldSuppressSmartBlankPrompt(baseInput({
       cds: 35,

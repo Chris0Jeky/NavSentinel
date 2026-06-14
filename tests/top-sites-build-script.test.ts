@@ -80,4 +80,14 @@ describe("top-sites build script", () => {
     ]);
     expect(() => runScript(extraColumnDir)).toThrow(/CSV row has 5 columns, expected 4/);
   });
+
+  it("fails closed on duplicate domains instead of OR-merging includeSubdomains", () => {
+    const dir = makeTempDir();
+    writeInput(dir, [
+      "domain,tier,source,category,include_subdomains",
+      "github.com,2,seed,developer,false",
+      "github.com,2,seed,developer,true",
+    ]);
+    expect(() => runScript(dir)).toThrow(/Duplicate domain in seed: github\.com/);
+  });
 });
