@@ -151,11 +151,11 @@
 > **DECISION INPUT READY 2026-06-13 (gap-fill research, 3-vote verified):** the visual-sim tech call is now answerable. **Recommend the PIVOT to logo-embedding.** Evidence: USENIX'21 **Phishpedia** (logo + Siamese embeddings) = **98.2% precision / 87.1% recall / 0.19s/page**, far above perceptual-hash/EMD/PhishZoo/LogoSENSE; a pure on-device pHash extension (PhishSnap) is feasible but low-accuracy. Plan: keep pHash only as a cheap pre-filter, pivot confirmation to a logo-embedding model (or on-device VLM in an offscreen doc). See **`docs/NORTHSTAR_ROADMAP.md` → P5-D6 + Decision D24**. **If Chris confirms the pivot, AI-5 re-scopes to "supply reference brand *logos*" (not login screenshots), or P4-01c-as-pHash is closed.** Caveat: Phishpedia is an *identification* system (assumes a page is already flagged) with limited in-the-wild brand coverage — pair it with the existing brand/domain-mismatch flag.
 
 
-**Why it's yours:** the visual-similarity pipeline is fully built and wired but ships **PLACEHOLDER** template hashes (`scripts/build-brand-templates.mjs` emits seeded-PRNG values), so it can never fire a true positive. Replacing them needs hashes built from **real brand login pages** — sourcing/sanctioning those screenshots is a product/legal call only you can make.
+**Why it's yours:** the old pHash/template path is no longer the plan. The remaining human decision is which reference brand **logos** the logo-embedding model may use, or whether to use a public reference set such as Phishpedia. That asset approval is a product/legal call only you can make.
 
-**Context:** P4-01c in `docs/Project_Roadmap.md` + `docs/agentic/ORCHESTRATOR.md` (BLOCKED). Until real templates exist, visual-sim is plumbing-complete, detection-pending.
+**Context:** P5-D6 (#246) carries the logo-embedding implementation path, with P5-D5 (#245) as the on-device ML host. The legacy pHash screenshots/templates context above is retained only as decision history.
 
-**Done when:** you supply (or point me to) a sanctioned set of brand login screenshots, or decide to defer P4-01c indefinitely.
+**Done when:** you supply or approve a sanctioned set of brand logos, confirm a public logo reference set, or explicitly defer the logo-embedding asset dependency.
 
 ---
 
