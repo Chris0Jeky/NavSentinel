@@ -6,6 +6,7 @@ export type DebugInfo = {
   decision: "allow" | "prompt" | "block";
   cds: number;
   nrs?: number;
+  blockThreshold?: number;
   reasonCodes: string[];
   nrsFactors?: string[];
   ctx: ClickContext;

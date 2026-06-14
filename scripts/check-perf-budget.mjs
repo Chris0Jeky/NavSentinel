@@ -33,24 +33,34 @@ const budgets = [
   {
     label: "capture_isolated (content script)",
     glob: "assets/capture_isolated.ts-*.js",
-    // Bumped 60 -> 61 (#206): ClickFix legit-CAPTCHA hardening tipped it over.
-    // Bumped 61 -> 62 (#238 / P5-C1): the replay-grade decision-capture wiring
-    // (snapshot + threading the nav feature vector through the block/prompt/
-    // clickfix outcome sites, incl. recording the destination host on blocks)
-    // added ~1KB to the all-frames content script. The pure feature-selection
-    // builder was deliberately moved into the storage chunk to keep this one
-    // lean; the residual is the call-site wiring. total-dist (500KB) remains the
-    // aggregate guard with ample room (~452KB / 90%). The chunk is repeatedly
-    // near its cap — the Phase-5 program adds more here (P5-A2/P5-B1); a future
-    // slice should split capture_isolated into smaller lazy chunks.
-    // Bumped 62 -> 63 (#233 / P5-A2): compact Smart Mode benign-context
+    // Bumped 60 -> 61 (#206): capture_isolated was already sitting at ~60KB from
+    // accumulated detection logic, and the ClickFix legit-CAPTCHA hardening
+    // (hostname + render-state validation instead of a spoofable src substring)
+    // tipped it just over.
+    // P5-A4 adds one DOM containment hint to prevent structural navigation
+    // containers from becoming delegated-click evasions.
+    // Bumped 61 -> 62 (#236, P5-B1): silent-decision instrumentation — the
+    // nav_silent_allow emission plus the scoping/throttle helpers in
+    // silent_decision.ts (which inline into this chunk) — added ~0.9KB, landing
+    // the chunk at ~61.2KB. The total-dist budget (500KB) remains the aggregate
+    // guard with ample room (~449KB). NOTE: PR #249 (P5-C1) independently grows
+    // this chunk; when both land, re-measure — together they may need a trim or a
+    // further bump. The chunk is repeatedly near its cap — track its growth.
+    // Bumped 62 -> 63 (#236 review fix): commit-confirmed silent-nav logging
+    // carries event metadata through the MAIN/isolated/SW path; Linux CI measures
+    // this chunk at ~62.6KB while total dist remains comfortably under 500KB.
+    // Bumped 60 -> 61 (#206) for ClickFix legit-CAPTCHA hardening, then to 63
+    // (#233 / P5-A2) for compact Smart Mode benign-context suppression.
     // Bumped 63 -> 65 after merging #233 + #236: Linux CI measured the combined
-    // Smart Mode + silent-decision chunk at 64.4KB. Keep this tight; the next
-    // capture growth slice should split capture_isolated into smaller lazy chunks.
-    // Bumped 65 -> 66 after merging #236 into #238: replay-grade prompt outcome
-    // capture plus silent-decision commit metadata measured just over 65KB while
-    // total dist stayed under 500KB. No further capture growth should land before
-    // a split/trim slice.
+    // capture chunk at 64.4KB while total dist stayed under 500KB. Keep this
+    // tight; the next capture growth slice should split capture_isolated into
+    // smaller lazy chunks.
+    // Bumped 65 -> 66 after the P5-A3/P5-A4 line: top-sites trust-tier lookup,
+    // threshold wiring, container-intent hints, and silent-decision metadata
+    // measure just over 65KB while total dist stays under 500KB. No further
+    // capture growth should land before a split/trim slice.
+    // #238 / P5-C1 then adds replay-grade outcome wiring at the call sites while
+    // keeping the pure feature-selection builder in the storage chunk.
     maxKB: 66,
   },
   {

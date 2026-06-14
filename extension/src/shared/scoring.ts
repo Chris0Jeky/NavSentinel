@@ -28,6 +28,8 @@ export interface ClickContext {
   input: "pointer" | "keyboard";
   top: ElementHint;
   underlying?: ElementHint;
+  /** True when the underlying interactive candidate is a descendant of the top element. */
+  inTop?: boolean;
   retargeted?: boolean;
   explicitNewTabIntent?: boolean;
   isLegitModalBackdrop?: boolean;
@@ -63,7 +65,7 @@ function hasMinimalName(h: ElementHint): boolean {
 }
 
 function isInteractive(h: ElementHint): boolean {
-  const tag = h.tag;
+  const tag = h.tag.toUpperCase();
   if (tag === "A" || tag === "BUTTON") return true;
   const role = (h.role ?? "").toLowerCase();
   if (role === "link" || role === "button") return true;
@@ -71,11 +73,36 @@ function isInteractive(h: ElementHint): boolean {
   return false;
 }
 
+function isPointerCursor(cursor: string | undefined): boolean {
+  return (cursor ?? "").trim().toLowerCase().endsWith("pointer");
+}
+
+function hasActionIntent(h: ElementHint): boolean {
+  if (isInteractive(h)) return true;
+  return isPointerCursor(h.cursor);
+}
+
+function isStructuralNavigationContainer(h: ElementHint): boolean {
+  if (hasActionIntent(h)) return false;
+  const tag = h.tag.toUpperCase();
+  const role = (h.role ?? "").toLowerCase();
+  return tag === "NAV" || role === "navigation";
+}
+
 function coverageRatio(h: ElementHint, viewport: { w: number; h: number }): number | undefined {
   const rect = h.rect;
   if (!rect) return undefined;
   if (viewport.w <= 0 || viewport.h <= 0) return undefined;
   return (rect.w * rect.h) / (viewport.w * viewport.h);
+}
+
+function isBenignContainedNavigationContainer(h: ElementHint, ctx: ClickContext): boolean {
+  if (!isStructuralNavigationContainer(h) || ctx.inTop !== true) return false;
+  const ratio = coverageRatio(h, ctx.viewport);
+  if (ratio === undefined || ratio > 0.20) return false;
+  const pos = (h.position ?? "").toLowerCase();
+  const z = h.zIndex ?? 0;
+  return !(z >= 5000 && (pos === "fixed" || pos === "absolute"));
 }
 
 function isVisible(h: ElementHint): boolean {
@@ -130,7 +157,8 @@ export function computeCDS(ctx: ClickContext): ScoreResult {
     const underInteractive = isInteractive(under);
     const underHasName = nameLength(under) > 0;
     const topIntentful = topInteractive && topHasName;
-    if (underInteractive && underHasName && !topIntentful) {
+    const benignContainer = isBenignContainedNavigationContainer(top, ctx);
+    if (underInteractive && underHasName && !topIntentful && !benignContainer) {
       cds += 35;
       reasons.push("intent_mismatch_under_interactive");
     }
@@ -184,8 +212,7 @@ export function computeCDS(ctx: ClickContext): ScoreResult {
   }
 
   // --- Cursor pointer with no affordance (uses gradient opacity threshold) ---
-  const cursor = (top.cursor ?? "").toLowerCase();
-  if (topInteractive && cursor === "pointer" && !topHasName && opacity < 0.3) {
+  if (topInteractive && isPointerCursor(top.cursor) && !topHasName && opacity < 0.3) {
     cds += 10;
     reasons.push("cursor_pointer_no_affordance");
   }

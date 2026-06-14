@@ -1,4 +1,6 @@
 import type { Mode } from "../shared/types";
+import type { NavigationTrustTier } from "../shared/top_sites";
+import { TRUST_TIER_TOP_SITE } from "../shared/top_sites";
 
 const SMART_GESTURE_WINDOW_MS = 1500;
 
@@ -13,6 +15,11 @@ const BENIGN_NRS_FACTORS = new Set([
   "nrs_user_activation_active",
 ]);
 const SAME_ORG_LOW_CDS_REASONS = new Set(["no_accessible_name", "keyboard_activation"]);
+const TOP_SITE_LOW_CDS_REASONS = new Set([
+  "no_accessible_name",
+  "minimal_accessible_name",
+  "keyboard_activation",
+]);
 
 export interface SmartPromptSuppressionInput {
   mode: Mode;
@@ -33,6 +40,7 @@ export interface SmartPromptSuppressionInput {
   sameOrganization: boolean;
   oauthRedirectMismatch: boolean;
   oauthOpenerManipulation: boolean;
+  trustTier?: NavigationTrustTier | undefined;
 }
 
 function normalizeHost(host: string | null | undefined): string {
@@ -70,7 +78,11 @@ export function shouldSuppressSmartBlankPrompt(input: SmartPromptSuppressionInpu
     input.cds <= 15 &&
     input.cdsReasons.length > 0 &&
     input.cdsReasons.every((reason) => SAME_ORG_LOW_CDS_REASONS.has(reason));
-  if (!sameOrgLowCds && (input.cds > 0 || input.cdsReasons.length > 0)) return false;
+  const topSiteLowCds = input.trustTier === TRUST_TIER_TOP_SITE &&
+    input.cds <= 20 &&
+    input.cdsReasons.length > 0 &&
+    input.cdsReasons.every((reason) => TOP_SITE_LOW_CDS_REASONS.has(reason));
+  if (!sameOrgLowCds && !topSiteLowCds && (input.cds > 0 || input.cdsReasons.length > 0)) return false;
   if (input.nrs >= input.blockThreshold) return false;
   if (input.nrsFactors.some((factor) => !BENIGN_NRS_FACTORS.has(factor))) return false;
 
@@ -84,6 +96,7 @@ export function shouldSuppressSmartBlankPrompt(input: SmartPromptSuppressionInpu
   if (!shortPointerGesture && !trustedKeyboardGesture) return false;
 
   if (input.sameOrganization) return true;
+  if (topSiteLowCds) return true;
 
   if (
     isKnownIdpHost(input.destHost) &&

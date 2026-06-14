@@ -18,8 +18,9 @@ import {
 } from "../shared/allowlist";
 import { getRegistrableDomain } from "../shared/domain";
 import { areSameOrganization } from "../shared/domain_groups";
-import { computeNRS, NRS_BLOCK_THRESHOLD, NRS_STRICT_BLOCK_THRESHOLD } from "../shared/nrs";
+import { computeNRS, getTierAdjustedBlockThreshold, NRS_BLOCK_THRESHOLD, NRS_STRICT_BLOCK_THRESHOLD } from "../shared/nrs";
 import type { NavigationContext } from "../shared/nrs";
+import { resolveFrameNavigationTrustTier } from "../shared/top_sites";
 import {
   createEmptyState,
   isStateExpired,
@@ -526,7 +527,7 @@ function handleBridgeMessage(message: unknown): void {
         nrs: lastDebug.nrs ?? 0,
         reasonCodes: lastDebug.reasonCodes,
         nrsFactors: lastDebug.nrsFactors ?? [],
-        blockThreshold: getNrsBlockThreshold(settings.defaultMode),
+        blockThreshold: lastDebug.blockThreshold ?? getNrsBlockThreshold(settings.defaultMode),
       }));
     }
     return;
@@ -549,7 +550,7 @@ function handleBridgeMessage(message: unknown): void {
           nrs: lastDebug.nrs ?? 0,
           reasonCodes: lastDebug.reasonCodes,
           nrsFactors: lastDebug.nrsFactors ?? [],
-            blockThreshold: getNrsBlockThreshold(settings.defaultMode),
+          blockThreshold: lastDebug.blockThreshold ?? getNrsBlockThreshold(settings.defaultMode),
           })
         : null;
       notifyAllowedTarget(
@@ -1732,6 +1733,13 @@ window.addEventListener(
       ? isKnownBadDomain(destRegDomain) ||
         (destHost !== null && destHost !== destRegDomain && isKnownBadDomain(destHost))
       : false;
+    const topFrame = isTopFrame();
+    const trustTier = resolveFrameNavigationTrustTier({
+      isTopFrame: topFrame,
+      destHost,
+      destinationAllowlisted: isAllowed,
+      knownBadDomain: destDomainBad,
+    });
 
     const oauthRedirectMismatch = isOAuthRedirectMismatch();
     const oauthOpenerManip = isOAuthOpenerManipulation();
@@ -1774,6 +1782,7 @@ window.addEventListener(
       navAnomalyScore: navAnomalyScore > 0 ? navAnomalyScore : undefined,
       jsBehaviorScore: jsBehaviorScore > 0 ? jsBehaviorScore : undefined,
       visualSimilarityScore: visualSimScore > 0 ? visualSimScore : undefined,
+      trustTier,
     };
 
     if (dblClickHijack) {
@@ -1800,7 +1809,7 @@ window.addEventListener(
     setActiveToken(token);
 
     let decision: "allow" | "prompt" | "block" = "allow";
-    const blockThreshold = getNrsBlockThreshold(mode);
+    const blockThreshold = getTierAdjustedBlockThreshold(getNrsBlockThreshold(mode), trustTier);
     // Replay-grade feature snapshot (P5-C1 / #238). Built from LOCAL decision
     // scope here — `lastDebug` is only assigned below (after the branches), so
     // it would carry the previous click's data at the outcome call sites.
@@ -1835,6 +1844,7 @@ window.addEventListener(
         !!(siteRegDomain && destRegDomain && areSameOrganization(siteRegDomain, destRegDomain)),
       oauthRedirectMismatch,
       oauthOpenerManipulation: oauthOpenerManip,
+      trustTier,
     });
 
     if (mode !== "off") {
@@ -1904,7 +1914,6 @@ window.addEventListener(
     }
 
     if (decision === "allow") {
-      const topFrame = isTopFrame();
       const silentNavEvent = buildSilentNavEvent({
         destHref: parsed?.href,
         destHost,
@@ -1949,7 +1958,18 @@ window.addEventListener(
       }
     }
 
-    lastDebug = { mode, decision, cds, nrs, reasonCodes, nrsFactors, ctx, adaptiveAdj: adaptiveAdjustment, navAnomalyScore };
+    lastDebug = {
+      mode,
+      decision,
+      cds,
+      nrs,
+      blockThreshold,
+      reasonCodes,
+      nrsFactors,
+      ctx,
+      adaptiveAdj: adaptiveAdjustment,
+      navAnomalyScore
+    };
     refreshDebug();
 
     if (settings.debug) {
@@ -1964,7 +1984,7 @@ window.addEventListener(
       const site = siteKeyFromLocation();
       const baseReasons = reasonCodes.filter(r => r !== "nrs_domain_repeat_offender");
       const baseNrs = Math.max(0, cachedDomainRepeatOffender ? nrs - 10 : nrs);
-      void recordNavigation(site, baseNrs, baseReasons, getNrsBlockThreshold(mode))
+      void recordNavigation(site, baseNrs, baseReasons, blockThreshold)
         .then((risk) => { cachedDomainRepeatOffender = risk.isRepeatOffender; })
         .catch((err) => { console.warn("[NavSentinel] domain profile write failed:", err); });
     }
