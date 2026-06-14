@@ -1,7 +1,7 @@
 # Session Handoff - NavSentinel Autonomous Loop
 
 **Last updated:** 2026-06-14
-**Status (2026-06-14 post-#258 checkpoint):** `main` @ **`bc06c65`** after #254 (Codex contract/status), #256 (P5-A4), #257 (P5-A3), and #258 (post-merge status sync) merged. Open PR gate: **#249** at `3e0389e`, green/clean and still blocked only by AI-6 manual Gate-3. Phase 5 plan: [`docs/NORTHSTAR_ROADMAP.md`](../NORTHSTAR_ROADMAP.md); issues **#232–#246** (`north-star`).
+**Status (2026-06-14 post-#258 checkpoint):** `main` @ **`bc06c65`** after #254 (Codex contract/status), #256 (P5-A4), #257 (P5-A3), and #258 (post-merge status sync) merged. Open PR gate: **#249** at `3e0389e`, green/clean and still blocked only by AI-6 manual Gate-3. Phase 5 plan: [`docs/NORTHSTAR_ROADMAP.md`](../NORTHSTAR_ROADMAP.md); live open North-Star issues are **#232**, **#237–#246**, and **#252**.
 
 Trust live git and GitHub over this snapshot. Re-check `git status -sb`, `git rev-parse main`, `git rev-parse origin/main`, PR checks, review threads, and comments before merging or branching.
 
@@ -11,7 +11,7 @@ Trust live git and GitHub over this snapshot. Re-check `git status -sb`, `git re
 - **#249** (P5-C1 / #238) is refreshed from the post-#257 feature base in `3e0389e` and remains open/clean/green against current `main`. It remains blocked only on AI-6 manual Chrome Gate-3 + merge. Conflict resolution preserved both replay-grade `PromptOutcomeEntry` fields and top-sites tier-adjusted threshold recording. Local verification after the refresh: `build:topsites`, `check:topsites`, focused replay/storage/silent/Smart/OAuth/scoring/top-sites/dom-builder tests 483 pass, typecheck, build, lint, perf budget 12/12 (`capture_isolated` 65.0KB / 66KB; total dist 459.7KB / 500KB), and `git diff --check`. Fresh GitHub Build/Unit + E2E are green.
 - **#253** (P5-B1 / #236) merged into `main` as `db63192` after clean merge state, green Build/Unit + E2E, and all 14 audited review threads resolved. The merged branch persists same-tab silent navigation decisions only after matching top-frame commits, covers JS-driven allowed same-tab navigations, filters non-web schemes, avoids duplicate `_self`/`_top`/`_parent` logging, logs explicit-new-tab silent allows immediately, restricts queued target allowance to top-frame same-tab document commits, and gives GET form submissions query-prefix commit matching without widening ordinary exact target matching. Two delegated supplemental review agents failed on Codex usage limits; the failure is ledgered and replaced by direct local review plus review-thread audit.
 - **#254** (Codex contract/status refresh) merged as `6faa856`; its docs/workflow branch and worktree were pruned.
-- **#255** (P5-A2 / #233) merged into `main` as `69400fc` after green Build/Unit + E2E, latest Codex clean on `4a77b39`, and all six fixed review threads resolved.
+- **#255** (P5-A2 / #233) merged into `main` as `69400fc` after green Build/Unit + E2E, latest Codex clean on `4a77b39`, and all six fixed review threads resolved; issue #233 is now closed.
 - **#256** (P5-A4 / #235) merged as `c63f832`; its branch and worktree were pruned.
 - **#257** (P5-A3 / #234) merged as `213ebcb`; its branch and worktree were pruned.
 - **#258** (post-merge status sync) merged as `bc06c65`; its branch was pruned.
@@ -34,11 +34,11 @@ The following section is retained as session history. The live pickup state is t
 
 ## Next Safe Action
 
-Do not start duplicate Phase-5 slices while **#249** is still open for human Gate-3. After #249 settles, pick the next unstarted North-Star slice from [`docs/NORTHSTAR_ROADMAP.md`](../NORTHSTAR_ROADMAP.md), likely **#232** (P5-A1 Smart-Mode silence CI gate) or **#237** (P5-B3 Decision Journal UI), unless a higher-priority review/CI failure appears. The Firefox stack **FF-02→FF-04** is unblocked (**AI-4 = `web-ext`**) but should wait behind the active Phase-5 PR gate.
+Do not start duplicate Phase-5 slices while **#249** is still open for human Gate-3. After #249 settles, pick the next unstarted North-Star slice from [`docs/NORTHSTAR_ROADMAP.md`](../NORTHSTAR_ROADMAP.md), likely **#232** (P5-A1 Smart-Mode silence CI gate), **#237** (P5-B3 Decision Journal UI), or **#252** (P5-B1 follow-up e2e/import trim), unless a higher-priority review/CI failure appears. The Firefox stack **FF-02→FF-04** is unblocked (**AI-4 = `web-ext`**) but should wait behind the active Phase-5 PR gate.
 
 ## Active Backlog
 
-- **North-Star Phase 5: #232–#246** (`north-star` label) — FP-Elimination (#232/#233/#234/#235), Friend-Advisor (#236/#237), Feedback-Capture (#238/#239/#240/#241), Architecture (#242/#243/#244/#245/#246). See `docs/NORTHSTAR_ROADMAP.md`.
+- **North-Star Phase 5:** original slices **#232–#246** (`north-star` label) plus follow-up **#252**. Live open set is **#232**, **#237–#246**, and **#252**; #233/#234/#235/#236 are merged/closed, and #238 is active in #249. See `docs/NORTHSTAR_ROADMAP.md`.
 - **Firefox port FF-02→FF-04** — AI-4 decided (`web-ext`); FF-01 shim merged (#173). Prereq: `session_state.ts` shim routing (P5-D3; session_state tracked by **#228**). Note: **#245 is P5-D5 (on-device ML), not Firefox.**
 - **Discovery cycle 3–4 backlog (open):** popup #205/#215/#216/#218/#219, oauth #207/#221/#222/#223, adaptive #204/#213, scoring #209/#217, credential/storage #199/#200/#201/#203/#227, iframe #225/#226, session_state #228, icon #229.
 - Older: #127 (JS behavior), #175/#176/#178/#179/#181/#186 (discovery), #184 (docs reconciliation).

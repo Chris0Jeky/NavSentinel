@@ -47,7 +47,7 @@ Status legend: `TODO` · `IN-PROGRESS` · `IN-REVIEW` · `MERGE-READY` · `DONE`
 
 Roadmap truth verified against `docs/Project_Roadmap.md` (Phases 0-3 done; Phase 4: P4-05–P4-08 done, P4-01/P4-02 in progress, P4-03/P4-04 pending). Baseline 2026-05-30: typecheck clean, lint 0/0, 2206 tests pass.
 
-**Updated 2026-06-14:** `main` @ **`bc06c65`** after **#254**, **#256**, **#257**, and **#258** merged. Open PR gate: **#249** (P5-C1 / #238, latest `3e0389e`, green/clean, human Gate-3). Active track = **North-Star Phase 5** (issues **#232–#246**, `north-star` label; see [`docs/NORTHSTAR_ROADMAP.md`](../NORTHSTAR_ROADMAP.md)). Discovery cycles 3–4 merged 2026-06-06 (#197/#202/#208/#210/#212/#214/#220/#230).
+**Updated 2026-06-14:** `main` @ **`bc06c65`** after **#254**, **#256**, **#257**, and **#258** merged. Open PR gate: **#249** (P5-C1 / #238, latest `3e0389e`, green/clean, human Gate-3). Active track = **North-Star Phase 5** (original issues **#232–#246** plus follow-up **#252**; live open set **#232**, **#237–#246**, **#252**; see [`docs/NORTHSTAR_ROADMAP.md`](../NORTHSTAR_ROADMAP.md)). Discovery cycles 3–4 merged 2026-06-06 (#197/#202/#208/#210/#212/#214/#220/#230).
 
 | ID | Slice | Source | Priority | Status | Depends on | Notes |
 |----|-------|--------|----------|--------|-----------|-------|
@@ -61,7 +61,7 @@ Roadmap truth verified against `docs/Project_Roadmap.md` (Phases 0-3 done; Phase
 | P4-01c | Visual-sim → **logo-embedding pivot** (retires placeholder pHash to a pre-filter) | Roadmap P4-01 / **P5-D6 (#246)** | P4 | PIVOT ✅ (2026-06-13) | on-device-ML host #245; AI-5 reference logos | Pivot **confirmed by maintainer**; pHash→logo-embedding (Phishpedia 98.2% precision). AI-5 re-scoped to reference logos. |
 | P2-GATE-FP | Re-run FP/TP measurement after P4 additions (Phase 2 gate open item) | Roadmap | P4 | TODO | — | `npm run measure:fp`; confirm < 0.1% still holds. Subsumed by **P5-A1** (#232) Smart-Mode-Silence CI gate. |
 | P4-04 | Community threat intelligence | Roadmap | P5 | BLOCKED | protocol/privacy product decisions | XL, deferred — not an autonomous pick |
-| **NS-P5** | **North-Star Phase 5** — 4 programs (FP-elim / advisor / feedback / architecture) | `docs/NORTHSTAR_ROADMAP.md` | **P1** | IN-PROGRESS | — | **Active track.** Do not duplicate active/merged slices: #238 is #249 / human Gate-3, #233 merged as #255, #234 merged as #257, #235 merged as #256, #236 merged as #253. Next unstarted candidates after #249 settles: **#232** (P5-A1 Smart-Mode silence CI gate) or **#237** (P5-B3 Decision Journal UI). |
+| **NS-P5** | **North-Star Phase 5** — 4 programs (FP-elim / advisor / feedback / architecture) | `docs/NORTHSTAR_ROADMAP.md` + #252 follow-up | **P1** | IN-PROGRESS | — | **Active track.** Do not duplicate active/merged slices: #238 is #249 / human Gate-3, #233 merged/closed via #255, #234 merged as #257, #235 merged as #256, #236 merged as #253. Live open North-Star issues: #232, #237–#246, #252. Next candidates after #249 settles: **#232** (P5-A1 Smart-Mode silence CI gate), **#237** (P5-B3 Decision Journal UI), or **#252** (P5-B1 follow-up e2e/import trim). |
 
 ---
 
@@ -95,7 +95,7 @@ PRs D-* are independent (different files) → parallel branches off `main`, **no
 
 | Slice | Branch | Base | Worktree | PR | Round 1 | Round 2 | Bots | Opened |
 |-------|--------|------|----------|----|---------|---------|------|--------|
-| P5-C1 / #238 replay-grade `PromptOutcomeEntry` | `feat/p5c1-enrich-prompt-outcome` | `main` | `../NavSentinel-p5c1-enrich-prompt-outcome` | #249 | done | done | green after `3e0389e` | Refreshed from `main` after #256/#257; conflicts resolved in capture threshold recording and perf-budget rationale. Local verification: `build:topsites`, `check:topsites`, focused tests 483 pass, typecheck, build, lint, perf-budget 12/12. Still waiting on AI-6 manual Chrome Gate-3 + merge. |
+| P5-C1 / #238 replay-grade `PromptOutcomeEntry` | `feat/p5c1-enrich-prompt-outcome` | `main` | `../NavSentinel-p5c1-enrich-prompt-outcome` | #249 | done | done | green after `3e0389e` | Refreshed from the post-#257 feature base and currently clean against `main`; conflicts resolved in capture threshold recording and perf-budget rationale. Local verification: `build:topsites`, `check:topsites`, focused tests 483 pass, typecheck, build, lint, perf-budget 12/12. Still waiting on AI-6 manual Chrome Gate-3 + merge. |
 | P5-B1 / #236 silent-decision events | `feat/p5b1-silent-decision-events` | `main` | root checkout | #253 | done | done | merged `db63192` | Merged after clean merge state, green Build/Unit + E2E, and all 14 audited review threads resolved. Issue #236 closed. Local feature branch and temporary helper worktree pruned. |
 | Codex contract/status refresh | `docs/codex-contract-refresh` | `origin/main` | pruned | #254 | Gemini done | Codex done | merged `6faa856` | Landed `AGENTS.md`/status-doc refresh and CI Xvfb apt cleanup. |
 | P5-A2 / #233 Smart Mode blank-prompt suppression | `feat/p5a2-signal-smart-gating` | `origin/main` | `../NavSentinel-p5a2-smart-gating` | #255 | local security review done | local runtime review done | merged `69400fc` | Gemini keyboard-activation and Codex Live OAuth/OAuth-tracker feedback fixed; latest Codex clean; all six review threads resolved before merge |
