@@ -41,6 +41,7 @@ describe("known Smart-mode benign context helpers", () => {
   it("recognizes OAuth URLs only when path and query both indicate OAuth", () => {
     expect(looksLikeOAuthUrl("https://accounts.google.com/o/oauth2/v2/auth?client_id=abc")).toBe(true);
     expect(looksLikeOAuthUrl("https://login.microsoftonline.com/common/oauth2/v2.0/authorize?response_type=code")).toBe(true);
+    expect(looksLikeOAuthUrl("https://login.live.com/oauth20_authorize.srf?client_id=abc&response_type=code")).toBe(true);
     expect(looksLikeOAuthUrl("https://accounts.google.com/login?continue=/dashboard")).toBe(false);
     expect(looksLikeOAuthUrl("not-a-url")).toBe(false);
   });

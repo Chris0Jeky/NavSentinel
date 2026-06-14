@@ -4,7 +4,7 @@ const SMART_GESTURE_WINDOW_MS = 1500;
 
 const IDP_RE = /(^|\.)((accounts\.google\.com)|(login\.microsoftonline\.com)|(login\.live\.com)|(okta\.com)|(auth0\.com))$/;
 const PAYMENT_RE = /(^|\.)(stripe\.com|paypal\.com|checkout\.com|squareup\.com|braintreegateway\.com|visa\.com|mastercard\.com|americanexpress\.com|cardinalcommerce\.com|arcot\.com)$/;
-const OAUTH_PATH_RE = /\/(oauth2?|authorize|consent|openid)(\/|$)/i;
+const OAUTH_PATH_RE = /\/(oauth20_authorize\.srf|oauth2?|authorize|consent|openid)(\/|$)/i;
 const OAUTH_QUERY_RE = /(^|[?&])(response_type|client_id|redirect_uri|scope)=/i;
 const BENIGN_NRS_FACTORS = new Set([
   "nrs_new_tab_window",
