@@ -315,6 +315,8 @@ type EventLogAppendResponse =
   | { ok: true }
   | { ok: false; error: string };
 
+const STORAGE_DELEGATE_RETRY_DELAYS_MS = [50, 150, 400];
+
 function isEventKind(value: unknown): value is EventKind {
   return typeof value === "string" && EVENT_KINDS.has(value as EventKind);
 }
@@ -340,15 +342,17 @@ export function isEventLogAppendMessage(message: unknown): message is EventLogAp
   return candidate.type === "ns-event-log-append" && isEventLogEntry(candidate.entry);
 }
 
+function normalizeEventLog(value: unknown): EventLogEntry[] {
+  return Array.isArray(value) ? value.filter(isEventLogEntry).slice(-5000) : [];
+}
+
 function makeId(): string {
   return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
 export async function getEventLog(): Promise<EventLogEntry[]> {
   const res = await chrome.storage.local.get(EVENT_LOG_KEY);
-  const log = res[EVENT_LOG_KEY];
-  if (!Array.isArray(log)) return [];
-  return log.slice(-5000) as EventLogEntry[];
+  return normalizeEventLog(res[EVENT_LOG_KEY]);
 }
 
 /**
@@ -361,11 +365,12 @@ export async function getEventLog(): Promise<EventLogEntry[]> {
  * is preserved. (Per-store separation is the eventual P5-C4 / #240 end-state.)
  */
 export function trimEventLog(entries: EventLogEntry[], limit: number): EventLogEntry[] {
-  if (entries.length <= limit) return entries;
-  let overflow = entries.length - limit;
+  const validEntries = normalizeEventLog(entries);
+  if (validEntries.length <= limit) return validEntries;
+  let overflow = validEntries.length - limit;
   const kept: EventLogEntry[] = [];
-  for (const entry of entries) {
-    if (overflow > 0 && entry?.kind && SILENT_DECISION_KINDS.has(entry.kind)) {
+  for (const entry of validEntries) {
+    if (overflow > 0 && SILENT_DECISION_KINDS.has(entry.kind)) {
       overflow--;
       continue;
     }
@@ -375,6 +380,15 @@ export function trimEventLog(entries: EventLogEntry[], limit: number): EventLogE
 }
 
 type EventLogAppendPartial = Omit<EventLogEntry, "id" | "ts"> & { id?: string; ts?: number };
+let eventLogPending: Promise<unknown> = Promise.resolve();
+
+function queueEventLogWrite<T>(operation: () => Promise<T>): Promise<T> {
+  const next = eventLogPending.then(operation);
+  eventLogPending = next.catch((err) => {
+    console.warn("[NavSentinel] event log serialization error:", err);
+  });
+  return next;
+}
 
 function buildEventLogEntry(partial: EventLogAppendPartial): EventLogEntry {
   return {
@@ -390,14 +404,14 @@ function buildEventLogEntry(partial: EventLogAppendPartial): EventLogEntry {
   };
 }
 
-async function appendEventDirect(entry: EventLogEntry): Promise<void> {
+async function persistEventLogEntry(entry: EventLogEntry): Promise<void> {
   const settings = await getSuiteSettings();
   const limit = clampInt(settings.logLimit, 50, 5000, DEFAULT_SUITE_SETTINGS.logLimit);
 
   for (let attempt = 0; attempt < 3; attempt++) {
     const res = await chrome.storage.local.get(EVENT_LOG_KEY);
-    const cur = Array.isArray(res[EVENT_LOG_KEY]) ? (res[EVENT_LOG_KEY] as EventLogEntry[]) : [];
-    const next = trimEventLog([...cur.filter((item) => item?.id !== entry.id), entry], limit);
+    const cur = normalizeEventLog(res[EVENT_LOG_KEY]);
+    const next = trimEventLog([...cur.filter((item) => item.id !== entry.id), entry], limit);
     await chrome.storage.local.set({ [EVENT_LOG_KEY]: next });
 
     // trimEventLog intentionally drops a brand-new silent-decision event when the
@@ -405,17 +419,19 @@ async function appendEventDirect(entry: EventLogEntry): Promise<void> {
     // persisted the correct log, so that is success — not a failed write. Without
     // this, appendEvent would burn all 3 retries and console.warn on every silent
     // allow once the log fills with loud events. (#236)
-    if (!next.some((item) => item?.id === entry.id)) return;
+    if (!next.some((item) => item.id === entry.id)) return;
 
     const verify = await chrome.storage.local.get(EVENT_LOG_KEY);
-    const verifyLog = Array.isArray(verify[EVENT_LOG_KEY])
-      ? (verify[EVENT_LOG_KEY] as EventLogEntry[])
-      : [];
-    if (verifyLog.some((item) => item?.id === entry.id)) {
+    const verifyLog = normalizeEventLog(verify[EVENT_LOG_KEY]);
+    if (verifyLog.some((item) => item.id === entry.id)) {
       return;
     }
   }
   console.warn("[NavSentinel] appendEvent: failed to persist after 3 attempts, id:", entry.id);
+}
+
+function appendEventDirect(entry: EventLogEntry): Promise<void> {
+  return queueEventLogWrite(() => persistEventLogEntry(entry));
 }
 
 function shouldDelegateEventLogWrite(): boolean {
@@ -444,10 +460,29 @@ function sendEventLogAppendMessage(message: EventLogAppendMessage): Promise<void
   });
 }
 
+async function delegateEventLogAppend(message: EventLogAppendMessage): Promise<void> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= STORAGE_DELEGATE_RETRY_DELAYS_MS.length; attempt++) {
+    try {
+      await sendEventLogAppendMessage(message);
+      return;
+    } catch (err) {
+      lastErr = err;
+      const delay = STORAGE_DELEGATE_RETRY_DELAYS_MS[attempt];
+      if (delay !== undefined) await delayMs(delay);
+    }
+  }
+  console.warn(
+    "[NavSentinel] event log append dropped - service worker unreachable after retries:",
+    message.entry.id,
+    lastErr
+  );
+}
+
 export async function appendEvent(partial: EventLogAppendPartial): Promise<void> {
   const entry = buildEventLogEntry(partial);
   if (shouldDelegateEventLogWrite()) {
-    return sendEventLogAppendMessage({ type: "ns-event-log-append", entry });
+    return delegateEventLogAppend({ type: "ns-event-log-append", entry });
   }
   return appendEventDirect(entry);
 }
@@ -632,8 +667,6 @@ function sendPromptOutcomeStorageMessage(message: PromptOutcomeStorageMessage): 
   });
 }
 
-const PROMPT_OUTCOME_DELEGATE_RETRY_DELAYS_MS = [50, 150, 400];
-
 function delayMs(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -662,14 +695,14 @@ async function delegatePromptOutcomeWrite(
   options?: { throwOnExhaustion?: boolean }
 ): Promise<void> {
   let lastErr: unknown;
-  for (let attempt = 0; attempt <= PROMPT_OUTCOME_DELEGATE_RETRY_DELAYS_MS.length; attempt++) {
+  for (let attempt = 0; attempt <= STORAGE_DELEGATE_RETRY_DELAYS_MS.length; attempt++) {
     try {
       await sendPromptOutcomeStorageMessage(message);
       return;
     } catch (err) {
       if (err instanceof PromptOutcomeUnauthorizedError) throw err;
       lastErr = err;
-      const delay = PROMPT_OUTCOME_DELEGATE_RETRY_DELAYS_MS[attempt];
+      const delay = STORAGE_DELEGATE_RETRY_DELAYS_MS[attempt];
       if (delay !== undefined) await delayMs(delay);
     }
   }

@@ -47,7 +47,7 @@ describe("trimEventLog (#236 protected-tail eviction)", () => {
     expect(trimEventLog(log, 3).map((e) => e.id)).toEqual(["l2", "l3", "l4"]);
   });
 
-  it("does not throw when corrupted entries are present", () => {
+  it("drops corrupted entries before trimming", () => {
     const log = [
       null,
       ev("silent1", "nav_silent_allow", 1),
@@ -55,6 +55,17 @@ describe("trimEventLog (#236 protected-tail eviction)", () => {
       ev("loud1", "nav_click_block", 2),
     ] as unknown as EventLogEntry[];
 
-    expect(trimEventLog(log, 3).map((e) => e?.id)).toEqual([undefined, undefined, "loud1"]);
+    expect(trimEventLog(log, 3).map((e) => e.id)).toEqual(["silent1", "loud1"]);
+  });
+
+  it("does not let corrupted rows displace loud events", () => {
+    const log = [
+      ev("loud1", "nav_click_block", 1),
+      ...Array.from({ length: 5 }, (_, i) => ({ id: `bad-${i}` })),
+      ev("silent1", "nav_silent_allow", 2),
+      ev("loud2", "nav_click_block", 3),
+    ] as unknown as EventLogEntry[];
+
+    expect(trimEventLog(log, 2).map((e) => e.id)).toEqual(["loud1", "loud2"]);
   });
 });
