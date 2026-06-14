@@ -1163,7 +1163,7 @@ Extension bundle size budget (12 budgets enforced by `npm run check:perf-budget`
 
 | Component | Budget | Notes |
 |---|---|---|
-| capture_isolated (content script) | < 60KB | Main navigation detection logic |
+| capture_isolated (content script) | < 63KB | Main navigation detection logic |
 | main_guard (MAIN world) | < 20KB | Pushstate/clickfix interception in page context |
 | credential_guard (content script) | < 30KB | Credential protection logic |
 | service worker | < 25KB | Background orchestration |

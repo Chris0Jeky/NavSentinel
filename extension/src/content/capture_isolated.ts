@@ -59,6 +59,7 @@ import {
   isOAuthRedirectMismatch,
   isOAuthOpenerManipulation,
 } from "./oauth_monitor";
+import { shouldSuppressSmartBlankPrompt } from "./smart_prompt_gate";
 import {
   handlePushStateBridgeMessage,
   isPushStateAbuseActive,
@@ -1677,10 +1678,31 @@ window.addEventListener(
     const blockThreshold = getNrsBlockThreshold(mode);
     const smartAllowsBlank =
       mode === "smart" && !!anchor && isLegitBlankAnchor(anchor, ctx, cds, cdsReasons);
+    const smartSuppressesBlankPrompt = shouldSuppressSmartBlankPrompt({
+      mode,
+      isBlankAnchor,
+      isAllowed,
+      explicitNewTab,
+      cds,
+      cdsReasons,
+      nrs,
+      nrsFactors,
+      blockThreshold,
+      pointerDownTrusted: downForClick?.trusted === true,
+      clickTrusted: e.isTrusted,
+      keyboardActivation: isKeyboardActivation,
+      timeSincePointerdownMs,
+      destHost,
+      destHref: parsed?.href ?? null,
+      sameOrganization: destHost === location.hostname ||
+        !!(siteRegDomain && destRegDomain && areSameOrganization(siteRegDomain, destRegDomain)),
+      oauthRedirectMismatch,
+      oauthOpenerManipulation: oauthOpenerManip,
+    });
 
     if (mode !== "off") {
       const hasClickfix = cfScore > 0;
-      if (isBlankAnchor && !isAllowed && !explicitNewTab && !smartAllowsBlank) {
+      if (isBlankAnchor && !isAllowed && !explicitNewTab && !smartAllowsBlank && !smartSuppressesBlankPrompt) {
         if (nrs >= blockThreshold) {
           decision = "block";
         } else {

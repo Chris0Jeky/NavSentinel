@@ -41,7 +41,11 @@ const budgets = [
     // chunk is repeatedly near its cap — track its growth as a follow-up.
     // Current cap is 62KB: P5-A4 adds one DOM containment hint to prevent
     // structural navigation containers from becoming delegated-click evasions.
-    maxKB: 62,
+    // Bumped 60 -> 61 (#206) for ClickFix legit-CAPTCHA hardening, then to 63
+    // (#233 / P5-A2) for compact Smart Mode benign-context suppression. Keep
+    // this tight; the next capture growth slice should split capture_isolated
+    // into smaller lazy chunks.
+    maxKB: 63,
   },
   {
     label: "main_guard (MAIN world)",

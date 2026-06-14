@@ -29,6 +29,7 @@ function fakeDown(overrides: Partial<DownCapture> = {}): DownCapture {
     shift: false,
     alt: false,
     meta: false,
+    trusted: true,
     stack: overrides.stack ?? [el],
     top: el,
     ...overrides,
