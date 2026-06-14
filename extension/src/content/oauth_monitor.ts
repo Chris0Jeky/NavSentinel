@@ -39,6 +39,7 @@ export interface OAuthFlowState {
 const OAUTH_PATH_KEYWORDS = [
   "oauth",
   "oauth2",
+  "oauth20_authorize.srf",
   "authorize",
   "consent",
   "openid",
