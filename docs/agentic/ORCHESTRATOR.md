@@ -47,7 +47,7 @@ Status legend: `TODO` · `IN-PROGRESS` · `IN-REVIEW` · `MERGE-READY` · `DONE`
 
 Roadmap truth verified against `docs/Project_Roadmap.md` (Phases 0-3 done; Phase 4: P4-05–P4-08 done, P4-01/P4-02 in progress, P4-03/P4-04 pending). Baseline 2026-05-30: typecheck clean, lint 0/0, 2206 tests pass.
 
-**Updated 2026-06-13:** `main` @ **`da400fb`**, **0 open PRs**, typecheck clean, lint 0/0, **2426 tests pass**. Active track = **North-Star Phase 5** (issues **#232–#246**, `north-star` label; see [`docs/NORTHSTAR_ROADMAP.md`](../NORTHSTAR_ROADMAP.md)). Discovery cycles 3–4 merged 2026-06-06 (#197/#202/#208/#210/#212/#214/#220/#230).
+**Updated 2026-06-14:** `main` @ **`db63192`** after **#253** merged. Open PRs: **#249** (human Gate-3), **#254** (draft docs/status), **#256** (green/clean aging), **#257** (green/clean aging). Active track = **North-Star Phase 5** (issues **#232–#246**, `north-star` label; see [`docs/NORTHSTAR_ROADMAP.md`](../NORTHSTAR_ROADMAP.md)). Discovery cycles 3–4 merged 2026-06-06 (#197/#202/#208/#210/#212/#214/#220/#230).
 
 | ID | Slice | Source | Priority | Status | Depends on | Notes |
 |----|-------|--------|----------|--------|-----------|-------|
@@ -61,7 +61,7 @@ Roadmap truth verified against `docs/Project_Roadmap.md` (Phases 0-3 done; Phase
 | P4-01c | Visual-sim → **logo-embedding pivot** (retires placeholder pHash to a pre-filter) | Roadmap P4-01 / **P5-D6 (#246)** | P4 | PIVOT ✅ (2026-06-13) | on-device-ML host #245; AI-5 reference logos | Pivot **confirmed by maintainer**; pHash→logo-embedding (Phishpedia 98.2% precision). AI-5 re-scoped to reference logos. |
 | P2-GATE-FP | Re-run FP/TP measurement after P4 additions (Phase 2 gate open item) | Roadmap | P4 | TODO | — | `npm run measure:fp`; confirm < 0.1% still holds. Subsumed by **P5-A1** (#232) Smart-Mode-Silence CI gate. |
 | P4-04 | Community threat intelligence | Roadmap | P5 | BLOCKED | protocol/privacy product decisions | XL, deferred — not an autonomous pick |
-| **NS-P5** | **North-Star Phase 5** — 4 programs (FP-elim / advisor / feedback / architecture) | `docs/NORTHSTAR_ROADMAP.md` | **P1** | IN-PROGRESS | — | **Active track.** Do not duplicate active/merged slices: #238 is #249 / human Gate-3, #233 merged as #255, #234 is #257 / green-clean aging, #235 is #256 / green-clean aging, #236 merged as #253. Next unstarted candidates after PR gates settle: **#232** (P5-A1 Smart-Mode silence CI gate) or **#237** (P5-B3 journal view). |
+| **NS-P5** | **North-Star Phase 5** — 4 programs (FP-elim / advisor / feedback / architecture) | `docs/NORTHSTAR_ROADMAP.md` | **P1** | IN-PROGRESS | — | **Active track.** Do not duplicate active/merged slices: #238 is #249 / human Gate-3, #233 merged as #255, #234 is #257 / green-clean aging, #235 is #256 / green-clean aging, #236 merged as #253. Next unstarted candidates after PR gates settle: **#232** (P5-A1 Smart-Mode silence CI gate) or **#237** (P5-B3 Decision Journal UI). |
 
 ---
 

@@ -33,7 +33,7 @@ The following section is retained as session history. The live pickup state is t
 
 ## Next Safe Action
 
-Do not start duplicate Phase-5 slices while the current PR set is open. First keep the merge/review gates moving for **#249** (human Gate-3), **#254** (draft docs/status), **#256** (green/clean, aging), and **#257** (green/clean, aging). After those settle, pick the next unstarted North-Star slice from [`docs/NORTHSTAR_ROADMAP.md`](../NORTHSTAR_ROADMAP.md), likely **#232** (P5-A1 Smart-Mode silence CI gate) or **#237** (P5-B2 decision journal view), unless a higher-priority review/CI failure appears. The Firefox stack **FF-02→FF-04** is unblocked (**AI-4 = `web-ext`**) but should wait behind the active Phase-5 PR gates.
+Do not start duplicate Phase-5 slices while the current PR set is open. First keep the merge/review gates moving for **#249** (human Gate-3), **#254** (draft docs/status), **#256** (green/clean, aging), and **#257** (green/clean, aging). After those settle, pick the next unstarted North-Star slice from [`docs/NORTHSTAR_ROADMAP.md`](../NORTHSTAR_ROADMAP.md), likely **#232** (P5-A1 Smart-Mode silence CI gate) or **#237** (P5-B3 Decision Journal UI), unless a higher-priority review/CI failure appears. The Firefox stack **FF-02→FF-04** is unblocked (**AI-4 = `web-ext`**) but should wait behind the active Phase-5 PR gates.
 
 ## Active Backlog
 
