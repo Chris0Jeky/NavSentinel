@@ -364,25 +364,34 @@ function postBlocked(params: {
   });
 }
 
-function postAllowed(params: { kind: string; url?: string }): void {
+function postAllowed(params: { kind: string; url?: string; target?: string }): void {
   recordNav("allowed", params);
-  if (!debug) return;
   postToIsolated("ns-nav-allowed", {
     kind: params.kind,
     url: params.url ?? "",
+    ...(params.target !== undefined ? { target: params.target } : {}),
     ts: nowMs()
   });
 }
 
-function notifyAllowedTarget(url: string | URL | undefined): void {
+function notifyAllowedTarget(url: string | URL | undefined, options?: { matchQueryPrefix?: boolean }): void {
   if (url === undefined || String(url) === "") return;
   try {
     const href = new URL(String(url), location.href).toString();
     if (!href.startsWith("http:") && !href.startsWith("https:")) return;
-    postToIsolated("ns-allow-target-nav", { url: href, ttlMs: TARGET_NAV_TTL_MS });
+    postToIsolated("ns-allow-target-nav", {
+      url: href,
+      ttlMs: TARGET_NAV_TTL_MS,
+      ...(options?.matchQueryPrefix ? { matchQueryPrefix: true } : {})
+    });
   } catch {
     // ignore
   }
+}
+
+function isGetForm(form: HTMLFormElement): boolean {
+  const raw = form.getAttribute("method") || form.method || "get";
+  return raw.toLowerCase() === "get";
 }
 
 function registerBlockedAction(params: {
@@ -503,7 +512,11 @@ function patchedOpen(
   features?: string
 ): Window | null {
   if (isOff() || (isSubframe() && isSubframeSelfTarget(target))) {
-    postAllowed({ kind: "window_open", ...(url !== undefined ? { url: String(url) } : {}) });
+    postAllowed({
+      kind: "window_open",
+      ...(url !== undefined ? { url: String(url) } : {}),
+      ...(target !== undefined ? { target } : {})
+    });
     notifyAllowedTarget(url);
     recordWindowOpen();
     return callNativeOpen(this, url, target, features);
@@ -511,14 +524,22 @@ function patchedOpen(
 
   const allowance = consumeOpenAllowance();
   if (allowance !== "none") {
-    postAllowed({ kind: "window_open", ...(url !== undefined ? { url: String(url) } : {}) });
+    postAllowed({
+      kind: "window_open",
+      ...(url !== undefined ? { url: String(url) } : {}),
+      ...(target !== undefined ? { target } : {})
+    });
     notifyAllowedTarget(url);
     recordWindowOpen();
     return callNativeOpen(this, url, target, features);
   }
 
   if (consumePopupIntentAllowance(target, features)) {
-    postAllowed({ kind: "window_open", ...(url !== undefined ? { url: String(url) } : {}) });
+    postAllowed({
+      kind: "window_open",
+      ...(url !== undefined ? { url: String(url) } : {}),
+      ...(target !== undefined ? { target } : {})
+    });
     notifyAllowedTarget(url);
     recordWindowOpen();
     return callNativeOpen(this, url, target, features);
@@ -643,7 +664,7 @@ function patchForms(): void {
     const actionUrl = resolveFormAction(this);
     if (isOff() || (isSubframe() && isFormSelfTarget(this.target))) {
       postAllowed({ kind: "form_submit", ...(actionUrl !== undefined ? { url: actionUrl } : {}) });
-      notifyAllowedTarget(actionUrl);
+      notifyAllowedTarget(actionUrl, { matchQueryPrefix: isGetForm(this) });
       nativeFormSubmit.call(this);
       return;
     }
@@ -651,7 +672,7 @@ function patchForms(): void {
     const allowance = consumeRedirectAllowance();
     if (allowance !== "none") {
       postAllowed({ kind: "form_submit", ...(actionUrl !== undefined ? { url: actionUrl } : {}) });
-      notifyAllowedTarget(actionUrl);
+      notifyAllowedTarget(actionUrl, { matchQueryPrefix: isGetForm(this) });
       nativeFormSubmit.call(this);
       return;
     }
@@ -672,7 +693,7 @@ function patchForms(): void {
           kind: "form_request_submit",
           ...(actionUrl !== undefined ? { url: actionUrl } : {})
         });
-        notifyAllowedTarget(actionUrl);
+        notifyAllowedTarget(actionUrl, { matchQueryPrefix: isGetForm(this) });
         nativeFormRequestSubmit.call(this, submitter);
         return;
       }
@@ -683,7 +704,7 @@ function patchForms(): void {
           kind: "form_request_submit",
           ...(actionUrl !== undefined ? { url: actionUrl } : {})
         });
-        notifyAllowedTarget(actionUrl);
+        notifyAllowedTarget(actionUrl, { matchQueryPrefix: isGetForm(this) });
         nativeFormRequestSubmit.call(this, submitter);
         return;
       }

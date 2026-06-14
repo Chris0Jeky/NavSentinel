@@ -242,6 +242,7 @@ export async function clearTrustedDomains(): Promise<void> {
 export type EventKind =
   | "nav_blank_prompt"
   | "nav_click_block"
+  | "nav_silent_allow"
   | "nav_rollback"
   | "nav_allowlist_add"
   | "nav_allowlist_remove"
@@ -250,6 +251,7 @@ export type EventKind =
   | "cred_trust_domain"
   | "cred_untrust_domain"
   | "cred_paste_warn"
+  | "cred_form_evaluated"
   | "suite_config_update"
   | "clickfix_detected"
   | "dblclickjack_detected"
@@ -257,6 +259,43 @@ export type EventKind =
   | "mutation_alert"
   | "pushstate_abuse"
   | "bridge_buffer_overflow";
+
+const EVENT_KINDS: ReadonlySet<EventKind> = new Set<EventKind>([
+  "nav_blank_prompt",
+  "nav_click_block",
+  "nav_silent_allow",
+  "nav_rollback",
+  "nav_allowlist_add",
+  "nav_allowlist_remove",
+  "cred_submit_prompt",
+  "cred_submit_allow_once",
+  "cred_trust_domain",
+  "cred_untrust_domain",
+  "cred_paste_warn",
+  "cred_form_evaluated",
+  "suite_config_update",
+  "clickfix_detected",
+  "dblclickjack_detected",
+  "nav_reputation_late_warn",
+  "mutation_alert",
+  "pushstate_abuse",
+  "bridge_buffer_overflow",
+]);
+
+/**
+ * Silent-decision event kinds (P5-B1 / #236): non-alarming records of decisions
+ * made WITHOUT a user prompt (silent nav allows, silently-passed credential
+ * forms). They populate the reviewable event stream + tuning corpus, but are
+ * deliberately excluded from the popup "Current page" gauge (pickSiteRiskEvent)
+ * so that a routine silent allow can never mask an earlier scored block on the
+ * same domain (preserving the #205 / #214 gauge-accuracy contract). Wiring the
+ * gauge to reflect these for the live page is the popup-consumer follow-up
+ * (#205 / #214 / #219).
+ */
+export const SILENT_DECISION_KINDS: ReadonlySet<EventKind> = new Set<EventKind>([
+  "nav_silent_allow",
+  "cred_form_evaluated",
+]);
 
 export interface EventLogEntry {
   id: string;
@@ -270,49 +309,191 @@ export interface EventLogEntry {
   extra?: Record<string, unknown>;
 }
 
+export type EventLogAppendMessage = { type: "ns-event-log-append"; entry: EventLogEntry };
+
+type EventLogAppendResponse =
+  | { ok: true }
+  | { ok: false; error: string };
+
+const STORAGE_DELEGATE_RETRY_DELAYS_MS = [50, 150, 400];
+
+function isEventKind(value: unknown): value is EventKind {
+  return typeof value === "string" && EVENT_KINDS.has(value as EventKind);
+}
+
+function isEventLogEntry(value: unknown): value is EventLogEntry {
+  if (!value || typeof value !== "object") return false;
+  const entry = value as Record<string, unknown>;
+  return typeof entry.id === "string" &&
+    typeof entry.ts === "number" &&
+    Number.isFinite(entry.ts) &&
+    isEventKind(entry.kind) &&
+    (entry.site === undefined || typeof entry.site === "string") &&
+    (entry.url === undefined || typeof entry.url === "string") &&
+    (entry.destHost === undefined || typeof entry.destHost === "string") &&
+    (entry.score === undefined || (typeof entry.score === "number" && Number.isFinite(entry.score))) &&
+    (entry.reasons === undefined || (Array.isArray(entry.reasons) && entry.reasons.every((reason) => typeof reason === "string"))) &&
+    (entry.extra === undefined || (typeof entry.extra === "object" && entry.extra !== null && !Array.isArray(entry.extra)));
+}
+
+export function isEventLogAppendMessage(message: unknown): message is EventLogAppendMessage {
+  if (!message || typeof message !== "object") return false;
+  const candidate = message as Record<string, unknown>;
+  return candidate.type === "ns-event-log-append" && isEventLogEntry(candidate.entry);
+}
+
+function normalizeEventLog(value: unknown): EventLogEntry[] {
+  return Array.isArray(value) ? value.filter(isEventLogEntry).slice(-5000) : [];
+}
+
 function makeId(): string {
   return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
 export async function getEventLog(): Promise<EventLogEntry[]> {
   const res = await chrome.storage.local.get(EVENT_LOG_KEY);
-  const log = res[EVENT_LOG_KEY];
-  if (!Array.isArray(log)) return [];
-  return log.slice(-5000) as EventLogEntry[];
+  return normalizeEventLog(res[EVENT_LOG_KEY]);
 }
 
-export async function appendEvent(
-  partial: Omit<EventLogEntry, "id" | "ts"> & { id?: string; ts?: number }
-): Promise<void> {
-  const settings = await getSuiteSettings();
-  const limit = clampInt(settings.logLimit, 50, 5000, DEFAULT_SUITE_SETTINGS.logLimit);
-  const entry: EventLogEntry = {
+/**
+ * Trim the event log to `limit`, evicting the OLDEST silent-decision events
+ * first (P5-B1 / #236). High-frequency silent records (nav_silent_allow /
+ * cred_form_evaluated) must never push the rarer loud threat events out of the
+ * shared FIFO log — the journal and the popup "Current page" gauge depend on the
+ * loud events surviving (preserving the #205 / #214 gauge-accuracy contract).
+ * Loud events are only trimmed if loud events alone still exceed the cap. Order
+ * is preserved. (Per-store separation is the eventual P5-C4 / #240 end-state.)
+ */
+export function trimEventLog(entries: EventLogEntry[], limit: number): EventLogEntry[] {
+  const validEntries = normalizeEventLog(entries);
+  if (validEntries.length <= limit) return validEntries;
+  let overflow = validEntries.length - limit;
+  const kept: EventLogEntry[] = [];
+  for (const entry of validEntries) {
+    if (overflow > 0 && SILENT_DECISION_KINDS.has(entry.kind)) {
+      overflow--;
+      continue;
+    }
+    kept.push(entry);
+  }
+  return kept.length > limit ? kept.slice(-limit) : kept;
+}
+
+type EventLogAppendPartial = Omit<EventLogEntry, "id" | "ts"> & { id?: string; ts?: number };
+let eventLogPending: Promise<unknown> = Promise.resolve();
+
+function queueEventLogWrite<T>(operation: () => Promise<T>): Promise<T> {
+  const next = eventLogPending.then(operation);
+  eventLogPending = next.catch((err) => {
+    console.warn("[NavSentinel] event log serialization error:", err);
+  });
+  return next;
+}
+
+function buildEventLogEntry(partial: EventLogAppendPartial): EventLogEntry {
+  return {
     id: partial.id ?? makeId(),
-    ts: partial.ts ?? Date.now(),
+    ts: Number.isFinite(partial.ts) ? (partial.ts as number) : Date.now(),
     kind: partial.kind,
     ...(partial.site !== undefined ? { site: partial.site } : {}),
     ...(partial.url !== undefined ? { url: partial.url } : {}),
     ...(partial.destHost !== undefined ? { destHost: partial.destHost } : {}),
-    ...(partial.score !== undefined ? { score: partial.score } : {}),
+    ...(partial.score !== undefined ? { score: Number.isFinite(partial.score) ? partial.score : 0 } : {}),
     ...(partial.reasons !== undefined ? { reasons: partial.reasons } : {}),
     ...(partial.extra !== undefined ? { extra: partial.extra } : {})
   };
+}
+
+async function persistEventLogEntry(entry: EventLogEntry): Promise<void> {
+  const settings = await getSuiteSettings();
+  const limit = clampInt(settings.logLimit, 50, 5000, DEFAULT_SUITE_SETTINGS.logLimit);
 
   for (let attempt = 0; attempt < 3; attempt++) {
     const res = await chrome.storage.local.get(EVENT_LOG_KEY);
-    const cur = Array.isArray(res[EVENT_LOG_KEY]) ? (res[EVENT_LOG_KEY] as EventLogEntry[]) : [];
-    const next = [...cur.filter((item) => item?.id !== entry.id), entry].slice(-limit);
+    const cur = normalizeEventLog(res[EVENT_LOG_KEY]);
+    const next = trimEventLog([...cur.filter((item) => item.id !== entry.id), entry], limit);
     await chrome.storage.local.set({ [EVENT_LOG_KEY]: next });
 
+    // trimEventLog intentionally drops a brand-new silent-decision event when the
+    // log is saturated with loud events (loud must win). The set above already
+    // persisted the correct log, so that is success — not a failed write. Without
+    // this, appendEvent would burn all 3 retries and console.warn on every silent
+    // allow once the log fills with loud events. (#236)
+    if (!next.some((item) => item.id === entry.id)) return;
+
     const verify = await chrome.storage.local.get(EVENT_LOG_KEY);
-    const verifyLog = Array.isArray(verify[EVENT_LOG_KEY])
-      ? (verify[EVENT_LOG_KEY] as EventLogEntry[])
-      : [];
-    if (verifyLog.some((item) => item?.id === entry.id)) {
+    const verifyLog = normalizeEventLog(verify[EVENT_LOG_KEY]);
+    if (verifyLog.some((item) => item.id === entry.id)) {
       return;
     }
   }
   console.warn("[NavSentinel] appendEvent: failed to persist after 3 attempts, id:", entry.id);
+}
+
+function appendEventDirect(entry: EventLogEntry): Promise<void> {
+  return queueEventLogWrite(() => persistEventLogEntry(entry));
+}
+
+function shouldDelegateEventLogWrite(): boolean {
+  const runtime = (globalThis as { chrome?: typeof chrome }).chrome?.runtime;
+  return !isExtensionServiceWorkerContext() && typeof runtime?.sendMessage === "function";
+}
+
+function sendEventLogAppendMessage(message: EventLogAppendMessage): Promise<void> {
+  return new Promise((resolve, reject) => {
+    try {
+      chrome.runtime.sendMessage(message, (response?: EventLogAppendResponse) => {
+        const lastError = chrome.runtime.lastError;
+        if (lastError) {
+          reject(new Error(lastError.message ?? "runtime.sendMessage failed"));
+          return;
+        }
+        if (response?.ok) {
+          resolve();
+          return;
+        }
+        reject(new Error(response?.error ?? "Event log append failed"));
+      });
+    } catch (err) {
+      reject(err instanceof Error ? err : new Error(String(err)));
+    }
+  });
+}
+
+async function delegateEventLogAppend(message: EventLogAppendMessage): Promise<void> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= STORAGE_DELEGATE_RETRY_DELAYS_MS.length; attempt++) {
+    try {
+      await sendEventLogAppendMessage(message);
+      return;
+    } catch (err) {
+      lastErr = err;
+      const delay = STORAGE_DELEGATE_RETRY_DELAYS_MS[attempt];
+      if (delay !== undefined) await delayMs(delay);
+    }
+  }
+  console.warn(
+    "[NavSentinel] event log append dropped - service worker unreachable after retries:",
+    message.entry.id,
+    lastErr
+  );
+}
+
+export async function appendEvent(partial: EventLogAppendPartial): Promise<void> {
+  const entry = buildEventLogEntry(partial);
+  if (shouldDelegateEventLogWrite()) {
+    return delegateEventLogAppend({ type: "ns-event-log-append", entry });
+  }
+  return appendEventDirect(entry);
+}
+
+export async function handleEventLogAppendMessage(message: EventLogAppendMessage): Promise<EventLogAppendResponse> {
+  try {
+    await appendEventDirect(message.entry);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 export async function clearEventLog(): Promise<void> {
@@ -486,8 +667,6 @@ function sendPromptOutcomeStorageMessage(message: PromptOutcomeStorageMessage): 
   });
 }
 
-const PROMPT_OUTCOME_DELEGATE_RETRY_DELAYS_MS = [50, 150, 400];
-
 function delayMs(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -516,14 +695,14 @@ async function delegatePromptOutcomeWrite(
   options?: { throwOnExhaustion?: boolean }
 ): Promise<void> {
   let lastErr: unknown;
-  for (let attempt = 0; attempt <= PROMPT_OUTCOME_DELEGATE_RETRY_DELAYS_MS.length; attempt++) {
+  for (let attempt = 0; attempt <= STORAGE_DELEGATE_RETRY_DELAYS_MS.length; attempt++) {
     try {
       await sendPromptOutcomeStorageMessage(message);
       return;
     } catch (err) {
       if (err instanceof PromptOutcomeUnauthorizedError) throw err;
       lastErr = err;
-      const delay = PROMPT_OUTCOME_DELEGATE_RETRY_DELAYS_MS[attempt];
+      const delay = STORAGE_DELEGATE_RETRY_DELAYS_MS[attempt];
       if (delay !== undefined) await delayMs(delay);
     }
   }
