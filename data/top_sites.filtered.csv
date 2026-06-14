@@ -7,11 +7,8 @@ login.microsoftonline.com,2,seed,identity
 apple.com,2,seed,technology
 icloud.com,2,seed,cloud
 amazon.com,2,seed,commerce
-amazonaws.com,2,seed,cloud
-cloudflare.com,2,seed,infrastructure
 wikipedia.org,2,seed,reference
 github.com,2,seed,developer
-githubusercontent.com,2,seed,developer
 stackoverflow.com,2,seed,developer
 linkedin.com,2,seed,professional
 adobe.com,2,seed,software
@@ -26,11 +23,3 @@ paypal.com,2,seed,payments
 shopify.com,2,seed,commerce
 dropbox.com,2,seed,cloud
 mozilla.org,2,seed,browser
-cloudfront.net,2,seed,infrastructure
-vercel.app,2,seed,hosting
-netlify.app,2,seed,hosting
-pages.dev,2,seed,hosting
-workers.dev,2,seed,hosting
-herokuapp.com,2,seed,hosting
-azurewebsites.net,2,seed,hosting
-firebaseapp.com,2,seed,hosting

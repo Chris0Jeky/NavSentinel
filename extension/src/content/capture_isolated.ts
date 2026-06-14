@@ -20,7 +20,7 @@ import { getRegistrableDomain } from "../shared/domain";
 import { areSameOrganization } from "../shared/domain_groups";
 import { computeNRS, getTierAdjustedBlockThreshold, NRS_BLOCK_THRESHOLD, NRS_STRICT_BLOCK_THRESHOLD } from "../shared/nrs";
 import type { NavigationContext } from "../shared/nrs";
-import { resolveNavigationTrustTier } from "../shared/top_sites";
+import { resolveFrameNavigationTrustTier } from "../shared/top_sites";
 import {
   createEmptyState,
   isStateExpired,
@@ -1725,7 +1725,9 @@ window.addEventListener(
       ? isKnownBadDomain(destRegDomain) ||
         (destHost !== null && destHost !== destRegDomain && isKnownBadDomain(destHost))
       : false;
-    const trustTier = resolveNavigationTrustTier({
+    const topFrame = isTopFrame();
+    const trustTier = resolveFrameNavigationTrustTier({
+      isTopFrame: topFrame,
       destHost,
       destinationAllowlisted: isAllowed,
       knownBadDomain: destDomainBad,
@@ -1889,7 +1891,6 @@ window.addEventListener(
     }
 
     if (decision === "allow") {
-      const topFrame = isTopFrame();
       const silentNavEvent = buildSilentNavEvent({
         destHref: parsed?.href,
         destHost,

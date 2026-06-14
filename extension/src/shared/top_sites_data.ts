@@ -3,5 +3,29 @@
  * Starter seed only: keep the runtime code stable while the vetted Tranco/CrUX
  * export grows behind the same build-time interface.
  */
-export const TOP_SITE_TIER_DOMAIN_BLOB =
-  "adobe.com amazon.com amazonaws.com apple.com atlassian.com auth0.com azurewebsites.net cloudflare.com cloudfront.net dropbox.com firebaseapp.com github.com githubusercontent.com google.com herokuapp.com icloud.com linkedin.com login.microsoftonline.com microsoft.com mozilla.org netlify.app office.com okta.com pages.dev paypal.com salesforce.com shopify.com slack.com stackoverflow.com stripe.com vercel.app wikipedia.org workers.dev youtube.com zoom.us";
+export const TOP_SITE_TIER_DOMAINS = [
+  "adobe.com",
+  "amazon.com",
+  "apple.com",
+  "atlassian.com",
+  "auth0.com",
+  "dropbox.com",
+  "github.com",
+  "google.com",
+  "icloud.com",
+  "linkedin.com",
+  "login.microsoftonline.com",
+  "microsoft.com",
+  "mozilla.org",
+  "office.com",
+  "okta.com",
+  "paypal.com",
+  "salesforce.com",
+  "shopify.com",
+  "slack.com",
+  "stackoverflow.com",
+  "stripe.com",
+  "wikipedia.org",
+  "youtube.com",
+  "zoom.us",
+] as const;

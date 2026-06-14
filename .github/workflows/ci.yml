@@ -37,6 +37,9 @@ jobs:
       - name: Run unit tests
         run: npm test
 
+      - name: Check top-sites generated data
+        run: npm run check:topsites
+
       - name: Build bloom filter (test data)
         run: npm run build:bloom:test
 

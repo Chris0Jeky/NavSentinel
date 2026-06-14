@@ -13,8 +13,6 @@ const BENIGN_NRS_FACTORS = new Set([
   "nrs_cross_site",
   "nrs_fast_attempt",
   "nrs_user_activation_active",
-  "nrs_top_site_prior",
-  "nrs_seen_benign_prior",
 ]);
 const SAME_ORG_LOW_CDS_REASONS = new Set(["no_accessible_name", "keyboard_activation"]);
 const TOP_SITE_LOW_CDS_REASONS = new Set([

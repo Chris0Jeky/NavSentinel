@@ -9,7 +9,6 @@ import type { NavigationContext } from "../extension/src/shared/nrs";
 import type { ScoreResult } from "../extension/src/shared/scoring";
 import {
   TRUST_TIER_KNOWN_BAD,
-  TRUST_TIER_SEEN_BENIGN,
   TRUST_TIER_TOP_SITE,
   TRUST_TIER_UNKNOWN,
   TRUST_TIER_USER_ALLOWLISTED,
@@ -310,10 +309,10 @@ describe("computeNRS", () => {
   });
 
   describe("trust tiers", () => {
-    it("relaxes top-tier destinations as a benign prior", () => {
+    it("does not subtract NRS for top-tier destinations", () => {
       const result = computeNRS(baseCds(30), baseNav({ trustTier: TRUST_TIER_TOP_SITE }));
-      expect(result.nrs).toBe(15);
-      expect(result.nrsFactors).toContain("nrs_top_site_prior");
+      expect(result.nrs).toBe(30);
+      expect(result.nrsFactors).not.toContain("nrs_top_site_prior");
     });
 
     it("does not apply the top-site prior to known-bad domains", () => {
@@ -326,18 +325,34 @@ describe("computeNRS", () => {
       expect(result.nrsFactors).not.toContain("nrs_top_site_prior");
     });
 
-    it("relaxes seen-before-benign destinations less than top-tier sites", () => {
-      const result = computeNRS(baseCds(30), baseNav({ trustTier: TRUST_TIER_SEEN_BENIGN }));
-      expect(result.nrs).toBe(20);
-      expect(result.nrsFactors).toContain("nrs_seen_benign_prior");
-    });
-
     it("adjusts block thresholds by trust tier", () => {
-      expect(getTierAdjustedBlockThreshold(70, TRUST_TIER_USER_ALLOWLISTED)).toBe(100);
-      expect(getTierAdjustedBlockThreshold(70, TRUST_TIER_TOP_SITE)).toBe(85);
-      expect(getTierAdjustedBlockThreshold(70, TRUST_TIER_SEEN_BENIGN)).toBe(80);
+      expect(getTierAdjustedBlockThreshold(70, TRUST_TIER_USER_ALLOWLISTED)).toBe(70);
+      expect(getTierAdjustedBlockThreshold(70, TRUST_TIER_TOP_SITE)).toBe(70);
       expect(getTierAdjustedBlockThreshold(70, TRUST_TIER_UNKNOWN)).toBe(70);
       expect(getTierAdjustedBlockThreshold(70, TRUST_TIER_KNOWN_BAD)).toBe(50);
+    });
+
+    it("does not double-relax strict-mode top-site scores via threshold", () => {
+      expect(getTierAdjustedBlockThreshold(50, TRUST_TIER_TOP_SITE)).toBe(50);
+      const result = computeNRS(baseCds(65), baseNav({ trustTier: TRUST_TIER_TOP_SITE }));
+      expect(result.nrs).toBe(65);
+      expect(result.nrs).toBeGreaterThanOrEqual(NRS_STRICT_BLOCK_THRESHOLD);
+    });
+
+    it("keeps attack-grade top-site signals at their normal NRS", () => {
+      const result = computeNRS(baseCds(0), baseNav({
+        trustTier: TRUST_TIER_TOP_SITE,
+        doubleClickHijackActive: true,
+        clickfixScore: 40,
+        oauthOpenerManipulation: true,
+        visualSimilarityScore: 30,
+      }));
+      expect(result.nrs).toBeGreaterThanOrEqual(100);
+      expect(result.nrsFactors).toContain("nrs_double_click_hijack");
+      expect(result.nrsFactors).toContain("nrs_clickfix_active");
+      expect(result.nrsFactors).toContain("nrs_oauth_opener_manipulation");
+      expect(result.nrsFactors).toContain("nrs_visual_brand_match");
+      expect(result.nrsFactors).not.toContain("nrs_top_site_prior");
     });
   });
 

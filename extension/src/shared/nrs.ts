@@ -3,9 +3,6 @@ import { NRS_WEIGHT_JS_BEHAVIOR_CAP } from "./js_behavior_state";
 import type { NavigationTrustTier } from "./top_sites";
 import {
   TRUST_TIER_KNOWN_BAD,
-  TRUST_TIER_SEEN_BENIGN,
-  TRUST_TIER_TOP_SITE,
-  TRUST_TIER_USER_ALLOWLISTED,
 } from "./top_sites";
 import { NRS_WEIGHT_VISUAL_SIM_CAP } from "./visual_sim_types";
 
@@ -81,8 +78,6 @@ const NRS_CSP_MODIFIER_THRESHOLD = 20;
 const NRS_WEIGHT_CSP_CAP = 10;
 const NRS_WEIGHT_DOMAIN_REPEAT_OFFENDER = 10;
 const NRS_WEIGHT_NAV_ANOMALY_CAP = 15;
-const NRS_WEIGHT_TOP_SITE_PRIOR = -15;
-const NRS_WEIGHT_SEEN_BENIGN_PRIOR = -10;
 
 /** Raw scores above this get 50% weight on the excess. */
 const NRS_DIMINISHING_RETURNS_THRESHOLD = 100;
@@ -98,12 +93,6 @@ export function getTierAdjustedBlockThreshold(
   const base = Number.isFinite(baseThreshold) ? baseThreshold : NRS_BLOCK_THRESHOLD;
   const adjustment = (() => {
     switch (trustTier) {
-      case TRUST_TIER_USER_ALLOWLISTED:
-        return 30;
-      case TRUST_TIER_TOP_SITE:
-        return 15;
-      case TRUST_TIER_SEEN_BENIGN:
-        return 10;
       case TRUST_TIER_KNOWN_BAD:
         return -20;
       default:
@@ -160,14 +149,6 @@ export function computeNRS(cdsResult: ScoreResult, navCtx: NavigationContext): N
   if (navCtx.knownBadDomain) {
     nrs += NRS_WEIGHT_KNOWN_BAD_DOMAIN;
     nrsFactors.push("nrs_known_bad_domain");
-  }
-
-  if (!navCtx.knownBadDomain && navCtx.trustTier === TRUST_TIER_TOP_SITE) {
-    nrs += NRS_WEIGHT_TOP_SITE_PRIOR;
-    nrsFactors.push("nrs_top_site_prior");
-  } else if (!navCtx.knownBadDomain && navCtx.trustTier === TRUST_TIER_SEEN_BENIGN) {
-    nrs += NRS_WEIGHT_SEEN_BENIGN_PRIOR;
-    nrsFactors.push("nrs_seen_benign_prior");
   }
 
   if (navCtx.redirectChainDepth !== undefined && navCtx.redirectChainDepth > NRS_WEIGHT_REDIRECT_CHAIN_THRESHOLD) {
