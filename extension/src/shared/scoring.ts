@@ -73,9 +73,13 @@ function isInteractive(h: ElementHint): boolean {
   return false;
 }
 
+function isPointerCursor(cursor: string | undefined): boolean {
+  return (cursor ?? "").trim().toLowerCase().endsWith("pointer");
+}
+
 function hasActionIntent(h: ElementHint): boolean {
   if (isInteractive(h)) return true;
-  return (h.cursor ?? "").toLowerCase() === "pointer";
+  return isPointerCursor(h.cursor);
 }
 
 function isStructuralNavigationContainer(h: ElementHint): boolean {
@@ -199,8 +203,7 @@ export function computeCDS(ctx: ClickContext): ScoreResult {
   }
 
   // --- Cursor pointer with no affordance (uses gradient opacity threshold) ---
-  const cursor = (top.cursor ?? "").toLowerCase();
-  if (topInteractive && cursor === "pointer" && !topHasName && opacity < 0.3) {
+  if (topInteractive && isPointerCursor(top.cursor) && !topHasName && opacity < 0.3) {
     cds += 10;
     reasons.push("cursor_pointer_no_affordance");
   }

@@ -230,9 +230,17 @@ describe("computeCDS — intent mismatch", () => {
       underlying: { tag: "A", textLength: 10 },
       inTop: true,
     };
+    const fallbackPointerCtx: ClickContext = {
+      viewport: { w: 1920, h: 1080 },
+      input: "pointer",
+      top: { tag: "NAV", cursor: "url(hand.cur), pointer" },
+      underlying: { tag: "A", textLength: 10 },
+      inTop: true,
+    };
 
     expect(computeCDS(clickHandlerCtx).reasonCodes).toContain("intent_mismatch_under_interactive");
     expect(computeCDS(pointerCtx).reasonCodes).toContain("intent_mismatch_under_interactive");
+    expect(computeCDS(fallbackPointerCtx).reasonCodes).toContain("intent_mismatch_under_interactive");
   });
 });
 

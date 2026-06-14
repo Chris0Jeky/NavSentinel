@@ -549,7 +549,7 @@ describe("computeCDS property tests", () => {
       fc.property(
         fc.double({ min: 0, max: 1, noNaN: true }),
         fc.boolean(),
-        fc.constantFrom("pointer", "default", "auto", ""),
+        fc.constantFrom("pointer", "url(hand.cur), pointer", "default", "auto", ""),
         fc.constantFrom("BUTTON", "DIV"),
         (opacity, hasName, cursor, tag) => {
           const top: ElementHint = {
@@ -565,7 +565,10 @@ describe("computeCDS property tests", () => {
           };
           const { reasonCodes } = computeCDS(ctx);
           const isTopInteractive = tag === "BUTTON";
-          const expectFire = isTopInteractive && cursor === "pointer" && !hasName && opacity < 0.3;
+          const expectFire = isTopInteractive &&
+            cursor.trim().toLowerCase().endsWith("pointer") &&
+            !hasName &&
+            opacity < 0.3;
           if (expectFire) {
             expect(reasonCodes).toContain("cursor_pointer_no_affordance");
           } else {
