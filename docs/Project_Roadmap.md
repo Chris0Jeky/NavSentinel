@@ -30,7 +30,7 @@ programs derived from the 2026-06-13 research + audit initiative are tracked in
 
 **Open issues (status checkpoint 2026-06-14):** North-Star Phase 5 (`north-star` label) remains tracked as **#232–#246** (see [`NORTHSTAR_ROADMAP.md`](NORTHSTAR_ROADMAP.md)); several slices are now merged or in active PRs. Use [`docs/agentic/HANDOFF.md`](agentic/HANDOFF.md), [`docs/agentic/ORCHESTRATOR.md`](agentic/ORCHESTRATOR.md), and live GitHub state for the current PR/issue inventory before branching.
 
-**Repo state (status checkpoint 2026-06-14):** `main` @ **`db63192`** after **#253** (P5-B1 / #236) merged. PR gate snapshot at this checkpoint: **#249** (P5-C1 / #238, green/clean, human Gate-3), **#254** (docs/status if still open; if merged, use the landed docs and remove it from active gates), **#256** (P5-A4 / #235, green/clean aging), and **#257** (P5-A3 / #234, green/clean aging). **#255** (P5-A2 / #233) is merged. Do not start duplicate work for #233/#234/#235/#236/#238. After current PR gates settle, likely next unstarted North-Star candidates are **#232** (P5-A1 Smart-Mode silence CI gate) or **#237** (P5-B3 Decision Journal UI).
+**Repo state (status checkpoint 2026-06-14):** `main` @ **`213ebcb`** after **#254** (Codex contract/status), **#256** (P5-A4 / #235), and **#257** (P5-A3 / #234) merged. Open PR gate: **#249** (P5-C1 / #238, latest `3e0389e`, green/clean, human Gate-3). **#255** (P5-A2 / #233) and **#253** (P5-B1 / #236) are also merged. Do not start duplicate work for #233/#234/#235/#236/#238. After #249 settles, likely next unstarted North-Star candidates are **#232** (P5-A1 Smart-Mode silence CI gate) or **#237** (P5-B3 Decision Journal UI).
 
 > **Picking up the autonomous loop? Start with [`docs/agentic/HANDOFF.md`](agentic/HANDOFF.md)** (point-in-time handoff) and [`docs/agentic/ORCHESTRATOR.md`](agentic/ORCHESTRATOR.md) (living backlog/cycle log). Also see `ACTION_ITEMS.md` for human-owned tasks: **AI-5** is now reference-logo supply/approval for the logo-embedding model, and **AI-6** is the manual Chrome Gate-3 check for #249.
 
@@ -1003,7 +1003,7 @@ ordered by estimated impact. Timelines are intentionally open-ended.
 
 | ID | Title | Effort | Status | Depends On |
 |---|---|---|---|---|
-| P4-01 | Visual similarity detection | XL | in progress | P3 gate (cleared) | PRs #109 (architecture), #110 (capture), #111 (templates) merged; #172 (NRS scoring integration) merged; P4-01b gym fixtures + E2E (`tests/e2e/visual-sim.spec.ts`) merged. Remaining: real perceptual brand templates (P4-01c) — current templates are placeholders, so spoof detection is not yet live end-to-end |
+| P4-01 | Visual similarity detection | XL | in progress | P3 gate (cleared) | PRs #109 (architecture), #110 (capture), #111 (templates) merged; #172 (NRS scoring integration) merged; P4-01b gym fixtures + E2E (`tests/e2e/visual-sim.spec.ts`) merged. North-Star D24 decided the remaining true-positive path should pivot from pHash templates to logo embeddings; implementation is now tracked by P5-D6 (#246), with AI-5 supplying/approving reference logos. |
 | P4-02 | JavaScript behavior analysis | XL | in progress | P3 gate (cleared) | PRs #98 (design), #101 (forms), #104 (creds), #105 (exfil), #107 (NRS), #108 (gym) merged; type dedup via #128/#129. Remaining work tracked in **issue #127**: perf validation (patch/getter overhead budgets) + residual `JsBehaviorState` dedup in `js_behavior_monitor.ts` |
 | P4-03 | Cross-browser port (Firefox MV3) | XL | pending | P3 gate (cleared) |
 | P4-04 | Community threat intelligence | XL | pending | P3 gate (cleared) |
@@ -1016,15 +1016,16 @@ ordered by estimated impact. Timelines are intentionally open-ended.
 
 #### P4-01: Visual similarity detection
 
-Screenshot the page and compare against known brand login page templates using perceptual
-hashing. Catches phishing pages that perfectly mimic a login form regardless of domain or
-URL. Libraries like `blockhash` work entirely client-side.
+The shipped P4-01 plumbing captures visual evidence and feeds NRS, but the true-positive
+brand-spoof path has pivoted away from perceptual page hashes. North-Star decision D24
+keeps pHash only as a cheap pre-filter and moves the real brand match path to logo
+embeddings / Siamese-CNN style matching, tracked by P5-D6 (#246).
 
-**Key decisions (deferred)**:
-- Template set: which brand login pages to include
-- Hash algorithm: blockhash vs. pHash vs. dHash
+**Key decisions (current)**:
+- Reference logo set: AI-5 asks Chris to supply/approve brand logos or a public reference set.
+- Model/runtime path: P5-D6 (#246) implements logo embeddings; P5-D5 (#245) provides the on-device ML host.
 - Performance budget: how often to capture/compare
-- Storage: where to keep the template database
+- Storage: where to keep the reference logo/model data
 
 **Sub-slices:**
 - **W3 (merged):** capture pipeline (`visual_sim_capture.ts`), hashing (`visual_sim_hash.ts`),
@@ -1034,11 +1035,12 @@ URL. Libraries like `blockhash` work entirely client-side.
   `gym/visual-sim-02-delayed-password.html`) + E2E (`tests/e2e/visual-sim.spec.ts`)
   proving the capture→SW pipeline fires end-to-end (immediate and delayed-password
   paths) with no error or false positive on benign login pages.
-- **P4-01c (pending, blocked):** true-positive E2E ("spoof page scores → blocks").
-  Blocked on **real perceptual brand templates** — `scripts/build-brand-templates.mjs`
-  currently emits deterministic PLACEHOLDER hashes (seeded PRNG), so no real
-  captured page matches a brand. Until real templates are built from actual brand
-  login screenshots, spoof detection is wired but cannot fire on a real page.
+- **P4-01c (superseded by D24 / P5-D6):** the original true-positive E2E
+  based on real perceptual brand templates is no longer the implementation path.
+  `scripts/build-brand-templates.mjs` still emits deterministic placeholder
+  hashes for the legacy pHash plumbing, but the active work is now logo embeddings
+  in P5-D6 (#246). AI-5 is the remaining human asset gate for approved reference
+  logos, not brand login screenshots.
 
 #### P4-02: JavaScript behavior analysis
 
