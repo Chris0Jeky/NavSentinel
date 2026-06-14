@@ -167,15 +167,19 @@ export function buildClickContextFromEvents(params: {
   const top = buildElementHint(topEl, { wantRect: true, wantStyle: true });
   const isLegitModalBackdrop = detectLegitModalBackdrop(topEl, params.click.stack, viewport);
 
-  return {
+  const ctx: ClickContext = {
     viewport,
     top,
-    ...(underEl ? { underlying: buildElementHint(underEl, { wantRect: true, wantStyle: false }) } : {}),
     retargeted,
     input: "pointer",
     explicitNewTabIntent,
     isLegitModalBackdrop
   };
+  if (underEl) {
+    ctx.underlying = buildElementHint(underEl, { wantRect: true, wantStyle: false });
+    ctx.inTop = topEl.contains(underEl);
+  }
+  return ctx;
 }
 
 export function buildKeyboardClickContext(target: Element | null): ClickContext {

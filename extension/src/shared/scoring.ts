@@ -28,6 +28,8 @@ export interface ClickContext {
   input: "pointer" | "keyboard";
   top: ElementHint;
   underlying?: ElementHint;
+  /** True when the underlying interactive candidate is a descendant of the top element. */
+  inTop?: boolean;
   retargeted?: boolean;
   explicitNewTabIntent?: boolean;
   isLegitModalBackdrop?: boolean;
@@ -76,7 +78,7 @@ function hasActionIntent(h: ElementHint): boolean {
   return (h.cursor ?? "").toLowerCase() === "pointer";
 }
 
-function isContainerLikeWithoutActionIntent(h: ElementHint): boolean {
+function isStructuralNavigationContainer(h: ElementHint): boolean {
   if (hasActionIntent(h)) return false;
   const tag = h.tag.toUpperCase();
   const role = (h.role ?? "").toLowerCase();
@@ -142,7 +144,7 @@ export function computeCDS(ctx: ClickContext): ScoreResult {
     const underInteractive = isInteractive(under);
     const underHasName = nameLength(under) > 0;
     const topIntentful = topInteractive && topHasName;
-    const benignContainer = isContainerLikeWithoutActionIntent(top);
+    const benignContainer = isStructuralNavigationContainer(top) && ctx.inTop === true;
     if (underInteractive && underHasName && !topIntentful && !benignContainer) {
       cds += 35;
       reasons.push("intent_mismatch_under_interactive");

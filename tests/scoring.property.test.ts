@@ -30,8 +30,8 @@ const arbRectHint = fc.record({
 const arbElementHint: fc.Arbitrary<ElementHint> = fc
   .record(
     {
-      tag: fc.constantFrom("DIV", "A", "BUTTON", "SPAN", "INPUT", "IMG", "FORM", "P"),
-      role: fc.option(fc.constantFrom("link", "button", "presentation", "none", ""), { nil: undefined }),
+      tag: fc.constantFrom("DIV", "A", "BUTTON", "SPAN", "INPUT", "IMG", "FORM", "P", "NAV", "nav"),
+      role: fc.option(fc.constantFrom("link", "button", "navigation", "Navigation", "presentation", "none", ""), { nil: undefined }),
       hasOnClick: fc.option(fc.boolean(), { nil: undefined }),
       cursor: fc.option(fc.constantFrom("pointer", "default", "auto", "text"), { nil: undefined }),
       textLength: fc.option(fc.integer({ min: 0, max: 200 }), { nil: undefined }),
@@ -62,6 +62,7 @@ const arbClickContext: fc.Arbitrary<ClickContext> = fc
       input: fc.constantFrom("pointer" as const, "keyboard" as const),
       top: arbElementHint,
       underlying: fc.option(arbElementHint, { nil: undefined }),
+      inTop: fc.option(fc.boolean(), { nil: undefined }),
       retargeted: fc.option(fc.boolean(), { nil: undefined }),
       explicitNewTabIntent: fc.option(fc.boolean(), { nil: undefined }),
       isLegitModalBackdrop: fc.option(fc.boolean(), { nil: undefined })
@@ -405,20 +406,53 @@ describe("computeCDS property tests", () => {
     );
   });
 
-  it("intent mismatch does not fire for structural navigation containers without action intent", () => {
+  it("intent mismatch does not fire for structural navigation containers that contain the action", () => {
     fc.assert(
       fc.property(
         arbViewport,
-        fc.constantFrom<ElementHint>({ tag: "NAV" }, { tag: "DIV", role: "navigation" }),
+        fc.constantFrom<ElementHint>(
+          { tag: "NAV" },
+          { tag: "nav" },
+          { tag: "DIV", role: "navigation" },
+          { tag: "DIV", role: "Navigation" }
+        ),
         (viewport, top) => {
           const ctx: ClickContext = {
             viewport,
             input: "pointer",
             top,
             underlying: { tag: "A", textLength: 10, opacity: 1 },
+            inTop: true,
           };
           const { reasonCodes } = computeCDS(ctx);
           expect(reasonCodes).not.toContain("intent_mismatch_under_interactive");
+        }
+      ),
+      { numRuns: 50 }
+    );
+  });
+
+  it("intent mismatch fires for structural navigation overlays without containment", () => {
+    fc.assert(
+      fc.property(
+        arbViewport,
+        fc.constantFrom<ElementHint>(
+          { tag: "NAV" },
+          { tag: "nav" },
+          { tag: "DIV", role: "navigation" },
+          { tag: "DIV", role: "Navigation" }
+        ),
+        fc.constantFrom<Partial<ClickContext>>({}, { inTop: false }),
+        (viewport, top, containment) => {
+          const ctx: ClickContext = {
+            viewport,
+            input: "pointer",
+            top,
+            underlying: { tag: "A", textLength: 10, opacity: 1 },
+            ...containment,
+          };
+          const { reasonCodes } = computeCDS(ctx);
+          expect(reasonCodes).toContain("intent_mismatch_under_interactive");
         }
       ),
       { numRuns: 50 }

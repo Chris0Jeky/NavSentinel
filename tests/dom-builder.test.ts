@@ -170,6 +170,31 @@ describe("buildClickContextFromEvents", () => {
     expect(result.underlying!.tag).toBe("A");
   });
 
+  it("marks underlying action as contained when the top element wraps it", () => {
+    const nav = makeEl("nav");
+    const link = document.createElement("a");
+    link.href = "https://example.com";
+    link.textContent = "Real link";
+    nav.appendChild(link);
+    const result = buildClickContextFromEvents({
+      down: fakeDown({ top: nav, stack: [nav, link] }),
+      click: fakeClick({ top: nav, stack: [nav, link] }),
+    });
+    expect(result.underlying?.tag).toBe("A");
+    expect(result.inTop).toBe(true);
+  });
+
+  it("marks underlying action as uncontained for sibling overlays", () => {
+    const link = makeEl("a", { href: "https://example.com" });
+    const overlay = makeEl("nav");
+    const result = buildClickContextFromEvents({
+      down: fakeDown({ top: overlay, stack: [overlay, link] }),
+      click: fakeClick({ top: overlay, stack: [overlay, link] }),
+    });
+    expect(result.underlying?.tag).toBe("A");
+    expect(result.inTop).toBe(false);
+  });
+
   it("does not set underlying when no interactive element below", () => {
     const top = makeEl("div");
     const bottom = makeEl("div");
