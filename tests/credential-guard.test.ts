@@ -844,7 +844,8 @@ describe("credential_guard", () => {
       expect(mockShowModal).toHaveBeenCalled();
     });
 
-    it("blocks the submit when the action origin changes during the prompt (#227.3)", async () => {
+    it("blocks the submit when the action changes to a cross-site destination during the prompt (#227.3)", async () => {
+      mockGetRegDomain.mockImplementation((h: string) => (h.includes("evil") ? "evil.example" : "bank.example"));
       stubLocation("https://bank.example/login");
       const form = createPasswordForm("https://bank.example/login");
       const requestSubmitSpy = vi.fn();
@@ -865,6 +866,99 @@ describe("credential_guard", () => {
         expect.objectContaining({
           extra: expect.objectContaining({ error: "action_mutated_during_prompt" }),
         }),
+      );
+    });
+
+    it("does NOT block a same-registrable-domain (www->api) action change during the prompt (R1-4)", async () => {
+      mockGetRegDomain.mockReturnValue("bank.example"); // every host resolves to the same registrable domain
+      stubLocation("https://www.bank.example/login");
+      const form = createPasswordForm("https://www.bank.example/login");
+      const requestSubmitSpy = vi.fn();
+      stubRequestSubmit(form, requestSubmitSpy);
+      mockShowModal.mockImplementation(async () => {
+        form.setAttribute("action", "https://api.bank.example/login");
+        return "proceed_once";
+      });
+
+      await dispatchSubmit(form);
+
+      expect(requestSubmitSpy).toHaveBeenCalled(); // benign same-site resolution -> resumed, not blocked
+    });
+
+    it("blocks an https->http action downgrade during the prompt (R1-4)", async () => {
+      mockGetRegDomain.mockReturnValue("bank.example");
+      stubLocation("https://bank.example/login");
+      const form = createPasswordForm("https://bank.example/login");
+      const requestSubmitSpy = vi.fn();
+      stubRequestSubmit(form, requestSubmitSpy);
+      mockShowModal.mockImplementation(async () => {
+        form.setAttribute("action", "http://bank.example/login");
+        return "proceed_once";
+      });
+
+      await dispatchSubmit(form);
+
+      expect(requestSubmitSpy).not.toHaveBeenCalled();
+      expect(mockShowToast).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining("destination changed") }),
+      );
+    });
+
+    it("does not fall back to form.submit() when requestSubmit throws and a formaction was assessed (R1-1)", async () => {
+      mockShowModal.mockResolvedValue("proceed_once");
+      stubLocation("https://bank.example/login");
+      const form = createPasswordForm("https://bank.example/login");
+      const btn = document.createElement("button");
+      btn.type = "submit";
+      btn.setAttribute("formaction", "https://pay.example/checkout");
+      form.appendChild(btn);
+      // requestSubmit throws (e.g. submitter detached); the unsafe form.submit
+      // fallback uses form.action and would ignore the assessed formaction.
+      stubRequestSubmit(form, vi.fn(() => { throw new Error("NotFoundError"); }));
+      const submitSpy = vi.spyOn(form, "submit").mockImplementation(() => {});
+
+      await dispatchSubmit(form, btn);
+
+      expect(submitSpy).not.toHaveBeenCalled();
+      expect(mockShowToast).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining("could not be completed safely") }),
+      );
+    });
+
+    it("blocks when the submitter is detached from the form during the prompt (R1-1/2)", async () => {
+      mockGetRegDomain.mockReturnValue("bank.example");
+      stubLocation("https://bank.example/login");
+      const form = createPasswordForm("https://bank.example/login");
+      const btn = document.createElement("button");
+      btn.type = "submit";
+      form.appendChild(btn);
+      const requestSubmitSpy = vi.fn();
+      stubRequestSubmit(form, requestSubmitSpy);
+      mockShowModal.mockImplementation(async () => {
+        form.removeChild(btn); // submitter no longer associated with this form
+        return "proceed_once";
+      });
+
+      await dispatchSubmit(form, btn);
+
+      expect(requestSubmitSpy).not.toHaveBeenCalled();
+      expect(mockShowToast).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining("destination changed") }),
+      );
+    });
+
+    it("treats an empty formaction as the current document, not the form action (R1-5d)", async () => {
+      stubLocation("https://bank.example/login");
+      const form = createPasswordForm("https://bank.example/submit");
+      const btn = document.createElement("button");
+      btn.type = "submit";
+      btn.setAttribute("formaction", "");
+      form.appendChild(btn);
+
+      await dispatchSubmit(form, btn);
+
+      expect(mockComputeRisk).toHaveBeenCalledWith(
+        expect.objectContaining({ actionUrl: "https://bank.example/login" }),
       );
     });
   });

@@ -99,14 +99,6 @@ function resolveActionUrl(form: HTMLFormElement, submitter: HTMLElement | null):
   }
 }
 
-function actionOrigin(url: string): string {
-  try {
-    return new URL(url).origin;
-  } catch {
-    return "";
-  }
-}
-
 function actionHost(url: string): string {
   try {
     return new URL(url).hostname;
@@ -115,12 +107,42 @@ function actionHost(url: string): string {
   }
 }
 
+function registrableOf(url: string): string {
+  const host = actionHost(url);
+  return getRegistrableDomain(host) || host;
+}
+
+function isHttpsUrl(url: string): boolean {
+  try {
+    return new URL(url).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 function resumeSubmit(form: HTMLFormElement, submitter: HTMLElement | null): void {
+  // requestSubmit re-dispatches the submit event; mark a one-shot bypass so our
+  // own handler lets that re-entrant event through (and consumes it).
   markAllowNext(form, 5000);
 
   try {
     form.requestSubmit(submitter);
   } catch {
+    // requestSubmit failed (e.g. the submit control was detached or re-associated
+    // during the await window). Nothing was submitted, so revoke the one-shot
+    // bypass.
+    allowNextSubmitUntil.delete(form);
+    // form.submit() ignores the submitter's formaction and always POSTs to
+    // form.action, so when a formaction override was assessed (#227.1) falling
+    // back would send credentials to an UNASSESSED destination. Fail closed and
+    // tell the user instead of silently downgrading the target (R1 finding 1).
+    if (submitter?.hasAttribute("formaction")) {
+      showToast({
+        message: "The sign-in could not be completed safely (the submit control changed). Please try again.",
+        timeoutMs: 8000
+      });
+      return;
+    }
     try {
       form.submit();
     } catch (e) {
@@ -144,7 +166,20 @@ async function blockIfActionMutated(
   pageUrl: string
 ): Promise<boolean> {
   const liveActionUrl = resolveActionUrl(form, submitter);
-  if (actionOrigin(liveActionUrl) === actionOrigin(assessedActionUrl)) return false;
+  // A submitter whose form association changed during the prompt (detached, or
+  // re-pointed via the form= attribute) would make requestSubmit target a
+  // different form/formaction than we assessed -- treat that as a destination
+  // change (R1 finding 1/2).
+  const submitterReassociated =
+    (submitter instanceof HTMLButtonElement || submitter instanceof HTMLInputElement) &&
+    submitter.form !== form;
+  // Compare at the granularity the risk model uses (registrable domain), plus an
+  // explicit https->http downgrade, so a benign same-site www->api action
+  // resolution is not hard-blocked while a cross-site swap or scheme downgrade
+  // still is (R1 finding 4).
+  const sameRegistrable = registrableOf(liveActionUrl) === registrableOf(assessedActionUrl);
+  const downgraded = isHttpsUrl(assessedActionUrl) && !isHttpsUrl(liveActionUrl);
+  if (sameRegistrable && !downgraded && !submitterReassociated) return false;
 
   const liveHost = actionHost(liveActionUrl);
   await appendEvent({
