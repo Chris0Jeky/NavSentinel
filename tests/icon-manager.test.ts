@@ -213,6 +213,23 @@ describe("icon_manager", () => {
     });
   });
 
+  it("does not resurrect the cache when clearTabIcon runs during an in-flight update (#229)", async () => {
+    let releaseBg!: () => void;
+    const gate = new Promise<void>((resolve) => { releaseBg = resolve; });
+    setBadgeBackgroundColor.mockImplementationOnce(async () => { await gate; });
+
+    const p = updateTabIcon(70, "red"); // in-flight, gated on its background write
+    for (let i = 0; i < 8; i++) await Promise.resolve();
+
+    clearTabIcon(70); // clear erases the tab WHILE the update is mid-flight
+    releaseBg();
+    await p;
+
+    // The in-flight apply must NOT re-populate the cache the clear just erased.
+    expect(getTabIconState(70)).toBe("gray");
+    expect(_getTabStateMap().has(70)).toBe(false);
+  });
+
   describe("tabState pruning", () => {
     it("prunes oldest entries when exceeding 200 tabs", async () => {
       const map = _getTabStateMap();

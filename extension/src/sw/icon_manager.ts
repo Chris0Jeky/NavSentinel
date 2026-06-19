@@ -16,6 +16,16 @@ const tabState = new Map<number, { icon: IconState; blocks: number }>();
 // while the synchronous cache recorded whichever ran last. (#229)
 const tabUpdateChains = new Map<number, Promise<void>>();
 
+// Monotonic counter bumped by clearTabIcon / setAllTabsGray. An in-flight applyTabIcon
+// captures it before its awaits and skips its cache write if it changed meanwhile, so a
+// clear/reset that races an in-flight update is not silently UNDONE by the later
+// cache write (the old code wrote the cache synchronously BEFORE the awaits, so a clear
+// won; caching after the awaits would otherwise resurrect the entry). Tradeoff: a clear
+// of one tab also skips the cache write of an unrelated in-flight update — harmless and
+// self-healing (the badge writes already applied; the next update re-renders + re-caches),
+// and getTabIconState has no production consumer. (#229)
+let resetGeneration = 0;
+
 // Cap tabState size to prevent unbounded memory growth in long-lived SW.
 // Other per-tab Maps in the SW use similar pruning (e.g. DBLCLICK_CHILD_PRUNE_LIMIT).
 const TAB_STATE_MAX = 200;
@@ -62,6 +72,7 @@ async function applyTabIcon(
   const current = tabState.get(tabId);
   if (current && current.icon === state && current.blocks === blockCount) return;
 
+  const startGeneration = resetGeneration;
   try {
     const config = BADGE_CONFIG[state];
     if (!config) {
@@ -71,6 +82,9 @@ async function applyTabIcon(
       await chrome.action.setBadgeBackgroundColor({ tabId, color: config.color });
       await chrome.action.setBadgeText({ tabId, text });
     }
+    // A clearTabIcon / setAllTabsGray ran while we awaited — do NOT resurrect the cache
+    // it just erased. (#229)
+    if (resetGeneration !== startGeneration) return;
     // Cache the state ONLY after the badge writes resolve, so getTabIconState never
     // claims a state the badge never reached.
     tabState.set(tabId, { icon: state, blocks: blockCount });
@@ -85,6 +99,7 @@ async function applyTabIcon(
 export function clearTabIcon(tabId: number): void {
   tabState.delete(tabId);
   tabUpdateChains.delete(tabId);
+  resetGeneration++;
   try {
     chrome.action.setBadgeText({ tabId, text: "" }).catch(() => {});
   } catch {
@@ -99,6 +114,7 @@ export function getTabIconState(tabId: number): IconState {
 export async function setAllTabsGray(): Promise<void> {
   tabState.clear();
   tabUpdateChains.clear();
+  resetGeneration++;
   const tabs = await chrome.tabs.query({});
   await Promise.all(
     tabs.map((tab) => {
