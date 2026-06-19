@@ -987,6 +987,65 @@ describe("credential_guard", () => {
         expect.objectContaining({ message: expect.stringContaining("destination changed") }),
       );
     });
+
+    it("blocks a silent-path submit when the action changes cross-site before resume (R1-5a)", async () => {
+      mockShouldPrompt.mockReturnValue(false); // silent pass, no modal
+      mockGetRegDomain.mockImplementation((h: string) => (h.includes("evil") ? "evil.example" : "bank.example"));
+      stubLocation("https://bank.example/login");
+      const form = createPasswordForm("https://bank.example/login");
+      const requestSubmitSpy = vi.fn();
+      stubRequestSubmit(form, requestSubmitSpy);
+      // Mutate the action while the cred_form_evaluated append is in flight.
+      mockAppendEvent.mockImplementation(async (e: { kind: string }) => {
+        if (e.kind === "cred_form_evaluated") form.setAttribute("action", "https://evil.example/collect");
+        return undefined;
+      });
+
+      await dispatchSubmit(form);
+
+      expect(requestSubmitSpy).not.toHaveBeenCalled();
+      expect(mockShowToast).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining("destination changed") }),
+      );
+    });
+
+    it("does not bypass the prompt when the SRI check throws (R1-5b)", async () => {
+      mockCheckSRI.mockImplementation(() => {
+        throw new Error("hostile DOM");
+      });
+      const form = createPasswordForm("https://evil.com/collect");
+
+      await dispatchSubmit(form);
+
+      expect(mockShowModal).toHaveBeenCalled();
+    });
+
+    it("guards a form whose only password field is associated via the form= attribute (R1-5c)", async () => {
+      const form = document.createElement("form");
+      form.id = "loginform";
+      document.body.appendChild(form);
+      const pw = document.createElement("input");
+      pw.type = "password";
+      pw.setAttribute("form", "loginform"); // associated, not a descendant
+      document.body.appendChild(pw);
+
+      const event = await dispatchSubmit(form);
+
+      expect(event.defaultPrevented).toBe(true);
+      expect(mockComputeRisk).toHaveBeenCalled();
+    });
+
+    it("resumes the submit exactly once on approval (R1-5f decided invariant)", async () => {
+      mockShowModal.mockResolvedValue("proceed_once");
+      stubLocation("https://bank.example/login");
+      const form = createPasswordForm("https://bank.example/login");
+      const requestSubmitSpy = vi.fn();
+      stubRequestSubmit(form, requestSubmitSpy);
+
+      await dispatchSubmit(form);
+
+      expect(requestSubmitSpy).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe("handlePaste", () => {

@@ -26,6 +26,9 @@ const allowNextSubmitUntil = new WeakMap<HTMLFormElement, number>();
 // not interpose at all (no preventDefault, no synthetic resubmit). Primed once at
 // init and kept current via the settings-change subscription; while it is still
 // unknown, handleSubmit falls back to the async settings read.
+// Note (R1 finding 6): an off->on flip has a one-submit propagation lag -- a
+// submit fired before the settings-change event lands is not interposed on. The
+// reverse (on->off) is always safe, and the lag is not attacker-forceable.
 let cachedCredMode: CredMode | undefined;
 void (async () => {
   try {
