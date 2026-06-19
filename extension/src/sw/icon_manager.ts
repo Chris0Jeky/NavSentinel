@@ -9,6 +9,23 @@ const BADGE_CONFIG: Record<IconState, { text: string; color: string } | null> = 
 
 const tabState = new Map<number, { icon: IconState; blocks: number }>();
 
+// Per-tab serialization chain. updateTabIcon appends each update to its tab's chain
+// so two same-tab updates never interleave their setBadge* calls — without this, the
+// background-color write from one invocation and the text write from another could
+// resolve out of order and leave a torn badge (e.g. red background + green check),
+// while the synchronous cache recorded whichever ran last. (#229)
+const tabUpdateChains = new Map<number, Promise<void>>();
+
+// Monotonic counter bumped by clearTabIcon / setAllTabsGray. An in-flight applyTabIcon
+// captures it before its awaits and skips its cache write if it changed meanwhile, so a
+// clear/reset that races an in-flight update is not silently UNDONE by the later
+// cache write (the old code wrote the cache synchronously BEFORE the awaits, so a clear
+// won; caching after the awaits would otherwise resurrect the entry). Tradeoff: a clear
+// of one tab also skips the cache write of an unrelated in-flight update — harmless and
+// self-healing (the badge writes already applied; the next update re-renders + re-caches),
+// and getTabIconState has no production consumer. (#229)
+let resetGeneration = 0;
+
 // Cap tabState size to prevent unbounded memory growth in long-lived SW.
 // Other per-tab Maps in the SW use similar pruning (e.g. DBLCLICK_CHILD_PRUNE_LIMIT).
 const TAB_STATE_MAX = 200;
@@ -24,33 +41,65 @@ function pruneTabState(): void {
   }
 }
 
-export async function updateTabIcon(
+export function updateTabIcon(
   tabId: number,
   state: IconState,
   blockCount = 0,
 ): Promise<void> {
+  // Append to the tab's chain so same-tab updates apply strictly in order
+  // (last-write-wins). The .catch keeps one failed/cancelled update from breaking
+  // the chain for the next one; applyTabIcon never rejects, so the chain is stable.
+  const prev = tabUpdateChains.get(tabId) ?? Promise.resolve();
+  const next = prev.catch(() => {}).then(() => applyTabIcon(tabId, state, blockCount));
+  tabUpdateChains.set(tabId, next);
+  // Drop the chain entry once it drains, but only if no newer update has replaced it
+  // (otherwise we would orphan the in-flight tail).
+  void next.finally(() => {
+    if (tabUpdateChains.get(tabId) === next) tabUpdateChains.delete(tabId);
+  });
+  return next;
+}
+
+async function applyTabIcon(
+  tabId: number,
+  state: IconState,
+  blockCount: number,
+): Promise<void> {
+  // Dedup is evaluated HERE (at apply time), not before queueing: a synchronous
+  // top-level dedup against the cache would wrongly skip a needed update when an
+  // in-flight update is moving the badge to a different state. By the time this runs,
+  // the cache reflects the immediately-preceding applied state for this tab.
   const current = tabState.get(tabId);
   if (current && current.icon === state && current.blocks === blockCount) return;
-  tabState.set(tabId, { icon: state, blocks: blockCount });
-  pruneTabState();
 
+  const startGeneration = resetGeneration;
   try {
     const config = BADGE_CONFIG[state];
     if (!config) {
       await chrome.action.setBadgeText({ tabId, text: "" });
-      return;
+    } else {
+      const text = blockCount > 0 ? String(blockCount) : config.text;
+      await chrome.action.setBadgeBackgroundColor({ tabId, color: config.color });
+      await chrome.action.setBadgeText({ tabId, text });
     }
-
-    const text = blockCount > 0 ? String(blockCount) : config.text;
-    await chrome.action.setBadgeBackgroundColor({ tabId, color: config.color });
-    await chrome.action.setBadgeText({ tabId, text });
+    // A clearTabIcon / setAllTabsGray ran while we awaited — do NOT resurrect the cache
+    // it just erased. (#229)
+    if (resetGeneration !== startGeneration) return;
+    // Cache the state ONLY after the badge writes resolve, so getTabIconState never
+    // claims a state the badge never reached.
+    tabState.set(tabId, { icon: state, blocks: blockCount });
+    pruneTabState();
   } catch {
-    // Tab may have closed or extension context invalidated
+    // Tab closed or extension context invalidated. Deliberately do NOT cache the
+    // unapplied state: leaving the prior cache means the apply-time dedup above
+    // cannot suppress a later corrective re-render to this same state. (#229)
   }
 }
 
 export function clearTabIcon(tabId: number): void {
   tabState.delete(tabId);
+  tabUpdateChains.delete(tabId);
+  resetGeneration++;
   try {
     chrome.action.setBadgeText({ tabId, text: "" }).catch(() => {});
   } catch {
@@ -64,6 +113,8 @@ export function getTabIconState(tabId: number): IconState {
 
 export async function setAllTabsGray(): Promise<void> {
   tabState.clear();
+  tabUpdateChains.clear();
+  resetGeneration++;
   const tabs = await chrome.tabs.query({});
   await Promise.all(
     tabs.map((tab) => {

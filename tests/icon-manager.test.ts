@@ -24,8 +24,8 @@ vi.stubGlobal("chrome", {
 describe("icon_manager", () => {
   beforeEach(() => {
     _getTabStateMap().clear();
-    setBadgeText.mockClear();
-    setBadgeBackgroundColor.mockClear();
+    setBadgeText.mockReset().mockResolvedValue(undefined);
+    setBadgeBackgroundColor.mockReset().mockResolvedValue(undefined);
     tabsQuery.mockClear();
     tabsQuery.mockResolvedValue([]);
   });
@@ -160,6 +160,74 @@ describe("icon_manager", () => {
       expect(setBadgeText).toHaveBeenCalledTimes(1);
       expect(setBadgeText).toHaveBeenCalledWith({ tabId: 30, text: "" });
     });
+  });
+
+  describe("concurrent same-tab updates (#229)", () => {
+    it("does not cache an unapplied state when a badge write fails, allowing a corrective retry", async () => {
+      // The background-color write fails on the first attempt (tab gone / context lost).
+      setBadgeBackgroundColor.mockRejectedValueOnce(new Error("tab gone"));
+      await updateTabIcon(60, "red");
+
+      // The cache must NOT claim "red" — the badge never reached it. (Old code wrote
+      // the cache optimistically BEFORE the awaits, so it would read "red" here.)
+      expect(getTabIconState(60)).toBe("gray");
+
+      // A corrective retry to the SAME state must NOT be suppressed by the dedup guard
+      // (old code's optimistic cache + early-return would silently swallow it).
+      setBadgeText.mockClear();
+      setBadgeBackgroundColor.mockClear();
+      await updateTabIcon(60, "red");
+      expect(setBadgeBackgroundColor).toHaveBeenCalledWith({ tabId: 60, color: "#dc2626" });
+      expect(setBadgeText).toHaveBeenCalledWith({ tabId: 60, text: "✕" });
+      expect(getTabIconState(60)).toBe("red");
+    });
+
+    it("serializes interleaved same-tab updates so the badge cannot tear", async () => {
+      const order: string[] = [];
+      let releaseFirstBg!: () => void;
+      const firstBgGate = new Promise<void>((resolve) => { releaseFirstBg = resolve; });
+      let bgCalls = 0;
+      setBadgeBackgroundColor.mockImplementation(async ({ color }: { color: string }) => {
+        const n = ++bgCalls;
+        order.push(`bg:${color}`);
+        if (n === 1) await firstBgGate; // hold the first update (red) in-flight
+      });
+      setBadgeText.mockImplementation(async ({ text }: { text: string }) => {
+        order.push(`text:${text}`);
+      });
+
+      const a = updateTabIcon(50, "red");   // A starts, gated on its bg write
+      const b = updateTabIcon(50, "green"); // B must queue behind A, not interleave
+
+      // Flush microtasks: A's bg has been called and is gated; B has NOT started.
+      for (let i = 0; i < 8; i++) await Promise.resolve();
+      expect(order).toEqual(["bg:#dc2626"]);
+
+      releaseFirstBg();
+      await Promise.all([a, b]);
+
+      // Strict ordering: every write of A precedes every write of B — no torn badge.
+      expect(order).toEqual(["bg:#dc2626", "text:✕", "bg:#16a34a", "text:✓"]);
+      // Last-write-wins, and the cache matches the visibly-applied badge.
+      expect(getTabIconState(50)).toBe("green");
+    });
+  });
+
+  it("does not resurrect the cache when clearTabIcon runs during an in-flight update (#229)", async () => {
+    let releaseBg!: () => void;
+    const gate = new Promise<void>((resolve) => { releaseBg = resolve; });
+    setBadgeBackgroundColor.mockImplementationOnce(async () => { await gate; });
+
+    const p = updateTabIcon(70, "red"); // in-flight, gated on its background write
+    for (let i = 0; i < 8; i++) await Promise.resolve();
+
+    clearTabIcon(70); // clear erases the tab WHILE the update is mid-flight
+    releaseBg();
+    await p;
+
+    // The in-flight apply must NOT re-populate the cache the clear just erased.
+    expect(getTabIconState(70)).toBe("gray");
+    expect(_getTabStateMap().has(70)).toBe(false);
   });
 
   describe("tabState pruning", () => {
