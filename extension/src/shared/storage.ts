@@ -1122,38 +1122,61 @@ export async function importAll(payload: unknown): Promise<void> {
   const p = payload as Record<string, unknown>;
   let importLogLimit = DEFAULT_SUITE_SETTINGS.logLimit;
 
+  // --- Phase 1: validate & build EVERY storage.local section payload before any
+  // write. This was previously a sequence of independent awaited set() calls, so a
+  // mid-sequence failure (invalid payload, quota rejection, transient error) left a
+  // partially-applied config — e.g. a new allowlist paired with the old event log.
+  // chrome.storage.local.set applies all keys in ONE operation, so committing the
+  // core sections together makes the security-relevant allowlist/trusted-domains
+  // replacement atomic with settings/event-log: an invalid payload or a failed
+  // write now leaves storage unchanged instead of half-applied. (#203)
+  //
+  // Prompt outcomes are deliberately kept as a separate LAST step: the path may be
+  // SW-delegated and rejects on exhaustion, and the options UI already distinguishes
+  // that delivery failure to report a precise partial result (#188).
+  const writes: Record<string, unknown> = {};
+
   if (p.settings && typeof p.settings === "object") {
     const merged = mergeSuiteSettings(
       structuredClone(DEFAULT_SUITE_SETTINGS),
       p.settings as SuiteSettingsPatch
     );
     importLogLimit = merged.logLimit;
-    await chrome.storage.local.set({ [SUITE_SETTINGS_KEY]: merged });
+    writes[SUITE_SETTINGS_KEY] = merged;
   }
 
   if (p.allowlist && typeof p.allowlist === "object") {
-    await chrome.storage.local.set({ [ALLOWLIST_KEY]: normalizeAllowlist(p.allowlist) });
+    writes[ALLOWLIST_KEY] = normalizeAllowlist(p.allowlist);
   }
 
   if (Array.isArray(p.trustedDomains)) {
-    await chrome.storage.local.set({
-      [TRUSTED_DOMAINS_KEY]: normalizeDomainList(p.trustedDomains)
-    });
+    writes[TRUSTED_DOMAINS_KEY] = normalizeDomainList(p.trustedDomains);
   }
 
   if (Array.isArray(p.eventLog)) {
     const boundedLogLimit = clampInt(importLogLimit, 50, 5000, DEFAULT_SUITE_SETTINGS.logLimit);
-    await chrome.storage.local.set({
-      [EVENT_LOG_KEY]: (p.eventLog as EventLogEntry[]).slice(-boundedLogLimit)
-    });
+    writes[EVENT_LOG_KEY] = (p.eventLog as EventLogEntry[]).slice(-boundedLogLimit);
   }
 
-  if (Array.isArray(p.promptOutcomes)) {
-    await replacePromptOutcomes(p.promptOutcomes as PromptOutcomeEntry[]);
-  } else {
+  const hasPromptOutcomes = Array.isArray(p.promptOutcomes);
+  if (!hasPromptOutcomes) {
     // Intentional: any import without valid outcomes resets adaptive scores
     // to prevent stale data. adaptiveScores from payload are ignored —
-    // they are recomputed from outcomes to prevent injection.
-    await chrome.storage.local.set({ [ADAPTIVE_SCORES_KEY]: {} });
+    // they are recomputed from outcomes to prevent injection. Folded into the
+    // atomic core write below. (When outcomes ARE present, replacePromptOutcomes
+    // recomputes adaptive scores itself, so it is omitted here.)
+    writes[ADAPTIVE_SCORES_KEY] = {};
+  }
+
+  // --- Phase 2: commit the core sections in a single atomic set ---
+  if (Object.keys(writes).length > 0) {
+    await chrome.storage.local.set(writes);
+  }
+
+  // --- Phase 3: prompt outcomes LAST (separate by design; recomputes adaptive
+  // scores; may be SW-delegated and reject on exhaustion → surfaced as a partial
+  // import by the options UI). The core sections above are already consistent. ---
+  if (hasPromptOutcomes) {
+    await replacePromptOutcomes(p.promptOutcomes as PromptOutcomeEntry[]);
   }
 }
