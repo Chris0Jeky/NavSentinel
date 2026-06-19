@@ -845,7 +845,12 @@ describe("credential_guard", () => {
     });
 
     it("blocks the submit when the action changes to a cross-site destination during the prompt (#227.3)", async () => {
-      mockGetRegDomain.mockImplementation((h: string) => (h.includes("evil") ? "evil.example" : "bank.example"));
+      // Assert registrableOf passes a BARE host (not a full URL), so a broken
+      // actionHost extractor cannot slip through masked (R2-L5).
+      mockGetRegDomain.mockImplementation((h: string) => {
+        if (h.includes("/") || h.includes(":")) throw new Error(`getRegistrableDomain got a non-host arg: ${h}`);
+        return h.includes("evil") ? "evil.example" : "bank.example";
+      });
       stubLocation("https://bank.example/login");
       const form = createPasswordForm("https://bank.example/login");
       const requestSubmitSpy = vi.fn();
@@ -1003,6 +1008,7 @@ describe("credential_guard", () => {
 
       await dispatchSubmit(form);
 
+      expect(mockShowModal).not.toHaveBeenCalled(); // silent branch, no prompt
       expect(requestSubmitSpy).not.toHaveBeenCalled();
       expect(mockShowToast).toHaveBeenCalledWith(
         expect.objectContaining({ message: expect.stringContaining("destination changed") }),
@@ -1035,16 +1041,103 @@ describe("credential_guard", () => {
       expect(mockComputeRisk).toHaveBeenCalled();
     });
 
-    it("resumes the submit exactly once on approval (R1-5f decided invariant)", async () => {
+    it("resumes exactly once even when the post-resume append rejects (R2-M2)", async () => {
       mockShowModal.mockResolvedValue("proceed_once");
       stubLocation("https://bank.example/login");
       const form = createPasswordForm("https://bank.example/login");
       const requestSubmitSpy = vi.fn();
       stubRequestSubmit(form, requestSubmitSpy);
+      // The trailing cred_submit_allow_once append rejects; the .catch guard must
+      // swallow it so the fail-open catch never re-enters and double-submits.
+      mockAppendEvent.mockImplementation(async (e: { kind: string }) => {
+        if (e.kind === "cred_submit_allow_once") throw new Error("post-resume boom");
+        return undefined;
+      });
 
       await dispatchSubmit(form);
 
       expect(requestSubmitSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not resume after an intentional block even if a post-decision op throws (R2-M2)", async () => {
+      mockGetRegDomain.mockImplementation((h: string) => (h.includes("evil") ? "evil.example" : "bank.example"));
+      stubLocation("https://bank.example/login");
+      const form = createPasswordForm("https://bank.example/login");
+      const requestSubmitSpy = vi.fn();
+      stubRequestSubmit(form, requestSubmitSpy);
+      // showToast (inside blockIfActionMutated, after decided=true) throws and
+      // unwinds to the fail-open catch, which must NOT override the block.
+      mockShowToast.mockImplementation(() => { throw new Error("toast boom"); });
+      mockShowModal.mockImplementation(async () => {
+        form.setAttribute("action", "https://evil.example/collect");
+        return "proceed_once";
+      });
+
+      await dispatchSubmit(form);
+
+      expect(requestSubmitSpy).not.toHaveBeenCalled();
+    });
+
+    it("blocks when the submitter is re-pointed to another form during the prompt (R2-M3)", async () => {
+      mockGetRegDomain.mockReturnValue("bank.example");
+      stubLocation("https://bank.example/login");
+      const form = document.createElement("form");
+      form.id = "loginform";
+      form.setAttribute("action", "https://bank.example/login");
+      const pw = document.createElement("input");
+      pw.type = "password";
+      form.appendChild(pw);
+      document.body.appendChild(form);
+      const attacker = document.createElement("form");
+      attacker.id = "attacker";
+      attacker.setAttribute("action", "https://bank.example/login");
+      document.body.appendChild(attacker);
+      // Submitter associated to the login form via form= (not a descendant), then
+      // re-pointed to the attacker form during the prompt.
+      const btn = document.createElement("button");
+      btn.type = "submit";
+      btn.setAttribute("form", "loginform");
+      document.body.appendChild(btn);
+      const requestSubmitSpy = vi.fn();
+      stubRequestSubmit(form, requestSubmitSpy);
+      mockShowModal.mockImplementation(async () => {
+        btn.setAttribute("form", "attacker");
+        return "proceed_once";
+      });
+
+      await dispatchSubmit(form, btn);
+
+      expect(requestSubmitSpy).not.toHaveBeenCalled();
+      expect(mockShowToast).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining("destination changed") }),
+      );
+    });
+
+    it("blocks even if the action_mutated event append rejects (R2-NIT2)", async () => {
+      mockGetRegDomain.mockImplementation((h: string) => (h.includes("evil") ? "evil.example" : "bank.example"));
+      stubLocation("https://bank.example/login");
+      const form = createPasswordForm("https://bank.example/login");
+      const requestSubmitSpy = vi.fn();
+      stubRequestSubmit(form, requestSubmitSpy);
+      mockAppendEvent.mockImplementation(async (e: { extra?: { error?: string } }) => {
+        if (e.extra?.error === "action_mutated_during_prompt") throw new Error("log boom");
+        return undefined;
+      });
+      mockShowModal.mockImplementation(async () => {
+        form.setAttribute("action", "https://evil.example/collect");
+        return "proceed_once";
+      });
+
+      await dispatchSubmit(form);
+
+      expect(requestSubmitSpy).not.toHaveBeenCalled();
+      expect(mockShowToast).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining("destination changed") }),
+      );
+    });
+
+    it("registers a settings-change subscription at module load (R2-L6)", () => {
+      expect(credSettingsCb).toBeTypeOf("function");
     });
 
     it("fail-open catch re-checks the destination and blocks a swapped action (R2-M1)", async () => {
