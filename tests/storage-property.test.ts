@@ -101,6 +101,32 @@ const arbEventLogEntry: fc.Arbitrary<EventLogEntry> = fc.record(
   { requiredKeys: ["id", "ts", "kind"] }
 );
 
+const arbElementHint = fc.record(
+  {
+    tag: fc.constantFrom("A", "DIV", "BUTTON", "FORM", "SPAN"),
+    role: fc.constantFrom("link", "button", "navigation"),
+    hasOnClick: fc.boolean(),
+    textLength: fc.integer({ min: 0, max: 80 }),
+    ariaLabelLength: fc.integer({ min: 0, max: 80 }),
+    targetBlank: fc.boolean(),
+    zIndex: fc.integer({ min: 0, max: 10_000 }),
+  },
+  { requiredKeys: ["tag"] }
+);
+
+const arbClickContext = fc.record(
+  {
+    viewport: fc.record({ w: fc.integer({ min: 0, max: 4000 }), h: fc.integer({ min: 0, max: 4000 }) }),
+    input: fc.constantFrom("pointer" as const, "keyboard" as const),
+    top: arbElementHint,
+    underlying: arbElementHint,
+    retargeted: fc.boolean(),
+    explicitNewTabIntent: fc.boolean(),
+    isLegitModalBackdrop: fc.boolean(),
+  },
+  { requiredKeys: ["viewport", "input", "top"] }
+);
+
 const arbPromptOutcomeEntry: fc.Arbitrary<PromptOutcomeEntry> = fc.record(
   {
     id: fc.string({ minLength: 1, maxLength: 20 }),
@@ -111,6 +137,13 @@ const arbPromptOutcomeEntry: fc.Arbitrary<PromptOutcomeEntry> = fc.record(
     score: fc.integer({ min: 0, max: 100 }),
     outcome: arbPromptOutcome,
     reasons: fc.array(fc.constantFrom("cross_site", "suspicious_url"), { minLength: 1, maxLength: 2 }),
+    // Enriched replay-grade fields (P5-C1 / #238) — all optional.
+    cds: fc.integer({ min: 0, max: 100 }),
+    nrsFactors: fc.array(fc.constantFrom("nrs_cross_site", "nrs_new_tab_window", "nrs_known_bad_domain"), { minLength: 1, maxLength: 3 }),
+    navAnomalyScore: fc.integer({ min: 0, max: 15 }),
+    adaptiveAdj: fc.integer({ min: -15, max: 15 }),
+    thresholdUsed: fc.integer({ min: 30, max: 100 }),
+    elementContext: arbClickContext,
   },
   { requiredKeys: ["id", "ts", "domain", "type", "score", "outcome"] }
 );

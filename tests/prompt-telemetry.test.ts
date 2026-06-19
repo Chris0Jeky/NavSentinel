@@ -184,3 +184,261 @@ describe("prompt telemetry storage", () => {
     expect(outcomes[0]!.id).toBe("i-100");
   });
 });
+
+describe("prompt telemetry replay-grade enrichment (P5-C1 / #238)", () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  it("stores and round-trips the enriched feature fields", async () => {
+    const { chrome } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const { appendPromptOutcome, getPromptOutcomes } = await import("../extension/src/shared/storage");
+
+    await appendPromptOutcome({
+      domain: "src.example",
+      destDomain: "dest.example",
+      type: "nav",
+      score: 72,
+      outcome: "block",
+      reasons: ["nrs_cross_site", "overlay_large_interactive"],
+      cds: 41,
+      nrsFactors: ["nrs_cross_site", "nrs_new_tab_window"],
+      navAnomalyScore: 15,
+      adaptiveAdj: -5,
+      thresholdUsed: 65,
+      elementContext: {
+        viewport: { w: 1280, h: 720 },
+        input: "pointer",
+        top: { tag: "A", role: "link", targetBlank: true, textLength: 4, opacity: 0.5 },
+        underlying: { tag: "DIV" },
+        retargeted: true
+      }
+    });
+
+    const [entry] = await getPromptOutcomes();
+    expect(entry!.reasons).toEqual(["nrs_cross_site", "overlay_large_interactive"]);
+    expect(entry!.cds).toBe(41);
+    expect(entry!.nrsFactors).toEqual(["nrs_cross_site", "nrs_new_tab_window"]);
+    expect(entry!.navAnomalyScore).toBe(15);
+    expect(entry!.adaptiveAdj).toBe(-5);
+    expect(entry!.thresholdUsed).toBe(65);
+    expect(entry!.elementContext?.top.tag).toBe("A");
+    expect(entry!.elementContext?.top.targetBlank).toBe(true);
+    expect(entry!.elementContext?.underlying?.tag).toBe("DIV");
+    expect(entry!.elementContext?.retargeted).toBe(true);
+  });
+
+  it("keeps thin legacy records valid (enrichment is optional)", async () => {
+    const { chrome } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const { appendPromptOutcome, getPromptOutcomes } = await import("../extension/src/shared/storage");
+
+    await appendPromptOutcome({ domain: "thin.example", type: "nav", score: 10, outcome: "dismiss" });
+    const [entry] = await getPromptOutcomes();
+    expect(entry!.domain).toBe("thin.example");
+    expect(entry!.cds).toBeUndefined();
+    expect(entry!.nrsFactors).toBeUndefined();
+    expect(entry!.elementContext).toBeUndefined();
+  });
+
+  it("caps reason/factor lists by count and length", async () => {
+    const { chrome } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const { appendPromptOutcome, getPromptOutcomes } = await import("../extension/src/shared/storage");
+
+    const longCode = "X".repeat(200);
+    await appendPromptOutcome({
+      domain: "bloat.example",
+      type: "nav",
+      score: 50,
+      outcome: "block",
+      reasons: Array.from({ length: 64 }, () => longCode),
+      nrsFactors: Array.from({ length: 64 }, () => longCode)
+    });
+
+    const [entry] = await getPromptOutcomes();
+    expect(entry!.reasons!.length).toBe(32);
+    expect(entry!.reasons!.every((r) => r.length <= 80)).toBe(true);
+    expect(entry!.nrsFactors!.length).toBe(32);
+    expect(entry!.nrsFactors!.every((r) => r.length <= 80)).toBe(true);
+  });
+
+  it("drops non-finite numeric enrichment but keeps the record", async () => {
+    const { chrome } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const { appendPromptOutcome, getPromptOutcomes } = await import("../extension/src/shared/storage");
+
+    const append = (p: unknown) => appendPromptOutcome(p as Parameters<typeof appendPromptOutcome>[0]);
+    await append({
+      domain: "nan.example",
+      type: "nav",
+      score: 30,
+      outcome: "block",
+      cds: Number.NaN,
+      navAnomalyScore: Number.POSITIVE_INFINITY,
+      adaptiveAdj: 7
+    });
+
+    const [entry] = await getPromptOutcomes();
+    expect(entry!.score).toBe(30);
+    expect(entry!.cds).toBeUndefined();
+    expect(entry!.navAnomalyScore).toBeUndefined();
+    expect(entry!.adaptiveAdj).toBe(7);
+  });
+
+  it("whitelists elementContext fields and drops unknown keys", async () => {
+    const { chrome } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const { appendPromptOutcome, getPromptOutcomes } = await import("../extension/src/shared/storage");
+
+    const append = (p: unknown) => appendPromptOutcome(p as Parameters<typeof appendPromptOutcome>[0]);
+    await append({
+      domain: "junk.example",
+      type: "nav",
+      score: 30,
+      outcome: "block",
+      elementContext: {
+        viewport: { w: 100, h: 100 },
+        input: "pointer",
+        top: { tag: "BUTTON", junkField: "DROP_ME", textLength: 3 },
+        bogusTopLevel: 999
+      }
+    });
+
+    const [entry] = await getPromptOutcomes();
+    const ctx = entry!.elementContext as Record<string, unknown> | undefined;
+    const top = ctx?.top as Record<string, unknown> | undefined;
+    expect(top?.tag).toBe("BUTTON");
+    expect(top?.textLength).toBe(3);
+    expect(top && "junkField" in top).toBe(false);
+    expect(ctx && "bogusTopLevel" in ctx).toBe(false);
+  });
+
+  it("bounds elementContext dimensions (drops extreme rect, zeroes extreme viewport)", async () => {
+    const { chrome } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const { appendPromptOutcome, getPromptOutcomes } = await import("../extension/src/shared/storage");
+
+    const append = (p: unknown) => appendPromptOutcome(p as Parameters<typeof appendPromptOutcome>[0]);
+    await append({
+      domain: "dims.example",
+      type: "nav",
+      score: 30,
+      outcome: "block",
+      elementContext: {
+        viewport: { w: Number.MAX_VALUE, h: -10 },
+        input: "pointer",
+        top: { tag: "A", rect: { w: 1e9, h: 50 } }
+      }
+    });
+
+    const [entry] = await getPromptOutcomes();
+    // extreme/negative viewport dims fall back to 0
+    expect(entry!.elementContext?.viewport).toEqual({ w: 0, h: 0 });
+    // a rect with an out-of-range dimension is dropped entirely
+    expect(entry!.elementContext?.top.rect).toBeUndefined();
+    expect(entry!.elementContext?.top.tag).toBe("A");
+  });
+
+  it("omits elementContext when there is no usable top element", async () => {
+    const { chrome } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const { appendPromptOutcome, getPromptOutcomes } = await import("../extension/src/shared/storage");
+
+    const append = (p: unknown) => appendPromptOutcome(p as Parameters<typeof appendPromptOutcome>[0]);
+    await append({
+      domain: "notop.example",
+      type: "nav",
+      score: 30,
+      outcome: "block",
+      elementContext: { viewport: { w: 1, h: 1 }, input: "pointer", top: {} }
+    });
+
+    const [entry] = await getPromptOutcomes();
+    expect(entry!.elementContext).toBeUndefined();
+  });
+
+  it("export/import round-trips enriched fields", async () => {
+    const { chrome } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const { appendPromptOutcome, exportAll, importAll, getPromptOutcomes, clearPromptOutcomes } = await import(
+      "../extension/src/shared/storage"
+    );
+
+    await appendPromptOutcome({
+      domain: "round.example",
+      destDomain: "trip.example",
+      type: "cred",
+      score: 88,
+      outcome: "cancel",
+      reasons: ["LOOKALIKE_DOMAIN"],
+      cds: 12,
+      thresholdUsed: 70,
+      elementContext: { viewport: { w: 800, h: 600 }, input: "pointer", top: { tag: "FORM" } }
+    });
+
+    const exported = await exportAll();
+    expect(exported.promptOutcomes[0]!.cds).toBe(12);
+    expect(exported.promptOutcomes[0]!.elementContext?.top.tag).toBe("FORM");
+
+    await clearPromptOutcomes();
+    expect(await getPromptOutcomes()).toHaveLength(0);
+
+    await importAll({ promptOutcomes: exported.promptOutcomes });
+    const [restored] = await getPromptOutcomes();
+    expect(restored!.cds).toBe(12);
+    expect(restored!.thresholdUsed).toBe(70);
+    expect(restored!.destDomain).toBe("trip.example");
+    expect(restored!.elementContext?.top.tag).toBe("FORM");
+  });
+
+  it("drops a custom cursor: url(...) but keeps keyword cursors (privacy)", async () => {
+    const { chrome } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const { appendPromptOutcome, getPromptOutcomes } = await import("../extension/src/shared/storage");
+
+    const append = (p: unknown) => appendPromptOutcome(p as Parameters<typeof appendPromptOutcome>[0]);
+    await append({
+      domain: "cur1.example", type: "nav", score: 30, outcome: "block",
+      elementContext: { viewport: { w: 100, h: 100 }, input: "pointer", top: { tag: "A", cursor: 'url("https://evil.example/c.png"), auto' } }
+    });
+    await append({
+      domain: "cur2.example", type: "nav", score: 30, outcome: "block",
+      elementContext: { viewport: { w: 100, h: 100 }, input: "pointer", top: { tag: "A", cursor: "pointer" } }
+    });
+
+    const outcomes = await getPromptOutcomes();
+    expect(outcomes[0]!.elementContext?.top.cursor).toBeUndefined();
+    expect(outcomes[1]!.elementContext?.top.cursor).toBe("pointer");
+  });
+
+  it("re-sanitizes enriched fields on import (not just append)", async () => {
+    const { chrome } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const { importAll, getPromptOutcomes } = await import("../extension/src/shared/storage");
+
+    const payload = {
+      promptOutcomes: [
+        {
+          id: "imp", ts: 1, domain: "i.example", type: "nav", score: 50, outcome: "block",
+          nrsFactors: Array.from({ length: 64 }, () => "X".repeat(200)),
+          elementContext: {
+            viewport: { w: 1e9, h: -5 },
+            input: "pointer",
+            top: { tag: "A", junkField: "DROP", cursor: 'url("https://evil/x")' }
+          }
+        }
+      ]
+    } as unknown as Parameters<typeof importAll>[0];
+    await importAll(payload);
+
+    const [entry] = await getPromptOutcomes();
+    expect(entry!.nrsFactors!.length).toBe(32);
+    expect(entry!.nrsFactors!.every((s) => s.length <= 80)).toBe(true);
+    expect(entry!.elementContext?.viewport).toEqual({ w: 0, h: 0 });
+    const top = entry!.elementContext?.top as unknown as Record<string, unknown>;
+    expect(top && "junkField" in top).toBe(false);
+    expect(top?.cursor).toBeUndefined();
+  });
+});

@@ -59,6 +59,8 @@ const budgets = [
     // threshold wiring, container-intent hints, and silent-decision metadata
     // measure just over 65KB while total dist stays under 500KB. No further
     // capture growth should land before a split/trim slice.
+    // #238 / P5-C1 then adds replay-grade outcome wiring at the call sites while
+    // keeping the pure feature-selection builder in the storage chunk.
     maxKB: 66,
   },
   {
