@@ -109,7 +109,7 @@ export function computeAdjustment(
   // protecting on thin evidence is the fail-safe direction. Blocks are never
   // discounted, so without this asymmetry a small block sample diluted by discounted
   // allows (e.g. [block, block, allow@80], total 2.3 -> confidence 0.77) would lose
-  // protection vs the prior code (-9 -> -7). Keeping confidence = 1 for the block
+  // protection vs the prior code (-8 -> -7). Keeping confidence = 1 for the block
   // direction makes every protective adjustment bit-identical to the prior code.
   const confidence = direction > 0 ? Math.min(1, total / MIN_OUTCOMES) : 1;
   const magnitude = Math.round(MAX_ADJUSTMENT * ratioExcess * confidence);
