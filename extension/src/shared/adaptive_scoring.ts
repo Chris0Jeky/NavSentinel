@@ -79,14 +79,32 @@ export function computeAdjustment(
   const allowRatio = allowWeight / total;
   const blockRatio = blockWeight / total;
 
-  let adjustment = 0;
+  // The ratio sets DIRECTION and how far past RATIO_THRESHOLD we are; it is scale-free.
+  let direction = 0;
+  let ratioExcess = 0;
   if (allowRatio >= RATIO_THRESHOLD) {
     // User mostly allows -> raise threshold -> fewer auto-blocks -> user decides more
-    adjustment = Math.round(MAX_ADJUSTMENT * ((allowRatio - RATIO_THRESHOLD) / (1 - RATIO_THRESHOLD)));
+    direction = 1;
+    ratioExcess = (allowRatio - RATIO_THRESHOLD) / (1 - RATIO_THRESHOLD);
   } else if (blockRatio >= RATIO_THRESHOLD) {
     // User mostly blocks -> lower threshold -> more auto-blocks -> stricter protection
-    adjustment = -Math.round(MAX_ADJUSTMENT * ((blockRatio - RATIO_THRESHOLD) / (1 - RATIO_THRESHOLD)));
+    direction = -1;
+    ratioExcess = (blockRatio - RATIO_THRESHOLD) / (1 - RATIO_THRESHOLD);
   }
+
+  // Effective-sample-size scaling (#213). The ratio above is scale-free: a pure-allow
+  // sequence has allowRatio = allowWeight/allowWeight = 1.0 regardless of the high-score
+  // discount, so e.g. 3 near-threshold allows (allowWeight 0.9) used to drive the full
+  // +15 — the 0.3 discount that resists social-engineering allows never affected the
+  // magnitude without blocks to dilute the ratio. Scale the magnitude by the SUMMED
+  // (discounted) weight — the effective sample size — relative to MIN_OUTCOMES, capped
+  // at 1. So 3 discounted allows (weight 0.9 -> confidence 0.3) yield ~a third of the
+  // magnitude, while any sequence with >= MIN_OUTCOMES full-weight decisive outcomes
+  // (weight >= 3 -> confidence 1) is unchanged. Rounding the positive magnitude before
+  // applying `direction` keeps full-weight results bit-identical to the prior code.
+  const confidence = Math.min(1, total / MIN_OUTCOMES);
+  const magnitude = Math.round(MAX_ADJUSTMENT * ratioExcess * confidence);
+  let adjustment = direction * magnitude;
 
   adjustment = Math.max(MIN_ADJUSTMENT, Math.min(MAX_ADJUSTMENT, adjustment));
   return { adjustment, allowCount, blockCount };
