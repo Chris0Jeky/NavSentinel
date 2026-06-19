@@ -13,6 +13,14 @@ export default defineConfig({
     // local-first posture. Disabling external resource loading keeps the lane
     // network-free and the output clean; it does not affect DOM/ARIA assertions
     // (only file FETCHING is disabled, not markup or inline styles). (#198)
+    //
+    // NOTE: these settings only apply to tests that select `@vitest-environment
+    // happy-dom` (there is no global `environment` here). A future jsdom/other-env
+    // test would need its own resource-disabling. This is also why suppressing
+    // resource loads globally is safe rather than risky: the extension is local-first
+    // — production code only ever fetches bundled `chrome.runtime.getURL(...)` assets
+    // or `data:` URLs, never external network — so a test needing a real network
+    // response would mock fetch, not rely on happy-dom loading it.
     environmentOptions: {
       happyDOM: {
         settings: {
