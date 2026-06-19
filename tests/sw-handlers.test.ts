@@ -357,7 +357,8 @@ describe("service worker handlers", () => {
       releaseGet();
       await vi.runAllTimersAsync();
 
-      expect(response).toEqual(expect.objectContaining({ depth: 2 }));
+      // Full RedirectChainInfo contract (seeded a.test/b.test are non-redirectors).
+      expect(response).toEqual({ depth: 2, viaKnownRedirector: false, knownRedirectorHops: 0 });
     });
   });
 

@@ -160,7 +160,12 @@ describe("SessionStateManager", () => {
   });
 
   it("degraded mode prevents the tab-close path from wiping intact storage (#228.2)", async () => {
-    await sessionStorage.mock.set({ "ns_sw:allowUntil": { "7": 123456 } });
+    // Two intact keys neither in-memory map knows about (both empty after a failed
+    // hydrate) -- a persistAll must not wipe either.
+    await sessionStorage.mock.set({
+      "ns_sw:allowUntil": { "7": 123456 },
+      "ns_sw:gestureUntil": { "8": 999 },
+    });
     sessionStorage.mock.get = vi.fn().mockRejectedValue(new Error("read fail"));
 
     const mgr = new SessionStateManager();
@@ -169,11 +174,12 @@ describe("SessionStateManager", () => {
 
     const setSpy = vi.spyOn(sessionStorage.mock, "set");
     // Realistic tab-close path: bulk per-map delete (deleteTab calls persistAll),
-    // plus a direct persistAll, must NOT overwrite the intact stored entry.
+    // plus a direct persistAll, must NOT overwrite the intact stored entries.
     mgr.deleteTab(7);
     mgr.persistAll();
     expect(setSpy).not.toHaveBeenCalled();
     expect(sessionStorage.store["ns_sw:allowUntil"]).toEqual({ "7": 123456 });
+    expect(sessionStorage.store["ns_sw:gestureUntil"]).toEqual({ "8": 999 });
   });
 
   it("gracefully handles session storage API failure", async () => {

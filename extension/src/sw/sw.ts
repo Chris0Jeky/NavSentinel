@@ -445,6 +445,11 @@ function runWhenHydrated(run: () => void, keepPortOpen = true): boolean {
     run();
   } else {
     void hydrateReady.then(run).catch((err) => {
+      // A deferred body that throws loses its (optional) sendResponse. The gated
+      // read handlers (Map.get / getChainInfo) cannot throw on restored data, and
+      // every content-side caller checks chrome.runtime.lastError and recovers, so
+      // error-path response recovery is intentionally delegated to the caller
+      // rather than emitting a per-handler neutral default here (R2 NIT).
       console.warn("[NavSentinel] deferred session-backed message handler failed:", err);
     });
   }
