@@ -185,13 +185,21 @@ async function blockIfActionMutated(
   const submitterReassociated =
     (submitter instanceof HTMLButtonElement || submitter instanceof HTMLInputElement) &&
     submitter.form !== form;
+  // Not a mutation if the resolved destination is byte-identical AND the submitter
+  // still belongs to this form.
+  if (!submitterReassociated && liveActionUrl === assessedActionUrl) return false;
   // Compare at the granularity the risk model uses (registrable domain), plus an
   // explicit https->http downgrade, so a benign same-site www->api action
   // resolution is not hard-blocked while a cross-site swap or scheme downgrade
-  // still is (R1 finding 4).
-  const sameRegistrable = registrableOf(liveActionUrl) === registrableOf(assessedActionUrl);
+  // still is (R1 finding 4). Opaque-host schemes (data:/blob:/mailto:) all map to
+  // an empty registrable, so an opaque->opaque swap must NOT be treated as equal
+  // (R2 L1) -- the byte-identical fast path above already lets a truly-unchanged
+  // opaque action through.
+  const liveReg = registrableOf(liveActionUrl);
+  const assessedReg = registrableOf(assessedActionUrl);
+  const sameRegistrable = liveReg !== "" && assessedReg !== "" && liveReg === assessedReg;
   const downgraded = isHttpsUrl(assessedActionUrl) && !isHttpsUrl(liveActionUrl);
-  if (sameRegistrable && !downgraded && !submitterReassociated) return false;
+  if (!submitterReassociated && sameRegistrable && !downgraded) return false;
 
   const liveHost = actionHost(liveActionUrl);
   await appendEvent({
@@ -395,6 +403,16 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
       return;
     }
 
+    // Terminal decision. Re-check the destination FIRST -- a mutation-blocked
+    // submit must NOT log a completed allow/trust or widen trust to a destination
+    // the user only saw pre-mutation (R2 L4) -- and locking `decided` here keeps a
+    // trust-write fault from fail-opening past this gate (R1-3). The user approved
+    // the destination they were shown; refuse if page JS swapped it (#227.3).
+    decided = true;
+    if (await blockIfActionMutated(form, submitter, assessedActionUrl, pageSite, risk.page.url)) {
+      return;
+    }
+
     if (choice === "trust_site" || choice === "trust_dest") {
       void appendPromptOutcome({
         domain: credDomain,
@@ -413,11 +431,8 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
       }).catch((e) => { console.warn("[NavSentinel] prompt outcome append failed (allow_once):", e); });
     }
 
-    // R1 finding 3: guard the trust writes. Previously these were the only awaited,
-    // un-.catch'd writes in the handler, so a storage/SW fault unwound to the
-    // fail-open catch with decided=false and resumed the submit while bypassing the
-    // #227.3 re-check below. A failed trust write is non-fatal -- log and proceed so
-    // the re-check still runs and the user's approved submit is honored.
+    // Trust writes are .catch-guarded so a failed write is non-fatal (log and
+    // proceed with the approved submit) and cannot unwind to the fail-open catch.
     if (choice === "trust_site" && risk.page.registrableDomain) {
       await addTrustedDomain(risk.page.registrableDomain).catch((e) => {
         console.warn("[NavSentinel] addTrustedDomain failed (trust_site):", e);
@@ -439,13 +454,6 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
         url: risk.page.url,
         destHost: risk.action.registrableDomain
       }).catch((e) => { console.warn("[NavSentinel] event log append failed (cred_trust_domain/dest):", e); });
-    }
-
-    // #227.3: the user approved the destination they were shown -- refuse to
-    // submit if page JS swapped it during the prompt.
-    decided = true;
-    if (await blockIfActionMutated(form, submitter, assessedActionUrl, pageSite, risk.page.url)) {
-      return;
     }
 
     resumeSubmit(form, submitter);

@@ -1092,6 +1092,45 @@ describe("credential_guard", () => {
       expect(submitSpy).toHaveBeenCalled();
       expect(mockComputeRisk).not.toHaveBeenCalled();
     });
+
+    it("blocks an opaque->opaque (data:) action swap during the prompt (R2-L1)", async () => {
+      // The real getRegistrableDomain("") returns "" for an opaque/empty host.
+      mockGetRegDomain.mockImplementation((h: string) => (h === "" ? "" : "example.com"));
+      stubLocation("https://bank.example/login");
+      const form = createPasswordForm("data:text/html,a");
+      const requestSubmitSpy = vi.fn();
+      stubRequestSubmit(form, requestSubmitSpy);
+      mockShowModal.mockImplementation(async () => {
+        form.setAttribute("action", "data:text/html,b");
+        return "proceed_once";
+      });
+
+      await dispatchSubmit(form);
+
+      expect(requestSubmitSpy).not.toHaveBeenCalled();
+      expect(mockShowToast).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining("destination changed") }),
+      );
+    });
+
+    it("does not log an outcome or widen trust when a trust choice is mutation-blocked (R2-L4)", async () => {
+      mockGetRegDomain.mockImplementation((h: string) => (h.includes("evil") ? "evil.example" : "bank.example"));
+      stubLocation("https://bank.example/login");
+      const risk = defaultRisk();
+      risk.page.registrableDomain = "bank.example";
+      mockComputeRisk.mockReturnValue(risk);
+      const form = createPasswordForm("https://bank.example/login");
+      stubRequestSubmit(form, vi.fn());
+      mockShowModal.mockImplementation(async () => {
+        form.setAttribute("action", "https://evil.example/collect");
+        return "trust_site";
+      });
+
+      await dispatchSubmit(form);
+
+      expect(mockAddTrusted).not.toHaveBeenCalled();
+      expect(mockAppendOutcome).not.toHaveBeenCalled();
+    });
   });
 
   describe("handlePaste", () => {
