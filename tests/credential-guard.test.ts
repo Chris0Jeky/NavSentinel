@@ -544,6 +544,35 @@ describe("credential_guard", () => {
       );
     });
 
+    it("assesses the submitter's formaction as the destination (#227.1)", async () => {
+      stubLocation("https://bank.example/login");
+      const form = createPasswordForm("https://bank.example/login");
+      const btn = document.createElement("button");
+      btn.type = "submit";
+      btn.setAttribute("formaction", "https://evil.example/collect");
+      form.appendChild(btn);
+
+      await dispatchSubmit(form, btn);
+
+      expect(mockComputeRisk).toHaveBeenCalledWith(
+        expect.objectContaining({ actionUrl: "https://evil.example/collect" }),
+      );
+    });
+
+    it("falls back to the form action when the submitter has no formaction (#227.1)", async () => {
+      stubLocation("https://bank.example/login");
+      const form = createPasswordForm("https://bank.example/submit");
+      const btn = document.createElement("button");
+      btn.type = "submit";
+      form.appendChild(btn);
+
+      await dispatchSubmit(form, btn);
+
+      expect(mockComputeRisk).toHaveBeenCalledWith(
+        expect.objectContaining({ actionUrl: "https://bank.example/submit" }),
+      );
+    });
+
     it("passes submitter through to requestSubmit", async () => {
       mockShowModal.mockResolvedValue("proceed_once");
       const form = createPasswordForm();

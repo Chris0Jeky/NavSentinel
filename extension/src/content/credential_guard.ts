@@ -61,9 +61,18 @@ function isPasswordForm(form: HTMLFormElement): boolean {
   }
 }
 
-function resolveActionUrl(form: HTMLFormElement): string {
+function resolveActionUrl(form: HTMLFormElement, submitter: HTMLElement | null): string {
   try {
-    const raw = (form.getAttribute("action") || "").trim();
+    // requestSubmit(submitter) honors the submitter's formaction per the HTML
+    // spec, so that is where the password is actually POSTed -- assess that
+    // destination, not just the form's action. A submitter carrying the
+    // formaction attribute (even empty, which the browser resolves to the current
+    // document) overrides the form action; otherwise fall back to it (#227.1).
+    const raw = (
+      submitter?.hasAttribute("formaction")
+        ? submitter.getAttribute("formaction") || ""
+        : form.getAttribute("action") || ""
+    ).trim();
     if (!raw || raw.toLowerCase().startsWith("javascript:")) return location.href;
     return new URL(raw, location.href).href;
   } catch {
@@ -105,7 +114,7 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
     const trusted = await getTrustedDomains();
     const risk = computeCredentialRisk({
       pageUrl: location.href,
-      actionUrl: resolveActionUrl(form),
+      actionUrl: resolveActionUrl(form, submitter),
       trustedDomains: trusted,
       config: cfg
     });
