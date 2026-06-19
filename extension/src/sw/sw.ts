@@ -169,43 +169,60 @@ function processOAuthNavigation(
   initiatorUrl: string,
   isUserTyped: boolean,
 ): void {
-  if (!isOAuthUrl(url)) {
-    const existingFlow = oauthFlowByTab.get(tabId);
-    if (existingFlow && (existingFlow.phase === "redirect" || existingFlow.phase === "consent")) {
-      // Only treat a non-OAuth commit as the OAuth CALLBACK when it (a) was NOT a
-      // user-typed/bookmarked navigation — a real callback arrives via a redirect,
-      // link click, or form submit, so we exclude only deliberate address entry —
-      // AND (b) carries an OAuth response (code/error in query, or access_token/
-      // id_token in query or fragment). Genuine intermediate provider hops (e.g.
-      // login.live.com), and benign typed/bookmarked pages that merely carry a
-      // generic ?code=/?error=, therefore do not trip a false redirect-mismatch
-      // (+30 NRS). A real attacker callback (redirect/link/form to its domain,
-      // carrying code) still satisfies both. (#207)
-      //
-      // Residual: a benign redirect/link page on another domain that happens to
-      // carry a generic ?code=/?error= during an active flow can still mismatch
-      // (tracked as a follow-up). And an abandoned flow now lingers in redirect/
-      // consent until the 60s age-prune rather than being forced to "complete"
-      // (bounded by OAUTH_FLOW_MAX_AGE_MS).
-      if (isUserTyped || !hasOAuthResponseParams(url)) return;
-      existingFlow.phase = "callback";
-      if (isUnexpectedCallback(existingFlow, url)) {
-        chrome.tabs.sendMessage(
-          tabId,
-          { type: "ns-oauth-redirect-mismatch", callbackUrl: url },
-          () => { if (chrome.runtime.lastError) { /* tab may not be ready */ } },
-        );
-      }
-      existingFlow.phase = "complete";
-      swState.persistMap(oauthFlowByTab, "oauthFlow");
+  const existingFlow = oauthFlowByTab.get(tabId);
+
+  // --- Callback detection (runs REGARDLESS of isOAuthUrl) ---
+  // A commit that carries an OAuth RESPONSE (code/error in query, or access_token/
+  // id_token in query or fragment) during an active flow IS the callback. This is
+  // checked BEFORE the isOAuthUrl gate on purpose: an attacker callback can be
+  // crafted to ALSO satisfy isOAuthUrl — an oauth-keyword path segment (e.g.
+  // "/oauth/cb") plus an OAuth request param such as `scope` — and when the callback
+  // logic lived inside the `!isOAuthUrl` branch, such a callback skipped mismatch
+  // detection entirely and fell through to fresh-flow creation, so no +30
+  // ns-oauth-redirect-mismatch fired. (#222)
+  //
+  // Gates that keep this from firing on legitimate traffic (preserved from #207):
+  //   (a) Only an active flow in redirect/consent can have a callback.
+  //   (b) Excludes user-typed/bookmarked navigations — a real callback arrives via a
+  //       redirect, link click, or form submit — so a benign typed page carrying a
+  //       generic ?code= (e.g. a coupon) does not trip.
+  //   (c) Requires an OAuth RESPONSE payload (code/error/token), NOT merely `state`,
+  //       so genuine intermediate provider authorization hops (e.g.
+  //       login.live.com/oauth20_authorize.srf?...&state=...) are not mis-classified.
+  //   (d) Only fires the +30 mismatch when the registrable domain differs from the
+  //       redirect_uri host recorded at flow start (isUnexpectedCallback).
+  //
+  // Residual: a benign redirect/link page on another domain that happens to carry a
+  // generic ?code=/?error= during an active flow can still mismatch (tracked as a
+  // follow-up). An abandoned flow lingers in redirect/consent until the 60s
+  // age-prune rather than being force-completed (bounded by OAUTH_FLOW_MAX_AGE_MS).
+  if (
+    existingFlow &&
+    (existingFlow.phase === "redirect" || existingFlow.phase === "consent") &&
+    !isUserTyped &&
+    hasOAuthResponseParams(url)
+  ) {
+    existingFlow.phase = "callback";
+    if (isUnexpectedCallback(existingFlow, url)) {
       chrome.tabs.sendMessage(
         tabId,
-        { type: "ns-oauth-flow-update", flow: existingFlow },
-        () => { if (chrome.runtime.lastError) { /* ignore */ } },
+        { type: "ns-oauth-redirect-mismatch", callbackUrl: url },
+        () => { if (chrome.runtime.lastError) { /* tab may not be ready */ } },
       );
     }
+    existingFlow.phase = "complete";
+    swState.persistMap(oauthFlowByTab, "oauthFlow");
+    chrome.tabs.sendMessage(
+      tabId,
+      { type: "ns-oauth-flow-update", flow: existingFlow },
+      () => { if (chrome.runtime.lastError) { /* ignore */ } },
+    );
     return;
   }
+
+  // Not a callback. A non-OAuth commit has nothing further to do here; an
+  // authorization REQUEST (isOAuthUrl) continues to flow-creation below.
+  if (!isOAuthUrl(url)) return;
 
   const redirectUri = extractRedirectUri(url);
   let expectedCallbackDomain = "";
@@ -217,7 +234,6 @@ function processOAuthNavigation(
     }
   }
 
-  const existingFlow = oauthFlowByTab.get(tabId);
   if (existingFlow && existingFlow.phase === "redirect") {
     existingFlow.consentUrl = url;
     existingFlow.phase = "consent";

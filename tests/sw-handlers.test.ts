@@ -1324,6 +1324,87 @@ describe("service worker handlers", () => {
       expect(mismatch).toBeDefined();
     });
 
+    it("flags an attacker callback that ALSO matches isOAuthUrl during an active flow (#222)", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+
+      // Start the flow; redirect_uri -> app.example.com (the expected callback host).
+      const consentUrl =
+        "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&redirect_uri=https%3A%2F%2Fapp.example.com%2Fcb&response_type=code&scope=openid";
+      mock.emitCommitted({ tabId: 10, frameId: 0, url: consentUrl, transitionType: "link" });
+
+      // A second authorization hop (isOAuthUrl, no response params) advances the flow
+      // into the "consent" phase — the exact state in which the bypass manifested.
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        url: "https://accounts.google.com/signin/oauth/consent?client_id=x&scope=openid&state=abc",
+        transitionType: "link",
+        transitionQualifiers: ["server_redirect"],
+      });
+
+      // The attacker callback is crafted to ALSO satisfy isOAuthUrl: an oauth-keyword
+      // path segment ("/oauth/") + an OAuth request param ("scope"), on top of the
+      // `code` response param. Before #222 this skipped the callback branch (because
+      // isOAuthUrl was true) and fell through to fresh-flow creation, so no mismatch
+      // fired. It lands on evil.example, a different registrable domain than the
+      // recorded redirect_uri host, so it MUST now flag.
+      mock.sentMessages.length = 0;
+      const attackerCallback =
+        "https://evil.example/oauth/cb?scope=openid&code=stolenauthcode&state=abc";
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        url: attackerCallback,
+        transitionType: "link",
+        transitionQualifiers: ["client_redirect"],
+      });
+
+      const mismatch = mock.sentMessages.find(
+        (m) => (m.message as { type: string }).type === "ns-oauth-redirect-mismatch",
+      );
+      expect(mismatch).toBeDefined();
+      expect((mismatch!.message as { callbackUrl: string }).callbackUrl).toBe(attackerCallback);
+      const complete = mock.sentMessages.find(
+        (m) =>
+          (m.message as { type: string }).type === "ns-oauth-flow-update" &&
+          (m.message as { flow: { phase: string } }).flow.phase === "complete",
+      );
+      expect(complete).toBeDefined();
+    });
+
+    it("does NOT fire a mismatch for an isOAuthUrl-matching callback to the EXPECTED domain (#222 no-FP)", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+
+      const consentUrl =
+        "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&redirect_uri=https%3A%2F%2Fapp.example.com%2Fcb&response_type=code&scope=openid";
+      mock.emitCommitted({ tabId: 10, frameId: 0, url: consentUrl, transitionType: "link" });
+
+      // A legitimate callback to the EXPECTED domain that happens to also match
+      // isOAuthUrl (oauth path keyword + scope) must still complete with NO mismatch —
+      // the hoisted callback check only fires the +30 on a registrable-domain change.
+      mock.sentMessages.length = 0;
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        url: "https://app.example.com/oauth/cb?scope=openid&code=authcode&state=abc",
+        transitionType: "link",
+        transitionQualifiers: ["client_redirect"],
+      });
+
+      const mismatch = mock.sentMessages.find(
+        (m) => (m.message as { type: string }).type === "ns-oauth-redirect-mismatch",
+      );
+      expect(mismatch).toBeUndefined();
+      const complete = mock.sentMessages.find(
+        (m) =>
+          (m.message as { type: string }).type === "ns-oauth-flow-update" &&
+          (m.message as { flow: { phase: string } }).flow.phase === "complete",
+      );
+      expect(complete).toBeDefined();
+    });
+
     it("flags a LINK-CLICK callback to an unexpected domain (no redirect qualifier) (#207 R2)", async () => {
       const mock = createChromeMock();
       await loadSw(mock);
