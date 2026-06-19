@@ -961,6 +961,32 @@ describe("credential_guard", () => {
         expect.objectContaining({ actionUrl: "https://bank.example/login" }),
       );
     });
+
+    it("trust-path: a failed trust write still runs the action re-check (no fail-open) (R1-3)", async () => {
+      mockGetRegDomain.mockImplementation((h: string) => (h.includes("evil") ? "evil.example" : "bank.example"));
+      stubLocation("https://bank.example/login");
+      const risk = defaultRisk();
+      risk.page.registrableDomain = "bank.example";
+      mockComputeRisk.mockReturnValue(risk);
+      mockAddTrusted.mockRejectedValue(new Error("storage failed"));
+      const form = createPasswordForm("https://bank.example/login");
+      const requestSubmitSpy = vi.fn();
+      stubRequestSubmit(form, requestSubmitSpy);
+      // Mutate to a cross-site destination, then choose trust_site (whose
+      // addTrustedDomain rejects). The mutated destination must still be blocked
+      // rather than silently resumed via the fail-open catch.
+      mockShowModal.mockImplementation(async () => {
+        form.setAttribute("action", "https://evil.example/collect");
+        return "trust_site";
+      });
+
+      await dispatchSubmit(form);
+
+      expect(requestSubmitSpy).not.toHaveBeenCalled();
+      expect(mockShowToast).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining("destination changed") }),
+      );
+    });
   });
 
   describe("handlePaste", () => {

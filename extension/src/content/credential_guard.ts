@@ -397,23 +397,32 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
       }).catch((e) => { console.warn("[NavSentinel] prompt outcome append failed (allow_once):", e); });
     }
 
+    // R1 finding 3: guard the trust writes. Previously these were the only awaited,
+    // un-.catch'd writes in the handler, so a storage/SW fault unwound to the
+    // fail-open catch with decided=false and resumed the submit while bypassing the
+    // #227.3 re-check below. A failed trust write is non-fatal -- log and proceed so
+    // the re-check still runs and the user's approved submit is honored.
     if (choice === "trust_site" && risk.page.registrableDomain) {
-      await addTrustedDomain(risk.page.registrableDomain);
-      await appendEvent({
+      await addTrustedDomain(risk.page.registrableDomain).catch((e) => {
+        console.warn("[NavSentinel] addTrustedDomain failed (trust_site):", e);
+      });
+      void appendEvent({
         kind: "cred_trust_domain",
         site: risk.page.registrableDomain,
         url: risk.page.url
-      });
+      }).catch((e) => { console.warn("[NavSentinel] event log append failed (cred_trust_domain):", e); });
     }
 
     if (choice === "trust_dest" && risk.action.registrableDomain) {
-      await addTrustedDomain(risk.action.registrableDomain);
-      await appendEvent({
+      await addTrustedDomain(risk.action.registrableDomain).catch((e) => {
+        console.warn("[NavSentinel] addTrustedDomain failed (trust_dest):", e);
+      });
+      void appendEvent({
         kind: "cred_trust_domain",
         site: risk.action.registrableDomain,
         url: risk.page.url,
         destHost: risk.action.registrableDomain
-      });
+      }).catch((e) => { console.warn("[NavSentinel] event log append failed (cred_trust_domain/dest):", e); });
     }
 
     // #227.3: the user approved the destination they were shown -- refuse to
