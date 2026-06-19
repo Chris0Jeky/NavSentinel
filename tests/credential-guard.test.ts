@@ -245,6 +245,24 @@ describe("credential_guard", () => {
       expect(mockGetSettings).not.toHaveBeenCalled();
     });
 
+    it("guards a form whose first password input is disabled but a later one is enabled (#227.2)", async () => {
+      const form = document.createElement("form");
+      const decoy = document.createElement("input");
+      decoy.type = "password";
+      decoy.disabled = true;
+      const real = document.createElement("input");
+      real.type = "password";
+      real.name = "pw";
+      form.appendChild(decoy);
+      form.appendChild(real);
+      document.body.appendChild(form);
+
+      const event = await dispatchSubmit(form);
+
+      expect(event.defaultPrevented).toBe(true);
+      expect(mockComputeRisk).toHaveBeenCalled();
+    });
+
     it("prevents default and stops propagation on password form", async () => {
       const form = createPasswordForm();
       const event = await dispatchSubmit(form);

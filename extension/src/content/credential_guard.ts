@@ -36,8 +36,26 @@ function consumeAllowNext(form: HTMLFormElement): boolean {
 
 function isPasswordForm(form: HTMLFormElement): boolean {
   try {
-    const pw = form.querySelector('input[type="password"]') as HTMLInputElement | null;
-    return !!pw && !pw.disabled;
+    // Consider every password input the form can actually submit, not just the
+    // first descendant. `form.querySelector` returns the first match in document
+    // order, so a disabled-first decoy ("<input type=password disabled>" before a
+    // real enabled field) made this return false and skipped the guard entirely.
+    // We also include inputs associated via the `form=` attribute (declared
+    // outside the form element) which `form.elements` exposes but a descendant
+    // query misses. Union both sources for resilience across DOM implementations,
+    // then require at least one ENABLED password field (#227.2).
+    const seen = new Set<Element>();
+    const collection = form.elements;
+    if (collection) {
+      for (let i = 0; i < collection.length; i++) {
+        const el = collection.item(i);
+        if (el) seen.add(el);
+      }
+    }
+    form.querySelectorAll('input[type="password"]').forEach((el) => seen.add(el));
+    return Array.from(seen).some(
+      (el) => el instanceof HTMLInputElement && el.type === "password" && !el.disabled
+    );
   } catch {
     return false;
   }
