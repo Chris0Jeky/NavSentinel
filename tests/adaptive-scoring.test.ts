@@ -307,6 +307,25 @@ describe("adaptive scoring", () => {
       expect(computeAdjustment(highScoreAllows(10), 70).adjustment).toBe(15);
     });
 
+    it("does NOT weaken protective (block-driven) adjustments on a small diluted sample (#213 R1)", async () => {
+      const { chrome } = createChromeMock();
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+      const { computeAdjustment } = await import("../extension/src/shared/adaptive_scoring");
+
+      // [block, block, allow@80]: blockWeight=2, allowWeight=0.3, total=2.3.
+      // blockRatio = 2/2.3 ≈ 0.870, ratioExcess ≈ 0.565 -> magnitude = round(15*0.565) = 8.
+      // Effective-sample-size scaling is RELAXATION-ONLY, so the protective (negative)
+      // direction is NOT scaled by the diluted confidence (which would weaken it to -7);
+      // it stays at full strength -8, bit-identical to the pre-#213 code. Protecting on
+      // thin evidence is the fail-safe direction and must never be weakened by the fix.
+      const outcomes: PromptOutcomeEntry[] = [
+        makeOutcome("example.com", "block", 80),
+        makeOutcome("example.com", "block", 80),
+        makeOutcome("example.com", "allow", 80),
+      ];
+      expect(computeAdjustment(outcomes, 70).adjustment).toBe(-8);
+    });
+
     it("only considers last 10 outcomes", async () => {
       const { chrome } = createChromeMock();
       vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);

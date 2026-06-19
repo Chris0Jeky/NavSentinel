@@ -92,17 +92,26 @@ export function computeAdjustment(
     ratioExcess = (blockRatio - RATIO_THRESHOLD) / (1 - RATIO_THRESHOLD);
   }
 
-  // Effective-sample-size scaling (#213). The ratio above is scale-free: a pure-allow
-  // sequence has allowRatio = allowWeight/allowWeight = 1.0 regardless of the high-score
-  // discount, so e.g. 3 near-threshold allows (allowWeight 0.9) used to drive the full
-  // +15 — the 0.3 discount that resists social-engineering allows never affected the
-  // magnitude without blocks to dilute the ratio. Scale the magnitude by the SUMMED
+  // Effective-sample-size scaling (#213), applied to the RELAXING direction ONLY. The
+  // ratio above is scale-free: a pure-allow sequence has allowRatio =
+  // allowWeight/allowWeight = 1.0 regardless of the high-score discount, so e.g. 3
+  // near-threshold allows (allowWeight 0.9) used to drive the full +15 — the 0.3
+  // discount that resists social-engineering allows never affected the magnitude
+  // without blocks to dilute the ratio. Scale the allow-driven magnitude by the SUMMED
   // (discounted) weight — the effective sample size — relative to MIN_OUTCOMES, capped
-  // at 1. So 3 discounted allows (weight 0.9 -> confidence 0.3) yield ~a third of the
-  // magnitude, while any sequence with >= MIN_OUTCOMES full-weight decisive outcomes
-  // (weight >= 3 -> confidence 1) is unchanged. Rounding the positive magnitude before
-  // applying `direction` keeps full-weight results bit-identical to the prior code.
-  const confidence = Math.min(1, total / MIN_OUTCOMES);
+  // at 1: 3 discounted allows (weight 0.9 -> confidence 0.3) yield ~a third of the
+  // magnitude, while any sequence with >= MIN_OUTCOMES full-weight allows (weight >= 3
+  // -> confidence 1) is unchanged.
+  //
+  // The PROTECTIVE (block-driven, negative) direction is deliberately NOT scaled:
+  // requiring more evidence before becoming LESS protective (raising the threshold) is
+  // the point, but requiring evidence before becoming MORE protective is backwards —
+  // protecting on thin evidence is the fail-safe direction. Blocks are never
+  // discounted, so without this asymmetry a small block sample diluted by discounted
+  // allows (e.g. [block, block, allow@80], total 2.3 -> confidence 0.77) would lose
+  // protection vs the prior code (-9 -> -7). Keeping confidence = 1 for the block
+  // direction makes every protective adjustment bit-identical to the prior code.
+  const confidence = direction > 0 ? Math.min(1, total / MIN_OUTCOMES) : 1;
   const magnitude = Math.round(MAX_ADJUSTMENT * ratioExcess * confidence);
   let adjustment = direction * magnitude;
 
