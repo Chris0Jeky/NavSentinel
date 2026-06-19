@@ -123,9 +123,16 @@ function isHttpsUrl(url: string): boolean {
   }
 }
 
-function resumeSubmit(form: HTMLFormElement, submitter: HTMLElement | null): void {
+function resumeSubmit(
+  form: HTMLFormElement,
+  submitter: HTMLElement | null,
+  opts?: { allowUnsafeFallback?: boolean }
+): void {
   // requestSubmit re-dispatches the submit event; mark a one-shot bypass so our
   // own handler lets that re-entrant event through (and consumes it).
+  // NOTE (#264): if requestSubmit no-ops on interactive constraint validation no
+  // re-entrant submit fires to consume the token, so it lingers up to 5s --
+  // tracked as a pre-existing follow-up (fix = a synchronous one-shot scope).
   markAllowNext(form, 5000);
 
   try {
@@ -138,8 +145,10 @@ function resumeSubmit(form: HTMLFormElement, submitter: HTMLElement | null): voi
     // form.submit() ignores the submitter's formaction and always POSTs to
     // form.action, so when a formaction override was assessed (#227.1) falling
     // back would send credentials to an UNASSESSED destination. Fail closed and
-    // tell the user instead of silently downgrading the target (R1 finding 1).
-    if (submitter?.hasAttribute("formaction")) {
+    // tell the user instead of silently downgrading the target (R1 finding 1) --
+    // UNLESS the caller assessed nothing (off mode / pre-assessment fail-open),
+    // where blocking a disabled guard would be a regression (R2 L2).
+    if (submitter?.hasAttribute("formaction") && !opts?.allowUnsafeFallback) {
       showToast({
         message: "The sign-in could not be completed safely (the submit control changed). Please try again.",
         timeoutMs: 8000
@@ -222,17 +231,21 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
   // blocked so the catch never double-submits and never overrides an intentional
   // block.
   let decided = false;
+  // Hoisted so the fail-open catch can re-check the destination before resuming
+  // (R2 M1). undefined until resolved inside the try.
+  let assessedActionUrl: string | undefined;
 
   try {
     const cfg = await getCredentialSettings();
     if (cfg.mode === "off") {
       decided = true;
-      resumeSubmit(form, submitter);
+      // Guard disabled -> never block; allow the form.submit() fallback (R2 L2).
+      resumeSubmit(form, submitter, { allowUnsafeFallback: true });
       return;
     }
 
     const trusted = await getTrustedDomains();
-    const assessedActionUrl = resolveActionUrl(form, submitter);
+    assessedActionUrl = resolveActionUrl(form, submitter);
     const risk = computeCredentialRisk({
       pageUrl: location.href,
       actionUrl: assessedActionUrl,
@@ -455,7 +468,33 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
     // infra faults we do not control, not by attacker-shaped DOM. `decided`
     // guards against double-submit and against overriding an intentional block.
     if (!decided) {
-      resumeSubmit(form, submitter);
+      // R2 M1: if we got far enough to assess a destination, re-check it before
+      // failing open so a post-assessment fault concurrent with a page-JS action
+      // swap cannot resume the POST to an unassessed destination. If nothing was
+      // assessed yet (settings/trust read rejected) the fault is not
+      // attacker-reachable; fail open (allow the fallback) to avoid bricking.
+      try {
+        if (
+          assessedActionUrl !== undefined &&
+          (await blockIfActionMutated(
+            form,
+            submitter,
+            assessedActionUrl,
+            normalizeHost(location.hostname),
+            location.href
+          ))
+        ) {
+          // mutated during the fault -> do not resume
+        } else {
+          resumeSubmit(
+            form,
+            submitter,
+            assessedActionUrl === undefined ? { allowUnsafeFallback: true } : undefined
+          );
+        }
+      } catch {
+        resumeSubmit(form, submitter, { allowUnsafeFallback: true });
+      }
     }
     try {
       await appendEvent({

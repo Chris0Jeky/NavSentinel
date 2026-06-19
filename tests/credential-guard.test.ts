@@ -1046,6 +1046,52 @@ describe("credential_guard", () => {
 
       expect(requestSubmitSpy).toHaveBeenCalledTimes(1);
     });
+
+    it("fail-open catch re-checks the destination and blocks a swapped action (R2-M1)", async () => {
+      mockGetRegDomain.mockImplementation((h: string) => (h.includes("evil") ? "evil.example" : "bank.example"));
+      stubLocation("https://bank.example/login");
+      const form = createPasswordForm("https://bank.example/login");
+      const requestSubmitSpy = vi.fn();
+      stubRequestSubmit(form, requestSubmitSpy);
+      // Modal rejects (post-assessment infra fault) while the action is swapped.
+      mockShowModal.mockImplementation(async () => {
+        form.setAttribute("action", "https://evil.example/collect");
+        throw new Error("modal boom");
+      });
+
+      await dispatchSubmit(form);
+
+      expect(requestSubmitSpy).not.toHaveBeenCalled();
+    });
+
+    it("fail-open catch still resumes when nothing was assessed (settings read rejects) (R2-M1)", async () => {
+      mockGetSettings.mockRejectedValue(new Error("storage failed"));
+      mockNormalizeHost.mockReturnValue("example.com");
+      const form = createPasswordForm("https://bank.example/login");
+      const requestSubmitSpy = vi.fn();
+      stubRequestSubmit(form, requestSubmitSpy);
+
+      await dispatchSubmit(form);
+
+      expect(requestSubmitSpy).toHaveBeenCalled(); // pre-assessment fault -> fail open
+    });
+
+    it("off-mode async resume does not block a formaction submit when requestSubmit throws (R2-L2)", async () => {
+      mockGetSettings.mockResolvedValue({ ...defaultConfig(), mode: "off" });
+      const form = createPasswordForm("https://bank.example/login");
+      const btn = document.createElement("button");
+      btn.type = "submit";
+      btn.setAttribute("formaction", "https://pay.example/checkout");
+      form.appendChild(btn);
+      stubRequestSubmit(form, vi.fn(() => { throw new Error("NotFoundError"); }));
+      const submitSpy = vi.spyOn(form, "submit").mockImplementation(() => {});
+
+      await dispatchSubmit(form, btn);
+
+      // Disabled guard must not block: fall back to form.submit(), no safety toast.
+      expect(submitSpy).toHaveBeenCalled();
+      expect(mockComputeRisk).not.toHaveBeenCalled();
+    });
   });
 
   describe("handlePaste", () => {
