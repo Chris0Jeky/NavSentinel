@@ -432,6 +432,25 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   }
 });
 
+// Gate a session-backed message handler on hydration (#228.1). On a cold SW the
+// runtime onMessage event can fire before _doHydrate's async storage.session.get
+// resolves. A handler that mutates a session-backed map before that would have
+// its persist dropped (persistMap is a pre-hydrate no-op) and then be clobbered
+// when _restoreMap merges the stale stored value back; read handlers would see
+// empty maps. Both cause false rollbacks/blocks on legitimate navigations. Defer
+// the body until hydration (hydrateReady is already resolved by the time it runs)
+// and return true so the message port stays open for any deferred sendResponse.
+function runWhenHydrated(run: () => void): boolean {
+  if (swState.hydrated) {
+    run();
+  } else {
+    void hydrateReady.then(run).catch((err) => {
+      console.warn("[NavSentinel] deferred session-backed message handler failed:", err);
+    });
+  }
+  return true;
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message !== "object") return;
 
@@ -463,133 +482,149 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === "ns-allow-nav") {
-    const tabId = sender.tab?.id;
-    if (typeof tabId === "number") {
-      const ttl = clampTtl(message.ttlMs, NAV_ALLOW_TTL_MS);
-      allowUntilByTab.set(tabId, Date.now() + ttl);
-      swState.persistMap(allowUntilByTab, "allowUntil");
-    }
-    sendResponse?.({ ok: true });
+    return runWhenHydrated(() => {
+      const tabId = sender.tab?.id;
+      if (typeof tabId === "number") {
+        const ttl = clampTtl(message.ttlMs, NAV_ALLOW_TTL_MS);
+        allowUntilByTab.set(tabId, Date.now() + ttl);
+        swState.persistMap(allowUntilByTab, "allowUntil");
+      }
+      sendResponse?.({ ok: true });
+    });
   }
 
   if (message.type === "ns-nav-gesture") {
-    const tabId = sender.tab?.id;
-    if (typeof tabId === "number") {
-      const ttl = clampTtl(message.ttlMs, NAV_GESTURE_TTL_MS, MAX_GESTURE_TTL_MS);
-      const now = Date.now();
-      gestureUntilByTab.set(tabId, now + ttl);
-      if (typeof message.url === "string" && message.url) {
-        lastUrlByTab.set(tabId, message.url);
+    return runWhenHydrated(() => {
+      const tabId = sender.tab?.id;
+      if (typeof tabId === "number") {
+        const ttl = clampTtl(message.ttlMs, NAV_GESTURE_TTL_MS, MAX_GESTURE_TTL_MS);
+        const now = Date.now();
+        gestureUntilByTab.set(tabId, now + ttl);
+        if (typeof message.url === "string" && message.url) {
+          lastUrlByTab.set(tabId, message.url);
+        }
+        rememberUserNavigationContext(tabId, now);
+        typedOriginByTab.delete(tabId);
+        swState.persistAll();
       }
-      rememberUserNavigationContext(tabId, now);
-      typedOriginByTab.delete(tabId);
-      swState.persistAll();
-    }
-    sendResponse?.({ ok: true });
+      sendResponse?.({ ok: true });
+    });
   }
 
   if (message.type === "ns-allow-target-nav") {
-    const tabId = sender.tab?.id;
-    if (typeof tabId === "number" && typeof message.url === "string" && message.url) {
-      const lower = message.url.toLowerCase();
-      const isHttp = lower.startsWith("http:") || lower.startsWith("https:");
-      if (isHttp) {
-        const ttl = clampTtl(message.ttlMs, NAV_TARGET_ALLOW_TTL_MS);
-        allowTargetByTab.set(tabId, {
-          url: message.url,
-          expiresAt: Date.now() + ttl,
-          ...(message.matchQueryPrefix === true ? { matchQueryPrefix: true } : {}),
-          ...(isEventLogAppendMessage({ type: "ns-event-log-append", entry: message.silentEvent })
-            ? { silentEvent: message.silentEvent }
-            : {})
-        });
-        swState.persistMap(allowTargetByTab, "allowTarget");
+    return runWhenHydrated(() => {
+      const tabId = sender.tab?.id;
+      if (typeof tabId === "number" && typeof message.url === "string" && message.url) {
+        const lower = message.url.toLowerCase();
+        const isHttp = lower.startsWith("http:") || lower.startsWith("https:");
+        if (isHttp) {
+          const ttl = clampTtl(message.ttlMs, NAV_TARGET_ALLOW_TTL_MS);
+          allowTargetByTab.set(tabId, {
+            url: message.url,
+            expiresAt: Date.now() + ttl,
+            ...(message.matchQueryPrefix === true ? { matchQueryPrefix: true } : {}),
+            ...(isEventLogAppendMessage({ type: "ns-event-log-append", entry: message.silentEvent })
+              ? { silentEvent: message.silentEvent }
+              : {})
+          });
+          swState.persistMap(allowTargetByTab, "allowTarget");
+        }
       }
-    }
-    sendResponse?.({ ok: true });
+      sendResponse?.({ ok: true });
+    });
   }
 
   if (message.type === "ns-ready") {
-    const tabId = sender.tab?.id;
-    if (typeof tabId === "number") {
-      readyTabs.add(tabId);
-      swState.persistReadyTabs();
-      const pending = pendingRollbackByTab.get(tabId);
-      if (pending) {
-        trySendRollback(tabId, pending);
+    return runWhenHydrated(() => {
+      const tabId = sender.tab?.id;
+      if (typeof tabId === "number") {
+        readyTabs.add(tabId);
+        swState.persistReadyTabs();
+        const pending = pendingRollbackByTab.get(tabId);
+        if (pending) {
+          trySendRollback(tabId, pending);
+        }
       }
-    }
+    });
   }
 
   if (message.type === "ns-check-rollback") {
-    const tabId = sender.tab?.id;
-    if (typeof tabId === "number") {
-      const entry = lastCommittedByTab.get(tabId);
-      sendResponse?.({
-        shouldRollback: !!entry && !entry.allowedAtCommit,
-        entry,
-        prevUrl: entry?.prevUrl
-      });
-    } else {
-      sendResponse?.({ shouldRollback: false, entry: undefined, prevUrl: undefined });
-    }
+    return runWhenHydrated(() => {
+      const tabId = sender.tab?.id;
+      if (typeof tabId === "number") {
+        const entry = lastCommittedByTab.get(tabId);
+        sendResponse?.({
+          shouldRollback: !!entry && !entry.allowedAtCommit,
+          entry,
+          prevUrl: entry?.prevUrl
+        });
+      } else {
+        sendResponse?.({ shouldRollback: false, entry: undefined, prevUrl: undefined });
+      }
+    });
   }
 
   if (message.type === "ns-store-forward") {
-    const tabId = sender.tab?.id;
-    if (typeof tabId === "number" && typeof message.url === "string") {
-      pendingForwardByTab.set(tabId, {
-        url: message.url,
-        ts: Date.now(),
-        ...(typeof message.returnUrl === "string" && message.returnUrl
-          ? { returnUrl: message.returnUrl }
-          : {})
-      });
-      swState.persistMap(pendingForwardByTab, "pendingForward");
-    }
+    return runWhenHydrated(() => {
+      const tabId = sender.tab?.id;
+      if (typeof tabId === "number" && typeof message.url === "string") {
+        pendingForwardByTab.set(tabId, {
+          url: message.url,
+          ts: Date.now(),
+          ...(typeof message.returnUrl === "string" && message.returnUrl
+            ? { returnUrl: message.returnUrl }
+            : {})
+        });
+        swState.persistMap(pendingForwardByTab, "pendingForward");
+      }
+    });
   }
 
   if (message.type === "ns-begin-rollback") {
-    const tabId = sender.tab?.id;
-    if (typeof tabId === "number" && typeof message.returnUrl === "string" && message.returnUrl) {
-      rollbackReturnByTab.set(tabId, {
-        url: message.returnUrl,
-        expiresAt: Date.now() + ROLLBACK_RETURN_TTL_MS
-      });
-      swState.persistMap(rollbackReturnByTab, "rollbackReturn");
-    }
-    sendResponse?.({ ok: true });
+    return runWhenHydrated(() => {
+      const tabId = sender.tab?.id;
+      if (typeof tabId === "number" && typeof message.returnUrl === "string" && message.returnUrl) {
+        rollbackReturnByTab.set(tabId, {
+          url: message.returnUrl,
+          expiresAt: Date.now() + ROLLBACK_RETURN_TTL_MS
+        });
+        swState.persistMap(rollbackReturnByTab, "rollbackReturn");
+      }
+      sendResponse?.({ ok: true });
+    });
   }
 
   if (message.type === "ns-check-forward") {
-    const tabId = sender.tab?.id;
-    if (typeof tabId === "number") {
-      const forward = pendingForwardByTab.get(tabId);
-      const currentUrl = typeof message.currentUrl === "string" ? message.currentUrl : "";
-      if (forward && currentUrl && forward.url === currentUrl) {
-        sendResponse?.({ status: "already_on_forward", url: "" });
-        return;
+    return runWhenHydrated(() => {
+      const tabId = sender.tab?.id;
+      if (typeof tabId === "number") {
+        const forward = pendingForwardByTab.get(tabId);
+        const currentUrl = typeof message.currentUrl === "string" ? message.currentUrl : "";
+        if (forward && currentUrl && forward.url === currentUrl) {
+          sendResponse?.({ status: "already_on_forward", url: "" });
+          return;
+        }
+        if (forward && currentUrl && forward.returnUrl === currentUrl) {
+          pendingForwardByTab.delete(tabId);
+          swState.persistMap(pendingForwardByTab, "pendingForward");
+          sendResponse?.({ status: "offer", url: forward.url });
+          return;
+        }
+        if (forward && !forward.returnUrl) {
+          pendingForwardByTab.delete(tabId);
+          swState.persistMap(pendingForwardByTab, "pendingForward");
+          sendResponse?.({ status: "offer", url: forward.url });
+          return;
+        }
+        if (forward && Date.now() - forward.ts > ROLLBACK_SUPPRESS_MS) {
+          pendingForwardByTab.delete(tabId);
+          swState.persistMap(pendingForwardByTab, "pendingForward");
+        }
+        sendResponse?.({ status: "none", url: "" });
+      } else {
+        sendResponse?.({ status: "none", url: "" });
       }
-      if (forward && currentUrl && forward.returnUrl === currentUrl) {
-        pendingForwardByTab.delete(tabId);
-        swState.persistMap(pendingForwardByTab, "pendingForward");
-        sendResponse?.({ status: "offer", url: forward.url });
-        return;
-      }
-      if (forward && !forward.returnUrl) {
-        pendingForwardByTab.delete(tabId);
-        swState.persistMap(pendingForwardByTab, "pendingForward");
-        sendResponse?.({ status: "offer", url: forward.url });
-        return;
-      }
-      if (forward && Date.now() - forward.ts > ROLLBACK_SUPPRESS_MS) {
-        pendingForwardByTab.delete(tabId);
-        swState.persistMap(pendingForwardByTab, "pendingForward");
-      }
-      sendResponse?.({ status: "none", url: "" });
-    } else {
-      sendResponse?.({ status: "none", url: "" });
-    }
+    });
   }
 
   if (message.type === "ns-get-chain-info") {
@@ -657,37 +692,39 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Only forward if the sender tab is a known child window to prevent
   // malicious pages from injecting false opener-nav signals.
   if (message.type === "ns-dblclick-opener-nav") {
-    const childTabId = sender.tab?.id;
-    if (typeof childTabId !== "number") return;
-    const childEntry = childWindowByTab.get(childTabId);
-    if (!childEntry) return;
-    // Mark that this child performed an opener.location write so the
-    // child-close signal is only sent for confirmed attack scenarios.
-    childEntry.openerNavObserved = true;
-    swState.persistMap(childWindowByTab, "childWindow");
+    return runWhenHydrated(() => {
+      const childTabId = sender.tab?.id;
+      if (typeof childTabId !== "number") return;
+      const childEntry = childWindowByTab.get(childTabId);
+      if (!childEntry) return;
+      // Mark that this child performed an opener.location write so the
+      // child-close signal is only sent for confirmed attack scenarios.
+      childEntry.openerNavObserved = true;
+      swState.persistMap(childWindowByTab, "childWindow");
 
-    // --- OAuth: detect opener manipulation during an active OAuth flow ---
-    const openerOAuthFlow = oauthFlowByTab.get(childEntry.openerTabId);
-    if (openerOAuthFlow && openerOAuthFlow.phase !== "complete") {
+      // --- OAuth: detect opener manipulation during an active OAuth flow ---
+      const openerOAuthFlow = oauthFlowByTab.get(childEntry.openerTabId);
+      if (openerOAuthFlow && openerOAuthFlow.phase !== "complete") {
+        chrome.tabs.sendMessage(
+          childEntry.openerTabId,
+          { type: "ns-oauth-opener-manipulation", flow: openerOAuthFlow },
+          () => { if (chrome.runtime.lastError) { /* ignore */ } },
+        );
+      }
+
       chrome.tabs.sendMessage(
         childEntry.openerTabId,
-        { type: "ns-oauth-opener-manipulation", flow: openerOAuthFlow },
-        () => { if (chrome.runtime.lastError) { /* ignore */ } },
+        {
+          type: "ns-dblclick-opener-nav-from-child",
+          url: typeof message.url === "string" ? message.url : "",
+          ts: typeof message.ts === "number" ? message.ts : Date.now(),
+        },
+        () => {
+          if (chrome.runtime.lastError) { /* opener may have navigated away */ }
+        }
       );
-    }
-
-    chrome.tabs.sendMessage(
-      childEntry.openerTabId,
-      {
-        type: "ns-dblclick-opener-nav-from-child",
-        url: typeof message.url === "string" ? message.url : "",
-        ts: typeof message.ts === "number" ? message.ts : Date.now(),
-      },
-      () => {
-        if (chrome.runtime.lastError) { /* opener may have navigated away */ }
-      }
-    );
-    sendResponse?.({ ok: true });
+      sendResponse?.({ ok: true });
+    });
   }
 });
 

@@ -250,6 +250,44 @@ describe("service worker handlers", () => {
     });
   });
 
+  describe("hydration gating of session-backed handlers (#228.1)", () => {
+    it("defers ns-check-rollback until hydration so it reflects restored state", async () => {
+      const mock = createChromeMock();
+      // Seed a pending rollback for tab 5 in session storage.
+      mock.chrome.storage.session._store["ns_sw:lastCommitted"] = {
+        "5": { allowedAtCommit: false, prevUrl: "https://prev.test/" },
+      };
+      // Gate the hydrate read so the message arrives BEFORE hydration completes.
+      let releaseGet!: () => void;
+      const gate = new Promise<void>((r) => { releaseGet = r; });
+      const origGet = mock.chrome.storage.session.get.bind(mock.chrome.storage.session);
+      mock.chrome.storage.session.get = (async (keys?: string | string[]) => {
+        await gate;
+        return origGet(keys);
+      }) as typeof mock.chrome.storage.session.get;
+
+      await loadSw(mock);
+
+      // Pre-hydrate: dispatch a session-backed read handler.
+      let response: unknown;
+      (mock.chrome.runtime.onMessage as unknown as {
+        emit: (m: unknown, s: unknown, r: (v?: unknown) => void) => void;
+      }).emit({ type: "ns-check-rollback" }, { tab: { id: 5 } }, (v) => { response = v; });
+
+      // The handler must NOT respond yet -- it is deferred until hydration.
+      expect(response).toBeUndefined();
+
+      // Complete hydration; the deferred body then runs and responds with the
+      // restored rollback entry (rather than the empty pre-hydrate map).
+      releaseGet();
+      await vi.runAllTimersAsync();
+
+      expect(response).toEqual(
+        expect.objectContaining({ shouldRollback: true, prevUrl: "https://prev.test/" }),
+      );
+    });
+  });
+
   describe("ns-tab-risk-update", () => {
     it("accepts valid risk states and updates icon with correct tabId", async () => {
       const mock = createChromeMock();

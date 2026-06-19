@@ -108,6 +108,57 @@ describe("SessionStateManager", () => {
     expect(mgr.readyTabs.size).toBe(0);
   });
 
+  it("enters degraded mode and suppresses persistence when the hydrate read fails (#228.2)", async () => {
+    // Intact stored state that a transient read failure must not wipe.
+    await sessionStorage.mock.set({ "ns_sw:allowUntil": { "7": 123456 } });
+    const failingGet = vi.fn().mockRejectedValue(new Error("transient read failure"));
+    sessionStorage.mock.get = failingGet;
+
+    const mgr = new SessionStateManager();
+    await mgr.hydrate();
+
+    expect(mgr.hydrated).toBe(true); // reads allowed so handlers do not block forever
+    expect(mgr.canPersist).toBe(false); // persistence suppressed
+    expect(failingGet).toHaveBeenCalledTimes(2); // initial + one retry
+
+    const setSpy = vi.spyOn(sessionStorage.mock, "set");
+    mgr.allowUntilByTab.set(99, 1);
+    mgr.persistMap(mgr.allowUntilByTab, "allowUntil");
+    mgr.persistAll();
+    mgr.persistReadyTabs();
+    expect(setSpy).not.toHaveBeenCalled();
+    // The pre-existing stored entry is still intact (not overwritten by empty maps).
+    expect(sessionStorage.store["ns_sw:allowUntil"]).toEqual({ "7": 123456 });
+  });
+
+  it("re-enables persistence after a successful hydrate (#228.2)", async () => {
+    const mgr = new SessionStateManager();
+    await mgr.hydrate();
+    expect(mgr.canPersist).toBe(true);
+
+    const setSpy = vi.spyOn(sessionStorage.mock, "set");
+    mgr.allowUntilByTab.set(5, 999);
+    mgr.persistMap(mgr.allowUntilByTab, "allowUntil");
+    expect(setSpy).toHaveBeenCalled();
+  });
+
+  it("retries the hydrate read once before degrading (#228.2)", async () => {
+    await sessionStorage.mock.set({ "ns_sw:allowUntil": { "7": 1 } });
+    const origGet = sessionStorage.mock.get.bind(sessionStorage.mock);
+    const flaky = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("transient"))
+      .mockImplementation((keys?: string | string[]) => origGet(keys));
+    sessionStorage.mock.get = flaky as typeof sessionStorage.mock.get;
+
+    const mgr = new SessionStateManager();
+    await mgr.hydrate();
+
+    expect(flaky).toHaveBeenCalledTimes(2);
+    expect(mgr.canPersist).toBe(true); // retry succeeded -> not degraded
+    expect(mgr.allowUntilByTab.get(7)).toBe(1);
+  });
+
   it("gracefully handles session storage API failure", async () => {
     vi.stubGlobal("chrome", {
       storage: {
