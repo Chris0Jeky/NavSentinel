@@ -7,6 +7,7 @@ vi.mock("../extension/src/shared/storage", () => ({
   addTrustedDomain: vi.fn(),
   appendEvent: vi.fn(),
   appendPromptOutcome: vi.fn(),
+  onSuiteSettingsChange: vi.fn(),
 }));
 
 vi.mock("../extension/src/shared/domain", () => ({
@@ -45,6 +46,8 @@ import {
   addTrustedDomain,
   appendEvent,
   appendPromptOutcome,
+  onSuiteSettingsChange,
+  type SuiteSettings,
 } from "../extension/src/shared/storage";
 import {
   computeCredentialRisk,
@@ -190,6 +193,17 @@ function defaultConfig() {
 // Import module under test — registers event listeners on document
 import "../extension/src/content/credential_guard";
 
+// The guard registers a settings-change subscription at module load to keep its
+// synchronous credential-mode cache fresh (#227.5). Capture that callback now
+// (before resetAllMocks clears mock.calls) so tests can drive the cached mode.
+const credSettingsCb = vi.mocked(onSuiteSettingsChange).mock.calls[0]?.[0] as
+  | ((s: SuiteSettings) => void)
+  | undefined;
+
+function setCachedCredMode(mode: string): void {
+  credSettingsCb?.({ credential: { mode } } as unknown as SuiteSettings);
+}
+
 // Required-field defaults so mock returns satisfy the full result interfaces.
 const SRI_BASE = { totalExternal: 0, withSRI: 0, withoutSRI: 0 };
 const CONTENT_BASE = {
@@ -218,6 +232,9 @@ describe("credential_guard", () => {
     mockShowModal.mockResolvedValue("cancel");
     mockAnalyzeContent.mockReturnValue({ ...CONTENT_BASE, score: 0, reasons: [] });
     mockCheckSRI.mockReturnValue({ ...SRI_BASE, score: 0, reasons: [], totalExternal: 0, withSRI: 0, withoutSRI: 0 });
+    // Normalize the module-level credential-mode cache so each test starts from a
+    // non-"off" state (resetAllMocks above does not touch module globals).
+    setCachedCredMode("smart");
   });
 
   afterEach(() => {
@@ -777,7 +794,9 @@ describe("credential_guard", () => {
       expect(modalSpec.reasons).toEqual(["Domain mismatch", "Cross-site action"]);
     });
 
-    it("catches errors and logs them without resuming submit", async () => {
+    it("fails open (resumes submit) and logs when a pre-decision error occurs (#227.4)", async () => {
+      // A transient settings/storage error before any decision must not permanently
+      // brick a legitimate login; fail open and still record the error.
       mockGetSettings.mockRejectedValue(new Error("storage failed"));
       mockNormalizeHost.mockReturnValue("example.com");
 
@@ -787,6 +806,7 @@ describe("credential_guard", () => {
 
       await dispatchSubmit(form);
 
+      expect(requestSubmitSpy).toHaveBeenCalled();
       expect(mockAppendEvent).toHaveBeenCalledTimes(1);
       const errorEvent = mockAppendEvent.mock.calls[0]![0];
       expect(errorEvent.kind).toBe("cred_submit_prompt");
@@ -794,7 +814,58 @@ describe("credential_guard", () => {
       expect(errorEvent).not.toHaveProperty("score");
       expect(errorEvent).not.toHaveProperty("reasons");
       expect(errorEvent).not.toHaveProperty("destHost");
+    });
+
+    it("does not interpose when the cached credential mode is off (#227.5)", async () => {
+      setCachedCredMode("off");
+      const form = createPasswordForm();
+      const requestSubmitSpy = vi.fn();
+      stubRequestSubmit(form, requestSubmitSpy);
+
+      const event = await dispatchSubmit(form);
+
+      // Disabled guard: the native submit proceeds untouched -- no preventDefault,
+      // no async settings read, no synthetic resubmit.
+      expect(event.defaultPrevented).toBe(false);
+      expect(mockGetSettings).not.toHaveBeenCalled();
       expect(requestSubmitSpy).not.toHaveBeenCalled();
+    });
+
+    it("does not bypass the prompt when content analysis throws (#227.4)", async () => {
+      // A hostile DOM that makes an analyzer throw must drop the signal, not the
+      // guard: the modal must still be shown.
+      mockAnalyzeContent.mockImplementation(() => {
+        throw new Error("hostile DOM");
+      });
+      const form = createPasswordForm("https://evil.com/collect");
+
+      await dispatchSubmit(form);
+
+      expect(mockShowModal).toHaveBeenCalled();
+    });
+
+    it("blocks the submit when the action origin changes during the prompt (#227.3)", async () => {
+      stubLocation("https://bank.example/login");
+      const form = createPasswordForm("https://bank.example/login");
+      const requestSubmitSpy = vi.fn();
+      stubRequestSubmit(form, requestSubmitSpy);
+      // Mutate the destination while the modal is open, then approve.
+      mockShowModal.mockImplementation(async () => {
+        form.setAttribute("action", "https://evil.example/collect");
+        return "proceed_once";
+      });
+
+      await dispatchSubmit(form);
+
+      expect(requestSubmitSpy).not.toHaveBeenCalled();
+      expect(mockShowToast).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining("destination changed") }),
+      );
+      expect(mockAppendEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          extra: expect.objectContaining({ error: "action_mutated_during_prompt" }),
+        }),
+      );
     });
   });
 
