@@ -8,6 +8,26 @@
  * Storage: `domainProfiles` key in chrome.storage.local.
  * Bounded to MAX_PROFILES entries with LRU eviction.
  * Profiles not seen in DECAY_AGE_MS have visits/triggerCount halved.
+ *
+ * Concurrency — accepted residual (#181, closed as accept+document):
+ * The public API serializes read-modify-write through the module-level `pending`
+ * promise chain, which eliminates lost updates WITHIN a single content-script
+ * context. It does NOT serialize across contexts: content scripts run with
+ * `all_frames: true`, so each frame (and each tab) has its own `pending`, and two
+ * contexts that record the same domain concurrently can each load the shared
+ * `chrome.storage.local`, mutate independently, and have the last `set` win — the
+ * other context's increment is then lost.
+ *
+ * This residual is deliberately accepted rather than fixed (a cross-context fix
+ * would route every write through the service worker, adding a message round-trip
+ * to the navigation hot path for what is low-stakes telemetry). The data here is a
+ * coarse per-domain visit/trigger counter feeding a single +10 `domain_repeat_offender`
+ * NRS signal that accrues over many visits. A lost update only ever DROPS an
+ * increment, so the failure mode is a marginal, self-correcting UNDER-count (a
+ * repeat offender flagged one visit later) — never an over-count that could
+ * manufacture a false positive, and never a correctness hazard for any other signal.
+ * If domain profiles ever gain a higher-stakes consumer, revisit the SW-delegation
+ * option recorded in #181.
  */
 
 export const DOMAIN_PROFILES_KEY = "sentinelsuite:domain_profiles_v1";
@@ -297,11 +317,12 @@ export function clearDomainProfiles(): Promise<void> {
  * to completion before relying on this reset — otherwise the prior op can still
  * run and mutate shared state after the next test begins.
  *
- * NOTE (known limitation): `pending` is per-content-script-context. With
- * `all_frames: true`, each frame has its own chain, so two frames racing
- * recordNavigation for the same domain can still lose an update at the shared
- * chrome.storage.local layer. Cross-context serialization is tracked separately
- * (out of scope for this single-context fix; see issue #181).
+ * NOTE: `pending` is per-content-script-context. With `all_frames: true`, each
+ * frame (and tab) has its own chain, so two contexts racing recordNavigation for
+ * the same domain can still lose an update at the shared chrome.storage.local
+ * layer. This cross-context residual is an ACCEPTED limitation — see the module
+ * header for the rationale (low-stakes counter; lost updates only under-count) and
+ * #181 (closed as accept+document).
  */
 export function _resetSerializationForTests(): void {
   pending = Promise.resolve();
