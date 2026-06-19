@@ -288,6 +288,72 @@ describe("suite storage and allowlist migration", () => {
     await expect(importAll(42)).rejects.toThrow("Invalid import payload");
   });
 
+  it("leaves the core config unchanged when a section write fails mid-import (#203)", async () => {
+    // Pre-existing config the import must NOT partially overwrite.
+    const { chrome, store } = createChromeMock({
+      "sentinelsuite:nav_allowlist_v1": { "old.com": ["a.old.com"] },
+      "sentinelsuite:trusted_domains_v1": ["old.example"],
+    });
+    // Simulate a storage failure (e.g. quota) that hits the event-log section. Under
+    // the old sequential-write importAll, settings/allowlist/trustedDomains were
+    // already committed before this rejected, leaving a partial config. The atomic
+    // single-set commit must instead leave ALL core sections untouched.
+    const realSet = chrome.storage.local.set.bind(chrome.storage.local);
+    chrome.storage.local.set = (async (next: Record<string, unknown>) => {
+      if ("sentinelsuite:event_log_v1" in next) {
+        throw new Error("QUOTA_BYTES quota exceeded");
+      }
+      return realSet(next);
+    }) as typeof chrome.storage.local.set;
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { importAll } = await import("../extension/src/shared/storage");
+    await expect(
+      importAll({
+        settings: { logLimit: 1234 },
+        allowlist: { "new.com": ["b.new.com"] },
+        trustedDomains: ["new.example"],
+        eventLog: [{ id: "e-1", ts: 1, kind: "nav_click_block" }],
+      })
+    ).rejects.toThrow(/quota/i);
+
+    // No partial application: every core section retains its original value.
+    expect(store["sentinelsuite:nav_allowlist_v1"]).toEqual({ "old.com": ["a.old.com"] });
+    expect(store["sentinelsuite:trusted_domains_v1"]).toEqual(["old.example"]);
+    expect(store["sentinelsuite:settings_v1"]).toBeUndefined();
+    expect(store["sentinelsuite:event_log_v1"]).toBeUndefined();
+  });
+
+  it("commits every core section in a single atomic set (#203)", async () => {
+    const { chrome, store } = createChromeMock();
+    const setSpy = vi.spyOn(chrome.storage.local, "set");
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { importAll } = await import("../extension/src/shared/storage");
+    await importAll({
+      settings: { logLimit: 300 },
+      allowlist: { "example.com": ["login.example.com"] },
+      trustedDomains: ["example.com"],
+      eventLog: [{ id: "e-1", ts: 1, kind: "nav_click_block" }],
+    });
+
+    // One write for all core sections (no promptOutcomes -> no separate delegate).
+    expect(setSpy).toHaveBeenCalledTimes(1);
+    const written = setSpy.mock.calls[0]![0] as Record<string, unknown>;
+    expect(Object.keys(written).sort()).toEqual(
+      [
+        "sentinelsuite:adaptive_scores_v1",
+        "sentinelsuite:event_log_v1",
+        "sentinelsuite:nav_allowlist_v1",
+        "sentinelsuite:settings_v1",
+        "sentinelsuite:trusted_domains_v1",
+      ].sort()
+    );
+    // Adaptive scores reset folded into the same atomic write (no promptOutcomes).
+    expect(store["sentinelsuite:adaptive_scores_v1"]).toEqual({});
+    expect(store["sentinelsuite:trusted_domains_v1"]).toEqual(["example.com"]);
+  });
+
   it("uses default logLimit (300) when no settings are provided in import", async () => {
     const { chrome, store } = createChromeMock();
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
