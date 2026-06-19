@@ -60,14 +60,21 @@ export function formatPopupEventLine(
 }
 
 /**
- * Whether a reason code REDUCES risk (vs. signals a threat). This is the exact
- * negation of the threat-filter in capture_isolated.buildPlainMessage (the source
- * of truth): startsWith for `keyboard_`/`legit_`, an exact match for
- * `nrs_user_activation_active`, and substring for the rest — so the popup chips and
- * the warning toast agree. Using startsWith/exact (not a broad substring) prevents
- * a future risk-INCREASING code that merely contains one of these tokens (e.g. a
- * "spoofed_user_activation") from being mis-coloured green. Extracting one shared
- * helper used by both call sites is the durable fix (seeded as a follow-up). (#205 R1)
+ * Whether a reason code REDUCES risk (vs. signals a threat). These map to the
+ * genuinely subtractive NRS factors (allowlist -100, explicit_new_tab -30,
+ * opener/previously_allowed -20) plus the keyboard_/legit_ qualifiers.
+ *
+ * NOTE: `nrs_user_activation_active` is deliberately NOT here — it carries a small
+ * +5 (risk-INCREASING) weight, so it is classified NEUTRAL (see isNeutralReason),
+ * rendering grey rather than green. The threat-headline filter in
+ * capture_isolated.buildPlainMessage (the source of truth) excludes BOTH
+ * risk-reducing AND that neutral code — a +5 should never headline a warning toast
+ * — so the two views differ only in that the chip shows the neutral code as grey
+ * instead of suppressing it. Using startsWith/exact (not a broad substring)
+ * prevents a future risk-INCREASING code that merely contains one of these tokens
+ * (e.g. "spoofed_user_activation") from being mis-coloured green. Extracting one
+ * shared helper across both call sites is the durable fix (seeded as a
+ * follow-up). (#205 R1, #217)
  */
 export function isRiskReducingReason(reasonCode: string): boolean {
   const r = reasonCode ?? "";
@@ -76,18 +83,34 @@ export function isRiskReducingReason(reasonCode: string): boolean {
     r.startsWith("legit_") ||
     r.includes("allowlisted") ||
     r.includes("previously_allowed") ||
-    r.includes("explicit_new_tab") ||
-    r === "nrs_user_activation_active"
+    r.includes("explicit_new_tab")
   );
 }
 
 /**
- * CSS class for a signal chip: "ok" (green) for risk-reducing reason codes,
- * "warn" (orange) otherwise. Replaces a dead `startsWith("-")` check — no stored
- * reason code is dash-prefixed, so every chip rendered as a warning. (#205)
+ * Whether a reason code is NEUTRAL — it neither reduces risk nor warrants a threat
+ * colour. `nrs_user_activation_active` carries a small +5 NRS weight (a mild signal
+ * in the clickjacking model, NOT trust) and is present on virtually every
+ * user-clicked navigation, so colouring it green (risk-reducing) misrepresents its
+ * sign while colouring it orange (threat) would cry wolf on ordinary clicks. It
+ * renders grey/neutral instead. (#217)
  */
-export function signalChipClass(reasonCode: string): "signal-chip--ok" | "signal-chip--warn" {
-  return isRiskReducingReason(reasonCode) ? "signal-chip--ok" : "signal-chip--warn";
+export function isNeutralReason(reasonCode: string): boolean {
+  return (reasonCode ?? "") === "nrs_user_activation_active";
+}
+
+/**
+ * CSS class for a signal chip: "ok" (green) for risk-reducing reason codes,
+ * "neutral" (grey) for neutral codes (the mild +5 user-activation signal), "warn"
+ * (orange) for everything else (threats). Replaces a dead `startsWith("-")` check —
+ * no stored reason code is dash-prefixed, so every chip rendered as a warning. (#205, #217)
+ */
+export function signalChipClass(
+  reasonCode: string
+): "signal-chip--ok" | "signal-chip--warn" | "signal-chip--neutral" {
+  if (isRiskReducingReason(reasonCode)) return "signal-chip--ok";
+  if (isNeutralReason(reasonCode)) return "signal-chip--neutral";
+  return "signal-chip--warn";
 }
 
 /**

@@ -6,6 +6,7 @@ import {
   eventIconName,
   formatPopupEventLine,
   getRecentPopupEvents,
+  isNeutralReason,
   isRiskReducingReason,
   pickSiteRiskEvent,
   signalChipClass
@@ -269,11 +270,10 @@ describe("formatPopupEventLine", () => {
   });
 });
 
-describe("signalChipClass (#205)", () => {
+describe("signalChipClass (#205, #217)", () => {
   it("classifies risk-reducing reason codes as ok (green)", () => {
     for (const r of [
       "nrs_allowlisted",
-      "nrs_user_activation_active",
       "nrs_explicit_new_tab_intent",
       "nrs_opener_previously_allowed",
       "keyboard_activation",
@@ -284,7 +284,14 @@ describe("signalChipClass (#205)", () => {
     }
   });
 
-  it("classifies threat/neutral reason codes as warn (orange)", () => {
+  it("classifies the mild +5 user-activation signal as neutral (grey), not green (#217)", () => {
+    // nrs_user_activation_active carries +5 NRS (risk-increasing) yet fires on
+    // ~every clicked nav, so it must be neither green (false reassurance) nor
+    // orange (false alarm).
+    expect(signalChipClass("nrs_user_activation_active")).toBe("signal-chip--neutral");
+  });
+
+  it("classifies threat reason codes as warn (orange)", () => {
     for (const r of [
       "clickfix_command_with_overlay",
       "nav_anomaly",
@@ -300,11 +307,10 @@ describe("signalChipClass (#205)", () => {
   });
 });
 
-describe("isRiskReducingReason (#205 R1: exact predicate, mirrors buildPlainMessage)", () => {
-  it("matches the risk-reducing reason codes the toast filters out", () => {
+describe("isRiskReducingReason (#205 R1, #217: exact predicate)", () => {
+  it("matches the genuinely subtractive reason codes the toast filters out", () => {
     for (const r of [
       "nrs_allowlisted",
-      "nrs_user_activation_active",
       "nrs_explicit_new_tab_intent",
       "nrs_opener_previously_allowed",
       "keyboard_activation",
@@ -315,13 +321,36 @@ describe("isRiskReducingReason (#205 R1: exact predicate, mirrors buildPlainMess
     }
   });
 
-  it("does NOT green a risk-increasing code that merely contains a token (startsWith/exact, not substring)", () => {
-    // user_activation is matched EXACTLY, keyboard_/legit_ via startsWith — so a
-    // hypothetical spoof/fake variant stays a warning (no false reassurance).
+  it("does NOT classify the +5 user-activation signal as risk-reducing (#217)", () => {
+    // It carries a positive weight, so it is neutral, never green.
+    expect(isRiskReducingReason("nrs_user_activation_active")).toBe(false);
+  });
+
+  it("does NOT green a risk-increasing code that merely contains a token (startsWith, not substring)", () => {
+    // keyboard_/legit_ match via startsWith — a hypothetical spoof/fake variant
+    // stays a warning (no false reassurance).
     expect(isRiskReducingReason("spoofed_user_activation")).toBe(false);
     expect(isRiskReducingReason("fake_legit_overlay")).toBe(false);
     expect(isRiskReducingReason("no_keyboard_activation")).toBe(false);
     expect(isRiskReducingReason("clickfix_command_with_overlay")).toBe(false);
+  });
+});
+
+describe("isNeutralReason (#217)", () => {
+  it("is true only for the mild +5 user-activation signal", () => {
+    expect(isNeutralReason("nrs_user_activation_active")).toBe(true);
+  });
+
+  it("is false for risk-reducing, threat, and empty codes", () => {
+    for (const r of [
+      "nrs_allowlisted",
+      "keyboard_activation",
+      "clickfix_command_with_overlay",
+      "nav_anomaly",
+      "",
+    ]) {
+      expect(isNeutralReason(r)).toBe(false);
+    }
   });
 });
 
