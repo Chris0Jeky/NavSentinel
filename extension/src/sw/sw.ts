@@ -440,7 +440,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 // empty maps. Both cause false rollbacks/blocks on legitimate navigations. Defer
 // the body until hydration (hydrateReady is already resolved by the time it runs)
 // and return true so the message port stays open for any deferred sendResponse.
-function runWhenHydrated(run: () => void): boolean {
+function runWhenHydrated(run: () => void, keepPortOpen = true): boolean {
   if (swState.hydrated) {
     run();
   } else {
@@ -448,7 +448,10 @@ function runWhenHydrated(run: () => void): boolean {
       console.warn("[NavSentinel] deferred session-backed message handler failed:", err);
     });
   }
-  return true;
+  // Returning true holds the message port open for a (possibly deferred)
+  // sendResponse. Handlers that never respond pass keepPortOpen=false so they do
+  // not leave a dangling port (R1 finding 3).
+  return keepPortOpen;
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -545,7 +548,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           trySendRollback(tabId, pending);
         }
       }
-    });
+    }, false);
   }
 
   if (message.type === "ns-check-rollback") {
@@ -577,7 +580,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         });
         swState.persistMap(pendingForwardByTab, "pendingForward");
       }
-    });
+    }, false);
   }
 
   if (message.type === "ns-begin-rollback") {
@@ -628,16 +631,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === "ns-get-chain-info") {
-    const tabId = sender.tab?.id;
-    if (typeof tabId === "number") {
-      const info = redirectChainTracker.getChainInfo(tabId);
-      sendResponse?.(info ?? { depth: 0, viaKnownRedirector: false, knownRedirectorHops: 0 });
-    } else {
-      // No tab context (popup, devtools, etc.) -- return default to avoid
-      // hanging the caller's message port.
-      sendResponse?.({ depth: 0, viaKnownRedirector: false, knownRedirectorHops: 0 });
-    }
-    return;
+    // Session-backed: redirectChainTracker reads swState.redirectChainData, so on a
+    // cold SW it must wait for hydration or it returns the empty depth:0 default
+    // and weakens redirect-chain scoring during the post-recycle window (#228.1).
+    return runWhenHydrated(() => {
+      const tabId = sender.tab?.id;
+      if (typeof tabId === "number") {
+        const info = redirectChainTracker.getChainInfo(tabId);
+        sendResponse?.(info ?? { depth: 0, viaKnownRedirector: false, knownRedirectorHops: 0 });
+      } else {
+        // No tab context (popup, devtools, etc.) -- return default to avoid
+        // hanging the caller's message port.
+        sendResponse?.({ depth: 0, viaKnownRedirector: false, knownRedirectorHops: 0 });
+      }
+    });
   }
 
   if (message.type === "ns-capture-viewport") {

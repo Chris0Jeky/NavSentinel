@@ -217,7 +217,10 @@ export class SessionStateManager {
       // block forever) but keep persistence DISABLED so the next persistAll()
       // cannot overwrite the still-present session storage with empty maps
       // (#228.2). Persistence resumes after a successful hydrate on the next SW
-      // startup.
+      // startup. TRADEOFF (R1 finding 2): for the rest of THIS worker's lifetime
+      // the SW-recycle-resistant protections that depend on persistence (the
+      // capture-rate limit, pending rollback/forward) are degraded; they recover
+      // on the next worker startup's fresh hydrate.
       this._hydrated = true;
       return;
     }
