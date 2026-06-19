@@ -285,6 +285,79 @@ describe("service worker handlers", () => {
       expect(response).toEqual(
         expect.objectContaining({ shouldRollback: true, prevUrl: "https://prev.test/" }),
       );
+
+      // A different tab with no restored entry must report no rollback -- proves
+      // the deferred handler reads the actual hydrated map, not a constant (R1-6).
+      let response2: unknown;
+      (mock.chrome.runtime.onMessage as unknown as {
+        emit: (m: unknown, s: unknown, r: (v?: unknown) => void) => void;
+      }).emit({ type: "ns-check-rollback" }, { tab: { id: 6 } }, (v) => { response2 = v; });
+      await vi.runAllTimersAsync();
+      expect(response2).toEqual(expect.objectContaining({ shouldRollback: false }));
+    });
+
+    it("defers a WRITE handler (ns-allow-nav) so the mutation persists after hydration (R1-4)", async () => {
+      const mock = createChromeMock();
+      let releaseGet!: () => void;
+      const gate = new Promise<void>((r) => { releaseGet = r; });
+      const origGet = mock.chrome.storage.session.get.bind(mock.chrome.storage.session);
+      mock.chrome.storage.session.get = (async (keys?: string | string[]) => {
+        await gate;
+        return origGet(keys);
+      }) as typeof mock.chrome.storage.session.get;
+
+      await loadSw(mock);
+
+      let response: unknown;
+      (mock.chrome.runtime.onMessage as unknown as {
+        emit: (m: unknown, s: unknown, r: (v?: unknown) => void) => void;
+      }).emit({ type: "ns-allow-nav", ttlMs: 8000 }, { tab: { id: 5 } }, (v) => { response = v; });
+
+      // Pre-hydrate: deferred -- no response and no persisted write yet.
+      expect(response).toBeUndefined();
+      expect(mock.chrome.storage.session._store["ns_sw:allowUntil"]).toBeUndefined();
+
+      releaseGet();
+      await vi.runAllTimersAsync();
+
+      expect(response).toEqual({ ok: true });
+      // persistMap fired post-hydrate with the tab's allow entry.
+      expect(mock.chrome.storage.session._store["ns_sw:allowUntil"]).toEqual(
+        expect.objectContaining({ "5": expect.any(Number) }),
+      );
+    });
+
+    it("defers ns-get-chain-info until hydration so it reflects restored chains (R1-1)", async () => {
+      const mock = createChromeMock();
+      mock.chrome.storage.session._store["ns_sw:redirectChains"] = {
+        "5": {
+          hops: [{ url: "https://a.test/" }, { url: "https://b.test/" }],
+          startedAt: 1,
+        },
+      };
+      let releaseGet!: () => void;
+      const gate = new Promise<void>((r) => { releaseGet = r; });
+      const origGet = mock.chrome.storage.session.get.bind(mock.chrome.storage.session);
+      mock.chrome.storage.session.get = (async (keys?: string | string[]) => {
+        await gate;
+        return origGet(keys);
+      }) as typeof mock.chrome.storage.session.get;
+
+      await loadSw(mock);
+
+      let response: unknown;
+      (mock.chrome.runtime.onMessage as unknown as {
+        emit: (m: unknown, s: unknown, r: (v?: unknown) => void) => void;
+      }).emit({ type: "ns-get-chain-info" }, { tab: { id: 5 } }, (v) => { response = v; });
+
+      // Pre-hydrate: deferred (without the gate it would synchronously return the
+      // empty depth:0 default).
+      expect(response).toBeUndefined();
+
+      releaseGet();
+      await vi.runAllTimersAsync();
+
+      expect(response).toEqual(expect.objectContaining({ depth: 2 }));
     });
   });
 

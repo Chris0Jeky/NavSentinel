@@ -159,6 +159,23 @@ describe("SessionStateManager", () => {
     expect(mgr.allowUntilByTab.get(7)).toBe(1);
   });
 
+  it("degraded mode prevents the tab-close path from wiping intact storage (#228.2)", async () => {
+    await sessionStorage.mock.set({ "ns_sw:allowUntil": { "7": 123456 } });
+    sessionStorage.mock.get = vi.fn().mockRejectedValue(new Error("read fail"));
+
+    const mgr = new SessionStateManager();
+    await mgr.hydrate();
+    expect(mgr.canPersist).toBe(false);
+
+    const setSpy = vi.spyOn(sessionStorage.mock, "set");
+    // Realistic tab-close path: bulk per-map delete (deleteTab calls persistAll),
+    // plus a direct persistAll, must NOT overwrite the intact stored entry.
+    mgr.deleteTab(7);
+    mgr.persistAll();
+    expect(setSpy).not.toHaveBeenCalled();
+    expect(sessionStorage.store["ns_sw:allowUntil"]).toEqual({ "7": 123456 });
+  });
+
   it("gracefully handles session storage API failure", async () => {
     vi.stubGlobal("chrome", {
       storage: {
