@@ -260,21 +260,70 @@ describe("adaptive scoring", () => {
       expect(computeAdjustment(outcomes).adjustment).toBe(0);
     });
 
-    it("characterization: 3 high-score allows still drive max +15 (discount nullified, tracked in #213)", async () => {
+    it("scales down 3 high-score allows via effective-sample-size (no longer drives max +15) (#213)", async () => {
       const { chrome } = createChromeMock();
       vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
       const { computeAdjustment } = await import("../extension/src/shared/adaptive_scoring");
 
-      // Pre-existing residual surfaced in #204 R1: the high-score discount (0.3
-      // weight) is nullified for a pure-allow sequence because allowRatio =
-      // allowWeight/allowWeight = 1.0 with no blocks. Tracked for a real fix in #213.
-      const outcomes: PromptOutcomeEntry[] = [
+      // #204 R1 residual, fixed in #213. A pure-allow sequence has allowRatio =
+      // allowWeight/allowWeight = 1.0 regardless of the high-score 0.3 discount, so 3
+      // near-threshold allows previously drove the full +15. Effective-sample-size
+      // scaling now weights the magnitude by the summed (discounted) weight:
+      // total = 3 * 0.3 = 0.9, confidence = 0.9/3 = 0.3, adjustment = round(15 * 0.3) = 5.
+      const highScore: PromptOutcomeEntry[] = [
         makeOutcome("example.com", "allow", 80),
         makeOutcome("example.com", "allow", 80),
         makeOutcome("example.com", "allow", 80),
       ];
+      expect(computeAdjustment(highScore, 70).adjustment).toBe(5);
 
-      expect(computeAdjustment(outcomes, 70).adjustment).toBe(15);
+      // Acceptance: 3 LOW-score (genuine-trust) allows still reach the full +15
+      // (total = 3 -> confidence = 1), so the fix only bites discounted samples.
+      const lowScore: PromptOutcomeEntry[] = [
+        makeOutcome("example.com", "allow", 30),
+        makeOutcome("example.com", "allow", 30),
+        makeOutcome("example.com", "allow", 30),
+      ];
+      expect(computeAdjustment(lowScore, 70).adjustment).toBe(15);
+      expect(computeAdjustment(highScore, 70).adjustment).toBeLessThan(
+        computeAdjustment(lowScore, 70).adjustment
+      );
+    });
+
+    it("ramps the discounted-allow magnitude up with more evidence, capping at +15 (#213)", async () => {
+      const { chrome } = createChromeMock();
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+      const { computeAdjustment } = await import("../extension/src/shared/adaptive_scoring");
+
+      const highScoreAllows = (n: number): PromptOutcomeEntry[] =>
+        Array.from({ length: n }, () => makeOutcome("example.com", "allow", 80));
+
+      // Effective sample size = n * 0.3, confidence = min(1, that / 3):
+      //  3 allows -> total 0.9 -> conf 0.30 -> round(15*0.30) = 5
+      //  5 allows -> total 1.5 -> conf 0.50 -> round(15*0.50) = 8
+      // 10 allows -> total 3.0 -> conf 1.00 -> round(15*1.00) = 15 (enough deliberate trust)
+      expect(computeAdjustment(highScoreAllows(3), 70).adjustment).toBe(5);
+      expect(computeAdjustment(highScoreAllows(5), 70).adjustment).toBe(8);
+      expect(computeAdjustment(highScoreAllows(10), 70).adjustment).toBe(15);
+    });
+
+    it("does NOT weaken protective (block-driven) adjustments on a small diluted sample (#213 R1)", async () => {
+      const { chrome } = createChromeMock();
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+      const { computeAdjustment } = await import("../extension/src/shared/adaptive_scoring");
+
+      // [block, block, allow@80]: blockWeight=2, allowWeight=0.3, total=2.3.
+      // blockRatio = 2/2.3 ≈ 0.870, ratioExcess ≈ 0.565 -> magnitude = round(15*0.565) = 8.
+      // Effective-sample-size scaling is RELAXATION-ONLY, so the protective (negative)
+      // direction is NOT scaled by the diluted confidence (which would weaken it to -7);
+      // it stays at full strength -8, bit-identical to the pre-#213 code. Protecting on
+      // thin evidence is the fail-safe direction and must never be weakened by the fix.
+      const outcomes: PromptOutcomeEntry[] = [
+        makeOutcome("example.com", "block", 80),
+        makeOutcome("example.com", "block", 80),
+        makeOutcome("example.com", "allow", 80),
+      ];
+      expect(computeAdjustment(outcomes, 70).adjustment).toBe(-8);
     });
 
     it("only considers last 10 outcomes", async () => {
