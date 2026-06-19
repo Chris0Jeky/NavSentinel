@@ -170,11 +170,22 @@ export class SessionStateManager {
   readonly captureTimestampsByTab = new Map<number, number[]>();
 
   private _hydrated = false;
+  private _canPersist = false;
   private _hydratePromise: Promise<void> | null = null;
 
-  /** Whether hydrate() has completed. */
+  /** Whether hydrate() has completed (success OR degraded read-failure). */
   get hydrated(): boolean {
     return this._hydrated;
+  }
+
+  /**
+   * Whether persistence is enabled. False before hydration AND after a failed
+   * hydrate (degraded mode), so a transient session.get read failure cannot let
+   * persistAll()/persistMap() overwrite the still-present session storage we
+   * merely failed to read (#228.2). Re-enabled only by a successful hydrate.
+   */
+  get canPersist(): boolean {
+    return this._canPersist;
   }
 
   // -----------------------------------------------------------------------
@@ -190,56 +201,72 @@ export class SessionStateManager {
   }
 
   private async _doHydrate(): Promise<void> {
-    try {
-      const data = await chrome.storage.session.get(Object.values(KEYS));
-
-      this._restoreMap(this.allowUntilByTab, data[KEYS.allowUntil]);
-      this._restoreMap(this.gestureUntilByTab, data[KEYS.gestureUntil]);
-      this._restoreMap(this.allowStartedByTab, data[KEYS.allowStarted]);
-      this._restoreMap(this.allowTargetByTab, data[KEYS.allowTarget]);
-      this._restoreMap(this.userNavContextUntilByTab, data[KEYS.userNavContextUntil]);
-      this._restoreMap(this.suppressUntilByTab, data[KEYS.suppressUntil]);
-      this._restoreMap(this.typedOriginByTab, data[KEYS.typedOrigin]);
-      this._restoreSet(this.readyTabs, data[KEYS.readyTabs]);
-      this._restoreMap(this.pendingRollbackByTab, data[KEYS.pendingRollback]);
-      this._restoreMap(this.pendingForwardByTab, data[KEYS.pendingForward]);
-      this._restoreMap(this.rollbackReturnByTab, data[KEYS.rollbackReturn]);
-      this._restoreMap(this.lastUrlByTab, data[KEYS.lastUrl]);
-      this._restoreMap(this.lastCommittedByTab, data[KEYS.lastCommitted]);
-      this._restoreMap(this.childWindowByTab, data[KEYS.childWindow]);
-      this._restoreMap(this.oauthFlowByTab, data[KEYS.oauthFlow]);
-      this._restoreRedirectChains(data[KEYS.redirectChains]);
-      this._restoreMap(this.captureTimestampsByTab, data[KEYS.captureTimestamps]);
-    } catch (err) {
-      console.warn("[NavSentinel] session storage hydration failed:", err);
+    let data: Record<string, unknown> | null = null;
+    // One retry: a transient session.get failure should not flip us into the
+    // persistence-suppressed degraded mode if an immediate retry succeeds.
+    for (let attempt = 0; attempt < 2 && data === null; attempt++) {
+      try {
+        data = await chrome.storage.session.get(Object.values(KEYS));
+      } catch (err) {
+        console.warn(`[NavSentinel] session storage hydration failed (attempt ${attempt + 1}):`, err);
+      }
     }
+
+    if (data === null) {
+      // Read failed after retry: allow in-memory reads (so gated handlers do not
+      // block forever) but keep persistence DISABLED so the next persistAll()
+      // cannot overwrite the still-present session storage with empty maps
+      // (#228.2). Persistence resumes after a successful hydrate on the next SW
+      // startup.
+      this._hydrated = true;
+      return;
+    }
+
+    this._restoreMap(this.allowUntilByTab, data[KEYS.allowUntil]);
+    this._restoreMap(this.gestureUntilByTab, data[KEYS.gestureUntil]);
+    this._restoreMap(this.allowStartedByTab, data[KEYS.allowStarted]);
+    this._restoreMap(this.allowTargetByTab, data[KEYS.allowTarget]);
+    this._restoreMap(this.userNavContextUntilByTab, data[KEYS.userNavContextUntil]);
+    this._restoreMap(this.suppressUntilByTab, data[KEYS.suppressUntil]);
+    this._restoreMap(this.typedOriginByTab, data[KEYS.typedOrigin]);
+    this._restoreSet(this.readyTabs, data[KEYS.readyTabs]);
+    this._restoreMap(this.pendingRollbackByTab, data[KEYS.pendingRollback]);
+    this._restoreMap(this.pendingForwardByTab, data[KEYS.pendingForward]);
+    this._restoreMap(this.rollbackReturnByTab, data[KEYS.rollbackReturn]);
+    this._restoreMap(this.lastUrlByTab, data[KEYS.lastUrl]);
+    this._restoreMap(this.lastCommittedByTab, data[KEYS.lastCommitted]);
+    this._restoreMap(this.childWindowByTab, data[KEYS.childWindow]);
+    this._restoreMap(this.oauthFlowByTab, data[KEYS.oauthFlow]);
+    this._restoreRedirectChains(data[KEYS.redirectChains]);
+    this._restoreMap(this.captureTimestampsByTab, data[KEYS.captureTimestamps]);
     this._hydrated = true;
+    this._canPersist = true;
   }
 
   // -----------------------------------------------------------------------
   // Persist: mirror in-memory state to session storage (fire-and-forget).
   // -----------------------------------------------------------------------
 
-  /** Persist a single Map to session storage. Skips write if not yet hydrated. */
+  /** Persist a single Map to session storage. Suppressed until a successful hydrate (#228.2). */
   persistMap<V>(map: Map<number, V>, key: keyof typeof KEYS): void {
-    if (!this._hydrated) return;
+    if (!this._canPersist) return;
     const storageKey = KEYS[key];
     void chrome.storage.session.set({ [storageKey]: mapToObj(map) }).catch((err) => {
       console.warn("[NavSentinel] session persist failed:", err);
     });
   }
 
-  /** Persist the readyTabs Set to session storage. Skips write if not yet hydrated. */
+  /** Persist the readyTabs Set to session storage. Suppressed until a successful hydrate (#228.2). */
   persistReadyTabs(): void {
-    if (!this._hydrated) return;
+    if (!this._canPersist) return;
     void chrome.storage.session.set({ [KEYS.readyTabs]: setToArray(this.readyTabs) }).catch((err) => {
       console.warn("[NavSentinel] session persist failed:", err);
     });
   }
 
-  /** Persist all state in a single batch write. Skips write if not yet hydrated. */
+  /** Persist all state in a single batch write. Suppressed until a successful hydrate (#228.2). */
   persistAll(): void {
-    if (!this._hydrated) return;
+    if (!this._canPersist) return;
     const data: Record<string, unknown> = {
       [KEYS.allowUntil]: mapToObj(this.allowUntilByTab),
       [KEYS.gestureUntil]: mapToObj(this.gestureUntilByTab),
