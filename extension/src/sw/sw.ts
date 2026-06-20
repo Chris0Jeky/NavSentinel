@@ -259,12 +259,22 @@ function processOAuthNavigation(
     }
   }
 
-  if (existingFlow && existingFlow.phase === "redirect") {
+  if (existingFlow && (existingFlow.phase === "redirect" || existingFlow.phase === "consent")) {
+    // A second authorization URL within an active (pre-callback) flow updates it
+    // IN PLACE rather than overwriting it with a fresh flow. Critically, the
+    // expectedCallbackDomain is only overwritten when the new URL actually carries
+    // one (the `if` below), so a second /authorize WITHOUT a redirect_uri cannot
+    // WIPE the domain the first URL established. Without this, an injected second
+    // OAuth URL would reset expectedCallbackDomain to "" and isUnexpectedCallback
+    // would then pass any callback unconditionally. (#324 / disc#4)
     existingFlow.consentUrl = url;
     existingFlow.phase = "consent";
     if (expectedCallbackDomain) {
       existingFlow.expectedCallbackDomain = expectedCallbackDomain;
     }
+    // initiatorUrl and startedAt are intentionally kept from the original flow: a
+    // second authorization URL is treated as a continuation of the same flow, and
+    // initiatorUrl is display-only (not consulted by isUnexpectedCallback).
   } else {
     pruneStaleOAuthFlows();
     const flow: OAuthFlowState = {
