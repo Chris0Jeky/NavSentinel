@@ -995,7 +995,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   onRemovedHandler(tabId);
 });
 function onRemovedHandler(tabId: number): void {
-  clearTabIcon(tabId);
+  void clearTabIcon(tabId); // fire-and-forget: blank is chain-ordered (#272)
   const childEntry = childWindowByTab.get(tabId);
   if (childEntry) {
     childWindowByTab.delete(tabId);
