@@ -7,7 +7,7 @@ import { getTemplates, isLoaded, loadTemplates } from "../extension/src/shared/v
 
 describe("brand_templates.json", () => {
   const templatePath = resolve(__dirname, "../extension/public/brand_templates.json");
-  let templateData: { version: number; generated: string; templates: Array<{ id: string; displayName: string; aHash: number[]; bHash: number[]; version: number }> };
+  let templateData: { version: number; templates: Array<{ id: string; displayName: string; aHash: number[]; bHash: number[]; version: number }> };
 
   beforeEach(() => {
     loadTemplates([]);
@@ -16,9 +16,14 @@ describe("brand_templates.json", () => {
 
   it("has valid JSON structure", () => {
     expect(templateData.version).toBe(1);
-    expect(templateData.generated).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(Array.isArray(templateData.templates)).toBe(true);
     expect(templateData.templates.length).toBeGreaterThan(0);
+  });
+
+  it("carries no non-deterministic build timestamp (reproducible build)", () => {
+    // A "generated" date would change every calendar day and dirty the tree on
+    // re-runs; the file must be byte-stable for identical input. (#322 / #16)
+    expect(templateData).not.toHaveProperty("generated");
   });
 
   it("contains at least 40 brands", () => {
@@ -102,7 +107,6 @@ describe("visual_sim_loader", () => {
         ok: true,
         json: async () => ({
           version: 1,
-          generated: "2026-05-16",
           templates: [
             {
               id: "example",

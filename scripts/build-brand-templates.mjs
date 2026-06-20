@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * Build Brand Templates (P4-01 W3-03)
  *
@@ -7,13 +6,18 @@
  * For now, it generates deterministic placeholder hashes derived from
  * brand identifiers (seeded PRNG) so the pipeline is fully testable.
  *
+ * The output is fully deterministic: identical input always yields a
+ * byte-identical file. It deliberately carries NO build timestamp — a
+ * "generated" date would change every calendar day and dirty the tree on
+ * re-runs (the git history already records when the file last changed). (#322)
+ *
  * Usage: node scripts/build-brand-templates.mjs
  * Output: extension/public/brand_templates.json
  */
 
 import { writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { createHash } from "node:crypto";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -100,16 +104,30 @@ function generateBHash(brandId) {
   return Array.from(hash1);
 }
 
-const templates = BRANDS.map((brand) => ({
-  id: brand.id,
-  displayName: brand.displayName,
-  aHash: generateAHash(brand.id),
-  bHash: generateBHash(brand.id),
-  version: 1,
-}));
+/**
+ * Build the full, deterministic brand-templates file object. Pure: same input ->
+ * structurally identical output, with no timestamp or other non-deterministic field.
+ */
+export function buildTemplateFile() {
+  const templates = BRANDS.map((brand) => ({
+    id: brand.id,
+    displayName: brand.displayName,
+    aHash: generateAHash(brand.id),
+    bHash: generateBHash(brand.id),
+    version: 1,
+  }));
+  return { version: 1, templates };
+}
 
-const output = JSON.stringify({ version: 1, generated: new Date().toISOString().split("T")[0], templates }, null, 2);
+function main() {
+  const output = JSON.stringify(buildTemplateFile(), null, 2);
+  writeFileSync(OUTPUT_PATH, output, "utf-8");
+  console.log(`Generated ${BRANDS.length} brand templates -> ${OUTPUT_PATH}`);
+  console.log(`File size: ${Buffer.byteLength(output)} bytes`);
+}
 
-writeFileSync(OUTPUT_PATH, output, "utf-8");
-console.log(`Generated ${templates.length} brand templates -> ${OUTPUT_PATH}`);
-console.log(`File size: ${Buffer.byteLength(output)} bytes`);
+// Only run when invoked directly (`node scripts/build-brand-templates.mjs`), so tests
+// can import buildTemplateFile without writing the output file. (#322)
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
+}
