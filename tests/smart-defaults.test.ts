@@ -6,9 +6,11 @@ import {
   analyzeOutcomesForPair,
   pairKey,
   isPairOnCooldownPure,
+  capCooldownMap,
   SMART_DEFAULT_THRESHOLD,
   SMART_DEFAULT_COOLDOWN_MS,
   SMART_DEFAULT_COOLDOWNS_KEY,
+  SMART_DEFAULT_COOLDOWNS_LIMIT,
 } from "../extension/src/shared/smart_defaults";
 
 function makeOutcome(
@@ -172,6 +174,19 @@ describe("smart defaults – cooldown (pure)", () => {
   it("uses correct threshold constant", () => {
     expect(SMART_DEFAULT_THRESHOLD).toBe(3);
   });
+
+  it("capCooldownMap evicts the soonest-to-expire entries beyond the limit (#308)", () => {
+    const map = { a: 100, b: 300, c: 200, d: 400 };
+    const capped = capCooldownMap(map, 2);
+    // Keeps the two latest-expiring (d=400, b=300); drops a=100, c=200.
+    expect(Object.keys(capped).sort()).toEqual(["b", "d"]);
+    expect(capped).toEqual({ b: 300, d: 400 });
+  });
+
+  it("capCooldownMap returns the map unchanged when within the limit (#308)", () => {
+    const map = { a: 100, b: 200 };
+    expect(capCooldownMap(map, 5)).toBe(map);
+  });
 });
 
 describe("smart defaults – storage integration", () => {
@@ -235,6 +250,33 @@ describe("smart defaults – storage integration", () => {
     const key = "a.com|b.com";
     expect(cooldowns[key]).toBeGreaterThanOrEqual(before + SMART_DEFAULT_COOLDOWN_MS);
     expect(cooldowns[key]).toBeLessThanOrEqual(after + SMART_DEFAULT_COOLDOWN_MS);
+  });
+
+  it("setCooldown caps the persisted map to the limit, evicting soonest-to-expire (#308)", async () => {
+    // Pre-fill exactly LIMIT entries, all still in the future (so getCooldowns
+    // does not prune them) but expiring BEFORE the new 24h cooldown. Entry 0 is
+    // the soonest-to-expire and should be the one evicted.
+    const now = Date.now();
+    const initial: Record<string, number> = {};
+    for (let i = 0; i < SMART_DEFAULT_COOLDOWNS_LIMIT; i++) {
+      initial[`pair${i}.com|d.com`] = now + 1000 + i;
+    }
+    const { chrome, store } = createChromeMock({
+      [SMART_DEFAULT_COOLDOWNS_KEY]: initial,
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { setCooldown } = await import("../extension/src/shared/smart_defaults");
+    await setCooldown("new.com", "x.com");
+
+    const stored = store[SMART_DEFAULT_COOLDOWNS_KEY] as Record<string, number>;
+    // Pre-fix: LIMIT + 1 entries persisted (no cap). Post-fix: capped to LIMIT.
+    expect(Object.keys(stored)).toHaveLength(SMART_DEFAULT_COOLDOWNS_LIMIT);
+    // The freshly-set cooldown has the latest expiry, so it always survives.
+    expect(stored["new.com|x.com"]).toBeDefined();
+    // The soonest-to-expire pre-existing entry is the one dropped.
+    expect(stored["pair0.com|d.com"]).toBeUndefined();
+    expect(stored["pair199.com|d.com"]).toBeDefined();
   });
 
   it("isPairOnCooldown returns true for active cooldown", async () => {

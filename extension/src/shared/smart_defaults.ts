@@ -15,6 +15,16 @@ export const SMART_DEFAULT_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours
 /** Storage key for cooldown timestamps. */
 export const SMART_DEFAULT_COOLDOWNS_KEY = "sentinelsuite:smart_default_cooldowns_v1";
 
+/**
+ * Upper bound on the number of cooldown entries persisted at once. getCooldowns
+ * already prunes expired entries on read, but within the 24h TTL window a user
+ * who dismisses suggestions for many distinct pairs could accumulate unbounded
+ * entries. This cap mirrors the existing PROMPT_OUTCOMES_LIMIT / event-log caps:
+ * when exceeded, the soonest-to-expire entries are dropped first (they would
+ * lapse next anyway), keeping the most recently set cooldowns. (#308)
+ */
+export const SMART_DEFAULT_COOLDOWNS_LIMIT = 200;
+
 export interface SmartDefaultSuggestion {
   sourceDomain: string;
   destDomain: string;
@@ -133,6 +143,26 @@ export async function isPairOnCooldown(
 }
 
 /**
+ * Cap a cooldown map to at most `limit` entries, evicting the soonest-to-expire
+ * entries first (they would lapse next anyway). Pure helper for testability.
+ * Returns the original map unchanged when already within the limit.
+ */
+export function capCooldownMap(
+  cooldowns: CooldownMap,
+  limit: number = SMART_DEFAULT_COOLDOWNS_LIMIT
+): CooldownMap {
+  const entries = Object.entries(cooldowns);
+  if (entries.length <= limit) return cooldowns;
+  // Sort by expiry descending so the latest-expiring (most recently set) survive.
+  entries.sort((a, b) => b[1] - a[1]);
+  const kept: CooldownMap = {};
+  for (const [key, expiresAt] of entries.slice(0, limit)) {
+    kept[key] = expiresAt;
+  }
+  return kept;
+}
+
+/**
  * Set a cooldown for a domain pair (called when user dismisses the suggestion).
  */
 export async function setCooldown(
@@ -141,7 +171,9 @@ export async function setCooldown(
 ): Promise<void> {
   const cooldowns = await getCooldowns();
   cooldowns[pairKey(sourceDomain, destDomain)] = Date.now() + SMART_DEFAULT_COOLDOWN_MS;
-  await chrome.storage.local.set({ [SMART_DEFAULT_COOLDOWNS_KEY]: cooldowns });
+  await chrome.storage.local.set({
+    [SMART_DEFAULT_COOLDOWNS_KEY]: capCooldownMap(cooldowns),
+  });
 }
 
 /**
