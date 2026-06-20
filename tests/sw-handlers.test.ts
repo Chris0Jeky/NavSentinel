@@ -2162,5 +2162,30 @@ describe("service worker handlers", () => {
       >;
       expect(stored["11"]).toBeUndefined();
     });
+
+    it("does not re-queue a forward offer for a tab removed during the send (disc#7, forward)", async () => {
+      const mock = createChromeMock();
+      const { captured } = deferSends(mock);
+      mock.chrome.storage.session._store["ns_sw:pendingForward"] = {
+        "12": { url: "https://evil.com/", ts: Date.now() },
+      };
+      mock.chrome.storage.session._store["ns_sw:readyTabs"] = [12];
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+
+      // A commit to a different URL on a ready tab dispatches the forward offer.
+      mock.emitTabUpdated(12, { status: "complete" }, { url: "https://current.com/" });
+      mock.emitTabRemoved(12);
+      mock.setLastError({ message: "No tab with id: 12." });
+      captured.forEach((cb) => cb());
+      mock.setLastError(undefined);
+      await vi.runAllTimersAsync();
+
+      const stored = (mock.chrome.storage.session._store["ns_sw:pendingForward"] ?? {}) as Record<
+        string,
+        unknown
+      >;
+      expect(stored["12"]).toBeUndefined();
+    });
   });
 });

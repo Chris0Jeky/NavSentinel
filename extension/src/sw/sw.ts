@@ -335,12 +335,21 @@ function clearPendingTabState(
 // fire AFTER the tab was closed (the lastError is usually *because* it closed);
 // re-queuing the pending entry then leaves a zombie for a dead tab. Suppress the
 // re-queue in that window. Module-level (not session-backed): a restart clears it,
-// and a dead tab never fires onUpdated, so this only matters in-session. A short
-// TTL avoids suppressing a legitimate retry after Chrome reuses the tab id.
-// (#323 / disc#7)
-const REMOVED_TAB_TTL_MS = 30_000;
+// and a dead tab never fires onUpdated, so this only matters in-session. The TTL is
+// kept short (real dead-port sendMessage callbacks fire in ~100-500ms) so a tab id
+// that Chrome reuses soon after close is not wrongly suppressed. (#323 / disc#7)
+const REMOVED_TAB_TTL_MS = 5_000;
 const REMOVED_TAB_PRUNE_LIMIT = 256;
 const recentlyRemovedTabs = new Map<number, number>(); // tabId -> removedAt
+
+// Tabs with a rollback/forward message send currently in flight. onUpdated can
+// fire twice (loading->complete, or url+status) before the async sendMessage
+// callback resolves; without this guard the second fire re-reads the SAME pending
+// entry and re-sends (double modal). Unlike a pre-delete, the pending entry stays
+// in the (persisted) map until the callback resolves it, so a worker death mid-send
+// cannot drop it. Cleared in the send callback. Module-level. (#323 / disc#3)
+const rollbackSendInFlight = new Set<number>();
+const forwardSendInFlight = new Set<number>();
 
 function noteTabRemoved(tabId: number, now: number): void {
   recentlyRemovedTabs.set(tabId, now);
@@ -366,6 +375,7 @@ function trySendRollback(
   tabId: number,
   pending: { url: string; prevUrl?: string; qualifiers: string[] }
 ): void {
+  rollbackSendInFlight.add(tabId); // onUpdated skips a re-send while this is set (#323/disc#3)
   chrome.tabs.sendMessage(
     tabId,
     {
@@ -375,6 +385,7 @@ function trySendRollback(
       qualifiers: pending.qualifiers
     },
     () => {
+      rollbackSendInFlight.delete(tabId);
       if (chrome.runtime.lastError) {
         readyTabs.delete(tabId);
         // Re-queue for retry, but not for a tab that closed during the send (#323/disc#7).
@@ -397,7 +408,9 @@ function trySendForwardOffer(
   tabId: number,
   forward: { url: string; ts: number; returnUrl?: string }
 ): void {
+  forwardSendInFlight.add(tabId); // onUpdated skips a re-send while this is set (#323/disc#3)
   chrome.tabs.sendMessage(tabId, { type: "ns-forward-offer", url: forward.url }, () => {
+    forwardSendInFlight.delete(tabId);
     if (chrome.runtime.lastError) {
       readyTabs.delete(tabId);
       if (!wasTabRecentlyRemoved(tabId, Date.now())) {
@@ -1125,13 +1138,15 @@ function onUpdatedHandler(
   tab: chrome.tabs.Tab
 ): void {
   const pendingRollback = pendingRollbackByTab.get(tabId);
-  if (pendingRollback && (changeInfo.status === "complete" || changeInfo.url)) {
-    // Remove in-memory BEFORE sending so a second onUpdated in the async gap
-    // (e.g. status=loading then status=complete) cannot re-send the same rollback
-    // (double modal). trySendRollback re-queues on send failure. NOT persisted:
-    // if the worker dies mid-send the old persisted entry survives for restart
-    // retry rather than being dropped. (#323/disc#3)
-    pendingRollbackByTab.delete(tabId);
+  // Skip if a send is already in flight: onUpdated can fire twice (loading->complete,
+  // or url+status) before the async callback resolves, and re-sending the same entry
+  // double-fires the rollback (double modal). The entry stays in the persisted map
+  // until the in-flight send resolves it, so this never drops it. (#323/disc#3)
+  if (
+    pendingRollback &&
+    (changeInfo.status === "complete" || changeInfo.url) &&
+    !rollbackSendInFlight.has(tabId)
+  ) {
     trySendRollback(tabId, pendingRollback);
   }
 
@@ -1142,7 +1157,6 @@ function onUpdatedHandler(
   if (!currentUrl) return;
   if (currentUrl === forward.url) return;
   if (!readyTabs.has(tabId)) return;
-  // Mirror of the rollback pre-delete: prevent a double forward-offer send. (#323/disc#3)
-  pendingForwardByTab.delete(tabId);
+  if (forwardSendInFlight.has(tabId)) return; // mirror of the rollback in-flight guard (#323/disc#3)
   trySendForwardOffer(tabId, forward);
 }
