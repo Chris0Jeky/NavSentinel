@@ -88,12 +88,23 @@ function applyDecay(profile: DomainProfile, now: number): boolean {
       profile.factors[key] = Math.floor(profile.factors[key]! * 0.5);
       if (profile.factors[key] === 0) delete profile.factors[key];
     }
+    // Decay nrsHistory length in step with visits so the consistency (stddev) metric stays
+    // on the same scale as avgNRS (= totalNRS/visits) after decay; otherwise stddev is
+    // computed from un-decayed raw values while avgNRS uses decayed counters. (#290)
+    if (profile.nrsHistory.length > 0) {
+      profile.nrsHistory = profile.nrsHistory.slice(
+        -Math.max(1, Math.floor(profile.nrsHistory.length * 0.5))
+      );
+    }
     profile.lastSeen += DECAY_AGE_MS;
     iterations++;
   }
-  if (iterations === MAX_DECAY_ITERATIONS) {
-    profile.lastSeen = now;
-  }
+  // Do NOT reset lastSeen to `now` on hitting the iteration cap (#290): that made a very old
+  // (>720-day) zombie profile look brand-new to evictLRU (which sorts ascending by lastSeen),
+  // permanently shielding it from eviction while newer active profiles were evicted at the
+  // MAX_PROFILES cap. Leaving lastSeen advanced by the loop keeps the profile ranked as stale;
+  // the cap only bounds per-call work (any realistic counter floors within 24 halvings, and a
+  // still-old lastSeen lets the next call continue decaying / lets LRU evict it).
   return true;
 }
 
