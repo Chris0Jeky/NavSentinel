@@ -472,14 +472,18 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
       }).catch((e) => { console.warn("[NavSentinel] event log append failed (cred_trust_domain/dest):", e); });
     }
 
-    // The trust writes above await chrome.storage, which yields the event loop; page JS
-    // could swap the form action during that window — a TOCTOU between the action re-check
-    // above (before the trust writes) and this resume. Re-validate immediately before
-    // resuming: blockIfActionMutated reads the live action synchronously and resumeSubmit
-    // runs in the same task, so no mutation can interleave after this final check. The
-    // trust write still happens first (so an approved domain is persisted before the submit
-    // navigates away); this only gates the resume on the destination still being the one the
-    // user approved. (#339)
+    // Required for the trust_site/trust_dest paths: the addTrustedDomain awaits above yield
+    // the event loop (chrome.storage), so page JS can swap the form action AFTER the earlier
+    // re-check (before the trust writes) but BEFORE this resume — a TOCTOU on the extension's
+    // core security boundary. Re-validate one last time: blockIfActionMutated reads the live
+    // action synchronously and returns false synchronously when unchanged, and resumeSubmit
+    // then runs with no further await — so only microtasks (never page macrotasks / event
+    // handlers) can run between the read and the submit, leaving no window to swap the action.
+    // The trust write still happens first (an approved domain is persisted before the submit
+    // navigates away); this only gates the resume on the destination the user approved. On
+    // the allow_once/proceed_once paths there is no await between the two gates, so this is a
+    // harmless no-op. A throw here cannot fail open: `decided` is already true, so the catch
+    // below refuses to resume. (#339)
     if (await blockIfActionMutated(form, submitter, assessedActionUrl, pageSite, risk.page.url)) {
       return;
     }

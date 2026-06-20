@@ -1040,6 +1040,55 @@ describe("credential_guard", () => {
       );
     });
 
+    it("trust_dest path: blocks when the action is swapped DURING the async trust write (TOCTOU) (#339)", async () => {
+      // Same TOCTOU as the trust_site test, but via the trust_dest await branch (line ~464),
+      // which the new second gate must also cover.
+      mockGetRegDomain.mockImplementation((h: string) => (h.includes("evil") ? "evil.example" : "bank.example"));
+      stubLocation("https://bank.example/login");
+      const risk = defaultRisk();
+      risk.page.registrableDomain = "bank.example";
+      risk.action.registrableDomain = "bank.example";
+      mockComputeRisk.mockReturnValue(risk);
+      const form = createPasswordForm("https://bank.example/login");
+      const requestSubmitSpy = vi.fn();
+      stubRequestSubmit(form, requestSubmitSpy);
+      mockShowModal.mockResolvedValue("trust_dest");
+      mockAddTrusted.mockImplementation(async () => {
+        form.setAttribute("action", "https://evil.example/collect");
+        return [];
+      });
+
+      await dispatchSubmit(form);
+
+      expect(requestSubmitSpy).not.toHaveBeenCalled();
+      expect(mockShowToast).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining("destination changed") }),
+      );
+    });
+
+    it("trust-path: a showToast fault in the SECOND gate fails closed (decided=true, no resume) (#339)", async () => {
+      // If blockIfActionMutated throws (showToast faults) in the post-trust-write gate, the
+      // exception unwinds to the outer catch where decided=true must prevent a fail-open resume.
+      mockGetRegDomain.mockImplementation((h: string) => (h.includes("evil") ? "evil.example" : "bank.example"));
+      stubLocation("https://bank.example/login");
+      const risk = defaultRisk();
+      risk.page.registrableDomain = "bank.example";
+      mockComputeRisk.mockReturnValue(risk);
+      const form = createPasswordForm("https://bank.example/login");
+      const requestSubmitSpy = vi.fn();
+      stubRequestSubmit(form, requestSubmitSpy);
+      mockShowModal.mockResolvedValue("trust_site");
+      mockAddTrusted.mockImplementation(async () => {
+        form.setAttribute("action", "https://evil.example/collect");
+        return [];
+      });
+      mockShowToast.mockImplementation(() => { throw new Error("toast boom"); });
+
+      await dispatchSubmit(form);
+
+      expect(requestSubmitSpy).not.toHaveBeenCalled();
+    });
+
     it("blocks a silent-path submit when the action changes cross-site before resume (R1-5a)", async () => {
       mockShouldPrompt.mockReturnValue(false); // silent pass, no modal
       mockGetRegDomain.mockImplementation((h: string) => (h.includes("evil") ? "evil.example" : "bank.example"));
