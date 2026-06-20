@@ -866,6 +866,46 @@ describe("service worker rollback gating", () => {
     expect(forward.url).toBe("https://evil.test/redirected");
   });
 
+  it("keeps the forward offer alive across a repeated abort during rollback (#339)", async () => {
+    // onErrorOccurredHandler used to delete rollbackReturnByTab UNCONDITIONALLY even when it
+    // preserved the forward offer. The offer is meaningless without its rollbackReturn
+    // companion: a SUBSEQUENT event re-evaluates preserveForwardOffer (= forward && rollbackReturn
+    // && forward.url===url), finds rollbackReturn gone, and drops the offer. This reproduces that
+    // by firing a second abort of the blocked destination.
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+
+    mock.emitCommitted({
+      tabId: 31, frameId: 0, url: "https://example.test/origin",
+      transitionType: "typed", transitionQualifiers: []
+    });
+    vi.setSystemTime(new Date("2026-03-17T12:00:11.000Z"));
+    mock.emitCommitted({
+      tabId: 31, frameId: 0, url: "https://evil.test/redirected",
+      transitionType: "link", transitionQualifiers: ["client_redirect"]
+    });
+    mock.dispatchRuntimeMessage(
+      { type: "ns-begin-rollback", returnUrl: "https://example.test/origin" },
+      { tab: { id: 31 } }
+    );
+    mock.emitBeforeNavigate({ tabId: 31, frameId: 0, url: "https://example.test/origin" });
+
+    // First abort of the blocked destination (forward.url) -> preserveForwardOffer=true.
+    mock.emitErrorOccurred({ tabId: 31, frameId: 0, url: "https://evil.test/redirected" });
+    // Second abort re-evaluates preserveForwardOffer. Pre-fix the first abort already deleted
+    // rollbackReturnByTab, so this evaluates false and clearPendingTabState drops the offer.
+    mock.emitErrorOccurred({ tabId: 31, frameId: 0, url: "https://evil.test/redirected" });
+
+    const forward = mock.dispatchRuntimeMessage(
+      { type: "ns-check-forward", currentUrl: "https://example.test/origin" },
+      { tab: { id: 31 } }
+    ) as { status?: string; url?: string };
+
+    expect(forward.status).toBe("offer");
+    expect(forward.url).toBe("https://evil.test/redirected");
+  });
+
   it("does not surface a forward offer while already on the forward URL", async () => {
     const mock = createChromeMock();
     vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);

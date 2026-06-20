@@ -1057,7 +1057,16 @@ function onErrorOccurredHandler(details: { tabId: number; frameId: number; url?:
   const preserveForwardOffer =
     !!forward && !!rollbackReturn && !!details.url && forward.url === details.url;
   clearPendingTabState(details.tabId, { preserveForwardOffer });
-  rollbackReturnByTab.delete(details.tabId);
+  if (!preserveForwardOffer) {
+    // Mirror onBeforeNavigateHandler: keep the rollback-return + suppress window alive when
+    // we are preserving the forward offer. The offer is meaningless without its rollbackReturn
+    // companion — preserveForwardOffer on the NEXT navigation/error event requires rollbackReturn
+    // to still exist, so an unconditional delete here drops the very offer clearPendingTabState
+    // just preserved. The suppress window must likewise survive so the eventual forward-retry
+    // commit is not mis-rolled-back. (#339)
+    rollbackReturnByTab.delete(details.tabId);
+    suppressUntilByTab.delete(details.tabId);
+  }
   allowStartedByTab.delete(details.tabId);
   typedOriginByTab.delete(details.tabId);
   swState.persistAll();
