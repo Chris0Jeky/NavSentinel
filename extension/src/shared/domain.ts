@@ -547,6 +547,12 @@ const BRAND_LIST: ReadonlyArray<readonly [brand: string, domain: string]> = [
  *
  * This list is intentionally conservative -- only high-traffic domains
  * that users encounter daily are included.
+ *
+ * @internal Exported only so tests can assert the registrable-domain invariant
+ * (see tests/psl-domain.test.ts). This is the live singleton consulted by
+ * `isBrandAlias`; the `ReadonlyMap`/`ReadonlySet` types are compile-time only,
+ * so consumers MUST NOT mutate it at runtime -- doing so would corrupt brand
+ * detection for the lifetime of the module. Treat strictly as read-only.
  */
 export const BRAND_KNOWN_ALIASES: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ["google", new Set([
