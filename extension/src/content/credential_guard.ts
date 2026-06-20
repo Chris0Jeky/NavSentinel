@@ -472,6 +472,21 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
       }).catch((e) => { console.warn("[NavSentinel] event log append failed (cred_trust_domain/dest):", e); });
     }
 
+    // Required for the trust_site/trust_dest paths: the addTrustedDomain awaits above yield
+    // the event loop (chrome.storage), so page JS can swap the form action AFTER the earlier
+    // re-check (before the trust writes) but BEFORE this resume — a TOCTOU on the extension's
+    // core security boundary. Re-validate one last time: blockIfActionMutated reads the live
+    // action synchronously and returns false synchronously when unchanged, and resumeSubmit
+    // then runs with no further await — so only microtasks (never page macrotasks / event
+    // handlers) can run between the read and the submit, leaving no window to swap the action.
+    // The trust write still happens first (an approved domain is persisted before the submit
+    // navigates away); this only gates the resume on the destination the user approved. On
+    // the allow_once/proceed_once paths there is no await between the two gates, so this is a
+    // harmless no-op. A throw here cannot fail open: `decided` is already true, so the catch
+    // below refuses to resume. (#339)
+    if (await blockIfActionMutated(form, submitter, assessedActionUrl, pageSite, risk.page.url)) {
+      return;
+    }
     resumeSubmit(form, submitter);
 
     await appendEvent({
