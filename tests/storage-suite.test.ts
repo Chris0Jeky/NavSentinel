@@ -255,8 +255,10 @@ describe("suite storage and allowlist migration", () => {
     const { chrome, store } = createChromeMock();
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
-    // All-silent overflow exercises the full importAll -> trimEventLog -> normalizeEventLog
-    // path: with no loud entries to protect, it degrades to keeping the newest `limit`.
+    // Degenerate-path coverage (NOT a fix discriminator — the mixed loud/silent test above
+    // is). For a homogeneous all-silent log, trimEventLog's silent-first eviction is
+    // equivalent to the old tail slice, so this passes pre-fix too; its value is exercising
+    // the full importAll -> trimEventLog -> normalizeEventLog path on the all-silent shape.
     // logLimit is clamped to a minimum of 50 (clampInt), so overflow needs >50 entries.
     const silent = Array.from({ length: 60 }, (_, i) => ({
       id: `silent-${i}`, ts: i, kind: "nav_silent_allow" as const,
