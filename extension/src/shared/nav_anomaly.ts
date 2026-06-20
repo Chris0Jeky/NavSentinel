@@ -707,6 +707,9 @@ export function _resetRecentNavs(): void {
   recentNavs.length = 0;
   sessionNavCount = 0;
   resetFrequencyCache();
+  // Reset the serialization chain so a prior test's queued/failed promise tail cannot carry
+  // forward into the next test (same inter-test isolation concern as the storage-mock reset). (#286 R2)
+  pending = Promise.resolve();
 }
 
 /**
