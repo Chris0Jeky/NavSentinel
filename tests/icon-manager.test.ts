@@ -173,6 +173,10 @@ describe("icon_manager", () => {
       let releaseBg!: () => void;
       const gate = new Promise<void>((resolve) => { releaseBg = resolve; });
       setBadgeBackgroundColor.mockImplementationOnce(async () => { await gate; });
+      // Must be mockResolvedValue (an already-settled promise), NOT a deferred
+      // mockImplementation: this guarantees setAllTabsGray's tabs.query continuation is
+      // enqueued BEFORE releaseBg() fires, so blankBadgeOrdered still sees the in-flight
+      // chain and orders its blank after it. A deferred query could invert that. (#272 R2)
       tabsQuery.mockResolvedValue([{ id: 20 }]);
 
       const p = updateTabIcon(20, "red"); // in-flight, gated on its bg write
