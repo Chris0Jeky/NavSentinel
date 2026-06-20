@@ -2097,4 +2097,140 @@ describe("service worker handlers", () => {
       expect(afterOther[String(TAB)], "suppress must be cleared by a non-return nav").toBeUndefined();
     });
   });
+
+  describe("rollback/forward send-race hardening (#323)", () => {
+    // Defer sendMessage callbacks (real Chrome is async) so the first send's
+    // callback does not run before the second event, exposing the races.
+    function deferSends(mock: ReturnType<typeof createChromeMock>) {
+      const rollbackSends: number[] = [];
+      const forwardSends: number[] = [];
+      const captured: Array<() => void> = [];
+      mock.chrome.tabs.sendMessage = ((
+        tabId: number,
+        message: unknown,
+        optOrCb?: { frameId?: number } | (() => void),
+        cb?: () => void,
+      ) => {
+        const done = typeof optOrCb === "function" ? optOrCb : cb;
+        const type = (message as { type?: string }).type;
+        if (type === "ns-rollback") rollbackSends.push(tabId);
+        if (type === "ns-forward-offer") forwardSends.push(tabId);
+        if (done) captured.push(done);
+      }) as typeof mock.chrome.tabs.sendMessage;
+      return { rollbackSends, forwardSends, captured };
+    }
+
+    it("does not double-send a rollback when onUpdated fires twice (disc#3)", async () => {
+      const mock = createChromeMock();
+      const { rollbackSends } = deferSends(mock);
+      mock.chrome.storage.session._store["ns_sw:pendingRollback"] = {
+        "10": { url: "https://evil.com/", qualifiers: [] },
+      };
+      mock.chrome.storage.session._store["ns_sw:readyTabs"] = [10];
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+
+      // Two rapid onUpdated events (url change, then status=complete) both pass the guard.
+      mock.emitTabUpdated(10, { url: "https://evil.com/" }, { url: "https://evil.com/" });
+      mock.emitTabUpdated(10, { status: "complete" }, { url: "https://evil.com/" });
+
+      // Pre-fix (no in-flight guard): the deferred first callback hasn't resolved the
+      // entry, so the second onUpdated re-reads it and re-sends -> [10, 10]. Post-fix:
+      // trySendRollback adds tabId to rollbackSendInFlight synchronously, so the second
+      // onUpdated sees the set populated and returns early -> [10].
+      expect(rollbackSends).toEqual([10]);
+    });
+
+    it("does not double-send a forward offer when onUpdated fires twice (disc#3)", async () => {
+      const mock = createChromeMock();
+      const { forwardSends } = deferSends(mock);
+      mock.chrome.storage.session._store["ns_sw:pendingForward"] = {
+        "13": { url: "https://evil.com/", ts: Date.now() },
+      };
+      mock.chrome.storage.session._store["ns_sw:readyTabs"] = [13];
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+
+      // Two rapid onUpdated to a different URL on a ready tab both pass the forward guard.
+      mock.emitTabUpdated(13, { url: "https://current.com/" }, { url: "https://current.com/" });
+      mock.emitTabUpdated(13, { status: "complete" }, { url: "https://current.com/" });
+
+      // Pre-fix: two forward-offer sends. Post-fix: forwardSendInFlight blocks the second.
+      expect(forwardSends).toEqual([13]);
+    });
+
+    it("does not double-send when onCommitted send is in flight and onUpdated fires (disc#3 cross-path)", async () => {
+      const mock = createChromeMock();
+      const { rollbackSends } = deferSends(mock);
+      // Tab NOT ready at commit: onCommitted queues the rollback (no send yet).
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+      // First navigation A then a suspicious B (different reg, no gesture) on tab 14.
+      mock.emitCommitted({ tabId: 14, frameId: 0, url: "https://a.com/", transitionType: "link" });
+      mock.emitBeforeNavigate({ tabId: 14, frameId: 0, url: "https://b.com/" });
+      mock.emitCommitted({ tabId: 14, frameId: 0, url: "https://b.com/", transitionType: "link" });
+      // Content becomes ready -> ns-ready flushes the queued rollback (send dispatched, callback deferred).
+      (mock.chrome.runtime.onMessage as unknown as {
+        emit: (m: unknown, s: unknown, r: (v?: unknown) => void) => void;
+      }).emit({ type: "ns-ready" }, { tab: { id: 14 } }, () => {});
+      await vi.runAllTimersAsync();
+      // Now an onUpdated fires while that send is still in flight.
+      mock.emitTabUpdated(14, { status: "complete" }, { url: "https://b.com/" });
+
+      // The in-flight guard must prevent the onUpdated from re-sending the same rollback.
+      expect(rollbackSends).toEqual([14]);
+    });
+
+    it("does not re-queue a rollback for a tab removed during the send (disc#7)", async () => {
+      const mock = createChromeMock();
+      const { captured } = deferSends(mock);
+      mock.chrome.storage.session._store["ns_sw:pendingRollback"] = {
+        "11": { url: "https://evil.com/", qualifiers: [] },
+      };
+      mock.chrome.storage.session._store["ns_sw:readyTabs"] = [11];
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+
+      // Send is dispatched (callback captured, not yet fired).
+      mock.emitTabUpdated(11, { status: "complete" }, { url: "https://evil.com/" });
+      // Tab closes mid-send, then the send callback fires with lastError (tab gone).
+      mock.emitTabRemoved(11);
+      mock.setLastError({ message: "No tab with id: 11." });
+      captured.forEach((cb) => cb());
+      mock.setLastError(undefined);
+      await vi.runAllTimersAsync();
+
+      // Pre-fix: the callback re-queued -> zombie entry for the dead tab.
+      const stored = (mock.chrome.storage.session._store["ns_sw:pendingRollback"] ?? {}) as Record<
+        string,
+        unknown
+      >;
+      expect(stored["11"]).toBeUndefined();
+    });
+
+    it("does not re-queue a forward offer for a tab removed during the send (disc#7, forward)", async () => {
+      const mock = createChromeMock();
+      const { captured } = deferSends(mock);
+      mock.chrome.storage.session._store["ns_sw:pendingForward"] = {
+        "12": { url: "https://evil.com/", ts: Date.now() },
+      };
+      mock.chrome.storage.session._store["ns_sw:readyTabs"] = [12];
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+
+      // A commit to a different URL on a ready tab dispatches the forward offer.
+      mock.emitTabUpdated(12, { status: "complete" }, { url: "https://current.com/" });
+      mock.emitTabRemoved(12);
+      mock.setLastError({ message: "No tab with id: 12." });
+      captured.forEach((cb) => cb());
+      mock.setLastError(undefined);
+      await vi.runAllTimersAsync();
+
+      const stored = (mock.chrome.storage.session._store["ns_sw:pendingForward"] ?? {}) as Record<
+        string,
+        unknown
+      >;
+      expect(stored["12"]).toBeUndefined();
+    });
+  });
 });
