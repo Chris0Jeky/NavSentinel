@@ -326,6 +326,60 @@ describe("appendEvent", () => {
     expect(log[0]!.extra).toEqual({ tabId: 42 });
   });
 
+  it("sanitizes non-string reasons so the event persists instead of being silently dropped (#339)", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { appendEvent } = await import("../extension/src/shared/storage");
+    // A malformed runtime append carries non-string reasons. Pre-fix the built entry fails
+    // isEventLogEntry, so persistEventLogEntry's re-validation drops it (mistaken for an
+    // intentional silent-decision eviction) and it never persists. Post-fix reasons are
+    // sanitized to a string[], so the entry stays valid and is persisted.
+    await appendEvent({
+      id: "bad-reasons",
+      kind: "nav_click_block",
+      reasons: [123, "ok", null, "fine"] as unknown as string[],
+    });
+
+    const log = (store[EVENT_LOG_KEY] as Array<{ id: string; reasons?: unknown }>) ?? [];
+    const entry = log.find((e) => e.id === "bad-reasons");
+    expect(entry).toBeDefined();
+    expect(entry!.reasons).toEqual(["ok", "fine"]); // non-strings filtered out
+  });
+
+  it("caps event reasons at MAX_REASON_CODES (32) to bound per-entry size (#339)", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { appendEvent } = await import("../extension/src/shared/storage");
+    const reasons = Array.from({ length: 40 }, (_, i) => `code_${i}`);
+    await appendEvent({ id: "many-reasons", kind: "nav_click_block", reasons });
+
+    const log = (store[EVENT_LOG_KEY] as Array<{ id: string; reasons?: string[] }>) ?? [];
+    const entry = log.find((e) => e.id === "many-reasons");
+    expect(entry).toBeDefined();
+    expect(entry!.reasons).toHaveLength(32);
+    expect(entry!.reasons![0]).toBe("code_0");
+    expect(entry!.reasons![31]).toBe("code_31");
+  });
+
+  it("coerces a non-array reasons value to [] (persists, does not throw or drop) (#339)", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { appendEvent } = await import("../extension/src/shared/storage");
+    await appendEvent({
+      id: "scalar-reasons",
+      kind: "nav_click_block",
+      reasons: "nrs_foo" as unknown as string[],
+    });
+
+    const log = (store[EVENT_LOG_KEY] as Array<{ id: string; reasons?: unknown }>) ?? [];
+    const entry = log.find((e) => e.id === "scalar-reasons");
+    expect(entry).toBeDefined();
+    expect(entry!.reasons).toEqual([]); // sanitizeCodeList -> undefined -> ?? [] (still valid)
+  });
+
   it("omits optional fields when not provided", async () => {
     const { chrome, store } = createChromeMock();
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);

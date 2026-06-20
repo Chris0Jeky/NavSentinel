@@ -513,7 +513,12 @@ function buildEventLogEntry(partial: EventLogAppendPartial): EventLogEntry {
     ...(partial.url !== undefined ? { url: partial.url } : {}),
     ...(partial.destHost !== undefined ? { destHost: partial.destHost } : {}),
     ...(partial.score !== undefined ? { score: Number.isFinite(partial.score) ? partial.score : 0 } : {}),
-    ...(partial.reasons !== undefined ? { reasons: partial.reasons } : {}),
+    // Sanitize reasons to a bounded string[] (reuses the prompt-outcome helper). A
+    // malformed runtime append message could carry non-string reasons; left raw, the
+    // entry would fail isEventLogEntry and persistEventLogEntry's re-validation would
+    // silently drop it (mistaking the drop for an intentional silent-decision eviction).
+    // Sanitizing keeps the entry valid (and bounds per-entry size, cf. #299). (#339)
+    ...(partial.reasons !== undefined ? { reasons: sanitizeCodeList(partial.reasons) ?? [] } : {}),
     ...(partial.extra !== undefined ? { extra: partial.extra } : {})
   };
 }
@@ -525,6 +530,13 @@ async function persistEventLogEntry(entry: EventLogEntry): Promise<void> {
   for (let attempt = 0; attempt < 3; attempt++) {
     const res = await chrome.storage.local.get(EVENT_LOG_KEY);
     const cur = normalizeEventLog(res[EVENT_LOG_KEY]);
+    // trimEventLog (re-normalizes via isEventLogEntry) is kept here as a defense-in-depth
+    // gate at the storage-write boundary: buildEventLogEntry sanitizes reasons, but `kind`
+    // is not validated there, so a crafted/abnormal entry with a bad kind is dropped at
+    // write rather than persisted as junk (it would otherwise sit in storage until the next
+    // append re-normalizes it, and — worse — survive `next` only to be filtered by the
+    // verify re-read below, burning all 3 retries). The #339 silent-loss is fixed upstream
+    // by sanitizing reasons in buildEventLogEntry, so VALID entries are no longer dropped. (#339)
     const next = trimEventLog([...cur.filter((item) => item.id !== entry.id), entry], limit);
     await chrome.storage.local.set({ [EVENT_LOG_KEY]: next });
 
@@ -603,7 +615,12 @@ export async function appendEvent(partial: EventLogAppendPartial): Promise<void>
 
 export async function handleEventLogAppendMessage(message: EventLogAppendMessage): Promise<EventLogAppendResponse> {
   try {
-    await appendEventDirect(message.entry);
+    // Re-build through buildEventLogEntry so the entry is sanitized at the SW trust
+    // boundary too. The normal sender already calls buildEventLogEntry before delegating,
+    // but isEventLogAppendMessage only validates shape (not per-element types), so a
+    // crafted message could otherwise carry non-string reasons straight to storage. The
+    // rebuild preserves the sender's id/ts. (#339)
+    await appendEventDirect(buildEventLogEntry(message.entry));
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
