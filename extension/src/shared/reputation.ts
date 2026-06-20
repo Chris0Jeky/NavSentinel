@@ -306,9 +306,9 @@ export function isKnownBadDomain(domain: string): boolean {
 }
 
 /**
- * Returns true if the reputation module has a loaded filter.
- * Not used at runtime. Exported only for unit tests.
- * @internal
+ * Returns true if the reputation module has a loaded filter. Used at runtime by the
+ * service worker (sw.ts ns-reputation-check handler) to populate the `filterReady`
+ * field in its response, and by unit tests.
  */
 export function reputationReady(): boolean {
   return _filter !== null;

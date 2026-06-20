@@ -439,6 +439,24 @@ describe("runtime reputation state", () => {
     expect(reputationReady()).toBe(false);               // pre-fix: stayed true (the real bug)
     expect(isKnownBadDomain("seed-bad.example")).toBe(false); // degraded -> no protection
   });
+
+  it("initReputation fails closed on a degenerate k=0 filter: reputationReady() transitions true->false (#287)", () => {
+    // Symmetric to the m=0 case: same initReputation try/catch path, k=0 branch (R2).
+    const good = createFilter(optimalParams(1, 0.0001).m, optimalParams(1, 0.0001).k);
+    insertDomain(good, "seed-bad.example");
+    expect(initReputation(serializeFilter(good))).toBe(true);
+    expect(reputationReady()).toBe(true);
+
+    const buf = new Uint8Array(16);
+    const view = new DataView(buf.buffer);
+    view.setUint32(0, 0x424c4f4d, true); // "BLOM"
+    view.setUint32(4, 1, true);           // version 1
+    view.setUint32(8, 0, true);           // k=0 (degenerate)
+    view.setUint32(12, 64, true);         // m=64
+    expect(initReputation(buf)).toBe(false);
+    expect(reputationReady()).toBe(false);
+    expect(isKnownBadDomain("seed-bad.example")).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------
