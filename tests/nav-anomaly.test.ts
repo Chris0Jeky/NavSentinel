@@ -509,6 +509,23 @@ describe("recordNavigationAnomaly", () => {
     expect(score2).toBe(BASE_ANOMALY_SCORE);
   });
 
+  it("rolls back the sliding-window entry when storage fails, so no phantom burst (#286)", async () => {
+    const now = Date.now();
+    store[NAV_PROFILE_KEY] = makeEstablishedProfile(now);
+
+    // First crypto nav: force loadProfile's storage read to reject once.
+    (chrome.storage.local.get as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error("storage fail")
+    );
+    await expect(recordNavigationAnomaly("binance.com", now + 1000)).rejects.toThrow();
+
+    // Second crypto nav (storage healthy again). Pre-fix the failed nav left a phantom
+    // 'crypto' entry in recentNavs, so this would see count=2 and fire a burst anomaly
+    // (BASE_ANOMALY_SCORE). Post-fix the phantom is rolled back, so count=1 -> no burst -> 0.
+    const score = await recordNavigationAnomaly("coinbase.com", now + 2000);
+    expect(score).toBe(0);
+  });
+
   it("returns higher score for 3+ burst into rare category", async () => {
     const now = Date.now();
     store[NAV_PROFILE_KEY] = makeEstablishedProfile(now);
