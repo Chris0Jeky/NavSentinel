@@ -128,11 +128,9 @@ function resumeSubmit(
   submitter: HTMLElement | null,
   opts?: { allowUnsafeFallback?: boolean }
 ): void {
-  // requestSubmit re-dispatches the submit event; mark a one-shot bypass so our
-  // own handler lets that re-entrant event through (and consumes it).
-  // NOTE (#264): if requestSubmit no-ops on interactive constraint validation no
-  // re-entrant submit fires to consume the token, so it lingers up to 5s --
-  // tracked as a pre-existing follow-up (fix = a synchronous one-shot scope).
+  // requestSubmit re-dispatches the submit event SYNCHRONOUSLY; mark a one-shot
+  // bypass so our own handler lets that re-entrant event through (and consumes it
+  // via consumeAllowNext at the top of handleSubmit, before any await).
   markAllowNext(form, 5000);
 
   try {
@@ -160,6 +158,16 @@ function resumeSubmit(
     } catch (e) {
       console.warn("[NavSentinel] form submit fallback failed:", e);
     }
+  } finally {
+    // #264: scope the bypass to the SYNCHRONOUS re-dispatch only. The genuine
+    // re-entrant submit fired (and consumed the token) during requestSubmit above,
+    // so this clear is a no-op for it. But if requestSubmit no-ops without throwing
+    // -- interactive constraint validation (an empty `required` field / `pattern`
+    // mismatch fires `invalid` and silently does not submit) -- nothing consumes the
+    // token. Clearing it here (synchronously, after the re-dispatch window) stops it
+    // lingering up to 5s and bypassing assessment + the action-mutation re-check on
+    // the next submit. The TTL in markAllowNext is now only a defensive backstop.
+    allowNextSubmitUntil.delete(form);
   }
 }
 
