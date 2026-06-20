@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * Builds a bloom filter of known-bad domains from public threat feeds
  * and writes it to extension/public/reputation_data.bin.
@@ -18,7 +17,7 @@
 
 import { writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT_PATH = resolve(
@@ -294,30 +293,47 @@ async function fetchOpenPhishDomains() {
 // Fallback test domains (used when feeds are unreachable)
 // ---------------------------------------------------------------------------
 
-const FALLBACK_TEST_DOMAINS = [
-  "evil-phishing-test.example",
-  "malware-dropper-test.example",
-  "fake-login-test.example",
-  "credential-harvest-test.example",
-  "scam-redirect-test.example",
-  "phishing-kit-test.example",
-  "exploit-kit-test.example",
-  "ransomware-delivery-test.example",
-  "banking-trojan-test.example",
-  "tech-support-scam-test.example",
-  "fake-antivirus-test.example",
-  "sms-phishing-test.example",
-  "oauth-abuse-test.example",
-  "clickjacking-test.example",
-  "drive-by-download-test.example",
-];
-
 // ---------------------------------------------------------------------------
 // Size budget
 // ---------------------------------------------------------------------------
 
 const SIZE_BUDGET_BYTES = 150 * 1024; // 150KB
 const TARGET_FP_RATE = 0.0001; // 0.01%
+
+// ---------------------------------------------------------------------------
+// Fail-closed guards (#322 / disc#12, disc#13)
+// ---------------------------------------------------------------------------
+
+/**
+ * The PRODUCTION builder must never silently ship a test/placeholder filter:
+ * if both feeds yield zero domains it must FAIL, not fall back to a handful of
+ * `.example` test domains (that is what scripts/build-test-bloom-filter.mjs is
+ * for). Shipping a 15-domain filter leaves `isKnownBadDomain` matching nothing
+ * real while `reputationReady()` reports true. (#321 / disc#12)
+ */
+export function assertFeedsProducedDomains(count) {
+  if (!Number.isInteger(count) || count <= 0) {
+    throw new Error(
+      `No domains fetched from any feed (count=${count}). Refusing to build a ` +
+        `placeholder reputation filter — fix the feeds or use ` +
+        `\`npm run build:bloom:test\` for intentional test data.`,
+    );
+  }
+}
+
+/**
+ * Fail closed when the filter exceeds the size budget instead of writing an
+ * oversized artifact (the runtime caps reads at MAX_REPUTATION_FILE_BYTES, so an
+ * over-budget filter would be silently rejected at load). (#322 / disc#13)
+ */
+export function assertWithinBudget(filterSizeBytes, budgetBytes) {
+  if (filterSizeBytes > budgetBytes) {
+    throw new Error(
+      `Filter size ${(filterSizeBytes / 1024).toFixed(1)} KB exceeds budget ` +
+        `${(budgetBytes / 1024).toFixed(0)} KB — raise TARGET_FP_RATE or reduce the domain set.`,
+    );
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Main
@@ -335,16 +351,8 @@ async function main() {
   // Merge all domains
   const allDomains = new Set([...urlhausDomains, ...openPhishDomains]);
 
-  // If no domains fetched, use fallback
-  let usingFallback = false;
-  if (allDomains.size === 0) {
-    console.warn("\n  WARNING: No domains fetched from any feed.");
-    console.warn("  Using fallback test domain list.\n");
-    for (const d of FALLBACK_TEST_DOMAINS) {
-      allDomains.add(d);
-    }
-    usingFallback = true;
-  }
+  // Fail closed: the production builder must not ship a placeholder filter. (#321/disc#12)
+  assertFeedsProducedDomains(allDomains.size);
 
   console.log(`\nTotal unique domains: ${allDomains.size}`);
 
@@ -357,14 +365,8 @@ async function main() {
     `Estimated filter size: ${(filterSizeBytes / 1024).toFixed(1)} KB`
   );
 
-  if (filterSizeBytes > SIZE_BUDGET_BYTES) {
-    console.warn(
-      `WARNING: Filter size (${(filterSizeBytes / 1024).toFixed(1)} KB) exceeds budget (${SIZE_BUDGET_BYTES / 1024} KB).`
-    );
-    console.warn(
-      "Consider increasing the target FP rate or reducing domain count."
-    );
-  }
+  // Fail closed on budget overflow rather than writing an oversized artifact. (disc#13)
+  assertWithinBudget(filterSizeBytes, SIZE_BUDGET_BYTES);
 
   // Build the filter
   const filter = createFilter(m, k);
@@ -382,12 +384,12 @@ async function main() {
   console.log(`  Hash functions (k): ${k}`);
   console.log(`  Bits (m): ${m}`);
   console.log(`  Target FP rate: ${(TARGET_FP_RATE * 100).toFixed(4)}%`);
-  if (usingFallback) {
-    console.log("  NOTE: Built from fallback test domains (feeds unreachable)");
-  }
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+// Only run when invoked directly, so tests can import the guards without fetching. (#322)
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
