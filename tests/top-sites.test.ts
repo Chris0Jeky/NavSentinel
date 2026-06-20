@@ -8,6 +8,7 @@ import {
   TRUST_TIER_UNKNOWN,
   TRUST_TIER_USER_ALLOWLISTED,
 } from "../extension/src/shared/top_sites";
+import { TOP_SITE_TIER_ENTRIES } from "../extension/src/shared/top_sites_data";
 
 describe("top-sites trust tier", () => {
   it("matches exact filtered top-site domains", () => {
@@ -85,5 +86,26 @@ describe("top-sites trust tier", () => {
       destHost: "github.com",
       knownBadDomain: true,
     })).toBe(TRUST_TIER_KNOWN_BAD);
+  });
+});
+
+describe("top-sites generated-data binary-search contract (#322 / disc#17)", () => {
+  // findTopSiteEntry binary-searches TOP_SITE_TIER_ENTRIES with `candidate.domain < domain`
+  // (UTF-16 code units). If the build emitted the array in any other order (e.g. a
+  // locale-aware localeCompare sort), the search could step past a present entry and
+  // return null — a real top site would silently lose its trust tier. These invariants
+  // protect the committed data regardless of how it was generated.
+  it("is strictly ascending under the exact `<` the search uses", () => {
+    for (let i = 1; i < TOP_SITE_TIER_ENTRIES.length; i += 1) {
+      const prev = TOP_SITE_TIER_ENTRIES[i - 1]!.domain;
+      const cur = TOP_SITE_TIER_ENTRIES[i]!.domain;
+      expect(prev < cur).toBe(true); // strict: also rejects duplicate domains
+    }
+  });
+
+  it("finds every committed entry via the binary search (no entry is unreachable)", () => {
+    for (const entry of TOP_SITE_TIER_ENTRIES) {
+      expect(isTopSiteDomain(entry.domain)).toBe(true);
+    }
   });
 });

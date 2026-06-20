@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 /**
  * Build a deterministic, filtered top-sites tier for NavSentinel.
  *
@@ -15,14 +13,10 @@
 
 import fs from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
+import { fileURLToPath, pathToFileURL } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
-const checkOnly = process.argv.includes("--check");
-const args = process.argv.slice(2).filter((arg) => arg !== "--check");
-const inputPath = resolveCliPath(args[0], "data/top_sites.filtered.csv");
-const outputPath = resolveCliPath(args[1], "extension/src/shared/top_sites_data.ts");
 
 const BANNED_CATEGORIES = new Set([
   "adult",
@@ -55,6 +49,21 @@ const DOMAIN_RE = /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-
 
 function normalizeDomain(domain) {
   return String(domain ?? "").trim().toLowerCase().replace(/\.+$/, "");
+}
+
+/**
+ * Compare two domains by UTF-16 code-unit order — the SAME comparison the runtime
+ * binary search uses (`candidate.domain < domain` in top_sites.ts findTopSiteEntry).
+ *
+ * localeCompare must NOT be used here: it is host-locale-dependent (Estonian collates
+ * "z" before "t"; Lithuanian "y" between "i" and "k"), so a localeCompare sort run
+ * under such a locale would emit the generated array in an order the runtime `<`
+ * search does not expect, and a present top-site domain would become unfindable
+ * (lookup misses -> trust tier silently lost). Code-unit comparison is deterministic
+ * across hosts and matches the consumer exactly. (#322 / disc#17)
+ */
+export function compareTopSiteDomains(a, b) {
+  return a < b ? -1 : a > b ? 1 : 0;
 }
 
 function resolveCliPath(arg, defaultRepoRelativePath) {
@@ -106,7 +115,7 @@ function requireCell(cells, index, field, line) {
   return value.trim();
 }
 
-function readEntries() {
+function readEntries(inputPath) {
   const text = fs.readFileSync(inputPath, "utf8");
   const rows = text.split(/\r?\n/).filter((line) => line.trim() && !line.trim().startsWith("#"));
   if (rows.length === 0) throw new Error(`No rows in ${path.relative(repoRoot, inputPath)}`);
@@ -156,7 +165,9 @@ function readEntries() {
       includeSubdomains,
     });
   }
-  return [...entries.values()].sort((a, b) => a.domain.localeCompare(b.domain));
+  // Sort by UTF-16 code-unit order so the generated array is valid for the runtime
+  // binary search (see compareTopSiteDomains). (#322 / disc#17)
+  return [...entries.values()].sort((a, b) => compareTopSiteDomains(a.domain, b.domain));
 }
 
 function render(entries) {
@@ -173,17 +184,30 @@ function render(entries) {
     `export const TOP_SITE_TIER_ENTRIES = [\n${values}\n] as const;\n`;
 }
 
-const entries = readEntries();
-const rendered = render(entries);
-if (checkOnly) {
-  const current = fs.existsSync(outputPath) ? fs.readFileSync(outputPath, "utf8") : "";
-  if (current !== rendered) {
-    console.error(`${path.relative(repoRoot, outputPath)} is stale. Run npm run build:topsites.`);
-    process.exit(1);
+function main() {
+  const checkOnly = process.argv.includes("--check");
+  const args = process.argv.slice(2).filter((arg) => arg !== "--check");
+  const inputPath = resolveCliPath(args[0], "data/top_sites.filtered.csv");
+  const outputPath = resolveCliPath(args[1], "extension/src/shared/top_sites_data.ts");
+
+  const entries = readEntries(inputPath);
+  const rendered = render(entries);
+  if (checkOnly) {
+    const current = fs.existsSync(outputPath) ? fs.readFileSync(outputPath, "utf8") : "";
+    if (current !== rendered) {
+      console.error(`${path.relative(repoRoot, outputPath)} is stale. Run npm run build:topsites.`);
+      process.exit(1);
+    }
+    console.log(`${path.relative(repoRoot, outputPath)} is up to date (${entries.length} domains).`);
+  } else {
+    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+    fs.writeFileSync(outputPath, rendered, "utf8");
+    console.log(`Wrote ${entries.length} filtered top-site domains to ${path.relative(repoRoot, outputPath)}`);
   }
-  console.log(`${path.relative(repoRoot, outputPath)} is up to date (${entries.length} domains).`);
-} else {
-  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-  fs.writeFileSync(outputPath, rendered, "utf8");
-  console.log(`Wrote ${entries.length} filtered top-site domains to ${path.relative(repoRoot, outputPath)}`);
+}
+
+// Only run when invoked directly (`node scripts/build-topsites-tier.mjs`), so tests
+// can import compareTopSiteDomains without reading/writing any files. (#322)
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
 }
