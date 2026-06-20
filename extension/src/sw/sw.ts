@@ -1034,6 +1034,18 @@ function onRemovedHandler(tabId: number): void {
 }
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  // Gate the session-backed reads (pendingRollback/pendingForward/readyTabs) on
+  // hydration like the nav/lifecycle handlers (#266). A cold worker can fire
+  // onUpdated before _doHydrate resolves; reading the still-empty maps would
+  // drop a legitimate pending rollback/forward offer (same FN class as #228.1).
+  if (!swState.hydrated) { void hydrateReady.then(() => onUpdatedHandler(tabId, changeInfo, tab)); return; }
+  onUpdatedHandler(tabId, changeInfo, tab);
+});
+function onUpdatedHandler(
+  tabId: number,
+  changeInfo: chrome.tabs.TabChangeInfo,
+  tab: chrome.tabs.Tab
+): void {
   const pendingRollback = pendingRollbackByTab.get(tabId);
   if (pendingRollback && (changeInfo.status === "complete" || changeInfo.url)) {
     trySendRollback(tabId, pendingRollback);
@@ -1047,4 +1059,4 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (currentUrl === forward.url) return;
   if (!readyTabs.has(tabId)) return;
   trySendForwardOffer(tabId, forward);
-});
+}

@@ -894,6 +894,120 @@ describe("service worker handlers", () => {
     });
   });
 
+  describe("onUpdated hydration deferral (#266)", () => {
+    it("defers a pending-rollback send until hydration so the restored offer is not dropped", async () => {
+      // Pre-fix: onUpdated fires before _doHydrate resolves, reads the still-empty
+      // pendingRollbackByTab map, finds nothing, and the restored rollback offer is
+      // silently dropped (same FN class as #228.1). Post-fix: the handler is deferred
+      // until hydration, reads the restored entry, and sends ns-rollback. The send is
+      // the only observable signal, so it distinguishes the two code paths.
+      const mock = createChromeMock();
+      mock.chrome.storage.session._store["ns_sw:pendingRollback"] = {
+        "7": {
+          url: "https://safe.test/landing",
+          prevUrl: "https://safe.test/home",
+          qualifiers: ["client_redirect"],
+        },
+      };
+
+      // Gate only the hydrate read so onUpdated fires BEFORE hydration completes.
+      let releaseGet!: () => void;
+      const gate = new Promise<void>((r) => {
+        releaseGet = r;
+      });
+      const origGet = mock.chrome.storage.session.get.bind(mock.chrome.storage.session);
+      let gated = true;
+      mock.chrome.storage.session.get = (async (keys?: string | string[]) => {
+        if (gated) {
+          gated = false;
+          await gate;
+        }
+        return origGet(keys);
+      }) as typeof mock.chrome.storage.session.get;
+
+      await loadSw(mock);
+
+      const rollbackMsg = () =>
+        mock.sentMessages.find(
+          (m) => (m.message as { type: string }).type === "ns-rollback" && m.tabId === 7,
+        );
+
+      // onUpdated fires pre-hydration. This negative assertion is a setup sanity-check:
+      // pre-fix the ungated handler also reads the still-empty in-memory map and sends
+      // nothing, so it cannot by itself distinguish deferral from an empty read. The
+      // DISCRIMINATOR is the post-hydration positive assertion below, which fails on
+      // pre-fix sw.ts (verified) because the dropped event never re-fires. (#266 R2)
+      mock.sentMessages.length = 0;
+      mock.emitTabUpdated(7, { status: "complete" }, { url: "https://safe.test/landing" });
+      expect(rollbackMsg(), "rollback must NOT be sent before hydration").toBeUndefined();
+
+      // Complete hydration; the deferred handler reads the restored entry and sends.
+      releaseGet();
+      await vi.runAllTimersAsync();
+
+      const sent = rollbackMsg();
+      expect(sent, "rollback sent after hydration from the restored map").toBeDefined();
+      // Assert the FULL restored entry round-tripped, not just the url (R1).
+      expect(sent!.message).toEqual(
+        expect.objectContaining({
+          type: "ns-rollback",
+          url: "https://safe.test/landing",
+          prevUrl: "https://safe.test/home",
+          qualifiers: ["client_redirect"],
+        }),
+      );
+    });
+
+    it("defers a pending-forward send until hydration so the restored offer is not dropped", async () => {
+      // Symmetric guard for the second session-backed path in onUpdatedHandler
+      // (pendingForwardByTab + readyTabs), which the rollback test does not exercise
+      // (R1). Pre-fix the pre-hydration read sees empty maps and the forward offer is
+      // dropped; post-fix it is deferred, reads the restored entry + readyTabs, and sends.
+      const mock = createChromeMock();
+      mock.chrome.storage.session._store["ns_sw:pendingForward"] = {
+        "8": { url: "https://safe.test/forward-target", ts: Date.now() },
+      };
+      mock.chrome.storage.session._store["ns_sw:readyTabs"] = [8];
+
+      let releaseGet!: () => void;
+      const gate = new Promise<void>((r) => {
+        releaseGet = r;
+      });
+      const origGet = mock.chrome.storage.session.get.bind(mock.chrome.storage.session);
+      let gated = true;
+      mock.chrome.storage.session.get = (async (keys?: string | string[]) => {
+        if (gated) {
+          gated = false;
+          await gate;
+        }
+        return origGet(keys);
+      }) as typeof mock.chrome.storage.session.get;
+
+      await loadSw(mock);
+
+      const forwardMsg = () =>
+        mock.sentMessages.find(
+          (m) => (m.message as { type: string }).type === "ns-forward-offer" && m.tabId === 8,
+        );
+
+      // currentUrl differs from forward.url, so the forward branch proceeds once it runs.
+      // (Negative assertion is a sanity-check; the post-hydration positive assertion is the
+      // discriminator that fails on pre-fix sw.ts — same rationale as the rollback test.)
+      mock.sentMessages.length = 0;
+      mock.emitTabUpdated(8, { status: "complete" }, { url: "https://safe.test/current" });
+      expect(forwardMsg(), "forward offer must NOT be sent before hydration").toBeUndefined();
+
+      releaseGet();
+      await vi.runAllTimersAsync();
+
+      const sent = forwardMsg();
+      expect(sent, "forward offer sent after hydration from the restored map").toBeDefined();
+      expect(sent!.message).toEqual(
+        expect.objectContaining({ type: "ns-forward-offer", url: "https://safe.test/forward-target" }),
+      );
+    });
+  });
+
   describe("dblclick child window lifecycle", () => {
     it("tracks child tab creation with openerTabId", async () => {
       const mock = createChromeMock();
