@@ -86,7 +86,11 @@ async function applyTabIcon(
     // it just erased. (#229)
     if (resetGeneration !== startGeneration) return;
     // Cache the state ONLY after the badge writes resolve, so getTabIconState never
-    // claims a state the badge never reached.
+    // claims a state the badge never reached. delete+set re-inserts this tab at the
+    // END of the Map so pruneTabState (which evicts oldest-inserted) can never
+    // immediately evict the entry we just wrote — which would make the next
+    // apply-time dedup miss and re-render. (#324/disc#8)
+    tabState.delete(tabId);
     tabState.set(tabId, { icon: state, blocks: blockCount });
     pruneTabState();
   } catch {

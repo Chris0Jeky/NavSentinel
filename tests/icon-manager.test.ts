@@ -303,5 +303,25 @@ describe("icon_manager", () => {
       expect(map.has(201)).toBe(true);
       expect(map.has(200)).toBe(true);
     });
+
+    it("does not evict a tab that was just re-rendered (delete+set keeps it newest) (disc#8)", async () => {
+      const map = _getTabStateMap();
+      // Fill to the cap with distinct entries (oldest = tab 1).
+      for (let i = 1; i <= 200; i++) {
+        map.set(i, { icon: "green", blocks: 0 });
+      }
+      // Re-render the OLDEST tab to a NEW state -> delete+set moves it to the newest slot.
+      await updateTabIcon(1, "red", 2);
+      expect(map.size).toBe(200);
+      // Add a brand-new tab -> size 201 -> prune evicts exactly one oldest.
+      await updateTabIcon(201, "green");
+      expect(map.size).toBe(200);
+      // Post-fix: tab 1 was repositioned to newest, so tab 2 is now the oldest and is
+      // evicted; the just-re-rendered tab 1 survives (and the next dedup will hit).
+      // Pre-fix: tab 1 stayed at the front and was wrongly evicted.
+      expect(map.has(1)).toBe(true);
+      expect(getTabIconState(1)).toBe("red");
+      expect(map.has(2)).toBe(false);
+    });
   });
 });
