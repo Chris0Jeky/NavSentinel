@@ -94,6 +94,10 @@ function makeEstablishedProfile(now: number): NavProfile {
 beforeEach(() => {
   for (const k of Object.keys(store)) delete store[k];
   _resetRecentNavs();
+  // Reset the storage mocks (incl. any queued mockRejectedValueOnce) so a one-time override
+  // from one test cannot bleed into the next test's first get/set call (#286 R1).
+  (chrome.storage.local.get as ReturnType<typeof vi.fn>).mockReset().mockImplementation(mockGet);
+  (chrome.storage.local.set as ReturnType<typeof vi.fn>).mockReset().mockImplementation(mockSet);
 });
 
 // ========================================================================
@@ -507,6 +511,64 @@ describe("recordNavigationAnomaly", () => {
     expect(score1).toBe(0);
     // Second crypto nav: 2 in window, anomaly detected
     expect(score2).toBe(BASE_ANOMALY_SCORE);
+  });
+
+  it("rolls back the sliding-window entry when storage fails, so no phantom burst (#286)", async () => {
+    const now = Date.now();
+    store[NAV_PROFILE_KEY] = makeEstablishedProfile(now);
+
+    // First crypto nav: force loadProfile's storage read to reject once.
+    (chrome.storage.local.get as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error("storage fail")
+    );
+    await expect(recordNavigationAnomaly("binance.com", now + 1000)).rejects.toThrow();
+    expect(_getRecentNavs().length).toBe(0); // phantom removed (pre-fix: 1)
+
+    // Second crypto nav (storage healthy again). Pre-fix the failed nav left a phantom
+    // 'crypto' entry in recentNavs, so this would see count=2 and fire a burst anomaly
+    // (BASE_ANOMALY_SCORE). Post-fix the phantom is rolled back, so count=1 -> no burst -> 0.
+    const score = await recordNavigationAnomaly("coinbase.com", now + 2000);
+    expect(score).toBe(0);
+  });
+
+  it("rolls back the sliding-window entry when saveProfile fails too (#286)", async () => {
+    const now = Date.now();
+    store[NAV_PROFILE_KEY] = makeEstablishedProfile(now);
+
+    // First crypto nav: loadProfile succeeds but saveProfile's storage write rejects once
+    // (the catch is shared, so this exercises the set-rejection branch of the rollback).
+    (chrome.storage.local.set as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error("set fail")
+    );
+    await expect(recordNavigationAnomaly("binance.com", now + 1000)).rejects.toThrow();
+    expect(_getRecentNavs().length).toBe(0); // phantom removed (pre-fix: 1)
+
+    // Second crypto nav (storage healthy): no phantom from the failed first nav.
+    const score = await recordNavigationAnomaly("coinbase.com", now + 2000);
+    expect(score).toBe(0);
+  });
+
+  it("keeps the serialization chain alive after a failure so later queued calls run (#286)", async () => {
+    const now = Date.now();
+    store[NAV_PROFILE_KEY] = makeEstablishedProfile(now);
+
+    // Queue three crypto navs synchronously; the FIRST fails its storage read.
+    (chrome.storage.local.get as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error("storage fail")
+    );
+    const pA = recordNavigationAnomaly("binance.com", now + 1000);
+    const pB = recordNavigationAnomaly("coinbase.com", now + 2000);
+    const pC = recordNavigationAnomaly("metamask.io", now + 3000);
+
+    await expect(pA).rejects.toThrow();
+    const scoreB = await pB;
+    const scoreC = await pC;
+
+    // A failed and rolled back its phantom; the chain stayed alive so B and C ran against
+    // correct state: B is the 1st crypto in-window (count=1 -> 0), C is the 2nd (count=2 -> burst).
+    expect(scoreB).toBe(0);
+    expect(scoreC).toBe(BASE_ANOMALY_SCORE);
+    expect(_getRecentNavs().length).toBe(2); // exactly B + C (A rolled back)
   });
 
   it("returns higher score for 3+ burst into rare category", async () => {
