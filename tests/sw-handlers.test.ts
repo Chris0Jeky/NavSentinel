@@ -2097,4 +2097,70 @@ describe("service worker handlers", () => {
       expect(afterOther[String(TAB)], "suppress must be cleared by a non-return nav").toBeUndefined();
     });
   });
+
+  describe("rollback/forward send-race hardening (#323)", () => {
+    // Defer sendMessage callbacks (real Chrome is async) so the first send's
+    // callback does not run before the second event, exposing the races.
+    function deferSends(mock: ReturnType<typeof createChromeMock>) {
+      const rollbackSends: number[] = [];
+      const captured: Array<() => void> = [];
+      mock.chrome.tabs.sendMessage = ((
+        tabId: number,
+        message: unknown,
+        optOrCb?: { frameId?: number } | (() => void),
+        cb?: () => void,
+      ) => {
+        const done = typeof optOrCb === "function" ? optOrCb : cb;
+        if ((message as { type?: string }).type === "ns-rollback") rollbackSends.push(tabId);
+        if (done) captured.push(done);
+      }) as typeof mock.chrome.tabs.sendMessage;
+      return { rollbackSends, captured };
+    }
+
+    it("does not double-send a rollback when onUpdated fires twice (disc#3)", async () => {
+      const mock = createChromeMock();
+      const { rollbackSends } = deferSends(mock);
+      mock.chrome.storage.session._store["ns_sw:pendingRollback"] = {
+        "10": { url: "https://evil.com/", qualifiers: [] },
+      };
+      mock.chrome.storage.session._store["ns_sw:readyTabs"] = [10];
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+
+      // Two rapid onUpdated events (url change, then status=complete) both pass the guard.
+      mock.emitTabUpdated(10, { url: "https://evil.com/" }, { url: "https://evil.com/" });
+      mock.emitTabUpdated(10, { status: "complete" }, { url: "https://evil.com/" });
+
+      // Pre-fix: the deferred first callback hasn't deleted the entry, so the
+      // second onUpdated re-sends -> [10, 10]. Post-fix: the first pre-deletes -> [10].
+      expect(rollbackSends).toEqual([10]);
+    });
+
+    it("does not re-queue a rollback for a tab removed during the send (disc#7)", async () => {
+      const mock = createChromeMock();
+      const { captured } = deferSends(mock);
+      mock.chrome.storage.session._store["ns_sw:pendingRollback"] = {
+        "11": { url: "https://evil.com/", qualifiers: [] },
+      };
+      mock.chrome.storage.session._store["ns_sw:readyTabs"] = [11];
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+
+      // Send is dispatched (callback captured, not yet fired).
+      mock.emitTabUpdated(11, { status: "complete" }, { url: "https://evil.com/" });
+      // Tab closes mid-send, then the send callback fires with lastError (tab gone).
+      mock.emitTabRemoved(11);
+      mock.setLastError({ message: "No tab with id: 11." });
+      captured.forEach((cb) => cb());
+      mock.setLastError(undefined);
+      await vi.runAllTimersAsync();
+
+      // Pre-fix: the callback re-queued -> zombie entry for the dead tab.
+      const stored = (mock.chrome.storage.session._store["ns_sw:pendingRollback"] ?? {}) as Record<
+        string,
+        unknown
+      >;
+      expect(stored["11"]).toBeUndefined();
+    });
+  });
 });

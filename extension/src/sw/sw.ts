@@ -331,6 +331,37 @@ function clearPendingTabState(
   // Persist is deferred to the caller's batch persist.
 }
 
+// Tabs removed within REMOVED_TAB_TTL_MS. A rollback/forward send callback can
+// fire AFTER the tab was closed (the lastError is usually *because* it closed);
+// re-queuing the pending entry then leaves a zombie for a dead tab. Suppress the
+// re-queue in that window. Module-level (not session-backed): a restart clears it,
+// and a dead tab never fires onUpdated, so this only matters in-session. A short
+// TTL avoids suppressing a legitimate retry after Chrome reuses the tab id.
+// (#323 / disc#7)
+const REMOVED_TAB_TTL_MS = 30_000;
+const REMOVED_TAB_PRUNE_LIMIT = 256;
+const recentlyRemovedTabs = new Map<number, number>(); // tabId -> removedAt
+
+function noteTabRemoved(tabId: number, now: number): void {
+  recentlyRemovedTabs.set(tabId, now);
+  if (recentlyRemovedTabs.size > REMOVED_TAB_PRUNE_LIMIT) {
+    for (const [id, ts] of recentlyRemovedTabs) {
+      if (now - ts >= REMOVED_TAB_TTL_MS) recentlyRemovedTabs.delete(id);
+    }
+    // Hard cap backstop: drop oldest-inserted if still over the limit.
+    while (recentlyRemovedTabs.size > REMOVED_TAB_PRUNE_LIMIT) {
+      const oldest = recentlyRemovedTabs.keys().next().value;
+      if (oldest === undefined) break;
+      recentlyRemovedTabs.delete(oldest);
+    }
+  }
+}
+
+function wasTabRecentlyRemoved(tabId: number, now: number): boolean {
+  const ts = recentlyRemovedTabs.get(tabId);
+  return ts !== undefined && now - ts < REMOVED_TAB_TTL_MS;
+}
+
 function trySendRollback(
   tabId: number,
   pending: { url: string; prevUrl?: string; qualifiers: string[] }
@@ -345,8 +376,14 @@ function trySendRollback(
     },
     () => {
       if (chrome.runtime.lastError) {
-        pendingRollbackByTab.set(tabId, pending);
         readyTabs.delete(tabId);
+        // Re-queue for retry, but not for a tab that closed during the send (#323/disc#7).
+        // NOTE: this can still clobber a newer pending entry written during the async
+        // gap (#323/disc#5/#6) — that needs the per-tab send-generation guard tracked
+        // separately; left intentionally unchanged here.
+        if (!wasTabRecentlyRemoved(tabId, Date.now())) {
+          pendingRollbackByTab.set(tabId, pending);
+        }
       } else {
         pendingRollbackByTab.delete(tabId);
       }
@@ -362,8 +399,10 @@ function trySendForwardOffer(
 ): void {
   chrome.tabs.sendMessage(tabId, { type: "ns-forward-offer", url: forward.url }, () => {
     if (chrome.runtime.lastError) {
-      pendingForwardByTab.set(tabId, forward);
       readyTabs.delete(tabId);
+      if (!wasTabRecentlyRemoved(tabId, Date.now())) {
+        pendingForwardByTab.set(tabId, forward);
+      }
     } else {
       pendingForwardByTab.delete(tabId);
     }
@@ -1031,6 +1070,9 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   onRemovedHandler(tabId);
 });
 function onRemovedHandler(tabId: number): void {
+  // Mark the tab removed so an in-flight rollback/forward send callback does not
+  // re-queue a zombie pending entry for it. (#323/disc#7)
+  noteTabRemoved(tabId, Date.now());
   void clearTabIcon(tabId); // fire-and-forget: blank is chain-ordered (#272)
   const childEntry = childWindowByTab.get(tabId);
   if (childEntry) {
@@ -1084,6 +1126,12 @@ function onUpdatedHandler(
 ): void {
   const pendingRollback = pendingRollbackByTab.get(tabId);
   if (pendingRollback && (changeInfo.status === "complete" || changeInfo.url)) {
+    // Remove in-memory BEFORE sending so a second onUpdated in the async gap
+    // (e.g. status=loading then status=complete) cannot re-send the same rollback
+    // (double modal). trySendRollback re-queues on send failure. NOT persisted:
+    // if the worker dies mid-send the old persisted entry survives for restart
+    // retry rather than being dropped. (#323/disc#3)
+    pendingRollbackByTab.delete(tabId);
     trySendRollback(tabId, pendingRollback);
   }
 
@@ -1094,5 +1142,7 @@ function onUpdatedHandler(
   if (!currentUrl) return;
   if (currentUrl === forward.url) return;
   if (!readyTabs.has(tabId)) return;
+  // Mirror of the rollback pre-delete: prevent a double forward-offer send. (#323/disc#3)
+  pendingForwardByTab.delete(tabId);
   trySendForwardOffer(tabId, forward);
 }
