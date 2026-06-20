@@ -92,6 +92,14 @@ const HEADER_SIZE = 16; // magic(4) + version(4) + k(4) + m(4)
  */
 export const MAX_FILTER_BITS = 16 * 1024 * 1024; // 16 Mbit = 2 MB
 export const MAX_HASH_FUNCTIONS = 30;
+/**
+ * Minimum bloom-filter size. Below one full byte (m < 8) the modulo math
+ * degenerates: with m=1 every probe computes (h1 + i*h2) % 1 = 0 and reads bit 0,
+ * so the filter is non-functional -- 100% false positives or always-false. Such a
+ * filter must be rejected (fail closed), exactly like m=0/k=0. A real reputation
+ * filter has m in the millions; this floor only excludes corrupt/crafted inputs. (#292)
+ */
+export const MIN_FILTER_BITS = 8;
 
 export interface BloomFilterState {
   /** Bit array */
@@ -135,13 +143,14 @@ export function loadFilter(data: ArrayBuffer | Uint8Array): BloomFilterState {
   const k = view.getUint32(8, true);
   const m = view.getUint32(12, true);
 
-  // Reject degenerate filters (m=0 or k=0). Without these lower-bound checks a zeroed/
-  // corrupt binary with a valid header would load as a non-null filter, so reputationReady()
-  // reports true while checkDomain() always returns false — silently disabling ALL domain
-  // reputation checks (the +50 known-bad NRS factor never fires). Fail closed instead: throw
-  // so initReputation sets _filter=null and reputationReady() honestly reports false. (#287)
-  if (m === 0) {
-    throw new Error("Bloom filter m=0 is invalid (degenerate filter)");
+  // Reject degenerate filters (sub-byte m, or k=0). Without these lower-bound checks a
+  // zeroed/corrupt binary with a valid header would load as a non-null filter, so
+  // reputationReady() reports true while checkDomain() returns garbage (always-false for
+  // m=0, or 100% false-positive for m=1) — either silently disabling ALL domain reputation
+  // checks or flooding them. Fail closed instead: throw so initReputation sets _filter=null
+  // and reputationReady() honestly reports false. (#287, #292)
+  if (m < MIN_FILTER_BITS) {
+    throw new Error(`Bloom filter m=${m} is below the ${MIN_FILTER_BITS}-bit minimum (degenerate filter)`);
   }
   if (k === 0) {
     throw new Error("Bloom filter k=0 is invalid (degenerate filter)");
@@ -175,7 +184,12 @@ export function loadFilter(data: ArrayBuffer | Uint8Array): BloomFilterState {
  *          false if the domain is definitely NOT in the set.
  */
 export function checkDomain(filter: BloomFilterState, domain: string): boolean {
-  if (!filter.bits || filter.m === 0 || filter.k === 0) return false;
+  // Reject degenerate filters consistently with loadFilter's MIN_FILTER_BITS
+  // floor: a sub-byte m (1..7) makes the modulo math degenerate (m=1 -> every
+  // probe reads bit 0), which would return true for every domain (100% FP). A
+  // filter from loadFilter can never be sub-byte, but checkDomain is exported
+  // and could be called with a directly-constructed filter. (#292)
+  if (!filter.bits || filter.m < MIN_FILTER_BITS || filter.k === 0) return false;
   if (!domain) return false;
 
   const key = domain.toLowerCase();
@@ -220,6 +234,10 @@ export function serializeFilter(filter: BloomFilterState): Uint8Array {
  * Exported only for unit tests.
  * @internal
  *
+ * Raw constructor with no validation: callers are responsible for ensuring
+ * m >= MIN_FILTER_BITS and k > 0 if the filter is to be used with
+ * insertDomain/checkDomain (both treat a sub-byte or k=0 filter as inert). (#292)
+ *
  * @param m Number of bits
  * @param k Number of hash functions
  */
@@ -238,7 +256,10 @@ export function createFilter(m: number, k: number): BloomFilterState {
  * @internal
  */
 export function insertDomain(filter: BloomFilterState, domain: string): void {
-  if (!domain || filter.m === 0) return;
+  // Mirror checkDomain / loadFilter: never write into a degenerate filter --
+  // a sub-byte m (m < MIN_FILTER_BITS) or k=0. The k=0 case is also covered by
+  // the empty for-loop below; the explicit guard keeps parity with checkDomain. (#292)
+  if (!domain || filter.m < MIN_FILTER_BITS || filter.k === 0) return;
   const key = domain.toLowerCase();
   const h1 = murmurhash3_32(key, 0x9747b28c);
   // Force h2 to be odd -- must match checkDomain's h2 derivation.
@@ -266,9 +287,11 @@ export function insertDomain(filter: BloomFilterState, domain: string): void {
  */
 export function optimalParams(n: number, p: number): { m: number; k: number } {
   if (!Number.isFinite(n) || n <= 0 || !Number.isFinite(p) || p <= 0 || p >= 1) {
-    return { m: 8, k: 1 };
+    return { m: MIN_FILTER_BITS, k: 1 };
   }
-  const m = Math.ceil((-n * Math.log(p)) / (Math.LN2 * Math.LN2));
+  // Clamp to the MIN_FILTER_BITS floor so optimalParams never suggests a sub-byte
+  // filter that loadFilter would then reject (e.g. n=1, p=0.49 -> raw m=2). (#292)
+  const m = Math.max(MIN_FILTER_BITS, Math.ceil((-n * Math.log(p)) / (Math.LN2 * Math.LN2)));
   const k = Math.max(1, Math.round((m / n) * Math.LN2));
   return { m, k };
 }

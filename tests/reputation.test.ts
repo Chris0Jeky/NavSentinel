@@ -289,7 +289,40 @@ describe("bloom filter serialization", () => {
     view.setUint32(4, 1, true);           // version 1
     view.setUint32(8, 7, true);           // k=7
     view.setUint32(12, 0, true);          // m=0 (degenerate)
-    expect(() => loadFilter(buf)).toThrow("m=0 is invalid");
+    expect(() => loadFilter(buf)).toThrow("below the 8-bit minimum");
+  });
+
+  it("rejects a sub-byte degenerate filter with m=1 (every probe reads bit 0) (#292)", () => {
+    const buf = new Uint8Array(17); // header(16) + ceil(1/8)=1 byte, so truncation passes
+    const view = new DataView(buf.buffer);
+    view.setUint32(0, 0x424c4f4d, true); // "BLOM"
+    view.setUint32(4, 1, true);           // version 1
+    view.setUint32(8, 7, true);           // k=7
+    view.setUint32(12, 1, true);          // m=1 (sub-byte, non-functional)
+    // Pre-fix this loaded successfully (m=1 passed the m===0 check); now fail closed.
+    expect(() => loadFilter(buf)).toThrow("below the 8-bit minimum");
+  });
+
+  it("rejects a sub-byte degenerate filter with m=5 (#292)", () => {
+    const buf = new Uint8Array(17); // header(16) + ceil(5/8)=1 byte
+    const view = new DataView(buf.buffer);
+    view.setUint32(0, 0x424c4f4d, true);
+    view.setUint32(4, 1, true);
+    view.setUint32(8, 7, true);           // k=7
+    view.setUint32(12, 5, true);          // m=5 (sub-byte)
+    expect(() => loadFilter(buf)).toThrow("below the 8-bit minimum");
+  });
+
+  it("accepts a filter at the 8-bit minimum boundary (m=8) (#292)", () => {
+    const buf = new Uint8Array(17); // header(16) + ceil(8/8)=1 byte
+    const view = new DataView(buf.buffer);
+    view.setUint32(0, 0x424c4f4d, true);
+    view.setUint32(4, 1, true);
+    view.setUint32(8, 7, true);           // k=7
+    view.setUint32(12, 8, true);          // m=8 (exactly the floor -> accepted)
+    const f = loadFilter(buf);
+    expect(f.m).toBe(8);
+    expect(f.k).toBe(7);
   });
 
   it("rejects a degenerate filter with k=0 (fail closed) (#287)", () => {
@@ -309,7 +342,7 @@ describe("bloom filter serialization", () => {
     view.setUint32(4, 1, true);           // version 1
     view.setUint32(8, 0, true);           // k=0
     view.setUint32(12, 0, true);          // m=0
-    expect(() => loadFilter(buf)).toThrow("m=0 is invalid"); // m check precedes k check
+    expect(() => loadFilter(buf)).toThrow("below the 8-bit minimum"); // m check precedes k check
   });
 
   it("accepts m and k at safety cap limits", () => {
