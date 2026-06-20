@@ -2075,6 +2075,8 @@ describe("service worker handlers", () => {
       mock.chrome.storage.session._store["ns_sw:rollbackReturn"] = {
         [TAB]: { url: "https://safe.com/", expiresAt: future },
       };
+      // pendingForward just needs to exist (preserveForwardOffer requires !!forward);
+      // its url is NOT compared -- only rollbackReturn.url === details.url is matched.
       mock.chrome.storage.session._store["ns_sw:pendingForward"] = {
         [TAB]: { url: "https://evil.com/", ts: Date.now() },
       };
