@@ -19,7 +19,6 @@ interface RawTemplate {
 
 interface TemplateFile {
   version: number;
-  generated: string;
   templates: RawTemplate[];
 }
 
