@@ -156,13 +156,18 @@ const cachedModeReady = getNavSettings()
   .then((s) => { cachedDefaultMode = s.defaultMode; })
   .catch(() => {});
 
-// onCommitted reads cachedDefaultMode synchronously, so the first navigation
-// after a wake-up (which is always deferred below until hydration) must also
-// wait for the mode read to land -- otherwise that one nav could still paint the
-// badge with the stale default. A later storage.onChanged can still briefly race
-// this read, exactly as the historical onStartup refresh could; that window is
-// transient and self-heals on the next change. (#303)
+// onCommitted reads cachedDefaultMode synchronously. swState.hydrated flips true
+// when session storage resolves, but cachedModeReady waits on local storage (a
+// separate concurrent read) -- so gating onCommitted on swState.hydrated alone
+// would let a navigation in the "session-resolved, mode-not-yet-read" window run
+// with the stale default. startupSettled flips true only after BOTH have landed,
+// so onCommitted (below) gates on it instead. A later storage.onChanged can still
+// briefly race the startup read (its read may resolve after the change and write
+// back the pre-change value), exactly as the historical onStartup refresh could;
+// that window is transient and self-heals on the next change. (#303)
 const startupReady = Promise.all([hydrateReady, cachedModeReady]);
+let startupSettled = false;
+void startupReady.then(() => { startupSettled = true; });
 
 function pruneStaleOAuthFlows(): void {
   const now = Date.now();
@@ -809,10 +814,10 @@ function onBeforeNavigateHandler(details: chrome.webNavigation.WebNavigationPare
 
 chrome.webNavigation.onCommitted.addListener((details) => {
   if (details.frameId !== 0) return;
-  // Defer on startupReady (hydration + the cachedDefaultMode read) so the first
-  // post-wake navigation paints the badge with the restored mode, not the
-  // "smart" default. (#303)
-  if (!swState.hydrated) { void startupReady.then(() => onCommittedHandler(details)); return; }
+  // Defer until startupSettled (hydration AND the cachedDefaultMode read both
+  // landed) so any navigation during wake-up paints the badge with the restored
+  // mode, not the "smart" default -- not just the first one. (#303)
+  if (!startupSettled) { void startupReady.then(() => onCommittedHandler(details)); return; }
   onCommittedHandler(details);
 });
 function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitionCallbackDetails): void {

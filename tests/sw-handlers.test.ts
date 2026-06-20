@@ -1989,5 +1989,51 @@ describe("service worker handlers", () => {
         expect.objectContaining({ tabId: 10, color: "#16a34a" }),
       );
     });
+
+    it("a nav after hydration but before the mode read still defers (session-before-local window) (#303)", async () => {
+      const mock = createChromeMock();
+      let releaseLocal!: () => void;
+      let releaseSession!: () => void;
+      const localGate = new Promise<void>((r) => { releaseLocal = r; });
+      const sessionGate = new Promise<void>((r) => { releaseSession = r; });
+
+      mock.chrome.storage.local.get = (async () => {
+        await localGate;
+        return { [SUITE_SETTINGS_KEY]: { nav: { defaultMode: "off" } } };
+      }) as unknown as typeof mock.chrome.storage.local.get;
+
+      const origSessionGet = mock.chrome.storage.session.get.bind(mock.chrome.storage.session);
+      mock.chrome.storage.session.get = (async (keys?: string | string[]) => {
+        await sessionGate;
+        return origSessionGet(keys);
+      }) as typeof mock.chrome.storage.session.get;
+
+      await loadSw(mock);
+
+      // Hydration completes (session resolves -> swState.hydrated becomes true) but
+      // the cachedDefaultMode read (local) is still pending.
+      releaseSession();
+      await vi.runAllTimersAsync();
+
+      // A nav in this window must STILL defer -- the guard is startupSettled, not
+      // swState.hydrated. With the old swState.hydrated guard it would take the
+      // synchronous path and paint green from the stale "smart" default.
+      mock.emitCommitted({
+        tabId: 11,
+        frameId: 0,
+        url: "https://example.com/",
+        transitionType: "link",
+      });
+      await vi.runAllTimersAsync();
+      expect(mock.chrome.action.setBadgeText).not.toHaveBeenCalledWith({ tabId: 11, text: "✓" });
+      expect(mock.chrome.action.setBadgeBackgroundColor).not.toHaveBeenCalledWith(
+        expect.objectContaining({ tabId: 11, color: "#16a34a" }),
+      );
+
+      // Release the mode read; the deferred handler now runs with mode "off".
+      releaseLocal();
+      await vi.runAllTimersAsync();
+      expect(mock.chrome.action.setBadgeText).toHaveBeenCalledWith({ tabId: 11, text: "" });
+    });
   });
 });
