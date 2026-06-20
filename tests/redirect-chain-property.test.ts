@@ -95,11 +95,18 @@ describe("isKnownRedirector property tests", () => {
     );
   });
 
-  it("always detects redirect query parameters regardless of domain", () => {
+  it("always detects redirect query parameters (non-allowlisted domains)", () => {
     const redirectParams = ["url", "redirect", "redirect_uri", "redirect_url", "goto", "dest", "return_to"];
+    // Post-#285, allowlisted hosts are fully exempt from the heuristics, so a redirect param on
+    // them returns false. arbDomain can generate an exact allowlisted host (e.g. "go.dev"), so
+    // exclude them to keep this universal invariant sound (mirrors the open-redirect-path test).
+    const allowlisted = new Set([
+      "go.microsoft.com", "go.dev", "go.googleprod.com",
+      "go.google.com", "click.mailchimp.com", "click.convertkit.com", "click.pstmrk.it",
+    ]);
     fc.assert(
       fc.property(
-        arbDomain,
+        arbDomain.filter((d) => !allowlisted.has(d)),
         fc.constantFrom(...redirectParams),
         fc.string({ minLength: 1, maxLength: 30 }).map((s) => s.replace(/[^a-zA-Z0-9]/g, "x")),
         (domain, param, value) => {
