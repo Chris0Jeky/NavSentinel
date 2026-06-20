@@ -785,7 +785,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 chrome.webNavigation.onBeforeNavigate.addListener((details) => {
   if (details.frameId !== 0) return;
-  if (!swState.hydrated) { void hydrateReady.then(() => onBeforeNavigateHandler(details)); return; }
+  // Gate on startupSettled (same as onCommitted), not just swState.hydrated.
+  // swState.hydrated flips when session storage resolves, but onCommitted defers
+  // until startupSettled (hydration AND the cachedDefaultMode read). If
+  // onBeforeNavigate ran on the earlier signal, a navigation arriving in that
+  // window would have its onBeforeNavigate processed while the paired onCommitted
+  // is still deferred -- inverting their order and dropping the gesture/allow
+  // state a legitimate navigation relies on (false rollback). Gating both on the
+  // same signal preserves onBeforeNavigate -> onCommitted ordering. (disc#2)
+  if (!startupSettled) { void startupReady.then(() => onBeforeNavigateHandler(details)); return; }
   onBeforeNavigateHandler(details);
 });
 function onBeforeNavigateHandler(details: chrome.webNavigation.WebNavigationParentedCallbackDetails): void {
@@ -796,6 +804,12 @@ function onBeforeNavigateHandler(details: chrome.webNavigation.WebNavigationPare
   clearPendingTabState(details.tabId, { preserveForwardOffer });
   if (!preserveForwardOffer) {
     rollbackReturnByTab.delete(details.tabId);
+    // Clear any active rollback-suppress window on a genuine new navigation. The
+    // suppress window exists ONLY to stop the rollback-return commit (the
+    // preserveForwardOffer case) from re-triggering a rollback; if it survived a
+    // forward navigation, a second suspicious URL committed within the 6s window
+    // would be silently skipped by onCommittedHandler's suppress check. (disc#1)
+    suppressUntilByTab.delete(details.tabId);
   }
   allowStartedByTab.delete(details.tabId);
   const now = Date.now();

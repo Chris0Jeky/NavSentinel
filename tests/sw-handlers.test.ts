@@ -2036,4 +2036,33 @@ describe("service worker handlers", () => {
       expect(mock.chrome.action.setBadgeText).toHaveBeenCalledWith({ tabId: 11, text: "" });
     });
   });
+
+  describe("rollback-suppress window cleared on new navigation (disc#1)", () => {
+    it("a second suspicious URL within the suppress window still triggers a rollback", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+      await vi.runAllTimersAsync(); // hydration + startupSettled
+
+      const TAB = 30; // not in readyTabs -> rollbacks queue into pendingRollbackByTab
+
+      // 1. First commit establishes prevUrl (no rollback: prevUrl was undefined).
+      mock.emitCommitted({ tabId: TAB, frameId: 0, url: "https://a.com/", transitionType: "link" });
+      // 2. Suspicious commit B (different registrable, no gesture) -> rollback + suppress set.
+      mock.emitBeforeNavigate({ tabId: TAB, frameId: 0, url: "https://b.com/" });
+      mock.emitCommitted({ tabId: TAB, frameId: 0, url: "https://b.com/", transitionType: "link" });
+      // 3. A DIFFERENT suspicious URL C within the 6s suppress window.
+      mock.emitBeforeNavigate({ tabId: TAB, frameId: 0, url: "https://c.com/" });
+      mock.emitCommitted({ tabId: TAB, frameId: 0, url: "https://c.com/", transitionType: "link" });
+      await vi.runAllTimersAsync();
+
+      const pending = (mock.chrome.storage.session._store["ns_sw:pendingRollback"] ?? {}) as Record<
+        string,
+        { url: string }
+      >;
+      // Pre-fix: the suppress window from B's rollback survived the navigation to C,
+      // so onCommitted(C) returned early -> no rollback queued for C (undefined).
+      // Post-fix: onBeforeNavigate(C) cleared the suppress window -> C rolls back.
+      expect(pending[String(TAB)]?.url).toBe("https://c.com/");
+    });
+  });
 });
