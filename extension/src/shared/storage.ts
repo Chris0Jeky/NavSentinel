@@ -90,6 +90,11 @@ export interface PromptOutcomeEntry {
 // Bounds for the enriched fields so a buggy/hostile caller can't bloat a record.
 const MAX_REASON_CODES = 32;
 const MAX_REASON_CODE_LEN = 80;
+// Bounds for imported EventLogEntry content (#299). isEventLogEntry validates SHAPE, not SIZE,
+// so a crafted backup could otherwise persist megabytes (e.g. extra:{x:'A'.repeat(5e6)}) into the
+// shared chrome.storage.local quota. URLs can legitimately run long, so the string cap is generous.
+const MAX_EVENT_STRING_LEN = 2048;
+const MAX_EVENT_EXTRA_BYTES = 4096;
 // Max plausible viewport/element dimension in CSS px (generous; covers 8K/multi-
 // monitor). Defends persisted replay records against extreme/negative values.
 const MAX_CLICK_CONTEXT_DIM = 32000;
@@ -433,7 +438,16 @@ export async function getEventLog(): Promise<EventLogEntry[]> {
  * is preserved. (Per-store separation is the eventual P5-C4 / #240 end-state.)
  */
 export function trimEventLog(entries: EventLogEntry[], limit: number): EventLogEntry[] {
-  const validEntries = normalizeEventLog(entries);
+  return trimValidEventLog(normalizeEventLog(entries), limit);
+}
+
+/**
+ * Silent-eviction trim for entries that are ALREADY shape-validated (no normalizeEventLog pass).
+ * Use this when the caller has already normalized — e.g. importAll normalizes then sanitizes each
+ * entry, so re-validating inside trimEventLog would be a redundant O(N) pass (#299 R1). The public
+ * trimEventLog wrapper above is for raw / storage-read input.
+ */
+function trimValidEventLog(validEntries: EventLogEntry[], limit: number): EventLogEntry[] {
   if (validEntries.length <= limit) return validEntries;
   let overflow = validEntries.length - limit;
   const kept: EventLogEntry[] = [];
@@ -607,6 +621,38 @@ function sanitizeCodeList(value: unknown): string[] | undefined {
     .filter((v): v is string => typeof v === "string")
     .map((s) => (s.length > MAX_REASON_CODE_LEN ? s.slice(0, MAX_REASON_CODE_LEN) : s))
     .slice(0, MAX_REASON_CODES);
+}
+
+/**
+ * Bound the content of a (shape-valid) imported EventLogEntry so a crafted backup cannot exhaust
+ * the shared chrome.storage.local quota (#299). Mirrors the re-sanitization the PromptOutcome
+ * import path already does (buildPromptOutcomeRecord): caps the string fields, reuses
+ * sanitizeCodeList for reasons, and drops an oversized/unserializable `extra`. Import-only — the
+ * live-append path (buildEventLogEntry) is fed by trusted internal code, not user-supplied JSON.
+ */
+function sanitizeImportedEventLogEntry(e: EventLogEntry): EventLogEntry {
+  // Caps by UTF-16 code-unit count (not bytes); a percent-encoded tail could be sliced mid-sequence,
+  // but the stored strings are display-only (no caller parses them via new URL/decodeURIComponent), so
+  // a truncated tail is at worst cosmetic. (#299 R2)
+  const cap = (s: string): string => (s.length > MAX_EVENT_STRING_LEN ? s.slice(0, MAX_EVENT_STRING_LEN) : s);
+  const out: EventLogEntry = { id: cap(e.id), ts: e.ts, kind: e.kind };
+  if (e.site !== undefined) out.site = cap(e.site);
+  if (e.url !== undefined) out.url = cap(e.url);
+  if (e.destHost !== undefined) out.destHost = cap(e.destHost);
+  if (e.score !== undefined) out.score = e.score;
+  // reasons elements are already strings here (isEventLogEntry pre-filtered them in
+  // normalizeEventLog); sanitizeCodeList only applies the count (32) + per-string-length (80) caps.
+  const reasons = sanitizeCodeList(e.reasons);
+  if (reasons !== undefined) out.reasons = reasons;
+  if (e.extra !== undefined) {
+    try {
+      if (JSON.stringify(e.extra).length <= MAX_EVENT_EXTRA_BYTES) out.extra = e.extra;
+      // else: drop the oversized extra (fail closed) — keep the entry, shed the bloat.
+    } catch {
+      // Unserializable extra (cycles, etc.) — drop it.
+    }
+  }
+  return out;
 }
 
 // A non-negative, finite dimension within a sane magnitude bound.
@@ -1158,7 +1204,15 @@ export async function importAll(payload: unknown): Promise<void> {
     // Route the cap through trimEventLog (same as appendEvent) for consistency: it
     // normalizes invalid rows and evicts silent-decision kinds first, so an oversized
     // import preserves loud/protected entries instead of a blind tail slice. (#252)
-    writes[EVENT_LOG_KEY] = trimEventLog(p.eventLog as EventLogEntry[], boundedLogLimit);
+    // Normalize (shape-validate) then re-sanitize each entry to bound per-entry content size so a
+    // crafted backup can't exhaust the shared storage quota (#299); trimValidEventLog then applies
+    // the silent-eviction cap without re-normalizing (#299 R1). The total-quota residual (N entries
+    // each at the per-entry cap) is fail-closed by importAll's single atomic set (#270), which
+    // rejects on quota-exceeded and leaves storage unchanged.
+    writes[EVENT_LOG_KEY] = trimValidEventLog(
+      normalizeEventLog(p.eventLog).map(sanitizeImportedEventLogEntry),
+      boundedLogLimit
+    );
   }
 
   const hasPromptOutcomes = Array.isArray(p.promptOutcomes);
