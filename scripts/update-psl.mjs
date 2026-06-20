@@ -28,6 +28,10 @@ const OUT_PATH = resolve(__dirname, "..", "extension", "src", "shared", "psl_dat
 // ...). Fail closed: refuse to write a suspiciously small rule set. (#322 / disc#15)
 export const MIN_PSL_RULES = 1000;
 
+// A length-only sanity gate: parsePSL guarantees the element shape, so this
+// guards against the truncated/empty-download failure mode (too few rules), not
+// per-element corruption. Boundary is inclusive-low: exactly MIN_PSL_RULES passes;
+// fewer rejects. buildTrie would still throw on a structurally bad element.
 export function assertEnoughRules(rules) {
   if (!Array.isArray(rules) || rules.length < MIN_PSL_RULES) {
     throw new Error(
