@@ -128,20 +128,17 @@ function resumeSubmit(
   submitter: HTMLElement | null,
   opts?: { allowUnsafeFallback?: boolean }
 ): void {
-  // requestSubmit re-dispatches the submit event; mark a one-shot bypass so our
-  // own handler lets that re-entrant event through (and consumes it).
-  // NOTE (#264): if requestSubmit no-ops on interactive constraint validation no
-  // re-entrant submit fires to consume the token, so it lingers up to 5s --
-  // tracked as a pre-existing follow-up (fix = a synchronous one-shot scope).
+  // requestSubmit re-dispatches the submit event SYNCHRONOUSLY; mark a one-shot
+  // bypass so our own handler lets that re-entrant event through (and consumes it
+  // via consumeAllowNext at the top of handleSubmit, before any await).
   markAllowNext(form, 5000);
 
   try {
     form.requestSubmit(submitter);
   } catch {
     // requestSubmit failed (e.g. the submit control was detached or re-associated
-    // during the await window). Nothing was submitted, so revoke the one-shot
-    // bypass.
-    allowNextSubmitUntil.delete(form);
+    // during the await window). Nothing was submitted; the `finally` below revokes
+    // the one-shot bypass on every exit path (throw, no-op, and success).
     // form.submit() ignores the submitter's formaction and always POSTs to
     // form.action, so when a formaction override was assessed (#227.1) falling
     // back would send credentials to an UNASSESSED destination. Fail closed and
@@ -160,6 +157,16 @@ function resumeSubmit(
     } catch (e) {
       console.warn("[NavSentinel] form submit fallback failed:", e);
     }
+  } finally {
+    // #264: scope the bypass to the SYNCHRONOUS re-dispatch only. The genuine
+    // re-entrant submit fired (and consumed the token) during requestSubmit above,
+    // so this clear is a no-op for it. But if requestSubmit no-ops without throwing
+    // -- interactive constraint validation (an empty `required` field / `pattern`
+    // mismatch fires `invalid` and silently does not submit) -- nothing consumes the
+    // token. Clearing it here (synchronously, after the re-dispatch window) stops it
+    // lingering up to 5s and bypassing assessment + the action-mutation re-check on
+    // the next submit. The TTL in markAllowNext is now only a defensive backstop.
+    allowNextSubmitUntil.delete(form);
   }
 }
 
