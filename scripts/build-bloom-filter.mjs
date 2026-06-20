@@ -9,8 +9,10 @@
  * The output is a binary file containing a serialized bloom filter
  * with header: magic(4) + version(4) + k(4) + m(4) + bits(ceil(m/8)).
  *
- * If feeds are unreachable, falls back to a small embedded test domain list
- * and emits a warning.
+ * This is the PRODUCTION builder: if both feeds return zero domains it FAILS
+ * CLOSED (throws -> exit 1) rather than shipping a placeholder filter, and it
+ * fails on size-budget overflow. For intentional test data use the separate
+ * scripts/build-test-bloom-filter.mjs (`npm run build:bloom:test`).
  *
  * Usage:  node scripts/build-bloom-filter.mjs
  */
@@ -288,10 +290,6 @@ async function fetchOpenPhishDomains() {
     return new Set();
   }
 }
-
-// ---------------------------------------------------------------------------
-// Fallback test domains (used when feeds are unreachable)
-// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // Size budget
