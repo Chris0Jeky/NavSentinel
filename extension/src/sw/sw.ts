@@ -144,14 +144,25 @@ const oauthFlowByTab = swState.oauthFlowByTab;
 // bodies await this promise so the first event after a restart sees restored state.
 const hydrateReady = swState.hydrate();
 
-// Refresh the synchronously-read cachedDefaultMode on every worker start.
-// onInstalled/onStartup also do this, but neither fires on a mid-session MV3
-// restart (the worker is woken by a navigation or message, not install/startup).
-// Without this, after such a restart cachedDefaultMode stays at the "smart"
-// default until the next storage change, so onCommittedHandler would paint the
-// toolbar badge green even when the user's persisted mode is "off". Fire-and-
-// forget, matching the onInstalled/onStartup pattern. (#303)
-void getNavSettings().then((s) => { cachedDefaultMode = s.defaultMode; }).catch(() => {});
+// Refresh the synchronously-read cachedDefaultMode on every worker start. MV3
+// restarts the SW on any waking event (navigation/message), not just install or
+// browser start, so onInstalled/onStartup do not fire on a mid-session restart.
+// Without this, cachedDefaultMode would stay at the "smart" default until the
+// next storage change and onCommittedHandler would paint the toolbar badge green
+// even when the user's persisted mode is "off". Running it here subsumes the
+// install/startup paths too (the listeners only fire if this module evaluated).
+// (#303)
+const cachedModeReady = getNavSettings()
+  .then((s) => { cachedDefaultMode = s.defaultMode; })
+  .catch(() => {});
+
+// onCommitted reads cachedDefaultMode synchronously, so the first navigation
+// after a wake-up (which is always deferred below until hydration) must also
+// wait for the mode read to land -- otherwise that one nav could still paint the
+// badge with the stale default. A later storage.onChanged can still briefly race
+// this read, exactly as the historical onStartup refresh could; that window is
+// transient and self-heals on the next change. (#303)
+const startupReady = Promise.all([hydrateReady, cachedModeReady]);
 
 function pruneStaleOAuthFlows(): void {
   const now = Date.now();
@@ -427,7 +438,8 @@ async function syncDnrRulesets(): Promise<void> {
 chrome.runtime.onInstalled.addListener((details) => {
   void syncDnrRulesets();
   chrome.action.setBadgeText({ text: "" }).catch(() => {});
-  void getNavSettings().then((s) => { cachedDefaultMode = s.defaultMode; }).catch(() => {});
+  // cachedDefaultMode is refreshed by the worker-start cachedModeReady above,
+  // which also runs on install/update, so no separate read is needed here. (#303)
 
   if (details.reason === "install") {
     chrome.tabs.create({
@@ -438,7 +450,8 @@ chrome.runtime.onInstalled.addListener((details) => {
 
 chrome.runtime.onStartup.addListener(() => {
   void syncDnrRulesets();
-  void getNavSettings().then((s) => { cachedDefaultMode = s.defaultMode; }).catch(() => {});
+  // cachedDefaultMode is refreshed by the worker-start cachedModeReady above
+  // (which runs on browser start too), so no separate read is needed here. (#303)
 });
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
@@ -796,7 +809,10 @@ function onBeforeNavigateHandler(details: chrome.webNavigation.WebNavigationPare
 
 chrome.webNavigation.onCommitted.addListener((details) => {
   if (details.frameId !== 0) return;
-  if (!swState.hydrated) { void hydrateReady.then(() => onCommittedHandler(details)); return; }
+  // Defer on startupReady (hydration + the cachedDefaultMode read) so the first
+  // post-wake navigation paints the badge with the restored mode, not the
+  // "smart" default. (#303)
+  if (!swState.hydrated) { void startupReady.then(() => onCommittedHandler(details)); return; }
   onCommittedHandler(details);
 });
 function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitionCallbackDetails): void {
