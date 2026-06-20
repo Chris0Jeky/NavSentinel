@@ -1345,6 +1345,56 @@ describe("service worker handlers", () => {
       ).toBe("app.contoso.com");
     });
 
+    it("updates expectedCallbackDomain when a second OAuth URL in consent carries a new redirect_uri (disc#4)", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+
+      // redirect -> consent, expectedCallbackDomain = app-a.com.
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        transitionType: "link",
+        url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=x&redirect_uri=https%3A%2F%2Fapp-a.com%2Fcb&response_type=code",
+      });
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        transitionType: "link",
+        transitionQualifiers: ["server_redirect"],
+        url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=x&redirect_uri=https%3A%2F%2Fapp-a.com%2Fcb&response_type=code&prompt=consent",
+      });
+      mock.sentMessages.length = 0;
+      // Second authorization URL (consent phase) WITH a new redirect_uri -> domain updates to app-b.com.
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        transitionType: "link",
+        url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=x&redirect_uri=https%3A%2F%2Fapp-b.com%2Fcb&response_type=code",
+      });
+      const flowMsg = mock.sentMessages.find(
+        (m) => (m.message as { type: string }).type === "ns-oauth-flow-update" && m.tabId === 10,
+      );
+      expect(
+        (flowMsg?.message as { flow: { expectedCallbackDomain: string } } | undefined)?.flow
+          .expectedCallbackDomain,
+      ).toBe("app-b.com");
+
+      // The updated domain is enforced: a callback to the OLD domain (different registrable) mismatches.
+      mock.sentMessages.length = 0;
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        transitionType: "link",
+        transitionQualifiers: ["server_redirect"],
+        url: "https://app-a.com/cb?code=abc&state=xyz",
+      });
+      const mismatch = mock.sentMessages.find(
+        (m) => (m.message as { type: string }).type === "ns-oauth-redirect-mismatch",
+      );
+      expect(mismatch).toBeDefined();
+    });
+
     it("a genuine cross-domain provider hop (no response params) does not fire a redirect-mismatch (#207)", async () => {
       const mock = createChromeMock();
       await loadSw(mock);

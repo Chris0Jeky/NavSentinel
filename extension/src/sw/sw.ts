@@ -272,6 +272,9 @@ function processOAuthNavigation(
     if (expectedCallbackDomain) {
       existingFlow.expectedCallbackDomain = expectedCallbackDomain;
     }
+    // initiatorUrl and startedAt are intentionally kept from the original flow: a
+    // second authorization URL is treated as a continuation of the same flow, and
+    // initiatorUrl is display-only (not consulted by isUnexpectedCallback).
   } else {
     pruneStaleOAuthFlows();
     const flow: OAuthFlowState = {
