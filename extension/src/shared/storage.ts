@@ -530,14 +530,17 @@ async function persistEventLogEntry(entry: EventLogEntry): Promise<void> {
   for (let attempt = 0; attempt < 3; attempt++) {
     const res = await chrome.storage.local.get(EVENT_LOG_KEY);
     const cur = normalizeEventLog(res[EVENT_LOG_KEY]);
-    // Use trimValidEventLog: `cur` is already normalized and `entry` is shape-valid
-    // (buildEventLogEntry sanitizes reasons), so the public trimEventLog's re-normalize
-    // pass is redundant — and it would conflate "dropped because malformed" with the
-    // intentional silent-decision eviction below. (#339)
-    const next = trimValidEventLog([...cur.filter((item) => item.id !== entry.id), entry], limit);
+    // trimEventLog (re-normalizes via isEventLogEntry) is kept here as a defense-in-depth
+    // gate at the storage-write boundary: buildEventLogEntry sanitizes reasons, but `kind`
+    // is not validated there, so a crafted/abnormal entry with a bad kind is dropped at
+    // write rather than persisted as junk (it would otherwise sit in storage until the next
+    // append re-normalizes it, and — worse — survive `next` only to be filtered by the
+    // verify re-read below, burning all 3 retries). The #339 silent-loss is fixed upstream
+    // by sanitizing reasons in buildEventLogEntry, so VALID entries are no longer dropped. (#339)
+    const next = trimEventLog([...cur.filter((item) => item.id !== entry.id), entry], limit);
     await chrome.storage.local.set({ [EVENT_LOG_KEY]: next });
 
-    // trimValidEventLog intentionally drops a brand-new silent-decision event when the
+    // trimEventLog intentionally drops a brand-new silent-decision event when the
     // log is saturated with loud events (loud must win). The set above already
     // persisted the correct log, so that is success — not a failed write. Without
     // this, appendEvent would burn all 3 retries and console.warn on every silent
@@ -612,7 +615,12 @@ export async function appendEvent(partial: EventLogAppendPartial): Promise<void>
 
 export async function handleEventLogAppendMessage(message: EventLogAppendMessage): Promise<EventLogAppendResponse> {
   try {
-    await appendEventDirect(message.entry);
+    // Re-build through buildEventLogEntry so the entry is sanitized at the SW trust
+    // boundary too. The normal sender already calls buildEventLogEntry before delegating,
+    // but isEventLogAppendMessage only validates shape (not per-element types), so a
+    // crafted message could otherwise carry non-string reasons straight to storage. The
+    // rebuild preserves the sender's id/ts. (#339)
+    await appendEventDirect(buildEventLogEntry(message.entry));
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
