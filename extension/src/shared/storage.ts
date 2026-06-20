@@ -631,6 +631,9 @@ function sanitizeCodeList(value: unknown): string[] | undefined {
  * live-append path (buildEventLogEntry) is fed by trusted internal code, not user-supplied JSON.
  */
 function sanitizeImportedEventLogEntry(e: EventLogEntry): EventLogEntry {
+  // Caps by UTF-16 code-unit count (not bytes); a percent-encoded tail could be sliced mid-sequence,
+  // but the stored strings are display-only (no caller parses them via new URL/decodeURIComponent), so
+  // a truncated tail is at worst cosmetic. (#299 R2)
   const cap = (s: string): string => (s.length > MAX_EVENT_STRING_LEN ? s.slice(0, MAX_EVENT_STRING_LEN) : s);
   const out: EventLogEntry = { id: cap(e.id), ts: e.ts, kind: e.kind };
   if (e.site !== undefined) out.site = cap(e.site);
