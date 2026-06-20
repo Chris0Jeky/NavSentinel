@@ -158,6 +158,81 @@ describe("suite storage and allowlist migration", () => {
     expect(store["sentinelsuite:trusted_domains_v1"]).toEqual(["127.0.0.1", "example.com"]);
   });
 
+  it("serializes concurrent trusted-domain adds so neither is lost (#339)", async () => {
+    const { chrome } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { addTrustedDomain, getTrustedDomains } = await import("../extension/src/shared/storage");
+
+    // Two independent adds fired concurrently (e.g. the options page and credential_guard).
+    // Pre-fix both read the same empty list and the second write clobbers the first -> only
+    // one domain survives. Serialized: both land.
+    await Promise.all([
+      addTrustedDomain("a-example.com"),
+      addTrustedDomain("b-example.com"),
+    ]);
+
+    expect(await getTrustedDomains()).toEqual(["a-example.com", "b-example.com"]);
+  });
+
+  it("serializes a concurrent trusted-domain remove + add without losing either (#339)", async () => {
+    const { chrome } = createChromeMock({
+      "sentinelsuite:trusted_domains_v1": ["existing.com"],
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { addTrustedDomain, removeTrustedDomain, getTrustedDomains } =
+      await import("../extension/src/shared/storage");
+
+    // remove(existing) + add(new) concurrently: pre-fix both read ["existing.com"], so the
+    // result is whichever wrote last ([] or ["existing.com","new-example.com"]) — never the
+    // intended ["new-example.com"]. Serialized: existing removed AND new added.
+    await Promise.all([
+      removeTrustedDomain("existing.com"),
+      addTrustedDomain("new-example.com"),
+    ]);
+
+    expect(await getTrustedDomains()).toEqual(["new-example.com"]);
+  });
+
+  it("serializes a concurrent clearTrustedDomains + add without losing the add (#339)", async () => {
+    const { chrome } = createChromeMock({
+      "sentinelsuite:trusted_domains_v1": ["old.com"],
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { addTrustedDomain, clearTrustedDomains, getTrustedDomains } =
+      await import("../extension/src/shared/storage");
+
+    // clear ("clear all" button) racing an add (credential_guard). Listed first => clear runs
+    // first, then add appends -> ["new-domain.com"]. Pre-fix the two race: result is [] or
+    // ["new-domain.com","old.com"] (whichever wrote last), never the serialized ["new-domain.com"].
+    await Promise.all([
+      clearTrustedDomains(),
+      addTrustedDomain("new-domain.com"),
+    ]);
+
+    expect(await getTrustedDomains()).toEqual(["new-domain.com"]);
+  });
+
+  it("concurrent add of the same domain is idempotent under the queue (#339)", async () => {
+    const { chrome } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { addTrustedDomain, getTrustedDomains } = await import("../extension/src/shared/storage");
+
+    // Covers the addTrustedDomainWithResult added:false branch under concurrency: the second
+    // queued op reads the now-updated list and dedupes. Both callers get the same final list.
+    const [r1, r2] = await Promise.all([
+      addTrustedDomain("dup-domain.com"),
+      addTrustedDomain("dup-domain.com"),
+    ]);
+
+    expect(await getTrustedDomains()).toEqual(["dup-domain.com"]);
+    expect(r1).toEqual(["dup-domain.com"]);
+    expect(r2).toEqual(["dup-domain.com"]);
+  });
+
   it("round-trips an IPv6-literal trusted domain (does not drop it on re-read) (#208 R2)", async () => {
     // normalizeHost emits IPv6 unbracketed; normalizeTrustedDomain must re-bracket
     // it for its fallback URL parse, else the stored value vanishes on re-read.
