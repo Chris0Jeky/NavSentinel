@@ -94,6 +94,10 @@ function makeEstablishedProfile(now: number): NavProfile {
 beforeEach(() => {
   for (const k of Object.keys(store)) delete store[k];
   _resetRecentNavs();
+  // Reset the storage mocks (incl. any queued mockRejectedValueOnce) so a one-time override
+  // from one test cannot bleed into the next test's first get/set call (#286 R1).
+  (chrome.storage.local.get as ReturnType<typeof vi.fn>).mockReset().mockImplementation(mockGet);
+  (chrome.storage.local.set as ReturnType<typeof vi.fn>).mockReset().mockImplementation(mockSet);
 });
 
 // ========================================================================
@@ -522,6 +526,22 @@ describe("recordNavigationAnomaly", () => {
     // Second crypto nav (storage healthy again). Pre-fix the failed nav left a phantom
     // 'crypto' entry in recentNavs, so this would see count=2 and fire a burst anomaly
     // (BASE_ANOMALY_SCORE). Post-fix the phantom is rolled back, so count=1 -> no burst -> 0.
+    const score = await recordNavigationAnomaly("coinbase.com", now + 2000);
+    expect(score).toBe(0);
+  });
+
+  it("rolls back the sliding-window entry when saveProfile fails too (#286)", async () => {
+    const now = Date.now();
+    store[NAV_PROFILE_KEY] = makeEstablishedProfile(now);
+
+    // First crypto nav: loadProfile succeeds but saveProfile's storage write rejects once
+    // (the catch is shared, so this exercises the set-rejection branch of the rollback).
+    (chrome.storage.local.set as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error("set fail")
+    );
+    await expect(recordNavigationAnomaly("binance.com", now + 1000)).rejects.toThrow();
+
+    // Second crypto nav (storage healthy): no phantom from the failed first nav.
     const score = await recordNavigationAnomaly("coinbase.com", now + 2000);
     expect(score).toBe(0);
   });
