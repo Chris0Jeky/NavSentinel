@@ -292,18 +292,35 @@ export interface TrustedDomainAddResult {
   added: boolean;
 }
 
-export async function addTrustedDomainWithResult(
+let trustedDomainsPending: Promise<unknown> = Promise.resolve();
+
+// Serialize trusted-domain read-modify-write ops. Each mutator reads the current list
+// then writes a derived list; without a queue, two concurrent calls (e.g. the options
+// page removing one domain while credential_guard adds another, or a double-tap on the
+// "trust this site" control) both read the same base and the second write silently
+// clobbers the first -> a lost trust decision. Mirrors updateSuiteSettings (#305 / #339).
+function queueTrustedDomainsWrite<T>(operation: () => Promise<T>): Promise<T> {
+  const next = trustedDomainsPending.then(operation);
+  trustedDomainsPending = next.catch((err) => {
+    console.warn("[NavSentinel] trusted domains serialization error:", err);
+  });
+  return next;
+}
+
+export function addTrustedDomainWithResult(
   domain: string
 ): Promise<TrustedDomainAddResult | null> {
-  const d = normalizeTrustedDomain(domain);
-  if (!d) return null;
-  const cur = await getTrustedDomains();
-  if (cur.includes(d)) {
-    return { domains: cur, normalized: d, added: false };
-  }
-  const next = [...cur, d].sort();
-  await chrome.storage.local.set({ [TRUSTED_DOMAINS_KEY]: next });
-  return { domains: next, normalized: d, added: true };
+  return queueTrustedDomainsWrite(async () => {
+    const d = normalizeTrustedDomain(domain);
+    if (!d) return null;
+    const cur = await getTrustedDomains();
+    if (cur.includes(d)) {
+      return { domains: cur, normalized: d, added: false };
+    }
+    const next = [...cur, d].sort();
+    await chrome.storage.local.set({ [TRUSTED_DOMAINS_KEY]: next });
+    return { domains: next, normalized: d, added: true };
+  });
 }
 
 export async function addTrustedDomain(domain: string): Promise<string[]> {
@@ -311,16 +328,20 @@ export async function addTrustedDomain(domain: string): Promise<string[]> {
   return result ? result.domains : getTrustedDomains();
 }
 
-export async function removeTrustedDomain(domain: string): Promise<string[]> {
-  const d = normalizeTrustedDomain(domain);
-  const cur = await getTrustedDomains();
-  const next = cur.filter((x) => x !== d);
-  await chrome.storage.local.set({ [TRUSTED_DOMAINS_KEY]: next });
-  return next;
+export function removeTrustedDomain(domain: string): Promise<string[]> {
+  return queueTrustedDomainsWrite(async () => {
+    const d = normalizeTrustedDomain(domain);
+    const cur = await getTrustedDomains();
+    const next = cur.filter((x) => x !== d);
+    await chrome.storage.local.set({ [TRUSTED_DOMAINS_KEY]: next });
+    return next;
+  });
 }
 
-export async function clearTrustedDomains(): Promise<void> {
-  await chrome.storage.local.set({ [TRUSTED_DOMAINS_KEY]: [] });
+export function clearTrustedDomains(): Promise<void> {
+  return queueTrustedDomainsWrite(async () => {
+    await chrome.storage.local.set({ [TRUSTED_DOMAINS_KEY]: [] });
+  });
 }
 
 export type EventKind =
