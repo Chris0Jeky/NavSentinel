@@ -88,8 +88,9 @@ const captureTimestampsByTab = swState.captureTimestampsByTab;
  */
 function allowViewportCapture(tabId: number, now = Date.now()): boolean {
   const cutoff = now - CAPTURE_RATE_WINDOW_MS;
-  // Defensive: a corrupt session value could restore as a non-array (SessionState
-  // _restoreMap does not validate per-entry shape), which would throw on .filter.
+  // Belt-and-suspenders: SessionState._restoreMap now validates captureTimestampsByTab
+  // entries and skips non-arrays, but guard here too so this path and the prune loop
+  // below stay independently safe if a future write path or call site bypasses that. (#339)
   const stored = captureTimestampsByTab.get(tabId);
   const recent = (Array.isArray(stored) ? stored : []).filter((ts) => ts >= cutoff);
   if (recent.length >= CAPTURE_RATE_MAX_PER_WINDOW) {
