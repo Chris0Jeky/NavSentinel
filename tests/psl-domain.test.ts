@@ -1,5 +1,31 @@
 import { describe, expect, it } from "vitest";
-import { getRegistrableDomain } from "../extension/src/shared/domain";
+import { getRegistrableDomain, BRAND_KNOWN_ALIASES } from "../extension/src/shared/domain";
+
+describe("BRAND_KNOWN_ALIASES registrable-domain invariant (#309)", () => {
+  it("every alias is its own registrable domain (no dead subdomain/full-host entries)", () => {
+    // isBrandAlias compares each Set entry against getRegistrableDomain(host)
+    // output, so an alias that is not itself a registrable domain (e.g. a full
+    // hostname like "appleid.apple.com" whose registrable domain is "apple.com")
+    // can never match -- it is dead config. This invariant prevents reintroducing
+    // such entries. (#309)
+    //
+    // Note: this does NOT guard against a re-introduced duplicate string (the
+    // #310 class) -- the Set constructor dedups before this test runs. That is
+    // acceptable: a duplicate alias is inert (the Set collapses it), so it has
+    // no runtime effect to guard against.
+    //
+    // Iterate a defensive copy: BRAND_KNOWN_ALIASES is the live singleton used by
+    // isBrandAlias, so tests must never mutate it (see its @internal contract).
+    const snapshot = new Map(
+      Array.from(BRAND_KNOWN_ALIASES, ([brand, aliases]) => [brand, [...aliases]]),
+    );
+    for (const [brand, aliases] of snapshot) {
+      for (const alias of aliases) {
+        expect(getRegistrableDomain(alias), `${brand} alias "${alias}"`).toBe(alias);
+      }
+    }
+  });
+});
 
 describe("PSL-based getRegistrableDomain", () => {
   describe("cloud / PaaS domains treated as public suffixes", () => {
