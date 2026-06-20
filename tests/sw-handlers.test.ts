@@ -1903,6 +1903,7 @@ describe("service worker handlers", () => {
 
       mock.chrome.action.setBadgeText.mockClear();
       mock.emitTabRemoved(10);
+      await vi.runAllTimersAsync(); // clearTabIcon's blank is now chain-ordered + async (#272)
 
       expect(mock.chrome.action.setBadgeText).toHaveBeenCalledWith(
         expect.objectContaining({ tabId: 10, text: "" }),
