@@ -88,7 +88,19 @@ const HEADER_MAGIC = 0x424c4f4d;
 const HEADER_VERSION = 1;
 const HEADER_SIZE = 16;
 
-function optimalParams(n, p) {
+export function optimalParams(n, p) {
+  // Fail closed on a non-finite element count or an out-of-range false-positive rate.
+  // With p <= 0, Math.log(p) is -Infinity/NaN -> m becomes Infinity/NaN; with p >= 1,
+  // Math.log(p) >= 0 -> m becomes <= 0; a non-finite n (NaN/Infinity) slips past the
+  // n <= 0 check and also yields a non-finite m. Any of these would silently produce a
+  // corrupt or absurdly sized filter binary instead of an honest error, so we throw
+  // here rather than let a misconfigured TARGET_FP_RATE poison the build. (#322 / #14)
+  if (!Number.isFinite(n)) {
+    throw new Error(`optimalParams: element count must be finite, got ${n}`);
+  }
+  if (!Number.isFinite(p) || p <= 0 || p >= 1) {
+    throw new Error(`optimalParams: false-positive rate must be in the open interval (0,1), got ${p}`);
+  }
   if (n <= 0) return { m: 8, k: 1 };
   const m = Math.ceil((-n * Math.log(p)) / (Math.LN2 * Math.LN2));
   const k = Math.max(1, Math.round((m / n) * Math.LN2));
