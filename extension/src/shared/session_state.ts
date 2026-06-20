@@ -241,7 +241,11 @@ export class SessionStateManager {
     this._restoreMap(this.childWindowByTab, data[KEYS.childWindow]);
     this._restoreMap(this.oauthFlowByTab, data[KEYS.oauthFlow]);
     this._restoreRedirectChains(data[KEYS.redirectChains]);
-    this._restoreMap(this.captureTimestampsByTab, data[KEYS.captureTimestamps]);
+    this._restoreMap(
+      this.captureTimestampsByTab,
+      data[KEYS.captureTimestamps],
+      (v) => Array.isArray(v) && v.every((n) => typeof n === "number" && Number.isFinite(n)),
+    );
     this._hydrated = true;
     this._canPersist = true;
   }
@@ -324,10 +328,28 @@ export class SessionStateManager {
   // Private helpers
   // -----------------------------------------------------------------------
 
-  private _restoreMap<V>(map: Map<number, V>, raw: unknown): void {
+  private _restoreMap<V>(
+    map: Map<number, V>,
+    raw: unknown,
+    isValidValue?: (value: unknown) => boolean,
+  ): void {
     const restored = objToMap<V>(raw);
+    let skipped = 0;
     for (const [k, v] of restored) {
+      // Optional per-value shape gate for maps whose value type would break callers if
+      // corrupt (e.g. captureTimestampsByTab expects number[], and sw.ts calls .filter on
+      // it — a non-array from a corrupt session restore would throw). Mirrors the inline
+      // validation _restoreRedirectChains already does. (#339)
+      if (isValidValue && !isValidValue(v)) {
+        skipped++;
+        continue;
+      }
       map.set(k, v);
+    }
+    if (skipped > 0) {
+      console.warn(
+        `[NavSentinel] session restore: skipped ${skipped} malformed map entr${skipped === 1 ? "y" : "ies"}`,
+      );
     }
   }
 

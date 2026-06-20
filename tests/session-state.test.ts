@@ -108,6 +108,27 @@ describe("SessionStateManager", () => {
     expect(mgr.readyTabs.size).toBe(0);
   });
 
+  it("skips malformed captureTimestamps entries (non-array / non-number) on restore (#339)", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await sessionStorage.mock.set({
+      "ns_sw:captureTimestamps": {
+        "5": "not-an-array", // would break sw.ts list.filter(...) if restored
+        "6": [100, 200], // valid
+        "7": [1, "x", 3], // mixed-type array -> invalid
+      },
+    });
+
+    const mgr = new SessionStateManager();
+    await mgr.hydrate();
+
+    // Only the valid number[] survives; the non-array and mixed array are dropped.
+    expect(mgr.captureTimestampsByTab.get(6)).toEqual([100, 200]);
+    expect(mgr.captureTimestampsByTab.has(5)).toBe(false);
+    expect(mgr.captureTimestampsByTab.has(7)).toBe(false);
+    expect(warnSpy).toHaveBeenCalled(); // corrupt restore is surfaced, not silent
+    warnSpy.mockRestore();
+  });
+
   it("enters degraded mode and suppresses persistence when the hydrate read fails (#228.2)", async () => {
     // Intact stored state that a transient read failure must not wipe.
     await sessionStorage.mock.set({ "ns_sw:allowUntil": { "7": 123456 } });
