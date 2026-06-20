@@ -45,19 +45,37 @@ describe("build-bloom-filter build script: fail-closed guards (#322)", () => {
     expect(() => optimalParams(1000, Infinity)).toThrow(/false-positive rate/i);
   });
 
-  it("optimalParams throws on a non-finite element count", () => {
+  it("optimalParams throws on a non-finite element count (NaN, ±Infinity)", () => {
     expect(() => optimalParams(NaN, 0.0001)).toThrow(/finite/i);
     expect(() => optimalParams(Infinity, 0.0001)).toThrow(/finite/i);
+    expect(() => optimalParams(-Infinity, 0.0001)).toThrow(/finite/i);
   });
 
-  it("optimalParams returns finite, sane m/k for valid inputs", () => {
+  it("optimalParams pins m/k to the known-good range for valid inputs (formula guard)", () => {
+    // n=50,000, p=0.0001: m = ceil(-n·ln p / ln(2)^2) ≈ 958k bits, k = round(m/n·ln2) = 13.
+    // Range-pinning (not just finiteness) catches a wrong formula — swapped numerator/
+    // denominator, a dropped ceil, or log10 vs ln — that would still be finite & positive.
     const { m, k } = optimalParams(50_000, 0.0001);
-    expect(Number.isFinite(m)).toBe(true);
-    expect(Number.isFinite(k)).toBe(true);
-    expect(m).toBeGreaterThan(0);
-    expect(k).toBeGreaterThanOrEqual(1);
-    // Empty set still yields the minimal filter (preserved behavior).
+    expect(m).toBeGreaterThan(900_000);
+    expect(m).toBeLessThan(1_100_000);
+    expect(k).toBeGreaterThanOrEqual(10);
+    expect(k).toBeLessThanOrEqual(20);
+  });
+
+  it("optimalParams treats n<=0 (including negative finite n) as the minimal filter", () => {
+    // Empty/degenerate set yields the minimal sentinel; negative finite n is finite, so it
+    // passes the throw guard and intentionally falls through to this same path.
     expect(optimalParams(0, 0.0001)).toEqual({ m: 8, k: 1 });
+    expect(optimalParams(-1, 0.0001)).toEqual({ m: 8, k: 1 });
+    expect(optimalParams(-100, 0.0001)).toEqual({ m: 8, k: 1 });
+  });
+
+  it("a huge-but-valid n flows through to an assertWithinBudget rejection (fail-closed chain)", () => {
+    // 200k domains at p=0.0001 -> ~3.8M bits -> ~468 KB, far over the 150 KB budget. The
+    // p-guard accepts the valid rate; the size backstop is what rejects the oversized filter.
+    const { m } = optimalParams(200_000, 0.0001);
+    const filterSizeBytes = 16 + Math.ceil(m / 8); // HEADER_SIZE + bitset bytes
+    expect(() => assertWithinBudget(filterSizeBytes, 150 * 1024)).toThrow(/exceeds budget/i);
   });
 
   // Enforce the main-guard contract: a future refactor that removed it would make
