@@ -57,8 +57,18 @@ export function parsePSL(text) {
     // Skip blanks and comments
     if (!line || line.startsWith("//")) continue;
 
+    // PSL format: a rule is read only up to the first whitespace; any trailing content
+    // on the line is an annotation. Truncating here is spec-correct AND turns a
+    // stray-whitespace line like "a. .b" into "a." — an empty label the guard below
+    // rejects. We deliberately do NOT charset-filter labels: the real PSL lists IDN
+    // rules in UNICODE form (e.g. 公司, امارات, みんな — see the ~1k non-ASCII labels in
+    // psl_data.json), so an ASCII-only [a-z0-9-] filter would reject thousands of valid
+    // rules and break update:psl. The reserved-key/empty-label guard below catches the
+    // labels that actually corrupt the trie. (#322 / #18)
+    const firstToken = line.split(/\s/)[0];
+
     let type = "exact";
-    let rule = line;
+    let rule = firstToken;
 
     if (rule.startsWith("!")) {
       type = "exception";
