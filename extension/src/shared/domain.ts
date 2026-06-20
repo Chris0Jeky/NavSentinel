@@ -401,8 +401,13 @@ export function computeCredentialRisk(params: {
     ? findClosestLookalike(pageReg, trusted)
     : null;
 
+  // Tracks whether a lookalike *edit-distance* signal (raw or homoglyph-normalized) already fired,
+  // so BRAND_KEYWORD_DOMAIN can skip an EXACT spoof it would otherwise double-count (#300).
+  let lookalikeDistanceFired = false;
+
   if (cfg.similarity.enabled) {
     if (lookalike && lookalike.distance <= maxDistance) {
+      lookalikeDistanceFired = true;
       score += 45;
       reasons.push({
         code: "LOOKALIKE_DOMAIN",
@@ -420,6 +425,7 @@ export function computeCredentialRisk(params: {
         enhanced.homoglyphLevenshtein.distance <= maxDistance &&
         !(lookalike && lookalike.distance <= maxDistance)) {
       // Only add if raw Levenshtein didn't already catch it
+      lookalikeDistanceFired = true;
       score += 45;
       reasons.push({
         code: "HOMOGLYPH_LOOKALIKE",
@@ -427,9 +433,12 @@ export function computeCredentialRisk(params: {
       });
     }
 
-    // Brand keyword in registrable domain (catches paypal-secure.com and
-    // obfuscated exact spoofs like paypa1.com / pay-pal.com).
-    if (enhanced.brandKeyword) {
+    // Brand keyword in registrable domain (catches paypal-secure.com and obfuscated exact spoofs
+    // like paypa1.com / pay-pal.com). Skip an EXACT spoof when a lookalike edit-distance signal
+    // already fired for it: bk.exact homoglyph/separator spoofs are the same evidence LOOKALIKE_DOMAIN
+    // / HOMOGLYPH_LOOKALIKE already scored, so counting both double-adds +45 then +40 (#300). A
+    // NON-exact brand+extra spoof (e.g. paypal-secure.com, distance > maxDistance) is distinct and still fires.
+    if (enhanced.brandKeyword && !(enhanced.brandKeyword.exact && lookalikeDistanceFired)) {
       const bk = enhanced.brandKeyword;
       score += 40;
       reasons.push({
