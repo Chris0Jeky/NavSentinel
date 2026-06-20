@@ -27,7 +27,11 @@ const MAX_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB = 2,097,152 bytes (runtime safet
 const HEADER_SIZE = 16;
 const HEADER_MAGIC = 0x424c4f4d; // "BLOM"
 const HEADER_VERSION = 1;
-const MIN_FILTER_BITS = 8; // sub-byte m is degenerate (see reputation.ts MIN_FILTER_BITS)
+// Mirror reputation.ts loadFilter's caps (the .mjs can't import the .ts at runtime),
+// so the CI gate accepts exactly what the runtime accepts.
+const MIN_FILTER_BITS = 8; // sub-byte m is degenerate
+const MAX_FILTER_BITS = 16 * 1024 * 1024; // 16 Mbit OOM/CPU-lock safety cap
+const MAX_HASH_FUNCTIONS = 30;
 
 /**
  * Validate the bloom filter binary's header and structural consistency.
@@ -52,12 +56,18 @@ export function validateBloomBinary(buf) {
   if (k < 1) {
     throw new Error(`Degenerate bloom filter: k=${k} (must be >= 1)`);
   }
+  if (k > MAX_HASH_FUNCTIONS) {
+    throw new Error(`Bloom filter k=${k} exceeds safety cap of ${MAX_HASH_FUNCTIONS} (would be rejected at runtime)`);
+  }
   if (m < MIN_FILTER_BITS) {
     throw new Error(`Degenerate bloom filter: m=${m} bits (must be >= ${MIN_FILTER_BITS})`);
   }
+  if (m > MAX_FILTER_BITS) {
+    throw new Error(`Bloom filter m=${m} bits exceeds safety cap of ${MAX_FILTER_BITS} (would be rejected at runtime)`);
+  }
   const expected = HEADER_SIZE + Math.ceil(m / 8);
   if (buf.length !== expected) {
-    throw new Error(`Bloom filter size mismatch: header says m=${m} (=> ${expected} bytes) but file is ${buf.length} bytes (truncated/corrupt?)`);
+    throw new Error(`Bloom filter size mismatch: header says m=${m} (=> ${expected} bytes) but file is ${buf.length} bytes (truncated or trailing garbage?)`);
   }
   return { m, k };
 }

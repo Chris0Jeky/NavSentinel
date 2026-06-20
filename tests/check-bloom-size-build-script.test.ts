@@ -43,6 +43,21 @@ describe("check-bloom-size: header validation (#322 / disc#11)", () => {
     expect(() => validateBloomBinary(makeBin({ m: 288, dataBytes: 4 }))).toThrow(/mismatch|truncat/i);
   });
 
+  it("rejects trailing garbage (size larger than header m)", () => {
+    // header says m=288 (=> 52 bytes) but the file has an extra byte (53)
+    expect(() => validateBloomBinary(makeBin({ m: 288, dataBytes: 37 }))).toThrow(/mismatch|trailing/i);
+  });
+
+  it("rejects k above the runtime safety cap (parity with loadFilter)", () => {
+    expect(() => validateBloomBinary(makeBin({ k: 31 }))).toThrow(/safety cap/i);
+  });
+
+  it("rejects m above the runtime safety cap (parity with loadFilter)", () => {
+    // m far beyond 16 Mbit; use a tiny dataBytes so we don't allocate a huge buffer,
+    // and let the size-mismatch/cap check fire (the m-cap check runs before the size check).
+    expect(() => validateBloomBinary(makeBin({ m: 20 * 1024 * 1024, dataBytes: 4 }))).toThrow(/safety cap/i);
+  });
+
   it("rejects a buffer too small for the header", () => {
     expect(() => validateBloomBinary(new Uint8Array(8))).toThrow(/header|too small/i);
   });
