@@ -273,6 +273,30 @@ describe("suite storage and allowlist migration", () => {
     expect(storedLog.every((e) => e.kind === "nav_silent_allow")).toBe(true);
   });
 
+  it("bounds imported event-log entry content to prevent storage-quota exhaustion (#299)", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    // A crafted backup with megabyte-scale fields (shape-valid, so isEventLogEntry accepts it).
+    const bigExtra = { x: "A".repeat(5_000_000) };
+    const bigReasons = Array.from({ length: 10000 }, () => "B".repeat(1000));
+    const bigUrl = "https://evil.test/" + "C".repeat(10000);
+
+    const { importAll } = await import("../extension/src/shared/storage");
+    await importAll({
+      eventLog: [
+        { id: "e-1", ts: 1, kind: "nav_click_block", url: bigUrl, reasons: bigReasons, extra: bigExtra },
+      ],
+    });
+
+    const stored = (store["sentinelsuite:event_log_v1"] as Array<Record<string, unknown>>)[0]!;
+    expect(stored.extra).toBeUndefined(); // oversized extra dropped (fail closed)
+    expect((stored.reasons as string[]).length).toBeLessThanOrEqual(32); // MAX_REASON_CODES
+    expect((stored.reasons as string[])[0]!.length).toBeLessThanOrEqual(80); // MAX_REASON_CODE_LEN
+    expect((stored.url as string).length).toBeLessThanOrEqual(2048); // MAX_EVENT_STRING_LEN
+    expect(JSON.stringify(stored).length).toBeLessThan(10000); // was ~5MB pre-fix
+  });
+
   it("imports prompt outcomes and computes non-zero adaptive scores", async () => {
     const { chrome, store } = createChromeMock();
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
