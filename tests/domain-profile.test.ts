@@ -262,9 +262,10 @@ describe("decay logic", () => {
     };
     await getDomainRisk("zombie.com"); // applies decay + persists
     const p = getStoredProfiles()["zombie.com"]!;
-    // Pre-fix lastSeen was reset to ~now (the bug). Post-fix it is advanced by the loop to
-    // ~1 decay period old, so the profile stays ranked stale for evictLRU.
-    expect(Date.now() - p.lastSeen).toBeGreaterThanOrEqual(DECAY_AGE_MS * 0.5);
+    // Pre-fix lastSeen was reset to ~now (the bug, delta ~0). Post-fix a 25-period zombie ends
+    // at exactly baseNow - DECAY_AGE_MS (24 advances from -25 periods), so delta is one full
+    // period — assert the exact invariant, not a loose half-period band (R2).
+    expect(Date.now() - p.lastSeen).toBeGreaterThanOrEqual(DECAY_AGE_MS);
   });
 
   it("decays nrsHistory length in step with visits (#290)", async () => {
@@ -284,7 +285,25 @@ describe("decay logic", () => {
     expect(p.nrsHistory).toEqual([50, 60, 70, 80]);
   });
 
-  it("at exactly 24 stale periods, lastSeen advances to ~now (loop self-terminates) (#290)", async () => {
+  it("decay+record cycle keeps nrsHistory aligned with decayed visits (#290)", async () => {
+    // The full motivating sequence: a stale profile decays (halving history) and THEN a new
+    // observation is pushed. Pre-fix decay left history at 9, so the push -> length 10; post-fix
+    // decay halves 9 -> 4 (newest) and the push -> length 5, staying scaled with visits.
+    const baseNow = Date.now();
+    store[DOMAIN_PROFILES_KEY] = {
+      "cycle.com": {
+        domain: "cycle.com",
+        visits: 16, totalNRS: 800, maxNRS: 80, triggerCount: 0,
+        lastSeen: baseNow - DECAY_AGE_MS - 1000, // one decay period
+        factors: {}, nrsHistory: [10, 20, 30, 40, 50, 60, 70, 80, 90], // length 9
+      },
+    };
+    await recordNavigation("cycle.com", 35, []); // decay (9 -> newest 4) then push 35 -> 5
+    const p = getStoredProfiles()["cycle.com"]!;
+    expect(p.nrsHistory).toEqual([60, 70, 80, 90, 35]);
+  });
+
+  it("boundary doc (non-discriminating): exactly 24 stale periods lands lastSeen at ~now (#290)", async () => {
     // Boundary documentation (not a fix discriminator): at exactly 24 periods the loop runs
     // 24 times and lands lastSeen at ~now via the normal `+= DECAY_AGE_MS` advance, exiting
     // naturally — it never needed the (removed) cap reset. Only >24-period zombies were affected.
