@@ -71,6 +71,19 @@ describe("smart defaults – pattern detection", () => {
     expect(result!.allowCount).toBe(3);
   });
 
+  it("counts 'always_allow' as the most-recent (leading) entry (#307)", () => {
+    const outcomes = [
+      makeOutcome({ domain: "a.com", destDomain: "b.com", outcome: "allow_once", ts: 1 }),
+      makeOutcome({ domain: "a.com", destDomain: "b.com", outcome: "allow_once", ts: 2 }),
+      makeOutcome({ domain: "a.com", destDomain: "b.com", outcome: "always_allow", ts: 3 }),
+    ];
+    // always_allow at sort-position 0: pre-fix the very first loop iteration hit
+    // the else-break (count 0) and suppressed the suggestion entirely.
+    const result = analyzeOutcomesForPair(outcomes, "a.com", "b.com");
+    expect(result).not.toBeNull();
+    expect(result!.allowCount).toBe(3);
+  });
+
   it("returns suggestion for more than threshold consecutive allows", () => {
     const outcomes = Array.from({ length: 5 }, (_, i) =>
       makeOutcome({ domain: "x.com", destDomain: "y.com", outcome: "allow_once", ts: i + 1 })
