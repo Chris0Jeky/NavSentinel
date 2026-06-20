@@ -273,28 +273,82 @@ describe("suite storage and allowlist migration", () => {
     expect(storedLog.every((e) => e.kind === "nav_silent_allow")).toBe(true);
   });
 
-  it("bounds imported event-log entry content to prevent storage-quota exhaustion (#299)", async () => {
+  it("bounds imported event-log entry content (site/url/destHost/reasons/extra) to prevent quota exhaustion (#299)", async () => {
     const { chrome, store } = createChromeMock();
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     // A crafted backup with megabyte-scale fields (shape-valid, so isEventLogEntry accepts it).
-    const bigExtra = { x: "A".repeat(5_000_000) };
-    const bigReasons = Array.from({ length: 10000 }, () => "B".repeat(1000));
-    const bigUrl = "https://evil.test/" + "C".repeat(10000);
-
+    const big = (n: number) => "C".repeat(n);
     const { importAll } = await import("../extension/src/shared/storage");
     await importAll({
       eventLog: [
-        { id: "e-1", ts: 1, kind: "nav_click_block", url: bigUrl, reasons: bigReasons, extra: bigExtra },
+        {
+          id: "e-1", ts: 1, kind: "nav_click_block",
+          site: "https://evil.test/" + big(10000),
+          url: "https://evil.test/" + big(10000),
+          destHost: big(10000),
+          reasons: Array.from({ length: 10000 }, () => "B".repeat(1000)),
+          extra: { x: "A".repeat(5_000_000) },
+        },
       ],
     });
 
     const stored = (store["sentinelsuite:event_log_v1"] as Array<Record<string, unknown>>)[0]!;
     expect(stored.extra).toBeUndefined(); // oversized extra dropped (fail closed)
-    expect((stored.reasons as string[]).length).toBeLessThanOrEqual(32); // MAX_REASON_CODES
-    expect((stored.reasons as string[])[0]!.length).toBeLessThanOrEqual(80); // MAX_REASON_CODE_LEN
-    expect((stored.url as string).length).toBeLessThanOrEqual(2048); // MAX_EVENT_STRING_LEN
-    expect(JSON.stringify(stored).length).toBeLessThan(10000); // was ~5MB pre-fix
+    const reasons = stored.reasons as string[];
+    expect(reasons.length).toBeLessThanOrEqual(32); // MAX_REASON_CODES
+    expect(reasons.every((r) => r.length <= 80)).toBe(true); // MAX_REASON_CODE_LEN
+    expect((stored.site as string).length).toBeLessThanOrEqual(2048); // MAX_EVENT_STRING_LEN
+    expect((stored.url as string).length).toBeLessThanOrEqual(2048);
+    expect((stored.destHost as string).length).toBeLessThanOrEqual(2048);
+    expect(stored.id).toBe("e-1"); // small id preserved
+    // Tight bound derived from the caps (was ~5MB pre-fix): 3 capped strings + reasons + overhead.
+    expect(JSON.stringify(stored).length).toBeLessThan(3 * 2048 + 32 * 80 + 1000);
+  });
+
+  it("preserves a small serializable extra and short fields on import (#299)", async () => {
+    // Inverted-condition guard: the oversized-extra DROP must be selective — a small, valid extra
+    // (like the structural objects the live path emits) and short fields must survive verbatim.
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { importAll } = await import("../extension/src/shared/storage");
+    await importAll({
+      eventLog: [
+        {
+          id: "ok-1", ts: 7, kind: "nav_silent_allow",
+          destHost: "good.example", reasons: ["nrs_cross_site"],
+          extra: { direction: "isolated_to_main", dropped: 3 },
+        },
+      ],
+    });
+
+    const stored = (store["sentinelsuite:event_log_v1"] as Array<Record<string, unknown>>)[0]!;
+    expect(stored.extra).toEqual({ direction: "isolated_to_main", dropped: 3 }); // PRESERVED
+    expect(stored.destHost).toBe("good.example");
+    expect(stored.reasons).toEqual(["nrs_cross_site"]);
+    expect(stored.id).toBe("ok-1");
+  });
+
+  it("preserves entry order and identity through import sanitize+trim (#299)", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const entries = [
+      { id: "a", ts: 1, kind: "nav_click_block", score: 50, reasons: ["r1"] },
+      { id: "b", ts: 2, kind: "nav_blank_prompt", score: 70 },
+      { id: "c", ts: 3, kind: "nav_silent_allow" },
+    ];
+    const { importAll } = await import("../extension/src/shared/storage");
+    await importAll({ eventLog: entries });
+
+    const stored = store["sentinelsuite:event_log_v1"] as Array<Record<string, unknown>>;
+    expect(stored.map((e) => e.id)).toEqual(["a", "b", "c"]); // order preserved
+    expect(stored.map((e) => [e.ts, e.kind, e.score])).toEqual([
+      [1, "nav_click_block", 50],
+      [2, "nav_blank_prompt", 70],
+      [3, "nav_silent_allow", undefined],
+    ]);
   });
 
   it("imports prompt outcomes and computes non-zero adaptive scores", async () => {
