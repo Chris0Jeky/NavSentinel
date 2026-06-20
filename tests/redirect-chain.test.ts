@@ -3,6 +3,7 @@ import {
   RedirectChainTracker,
   isKnownRedirector,
 } from "../extension/src/shared/redirect_chain";
+import type { RedirectChain } from "../extension/src/shared/redirect_chain";
 import {
   computeNRS,
 } from "../extension/src/shared/nrs";
@@ -79,6 +80,16 @@ describe("isKnownRedirector", () => {
     expect(isKnownRedirector("https://go.googleprod.com/foo")).toBe(false);
     expect(isKnownRedirector("https://click.mailchimp.com/track/click/abc")).toBe(false);
     expect(isKnownRedirector("https://click.convertkit.com/campaigns/xyz")).toBe(false);
+  });
+
+  it("does not flag allowlisted domains even with redirect params or open-redirect paths (#285)", () => {
+    // The earlier guard only wrapped the prefix check, so an allowlisted host with a redirect
+    // param or an open-redirect path still false-positived. Now allowlisted hosts are fully exempt.
+    // Each case below returns TRUE on pre-fix code.
+    expect(isKnownRedirector("https://go.microsoft.com/fwlink/?url=https://example.com")).toBe(false); // ?url= param
+    expect(isKnownRedirector("https://click.pstmrk.it/link/abc123")).toBe(false);                     // /link/ path
+    expect(isKnownRedirector("https://go.dev/go/something")).toBe(false);                             // /go path
+    expect(isKnownRedirector("https://click.mailchimp.com/track?redirect=https://x.com")).toBe(false); // ?redirect=
   });
 
   it("still flags tracking prefixes for non-allowlisted domains", () => {
@@ -182,6 +193,21 @@ describe("RedirectChainTracker", () => {
     tracker.recordHop(2, "https://c.com/", 20000, "link");
     // Chain for tab 1 should be pruned (last hop at 2000, now 20000 = 18s > 15s)
     expect(tracker.getChainInfo(1)).toBeNull();
+  });
+
+  it("prunes an empty-hops chain by startedAt (restored chains can't persist forever) (#285)", () => {
+    // An empty-hops chain can be restored from session storage (its persisted validation does
+    // not require hops.length > 0). Pre-fix pruneStale read lastHop = hops[-1] = undefined, so
+    // the guard `if (lastHop && ...)` never fired and the entry persisted indefinitely.
+    const backing = new Map<number, RedirectChain>();
+    backing.set(99, { startedAt: 1000, hops: [] });
+    const tracker = new RedirectChainTracker(backing);
+
+    // recordHop on a different tab at t=21000 triggers pruneStale (21000 - 1000 = 20s > 15s).
+    tracker.recordHop(1, "https://example.com/", 21000, "link");
+
+    expect(backing.has(99)).toBe(false); // empty chain pruned by startedAt
+    expect(backing.has(1)).toBe(true);   // active chain kept
   });
 
   it("cleans up on deleteTab", () => {
