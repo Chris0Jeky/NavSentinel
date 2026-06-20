@@ -135,6 +135,17 @@ export function loadFilter(data: ArrayBuffer | Uint8Array): BloomFilterState {
   const k = view.getUint32(8, true);
   const m = view.getUint32(12, true);
 
+  // Reject degenerate filters (m=0 or k=0). Without these lower-bound checks a zeroed/
+  // corrupt binary with a valid header would load as a non-null filter, so reputationReady()
+  // reports true while checkDomain() always returns false — silently disabling ALL domain
+  // reputation checks (the +50 known-bad NRS factor never fires). Fail closed instead: throw
+  // so initReputation sets _filter=null and reputationReady() honestly reports false. (#287)
+  if (m === 0) {
+    throw new Error("Bloom filter m=0 is invalid (degenerate filter)");
+  }
+  if (k === 0) {
+    throw new Error("Bloom filter k=0 is invalid (degenerate filter)");
+  }
   if (m > MAX_FILTER_BITS) {
     throw new Error(`Bloom filter m=${m} exceeds safety cap of ${MAX_FILTER_BITS} bits`);
   }
