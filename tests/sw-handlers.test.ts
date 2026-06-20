@@ -943,7 +943,60 @@ describe("service worker handlers", () => {
 
       const sent = rollbackMsg();
       expect(sent, "rollback sent after hydration from the restored map").toBeDefined();
-      expect((sent!.message as { url: string }).url).toBe("https://safe.test/landing");
+      // Assert the FULL restored entry round-tripped, not just the url (R1).
+      expect(sent!.message).toEqual(
+        expect.objectContaining({
+          type: "ns-rollback",
+          url: "https://safe.test/landing",
+          prevUrl: "https://safe.test/home",
+          qualifiers: ["client_redirect"],
+        }),
+      );
+    });
+
+    it("defers a pending-forward send until hydration so the restored offer is not dropped", async () => {
+      // Symmetric guard for the second session-backed path in onUpdatedHandler
+      // (pendingForwardByTab + readyTabs), which the rollback test does not exercise
+      // (R1). Pre-fix the pre-hydration read sees empty maps and the forward offer is
+      // dropped; post-fix it is deferred, reads the restored entry + readyTabs, and sends.
+      const mock = createChromeMock();
+      mock.chrome.storage.session._store["ns_sw:pendingForward"] = {
+        "8": { url: "https://safe.test/forward-target", ts: Date.now() },
+      };
+      mock.chrome.storage.session._store["ns_sw:readyTabs"] = [8];
+
+      let releaseGet!: () => void;
+      const gate = new Promise<void>((r) => {
+        releaseGet = r;
+      });
+      const origGet = mock.chrome.storage.session.get.bind(mock.chrome.storage.session);
+      let gated = true;
+      mock.chrome.storage.session.get = (async (keys?: string | string[]) => {
+        if (gated) {
+          gated = false;
+          await gate;
+        }
+        return origGet(keys);
+      }) as typeof mock.chrome.storage.session.get;
+
+      await loadSw(mock);
+
+      const forwardMsg = () =>
+        mock.sentMessages.find(
+          (m) => (m.message as { type: string }).type === "ns-forward-offer" && m.tabId === 8,
+        );
+
+      // currentUrl differs from forward.url, so the forward branch proceeds once it runs.
+      mock.sentMessages.length = 0;
+      mock.emitTabUpdated(8, { status: "complete" }, { url: "https://safe.test/current" });
+      expect(forwardMsg(), "forward offer must NOT be sent before hydration").toBeUndefined();
+
+      releaseGet();
+      await vi.runAllTimersAsync();
+
+      const sent = forwardMsg();
+      expect(sent, "forward offer sent after hydration from the restored map").toBeDefined();
+      expect((sent!.message as { url: string }).url).toBe("https://safe.test/forward-target");
     });
   });
 
