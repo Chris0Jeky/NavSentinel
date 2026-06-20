@@ -2036,4 +2036,65 @@ describe("service worker handlers", () => {
       expect(mock.chrome.action.setBadgeText).toHaveBeenCalledWith({ tabId: 11, text: "" });
     });
   });
+
+  describe("rollback-suppress window cleared on new navigation (disc#1)", () => {
+    it("a second suspicious URL within the suppress window still triggers a rollback", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+      await vi.runAllTimersAsync(); // hydration + startupSettled
+
+      const TAB = 30; // not in readyTabs -> rollbacks queue into pendingRollbackByTab
+
+      // 1. First commit establishes prevUrl (no rollback: prevUrl was undefined).
+      mock.emitCommitted({ tabId: TAB, frameId: 0, url: "https://a.com/", transitionType: "link" });
+      // 2. Suspicious commit B (different registrable, no gesture) -> rollback + suppress set.
+      mock.emitBeforeNavigate({ tabId: TAB, frameId: 0, url: "https://b.com/" });
+      mock.emitCommitted({ tabId: TAB, frameId: 0, url: "https://b.com/", transitionType: "link" });
+      // 3. A DIFFERENT suspicious URL C within the 6s suppress window.
+      mock.emitBeforeNavigate({ tabId: TAB, frameId: 0, url: "https://c.com/" });
+      mock.emitCommitted({ tabId: TAB, frameId: 0, url: "https://c.com/", transitionType: "link" });
+      await vi.runAllTimersAsync();
+
+      const pending = (mock.chrome.storage.session._store["ns_sw:pendingRollback"] ?? {}) as Record<
+        string,
+        { url: string }
+      >;
+      // Pre-fix: the suppress window from B's rollback survived the navigation to C,
+      // so onCommitted(C) returned early -> no rollback queued for C (undefined).
+      // Post-fix: onBeforeNavigate(C) cleared the suppress window -> C rolls back.
+      expect(pending[String(TAB)]?.url).toBe("https://c.com/");
+    });
+
+    it("keeps the suppress window for the rollback-return nav but clears it for any other (disc#1)", async () => {
+      const TAB = 50;
+      const future = Date.now() + 60_000;
+      // Seed a rollback-return state: suppress active, a matching rollbackReturn,
+      // and a pending forward offer (so preserveForwardOffer can evaluate true).
+      const mock = createChromeMock();
+      mock.chrome.storage.session._store["ns_sw:suppressUntil"] = { [TAB]: future };
+      mock.chrome.storage.session._store["ns_sw:rollbackReturn"] = {
+        [TAB]: { url: "https://safe.com/", expiresAt: future },
+      };
+      // pendingForward just needs to exist (preserveForwardOffer requires !!forward);
+      // its url is NOT compared -- only rollbackReturn.url === details.url is matched.
+      mock.chrome.storage.session._store["ns_sw:pendingForward"] = {
+        [TAB]: { url: "https://evil.com/", ts: Date.now() },
+      };
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+
+      // 1. The rollback-return navigation (url matches rollbackReturn) must KEEP suppress.
+      mock.emitBeforeNavigate({ tabId: TAB, frameId: 0, url: "https://safe.com/" });
+      await vi.runAllTimersAsync();
+      const afterReturn = (mock.chrome.storage.session._store["ns_sw:suppressUntil"] ?? {}) as Record<string, number>;
+      expect(afterReturn[String(TAB)], "suppress must survive the rollback-return nav").toBeDefined();
+
+      // 2. A genuine different navigation must CLEAR suppress.
+      mock.emitBeforeNavigate({ tabId: TAB, frameId: 0, url: "https://other.com/" });
+      await vi.runAllTimersAsync();
+      const afterOther = (mock.chrome.storage.session._store["ns_sw:suppressUntil"] ?? {}) as Record<string, number>;
+      // Pre-fix: suppress was never cleared on any onBeforeNavigate, so it survives here too.
+      expect(afterOther[String(TAB)], "suppress must be cleared by a non-return nav").toBeUndefined();
+    });
+  });
 });

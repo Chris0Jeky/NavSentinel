@@ -796,6 +796,12 @@ function onBeforeNavigateHandler(details: chrome.webNavigation.WebNavigationPare
   clearPendingTabState(details.tabId, { preserveForwardOffer });
   if (!preserveForwardOffer) {
     rollbackReturnByTab.delete(details.tabId);
+    // Clear any active rollback-suppress window on a genuine new navigation. The
+    // suppress window exists ONLY to stop the rollback-return commit (the
+    // preserveForwardOffer case) from re-triggering a rollback; if it survived a
+    // forward navigation, a second suspicious URL committed within the 6s window
+    // would be silently skipped by onCommittedHandler's suppress check. (disc#1)
+    suppressUntilByTab.delete(details.tabId);
   }
   allowStartedByTab.delete(details.tabId);
   const now = Date.now();
