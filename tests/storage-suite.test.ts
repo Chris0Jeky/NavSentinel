@@ -226,6 +226,53 @@ describe("suite storage and allowlist migration", () => {
     expect(storedLog[0]?.id).toBe("evt-30");
   });
 
+  it("caps the imported event log via trimEventLog: evicts silent-decision kinds first, preserves loud (#252)", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    // 40 loud + 30 silent = 70 entries, limit 50 (over by 20). A plain slice(-50) would
+    // drop the 20 oldest LOUD entries; trimEventLog evicts the 20 oldest SILENT entries
+    // instead, so all 40 loud survive and only the newest 10 silent remain.
+    const loud = Array.from({ length: 40 }, (_, i) => ({
+      id: `loud-${i}`, ts: i, kind: "nav_click_block" as const,
+    }));
+    const silent = Array.from({ length: 30 }, (_, i) => ({
+      id: `silent-${i}`, ts: 100 + i, kind: "nav_silent_allow" as const,
+    }));
+
+    const { importAll } = await import("../extension/src/shared/storage");
+    await importAll({ settings: { logLimit: 50 }, eventLog: [...loud, ...silent] });
+
+    const storedLog = store["sentinelsuite:event_log_v1"] as Array<{ id: string; kind: string }>;
+    expect(storedLog).toHaveLength(50);
+    expect(storedLog.filter((e) => e.kind === "nav_click_block")).toHaveLength(40); // all loud kept
+    const silentKept = storedLog.filter((e) => e.kind === "nav_silent_allow");
+    expect(silentKept).toHaveLength(10);
+    expect(silentKept.map((e) => e.id)).toEqual(silent.slice(-10).map((e) => e.id)); // newest 10
+  });
+
+  it("caps an all-silent imported event log to the newest N via trimEventLog (#252)", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    // Degenerate-path coverage (NOT a fix discriminator — the mixed loud/silent test above
+    // is). For a homogeneous all-silent log, trimEventLog's silent-first eviction is
+    // equivalent to the old tail slice, so this passes pre-fix too; its value is exercising
+    // the full importAll -> trimEventLog -> normalizeEventLog path on the all-silent shape.
+    // logLimit is clamped to a minimum of 50 (clampInt), so overflow needs >50 entries.
+    const silent = Array.from({ length: 60 }, (_, i) => ({
+      id: `silent-${i}`, ts: i, kind: "nav_silent_allow" as const,
+    }));
+
+    const { importAll } = await import("../extension/src/shared/storage");
+    await importAll({ settings: { logLimit: 50 }, eventLog: silent });
+
+    const storedLog = store["sentinelsuite:event_log_v1"] as Array<{ id: string; kind: string }>;
+    expect(storedLog).toHaveLength(50);
+    expect(storedLog.map((e) => e.id)).toEqual(silent.slice(-50).map((e) => e.id)); // newest 50
+    expect(storedLog.every((e) => e.kind === "nav_silent_allow")).toBe(true);
+  });
+
   it("imports prompt outcomes and computes non-zero adaptive scores", async () => {
     const { chrome, store } = createChromeMock();
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);

@@ -1391,14 +1391,17 @@ describe("prompt outcome delegation — retry, drop, and refusal", () => {
     const { importAll, PromptOutcomeDeliveryError } = await import("../extension/src/shared/storage");
     await expect(
       importAll({
-        eventLog: [{ kind: "nav_block" }],
+        // Valid entry (id+ts+known kind): importAll now normalizes the eventLog via
+        // trimEventLog (#252), which drops malformed rows, so a placeholder lacking
+        // id/ts would be filtered to [] and obscure the atomicity assertion below.
+        eventLog: [{ id: "e-1", ts: 5, kind: "nav_click_block" }],
         promptOutcomes: [{ id: "imp-1", ts: 5, domain: "d.example", type: "nav", score: 10, outcome: "allow" }],
       })
     ).rejects.toBeInstanceOf(PromptOutcomeDeliveryError);
     expect(calls).toBe(4);
     // Non-atomic: eventLog (written before the prompt-outcome step) IS committed,
     // which is why the options handler must report a *partial* failure (#188 R1)...
-    expect(store[EVENT_LOG_KEY]).toEqual([{ kind: "nav_block" }]);
+    expect(store[EVENT_LOG_KEY]).toEqual([{ id: "e-1", ts: 5, kind: "nav_click_block" }]);
     // ...but the delegated prompt-outcome write never reached storage (seed intact).
     expect(store[PROMPT_OUTCOMES_KEY]).toEqual([seed]);
   });
