@@ -207,10 +207,21 @@ export async function getSuiteSettings(): Promise<SuiteSettings> {
   return mergeSuiteSettings(structuredClone(DEFAULT_SUITE_SETTINGS), stored);
 }
 
-export async function updateSuiteSettings(partial: SuiteSettingsPatch): Promise<SuiteSettings> {
-  const cur = await getSuiteSettings();
-  const next = mergeSuiteSettings(cur, partial);
-  await chrome.storage.local.set({ [SUITE_SETTINGS_KEY]: next });
+let settingsPending: Promise<unknown> = Promise.resolve();
+
+export function updateSuiteSettings(partial: SuiteSettingsPatch): Promise<SuiteSettings> {
+  // Serialize the read-modify-write so rapid concurrent updates (e.g. the popup nav-mode and
+  // cred-mode toggles fired in quick succession, or a double-tap on one segment) don't both read
+  // the same state and have the second write silently clobber the first's change. (#305)
+  const next = settingsPending.then(async (): Promise<SuiteSettings> => {
+    const cur = await getSuiteSettings();
+    const merged = mergeSuiteSettings(cur, partial);
+    await chrome.storage.local.set({ [SUITE_SETTINGS_KEY]: merged });
+    return merged;
+  });
+  settingsPending = next.catch((err) => {
+    console.warn("[NavSentinel] suite settings serialization error:", err);
+  });
   return next;
 }
 
