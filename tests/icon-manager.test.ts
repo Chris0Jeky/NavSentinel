@@ -5,6 +5,7 @@ import {
   getTabIconState,
   setAllTabsGray,
   _getTabStateMap,
+  _resetForTesting,
 } from "../extension/src/sw/icon_manager";
 
 const setBadgeText = vi.fn().mockResolvedValue(undefined);
@@ -23,7 +24,7 @@ vi.stubGlobal("chrome", {
 
 describe("icon_manager", () => {
   beforeEach(() => {
-    _getTabStateMap().clear();
+    _resetForTesting(); // clears tabState + tabUpdateChains + resetGeneration (test isolation)
     setBadgeText.mockReset().mockResolvedValue(undefined);
     setBadgeBackgroundColor.mockReset().mockResolvedValue(undefined);
     tabsQuery.mockClear();
@@ -159,6 +160,31 @@ describe("icon_manager", () => {
       await setAllTabsGray();
       expect(setBadgeText).toHaveBeenCalledTimes(1);
       expect(setBadgeText).toHaveBeenCalledWith({ tabId: 30, text: "" });
+    });
+
+    it("blanks AFTER an in-flight update so a reset tab never shows a stale badge (#272)", async () => {
+      // Symmetric guard for the setAllTabsGray path (the clearTabIcon equivalent is the
+      // #272 test above). Pre-fix the fire-and-forget blank could land before the in-flight
+      // update's writes; post-fix the per-tab blankBadgeOrdered orders it strictly last.
+      const textOrder: string[] = [];
+      setBadgeText.mockImplementation(async ({ text }: { text: string }) => {
+        textOrder.push(text);
+      });
+      let releaseBg!: () => void;
+      const gate = new Promise<void>((resolve) => { releaseBg = resolve; });
+      setBadgeBackgroundColor.mockImplementationOnce(async () => { await gate; });
+      tabsQuery.mockResolvedValue([{ id: 20 }]);
+
+      const p = updateTabIcon(20, "red"); // in-flight, gated on its bg write
+      for (let i = 0; i < 8; i++) await Promise.resolve();
+      expect(textOrder).toEqual([]);
+
+      const gray = setAllTabsGray(); // queues a blank ordered AFTER the in-flight update
+      releaseBg();
+      await Promise.all([p, gray]);
+
+      expect(textOrder).toEqual(["✕", ""]);
+      expect(_getTabStateMap().size).toBe(0);
     });
   });
 

@@ -146,3 +146,15 @@ export async function setAllTabsGray(): Promise<void> {
 export function _getTabStateMap(): Map<number, { icon: IconState; blocks: number }> {
   return tabState;
 }
+
+/**
+ * Reset ALL module-level state for test isolation. The plain `_getTabStateMap().clear()`
+ * left `resetGeneration` monotonically elevated and `tabUpdateChains` populated across
+ * tests, which is harmless today (tests rely on generation CHANGES, not absolute values)
+ * but fragile under reordering/parallelism. Exposed for testing only.
+ */
+export function _resetForTesting(): void {
+  tabState.clear();
+  tabUpdateChains.clear();
+  resetGeneration = 0;
+}
