@@ -99,15 +99,19 @@ export function isKnownRedirector(url: string): boolean {
 
   const hostname = parsed.hostname.toLowerCase();
 
-  // Exact shortener domain match
+  // Exact shortener domain match (definitive).
   if (SHORTENER_DOMAINS.has(hostname)) return true;
 
+  // Known-legitimate tracking services (e.g. go.microsoft.com, click.pstmrk.it) deliver real
+  // tracked-link URLs whose hostnames match tracking prefixes AND whose paths/params match the
+  // open-redirect heuristics below. Exempt them from ALL heuristic checks, not just the prefix
+  // check (#285): the earlier guard wrapped only the prefix loop, so an allowlisted host with a
+  // `?url=`/`?redirect=` param or a `/link/`-style path still false-positived as a redirector.
+  if (TRACKING_PREFIX_ALLOWLIST.has(hostname)) return false;
+
   // Tracking subdomain prefix match (e.g. click.example.com).
-  // Skip known-legitimate services that happen to match tracking prefixes.
-  if (!TRACKING_PREFIX_ALLOWLIST.has(hostname)) {
-    for (const prefix of TRACKING_PREFIXES) {
-      if (hostname.startsWith(prefix)) return true;
-    }
+  for (const prefix of TRACKING_PREFIXES) {
+    if (hostname.startsWith(prefix)) return true;
   }
 
   // Redirect query parameters
@@ -224,7 +228,12 @@ export class RedirectChainTracker {
   private pruneStale(now: number): void {
     for (const [tabId, chain] of this.chains) {
       const lastHop = chain.hops[chain.hops.length - 1];
-      if (lastHop && now - lastHop.ts > CHAIN_STALE_MS) {
+      // An empty-hops chain (e.g. one restored from session storage, whose persisted
+      // validation does not require hops.length > 0) has no lastHop, so the lastHop-based
+      // staleness check never fired and the entry persisted indefinitely. Fall back to
+      // startedAt so such chains are still time-pruned. (#285)
+      const refTs = lastHop ? lastHop.ts : chain.startedAt;
+      if (now - refTs > CHAIN_STALE_MS) {
         this.chains.delete(tabId);
       }
     }
