@@ -1302,6 +1302,49 @@ describe("service worker handlers", () => {
       expect(completeMsg).toBeUndefined();
     });
 
+    it("preserves expectedCallbackDomain when a second OAuth URL has no redirect_uri (disc#4)", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+
+      // 1. Authorization request with redirect_uri -> flow created (redirect phase),
+      //    expectedCallbackDomain = app.contoso.com.
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        transitionType: "link",
+        url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=x&redirect_uri=https%3A%2F%2Fapp.contoso.com%2Fcb&response_type=code",
+      });
+      // 2. Second authorization URL (with redirect_uri) -> advances to consent phase.
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        transitionType: "link",
+        transitionQualifiers: ["server_redirect"],
+        url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=x&redirect_uri=https%3A%2F%2Fapp.contoso.com%2Fcb&response_type=code&prompt=consent",
+      });
+      mock.sentMessages.length = 0;
+      // 3. Injected second OAuth URL WITHOUT a redirect_uri (the attack): must NOT
+      //    wipe the expectedCallbackDomain established by the active flow.
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        transitionType: "link",
+        url: "https://login.live.com/oauth20_authorize.srf?client_id=x&response_type=code&scope=openid",
+      });
+
+      const flowMsg = mock.sentMessages.find(
+        (m) => (m.message as { type: string }).type === "ns-oauth-flow-update" && m.tabId === 10,
+      );
+      // Pre-fix: the consent-phase flow was overwritten by a fresh redirect-phase flow
+      // with expectedCallbackDomain "" (then isUnexpectedCallback passes anything).
+      // Post-fix: the flow is updated in place and the domain is preserved.
+      expect(
+        (flowMsg?.message as { flow: { expectedCallbackDomain: string } } | undefined)?.flow
+          .expectedCallbackDomain,
+      ).toBe("app.contoso.com");
+    });
+
     it("a genuine cross-domain provider hop (no response params) does not fire a redirect-mismatch (#207)", async () => {
       const mock = createChromeMock();
       await loadSw(mock);
