@@ -388,10 +388,11 @@ function trySendRollback(
       rollbackSendInFlight.delete(tabId);
       if (chrome.runtime.lastError) {
         readyTabs.delete(tabId);
-        // Re-queue for retry, but not for a tab that closed during the send (#323/disc#7).
-        // NOTE: this can still clobber a newer pending entry written during the async
-        // gap (#323/disc#5/#6) — that needs the per-tab send-generation guard tracked
-        // separately; left intentionally unchanged here.
+        // Re-queue for retry, but not for a tab that closed during the send (#323/disc#7):
+        // onRemoved fires synchronously and clearPendingTabState already deleted the
+        // entry, so skipping the re-queue here leaves no zombie. NOTE: this re-queue can
+        // still clobber a newer pending entry written during the async gap (#323/disc#5/#6)
+        // — that needs the per-tab send-generation guard tracked separately; unchanged here.
         if (!wasTabRecentlyRemoved(tabId, Date.now())) {
           pendingRollbackByTab.set(tabId, pending);
         }
@@ -644,7 +645,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         readyTabs.add(tabId);
         swState.persistReadyTabs();
         const pending = pendingRollbackByTab.get(tabId);
-        if (pending) {
+        // Skip if a send is already in flight (e.g. an onUpdated-triggered send, or
+        // a rapid duplicate ns-ready) so we don't double-send the same rollback. (#323/disc#3)
+        if (pending && !rollbackSendInFlight.has(tabId)) {
           trySendRollback(tabId, pending);
         }
       }
