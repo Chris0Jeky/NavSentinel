@@ -44,6 +44,12 @@ describe("brand-templates build script — deterministic, timestamp-free (#322 /
       resolve(__dirname, "../extension/public/brand_templates.json"),
       "utf-8",
     );
-    expect(JSON.parse(committed)).toEqual(buildTemplateFile());
+    // Custom message uses vitest's expect(actual, message) form (Jest-compatible
+    // matchers ignore a message arg passed to toEqual) so a failure tells the
+    // contributor the remedy, not just the diff.
+    expect(
+      JSON.parse(committed),
+      "Committed extension/public/brand_templates.json is out of sync with the generator. Run `npm run build:templates` and commit the updated file.",
+    ).toEqual(buildTemplateFile());
   });
 });
