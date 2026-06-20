@@ -1385,6 +1385,9 @@ describe("credential_guard", () => {
       // synchronously is let through. Real browsers dispatch that event during the
       // requestSubmit() call, so consumeAllowNext (at the top of handleSubmit, before
       // any await) sees the token and returns early without re-prompting.
+      // NOTE: this validates the one-shot DESIGN, not the #264 fix — it passes on pre-fix
+      // code too (the re-entrant consume deletes the token before `finally` runs). The fix
+      // discriminator is the constraint-validation-no-op test below.
       mockShowModal.mockResolvedValue("proceed_once");
       const form = createPasswordForm();
       let reentrantCount = 0;
@@ -1441,6 +1444,26 @@ describe("credential_guard", () => {
 
       expect(second.defaultPrevented).toBe(true); // interposed again -> token did not linger
       expect(mockShowModal).toHaveBeenCalledTimes(2); // assessment ran for submit #2
+    });
+
+    it("clears the bypass token after requestSubmit throws (no lingering) (#264)", async () => {
+      // Pins the throw exit path: requestSubmit throws -> resumeSubmit falls back and the
+      // `finally` clears the token, so a separate later submit on the same form is re-assessed.
+      // (Pre-fix the catch already deleted on throw, so this is coverage-pinning, not a
+      // discriminator — the no-op test above is the discriminator.)
+      mockShowModal.mockResolvedValue("proceed_once");
+      const form = createPasswordForm();
+      stubRequestSubmit(form, vi.fn(() => { throw new Error("requestSubmit failed"); }));
+      vi.spyOn(form, "submit").mockImplementation(() => {}); // avoid jsdom navigation
+
+      await dispatchSubmit(form); // submit #1 -> resumeSubmit -> requestSubmit throws -> fallback
+      expect(mockShowModal).toHaveBeenCalledTimes(1);
+
+      mockShowModal.mockResolvedValue("cancel");
+      const second = await dispatchSubmit(form);
+
+      expect(second.defaultPrevented).toBe(true); // re-assessed -> token did not linger after throw
+      expect(mockShowModal).toHaveBeenCalledTimes(2);
     });
   });
 });
