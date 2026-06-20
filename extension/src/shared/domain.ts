@@ -548,7 +548,7 @@ const BRAND_LIST: ReadonlyArray<readonly [brand: string, domain: string]> = [
  * This list is intentionally conservative -- only high-traffic domains
  * that users encounter daily are included.
  */
-const BRAND_KNOWN_ALIASES: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+export const BRAND_KNOWN_ALIASES: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ["google", new Set([
     "googleapis.com", "googleusercontent.com", "googlevideo.com",
     "googletagmanager.com", "googlesyndication.com", "googleadservices.com",
@@ -566,9 +566,9 @@ const BRAND_KNOWN_ALIASES: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ["discord", new Set(["discordapp.com"])],
   ["reddit", new Set(["redditmedia.com", "redditinc.com", "redditstatic.com"])],
   ["shopify", new Set(["shopifycloud.com", "shopifysvc.com"])],
-  ["github", new Set(["githubusercontent.com", "githubusercontent.com", "githubassets.com"])],
+  ["github", new Set(["githubusercontent.com", "githubassets.com"])],
   ["gitlab", new Set(["gitlab.io"])],
-  ["apple", new Set(["apple-dns.net", "appleid.apple.com"])],
+  ["apple", new Set(["apple-dns.net"])],
   ["facebook", new Set(["facebookcorewwwi.onion", "facebookmail.com"])],
   ["instagram", new Set(["instagramstatic.com"])],
   ["netflix", new Set(["nflxext.com", "nflxvideo.net"])],
