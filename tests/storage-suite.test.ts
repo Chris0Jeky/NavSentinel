@@ -187,6 +187,24 @@ describe("suite storage and allowlist migration", () => {
     expect(store["sentinelsuite:trusted_domains_v1"]).toEqual(["example.com"]);
   });
 
+  it("serializes concurrent updateSuiteSettings so neither update is lost (#305)", async () => {
+    const { chrome } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { updateSuiteSettings, getSuiteSettings } = await import("../extension/src/shared/storage");
+
+    // Two independent patches fired concurrently, like the popup's nav-mode + cred-mode handlers.
+    // Pre-fix both read the same state and the second write clobbers the first -> one update lost.
+    await Promise.all([
+      updateSuiteSettings({ nav: { defaultMode: "off" } }),
+      updateSuiteSettings({ credential: { mode: "strict" } }),
+    ]);
+
+    const settings = await getSuiteSettings();
+    expect(settings.nav.defaultMode).toBe("off"); // pre-fix: clobbered back to default
+    expect(settings.credential.mode).toBe("strict");
+  });
+
   it("clamps imported event logs to the configured log limit", async () => {
     const { chrome, store } = createChromeMock();
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
