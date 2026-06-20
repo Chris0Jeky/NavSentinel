@@ -932,7 +932,11 @@ describe("service worker handlers", () => {
           (m) => (m.message as { type: string }).type === "ns-rollback" && m.tabId === 7,
         );
 
-      // onUpdated fires pre-hydration: must be deferred, not run against the empty map.
+      // onUpdated fires pre-hydration. This negative assertion is a setup sanity-check:
+      // pre-fix the ungated handler also reads the still-empty in-memory map and sends
+      // nothing, so it cannot by itself distinguish deferral from an empty read. The
+      // DISCRIMINATOR is the post-hydration positive assertion below, which fails on
+      // pre-fix sw.ts (verified) because the dropped event never re-fires. (#266 R2)
       mock.sentMessages.length = 0;
       mock.emitTabUpdated(7, { status: "complete" }, { url: "https://safe.test/landing" });
       expect(rollbackMsg(), "rollback must NOT be sent before hydration").toBeUndefined();
@@ -987,6 +991,8 @@ describe("service worker handlers", () => {
         );
 
       // currentUrl differs from forward.url, so the forward branch proceeds once it runs.
+      // (Negative assertion is a sanity-check; the post-hydration positive assertion is the
+      // discriminator that fails on pre-fix sw.ts — same rationale as the rollback test.)
       mock.sentMessages.length = 0;
       mock.emitTabUpdated(8, { status: "complete" }, { url: "https://safe.test/current" });
       expect(forwardMsg(), "forward offer must NOT be sent before hydration").toBeUndefined();
@@ -996,7 +1002,9 @@ describe("service worker handlers", () => {
 
       const sent = forwardMsg();
       expect(sent, "forward offer sent after hydration from the restored map").toBeDefined();
-      expect((sent!.message as { url: string }).url).toBe("https://safe.test/forward-target");
+      expect(sent!.message).toEqual(
+        expect.objectContaining({ type: "ns-forward-offer", url: "https://safe.test/forward-target" }),
+      );
     });
   });
 
