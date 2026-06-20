@@ -144,6 +144,15 @@ const oauthFlowByTab = swState.oauthFlowByTab;
 // bodies await this promise so the first event after a restart sees restored state.
 const hydrateReady = swState.hydrate();
 
+// Refresh the synchronously-read cachedDefaultMode on every worker start.
+// onInstalled/onStartup also do this, but neither fires on a mid-session MV3
+// restart (the worker is woken by a navigation or message, not install/startup).
+// Without this, after such a restart cachedDefaultMode stays at the "smart"
+// default until the next storage change, so onCommittedHandler would paint the
+// toolbar badge green even when the user's persisted mode is "off". Fire-and-
+// forget, matching the onInstalled/onStartup pattern. (#303)
+void getNavSettings().then((s) => { cachedDefaultMode = s.defaultMode; }).catch(() => {});
+
 function pruneStaleOAuthFlows(): void {
   const now = Date.now();
   for (const [tabId, flow] of oauthFlowByTab) {

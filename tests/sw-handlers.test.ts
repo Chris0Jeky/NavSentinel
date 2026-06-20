@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { SUITE_SETTINGS_KEY } from "../extension/src/shared/storage";
 
 type RuntimeMessage = Record<string, unknown>;
 type RuntimeSender = { tab?: { id?: number; windowId?: number }; frameId?: number };
@@ -1907,6 +1908,37 @@ describe("service worker handlers", () => {
 
       expect(mock.chrome.action.setBadgeText).toHaveBeenCalledWith(
         expect.objectContaining({ tabId: 10, text: "" }),
+      );
+    });
+  });
+
+  describe("cachedDefaultMode refresh on worker start (#303)", () => {
+    it("paints a fresh top-frame nav gray when persisted mode is 'off' after a mid-session restart", async () => {
+      const mock = createChromeMock();
+      // Persisted mode is "off". loadSw simulates a mid-session MV3 restart: the
+      // worker module is imported (woken by an event) but onInstalled/onStartup
+      // do NOT fire, so the only refresh of cachedDefaultMode is the eager one.
+      mock.chrome.storage.local.get = (async () => ({
+        [SUITE_SETTINGS_KEY]: { nav: { defaultMode: "off" } },
+      })) as unknown as typeof mock.chrome.storage.local.get;
+
+      await loadSw(mock);
+      // Let hydration and the eager cachedDefaultMode refresh settle.
+      await vi.runAllTimersAsync();
+
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        url: "https://example.com/",
+        transitionType: "link",
+      });
+      await vi.runAllTimersAsync();
+
+      // mode "off" => gray badge (BADGE_CONFIG.gray is null: empty text, no color).
+      expect(mock.chrome.action.setBadgeText).toHaveBeenCalledWith({ tabId: 10, text: "" });
+      // Pre-fix the cache stayed "smart" => green badge would set the green color.
+      expect(mock.chrome.action.setBadgeBackgroundColor).not.toHaveBeenCalledWith(
+        expect.objectContaining({ tabId: 10, color: "#16a34a" }),
       );
     });
   });
