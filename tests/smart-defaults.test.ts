@@ -103,6 +103,18 @@ describe("smart defaults – pattern detection", () => {
     expect(analyzeOutcomesForPair(outcomes, "a.com", "b.com")).toBeNull();
   });
 
+  it("a cancel in the middle resets the consecutive count", () => {
+    const outcomes = [
+      makeOutcome({ domain: "a.com", destDomain: "b.com", outcome: "allow_once", ts: 1 }),
+      makeOutcome({ domain: "a.com", destDomain: "b.com", outcome: "cancel", ts: 2 }),
+      makeOutcome({ domain: "a.com", destDomain: "b.com", outcome: "allow_once", ts: 3 }),
+      makeOutcome({ domain: "a.com", destDomain: "b.com", outcome: "allow_once", ts: 4 }),
+    ];
+    // cancel (user closed the prompt without deciding) is not a positive signal,
+    // so it breaks the streak -- only 2 consecutive from the most recent.
+    expect(analyzeOutcomesForPair(outcomes, "a.com", "b.com")).toBeNull();
+  });
+
   it("only counts nav-type outcomes, not cred", () => {
     const outcomes = [
       makeOutcome({ domain: "a.com", destDomain: "b.com", outcome: "allow_once", type: "cred", ts: 1 }),
