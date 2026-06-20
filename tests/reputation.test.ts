@@ -282,6 +282,26 @@ describe("bloom filter serialization", () => {
     expect(() => loadFilter(buf)).toThrow("exceeds safety cap");
   });
 
+  it("rejects a degenerate filter with m=0 (fail closed) (#287)", () => {
+    const buf = new Uint8Array(16);
+    const view = new DataView(buf.buffer);
+    view.setUint32(0, 0x424c4f4d, true); // "BLOM"
+    view.setUint32(4, 1, true);           // version 1
+    view.setUint32(8, 7, true);           // k=7
+    view.setUint32(12, 0, true);          // m=0 (degenerate)
+    expect(() => loadFilter(buf)).toThrow("m=0 is invalid");
+  });
+
+  it("rejects a degenerate filter with k=0 (fail closed) (#287)", () => {
+    const buf = new Uint8Array(16);
+    const view = new DataView(buf.buffer);
+    view.setUint32(0, 0x424c4f4d, true); // "BLOM"
+    view.setUint32(4, 1, true);           // version 1
+    view.setUint32(8, 0, true);           // k=0 (degenerate)
+    view.setUint32(12, 64, true);         // m=64
+    expect(() => loadFilter(buf)).toThrow("k=0 is invalid");
+  });
+
   it("accepts m and k at safety cap limits", () => {
     // Build a valid header with k=MAX_HASH_FUNCTIONS and a small m
     const m = 64;
@@ -387,6 +407,20 @@ describe("runtime reputation state", () => {
     expect(result).toBe(false);
     // After failed init, isKnownBadDomain should return false (graceful degradation)
     expect(isKnownBadDomain("anything")).toBe(false);
+  });
+
+  it("initReputation fails closed on a degenerate m=0 filter: reputationReady() stays false (#287)", () => {
+    // A zeroed/corrupt binary with a valid header must NOT load as a non-null filter that
+    // reports ready while matching nothing (which would silently disable all reputation checks).
+    const buf = new Uint8Array(16);
+    const view = new DataView(buf.buffer);
+    view.setUint32(0, 0x424c4f4d, true); // "BLOM"
+    view.setUint32(4, 1, true);           // version 1
+    view.setUint32(8, 7, true);           // k=7
+    view.setUint32(12, 0, true);          // m=0 (degenerate)
+    expect(initReputation(buf)).toBe(false);
+    expect(reputationReady()).toBe(false); // honest: not protected (pre-fix this was true)
+    expect(isKnownBadDomain("anything.example")).toBe(false);
   });
 });
 
