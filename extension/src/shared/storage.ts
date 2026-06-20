@@ -438,7 +438,16 @@ export async function getEventLog(): Promise<EventLogEntry[]> {
  * is preserved. (Per-store separation is the eventual P5-C4 / #240 end-state.)
  */
 export function trimEventLog(entries: EventLogEntry[], limit: number): EventLogEntry[] {
-  const validEntries = normalizeEventLog(entries);
+  return trimValidEventLog(normalizeEventLog(entries), limit);
+}
+
+/**
+ * Silent-eviction trim for entries that are ALREADY shape-validated (no normalizeEventLog pass).
+ * Use this when the caller has already normalized — e.g. importAll normalizes then sanitizes each
+ * entry, so re-validating inside trimEventLog would be a redundant O(N) pass (#299 R1). The public
+ * trimEventLog wrapper above is for raw / storage-read input.
+ */
+function trimValidEventLog(validEntries: EventLogEntry[], limit: number): EventLogEntry[] {
   if (validEntries.length <= limit) return validEntries;
   let overflow = validEntries.length - limit;
   const kept: EventLogEntry[] = [];
@@ -628,6 +637,8 @@ function sanitizeImportedEventLogEntry(e: EventLogEntry): EventLogEntry {
   if (e.url !== undefined) out.url = cap(e.url);
   if (e.destHost !== undefined) out.destHost = cap(e.destHost);
   if (e.score !== undefined) out.score = e.score;
+  // reasons elements are already strings here (isEventLogEntry pre-filtered them in
+  // normalizeEventLog); sanitizeCodeList only applies the count (32) + per-string-length (80) caps.
   const reasons = sanitizeCodeList(e.reasons);
   if (reasons !== undefined) out.reasons = reasons;
   if (e.extra !== undefined) {
@@ -1190,9 +1201,12 @@ export async function importAll(payload: unknown): Promise<void> {
     // Route the cap through trimEventLog (same as appendEvent) for consistency: it
     // normalizes invalid rows and evicts silent-decision kinds first, so an oversized
     // import preserves loud/protected entries instead of a blind tail slice. (#252)
-    // Re-sanitize each (shape-valid) entry first to bound per-entry content size so a crafted
-    // backup can't exhaust the shared storage quota (#299).
-    writes[EVENT_LOG_KEY] = trimEventLog(
+    // Normalize (shape-validate) then re-sanitize each entry to bound per-entry content size so a
+    // crafted backup can't exhaust the shared storage quota (#299); trimValidEventLog then applies
+    // the silent-eviction cap without re-normalizing (#299 R1). The total-quota residual (N entries
+    // each at the per-entry cap) is fail-closed by importAll's single atomic set (#270), which
+    // rejects on quota-exceeded and leaves storage unchanged.
+    writes[EVENT_LOG_KEY] = trimValidEventLog(
       normalizeEventLog(p.eventLog).map(sanitizeImportedEventLogEntry),
       boundedLogLimit
     );
