@@ -137,9 +137,8 @@ function resumeSubmit(
     form.requestSubmit(submitter);
   } catch {
     // requestSubmit failed (e.g. the submit control was detached or re-associated
-    // during the await window). Nothing was submitted, so revoke the one-shot
-    // bypass.
-    allowNextSubmitUntil.delete(form);
+    // during the await window). Nothing was submitted; the `finally` below revokes
+    // the one-shot bypass on every exit path (throw, no-op, and success).
     // form.submit() ignores the submitter's formaction and always POSTs to
     // form.action, so when a formaction override was assessed (#227.1) falling
     // back would send credentials to an UNASSESSED destination. Fail closed and
