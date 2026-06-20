@@ -234,6 +234,10 @@ export function serializeFilter(filter: BloomFilterState): Uint8Array {
  * Exported only for unit tests.
  * @internal
  *
+ * Raw constructor with no validation: callers are responsible for ensuring
+ * m >= MIN_FILTER_BITS and k > 0 if the filter is to be used with
+ * insertDomain/checkDomain (both treat a sub-byte or k=0 filter as inert). (#292)
+ *
  * @param m Number of bits
  * @param k Number of hash functions
  */
@@ -252,9 +256,10 @@ export function createFilter(m: number, k: number): BloomFilterState {
  * @internal
  */
 export function insertDomain(filter: BloomFilterState, domain: string): void {
-  // Mirror checkDomain / loadFilter: never write into a sub-byte degenerate
-  // filter (m < MIN_FILTER_BITS). (#292)
-  if (!domain || filter.m < MIN_FILTER_BITS) return;
+  // Mirror checkDomain / loadFilter: never write into a degenerate filter --
+  // a sub-byte m (m < MIN_FILTER_BITS) or k=0. The k=0 case is also covered by
+  // the empty for-loop below; the explicit guard keeps parity with checkDomain. (#292)
+  if (!domain || filter.m < MIN_FILTER_BITS || filter.k === 0) return;
   const key = domain.toLowerCase();
   const h1 = murmurhash3_32(key, 0x9747b28c);
   // Force h2 to be odd -- must match checkDomain's h2 derivation.
