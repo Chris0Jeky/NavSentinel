@@ -1203,6 +1203,7 @@ describe("credential_guard", () => {
       // Disabled guard must not block: fall back to form.submit(), no safety toast.
       expect(submitSpy).toHaveBeenCalled();
       expect(mockComputeRisk).not.toHaveBeenCalled();
+      expect(mockShowToast).not.toHaveBeenCalled(); // allowUnsafeFallback suppresses the toast (R2)
     });
 
     it("blocks an opaque->opaque (data:) action swap during the prompt (R2-L1)", async () => {
@@ -1411,6 +1412,8 @@ describe("credential_guard", () => {
     });
 
     it("bypass does not apply to a different form", async () => {
+      // NOTE: validates WeakMap form-identity isolation, which was correct before #264 —
+      // this passes on pre-fix code too. The fix discriminator is the no-op test above.
       mockShowModal.mockResolvedValue("proceed_once");
       const form1 = createPasswordForm();
       stubRequestSubmit(form1, vi.fn());
@@ -1463,6 +1466,35 @@ describe("credential_guard", () => {
       const second = await dispatchSubmit(form);
 
       expect(second.defaultPrevented).toBe(true); // re-assessed -> token did not linger after throw
+      expect(mockShowModal).toHaveBeenCalledTimes(2);
+    });
+
+    it("clears the bypass token on the formaction safety-toast early-return path (#264)", async () => {
+      // The one finally-covered exit not pinned elsewhere: requestSubmit throws AND the
+      // submitter has a formaction AND allowUnsafeFallback is false -> catch shows the
+      // safety toast and returns early (no form.submit fallback). The `finally` must still
+      // clear the token so the next separate submit is re-assessed. Guards against a future
+      // refactor moving the delete out of `finally` into only the form.submit() path.
+      mockShowModal.mockResolvedValue("proceed_once");
+      const form = createPasswordForm();
+      const btn = document.createElement("button");
+      btn.type = "submit";
+      btn.setAttribute("formaction", "https://pay.example/checkout");
+      form.appendChild(btn);
+      stubRequestSubmit(form, vi.fn(() => { throw new Error("NotFoundError"); }));
+      const submitSpy = vi.spyOn(form, "submit").mockImplementation(() => {});
+
+      await dispatchSubmit(form, btn); // toast + early return (form.submit NOT called)
+      expect(mockShowToast).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining("could not be completed safely") }),
+      );
+      expect(submitSpy).not.toHaveBeenCalled();
+      expect(mockShowModal).toHaveBeenCalledTimes(1);
+
+      // Token must be cleared by finally -> next submit fully re-assessed (not bypassed).
+      mockShowModal.mockResolvedValue("cancel");
+      const second = await dispatchSubmit(form, btn);
+      expect(second.defaultPrevented).toBe(true);
       expect(mockShowModal).toHaveBeenCalledTimes(2);
     });
   });
