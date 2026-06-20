@@ -5,6 +5,7 @@ import {
   getTabIconState,
   setAllTabsGray,
   _getTabStateMap,
+  _resetForTesting,
 } from "../extension/src/sw/icon_manager";
 
 const setBadgeText = vi.fn().mockResolvedValue(undefined);
@@ -23,7 +24,7 @@ vi.stubGlobal("chrome", {
 
 describe("icon_manager", () => {
   beforeEach(() => {
-    _getTabStateMap().clear();
+    _resetForTesting(); // clears tabState + tabUpdateChains + resetGeneration (test isolation)
     setBadgeText.mockReset().mockResolvedValue(undefined);
     setBadgeBackgroundColor.mockReset().mockResolvedValue(undefined);
     tabsQuery.mockClear();
@@ -105,15 +106,15 @@ describe("icon_manager", () => {
   });
 
   describe("clearTabIcon", () => {
-    it("removes tab state and clears badge", () => {
+    it("removes tab state and clears badge", async () => {
       _getTabStateMap().set(10, { icon: "red", blocks: 2 });
-      clearTabIcon(10);
+      await clearTabIcon(10); // blank is now chain-ordered + async (#272)
       expect(_getTabStateMap().has(10)).toBe(false);
       expect(setBadgeText).toHaveBeenCalledWith({ tabId: 10, text: "" });
     });
 
-    it("works on unknown tab without error", () => {
-      expect(() => clearTabIcon(999)).not.toThrow();
+    it("works on unknown tab without error", async () => {
+      await expect(clearTabIcon(999)).resolves.toBeUndefined();
     });
   });
 
@@ -159,6 +160,35 @@ describe("icon_manager", () => {
       await setAllTabsGray();
       expect(setBadgeText).toHaveBeenCalledTimes(1);
       expect(setBadgeText).toHaveBeenCalledWith({ tabId: 30, text: "" });
+    });
+
+    it("blanks AFTER an in-flight update so a reset tab never shows a stale badge (#272)", async () => {
+      // Symmetric guard for the setAllTabsGray path (the clearTabIcon equivalent is the
+      // #272 test above). Pre-fix the fire-and-forget blank could land before the in-flight
+      // update's writes; post-fix the per-tab blankBadgeOrdered orders it strictly last.
+      const textOrder: string[] = [];
+      setBadgeText.mockImplementation(async ({ text }: { text: string }) => {
+        textOrder.push(text);
+      });
+      let releaseBg!: () => void;
+      const gate = new Promise<void>((resolve) => { releaseBg = resolve; });
+      setBadgeBackgroundColor.mockImplementationOnce(async () => { await gate; });
+      // Must be mockResolvedValue (an already-settled promise), NOT a deferred
+      // mockImplementation: this guarantees setAllTabsGray's tabs.query continuation is
+      // enqueued BEFORE releaseBg() fires, so blankBadgeOrdered still sees the in-flight
+      // chain and orders its blank after it. A deferred query could invert that. (#272 R2)
+      tabsQuery.mockResolvedValue([{ id: 20 }]);
+
+      const p = updateTabIcon(20, "red"); // in-flight, gated on its bg write
+      for (let i = 0; i < 8; i++) await Promise.resolve();
+      expect(textOrder).toEqual([]);
+
+      const gray = setAllTabsGray(); // queues a blank ordered AFTER the in-flight update
+      releaseBg();
+      await Promise.all([p, gray]);
+
+      expect(textOrder).toEqual(["✕", ""]);
+      expect(_getTabStateMap().size).toBe(0);
     });
   });
 
@@ -221,13 +251,38 @@ describe("icon_manager", () => {
     const p = updateTabIcon(70, "red"); // in-flight, gated on its background write
     for (let i = 0; i < 8; i++) await Promise.resolve();
 
-    clearTabIcon(70); // clear erases the tab WHILE the update is mid-flight
+    const cleared = clearTabIcon(70); // clear erases the tab WHILE the update is mid-flight
     releaseBg();
-    await p;
+    await Promise.all([p, cleared]);
 
     // The in-flight apply must NOT re-populate the cache the clear just erased.
     expect(getTabIconState(70)).toBe("gray");
     expect(_getTabStateMap().has(70)).toBe(false);
+  });
+
+  it("blanks the badge AFTER an in-flight update so a cleared tab never shows a stale badge (#272)", async () => {
+    // Pre-fix the badge blank was fire-and-forget, so it could resolve BEFORE the in-flight
+    // update's setBadge* writes — leaving the badge showing the stale colour/text even though
+    // the cache was cleared. Routing the blank through the tab's chain orders it strictly last.
+    const textOrder: string[] = [];
+    setBadgeText.mockImplementation(async ({ text }: { text: string }) => {
+      textOrder.push(text);
+    });
+    let releaseBg!: () => void;
+    const gate = new Promise<void>((resolve) => { releaseBg = resolve; });
+    setBadgeBackgroundColor.mockImplementationOnce(async () => { await gate; });
+
+    const p = updateTabIcon(80, "red"); // in-flight, gated on its background write
+    for (let i = 0; i < 8; i++) await Promise.resolve();
+    expect(textOrder).toEqual([]); // in-flight text write hasn't happened yet
+
+    const cleared = clearTabIcon(80); // blank must be ordered AFTER the in-flight update
+    releaseBg();
+    await Promise.all([p, cleared]);
+
+    // The in-flight update painted "✕" FIRST, then the clear blanked it LAST.
+    expect(textOrder).toEqual(["✕", ""]);
+    expect(getTabIconState(80)).toBe("gray");
   });
 
   describe("tabState pruning", () => {

@@ -96,15 +96,34 @@ async function applyTabIcon(
   }
 }
 
-export function clearTabIcon(tabId: number): void {
+// Append a badge-blank to the tab's update chain so it is ordered strictly AFTER any
+// in-flight applyTabIcon for that tab. A fire-and-forget blank (the old behavior) could
+// race the in-flight setBadge* writes — which complete after their resetGeneration
+// capture — and leave the badge NON-EMPTY (the in-flight update's colour/text) even
+// though the cache was cleared. Routing the blank through the chain makes last-write-wins
+// hold for clears too. (#272)
+function blankBadgeOrdered(tabId: number): Promise<void> {
+  const prev = tabUpdateChains.get(tabId) ?? Promise.resolve();
+  const next = prev.catch(() => {}).then(async () => {
+    try {
+      await chrome.action.setBadgeText({ tabId, text: "" });
+    } catch {
+      // Tab closed or extension context invalidated — nothing to blank.
+    }
+  });
+  tabUpdateChains.set(tabId, next);
+  void next.finally(() => {
+    if (tabUpdateChains.get(tabId) === next) tabUpdateChains.delete(tabId);
+  });
+  return next;
+}
+
+export function clearTabIcon(tabId: number): Promise<void> {
   tabState.delete(tabId);
-  tabUpdateChains.delete(tabId);
   resetGeneration++;
-  try {
-    chrome.action.setBadgeText({ tabId, text: "" }).catch(() => {});
-  } catch {
-    // ignore
-  }
+  // Do NOT drop the chain here: blankBadgeOrdered appends to it so the blank runs after
+  // any in-flight update for this tab (the finally in blankBadgeOrdered prunes it). (#272)
+  return blankBadgeOrdered(tabId);
 }
 
 export function getTabIconState(tabId: number): IconState {
@@ -113,18 +132,29 @@ export function getTabIconState(tabId: number): IconState {
 
 export async function setAllTabsGray(): Promise<void> {
   tabState.clear();
-  tabUpdateChains.clear();
   resetGeneration++;
+  // Order each tab's blank after its in-flight update. Do NOT clear the chains: each
+  // blankBadgeOrdered appends to (and self-prunes) its tab's chain, so an in-flight
+  // update can no longer land its setBadge* writes after our blank. (#272)
   const tabs = await chrome.tabs.query({});
   await Promise.all(
-    tabs.map((tab) => {
-      if (tab.id === undefined) return Promise.resolve();
-      return chrome.action.setBadgeText({ tabId: tab.id, text: "" }).catch(() => {});
-    }),
+    tabs.map((tab) => (tab.id === undefined ? Promise.resolve() : blankBadgeOrdered(tab.id))),
   );
 }
 
 /** Exposed for testing only. */
 export function _getTabStateMap(): Map<number, { icon: IconState; blocks: number }> {
   return tabState;
+}
+
+/**
+ * Reset ALL module-level state for test isolation. The plain `_getTabStateMap().clear()`
+ * left `resetGeneration` monotonically elevated and `tabUpdateChains` populated across
+ * tests, which is harmless today (tests rely on generation CHANGES, not absolute values)
+ * but fragile under reordering/parallelism. Exposed for testing only.
+ */
+export function _resetForTesting(): void {
+  tabState.clear();
+  tabUpdateChains.clear();
+  resetGeneration = 0;
 }
