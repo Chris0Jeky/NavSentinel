@@ -57,8 +57,18 @@ export function parsePSL(text) {
     // Skip blanks and comments
     if (!line || line.startsWith("//")) continue;
 
+    // PSL format: a rule is read only up to the first whitespace; any trailing content
+    // on the line is an annotation. Truncating here is spec-correct AND turns a
+    // stray-whitespace line like "a. .b" into "a." — an empty label the guard below
+    // rejects. We deliberately do NOT charset-filter labels: the real PSL lists IDN
+    // rules in UNICODE form (e.g. 公司, امارات, みんな — see the ~1k non-ASCII labels in
+    // psl_data.json), so an ASCII-only [a-z0-9-] filter would reject thousands of valid
+    // rules and break update:psl. The reserved-key/empty-label guard below catches the
+    // labels that actually corrupt the trie. (#322 / #18)
+    const firstToken = line.split(/\s/)[0];
+
     let type = "exact";
-    let rule = line;
+    let rule = firstToken;
 
     if (rule.startsWith("!")) {
       type = "exception";
@@ -69,6 +79,24 @@ export function parsePSL(text) {
     }
 
     const labels = rule.split(".").reverse(); // TLD first
+
+    // Fail closed on malformed rules. The trie reserves three control keys: "" marks a
+    // public-suffix endpoint, "*" marks a wildcard level, "!" marks an exception. A rule
+    // whose labels include one of those (a bare "*" or "!", a stray non-leftmost "*",
+    // a "*." with no base) or an empty label (a bare "!", "*.", or a ".."/leading-dot
+    // line) would SILENTLY CORRUPT the compiled trie — e.g. a bare "*" lands as a
+    // root-level wildcard that marks every TLD label a public suffix, breaking
+    // registrable-domain computation (and therefore same-site / phishing decisions).
+    // The real PSL never contains these; a feed that does is an anomaly we must not
+    // ship, so we throw before buildTrie/write rather than emit a poisoned trie. (#322 / #18)
+    for (const label of labels) {
+      if (label === "" || label === "*" || label === "!") {
+        throw new Error(
+          `Malformed PSL rule (reserved or empty label ${JSON.stringify(label)}): ${JSON.stringify(line)}`,
+        );
+      }
+    }
+
     rules.push({ type, labels });
   }
 
