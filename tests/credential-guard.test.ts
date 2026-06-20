@@ -1380,21 +1380,31 @@ describe("credential_guard", () => {
   // Each test creates a fresh form, so entries from prior tests are GC-eligible
   // and cannot leak. Do NOT reuse form references across `it` blocks.
   describe("allowNextSubmit mechanism", () => {
-    it("second submit on same form within window proceeds without prompt", async () => {
+    it("lets the synchronous re-entrant submit from requestSubmit through (one-shot)", async () => {
+      // The bypass exists ONLY so the submit event that requestSubmit re-dispatches
+      // synchronously is let through. Real browsers dispatch that event during the
+      // requestSubmit() call, so consumeAllowNext (at the top of handleSubmit, before
+      // any await) sees the token and returns early without re-prompting.
       mockShowModal.mockResolvedValue("proceed_once");
       const form = createPasswordForm();
-      stubRequestSubmit(form, vi.fn());
+      let reentrantCount = 0;
+      let reentrantPrevented: boolean | undefined;
+      stubRequestSubmit(
+        form,
+        vi.fn(() => {
+          reentrantCount += 1;
+          const ev = new SubmitEvent("submit", { bubbles: true, cancelable: true, submitter: null });
+          form.dispatchEvent(ev); // synchronous re-dispatch, as the browser does
+          reentrantPrevented = ev.defaultPrevented;
+        }),
+      );
 
-      await dispatchSubmit(form);
+      const first = await dispatchSubmit(form);
 
-      expect(mockShowModal).toHaveBeenCalledTimes(1);
-      vi.resetAllMocks();
-
-      const event2 = await dispatchSubmit(form);
-
-      expect(event2.defaultPrevented).toBe(false);
-      expect(mockGetSettings).not.toHaveBeenCalled();
-      expect(mockShowModal).not.toHaveBeenCalled();
+      expect(first.defaultPrevented).toBe(true); // user submit #1 was interposed (modal shown)
+      expect(reentrantCount).toBe(1);
+      expect(reentrantPrevented).toBe(false); // the re-entrant submit was let through
+      expect(mockShowModal).toHaveBeenCalledTimes(1); // re-entrant submit did NOT re-prompt
     });
 
     it("bypass does not apply to a different form", async () => {
@@ -1412,45 +1422,25 @@ describe("credential_guard", () => {
       expect(mockShowModal).toHaveBeenCalledTimes(2);
     });
 
-    it("bypass expires after 5-second window", async () => {
-      vi.useFakeTimers({ shouldAdvanceTime: true });
-      try {
-        mockShowModal.mockResolvedValue("proceed_once");
-        const form = createPasswordForm();
-        stubRequestSubmit(form, vi.fn());
+    it("does not let the bypass token linger after a constraint-validation no-op (#264)", async () => {
+      // Interactive constraint validation (an empty `required` field / `pattern` mismatch)
+      // makes requestSubmit no-op WITHOUT throwing and WITHOUT re-dispatching a submit, so
+      // nothing consumes the token. Pre-fix it lingered up to 5s and the NEXT separate submit
+      // bypassed assessment + the action-mutation re-check. Post-fix resumeSubmit's `finally`
+      // clears it synchronously, so the next submit is fully re-assessed.
+      mockShowModal.mockResolvedValue("proceed_once");
+      const form = createPasswordForm();
+      stubRequestSubmit(form, vi.fn()); // no re-dispatch, no throw (constraint-validation no-op)
 
-        const event1 = new SubmitEvent("submit", { bubbles: true, cancelable: true, submitter: null });
-        form.dispatchEvent(event1);
-        await vi.advanceTimersByTimeAsync(0);
+      await dispatchSubmit(form); // submit #1 -> modal proceed -> resumeSubmit -> requestSubmit no-op
+      expect(mockShowModal).toHaveBeenCalledTimes(1);
 
-        expect(mockShowModal).toHaveBeenCalledTimes(1);
-        vi.resetAllMocks();
-        mockGetSettings.mockResolvedValue(defaultConfig());
-        mockGetTrusted.mockResolvedValue([]);
-        mockComputeRisk.mockReturnValue(defaultRisk());
-        mockIsCrossSite.mockReturnValue(true);
-        mockGetReasonLines.mockReturnValue(["Domain mismatch"]);
-        mockShouldPrompt.mockReturnValue(true);
-        mockShowModal.mockResolvedValue("cancel");
-        mockAnalyzeContent.mockReturnValue({ ...CONTENT_BASE, score: 0, reasons: [] });
-        mockCheckSRI.mockReturnValue({ ...SRI_BASE, score: 0, reasons: [], totalExternal: 0, withSRI: 0, withoutSRI: 0 });
-        mockAppendEvent.mockResolvedValue(undefined);
-        mockAppendOutcome.mockResolvedValue(undefined);
-        mockNormalizeHost.mockReturnValue("example.com");
-        mockGetRegDomain.mockReturnValue("example.com");
-        mockRecalcSeverity.mockReturnValue("medium");
+      // A separate later submit on the SAME form must be re-assessed (prompted), not bypassed.
+      mockShowModal.mockResolvedValue("cancel");
+      const second = await dispatchSubmit(form);
 
-        vi.advanceTimersByTime(5001);
-
-        const event3 = new SubmitEvent("submit", { bubbles: true, cancelable: true, submitter: null });
-        form.dispatchEvent(event3);
-        await vi.advanceTimersByTimeAsync(0);
-
-        expect(event3.defaultPrevented).toBe(true);
-        expect(mockShowModal).toHaveBeenCalledTimes(1);
-      } finally {
-        vi.useRealTimers();
-      }
+      expect(second.defaultPrevented).toBe(true); // interposed again -> token did not linger
+      expect(mockShowModal).toHaveBeenCalledTimes(2); // assessment ran for submit #2
     });
   });
 });
