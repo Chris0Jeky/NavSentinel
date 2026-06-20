@@ -522,6 +522,7 @@ describe("recordNavigationAnomaly", () => {
       new Error("storage fail")
     );
     await expect(recordNavigationAnomaly("binance.com", now + 1000)).rejects.toThrow();
+    expect(_getRecentNavs().length).toBe(0); // phantom removed (pre-fix: 1)
 
     // Second crypto nav (storage healthy again). Pre-fix the failed nav left a phantom
     // 'crypto' entry in recentNavs, so this would see count=2 and fire a burst anomaly
@@ -540,10 +541,34 @@ describe("recordNavigationAnomaly", () => {
       new Error("set fail")
     );
     await expect(recordNavigationAnomaly("binance.com", now + 1000)).rejects.toThrow();
+    expect(_getRecentNavs().length).toBe(0); // phantom removed (pre-fix: 1)
 
     // Second crypto nav (storage healthy): no phantom from the failed first nav.
     const score = await recordNavigationAnomaly("coinbase.com", now + 2000);
     expect(score).toBe(0);
+  });
+
+  it("keeps the serialization chain alive after a failure so later queued calls run (#286)", async () => {
+    const now = Date.now();
+    store[NAV_PROFILE_KEY] = makeEstablishedProfile(now);
+
+    // Queue three crypto navs synchronously; the FIRST fails its storage read.
+    (chrome.storage.local.get as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error("storage fail")
+    );
+    const pA = recordNavigationAnomaly("binance.com", now + 1000);
+    const pB = recordNavigationAnomaly("coinbase.com", now + 2000);
+    const pC = recordNavigationAnomaly("metamask.io", now + 3000);
+
+    await expect(pA).rejects.toThrow();
+    const scoreB = await pB;
+    const scoreC = await pC;
+
+    // A failed and rolled back its phantom; the chain stayed alive so B and C ran against
+    // correct state: B is the 1st crypto in-window (count=1 -> 0), C is the 2nd (count=2 -> burst).
+    expect(scoreB).toBe(0);
+    expect(scoreC).toBe(BASE_ANOMALY_SCORE);
+    expect(_getRecentNavs().length).toBe(2); // exactly B + C (A rolled back)
   });
 
   it("returns higher score for 3+ burst into rare category", async () => {
