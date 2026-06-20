@@ -546,50 +546,62 @@ export function recordNavigationAnomaly(
     const now = nowOverride ?? Date.now();
     const category = classifyDomain(hostname);
 
-    // Update in-memory sliding window
+    // Update in-memory sliding window. Keep the entry reference so it can be rolled back
+    // if the storage round-trip below fails (#286): pushing before the await is required so
+    // computeAnomalyScore counts the current nav, but a rejected loadProfile/saveProfile
+    // must not leave this phantom entry behind — it would inflate the NEXT navigation's
+    // burst count (recentCount) and fire a false anomaly within the burst window.
     pruneRecentNavs(now);
-    recentNavs.push({ category, ts: now });
+    const navEntry = { category, ts: now };
+    recentNavs.push(navEntry);
     const recentCount = countRecentCategory(category, now);
 
-    // Load and decay profile
-    const profile = await loadProfile();
-    applyDecay(profile, now);
-    pruneBurstRecords(profile, now);
+    try {
+      // Load and decay profile
+      const profile = await loadProfile();
+      applyDecay(profile, now);
+      pruneBurstRecords(profile, now);
 
-    // Compute anomaly BEFORE updating counts (so current nav
-    // does not inflate the frequency of the destination category)
-    const anomalyScore = computeAnomalyScore(profile, category, recentCount);
+      // Compute anomaly BEFORE updating counts (so current nav
+      // does not inflate the frequency of the destination category)
+      const anomalyScore = computeAnomalyScore(profile, category, recentCount);
 
-    // Record burst if anomaly detected
-    if (anomalyScore > 0) {
-      profile.recentBurst.push({
-        category,
-        ts: now,
-        count: recentCount,
-      });
-      // Re-prune after adding
-      if (profile.recentBurst.length > MAX_BURST_RECORDS) {
-        profile.recentBurst = profile.recentBurst.slice(-MAX_BURST_RECORDS);
+      // Record burst if anomaly detected
+      if (anomalyScore > 0) {
+        profile.recentBurst.push({
+          category,
+          ts: now,
+          count: recentCount,
+        });
+        // Re-prune after adding
+        if (profile.recentBurst.length > MAX_BURST_RECORDS) {
+          profile.recentBurst = profile.recentBurst.slice(-MAX_BURST_RECORDS);
+        }
       }
+
+      // Update category count
+      profile.categoryCounts[category] = (profile.categoryCounts[category] ?? 0) + 1;
+      profile.totalNavigations += 1;
+      profile.lastUpdated = now;
+
+      // Normalize if cap exceeded
+      normalizeProfile(profile);
+
+      await saveProfile(profile);
+
+      // Update the session gate + frequency snapshot ONLY after a successful save,
+      // so a rejected save can't leave sessionNavCount armed against a stale cache
+      // (which would bias the sync path toward over-detection).
+      sessionNavCount = Math.max(sessionNavCount, profile.totalNavigations);
+      refreshFrequencyCache(profile);
+
+      return anomalyScore;
+    } catch (err) {
+      // Roll back the sliding-window entry so the failed nav leaves no phantom (#286).
+      const idx = recentNavs.indexOf(navEntry);
+      if (idx !== -1) recentNavs.splice(idx, 1);
+      throw err;
     }
-
-    // Update category count
-    profile.categoryCounts[category] = (profile.categoryCounts[category] ?? 0) + 1;
-    profile.totalNavigations += 1;
-    profile.lastUpdated = now;
-
-    // Normalize if cap exceeded
-    normalizeProfile(profile);
-
-    await saveProfile(profile);
-
-    // Update the session gate + frequency snapshot ONLY after a successful save,
-    // so a rejected save can't leave sessionNavCount armed against a stale cache
-    // (which would bias the sync path toward over-detection).
-    sessionNavCount = Math.max(sessionNavCount, profile.totalNavigations);
-    refreshFrequencyCache(profile);
-
-    return anomalyScore;
   });
 
   pending = next.catch((err) => {
