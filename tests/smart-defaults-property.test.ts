@@ -98,15 +98,21 @@ describe("analyzeOutcomesForPair properties", () => {
     );
   });
 
-  it("returns suggestion for THRESHOLD consecutive allows", () => {
+  it("returns suggestion for THRESHOLD consecutive positive outcomes (allow / allow_once / always_allow)", () => {
     fc.assert(
       fc.property(
         arbDomain,
         arbDomain,
-        fc.integer({ min: SMART_DEFAULT_THRESHOLD, max: 10 }),
-        (src, dest, count) => {
-          const outcomes = Array.from({ length: count }, (_, i) =>
-            makeNavOutcome(src, dest, "allow", 1000 + i)
+        // Each entry is an independently-chosen positive outcome, so the
+        // property exercises the full positive set -- a regressed impl that
+        // dropped always_allow/allow_once would be found by shrinking. (#307)
+        fc.array(fc.constantFrom("allow", "allow_once", "always_allow"), {
+          minLength: SMART_DEFAULT_THRESHOLD,
+          maxLength: 10,
+        }),
+        (src, dest, positives) => {
+          const outcomes = positives.map((outcome, i) =>
+            makeNavOutcome(src, dest, outcome, 1000 + i)
           );
           const result = analyzeOutcomesForPair(outcomes, src, dest);
           expect(result).not.toBeNull();

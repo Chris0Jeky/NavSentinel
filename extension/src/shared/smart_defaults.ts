@@ -66,10 +66,21 @@ export function analyzeOutcomesForPair(
   // Sort by timestamp descending (most recent first)
   const sorted = [...pairOutcomes].sort((a, b) => b.ts - a.ts);
 
-  // Count consecutive allows from the most recent entry
+  // Count consecutive allows from the most recent entry. `always_allow` is a
+  // positive trust signal (the user clicked "Always allow") and must extend the
+  // streak, not break it -- otherwise a prior always-allow record sitting in the
+  // history (e.g. after the pair was removed from the allowlist) truncates an
+  // otherwise-continuous run of allows and suppresses the re-suggestion. This
+  // matches the positive-outcome set in adaptive_scoring.ts; `trust` is a
+  // credential-guard outcome that never appears on nav-type entries (filtered
+  // above), so it is intentionally omitted here. (#307)
   let consecutiveAllows = 0;
   for (const entry of sorted) {
-    if (entry.outcome === "allow" || entry.outcome === "allow_once") {
+    if (
+      entry.outcome === "allow" ||
+      entry.outcome === "allow_once" ||
+      entry.outcome === "always_allow"
+    ) {
       consecutiveAllows++;
     } else {
       break;
