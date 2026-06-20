@@ -283,6 +283,24 @@ describe("decay logic", () => {
     // left untouched, desyncing the consistency (stddev) metric from the decayed counters.
     expect(p.nrsHistory).toEqual([50, 60, 70, 80]);
   });
+
+  it("at exactly 24 stale periods, lastSeen advances to ~now (loop self-terminates) (#290)", async () => {
+    // Boundary documentation (not a fix discriminator): at exactly 24 periods the loop runs
+    // 24 times and lands lastSeen at ~now via the normal `+= DECAY_AGE_MS` advance, exiting
+    // naturally — it never needed the (removed) cap reset. Only >24-period zombies were affected.
+    const baseNow = Date.now();
+    store[DOMAIN_PROFILES_KEY] = {
+      "edge.com": {
+        domain: "edge.com",
+        visits: 1000, totalNRS: 50000, maxNRS: 90, triggerCount: 500,
+        lastSeen: baseNow - 24 * DECAY_AGE_MS, // exactly the cap boundary
+        factors: {}, nrsHistory: [80],
+      },
+    };
+    await getDomainRisk("edge.com");
+    const p = getStoredProfiles()["edge.com"]!;
+    expect(Date.now() - p.lastSeen).toBeLessThan(DECAY_AGE_MS);
+  });
 });
 
 describe("getDomainRisk", () => {
