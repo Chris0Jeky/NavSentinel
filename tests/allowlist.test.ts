@@ -150,6 +150,35 @@ describe("getAllowlist", () => {
     const result = await getAllowlist();
     expect(result).toEqual({ "new.com": ["a.com"] });
   });
+
+  it("migrates legacy when the new key holds a falsy value (#306)", async () => {
+    // A partial/crashed write can leave the new key present but falsy.
+    store[ALLOWLIST_KEY] = null;
+    store[LEGACY_KEY] = { "old.com": ["target.com"] };
+    const result = await getAllowlist();
+    // Pre-fix: hasOwnProperty(ALLOWLIST_KEY) was true -> returned {} and the
+    // user's legacy allowlist was silently dropped.
+    expect(result).toEqual({ "old.com": ["target.com"] });
+    expect(store[ALLOWLIST_KEY]).toEqual({ "old.com": ["target.com"] });
+    expect(store[LEGACY_KEY]).toBeUndefined();
+  });
+
+  it("migrates legacy when the new key holds an array (#306)", async () => {
+    store[ALLOWLIST_KEY] = ["not", "an", "allowlist"];
+    store[LEGACY_KEY] = { "old.com": ["target.com"] };
+    const result = await getAllowlist();
+    expect(result).toEqual({ "old.com": ["target.com"] });
+  });
+
+  it("treats an empty new-key object as authoritative, not a migration trigger (#306)", async () => {
+    // The user explicitly cleared their allowlist; an empty {} must NOT cause a
+    // legacy re-migration (preserves the cleared state).
+    store[ALLOWLIST_KEY] = {};
+    store[LEGACY_KEY] = { "old.com": ["target.com"] };
+    const result = await getAllowlist();
+    expect(result).toEqual({});
+    expect(store[LEGACY_KEY]).toEqual({ "old.com": ["target.com"] });
+  });
 });
 
 describe("setAllowlist", () => {

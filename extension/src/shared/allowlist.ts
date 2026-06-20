@@ -27,9 +27,15 @@ export function normalizeAllowlist(value: unknown): Allowlist {
 
 export async function getAllowlist(): Promise<Allowlist> {
   const res = await chrome.storage.local.get([ALLOWLIST_KEY, LEGACY_ALLOWLIST_KEY]);
-  const current = normalizeAllowlist(res[ALLOWLIST_KEY]);
-  if (Object.prototype.hasOwnProperty.call(res, ALLOWLIST_KEY)) {
-    return current;
+  const stored = res[ALLOWLIST_KEY];
+  // Treat the new key as authoritative only when it holds a real object (an
+  // empty {} is valid -- the user cleared their allowlist). A falsy/invalid
+  // value (null/false/0/""/array, e.g. from a partial or crashed write) must
+  // NOT short-circuit the legacy migration: the previous hasOwnProperty check
+  // returned {} for such a value and silently dropped the user's legacy
+  // allowlist. (#306)
+  if (stored && typeof stored === "object" && !Array.isArray(stored)) {
+    return normalizeAllowlist(stored);
   }
 
   const legacy = normalizeAllowlist(res[LEGACY_ALLOWLIST_KEY]);
