@@ -894,6 +894,59 @@ describe("service worker handlers", () => {
     });
   });
 
+  describe("onUpdated hydration deferral (#266)", () => {
+    it("defers a pending-rollback send until hydration so the restored offer is not dropped", async () => {
+      // Pre-fix: onUpdated fires before _doHydrate resolves, reads the still-empty
+      // pendingRollbackByTab map, finds nothing, and the restored rollback offer is
+      // silently dropped (same FN class as #228.1). Post-fix: the handler is deferred
+      // until hydration, reads the restored entry, and sends ns-rollback. The send is
+      // the only observable signal, so it distinguishes the two code paths.
+      const mock = createChromeMock();
+      mock.chrome.storage.session._store["ns_sw:pendingRollback"] = {
+        "7": {
+          url: "https://safe.test/landing",
+          prevUrl: "https://safe.test/home",
+          qualifiers: ["client_redirect"],
+        },
+      };
+
+      // Gate only the hydrate read so onUpdated fires BEFORE hydration completes.
+      let releaseGet!: () => void;
+      const gate = new Promise<void>((r) => {
+        releaseGet = r;
+      });
+      const origGet = mock.chrome.storage.session.get.bind(mock.chrome.storage.session);
+      let gated = true;
+      mock.chrome.storage.session.get = (async (keys?: string | string[]) => {
+        if (gated) {
+          gated = false;
+          await gate;
+        }
+        return origGet(keys);
+      }) as typeof mock.chrome.storage.session.get;
+
+      await loadSw(mock);
+
+      const rollbackMsg = () =>
+        mock.sentMessages.find(
+          (m) => (m.message as { type: string }).type === "ns-rollback" && m.tabId === 7,
+        );
+
+      // onUpdated fires pre-hydration: must be deferred, not run against the empty map.
+      mock.sentMessages.length = 0;
+      mock.emitTabUpdated(7, { status: "complete" }, { url: "https://safe.test/landing" });
+      expect(rollbackMsg(), "rollback must NOT be sent before hydration").toBeUndefined();
+
+      // Complete hydration; the deferred handler reads the restored entry and sends.
+      releaseGet();
+      await vi.runAllTimersAsync();
+
+      const sent = rollbackMsg();
+      expect(sent, "rollback sent after hydration from the restored map").toBeDefined();
+      expect((sent!.message as { url: string }).url).toBe("https://safe.test/landing");
+    });
+  });
+
   describe("dblclick child window lifecycle", () => {
     it("tracks child tab creation with openerTabId", async () => {
       const mock = createChromeMock();
