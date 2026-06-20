@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * Fetches the Public Suffix List and compiles it into a JSON trie
  * stored at extension/src/shared/psl_data.json.
@@ -15,11 +14,32 @@
 
 import { writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const PSL_URL = "https://publicsuffix.org/list/public_suffix_list.dat";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT_PATH = resolve(__dirname, "..", "extension", "src", "shared", "psl_data.json");
+
+// The real PSL has ~9,000+ rules. A successful HTTP 200 can still return an empty
+// or truncated body (CDN hiccup, partial transfer); parsePSL("") yields [] and
+// buildTrie([]) yields {}, which would overwrite the committed psl_data.json with
+// an empty trie -> getRegistrableDomain then returns TLD-only for every host,
+// collapsing cross-registrant isolation for all multi-part ccTLDs (co.uk, com.au,
+// ...). Fail closed: refuse to write a suspiciously small rule set. (#322 / disc#15)
+export const MIN_PSL_RULES = 1000;
+
+// A length-only sanity gate: parsePSL guarantees the element shape, so this
+// guards against the truncated/empty-download failure mode (too few rules), not
+// per-element corruption. Boundary is inclusive-low: exactly MIN_PSL_RULES passes;
+// fewer rejects. buildTrie would still throw on a structurally bad element.
+export function assertEnoughRules(rules) {
+  if (!Array.isArray(rules) || rules.length < MIN_PSL_RULES) {
+    throw new Error(
+      `PSL too short: ${Array.isArray(rules) ? rules.length : "non-array"} rules ` +
+        `(< ${MIN_PSL_RULES}) — refusing to overwrite psl_data.json (possible truncated download)`,
+    );
+  }
+}
 
 async function fetchPSL() {
   const res = await fetch(PSL_URL);
@@ -29,7 +49,7 @@ async function fetchPSL() {
   return res.text();
 }
 
-function parsePSL(text) {
+export function parsePSL(text) {
   const rules = [];
 
   for (const raw of text.split("\n")) {
@@ -98,6 +118,9 @@ async function main() {
   const rules = parsePSL(text);
   console.log(`Parsed ${rules.length} rules.`);
 
+  // Fail closed before touching the committed file (see assertEnoughRules / #322).
+  assertEnoughRules(rules);
+
   console.log("Building trie...");
   const trie = buildTrie(rules);
 
@@ -107,7 +130,11 @@ async function main() {
   console.log(`Wrote ${OUT_PATH} (${sizeKB} KB)`);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+// Only run when invoked directly (`node scripts/update-psl.mjs`), so tests can
+// import parsePSL / assertEnoughRules without triggering the network fetch.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
