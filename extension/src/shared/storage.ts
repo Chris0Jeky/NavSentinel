@@ -1155,7 +1155,10 @@ export async function importAll(payload: unknown): Promise<void> {
 
   if (Array.isArray(p.eventLog)) {
     const boundedLogLimit = clampInt(importLogLimit, 50, 5000, DEFAULT_SUITE_SETTINGS.logLimit);
-    writes[EVENT_LOG_KEY] = (p.eventLog as EventLogEntry[]).slice(-boundedLogLimit);
+    // Route the cap through trimEventLog (same as appendEvent) for consistency: it
+    // normalizes invalid rows and evicts silent-decision kinds first, so an oversized
+    // import preserves loud/protected entries instead of a blind tail slice. (#252)
+    writes[EVENT_LOG_KEY] = trimEventLog(p.eventLog as EventLogEntry[], boundedLogLimit);
   }
 
   const hasPromptOutcomes = Array.isArray(p.promptOutcomes);
