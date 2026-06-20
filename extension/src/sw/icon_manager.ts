@@ -89,7 +89,9 @@ async function applyTabIcon(
     // claims a state the badge never reached. delete+set re-inserts this tab at the
     // END of the Map so pruneTabState (which evicts oldest-inserted) can never
     // immediately evict the entry we just wrote — which would make the next
-    // apply-time dedup miss and re-render. (#324/disc#8)
+    // apply-time dedup miss and re-render. This also makes pruneTabState behave as
+    // LRU-by-last-render (a frequently-rendered tab survives) rather than
+    // FIFO-by-first-insertion. (#324/disc#8)
     tabState.delete(tabId);
     tabState.set(tabId, { icon: state, blocks: blockCount });
     pruneTabState();

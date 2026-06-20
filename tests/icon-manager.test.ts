@@ -322,6 +322,14 @@ describe("icon_manager", () => {
       expect(map.has(1)).toBe(true);
       expect(getTabIconState(1)).toBe("red");
       expect(map.has(2)).toBe(false);
+
+      // The surviving cache entry is usable: re-rendering tab 1 with the same state
+      // hits the dedup short-circuit (no badge writes) — the benefit the fix preserves.
+      setBadgeText.mockClear();
+      setBadgeBackgroundColor.mockClear();
+      await updateTabIcon(1, "red", 2);
+      expect(setBadgeText).not.toHaveBeenCalled();
+      expect(setBadgeBackgroundColor).not.toHaveBeenCalled();
     });
   });
 });
