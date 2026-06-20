@@ -147,6 +147,35 @@ describe("LRU eviction", () => {
     expect(profiles["domain-0.com"]).toBeUndefined();
     expect(profiles["newcomer.com"]).toBeDefined();
   });
+
+  it("evicts a decayed >24-period zombie, not an active profile, at the cap (#290)", async () => {
+    const baseNow = Date.now();
+    const bulk: Record<string, DomainProfile> = {};
+    // MAX_PROFILES-1 ACTIVE profiles, all very recently seen.
+    for (let i = 0; i < MAX_PROFILES - 1; i++) {
+      bulk[`active-${i}.com`] = {
+        domain: `active-${i}.com`, visits: 1, totalNRS: 10, maxNRS: 10, triggerCount: 0,
+        lastSeen: baseNow - 1000 + i, factors: {}, nrsHistory: [10],
+      };
+    }
+    // One ancient zombie, older than the 24-iteration decay cap.
+    bulk["zombie.com"] = {
+      domain: "zombie.com", visits: 1000, totalNRS: 50000, maxNRS: 90, triggerCount: 500,
+      lastSeen: baseNow - 25 * DECAY_AGE_MS, factors: {}, nrsHistory: [80],
+    };
+    store[DOMAIN_PROFILES_KEY] = bulk; // MAX_PROFILES total
+
+    // Touch the zombie so decay runs + persists. Pre-fix this reset its lastSeen to ~now,
+    // making it look brand-new to evictLRU; post-fix lastSeen stays ~1 period old.
+    await getDomainRisk("zombie.com");
+    // Adding a newcomer exceeds the cap -> eviction of the genuinely-oldest profile.
+    await recordNavigation("newcomer.com", 20, []);
+
+    const profiles = getStoredProfiles();
+    expect(Object.keys(profiles).length).toBe(MAX_PROFILES);
+    expect(profiles["newcomer.com"]).toBeDefined();
+    expect(profiles["zombie.com"]).toBeUndefined(); // evicted (pre-fix: survived, an active was evicted)
+  });
 });
 
 describe("decay logic", () => {
@@ -219,6 +248,40 @@ describe("decay logic", () => {
     // triggerCount 4 > 3 AND avgNRS 40 > 30
     expect(risk.isRepeatOffender).toBe(true);
     expect(risk.avgNRS).toBe(40);
+  });
+
+  it("does not reset lastSeen to now for a >24-period zombie (stays LRU-evictable) (#290)", async () => {
+    const baseNow = Date.now();
+    store[DOMAIN_PROFILES_KEY] = {
+      "zombie.com": {
+        domain: "zombie.com",
+        visits: 1000, totalNRS: 50000, maxNRS: 90, triggerCount: 500,
+        lastSeen: baseNow - 25 * DECAY_AGE_MS, // older than the 24-iteration cap
+        factors: { nrs_cross_site: 100 }, nrsHistory: [80, 80, 80],
+      },
+    };
+    await getDomainRisk("zombie.com"); // applies decay + persists
+    const p = getStoredProfiles()["zombie.com"]!;
+    // Pre-fix lastSeen was reset to ~now (the bug). Post-fix it is advanced by the loop to
+    // ~1 decay period old, so the profile stays ranked stale for evictLRU.
+    expect(Date.now() - p.lastSeen).toBeGreaterThanOrEqual(DECAY_AGE_MS * 0.5);
+  });
+
+  it("decays nrsHistory length in step with visits (#290)", async () => {
+    const baseNow = Date.now();
+    store[DOMAIN_PROFILES_KEY] = {
+      "hist.com": {
+        domain: "hist.com",
+        visits: 16, totalNRS: 800, maxNRS: 80, triggerCount: 0,
+        lastSeen: baseNow - DECAY_AGE_MS - 1000, // exactly one decay period
+        factors: {}, nrsHistory: [10, 20, 30, 40, 50, 60, 70, 80], // length 8
+      },
+    };
+    await getDomainRisk("hist.com"); // 1 decay iteration, read path (no push)
+    const p = getStoredProfiles()["hist.com"]!;
+    // One decay halves the history length (8 -> 4), keeping the newest 4. Pre-fix it was
+    // left untouched, desyncing the consistency (stddev) metric from the decayed counters.
+    expect(p.nrsHistory).toEqual([50, 60, 70, 80]);
   });
 });
 
