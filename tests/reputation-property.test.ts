@@ -257,6 +257,29 @@ describe("bloom filter no-false-negatives guarantee", () => {
     );
   });
 
+  it("sub-byte degenerate filter (m=1..7) returns false even with all bits set (#292)", () => {
+    fc.assert(
+      fc.property(arbDomain, fc.integer({ min: 1, max: 7 }), (domain, m) => {
+        // Worst case: bit 0 set. Pre-fix checkDomain (guarded on m===0) would let
+        // m=1 read bit 0 on every probe and return true for every domain.
+        const bits = new Uint8Array(1);
+        bits[0] = 0xff;
+        const f = { bits, m, k: 7 };
+        expect(checkDomain(f, domain)).toBe(false);
+      }),
+    );
+  });
+
+  it("insertDomain on a sub-byte filter (m=1..7) is a no-op (#292)", () => {
+    fc.assert(
+      fc.property(arbDomain, fc.integer({ min: 1, max: 7 }), (domain, m) => {
+        const f = { bits: new Uint8Array(1), m, k: 7 };
+        insertDomain(f, domain);
+        expect(f.bits.every((b) => b === 0)).toBe(true);
+      }),
+    );
+  });
+
   it("insertDomain on m=0 filter is safe and does not throw", () => {
     fc.assert(
       fc.property(arbDomain, (domain) => {

@@ -184,7 +184,12 @@ export function loadFilter(data: ArrayBuffer | Uint8Array): BloomFilterState {
  *          false if the domain is definitely NOT in the set.
  */
 export function checkDomain(filter: BloomFilterState, domain: string): boolean {
-  if (!filter.bits || filter.m === 0 || filter.k === 0) return false;
+  // Reject degenerate filters consistently with loadFilter's MIN_FILTER_BITS
+  // floor: a sub-byte m (1..7) makes the modulo math degenerate (m=1 -> every
+  // probe reads bit 0), which would return true for every domain (100% FP). A
+  // filter from loadFilter can never be sub-byte, but checkDomain is exported
+  // and could be called with a directly-constructed filter. (#292)
+  if (!filter.bits || filter.m < MIN_FILTER_BITS || filter.k === 0) return false;
   if (!domain) return false;
 
   const key = domain.toLowerCase();
@@ -247,7 +252,9 @@ export function createFilter(m: number, k: number): BloomFilterState {
  * @internal
  */
 export function insertDomain(filter: BloomFilterState, domain: string): void {
-  if (!domain || filter.m === 0) return;
+  // Mirror checkDomain / loadFilter: never write into a sub-byte degenerate
+  // filter (m < MIN_FILTER_BITS). (#292)
+  if (!domain || filter.m < MIN_FILTER_BITS) return;
   const key = domain.toLowerCase();
   const h1 = murmurhash3_32(key, 0x9747b28c);
   // Force h2 to be odd -- must match checkDomain's h2 derivation.
@@ -275,9 +282,11 @@ export function insertDomain(filter: BloomFilterState, domain: string): void {
  */
 export function optimalParams(n: number, p: number): { m: number; k: number } {
   if (!Number.isFinite(n) || n <= 0 || !Number.isFinite(p) || p <= 0 || p >= 1) {
-    return { m: 8, k: 1 };
+    return { m: MIN_FILTER_BITS, k: 1 };
   }
-  const m = Math.ceil((-n * Math.log(p)) / (Math.LN2 * Math.LN2));
+  // Clamp to the MIN_FILTER_BITS floor so optimalParams never suggests a sub-byte
+  // filter that loadFilter would then reject (e.g. n=1, p=0.49 -> raw m=2). (#292)
+  const m = Math.max(MIN_FILTER_BITS, Math.ceil((-n * Math.log(p)) / (Math.LN2 * Math.LN2)));
   const k = Math.max(1, Math.round((m / n) * Math.LN2));
   return { m, k };
 }
