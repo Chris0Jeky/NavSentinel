@@ -497,8 +497,10 @@ describe("computeCredentialRisk enhanced detection", () => {
     expect(risk.reasons.map((r) => r.code)).toContain("BRAND_KEYWORD_DOMAIN");
   });
 
-  it("does not double-count raw and homoglyph Levenshtein", () => {
-    // paypa1.com: raw Levenshtein = 1 (already caught), so homoglyph should not add extra
+  it("does not double-count raw/homoglyph Levenshtein OR the exact brand-keyword (#300)", () => {
+    // paypa1.com vs trusted paypal.com: raw Levenshtein = 1 fires LOOKALIKE_DOMAIN (+45). The
+    // homoglyph Levenshtein AND the EXACT brand-keyword describe the SAME spoof, so neither should
+    // add again (BRAND_KEYWORD_DOMAIN was a +40 double-count pre-#300). Detection is preserved.
     const risk = computeCredentialRisk({
       pageUrl: "https://paypa1.com/login",
       actionUrl: "https://paypa1.com/post",
@@ -509,6 +511,23 @@ describe("computeCredentialRisk enhanced detection", () => {
     const codes = risk.reasons.map((r) => r.code);
     expect(codes).toContain("LOOKALIKE_DOMAIN");
     expect(codes).not.toContain("HOMOGLYPH_LOOKALIKE");
+    expect(codes).not.toContain("BRAND_KEYWORD_DOMAIN"); // #300: exact spoof not re-counted
+    expect(["medium", "high"]).toContain(risk.severity); // still flagged (LOOKALIKE +45 + untrusted)
+  });
+
+  it("still fires BRAND_KEYWORD_DOMAIN for a non-exact brand+extra spoof even when the brand is trusted (#300)", () => {
+    // paypal-secure.com is NOT within edit distance of paypal.com (distance > maxDistance), so the
+    // lookalike-distance dedup does NOT apply and the brand+extra signal must still fire.
+    const risk = computeCredentialRisk({
+      pageUrl: "https://paypal-secure.com/login",
+      actionUrl: "https://paypal-secure.com/post",
+      trustedDomains: ["paypal.com"],
+      config: baseConfig
+    });
+
+    const codes = risk.reasons.map((r) => r.code);
+    expect(codes).toContain("BRAND_KEYWORD_DOMAIN"); // non-exact spoof -> still fires
+    expect(codes).not.toContain("LOOKALIKE_DOMAIN"); // distance > maxDistance -> no lookalike to dedup against
   });
 });
 
