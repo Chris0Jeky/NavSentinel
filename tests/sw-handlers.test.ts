@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { SUITE_SETTINGS_KEY } from "../extension/src/shared/storage";
 
 type RuntimeMessage = Record<string, unknown>;
 type RuntimeSender = { tab?: { id?: number; windowId?: number }; frameId?: number };
@@ -1908,6 +1909,131 @@ describe("service worker handlers", () => {
       expect(mock.chrome.action.setBadgeText).toHaveBeenCalledWith(
         expect.objectContaining({ tabId: 10, text: "" }),
       );
+    });
+  });
+
+  describe("cachedDefaultMode refresh on worker start (#303)", () => {
+    it("paints a fresh top-frame nav gray when persisted mode is 'off' after a mid-session restart", async () => {
+      const mock = createChromeMock();
+      // Persisted mode is "off". loadSw simulates a mid-session MV3 restart: the
+      // worker module is imported (woken by an event) but onInstalled/onStartup
+      // do NOT fire, so the only refresh of cachedDefaultMode is the eager one.
+      mock.chrome.storage.local.get = (async () => ({
+        [SUITE_SETTINGS_KEY]: { nav: { defaultMode: "off" } },
+      })) as unknown as typeof mock.chrome.storage.local.get;
+
+      await loadSw(mock);
+      // Let hydration and the eager cachedDefaultMode refresh settle.
+      await vi.runAllTimersAsync();
+
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        url: "https://example.com/",
+        transitionType: "link",
+      });
+      await vi.runAllTimersAsync();
+
+      // mode "off" => gray badge (BADGE_CONFIG.gray is null: empty text, no color).
+      expect(mock.chrome.action.setBadgeText).toHaveBeenCalledWith({ tabId: 10, text: "" });
+      // Pre-fix the cache stayed "smart" => green badge would set the green color
+      // and the "✓" text; assert neither appears.
+      expect(mock.chrome.action.setBadgeBackgroundColor).not.toHaveBeenCalledWith(
+        expect.objectContaining({ tabId: 10, color: "#16a34a" }),
+      );
+      expect(mock.chrome.action.setBadgeText).not.toHaveBeenCalledWith({ tabId: 10, text: "✓" });
+    });
+
+    it("the deferred wake-up navigation waits for the mode read before painting (#303)", async () => {
+      const mock = createChromeMock();
+      // Gate BOTH reads so the worker is un-hydrated AND the mode is unread when
+      // the waking navigation arrives -> it must take the deferred path and wait
+      // on startupReady (hydration + mode) before choosing the badge color.
+      let releaseLocal!: () => void;
+      let releaseSession!: () => void;
+      const localGate = new Promise<void>((r) => { releaseLocal = r; });
+      const sessionGate = new Promise<void>((r) => { releaseSession = r; });
+
+      mock.chrome.storage.local.get = (async () => {
+        await localGate;
+        return { [SUITE_SETTINGS_KEY]: { nav: { defaultMode: "off" } } };
+      }) as unknown as typeof mock.chrome.storage.local.get;
+
+      const origSessionGet = mock.chrome.storage.session.get.bind(mock.chrome.storage.session);
+      mock.chrome.storage.session.get = (async (keys?: string | string[]) => {
+        await sessionGate;
+        return origSessionGet(keys);
+      }) as typeof mock.chrome.storage.session.get;
+
+      await loadSw(mock);
+
+      // Waking navigation arrives before hydration / mode read complete.
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        url: "https://example.com/",
+        transitionType: "link",
+      });
+      // Handler is deferred on startupReady -> nothing painted for this tab yet.
+      expect(mock.chrome.action.setBadgeBackgroundColor).not.toHaveBeenCalledWith(
+        expect.objectContaining({ tabId: 10 }),
+      );
+
+      // Release hydration + the mode read; the deferred handler now runs with "off".
+      releaseSession();
+      releaseLocal();
+      await vi.runAllTimersAsync();
+
+      expect(mock.chrome.action.setBadgeText).toHaveBeenCalledWith({ tabId: 10, text: "" });
+      expect(mock.chrome.action.setBadgeBackgroundColor).not.toHaveBeenCalledWith(
+        expect.objectContaining({ tabId: 10, color: "#16a34a" }),
+      );
+    });
+
+    it("a nav after hydration but before the mode read still defers (session-before-local window) (#303)", async () => {
+      const mock = createChromeMock();
+      let releaseLocal!: () => void;
+      let releaseSession!: () => void;
+      const localGate = new Promise<void>((r) => { releaseLocal = r; });
+      const sessionGate = new Promise<void>((r) => { releaseSession = r; });
+
+      mock.chrome.storage.local.get = (async () => {
+        await localGate;
+        return { [SUITE_SETTINGS_KEY]: { nav: { defaultMode: "off" } } };
+      }) as unknown as typeof mock.chrome.storage.local.get;
+
+      const origSessionGet = mock.chrome.storage.session.get.bind(mock.chrome.storage.session);
+      mock.chrome.storage.session.get = (async (keys?: string | string[]) => {
+        await sessionGate;
+        return origSessionGet(keys);
+      }) as typeof mock.chrome.storage.session.get;
+
+      await loadSw(mock);
+
+      // Hydration completes (session resolves -> swState.hydrated becomes true) but
+      // the cachedDefaultMode read (local) is still pending.
+      releaseSession();
+      await vi.runAllTimersAsync();
+
+      // A nav in this window must STILL defer -- the guard is startupSettled, not
+      // swState.hydrated. With the old swState.hydrated guard it would take the
+      // synchronous path and paint green from the stale "smart" default.
+      mock.emitCommitted({
+        tabId: 11,
+        frameId: 0,
+        url: "https://example.com/",
+        transitionType: "link",
+      });
+      await vi.runAllTimersAsync();
+      expect(mock.chrome.action.setBadgeText).not.toHaveBeenCalledWith({ tabId: 11, text: "✓" });
+      expect(mock.chrome.action.setBadgeBackgroundColor).not.toHaveBeenCalledWith(
+        expect.objectContaining({ tabId: 11, color: "#16a34a" }),
+      );
+
+      // Release the mode read; the deferred handler now runs with mode "off".
+      releaseLocal();
+      await vi.runAllTimersAsync();
+      expect(mock.chrome.action.setBadgeText).toHaveBeenCalledWith({ tabId: 11, text: "" });
     });
   });
 });
