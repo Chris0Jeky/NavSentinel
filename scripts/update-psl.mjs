@@ -69,6 +69,24 @@ export function parsePSL(text) {
     }
 
     const labels = rule.split(".").reverse(); // TLD first
+
+    // Fail closed on malformed rules. The trie reserves three control keys: "" marks a
+    // public-suffix endpoint, "*" marks a wildcard level, "!" marks an exception. A rule
+    // whose labels include one of those (a bare "*" or "!", a stray non-leftmost "*",
+    // a "*." with no base) or an empty label (a bare "!", "*.", or a ".."/leading-dot
+    // line) would SILENTLY CORRUPT the compiled trie — e.g. a bare "*" lands as a
+    // root-level wildcard that marks every TLD label a public suffix, breaking
+    // registrable-domain computation (and therefore same-site / phishing decisions).
+    // The real PSL never contains these; a feed that does is an anomaly we must not
+    // ship, so we throw before buildTrie/write rather than emit a poisoned trie. (#322 / #18)
+    for (const label of labels) {
+      if (label === "" || label === "*" || label === "!") {
+        throw new Error(
+          `Malformed PSL rule (reserved or empty label ${JSON.stringify(label)}): ${JSON.stringify(line)}`,
+        );
+      }
+    }
+
     rules.push({ type, labels });
   }
 
