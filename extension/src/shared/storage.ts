@@ -513,7 +513,12 @@ function buildEventLogEntry(partial: EventLogAppendPartial): EventLogEntry {
     ...(partial.url !== undefined ? { url: partial.url } : {}),
     ...(partial.destHost !== undefined ? { destHost: partial.destHost } : {}),
     ...(partial.score !== undefined ? { score: Number.isFinite(partial.score) ? partial.score : 0 } : {}),
-    ...(partial.reasons !== undefined ? { reasons: partial.reasons } : {}),
+    // Sanitize reasons to a bounded string[] (reuses the prompt-outcome helper). A
+    // malformed runtime append message could carry non-string reasons; left raw, the
+    // entry would fail isEventLogEntry and persistEventLogEntry's re-validation would
+    // silently drop it (mistaking the drop for an intentional silent-decision eviction).
+    // Sanitizing keeps the entry valid (and bounds per-entry size, cf. #299). (#339)
+    ...(partial.reasons !== undefined ? { reasons: sanitizeCodeList(partial.reasons) ?? [] } : {}),
     ...(partial.extra !== undefined ? { extra: partial.extra } : {})
   };
 }
@@ -525,10 +530,14 @@ async function persistEventLogEntry(entry: EventLogEntry): Promise<void> {
   for (let attempt = 0; attempt < 3; attempt++) {
     const res = await chrome.storage.local.get(EVENT_LOG_KEY);
     const cur = normalizeEventLog(res[EVENT_LOG_KEY]);
-    const next = trimEventLog([...cur.filter((item) => item.id !== entry.id), entry], limit);
+    // Use trimValidEventLog: `cur` is already normalized and `entry` is shape-valid
+    // (buildEventLogEntry sanitizes reasons), so the public trimEventLog's re-normalize
+    // pass is redundant — and it would conflate "dropped because malformed" with the
+    // intentional silent-decision eviction below. (#339)
+    const next = trimValidEventLog([...cur.filter((item) => item.id !== entry.id), entry], limit);
     await chrome.storage.local.set({ [EVENT_LOG_KEY]: next });
 
-    // trimEventLog intentionally drops a brand-new silent-decision event when the
+    // trimValidEventLog intentionally drops a brand-new silent-decision event when the
     // log is saturated with loud events (loud must win). The set above already
     // persisted the correct log, so that is success — not a failed write. Without
     // this, appendEvent would burn all 3 retries and console.warn on every silent

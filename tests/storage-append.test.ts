@@ -326,6 +326,27 @@ describe("appendEvent", () => {
     expect(log[0]!.extra).toEqual({ tabId: 42 });
   });
 
+  it("sanitizes non-string reasons so the event persists instead of being silently dropped (#339)", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { appendEvent } = await import("../extension/src/shared/storage");
+    // A malformed runtime append carries non-string reasons. Pre-fix the built entry fails
+    // isEventLogEntry, so persistEventLogEntry's re-validation drops it (mistaken for an
+    // intentional silent-decision eviction) and it never persists. Post-fix reasons are
+    // sanitized to a string[], so the entry stays valid and is persisted.
+    await appendEvent({
+      id: "bad-reasons",
+      kind: "nav_click_block",
+      reasons: [123, "ok", null, "fine"] as unknown as string[],
+    });
+
+    const log = (store[EVENT_LOG_KEY] as Array<{ id: string; reasons?: unknown }>) ?? [];
+    const entry = log.find((e) => e.id === "bad-reasons");
+    expect(entry).toBeDefined();
+    expect(entry!.reasons).toEqual(["ok", "fine"]); // non-strings filtered out
+  });
+
   it("omits optional fields when not provided", async () => {
     const { chrome, store } = createChromeMock();
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
