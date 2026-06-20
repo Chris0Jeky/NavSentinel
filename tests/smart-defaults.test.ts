@@ -58,6 +58,19 @@ describe("smart defaults – pattern detection", () => {
     expect(result!.allowCount).toBe(3);
   });
 
+  it("counts 'always_allow' as a positive outcome in the streak (#307)", () => {
+    const outcomes = [
+      makeOutcome({ domain: "a.com", destDomain: "b.com", outcome: "allow_once", ts: 1 }),
+      makeOutcome({ domain: "a.com", destDomain: "b.com", outcome: "always_allow", ts: 2 }),
+      makeOutcome({ domain: "a.com", destDomain: "b.com", outcome: "allow_once", ts: 3 }),
+    ];
+    // always_allow is an explicit trust signal; pre-fix it broke the streak
+    // (only 1 consecutive from the most recent) and suppressed the suggestion.
+    const result = analyzeOutcomesForPair(outcomes, "a.com", "b.com");
+    expect(result).not.toBeNull();
+    expect(result!.allowCount).toBe(3);
+  });
+
   it("returns suggestion for more than threshold consecutive allows", () => {
     const outcomes = Array.from({ length: 5 }, (_, i) =>
       makeOutcome({ domain: "x.com", destDomain: "y.com", outcome: "allow_once", ts: i + 1 })
