@@ -92,6 +92,14 @@ const HEADER_SIZE = 16; // magic(4) + version(4) + k(4) + m(4)
  */
 export const MAX_FILTER_BITS = 16 * 1024 * 1024; // 16 Mbit = 2 MB
 export const MAX_HASH_FUNCTIONS = 30;
+/**
+ * Minimum bloom-filter size. Below one full byte (m < 8) the modulo math
+ * degenerates: with m=1 every probe computes (h1 + i*h2) % 1 = 0 and reads bit 0,
+ * so the filter is non-functional -- 100% false positives or always-false. Such a
+ * filter must be rejected (fail closed), exactly like m=0/k=0. A real reputation
+ * filter has m in the millions; this floor only excludes corrupt/crafted inputs. (#292)
+ */
+export const MIN_FILTER_BITS = 8;
 
 export interface BloomFilterState {
   /** Bit array */
@@ -135,13 +143,14 @@ export function loadFilter(data: ArrayBuffer | Uint8Array): BloomFilterState {
   const k = view.getUint32(8, true);
   const m = view.getUint32(12, true);
 
-  // Reject degenerate filters (m=0 or k=0). Without these lower-bound checks a zeroed/
-  // corrupt binary with a valid header would load as a non-null filter, so reputationReady()
-  // reports true while checkDomain() always returns false — silently disabling ALL domain
-  // reputation checks (the +50 known-bad NRS factor never fires). Fail closed instead: throw
-  // so initReputation sets _filter=null and reputationReady() honestly reports false. (#287)
-  if (m === 0) {
-    throw new Error("Bloom filter m=0 is invalid (degenerate filter)");
+  // Reject degenerate filters (sub-byte m, or k=0). Without these lower-bound checks a
+  // zeroed/corrupt binary with a valid header would load as a non-null filter, so
+  // reputationReady() reports true while checkDomain() returns garbage (always-false for
+  // m=0, or 100% false-positive for m=1) — either silently disabling ALL domain reputation
+  // checks or flooding them. Fail closed instead: throw so initReputation sets _filter=null
+  // and reputationReady() honestly reports false. (#287, #292)
+  if (m < MIN_FILTER_BITS) {
+    throw new Error(`Bloom filter m=${m} is below the ${MIN_FILTER_BITS}-bit minimum (degenerate filter)`);
   }
   if (k === 0) {
     throw new Error("Bloom filter k=0 is invalid (degenerate filter)");
