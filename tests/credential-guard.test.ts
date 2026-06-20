@@ -1012,6 +1012,34 @@ describe("credential_guard", () => {
       );
     });
 
+    it("trust-path: blocks when the action is swapped DURING the async trust write (TOCTOU) (#339)", async () => {
+      // The pre-resume re-check happens BEFORE the await addTrustedDomain. Page JS that swaps
+      // the action while that storage write is in flight would otherwise reach resumeSubmit with
+      // an unassessed destination. A second re-check immediately before resume must catch it.
+      mockGetRegDomain.mockImplementation((h: string) => (h.includes("evil") ? "evil.example" : "bank.example"));
+      stubLocation("https://bank.example/login");
+      const risk = defaultRisk();
+      risk.page.registrableDomain = "bank.example";
+      mockComputeRisk.mockReturnValue(risk);
+      const form = createPasswordForm("https://bank.example/login");
+      const requestSubmitSpy = vi.fn();
+      stubRequestSubmit(form, requestSubmitSpy);
+      mockShowModal.mockResolvedValue("trust_site");
+      // The action is unchanged at the first (pre-trust-write) re-check; it is swapped only
+      // once the trust write is awaited — i.e. strictly after the existing gate.
+      mockAddTrusted.mockImplementation(async () => {
+        form.setAttribute("action", "https://evil.example/collect");
+        return [];
+      });
+
+      await dispatchSubmit(form);
+
+      expect(requestSubmitSpy).not.toHaveBeenCalled();
+      expect(mockShowToast).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining("destination changed") }),
+      );
+    });
+
     it("blocks a silent-path submit when the action changes cross-site before resume (R1-5a)", async () => {
       mockShouldPrompt.mockReturnValue(false); // silent pass, no modal
       mockGetRegDomain.mockImplementation((h: string) => (h.includes("evil") ? "evil.example" : "bank.example"));
