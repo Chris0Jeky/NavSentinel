@@ -1,0 +1,57 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Proto Wrap 05 - Page wraps form.submit / location.assign / window.open</title>
+  <style>
+    body { font-family: sans-serif; padding: 24px; background: #f5f5f5; }
+    #app { background: #fff; padding: 16px; border-radius: 4px; border: 1px solid #ddd; min-height: 60px; }
+    #status { margin-top: 16px; padding: 8px 12px; border-radius: 4px; font-size: 14px; background: #d1ecf1; }
+  </style>
+</head>
+<body>
+  <h1>Proto Wrap 05</h1>
+  <p>
+    A strict-mode module wraps the enforcement methods NavSentinel patches
+    (<code>HTMLFormElement.prototype.submit</code>, <code>Location.prototype.assign</code>,
+    <code>window.open</code>) the way real form/analytics libraries do. If NavSentinel
+    froze those slots non-writable, these assignments would throw
+    <code>TypeError: Cannot assign to read only property</code> and abort init.
+    Expected: all wraps succeed and the app renders.
+  </p>
+
+  <!-- Realistic library pattern: an UNGUARDED strict-mode module. If any wrap
+       throws, the error is uncaught and the app render below never runs. -->
+  <script type="module">
+    "use strict";
+    const results = {};
+
+    const origSubmit = HTMLFormElement.prototype.submit;
+    HTMLFormElement.prototype.submit = function (...args) {
+      return origSubmit.apply(this, args);
+    };
+    results.formSubmit = "ok";
+
+    const origAssign = Location.prototype.assign;
+    Location.prototype.assign = function (...args) {
+      return origAssign.apply(this, args);
+    };
+    results.locationAssign = "ok";
+
+    const origOpen = window.open;
+    window.open = function (...args) {
+      return origOpen.apply(this, args);
+    };
+    results.windowOpen = "ok";
+
+    document.body.dataset.protoWrap = JSON.stringify(results);
+    document.getElementById("app").textContent =
+      "Booted; wrapped: " + Object.keys(results).join(", ");
+    document.getElementById("status").textContent = "Status: OK — all wraps succeeded";
+  </script>
+
+  <div id="app"><!-- rendered by the module above --></div>
+  <div id="status">Status: waiting…</div>
+</body>
+</html>

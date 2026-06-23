@@ -84,3 +84,58 @@ test("SPA router can wrap history.pushState without a grey screen @regression", 
     fs.rmSync(userDataDir, { recursive: true, force: true });
   }
 });
+
+test("a page can wrap form.submit / location.assign / window.open without throwing @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-protowrap-"));
+
+  let context;
+  try {
+    context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [
+        `--disable-extensions-except=${extensionPath}`,
+        `--load-extension=${extensionPath}`
+      ]
+    });
+  } catch (err) {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+    throw err;
+  }
+
+  const pageErrors: string[] = [];
+  const page = await context.newPage();
+  page.on("pageerror", (err) => pageErrors.push(err.message));
+
+  try {
+    await page.goto(`${baseUrl}/proto-wrap-05.html`, {
+      waitUntil: "domcontentloaded",
+      timeout: 20_000
+    });
+    await waitForNavSentinelBridge(page);
+
+    // All three enforcement methods stayed writable, so the page's wraps succeeded.
+    const wrapped = await page.evaluate(() => document.body.dataset.protoWrap);
+    expect(wrapped, "form.submit / location.assign / window.open must be wrappable").toBeTruthy();
+    const parsed = JSON.parse(wrapped ?? "{}") as Record<string, string>;
+    expect(parsed.formSubmit).toBe("ok");
+    expect(parsed.locationAssign).toBe("ok");
+    expect(parsed.windowOpen).toBe("ok");
+
+    // The module finished (no uncaught throw aborted the app render).
+    expect(await page.locator("#app").textContent()).toContain("Booted");
+
+    const frozenError = pageErrors.find(
+      (m) => /read only/i.test(m) && /(submit|assign|open)/i.test(m)
+    );
+    expect(frozenError, `unexpected freeze error: ${frozenError ?? ""}`).toBeUndefined();
+  } finally {
+    await context.close();
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});

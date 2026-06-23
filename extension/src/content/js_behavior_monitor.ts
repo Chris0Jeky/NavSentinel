@@ -232,15 +232,16 @@ function patchFormSubmitMonitoring(): void {
   };
   document.addEventListener("submit", _submitListener, true);
 
-  // Patch HTMLFormElement.prototype.submit for programmatic submits.
-  // main_guard.patchForms() hardens this same prototype method with a
-  // non-writable defineProperty, and its bootstrap runs BEFORE the async
-  // ns-config that triggers this init — so this assignment can throw "Cannot
-  // assign to read only property 'submit'". Degrade gracefully: the capturing
-  // 'submit' listener above already covers event-based submits, so catch the
-  // throw rather than letting it abort the rest of initJsBehaviorMonitor (which
-  // would drop the other JS-behavior API patches). Leave _originalSubmitFn null
-  // on failure so teardown skips a restore that would also throw.
+  // Patch HTMLFormElement.prototype.submit for programmatic submits (the capturing
+  // 'submit' listener above only sees event-based submits + requestSubmit, not
+  // form.submit()). main_guard.patchForms() installs its own submit wrapper first;
+  // it is now writable+configurable (#349, was a frozen slot that made this throw
+  // and silently disabled programmatic-submit detection), so this assignment now
+  // succeeds and chains cleanly on top: this wrapper detects, then calls
+  // main_guard's wrapper (originalSubmit), then the native — handleFormSubmit fires
+  // exactly once, no double-handling. The try/catch stays as defense-in-depth in
+  // case another extension/page froze the slot; on failure leave _originalSubmitFn
+  // null so teardown skips a restore that would also throw.
   const originalSubmit = HTMLFormElement.prototype.submit;
   try {
     HTMLFormElement.prototype.submit = function (this: HTMLFormElement) {
