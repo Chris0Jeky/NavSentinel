@@ -1877,7 +1877,7 @@ window.addEventListener(
           const prefix = hasClickfix
             ? "NavSentinel blocked a new tab with fake dialog detected"
             : "NavSentinel blocked a suspicious new tab";
-          showToast({ message: buildPlainMessage(prefix, reasonCodes) });
+          showToast({ message: buildPlainMessage(prefix, reasonCodes), coalesce: !hasClickfix });
           if (hasClickfix) clickFixAlertedAt = Date.now();
         }
       } else if (!isBlankAnchor && nrs >= blockThreshold) {
@@ -1902,7 +1902,7 @@ window.addEventListener(
         const blockPrefix = hasClickfix
           ? "NavSentinel blocked a deceptive click with fake dialog"
           : "NavSentinel blocked a deceptive click";
-        showToast({ message: buildPlainMessage(blockPrefix, reasonCodes) });
+        showToast({ message: buildPlainMessage(blockPrefix, reasonCodes), coalesce: !hasClickfix });
         if (hasClickfix) clickFixAlertedAt = Date.now();
       }
     }

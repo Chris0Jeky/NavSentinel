@@ -105,9 +105,14 @@ const budgets = [
     maxKB: 6,
   },
   {
+    // Bumped 5 -> 8 KB for the burst-coalescing count pill (#351): when many
+    // block notices fire in quick succession they collapse into one small pill
+    // (count + expand) instead of a full card each, which added the pill render
+    // path, idle/navigation reset logic, and pill CSS (~2.6KB). Still a tiny
+    // shared chunk; total-dist budget (500KB) remains the aggregate guard.
     label: "ui_toast (shared)",
     glob: "assets/ui_toast-*.js",
-    maxKB: 5,
+    maxKB: 8,
   },
   // C-02: Separate budget for the reputation bloom filter (150 KB).
   // check-bloom-size.mjs enforces a coarse 2 MB absolute max on the source
