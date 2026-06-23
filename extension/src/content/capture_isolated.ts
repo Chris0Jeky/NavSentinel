@@ -1495,6 +1495,11 @@ function showAllowPrompt(params: {
   showToast({
     message: `${params.title}: ${params.host ?? params.url}`,
     actions,
+    // Coalesce a burst of blocked-nav prompts (ad-heavy / malicious-popup pages)
+    // into the count pill so the user is not forced to act on each. The blocked
+    // navigation stays blocked; the pill expands to the latest prompt's actions
+    // if a popup was actually wanted.
+    coalesce: true,
     onDismiss: () => {
       appendOutcomeSafely({
         domain: sourceDomain,

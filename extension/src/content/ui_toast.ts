@@ -31,7 +31,9 @@ let root: ShadowRoot | null = null;
 // --- Burst coalescing state (per page, ephemeral, never persisted) ---
 let burstCount = 0;
 let burstLastAt = 0;
-let lastBlockMessage = "";
+// The most recent coalesced toast, kept so the pill can expand back into the
+// latest prompt's full actions (e.g. Allow once / Always allow on a blocked popup).
+let lastCoalescedOpts: ToastOptions | null = null;
 let pill: HTMLElement | null = null;
 let pillCountEl: HTMLElement | null = null;
 let pillIdleTimer = 0;
@@ -264,8 +266,29 @@ function maybeResetOnNavigation(): void {
 function resetBurst(): void {
   burstCount = 0;
   burstLastAt = 0;
-  lastBlockMessage = "";
+  lastCoalescedOpts = null;
   dismissPill();
+}
+
+/**
+ * Expand the pill back into the latest blocked prompt as a full card, carrying
+ * its actions (Allow once / Always allow) so a wrongly-blocked popup can still be
+ * allowed. Acting on it — or dismissing — clears the whole burst.
+ */
+function buildExpandedOpts(): ToastOptions {
+  const latest = lastCoalescedOpts;
+  const earlier = Math.max(0, burstCount - 1);
+  const base = latest?.message ?? "Blocked navigations";
+  const message = earlier > 0 ? `${base}  ·  +${earlier} more blocked` : base;
+  const wrap = (a: ToastAction): ToastAction => ({
+    label: a.label,
+    onClick: () => { try { a.onClick(); } finally { resetBurst(); } },
+  });
+  return {
+    message,
+    ...(latest?.actions ? { actions: latest.actions.map(wrap) } : {}),
+    onDismiss: () => { try { latest?.onDismiss?.(); } finally { resetBurst(); } },
+  };
 }
 
 function dismissPill(): void {
@@ -317,10 +340,11 @@ function showOrUpdatePill(): void {
     pill.appendChild(dot);
     pill.appendChild(text);
 
-    const expand = () => renderFullCard({
-      message: `${lastBlockMessage} …and ${burstCount - 1} earlier blocked.`,
-      onDismiss: () => resetBurst(),
-    });
+    const expand = () => {
+      const expanded = buildExpandedOpts();
+      dismissPill(); // swap the pill for the full card; acting/dismissing resets
+      renderFullCard(expanded);
+    };
     pill.addEventListener("click", expand);
     pill.addEventListener("keydown", (e) => {
       if (e instanceof KeyboardEvent && (e.key === "Enter" || e.key === " ")) {
@@ -349,7 +373,7 @@ function handleCoalescible(opts: ToastOptions): void {
     dismissPill();
   }
   burstLastAt = now;
-  lastBlockMessage = opts.message;
+  lastCoalescedOpts = opts;
 
   if (burstCount >= COALESCE_THRESHOLD) {
     showOrUpdatePill();

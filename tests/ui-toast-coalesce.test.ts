@@ -128,7 +128,31 @@ describe("ui_toast burst coalescing", () => {
     block();
     pill()!.click();
     expect(wraps().length).toBe(1);
-    expect(getRoot()!.querySelector(".wrap .body")!.textContent).toContain("earlier blocked");
+    expect(getRoot()!.querySelector(".wrap .body")!.textContent).toContain("more blocked");
+    expect(pill()).toBeNull(); // the pill is swapped for the full card
+  });
+
+  it("preserves the latest prompt's actions when expanded (e.g. Allow once on a blocked popup)", () => {
+    const allow = vi.fn();
+    showToast({ message: "Blocked popup: a.example", coalesce: true });
+    showToast({ message: "Blocked popup: b.example", coalesce: true });
+    showToast({
+      message: "Blocked popup: c.example",
+      coalesce: true,
+      actions: [{ label: "Allow once", onClick: allow }],
+    });
+    // The 3rd blocked-popup prompt collapses the burst into the pill.
+    expect(pill()).not.toBeNull();
+    pill()!.click();
+    const labels = Array.from(getRoot()!.querySelectorAll(".wrap button")).map((b) => b.textContent);
+    expect(labels).toContain("Allow once");
+    // Acting on the preserved action allows that popup AND clears the burst.
+    const allowBtn = Array.from(
+      getRoot()!.querySelectorAll<HTMLButtonElement>(".wrap button")
+    ).find((b) => b.textContent === "Allow once")!;
+    allowBtn.click();
+    expect(allow).toHaveBeenCalledTimes(1);
+    expect(pill()).toBeNull();
   });
 
   it("uses a singular label for a single navigation after reset", () => {
