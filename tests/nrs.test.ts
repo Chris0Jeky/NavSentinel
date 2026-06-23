@@ -410,6 +410,44 @@ describe("computeNRS", () => {
       expect(getTierAdjustedBlockThreshold(95, TRUST_TIER_TOP_SITE, benignFactors)).toBe(100);
     });
 
+    it("flips a representative top-site layout false positive from block to non-block", () => {
+      // github.com-style benign click: one CDS layout reason (intent_mismatch) on an
+      // SPA, opening a cross-site link in a new tab. No attack signal present.
+      const { nrs, nrsFactors } = computeNRS(
+        baseCds(35, ["intent_mismatch_under_interactive"]),
+        baseNav({ isNewTabOrWindow: true, isCrossSite: true, trustTier: TRUST_TIER_TOP_SITE })
+      );
+      expect(nrs).toBe(75); // 35 + 20 (new tab) + 20 (cross-site)
+      // Old behavior (relief not wired): 75 >= 70 -> BLOCK (the false positive).
+      expect(nrs).toBeGreaterThanOrEqual(
+        getTierAdjustedBlockThreshold(NRS_BLOCK_THRESHOLD, TRUST_TIER_TOP_SITE)
+      );
+      // With the relief: threshold rises to 90, so 75 < 90 -> no longer a block.
+      expect(nrs).toBeLessThan(
+        getTierAdjustedBlockThreshold(NRS_BLOCK_THRESHOLD, TRUST_TIER_TOP_SITE, nrsFactors)
+      );
+    });
+
+    it("keeps a top-site click blocked when a real attack factor is present", () => {
+      const { nrs, nrsFactors } = computeNRS(
+        baseCds(35, ["intent_mismatch_under_interactive"]),
+        baseNav({
+          isNewTabOrWindow: true,
+          isCrossSite: true,
+          trustTier: TRUST_TIER_TOP_SITE,
+          clickfixScore: 40,
+        })
+      );
+      // An attack factor (clickfix) is present -> relief not eligible -> full bar.
+      const threshold = getTierAdjustedBlockThreshold(
+        NRS_BLOCK_THRESHOLD,
+        TRUST_TIER_TOP_SITE,
+        nrsFactors
+      );
+      expect(threshold).toBe(NRS_BLOCK_THRESHOLD);
+      expect(nrs).toBeGreaterThanOrEqual(threshold);
+    });
+
     describe("isTopSiteReliefEligible", () => {
       it("is true for empty / all-benign factor sets", () => {
         expect(isTopSiteReliefEligible([])).toBe(true);

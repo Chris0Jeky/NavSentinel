@@ -26,7 +26,7 @@ describe("top-sites trust tier", () => {
   });
 
   it("does not treat subdomains as top sites without an explicit generated policy", () => {
-    expect(isTopSiteDomain("docs.github.com")).toBe(false);
+    expect(isTopSiteDomain("meta.stackoverflow.com")).toBe(false);
     expect(isTopSiteDomain("evil.auth0.com")).toBe(false);
     expect(isTopSiteDomain("evil.okta.com")).toBe(false);
     expect(isTopSiteDomain("evil.slack.com")).toBe(false);
@@ -43,6 +43,25 @@ describe("top-sites trust tier", () => {
     expect(isTopSiteDomain("evil.herokuapp.com")).toBe(false);
     expect(isTopSiteDomain("evil.azurewebsites.net")).toBe(false);
     expect(isTopSiteDomain("evil.firebaseapp.com")).toBe(false);
+  });
+
+  it("treats subdomains as top sites ONLY when the entry opts in (includeSubdomains)", () => {
+    // Brands flagged includeSubdomains (first-party subdomains only) inherit trust.
+    expect(isTopSiteDomain("gist.github.com")).toBe(true);
+    expect(isTopSiteDomain("api.anthropic.com")).toBe(true);
+    expect(isTopSiteDomain("support.apple.com")).toBe(true);
+    // Explicit Google subdomain entries resolve exactly (google.com itself is NOT
+    // includeSubdomains because sites.google.com hosts user content).
+    expect(isTopSiteDomain("accounts.google.com")).toBe(true);
+    expect(isTopSiteDomain("mail.google.com")).toBe(true);
+    expect(isTopSiteDomain("sites.google.com")).toBe(false);
+    expect(isTopSiteDomain("evil.google.com")).toBe(false);
+  });
+
+  it("resolves the newly added major domains to the top-site tier", () => {
+    for (const host of ["claude.ai", "anthropic.com", "gitlab.com", "figma.com", "npmjs.com"]) {
+      expect(resolveNavigationTrustTier({ destHost: host })).toBe(TRUST_TIER_TOP_SITE);
+    }
   });
 
   it("resolves known-bad before any benign prior", () => {
