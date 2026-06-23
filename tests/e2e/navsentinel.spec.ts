@@ -1449,7 +1449,22 @@ test("RW-19 repeated tech-support popup burst is blocked @regression", async () 
         { timeout: 5000 }
       );
 
-      await waitForToastText(page, "Blocked popup", 3000);
+      // A burst of blocked popups coalesces: the first one or two show the full
+      // "Blocked popup" prompt, then NavSentinel collapses the rest into a single
+      // count pill instead of nagging once per popup. Accept either surface.
+      await page.waitForFunction(
+        () => {
+          const root = document.querySelector("#__navsentinel_toast_host")?.shadowRoot;
+          if (!root) return false;
+          const pill = root.querySelector(".pill");
+          if (pill?.textContent && /blocked/i.test(pill.textContent)) return true;
+          const body = root.querySelector(".wrap .body");
+          return !!body?.textContent && /blocked popup/i.test(body.textContent);
+        },
+        null,
+        { timeout: 4000 }
+      );
+      // Security property unchanged: not one of the burst popups actually opened.
       await expect.poll(() => context.pages().length, { timeout: 3000 }).toBe(beforePages);
     } finally {
       await context.close();
