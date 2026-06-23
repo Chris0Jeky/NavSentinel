@@ -1814,7 +1814,7 @@ window.addEventListener(
     setActiveToken(token);
 
     let decision: "allow" | "prompt" | "block" = "allow";
-    const blockThreshold = getTierAdjustedBlockThreshold(getNrsBlockThreshold(mode), trustTier);
+    const blockThreshold = getTierAdjustedBlockThreshold(getNrsBlockThreshold(mode), trustTier, nrsFactors);
     // Replay-grade feature snapshot (P5-C1 / #238). Built from LOCAL decision
     // scope here — `lastDebug` is only assigned below (after the branches), so
     // it would carry the previous click's data at the outcome call sites.
