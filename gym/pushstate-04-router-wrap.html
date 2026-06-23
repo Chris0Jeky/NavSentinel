@@ -1,0 +1,78 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PushState 04 - SPA Router Wraps history.pushState (regression)</title>
+  <style>
+    body { font-family: sans-serif; padding: 24px; background: #f5f5f5; }
+    h1 { margin-top: 0; }
+    .description {
+      background: #d1ecf1; border: 1px solid #17a2b8;
+      padding: 12px; border-radius: 4px; margin-bottom: 20px;
+    }
+    #app { background: #fff; padding: 16px; border-radius: 4px; border: 1px solid #ddd; min-height: 80px; }
+    #status { margin-top: 16px; padding: 8px 12px; border-radius: 4px; font-size: 14px; background: #d1ecf1; }
+  </style>
+</head>
+<body>
+  <h1>PushState 04 - SPA Router Wraps history.pushState</h1>
+  <div class="description">
+    <strong>Regression scenario (claude.ai / TanStack Router grey screen):</strong>
+    a strict-mode module reassigns <code>history.pushState = wrapper</code> the way
+    real SPA routers do. If NavSentinel hardens <code>History.prototype.pushState</code>
+    to non-writable, that assignment throws
+    <code>TypeError: Cannot assign to read only property 'pushState'</code>, the module
+    init aborts, and <code>#app</code> below never renders (the grey screen).
+    <br><br>
+    <strong>Expected:</strong> the wrap succeeds, navigation works, and the app renders.
+  </div>
+
+  <!-- Realistic router pattern: an UNGUARDED strict-mode module. If the wrap
+       throws, the error is uncaught and everything after it (the app render)
+       never runs — exactly the claude.ai failure. -->
+  <script type="module">
+    "use strict";
+    // Capture-then-wrap (what TanStack Router / the `history` library do).
+    const originalPushState = history.pushState;
+    const originalReplaceState = history.replaceState;
+    history.pushState = function (...args) {
+      return originalPushState.apply(this, args);
+    };
+    history.replaceState = function (...args) {
+      return originalReplaceState.apply(this, args);
+    };
+
+    // Drive a client-side navigation through the wrapped method.
+    history.pushState({ page: "/dashboard" }, "", "/dashboard");
+
+    // This only runs if the wrap above did NOT throw — i.e. it proves the
+    // grey-screen regression is fixed.
+    const app = document.getElementById("app");
+    app.innerHTML = "<h2>Dashboard</h2><p>Router booted; pushState wrapped successfully.</p>";
+    document.body.dataset.appBooted = "true";
+  </script>
+
+  <div id="app"><!-- rendered by the router module above --></div>
+
+  <div id="status">Status: waiting for router…</div>
+
+  <!-- Explicit, guarded probe so the E2E gets a clean pass/fail signal even if
+       the page were to swallow the error some other way. -->
+  <script type="module">
+    "use strict";
+    let writable = true;
+    let message = "pushState is writable";
+    try {
+      const probe = history.pushState;
+      history.pushState = probe; // no-op reassignment; throws if frozen non-writable
+    } catch (e) {
+      writable = false;
+      message = "FROZEN: " + (e && e.message ? e.message : String(e));
+    }
+    document.body.dataset.pushstateWritable = writable ? "true" : "false";
+    document.getElementById("status").textContent =
+      "Status: " + (writable ? "OK — " : "FAIL — ") + message;
+  </script>
+</body>
+</html>
