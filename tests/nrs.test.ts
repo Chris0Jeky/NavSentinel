@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   computeNRS,
   getTierAdjustedBlockThreshold,
+  isTopSiteReliefEligible,
   NRS_BLOCK_THRESHOLD,
   NRS_STRICT_BLOCK_THRESHOLD,
+  NRS_TOP_SITE_CDS_RELIEF,
 } from "../extension/src/shared/nrs";
 import type { NavigationContext } from "../extension/src/shared/nrs";
 import type { ScoreResult } from "../extension/src/shared/scoring";
@@ -353,6 +355,79 @@ describe("computeNRS", () => {
       expect(result.nrsFactors).toContain("nrs_oauth_opener_manipulation");
       expect(result.nrsFactors).toContain("nrs_visual_brand_match");
       expect(result.nrsFactors).not.toContain("nrs_top_site_prior");
+    });
+  });
+
+  describe("top-site CDS-only block-threshold relief (#350 / P5-A3)", () => {
+    const benignFactors = ["nrs_new_tab_window", "nrs_cross_site"];
+
+    it("relieves the threshold for a top-site reached only via benign structure", () => {
+      expect(getTierAdjustedBlockThreshold(70, TRUST_TIER_TOP_SITE, benignFactors)).toBe(
+        70 + NRS_TOP_SITE_CDS_RELIEF
+      );
+    });
+
+    it("relieves when no NRS factors are present (pure CDS layout)", () => {
+      expect(getTierAdjustedBlockThreshold(70, TRUST_TIER_TOP_SITE, [])).toBe(
+        70 + NRS_TOP_SITE_CDS_RELIEF
+      );
+    });
+
+    it("does NOT relieve when any attack factor is present", () => {
+      for (const attack of [
+        "nrs_known_bad_domain",
+        "nrs_clickfix_active",
+        "nrs_double_click_hijack",
+        "nrs_oauth_redirect_mismatch",
+        "nrs_pushstate_abuse",
+        "nrs_visual_brand_match",
+        "nrs_multiple_attempts",
+        "nrs_redirect_via_known_redirector",
+        "nrs_js_behavior_suspicious",
+        "nrs_domain_repeat_offender",
+        "nrs_nav_anomaly",
+      ]) {
+        expect(
+          getTierAdjustedBlockThreshold(70, TRUST_TIER_TOP_SITE, [...benignFactors, attack])
+        ).toBe(70);
+      }
+    });
+
+    it("does NOT relieve non-top-site tiers even with benign-only factors", () => {
+      expect(getTierAdjustedBlockThreshold(70, TRUST_TIER_UNKNOWN, benignFactors)).toBe(70);
+      expect(getTierAdjustedBlockThreshold(70, TRUST_TIER_USER_ALLOWLISTED, benignFactors)).toBe(70);
+    });
+
+    it("known-bad still tightens regardless of factors (relief never applies)", () => {
+      expect(getTierAdjustedBlockThreshold(70, TRUST_TIER_KNOWN_BAD, benignFactors)).toBe(50);
+    });
+
+    it("stays backward-compatible: omitting nrsFactors gives no relief", () => {
+      expect(getTierAdjustedBlockThreshold(70, TRUST_TIER_TOP_SITE)).toBe(70);
+    });
+
+    it("clamps the relieved threshold to the 100 ceiling", () => {
+      expect(getTierAdjustedBlockThreshold(95, TRUST_TIER_TOP_SITE, benignFactors)).toBe(100);
+    });
+
+    describe("isTopSiteReliefEligible", () => {
+      it("is true for empty / all-benign factor sets", () => {
+        expect(isTopSiteReliefEligible([])).toBe(true);
+        expect(isTopSiteReliefEligible([
+          "nrs_new_tab_window",
+          "nrs_cross_site",
+          "nrs_fast_attempt",
+          "nrs_user_activation_active",
+          "nrs_explicit_new_tab_intent",
+          "nrs_allowlisted",
+          "nrs_opener_previously_allowed",
+        ])).toBe(true);
+      });
+
+      it("is false when any attack/contextual factor is present", () => {
+        expect(isTopSiteReliefEligible(["nrs_cross_site", "nrs_csp_weakness"])).toBe(false);
+        expect(isTopSiteReliefEligible(["nrs_clickfix_active"])).toBe(false);
+      });
     });
   });
 
