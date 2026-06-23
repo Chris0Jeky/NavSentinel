@@ -448,6 +448,30 @@ describe("computeNRS", () => {
       expect(nrs).toBeGreaterThanOrEqual(threshold);
     });
 
+    it("relieves a same-tab, same-site top-site click that only tripped fast_attempt (LinkedIn case)", () => {
+      // Real report: clicking a button on linkedin.com (a top site) in smart mode
+      // blocked it as a 'deceptive click — navigation triggered unusually quickly'
+      // (nrs_fast_attempt fires on any sub-250ms click). Same tab, same site, plus a
+      // layout-driven CDS — no attack signal.
+      const { nrs, nrsFactors } = computeNRS(
+        baseCds(60, ["intent_mismatch_under_interactive", "overlay_medium_interactive"]),
+        baseNav({
+          timeSincePointerdownMs: 120,
+          userActivationActive: true,
+          trustTier: TRUST_TIER_TOP_SITE,
+        })
+      );
+      expect(nrs).toBe(75); // 60 + 10 (fast) + 5 (user activation)
+      expect(nrsFactors).toContain("nrs_fast_attempt");
+      // Old behavior: 75 >= 70 -> blocked (the FP). With relief: threshold 90 -> not blocked.
+      expect(nrs).toBeGreaterThanOrEqual(
+        getTierAdjustedBlockThreshold(NRS_BLOCK_THRESHOLD, TRUST_TIER_TOP_SITE)
+      );
+      expect(nrs).toBeLessThan(
+        getTierAdjustedBlockThreshold(NRS_BLOCK_THRESHOLD, TRUST_TIER_TOP_SITE, nrsFactors)
+      );
+    });
+
     describe("isTopSiteReliefEligible", () => {
       it("is true for empty / all-benign factor sets", () => {
         expect(isTopSiteReliefEligible([])).toBe(true);
