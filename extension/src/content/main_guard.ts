@@ -451,6 +451,52 @@ function hardenProto(
   }
 }
 
+/**
+ * Install a patched method on a prototype as a WRITABLE + CONFIGURABLE data
+ * property (native methods are non-enumerable, so we keep enumerable:false).
+ *
+ * Unlike hardenProto (which freezes the slot non-writable/non-configurable),
+ * this lets a legitimate page reassign the method afterwards — e.g. an SPA
+ * router doing `history.pushState = wrapper`. Against a strict-mode reassign,
+ * a non-writable inherited data property throws
+ * "Cannot assign to read only property 'pushState'", which aborts the page's
+ * router init and leaves a blank/grey screen (observed on claude.ai / TanStack
+ * Router and other strict-mode SPAs).
+ *
+ * This is only safe for OBSERVATIONAL hooks (they call the saved native and
+ * merely report — they never block), where non-writability bought no real
+ * defense anyway: a MAIN-world adversary shares this realm and can bypass the
+ * hook regardless (cross-realm native, wholesale overwrite, or simply not using
+ * the API). Because the wrapper delegates to the module-captured native (not to
+ * `proto[prop]`), a page that does capture-then-wrap chains safely
+ * (page wrapper -> our wrapper -> native) with no re-entrancy, and our signal
+ * still fires for page-initiated calls. Do NOT use this for enforcement hooks
+ * without a separate review.
+ */
+function softPatchProto(
+  proto: object,
+  prop: string,
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
+  value: Function,
+  label: string
+): void {
+  try {
+    Object.defineProperty(proto, prop, {
+      value,
+      writable: true,
+      configurable: true,
+      enumerable: false,
+    });
+  } catch {
+    try {
+      (proto as Record<string, unknown>)[prop] = value;
+    } catch { /* ignore — already patched or frozen */ }
+    if (debug) {
+      console.debug(`[NavSentinel] softPatchProto fallback for ${label}, used assignment`);
+    }
+  }
+}
+
 // Clipboard API natives (may not exist in all contexts)
 const nativeClipboardWriteText =
   typeof navigator !== "undefined" && navigator.clipboard
@@ -1171,8 +1217,12 @@ function patchHistory(): void {
     }
     return result;
   };
-  hardenProto(History.prototype, "pushState", patchedPushState, "History.prototype.pushState");
-  hardenProto(History.prototype, "replaceState", patchedReplaceState, "History.prototype.replaceState");
+  // Observational hooks only (they call the native and report; never block), so
+  // install them WRITABLE + CONFIGURABLE — hardening these to non-writable broke
+  // strict-mode SPA routers that reassign history.pushState (grey screen on
+  // claude.ai and other TanStack/React-Router apps). See softPatchProto.
+  softPatchProto(History.prototype, "pushState", patchedPushState, "History.prototype.pushState");
+  softPatchProto(History.prototype, "replaceState", patchedReplaceState, "History.prototype.replaceState");
 }
 
 /**
