@@ -1495,6 +1495,11 @@ function showAllowPrompt(params: {
   showToast({
     message: `${params.title}: ${params.host ?? params.url}`,
     actions,
+    // Coalesce a burst of blocked-nav prompts (ad-heavy / malicious-popup pages)
+    // into the count pill so the user is not forced to act on each. The blocked
+    // navigation stays blocked; the pill expands to the latest prompt's actions
+    // if a popup was actually wanted.
+    coalesce: true,
     onDismiss: () => {
       appendOutcomeSafely({
         domain: sourceDomain,
@@ -1877,7 +1882,7 @@ window.addEventListener(
           const prefix = hasClickfix
             ? "NavSentinel blocked a new tab with fake dialog detected"
             : "NavSentinel blocked a suspicious new tab";
-          showToast({ message: buildPlainMessage(prefix, reasonCodes) });
+          showToast({ message: buildPlainMessage(prefix, reasonCodes), coalesce: !hasClickfix });
           if (hasClickfix) clickFixAlertedAt = Date.now();
         }
       } else if (!isBlankAnchor && nrs >= blockThreshold) {
@@ -1902,7 +1907,7 @@ window.addEventListener(
         const blockPrefix = hasClickfix
           ? "NavSentinel blocked a deceptive click with fake dialog"
           : "NavSentinel blocked a deceptive click";
-        showToast({ message: buildPlainMessage(blockPrefix, reasonCodes) });
+        showToast({ message: buildPlainMessage(blockPrefix, reasonCodes), coalesce: !hasClickfix });
         if (hasClickfix) clickFixAlertedAt = Date.now();
       }
     }
