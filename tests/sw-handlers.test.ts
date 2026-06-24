@@ -2137,6 +2137,67 @@ describe("service worker handlers", () => {
       releaseLocal();
       await vi.runAllTimersAsync();
       expect(mock.chrome.action.setBadgeText).toHaveBeenCalledWith({ tabId: 11, text: "" });
+      // And green/"✓" must NEVER have reached tab 11 at any point — no stale-"smart" flash.
+      expect(mock.chrome.action.setBadgeText).not.toHaveBeenCalledWith({ tabId: 11, text: "✓" });
+      expect(mock.chrome.action.setBadgeBackgroundColor).not.toHaveBeenCalledWith(
+        expect.objectContaining({ tabId: 11, color: "#16a34a" }),
+      );
+    });
+
+    it("with the mode read settled first, the nav still defers on hydration, then paints gray (#327 local-first)", async () => {
+      const mock = createChromeMock();
+      let releaseLocal!: () => void;
+      let releaseSession!: () => void;
+      const localGate = new Promise<void>((r) => { releaseLocal = r; });
+      const sessionGate = new Promise<void>((r) => { releaseSession = r; });
+
+      mock.chrome.storage.local.get = (async () => {
+        await localGate;
+        return { [SUITE_SETTINGS_KEY]: { nav: { defaultMode: "off" } } };
+      }) as unknown as typeof mock.chrome.storage.local.get;
+
+      const origSessionGet = mock.chrome.storage.session.get.bind(mock.chrome.storage.session);
+      mock.chrome.storage.session.get = (async (keys?: string | string[]) => {
+        await sessionGate;
+        return origSessionGet(keys);
+      }) as typeof mock.chrome.storage.session.get;
+
+      await loadSw(mock);
+
+      // Opposite ordering from the test above: the mode read (local) resolves FIRST while
+      // session hydration is still pending.
+      releaseLocal();
+      await vi.runAllTimersAsync();
+
+      // A nav in this window must STILL defer -- the handler gates on swState.hydrated,
+      // which is not yet true even though the mode is already read.
+      mock.emitCommitted({
+        tabId: 12,
+        frameId: 0,
+        url: "https://example.com/",
+        transitionType: "link",
+      });
+      await vi.runAllTimersAsync();
+      const lastUrlPending = (mock.chrome.storage.session._store["ns_sw:lastUrl"] ?? {}) as Record<
+        string,
+        string
+      >;
+      expect(lastUrlPending["12"]).toBeUndefined();
+      expect(mock.chrome.action.setBadgeText).not.toHaveBeenCalledWith({ tabId: 12, text: "" });
+
+      // Release hydration; the deferred handler runs and the icon paints gray immediately
+      // (cachedModeReady already settled, so the .then enqueues without further waiting).
+      releaseSession();
+      await vi.runAllTimersAsync();
+      const lastUrl = (mock.chrome.storage.session._store["ns_sw:lastUrl"] ?? {}) as Record<
+        string,
+        string
+      >;
+      expect(lastUrl["12"]).toBe("https://example.com/");
+      expect(mock.chrome.action.setBadgeText).toHaveBeenCalledWith({ tabId: 12, text: "" });
+      expect(mock.chrome.action.setBadgeBackgroundColor).not.toHaveBeenCalledWith(
+        expect.objectContaining({ tabId: 12, color: "#16a34a" }),
+      );
     });
   });
 
