@@ -342,17 +342,6 @@ function clearPendingTabState(
   // Persist is deferred to the caller's batch persist.
 }
 
-// Tabs removed within REMOVED_TAB_TTL_MS. A rollback/forward send callback can
-// fire AFTER the tab was closed (the lastError is usually *because* it closed);
-// re-queuing the pending entry then leaves a zombie for a dead tab. Suppress the
-// re-queue in that window. Module-level (not session-backed): a restart clears it,
-// and a dead tab never fires onUpdated, so this only matters in-session. The TTL is
-// kept short (real dead-port sendMessage callbacks fire in ~100-500ms) so a tab id
-// that Chrome reuses soon after close is not wrongly suppressed. (#323 / disc#7)
-const REMOVED_TAB_TTL_MS = 5_000;
-const REMOVED_TAB_PRUNE_LIMIT = 256;
-const recentlyRemovedTabs = new Map<number, number>(); // tabId -> removedAt
-
 // Tabs with a rollback/forward message send currently in flight. onUpdated can
 // fire twice (loading->complete, or url+status) before the async sendMessage
 // callback resolves; without this guard the second fire re-reads the SAME pending
@@ -361,26 +350,6 @@ const recentlyRemovedTabs = new Map<number, number>(); // tabId -> removedAt
 // cannot drop it. Cleared in the send callback. Module-level. (#323 / disc#3)
 const rollbackSendInFlight = new Set<number>();
 const forwardSendInFlight = new Set<number>();
-
-function noteTabRemoved(tabId: number, now: number): void {
-  recentlyRemovedTabs.set(tabId, now);
-  if (recentlyRemovedTabs.size > REMOVED_TAB_PRUNE_LIMIT) {
-    for (const [id, ts] of recentlyRemovedTabs) {
-      if (now - ts >= REMOVED_TAB_TTL_MS) recentlyRemovedTabs.delete(id);
-    }
-    // Hard cap backstop: drop oldest-inserted if still over the limit.
-    while (recentlyRemovedTabs.size > REMOVED_TAB_PRUNE_LIMIT) {
-      const oldest = recentlyRemovedTabs.keys().next().value;
-      if (oldest === undefined) break;
-      recentlyRemovedTabs.delete(oldest);
-    }
-  }
-}
-
-function wasTabRecentlyRemoved(tabId: number, now: number): boolean {
-  const ts = recentlyRemovedTabs.get(tabId);
-  return ts !== undefined && now - ts < REMOVED_TAB_TTL_MS;
-}
 
 function trySendRollback(
   tabId: number,
@@ -398,24 +367,18 @@ function trySendRollback(
     () => {
       rollbackSendInFlight.delete(tabId);
       if (chrome.runtime.lastError) {
+        // Send failed (tab busy / port gone). Leave pendingRollbackByTab exactly as it
+        // is: every caller stores the entry in the map *before* dispatching (onCommitted
+        // stores-then-sends; ns-ready/onUpdated send the map's own entry), so it is
+        // already queued for the next onUpdated retry. We must NOT re-insert the captured
+        // (stale closure) `pending`: if a newer navigation overwrote the entry, or
+        // onBeforeNavigate / onRemoved cleared it during the async gap, that newer state
+        // is authoritative — resurrecting our stale value would clobber a fresher rollback
+        // or leave a zombie that fires a false rollback on the next page. (#323/disc#5/#7)
         readyTabs.delete(tabId);
-        // Re-queue for retry, but only into an EMPTY slot. Two guards:
-        //   - wasTabRecentlyRemoved: onRemoved ran during the async gap → re-queuing
-        //     would leave a zombie pending entry for a dead tab (#323/disc#7).
-        //   - !pendingRollbackByTab.has: a newer navigation wrote a fresher entry during
-        //     the gap (the ready-tab commit path sends directly without storing, so the
-        //     captured `pending` here is a *stale closure value*); re-inserting it would
-        //     clobber the newer entry → the second suspicious nav is lost / mis-cited
-        //     (#323/disc#5). When the slot is empty (the normal ready-tab send path that
-        //     never stored `pending`), this still re-queues so a later onUpdated retries.
-        // NOTE (residual, seeded as a follow-up): the success branch's unconditional
-        // delete and two-concurrent-ready-sends erroring out of order are not fully
-        // closed by this slot check — a per-tab send-generation guard would. See the
-        // sw send-race generation-guard follow-up issue.
-        if (!wasTabRecentlyRemoved(tabId, Date.now()) && !pendingRollbackByTab.has(tabId)) {
-          pendingRollbackByTab.set(tabId, pending);
-        }
-      } else {
+      } else if (pendingRollbackByTab.get(tabId) === pending) {
+        // Delivered. Remove ONLY the exact entry we sent (reference identity) — a newer
+        // entry written during the async send gap must survive. (#323/disc#5)
         pendingRollbackByTab.delete(tabId);
       }
       swState.persistMap(pendingRollbackByTab, "pendingRollback");
@@ -432,16 +395,14 @@ function trySendForwardOffer(
   chrome.tabs.sendMessage(tabId, { type: "ns-forward-offer", url: forward.url }, () => {
     forwardSendInFlight.delete(tabId);
     if (chrome.runtime.lastError) {
+      // Same rule as trySendRollback: the entry is already in pendingForwardByTab (its
+      // only caller sends the map's own entry), so leave it queued for retry and never
+      // re-insert the stale closure value over a newer ns-store-forward write or a slot
+      // that onBeforeNavigate / onRemoved cleared during the gap. (#323/disc#6/#7)
       readyTabs.delete(tabId);
-      // Same two guards as trySendRollback: don't re-queue for a removed tab
-      // (#323/disc#7), and don't clobber a newer forward offer written during the
-      // async gap with this stale closure value (#323/disc#6). trySendForwardOffer's
-      // only caller (onUpdatedHandler) leaves the entry in the map during the send,
-      // so on error the slot is normally still occupied by an entry of record.
-      if (!wasTabRecentlyRemoved(tabId, Date.now()) && !pendingForwardByTab.has(tabId)) {
-        pendingForwardByTab.set(tabId, forward);
-      }
-    } else {
+    } else if (pendingForwardByTab.get(tabId) === forward) {
+      // Delivered. Remove ONLY the exact offer we sent — a newer ns-store-forward offer
+      // written during the async gap must survive. (#323/disc#6)
       pendingForwardByTab.delete(tabId);
     }
     swState.persistMap(pendingForwardByTab, "pendingForward");
@@ -1025,18 +986,18 @@ function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitio
   pendingForwardByTab.set(details.tabId, { url: details.url, ts: now });
   suppressUntilByTab.set(details.tabId, now + ROLLBACK_SUPPRESS_MS);
 
+  // Always queue the rollback so the map is the single source of truth: it then survives
+  // a worker restart and a failed/raced send, and trySendRollback removes this exact entry
+  // only on delivery (and leaves it for the next onUpdated retry on failure). Send now if
+  // the tab is already ready. (#323)
+  const rollbackEntry = {
+    url: details.url,
+    ...(prevUrl !== undefined ? { prevUrl } : {}),
+    qualifiers
+  };
+  pendingRollbackByTab.set(details.tabId, rollbackEntry);
   if (readyTabs.has(details.tabId)) {
-    trySendRollback(details.tabId, {
-      url: details.url,
-      ...(prevUrl !== undefined ? { prevUrl } : {}),
-      qualifiers
-    });
-  } else {
-    pendingRollbackByTab.set(details.tabId, {
-      url: details.url,
-      ...(prevUrl !== undefined ? { prevUrl } : {}),
-      qualifiers
-    });
+    trySendRollback(details.tabId, rollbackEntry);
   }
   swState.persistAll();
 }
@@ -1119,9 +1080,9 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   onRemovedHandler(tabId);
 });
 function onRemovedHandler(tabId: number): void {
-  // Mark the tab removed so an in-flight rollback/forward send callback does not
-  // re-queue a zombie pending entry for it. (#323/disc#7)
-  noteTabRemoved(tabId, Date.now());
+  // clearPendingTabState (below) deletes this tab's pending rollback/forward entries; an
+  // in-flight send's callback then finds the slot gone and (error: leaves it; success:
+  // identity-mismatch) never re-inserts a zombie for the dead tab. (#323/disc#7)
   void clearTabIcon(tabId); // fire-and-forget: blank is chain-ordered (#272)
   const childEntry = childWindowByTab.get(tabId);
   if (childEntry) {
