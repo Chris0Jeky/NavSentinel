@@ -2142,6 +2142,11 @@ describe("service worker handlers", () => {
       expect(mock.chrome.action.setBadgeBackgroundColor).not.toHaveBeenCalledWith(
         expect.objectContaining({ tabId: 11, color: "#16a34a" }),
       );
+      // The gray paint is definitively the LAST write for the tab (no trailing green flash).
+      const tab11Texts = (mock.chrome.action.setBadgeText as unknown as {
+        mock: { calls: Array<[{ tabId: number; text: string }]> };
+      }).mock.calls.filter((c) => c[0].tabId === 11);
+      expect(tab11Texts[tab11Texts.length - 1]?.[0]).toEqual({ tabId: 11, text: "" });
     });
 
     it("with the mode read settled first, the nav still defers on hydration, then paints gray (#327 local-first)", async () => {
@@ -2198,6 +2203,57 @@ describe("service worker handlers", () => {
       expect(mock.chrome.action.setBadgeBackgroundColor).not.toHaveBeenCalledWith(
         expect.objectContaining({ tabId: 12, color: "#16a34a" }),
       );
+    });
+
+    it("a threat escalation in the mode-pending window survives the deferred baseline reset (#327)", async () => {
+      const mock = createChromeMock();
+      let releaseLocal!: () => void;
+      let releaseSession!: () => void;
+      const localGate = new Promise<void>((r) => { releaseLocal = r; });
+      const sessionGate = new Promise<void>((r) => { releaseSession = r; });
+
+      // Mode is "smart" (on) -> the baseline reset would paint GREEN. The escalation paints
+      // red; with a naive deferred paint the late green would overwrite the red and hide the
+      // threat. The chain-anchored reset must be ordered BEFORE the escalation so red wins.
+      mock.chrome.storage.local.get = (async () => {
+        await localGate;
+        return { [SUITE_SETTINGS_KEY]: { nav: { defaultMode: "smart" } } };
+      }) as unknown as typeof mock.chrome.storage.local.get;
+
+      const origSessionGet = mock.chrome.storage.session.get.bind(mock.chrome.storage.session);
+      mock.chrome.storage.session.get = (async (keys?: string | string[]) => {
+        await sessionGate;
+        return origSessionGet(keys);
+      }) as typeof mock.chrome.storage.session.get;
+
+      await loadSw(mock);
+      releaseSession(); // hydrated; mode read still pending
+      await vi.runAllTimersAsync();
+
+      // Fresh top-frame nav reserves the baseline-reset chain slot (color deferred on mode).
+      mock.emitCommitted({ tabId: 13, frameId: 0, url: "https://example.com/", transitionType: "link" });
+      await vi.runAllTimersAsync();
+
+      // The content script detects a threat and escalates to red BEFORE the mode read resolves.
+      (mock.chrome.runtime.onMessage as unknown as {
+        emit: (m: unknown, s: unknown, r: (v?: unknown) => void) => void;
+      }).emit({ type: "ns-tab-risk-update", state: "red", blockCount: 0 }, { tab: { id: 13 } }, () => {});
+      await vi.runAllTimersAsync();
+
+      // Mode read resolves: the green reset runs, then the escalation — red is the final state.
+      releaseLocal();
+      await vi.runAllTimersAsync();
+
+      const colorCalls = (mock.chrome.action.setBadgeBackgroundColor as unknown as {
+        mock: { calls: Array<[{ tabId: number; color: string }]> };
+      }).mock.calls.filter((c) => c[0].tabId === 13);
+      const textCalls = (mock.chrome.action.setBadgeText as unknown as {
+        mock: { calls: Array<[{ tabId: number; text: string }]> };
+      }).mock.calls.filter((c) => c[0].tabId === 13);
+      // Final badge is red (✕ / #dc2626), NOT green (✓ / #16a34a). Pre-fix: the late green
+      // overwrote the red -> last write would be green.
+      expect(colorCalls[colorCalls.length - 1]?.[0].color).toBe("#dc2626");
+      expect(textCalls[textCalls.length - 1]?.[0].text).toBe("✕");
     });
   });
 

@@ -18,7 +18,7 @@ import {
   type OAuthFlowState,
 } from "../content/oauth_monitor";
 import { swState } from "../shared/session_state";
-import { updateTabIcon, clearTabIcon, setAllTabsGray } from "./icon_manager";
+import { updateTabIcon, updateTabIconWhen, clearTabIcon, setAllTabsGray } from "./icon_manager";
 
 const BASELINE_RULESET_ID = "baseline";
 
@@ -884,15 +884,18 @@ function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitio
   const prevUrl = lastUrlByTab.get(details.tabId);
   lastUrlByTab.set(details.tabId, details.url);
 
-  // Reset tab icon for fresh top-frame navigation.
-  // Content script will escalate to yellow/red as threats are detected.
-  // Gate ONLY this paint on cachedModeReady (the local-storage mode read) so a wake-up
-  // navigation paints with the restored mode, not the "smart" default — while the rest of
-  // the handler (the nav state machine above/below) runs as soon as the session maps are
-  // hydrated. cachedDefaultMode is read inside the callback so it reflects the resolved
-  // value. (#327, was #303)
-  void cachedModeReady.then(() =>
-    updateTabIcon(details.tabId, cachedDefaultMode === "off" ? "gray" : "green")
+  // Reset tab icon for fresh top-frame navigation; the content script will escalate to
+  // yellow/red as threats are detected. The green/gray color needs cachedDefaultMode (the
+  // async local-storage read) so it is NOT painted synchronously — that would flash green
+  // for an "off"-mode user on a mid-session restart (#303). But the reset must still be
+  // ordered BEFORE the page's own escalation, or a slow mode read could land the green/gray
+  // paint after a red/yellow threat badge and hide it. updateTabIconWhen reserves this tab's
+  // icon-chain slot synchronously (so a later escalation is ordered after it) while
+  // deferring only the color until cachedModeReady settles. (#327, was #303)
+  void updateTabIconWhen(
+    details.tabId,
+    cachedModeReady,
+    () => (cachedDefaultMode === "off" ? "gray" : "green")
   );
 
   const qualifiers = details.transitionQualifiers ?? [];

@@ -60,6 +60,35 @@ export function updateTabIcon(
   return next;
 }
 
+/**
+ * Like updateTabIcon, but the paint waits for `ready` to settle and the icon state is
+ * computed from `state()` at paint time. The tab's chain slot is reserved SYNCHRONOUSLY at
+ * call time, so any updateTabIcon for the same tab enqueued LATER (e.g. a content-script
+ * threat escalation) is ordered strictly after this paint and can never be overwritten by
+ * it — even when `ready` resolves much later. Used for the onCommitted baseline reset, whose
+ * green/gray color depends on the async cachedDefaultMode read but which must still be
+ * ordered before the page's own escalation. (#327)
+ */
+export function updateTabIconWhen(
+  tabId: number,
+  ready: Promise<unknown>,
+  state: () => IconState,
+  blockCount = 0,
+): Promise<void> {
+  const prev = tabUpdateChains.get(tabId) ?? Promise.resolve();
+  // ready.catch keeps a rejected readiness promise from breaking the chain; applyTabIcon
+  // never rejects, so the chain stays stable.
+  const next = prev
+    .catch(() => {})
+    .then(() => ready.catch(() => {}))
+    .then(() => applyTabIcon(tabId, state(), blockCount));
+  tabUpdateChains.set(tabId, next);
+  void next.finally(() => {
+    if (tabUpdateChains.get(tabId) === next) tabUpdateChains.delete(tabId);
+  });
+  return next;
+}
+
 async function applyTabIcon(
   tabId: number,
   state: IconState,
