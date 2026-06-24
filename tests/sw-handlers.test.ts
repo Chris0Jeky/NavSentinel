@@ -2325,5 +2325,287 @@ describe("service worker handlers", () => {
       >;
       expect(stored["12"]).toBeUndefined();
     });
+
+    it("does not clobber a newer queued rollback when a stale in-flight send errors (disc#5)", async () => {
+      const mock = createChromeMock();
+      const { captured } = deferSends(mock);
+      // Tab 11 is NOT ready and has a stale rollback seeded in storage. onUpdatedHandler
+      // flushes that seeded entry (dispatches the stale send; callback deferred below).
+      mock.chrome.storage.session._store["ns_sw:pendingRollback"] = {
+        "11": { url: "https://stale-evil.com/", qualifiers: [] },
+      };
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+
+      // Establish a prevUrl for tab 11 so the later cross-site commit is suspicious.
+      mock.emitCommitted({ tabId: 11, frameId: 0, url: "https://a.com/", transitionType: "link" });
+      // onUpdated dispatches the seeded (now stale) rollback; its callback is deferred.
+      mock.emitTabUpdated(11, { status: "complete" }, { url: "https://a.com/" });
+      // During the async send gap a NEWER suspicious commit (tab still not ready) writes a
+      // fresh entry into pendingRollbackByTab, overwriting the map slot with the newer URL.
+      mock.emitBeforeNavigate({ tabId: 11, frameId: 0, url: "https://newer-evil.com/" });
+      mock.emitCommitted({ tabId: 11, frameId: 0, url: "https://newer-evil.com/", transitionType: "link" });
+      await vi.runAllTimersAsync();
+
+      // The stale send now fails (e.g. tab busy / port gone). Its error callback must
+      // leave the map untouched, not resurrect the captured stale `pending`.
+      mock.setLastError({ message: "Could not establish connection." });
+      captured.forEach((cb) => cb());
+      mock.setLastError(undefined);
+      await vi.runAllTimersAsync();
+
+      const stored = (mock.chrome.storage.session._store["ns_sw:pendingRollback"] ?? {}) as Record<
+        string,
+        { url: string }
+      >;
+      // Pre-fix (main): the stale error callback re-inserted "stale-evil.com", clobbering
+      // the newer entry. Post-fix: the error callback leaves the map, so the newer entry
+      // of record survives.
+      expect(stored["11"]?.url).toBe("https://newer-evil.com/");
+    });
+
+    it("does not clobber a newer forward offer when a stale in-flight send errors (disc#6)", async () => {
+      const mock = createChromeMock();
+      const { captured } = deferSends(mock);
+      mock.chrome.storage.session._store["ns_sw:pendingForward"] = {
+        "12": { url: "https://offer-1.com/", ts: Date.now() },
+      };
+      mock.chrome.storage.session._store["ns_sw:readyTabs"] = [12];
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+
+      // A commit to a different URL on a ready tab dispatches the (now stale) forward
+      // offer; the callback is deferred.
+      mock.emitTabUpdated(12, { status: "complete" }, { url: "https://current.com/" });
+      // During the send gap the content script stores a NEWER forward offer. The stale
+      // offer-1.com entry is still in pendingForwardByTab (the send did not pre-delete it),
+      // so ns-store-forward OVERWRITES the slot from offer-1.com to offer-2.com.
+      (mock.chrome.runtime.onMessage as unknown as {
+        emit: (m: unknown, s: unknown, r: (v?: unknown) => void) => void;
+      }).emit({ type: "ns-store-forward", url: "https://offer-2.com/" }, { tab: { id: 12 } }, () => {});
+      await vi.runAllTimersAsync();
+
+      // The stale forward send fails; its error callback must leave the (newer) map entry.
+      mock.setLastError({ message: "Could not establish connection." });
+      captured.forEach((cb) => cb());
+      mock.setLastError(undefined);
+      await vi.runAllTimersAsync();
+
+      const stored = (mock.chrome.storage.session._store["ns_sw:pendingForward"] ?? {}) as Record<
+        string,
+        { url: string }
+      >;
+      // Pre-fix (main): stale "offer-1.com" clobbers the newer offer. Post-fix: newer survives.
+      expect(stored["12"]?.url).toBe("https://offer-2.com/");
+    });
+
+    it("a stale rollback SUCCESS callback does not delete a newer queued rollback (disc#5 success)", async () => {
+      const mock = createChromeMock();
+      const { captured } = deferSends(mock);
+      // Seed a stale rollback for a NOT-ready tab; onUpdated flushes it (deferred send).
+      mock.chrome.storage.session._store["ns_sw:pendingRollback"] = {
+        "21": { url: "https://stale-evil.com/", qualifiers: [] },
+      };
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+      mock.emitCommitted({ tabId: 21, frameId: 0, url: "https://a.com/", transitionType: "link" });
+      mock.emitTabUpdated(21, { status: "complete" }, { url: "https://a.com/" });
+      // During the gap a newer suspicious commit overwrites the slot.
+      mock.emitBeforeNavigate({ tabId: 21, frameId: 0, url: "https://newer-evil.com/" });
+      mock.emitCommitted({ tabId: 21, frameId: 0, url: "https://newer-evil.com/", transitionType: "link" });
+      await vi.runAllTimersAsync();
+
+      // The stale send now SUCCEEDS (no lastError). The success callback must delete ONLY
+      // the exact entry it sent (identity), not the newer entry now occupying the slot.
+      captured.forEach((cb) => cb());
+      await vi.runAllTimersAsync();
+
+      const stored = (mock.chrome.storage.session._store["ns_sw:pendingRollback"] ?? {}) as Record<
+        string,
+        { url: string }
+      >;
+      // Pre-fix (main): the success branch unconditionally deleted the slot, dropping the
+      // newer rollback. Post-fix (identity guard): the newer entry survives.
+      expect(stored["21"]?.url).toBe("https://newer-evil.com/");
+    });
+
+    it("a stale forward SUCCESS callback does not delete a newer ns-store-forward offer (disc#6 success)", async () => {
+      const mock = createChromeMock();
+      const { captured } = deferSends(mock);
+      mock.chrome.storage.session._store["ns_sw:pendingForward"] = {
+        "22": { url: "https://offer-1.com/", ts: Date.now() },
+      };
+      mock.chrome.storage.session._store["ns_sw:readyTabs"] = [22];
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+      mock.emitTabUpdated(22, { status: "complete" }, { url: "https://current.com/" });
+      // Newer offer overwrites the slot during the in-flight gap.
+      (mock.chrome.runtime.onMessage as unknown as {
+        emit: (m: unknown, s: unknown, r: (v?: unknown) => void) => void;
+      }).emit({ type: "ns-store-forward", url: "https://offer-2.com/" }, { tab: { id: 22 } }, () => {});
+      await vi.runAllTimersAsync();
+
+      // The stale forward send SUCCEEDS; the success callback must not delete the newer offer.
+      captured.forEach((cb) => cb());
+      await vi.runAllTimersAsync();
+
+      const stored = (mock.chrome.storage.session._store["ns_sw:pendingForward"] ?? {}) as Record<
+        string,
+        { url: string }
+      >;
+      // Pre-fix (main): unconditional delete dropped offer-2. Post-fix: it survives.
+      expect(stored["22"]?.url).toBe("https://offer-2.com/");
+    });
+
+    it("a stale rollback error callback does not resurrect an entry onBeforeNavigate cleared mid-flight", async () => {
+      const mock = createChromeMock();
+      const { captured } = deferSends(mock);
+      // Seed a rollback for tab 23; onUpdated dispatches it (deferred send).
+      mock.chrome.storage.session._store["ns_sw:pendingRollback"] = {
+        "23": { url: "https://evil.com/", qualifiers: [] },
+      };
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+      mock.emitTabUpdated(23, { status: "complete" }, { url: "https://evil.com/" });
+      // A new top-frame navigation begins: onBeforeNavigate clears pendingRollbackByTab.
+      mock.emitBeforeNavigate({ tabId: 23, frameId: 0, url: "https://legit-next.com/" });
+      await vi.runAllTimersAsync();
+
+      // The send for the superseded navigation now fails (port closed by the new nav).
+      mock.setLastError({ message: "Could not establish connection." });
+      captured.forEach((cb) => cb());
+      mock.setLastError(undefined);
+      await vi.runAllTimersAsync();
+
+      const stored = (mock.chrome.storage.session._store["ns_sw:pendingRollback"] ?? {}) as Record<
+        string,
+        unknown
+      >;
+      // Pre-fix (main / the interim !has guard): the empty slot let the stale value be
+      // re-inserted → a zombie that fires a false rollback on the legitimate next page.
+      // Post-fix: the error callback leaves the cleared slot empty.
+      expect(stored["23"]).toBeUndefined();
+    });
+
+    it("a stale forward error callback does not resurrect an offer onBeforeNavigate cleared mid-flight", async () => {
+      const mock = createChromeMock();
+      const { captured } = deferSends(mock);
+      mock.chrome.storage.session._store["ns_sw:pendingForward"] = {
+        "24": { url: "https://offer.com/", ts: Date.now() },
+      };
+      mock.chrome.storage.session._store["ns_sw:readyTabs"] = [24];
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+      mock.emitTabUpdated(24, { status: "complete" }, { url: "https://current.com/" });
+      // A genuine new navigation clears the forward offer (no rollback-return preserve).
+      mock.emitBeforeNavigate({ tabId: 24, frameId: 0, url: "https://legit-next.com/" });
+      await vi.runAllTimersAsync();
+
+      mock.setLastError({ message: "Could not establish connection." });
+      captured.forEach((cb) => cb());
+      mock.setLastError(undefined);
+      await vi.runAllTimersAsync();
+
+      const stored = (mock.chrome.storage.session._store["ns_sw:pendingForward"] ?? {}) as Record<
+        string,
+        unknown
+      >;
+      // Post-fix: the cleared forward slot stays empty (no zombie offer on the next page).
+      expect(stored["24"]).toBeUndefined();
+    });
+
+    it("still retries a rollback on a transient send error because the entry stays queued (no regression)", async () => {
+      const mock = createChromeMock();
+      const { captured } = deferSends(mock);
+      // Tab 16 is ready: the suspicious commit stores the rollback AND sends it (the
+      // store-then-send invariant). A transient send failure must leave it queued.
+      mock.chrome.storage.session._store["ns_sw:readyTabs"] = [16];
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+
+      mock.emitCommitted({ tabId: 16, frameId: 0, url: "https://a.com/", transitionType: "link" });
+      mock.emitBeforeNavigate({ tabId: 16, frameId: 0, url: "https://evil.com/" });
+      mock.emitCommitted({ tabId: 16, frameId: 0, url: "https://evil.com/", transitionType: "link" });
+      await vi.runAllTimersAsync();
+
+      // The send fails transiently; the entry was stored before dispatch and nothing
+      // superseded it, so it must remain queued for the next onUpdated retry.
+      mock.setLastError({ message: "Could not establish connection." });
+      captured.forEach((cb) => cb());
+      mock.setLastError(undefined);
+      await vi.runAllTimersAsync();
+
+      const stored = (mock.chrome.storage.session._store["ns_sw:pendingRollback"] ?? {}) as Record<
+        string,
+        { url: string }
+      >;
+      expect(stored["16"]?.url).toBe("https://evil.com/");
+    });
+
+    it("deletes the delivered rollback on a clean success (positive identity match)", async () => {
+      const mock = createChromeMock();
+      const { captured } = deferSends(mock);
+      // The real delivery path: a queued rollback is dispatched by onUpdated and the send
+      // succeeds with no competing write. The success branch's identity check must hold
+      // (get === sent) and delete the delivered entry. (The ready-tab onCommitted
+      // direct-send is a rare edge — onBeforeNavigate clears readyTabs for the new page —
+      // so the queue-then-deliver-on-onUpdated/ns-ready path is the common one.)
+      mock.chrome.storage.session._store["ns_sw:pendingRollback"] = {
+        "40": { url: "https://evil.com/", qualifiers: [] },
+      };
+      mock.chrome.storage.session._store["ns_sw:readyTabs"] = [40];
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+      mock.emitTabUpdated(40, { status: "complete" }, { url: "https://evil.com/" });
+      // No competing navigation; release the deferred success callback.
+      captured.forEach((cb) => cb());
+      await vi.runAllTimersAsync();
+
+      const stored = (mock.chrome.storage.session._store["ns_sw:pendingRollback"] ?? {}) as Record<
+        string,
+        unknown
+      >;
+      expect(stored["40"]).toBeUndefined();
+    });
+
+    it("deletes the delivered forward offer on a clean success (positive identity match)", async () => {
+      const mock = createChromeMock();
+      const { captured } = deferSends(mock);
+      mock.chrome.storage.session._store["ns_sw:pendingForward"] = {
+        "41": { url: "https://offer.com/", ts: Date.now() },
+      };
+      mock.chrome.storage.session._store["ns_sw:readyTabs"] = [41];
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+      mock.emitTabUpdated(41, { status: "complete" }, { url: "https://current.com/" });
+      captured.forEach((cb) => cb());
+      await vi.runAllTimersAsync();
+
+      const stored = (mock.chrome.storage.session._store["ns_sw:pendingForward"] ?? {}) as Record<
+        string,
+        unknown
+      >;
+      expect(stored["41"]).toBeUndefined();
+    });
+
+    it("persists the rollback at commit time even when the tab is not ready (always-store durability)", async () => {
+      const mock = createChromeMock();
+      deferSends(mock);
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+      // A suspicious commit on a NOT-ready tab (onBeforeNavigate cleared readyTabs for the
+      // new page) must still PERSIST the rollback so a worker death before the content
+      // script announces ns-ready re-delivers it on restart, instead of dropping it.
+      mock.emitCommitted({ tabId: 42, frameId: 0, url: "https://a.com/", transitionType: "link" });
+      mock.emitBeforeNavigate({ tabId: 42, frameId: 0, url: "https://evil.com/" });
+      mock.emitCommitted({ tabId: 42, frameId: 0, url: "https://evil.com/", transitionType: "link" });
+      await vi.runAllTimersAsync();
+
+      const stored = (mock.chrome.storage.session._store["ns_sw:pendingRollback"] ?? {}) as Record<
+        string,
+        { url: string }
+      >;
+      expect(stored["42"]?.url).toBe("https://evil.com/");
+    });
   });
 });
