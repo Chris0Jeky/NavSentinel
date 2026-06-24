@@ -2541,5 +2541,71 @@ describe("service worker handlers", () => {
       >;
       expect(stored["16"]?.url).toBe("https://evil.com/");
     });
+
+    it("deletes the delivered rollback on a clean success (positive identity match)", async () => {
+      const mock = createChromeMock();
+      const { captured } = deferSends(mock);
+      // The real delivery path: a queued rollback is dispatched by onUpdated and the send
+      // succeeds with no competing write. The success branch's identity check must hold
+      // (get === sent) and delete the delivered entry. (The ready-tab onCommitted
+      // direct-send is a rare edge — onBeforeNavigate clears readyTabs for the new page —
+      // so the queue-then-deliver-on-onUpdated/ns-ready path is the common one.)
+      mock.chrome.storage.session._store["ns_sw:pendingRollback"] = {
+        "40": { url: "https://evil.com/", qualifiers: [] },
+      };
+      mock.chrome.storage.session._store["ns_sw:readyTabs"] = [40];
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+      mock.emitTabUpdated(40, { status: "complete" }, { url: "https://evil.com/" });
+      // No competing navigation; release the deferred success callback.
+      captured.forEach((cb) => cb());
+      await vi.runAllTimersAsync();
+
+      const stored = (mock.chrome.storage.session._store["ns_sw:pendingRollback"] ?? {}) as Record<
+        string,
+        unknown
+      >;
+      expect(stored["40"]).toBeUndefined();
+    });
+
+    it("deletes the delivered forward offer on a clean success (positive identity match)", async () => {
+      const mock = createChromeMock();
+      const { captured } = deferSends(mock);
+      mock.chrome.storage.session._store["ns_sw:pendingForward"] = {
+        "41": { url: "https://offer.com/", ts: Date.now() },
+      };
+      mock.chrome.storage.session._store["ns_sw:readyTabs"] = [41];
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+      mock.emitTabUpdated(41, { status: "complete" }, { url: "https://current.com/" });
+      captured.forEach((cb) => cb());
+      await vi.runAllTimersAsync();
+
+      const stored = (mock.chrome.storage.session._store["ns_sw:pendingForward"] ?? {}) as Record<
+        string,
+        unknown
+      >;
+      expect(stored["41"]).toBeUndefined();
+    });
+
+    it("persists the rollback at commit time even when the tab is not ready (always-store durability)", async () => {
+      const mock = createChromeMock();
+      deferSends(mock);
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+      // A suspicious commit on a NOT-ready tab (onBeforeNavigate cleared readyTabs for the
+      // new page) must still PERSIST the rollback so a worker death before the content
+      // script announces ns-ready re-delivers it on restart, instead of dropping it.
+      mock.emitCommitted({ tabId: 42, frameId: 0, url: "https://a.com/", transitionType: "link" });
+      mock.emitBeforeNavigate({ tabId: 42, frameId: 0, url: "https://evil.com/" });
+      mock.emitCommitted({ tabId: 42, frameId: 0, url: "https://evil.com/", transitionType: "link" });
+      await vi.runAllTimersAsync();
+
+      const stored = (mock.chrome.storage.session._store["ns_sw:pendingRollback"] ?? {}) as Record<
+        string,
+        { url: string }
+      >;
+      expect(stored["42"]?.url).toBe("https://evil.com/");
+    });
   });
 });

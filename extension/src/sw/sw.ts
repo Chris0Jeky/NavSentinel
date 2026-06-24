@@ -986,20 +986,25 @@ function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitio
   pendingForwardByTab.set(details.tabId, { url: details.url, ts: now });
   suppressUntilByTab.set(details.tabId, now + ROLLBACK_SUPPRESS_MS);
 
-  // Always queue the rollback so the map is the single source of truth: it then survives
-  // a worker restart and a failed/raced send, and trySendRollback removes this exact entry
-  // only on delivery (and leaves it for the next onUpdated retry on failure). Send now if
-  // the tab is already ready. (#323)
+  // Always queue the rollback so the map is the single source of truth: it then survives a
+  // worker restart and a failed/raced send, and trySendRollback removes this exact entry
+  // only on delivery (identity match) and leaves it for the next onUpdated retry on failure.
+  // persistAll() runs BEFORE the dispatch so the queued entry is written ahead of the send
+  // that may clear it — the success callback's later persistMap is then unambiguously the
+  // last write, with no persist-ordering race. A worker death between here and that callback
+  // re-attempts delivery on restart rather than dropping the rollback: a deliberate
+  // durability win over the old direct-send, whose only cost is a rare possible redelivery
+  // (never a missed rollback). Send now if the tab is already ready. (#323)
   const rollbackEntry = {
     url: details.url,
     ...(prevUrl !== undefined ? { prevUrl } : {}),
     qualifiers
   };
   pendingRollbackByTab.set(details.tabId, rollbackEntry);
+  swState.persistAll();
   if (readyTabs.has(details.tabId)) {
     trySendRollback(details.tabId, rollbackEntry);
   }
-  swState.persistAll();
 }
 
 function allowTargetMatchesCommit(
