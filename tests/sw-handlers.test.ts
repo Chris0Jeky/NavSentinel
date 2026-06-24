@@ -2039,9 +2039,9 @@ describe("service worker handlers", () => {
 
     it("the deferred wake-up navigation waits for the mode read before painting (#303)", async () => {
       const mock = createChromeMock();
-      // Gate BOTH reads so the worker is un-hydrated AND the mode is unread when
-      // the waking navigation arrives -> it must take the deferred path and wait
-      // on startupReady (hydration + mode) before choosing the badge color.
+      // Gate BOTH reads so the worker is un-hydrated AND the mode is unread when the
+      // waking navigation arrives -> it defers on hydration; once hydrated, the handler
+      // runs and the icon paint awaits the mode read before choosing the badge color.
       let releaseLocal!: () => void;
       let releaseSession!: () => void;
       const localGate = new Promise<void>((r) => { releaseLocal = r; });
@@ -2067,7 +2067,7 @@ describe("service worker handlers", () => {
         url: "https://example.com/",
         transitionType: "link",
       });
-      // Handler is deferred on startupReady -> nothing painted for this tab yet.
+      // Handler is deferred on hydration -> nothing painted for this tab yet.
       expect(mock.chrome.action.setBadgeBackgroundColor).not.toHaveBeenCalledWith(
         expect.objectContaining({ tabId: 10 }),
       );
@@ -2083,7 +2083,7 @@ describe("service worker handlers", () => {
       );
     });
 
-    it("a nav after hydration but before the mode read still defers (session-before-local window) (#303)", async () => {
+    it("runs the nav state machine on hydration but defers ONLY the icon paint until the mode read (#327)", async () => {
       const mock = createChromeMock();
       let releaseLocal!: () => void;
       let releaseSession!: () => void;
@@ -2108,9 +2108,6 @@ describe("service worker handlers", () => {
       releaseSession();
       await vi.runAllTimersAsync();
 
-      // A nav in this window must STILL defer -- the guard is startupSettled, not
-      // swState.hydrated. With the old swState.hydrated guard it would take the
-      // synchronous path and paint green from the stale "smart" default.
       mock.emitCommitted({
         tabId: 11,
         frameId: 0,
@@ -2118,12 +2115,25 @@ describe("service worker handlers", () => {
         transitionType: "link",
       });
       await vi.runAllTimersAsync();
+
+      // #327: the nav state machine runs as soon as the session maps are hydrated -- the
+      // handler did NOT defer on the mode read (the pre-#327 startupSettled gate would
+      // have). Observable: it recorded lastUrl for the tab.
+      const lastUrl = (mock.chrome.storage.session._store["ns_sw:lastUrl"] ?? {}) as Record<
+        string,
+        string
+      >;
+      expect(lastUrl["11"]).toBe("https://example.com/");
+
+      // ...but ONLY the icon paint is deferred on the still-pending mode read, so no badge
+      // has been painted for this tab yet -- in particular not a stale-"smart" green.
+      expect(mock.chrome.action.setBadgeText).not.toHaveBeenCalledWith({ tabId: 11, text: "" });
       expect(mock.chrome.action.setBadgeText).not.toHaveBeenCalledWith({ tabId: 11, text: "✓" });
       expect(mock.chrome.action.setBadgeBackgroundColor).not.toHaveBeenCalledWith(
-        expect.objectContaining({ tabId: 11, color: "#16a34a" }),
+        expect.objectContaining({ tabId: 11 }),
       );
 
-      // Release the mode read; the deferred handler now runs with mode "off".
+      // Release the mode read; the icon now paints with the restored "off" mode (gray).
       releaseLocal();
       await vi.runAllTimersAsync();
       expect(mock.chrome.action.setBadgeText).toHaveBeenCalledWith({ tabId: 11, text: "" });
@@ -2134,7 +2144,7 @@ describe("service worker handlers", () => {
     it("a second suspicious URL within the suppress window still triggers a rollback", async () => {
       const mock = createChromeMock();
       await loadSw(mock);
-      await vi.runAllTimersAsync(); // hydration + startupSettled
+      await vi.runAllTimersAsync(); // hydration + mode read
 
       const TAB = 30; // not in readyTabs -> rollbacks queue into pendingRollbackByTab
 

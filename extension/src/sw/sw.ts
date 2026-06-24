@@ -157,18 +157,14 @@ const cachedModeReady = getNavSettings()
   .then((s) => { cachedDefaultMode = s.defaultMode; })
   .catch(() => {});
 
-// onCommitted reads cachedDefaultMode synchronously. swState.hydrated flips true
-// when session storage resolves, but cachedModeReady waits on local storage (a
-// separate concurrent read) -- so gating onCommitted on swState.hydrated alone
-// would let a navigation in the "session-resolved, mode-not-yet-read" window run
-// with the stale default. startupSettled flips true only after BOTH have landed,
-// so onCommitted (below) gates on it instead. A later storage.onChanged can still
-// briefly race the startup read (its read may resolve after the change and write
-// back the pre-change value), exactly as the historical onStartup refresh could;
-// that window is transient and self-heals on the next change. (#303)
-const startupReady = Promise.all([hydrateReady, cachedModeReady]);
-let startupSettled = false;
-void startupReady.then(() => { startupSettled = true; });
+// onCommittedHandler paints the toolbar badge from the synchronously-read
+// cachedDefaultMode. That read (cachedModeReady, local storage) is a separate concern
+// from session hydration, so ONLY the icon paint inside onCommittedHandler awaits
+// cachedModeReady; the handler itself gates on swState.hydrated like every other nav
+// handler (#327). A later storage.onChanged can still briefly race the startup read (its
+// read may resolve after the change and write back the pre-change value), exactly as the
+// historical onStartup refresh could; that window is transient and self-heals on the next
+// change. (#303)
 
 function pruneStaleOAuthFlows(): void {
   const now = Date.now();
@@ -860,10 +856,15 @@ function onBeforeNavigateHandler(details: chrome.webNavigation.WebNavigationPare
 
 chrome.webNavigation.onCommitted.addListener((details) => {
   if (details.frameId !== 0) return;
-  // Defer until startupSettled (hydration AND the cachedDefaultMode read both
-  // landed) so any navigation during wake-up paints the badge with the restored
-  // mode, not the "smart" default -- not just the first one. (#303)
-  if (!startupSettled) { void startupReady.then(() => onCommittedHandler(details)); return; }
+  // Gate on swState.hydrated, uniform with every other nav/lifecycle handler
+  // (onBeforeNavigate / onErrorOccurred / onCreated / onRemoved / onUpdated). The nav
+  // state machine needs only the session-backed maps; the cachedDefaultMode read is a
+  // separate concern handled by gating ONLY the icon paint inside onCommittedHandler on
+  // cachedModeReady. Gating the whole handler on startupSettled (hydration AND the mode
+  // read) made onCommitted defer on a different signal than the hydration-only handlers,
+  // so in the startup window the same tab's nav events could process out of order and
+  // drop per-tab nav state -> a false rollback. (#327, was #303)
+  if (!swState.hydrated) { void hydrateReady.then(() => onCommittedHandler(details)); return; }
   onCommittedHandler(details);
 });
 function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitionCallbackDetails): void {
@@ -885,8 +886,14 @@ function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitio
 
   // Reset tab icon for fresh top-frame navigation.
   // Content script will escalate to yellow/red as threats are detected.
-  // Uses synchronous cached mode to avoid racing with content-script threat escalation.
-  void updateTabIcon(details.tabId, cachedDefaultMode === "off" ? "gray" : "green");
+  // Gate ONLY this paint on cachedModeReady (the local-storage mode read) so a wake-up
+  // navigation paints with the restored mode, not the "smart" default — while the rest of
+  // the handler (the nav state machine above/below) runs as soon as the session maps are
+  // hydrated. cachedDefaultMode is read inside the callback so it reflects the resolved
+  // value. (#327, was #303)
+  void cachedModeReady.then(() =>
+    updateTabIcon(details.tabId, cachedDefaultMode === "off" ? "gray" : "green")
+  );
 
   const qualifiers = details.transitionQualifiers ?? [];
   const isRedirect =
