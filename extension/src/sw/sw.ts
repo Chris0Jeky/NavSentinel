@@ -399,12 +399,20 @@ function trySendRollback(
       rollbackSendInFlight.delete(tabId);
       if (chrome.runtime.lastError) {
         readyTabs.delete(tabId);
-        // Re-queue for retry, but not for a tab that closed during the send (#323/disc#7):
-        // onRemoved fires synchronously and clearPendingTabState already deleted the
-        // entry, so skipping the re-queue here leaves no zombie. NOTE: this re-queue can
-        // still clobber a newer pending entry written during the async gap (#323/disc#5/#6)
-        // — that needs the per-tab send-generation guard tracked separately; unchanged here.
-        if (!wasTabRecentlyRemoved(tabId, Date.now())) {
+        // Re-queue for retry, but only into an EMPTY slot. Two guards:
+        //   - wasTabRecentlyRemoved: onRemoved ran during the async gap → re-queuing
+        //     would leave a zombie pending entry for a dead tab (#323/disc#7).
+        //   - !pendingRollbackByTab.has: a newer navigation wrote a fresher entry during
+        //     the gap (the ready-tab commit path sends directly without storing, so the
+        //     captured `pending` here is a *stale closure value*); re-inserting it would
+        //     clobber the newer entry → the second suspicious nav is lost / mis-cited
+        //     (#323/disc#5). When the slot is empty (the normal ready-tab send path that
+        //     never stored `pending`), this still re-queues so a later onUpdated retries.
+        // NOTE (residual, seeded as a follow-up): the success branch's unconditional
+        // delete and two-concurrent-ready-sends erroring out of order are not fully
+        // closed by this slot check — a per-tab send-generation guard would. See the
+        // sw send-race generation-guard follow-up issue.
+        if (!wasTabRecentlyRemoved(tabId, Date.now()) && !pendingRollbackByTab.has(tabId)) {
           pendingRollbackByTab.set(tabId, pending);
         }
       } else {
@@ -425,7 +433,12 @@ function trySendForwardOffer(
     forwardSendInFlight.delete(tabId);
     if (chrome.runtime.lastError) {
       readyTabs.delete(tabId);
-      if (!wasTabRecentlyRemoved(tabId, Date.now())) {
+      // Same two guards as trySendRollback: don't re-queue for a removed tab
+      // (#323/disc#7), and don't clobber a newer forward offer written during the
+      // async gap with this stale closure value (#323/disc#6). trySendForwardOffer's
+      // only caller (onUpdatedHandler) leaves the entry in the map during the send,
+      // so on error the slot is normally still occupied by an entry of record.
+      if (!wasTabRecentlyRemoved(tabId, Date.now()) && !pendingForwardByTab.has(tabId)) {
         pendingForwardByTab.set(tabId, forward);
       }
     } else {

@@ -2325,5 +2325,103 @@ describe("service worker handlers", () => {
       >;
       expect(stored["12"]).toBeUndefined();
     });
+
+    it("does not clobber a newer queued rollback when a stale in-flight send errors (disc#5)", async () => {
+      const mock = createChromeMock();
+      const { captured } = deferSends(mock);
+      // Tab 11 is NOT ready, so cross-site commits queue into pendingRollbackByTab
+      // (the onCommitted else branch) instead of sending directly.
+      mock.chrome.storage.session._store["ns_sw:pendingRollback"] = {
+        "11": { url: "https://stale-evil.com/", qualifiers: [] },
+      };
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+
+      // Establish a prevUrl for tab 11 so the later cross-site commit is suspicious.
+      mock.emitCommitted({ tabId: 11, frameId: 0, url: "https://a.com/", transitionType: "link" });
+      // onUpdated dispatches the seeded (now stale) rollback; its callback is deferred.
+      mock.emitTabUpdated(11, { status: "complete" }, { url: "https://a.com/" });
+      // During the async send gap a NEWER suspicious nav queues a fresh rollback entry,
+      // overwriting the map slot with the newer URL.
+      mock.emitBeforeNavigate({ tabId: 11, frameId: 0, url: "https://newer-evil.com/" });
+      mock.emitCommitted({ tabId: 11, frameId: 0, url: "https://newer-evil.com/", transitionType: "link" });
+      await vi.runAllTimersAsync();
+
+      // The stale send now fails (e.g. tab busy / port gone). Its error callback must
+      // NOT re-insert the captured stale `pending` over the newer entry.
+      mock.setLastError({ message: "Could not establish connection." });
+      captured.forEach((cb) => cb());
+      mock.setLastError(undefined);
+      await vi.runAllTimersAsync();
+
+      const stored = (mock.chrome.storage.session._store["ns_sw:pendingRollback"] ?? {}) as Record<
+        string,
+        { url: string }
+      >;
+      // Pre-fix: the stale callback re-inserted "stale-evil.com", clobbering the newer
+      // entry. Post-fix (!has guard): the newer entry of record survives.
+      expect(stored["11"]?.url).toBe("https://newer-evil.com/");
+    });
+
+    it("does not clobber a newer forward offer when a stale in-flight send errors (disc#6)", async () => {
+      const mock = createChromeMock();
+      const { captured } = deferSends(mock);
+      mock.chrome.storage.session._store["ns_sw:pendingForward"] = {
+        "12": { url: "https://offer-1.com/", ts: Date.now() },
+      };
+      mock.chrome.storage.session._store["ns_sw:readyTabs"] = [12];
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+
+      // A commit to a different URL on a ready tab dispatches the (now stale) forward
+      // offer; the callback is deferred.
+      mock.emitTabUpdated(12, { status: "complete" }, { url: "https://current.com/" });
+      // During the send gap the content script stores a NEWER forward offer (ns-store-forward).
+      (mock.chrome.runtime.onMessage as unknown as {
+        emit: (m: unknown, s: unknown, r: (v?: unknown) => void) => void;
+      }).emit({ type: "ns-store-forward", url: "https://offer-2.com/" }, { tab: { id: 12 } }, () => {});
+      await vi.runAllTimersAsync();
+
+      // The stale forward send fails; its error callback must not re-insert the stale offer.
+      mock.setLastError({ message: "Could not establish connection." });
+      captured.forEach((cb) => cb());
+      mock.setLastError(undefined);
+      await vi.runAllTimersAsync();
+
+      const stored = (mock.chrome.storage.session._store["ns_sw:pendingForward"] ?? {}) as Record<
+        string,
+        { url: string }
+      >;
+      // Pre-fix: stale "offer-1.com" clobbers the newer offer. Post-fix: newer survives.
+      expect(stored["12"]?.url).toBe("https://offer-2.com/");
+    });
+
+    it("still re-queues a rollback on a transient send error when the slot is empty (no regression)", async () => {
+      const mock = createChromeMock();
+      const { captured } = deferSends(mock);
+      // Tab 16 is ready: the suspicious commit sends the rollback directly WITHOUT
+      // storing it in the map first (the if branch, not the else).
+      mock.chrome.storage.session._store["ns_sw:readyTabs"] = [16];
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+
+      mock.emitCommitted({ tabId: 16, frameId: 0, url: "https://a.com/", transitionType: "link" });
+      mock.emitBeforeNavigate({ tabId: 16, frameId: 0, url: "https://evil.com/" });
+      mock.emitCommitted({ tabId: 16, frameId: 0, url: "https://evil.com/", transitionType: "link" });
+      await vi.runAllTimersAsync();
+
+      // The direct send fails transiently; the tab was NOT removed and nothing newer was
+      // queued, so the legitimate retry path must still re-queue the entry.
+      mock.setLastError({ message: "Could not establish connection." });
+      captured.forEach((cb) => cb());
+      mock.setLastError(undefined);
+      await vi.runAllTimersAsync();
+
+      const stored = (mock.chrome.storage.session._store["ns_sw:pendingRollback"] ?? {}) as Record<
+        string,
+        { url: string }
+      >;
+      expect(stored["16"]?.url).toBe("https://evil.com/");
+    });
   });
 });
