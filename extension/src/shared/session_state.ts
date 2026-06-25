@@ -95,6 +95,9 @@ const isValidAllowTarget = (v: unknown): boolean =>
   isRecord(v) &&
   isString(v.url) &&
   isFiniteNumber(v.expiresAt) &&
+  // matchQueryPrefix is optional and the write-site sets it only on strict `=== true`; a
+  // corrupt truthy non-boolean would otherwise widen exact-match to prefix-match.
+  (v.matchQueryPrefix === undefined || v.matchQueryPrefix === true) &&
   // silentEvent is optional; if present it must at least be an object. The write-site
   // isEventLogAppendMessage guard is the primary defence — this drops only a wholly
   // non-object value that restore-tampering could inject before it reaches appendEvent.
@@ -425,7 +428,10 @@ export class SessionStateManager {
         isRecord(v) &&
         isFiniteNumber(v.startedAt) &&
         Array.isArray(v.hops) &&
-        v.hops.every((h: unknown) => isRecord(h) && isString(h.url) && isFiniteNumber(h.ts))
+        v.hops.every(
+          (h: unknown) =>
+            isRecord(h) && isString(h.url) && isFiniteNumber(h.ts) && isString(h.transitionType),
+        )
       ) {
         this.redirectChainData.set(k, v as unknown as RedirectChain);
       } else {

@@ -159,10 +159,13 @@ describe("SessionStateManager", () => {
         "40": { url: "https://safe.test/", expiresAt: "99999999999999" },
         "41": { url: "https://safe.test/", expiresAt: 123456 },
       },
-      // allowTarget: corrupt expiresAt.
+      // allowTarget: corrupt expiresAt / silentEvent / matchQueryPrefix; one fully-valid.
       "ns_sw:allowTarget": {
         "50": { url: "https://t.test/", expiresAt: null },
         "51": { url: "https://t.test/", expiresAt: 123456 },
+        "52": { url: "https://t.test/", expiresAt: 123456, silentEvent: "not-an-object" },
+        "53": { url: "https://t.test/", expiresAt: 123456, matchQueryPrefix: "yes" },
+        "54": { url: "https://t.test/", expiresAt: 123456, matchQueryPrefix: true, silentEvent: { type: "ns-event-log-append" } },
       },
       // pendingRollback: corrupt qualifiers (not a string array).
       "ns_sw:pendingRollback": {
@@ -184,11 +187,14 @@ describe("SessionStateManager", () => {
         "90": 42,
         "91": "https://ok.test/",
       },
-      // redirectChains: corrupt startedAt / hop.ts -> NaN sort + never-pruned (#339).
+      // redirectChains: corrupt startedAt / hop.ts / hop.transitionType -> NaN sort +
+      // never-pruned (#339); empty-hops is valid (pruneStale uses the startedAt fallback).
       "ns_sw:redirectChains": {
-        "100": { hops: [{ url: "https://a.test/", ts: 10 }], startedAt: "bad" },
-        "101": { hops: [{ url: "https://a.test/", ts: null }], startedAt: 1000 },
-        "102": { hops: [{ url: "https://a.test/", ts: 10 }], startedAt: 1000 },
+        "100": { hops: [{ url: "https://a.test/", ts: 10, transitionType: "link" }], startedAt: "bad" },
+        "101": { hops: [{ url: "https://a.test/", ts: null, transitionType: "link" }], startedAt: 1000 },
+        "102": { hops: [{ url: "https://a.test/", ts: 10, transitionType: "link" }], startedAt: 1000 },
+        "103": { hops: [], startedAt: 1000 },
+        "104": { hops: [{ url: "https://a.test/", ts: 10, transitionType: 42 }], startedAt: 1000 },
       },
     });
 
@@ -209,6 +215,9 @@ describe("SessionStateManager", () => {
     expect(mgr.rollbackReturnByTab.get(41)?.expiresAt).toBe(123456);
     expect(mgr.allowTargetByTab.has(50)).toBe(false); // expiresAt null
     expect(mgr.allowTargetByTab.get(51)?.expiresAt).toBe(123456);
+    expect(mgr.allowTargetByTab.has(52)).toBe(false); // silentEvent not an object
+    expect(mgr.allowTargetByTab.has(53)).toBe(false); // matchQueryPrefix not true
+    expect(mgr.allowTargetByTab.get(54)?.expiresAt).toBe(123456); // valid incl. silentEvent
     expect(mgr.pendingRollbackByTab.has(60)).toBe(false); // qualifiers not array
     expect(mgr.pendingRollbackByTab.get(61)?.qualifiers).toEqual(["foo"]);
     expect(mgr.typedOriginByTab.has(70)).toBe(false); // ts "bad"
@@ -220,6 +229,8 @@ describe("SessionStateManager", () => {
     expect(mgr.redirectChainData.has(100)).toBe(false); // startedAt "bad"
     expect(mgr.redirectChainData.has(101)).toBe(false); // hop.ts null
     expect(mgr.redirectChainData.get(102)?.startedAt).toBe(1000);
+    expect(mgr.redirectChainData.get(103)?.startedAt).toBe(1000); // empty hops is valid
+    expect(mgr.redirectChainData.has(104)).toBe(false); // hop.transitionType not a string
     expect(warnSpy).toHaveBeenCalled(); // corrupt restore is surfaced, not silent
     warnSpy.mockRestore();
   });
