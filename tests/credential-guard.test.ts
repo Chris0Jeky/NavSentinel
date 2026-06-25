@@ -1454,7 +1454,7 @@ describe("credential_guard", () => {
     });
   });
 
-  // The module-level WeakMap `allowNextSubmitUntil` persists across tests.
+  // The module-level WeakSet `allowNextSubmit` persists across tests.
   // Each test creates a fresh form, so entries from prior tests are GC-eligible
   // and cannot leak. Do NOT reuse form references across `it` blocks.
   describe("allowNextSubmit mechanism", () => {
@@ -1489,7 +1489,7 @@ describe("credential_guard", () => {
     });
 
     it("bypass does not apply to a different form", async () => {
-      // NOTE: validates WeakMap form-identity isolation, which was correct before #264 —
+      // NOTE: validates WeakSet form-identity isolation, which was correct before #264 —
       // this passes on pre-fix code too. The fix discriminator is the no-op test above.
       mockShowModal.mockResolvedValue("proceed_once");
       const form1 = createPasswordForm();
