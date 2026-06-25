@@ -92,7 +92,13 @@ const isStringArray = (v: unknown): boolean =>
   Array.isArray(v) && v.every((s) => typeof s === "string");
 
 const isValidAllowTarget = (v: unknown): boolean =>
-  isRecord(v) && isString(v.url) && isFiniteNumber(v.expiresAt);
+  isRecord(v) &&
+  isString(v.url) &&
+  isFiniteNumber(v.expiresAt) &&
+  // silentEvent is optional; if present it must at least be an object. The write-site
+  // isEventLogAppendMessage guard is the primary defence — this drops only a wholly
+  // non-object value that restore-tampering could inject before it reaches appendEvent.
+  (v.silentEvent === undefined || isRecord(v.silentEvent));
 const isValidPendingRollback = (v: unknown): boolean =>
   isRecord(v) && isString(v.url) && isStringArray(v.qualifiers);
 const isValidPendingForward = (v: unknown): boolean =>
@@ -113,6 +119,9 @@ const isValidChildWindow = (v: unknown): boolean =>
   typeof v.openerNavObserved === "boolean";
 const isValidTypedOrigin = (v: unknown): boolean =>
   isRecord(v) && isFiniteNumber(v.ts) && isFiniteNumber(v.deadline);
+// 'callback' is a transient in-memory phase (immediately advanced to 'complete' before the
+// persistMap), so it cannot appear in restored storage today; it is kept as a forward-compat
+// hedge against a future batched-write path. (#339)
 const OAUTH_PHASES = new Set(["redirect", "consent", "callback", "complete"]);
 const isValidOAuthFlow = (v: unknown): boolean =>
   isRecord(v) &&
@@ -405,10 +414,28 @@ export class SessionStateManager {
 
   private _restoreRedirectChains(raw: unknown): void {
     const restored = objToMap<RedirectChain>(raw);
+    let skipped = 0;
     for (const [k, v] of restored) {
-      if (v && Array.isArray(v.hops) && typeof v.startedAt === "number") {
-        this.redirectChainData.set(k, v);
+      // #339: require a FINITE startedAt and well-formed hops (each { url: string; ts: number }).
+      // `typeof === "number"` accepted NaN, which poisons pruneStale (`now - NaN > X` is always
+      // false → never time-pruned) and makes enforceMapLimit's startedAt sort non-deterministic
+      // — the same corruption class the per-map validators above close. A NaN hop.ts likewise
+      // breaks hasActiveChain / the chain-window comparison.
+      if (
+        isRecord(v) &&
+        isFiniteNumber(v.startedAt) &&
+        Array.isArray(v.hops) &&
+        v.hops.every((h: unknown) => isRecord(h) && isString(h.url) && isFiniteNumber(h.ts))
+      ) {
+        this.redirectChainData.set(k, v as unknown as RedirectChain);
+      } else {
+        skipped++;
       }
+    }
+    if (skipped > 0) {
+      console.warn(
+        `[NavSentinel] session restore: skipped ${skipped} malformed redirect-chain entr${skipped === 1 ? "y" : "ies"}`,
+      );
     }
   }
 

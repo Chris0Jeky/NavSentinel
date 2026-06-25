@@ -340,7 +340,11 @@ describe("service worker handlers", () => {
       const mock = createChromeMock();
       mock.chrome.storage.session._store["ns_sw:redirectChains"] = {
         "5": {
-          hops: [{ url: "https://a.test/" }, { url: "https://b.test/" }],
+          // Full RedirectHop shape ({ url, ts }) — the #339 restore validator requires it.
+          hops: [
+            { url: "https://a.test/", ts: 1 },
+            { url: "https://b.test/", ts: 2 },
+          ],
           startedAt: 1,
         },
       };

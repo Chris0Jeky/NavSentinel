@@ -169,6 +169,27 @@ describe("SessionStateManager", () => {
         "60": { url: "https://r.test/", qualifiers: "nope" },
         "61": { url: "https://r.test/", qualifiers: ["foo"] },
       },
+      // typedOrigin: corrupt ts -> would invalidate the typed-origin TTL window.
+      "ns_sw:typedOrigin": {
+        "70": { ts: "bad", deadline: 1000 },
+        "71": { ts: 5, deadline: 1000 },
+      },
+      // simple number map: a non-number per-entry value would NaN a navigation-allow check.
+      "ns_sw:allowUntil": {
+        "80": "not-a-number",
+        "81": 12345,
+      },
+      // simple string map: a numeric value would break domain parsing on prevUrl.
+      "ns_sw:lastUrl": {
+        "90": 42,
+        "91": "https://ok.test/",
+      },
+      // redirectChains: corrupt startedAt / hop.ts -> NaN sort + never-pruned (#339).
+      "ns_sw:redirectChains": {
+        "100": { hops: [{ url: "https://a.test/", ts: 10 }], startedAt: "bad" },
+        "101": { hops: [{ url: "https://a.test/", ts: null }], startedAt: 1000 },
+        "102": { hops: [{ url: "https://a.test/", ts: 10 }], startedAt: 1000 },
+      },
     });
 
     const mgr = new SessionStateManager();
@@ -190,6 +211,15 @@ describe("SessionStateManager", () => {
     expect(mgr.allowTargetByTab.get(51)?.expiresAt).toBe(123456);
     expect(mgr.pendingRollbackByTab.has(60)).toBe(false); // qualifiers not array
     expect(mgr.pendingRollbackByTab.get(61)?.qualifiers).toEqual(["foo"]);
+    expect(mgr.typedOriginByTab.has(70)).toBe(false); // ts "bad"
+    expect(mgr.typedOriginByTab.get(71)?.ts).toBe(5);
+    expect(mgr.allowUntilByTab.has(80)).toBe(false); // non-number
+    expect(mgr.allowUntilByTab.get(81)).toBe(12345);
+    expect(mgr.lastUrlByTab.has(90)).toBe(false); // numeric, not a string
+    expect(mgr.lastUrlByTab.get(91)).toBe("https://ok.test/");
+    expect(mgr.redirectChainData.has(100)).toBe(false); // startedAt "bad"
+    expect(mgr.redirectChainData.has(101)).toBe(false); // hop.ts null
+    expect(mgr.redirectChainData.get(102)?.startedAt).toBe(1000);
     expect(warnSpy).toHaveBeenCalled(); // corrupt restore is surfaced, not silent
     warnSpy.mockRestore();
   });
