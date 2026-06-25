@@ -74,6 +74,56 @@ export interface LastCommittedEntry {
 }
 
 // ---------------------------------------------------------------------------
+// Restore shape validators (#339). chrome.storage.session is the extension's own
+// storage, but a corrupt/partial write or a future schema change could leave a malformed
+// value. _restoreMap drops any entry that fails its validator on hydrate, so a bad value
+// never poisons SW logic: a non-number ts / startedAt / createdAt makes a downstream
+// `now - x` comparison NaN, which silently disables a prune, makes a size-cap sort
+// non-deterministic, or (for lastCommitted) flips a same-site nav into a FALSE rollback
+// after a worker restart; a corrupt oauthFlow.phase can evade redirect-mismatch detection.
+// Mirrors the captureTimestamps gate added in #345.
+// ---------------------------------------------------------------------------
+const isFiniteNumber = (v: unknown): v is number =>
+  typeof v === "number" && Number.isFinite(v);
+const isString = (v: unknown): v is string => typeof v === "string";
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null;
+const isStringArray = (v: unknown): boolean =>
+  Array.isArray(v) && v.every((s) => typeof s === "string");
+
+const isValidAllowTarget = (v: unknown): boolean =>
+  isRecord(v) && isString(v.url) && isFiniteNumber(v.expiresAt);
+const isValidPendingRollback = (v: unknown): boolean =>
+  isRecord(v) && isString(v.url) && isStringArray(v.qualifiers);
+const isValidPendingForward = (v: unknown): boolean =>
+  isRecord(v) && isString(v.url) && isFiniteNumber(v.ts);
+const isValidRollbackReturn = (v: unknown): boolean =>
+  isRecord(v) && isString(v.url) && isFiniteNumber(v.expiresAt);
+const isValidLastCommitted = (v: unknown): boolean =>
+  isRecord(v) &&
+  isString(v.url) &&
+  isString(v.transitionType) &&
+  isStringArray(v.qualifiers) &&
+  isFiniteNumber(v.ts) &&
+  typeof v.allowedAtCommit === "boolean";
+const isValidChildWindow = (v: unknown): boolean =>
+  isRecord(v) &&
+  isFiniteNumber(v.openerTabId) &&
+  isFiniteNumber(v.createdAt) &&
+  typeof v.openerNavObserved === "boolean";
+const isValidTypedOrigin = (v: unknown): boolean =>
+  isRecord(v) && isFiniteNumber(v.ts) && isFiniteNumber(v.deadline);
+const OAUTH_PHASES = new Set(["redirect", "consent", "callback", "complete"]);
+const isValidOAuthFlow = (v: unknown): boolean =>
+  isRecord(v) &&
+  isString(v.initiatorUrl) &&
+  isString(v.consentUrl) &&
+  isString(v.expectedCallbackDomain) &&
+  isFiniteNumber(v.startedAt) &&
+  typeof v.phase === "string" &&
+  OAUTH_PHASES.has(v.phase);
+
+// ---------------------------------------------------------------------------
 // Session storage key constants
 // ---------------------------------------------------------------------------
 
@@ -225,21 +275,21 @@ export class SessionStateManager {
       return;
     }
 
-    this._restoreMap(this.allowUntilByTab, data[KEYS.allowUntil]);
-    this._restoreMap(this.gestureUntilByTab, data[KEYS.gestureUntil]);
-    this._restoreMap(this.allowStartedByTab, data[KEYS.allowStarted]);
-    this._restoreMap(this.allowTargetByTab, data[KEYS.allowTarget]);
-    this._restoreMap(this.userNavContextUntilByTab, data[KEYS.userNavContextUntil]);
-    this._restoreMap(this.suppressUntilByTab, data[KEYS.suppressUntil]);
-    this._restoreMap(this.typedOriginByTab, data[KEYS.typedOrigin]);
+    this._restoreMap(this.allowUntilByTab, data[KEYS.allowUntil], isFiniteNumber);
+    this._restoreMap(this.gestureUntilByTab, data[KEYS.gestureUntil], isFiniteNumber);
+    this._restoreMap(this.allowStartedByTab, data[KEYS.allowStarted], isString);
+    this._restoreMap(this.allowTargetByTab, data[KEYS.allowTarget], isValidAllowTarget);
+    this._restoreMap(this.userNavContextUntilByTab, data[KEYS.userNavContextUntil], isFiniteNumber);
+    this._restoreMap(this.suppressUntilByTab, data[KEYS.suppressUntil], isFiniteNumber);
+    this._restoreMap(this.typedOriginByTab, data[KEYS.typedOrigin], isValidTypedOrigin);
     this._restoreSet(this.readyTabs, data[KEYS.readyTabs]);
-    this._restoreMap(this.pendingRollbackByTab, data[KEYS.pendingRollback]);
-    this._restoreMap(this.pendingForwardByTab, data[KEYS.pendingForward]);
-    this._restoreMap(this.rollbackReturnByTab, data[KEYS.rollbackReturn]);
-    this._restoreMap(this.lastUrlByTab, data[KEYS.lastUrl]);
-    this._restoreMap(this.lastCommittedByTab, data[KEYS.lastCommitted]);
-    this._restoreMap(this.childWindowByTab, data[KEYS.childWindow]);
-    this._restoreMap(this.oauthFlowByTab, data[KEYS.oauthFlow]);
+    this._restoreMap(this.pendingRollbackByTab, data[KEYS.pendingRollback], isValidPendingRollback);
+    this._restoreMap(this.pendingForwardByTab, data[KEYS.pendingForward], isValidPendingForward);
+    this._restoreMap(this.rollbackReturnByTab, data[KEYS.rollbackReturn], isValidRollbackReturn);
+    this._restoreMap(this.lastUrlByTab, data[KEYS.lastUrl], isString);
+    this._restoreMap(this.lastCommittedByTab, data[KEYS.lastCommitted], isValidLastCommitted);
+    this._restoreMap(this.childWindowByTab, data[KEYS.childWindow], isValidChildWindow);
+    this._restoreMap(this.oauthFlowByTab, data[KEYS.oauthFlow], isValidOAuthFlow);
     this._restoreRedirectChains(data[KEYS.redirectChains]);
     this._restoreMap(
       this.captureTimestampsByTab,

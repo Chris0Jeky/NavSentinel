@@ -129,6 +129,71 @@ describe("SessionStateManager", () => {
     warnSpy.mockRestore();
   });
 
+  it("drops malformed structured-map entries (corrupt numeric / shape fields) on restore (#339)", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await sessionStorage.mock.set({
+      // oauthFlow: corrupt startedAt (NaN-poisons pruneStaleOAuthFlows) + bad phase
+      // (evades redirect-mismatch detection); one valid entry survives.
+      "ns_sw:oauthFlow": {
+        "1": { initiatorUrl: "https://app.test/", consentUrl: "https://accounts.google.com/authorize", expectedCallbackDomain: "app.test", startedAt: null, phase: "redirect" },
+        "2": { initiatorUrl: "https://app.test/", consentUrl: "https://accounts.google.com/authorize", expectedCallbackDomain: "app.test", startedAt: 1000, phase: "not-a-phase" },
+        "3": { initiatorUrl: "https://app.test/", consentUrl: "https://accounts.google.com/authorize", expectedCallbackDomain: "app.test", startedAt: 1000, phase: "consent" },
+      },
+      // childWindow: corrupt createdAt -> NaN prune + DoubleClickjacking false-negative.
+      "ns_sw:childWindow": {
+        "10": { openerTabId: 7, createdAt: "bad", openerNavObserved: true },
+        "11": { openerTabId: 7, createdAt: 100000, openerNavObserved: true },
+      },
+      // pendingForward: corrupt ts -> stale offer never reaped by the ts-expiry guard.
+      "ns_sw:pendingForward": {
+        "20": { url: "https://evil.test/", ts: null, returnUrl: "https://safe.test/" },
+        "21": { url: "https://e.test/", ts: 5000 },
+      },
+      // lastCommitted: corrupt ts -> false rollback for a same-site nav after restart.
+      "ns_sw:lastCommitted": {
+        "30": { url: "https://example.com/p1", prevUrl: "https://example.com/", transitionType: "link", qualifiers: [], ts: "corrupted", allowedAtCommit: true },
+        "31": { url: "https://example.com/p2", transitionType: "link", qualifiers: [], ts: 9000, allowedAtCommit: false },
+      },
+      // rollbackReturn: corrupt expiresAt (string -> coercion keeps a stale return alive).
+      "ns_sw:rollbackReturn": {
+        "40": { url: "https://safe.test/", expiresAt: "99999999999999" },
+        "41": { url: "https://safe.test/", expiresAt: 123456 },
+      },
+      // allowTarget: corrupt expiresAt.
+      "ns_sw:allowTarget": {
+        "50": { url: "https://t.test/", expiresAt: null },
+        "51": { url: "https://t.test/", expiresAt: 123456 },
+      },
+      // pendingRollback: corrupt qualifiers (not a string array).
+      "ns_sw:pendingRollback": {
+        "60": { url: "https://r.test/", qualifiers: "nope" },
+        "61": { url: "https://r.test/", qualifiers: ["foo"] },
+      },
+    });
+
+    const mgr = new SessionStateManager();
+    await mgr.hydrate();
+
+    // Corrupt entries are dropped on restore; valid ones survive. (Pre-fix: all restored.)
+    expect(mgr.oauthFlowByTab.has(1)).toBe(false); // startedAt null
+    expect(mgr.oauthFlowByTab.has(2)).toBe(false); // bad phase
+    expect(mgr.oauthFlowByTab.get(3)?.phase).toBe("consent");
+    expect(mgr.childWindowByTab.has(10)).toBe(false); // createdAt "bad"
+    expect(mgr.childWindowByTab.get(11)?.createdAt).toBe(100000);
+    expect(mgr.pendingForwardByTab.has(20)).toBe(false); // ts null
+    expect(mgr.pendingForwardByTab.get(21)?.ts).toBe(5000);
+    expect(mgr.lastCommittedByTab.has(30)).toBe(false); // ts "corrupted"
+    expect(mgr.lastCommittedByTab.get(31)?.ts).toBe(9000);
+    expect(mgr.rollbackReturnByTab.has(40)).toBe(false); // expiresAt string
+    expect(mgr.rollbackReturnByTab.get(41)?.expiresAt).toBe(123456);
+    expect(mgr.allowTargetByTab.has(50)).toBe(false); // expiresAt null
+    expect(mgr.allowTargetByTab.get(51)?.expiresAt).toBe(123456);
+    expect(mgr.pendingRollbackByTab.has(60)).toBe(false); // qualifiers not array
+    expect(mgr.pendingRollbackByTab.get(61)?.qualifiers).toEqual(["foo"]);
+    expect(warnSpy).toHaveBeenCalled(); // corrupt restore is surfaced, not silent
+    warnSpy.mockRestore();
+  });
+
   it("enters degraded mode and suppresses persistence when the hydrate read fails (#228.2)", async () => {
     // Intact stored state that a transient read failure must not wipe.
     await sessionStorage.mock.set({ "ns_sw:allowUntil": { "7": 123456 } });
