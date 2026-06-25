@@ -19,7 +19,7 @@ import {
 import { analyzePageContent } from "./content_analyzer";
 import { checkSRI } from "./sri_checker";
 
-const allowNextSubmitUntil = new WeakMap<HTMLFormElement, number>();
+const allowNextSubmit = new WeakSet<HTMLFormElement>();
 
 // #227.5: the credential mode, cached synchronously so handleSubmit can decide
 // whether to interpose BEFORE preventDefault. When the guard is disabled it must
@@ -41,19 +41,20 @@ onSuiteSettingsChange((s) => {
   cachedCredMode = s.credential.mode;
 });
 
-function nowMs(): number {
-  return Date.now();
-}
-
-function markAllowNext(form: HTMLFormElement, ms: number): void {
-  allowNextSubmitUntil.set(form, nowMs() + ms);
+// One-shot bypass token for the synchronous re-entrant submit dispatched by resumeSubmit:
+// presence in the set means "let the next submit through". #264's `finally` clears it on
+// every exit path of resumeSubmit, and the genuine re-entrant submit consumes it
+// synchronously during requestSubmit (same tick), so a WeakSet (presence = valid) is exactly
+// equivalent to the former WeakMap<form, expiry> + `now <= expiry` check — the timestamp/TTL
+// was permanently moot (always fresh whenever the token was present). (#282)
+function markAllowNext(form: HTMLFormElement): void {
+  allowNextSubmit.add(form);
 }
 
 function consumeAllowNext(form: HTMLFormElement): boolean {
-  const t = allowNextSubmitUntil.get(form);
-  if (!t) return false;
-  allowNextSubmitUntil.delete(form);
-  return nowMs() <= t;
+  if (!allowNextSubmit.has(form)) return false;
+  allowNextSubmit.delete(form);
+  return true;
 }
 
 function isPasswordForm(form: HTMLFormElement): boolean {
@@ -131,7 +132,7 @@ function resumeSubmit(
   // requestSubmit re-dispatches the submit event SYNCHRONOUSLY; mark a one-shot
   // bypass so our own handler lets that re-entrant event through (and consumes it
   // via consumeAllowNext at the top of handleSubmit, before any await).
-  markAllowNext(form, 5000);
+  markAllowNext(form);
 
   try {
     form.requestSubmit(submitter);
@@ -164,9 +165,9 @@ function resumeSubmit(
     // -- interactive constraint validation (an empty `required` field / `pattern`
     // mismatch fires `invalid` and silently does not submit) -- nothing consumes the
     // token. Clearing it here (synchronously, after the re-dispatch window) stops it
-    // lingering up to 5s and bypassing assessment + the action-mutation re-check on
-    // the next submit. The TTL in markAllowNext is now only a defensive backstop.
-    allowNextSubmitUntil.delete(form);
+    // lingering and bypassing assessment + the action-mutation re-check on the next
+    // submit. (#282: the bypass is a WeakSet one-shot — presence is the token, no TTL.)
+    allowNextSubmit.delete(form);
   }
 }
 
