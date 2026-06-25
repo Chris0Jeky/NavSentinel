@@ -1,7 +1,9 @@
 # Session Handoff - NavSentinel Autonomous Loop
 
-**Last updated:** 2026-06-14
-**Status (2026-06-14 durable live-state checkpoint):** exact `main` SHA is intentionally not hardcoded here; verify with `git rev-parse origin/main`. Merged status includes #254 (Codex contract/status), #256 (P5-A4), #257 (P5-A3), #258 (post-merge status sync), and later docs cleanup. Open PR gate: **#249** at `3e0389e`, green/clean and still blocked only by AI-6 manual Gate-3. Phase 5 plan: [`docs/NORTHSTAR_ROADMAP.md`](../NORTHSTAR_ROADMAP.md); live open North-Star issues are **#232**, **#237–#246**, and **#252**.
+**Last updated:** 2026-06-25
+**Status (2026-06-24/25 autonomous-loop checkpoint):** `main` @ **`11a2aa2`** (verify with `git rev-parse origin/main`). This session merged **#359 / #323** (SW send-race store-then-send redesign) and **#361 / #327** (unify `onCommitted` hydration gate + chain-anchored icon reset). Each: multiple independent adversarial review rounds (read-only `feature-dev:code-reviewer` Workflows) + green CI incl. E2E + regression tests proven to fail pre-fix. **#361 took 3 rounds** — R2 caught a deferred-icon-paint regression that could hide a threat badge; R3 caught a ghost-cache gap; both fixed. Closed **#323/#324/#327**; seeded **#360/#362**. **Open PRs: #356 (AI-13) + #273 (AI-8) — BOTH browser-surface, held for Gate-3.** **Open human items: 🚨 AI-9 (#321 release blocker), AI-13 (#356), AI-8 (#273)** — see `ACTION_ITEMS.md`. Baseline: typecheck/lint clean, **2743 unit tests**, perf **12/12**. Autonomous queue is thin (most open issues gated by Q2 budget / FP-measurement / browser-Gate-3 / Q6 main_guard-testability); next ungated candidates: **#176** (sw URL minimization), **#282** (credential_guard cleanup), **#252 pt1** (silent-decision e2e). Phase 5 plan: [`docs/NORTHSTAR_ROADMAP.md`](../NORTHSTAR_ROADMAP.md); live open North-Star issues **#232**, **#237–#246**, **#252**.
+
+> **Historical (superseded):** 2026-06-14 — exact `main` SHA not hardcoded; merged #254/#256/#257/#258 + docs cleanup; #249 was the open gate (AI-6, since resolved).
 
 Trust live git and GitHub over this snapshot. Re-check `git status -sb`, `git rev-parse main`, `git rev-parse origin/main`, PR checks, review threads, and comments before merging or branching.
 
