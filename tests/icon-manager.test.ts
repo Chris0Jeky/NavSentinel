@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach, vi } from "vitest";
 import {
   updateTabIcon,
+  updateTabIconWhen,
   clearTabIcon,
   getTabIconState,
   setAllTabsGray,
@@ -330,6 +331,64 @@ describe("icon_manager", () => {
       await updateTabIcon(1, "red", 2);
       expect(setBadgeText).not.toHaveBeenCalled();
       expect(setBadgeBackgroundColor).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("updateTabIconWhen (deferred, chain-anchored) (#327)", () => {
+    it("reserves the chain slot now but paints only after ready settles", async () => {
+      let release!: () => void;
+      const ready = new Promise<void>((r) => { release = r; });
+      const p = updateTabIconWhen(90, ready, () => "green");
+
+      // Nothing painted yet — the paint is deferred on ready.
+      for (let i = 0; i < 4; i++) await Promise.resolve();
+      expect(setBadgeText).not.toHaveBeenCalled();
+
+      release();
+      await p;
+      expect(setBadgeBackgroundColor).toHaveBeenCalledWith({ tabId: 90, color: "#16a34a" });
+      expect(getTabIconState(90)).toBe("green");
+    });
+
+    it("a later escalation is ordered AFTER the deferred reset (escalation wins)", async () => {
+      let release!: () => void;
+      const ready = new Promise<void>((r) => { release = r; });
+      // Reset reserved while ready is pending; a threat escalation enqueues after it.
+      updateTabIconWhen(91, ready, () => "green");
+      const esc = updateTabIcon(91, "red");
+      release();
+      await esc;
+      // The green reset ran first, then the red escalation — red is the final state.
+      expect(getTabIconState(91)).toBe("red");
+    });
+
+    it("does not leave a ghost cache entry when clearTabIcon races the ready await (#229)", async () => {
+      let release!: () => void;
+      const ready = new Promise<void>((r) => { release = r; });
+      const p = updateTabIconWhen(92, ready, () => "green");
+
+      // Tab is cleared (removed) while the reset is still waiting on the mode read.
+      const cleared = clearTabIcon(92);
+      expect(_getTabStateMap().has(92)).toBe(false); // clearTabIcon deletes synchronously
+
+      release();
+      await Promise.all([p, cleared]);
+      // Pre-fix: applyTabIcon captured the generation AFTER the await (post-bump), so the
+      // post-write guard did not fire and a ghost { icon: "green" } entry was cached for the
+      // removed tab. Post-fix: the schedule-time generation snapshot makes the guard fire.
+      expect(_getTabStateMap().has(92)).toBe(false);
+    });
+
+    it("does not leave a ghost cache entry when setAllTabsGray races the ready await (#229)", async () => {
+      let release!: () => void;
+      const ready = new Promise<void>((r) => { release = r; });
+      const p = updateTabIconWhen(93, ready, () => "green");
+
+      await setAllTabsGray(); // clears tabState + bumps resetGeneration (no tabs to blank)
+      release();
+      await p;
+      await Promise.resolve();
+      expect(_getTabStateMap().has(93)).toBe(false);
     });
   });
 });
