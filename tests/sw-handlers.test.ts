@@ -2039,9 +2039,9 @@ describe("service worker handlers", () => {
 
     it("the deferred wake-up navigation waits for the mode read before painting (#303)", async () => {
       const mock = createChromeMock();
-      // Gate BOTH reads so the worker is un-hydrated AND the mode is unread when
-      // the waking navigation arrives -> it must take the deferred path and wait
-      // on startupReady (hydration + mode) before choosing the badge color.
+      // Gate BOTH reads so the worker is un-hydrated AND the mode is unread when the
+      // waking navigation arrives -> it defers on hydration; once hydrated, the handler
+      // runs and the icon paint awaits the mode read before choosing the badge color.
       let releaseLocal!: () => void;
       let releaseSession!: () => void;
       const localGate = new Promise<void>((r) => { releaseLocal = r; });
@@ -2067,7 +2067,7 @@ describe("service worker handlers", () => {
         url: "https://example.com/",
         transitionType: "link",
       });
-      // Handler is deferred on startupReady -> nothing painted for this tab yet.
+      // Handler is deferred on hydration -> nothing painted for this tab yet.
       expect(mock.chrome.action.setBadgeBackgroundColor).not.toHaveBeenCalledWith(
         expect.objectContaining({ tabId: 10 }),
       );
@@ -2083,7 +2083,7 @@ describe("service worker handlers", () => {
       );
     });
 
-    it("a nav after hydration but before the mode read still defers (session-before-local window) (#303)", async () => {
+    it("runs the nav state machine on hydration but defers ONLY the icon paint until the mode read (#327)", async () => {
       const mock = createChromeMock();
       let releaseLocal!: () => void;
       let releaseSession!: () => void;
@@ -2108,9 +2108,6 @@ describe("service worker handlers", () => {
       releaseSession();
       await vi.runAllTimersAsync();
 
-      // A nav in this window must STILL defer -- the guard is startupSettled, not
-      // swState.hydrated. With the old swState.hydrated guard it would take the
-      // synchronous path and paint green from the stale "smart" default.
       mock.emitCommitted({
         tabId: 11,
         frameId: 0,
@@ -2118,15 +2115,145 @@ describe("service worker handlers", () => {
         transitionType: "link",
       });
       await vi.runAllTimersAsync();
+
+      // #327: the nav state machine runs as soon as the session maps are hydrated -- the
+      // handler did NOT defer on the mode read (the pre-#327 startupSettled gate would
+      // have). Observable: it recorded lastUrl for the tab.
+      const lastUrl = (mock.chrome.storage.session._store["ns_sw:lastUrl"] ?? {}) as Record<
+        string,
+        string
+      >;
+      expect(lastUrl["11"]).toBe("https://example.com/");
+
+      // ...but ONLY the icon paint is deferred on the still-pending mode read, so no badge
+      // has been painted for this tab yet -- in particular not a stale-"smart" green.
+      expect(mock.chrome.action.setBadgeText).not.toHaveBeenCalledWith({ tabId: 11, text: "" });
+      expect(mock.chrome.action.setBadgeText).not.toHaveBeenCalledWith({ tabId: 11, text: "✓" });
+      expect(mock.chrome.action.setBadgeBackgroundColor).not.toHaveBeenCalledWith(
+        expect.objectContaining({ tabId: 11 }),
+      );
+
+      // Release the mode read; the icon now paints with the restored "off" mode (gray).
+      releaseLocal();
+      await vi.runAllTimersAsync();
+      expect(mock.chrome.action.setBadgeText).toHaveBeenCalledWith({ tabId: 11, text: "" });
+      // And green/"✓" must NEVER have reached tab 11 at any point — no stale-"smart" flash.
       expect(mock.chrome.action.setBadgeText).not.toHaveBeenCalledWith({ tabId: 11, text: "✓" });
       expect(mock.chrome.action.setBadgeBackgroundColor).not.toHaveBeenCalledWith(
         expect.objectContaining({ tabId: 11, color: "#16a34a" }),
       );
+      // The gray paint is definitively the LAST write for the tab (no trailing green flash).
+      const tab11Texts = (mock.chrome.action.setBadgeText as unknown as {
+        mock: { calls: Array<[{ tabId: number; text: string }]> };
+      }).mock.calls.filter((c) => c[0].tabId === 11);
+      expect(tab11Texts[tab11Texts.length - 1]?.[0]).toEqual({ tabId: 11, text: "" });
+    });
 
-      // Release the mode read; the deferred handler now runs with mode "off".
+    it("with the mode read settled first, the nav still defers on hydration, then paints gray (#327 local-first)", async () => {
+      const mock = createChromeMock();
+      let releaseLocal!: () => void;
+      let releaseSession!: () => void;
+      const localGate = new Promise<void>((r) => { releaseLocal = r; });
+      const sessionGate = new Promise<void>((r) => { releaseSession = r; });
+
+      mock.chrome.storage.local.get = (async () => {
+        await localGate;
+        return { [SUITE_SETTINGS_KEY]: { nav: { defaultMode: "off" } } };
+      }) as unknown as typeof mock.chrome.storage.local.get;
+
+      const origSessionGet = mock.chrome.storage.session.get.bind(mock.chrome.storage.session);
+      mock.chrome.storage.session.get = (async (keys?: string | string[]) => {
+        await sessionGate;
+        return origSessionGet(keys);
+      }) as typeof mock.chrome.storage.session.get;
+
+      await loadSw(mock);
+
+      // Opposite ordering from the test above: the mode read (local) resolves FIRST while
+      // session hydration is still pending.
       releaseLocal();
       await vi.runAllTimersAsync();
-      expect(mock.chrome.action.setBadgeText).toHaveBeenCalledWith({ tabId: 11, text: "" });
+
+      // A nav in this window must STILL defer -- the handler gates on swState.hydrated,
+      // which is not yet true even though the mode is already read.
+      mock.emitCommitted({
+        tabId: 12,
+        frameId: 0,
+        url: "https://example.com/",
+        transitionType: "link",
+      });
+      await vi.runAllTimersAsync();
+      const lastUrlPending = (mock.chrome.storage.session._store["ns_sw:lastUrl"] ?? {}) as Record<
+        string,
+        string
+      >;
+      expect(lastUrlPending["12"]).toBeUndefined();
+      expect(mock.chrome.action.setBadgeText).not.toHaveBeenCalledWith({ tabId: 12, text: "" });
+
+      // Release hydration; the deferred handler runs and the icon paints gray immediately
+      // (cachedModeReady already settled, so the .then enqueues without further waiting).
+      releaseSession();
+      await vi.runAllTimersAsync();
+      const lastUrl = (mock.chrome.storage.session._store["ns_sw:lastUrl"] ?? {}) as Record<
+        string,
+        string
+      >;
+      expect(lastUrl["12"]).toBe("https://example.com/");
+      expect(mock.chrome.action.setBadgeText).toHaveBeenCalledWith({ tabId: 12, text: "" });
+      expect(mock.chrome.action.setBadgeBackgroundColor).not.toHaveBeenCalledWith(
+        expect.objectContaining({ tabId: 12, color: "#16a34a" }),
+      );
+    });
+
+    it("a threat escalation in the mode-pending window survives the deferred baseline reset (#327)", async () => {
+      const mock = createChromeMock();
+      let releaseLocal!: () => void;
+      let releaseSession!: () => void;
+      const localGate = new Promise<void>((r) => { releaseLocal = r; });
+      const sessionGate = new Promise<void>((r) => { releaseSession = r; });
+
+      // Mode is "smart" (on) -> the baseline reset would paint GREEN. The escalation paints
+      // red; with a naive deferred paint the late green would overwrite the red and hide the
+      // threat. The chain-anchored reset must be ordered BEFORE the escalation so red wins.
+      mock.chrome.storage.local.get = (async () => {
+        await localGate;
+        return { [SUITE_SETTINGS_KEY]: { nav: { defaultMode: "smart" } } };
+      }) as unknown as typeof mock.chrome.storage.local.get;
+
+      const origSessionGet = mock.chrome.storage.session.get.bind(mock.chrome.storage.session);
+      mock.chrome.storage.session.get = (async (keys?: string | string[]) => {
+        await sessionGate;
+        return origSessionGet(keys);
+      }) as typeof mock.chrome.storage.session.get;
+
+      await loadSw(mock);
+      releaseSession(); // hydrated; mode read still pending
+      await vi.runAllTimersAsync();
+
+      // Fresh top-frame nav reserves the baseline-reset chain slot (color deferred on mode).
+      mock.emitCommitted({ tabId: 13, frameId: 0, url: "https://example.com/", transitionType: "link" });
+      await vi.runAllTimersAsync();
+
+      // The content script detects a threat and escalates to red BEFORE the mode read resolves.
+      (mock.chrome.runtime.onMessage as unknown as {
+        emit: (m: unknown, s: unknown, r: (v?: unknown) => void) => void;
+      }).emit({ type: "ns-tab-risk-update", state: "red", blockCount: 0 }, { tab: { id: 13 } }, () => {});
+      await vi.runAllTimersAsync();
+
+      // Mode read resolves: the green reset runs, then the escalation — red is the final state.
+      releaseLocal();
+      await vi.runAllTimersAsync();
+
+      const colorCalls = (mock.chrome.action.setBadgeBackgroundColor as unknown as {
+        mock: { calls: Array<[{ tabId: number; color: string }]> };
+      }).mock.calls.filter((c) => c[0].tabId === 13);
+      const textCalls = (mock.chrome.action.setBadgeText as unknown as {
+        mock: { calls: Array<[{ tabId: number; text: string }]> };
+      }).mock.calls.filter((c) => c[0].tabId === 13);
+      // Final badge is red (✕ / #dc2626), NOT green (✓ / #16a34a). Pre-fix: the late green
+      // overwrote the red -> last write would be green.
+      expect(colorCalls[colorCalls.length - 1]?.[0].color).toBe("#dc2626");
+      expect(textCalls[textCalls.length - 1]?.[0].text).toBe("✕");
     });
   });
 
@@ -2134,7 +2261,7 @@ describe("service worker handlers", () => {
     it("a second suspicious URL within the suppress window still triggers a rollback", async () => {
       const mock = createChromeMock();
       await loadSw(mock);
-      await vi.runAllTimersAsync(); // hydration + startupSettled
+      await vi.runAllTimersAsync(); // hydration + mode read
 
       const TAB = 30; // not in readyTabs -> rollbacks queue into pendingRollbackByTab
 

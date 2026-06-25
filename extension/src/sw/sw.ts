@@ -18,7 +18,7 @@ import {
   type OAuthFlowState,
 } from "../content/oauth_monitor";
 import { swState } from "../shared/session_state";
-import { updateTabIcon, clearTabIcon, setAllTabsGray } from "./icon_manager";
+import { updateTabIcon, updateTabIconWhen, clearTabIcon, setAllTabsGray } from "./icon_manager";
 
 const BASELINE_RULESET_ID = "baseline";
 
@@ -157,18 +157,14 @@ const cachedModeReady = getNavSettings()
   .then((s) => { cachedDefaultMode = s.defaultMode; })
   .catch(() => {});
 
-// onCommitted reads cachedDefaultMode synchronously. swState.hydrated flips true
-// when session storage resolves, but cachedModeReady waits on local storage (a
-// separate concurrent read) -- so gating onCommitted on swState.hydrated alone
-// would let a navigation in the "session-resolved, mode-not-yet-read" window run
-// with the stale default. startupSettled flips true only after BOTH have landed,
-// so onCommitted (below) gates on it instead. A later storage.onChanged can still
-// briefly race the startup read (its read may resolve after the change and write
-// back the pre-change value), exactly as the historical onStartup refresh could;
-// that window is transient and self-heals on the next change. (#303)
-const startupReady = Promise.all([hydrateReady, cachedModeReady]);
-let startupSettled = false;
-void startupReady.then(() => { startupSettled = true; });
+// onCommittedHandler paints the toolbar badge from the synchronously-read
+// cachedDefaultMode. That read (cachedModeReady, local storage) is a separate concern
+// from session hydration, so ONLY the icon paint inside onCommittedHandler awaits
+// cachedModeReady; the handler itself gates on swState.hydrated like every other nav
+// handler (#327). A later storage.onChanged can still briefly race the startup read (its
+// read may resolve after the change and write back the pre-change value), exactly as the
+// historical onStartup refresh could; that window is transient and self-heals on the next
+// change. (#303)
 
 function pruneStaleOAuthFlows(): void {
   const now = Date.now();
@@ -860,10 +856,15 @@ function onBeforeNavigateHandler(details: chrome.webNavigation.WebNavigationPare
 
 chrome.webNavigation.onCommitted.addListener((details) => {
   if (details.frameId !== 0) return;
-  // Defer until startupSettled (hydration AND the cachedDefaultMode read both
-  // landed) so any navigation during wake-up paints the badge with the restored
-  // mode, not the "smart" default -- not just the first one. (#303)
-  if (!startupSettled) { void startupReady.then(() => onCommittedHandler(details)); return; }
+  // Gate on swState.hydrated, uniform with every other nav/lifecycle handler
+  // (onBeforeNavigate / onErrorOccurred / onCreated / onRemoved / onUpdated). The nav
+  // state machine needs only the session-backed maps; the cachedDefaultMode read is a
+  // separate concern handled by gating ONLY the icon paint inside onCommittedHandler on
+  // cachedModeReady. Gating the whole handler on startupSettled (hydration AND the mode
+  // read) made onCommitted defer on a different signal than the hydration-only handlers,
+  // so in the startup window the same tab's nav events could process out of order and
+  // drop per-tab nav state -> a false rollback. (#327, was #303)
+  if (!swState.hydrated) { void hydrateReady.then(() => onCommittedHandler(details)); return; }
   onCommittedHandler(details);
 });
 function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitionCallbackDetails): void {
@@ -883,10 +884,19 @@ function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitio
   const prevUrl = lastUrlByTab.get(details.tabId);
   lastUrlByTab.set(details.tabId, details.url);
 
-  // Reset tab icon for fresh top-frame navigation.
-  // Content script will escalate to yellow/red as threats are detected.
-  // Uses synchronous cached mode to avoid racing with content-script threat escalation.
-  void updateTabIcon(details.tabId, cachedDefaultMode === "off" ? "gray" : "green");
+  // Reset tab icon for fresh top-frame navigation; the content script will escalate to
+  // yellow/red as threats are detected. The green/gray color needs cachedDefaultMode (the
+  // async local-storage read) so it is NOT painted synchronously — that would flash green
+  // for an "off"-mode user on a mid-session restart (#303). But the reset must still be
+  // ordered BEFORE the page's own escalation, or a slow mode read could land the green/gray
+  // paint after a red/yellow threat badge and hide it. updateTabIconWhen reserves this tab's
+  // icon-chain slot synchronously (so a later escalation is ordered after it) while
+  // deferring only the color until cachedModeReady settles. (#327, was #303)
+  void updateTabIconWhen(
+    details.tabId,
+    cachedModeReady,
+    () => (cachedDefaultMode === "off" ? "gray" : "green")
+  );
 
   const qualifiers = details.transitionQualifiers ?? [];
   const isRedirect =

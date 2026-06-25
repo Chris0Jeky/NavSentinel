@@ -60,10 +60,51 @@ export function updateTabIcon(
   return next;
 }
 
+/**
+ * Like updateTabIcon, but the paint waits for `ready` to settle and the icon state is
+ * computed from `state()` at paint time. The tab's chain slot is reserved SYNCHRONOUSLY at
+ * call time, so any updateTabIcon for the same tab enqueued LATER (e.g. a content-script
+ * threat escalation) is ordered strictly after this paint and can never be overwritten by
+ * it — even when `ready` resolves much later. Used for the onCommitted baseline reset, whose
+ * green/gray color depends on the async cachedDefaultMode read but which must still be
+ * ordered before the page's own escalation. (#327)
+ */
+export function updateTabIconWhen(
+  tabId: number,
+  ready: Promise<unknown>,
+  state: () => IconState,
+  blockCount = 0,
+): Promise<void> {
+  // Snapshot the reset generation NOW, before awaiting `ready`. If a clearTabIcon /
+  // setAllTabsGray bumps it during the await, applyTabIcon's post-write guard (which
+  // compares against this snapshot) skips the cache write, so this deferred reset cannot
+  // leave a ghost cache entry for a cleared/removed tab. The badge writes still occur but
+  // are superseded by the chained blank/gray that the clear enqueued after us. (#327)
+  const genAtEnqueue = resetGeneration;
+  const prev = tabUpdateChains.get(tabId) ?? Promise.resolve();
+  // ready.catch keeps a rejected readiness promise from breaking the chain; applyTabIcon
+  // never rejects, so the chain stays stable.
+  const next = prev
+    .catch(() => {})
+    .then(() => ready.catch(() => {}))
+    .then(() => applyTabIcon(tabId, state(), blockCount, genAtEnqueue));
+  tabUpdateChains.set(tabId, next);
+  void next.finally(() => {
+    if (tabUpdateChains.get(tabId) === next) tabUpdateChains.delete(tabId);
+  });
+  return next;
+}
+
 async function applyTabIcon(
   tabId: number,
   state: IconState,
   blockCount: number,
+  // Generation captured at SCHEDULE time. updateTabIcon captures it here at apply time
+  // (its only pre-apply wait is the synchronous chain drain). updateTabIconWhen passes its
+  // pre-`ready`-await snapshot so a clearTabIcon / setAllTabsGray that races the await is
+  // still detected by the post-write guard below — otherwise the deferred reset would write
+  // a ghost cache entry for a tab that was just cleared. (#327 / #229)
+  startGeneration: number = resetGeneration,
 ): Promise<void> {
   // Dedup is evaluated HERE (at apply time), not before queueing: a synchronous
   // top-level dedup against the cache would wrongly skip a needed update when an
@@ -72,7 +113,6 @@ async function applyTabIcon(
   const current = tabState.get(tabId);
   if (current && current.icon === state && current.blocks === blockCount) return;
 
-  const startGeneration = resetGeneration;
   try {
     const config = BADGE_CONFIG[state];
     if (!config) {
