@@ -24,6 +24,10 @@ const BASELINE_RULESET_ID = "baseline";
 
 /** Cached defaultMode for synchronous access in navigation handlers. */
 let cachedDefaultMode = "smart";
+// Set once storage.onChanged delivers a mode, so the slower async startup read
+// (loadCachedDefaultMode, especially after its retry) cannot resolve LATE and clobber a
+// newer onChanged value with the stale value it read at startup. (#362)
+let modeUpdatedByOnChanged = false;
 
 /** Maximum .bin file size we will read (2 MB + 16-byte header, matching MAX_FILTER_BITS). */
 const MAX_REPUTATION_FILE_BYTES = 2 * 1024 * 1024 + 16;
@@ -153,9 +157,32 @@ const hydrateReady = swState.hydrate();
 // even when the user's persisted mode is "off". Running it here subsumes the
 // install/startup paths too (the listeners only fire if this module evaluated).
 // (#303)
-const cachedModeReady = getNavSettings()
-  .then((s) => { cachedDefaultMode = s.defaultMode; })
-  .catch(() => {});
+async function loadCachedDefaultMode(): Promise<void> {
+  try {
+    const mode = (await getNavSettings()).defaultMode;
+    // Don't clobber a newer value an onChanged delivered while this read was in flight.
+    if (!modeUpdatedByOnChanged) cachedDefaultMode = mode;
+  } catch (err) {
+    // Rare (storage quota / context invalidated mid-read). Retry once — a transient
+    // failure usually succeeds immediately, which avoids a stale-"smart" green badge for
+    // an "off" user. cachedDefaultMode is the BADGE-paint value only (not enforcement); on
+    // a double failure it stays at its current value and self-heals on the next
+    // storage.onChanged / worker restart, so we surface the failure rather than flip to a
+    // different (also-possibly-wrong) mode. (#362)
+    console.warn("[NavSentinel] cachedDefaultMode read failed, retrying:", err);
+    try {
+      const mode = (await getNavSettings()).defaultMode;
+      if (!modeUpdatedByOnChanged) cachedDefaultMode = mode;
+    } catch (retryErr) {
+      console.warn(
+        "[NavSentinel] cachedDefaultMode retry failed; keeping",
+        cachedDefaultMode,
+        retryErr,
+      );
+    }
+  }
+}
+const cachedModeReady = loadCachedDefaultMode();
 
 // onCommittedHandler paints the toolbar badge from the synchronously-read
 // cachedDefaultMode. That read (cachedModeReady, local storage) is a separate concern
@@ -518,8 +545,13 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   const newVal = changes[SUITE_SETTINGS_KEY]!.newValue as
     | { nav?: { defaultMode?: string } }
     | undefined;
-  if (newVal?.nav?.defaultMode) {
+  // Accept any string mode (not just truthy) so a future empty-string mode is not
+  // silently dropped, leaving cachedDefaultMode stale. No valid mode is "" today. (#362)
+  if (typeof newVal?.nav?.defaultMode === "string") {
     cachedDefaultMode = newVal.nav.defaultMode;
+    // This is authoritative and fresher than the startup read; block a late startup
+    // read from overwriting it with the value it captured before this change. (#362)
+    modeUpdatedByOnChanged = true;
   }
   if (newVal?.nav?.defaultMode === "off") {
     void setAllTabsGray();
