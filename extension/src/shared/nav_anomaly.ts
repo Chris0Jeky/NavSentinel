@@ -459,6 +459,16 @@ async function loadProfile(): Promise<NavProfile> {
   // Forward-compat: ensure all fields exist
   if (typeof p.categoryCounts !== "object" || p.categoryCounts === null) {
     p.categoryCounts = {};
+  } else {
+    // Drop corrupt non-finite category counts (typeof check below misses NaN since
+    // typeof NaN === "number"). A NaN count would bypass the rarity gate (NaN >= threshold
+    // is false) AND re-poison totalNavigations via applyDecay/normalizeProfile's unguarded
+    // `sum + c`, cascading NaN to every count and the session gate. Dropping it keeps those
+    // recomputes finite. totalNavigations itself is left for the per-consumer guards so the
+    // #297/#372 prime-guard's corruption signal survives. (#373)
+    for (const key of Object.keys(p.categoryCounts)) {
+      if (!Number.isFinite(p.categoryCounts[key])) delete p.categoryCounts[key];
+    }
   }
   if (typeof p.totalNavigations !== "number") {
     p.totalNavigations = 0;
@@ -511,6 +521,10 @@ export function computeAnomalyScore(
   // The -1 accounts for the current navigation already added to the window
   // but not yet recorded in the profile.
   const storedCount = profile.categoryCounts[category] ?? 0;
+  // Defence-in-depth: loadProfile drops non-finite counts, but this is an exported fn that
+  // could be called with a raw profile. A NaN storedCount would make `NaN >= threshold`
+  // false (rarity-gate bypass), so gate off a corrupt destination-category count. (#373)
+  if (!Number.isFinite(storedCount)) return 0;
   const burstInflation = Math.max(0, recentCategoryCount - 1);
   const preBurstCount = Math.max(0, storedCount - burstInflation);
   const preBurstTotal = Math.max(1, profile.totalNavigations - burstInflation);
@@ -570,10 +584,8 @@ export function recordNavigationAnomaly(
       // run against it. Recompute from the (finite) category counts so the rarity baseline is
       // preserved rather than wiped. Mirrors the prime-path guard in #297. (#373)
       if (!Number.isFinite(profile.totalNavigations)) {
-        profile.totalNavigations = Object.values(profile.categoryCounts).reduce(
-          (sum, n) => sum + (Number.isFinite(n) ? n : 0),
-          0,
-        );
+        // loadProfile has already dropped any non-finite counts, so this sum is finite.
+        profile.totalNavigations = Object.values(profile.categoryCounts).reduce((sum, n) => sum + n, 0);
       }
       applyDecay(profile, now);
       pruneBurstRecords(profile, now);

@@ -407,6 +407,13 @@ describe("computeAnomalyScore", () => {
     expect(computeAnomalyScore(makeProfile({ categoryCounts: { crypto: 1 }, totalNavigations: Infinity }), "crypto", 3)).toBe(0);
   });
 
+  it("returns 0 for a corrupt non-finite destination-category count (no rarity bypass) (#373)", () => {
+    // A NaN category count: `NaN ?? 0` is NaN (?? only coalesces null/undefined), so storedCount
+    // stays NaN and `NaN >= RARE_CATEGORY_THRESHOLD` is false → pre-fix the rarity gate is
+    // bypassed and a frequent category's burst scores. Must gate off instead.
+    expect(computeAnomalyScore(makeProfile({ categoryCounts: { entertainment: NaN }, totalNavigations: 100 }), "entertainment", 3)).toBe(0);
+  });
+
   it("returns 0 when total navigations below minimum", () => {
     const profile = makeProfile({
       categoryCounts: { entertainment: MIN_NAVIGATIONS_FOR_ANOMALY - 1 },
@@ -936,6 +943,27 @@ describe("primeAnomalySession", () => {
     const saved = store[NAV_PROFILE_KEY] as { totalNavigations: number };
     expect(Number.isFinite(saved.totalNavigations)).toBe(true);
     expect(saved.totalNavigations).toBe(101);
+  });
+
+  it("drops a corrupt NaN category count on load so decay/normalize cannot cascade it (#373)", async () => {
+    const now = Date.now();
+    // OLD profile (decay is due) with one NaN category count. Pre-fix, applyDecay's unguarded
+    // `sum + c` would recompute totalNavigations to NaN, normalizeProfile would NaN-ify every
+    // count, and sessionNavCount would become NaN (sync gate permanently disabled).
+    store[NAV_PROFILE_KEY] = makeProfile({
+      categoryCounts: { crypto: 40, entertainment: NaN },
+      totalNavigations: 100,
+      lastUpdated: now - 400 * 24 * 60 * 60 * 1000, // far past any decay interval
+    });
+    _resetRecentNavs();
+
+    await recordNavigationAnomaly("binance.com", now);
+
+    const saved = store[NAV_PROFILE_KEY] as { totalNavigations: number; categoryCounts: Record<string, number> };
+    // The NaN count is dropped on load, so every downstream recompute stays finite.
+    expect(saved.categoryCounts.entertainment).toBeUndefined();
+    expect(Number.isFinite(saved.totalNavigations)).toBe(true);
+    expect(Object.values(saved.categoryCounts).every((c) => Number.isFinite(c))).toBe(true);
   });
 });
 
