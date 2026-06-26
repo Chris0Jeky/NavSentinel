@@ -666,10 +666,16 @@ export function getAnomalyScoreSync(
 export function primeAnomalySession(): Promise<void> {
   const next = pending.then(async (): Promise<void> => {
     const profile = await loadProfile();
+    // Only seed BOTH the gate and the frequency cache from a non-corrupt profile. A
+    // non-finite totalNavigations marks a corrupt stored profile; refreshing the cache from
+    // it would overwrite cachedCategoryCounts with possibly-bogus counts while the gate
+    // stays armed from prior in-session records (sessionNavCount), so a later burst to a
+    // genuinely-frequent category could escape the rarity gate (a false positive). Keep the
+    // existing good cache instead. (#297)
     if (Number.isFinite(profile.totalNavigations)) {
       sessionNavCount = Math.max(sessionNavCount, profile.totalNavigations);
+      refreshFrequencyCache(profile);
     }
-    refreshFrequencyCache(profile);
   });
   pending = next.catch((err) => {
     console.warn("[NavSentinel] nav anomaly prime error:", err);

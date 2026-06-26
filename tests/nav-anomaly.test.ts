@@ -876,6 +876,39 @@ describe("primeAnomalySession", () => {
     // No history → still gated, score stays 0.
     expect(getAnomalyScoreSync("binance.com", Date.now())).toBe(0);
   });
+
+  it("a corrupt re-prime does not poison the frequency cache while the gate stays armed (#297)", async () => {
+    const now = Date.now();
+    // 1. Good prime: crypto is a FREQUENT category (50%), so the rarity gate would blank a
+    //    crypto burst. This also arms sessionNavCount (>= MIN).
+    store[NAV_PROFILE_KEY] = makeProfile({
+      categoryCounts: { crypto: 50, entertainment: 50 },
+      totalNavigations: 100,
+      lastUpdated: now,
+    });
+    _resetRecentNavs();
+    await primeAnomalySession();
+
+    // 2. Build the crypto burst into recentNavs NOW, while the good profile is still stored
+    //    (this record keeps the cache crypto-frequent). The score read below adds +1, so
+    //    recentCount = 2 meets the burst threshold.
+    await recordNavigationAnomaly("binance.com", now + 50000);
+
+    // 3. A CORRUPT re-prime (non-finite totalNavigations) that OMITS crypto, with NO record
+    //    afterward. Pre-fix this overwrote cachedCategoryCounts (crypto now looks "rare")
+    //    while leaving the gate armed; post-fix the corrupt profile is ignored and the good
+    //    frequency cache is preserved — so it is the ONLY thing touching the cache here.
+    store[NAV_PROFILE_KEY] = makeProfile({
+      categoryCounts: { entertainment: 100 },
+      totalNavigations: NaN,
+      lastUpdated: now,
+    });
+    await primeAnomalySession();
+
+    // 4. The crypto burst must STILL be rarity-blanked (crypto is frequent in the preserved
+    //    cache). Pre-fix the poisoned cache forgot crypto was frequent → a false-positive 10.
+    expect(getAnomalyScoreSync("coinbase.com", now + 51000)).toBe(0);
+  });
 });
 
 describe("getAnomalyScoreSync rarity gate (D-ANOM R2: sync path matches async rarity check)", () => {
