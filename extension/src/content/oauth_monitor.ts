@@ -338,9 +338,10 @@ export function getOAuthFlowState(): OAuthFlowState | null {
   }
   // A 'complete' flow is finished, not active. The SW forwards the terminal
   // 'complete' update (then drops the flow), but the contract here is "null if no
-  // flow is active", so a completed flow must not read as active to consumers. (#366)
+  // flow is active". Clear the reference now rather than holding the dead flow object
+  // until the TTL check above eventually nulls it. (#366)
   if (currentFlow && currentFlow.phase === "complete") {
-    return null;
+    currentFlow = null;
   }
   return currentFlow;
 }

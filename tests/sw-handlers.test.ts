@@ -1289,8 +1289,8 @@ describe("service worker handlers", () => {
 
       // +30s more: tab 10 is now 70s old (stale); tab 20 is 30s (fresh). Tab 20 gets a
       // SECOND authorize → the IN-PLACE update path. Pre-fix that branch never pruned,
-      // so tab 10's stale flow lingered; post-fix the prune-before-branch drops it while
-      // tab 20's fresh flow is re-read and updated in place.
+      // so tab 10's stale flow lingered; post-fix the prune-before-branch drops the OTHER
+      // tab's stale entry while the updating tab is excluded from pruning.
       vi.setSystemTime(new Date("2026-03-17T12:01:10.000Z"));
       mock.emitCommitted({
         tabId: 20,
@@ -1300,8 +1300,43 @@ describe("service worker handlers", () => {
         url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=x&redirect_uri=https%3A%2F%2Fapp-b.com%2Fcb&response_type=code&prompt=consent",
       });
 
-      expect(oauthStore()["10"]).toBeUndefined(); // stale flow pruned on the in-place update
-      expect(oauthStore()["20"]).toBeTruthy(); // the updating tab's fresh flow survives
+      expect(oauthStore()["10"]).toBeUndefined(); // other tab's stale flow pruned
+      expect(oauthStore()["20"]).toBeTruthy(); // the updating tab is never pruned
+    });
+
+    it("never prunes the active tab's own flow during an in-place update, preserving its callback domain (#366)", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+
+      // Tab 10 starts a flow with redirect_uri -> expectedCallbackDomain = app-a.com.
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        transitionType: "link",
+        url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=x&redirect_uri=https%3A%2F%2Fapp-a.com%2Fcb&response_type=code",
+      });
+
+      // The user lingers on consent for 70s (> 60s max age), THEN the page does an
+      // in-place authorize hop WITHOUT a redirect_uri (the #324 case). The flow is past
+      // max-age, but as the active tab it must NOT be pruned — otherwise it would restart
+      // as a fresh flow with expectedCallbackDomain "" and lose redirect-mismatch coverage.
+      vi.setSystemTime(new Date("2026-03-17T12:01:10.000Z"));
+      mock.sentMessages.length = 0;
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        transitionType: "link",
+        transitionQualifiers: ["server_redirect"],
+        url: "https://login.live.com/oauth20_authorize.srf?client_id=x&response_type=code&scope=openid",
+      });
+
+      const flowMsg = mock.sentMessages.find(
+        (m) => (m.message as { type: string }).type === "ns-oauth-flow-update" && m.tabId === 10,
+      );
+      const flow = (flowMsg?.message as { flow: { phase: string; expectedCallbackDomain: string } } | undefined)?.flow;
+      expect(flow?.phase).toBe("consent"); // updated in place, not restarted as 'redirect'
+      expect(flow?.expectedCallbackDomain).toBe("app-a.com"); // preserved (pre-bug-fix: "")
     });
 
     it("transitions to consent on second OAuth URL with OAuth params", async () => {
