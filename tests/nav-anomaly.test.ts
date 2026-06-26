@@ -399,6 +399,21 @@ describe("computeAnomalyScore", () => {
     expect(score).toBe(0);
   });
 
+  it("returns 0 for a corrupt non-finite totalNavigations (no gate bypass) (#373)", () => {
+    // Pre-fix: NaN < MIN is false AND NaN >= RARE_CATEGORY_THRESHOLD is false, so BOTH the
+    // min-nav gate and the rarity gate are bypassed and a burst scores ~15. A corrupt
+    // profile must score nothing.
+    expect(computeAnomalyScore(makeProfile({ categoryCounts: { crypto: 1 }, totalNavigations: NaN }), "crypto", 3)).toBe(0);
+    expect(computeAnomalyScore(makeProfile({ categoryCounts: { crypto: 1 }, totalNavigations: Infinity }), "crypto", 3)).toBe(0);
+  });
+
+  it("returns 0 for a corrupt non-finite destination-category count (no rarity bypass) (#373)", () => {
+    // A NaN category count: `NaN ?? 0` is NaN (?? only coalesces null/undefined), so storedCount
+    // stays NaN and `NaN >= RARE_CATEGORY_THRESHOLD` is false → pre-fix the rarity gate is
+    // bypassed and a frequent category's burst scores. Must gate off instead.
+    expect(computeAnomalyScore(makeProfile({ categoryCounts: { entertainment: NaN }, totalNavigations: 100 }), "entertainment", 3)).toBe(0);
+  });
+
   it("returns 0 when total navigations below minimum", () => {
     const profile = makeProfile({
       categoryCounts: { entertainment: MIN_NAVIGATIONS_FOR_ANOMALY - 1 },
@@ -908,6 +923,68 @@ describe("primeAnomalySession", () => {
     // 4. The crypto burst must STILL be rarity-blanked (crypto is frequent in the preserved
     //    cache). Pre-fix the poisoned cache forgot crypto was frequent → a false-positive 10.
     expect(getAnomalyScoreSync("coinbase.com", now + 51000)).toBe(0);
+  });
+
+  it("recordNavigationAnomaly self-heals a corrupt totalNavigations instead of propagating NaN (#373)", async () => {
+    const now = Date.now();
+    // Corrupt stored profile: category counts intact, totalNavigations NaN.
+    store[NAV_PROFILE_KEY] = makeProfile({
+      categoryCounts: { crypto: 30, entertainment: 70 },
+      totalNavigations: NaN,
+      lastUpdated: now,
+    });
+    _resetRecentNavs();
+
+    await recordNavigationAnomaly("binance.com", now);
+
+    // The re-saved profile must be finite: pre-fix `NaN + 1` re-persisted NaN (sticky) and
+    // `Math.max(sessionNavCount, NaN)` poisoned the session gate. Recomputed from counts
+    // (30 + 70 = 100) + this nav = 101.
+    const saved = store[NAV_PROFILE_KEY] as { totalNavigations: number };
+    expect(Number.isFinite(saved.totalNavigations)).toBe(true);
+    expect(saved.totalNavigations).toBe(101);
+  });
+
+  it("drops a corrupt NaN category count on load so decay/normalize cannot cascade it (#373)", async () => {
+    const now = Date.now();
+    // OLD profile (decay is due) with one NaN category count. Pre-fix, applyDecay's unguarded
+    // `sum + c` would recompute totalNavigations to NaN, normalizeProfile would NaN-ify every
+    // count, and sessionNavCount would become NaN (sync gate permanently disabled).
+    store[NAV_PROFILE_KEY] = makeProfile({
+      categoryCounts: { crypto: 40, entertainment: NaN },
+      totalNavigations: 100,
+      lastUpdated: now - 400 * 24 * 60 * 60 * 1000, // far past any decay interval
+    });
+    _resetRecentNavs();
+
+    await recordNavigationAnomaly("binance.com", now);
+
+    const saved = store[NAV_PROFILE_KEY] as { totalNavigations: number; categoryCounts: Record<string, number> };
+    // The NaN count is dropped on load, so every downstream recompute stays finite.
+    expect(saved.categoryCounts.entertainment).toBeUndefined();
+    expect(Number.isFinite(saved.totalNavigations)).toBe(true);
+    expect(Object.values(saved.categoryCounts).every((c) => Number.isFinite(c))).toBe(true);
+  });
+
+  it("recomputes a finite total when a count is dropped, so a fresh profile's rarity denominator stays consistent (#373 R2)", async () => {
+    const now = Date.now();
+    // FRESH profile (no decay due) with a finite-but-now-inconsistent total: a NaN count is
+    // dropped on load, leaving total=100 inflated vs the surviving 5 crypto navs. Pre-fix that
+    // inflated denominator makes crypto look rare (5/100) and false-positives a crypto burst.
+    store[NAV_PROFILE_KEY] = makeProfile({
+      categoryCounts: { crypto: 5, entertainment: NaN },
+      totalNavigations: 100,
+      lastUpdated: now,
+    });
+    _resetRecentNavs();
+
+    await recordNavigationAnomaly("binance.com", now);
+
+    const saved = store[NAV_PROFILE_KEY] as { totalNavigations: number; categoryCounts: Record<string, number> };
+    // Total recomputed from survivors (5) + this nav = 6, NOT 100 + 1 = 101.
+    expect(saved.totalNavigations).toBe(6);
+    expect(saved.categoryCounts.entertainment).toBeUndefined();
+    expect(saved.categoryCounts.crypto).toBe(6);
   });
 });
 
