@@ -811,6 +811,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       swState.persistMap(childWindowByTab, "childWindow");
 
       // --- OAuth: detect opener manipulation during an active OAuth flow ---
+      // A completed flow is deleted from the map on completion (#366), so a LIVE
+      // openerOAuthFlow is never 'complete'. The `!== "complete"` guard only matters for a
+      // corrupt/tampered restored 'complete' entry, which OAUTH_PHASES still admits as
+      // defence-in-depth (see session_state.ts) — treat that as a finished flow, not an
+      // active manipulation target. Do not remove the guard without also tightening OAUTH_PHASES.
       const openerOAuthFlow = oauthFlowByTab.get(childEntry.openerTabId);
       if (openerOAuthFlow && openerOAuthFlow.phase !== "complete") {
         chrome.tabs.sendMessage(

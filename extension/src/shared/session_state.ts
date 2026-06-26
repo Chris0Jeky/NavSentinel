@@ -141,13 +141,15 @@ const isValidChildWindow = (v: unknown): boolean =>
   typeof v.openerNavObserved === "boolean";
 const isValidTypedOrigin = (v: unknown): boolean =>
   isRecord(v) && isFiniteNumber(v.ts) && isFiniteNumber(v.deadline);
-// Only the DURABLE phases are restorable. processOAuthNavigation persists exactly
-// 'redirect', 'consent', and 'complete'; 'callback' is set transiently and immediately
-// advanced to 'complete' before any persistMap, so it can never legitimately appear in
-// storage. Restoring a 'callback' entry would be worse than dropping it: the callback
-// branch only treats redirect/consent as active, so a tampered 'callback' value would slip
-// past the very redirect-mismatch check this validator exists to protect (#339). Keeping
-// the set tight to the producer's real output is the safe, evasion-resistant choice.
+// Restorable phases. A LIVE flow is only ever 'redirect' or 'consent' in storage:
+// 'callback' is set transiently and advanced to 'complete' before any persistMap, and since
+// #366 the callback branch DELETES the flow before persisting, so 'complete' is never
+// written either. 'complete' is nonetheless accepted here as defence-in-depth: paired with
+// the dblclick opener guard's `phase !== "complete"` check (sw.ts), it neutralises a
+// corrupt/tampered restored 'complete' (treated as a finished flow, not active) instead of
+// letting it masquerade. 'callback' is rejected outright — the callback branch only treats
+// redirect/consent as active, so a tampered 'callback' would slip past the very
+// redirect-mismatch check this validator protects (#339).
 const OAUTH_PHASES = new Set(["redirect", "consent", "complete"]);
 const isValidOAuthFlow = (v: unknown): boolean =>
   isRecord(v) &&

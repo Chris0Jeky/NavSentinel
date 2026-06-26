@@ -1339,6 +1339,55 @@ describe("service worker handlers", () => {
       expect(flow?.expectedCallbackDomain).toBe("app-a.com"); // preserved (pre-bug-fix: "")
     });
 
+    it("excludes the active tab from SIZE-CAP pruning, preserving its callback domain (#366 R2)", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+      const oauthStore = () =>
+        (mock.chrome.storage.session._store["ns_sw:oauthFlow"] ?? {}) as Record<string, unknown>;
+
+      // Tab 10 starts the OLDEST flow (redirect_uri -> expectedCallbackDomain app-a.com).
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        transitionType: "link",
+        url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=x&redirect_uri=https%3A%2F%2Fapp-a.com%2Fcb&response_type=code",
+      });
+      // Fill to 51 entries total (> OAUTH_FLOW_PRUNE_LIMIT of 50), all fresh (no age prune).
+      for (let t = 11; t <= 60; t++) {
+        mock.emitCommitted({
+          tabId: t,
+          frameId: 0,
+          transitionType: "link",
+          url: `https://accounts.google.com/o/oauth2/v2/auth?client_id=x&redirect_uri=https%3A%2F%2Fapp-${t}.com%2Fcb&response_type=code`,
+        });
+      }
+      expect(Object.keys(oauthStore()).length).toBe(51); // over the 50 cap, none aged out
+
+      // Tab 10 (the OLDEST entry, and the active tab) does an in-place authorize hop WITHOUT
+      // a redirect_uri. The size cap fires (51 > 50) and would, without the active-tab
+      // filter, evict tab 10 as the oldest — losing expectedCallbackDomain. The filter must
+      // protect it and drop the oldest OTHER entry instead.
+      vi.setSystemTime(new Date("2026-03-17T12:00:50.000Z")); // still < 60s for every flow
+      mock.sentMessages.length = 0;
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        transitionType: "link",
+        transitionQualifiers: ["server_redirect"],
+        url: "https://login.live.com/oauth20_authorize.srf?client_id=x&response_type=code&scope=openid",
+      });
+
+      const flowMsg = mock.sentMessages.find(
+        (m) => (m.message as { type: string }).type === "ns-oauth-flow-update" && m.tabId === 10,
+      );
+      const flow = (flowMsg?.message as { flow: { phase: string; expectedCallbackDomain: string } } | undefined)?.flow;
+      expect(flow?.phase).toBe("consent"); // updated in place, not restarted
+      expect(flow?.expectedCallbackDomain).toBe("app-a.com"); // preserved under size-cap pruning
+      expect(oauthStore()["10"]).toBeTruthy(); // active tab survived the cap
+      expect(Object.keys(oauthStore()).length).toBe(50); // exactly one OTHER entry pruned
+    });
+
     it("transitions to consent on second OAuth URL with OAuth params", async () => {
       const mock = createChromeMock();
       await loadSw(mock);
