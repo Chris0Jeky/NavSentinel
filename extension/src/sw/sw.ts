@@ -153,9 +153,29 @@ const hydrateReady = swState.hydrate();
 // even when the user's persisted mode is "off". Running it here subsumes the
 // install/startup paths too (the listeners only fire if this module evaluated).
 // (#303)
-const cachedModeReady = getNavSettings()
-  .then((s) => { cachedDefaultMode = s.defaultMode; })
-  .catch(() => {});
+async function loadCachedDefaultMode(): Promise<void> {
+  try {
+    cachedDefaultMode = (await getNavSettings()).defaultMode;
+  } catch (err) {
+    // Rare (storage quota / context invalidated mid-read). Retry once — a transient
+    // failure usually succeeds immediately, which avoids a stale-"smart" green badge for
+    // an "off" user. cachedDefaultMode is the BADGE-paint value only (not enforcement); on
+    // a double failure it stays at its current value and self-heals on the next
+    // storage.onChanged / worker restart, so we surface the failure rather than flip to a
+    // different (also-possibly-wrong) mode. (#362)
+    console.warn("[NavSentinel] cachedDefaultMode read failed, retrying:", err);
+    try {
+      cachedDefaultMode = (await getNavSettings()).defaultMode;
+    } catch (retryErr) {
+      console.warn(
+        "[NavSentinel] cachedDefaultMode retry failed; keeping",
+        cachedDefaultMode,
+        retryErr,
+      );
+    }
+  }
+}
+const cachedModeReady = loadCachedDefaultMode();
 
 // onCommittedHandler paints the toolbar badge from the synchronously-read
 // cachedDefaultMode. That read (cachedModeReady, local storage) is a separate concern
@@ -518,7 +538,9 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   const newVal = changes[SUITE_SETTINGS_KEY]!.newValue as
     | { nav?: { defaultMode?: string } }
     | undefined;
-  if (newVal?.nav?.defaultMode) {
+  // Accept any string mode (not just truthy) so a future empty-string mode is not
+  // silently dropped, leaving cachedDefaultMode stale. No valid mode is "" today. (#362)
+  if (typeof newVal?.nav?.defaultMode === "string") {
     cachedDefaultMode = newVal.nav.defaultMode;
   }
   if (newVal?.nav?.defaultMode === "off") {

@@ -2209,6 +2209,41 @@ describe("service worker handlers", () => {
       expect(mock.chrome.action.setBadgeText).not.toHaveBeenCalledWith({ tabId: 10, text: "✓" });
     });
 
+    it("retries the mode read after a transient storage failure, avoiding a false green badge (#362)", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const mock = createChromeMock();
+      // Persisted mode is "off", but the FIRST cachedDefaultMode read rejects (a transient
+      // storage failure). The retry must recover "off" so the badge does not flash green.
+      let localGetCalls = 0;
+      mock.chrome.storage.local.get = (async () => {
+        localGetCalls++;
+        if (localGetCalls === 1) throw new Error("transient storage failure");
+        return { [SUITE_SETTINGS_KEY]: { nav: { defaultMode: "off" } } };
+      }) as unknown as typeof mock.chrome.storage.local.get;
+
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        url: "https://example.com/",
+        transitionType: "link",
+      });
+      await vi.runAllTimersAsync();
+
+      // The failure was surfaced (no longer a silent catch) and the retry ran.
+      expect(
+        warnSpy.mock.calls.some((c) => String(c[0]).includes("cachedDefaultMode read failed")),
+      ).toBe(true);
+      expect(localGetCalls).toBeGreaterThanOrEqual(2); // initial read + retry
+      // mode "off" => gray badge; pre-fix the swallowed failure left "smart" => green.
+      expect(mock.chrome.action.setBadgeBackgroundColor).not.toHaveBeenCalledWith(
+        expect.objectContaining({ tabId: 10, color: "#16a34a" }),
+      );
+      warnSpy.mockRestore();
+    });
+
     it("the deferred wake-up navigation waits for the mode read before painting (#303)", async () => {
       const mock = createChromeMock();
       // Gate BOTH reads so the worker is un-hydrated AND the mode is unread when the
