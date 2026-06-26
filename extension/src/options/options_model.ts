@@ -1,3 +1,5 @@
+import type { PromptOutcome } from "../shared/storage";
+
 export function pct(n: number, total: number): string {
   if (total === 0) return "--";
   return `${((n / total) * 100).toFixed(1)}%`;
@@ -18,8 +20,57 @@ export function fmtTime(ts: number): string {
 }
 
 export function parseIntSafe(value: string, fallback: number): number {
+  // An empty / whitespace-only string must use the fallback. `Number("")` and
+  // `Number("   ")` are both `0` (finite), so without this guard clearing a
+  // numeric field and saving would silently store `0` (then clamp to the field
+  // minimum) instead of the documented default. (#367)
+  if (value.trim() === "") return fallback;
   const n = Number(value);
   return Number.isFinite(n) ? Math.trunc(n) : fallback;
+}
+
+/** Display strings for the options Prompt Statistics panel. */
+export interface PromptOutcomeStats {
+  total: number;
+  allowRate: string;
+  blockRate: string;
+  trustRate: string;
+  dismissRate: string;
+  avgScoreAllow: string;
+  avgScoreBlock: string;
+}
+
+/**
+ * Aggregate prompt-outcome entries into the display strings the options Prompt
+ * Statistics panel renders. Pure (no DOM) so the aggregation is unit-testable.
+ *
+ * The buckets partition EVERY PromptOutcome variant:
+ *   allows  = allow | allow_once | always_allow   blocks = block | cancel
+ *   trusts  = trust                               dismisses = dismiss
+ * so the four displayed rates sum to 100%. The bare `allow` variant was
+ * previously dropped from the allows bucket — it was counted in `total` but in
+ * none of the four arrays, understating the allow-rate and excluding those
+ * scores from the allow average. (#367)
+ */
+export function computePromptOutcomeStats(
+  outcomes: ReadonlyArray<{ outcome: PromptOutcome; score: number }>,
+): PromptOutcomeStats {
+  const inBucket = (...os: PromptOutcome[]) =>
+    outcomes.filter((e) => os.includes(e.outcome));
+  const allows = inBucket("allow", "allow_once", "always_allow");
+  const blocks = inBucket("block", "cancel");
+  const trusts = inBucket("trust");
+  const dismisses = inBucket("dismiss");
+  const total = outcomes.length;
+  return {
+    total,
+    allowRate: pct(allows.length, total),
+    blockRate: pct(blocks.length, total),
+    trustRate: pct(trusts.length, total),
+    dismissRate: pct(dismisses.length, total),
+    avgScoreAllow: avg(allows.map((e) => e.score)),
+    avgScoreBlock: avg(blocks.map((e) => e.score)),
+  };
 }
 
 export interface ImportErrorOutcome {

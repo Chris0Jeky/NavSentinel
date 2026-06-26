@@ -3,7 +3,7 @@ import type { CredMode, EventLogEntry, SuiteSettings } from "../shared/storage";
 import { classifyEventTone } from "../shared/event_tone";
 import { icon, logoSentinel } from "../shared/icons";
 import { getSegValue, initSegKeyboard, setSegValue } from "../shared/seg_control";
-import { pct, avg, fmtTime, parseIntSafe, withReentrancyGuard, runClearStats, runImportFlow } from "./options_model";
+import { computePromptOutcomeStats, fmtTime, parseIntSafe, withReentrancyGuard, runClearStats, runImportFlow } from "./options_model";
 import {
   addTrustedDomainWithResult,
   appendEvent,
@@ -331,19 +331,14 @@ async function refreshEventLog(): Promise<void> {
 }
 
 function renderStats(outcomes: PromptOutcomeEntry[]): void {
-  const total = outcomes.length;
-  const allows = outcomes.filter((e) => e.outcome === "allow_once" || e.outcome === "always_allow");
-  const blocks = outcomes.filter((e) => e.outcome === "block" || e.outcome === "cancel");
-  const trusts = outcomes.filter((e) => e.outcome === "trust");
-  const dismisses = outcomes.filter((e) => e.outcome === "dismiss");
-
-  statTotalEl.textContent = String(total);
-  statAllowRateEl.textContent = pct(allows.length, total);
-  statBlockRateEl.textContent = pct(blocks.length, total);
-  statTrustRateEl.textContent = pct(trusts.length, total);
-  statDismissRateEl.textContent = pct(dismisses.length, total);
-  statAvgScoreAllowEl.textContent = avg(allows.map((e) => e.score));
-  statAvgScoreBlockEl.textContent = avg(blocks.map((e) => e.score));
+  const stats = computePromptOutcomeStats(outcomes);
+  statTotalEl.textContent = String(stats.total);
+  statAllowRateEl.textContent = stats.allowRate;
+  statBlockRateEl.textContent = stats.blockRate;
+  statTrustRateEl.textContent = stats.trustRate;
+  statDismissRateEl.textContent = stats.dismissRate;
+  statAvgScoreAllowEl.textContent = stats.avgScoreAllow;
+  statAvgScoreBlockEl.textContent = stats.avgScoreBlock;
 
   const domainCounts = new Map<string, number>();
   for (const e of outcomes) {
