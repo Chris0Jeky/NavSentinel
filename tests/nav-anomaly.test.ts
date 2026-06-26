@@ -399,6 +399,14 @@ describe("computeAnomalyScore", () => {
     expect(score).toBe(0);
   });
 
+  it("returns 0 for a corrupt non-finite totalNavigations (no gate bypass) (#373)", () => {
+    // Pre-fix: NaN < MIN is false AND NaN >= RARE_CATEGORY_THRESHOLD is false, so BOTH the
+    // min-nav gate and the rarity gate are bypassed and a burst scores ~15. A corrupt
+    // profile must score nothing.
+    expect(computeAnomalyScore(makeProfile({ categoryCounts: { crypto: 1 }, totalNavigations: NaN }), "crypto", 3)).toBe(0);
+    expect(computeAnomalyScore(makeProfile({ categoryCounts: { crypto: 1 }, totalNavigations: Infinity }), "crypto", 3)).toBe(0);
+  });
+
   it("returns 0 when total navigations below minimum", () => {
     const profile = makeProfile({
       categoryCounts: { entertainment: MIN_NAVIGATIONS_FOR_ANOMALY - 1 },
@@ -908,6 +916,26 @@ describe("primeAnomalySession", () => {
     // 4. The crypto burst must STILL be rarity-blanked (crypto is frequent in the preserved
     //    cache). Pre-fix the poisoned cache forgot crypto was frequent → a false-positive 10.
     expect(getAnomalyScoreSync("coinbase.com", now + 51000)).toBe(0);
+  });
+
+  it("recordNavigationAnomaly self-heals a corrupt totalNavigations instead of propagating NaN (#373)", async () => {
+    const now = Date.now();
+    // Corrupt stored profile: category counts intact, totalNavigations NaN.
+    store[NAV_PROFILE_KEY] = makeProfile({
+      categoryCounts: { crypto: 30, entertainment: 70 },
+      totalNavigations: NaN,
+      lastUpdated: now,
+    });
+    _resetRecentNavs();
+
+    await recordNavigationAnomaly("binance.com", now);
+
+    // The re-saved profile must be finite: pre-fix `NaN + 1` re-persisted NaN (sticky) and
+    // `Math.max(sessionNavCount, NaN)` poisoned the session gate. Recomputed from counts
+    // (30 + 70 = 100) + this nav = 101.
+    const saved = store[NAV_PROFILE_KEY] as { totalNavigations: number };
+    expect(Number.isFinite(saved.totalNavigations)).toBe(true);
+    expect(saved.totalNavigations).toBe(101);
   });
 });
 

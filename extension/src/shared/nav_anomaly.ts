@@ -497,8 +497,13 @@ export function computeAnomalyScore(
   // Don't flag "unknown" category -- too noisy
   if (category === "unknown") return 0;
 
-  // Need minimum navigations for meaningful frequency analysis
-  if (profile.totalNavigations < MIN_NAVIGATIONS_FOR_ANOMALY) return 0;
+  // Need minimum navigations for meaningful frequency analysis. The Number.isFinite
+  // check is load-bearing: a corrupt non-finite totalNavigations would make `NaN < MIN`
+  // false here AND `NaN >= RARE_CATEGORY_THRESHOLD` false below, bypassing BOTH gates and
+  // scoring every burst — a corrupt profile must score nothing, not everything. (#373)
+  if (!Number.isFinite(profile.totalNavigations) || profile.totalNavigations < MIN_NAVIGATIONS_FOR_ANOMALY) {
+    return 0;
+  }
 
   // Check if category is rare (< 5% of total navigations).
   // Subtract recent burst navigations from the stored count to avoid
@@ -559,6 +564,17 @@ export function recordNavigationAnomaly(
     try {
       // Load and decay profile
       const profile = await loadProfile();
+      // Self-heal a corrupt non-finite totalNavigations BEFORE it propagates: `+= 1` would
+      // keep NaN (sticky in storage on save), `Math.max(sessionNavCount, NaN)` would poison
+      // the session gate (NaN < MIN is false → gate bypass), and the cache refresh below would
+      // run against it. Recompute from the (finite) category counts so the rarity baseline is
+      // preserved rather than wiped. Mirrors the prime-path guard in #297. (#373)
+      if (!Number.isFinite(profile.totalNavigations)) {
+        profile.totalNavigations = Object.values(profile.categoryCounts).reduce(
+          (sum, n) => sum + (Number.isFinite(n) ? n : 0),
+          0,
+        );
+      }
       applyDecay(profile, now);
       pruneBurstRecords(profile, now);
 
