@@ -254,9 +254,17 @@ describe("service worker handlers", () => {
   describe("hydration gating of session-backed handlers (#228.1)", () => {
     it("defers ns-check-rollback until hydration so it reflects restored state", async () => {
       const mock = createChromeMock();
-      // Seed a pending rollback for tab 5 in session storage.
+      // Seed a pending rollback for tab 5 in session storage. (Full lastCommitted shape, as
+      // onCommittedHandler always writes it — the #339 restore validator requires it.)
       mock.chrome.storage.session._store["ns_sw:lastCommitted"] = {
-        "5": { allowedAtCommit: false, prevUrl: "https://prev.test/" },
+        "5": {
+          url: "https://cur.test/",
+          prevUrl: "https://prev.test/",
+          transitionType: "link",
+          qualifiers: [],
+          ts: 1000,
+          allowedAtCommit: false,
+        },
       };
       // Gate the hydrate read so the message arrives BEFORE hydration completes.
       let releaseGet!: () => void;
@@ -332,7 +340,11 @@ describe("service worker handlers", () => {
       const mock = createChromeMock();
       mock.chrome.storage.session._store["ns_sw:redirectChains"] = {
         "5": {
-          hops: [{ url: "https://a.test/" }, { url: "https://b.test/" }],
+          // Full RedirectHop shape ({ url, ts, transitionType }) — the #339 restore validator requires it.
+          hops: [
+            { url: "https://a.test/", ts: 1, transitionType: "link" },
+            { url: "https://b.test/", ts: 2, transitionType: "link" },
+          ],
           startedAt: 1,
         },
       };
