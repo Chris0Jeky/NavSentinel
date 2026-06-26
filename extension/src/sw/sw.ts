@@ -24,6 +24,10 @@ const BASELINE_RULESET_ID = "baseline";
 
 /** Cached defaultMode for synchronous access in navigation handlers. */
 let cachedDefaultMode = "smart";
+// Set once storage.onChanged delivers a mode, so the slower async startup read
+// (loadCachedDefaultMode, especially after its retry) cannot resolve LATE and clobber a
+// newer onChanged value with the stale value it read at startup. (#362)
+let modeUpdatedByOnChanged = false;
 
 /** Maximum .bin file size we will read (2 MB + 16-byte header, matching MAX_FILTER_BITS). */
 const MAX_REPUTATION_FILE_BYTES = 2 * 1024 * 1024 + 16;
@@ -155,7 +159,9 @@ const hydrateReady = swState.hydrate();
 // (#303)
 async function loadCachedDefaultMode(): Promise<void> {
   try {
-    cachedDefaultMode = (await getNavSettings()).defaultMode;
+    const mode = (await getNavSettings()).defaultMode;
+    // Don't clobber a newer value an onChanged delivered while this read was in flight.
+    if (!modeUpdatedByOnChanged) cachedDefaultMode = mode;
   } catch (err) {
     // Rare (storage quota / context invalidated mid-read). Retry once — a transient
     // failure usually succeeds immediately, which avoids a stale-"smart" green badge for
@@ -165,7 +171,8 @@ async function loadCachedDefaultMode(): Promise<void> {
     // different (also-possibly-wrong) mode. (#362)
     console.warn("[NavSentinel] cachedDefaultMode read failed, retrying:", err);
     try {
-      cachedDefaultMode = (await getNavSettings()).defaultMode;
+      const mode = (await getNavSettings()).defaultMode;
+      if (!modeUpdatedByOnChanged) cachedDefaultMode = mode;
     } catch (retryErr) {
       console.warn(
         "[NavSentinel] cachedDefaultMode retry failed; keeping",
@@ -542,6 +549,9 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   // silently dropped, leaving cachedDefaultMode stale. No valid mode is "" today. (#362)
   if (typeof newVal?.nav?.defaultMode === "string") {
     cachedDefaultMode = newVal.nav.defaultMode;
+    // This is authoritative and fresher than the startup read; block a late startup
+    // read from overwriting it with the value it captured before this change. (#362)
+    modeUpdatedByOnChanged = true;
   }
   if (newVal?.nav?.defaultMode === "off") {
     void setAllTabsGray();

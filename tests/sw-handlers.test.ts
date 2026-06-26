@@ -2244,6 +2244,47 @@ describe("service worker handlers", () => {
       warnSpy.mockRestore();
     });
 
+    it("does not let a slow startup read clobber a newer onChanged mode (race) (#362)", async () => {
+      const mock = createChromeMock();
+      // Startup mode read is SLOW and returns the OLD mode ("smart" => green).
+      let releaseLocal!: () => void;
+      const localGate = new Promise<void>((r) => { releaseLocal = r; });
+      mock.chrome.storage.local.get = (async () => {
+        await localGate;
+        return { [SUITE_SETTINGS_KEY]: { nav: { defaultMode: "smart" } } };
+      }) as unknown as typeof mock.chrome.storage.local.get;
+
+      await loadSw(mock);
+
+      // While the startup read is in flight, the user switches to "off" -> onChanged delivers it.
+      mock.emitStorageChanged(
+        {
+          [SUITE_SETTINGS_KEY]: {
+            oldValue: { nav: { defaultMode: "smart" } },
+            newValue: { nav: { defaultMode: "off" } },
+          },
+        },
+        "local",
+      );
+
+      // Now let the slow startup read resolve with the now-STALE "smart".
+      releaseLocal();
+      await vi.runAllTimersAsync();
+
+      // The newer "off" from onChanged must win -> a fresh commit paints gray, not green.
+      // Pre-fix the late startup read overwrote "off" with "smart" => green badge.
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        url: "https://example.com/",
+        transitionType: "link",
+      });
+      await vi.runAllTimersAsync();
+      expect(mock.chrome.action.setBadgeBackgroundColor).not.toHaveBeenCalledWith(
+        expect.objectContaining({ tabId: 10, color: "#16a34a" }),
+      );
+    });
+
     it("the deferred wake-up navigation waits for the mode read before painting (#303)", async () => {
       const mock = createChromeMock();
       // Gate BOTH reads so the worker is un-hydrated AND the mode is unread when the
