@@ -166,23 +166,28 @@ const cachedModeReady = getNavSettings()
 // historical onStartup refresh could; that window is transient and self-heals on the next
 // change. (#303)
 
-function pruneStaleOAuthFlows(): void {
+// Prune stale / over-cap OAuth flows. `activeTabId`, when given, is NEVER pruned:
+// the flow currently being created or updated must survive even if it is itself
+// past max-age (the user lingered on a consent page) or the oldest under the size
+// cap — pruning it would drop initiatorUrl (#207) and expectedCallbackDomain (#324),
+// weakening redirect-mismatch detection. Does NOT persist; the caller owns the
+// single persistMap so an authorize commit writes session storage once. (#366)
+function pruneStaleOAuthFlows(activeTabId?: number): void {
   const now = Date.now();
   for (const [tabId, flow] of oauthFlowByTab) {
-    if (now - flow.startedAt > OAUTH_FLOW_MAX_AGE_MS) {
+    if (tabId !== activeTabId && now - flow.startedAt > OAUTH_FLOW_MAX_AGE_MS) {
       oauthFlowByTab.delete(tabId);
     }
   }
   if (oauthFlowByTab.size > OAUTH_FLOW_PRUNE_LIMIT) {
-    const sorted = [...oauthFlowByTab.entries()].sort(
-      (a, b) => a[1].startedAt - b[1].startedAt,
-    );
+    const sorted = [...oauthFlowByTab.entries()]
+      .filter(([tabId]) => tabId !== activeTabId)
+      .sort((a, b) => a[1].startedAt - b[1].startedAt);
     const excess = oauthFlowByTab.size - OAUTH_FLOW_PRUNE_LIMIT;
-    for (let i = 0; i < excess; i++) {
+    for (let i = 0; i < excess && i < sorted.length; i++) {
       oauthFlowByTab.delete(sorted[i]![0]);
     }
   }
-  swState.persistMap(oauthFlowByTab, "oauthFlow");
 }
 
 function processOAuthNavigation(
@@ -233,6 +238,11 @@ function processOAuthNavigation(
       );
     }
     existingFlow.phase = "complete";
+    // The flow is finished: drop it so completed (semantically-dead) entries don't
+    // linger in the map and session storage until the tab closes or the age-pruner
+    // happens to run on the next new flow. `existingFlow` is a local reference, so the
+    // terminal update below still carries the 'complete' phase to the content script. (#366)
+    oauthFlowByTab.delete(tabId);
     swState.persistMap(oauthFlowByTab, "oauthFlow");
     chrome.tabs.sendMessage(
       tabId,
@@ -245,6 +255,14 @@ function processOAuthNavigation(
   // Not a callback. A non-OAuth commit has nothing further to do here; an
   // authorization REQUEST (isOAuthUrl) continues to flow-creation below.
   if (!isOAuthUrl(url)) return;
+
+  // Size/age-cap OTHER tabs' stale flows here — on an OAuth-authorize commit, not
+  // on every navigation — so BOTH the in-place-update and new-flow paths below
+  // benefit. A provider chaining multiple /authorize hops updates a flow in place
+  // and would otherwise never trigger cleanup. `tabId` is passed so THIS tab's flow
+  // is never pruned, even if it is itself past max-age (lingering consent) — so the
+  // in-place update below keeps its initiatorUrl/expectedCallbackDomain. (#366)
+  pruneStaleOAuthFlows(tabId);
 
   const redirectUri = extractRedirectUri(url);
   let expectedCallbackDomain = "";
@@ -273,7 +291,6 @@ function processOAuthNavigation(
     // second authorization URL is treated as a continuation of the same flow, and
     // initiatorUrl is display-only (not consulted by isUnexpectedCallback).
   } else {
-    pruneStaleOAuthFlows();
     const flow: OAuthFlowState = {
       // The page that initiated the flow — the URL committed BEFORE this consent
       // navigation. Passed in from onCommittedHandler, which captures it before
@@ -794,6 +811,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       swState.persistMap(childWindowByTab, "childWindow");
 
       // --- OAuth: detect opener manipulation during an active OAuth flow ---
+      // A completed flow is deleted from the map on completion (#366), so a LIVE
+      // openerOAuthFlow is never 'complete'. The `!== "complete"` guard only matters for a
+      // corrupt/tampered restored 'complete' entry, which OAUTH_PHASES still admits as
+      // defence-in-depth (see session_state.ts) — treat that as a finished flow, not an
+      // active manipulation target. Do not remove the guard without also tightening OAUTH_PHASES.
       const openerOAuthFlow = oauthFlowByTab.get(childEntry.openerTabId);
       if (openerOAuthFlow && openerOAuthFlow.phase !== "complete") {
         chrome.tabs.sendMessage(
