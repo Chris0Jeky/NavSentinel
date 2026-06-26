@@ -191,7 +191,7 @@ function processOAuthNavigation(
   initiatorUrl: string,
   isUserTyped: boolean,
 ): void {
-  const existingFlow = oauthFlowByTab.get(tabId);
+  let existingFlow = oauthFlowByTab.get(tabId);
 
   // --- Callback detection (runs REGARDLESS of isOAuthUrl) ---
   // A commit that carries an OAuth RESPONSE (code/error in query, or access_token/
@@ -233,6 +233,11 @@ function processOAuthNavigation(
       );
     }
     existingFlow.phase = "complete";
+    // The flow is finished: drop it so completed (semantically-dead) entries don't
+    // linger in the map and session storage until the tab closes or the age-pruner
+    // happens to run on the next new flow. `existingFlow` is a local reference, so the
+    // terminal update below still carries the 'complete' phase to the content script. (#366)
+    oauthFlowByTab.delete(tabId);
     swState.persistMap(oauthFlowByTab, "oauthFlow");
     chrome.tabs.sendMessage(
       tabId,
@@ -245,6 +250,15 @@ function processOAuthNavigation(
   // Not a callback. A non-OAuth commit has nothing further to do here; an
   // authorization REQUEST (isOAuthUrl) continues to flow-creation below.
   if (!isOAuthUrl(url)) return;
+
+  // Size/age-cap stale flows here — on an OAuth-authorize commit, not on every
+  // navigation — so BOTH the in-place-update and new-flow paths below benefit. A
+  // provider chaining multiple /authorize hops updates a flow in place and would
+  // otherwise never trigger cleanup of other tabs' stale entries (#366). Re-read
+  // afterwards so a current-tab flow that was itself pruned as stale starts fresh
+  // below instead of updating an orphaned (already-deleted) entry.
+  pruneStaleOAuthFlows();
+  existingFlow = oauthFlowByTab.get(tabId);
 
   const redirectUri = extractRedirectUri(url);
   let expectedCallbackDomain = "";
@@ -273,7 +287,6 @@ function processOAuthNavigation(
     // second authorization URL is treated as a continuation of the same flow, and
     // initiatorUrl is display-only (not consulted by isUnexpectedCallback).
   } else {
-    pruneStaleOAuthFlows();
     const flow: OAuthFlowState = {
       // The page that initiated the flow — the URL committed BEFORE this consent
       // navigation. Passed in from onCommittedHandler, which captures it before

@@ -273,6 +273,18 @@ describe("OAuth runtime message handling", () => {
     expect(getOAuthFlowState()).toEqual(flow);
   });
 
+  it("returns null for a 'complete' flow (it is finished, not active) (#366)", () => {
+    // The SW forwards the terminal 'complete' update; getOAuthFlowState's contract
+    // is "null if no flow is active", so a completed flow must not read as active.
+    handleOAuthRuntimeMessage({ type: "ns-oauth-flow-update", flow: makeFlow({ phase: "complete" }) });
+    expect(getOAuthFlowState()).toBeNull();
+  });
+
+  it("keeps a still-active (consent) flow non-null", () => {
+    handleOAuthRuntimeMessage({ type: "ns-oauth-flow-update", flow: makeFlow({ phase: "consent" }) });
+    expect(getOAuthFlowState()?.phase).toBe("consent");
+  });
+
   it("handles ns-oauth-redirect-mismatch", () => {
     expect(isOAuthRedirectMismatch()).toBe(false);
     const handled = handleOAuthRuntimeMessage({

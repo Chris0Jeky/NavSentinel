@@ -84,7 +84,9 @@ const LOCALHOST_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
 
 /**
  * Check whether a keyword appears at a path-segment boundary.
- * Matches "/keyword/", "/keyword?", "/keyword" at end of path.
+ * Matches "/keyword/" or "/keyword" at the end of the path. The sole caller
+ * passes `URL.pathname`, which never contains '?' (the query is split off at
+ * parse time), so only the '/' and end-of-path boundaries are possible. (#366)
  */
 function hasPathSegment(lowerPath: string, keyword: string): boolean {
   let idx = 0;
@@ -96,11 +98,10 @@ function hasPathSegment(lowerPath: string, keyword: string): boolean {
       idx += 1;
       continue;
     }
-    // Must be followed by '/', '?', or end-of-string
+    // Must be followed by '/' or be at the end of the path.
     const afterIdx = idx + keyword.length;
     if (afterIdx >= lowerPath.length) return true;
-    const after = lowerPath[afterIdx];
-    if (after === "/" || after === "?") return true;
+    if (lowerPath[afterIdx] === "/") return true;
     idx += 1;
   }
 }
@@ -334,6 +335,12 @@ export function isOAuthOpenerManipulation(): boolean {
 export function getOAuthFlowState(): OAuthFlowState | null {
   if (currentFlow && (Date.now() - currentFlow.startedAt) >= OAUTH_FLAG_TTL_MS) {
     currentFlow = null;
+  }
+  // A 'complete' flow is finished, not active. The SW forwards the terminal
+  // 'complete' update (then drops the flow), but the contract here is "null if no
+  // flow is active", so a completed flow must not read as active to consumers. (#366)
+  if (currentFlow && currentFlow.phase === "complete") {
+    return null;
   }
   return currentFlow;
 }

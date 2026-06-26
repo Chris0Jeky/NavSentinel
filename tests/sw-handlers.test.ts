@@ -1228,6 +1228,82 @@ describe("service worker handlers", () => {
       expect(flow.phase).toBe("redirect");
     });
 
+    it("removes the completed flow from the map and session storage instead of leaking it (#366)", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+      const oauthStore = () =>
+        (mock.chrome.storage.session._store["ns_sw:oauthFlow"] ?? {}) as Record<string, unknown>;
+
+      const authUrl =
+        "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&redirect_uri=https%3A%2F%2Fapp.com%2Fcb&response_type=code";
+      mock.emitBeforeNavigate({ tabId: 10, frameId: 0, url: authUrl });
+      mock.emitCommitted({ tabId: 10, frameId: 0, url: authUrl, transitionType: "link" });
+      expect(oauthStore()["10"]).toBeTruthy(); // resident while active
+
+      // The callback commit (OAuth response params) completes the flow.
+      mock.emitBeforeNavigate({ tabId: 10, frameId: 0, url: "https://app.com/cb?code=done" });
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        url: "https://app.com/cb?code=done",
+        transitionType: "link",
+        transitionQualifiers: ["client_redirect"],
+      });
+
+      // Pre-fix: the entry lingered as phase:'complete'. Post-fix: it is deleted.
+      expect(oauthStore()["10"]).toBeUndefined();
+      // The terminal 'complete' update is still delivered to the content script.
+      const completeMsg = mock.sentMessages.find(
+        (m) =>
+          (m.message as { type: string }).type === "ns-oauth-flow-update" &&
+          (m.message as { flow: { phase: string } }).flow.phase === "complete",
+      );
+      expect(completeMsg).toBeDefined();
+    });
+
+    it("prunes stale flows during an in-place update, not only on new-flow creation (#366)", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+      const oauthStore = () =>
+        (mock.chrome.storage.session._store["ns_sw:oauthFlow"] ?? {}) as Record<string, unknown>;
+
+      // Tab 10 starts a flow at T0.
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        transitionType: "link",
+        url: "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&redirect_uri=https%3A%2F%2Fapp-a.com%2Fcb&response_type=code",
+      });
+      // +40s: tab 20 starts a flow (tab 10 still fresh at 40s < 60s max age).
+      vi.setSystemTime(new Date("2026-03-17T12:00:40.000Z"));
+      mock.emitCommitted({
+        tabId: 20,
+        frameId: 0,
+        transitionType: "link",
+        url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=x&redirect_uri=https%3A%2F%2Fapp-b.com%2Fcb&response_type=code",
+      });
+      expect(oauthStore()["10"]).toBeTruthy();
+      expect(oauthStore()["20"]).toBeTruthy();
+
+      // +30s more: tab 10 is now 70s old (stale); tab 20 is 30s (fresh). Tab 20 gets a
+      // SECOND authorize → the IN-PLACE update path. Pre-fix that branch never pruned,
+      // so tab 10's stale flow lingered; post-fix the prune-before-branch drops it while
+      // tab 20's fresh flow is re-read and updated in place.
+      vi.setSystemTime(new Date("2026-03-17T12:01:10.000Z"));
+      mock.emitCommitted({
+        tabId: 20,
+        frameId: 0,
+        transitionType: "link",
+        transitionQualifiers: ["server_redirect"],
+        url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=x&redirect_uri=https%3A%2F%2Fapp-b.com%2Fcb&response_type=code&prompt=consent",
+      });
+
+      expect(oauthStore()["10"]).toBeUndefined(); // stale flow pruned on the in-place update
+      expect(oauthStore()["20"]).toBeTruthy(); // the updating tab's fresh flow survives
+    });
+
     it("transitions to consent on second OAuth URL with OAuth params", async () => {
       const mock = createChromeMock();
       await loadSw(mock);
