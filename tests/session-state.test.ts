@@ -138,11 +138,18 @@ describe("SessionStateManager", () => {
         "1": { initiatorUrl: "https://app.test/", consentUrl: "https://accounts.google.com/authorize", expectedCallbackDomain: "app.test", startedAt: null, phase: "redirect" },
         "2": { initiatorUrl: "https://app.test/", consentUrl: "https://accounts.google.com/authorize", expectedCallbackDomain: "app.test", startedAt: 1000, phase: "not-a-phase" },
         "3": { initiatorUrl: "https://app.test/", consentUrl: "https://accounts.google.com/authorize", expectedCallbackDomain: "app.test", startedAt: 1000, phase: "consent" },
+        // NaN startedAt survives structured-clone (chrome.storage.session is NOT JSON) and
+        // would poison pruneStaleOAuthFlows' `now - startedAt` comparison — only Number.isFinite
+        // rejects it (a plain typeof===number check would pass). (#365 review F-1)
+        "4": { initiatorUrl: "https://app.test/", consentUrl: "https://accounts.google.com/authorize", expectedCallbackDomain: "app.test", startedAt: NaN, phase: "redirect" },
       },
-      // childWindow: corrupt createdAt -> NaN prune + DoubleClickjacking false-negative.
+      // childWindow: corrupt createdAt -> NaN prune + DoubleClickjacking false-negative;
+      // openerTabId 0 passes isFiniteNumber but makes the child-closed sendMessage fail
+      // silently (Chrome tab IDs are always >= 1). (#365 review SEC-02)
       "ns_sw:childWindow": {
         "10": { openerTabId: 7, createdAt: "bad", openerNavObserved: true },
         "11": { openerTabId: 7, createdAt: 100000, openerNavObserved: true },
+        "12": { openerTabId: 0, createdAt: 100000, openerNavObserved: true },
       },
       // pendingForward: corrupt ts -> stale offer never reaped by the ts-expiry guard.
       "ns_sw:pendingForward": {
@@ -172,15 +179,32 @@ describe("SessionStateManager", () => {
         "60": { url: "https://r.test/", qualifiers: "nope" },
         "61": { url: "https://r.test/", qualifiers: ["foo"] },
       },
-      // typedOrigin: corrupt ts -> would invalidate the typed-origin TTL window.
+      // typedOrigin: corrupt ts -> would invalidate the typed-origin TTL window. The NaN ts
+      // and Infinity deadline cases prove the Number.isFinite gate is load-bearing (both
+      // survive structured-clone and pass a plain typeof===number check). (#365 review F-1)
       "ns_sw:typedOrigin": {
         "70": { ts: "bad", deadline: 1000 },
         "71": { ts: 5, deadline: 1000 },
+        "72": { ts: NaN, deadline: 1000 },
+        "73": { ts: 5, deadline: Infinity },
       },
       // simple number map: a non-number per-entry value would NaN a navigation-allow check.
       "ns_sw:allowUntil": {
         "80": "not-a-number",
         "81": 12345,
+      },
+      // suppressUntil: a far-future numeric STRING coerces under `now <= suppressUntil` to a
+      // permanently-active suppress window, silently dropping every suspicious nav after a
+      // restart; isFiniteNumber rejects it. (#365 review F-2)
+      "ns_sw:suppressUntil": {
+        "82": "9999999999999999",
+        "83": 500,
+      },
+      // userNavContextUntil: a NaN/string value would fake a recent-user-nav context and
+      // suppress rollback triggering; previously had NO test of any kind. (#365 review F-2)
+      "ns_sw:userNavContextUntil": {
+        "84": NaN,
+        "85": 1000,
       },
       // simple string map: a numeric value would break domain parsing on prevUrl.
       "ns_sw:lastUrl": {
@@ -195,6 +219,8 @@ describe("SessionStateManager", () => {
         "102": { hops: [{ url: "https://a.test/", ts: 10, transitionType: "link" }], startedAt: 1000 },
         "103": { hops: [], startedAt: 1000 },
         "104": { hops: [{ url: "https://a.test/", ts: 10, transitionType: 42 }], startedAt: 1000 },
+        // Infinity startedAt: never time-pruned (`now - Infinity > X` is false) + NaN sort key.
+        "105": { hops: [{ url: "https://a.test/", ts: 10, transitionType: "link" }], startedAt: Infinity },
       },
     });
 
@@ -205,8 +231,10 @@ describe("SessionStateManager", () => {
     expect(mgr.oauthFlowByTab.has(1)).toBe(false); // startedAt null
     expect(mgr.oauthFlowByTab.has(2)).toBe(false); // bad phase
     expect(mgr.oauthFlowByTab.get(3)?.phase).toBe("consent");
+    expect(mgr.oauthFlowByTab.has(4)).toBe(false); // startedAt NaN
     expect(mgr.childWindowByTab.has(10)).toBe(false); // createdAt "bad"
     expect(mgr.childWindowByTab.get(11)?.createdAt).toBe(100000);
+    expect(mgr.childWindowByTab.has(12)).toBe(false); // openerTabId 0 (Chrome IDs are >= 1)
     expect(mgr.pendingForwardByTab.has(20)).toBe(false); // ts null
     expect(mgr.pendingForwardByTab.get(21)?.ts).toBe(5000);
     expect(mgr.lastCommittedByTab.has(30)).toBe(false); // ts "corrupted"
@@ -222,8 +250,14 @@ describe("SessionStateManager", () => {
     expect(mgr.pendingRollbackByTab.get(61)?.qualifiers).toEqual(["foo"]);
     expect(mgr.typedOriginByTab.has(70)).toBe(false); // ts "bad"
     expect(mgr.typedOriginByTab.get(71)?.ts).toBe(5);
+    expect(mgr.typedOriginByTab.has(72)).toBe(false); // ts NaN (passes typeof, fails isFinite)
+    expect(mgr.typedOriginByTab.has(73)).toBe(false); // deadline Infinity
     expect(mgr.allowUntilByTab.has(80)).toBe(false); // non-number
     expect(mgr.allowUntilByTab.get(81)).toBe(12345);
+    expect(mgr.suppressUntilByTab.has(82)).toBe(false); // numeric string coerces under `<=`
+    expect(mgr.suppressUntilByTab.get(83)).toBe(500);
+    expect(mgr.userNavContextUntilByTab.has(84)).toBe(false); // NaN
+    expect(mgr.userNavContextUntilByTab.get(85)).toBe(1000);
     expect(mgr.lastUrlByTab.has(90)).toBe(false); // numeric, not a string
     expect(mgr.lastUrlByTab.get(91)).toBe("https://ok.test/");
     expect(mgr.redirectChainData.has(100)).toBe(false); // startedAt "bad"
@@ -231,6 +265,7 @@ describe("SessionStateManager", () => {
     expect(mgr.redirectChainData.get(102)?.startedAt).toBe(1000);
     expect(mgr.redirectChainData.get(103)?.startedAt).toBe(1000); // empty hops is valid
     expect(mgr.redirectChainData.has(104)).toBe(false); // hop.transitionType not a string
+    expect(mgr.redirectChainData.has(105)).toBe(false); // startedAt Infinity
     expect(warnSpy).toHaveBeenCalled(); // corrupt restore is surfaced, not silent
     warnSpy.mockRestore();
   });

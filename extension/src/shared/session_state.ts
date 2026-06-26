@@ -132,6 +132,11 @@ const isValidLastCommitted = (v: unknown): boolean =>
 const isValidChildWindow = (v: unknown): boolean =>
   isRecord(v) &&
   isFiniteNumber(v.openerTabId) &&
+  // Chrome tab IDs are always positive (>= 1); the producer writes tab.openerTabId verbatim.
+  // A corrupt 0 / -1 (chrome.tabs.TAB_ID_NONE) would pass isFiniteNumber but make the
+  // onRemoved `chrome.tabs.sendMessage(openerTabId, ns-dblclick-child-closed)` fail silently,
+  // suppressing the DoubleClickjacking child-closed notification. (#339)
+  v.openerTabId > 0 &&
   isFiniteNumber(v.createdAt) &&
   typeof v.openerNavObserved === "boolean";
 const isValidTypedOrigin = (v: unknown): boolean =>
