@@ -235,6 +235,61 @@ describe("SessionStateManager", () => {
     warnSpy.mockRestore();
   });
 
+  it("drops corrupt optional-string fields, non-durable OAuth phases, and array-typed values on restore (#365 review)", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await sessionStorage.mock.set({
+      // oauthFlow phase 'callback' is never durably persisted (set transiently then advanced
+      // to 'complete' before persistMap); a restored 'callback' would slip past the
+      // redirect/consent-only mismatch branch, so it must be dropped. 'complete' is durable.
+      "ns_sw:oauthFlow": {
+        "1": { initiatorUrl: "https://app.test/", consentUrl: "https://accounts.google.com/authorize", expectedCallbackDomain: "app.test", startedAt: 1000, phase: "callback" },
+        "2": { initiatorUrl: "https://app.test/", consentUrl: "https://accounts.google.com/authorize", expectedCallbackDomain: "app.test", startedAt: 1000, phase: "complete" },
+      },
+      // pendingForward returnUrl: a corrupt truthy non-string strands the forward offer
+      // (matches neither the `=== currentUrl` nor the `!returnUrl` branch).
+      "ns_sw:pendingForward": {
+        "10": { url: "https://e.test/", ts: 5000, returnUrl: 42 },
+        "11": { url: "https://e.test/", ts: 5000, returnUrl: "https://ok.test/" },
+        "12": { url: "https://e.test/", ts: 5000 }, // returnUrl absent is valid
+      },
+      // pendingRollback prevUrl: corrupt non-string reaches the rollback message + URL parse.
+      "ns_sw:pendingRollback": {
+        "20": { url: "https://r.test/", qualifiers: [], prevUrl: 99 },
+        "21": { url: "https://r.test/", qualifiers: [], prevUrl: "https://prev.test/" },
+      },
+      // lastCommitted prevUrl: same string-or-absent gate.
+      "ns_sw:lastCommitted": {
+        "30": { url: "https://example.com/p", transitionType: "link", qualifiers: [], ts: 1, allowedAtCommit: true, prevUrl: {} },
+        "31": { url: "https://example.com/p", transitionType: "link", qualifiers: [], ts: 1, allowedAtCommit: true, prevUrl: "https://example.com/" },
+      },
+      // an array where a record is expected must be rejected (isRecord excludes arrays);
+      // likewise an array-typed silentEvent must not pass the `isRecord` check.
+      "ns_sw:allowTarget": {
+        "40": [],
+        "41": { url: "https://t.test/", expiresAt: 123456, silentEvent: ["not", "a", "record"] },
+        "42": { url: "https://t.test/", expiresAt: 123456 },
+      },
+    });
+
+    const mgr = new SessionStateManager();
+    await mgr.hydrate();
+
+    expect(mgr.oauthFlowByTab.has(1)).toBe(false); // phase 'callback' is not durable
+    expect(mgr.oauthFlowByTab.get(2)?.phase).toBe("complete");
+    expect(mgr.pendingForwardByTab.has(10)).toBe(false); // returnUrl non-string
+    expect(mgr.pendingForwardByTab.get(11)?.returnUrl).toBe("https://ok.test/");
+    expect(mgr.pendingForwardByTab.get(12)?.url).toBe("https://e.test/"); // absent is valid
+    expect(mgr.pendingRollbackByTab.has(20)).toBe(false); // prevUrl non-string
+    expect(mgr.pendingRollbackByTab.get(21)?.prevUrl).toBe("https://prev.test/");
+    expect(mgr.lastCommittedByTab.has(30)).toBe(false); // prevUrl non-string (object)
+    expect(mgr.lastCommittedByTab.get(31)?.prevUrl).toBe("https://example.com/");
+    expect(mgr.allowTargetByTab.has(40)).toBe(false); // array, not a record
+    expect(mgr.allowTargetByTab.has(41)).toBe(false); // silentEvent is an array
+    expect(mgr.allowTargetByTab.get(42)?.expiresAt).toBe(123456);
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
   it("enters degraded mode and suppresses persistence when the hydrate read fails (#228.2)", async () => {
     // Intact stored state that a transient read failure must not wipe.
     await sessionStorage.mock.set({ "ns_sw:allowUntil": { "7": 123456 } });

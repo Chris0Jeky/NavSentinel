@@ -87,7 +87,7 @@ const isFiniteNumber = (v: unknown): v is number =>
   typeof v === "number" && Number.isFinite(v);
 const isString = (v: unknown): v is string => typeof v === "string";
 const isRecord = (v: unknown): v is Record<string, unknown> =>
-  typeof v === "object" && v !== null;
+  typeof v === "object" && v !== null && !Array.isArray(v);
 const isStringArray = (v: unknown): boolean =>
   Array.isArray(v) && v.every((s) => typeof s === "string");
 
@@ -103,9 +103,20 @@ const isValidAllowTarget = (v: unknown): boolean =>
   // non-object value that restore-tampering could inject before it reaches appendEvent.
   (v.silentEvent === undefined || isRecord(v.silentEvent));
 const isValidPendingRollback = (v: unknown): boolean =>
-  isRecord(v) && isString(v.url) && isStringArray(v.qualifiers);
+  isRecord(v) &&
+  isString(v.url) &&
+  isStringArray(v.qualifiers) &&
+  // prevUrl is optional; a corrupt truthy non-string flows into the content-script
+  // rollback message and isSameRegistrableNavigation's URL parse — keep it string-or-absent.
+  (v.prevUrl === undefined || isString(v.prevUrl));
 const isValidPendingForward = (v: unknown): boolean =>
-  isRecord(v) && isString(v.url) && isFiniteNumber(v.ts);
+  isRecord(v) &&
+  isString(v.url) &&
+  isFiniteNumber(v.ts) &&
+  // returnUrl is optional; a corrupt truthy non-string matches neither the `=== currentUrl`
+  // offer branch nor the `!returnUrl` branch, silently stranding the forward offer until
+  // expiry after a restart — drop it instead of restoring poison.
+  (v.returnUrl === undefined || isString(v.returnUrl));
 const isValidRollbackReturn = (v: unknown): boolean =>
   isRecord(v) && isString(v.url) && isFiniteNumber(v.expiresAt);
 const isValidLastCommitted = (v: unknown): boolean =>
@@ -114,7 +125,10 @@ const isValidLastCommitted = (v: unknown): boolean =>
   isString(v.transitionType) &&
   isStringArray(v.qualifiers) &&
   isFiniteNumber(v.ts) &&
-  typeof v.allowedAtCommit === "boolean";
+  typeof v.allowedAtCommit === "boolean" &&
+  // prevUrl is optional; same string-or-absent gate as pendingRollback (it reaches the same
+  // same-registrable URL-parse path).
+  (v.prevUrl === undefined || isString(v.prevUrl));
 const isValidChildWindow = (v: unknown): boolean =>
   isRecord(v) &&
   isFiniteNumber(v.openerTabId) &&
@@ -122,10 +136,14 @@ const isValidChildWindow = (v: unknown): boolean =>
   typeof v.openerNavObserved === "boolean";
 const isValidTypedOrigin = (v: unknown): boolean =>
   isRecord(v) && isFiniteNumber(v.ts) && isFiniteNumber(v.deadline);
-// 'callback' is a transient in-memory phase (immediately advanced to 'complete' before the
-// persistMap), so it cannot appear in restored storage today; it is kept as a forward-compat
-// hedge against a future batched-write path. (#339)
-const OAUTH_PHASES = new Set(["redirect", "consent", "callback", "complete"]);
+// Only the DURABLE phases are restorable. processOAuthNavigation persists exactly
+// 'redirect', 'consent', and 'complete'; 'callback' is set transiently and immediately
+// advanced to 'complete' before any persistMap, so it can never legitimately appear in
+// storage. Restoring a 'callback' entry would be worse than dropping it: the callback
+// branch only treats redirect/consent as active, so a tampered 'callback' value would slip
+// past the very redirect-mismatch check this validator exists to protect (#339). Keeping
+// the set tight to the producer's real output is the safe, evasion-resistant choice.
+const OAUTH_PHASES = new Set(["redirect", "consent", "complete"]);
 const isValidOAuthFlow = (v: unknown): boolean =>
   isRecord(v) &&
   isString(v.initiatorUrl) &&
