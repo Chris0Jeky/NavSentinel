@@ -965,6 +965,27 @@ describe("primeAnomalySession", () => {
     expect(Number.isFinite(saved.totalNavigations)).toBe(true);
     expect(Object.values(saved.categoryCounts).every((c) => Number.isFinite(c))).toBe(true);
   });
+
+  it("recomputes a finite total when a count is dropped, so a fresh profile's rarity denominator stays consistent (#373 R2)", async () => {
+    const now = Date.now();
+    // FRESH profile (no decay due) with a finite-but-now-inconsistent total: a NaN count is
+    // dropped on load, leaving total=100 inflated vs the surviving 5 crypto navs. Pre-fix that
+    // inflated denominator makes crypto look rare (5/100) and false-positives a crypto burst.
+    store[NAV_PROFILE_KEY] = makeProfile({
+      categoryCounts: { crypto: 5, entertainment: NaN },
+      totalNavigations: 100,
+      lastUpdated: now,
+    });
+    _resetRecentNavs();
+
+    await recordNavigationAnomaly("binance.com", now);
+
+    const saved = store[NAV_PROFILE_KEY] as { totalNavigations: number; categoryCounts: Record<string, number> };
+    // Total recomputed from survivors (5) + this nav = 6, NOT 100 + 1 = 101.
+    expect(saved.totalNavigations).toBe(6);
+    expect(saved.categoryCounts.entertainment).toBeUndefined();
+    expect(saved.categoryCounts.crypto).toBe(6);
+  });
 });
 
 describe("getAnomalyScoreSync rarity gate (D-ANOM R2: sync path matches async rarity check)", () => {

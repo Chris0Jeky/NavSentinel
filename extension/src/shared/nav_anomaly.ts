@@ -464,10 +464,21 @@ async function loadProfile(): Promise<NavProfile> {
     // typeof NaN === "number"). A NaN count would bypass the rarity gate (NaN >= threshold
     // is false) AND re-poison totalNavigations via applyDecay/normalizeProfile's unguarded
     // `sum + c`, cascading NaN to every count and the session gate. Dropping it keeps those
-    // recomputes finite. totalNavigations itself is left for the per-consumer guards so the
-    // #297/#372 prime-guard's corruption signal survives. (#373)
+    // recomputes finite. (#373)
+    let droppedCount = false;
     for (const key of Object.keys(p.categoryCounts)) {
-      if (!Number.isFinite(p.categoryCounts[key])) delete p.categoryCounts[key];
+      if (!Number.isFinite(p.categoryCounts[key])) {
+        delete p.categoryCounts[key];
+        droppedCount = true;
+      }
+    }
+    // If a count was dropped and totalNavigations is FINITE, recompute it from the survivors
+    // so the rarity denominator stays consistent (else a fresh profile — no decay due, total
+    // not self-healed — keeps the inflated total and false-positives a now-frequent category).
+    // A NON-finite total is intentionally left untouched: that is the #297/#372 prime-guard's
+    // corruption signal, and the per-consumer guards + recordNavigationAnomaly self-heal it. (#373)
+    if (droppedCount && Number.isFinite(p.totalNavigations)) {
+      p.totalNavigations = Object.values(p.categoryCounts).reduce((sum, n) => sum + n, 0);
     }
   }
   if (typeof p.totalNavigations !== "number") {
