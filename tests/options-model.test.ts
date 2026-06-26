@@ -4,6 +4,7 @@ import {
   avg,
   fmtTime,
   parseIntSafe,
+  computePromptOutcomeStats,
   withReentrancyGuard,
   classifyImportError,
   runClearStats,
@@ -91,8 +92,14 @@ describe("parseIntSafe", () => {
     expect(parseIntSafe("42", 0)).toBe(42);
   });
 
-  it("treats empty string as 0 (Number('') === 0)", () => {
-    expect(parseIntSafe("", 99)).toBe(0);
+  it("returns fallback for an empty string (not 0) (#367)", () => {
+    // Number("") === 0 is finite, so the empty-field case must be guarded
+    // explicitly or it would silently store 0 instead of the default.
+    expect(parseIntSafe("", 99)).toBe(99);
+  });
+
+  it("returns fallback for a whitespace-only string (#367)", () => {
+    expect(parseIntSafe("   ", 99)).toBe(99);
   });
 
   it("truncates fractional values", () => {
@@ -129,6 +136,53 @@ describe("parseIntSafe", () => {
 
   it("handles leading zeros", () => {
     expect(parseIntSafe("007", 0)).toBe(7);
+  });
+});
+
+describe("computePromptOutcomeStats", () => {
+  const mk = (outcome: string, score: number) => ({ outcome: outcome as never, score });
+
+  it("counts the bare 'allow' variant in the allow bucket (#367 repro)", () => {
+    // Issue repro: one 'allow' (80) + one 'allow_once' (60). Pre-fix the bare
+    // 'allow' was dropped → allow-rate 50.0% / avg 60.0. Both must be allows.
+    const stats = computePromptOutcomeStats([mk("allow", 80), mk("allow_once", 60)]);
+    expect(stats.allowRate).toBe("100.0%");
+    expect(stats.avgScoreAllow).toBe("70.0");
+    expect(stats.total).toBe(2);
+  });
+
+  it("partitions every PromptOutcome variant so the four rates sum to 100%", () => {
+    const stats = computePromptOutcomeStats([
+      mk("allow", 10),
+      mk("allow_once", 20),
+      mk("always_allow", 30),
+      mk("block", 40),
+      mk("cancel", 50),
+      mk("trust", 60),
+      mk("dismiss", 70),
+    ]);
+    // allows 3/7, blocks 2/7, trust 1/7, dismiss 1/7 → 42.9 + 28.6 + 14.3 + 14.3 = 100.1
+    // (rounding); the point is no entry is uncounted.
+    expect(stats.allowRate).toBe("42.9%");
+    expect(stats.blockRate).toBe("28.6%");
+    expect(stats.trustRate).toBe("14.3%");
+    expect(stats.dismissRate).toBe("14.3%");
+    expect(stats.avgScoreAllow).toBe("20.0"); // (10+20+30)/3
+    expect(stats.avgScoreBlock).toBe("45.0"); // (40+50)/2
+  });
+
+  it("returns '--' rates and avgs for an empty set", () => {
+    const stats = computePromptOutcomeStats([]);
+    expect(stats.total).toBe(0);
+    expect(stats.allowRate).toBe("--");
+    expect(stats.avgScoreAllow).toBe("--");
+    expect(stats.avgScoreBlock).toBe("--");
+  });
+
+  it("groups 'cancel' with blocks", () => {
+    const stats = computePromptOutcomeStats([mk("block", 90), mk("cancel", 70)]);
+    expect(stats.blockRate).toBe("100.0%");
+    expect(stats.avgScoreBlock).toBe("80.0");
   });
 });
 
