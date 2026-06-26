@@ -1,5 +1,6 @@
 import { initJsBehaviorMonitor } from "./js_behavior_monitor";
 import { OutboundQueue, isMainGuardAlertType } from "./bridge_outbound";
+import { enforceMapSizeCap, shouldEmitRapidPushState } from "./main_guard_helpers";
 
 const NS_SOURCE = "__navsentinel__";
 const BRIDGE_INIT_TYPE = "ns-port-init";
@@ -10,6 +11,11 @@ const MAX_OPENS_PER_GESTURE = 1;
 const MAX_REDIRECTS_PER_GESTURE = 2;
 const ALLOW_ONCE_TTL_MS = 1200;
 const BLOCKED_ACTION_TTL_MS = 5000;
+// Hard cap on live blockedActions entries. The TTL-only prune evicts nothing within a 5s
+// burst, so a tight loop of blocked window.open/location/form.submit calls would otherwise
+// grow the Map unbounded (one closure per call). 256 is far above any legitimate count of
+// pending blocked actions awaiting a user decision; over it, the oldest entry is evicted. (#301)
+const MAX_BLOCKED_ACTIONS = 256;
 const MAX_POPUP_INTENT_VIEWPORT_SHARE = 0.35;
 const PROTOCOL_VERSION = 1;
 // Max time to wait for the isolated world to echo the bridge challenge before
@@ -136,6 +142,8 @@ let lastOpenerNavUrl = "";
 let lastGestureTs = 0;
 /** Timestamps of recent pushState/replaceState calls for rapid-fire detection. */
 let pushStateTimestamps: number[] = [];
+// Rising-edge flag so a sustained rapid-pushState burst emits one alert, not one per call (#302).
+let rapidPushStateEmitted = false;
 
 const blockedActions = new Map<
   string,
@@ -411,6 +419,8 @@ function registerBlockedAction(params: {
     ...(params.target !== undefined ? { target: params.target } : {}),
     ...(params.features !== undefined ? { features: params.features } : {})
   });
+  // Bound the Map against a synchronous flood the TTL prune can't catch (#301).
+  enforceMapSizeCap(blockedActions, MAX_BLOCKED_ACTIONS);
   postBlocked({
     id,
     kind: params.kind,
@@ -1156,7 +1166,12 @@ function checkPushStateSuspicious(url: string | URL | null | undefined, _method:
   const cutoff = now - PUSHSTATE_RAPID_WINDOW_MS;
   pushStateTimestamps = pushStateTimestamps.filter(ts => ts >= cutoff);
 
-  if (pushStateTimestamps.length >= PUSHSTATE_RAPID_THRESHOLD) {
+  // Dedup to the rising edge: emit once per burst, then fall through (so the gesture-
+  // correlated check below still runs during a sustained burst). Emitting per-call would
+  // flood the priority bridge queue and drop a later ns-nav-blocked. (#302)
+  const rapid = shouldEmitRapidPushState(pushStateTimestamps.length, PUSHSTATE_RAPID_THRESHOLD, rapidPushStateEmitted);
+  rapidPushStateEmitted = rapid.emitted;
+  if (rapid.emit) {
     return "rapid_pushstate";
   }
 
