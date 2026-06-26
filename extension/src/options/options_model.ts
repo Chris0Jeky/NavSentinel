@@ -55,21 +55,36 @@ export interface PromptOutcomeStats {
 export function computePromptOutcomeStats(
   outcomes: ReadonlyArray<{ outcome: PromptOutcome; score: number }>,
 ): PromptOutcomeStats {
-  const inBucket = (...os: PromptOutcome[]) =>
-    outcomes.filter((e) => os.includes(e.outcome));
-  const allows = inBucket("allow", "allow_once", "always_allow");
-  const blocks = inBucket("block", "cancel");
-  const trusts = inBucket("trust");
-  const dismisses = inBucket("dismiss");
+  // Single pass over the (bounded, ~500-entry) outcome list — one bucket per entry,
+  // no intermediate filter/map allocations.
+  let allowCount = 0;
+  let blockCount = 0;
+  let trustCount = 0;
+  let dismissCount = 0;
+  const allowScores: number[] = [];
+  const blockScores: number[] = [];
+  for (const { outcome, score } of outcomes) {
+    if (outcome === "allow" || outcome === "allow_once" || outcome === "always_allow") {
+      allowCount++;
+      allowScores.push(score);
+    } else if (outcome === "block" || outcome === "cancel") {
+      blockCount++;
+      blockScores.push(score);
+    } else if (outcome === "trust") {
+      trustCount++;
+    } else if (outcome === "dismiss") {
+      dismissCount++;
+    }
+  }
   const total = outcomes.length;
   return {
     total,
-    allowRate: pct(allows.length, total),
-    blockRate: pct(blocks.length, total),
-    trustRate: pct(trusts.length, total),
-    dismissRate: pct(dismisses.length, total),
-    avgScoreAllow: avg(allows.map((e) => e.score)),
-    avgScoreBlock: avg(blocks.map((e) => e.score)),
+    allowRate: pct(allowCount, total),
+    blockRate: pct(blockCount, total),
+    trustRate: pct(trustCount, total),
+    dismissRate: pct(dismissCount, total),
+    avgScoreAllow: avg(allowScores),
+    avgScoreBlock: avg(blockScores),
   };
 }
 
