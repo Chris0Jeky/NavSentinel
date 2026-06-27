@@ -212,7 +212,7 @@ describe("SessionStateManager", () => {
         "91": "https://ok.test/",
       },
       // redirectChains: corrupt startedAt / hop.ts / hop.transitionType -> NaN sort +
-      // never-pruned (#339); empty-hops is valid (pruneStale uses the startedAt fallback).
+      // never-pruned (#339); empty-hops is rejected (a live chain always has >= 1 hop, #390).
       "ns_sw:redirectChains": {
         "100": { hops: [{ url: "https://a.test/", ts: 10, transitionType: "link" }], startedAt: "bad" },
         "101": { hops: [{ url: "https://a.test/", ts: null, transitionType: "link" }], startedAt: 1000 },
@@ -263,7 +263,7 @@ describe("SessionStateManager", () => {
     expect(mgr.redirectChainData.has(100)).toBe(false); // startedAt "bad"
     expect(mgr.redirectChainData.has(101)).toBe(false); // hop.ts null
     expect(mgr.redirectChainData.get(102)?.startedAt).toBe(1000);
-    expect(mgr.redirectChainData.get(103)?.startedAt).toBe(1000); // empty hops is valid
+    expect(mgr.redirectChainData.has(103)).toBe(false); // empty hops rejected (#390)
     expect(mgr.redirectChainData.has(104)).toBe(false); // hop.transitionType not a string
     expect(mgr.redirectChainData.has(105)).toBe(false); // startedAt Infinity
     expect(warnSpy).toHaveBeenCalled(); // corrupt restore is surfaced, not silent

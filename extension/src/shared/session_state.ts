@@ -449,10 +449,15 @@ export class SessionStateManager {
       // false → never time-pruned) and makes enforceMapLimit's startedAt sort non-deterministic
       // — the same corruption class the per-map validators above close. A NaN hop.ts likewise
       // breaks hasActiveChain / the chain-window comparison.
+      // #390: require hops.length > 0. A live chain is always created with its first hop
+      // (redirect_chain.recordHop), so a 0-hop chain is never legitimate — restoring one
+      // would seat a depth-0 entry that occupies a map slot until time-pruned. Rejecting it
+      // keeps restore consistent with the live "a chain has >= 1 hop" invariant.
       if (
         isRecord(v) &&
         isFiniteNumber(v.startedAt) &&
         Array.isArray(v.hops) &&
+        v.hops.length > 0 &&
         v.hops.every(
           (h: unknown) =>
             isRecord(h) && isString(h.url) && isFiniteNumber(h.ts) && isString(h.transitionType),
