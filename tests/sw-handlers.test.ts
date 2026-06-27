@@ -1838,6 +1838,32 @@ describe("service worker handlers", () => {
       expect(mismatch).toBeUndefined();
     });
 
+    it("DOES fire a mismatch for an unexpected-domain OIDC response_mode=fragment callback (#code=&state= in the fragment) (#223)", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+
+      const consentUrl =
+        "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=x&redirect_uri=https%3A%2F%2Fapp.example.com%2Fcb&response_type=code&scope=openid&response_mode=fragment";
+      mock.emitCommitted({ tabId: 12, frameId: 0, url: consentUrl, transitionType: "link" });
+
+      // A malicious response_mode=fragment callback lands on an unexpected domain with the
+      // code AND state echo in the FRAGMENT (Azure AD / Okta shape). It is corroborated, so
+      // the mismatch must still fire — the #223 state requirement must not regress this.
+      mock.sentMessages.length = 0;
+      mock.emitCommitted({
+        tabId: 12,
+        frameId: 0,
+        url: "https://evil.example/cb#code=stolen&state=s2",
+        transitionType: "link",
+        transitionQualifiers: ["server_redirect"],
+      });
+
+      const mismatch = mock.sentMessages.find(
+        (m) => (m.message as { type: string }).type === "ns-oauth-redirect-mismatch",
+      );
+      expect(mismatch).toBeDefined();
+    });
+
     it("does NOT fire a redirect-mismatch for a legit callback to the EXPECTED domain (#207 R2)", async () => {
       const mock = createChromeMock();
       await loadSw(mock);

@@ -271,9 +271,11 @@ export function hasOAuthResponseParams(url: string): boolean {
  * therefore suppresses the coupon false positive while still catching real attack
  * callbacks.
  *
- * Residual false negative: a spec-noncompliant flow whose callback omits `state` loses
+ * Residual false negative: a flow whose callback omits `state` ENTIRELY loses
  * redirect-mismatch coverage. `state` is RECOMMENDED but technically optional, so this is a
- * measured tradeoff — gate any rollout on `measure:fp`. (#223)
+ * measured tradeoff — gate any rollout on `measure:fp`. (Query-form `?code=&state=`,
+ * implicit `#access_token=`, and OIDC `response_mode=fragment` `#code=&state=` callbacks are
+ * all covered.) (#223)
  */
 export function hasCorroboratedOAuthResponse(url: string): boolean {
   let parsed: URL;
@@ -283,11 +285,15 @@ export function hasCorroboratedOAuthResponse(url: string): boolean {
     return false;
   }
 
-  // Fragment tokens are a strong standalone indicator (implicit/hybrid flows).
+  // Fragment indicators. Tokens (access_token/id_token) are strong standalone indicators
+  // (implicit/hybrid flows). A code/error in the fragment is the OIDC `response_mode=fragment`
+  // authorization-code callback (Azure AD / Okta), where the code AND its `state` echo land in
+  // the fragment instead of the query — corroborated the same way as the query form.
   const fragment = parsed.hash.startsWith("#") ? parsed.hash.slice(1) : parsed.hash;
   if (fragment) {
     const fragParams = new URLSearchParams(fragment);
     if (fragParams.has("access_token") || fragParams.has("id_token")) return true;
+    if ((fragParams.has("code") || fragParams.has("error")) && fragParams.has("state")) return true;
   }
 
   // A query code/error must be corroborated by a `state` echo to count as a callback.
