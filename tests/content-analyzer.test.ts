@@ -260,6 +260,21 @@ describe("content_analyzer - phishing kit detection", () => {
     expect(result.kitName).toBe("Phish-Hidden-Iframe");
   });
 
+  it("resolves a spaced-hidden iframe with an exfil-keyword src to Phish-Hidden-Iframe (ordering pin, #289)", () => {
+    // A hidden iframe (`display: none`, space) whose src also carries an exfil keyword
+    // (`collect`) matches BOTH Phish-Hidden-Iframe (new htmlPattern) and Data-Exfil-Iframe.
+    // detectPhishingKit returns the first fingerprint in order, and Phish-Hidden-Iframe is
+    // earlier — matching the pre-existing zero-space (selector) behavior. Pin it so a future
+    // KIT_FINGERPRINTS reorder cannot silently flip the kitName. phishingKitMatch and the
+    // +40 score are identical either way, so this is a label-stability guard only.
+    const snap = loginSnapshot({
+      htmlSnippet: '<iframe src="https://evil.com/collect" style="display: none"></iframe>',
+    });
+    const result = analyzeSnapshot(snap, "phish.com");
+    expect(result.phishingKitMatch).toBe(true);
+    expect(result.kitName).toBe("Phish-Hidden-Iframe");
+  });
+
   it("detects a hidden exfil form with whitespace in the style via the bounded regex (D-REDOS)", () => {
     // "display: none" (with space) is missed by the [style*="display:none"]
     // selector, so only the htmlPattern can catch it — confirms the bounded
