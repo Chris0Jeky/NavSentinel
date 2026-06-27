@@ -3,7 +3,17 @@ import {
   enforceMapSizeCap,
   pruneTimestampWindow,
   shouldEmitRapidPushState,
+  gestureBranchEmissionBound,
 } from "../extension/src/content/main_guard_helpers";
+
+// Mirror of the production PUSHSTATE_* constants in main_guard.ts and the OutboundQueue
+// capacity in main_guard.ts. Kept here so the #377/F1 invariant test fails if a future
+// constant change would let the gesture-branch flood the priority buffer. (#377/F1)
+const PUSHSTATE_GESTURE_WINDOW_MS = 2000;
+const PUSHSTATE_RAPID_WINDOW_MS = 1000;
+const PUSHSTATE_RAPID_THRESHOLD = 4;
+const MAX_PENDING_OUTBOUND = 32;
+const RESERVED_SCARCE_OUTBOUND_SLOTS = 4;
 
 describe("enforceMapSizeCap (#301)", () => {
   const mapOf = (n: number) => {
@@ -109,5 +119,39 @@ describe("shouldEmitRapidPushState (#302)", () => {
       if (d.emit) emissions2++;
     }
     expect(emissions2).toBeLessThanOrEqual(4);
+  });
+});
+
+describe("gestureBranchEmissionBound (#377/F1)", () => {
+  it("computes the ceil(window / spacing) bound for sample constants", () => {
+    // 2000ms window, 3 events per 1000ms => 333.3ms spacing => ceil(2000/333.3) = 6.
+    expect(gestureBranchEmissionBound(2000, 1000, 4)).toBe(6);
+    // Wider gesture window raises the bound proportionally.
+    expect(gestureBranchEmissionBound(4000, 1000, 4)).toBe(12);
+    // A higher rapid threshold (more below-threshold events) raises it too.
+    expect(gestureBranchEmissionBound(2000, 1000, 7)).toBe(12);
+  });
+
+  it("is 0 when the rapid threshold is 1 (no below-threshold events can fire the branch)", () => {
+    expect(gestureBranchEmissionBound(2000, 1000, 1)).toBe(0);
+  });
+
+  it("returns +Infinity for a non-positive rapid window (guards a divide-by-zero)", () => {
+    expect(gestureBranchEmissionBound(2000, 0, 4)).toBe(Number.POSITIVE_INFINITY);
+    expect(gestureBranchEmissionBound(2000, Number.NaN, 4)).toBe(Number.POSITIVE_INFINITY);
+  });
+
+  it("the production gesture-branch bound stays well under the scarce-signal capacity", () => {
+    const bound = gestureBranchEmissionBound(
+      PUSHSTATE_GESTURE_WINDOW_MS,
+      PUSHSTATE_RAPID_WINDOW_MS,
+      PUSHSTATE_RAPID_THRESHOLD,
+    );
+    expect(bound).toBe(6);
+    // The gesture branch emits ns-pushstate-suspicious, a SCARCE (non-floodable) signal.
+    // It must never on its own approach the reservable priority capacity, or it could
+    // crowd out other scarce signals. If this fails, a PUSHSTATE_* constant changed
+    // unsafely — re-tune it or the buffer reservation. (#377/F1)
+    expect(bound).toBeLessThan(MAX_PENDING_OUTBOUND - RESERVED_SCARCE_OUTBOUND_SLOTS);
   });
 });

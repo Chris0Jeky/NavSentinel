@@ -80,3 +80,26 @@ export function shouldEmitRapidPushState(
   }
   return { emit: false, lastEmitAt };
 }
+
+/**
+ * Upper bound on `domain_like_path_after_gesture` (gesture-branch) pushstate alerts that
+ * can be emitted within one gesture window (#377/F1). That branch only fires for pushState
+ * events BELOW the rapid threshold (at or above it, the rapid branch + its cooldown handle
+ * the flood), so it is inherently rate-limited: at most `rapidThreshold - 1` events per
+ * `rapidWindowMs`, sustained across `gestureWindowMs`. The result must stay well under the
+ * priority OutboundQueue's scarce-signal capacity, or a future constant change could let
+ * this scarce signal itself flood the buffer. Enforced by a unit test on the production
+ * constants; keep that test in sync with the PUSHSTATE_* constants in main_guard.ts.
+ */
+export function gestureBranchEmissionBound(
+  gestureWindowMs: number,
+  rapidWindowMs: number,
+  rapidThreshold: number,
+): number {
+  // Events strictly below the rapid threshold per rapid window (at/above it the rapid
+  // branch + cooldown take over). A threshold of 1 leaves zero below-threshold events,
+  // so the gesture branch can never fire.
+  const belowThresholdPerWindow = Math.max(0, rapidThreshold - 1);
+  if (!Number.isFinite(rapidWindowMs) || rapidWindowMs <= 0) return Number.POSITIVE_INFINITY;
+  return Math.ceil((gestureWindowMs * belowThresholdPerWindow) / rapidWindowMs);
+}

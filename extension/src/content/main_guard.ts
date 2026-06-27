@@ -1,5 +1,5 @@
 import { initJsBehaviorMonitor } from "./js_behavior_monitor";
-import { OutboundQueue, isMainGuardAlertType } from "./bridge_outbound";
+import { OutboundQueue, isMainGuardAlertType, isFloodableAlertType } from "./bridge_outbound";
 import { enforceMapSizeCap, pruneTimestampWindow, shouldEmitRapidPushState } from "./main_guard_helpers";
 
 const NS_SOURCE = "__navsentinel__";
@@ -30,6 +30,11 @@ const DBLCLICK_WINDOW_MS = 800;
 const OPENER_NAV_STALE_MS = 3000;
 
 // --- PushState gating constants ---
+// NOTE (#377/F1): the gesture-branch emission bound derived from these three constants
+// (see gestureBranchEmissionBound in main_guard_helpers.ts) must stay well under the
+// priority OutboundQueue's scarce-signal capacity (MAX_PENDING_OUTBOUND -
+// RESERVED_SCARCE_OUTBOUND_SLOTS). If you change any of them, update the F1 invariant test
+// in tests/main-guard-helpers.test.ts.
 /** How long after a gesture a pushState/replaceState call is considered gesture-correlated. */
 const PUSHSTATE_GESTURE_WINDOW_MS = 2000;
 /** Minimum number of rapid state changes to flag without domain-like path analysis. */
@@ -47,16 +52,21 @@ let bridgeVerified = false;
 let bridgeChallenge: string | null = null;
 let bridgeHandshakeTimer = 0;
 const MAX_PENDING_OUTBOUND = 32;
+// Slots the floodable per-navigation alerts (ns-nav-blocked/ns-nav-allowed) may never
+// occupy, so a synchronous nav flood cannot starve the scarce once-per-event signals
+// (ns-dblclick-*/ns-js-*/ns-pushstate-suspicious) out of the pre-bridge buffer. (#377/F2)
+const RESERVED_SCARCE_OUTBOUND_SLOTS = 4;
 // Buffers messages produced before the bridge is verified. On overflow it keeps
 // security-relevant alerts (never evicted by routine traffic) and the earliest
 // of equal-priority messages — see bridge_outbound.ts for the rationale.
-const pendingOutbound = new OutboundQueue(MAX_PENDING_OUTBOUND);
+const pendingOutbound = new OutboundQueue(MAX_PENDING_OUTBOUND, RESERVED_SCARCE_OUTBOUND_SLOTS);
 
 function postToIsolated(type: string, payload?: Record<string, unknown>): void {
   if (!bridgePort || !bridgeSession || !bridgeVerified) {
     pendingOutbound.enqueue(
       { type, ...(payload !== undefined ? { payload } : {}) },
-      isMainGuardAlertType(type)
+      isMainGuardAlertType(type),
+      isFloodableAlertType(type)
     );
     return;
   }

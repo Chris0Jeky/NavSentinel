@@ -23,17 +23,25 @@ export interface OutboundMessage {
 interface QueuedMessage {
   message: OutboundMessage;
   priority: boolean;
+  floodable: boolean;
 }
 
 export class OutboundQueue {
   private readonly cap: number;
+  private readonly reservedForScarce: number;
   private readonly items: QueuedMessage[] = [];
+  private floodableCount = 0;
   private dropped = 0;
 
-  constructor(cap: number) {
+  constructor(cap: number, reservedForScarce = 0) {
     // Guard against a non-finite cap (e.g. NaN), which would otherwise make the
     // length comparison always false and leave the queue effectively unbounded.
     this.cap = Number.isFinite(cap) ? Math.max(0, Math.floor(cap)) : 0;
+    // Slots that floodable alerts may never occupy, so a per-navigation flood cannot
+    // crowd out the scarce once-per-event signals. Clamped to [0, cap].
+    this.reservedForScarce = Number.isFinite(reservedForScarce)
+      ? Math.max(0, Math.min(Math.floor(reservedForScarce), this.cap))
+      : 0;
   }
 
   /**
@@ -41,10 +49,25 @@ export class OutboundQueue {
    * evicted by routine traffic. On overflow the oldest routine message is
    * dropped to make room; if every buffered message is priority, the earliest
    * are kept and this incoming one is dropped.
+   *
+   * `floodable` marks high-frequency per-navigation priority telemetry
+   * (`ns-nav-blocked`/`ns-nav-allowed`). A synchronous flood of these before the
+   * bridge handshake would otherwise fill all `cap` slots and starve the scarce
+   * once-per-event correlation signals (`ns-dblclick-*`, `ns-js-*`,
+   * `ns-pushstate-suspicious`), which are then dropped — losing irreplaceable
+   * evidence. Floodable priority alerts are therefore capped at `cap -
+   * reservedForScarce`; beyond that the surplus is dropped (the navigation is still
+   * blocked/allowed and recorded; only the redundant bridge telemetry is shed).
+   * (#377/F2)
    */
-  enqueue(message: OutboundMessage, priority = false): void {
+  enqueue(message: OutboundMessage, priority = false, floodable = false): void {
+    if (priority && floodable && this.floodableCount >= this.cap - this.reservedForScarce) {
+      this.dropped++;
+      return;
+    }
     if (this.items.length < this.cap) {
-      this.items.push({ message, priority });
+      this.items.push({ message, priority, floodable });
+      if (floodable) this.floodableCount++;
       return;
     }
     if (!priority) {
@@ -61,7 +84,8 @@ export class OutboundQueue {
     }
     this.items.splice(routineIdx, 1);
     this.dropped++;
-    this.items.push({ message, priority });
+    this.items.push({ message, priority, floodable });
+    if (floodable) this.floodableCount++;
   }
 
   /**
@@ -72,6 +96,7 @@ export class OutboundQueue {
     const items = this.items.splice(0, this.items.length).map((q) => q.message);
     const dropped = this.dropped;
     this.dropped = 0;
+    this.floodableCount = 0;
     return { items, dropped };
   }
 
@@ -114,4 +139,17 @@ export function isMainGuardAlertType(type: string): boolean {
     type.startsWith("ns-dblclick-") ||
     type.startsWith("ns-allow")
   );
+}
+
+// Priority alerts emitted once per navigation decision. A page can drive these in a
+// synchronous loop (many blocked/allowed window.open / location.assign / form.submit
+// calls), so under the pre-bridge buffer they are the flood source. They are tagged
+// `floodable` so the OutboundQueue caps them and reserves room for the scarce
+// once-per-event correlation signals (dblclick / js / pushstate). (#377/F2)
+const FLOODABLE_ALERT_TYPES = new Set<string>(["ns-nav-blocked", "ns-nav-allowed"]);
+
+/** Whether an alert is high-frequency per-navigation telemetry subject to the
+ *  OutboundQueue floodable cap. (#377/F2) */
+export function isFloodableAlertType(type: string): boolean {
+  return FLOODABLE_ALERT_TYPES.has(type);
 }
