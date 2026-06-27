@@ -21,7 +21,8 @@ function createEvent<T extends (...args: never[]) => void>() {
   };
 }
 
-function createChromeMock() {
+function createChromeMock(options: { deferSends?: boolean } = {}) {
+  const { deferSends = false } = options;
   const runtimeOnMessage = createEvent<
     (message: RuntimeMessage, sender: RuntimeSender, sendResponse: SendResponse) => void
   >();
@@ -55,6 +56,11 @@ function createChromeMock() {
     message: unknown;
     options?: { frameId?: number };
   }> = [];
+  // When deferSends is on, sendMessage records the callback here instead of invoking
+  // it synchronously, so a send can be kept "in flight" while other events fire — the
+  // timing window the #360 triple-send regression depends on.
+  const pendingSends: Array<{ tabId: number; message: unknown; done: (() => void) | undefined }> =
+    [];
   const localStore: Record<string, unknown> = {};
 
   return {
@@ -137,7 +143,11 @@ function createChromeMock() {
               message,
               ...(options ? { options } : {})
             });
-            done?.();
+            if (deferSends) {
+              pendingSends.push({ tabId, message, done });
+            } else {
+              done?.();
+            }
           }
         )
       }
@@ -174,6 +184,25 @@ function createChromeMock() {
       });
       return response;
     },
+    // Resolve a deferred sendMessage callback (deferSends mode). Pass { fail: true } to
+    // simulate chrome.runtime.lastError set during the callback (a failed delivery).
+    flushSend(index: number, opts: { fail?: boolean } = {}) {
+      const send = pendingSends[index];
+      if (!send) throw new Error(`no deferred send at index ${index}`);
+      // Consume the callback so a second flushSend(index) is a safe no-op rather than
+      // silently re-invoking the production send callback a second time.
+      const done = send.done;
+      if (!done) return;
+      send.done = undefined;
+      const runtime = this.chrome.runtime as { lastError?: { message: string } };
+      if (opts.fail) runtime.lastError = { message: "tab busy" };
+      try {
+        done();
+      } finally {
+        if (opts.fail) delete runtime.lastError;
+      }
+    },
+    pendingSends,
     sentMessages,
     localStore
   };
@@ -2076,5 +2105,99 @@ describe("service worker rollback gating", () => {
       expect(response!.status).toBe("none");
       expect(response!.url).toBe("");
     });
+  });
+});
+
+describe("service worker rollback in-flight guard (#360)", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-17T12:00:00.000Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  function rollbackSendsFor(mock: ReturnType<typeof createChromeMock>, url: string): number {
+    return mock.sentMessages.filter(
+      (m) => (m.message as { type?: string; url?: string }).type === "ns-rollback" &&
+        (m.message as { url?: string }).url === url
+    ).length;
+  }
+
+  // A completed send for an OLDER rollback entry must not clear the in-flight marker of a
+  // NEWER entry that replaced it in the same tab. Pre-fix the marker was keyed on tabId, so
+  // the older send's callback freed the tab and a later onUpdated re-dispatched the newer
+  // entry a THIRD time (duplicate modal). Tab+URL string keying scopes each marker to its
+  // own destination URL, so A's callback cannot clear B's key even though they share the
+  // same tab (A and B carry different URLs). (#360)
+  it("does not re-dispatch a newer rollback entry after an older in-flight send for the same tab resolves", async () => {
+    const mock = createChromeMock({ deferSends: true });
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+
+    const TAB = 40;
+    // A and B are on DIFFERENT registrable domains from their respective predecessors
+    // (origin -> A is cross-site; A -> B is cross-site) so both commits are treated as
+    // suspicious cross-site redirects and each queues a rollback. (Same-registrable
+    // redirects take the benign early-return at sw.ts and would not queue.)
+    const URL_A = "https://evil-a.test/a";
+    const URL_B = "https://evil-b.test/b";
+
+    // Benign origin commit so later redirects carry a prevUrl.
+    mock.emitCommitted({
+      tabId: TAB,
+      frameId: 0,
+      url: "https://example.test/origin",
+      transitionType: "typed",
+      transitionQualifiers: []
+    });
+
+    // First suspicious redirect (entry A). beforeNavigate clears readyTabs; ns-ready then
+    // re-marks the tab ready before the commit lands, so onCommitted dispatches A directly
+    // and that send is left in flight (deferred).
+    vi.setSystemTime(new Date("2026-03-17T12:00:11.000Z"));
+    mock.emitBeforeNavigate({ tabId: TAB, frameId: 0, url: URL_A });
+    mock.dispatchRuntimeMessage({ type: "ns-ready" }, { tab: { id: TAB } });
+    mock.emitCommitted({
+      tabId: TAB,
+      frameId: 0,
+      url: URL_A,
+      transitionType: "link",
+      transitionQualifiers: ["client_redirect"]
+    });
+    expect(rollbackSendsFor(mock, URL_A)).toBe(1);
+    expect(mock.pendingSends.length).toBe(1); // A still in flight
+
+    // Second suspicious redirect (entry B) after the 6s suppress window, WITHOUT an
+    // intervening beforeNavigate (the rare window): it overwrites the slot with B while the
+    // tab is still ready, so onCommitted dispatches B too. Now A and B are both in flight.
+    vi.setSystemTime(new Date("2026-03-17T12:00:18.000Z"));
+    mock.emitCommitted({
+      tabId: TAB,
+      frameId: 0,
+      url: URL_B,
+      transitionType: "link",
+      transitionQualifiers: ["client_redirect"]
+    });
+    expect(rollbackSendsFor(mock, URL_B)).toBe(1);
+    expect(mock.pendingSends.length).toBe(2); // A and B both in flight
+
+    // The older send (A) resolves. Its callback must only clear A's marker, leaving B's.
+    mock.flushSend(0);
+
+    // A later tab-completion event must NOT re-dispatch B (it is still in flight).
+    mock.emitTabUpdated(TAB, { status: "complete" }, { url: URL_B });
+
+    // Pre-fix this produced a third send (B twice). With entry-identity guarding, B is sent
+    // exactly once.
+    expect(rollbackSendsFor(mock, URL_B)).toBe(1);
+
+    // Resolving B then clears its entry; no further sends on subsequent completion events.
+    mock.flushSend(1);
+    mock.emitTabUpdated(TAB, { status: "complete" }, { url: URL_B });
+    expect(rollbackSendsFor(mock, URL_B)).toBe(1);
   });
 });

@@ -2604,8 +2604,9 @@ describe("service worker handlers", () => {
 
       // Pre-fix (no in-flight guard): the deferred first callback hasn't resolved the
       // entry, so the second onUpdated re-reads it and re-sends -> [10, 10]. Post-fix:
-      // trySendRollback adds tabId to rollbackSendInFlight synchronously, so the second
-      // onUpdated sees the set populated and returns early -> [10].
+      // trySendRollback adds the tab+URL string key for the pending entry to
+      // rollbackSendInFlight synchronously (#360), so the second onUpdated sees that same
+      // key in the set and returns early -> [10].
       expect(rollbackSends).toEqual([10]);
     });
 
@@ -2624,6 +2625,40 @@ describe("service worker handlers", () => {
       mock.emitTabUpdated(13, { status: "complete" }, { url: "https://current.com/" });
 
       // Pre-fix: two forward-offer sends. Post-fix: forwardSendInFlight blocks the second.
+      expect(forwardSends).toEqual([13]);
+    });
+
+    it("does not double-send a forward offer when ns-store-forward rewrites the same-URL offer mid-send (#360)", async () => {
+      const mock = createChromeMock();
+      const { forwardSends } = deferSends(mock);
+      mock.chrome.storage.session._store["ns_sw:pendingForward"] = {
+        "13": { url: "https://evil.com/", ts: Date.now() },
+      };
+      mock.chrome.storage.session._store["ns_sw:readyTabs"] = [13];
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+
+      // First onUpdated dispatches the forward offer for evil.com (send deferred, in flight).
+      mock.emitTabUpdated(13, { status: "complete" }, { url: "https://current.com/" });
+      expect(forwardSends).toEqual([13]);
+
+      // ns-store-forward rewrites pendingForward with a FRESH object for the SAME url
+      // (to add a returnUrl) while the first send is still in flight.
+      (mock.chrome.runtime.onMessage as unknown as {
+        emit: (m: unknown, s: unknown, r: (v?: unknown) => void) => void;
+      }).emit(
+        { type: "ns-store-forward", url: "https://evil.com/", returnUrl: "https://origin.com/" },
+        { tab: { id: 13 } },
+        () => {}
+      );
+      await vi.runAllTimersAsync();
+
+      // A later onUpdated must NOT fire a second offer WHILE A is in flight: the tab+URL
+      // in-flight key still matches the rewritten same-URL offer. With the earlier
+      // object-identity keying the fresh rewrite object looked not-in-flight and produced a
+      // concurrent duplicate -> [13, 13]. (The separate *post-delivery* serialized re-send
+      // of the rewritten offer is a pre-existing edge tracked in #382, out of scope here.)
+      mock.emitTabUpdated(13, { status: "complete" }, { url: "https://current.com/" });
       expect(forwardSends).toEqual([13]);
     });
 
