@@ -157,6 +157,37 @@ describe("scoreCSPStrings", () => {
       expect(result.score).toBe(0);
     });
 
+    it("does NOT flag unsafe-inline as permissive when a nonce is also present (CSP L3 ignores it)", () => {
+      // Per CSP Level 3 the user agent ignores 'unsafe-inline' when a nonce/hash is
+      // present, so 'nonce-… unsafe-inline' is enforced as nonce-only — flagging it as
+      // permissive was a false positive on legitimate strict-CSP sites.
+      const result = scoreCSPStrings(["script-src 'nonce-abc123' 'unsafe-inline'"]);
+      expect(result.isStrict).toBe(true);
+      expect(result.reasons).toContain("csp_strict_nonces");
+      expect(result.reasons).not.toContain("csp_permissive");
+      expect(result.score).toBe(0);
+    });
+
+    it("does NOT flag unsafe-inline as permissive when a hash is also present", () => {
+      const result = scoreCSPStrings(["script-src 'sha256-abcdef123456' 'unsafe-inline'"]);
+      expect(result.reasons).not.toContain("csp_permissive");
+      expect(result.score).toBe(0);
+    });
+
+    it("STILL flags unsafe-eval as permissive even with a nonce (a nonce does not neutralize eval)", () => {
+      const result = scoreCSPStrings(["script-src 'nonce-abc123' 'unsafe-eval'"]);
+      expect(result.isStrict).toBe(true);
+      expect(result.reasons).toContain("csp_strict_nonces");
+      expect(result.reasons).toContain("csp_permissive");
+      expect(result.score).toBe(3);
+    });
+
+    it("flags unsafe-eval (not unsafe-inline) when a nonce coexists with both", () => {
+      const result = scoreCSPStrings(["script-src 'nonce-abc' 'unsafe-inline' 'unsafe-eval'"]);
+      expect(result.reasons).toContain("csp_permissive"); // from unsafe-eval only
+      expect(result.score).toBe(3);
+    });
+
     it("strict CSP yields neutral score", () => {
       const result = scoreCSPStrings([
         "default-src 'self'; script-src 'nonce-xyz'",
