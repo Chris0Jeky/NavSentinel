@@ -382,29 +382,38 @@ function clearPendingTabState(
   // Persist is deferred to the caller's batch persist.
 }
 
-// Rollback/forward entries (by object identity) whose message send is currently in
+// Tab+URL keys (`tabId\nurl`) whose rollback/forward message send is currently in
 // flight. onUpdated can fire twice (loading->complete, or url+status) before the async
-// sendMessage callback resolves; without this guard the second fire re-reads the SAME
+// sendMessage callback resolves; without this guard the second fire re-reads the same
 // pending entry and re-sends (double modal). Unlike a pre-delete, the pending entry
 // stays in the (persisted) map until the callback resolves it, so a worker death
 // mid-send cannot drop it. Cleared in the send callback. Module-level. (#323 / disc#3)
 //
-// Keyed on the entry *reference* rather than the tabId (#360): when an older entry A
-// is in flight and a newer commit overwrites the slot with B that also dispatches,
-// both are briefly in flight for the same tab. A per-tabId Set let A's callback
-// delete(tabId) clear the marker while B was still in flight, after which a later
-// onUpdated saw the tab "free" and re-dispatched B a *third* time (duplicate modal).
-// An entry-identity Set scopes each marker to its own send, so a completed send only
-// clears its own entry and never frees a newer one. Entries are unique per-commit
-// objects, so a single global Set keyed by reference is unambiguous across tabs.
-const rollbackSendInFlight = new Set<object>();
-const forwardSendInFlight = new Set<object>();
+// Keyed on tabId+URL rather than the bare tabId (#360). The bare-tabId Set had a
+// triple-send bug: when an older entry A was in flight and a newer commit overwrote the
+// slot with B that also dispatched, A's callback delete(tabId) cleared the marker while
+// B was still in flight, so a later onUpdated re-dispatched B a *third* time. A+B carry
+// *different* URLs, so tab+URL keys scope each marker to its own destination — A's
+// callback clears only A's key and never frees B. The composite key (vs a per-entry
+// object reference) is deliberate so a same-URL rewrite stays guarded: ns-store-forward
+// replaces pendingForwardByTab with a *fresh* object for the same tab+URL (to add a
+// returnUrl) while a send is in flight; an object-identity key would treat the rewrite
+// as not-in-flight and fire a duplicate forward offer — the tab+URL key still matches it.
+const rollbackSendInFlight = new Set<string>();
+const forwardSendInFlight = new Set<string>();
+
+/** In-flight key for a tab's rollback/forward send. `\n` cannot occur in a URL, so it
+ *  unambiguously separates the numeric tabId from the destination URL. (#360) */
+function sendInFlightKey(tabId: number, url: string): string {
+  return `${tabId}\n${url}`;
+}
 
 function trySendRollback(
   tabId: number,
   pending: { url: string; prevUrl?: string; qualifiers: string[] }
 ): void {
-  rollbackSendInFlight.add(pending); // callers skip a re-send of THIS entry while set (#323/disc#3, #360)
+  const inFlightKey = sendInFlightKey(tabId, pending.url);
+  rollbackSendInFlight.add(inFlightKey); // callers skip a re-send of this tab+URL while set (#323/disc#3, #360)
   chrome.tabs.sendMessage(
     tabId,
     {
@@ -414,7 +423,7 @@ function trySendRollback(
       qualifiers: pending.qualifiers
     },
     () => {
-      rollbackSendInFlight.delete(pending);
+      rollbackSendInFlight.delete(inFlightKey);
       if (chrome.runtime.lastError) {
         // Send failed (tab busy / port gone). Leave pendingRollbackByTab exactly as it
         // is: every caller stores the entry in the map *before* dispatching (onCommitted
@@ -440,9 +449,10 @@ function trySendForwardOffer(
   tabId: number,
   forward: { url: string; ts: number; returnUrl?: string }
 ): void {
-  forwardSendInFlight.add(forward); // callers skip a re-send of THIS offer while set (#323/disc#3, #360)
+  const inFlightKey = sendInFlightKey(tabId, forward.url);
+  forwardSendInFlight.add(inFlightKey); // callers skip a re-send of this tab+URL while set (#323/disc#3, #360)
   chrome.tabs.sendMessage(tabId, { type: "ns-forward-offer", url: forward.url }, () => {
-    forwardSendInFlight.delete(forward);
+    forwardSendInFlight.delete(inFlightKey);
     if (chrome.runtime.lastError) {
       // Same rule as trySendRollback: the entry is already in pendingForwardByTab (its
       // only caller sends the map's own entry), so leave it queued for retry and never
@@ -684,11 +694,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         readyTabs.add(tabId);
         swState.persistReadyTabs();
         const pending = pendingRollbackByTab.get(tabId);
-        // Skip if THIS entry's send is already in flight (e.g. an onUpdated-triggered
-        // send, or a rapid duplicate ns-ready) so we don't double-send the same
-        // rollback. A newer entry that replaced this one is a different reference and
-        // would not be blocked here. (#323/disc#3, #360)
-        if (pending && !rollbackSendInFlight.has(pending)) {
+        // Skip if a send for this tab+URL is already in flight (e.g. an onUpdated-
+        // triggered send, or a rapid duplicate ns-ready) so we don't double-send the
+        // same rollback. A newer entry for a *different* URL is a different key and would
+        // not be blocked here. (#323/disc#3, #360)
+        if (pending && !rollbackSendInFlight.has(sendInFlightKey(tabId, pending.url))) {
           trySendRollback(tabId, pending);
         }
       }
@@ -1077,13 +1087,14 @@ function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitio
   };
   pendingRollbackByTab.set(details.tabId, rollbackEntry);
   swState.persistAll();
-  // Mirror the ns-ready / onUpdated in-flight guard so this site cannot double-send.
-  // rollbackEntry is freshly built here, so it is never already in flight — the guard
-  // is a no-op for the normal path but keeps all three dispatch sites uniform and
-  // makes a future refactor that reuses an entry safe. Because the guard is keyed on
-  // the entry reference (not the tabId), guarding here never strands a NEW entry while
-  // an OLDER one is in flight — the worry that blocked a naive per-tabId guard. (#360)
-  if (readyTabs.has(details.tabId) && !rollbackSendInFlight.has(rollbackEntry)) {
+  // Mirror the ns-ready / onUpdated in-flight guard so this site cannot double-send the
+  // same tab+URL. Because the key is tab+URL (not the bare tabId), guarding here never
+  // strands a NEW destination while an OLDER one is in flight — the worry that blocked a
+  // naive per-tabId guard: a fresh commit to a different URL has a different key. (#360)
+  if (
+    readyTabs.has(details.tabId) &&
+    !rollbackSendInFlight.has(sendInFlightKey(details.tabId, rollbackEntry.url))
+  ) {
     trySendRollback(details.tabId, rollbackEntry);
   }
 }
@@ -1228,7 +1239,7 @@ function onUpdatedHandler(
   if (
     pendingRollback &&
     (changeInfo.status === "complete" || changeInfo.url) &&
-    !rollbackSendInFlight.has(pendingRollback)
+    !rollbackSendInFlight.has(sendInFlightKey(tabId, pendingRollback.url))
   ) {
     trySendRollback(tabId, pendingRollback);
   }
@@ -1240,6 +1251,9 @@ function onUpdatedHandler(
   if (!currentUrl) return;
   if (currentUrl === forward.url) return;
   if (!readyTabs.has(tabId)) return;
-  if (forwardSendInFlight.has(forward)) return; // mirror of the rollback in-flight guard (#323/disc#3, #360)
+  // tab+URL key (#360): a same-URL rewrite via ns-store-forward (which swaps in a fresh
+  // offer object to add a returnUrl while a send is in flight) stays guarded here, so the
+  // rewrite cannot fire a duplicate forward offer.
+  if (forwardSendInFlight.has(sendInFlightKey(tabId, forward.url))) return;
   trySendForwardOffer(tabId, forward);
 }

@@ -2628,6 +2628,38 @@ describe("service worker handlers", () => {
       expect(forwardSends).toEqual([13]);
     });
 
+    it("does not double-send a forward offer when ns-store-forward rewrites the same-URL offer mid-send (#360)", async () => {
+      const mock = createChromeMock();
+      const { forwardSends } = deferSends(mock);
+      mock.chrome.storage.session._store["ns_sw:pendingForward"] = {
+        "13": { url: "https://evil.com/", ts: Date.now() },
+      };
+      mock.chrome.storage.session._store["ns_sw:readyTabs"] = [13];
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+
+      // First onUpdated dispatches the forward offer for evil.com (send deferred, in flight).
+      mock.emitTabUpdated(13, { status: "complete" }, { url: "https://current.com/" });
+      expect(forwardSends).toEqual([13]);
+
+      // ns-store-forward rewrites pendingForward with a FRESH object for the SAME url
+      // (to add a returnUrl) while the first send is still in flight.
+      (mock.chrome.runtime.onMessage as unknown as {
+        emit: (m: unknown, s: unknown, r: (v?: unknown) => void) => void;
+      }).emit(
+        { type: "ns-store-forward", url: "https://evil.com/", returnUrl: "https://origin.com/" },
+        { tab: { id: 13 } },
+        () => {}
+      );
+      await vi.runAllTimersAsync();
+
+      // A later onUpdated must NOT fire a second offer: the tab+URL in-flight key still
+      // matches the rewritten same-URL offer. With the earlier object-identity keying the
+      // fresh rewrite object looked not-in-flight and produced a duplicate -> [13, 13].
+      mock.emitTabUpdated(13, { status: "complete" }, { url: "https://current.com/" });
+      expect(forwardSends).toEqual([13]);
+    });
+
     it("does not double-send when onCommitted send is in flight and onUpdated fires (disc#3 cross-path)", async () => {
       const mock = createChromeMock();
       const { rollbackSends } = deferSends(mock);
