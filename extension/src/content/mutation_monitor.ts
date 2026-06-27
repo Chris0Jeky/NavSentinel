@@ -17,6 +17,8 @@
  * Runs in the ISOLATED content script world.
  */
 
+import { matchProviderHostSrc, type ProviderHostEntry } from "../shared/iframe_provider";
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -57,7 +59,12 @@ const TINY_IFRAME_PX = 10;
  * embedding a provider name anywhere in the URL — e.g. evil.example/?u=hcaptcha.com
  * or attacker-cdn/recaptcha-badge.png (the same hostname-spoof class as #206). (#211)
  */
-const LEGIT_IFRAME_HOSTS: Array<{ host: string; pathPrefix?: string }> = [
+// Broader legit-iframe set (captcha providers + analytics/ads/social/embed hosts) — wider
+// than clickfix's CAPTCHA_PROVIDERS by purpose. The two tables stay separate but share the
+// matcher (matchProviderHostSrc), so the host/path validation logic cannot drift. Note the
+// recaptcha.net/gstatic.com path-gating intentionally stays per-consumer; reconciling it is
+// FP-sensitive (tightening here could flag a legit gstatic iframe) and out of scope. (#226)
+const LEGIT_IFRAME_HOSTS: ProviderHostEntry[] = [
   { host: "google.com", pathPrefix: "/recaptcha" },
   { host: "recaptcha.net" },
   { host: "gstatic.com" },
@@ -149,28 +156,10 @@ function isCrossDomain(href: string): boolean {
 }
 
 function isLegitIframeSrc(src: string): boolean {
-  let url: URL;
-  try {
-    // Resolve relative srcs against the page; opaque/script schemes are rejected by
-    // the protocol check below (and handled separately by suspiciousIframeScheme).
-    url = new URL(src, typeof location !== "undefined" ? location.href : undefined);
-  } catch {
-    return false;
-  }
-  if (url.protocol !== "https:" && url.protocol !== "http:") return false;
-  // Strip a single trailing dot ("hcaptcha.com." is the same host).
-  const hostname = url.hostname.toLowerCase().replace(/\.$/, "");
-  const pathname = url.pathname.toLowerCase();
-  for (const entry of LEGIT_IFRAME_HOSTS) {
-    const hostMatch = hostname === entry.host || hostname.endsWith("." + entry.host);
-    if (!hostMatch) continue;
-    // Path prefix is segment-anchored (=== prefix or prefix + "/"), mirroring the
-    // host suffix-boundary so "/recaptcha-evil/x" cannot satisfy "/recaptcha". (#211 R1)
-    const pp = entry.pathPrefix;
-    if (pp && pathname !== pp && !pathname.startsWith(pp + "/")) continue;
-    return true;
-  }
-  return false;
+  // Host + segment-anchored path validation is shared with clickfix_detector via
+  // matchProviderHostSrc so the two cannot drift; opaque/script schemes are rejected by it
+  // (and handled separately by suspiciousIframeScheme). (#226, #211 R1)
+  return matchProviderHostSrc(src, LEGIT_IFRAME_HOSTS);
 }
 
 // Opaque / script-bearing iframe URL schemes. An iframe injected after load with
