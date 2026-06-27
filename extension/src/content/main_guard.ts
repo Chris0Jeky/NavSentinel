@@ -1,6 +1,6 @@
 import { initJsBehaviorMonitor } from "./js_behavior_monitor";
 import { OutboundQueue, isMainGuardAlertType } from "./bridge_outbound";
-import { enforceMapSizeCap, shouldEmitRapidPushState } from "./main_guard_helpers";
+import { enforceMapSizeCap, pruneTimestampWindow, shouldEmitRapidPushState } from "./main_guard_helpers";
 
 const NS_SOURCE = "__navsentinel__";
 const BRIDGE_INIT_TYPE = "ns-port-init";
@@ -36,6 +36,10 @@ const PUSHSTATE_GESTURE_WINDOW_MS = 2000;
 const PUSHSTATE_RAPID_THRESHOLD = 4;
 /** Window for counting rapid pushState calls. */
 const PUSHSTATE_RAPID_WINDOW_MS = 1000;
+// Hard cap on the pushState timestamp buffer. In a synchronous flood every timestamp equals
+// `now` so the window filter prunes nothing; we only need to know the count reached the rapid
+// threshold, so cap the buffer just above it to bound memory + the per-call O(n) filter. (#302)
+const PUSHSTATE_RAPID_CAP = PUSHSTATE_RAPID_THRESHOLD * 2;
 
 let bridgePort: MessagePort | null = null;
 let bridgeSession: string | null = null;
@@ -142,8 +146,9 @@ let lastOpenerNavUrl = "";
 let lastGestureTs = 0;
 /** Timestamps of recent pushState/replaceState calls for rapid-fire detection. */
 let pushStateTimestamps: number[] = [];
-// Rising-edge flag so a sustained rapid-pushState burst emits one alert, not one per call (#302).
-let rapidPushStateEmitted = false;
+// Cooldown anchor so a sustained rapid-pushState burst emits at most one alert per window,
+// not one per call (which would flood the priority bridge queue and drop ns-nav-blocked) (#302).
+let lastRapidPushStateEmitAt = 0;
 
 const blockedActions = new Map<
   string,
@@ -1163,19 +1168,27 @@ function checkPushStateSuspicious(url: string | URL | null | undefined, _method:
   // --- Rapid-fire detection ---
   // Track timestamps and prune old entries
   pushStateTimestamps.push(now);
-  const cutoff = now - PUSHSTATE_RAPID_WINDOW_MS;
-  pushStateTimestamps = pushStateTimestamps.filter(ts => ts >= cutoff);
+  // Prune to the window AND cap the buffer so a synchronous flood (all timestamps === now,
+  // nothing pruned) can't grow it unbounded. (#302)
+  pushStateTimestamps = pruneTimestampWindow(
+    pushStateTimestamps,
+    now,
+    PUSHSTATE_RAPID_WINDOW_MS,
+    PUSHSTATE_RAPID_CAP,
+  );
 
-  // Dedup to the rising edge: emit once per burst, then fall through (so the gesture-
-  // correlated check below still runs during a sustained burst). Emitting per-call would
-  // flood the priority bridge queue and drop a later ns-nav-blocked. (#302)
-  const rapid = shouldEmitRapidPushState(pushStateTimestamps.length, PUSHSTATE_RAPID_THRESHOLD, rapidPushStateEmitted);
-  rapidPushStateEmitted = rapid.emitted;
-  if (rapid.emit) {
-    return "rapid_pushstate";
+  if (pushStateTimestamps.length >= PUSHSTATE_RAPID_THRESHOLD) {
+    // In a rapid burst, emit at most one rapid_pushstate per window (cooldown) AND suppress
+    // every other alert (including the gesture-correlated one below) for the rest of the burst.
+    // Emitting per-call — via EITHER alert type — would saturate the priority bridge queue
+    // before the handshake and drop a later ns-nav-blocked, losing that detection. (#302)
+    const rapid = shouldEmitRapidPushState(now, lastRapidPushStateEmitAt, PUSHSTATE_RAPID_WINDOW_MS);
+    lastRapidPushStateEmitAt = rapid.lastEmitAt;
+    return rapid.emit ? "rapid_pushstate" : null;
   }
 
-  // --- Gesture-correlated domain-like path ---
+  // --- Gesture-correlated domain-like path (only below the rapid threshold, so it is
+  // inherently rate-limited and cannot flood) ---
   if (lastGestureTs > 0 && (now - lastGestureTs) <= PUSHSTATE_GESTURE_WINDOW_MS) {
     if (urlStr && pathLooksCrossOrigin(urlStr)) {
       return "domain_like_path_after_gesture";

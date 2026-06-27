@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { enforceMapSizeCap, shouldEmitRapidPushState } from "../extension/src/content/main_guard_helpers";
+import {
+  enforceMapSizeCap,
+  pruneTimestampWindow,
+  shouldEmitRapidPushState,
+} from "../extension/src/content/main_guard_helpers";
 
 describe("enforceMapSizeCap (#301)", () => {
   const mapOf = (n: number) => {
@@ -50,41 +54,60 @@ describe("enforceMapSizeCap (#301)", () => {
   });
 });
 
+describe("pruneTimestampWindow (#302)", () => {
+  it("drops timestamps older than the window", () => {
+    const now = 10_000;
+    const out = pruneTimestampWindow([8000, 8999, 9000, 9500, 10_000], now, 1000, 100);
+    // cutoff = 9000; 8000 and 8999 are dropped.
+    expect(out).toEqual([9000, 9500, 10_000]);
+  });
+
+  it("caps the buffer to the most-recent `cap` (synchronous flood: all === now, none pruned)", () => {
+    const now = 5000;
+    const flood = Array.from({ length: 10_000 }, () => now); // all identical -> nothing pruned
+    const out = pruneTimestampWindow(flood, now, 1000, 8);
+    expect(out.length).toBe(8);
+    expect(out.every((t) => t === now)).toBe(true);
+  });
+
+  it("returns empty when everything is outside the window", () => {
+    expect(pruneTimestampWindow([1, 2, 3], 10_000, 1000, 8)).toEqual([]);
+  });
+});
+
 describe("shouldEmitRapidPushState (#302)", () => {
-  const THRESHOLD = 4;
+  const COOLDOWN = 1000;
 
-  it("does not emit below the threshold (and re-arms the flag)", () => {
-    expect(shouldEmitRapidPushState(1, THRESHOLD, false)).toEqual({ emit: false, emitted: false });
-    expect(shouldEmitRapidPushState(3, THRESHOLD, true)).toEqual({ emit: false, emitted: false });
+  it("emits on the first call (lastEmitAt 0) and records the time", () => {
+    expect(shouldEmitRapidPushState(5000, 0, COOLDOWN)).toEqual({ emit: true, lastEmitAt: 5000 });
   });
 
-  it("emits ONCE on the rising edge, then suppresses for the sustained burst", () => {
-    // First call that reaches the threshold: emit.
-    const first = shouldEmitRapidPushState(4, THRESHOLD, false);
-    expect(first).toEqual({ emit: true, emitted: true });
-    // Every subsequent above-threshold call while the flag is set: suppressed.
-    expect(shouldEmitRapidPushState(5, THRESHOLD, true)).toEqual({ emit: false, emitted: true });
-    expect(shouldEmitRapidPushState(99, THRESHOLD, true)).toEqual({ emit: false, emitted: true });
+  it("suppresses within the cooldown window, then re-emits once it elapses", () => {
+    // 500ms after the last emit at 5000 -> still in cooldown -> suppressed (lastEmitAt unchanged).
+    expect(shouldEmitRapidPushState(5500, 5000, COOLDOWN)).toEqual({ emit: false, lastEmitAt: 5000 });
+    // Exactly one window later -> re-emit.
+    expect(shouldEmitRapidPushState(6000, 5000, COOLDOWN)).toEqual({ emit: true, lastEmitAt: 6000 });
   });
 
-  it("re-arms after the burst subsides so a new burst emits again", () => {
-    // Burst ends (count drops below threshold) -> flag clears.
-    const subsided = shouldEmitRapidPushState(2, THRESHOLD, true);
-    expect(subsided).toEqual({ emit: false, emitted: false });
-    // New burst -> rising edge emits again.
-    expect(shouldEmitRapidPushState(4, THRESHOLD, false)).toEqual({ emit: true, emitted: true });
-  });
-
-  it("a 100-call flood produces exactly one emission", () => {
-    let flag = false;
+  it("a sustained flood emits at a bounded rate (~once per window), not once per call", () => {
+    let last = 0;
     let emissions = 0;
-    let count = 0;
-    for (let i = 0; i < 100; i++) {
-      count = Math.min(count + 1, 10); // windowed count stays >= threshold during the flood
-      const d = shouldEmitRapidPushState(count, THRESHOLD, flag);
-      flag = d.emitted;
+    // 1000 synchronous calls all at the same instant -> only the first emits.
+    for (let i = 0; i < 1000; i++) {
+      const d = shouldEmitRapidPushState(5000, last, COOLDOWN);
+      last = d.lastEmitAt;
       if (d.emit) emissions++;
     }
     expect(emissions).toBe(1);
+    // Over a 3s pre-bridge window, an ongoing flood emits at most ~3 (one per cooldown) —
+    // far below the 32-slot queue, so ns-nav-blocked is never crowded out.
+    let last2 = 0;
+    let emissions2 = 0;
+    for (let t = 5000; t < 8000; t += 10) {
+      const d = shouldEmitRapidPushState(t, last2, COOLDOWN);
+      last2 = d.lastEmitAt;
+      if (d.emit) emissions2++;
+    }
+    expect(emissions2).toBeLessThanOrEqual(4);
   });
 });
