@@ -606,6 +606,14 @@ describe("hasCorroboratedOAuthResponse (#223)", () => {
     expect(hasCorroboratedOAuthResponse("https://app.com/cb#id_token=jwt")).toBe(true);
   });
 
+  it("accepts an OIDC response_mode=fragment authorization-code callback (#code=&state= in the fragment)", () => {
+    // Azure AD / Okta put the code AND state echo in the fragment, not the query.
+    expect(hasCorroboratedOAuthResponse("https://app.com/cb#code=abc&state=xyz")).toBe(true);
+    expect(hasCorroboratedOAuthResponse("https://app.com/cb#error=denied&state=xyz")).toBe(true);
+    // ...but still requires the state echo: a bare fragment code is not corroborated.
+    expect(hasCorroboratedOAuthResponse("https://app.com/cb#code=abc")).toBe(false);
+  });
+
   it("does NOT treat state alone (an authorization request hop) as a corroborated response", () => {
     expect(
       hasCorroboratedOAuthResponse(
