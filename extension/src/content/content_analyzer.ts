@@ -271,6 +271,17 @@ export const KIT_FINGERPRINTS: ReadonlyArray<KitFingerprint> = [
   {
     name: "Phish-Hidden-Iframe",
     selectors: ['iframe[style*="display:none"]', 'iframe[style*="visibility:hidden"]', 'iframe[width="0"]', 'iframe[height="0"]'],
+    // The substring selectors only match the no-space form `display:none`; a phishing page
+    // writing the standard `display: none` (space after the colon), or hiding via inline CSS
+    // dimensions `width: 0`/`height: 0` instead of the width/height attributes, evades them
+    // entirely (#289). Mirror Exfil-Hidden-Form's HTML_SNIPPET_MAX-bounded fallback so the
+    // space and CSS-dimension variants are still caught against the htmlSnippet.
+    htmlPatterns: [
+      new RegExp(
+        String.raw`<iframe[^>]{0,${HTML_SNIPPET_MAX}}style\s*=\s*["'][^"']{0,${HTML_SNIPPET_MAX}}(?:display\s*:\s*none|visibility\s*:\s*hidden|(?:width|height)\s*:\s*0)`,
+        "i",
+      ),
+    ],
   },
   {
     name: "Base64-Form-Action",
@@ -630,8 +641,20 @@ function checkFormActions(snapshot: PageSnapshot, currentDomain: string): Suspic
       continue;
     }
 
-    // Base64-encoded URL in action
-    if (/^[A-Za-z0-9+/=]{20,}$/.test(rawAction) || actionLower.includes("base64")) {
+    // Base64-encoded URL in action. The base64 alphabet shares '/' with URL paths, so the
+    // bare charset+length test false-flagged ordinary relative actions like
+    // "/loginProcessSubmitFormUser" and "/api/v2/auth/submitCredentials" (#288). Tighten it
+    // to genuine base64 shape: a length that is a multiple of 4 (base64 block alignment),
+    // the strict alphabet with padding only at the very end, and NOT an absolute path
+    // (leading '/') — the form every documented false positive took. A real encoded blob
+    // such as the "https://..."-encoding `aHR0cHM6Ly9...` still matches. The explicit
+    // "base64" keyword check is retained.
+    const looksBase64Action =
+      rawAction.length >= 20 &&
+      rawAction.length % 4 === 0 &&
+      !rawAction.startsWith("/") &&
+      /^[A-Za-z0-9+/]+={0,2}$/.test(rawAction);
+    if (looksBase64Action || actionLower.includes("base64")) {
       reasons.push("Form action appears to be base64-encoded");
       continue;
     }

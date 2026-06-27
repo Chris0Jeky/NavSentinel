@@ -237,6 +237,29 @@ describe("content_analyzer - phishing kit detection", () => {
     expect(result.kitName).toBe("Phish-Hidden-Iframe");
   });
 
+  it("detects a hidden iframe with whitespace in the style via the htmlPattern fallback (#289)", () => {
+    // `display: none` (space after the colon) evades the [style*="display:none"] substring
+    // selector; with no matchedSelectors only the new htmlPattern can catch it. src has no
+    // exfil keyword so it cannot match Data-Exfil-Iframe instead.
+    const snap = loginSnapshot({
+      htmlSnippet: '<iframe src="https://evil.com/page" style="display: none"></iframe>',
+    });
+    const result = analyzeSnapshot(snap, "phish.com");
+    expect(result.phishingKitMatch).toBe(true);
+    expect(result.kitName).toBe("Phish-Hidden-Iframe");
+  });
+
+  it("detects a hidden iframe sized to zero via inline CSS through the htmlPattern fallback (#289)", () => {
+    // width:0/height:0 in inline CSS (not the width/height attributes the selectors check)
+    // also evades the selectors; the htmlPattern's CSS-dimension branch catches it.
+    const snap = loginSnapshot({
+      htmlSnippet: '<iframe src="https://evil.com/page" style="width: 0; height: 0"></iframe>',
+    });
+    const result = analyzeSnapshot(snap, "phish.com");
+    expect(result.phishingKitMatch).toBe(true);
+    expect(result.kitName).toBe("Phish-Hidden-Iframe");
+  });
+
   it("detects a hidden exfil form with whitespace in the style via the bounded regex (D-REDOS)", () => {
     // "display: none" (with space) is missed by the [style*="display:none"]
     // selector, so only the htmlPattern can catch it — confirms the bounded
@@ -361,6 +384,21 @@ describe("content_analyzer - suspicious form actions", () => {
     const result = analyzeSnapshot(snap, "phish.com");
     expect(result.suspiciousFormAction).toBe(true);
     expect(result.reasons.some((r) => r.includes("base64"))).toBe(true);
+  });
+
+  it("does NOT flag a long all-alnum relative path as base64 (#288)", () => {
+    // 27 chars, all in the base64 alphabet via the shared '/', but an ordinary absolute
+    // path. The pre-fix regex /^[A-Za-z0-9+/=]{20,}$/ false-flagged it as base64-encoded.
+    for (const formAction of [
+      "/loginProcessSubmitFormUser",
+      "/api/v2/auth/submitCredentials",
+    ]) {
+      const result = analyzeSnapshot(loginSnapshot({ formAction }), "myapp.com");
+      expect(
+        result.reasons.some((r) => r.includes("base64")),
+        `${formAction} must not be flagged as base64`
+      ).toBe(false);
+    }
   });
 
   it("flags password form submitting to different domain", () => {
