@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { OutboundQueue, isMainGuardAlertType, type OutboundMessage } from "../extension/src/content/bridge_outbound";
+import {
+  OutboundQueue,
+  isMainGuardAlertType,
+  isFloodableAlertType,
+  type OutboundMessage,
+} from "../extension/src/content/bridge_outbound";
 
 const msg = (type: string, payload?: Record<string, unknown>): OutboundMessage =>
   payload !== undefined ? { type, payload } : { type };
@@ -144,6 +149,95 @@ describe("OutboundQueue priority (D-BRIDGE R2: alerts survive routine pressure)"
     const { items, dropped } = q.drain();
     expect(items.map((m) => m.type)).toEqual(["alert1", "alert2"]);
     expect(dropped).toBe(1);
+  });
+});
+
+describe("OutboundQueue floodable reservation (#377/F2)", () => {
+  it("caps a floodable ns-nav-blocked flood at cap - reserved, keeping room for scarce alerts", () => {
+    const q = new OutboundQueue(32, 4); // 4 slots reserved for scarce signals
+    // Synchronous flood of 100 blocked navigations (floodable priority).
+    for (let i = 0; i < 100; i++) q.enqueue(msg("ns-nav-blocked", { i }), true, true);
+    // A scarce once-per-event signal arrives AFTER the flood.
+    q.enqueue(msg("ns-dblclick-second-click", { ts: 1 }), true, false);
+
+    const { items } = q.drain();
+    // The scarce dblclick signal survives — pre-fix the all-priority buffer dropped it.
+    expect(items.some((m) => m.type === "ns-dblclick-second-click")).toBe(true);
+    // Floodable telemetry is bounded to cap - reserved.
+    expect(items.filter((m) => m.type === "ns-nav-blocked").length).toBe(28);
+  });
+
+  it("an allowed-nav flood (ns-nav-allowed + ns-allow-target-nav relay) cannot crowd out a scarce alert", () => {
+    const q = new OutboundQueue(32, 4);
+    // Each allowed nav emits BOTH the telemetry and its companion relay; both are floodable.
+    for (let i = 0; i < 50; i++) {
+      q.enqueue(msg("ns-nav-allowed", { i }), true, true);
+      q.enqueue(msg("ns-allow-target-nav", { i }), true, true);
+    }
+    q.enqueue(msg("ns-dblclick-second-click", { ts: 1 }), true, false);
+
+    const { items } = q.drain();
+    expect(items.some((m) => m.type === "ns-dblclick-second-click")).toBe(true);
+    // Combined floodable (both per-nav message types) is bounded to cap - reserved.
+    const floodable = items.filter(
+      (m) => m.type === "ns-nav-allowed" || m.type === "ns-allow-target-nav"
+    ).length;
+    expect(floodable).toBe(28);
+  });
+
+  it("does not suppress floodable alerts below the cap (no over-suppression)", () => {
+    const q = new OutboundQueue(32, 4);
+    for (let i = 0; i < 10; i++) q.enqueue(msg("ns-nav-blocked", { i }), true, true);
+    const { items, dropped } = q.drain();
+    expect(items.length).toBe(10);
+    expect(dropped).toBe(0);
+  });
+
+  it("a non-floodable priority alert may still fill all slots (reservation only bounds floodable)", () => {
+    const q = new OutboundQueue(8, 4);
+    // 8 distinct scarce priority signals — none floodable — may use every slot.
+    for (let i = 0; i < 8; i++) q.enqueue(msg(`ns-js-signal-${i}`, { i }), true, false);
+    const { items, dropped } = q.drain();
+    expect(items.length).toBe(8);
+    expect(dropped).toBe(0);
+  });
+
+  it("drain resets the floodable count so a second pre-bridge window starts clean", () => {
+    const q = new OutboundQueue(8, 2); // floodable capped at 6
+    for (let i = 0; i < 10; i++) q.enqueue(msg("ns-nav-blocked", { i }), true, true);
+    expect(q.drain().items.length).toBe(6);
+    // Second batch must again admit up to 6 (count was reset, not stuck at 10).
+    for (let i = 0; i < 10; i++) q.enqueue(msg("ns-nav-blocked", { i }), true, true);
+    expect(q.drain().items.length).toBe(6);
+  });
+
+  it("reservation is a no-op when reservedForScarce defaults to 0 (back-compat)", () => {
+    const q = new OutboundQueue(4); // no reserved arg
+    // Floodable priority can use all 4 slots, evicting routine if needed — old behavior.
+    q.enqueue(msg("noise"), false, false);
+    for (let i = 0; i < 4; i++) q.enqueue(msg("ns-nav-blocked", { i }), true, true);
+    const { items } = q.drain();
+    expect(items.filter((m) => m.type === "ns-nav-blocked").length).toBe(4);
+    expect(items.some((m) => m.type === "noise")).toBe(false); // routine displaced
+  });
+});
+
+describe("isFloodableAlertType (#377/F2)", () => {
+  it("treats per-navigation telemetry AND the per-nav allow relay as floodable", () => {
+    // ns-allow-target-nav accompanies every ns-nav-allowed, so an allowed-nav flood would
+    // otherwise refill the buffer past the reservation via the uncapped relay.
+    for (const t of ["ns-nav-blocked", "ns-nav-allowed", "ns-allow-target-nav"]) {
+      expect(isFloodableAlertType(t)).toBe(true);
+    }
+  });
+
+  it("treats scarce once-per-event correlation signals as NOT floodable", () => {
+    for (const t of [
+      "ns-dblclick-second-click", "ns-dblclick-window-open", "ns-pushstate-suspicious",
+      "ns-js-exfil-network", "ns-clipboard-write",
+    ]) {
+      expect(isFloodableAlertType(t)).toBe(false);
+    }
   });
 });
 

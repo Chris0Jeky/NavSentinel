@@ -3,7 +3,17 @@ import {
   enforceMapSizeCap,
   pruneTimestampWindow,
   shouldEmitRapidPushState,
+  gestureBranchEmissionBound,
 } from "../extension/src/content/main_guard_helpers";
+// The REAL production constants (not a mirror), so the #377/F1 invariant below fails CI if a
+// future change to any of them would let the gesture branch flood the priority buffer.
+import {
+  PUSHSTATE_GESTURE_WINDOW_MS,
+  PUSHSTATE_RAPID_WINDOW_MS,
+  PUSHSTATE_RAPID_THRESHOLD,
+  MAX_PENDING_OUTBOUND,
+  RESERVED_SCARCE_OUTBOUND_SLOTS,
+} from "../extension/src/content/main_guard_constants";
 
 describe("enforceMapSizeCap (#301)", () => {
   const mapOf = (n: number) => {
@@ -109,5 +119,43 @@ describe("shouldEmitRapidPushState (#302)", () => {
       if (d.emit) emissions2++;
     }
     expect(emissions2).toBeLessThanOrEqual(4);
+  });
+});
+
+describe("gestureBranchEmissionBound (#377/F1)", () => {
+  it("computes the ceil(window / spacing) bound for sample constants", () => {
+    // 2000ms window, 3 events per 1000ms => 333.3ms spacing => ceil(2000/333.3) = 6.
+    expect(gestureBranchEmissionBound(2000, 1000, 4)).toBe(6);
+    // Wider gesture window raises the bound proportionally.
+    expect(gestureBranchEmissionBound(4000, 1000, 4)).toBe(12);
+    // A higher rapid threshold (more below-threshold events) raises it too.
+    expect(gestureBranchEmissionBound(2000, 1000, 7)).toBe(12);
+  });
+
+  it("is 0 when the rapid threshold is 1 (no below-threshold events can fire the branch)", () => {
+    expect(gestureBranchEmissionBound(2000, 1000, 1)).toBe(0);
+  });
+
+  it("returns +Infinity for a non-positive rapid window (guards a divide-by-zero)", () => {
+    expect(gestureBranchEmissionBound(2000, 0, 4)).toBe(Number.POSITIVE_INFINITY);
+    expect(gestureBranchEmissionBound(2000, Number.NaN, 4)).toBe(Number.POSITIVE_INFINITY);
+  });
+
+  it("the production gesture-branch bound stays within the scarce-signal reservation", () => {
+    const bound = gestureBranchEmissionBound(
+      PUSHSTATE_GESTURE_WINDOW_MS,
+      PUSHSTATE_RAPID_WINDOW_MS,
+      PUSHSTATE_RAPID_THRESHOLD,
+    );
+    expect(bound).toBe(6);
+    // (a) The gesture branch alone must not be able to fill the non-reserved priority
+    // capacity — otherwise it could crowd out OTHER (non-reserved) priority alerts.
+    expect(bound).toBeLessThan(MAX_PENDING_OUTBOUND - RESERVED_SCARCE_OUTBOUND_SLOTS);
+    // (b) The gesture branch (ns-pushstate-suspicious, a scarce signal) must also fit
+    // WITHIN the scarce reservation, so that under a full floodable nav-flood it cannot
+    // monopolize the reserved slots and starve the dblclick/js correlation signals. If
+    // either assertion fails, a PUSHSTATE_* constant grew unsafely — re-tune it or raise
+    // RESERVED_SCARCE_OUTBOUND_SLOTS. (#377/F1, F2)
+    expect(bound).toBeLessThanOrEqual(RESERVED_SCARCE_OUTBOUND_SLOTS);
   });
 });
