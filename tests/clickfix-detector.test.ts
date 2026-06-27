@@ -476,6 +476,24 @@ describe("hasLegitCaptcha", () => {
     div.innerHTML = '<iframe src="https://www.google.com/maps/x/recaptcha-not-real"></iframe>';
     expect(hasLegitCaptcha(div)).toBe(false);
   });
+
+  it.each([
+    "https://www.google.com/recaptcha-evil/x",
+    "https://www.gstatic.com/recaptcha-evil",
+    "https://www.recaptcha.net/recaptcha-evil/x",
+  ])(
+    "rejects a real provider host at a lookalike path (segment-anchor tightening #226/#211): %s",
+    (src) => {
+      // The path begins with "/recaptcha" but is not a whole-segment match. The old
+      // UNANCHORED startsWith accepted it, letting an attacker host a fake captcha at a
+      // provider domain to suppress ClickFix detection; the segment-anchored matcher
+      // (shared via matchProviderHostSrc) now rejects it. The iframe is rendered, so the
+      // ONLY reason for false is the path mismatch (not the #206 hidden-decoy guard).
+      const div = document.createElement("div");
+      div.innerHTML = `<iframe src="${src}"></iframe>`;
+      expect(hasLegitCaptcha(div), src).toBe(false);
+    },
+  );
 });
 
 // --- #206: a spoofed captcha iframe must NOT suppress ClickFix scoring ---

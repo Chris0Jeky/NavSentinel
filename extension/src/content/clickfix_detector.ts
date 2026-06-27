@@ -14,6 +14,8 @@
  * content looks command-like) is tracked.
  */
 
+import { matchProviderHostSrc, type ProviderHostEntry } from "../shared/iframe_provider";
+
 // --- Clipboard event tracking ---
 
 export interface ClipboardWriteEvent {
@@ -162,7 +164,10 @@ const INSTRUCTION_PATTERNS: RegExp[] = [
  * `src="https://evil.cdn/recaptcha.png"`), which let a phishing page suppress the
  * whole ClickFix detector by adding one hidden iframe (#206).
  */
-const CAPTCHA_PROVIDERS: Array<{ host: string; pathPrefix?: string }> = [
+// Captcha-provider hosts only (clickfix's purpose). mutation_monitor keeps its own broader
+// LEGIT_IFRAME_HOSTS table; the two intentionally differ by purpose but share the matcher
+// (matchProviderHostSrc) so the host/path validation cannot drift. (#226)
+const CAPTCHA_PROVIDERS: ProviderHostEntry[] = [
   { host: "google.com", pathPrefix: "/recaptcha" },
   { host: "recaptcha.net", pathPrefix: "/recaptcha" },
   { host: "gstatic.com", pathPrefix: "/recaptcha" },
@@ -210,26 +215,11 @@ function isRenderedIframe(iframe: Element): boolean {
 function isProviderCaptchaIframe(iframe: Element): boolean {
   const src = iframe.getAttribute("src");
   if (!src) return false;
-  let url: URL;
-  try {
-    // Resolve against the page URL so relative srcs are evaluated correctly; this
-    // also rejects opaque/script schemes (data:, blob:, javascript:) below.
-    url = new URL(src, typeof location !== "undefined" ? location.href : undefined);
-  } catch {
-    return false;
-  }
-  if (url.protocol !== "https:" && url.protocol !== "http:") return false;
-  // Strip a single trailing dot ("hcaptcha.com." is the same host) so a fully
-  // qualified provider name still matches.
-  const hostname = url.hostname.toLowerCase().replace(/\.$/, "");
-  const pathname = url.pathname.toLowerCase();
-  for (const provider of CAPTCHA_PROVIDERS) {
-    const hostMatch = hostname === provider.host || hostname.endsWith("." + provider.host);
-    if (!hostMatch) continue;
-    if (provider.pathPrefix && !pathname.startsWith(provider.pathPrefix)) continue;
-    return isRenderedIframe(iframe);
-  }
-  return false;
+  // Host + segment-anchored path validation is shared with mutation_monitor so the two
+  // cannot drift; this also tightens the path test from the old unanchored startsWith, so
+  // a lookalike like google.com/recaptcha-evil no longer counts as a provider. (#226, #211)
+  if (!matchProviderHostSrc(src, CAPTCHA_PROVIDERS)) return false;
+  return isRenderedIframe(iframe);
 }
 
 /**
