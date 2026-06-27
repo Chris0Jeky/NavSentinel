@@ -2653,9 +2653,11 @@ describe("service worker handlers", () => {
       );
       await vi.runAllTimersAsync();
 
-      // A later onUpdated must NOT fire a second offer: the tab+URL in-flight key still
-      // matches the rewritten same-URL offer. With the earlier object-identity keying the
-      // fresh rewrite object looked not-in-flight and produced a duplicate -> [13, 13].
+      // A later onUpdated must NOT fire a second offer WHILE A is in flight: the tab+URL
+      // in-flight key still matches the rewritten same-URL offer. With the earlier
+      // object-identity keying the fresh rewrite object looked not-in-flight and produced a
+      // concurrent duplicate -> [13, 13]. (The separate *post-delivery* serialized re-send
+      // of the rewritten offer is a pre-existing edge tracked in #382, out of scope here.)
       mock.emitTabUpdated(13, { status: "complete" }, { url: "https://current.com/" });
       expect(forwardSends).toEqual([13]);
     });
