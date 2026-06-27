@@ -62,11 +62,19 @@ export function parseCSP(raw: string): Map<string, string[]> {
   return directives;
 }
 
-/** Check if a list of source values contains `'unsafe-inline'` or `'unsafe-eval'`. */
-function hasUnsafe(values: string[]): boolean {
-  return values.some(
-    (v) => v === "'unsafe-inline'" || v === "'unsafe-eval'"
-  );
+/**
+ * Whether a source list is *effectively* permissive via an unsafe keyword. Per CSP
+ * Level 3, a nonce or hash in the source list makes the user agent IGNORE
+ * `'unsafe-inline'` (a common backward-compatibility pattern: `'nonce-…' 'unsafe-inline'`
+ * is enforced as nonce-only), so `'unsafe-inline'` only counts when no nonce/hash is
+ * present. `'unsafe-eval'` is NOT neutralized by a nonce/hash and always counts. Scoring
+ * a nonce-guarded `'unsafe-inline'` as a weakness was a false positive on legitimate
+ * strict-CSP sites.
+ */
+function hasEffectiveUnsafe(values: string[]): boolean {
+  if (values.includes("'unsafe-eval'")) return true;
+  if (values.includes("'unsafe-inline'") && !hasNoncesOrHashes(values)) return true;
+  return false;
 }
 
 /** Check if a list of source values contains a wildcard `*`. */
@@ -101,7 +109,7 @@ function scorePolicy(parsed: Map<string, string[]>): {
     reasons.push("csp_strict_nonces");
   }
 
-  if (scriptSrc && hasUnsafe(scriptSrc)) {
+  if (scriptSrc && hasEffectiveUnsafe(scriptSrc)) {
     score += 3;
     reasons.push("csp_permissive");
   }
