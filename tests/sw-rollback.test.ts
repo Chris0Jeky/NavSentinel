@@ -189,10 +189,15 @@ function createChromeMock(options: { deferSends?: boolean } = {}) {
     flushSend(index: number, opts: { fail?: boolean } = {}) {
       const send = pendingSends[index];
       if (!send) throw new Error(`no deferred send at index ${index}`);
+      // Consume the callback so a second flushSend(index) is a safe no-op rather than
+      // silently re-invoking the production send callback a second time.
+      const done = send.done;
+      if (!done) return;
+      send.done = undefined;
       const runtime = this.chrome.runtime as { lastError?: { message: string } };
       if (opts.fail) runtime.lastError = { message: "tab busy" };
       try {
-        send.done?.();
+        done();
       } finally {
         if (opts.fail) delete runtime.lastError;
       }
