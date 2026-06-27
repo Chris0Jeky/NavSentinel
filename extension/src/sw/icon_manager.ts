@@ -46,11 +46,19 @@ export function updateTabIcon(
   state: IconState,
   blockCount = 0,
 ): Promise<void> {
+  // Snapshot the reset generation NOW (at schedule time), not when applyTabIcon later runs
+  // in the .then microtask. clearTabIcon / setAllTabsGray bump resetGeneration SYNCHRONOUSLY,
+  // so a clear called after this returns but before the queued apply would otherwise be
+  // captured by applyTabIcon's apply-time default — making its post-write guard compare
+  // against the already-bumped value, pass, and resurrect a ghost cache entry for the cleared
+  // tab. Capturing here (like updateTabIconWhen) lets that guard detect the racing clear and
+  // skip the cache write. (#394, mirrors #327)
+  const genAtEnqueue = resetGeneration;
   // Append to the tab's chain so same-tab updates apply strictly in order
   // (last-write-wins). The .catch keeps one failed/cancelled update from breaking
   // the chain for the next one; applyTabIcon never rejects, so the chain is stable.
   const prev = tabUpdateChains.get(tabId) ?? Promise.resolve();
-  const next = prev.catch(() => {}).then(() => applyTabIcon(tabId, state, blockCount));
+  const next = prev.catch(() => {}).then(() => applyTabIcon(tabId, state, blockCount, genAtEnqueue));
   tabUpdateChains.set(tabId, next);
   // Drop the chain entry once it drains, but only if no newer update has replaced it
   // (otherwise we would orphan the in-flight tail).
@@ -99,11 +107,11 @@ async function applyTabIcon(
   tabId: number,
   state: IconState,
   blockCount: number,
-  // Generation captured at SCHEDULE time. updateTabIcon captures it here at apply time
-  // (its only pre-apply wait is the synchronous chain drain). updateTabIconWhen passes its
-  // pre-`ready`-await snapshot so a clearTabIcon / setAllTabsGray that races the await is
-  // still detected by the post-write guard below — otherwise the deferred reset would write
-  // a ghost cache entry for a tab that was just cleared. (#327 / #229)
+  // Generation captured at SCHEDULE time by the caller. Both updateTabIcon and
+  // updateTabIconWhen now pass their pre-await snapshot so a clearTabIcon / setAllTabsGray
+  // that races the chain drain (or the `ready` await) is detected by the post-write guard
+  // below — otherwise the deferred apply would write a ghost cache entry for a tab that was
+  // just cleared. The default is a defensive fallback for any direct caller. (#327 / #229 / #394)
   startGeneration: number = resetGeneration,
 ): Promise<void> {
   // Dedup is evaluated HERE (at apply time), not before queueing: a synchronous

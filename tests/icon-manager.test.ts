@@ -261,6 +261,30 @@ describe("icon_manager", () => {
     expect(_getTabStateMap().has(70)).toBe(false);
   });
 
+  it("does not leave a ghost cache entry when clearTabIcon runs synchronously before the queued apply (#394)", async () => {
+    // The clear runs in the SAME synchronous tick as updateTabIcon, BEFORE the queued
+    // applyTabIcon microtask — so resetGeneration is bumped before the apply. Pre-fix, the
+    // apply-time default captured the already-bumped generation, so the post-write guard
+    // (resetGeneration === startGeneration) passed and the cleared tab's cache was
+    // resurrected (ghost: badge blank but cache says "red"). Capturing the generation at
+    // SCHEDULE time lets the guard detect the racing clear and skip the cache write.
+    const p = updateTabIcon(75, "red");
+    const cleared = clearTabIcon(75); // synchronous, before the apply microtask runs
+    for (let i = 0; i < 8; i++) await Promise.resolve();
+    await Promise.all([p, cleared]);
+
+    expect(getTabIconState(75)).toBe("gray");
+    expect(_getTabStateMap().has(75)).toBe(false);
+
+    // Practical consequence: a later escalation to "red" must still RENDER, not be
+    // dedup-suppressed by a ghost "red" cache.
+    setBadgeText.mockClear();
+    setBadgeBackgroundColor.mockClear();
+    await updateTabIcon(75, "red");
+    expect(setBadgeBackgroundColor).toHaveBeenCalledWith({ tabId: 75, color: "#dc2626" });
+    expect(getTabIconState(75)).toBe("red");
+  });
+
   it("blanks the badge AFTER an in-flight update so a cleared tab never shows a stale badge (#272)", async () => {
     // Pre-fix the badge blank was fire-and-forget, so it could resolve BEFORE the in-flight
     // update's setBadge* writes — leaving the badge showing the stale colour/text even though
