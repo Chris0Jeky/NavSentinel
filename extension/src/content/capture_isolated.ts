@@ -1386,6 +1386,14 @@ function checkSmartDefaultSuggestion(sourceDomain: string, destDomain: string): 
       const onCooldown = await isPairOnCooldown(sourceDomain, destDomain);
       if (onCooldown) return;
 
+      // Don't suggest adding a pair already on the allowlist. After #307 a historical
+      // always_allow outcome keeps counting toward the streak, so a pair the user
+      // already made permanent (or re-allowed in options) could otherwise re-surface
+      // the toast. Read the live allowlist (not the cached module copy) so an
+      // options-page removal correctly re-enables the suggestion. (#315)
+      const currentAllowlist = await getAllowlist();
+      if (isAllowlisted(currentAllowlist, sourceDomain, destDomain)) return;
+
       const outcomes = await getPromptOutcomes();
       const suggestion = analyzeOutcomesForPair(outcomes, sourceDomain, destDomain);
       if (!suggestion) return;
