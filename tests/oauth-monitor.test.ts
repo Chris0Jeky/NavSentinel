@@ -3,6 +3,7 @@ import {
   isOAuthUrl,
   extractRedirectUri,
   hasOAuthResponseParams,
+  hasCorroboratedOAuthResponse,
   isUnexpectedCallback,
   handleOAuthRuntimeMessage,
   isOAuthRedirectMismatch,
@@ -588,5 +589,34 @@ describe("hasOAuthResponseParams (#207)", () => {
     expect(hasOAuthResponseParams("https://gmail.com/")).toBe(false);
     expect(hasOAuthResponseParams("https://shop.example/promo")).toBe(false);
     expect(hasOAuthResponseParams("not a url")).toBe(false);
+  });
+});
+
+describe("hasCorroboratedOAuthResponse (#223)", () => {
+  it("requires a state echo to corroborate a query code/error", () => {
+    expect(hasCorroboratedOAuthResponse("https://app.com/cb?code=abc&state=x")).toBe(true);
+    expect(hasCorroboratedOAuthResponse("https://app.com/cb?error=denied&state=x")).toBe(true);
+    // code/error WITHOUT state is not corroborated (the #223 coupon false-positive case).
+    expect(hasCorroboratedOAuthResponse("https://shop.example/sale?code=SUMMER")).toBe(false);
+    expect(hasCorroboratedOAuthResponse("https://app.com/cb?error=oops")).toBe(false);
+  });
+
+  it("accepts a fragment access_token / id_token on its own (implicit/hybrid)", () => {
+    expect(hasCorroboratedOAuthResponse("https://app.com/cb#access_token=t&token_type=bearer")).toBe(true);
+    expect(hasCorroboratedOAuthResponse("https://app.com/cb#id_token=jwt")).toBe(true);
+  });
+
+  it("does NOT treat state alone (an authorization request hop) as a corroborated response", () => {
+    expect(
+      hasCorroboratedOAuthResponse(
+        "https://login.live.com/oauth20_authorize.srf?client_id=x&response_type=code&state=abc",
+      ),
+    ).toBe(false);
+    expect(hasCorroboratedOAuthResponse("https://example.com/page?state=abc")).toBe(false);
+  });
+
+  it("returns false for unrelated navigations and malformed URLs", () => {
+    expect(hasCorroboratedOAuthResponse("https://gmail.com/")).toBe(false);
+    expect(hasCorroboratedOAuthResponse("not a url")).toBe(false);
   });
 });

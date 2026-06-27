@@ -23,6 +23,7 @@ import {
   isOAuthUrl,
   extractRedirectUri,
   hasOAuthResponseParams,
+  hasCorroboratedOAuthResponse,
   isUnexpectedCallback,
   type OAuthFlowState,
 } from "../content/oauth_monitor";
@@ -290,10 +291,16 @@ function processOAuthNavigation(
   //   (d) Only fires the +30 mismatch when the registrable domain differs from the
   //       redirect_uri host recorded at flow start (isUnexpectedCallback).
   //
-  // Residual: a benign redirect/link page on another domain that happens to carry a
-  // generic ?code=/?error= during an active flow can still mismatch (tracked as a
-  // follow-up). An abandoned flow lingers in redirect/consent until the 60s
-  // age-prune rather than being force-completed (bounded by OAUTH_FLOW_MAX_AGE_MS).
+  //   (e) Fires the mismatch ONLY when the response is CORROBORATED — a query code/error
+  //       co-occurs with a `state` echo, or a fragment carries access_token/id_token
+  //       (hasCorroboratedOAuthResponse). A benign cross-domain page carrying just a
+  //       generic ?code=/?error= (a coupon/tracking code) has no `state`, so it no longer
+  //       trips a false mismatch. A real callback — benign or malicious-to-an-unexpected-
+  //       domain — echoes the `state` the request sent. Residual FN: a flow whose callback
+  //       omits `state` loses coverage (state is recommended-but-optional). (#223)
+  //
+  // An abandoned flow lingers in redirect/consent until the 60s age-prune rather than
+  // being force-completed (bounded by OAUTH_FLOW_MAX_AGE_MS).
   if (
     existingFlow &&
     (existingFlow.phase === "redirect" || existingFlow.phase === "consent") &&
@@ -301,7 +308,7 @@ function processOAuthNavigation(
     hasOAuthResponseParams(url)
   ) {
     existingFlow.phase = "callback";
-    if (isUnexpectedCallback(existingFlow, url)) {
+    if (isUnexpectedCallback(existingFlow, url) && hasCorroboratedOAuthResponse(url)) {
       chrome.tabs.sendMessage(
         tabId,
         { type: "ns-oauth-redirect-mismatch", callbackUrl: url },

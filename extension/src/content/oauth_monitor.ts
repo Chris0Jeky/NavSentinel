@@ -256,6 +256,47 @@ export function hasOAuthResponseParams(url: string): boolean {
   return false;
 }
 
+/**
+ * Stronger, corroborated variant of {@link hasOAuthResponseParams} for the
+ * redirect-MISMATCH decision (#223). A query authorization `code`/`error` is only
+ * treated as a real callback when it co-occurs with a `state` echo; a fragment
+ * `access_token`/`id_token` is accepted on its own (implicit/hybrid callbacks carry the
+ * token directly and have no separate "weak" form).
+ *
+ * Rationale: a benign cross-domain page reached via a redirect/link during an active flow
+ * can carry a generic `?code=` (a coupon, country, or tracking code) or `?error=` and trip
+ * a false redirect-mismatch. A genuine OAuth callback — benign OR a malicious one to an
+ * UNEXPECTED domain (the case the mismatch exists to catch) — echoes the `state` the
+ * authorization request sent, because the relying party validates it. Requiring `state`
+ * therefore suppresses the coupon false positive while still catching real attack
+ * callbacks.
+ *
+ * Residual false negative: a spec-noncompliant flow whose callback omits `state` loses
+ * redirect-mismatch coverage. `state` is RECOMMENDED but technically optional, so this is a
+ * measured tradeoff — gate any rollout on `measure:fp`. (#223)
+ */
+export function hasCorroboratedOAuthResponse(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+
+  // Fragment tokens are a strong standalone indicator (implicit/hybrid flows).
+  const fragment = parsed.hash.startsWith("#") ? parsed.hash.slice(1) : parsed.hash;
+  if (fragment) {
+    const fragParams = new URLSearchParams(fragment);
+    if (fragParams.has("access_token") || fragParams.has("id_token")) return true;
+  }
+
+  // A query code/error must be corroborated by a `state` echo to count as a callback.
+  const q = parsed.searchParams;
+  if ((q.has("code") || q.has("error")) && q.has("state")) return true;
+
+  return false;
+}
+
 // --- Content-script-side state ---
 
 /** Current OAuth flow state for this tab, forwarded from the SW. */
