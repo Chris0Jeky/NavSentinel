@@ -2604,9 +2604,9 @@ describe("service worker handlers", () => {
 
       // Pre-fix (no in-flight guard): the deferred first callback hasn't resolved the
       // entry, so the second onUpdated re-reads it and re-sends -> [10, 10]. Post-fix:
-      // trySendRollback adds the pending entry reference to rollbackSendInFlight
-      // synchronously (entry-keyed since #360), so the second onUpdated sees that same
-      // entry in the set and returns early -> [10].
+      // trySendRollback adds the tab+URL string key for the pending entry to
+      // rollbackSendInFlight synchronously (#360), so the second onUpdated sees that same
+      // key in the set and returns early -> [10].
       expect(rollbackSends).toEqual([10]);
     });
 

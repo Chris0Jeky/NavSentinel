@@ -2130,8 +2130,9 @@ describe("service worker rollback in-flight guard (#360)", () => {
   // A completed send for an OLDER rollback entry must not clear the in-flight marker of a
   // NEWER entry that replaced it in the same tab. Pre-fix the marker was keyed on tabId, so
   // the older send's callback freed the tab and a later onUpdated re-dispatched the newer
-  // entry a THIRD time (duplicate modal). Entry-identity keying makes each marker scope to
-  // its own send. (#360)
+  // entry a THIRD time (duplicate modal). Tab+URL string keying scopes each marker to its
+  // own destination URL, so A's callback cannot clear B's key even though they share the
+  // same tab (A and B carry different URLs). (#360)
   it("does not re-dispatch a newer rollback entry after an older in-flight send for the same tab resolves", async () => {
     const mock = createChromeMock({ deferSends: true });
     vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
