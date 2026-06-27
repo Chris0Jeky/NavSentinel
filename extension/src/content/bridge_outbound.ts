@@ -145,12 +145,24 @@ export function isMainGuardAlertType(type: string): boolean {
   );
 }
 
-// Priority alerts emitted once per navigation decision. A page can drive these in a
+// Priority messages emitted once per navigation decision. A page can drive these in a
 // synchronous loop (many blocked/allowed window.open / location.assign / form.submit
 // calls), so under the pre-bridge buffer they are the flood source. They are tagged
 // `floodable` so the OutboundQueue caps them and reserves room for the scarce
 // once-per-event correlation signals (dblclick / js / pushstate). (#377/F2)
-const FLOODABLE_ALERT_TYPES = new Set<string>(["ns-nav-blocked", "ns-nav-allowed"]);
+//
+// `ns-allow-target-nav` is the per-allowed-nav SW pre-authorization relay that accompanies
+// every `ns-nav-allowed`. It is `priority` (never evicted by routine traffic — dropping one
+// under NORMAL pressure would re-block a user-approved nav), but it is ALSO `floodable`: an
+// allowed-nav flood would otherwise queue one uncapped relay per nav and refill the buffer
+// past the reservation, starving the scarce signals. Capping it shifts only the SURPLUS
+// relays in a flood; the SW then re-evaluates those navs (fail-safe — more restrictive,
+// never a bypass), an acceptable trade vs losing irreplaceable detection signals. (#377/F2)
+const FLOODABLE_ALERT_TYPES = new Set<string>([
+  "ns-nav-blocked",
+  "ns-nav-allowed",
+  "ns-allow-target-nav",
+]);
 
 /** Whether an alert is high-frequency per-navigation telemetry subject to the
  *  OutboundQueue floodable cap. (#377/F2) */

@@ -167,6 +167,24 @@ describe("OutboundQueue floodable reservation (#377/F2)", () => {
     expect(items.filter((m) => m.type === "ns-nav-blocked").length).toBe(28);
   });
 
+  it("an allowed-nav flood (ns-nav-allowed + ns-allow-target-nav relay) cannot crowd out a scarce alert", () => {
+    const q = new OutboundQueue(32, 4);
+    // Each allowed nav emits BOTH the telemetry and its companion relay; both are floodable.
+    for (let i = 0; i < 50; i++) {
+      q.enqueue(msg("ns-nav-allowed", { i }), true, true);
+      q.enqueue(msg("ns-allow-target-nav", { i }), true, true);
+    }
+    q.enqueue(msg("ns-dblclick-second-click", { ts: 1 }), true, false);
+
+    const { items } = q.drain();
+    expect(items.some((m) => m.type === "ns-dblclick-second-click")).toBe(true);
+    // Combined floodable (both per-nav message types) is bounded to cap - reserved.
+    const floodable = items.filter(
+      (m) => m.type === "ns-nav-allowed" || m.type === "ns-allow-target-nav"
+    ).length;
+    expect(floodable).toBe(28);
+  });
+
   it("does not suppress floodable alerts below the cap (no over-suppression)", () => {
     const q = new OutboundQueue(32, 4);
     for (let i = 0; i < 10; i++) q.enqueue(msg("ns-nav-blocked", { i }), true, true);
@@ -205,8 +223,10 @@ describe("OutboundQueue floodable reservation (#377/F2)", () => {
 });
 
 describe("isFloodableAlertType (#377/F2)", () => {
-  it("treats per-navigation telemetry as floodable", () => {
-    for (const t of ["ns-nav-blocked", "ns-nav-allowed"]) {
+  it("treats per-navigation telemetry AND the per-nav allow relay as floodable", () => {
+    // ns-allow-target-nav accompanies every ns-nav-allowed, so an allowed-nav flood would
+    // otherwise refill the buffer past the reservation via the uncapped relay.
+    for (const t of ["ns-nav-blocked", "ns-nav-allowed", "ns-allow-target-nav"]) {
       expect(isFloodableAlertType(t)).toBe(true);
     }
   });
@@ -214,7 +234,7 @@ describe("isFloodableAlertType (#377/F2)", () => {
   it("treats scarce once-per-event correlation signals as NOT floodable", () => {
     for (const t of [
       "ns-dblclick-second-click", "ns-dblclick-window-open", "ns-pushstate-suspicious",
-      "ns-js-exfil-network", "ns-allow-target-nav", "ns-clipboard-write",
+      "ns-js-exfil-network", "ns-clipboard-write",
     ]) {
       expect(isFloodableAlertType(t)).toBe(false);
     }
