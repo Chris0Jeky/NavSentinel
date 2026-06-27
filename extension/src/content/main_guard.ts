@@ -1,6 +1,13 @@
 import { initJsBehaviorMonitor } from "./js_behavior_monitor";
 import { OutboundQueue, isMainGuardAlertType, isFloodableAlertType } from "./bridge_outbound";
 import { enforceMapSizeCap, pruneTimestampWindow, shouldEmitRapidPushState } from "./main_guard_helpers";
+import {
+  PUSHSTATE_GESTURE_WINDOW_MS,
+  PUSHSTATE_RAPID_THRESHOLD,
+  PUSHSTATE_RAPID_WINDOW_MS,
+  MAX_PENDING_OUTBOUND,
+  RESERVED_SCARCE_OUTBOUND_SLOTS,
+} from "./main_guard_constants";
 
 const NS_SOURCE = "__navsentinel__";
 const BRIDGE_INIT_TYPE = "ns-port-init";
@@ -29,18 +36,11 @@ const BRIDGE_HANDSHAKE_TIMEOUT_MS = 3000;
 const DBLCLICK_WINDOW_MS = 800;
 const OPENER_NAV_STALE_MS = 3000;
 
-// --- PushState gating constants ---
-// NOTE (#377/F1): the gesture-branch emission bound derived from these three constants
-// (see gestureBranchEmissionBound in main_guard_helpers.ts) must stay well under the
-// priority OutboundQueue's scarce-signal capacity (MAX_PENDING_OUTBOUND -
-// RESERVED_SCARCE_OUTBOUND_SLOTS). If you change any of them, update the F1 invariant test
-// in tests/main-guard-helpers.test.ts.
-/** How long after a gesture a pushState/replaceState call is considered gesture-correlated. */
-const PUSHSTATE_GESTURE_WINDOW_MS = 2000;
-/** Minimum number of rapid state changes to flag without domain-like path analysis. */
-const PUSHSTATE_RAPID_THRESHOLD = 4;
-/** Window for counting rapid pushState calls. */
-const PUSHSTATE_RAPID_WINDOW_MS = 1000;
+// PushState gating + pre-bridge buffer constants live in main_guard_constants.ts (a
+// side-effect-free module) so the #377/F1 invariant test asserts against the SAME values
+// the runtime uses. The gesture-branch emission bound derived from the three PUSHSTATE_*
+// constants must stay within the priority OutboundQueue's scarce-signal reservation — that
+// invariant is enforced in tests/main-guard-helpers.test.ts.
 // Hard cap on the pushState timestamp buffer. In a synchronous flood every timestamp equals
 // `now` so the window filter prunes nothing; we only need to know the count reached the rapid
 // threshold, so cap the buffer just above it to bound memory + the per-call O(n) filter. (#302)
@@ -51,11 +51,6 @@ let bridgeSession: string | null = null;
 let bridgeVerified = false;
 let bridgeChallenge: string | null = null;
 let bridgeHandshakeTimer = 0;
-const MAX_PENDING_OUTBOUND = 32;
-// Slots the floodable per-navigation alerts (ns-nav-blocked/ns-nav-allowed) may never
-// occupy, so a synchronous nav flood cannot starve the scarce once-per-event signals
-// (ns-dblclick-*/ns-js-*/ns-pushstate-suspicious) out of the pre-bridge buffer. (#377/F2)
-const RESERVED_SCARCE_OUTBOUND_SLOTS = 4;
 // Buffers messages produced before the bridge is verified. On overflow it keeps
 // security-relevant alerts (never evicted by routine traffic) and the earliest
 // of equal-priority messages — see bridge_outbound.ts for the rationale.

@@ -111,7 +111,11 @@ export class OutboundQueue {
   }
 }
 
-// Non-droppable detection signals on the MAIN-world → isolated direction.
+// Priority detection signals on the MAIN-world → isolated direction (never evicted by
+// routine traffic). Note: the members that are also FLOODABLE_ALERT_TYPES
+// (ns-nav-blocked, ns-nav-allowed) are additionally capped at cap - reservedForScarce
+// slots and dropped beyond that under a flood, so they are not unconditionally
+// non-droppable. (#377/F2)
 const MAIN_GUARD_ALERT_TYPES = new Set<string>([
   "ns-nav-blocked",
   "ns-nav-allowed",

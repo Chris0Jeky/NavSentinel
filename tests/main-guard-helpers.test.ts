@@ -5,15 +5,15 @@ import {
   shouldEmitRapidPushState,
   gestureBranchEmissionBound,
 } from "../extension/src/content/main_guard_helpers";
-
-// Mirror of the production PUSHSTATE_* constants in main_guard.ts and the OutboundQueue
-// capacity in main_guard.ts. Kept here so the #377/F1 invariant test fails if a future
-// constant change would let the gesture-branch flood the priority buffer. (#377/F1)
-const PUSHSTATE_GESTURE_WINDOW_MS = 2000;
-const PUSHSTATE_RAPID_WINDOW_MS = 1000;
-const PUSHSTATE_RAPID_THRESHOLD = 4;
-const MAX_PENDING_OUTBOUND = 32;
-const RESERVED_SCARCE_OUTBOUND_SLOTS = 4;
+// The REAL production constants (not a mirror), so the #377/F1 invariant below fails CI if a
+// future change to any of them would let the gesture branch flood the priority buffer.
+import {
+  PUSHSTATE_GESTURE_WINDOW_MS,
+  PUSHSTATE_RAPID_WINDOW_MS,
+  PUSHSTATE_RAPID_THRESHOLD,
+  MAX_PENDING_OUTBOUND,
+  RESERVED_SCARCE_OUTBOUND_SLOTS,
+} from "../extension/src/content/main_guard_constants";
 
 describe("enforceMapSizeCap (#301)", () => {
   const mapOf = (n: number) => {
@@ -141,17 +141,21 @@ describe("gestureBranchEmissionBound (#377/F1)", () => {
     expect(gestureBranchEmissionBound(2000, Number.NaN, 4)).toBe(Number.POSITIVE_INFINITY);
   });
 
-  it("the production gesture-branch bound stays well under the scarce-signal capacity", () => {
+  it("the production gesture-branch bound stays within the scarce-signal reservation", () => {
     const bound = gestureBranchEmissionBound(
       PUSHSTATE_GESTURE_WINDOW_MS,
       PUSHSTATE_RAPID_WINDOW_MS,
       PUSHSTATE_RAPID_THRESHOLD,
     );
     expect(bound).toBe(6);
-    // The gesture branch emits ns-pushstate-suspicious, a SCARCE (non-floodable) signal.
-    // It must never on its own approach the reservable priority capacity, or it could
-    // crowd out other scarce signals. If this fails, a PUSHSTATE_* constant changed
-    // unsafely — re-tune it or the buffer reservation. (#377/F1)
+    // (a) The gesture branch alone must not be able to fill the non-reserved priority
+    // capacity — otherwise it could crowd out OTHER (non-reserved) priority alerts.
     expect(bound).toBeLessThan(MAX_PENDING_OUTBOUND - RESERVED_SCARCE_OUTBOUND_SLOTS);
+    // (b) The gesture branch (ns-pushstate-suspicious, a scarce signal) must also fit
+    // WITHIN the scarce reservation, so that under a full floodable nav-flood it cannot
+    // monopolize the reserved slots and starve the dblclick/js correlation signals. If
+    // either assertion fails, a PUSHSTATE_* constant grew unsafely — re-tune it or raise
+    // RESERVED_SCARCE_OUTBOUND_SLOTS. (#377/F1, F2)
+    expect(bound).toBeLessThanOrEqual(RESERVED_SCARCE_OUTBOUND_SLOTS);
   });
 });
