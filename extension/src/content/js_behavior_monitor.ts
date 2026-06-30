@@ -315,8 +315,8 @@ function patchFetchMonitoring(_cfg: JsBehaviorMonitorConfig): void {
 
   const originalFetch = window.fetch;
   if (!originalFetch) return;
-  _fetchPatched = true;
-  window.fetch = function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+
+  const wrappedFetch = function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
     try {
       let url = "";
       if (typeof input === "string") {
@@ -337,17 +337,31 @@ function patchFetchMonitoring(_cfg: JsBehaviorMonitorConfig): void {
 
     return originalFetch.call(window, input, init);
   };
+
+  // window.fetch may be hardened non-writable by another extension or by a
+  // page-level anti-fingerprinting / bot-detection script. A bare assignment
+  // would throw "Cannot assign to read only property 'fetch'" and abort the rest
+  // of initJsBehaviorMonitor — silently dropping the XHR, beacon, and
+  // credential-read patches and the ns-config-ack handshake. Guard the
+  // assignment and only mark patched on success so a later ns-config re-sync can
+  // retry. (Mirrors the form-submit patch and credential-getter patch.)
+  try {
+    window.fetch = wrappedFetch;
+    _fetchPatched = true;
+  } catch {
+    // fetch is locked; degrade without breaking page code or aborting init.
+  }
 }
 
 function patchXHRMonitoring(_cfg: JsBehaviorMonitorConfig): void {
   if (_xhrPatched) return;
   void _cfg;
-  _xhrPatched = true;
 
   const originalOpen = XMLHttpRequest.prototype.open;
+  const originalSend = XMLHttpRequest.prototype.send;
   const xhrUrlMap = new WeakMap<XMLHttpRequest, string>();
 
-  XMLHttpRequest.prototype.open = function (
+  const wrappedOpen = function (
     this: XMLHttpRequest,
     method: string,
     url: string | URL,
@@ -363,8 +377,7 @@ function patchXHRMonitoring(_cfg: JsBehaviorMonitorConfig): void {
     return (originalOpen as Function).apply(this, [method, url, ...rest]);
   };
 
-  const originalSend = XMLHttpRequest.prototype.send;
-  XMLHttpRequest.prototype.send = function (
+  const wrappedSend = function (
     this: XMLHttpRequest,
     body?: Document | XMLHttpRequestBodyInit | null
   ) {
@@ -381,6 +394,31 @@ function patchXHRMonitoring(_cfg: JsBehaviorMonitorConfig): void {
     }
     return originalSend.call(this, body);
   };
+
+  // XMLHttpRequest.prototype.open/send may be hardened non-writable by another
+  // extension or a page-level anti-fingerprinting / bot-detection script. A bare
+  // assignment would throw and abort the rest of initJsBehaviorMonitor — dropping
+  // the beacon and credential-read patches and the ns-config-ack handshake. Guard
+  // each assignment, roll back a lone open() wrap if send() can't be patched
+  // (XHR monitoring needs both), and only mark patched once both succeed so a
+  // later ns-config re-sync starts from the native methods (no double-wrap).
+  try {
+    XMLHttpRequest.prototype.open = wrappedOpen;
+  } catch {
+    return;
+  }
+  try {
+    XMLHttpRequest.prototype.send = wrappedSend;
+  } catch {
+    try {
+      XMLHttpRequest.prototype.open = originalOpen;
+    } catch {
+      // open is now locked too; the wrapper only records URLs and calls through,
+      // so leaving it in place cannot break page XHR.
+    }
+    return;
+  }
+  _xhrPatched = true;
 }
 
 function patchBeaconMonitoring(_cfg: JsBehaviorMonitorConfig): void {
@@ -388,10 +426,9 @@ function patchBeaconMonitoring(_cfg: JsBehaviorMonitorConfig): void {
   void _cfg;
 
   if (!navigator.sendBeacon) return;
-  _beaconPatched = true;
 
   const originalBeacon = navigator.sendBeacon.bind(navigator);
-  navigator.sendBeacon = function (url: string | URL, data?: BodyInit | null): boolean {
+  const wrappedBeacon = function (url: string | URL, data?: BodyInit | null): boolean {
     try {
       const urlStr = typeof url === "string" ? url : String(url);
       const origin = extractOrigin(urlStr);
@@ -403,6 +440,18 @@ function patchBeaconMonitoring(_cfg: JsBehaviorMonitorConfig): void {
     }
     return originalBeacon(url, data);
   };
+
+  // navigator.sendBeacon may be hardened non-writable by another extension or by
+  // a page-level anti-fingerprinting / bot-detection script. A bare assignment
+  // would throw and abort the rest of initJsBehaviorMonitor — dropping the
+  // credential-read patch and the ns-config-ack handshake. Guard the assignment
+  // and only mark patched on success so a later ns-config re-sync can retry.
+  try {
+    navigator.sendBeacon = wrappedBeacon;
+    _beaconPatched = true;
+  } catch {
+    // sendBeacon is locked; degrade without breaking page code or aborting init.
+  }
 }
 
 // ============================================================================
