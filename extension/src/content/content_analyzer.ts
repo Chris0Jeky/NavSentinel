@@ -206,10 +206,11 @@ export const MAX_TITLE_LEN = 1000;
 /**
  * Max chars scanned from each `<img>` alt/src attribute. A `data:`-URI src can be
  * multi-MB; bounding each attribute (combined with the 50-image limit) caps the
- * whole signal string at ~50·2·MAX_IMG_ATTR without an unbounded concat. Reduced
- * via `boundedSample` (head+tail) so a long URL path can't bury the brand keyword
- * (e.g. `.../paypal-logo.png`); every image's signal is retained regardless of
- * order (no truncating total cap that could drop a late logo).
+ * whole signal string at ~50·2·(MAX_IMG_ATTR + a short tail) without an unbounded
+ * concat. Reduced via `boundedSample` (full head + short tail) so a long URL path
+ * can't bury the brand keyword (e.g. `.../paypal-logo.png`); every image's signal
+ * is retained regardless of order (no truncating total cap that could drop a late
+ * logo).
  */
 export const MAX_IMG_ATTR = 512;
 
@@ -424,18 +425,18 @@ export function domainMatchesBrand(currentDomain: string, brand: BrandEntry): bo
 // ---------------------------------------------------------------------------
 
 /**
- * Bounded sample of an attacker-controlled string for content scanning. When the
- * string exceeds `max`, keep a head AND a tail slice (joined by a space) rather
- * than head-only, so a brand/login keyword can't be hidden by padding the front
- * (a hostile `<title>`) or burying it at the end of a long URL path. Cost is
- * O(max) regardless of input size. A keyword placed strictly in the omitted
- * middle of a doubly-padded string is not retained, but such text is neither
- * user-visible (the browser tab shows the head) nor a realistic deception vector.
+ * Bounded sample of an attacker-controlled string for content scanning. Keeps the
+ * full first `max` chars — so it never drops anything a plain head-only
+ * `slice(0, max)` would have kept — PLUS a short `max>>2`-char tail, so a
+ * brand/login keyword can't be hidden by padding the front (a hostile `<title>`)
+ * or by burying it at the end of a long URL path. Only content strictly beyond
+ * the head window is ever dropped (and only when the input also has a long tail).
+ * Cost is O(max) regardless of input size.
  */
 export function boundedSample(s: string, max: number): string {
   if (s.length <= max) return s;
-  const half = max >> 1;
-  return s.slice(0, half) + " " + s.slice(s.length - half);
+  const tailStart = Math.max(max, s.length - (max >> 2));
+  return s.slice(0, max) + " " + s.slice(tailStart);
 }
 
 /** Build a PageSnapshot from a live Document. Called in content script context. */

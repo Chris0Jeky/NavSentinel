@@ -64,21 +64,38 @@ describe("boundedSample", () => {
     expect(boundedSample("hello", 10)).toBe("hello");
   });
 
-  it("keeps the head and the tail when over max, dropping the middle", () => {
-    const s = "HEAD" + "x".repeat(100) + "TAIL";
-    const out = boundedSample(s, 8);
-    expect(out).toContain("HEAD");
-    expect(out).toContain("TAIL");
-    expect(out).not.toContain("xxxxx");
-    expect(out.length).toBeLessThanOrEqual(9);
+  it("keeps the full head window plus a tail, dropping only the middle", () => {
+    const s = "HEAD" + "z".repeat(300) + "NEEDLE" + "z".repeat(300) + "TAIL";
+    const out = boundedSample(s, 16);
+    expect(out.startsWith("HEAD")).toBe(true); // full head preserved
+    expect(out.endsWith("TAIL")).toBe(true);   // tail preserved
+    expect(out).not.toContain("NEEDLE");       // omitted middle
+    expect(out.length).toBeLessThanOrEqual(16 + (16 >> 2) + 1);
+  });
+
+  it("never drops content the prior head-only window covered (no [max/2,max) regression)", () => {
+    // A keyword between max/2 and max must survive: the head is the FULL max, so a
+    // 50/50 head+tail split (which would drop it) is a regression this pins.
+    const s = "a".repeat(10) + "NEEDLE" + "a".repeat(100);
+    expect(boundedSample(s, 20)).toContain("NEEDLE"); // NEEDLE at [10,16) is within the 20-char head
   });
 });
 
 describe("buildPageSnapshot title cap (#401)", () => {
   it("bounds an oversized title to ~MAX_TITLE_LEN chars", () => {
     document.documentElement.innerHTML = "<head></head><body></body>";
-    document.title = "x".repeat(MAX_TITLE_LEN + 500);
-    expect(buildPageSnapshot(document).title.length).toBeLessThanOrEqual(MAX_TITLE_LEN + 1);
+    document.title = "x".repeat(MAX_TITLE_LEN * 3);
+    expect(buildPageSnapshot(document).title.length).toBeLessThanOrEqual(
+      MAX_TITLE_LEN + (MAX_TITLE_LEN >> 2) + 1,
+    );
+  });
+
+  it("keeps a brand keyword in the prior head window (max/2..max band, no regression)", () => {
+    document.documentElement.innerHTML = "<head></head><body></body>";
+    // Brand at ~700 -- within [MAX_TITLE_LEN/2, MAX_TITLE_LEN). A 50/50 head+tail
+    // split would have dropped it; the full-head sample must keep it.
+    document.title = "a".repeat(700) + "PayPal Login" + "c".repeat(788);
+    expect(buildPageSnapshot(document).title).toContain("paypal");
   });
 
   it("keeps the title tail so a front-padded hostile title can't hide the brand", () => {
@@ -133,7 +150,9 @@ describe("buildPageSnapshot imgSignals cap (#401)", () => {
     expect(snap.imgSignals).toContain("brand0");
     expect(snap.imgSignals).toContain("brand49");
     // Total stays bounded by the per-attribute sample x the 50-image limit.
-    expect(snap.imgSignals.length).toBeLessThanOrEqual(50 * (2 * (MAX_IMG_ATTR + 1) + 2));
+    expect(snap.imgSignals.length).toBeLessThanOrEqual(
+      50 * (2 * (MAX_IMG_ATTR + (MAX_IMG_ATTR >> 2) + 1) + 2),
+    );
   });
 
   it("does not truncate a small set of images and preserves brand keywords", () => {
