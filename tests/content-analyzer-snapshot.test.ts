@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   buildPageSnapshot,
   HTML_SNIPPET_MAX,
+  MAX_IMG_SIGNALS,
+  MAX_TITLE_LEN,
 } from "../extension/src/content/content_analyzer";
 
 // Guards the slice <-> HTML_SNIPPET_MAX coupling (D-REDOS R3 nit): the exfil
@@ -53,5 +55,49 @@ describe("buildPageSnapshot credential-page gate (#196)", () => {
     document.documentElement.innerHTML =
       "<head></head><body><form><input type=\"password\" style=\"display:none none\"></form></body>";
     expect(buildPageSnapshot(document).hasPasswordField).toBe(true);
+  });
+});
+
+describe("buildPageSnapshot title cap (#401)", () => {
+  it("caps title length at MAX_TITLE_LEN for an oversized title", () => {
+    document.documentElement.innerHTML = "<head></head><body></body>";
+    document.title = "x".repeat(MAX_TITLE_LEN + 500);
+    expect(buildPageSnapshot(document).title.length).toBe(MAX_TITLE_LEN);
+  });
+
+  it("does not truncate a normal title and still lowercases it", () => {
+    document.documentElement.innerHTML = "<head></head><body></body>";
+    document.title = "PayPal Login";
+    expect(buildPageSnapshot(document).title).toBe("paypal login");
+  });
+});
+
+describe("buildPageSnapshot imgSignals cap (#401)", () => {
+  it("truncates a single multi-MB data-URI src but keeps the alt brand keyword", () => {
+    const bigSrc = "data:image/png;base64," + "a".repeat(MAX_IMG_SIGNALS * 4);
+    document.documentElement.innerHTML =
+      `<body><img alt="paypal" src="${bigSrc}"></body>`;
+    const snap = buildPageSnapshot(document);
+    // Per-attribute cap keeps a lone huge src far below the multi-MB original.
+    expect(snap.imgSignals.length).toBeLessThan(2000);
+    expect(snap.imgSignals).toContain("paypal");
+  });
+
+  it("caps the total imgSignals length across many images", () => {
+    let html = "<body>";
+    for (let i = 0; i < 50; i++) {
+      html += `<img alt="brand${i}" src="https://cdn.example.com/${"p".repeat(600)}.png">`;
+    }
+    html += "</body>";
+    document.documentElement.innerHTML = html;
+    expect(buildPageSnapshot(document).imgSignals.length).toBe(MAX_IMG_SIGNALS);
+  });
+
+  it("does not truncate a small set of images and preserves brand keywords", () => {
+    document.documentElement.innerHTML =
+      `<body><img alt="Google logo" src="https://cdn.test/google.png"></body>`;
+    const snap = buildPageSnapshot(document);
+    expect(snap.imgSignals.length).toBeLessThan(MAX_IMG_SIGNALS);
+    expect(snap.imgSignals).toContain("google");
   });
 });

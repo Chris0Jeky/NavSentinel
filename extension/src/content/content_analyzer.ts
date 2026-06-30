@@ -193,6 +193,26 @@ export const BRAND_DB: ReadonlyArray<BrandEntry> = [
  */
 export const HTML_SNIPPET_MAX = 10000;
 
+/**
+ * Max chars of `document.title` captured into the snapshot. `title` has no
+ * platform length limit, and `detectBrand`/`analyzeSnapshot` run ~60 brand
+ * titlePatterns plus a loginSignals regex against it on the synchronous
+ * credential-submit path — an unbounded title would blow the documented
+ * <50ms-per-analysis budget. A real title comfortably fits; the brand keyword
+ * (if any) is at the start. Mirrors the bodyText/htmlSnippet/scriptText bounds.
+ */
+export const MAX_TITLE_LEN = 1000;
+
+/**
+ * Caps for the concatenated `<img>` alt/src signal string. `src` is only
+ * substring-scanned for brand keywords, but a `data:`-URI src (inlined image)
+ * can be multi-MB; an unbounded concat would blow the same budget. Bound each
+ * attribute and the total — a brand keyword in a real alt/http(s) src is at the
+ * start, and base64 blobs carry no brand text.
+ */
+export const MAX_IMG_SIGNALS = 8192;
+const MAX_IMG_ATTR = 512;
+
 export interface KitFingerprint {
   name: string;
   /** CSS selectors or attribute patterns to look for */
@@ -429,15 +449,18 @@ export function buildPageSnapshot(doc: Document): PageSnapshot {
   }
   scriptText = scriptText.slice(0, 30000);
 
-  // Image signals
+  // Image signals -- bounded per-attribute and in total (multi-MB data:-URI src
+  // would otherwise blow the analysis budget; see MAX_IMG_SIGNALS).
   const imgs = doc.querySelectorAll("img");
   let imgSignals = "";
   const imgLimit = Math.min(imgs.length, 50);
   for (let i = 0; i < imgLimit; i++) {
     const img = imgs[i] as HTMLImageElement;
-    imgSignals += " " + (img.getAttribute("alt") || "").toLowerCase() +
-                  " " + (img.getAttribute("src") || "").toLowerCase();
+    imgSignals += " " + (img.getAttribute("alt") || "").slice(0, MAX_IMG_ATTR).toLowerCase() +
+                  " " + (img.getAttribute("src") || "").slice(0, MAX_IMG_ATTR).toLowerCase();
+    if (imgSignals.length >= MAX_IMG_SIGNALS) break;
   }
+  imgSignals = imgSignals.slice(0, MAX_IMG_SIGNALS);
 
   // Form actions
   const formActions: Array<{ action: string; hasPassword: boolean }> = [];
@@ -479,7 +502,7 @@ export function buildPageSnapshot(doc: Document): PageSnapshot {
   });
 
   return {
-    title: (doc.title || "").toLowerCase(),
+    title: (doc.title || "").slice(0, MAX_TITLE_LEN).toLowerCase(),
     bodyText,
     htmlSnippet,
     scriptText,
