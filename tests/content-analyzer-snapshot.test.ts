@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
 import {
+  boundedSample,
   buildPageSnapshot,
   HTML_SNIPPET_MAX,
   MAX_IMG_ATTR,
@@ -58,11 +59,36 @@ describe("buildPageSnapshot credential-page gate (#196)", () => {
   });
 });
 
+describe("boundedSample", () => {
+  it("returns the input unchanged when within max", () => {
+    expect(boundedSample("hello", 10)).toBe("hello");
+  });
+
+  it("keeps the head and the tail when over max, dropping the middle", () => {
+    const s = "HEAD" + "x".repeat(100) + "TAIL";
+    const out = boundedSample(s, 8);
+    expect(out).toContain("HEAD");
+    expect(out).toContain("TAIL");
+    expect(out).not.toContain("xxxxx");
+    expect(out.length).toBeLessThanOrEqual(9);
+  });
+});
+
 describe("buildPageSnapshot title cap (#401)", () => {
-  it("caps title length at MAX_TITLE_LEN for an oversized title", () => {
+  it("bounds an oversized title to ~MAX_TITLE_LEN chars", () => {
     document.documentElement.innerHTML = "<head></head><body></body>";
     document.title = "x".repeat(MAX_TITLE_LEN + 500);
-    expect(buildPageSnapshot(document).title.length).toBe(MAX_TITLE_LEN);
+    expect(buildPageSnapshot(document).title.length).toBeLessThanOrEqual(MAX_TITLE_LEN + 1);
+  });
+
+  it("keeps the title tail so a front-padded hostile title can't hide the brand", () => {
+    document.documentElement.innerHTML = "<head></head><body></body>";
+    // Brand/login terms after MAX_TITLE_LEN of padding -- a head-only cap would
+    // drop them (a content-fingerprinting evasion; flagged by Codex on #403).
+    document.title = "x".repeat(MAX_TITLE_LEN * 2) + " PayPal Login";
+    const snap = buildPageSnapshot(document);
+    expect(snap.title).toContain("paypal");
+    expect(snap.title).toContain("login");
   });
 
   it("does not truncate a normal title and still lowercases it", () => {
@@ -73,24 +99,25 @@ describe("buildPageSnapshot title cap (#401)", () => {
 });
 
 describe("buildPageSnapshot imgSignals cap (#401)", () => {
-  it("truncates a single multi-MB data-URI src but keeps the alt brand keyword", () => {
+  it("bounds a single multi-MB data-URI src but keeps the alt brand keyword", () => {
     const bigSrc = "data:image/png;base64," + "a".repeat(MAX_IMG_ATTR * 20);
     document.documentElement.innerHTML =
       `<body><img alt="paypal" src="${bigSrc}"></body>`;
     const snap = buildPageSnapshot(document);
-    // Per-attribute cap keeps a lone huge src far below the multi-MB original.
+    // The huge src is reduced to ~MAX_IMG_ATTR chars, far below the original.
     expect(snap.imgSignals.length).toBeLessThan(2 * MAX_IMG_ATTR + 64);
     expect(snap.imgSignals).toContain("paypal");
   });
 
-  it("truncates a long src past MAX_IMG_ATTR but keeps its leading domain", () => {
-    const src = "https://cdn.example.com/" + "z".repeat(MAX_IMG_ATTR) + "needle.png";
+  it("head+tail samples a long src: keeps leading domain + trailing filename, drops the middle", () => {
+    const src = "https://paypal-cdn.test/" + "z".repeat(MAX_IMG_ATTR * 4) +
+      "MIDDLEX" + "z".repeat(MAX_IMG_ATTR * 4) + "/logo-paypal.png";
     document.documentElement.innerHTML =
       `<body><img alt="logo" src="${src}"></body>`;
     const snap = buildPageSnapshot(document);
-    expect(snap.imgSignals).toContain("cdn.example.com");
-    // The marker sits past MAX_IMG_ATTR, so the per-attribute cap drops it.
-    expect(snap.imgSignals).not.toContain("needle");
+    expect(snap.imgSignals).toContain("paypal-cdn");   // head
+    expect(snap.imgSignals).toContain("logo-paypal");  // tail (a head-only cap would drop this)
+    expect(snap.imgSignals).not.toContain("middlex");  // omitted middle
   });
 
   it("retains every image's signal regardless of count/order (no ordering drop)", () => {
@@ -105,8 +132,8 @@ describe("buildPageSnapshot imgSignals cap (#401)", () => {
     // dropped (guards against re-introducing a truncating total cap).
     expect(snap.imgSignals).toContain("brand0");
     expect(snap.imgSignals).toContain("brand49");
-    // Total stays bounded by the per-attribute cap x the 50-image limit.
-    expect(snap.imgSignals.length).toBeLessThanOrEqual(50 * (2 * MAX_IMG_ATTR + 2));
+    // Total stays bounded by the per-attribute sample x the 50-image limit.
+    expect(snap.imgSignals.length).toBeLessThanOrEqual(50 * (2 * (MAX_IMG_ATTR + 1) + 2));
   });
 
   it("does not truncate a small set of images and preserves brand keywords", () => {

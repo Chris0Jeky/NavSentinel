@@ -194,25 +194,22 @@ export const BRAND_DB: ReadonlyArray<BrandEntry> = [
 export const HTML_SNIPPET_MAX = 10000;
 
 /**
- * Max chars of `document.title` captured into the snapshot. `title` has no
- * platform length limit, and `detectBrand`/`analyzeSnapshot` run ~60 brand
- * titlePatterns plus a loginSignals regex against it on the synchronous
- * credential-submit path — an unbounded title would blow the documented
- * <50ms-per-analysis budget. A real title comfortably fits; the brand keyword
- * (if any) is at the start. Mirrors the bodyText/htmlSnippet/scriptText bounds.
+ * Max chars scanned from `document.title`. `title` has no platform length limit
+ * and is fully attacker-controlled, yet detectBrand/analyzeSnapshot run ~60 brand
+ * titlePatterns + a loginSignals regex against it on the synchronous credential-
+ * submit path, so an unbounded title would blow the documented <50ms budget. The
+ * title is reduced via `boundedSample` (head+tail) so a hostile page can't evade
+ * the scan by padding the front to push the real brand/login text out of range.
  */
 export const MAX_TITLE_LEN = 1000;
 
 /**
- * Max chars captured from each `<img>` alt/src attribute. `src` is only
- * substring-scanned for brand keywords, but a `data:`-URI src (inlined image)
- * can be multi-MB; bounding each attribute (combined with the 50-image limit)
- * caps the whole signal string at ~50·2·MAX_IMG_ATTR without an unbounded
- * concat. A brand keyword in a real alt/http(s) src is at the start, and base64
- * blobs carry no brand text. A *total* cap is deliberately avoided: it would
- * have to truncate mid-list and could drop a brand logo's signal that appears
- * after image-heavy filler — an evasion the per-attribute bound sidesteps while
- * still killing the unbounded-growth cost.
+ * Max chars scanned from each `<img>` alt/src attribute. A `data:`-URI src can be
+ * multi-MB; bounding each attribute (combined with the 50-image limit) caps the
+ * whole signal string at ~50·2·MAX_IMG_ATTR without an unbounded concat. Reduced
+ * via `boundedSample` (head+tail) so a long URL path can't bury the brand keyword
+ * (e.g. `.../paypal-logo.png`); every image's signal is retained regardless of
+ * order (no truncating total cap that could drop a late logo).
  */
 export const MAX_IMG_ATTR = 512;
 
@@ -426,6 +423,21 @@ export function domainMatchesBrand(currentDomain: string, brand: BrandEntry): bo
 // Snapshot builder (runs in content script with real DOM)
 // ---------------------------------------------------------------------------
 
+/**
+ * Bounded sample of an attacker-controlled string for content scanning. When the
+ * string exceeds `max`, keep a head AND a tail slice (joined by a space) rather
+ * than head-only, so a brand/login keyword can't be hidden by padding the front
+ * (a hostile `<title>`) or burying it at the end of a long URL path. Cost is
+ * O(max) regardless of input size. A keyword placed strictly in the omitted
+ * middle of a doubly-padded string is not retained, but such text is neither
+ * user-visible (the browser tab shows the head) nor a realistic deception vector.
+ */
+export function boundedSample(s: string, max: number): string {
+  if (s.length <= max) return s;
+  const half = max >> 1;
+  return s.slice(0, half) + " " + s.slice(s.length - half);
+}
+
 /** Build a PageSnapshot from a live Document. Called in content script context. */
 export function buildPageSnapshot(doc: Document): PageSnapshot {
   // Credential-page gate: shared visible-credential-field helper (#196).
@@ -452,17 +464,20 @@ export function buildPageSnapshot(doc: Document): PageSnapshot {
   }
   scriptText = scriptText.slice(0, 30000);
 
-  // Image signals -- each alt/src is bounded to MAX_IMG_ATTR chars (a multi-MB
-  // data:-URI src would otherwise blow the analysis budget). The 50-image limit
-  // bounds the total; every image's signal is retained so image order can't drop
-  // a brand match (see MAX_IMG_ATTR).
+  // Image signals -- each alt/src is head+tail sampled to ~MAX_IMG_ATTR chars (a
+  // multi-MB data:-URI src would otherwise blow the analysis budget). The 50-image
+  // limit bounds the total; every image's signal is retained so image order can't
+  // drop a brand match (see MAX_IMG_ATTR / boundedSample). Only slice/lowercase
+  // present attributes to avoid needless allocations on the hot path.
   const imgs = doc.querySelectorAll("img");
   let imgSignals = "";
   const imgLimit = Math.min(imgs.length, 50);
   for (let i = 0; i < imgLimit; i++) {
     const img = imgs[i] as HTMLImageElement;
-    imgSignals += " " + (img.getAttribute("alt") || "").slice(0, MAX_IMG_ATTR).toLowerCase() +
-                  " " + (img.getAttribute("src") || "").slice(0, MAX_IMG_ATTR).toLowerCase();
+    const alt = img.getAttribute("alt");
+    const src = img.getAttribute("src");
+    imgSignals += " " + (alt ? boundedSample(alt, MAX_IMG_ATTR).toLowerCase() : "") +
+                  " " + (src ? boundedSample(src, MAX_IMG_ATTR).toLowerCase() : "");
   }
 
   // Form actions
@@ -505,7 +520,7 @@ export function buildPageSnapshot(doc: Document): PageSnapshot {
   });
 
   return {
-    title: (doc.title || "").slice(0, MAX_TITLE_LEN).toLowerCase(),
+    title: boundedSample(doc.title || "", MAX_TITLE_LEN).toLowerCase(),
     bodyText,
     htmlSnippet,
     scriptText,
