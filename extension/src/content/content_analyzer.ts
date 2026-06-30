@@ -204,14 +204,17 @@ export const HTML_SNIPPET_MAX = 10000;
 export const MAX_TITLE_LEN = 1000;
 
 /**
- * Caps for the concatenated `<img>` alt/src signal string. `src` is only
+ * Max chars captured from each `<img>` alt/src attribute. `src` is only
  * substring-scanned for brand keywords, but a `data:`-URI src (inlined image)
- * can be multi-MB; an unbounded concat would blow the same budget. Bound each
- * attribute and the total — a brand keyword in a real alt/http(s) src is at the
- * start, and base64 blobs carry no brand text.
+ * can be multi-MB; bounding each attribute (combined with the 50-image limit)
+ * caps the whole signal string at ~50·2·MAX_IMG_ATTR without an unbounded
+ * concat. A brand keyword in a real alt/http(s) src is at the start, and base64
+ * blobs carry no brand text. A *total* cap is deliberately avoided: it would
+ * have to truncate mid-list and could drop a brand logo's signal that appears
+ * after image-heavy filler — an evasion the per-attribute bound sidesteps while
+ * still killing the unbounded-growth cost.
  */
-export const MAX_IMG_SIGNALS = 8192;
-const MAX_IMG_ATTR = 512;
+export const MAX_IMG_ATTR = 512;
 
 export interface KitFingerprint {
   name: string;
@@ -449,8 +452,10 @@ export function buildPageSnapshot(doc: Document): PageSnapshot {
   }
   scriptText = scriptText.slice(0, 30000);
 
-  // Image signals -- bounded per-attribute and in total (multi-MB data:-URI src
-  // would otherwise blow the analysis budget; see MAX_IMG_SIGNALS).
+  // Image signals -- each alt/src is bounded to MAX_IMG_ATTR chars (a multi-MB
+  // data:-URI src would otherwise blow the analysis budget). The 50-image limit
+  // bounds the total; every image's signal is retained so image order can't drop
+  // a brand match (see MAX_IMG_ATTR).
   const imgs = doc.querySelectorAll("img");
   let imgSignals = "";
   const imgLimit = Math.min(imgs.length, 50);
@@ -458,9 +463,7 @@ export function buildPageSnapshot(doc: Document): PageSnapshot {
     const img = imgs[i] as HTMLImageElement;
     imgSignals += " " + (img.getAttribute("alt") || "").slice(0, MAX_IMG_ATTR).toLowerCase() +
                   " " + (img.getAttribute("src") || "").slice(0, MAX_IMG_ATTR).toLowerCase();
-    if (imgSignals.length >= MAX_IMG_SIGNALS) break;
   }
-  imgSignals = imgSignals.slice(0, MAX_IMG_SIGNALS);
 
   // Form actions
   const formActions: Array<{ action: string; hasPassword: boolean }> = [];

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildPageSnapshot,
   HTML_SNIPPET_MAX,
-  MAX_IMG_SIGNALS,
+  MAX_IMG_ATTR,
   MAX_TITLE_LEN,
 } from "../extension/src/content/content_analyzer";
 
@@ -74,30 +74,45 @@ describe("buildPageSnapshot title cap (#401)", () => {
 
 describe("buildPageSnapshot imgSignals cap (#401)", () => {
   it("truncates a single multi-MB data-URI src but keeps the alt brand keyword", () => {
-    const bigSrc = "data:image/png;base64," + "a".repeat(MAX_IMG_SIGNALS * 4);
+    const bigSrc = "data:image/png;base64," + "a".repeat(MAX_IMG_ATTR * 20);
     document.documentElement.innerHTML =
       `<body><img alt="paypal" src="${bigSrc}"></body>`;
     const snap = buildPageSnapshot(document);
     // Per-attribute cap keeps a lone huge src far below the multi-MB original.
-    expect(snap.imgSignals.length).toBeLessThan(2000);
+    expect(snap.imgSignals.length).toBeLessThan(2 * MAX_IMG_ATTR + 64);
     expect(snap.imgSignals).toContain("paypal");
   });
 
-  it("caps the total imgSignals length across many images", () => {
+  it("truncates a long src past MAX_IMG_ATTR but keeps its leading domain", () => {
+    const src = "https://cdn.example.com/" + "z".repeat(MAX_IMG_ATTR) + "needle.png";
+    document.documentElement.innerHTML =
+      `<body><img alt="logo" src="${src}"></body>`;
+    const snap = buildPageSnapshot(document);
+    expect(snap.imgSignals).toContain("cdn.example.com");
+    // The marker sits past MAX_IMG_ATTR, so the per-attribute cap drops it.
+    expect(snap.imgSignals).not.toContain("needle");
+  });
+
+  it("retains every image's signal regardless of count/order (no ordering drop)", () => {
     let html = "<body>";
     for (let i = 0; i < 50; i++) {
       html += `<img alt="brand${i}" src="https://cdn.example.com/${"p".repeat(600)}.png">`;
     }
     html += "</body>";
     document.documentElement.innerHTML = html;
-    expect(buildPageSnapshot(document).imgSignals.length).toBe(MAX_IMG_SIGNALS);
+    const snap = buildPageSnapshot(document);
+    // Both the first and a late image contribute -- a late brand logo is never
+    // dropped (guards against re-introducing a truncating total cap).
+    expect(snap.imgSignals).toContain("brand0");
+    expect(snap.imgSignals).toContain("brand49");
+    // Total stays bounded by the per-attribute cap x the 50-image limit.
+    expect(snap.imgSignals.length).toBeLessThanOrEqual(50 * (2 * MAX_IMG_ATTR + 2));
   });
 
   it("does not truncate a small set of images and preserves brand keywords", () => {
     document.documentElement.innerHTML =
       `<body><img alt="Google logo" src="https://cdn.test/google.png"></body>`;
     const snap = buildPageSnapshot(document);
-    expect(snap.imgSignals.length).toBeLessThan(MAX_IMG_SIGNALS);
     expect(snap.imgSignals).toContain("google");
   });
 });
