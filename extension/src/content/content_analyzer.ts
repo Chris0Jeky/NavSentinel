@@ -198,8 +198,10 @@ export const HTML_SNIPPET_MAX = 10000;
  * and is fully attacker-controlled, yet detectBrand/analyzeSnapshot run ~60 brand
  * titlePatterns + a loginSignals regex against it on the synchronous credential-
  * submit path, so an unbounded title would blow the documented <50ms budget. The
- * title is reduced via `boundedSample` (head+tail) so a hostile page can't evade
- * the scan by padding the front to push the real brand/login text out of range.
+ * title is reduced via `boundedSample` (full head + short tail) so simple front-
+ * padding doesn't push the brand/login text out of the scanned range; a calibrated
+ * boundary placement can still evade the title channel (see #401), with the
+ * bodyText/imgSignals channels as the backstop.
  */
 export const MAX_TITLE_LEN = 1000;
 
@@ -427,11 +429,13 @@ export function domainMatchesBrand(currentDomain: string, brand: BrandEntry): bo
 /**
  * Bounded sample of an attacker-controlled string for content scanning. Keeps the
  * full first `max` chars — so it never drops anything a plain head-only
- * `slice(0, max)` would have kept — PLUS a short `max>>2`-char tail, so a
- * brand/login keyword can't be hidden by padding the front (a hostile `<title>`)
- * or by burying it at the end of a long URL path. Only content strictly beyond
- * the head window is ever dropped (and only when the input also has a long tail).
- * Cost is O(max) regardless of input size.
+ * `slice(0, max)` would have kept — PLUS a short `max>>2`-char tail, so brand/login
+ * text pushed toward the front (a hostile `<title>`) or buried at the end of a long
+ * URL path is still scanned. This is a bounded sample, not a full scan: content
+ * placed precisely past the head boundary with calibrated trailing padding can
+ * still land in the omitted middle `[max, len-(max>>2))`. That residual title-
+ * channel gap (tracked on #401) is an inherent tradeoff of the O(max) budget and is
+ * backstopped by the untouched bodyText/imgSignals detection channels.
  */
 export function boundedSample(s: string, max: number): string {
   if (s.length <= max) return s;
