@@ -1,8 +1,11 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
 import {
+  boundedSample,
   buildPageSnapshot,
   HTML_SNIPPET_MAX,
+  MAX_IMG_ATTR,
+  MAX_TITLE_LEN,
 } from "../extension/src/content/content_analyzer";
 
 // Guards the slice <-> HTML_SNIPPET_MAX coupling (D-REDOS R3 nit): the exfil
@@ -53,5 +56,109 @@ describe("buildPageSnapshot credential-page gate (#196)", () => {
     document.documentElement.innerHTML =
       "<head></head><body><form><input type=\"password\" style=\"display:none none\"></form></body>";
     expect(buildPageSnapshot(document).hasPasswordField).toBe(true);
+  });
+});
+
+describe("boundedSample", () => {
+  it("returns the input unchanged when within max", () => {
+    expect(boundedSample("hello", 10)).toBe("hello");
+  });
+
+  it("keeps the full head window plus a tail, dropping only the middle", () => {
+    const s = "HEAD" + "z".repeat(300) + "NEEDLE" + "z".repeat(300) + "TAIL";
+    const out = boundedSample(s, 16);
+    expect(out.startsWith("HEAD")).toBe(true); // full head preserved
+    expect(out.endsWith("TAIL")).toBe(true);   // tail preserved
+    expect(out).not.toContain("NEEDLE");       // omitted middle
+    expect(out.length).toBeLessThanOrEqual(16 + (16 >> 2) + 1);
+  });
+
+  it("never drops content the prior head-only window covered (no [max/2,max) regression)", () => {
+    // A keyword between max/2 and max must survive: the head is the FULL max, so a
+    // 50/50 head+tail split (which would drop it) is a regression this pins.
+    const s = "a".repeat(10) + "NEEDLE" + "a".repeat(100);
+    expect(boundedSample(s, 20)).toContain("NEEDLE"); // NEEDLE at [10,16) is within the 20-char head
+  });
+});
+
+describe("buildPageSnapshot title cap (#401)", () => {
+  it("bounds an oversized title to ~MAX_TITLE_LEN chars", () => {
+    document.documentElement.innerHTML = "<head></head><body></body>";
+    document.title = "x".repeat(MAX_TITLE_LEN * 3);
+    expect(buildPageSnapshot(document).title.length).toBeLessThanOrEqual(
+      MAX_TITLE_LEN + (MAX_TITLE_LEN >> 2) + 1,
+    );
+  });
+
+  it("keeps a brand keyword in the prior head window (max/2..max band, no regression)", () => {
+    document.documentElement.innerHTML = "<head></head><body></body>";
+    // Brand at ~700 -- within [MAX_TITLE_LEN/2, MAX_TITLE_LEN). A 50/50 head+tail
+    // split would have dropped it; the full-head sample must keep it.
+    document.title = "a".repeat(700) + "PayPal Login" + "c".repeat(788);
+    expect(buildPageSnapshot(document).title).toContain("paypal");
+  });
+
+  it("keeps the title tail so a front-padded hostile title can't hide the brand", () => {
+    document.documentElement.innerHTML = "<head></head><body></body>";
+    // Brand/login terms after MAX_TITLE_LEN of padding -- a head-only cap would
+    // drop them (a content-fingerprinting evasion; flagged by Codex on #403).
+    document.title = "x".repeat(MAX_TITLE_LEN * 2) + " PayPal Login";
+    const snap = buildPageSnapshot(document);
+    expect(snap.title).toContain("paypal");
+    expect(snap.title).toContain("login");
+  });
+
+  it("does not truncate a normal title and still lowercases it", () => {
+    document.documentElement.innerHTML = "<head></head><body></body>";
+    document.title = "PayPal Login";
+    expect(buildPageSnapshot(document).title).toBe("paypal login");
+  });
+});
+
+describe("buildPageSnapshot imgSignals cap (#401)", () => {
+  it("bounds a single multi-MB data-URI src but keeps the alt brand keyword", () => {
+    const bigSrc = "data:image/png;base64," + "a".repeat(MAX_IMG_ATTR * 20);
+    document.documentElement.innerHTML =
+      `<body><img alt="paypal" src="${bigSrc}"></body>`;
+    const snap = buildPageSnapshot(document);
+    // The huge src is reduced to ~MAX_IMG_ATTR chars, far below the original.
+    expect(snap.imgSignals.length).toBeLessThan(2 * MAX_IMG_ATTR + 64);
+    expect(snap.imgSignals).toContain("paypal");
+  });
+
+  it("head+tail samples a long src: keeps leading domain + trailing filename, drops the middle", () => {
+    const src = "https://paypal-cdn.test/" + "z".repeat(MAX_IMG_ATTR * 4) +
+      "MIDDLEX" + "z".repeat(MAX_IMG_ATTR * 4) + "/logo-paypal.png";
+    document.documentElement.innerHTML =
+      `<body><img alt="logo" src="${src}"></body>`;
+    const snap = buildPageSnapshot(document);
+    expect(snap.imgSignals).toContain("paypal-cdn");   // head
+    expect(snap.imgSignals).toContain("logo-paypal");  // tail (a head-only cap would drop this)
+    expect(snap.imgSignals).not.toContain("middlex");  // omitted middle
+  });
+
+  it("retains every image's signal regardless of count/order (no ordering drop)", () => {
+    let html = "<body>";
+    for (let i = 0; i < 50; i++) {
+      html += `<img alt="brand${i}" src="https://cdn.example.com/${"p".repeat(600)}.png">`;
+    }
+    html += "</body>";
+    document.documentElement.innerHTML = html;
+    const snap = buildPageSnapshot(document);
+    // Both the first and a late image contribute -- a late brand logo is never
+    // dropped (guards against re-introducing a truncating total cap).
+    expect(snap.imgSignals).toContain("brand0");
+    expect(snap.imgSignals).toContain("brand49");
+    // Total stays bounded by the per-attribute sample x the 50-image limit.
+    expect(snap.imgSignals.length).toBeLessThanOrEqual(
+      50 * (2 * (MAX_IMG_ATTR + (MAX_IMG_ATTR >> 2) + 1) + 2),
+    );
+  });
+
+  it("does not truncate a small set of images and preserves brand keywords", () => {
+    document.documentElement.innerHTML =
+      `<body><img alt="Google logo" src="https://cdn.test/google.png"></body>`;
+    const snap = buildPageSnapshot(document);
+    expect(snap.imgSignals).toContain("google");
   });
 });
