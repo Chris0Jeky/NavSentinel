@@ -15,6 +15,7 @@ import {
   getMutationAlertCount,
   _resetMutationState,
   _getShadowObserverCountForTesting,
+  _getPendingMutationCountForTesting,
   _feedMutationRecordsForTesting,
   type MutationAlert,
 } from "../extension/src/content/mutation_monitor";
@@ -997,6 +998,48 @@ describe("mutation_monitor shadow DOM observation", () => {
     expect(alerts.filter((a) => a.type === "password_injected").length).toBe(1);
 
     outerHost.remove();
+    stopMutationMonitor();
+  });
+});
+
+describe("mutation_monitor alert-cap cleanup (#409)", () => {
+  beforeEach(() => {
+    _resetMutationState();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    _resetMutationState();
+    vi.useRealTimers();
+  });
+
+  it("still disconnects shadow observers + drains the queue after the alert cap is reached (#409)", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    host.attachShadow({ mode: "open" });
+
+    startMutationMonitor(document, () => {});
+    await vi.advanceTimersByTimeAsync(200);
+    expect(_getShadowObserverCountForTesting()).toBe(1);
+
+    // Drive past MAX_ALERTS (50) with injected password fields.
+    for (let i = 0; i < 60; i++) {
+      const input = document.createElement("input");
+      input.type = "password";
+      document.body.appendChild(input);
+    }
+    await vi.advanceTimersByTimeAsync(200);
+    expect(getMutationAlertCount()).toBe(50); // capped
+
+    // Remove the shadow host. Pre-fix, processBatch early-returned on the cap, so
+    // removed-node cleanup was skipped (observer leaked, count stayed 1) and the
+    // queue was never drained. Post-fix, cleanup + drain run unconditionally.
+    host.remove();
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(_getShadowObserverCountForTesting()).toBe(0);
+    expect(_getPendingMutationCountForTesting()).toBe(0);
+
     stopMutationMonitor();
   });
 });
