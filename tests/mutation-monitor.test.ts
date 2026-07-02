@@ -948,6 +948,7 @@ describe("mutation_monitor shadow DOM observation", () => {
     await vi.advanceTimersByTimeAsync(200);
     expect(alerts.filter((a) => a.type === "password_injected").length).toBe(1);
 
+    wrapper.remove();
     stopMutationMonitor();
   });
 });
