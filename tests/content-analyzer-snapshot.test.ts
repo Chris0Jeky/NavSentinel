@@ -217,4 +217,27 @@ describe("buildPageSnapshot formActions cap (#401)", () => {
     const snap = buildPageSnapshot(document);
     expect(snap.formActions[0]!.action).toBe("/login");
   });
+
+  it("still trims + detects cross-domain with modest surrounding whitespace (#407 R1)", () => {
+    // Slicing before trimming must not break within-cap content: leading/trailing
+    // whitespace is still stripped so the scheme+host survive and the check fires.
+    document.documentElement.innerHTML =
+      `<body><form action="   https://attacker.example/x   "><input type="password"></form></body>`;
+    const snap = buildPageSnapshot(document);
+    expect(snap.formActions[0]!.action).toBe("https://attacker.example/x");
+    const result = analyzeSnapshot(snap, "bank.test");
+    expect(result.reasons.some((r) => r.includes("different domain"))).toBe(true);
+  });
+
+  it("bounds a leading-whitespace-padded action so trim stays O(cap) (#407 R1)", () => {
+    // Pre-fix .trim() ran on the full multi-MB string BEFORE the cap (an O(len)
+    // synchronous-DoS on the credential-submit path). Slicing first bounds the
+    // stored action; content buried past the cap by padding is dropped here
+    // (credential_guard independently re-checks the submit destination).
+    const padded = " ".repeat(MAX_FORM_ACTION_LEN * 100) + "https://evil.test/x";
+    document.documentElement.innerHTML =
+      `<body><form action="${padded}"><input type="password"></form></body>`;
+    const snap = buildPageSnapshot(document);
+    expect(snap.formActions[0]!.action.length).toBeLessThanOrEqual(MAX_FORM_ACTION_LEN);
+  });
 });

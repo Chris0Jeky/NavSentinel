@@ -518,10 +518,22 @@ export function buildPageSnapshot(doc: Document): PageSnapshot {
   const formLimit = Math.min(forms.length, MAX_FORMS);
   for (let i = 0; i < formLimit; i++) {
     const form = forms[i] as HTMLFormElement;
-    const rawAction = (form.getAttribute("action") || "").trim();
-    const action = rawAction.length > MAX_FORM_ACTION_LEN
-      ? rawAction.slice(0, MAX_FORM_ACTION_LEN)
-      : rawAction;
+    // Slice the RAW attribute BEFORE trimming. .trim() scans inward to the
+    // whitespace boundary, so trimming first leaves that scan O(len) on the full
+    // attacker-controlled string — an action padded with megabytes of leading
+    // whitespace would re-open the exact synchronous-DoS the cap closes. Slicing
+    // first bounds trim() to O(MAX_FORM_ACTION_LEN). Consequence: meaningful
+    // content buried past MAX_FORM_ACTION_LEN of leading whitespace is dropped
+    // here (fundamental to any O(cap) bound), so a hostile page could pad a
+    // password form's action to evade THIS page-wide cross-domain scan — but
+    // credential_guard independently re-resolves the submitting form's real
+    // destination host at submit time via `new URL` (which strips whitespace),
+    // so the credential path is unaffected. (#407 R1)
+    const rawAttr = form.getAttribute("action") || "";
+    const bounded = rawAttr.length > MAX_FORM_ACTION_LEN
+      ? rawAttr.slice(0, MAX_FORM_ACTION_LEN)
+      : rawAttr;
+    const action = bounded.trim();
     const hasPw = !!form.querySelector('input[type="password"]');
     formActions.push({ action, hasPassword: hasPw });
   }
