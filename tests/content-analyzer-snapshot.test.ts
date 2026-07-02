@@ -3,9 +3,12 @@ import { describe, expect, it } from "vitest";
 import {
   boundedSample,
   buildPageSnapshot,
+  analyzeSnapshot,
   HTML_SNIPPET_MAX,
   MAX_IMG_ATTR,
   MAX_TITLE_LEN,
+  MAX_FORMS,
+  MAX_FORM_ACTION_LEN,
 } from "../extension/src/content/content_analyzer";
 
 // Guards the slice <-> HTML_SNIPPET_MAX coupling (D-REDOS R3 nit): the exfil
@@ -160,5 +163,84 @@ describe("buildPageSnapshot imgSignals cap (#401)", () => {
       `<body><img alt="Google logo" src="https://cdn.test/google.png"></body>`;
     const snap = buildPageSnapshot(document);
     expect(snap.imgSignals).toContain("google");
+  });
+});
+
+describe("buildPageSnapshot formActions cap (#401)", () => {
+  it("caps the number of snapshotted forms at MAX_FORMS", () => {
+    let html = "<body>";
+    for (let i = 0; i < MAX_FORMS + 25; i++) {
+      html += `<form action="/submit${i}"></form>`;
+    }
+    html += "</body>";
+    document.documentElement.innerHTML = html;
+    const snap = buildPageSnapshot(document);
+    expect(snap.formActions.length).toBe(MAX_FORMS);
+  });
+
+  it("head-slices a multi-MB action to MAX_FORM_ACTION_LEN", () => {
+    const huge = "https://evil.test/" + "a".repeat(MAX_FORM_ACTION_LEN * 50);
+    document.documentElement.innerHTML =
+      `<body><form action="${huge}"><input type="password"></form></body>`;
+    const snap = buildPageSnapshot(document);
+    expect(snap.formActions.length).toBe(1);
+    expect(snap.formActions[0]!.action.length).toBe(MAX_FORM_ACTION_LEN);
+    // The scheme+host survive at the head, so the cross-domain check still fires.
+    expect(snap.formActions[0]!.action.startsWith("https://evil.test/")).toBe(true);
+  });
+
+  it("keeps a bounded action's cross-domain password detection working", () => {
+    const huge = "https://attacker.example/" + "a".repeat(MAX_FORM_ACTION_LEN * 10);
+    document.documentElement.innerHTML =
+      `<body><form action="${huge}"><input type="password"></form></body>`;
+    const snap = buildPageSnapshot(document);
+    const result = analyzeSnapshot(snap, "bank.test");
+    expect(result.suspiciousFormAction).toBe(true);
+    expect(result.reasons.some((r) => r.includes("different domain"))).toBe(true);
+  });
+
+  it("a truncated genuine base64 action still matches the base64 heuristic", () => {
+    // A pure-base64-alphabet blob far longer than the cap; the multiple-of-4 head
+    // slice preserves length%4===0 and the strict alphabet so the shape still trips.
+    const blob = "aHR0cHM6" + "A".repeat(MAX_FORM_ACTION_LEN * 4);
+    document.documentElement.innerHTML =
+      `<body><form action="${blob}"><input type="password"></form></body>`;
+    const snap = buildPageSnapshot(document);
+    expect(snap.formActions[0]!.action.length % 4).toBe(0);
+    const result = analyzeSnapshot(snap, "bank.test");
+    expect(result.reasons.some((r) => r.includes("base64"))).toBe(true);
+  });
+
+  it("does not alter a normal short action", () => {
+    document.documentElement.innerHTML =
+      `<body><form action="/login"><input type="password"></form></body>`;
+    const snap = buildPageSnapshot(document);
+    expect(snap.formActions[0]!.action).toBe("/login");
+  });
+
+  it("still trims + detects cross-domain with modest surrounding whitespace (#407 R1)", () => {
+    // Slicing before trimming must not break within-cap content: leading/trailing
+    // whitespace is still stripped so the scheme+host survive and the check fires.
+    document.documentElement.innerHTML =
+      `<body><form action="   https://attacker.example/x   "><input type="password"></form></body>`;
+    const snap = buildPageSnapshot(document);
+    expect(snap.formActions[0]!.action).toBe("https://attacker.example/x");
+    const result = analyzeSnapshot(snap, "bank.test");
+    expect(result.reasons.some((r) => r.includes("different domain"))).toBe(true);
+  });
+
+  it("collapses an action padded past the cap with leading whitespace to empty (#407 R1)", () => {
+    // Pins slice-BEFORE-trim: with the whole cap window filled by leading
+    // whitespace, slice(0, cap) is all spaces and trim() yields "". The OLD
+    // trim-then-slice ordering would instead trim to "https://evil.test/x" and
+    // keep it (a non-empty, unbounded-trim result), so this assertion fails under
+    // the pre-fix ordering — genuinely distinguishing the fix, not just the bound.
+    // The buried destination is dropped here (accepted; credential_guard re-checks
+    // the submit destination from the raw attribute independently).
+    const padded = " ".repeat(MAX_FORM_ACTION_LEN * 100) + "https://evil.test/x";
+    document.documentElement.innerHTML =
+      `<body><form action="${padded}"><input type="password"></form></body>`;
+    const snap = buildPageSnapshot(document);
+    expect(snap.formActions[0]!.action).toBe("");
   });
 });

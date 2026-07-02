@@ -216,6 +216,30 @@ export const MAX_TITLE_LEN = 1000;
  */
 export const MAX_IMG_ATTR = 512;
 
+/**
+ * Max number of `<form>` elements snapshotted, mirroring the 50-image limit. A
+ * page with thousands of forms would otherwise pay a per-form getAttribute +
+ * password querySelector + a full checkFormActions scan (URL parse + base64
+ * regex) on the synchronous credential-submit path. Forms beyond the cap are not
+ * snapshot-scanned for suspicious actions — an accepted bound consistent with the
+ * module's other caps. A *credential* form beyond the cap is still covered:
+ * credential_guard independently assesses the actual submitting form's own
+ * action/formaction destination host at submit time, regardless of this list. (#401)
+ */
+export const MAX_FORMS = 50;
+
+/**
+ * Max chars kept from each form `action`. An `action` attribute has no length
+ * limit and is attacker-controlled; a multi-MB action would make the base64
+ * regex + URL parse in checkFormActions O(MB) each on the <50ms submit path. A
+ * plain head slice (NOT boundedSample — the space boundedSample inserts is not in
+ * the base64 alphabet and would defeat the base64-shape heuristic) preserves
+ * detection: the scheme+host sit at the front (cross-domain check intact) and a
+ * genuine base64 blob truncated to a multiple-of-4 head still satisfies
+ * length%4===0 + the strict alphabet. Kept a multiple of 4 for exactly that. (#401)
+ */
+export const MAX_FORM_ACTION_LEN = 2048;
+
 export interface KitFingerprint {
   name: string;
   /** CSS selectors or attribute patterns to look for */
@@ -485,12 +509,31 @@ export function buildPageSnapshot(doc: Document): PageSnapshot {
                   " " + (src ? boundedSample(src, MAX_IMG_ATTR).toLowerCase() : "");
   }
 
-  // Form actions
+  // Form actions -- capped at MAX_FORMS, and each action head-sliced to
+  // MAX_FORM_ACTION_LEN so a multi-MB action can't blow the analysis budget (see
+  // the constants). A plain slice (not boundedSample) is used to keep the base64
+  // heuristic's alphabet/length%4 semantics intact.
   const formActions: Array<{ action: string; hasPassword: boolean }> = [];
   const forms = doc.querySelectorAll("form");
-  for (let i = 0; i < forms.length; i++) {
+  const formLimit = Math.min(forms.length, MAX_FORMS);
+  for (let i = 0; i < formLimit; i++) {
     const form = forms[i] as HTMLFormElement;
-    const action = (form.getAttribute("action") || "").trim();
+    // Slice the RAW attribute BEFORE trimming. .trim() scans inward to the
+    // whitespace boundary, so trimming first leaves that scan O(len) on the full
+    // attacker-controlled string — an action padded with megabytes of leading
+    // whitespace would re-open the exact synchronous-DoS the cap closes. Slicing
+    // first bounds trim() to O(MAX_FORM_ACTION_LEN). Consequence: meaningful
+    // content buried past MAX_FORM_ACTION_LEN of leading whitespace is dropped
+    // here (fundamental to any O(cap) bound), so a hostile page could pad a
+    // password form's action to evade THIS page-wide cross-domain scan — but
+    // credential_guard independently re-resolves the submitting form's real
+    // destination host at submit time via `new URL` (which strips whitespace),
+    // so the credential path is unaffected. (#407 R1)
+    const rawAttr = form.getAttribute("action") || "";
+    const bounded = rawAttr.length > MAX_FORM_ACTION_LEN
+      ? rawAttr.slice(0, MAX_FORM_ACTION_LEN)
+      : rawAttr;
+    const action = bounded.trim();
     const hasPw = !!form.querySelector('input[type="password"]');
     formActions.push({ action, hasPassword: hasPw });
   }
