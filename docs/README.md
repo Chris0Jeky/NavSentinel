@@ -15,6 +15,10 @@ This folder documents the current merged `main` branch.
 
 ## Project analysis
 
+- `docs/Strategic_Outlook.md`
+  - **What the project does well, where it's headed, and the effective path there** (next-ten-slices order, 90-day scoreboard). Generated 2026-07-02. Read together with `Course_Correction.md`.
+- `docs/Course_Correction.md`
+  - **What isn't working — strategy and execution — and the sort-out plan** (hard truths with evidence, corrective principles, phased plan, seeded issues #415-#427). Generated 2026-07-02.
 - `docs/Comprehensive_Project_Analysis.md`
   - Full repo analysis with architecture deep dive, metrics, gap analysis, scorecard, and recommended roadmap. Generated 2026-04-09.
 - `docs/Product_Thesis_Review.md`
