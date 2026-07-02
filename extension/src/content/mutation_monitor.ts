@@ -502,11 +502,23 @@ function processAddedNode(node: Node): void {
 
 function disconnectShadowObserver(host: Element): void {
   const obs = shadowObserversByHost.get(host);
-  if (obs) {
-    obs.disconnect();
-    shadowObserversByHost.delete(host);
-    const sr = tryGetShadowRoot(host);
-    if (sr) observedShadowRoots.delete(sr);
+  if (!obs) return;
+  obs.disconnect();
+  shadowObserversByHost.delete(host);
+  const sr = tryGetShadowRoot(host);
+  if (sr) {
+    observedShadowRoots.delete(sr);
+    // Nested shadow hosts live inside this root, which the light-DOM
+    // querySelectorAll walk in processRemovedNode cannot pierce — without this
+    // recursion their observers (and the strong Map references keeping the
+    // detached elements alive) leak until the AUTO_DISCONNECT_MS timer (#401).
+    // Cost is bounded: only hosts that actually had a registered observer pay
+    // the shadow-root walk, and every observed nested host is in the Map, so
+    // the recursion reaches arbitrarily deep observed nesting.
+    const nested = sr.querySelectorAll("*");
+    for (let i = 0; i < nested.length; i++) {
+      disconnectShadowObserver(nested[i]!);
+    }
   }
 }
 
@@ -671,4 +683,9 @@ export function getMutationAlertCount(): number {
 export function _resetMutationState(): void {
   stopMutationMonitor();
   alerts.length = 0;
+}
+
+/** Exposed for testing only: number of live per-shadow-root observers. */
+export function _getShadowObserverCountForTesting(): number {
+  return shadowObserversByHost.size;
 }
