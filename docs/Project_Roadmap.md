@@ -1206,6 +1206,10 @@ Documents that remain active and are **not** archived:
 
 ## References
 
+- [Strategic Outlook](Strategic_Outlook.md) -- 2026-07-02 review: strengths, trajectory, and
+  the effective path (next-ten-slices order); companion to the Course Correction
+- [Course Correction](Course_Correction.md) -- 2026-07-02 review: hard truths, strategy and
+  execution failures, corrective principles, and the phased sort-out plan (issues #415-#427)
 - [Product Thesis Review](Product_Thesis_Review.md) -- Critical assessment of security
   value, usability, competitive positioning, and expansion strategy
 - [Comprehensive Project Analysis](Comprehensive_Project_Analysis.md) -- Full repo
