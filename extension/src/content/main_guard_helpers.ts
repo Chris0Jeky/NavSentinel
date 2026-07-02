@@ -45,8 +45,14 @@ export function pruneTimestampWindow(
   cap: number,
 ): number[] {
   const cutoff = now - windowMs;
-  let pruned = timestamps.filter((ts) => ts >= cutoff);
-  if (pruned.length > cap) pruned = pruned.slice(-cap);
+  const pruned = timestamps.filter((ts) => ts >= cutoff);
+  // A non-positive cap means "keep nothing". Guard it explicitly: slice(-cap) with
+  // cap === 0 is slice(-0), and -0 normalizes to +0 under ToIntegerOrInfinity, so
+  // slice(0) would return the WHOLE array — the opposite of a zero cap. A negative
+  // cap would also mis-slice from the front. Dormant today (the only caller passes
+  // PUSHSTATE_RAPID_CAP = 8) but a latent footgun in a DoS-cap helper. (#401)
+  if (cap <= 0) return [];
+  if (pruned.length > cap) return pruned.slice(-cap);
   return pruned;
 }
 

@@ -83,6 +83,18 @@ describe("pruneTimestampWindow (#302)", () => {
   it("returns empty when everything is outside the window", () => {
     expect(pruneTimestampWindow([1, 2, 3], 10_000, 1000, 8)).toEqual([]);
   });
+
+  it("keeps nothing at cap === 0 (guards the slice(-0) → whole-array footgun) (#401)", () => {
+    const now = 5000;
+    const inWindow = [now, now, now];
+    // slice(-0) would return the whole array; a zero cap must keep nothing.
+    expect(pruneTimestampWindow(inWindow, now, 1000, 0)).toEqual([]);
+  });
+
+  it("keeps nothing at a negative cap (no front-slice) (#401)", () => {
+    const now = 5000;
+    expect(pruneTimestampWindow([now, now, now], now, 1000, -3)).toEqual([]);
+  });
 });
 
 describe("shouldEmitRapidPushState (#302)", () => {
