@@ -229,15 +229,18 @@ describe("buildPageSnapshot formActions cap (#401)", () => {
     expect(result.reasons.some((r) => r.includes("different domain"))).toBe(true);
   });
 
-  it("bounds a leading-whitespace-padded action so trim stays O(cap) (#407 R1)", () => {
-    // Pre-fix .trim() ran on the full multi-MB string BEFORE the cap (an O(len)
-    // synchronous-DoS on the credential-submit path). Slicing first bounds the
-    // stored action; content buried past the cap by padding is dropped here
-    // (credential_guard independently re-checks the submit destination).
+  it("collapses an action padded past the cap with leading whitespace to empty (#407 R1)", () => {
+    // Pins slice-BEFORE-trim: with the whole cap window filled by leading
+    // whitespace, slice(0, cap) is all spaces and trim() yields "". The OLD
+    // trim-then-slice ordering would instead trim to "https://evil.test/x" and
+    // keep it (a non-empty, unbounded-trim result), so this assertion fails under
+    // the pre-fix ordering — genuinely distinguishing the fix, not just the bound.
+    // The buried destination is dropped here (accepted; credential_guard re-checks
+    // the submit destination from the raw attribute independently).
     const padded = " ".repeat(MAX_FORM_ACTION_LEN * 100) + "https://evil.test/x";
     document.documentElement.innerHTML =
       `<body><form action="${padded}"><input type="password"></form></body>`;
     const snap = buildPageSnapshot(document);
-    expect(snap.formActions[0]!.action.length).toBeLessThanOrEqual(MAX_FORM_ACTION_LEN);
+    expect(snap.formActions[0]!.action).toBe("");
   });
 });
