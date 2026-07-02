@@ -585,23 +585,31 @@ function processAttributeChange(record: MutationRecord): void {
 
 function processBatch(): void {
   debounceTimer = null;
-  if (alerts.length >= MAX_ALERTS) return;
 
+  // Always drain the queue, even once the alert cap is reached: the old early
+  // `return` here left pendingMutations growing unbounded (onMutations keeps
+  // pushing) and, worse, skipped removed-node CLEANUP so shadow-observer
+  // disconnects stopped until AUTO_DISCONNECT_MS. Only the DETECTION work
+  // (added-node scan + attribute-change alerts) is gated on the cap; removed-node
+  // cleanup runs unconditionally. pushAlert also self-caps, so `detect` is a perf
+  // skip, not the alert bound. (#409)
   const batch = pendingMutations;
   pendingMutations = [];
 
   for (const record of batch) {
-    if (alerts.length >= MAX_ALERTS) break;
+    const detect = alerts.length < MAX_ALERTS;
 
     if (record.type === "childList") {
-      for (let i = 0; i < record.addedNodes.length; i++) {
-        if (alerts.length >= MAX_ALERTS) break;
-        processAddedNode(record.addedNodes[i]!);
+      if (detect) {
+        for (let i = 0; i < record.addedNodes.length; i++) {
+          if (alerts.length >= MAX_ALERTS) break;
+          processAddedNode(record.addedNodes[i]!);
+        }
       }
       for (let i = 0; i < record.removedNodes.length; i++) {
         processRemovedNode(record.removedNodes[i]!);
       }
-    } else if (record.type === "attributes") {
+    } else if (record.type === "attributes" && detect) {
       processAttributeChange(record);
     }
   }
@@ -701,6 +709,11 @@ export function _resetMutationState(): void {
 /** Exposed for testing only: number of live per-shadow-root observers. */
 export function _getShadowObserverCountForTesting(): number {
   return shadowObserversByHost.size;
+}
+
+/** Exposed for testing only: number of records still queued for the next batch. */
+export function _getPendingMutationCountForTesting(): number {
+  return pendingMutations.length;
 }
 
 /**
