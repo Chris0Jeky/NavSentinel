@@ -93,7 +93,11 @@ describe("pruneTimestampWindow (#302)", () => {
 
   it("keeps nothing at a negative cap (no front-slice) (#401)", () => {
     const now = 5000;
-    expect(pruneTimestampWindow([now, now, now], now, 1000, -3)).toEqual([]);
+    // cap magnitude must differ from the array length: at cap === -length the old
+    // slice(-cap) would coincidentally start past the end and also yield [], hiding
+    // the bug. At cap = -1 the old code did slice(1) and kept the tail (non-empty),
+    // so this input genuinely pins the guard's negative branch.
+    expect(pruneTimestampWindow([now, now, now], now, 1000, -1)).toEqual([]);
   });
 });
 
