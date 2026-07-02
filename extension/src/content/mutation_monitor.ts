@@ -538,6 +538,12 @@ function disconnectShadowObserver(host: Element): void {
 function processRemovedNode(node: Node): void {
   if (!(node instanceof Element)) return;
 
+  // Fast path: this function only disconnects shadow observers, so with none
+  // registered there is nothing to do — skip the O(subtree) querySelectorAll walk
+  // entirely. This keeps the now-unconditional cleanup (#409) essentially free on
+  // the common page that uses no shadow DOM. (#412 R2)
+  if (shadowObserversByHost.size === 0) return;
+
   disconnectShadowObserver(node);
 
   const descendants = node.querySelectorAll("*");
