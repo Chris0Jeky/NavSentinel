@@ -21,12 +21,13 @@
 
 ## Current state snapshot (verified 2026-07-03)
 
-`main` @ **`f2c3652`** (verify: `git rev-parse origin/main` + `gh pr list`). typecheck/lint clean, **2856 unit tests** (94 files), perf 12/12, CI green on `main`.
+`main` @ **`8b667c0`** (verify: `git rev-parse origin/main` + `gh pr list`). typecheck/lint clean, **2856 unit tests** (94 files), perf 12/12, CI green on `main`.
 
 - **Direction:** ship/measure, **not** hardening — adopted 2026-07-03 (`docs/agentic/DECISIONS.md` D-2026-07-03-A). Follow the **Priority Ladder** in `docs/agentic/ORCHESTRATOR.md`; discovery is milestone-gated; LOW residue -> `docs/agentic/ICEBOX.md`.
 - **Open PRs (all human-gated, at the WIP cap of 3 - D-2026-07-03-D):** #399 (AI-14 `measure:fp`), #356 (AI-13 Gate-3), #273 (AI-8 Gate-3). **Do not open more browser-surface PRs until this drains.**
 - **Last session (2026-07-03):** merged **#429** (claims-honesty #423 - README/store/roadmap/orientation now match shipped+measured reality: the fake 52-byte bloom, 0 releases, benchmark `lastRun:null`, dead visual-sim, stale test counts) and **#430** (release guard `check-bloom-real.mjs` + **fixed a pre-existing syntax error that made `release.mjs` unparseable** = the literal reason `npm run release` never ran). Then resolved all deferred decisions (D-2026-07-03-A..H) and collapsed the status docs.
-- **Next agent slices (ungated, ladder order):** #417 corpus-v2 -> #426 triage -> #418 benchmark -> #427 hygiene -> #374 split -> visual-sim excision (D-2026-07-03-F).
+- **Cycle 44 (2026-07-03, agent, no code):** ran the **#427 backlog hygiene sweep** — closed #322 (build-script findings all FIXED), #350 (top-site relief shipped in #354; residual → #416), #395 (all dispositioned); re-bodied #339 to its 7 gated residuals; parked 16 LOW sub-findings in `docs/agentic/ICEBOX.md`. Open issues **62→59**. Opened as a docs PR (Closes #427). No open-item state changed.
+- **Next agent slices (ungated, ladder order):** #418 benchmark truth-up (honest re-scope, in-sandbox) -> #426 corpus triage -> #417 corpus-v2 harness -> #374 split -> visual-sim excision (D-2026-07-03-F).
 - **Historical snapshots** (pre-2026-07-03, ~28 session bullets) archived to [`docs/archive/ACTION_ITEMS_snapshots.md`](docs/archive/ACTION_ITEMS_snapshots.md).
 
 ---
