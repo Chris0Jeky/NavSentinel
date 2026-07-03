@@ -595,7 +595,7 @@ function generateMarkdown(analysis, comparison, results) {
   const lines = [];
   const stamp = new Date().toISOString();
 
-  lines.push("# NavSentinel Competitive Benchmark Report");
+  lines.push("# NavSentinel Gym-Regression Benchmark Report");
   lines.push("");
   lines.push(`Generated: ${stamp}`);
   lines.push("");
@@ -843,7 +843,7 @@ async function main() {
   const ov = analysis.overall;
   console.log(`
 ════════════════════════════════════════════════════
-  NavSentinel Competitive Benchmark Report
+  NavSentinel Gym-Regression Benchmark Report
 ════════════════════════════════════════════════════
   Fixtures tested:   ${corpus.length}
   Duration:          ${elapsed}s

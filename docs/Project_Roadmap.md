@@ -899,12 +899,14 @@ Prepare and submit for CWS distribution.
 **Headline claim** (from Thesis Review, Section 10) — ⚠️ **UNEVIDENCED SUPERLATIVE; do not ship as-is (#418):**
 "The only browser extension that detects DoubleClickjacking, ClickFix overlays, and OAuth
 consent flow abuse -- without sending your data anywhere."
+
 The "only … that detects" wording is a competitive superlative with **no competitive benchmark
 behind it** (P2-10's Safe-Browsing arm was never built — see #418), and the landscape has since
-shifted (Chrome now ships local Gemini Nano scam detection — NORTHSTAR D21). The **actual shipped
-store copy** (`docs/STORE_LISTING.md`) already avoids the superlative ("protects two high-risk
-browser surfaces that other extensions miss"). Use the structural-positioning framing (D12), not
-"the only", until #418 produces comparative data.
+shifted (Chrome now ships local Gemini Nano scam detection — NORTHSTAR D21). The checked-in
+store-listing drafts (`docs/STORE_LISTING.md` and the canonical `docs/cws-listing/STORE_LISTING.md`,
+PR #81 — **neither yet submitted**) already avoid the superlative ("protects two high-risk browser
+surfaces that other extensions miss"). Use the structural-positioning framing (D12), not "the
+only", until #418 produces comparative data.
 
 **Done when**: Extension is listed and installable from CWS. **NOT MET (2026-07-03)** — the extension has never been submitted to the Chrome Web Store (0 git tags, 0 GitHub releases). Listing copy and the privacy disclosure are drafted under `docs/cws-listing/` (PR #81), but actual submission/listing is an open manual gate (#321 / AI-9, release umbrella #415).
 
