@@ -48,7 +48,7 @@ The most security-sensitive code lives in:
 
 - event logging is best-effort because `chrome.storage.local` is not transactional
 - domain normalization uses a build-time PSL snapshot; new TLDs require a data rebuild
-- bloom filter of known-bad domains is a build-time snapshot; new threats require a filter rebuild
+- the bloom filter is a build-time snapshot; the shipped build currently bundles a placeholder 15-domain `.example` test filter rather than a real known-bad-domain feed — a production feed is tracked for the first release (issue #321) and has not yet shipped — and new threats require a filter rebuild
 - a browser extension cannot defend against a fully compromised browser or OS
 
 ## Reporting

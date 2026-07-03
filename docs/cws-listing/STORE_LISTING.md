@@ -4,7 +4,7 @@
 NavSentinel
 
 ## Summary (132 characters max)
-Catches what Safe Browsing can't see. Detects DoubleClickjacking, ClickFix, and OAuth abuse — all locally, no data sent anywhere.
+Detects DoubleClickjacking, ClickFix, and OAuth abuse — all locally, no data sent anywhere.
 
 ## Detailed Description (max 16,000 characters)
 
@@ -36,7 +36,7 @@ Traditional browser protection compares URLs against known-bad lists. NavSentine
 
 - **Local-first**: No telemetry, no cloud scoring, no remote lookups. Everything runs in your browser.
 - **Dual scoring engine**: Click Deception Score (CDS) analyzes click context; Navigation Risk Score (NRS) analyzes destination risk. Both produce explainable reason codes.
-- **Known-bad domain filter**: Build-time bloom filter from public threat feeds (URLhaus, OpenPhish) adds +50 to risk score for known malicious destinations.
+- **Known-bad domain filter**: A build-time bloom filter adds +50 to a destination's risk score for known-malicious domains, with no runtime network calls. The production filter is compiled from public threat feeds (URLhaus, OpenPhish) at release build time; until the first release the bundled filter is a placeholder test dataset (issue #321).
 - **Smart defaults**: After 3 consecutive allow decisions for the same site pair, suggests adding it to your permanent allowlist.
 - **Detailed event log**: Every decision is logged locally with score, reason codes, and timestamps. Export as JSON for analysis.
 - **Trusted domain management**: Mark sites you trust for credential submissions. Uses registrable-domain matching for accuracy.

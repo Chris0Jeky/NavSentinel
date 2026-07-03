@@ -42,7 +42,7 @@ npx playwright screenshot --full-page extension/dist/src/popup/popup.html popup.
 ```
 
 ## Promotional Tile (440x280)
-- NavSentinel logo + tagline: "Catches what Safe Browsing can't see"
+- NavSentinel logo + tagline: "Local-first defense against interaction-level attacks"
 - Dark theme matching extension aesthetic
 
 ## Notes

@@ -36,7 +36,7 @@ NavSentinel protects users from interaction-level browser attacks (DoubleClickja
 - No third-party tracking or advertising
 
 ### Remote Code
-This extension does not use remote code. All JavaScript is bundled at build time. The two static data assets (Public Suffix List snapshot and known-bad domain bloom filter) are compiled at build time from public sources and never updated at runtime.
+This extension does not use remote code. All JavaScript is bundled at build time. Two static data assets (a Public Suffix List snapshot and a known-bad-domain bloom filter) are compiled at build time and never updated at runtime. The PSL snapshot is generated from a public source; the bloom filter currently ships a placeholder test dataset built from reserved `.example` domains, with the production build from public threat feeds (URLhaus, OpenPhish) tracked as release-blocker #321.
 
 ### Content Security Policy
 The extension uses the default Manifest V3 CSP. No `unsafe-eval` or remote script loading.
