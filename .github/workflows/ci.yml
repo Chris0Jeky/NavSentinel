@@ -126,6 +126,10 @@ jobs:
       - run: npm run build
       - run: npm run check:perf-budget
 
+      # Fail-closed: never publish a release that bundles the placeholder bloom
+      # filter (real feed = issue #321 / AI-9). Release-only, not per-PR CI.
+      - run: npm run check:bloom-real
+
       - name: Package extension
         run: npm run package:ext
 
