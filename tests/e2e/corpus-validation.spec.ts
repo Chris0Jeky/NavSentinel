@@ -4,6 +4,27 @@ import http from "node:http";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
+import {
+  classifyCorpusOutcome,
+  tallyCorpusOutcomes,
+  type ProtectionLevel,
+} from "../corpus/corpus_scoring";
+
+/*
+ * Corpus-v2 status (#417):
+ *  - DONE (this change): protected-vs-fired scoring. Each page is classified as
+ *    `protected` (a pre-harm block/prompt fired), `fired` (only a post-render
+ *    `nav_rollback` fired — weaker), or `miss`, via the unit-tested
+ *    `classifyCorpusOutcome` (tests/corpus/corpus_scoring.test.ts). "Protected"
+ *    is the number that means the user was actually protected.
+ *  - STILL PENDING (#417, needs a headed run to validate): pages are still
+ *    served from 127.0.0.1 (so domain/cross-site/reputation signals are
+ *    neutered) and links/forms are still exercised with synthetic
+ *    `dispatchEvent` (isTrusted=false). Real-hostname routing (page.route
+ *    returning snapshot bytes for the original URL) + trusted `page.click()` are
+ *    the remaining methodology fixes; until they land the absolute rate here is
+ *    a floor, not the honest number.
+ */
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -172,6 +193,10 @@ interface PageResult {
   url: string;
   source: string;
   detected: boolean;
+  /** #417: protected (pre-harm block/prompt) vs fired (post-render rollback) vs miss. */
+  protection?: ProtectionLevel;
+  protectedBy?: string[];
+  firedBy?: string[];
   hasPasswordForm?: boolean;
   events: Array<{ kind?: string | undefined; score?: number | undefined }>;
   error?: string | undefined;
@@ -367,28 +392,35 @@ test("Phishing corpus validation @corpus", async () => {
               (e) => e.kind && DETECTION_EVENT_KINDS.has(e.kind)
             );
 
-            const detected =
-              detectionEvents.length > 0 ||
-              (toastText !== null && toastText.length > 0) ||
-              hasCredentialModal;
-
-            const detectionSource = [
-              ...detectionEvents.map((e) => e.kind),
-              ...(hasCredentialModal ? ["credential_modal"] : []),
-              ...(toastText ? ["toast"] : [])
-            ].filter(Boolean);
+            // #417: classify protected (pre-harm block/prompt) vs fired
+            // (post-render rollback — weaker) vs miss, rather than a flat boolean.
+            const outcome = classifyCorpusOutcome({
+              detectionKinds: detectionEvents
+                .map((e) => e.kind)
+                .filter((k): k is string => typeof k === "string"),
+              hadCredentialModal: hasCredentialModal,
+              hadToastPrompt: toastText !== null && toastText.length > 0,
+            });
+            const detected = outcome.level !== "miss";
 
             results.push({
               filename: entry.filename!,
               url: entry.url,
               source: entry.source,
               detected,
+              protection: outcome.level,
+              protectedBy: outcome.protectedBy,
+              firedBy: outcome.firedBy,
               hasPasswordForm,
               events: detectionEvents.map((e) => ({ kind: e.kind, score: e.score }))
             });
 
-            if (detected) {
-              console.log(`    -> DETECTED (${detectionSource.join(", ")})`);
+            if (outcome.level === "protected") {
+              console.log(`    -> PROTECTED (${outcome.protectedBy.join(", ")})`);
+            } else if (outcome.level === "fired") {
+              console.log(
+                `    -> fired-late only (${outcome.firedBy.join(", ")}) — page rendered before rollback`
+              );
             } else {
               console.log(`    -> not detected${hasPasswordForm ? " [has password form]" : ""}`);
             }
@@ -426,6 +458,21 @@ test("Phishing corpus validation @corpus", async () => {
     ? ((truePositives.length / tested.length) * 100).toFixed(1)
     : "N/A";
 
+  // #417: protected-vs-fired split — "protected" is the number that means the
+  // user was actually protected (a pre-harm block/prompt fired); "fired" is the
+  // weaker post-render rollback that fired only after the page could have
+  // harvested credentials. Report them separately, not as one detection rate.
+  const totals = tallyCorpusOutcomes(
+    tested.map((r) => ({
+      level: (r.protection ?? "miss") as ProtectionLevel,
+      protectedBy: r.protectedBy ?? [],
+      firedBy: r.firedBy ?? [],
+    }))
+  );
+  const protectedRate = totals.total > 0
+    ? ((totals.protected / totals.total) * 100).toFixed(1)
+    : "N/A";
+
   // Break down by pages with password forms (credential-harvesting pages)
   const withPwForm = tested.filter((r) => r.hasPasswordForm);
   const withPwFormDetected = withPwForm.filter((r) => r.detected);
@@ -449,6 +496,11 @@ test("Phishing corpus validation @corpus", async () => {
   console.log(`  True positives (TP):  ${truePositives.length}`);
   console.log(`  False negatives (FN): ${falseNegatives.length}`);
   console.log(`  Overall detection:    ${detectionRate}%`);
+  console.log(`${"-".repeat(60)}`);
+  console.log(`  #417 protected-vs-fired (of ${totals.total} tested):`);
+  console.log(`    Protected (pre-harm block/prompt): ${totals.protected} (${protectedRate}%)`);
+  console.log(`    Fired-late only (post-render rollback): ${totals.fired}`);
+  console.log(`    Miss (no signal): ${totals.miss}`);
   console.log(`${"-".repeat(60)}`);
   console.log(`  Pages with password forms:     ${withPwForm.length}`);
   console.log(`    Detected (credential guard): ${withPwFormDetected.length} (${pwFormRate}%)`);
@@ -492,7 +544,12 @@ test("Phishing corpus validation @corpus", async () => {
           pagesWithoutPasswordForm: withoutPwForm.length,
           otherDetected: withoutPwFormDetected.length,
           otherDetectionRate: withoutPwForm.length > 0 ? withoutPwFormDetected.length / withoutPwForm.length : null,
-          methodology: "Pages served from local HTTP server (127.0.0.1). Form submission simulated on pages with password fields. Link clicks simulated on all pages."
+          // #417: protected = pre-harm block/prompt (the number that means "user protected");
+          // fired = post-render rollback only (weaker); miss = nothing fired.
+          protectedVsFired: { protected: totals.protected, fired: totals.fired, miss: totals.miss },
+          protectedRate: totals.total > 0 ? totals.protected / totals.total : null,
+          methodology:
+            "corpus-v2 (#417): protected-vs-fired scoring is live (protected = pre-harm block/prompt; fired = post-render rollback only). STILL PENDING (#417): pages are served from 127.0.0.1 (domain/cross-site/reputation signals neutered) and links/forms use synthetic dispatchEvent (isTrusted=false); real-hostname page.route + trusted page.click() are the remaining methodology fixes, so absolute rates are a floor."
         },
         results
       },
