@@ -13,6 +13,8 @@ This is the compact session contract for Claude Code in `NavSentinel/`. Keep it 
 
 When sources conflict, follow the higher source and report the conflict.
 
+**Standing direction (2026-07-03):** ship/measure, not hardening. Follow the Priority Ladder and posture in `docs/agentic/DECISIONS.md` — discovery is milestone-gated (LOW residue -> `docs/agentic/ICEBOX.md`), human-gated PRs are capped at 3, and browser-surface is defined by runtime blast radius (MAIN-world / submit path / service-worker nav / MutationObserver / visible UI), not file type.
+
 ## First 5 Minutes
 
 1. Read `ACTION_ITEMS.md` (human-owned tasks + current-state snapshot — see Human Action Items below).
@@ -198,7 +200,7 @@ Do not claim tests passed unless they actually ran in the current environment.
 - Reputation and content analysis: `extension/src/shared/reputation.ts`, `extension/src/content/content_analyzer.ts`, `extension/src/shared/domain_profile.ts`, `extension/src/content/sri_checker.ts`, `extension/src/content/csp_analyzer.ts`.
 - Popup/options UI: `extension/src/popup/*`, `extension/src/options/*`, `extension/src/onboarding/*`.
 - Shared helpers: `extension/src/shared/explanations.ts`, `extension/src/shared/event_tone.ts`, `extension/src/shared/smart_defaults.ts`, `extension/src/shared/domain_groups.ts`.
-- Test surfaces: `tests/*.test.ts` (92 files), `tests/e2e/*.spec.ts` (14 files), `gym/*` (123 files: 122 fixtures + `index.html` launcher).
+- Test surfaces: `tests/*.test.ts` (94 files), `tests/e2e/*.spec.ts` (14 files), `gym/*` (123 files: 122 fixtures + `index.html` launcher).
 
 ## Local Settings
 

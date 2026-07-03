@@ -54,7 +54,7 @@ The current `main` branch ships the merged suite baseline. That means the extens
 
 - `extension/`: MV3 source, manifest, assets, and build output
 - `gym/`: deterministic HTML fixtures for navigation and credential scenarios
-- `tests/`: Vitest unit tests (92 files) and Playwright E2E tests (14 specs)
+- `tests/`: Vitest unit tests (94 files) and Playwright E2E tests (14 specs)
 - `docs/`: architecture, threat model, testing, release, roadmap, and redesign docs
 - `scripts/`: release, bloom filter build, benchmark, PSL update, and agent hook scripts
 - `autodoc/`: agent-facing code orientation index

@@ -13,6 +13,8 @@ This is the Codex operating contract for NavSentinel. Keep this file compact; pu
 
 When sources conflict, use the higher source and report the conflict.
 
+**Standing direction (2026-07-03):** ship/measure, not hardening. Follow the Priority Ladder and posture in `docs/agentic/DECISIONS.md` — discovery is milestone-gated (LOW residue -> `docs/agentic/ICEBOX.md`), human-gated PRs are capped at 3, and browser-surface is defined by runtime blast radius (MAIN-world / submit path / service-worker nav / MutationObserver / visible UI), not file type.
+
 ## Codex Tooling
 
 Use the best available Codex tools for the job:
