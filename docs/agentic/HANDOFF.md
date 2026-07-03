@@ -1,16 +1,17 @@
 # Session Handoff — NavSentinel Autonomous Loop
 
-**Last updated:** 2026-07-03 (cycle 46) · **`main` @ `de2d7ce`** (always verify: `git rev-parse origin/main`, `gh pr list`).
+**Last updated:** 2026-07-03 (cycle 48) · **`main` @ `eba5d71`** (always verify: `git rev-parse origin/main`, `gh pr list`).
 
 > Short, always-current next-loop entry point. Trust live git/GitHub over any snapshot. The append-only history is in `docs/agentic/ORCHESTRATOR.md` (cycle log); standing decisions are in `docs/agentic/DECISIONS.md`; human-only tasks are in `ACTION_ITEMS.md`.
 
 ## Current state
 
 - **Direction:** ship/measure, **not** hardening (adopted — `docs/agentic/DECISIONS.md` D-2026-07-03-A). Follow the **Priority Ladder** in `ORCHESTRATOR.md`; discovery passes are milestone-gated; LOW residue → `docs/agentic/ICEBOX.md`.
-- **Baseline:** typecheck/lint clean, **2856 unit tests** (94 files), perf 12/12. CI green on `main`.
+- **Baseline:** typecheck/lint clean, **2874 unit tests** (95 files), perf 12/12. CI green on `main`.
 - **Open PRs (all human-gated, browser-surface / measure:fp):** #399 (AI-14, `measure:fp`), #356 (AI-13, Gate-3), #273 (AI-8, Gate-3). At the WIP cap of 3 — **do not open more browser-surface PRs** (D-2026-07-03-D).
 - **Last session (2026-07-03):** merged **#429** (claims-honesty #423 — public docs now match shipped reality) and **#430** (release guard #321-companion + fixed an unparseable `release.mjs` that had blocked *all* releases). See ORCHESTRATOR cycle 43.
-- **This session (cycles 44–46, agent, no runtime code):** #427 hygiene sweep (closed #322/#350/#395/#427, re-bodied #339, parked 16 residue) → #418 benchmark honest re-scope (#433 merged; #418 re-bodied to the gated Safe-Browsing arm) → this checkpoint. Open issues **62→58**. ⚠️ **#426 corpus triage is #417-gated** (the only committed corpus artifact is the 5-01 report — no manifest, no FN list, no raw results in-repo [gitignored/local-only]; the 5-01 number is methodologically invalid per #417). See ORCHESTRATOR cycles 44–46.
+- **This session (cycles 44–47, agent):** #427 hygiene sweep (closed #322/#350/#395/#427, re-bodied #339, parked 16 residue) → #418 benchmark honest re-scope (#433; #418 re-bodied to the gated SB-arm) → docs checkpoint → **#417 corpus-v2 pillar 1** (#435: protected-vs-fired classifier, unit-tested; a review round caught a HIGH toast-inflation bug + Codex a fail-open-cred edge, both fixed). Open issues **62→58**. See ORCHESTRATOR cycles 44–47.
+- ⚠️ **BOUNDARY:** the clean in-sandbox ungated engineering queue is thinning. The measurement rung (#417 pillars 2–4 / #426 / #416 / #232) is headed-Chrome/network-gated; North-Star UI is Gate-3. **Highest-leverage next = the human AI-15 batch.** Deferred Q-CORPUS in ORCHESTRATOR current-state.
 
 ## 🚨 Open human items (flag these in every summary — see `ACTION_ITEMS.md`)
 
@@ -19,13 +20,16 @@
 - **AI-8 (#273) · AI-13 (#356) · AI-14 (#399)** — Gate-3 checks / `measure:fp` run on the 3 open PRs.
 - **AI-16** — ratify or amend the 2026-07-03 standing decisions (`docs/agentic/DECISIONS.md`); your veto checkpoint (esp. D-E). Nothing blocks on it — the loop already follows them.
 
-## Next safe slices (agent, ungated, in ladder order)
+## Next slices — mostly gated (agent, ladder order)
 
-1. **#417** corpus methodology v2 — **the real unblock** (and #426 depends on it). Extract the **protected-vs-fired classification as a pure, unit-tested module** (in-sandbox verifiable, per Q3), commit the corpus **manifest** for reproducibility, and write the Playwright wiring (real-hostname `page.route` routing + trusted clicks in `tests/e2e/corpus-validation.spec.ts`) marked clearly **needs a headed run (Gate-3/CI)** — the sandbox cannot run it.
-2. **#426** corpus TP triage — **#417-gated.** The only committed corpus artifact is the 5-01 markdown report (28 TP listed, 72 FN not enumerated); the manifest + raw per-page results are gitignored/local-only. The 5-01 28% number is methodologically invalid (#417). A valid per-page triage needs the corpus-v2 re-run. Do **after** #417 + a headed run.
-3. **#374** chunk split → then the **visual-sim excision** (D-2026-07-03-F). Browser-surface (capture_isolated) → Gate-3.
+Read the **BOUNDARY** note above first: the remaining ladder work needs a headed run or a Gate-3 pass. Genuine, high-confidence, in-sandbox-verifiable ungated engineering is largely exhausted for this phase.
 
-> **Done this session:** **#427** hygiene sweep (cycle 44) + **#418** benchmark honest re-scope (cycle 45, #433 merged; #418 re-bodied to the gated SB-arm). No longer next-slices.
+1. **#417 pillars 2–4** — real-hostname `page.route` routing + trusted `page.click` + a committed manifest. Buildable in-sandbox but **unrunnable** (headed Chrome). See Q-CORPUS: build now as Gate-3-validated wiring, or defer to a headed corpus session. Pillar 1 (protected-vs-fired classifier) shipped in #435.
+2. **#426** corpus TP triage — **#417-gated + headed-gated.** Only the 5-01 report is committed (28 TP, no FN list; manifest + raw results gitignored); the 28% is methodologically invalid. Needs the corpus-v2 re-run.
+3. **#232 / #416** — FP/measurement gates: benign-journey CI gate + measurement-reset. Headed-Chrome/network; landing an unvalidated blocking gate risks red-CI.
+4. **#374** chunk split → **visual-sim excision** (D-2026-07-03-F). Browser-surface → Gate-3.
+
+> **Done this session:** #427 hygiene sweep (c44) · #418 benchmark honest re-scope (c45, #433) · docs checkpoints (c46/c48) · #417 pillar 1 protected-vs-fired classifier (c47, #435).
 
 ## Reliability notes
 

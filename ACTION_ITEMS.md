@@ -21,13 +21,13 @@
 
 ## Current state snapshot (verified 2026-07-03)
 
-`main` @ **`de2d7ce`** (verify: `git rev-parse origin/main` + `gh pr list`). typecheck/lint clean, **2856 unit tests** (94 files), perf 12/12, CI green on `main`.
+`main` @ **`eba5d71`** (verify: `git rev-parse origin/main` + `gh pr list`). typecheck/lint clean, **2874 unit tests** (95 files), perf 12/12, CI green on `main`.
 
 - **Direction:** ship/measure, **not** hardening — adopted 2026-07-03 (`docs/agentic/DECISIONS.md` D-2026-07-03-A). Follow the **Priority Ladder** in `docs/agentic/ORCHESTRATOR.md`; discovery is milestone-gated; LOW residue -> `docs/agentic/ICEBOX.md`.
 - **Open PRs (all human-gated, at the WIP cap of 3 - D-2026-07-03-D):** #399 (AI-14 `measure:fp`), #356 (AI-13 Gate-3), #273 (AI-8 Gate-3). **Do not open more browser-surface PRs until this drains.**
 - **Last session (2026-07-03):** merged **#429** (claims-honesty #423 - README/store/roadmap/orientation now match shipped+measured reality: the fake 52-byte bloom, 0 releases, benchmark `lastRun:null`, dead visual-sim, stale test counts) and **#430** (release guard `check-bloom-real.mjs` + **fixed a pre-existing syntax error that made `release.mjs` unparseable** = the literal reason `npm run release` never ran). Then resolved all deferred decisions (D-2026-07-03-A..H) and collapsed the status docs.
-- **Cycles 44–46 (2026-07-03, agent, no runtime code):** **#427** hygiene sweep (closed #322/#350/#395/#427, re-bodied #339, parked 16 LOW sub-findings in `docs/agentic/ICEBOX.md`) + **#418** benchmark honest re-scope (#433 merged; #418 re-bodied to the gated Safe-Browsing arm) + a docs checkpoint. Open issues **62→58**. No open-item state changed. ⚠️ Found **#426 corpus triage is #417-gated** (only the 5-01 report is committed — the manifest + raw FN results are gitignored/local-only; the 5-01 number is methodologically invalid per #417).
-- **Next agent slices (ungated):** #417 corpus-v2 harness (unit-testable protected-vs-fired core + committed manifest; a real run is Gate-3/CI) -> then #426 -> #374 split -> visual-sim excision (D-2026-07-03-F).
+- **Cycles 44–47 (2026-07-03, agent):** **#427** hygiene sweep (closed #322/#350/#395/#427, re-bodied #339, parked 16 sub-findings) + **#418** benchmark honest re-scope (#433; #418 re-bodied to the gated SB-arm) + a docs checkpoint + **#417 corpus-v2 pillar 1** (#435: unit-tested protected-vs-fired classifier; a review caught a HIGH toast-inflation bug + Codex a fail-open-cred edge, both fixed). Open issues **62→58**. No open-item state changed.
+- ⚠️ **BOUNDARY (agent):** the clean in-sandbox ungated engineering queue is thinning. The measurement rung (#417 pillars 2–4 / #426 / #416 / #232) is **headed-Chrome/network-gated** and North-Star UI is Gate-3, so the **highest-leverage move is now the AI-15 batch** (below). Deferred **Q-CORPUS** (build #417's unrunnable browser-wiring now vs. defer to a headed session) is logged in `docs/agentic/ORCHESTRATOR.md`.
 - **Historical snapshots** (pre-2026-07-03, ~28 session bullets) archived to [`docs/archive/ACTION_ITEMS_snapshots.md`](docs/archive/ACTION_ITEMS_snapshots.md).
 
 ---
