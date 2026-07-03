@@ -80,8 +80,9 @@ function main() {
   }
 
   const msg =
-    `shipped reputation_data.bin is the placeholder/test filter (m=${info.m} bits < ${MIN_REAL_FILTER_BITS}). ` +
-    `Build the real feed with 'npm run build:bloom' before releasing (issue #321 / AI-9).`;
+    `shipped reputation_data.bin is not a production threat-feed filter (m=${info.m} bits < ${MIN_REAL_FILTER_BITS} floor). ` +
+    `Build/rebuild the real feed with 'npm run build:bloom' before releasing — the committed default is a placeholder, ` +
+    `and a below-floor filter can also mean a threat feed failed at build time (issue #321 / AI-9).`;
   if (allowTest) {
     console.warn(`WARNING (NAVSENTINEL_ALLOW_TEST_BLOOM=1): ${msg}`);
     return;

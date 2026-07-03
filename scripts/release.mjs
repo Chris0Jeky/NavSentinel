@@ -102,7 +102,7 @@ const bloomPath = path.join(root, "extension", "public", "reputation_data.bin");
 try {
   const info = inspectBloomFilter(fs.readFileSync(bloomPath));
   if (!info.real) {
-    const detail = `reputation_data.bin is the placeholder/test filter (m=${info.m} bits < ${MIN_REAL_FILTER_BITS}). Build the real feed with 'npm run build:bloom' first (issue #321 / AI-9).`;
+    const detail = `reputation_data.bin is not a production threat-feed filter (m=${info.m} bits < ${MIN_REAL_FILTER_BITS} floor). Build/rebuild the real feed with 'npm run build:bloom' first — the committed default is a placeholder, and a below-floor filter can also mean a threat feed failed at build time (issue #321 / AI-9).`;
     if (process.env.NAVSENTINEL_ALLOW_TEST_BLOOM === "1") {
       console.log(`WARNING (NAVSENTINEL_ALLOW_TEST_BLOOM=1): releasing with ${detail}`);
     } else {

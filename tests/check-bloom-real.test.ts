@@ -25,9 +25,9 @@ describe("check-bloom-real: production-vs-placeholder gate (#321)", () => {
     expect(info.k).toBe(13);
   });
 
-  it("classifies a production-sized filter (m in the millions) as real", () => {
-    // ceil(2_000_000/8) data bytes — validateBloomBinary requires an exact size.
-    const info = inspectBloomFilter(makeBin({ m: 2_000_000, k: 13 }));
+  it("classifies a production-sized filter as real", () => {
+    // ~800k bits (~100KB), within the real builder's 150KB / ~1.23M-bit budget.
+    const info = inspectBloomFilter(makeBin({ m: 800_000, k: 13 }));
     expect(info.real).toBe(true);
   });
 
@@ -46,6 +46,9 @@ describe("check-bloom-real: production-vs-placeholder gate (#321)", () => {
     // Guards against a future edit that lowers the floor into placeholder range
     // or raises it above a plausible small production feed.
     expect(MIN_REAL_FILTER_BITS).toBeGreaterThan(1_000); // well above the ~300-bit stub
-    expect(MIN_REAL_FILTER_BITS).toBeLessThan(1_000_000); // below a real URLhaus/OpenPhish filter
+    // budget-ceiling sanity check: the floor stays below the real builder's
+    // ~1.23M-bit / 150KB budget, so a healthy dual-feed filter (tens of
+    // thousands of domains, m in the hundreds of thousands) clears it.
+    expect(MIN_REAL_FILTER_BITS).toBeLessThan(1_000_000);
   });
 });
