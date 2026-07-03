@@ -14,10 +14,10 @@ know it's done. It synthesizes the findings from
 | Phase | Title | Tasks | Done | Status |
 |---|---|---|---|---|
 | 0 | Stabilize | 6 | 6 | **Done** |
-| 1 | Validate Foundation | 8 | 8 | **Done** (FP gate cleared via same-org domain groups) |
+| 1 | Validate Foundation | 8 | 8 | **Done** (last FP measurement 0.72% on 2026-05-01, above the 0.1% target; same-org domain-groups fix added but never re-measured — see P1-05) |
 | 2 | Target 2025-2026 Threats | 13 | 13 | **Done** |
 | 3 | Productize | 12 | 12 | **Done** |
-| 4 | Differentiate | 8 | 4 | In progress (P4-05–P4-08 done; P4-01 visual sim in progress, P4-02 JS behavior in progress, P4-03–P4-04 pending) |
+| 4 | Differentiate | 8 | 4 | In progress (P4-05–P4-08 done; P4-01 visual sim plumbing merged but detection non-functional — ships placeholder templates the E2E `visual-sim.spec.ts` asserts can never match, and the true-positive path is superseded by P5-D6 #246, P4-02 JS behavior in progress, P4-03–P4-04 pending) |
 
 Total: **47 tasks** across 5 phases. **43/47 complete**. P4-01 and P4-02 have foundational PRs merged but need completion work. P4-03 (Firefox port) and P4-04 (community intelligence) are pending.
 
@@ -441,7 +441,7 @@ Phase 1 is complete when:
 - [x] CDS resists the 5 specific evasion patterns from the Thesis Review (PR #20 merged, PR #25 red-team suite confirms)
 - [x] Lookalike detection catches subdomain stuffing, homoglyphs, and brand keywords (PR #22 merged)
 - [x] NRS is implemented per spec and wired into navigation decisions (PR #28 merged)
-- [x] False positive rate on Tranco top-200: measured at 0.72% (1/138: unity3d.com) on 2026-05-01; fixed via same-organization domain groups (`domain_groups.ts`) which suppresses cross-site penalty for known multi-domain ecosystems (PR #24, fixes via PR #32, domain-group fix on `fix/fp-gate-multi-domain`)
+- [x] False positive rate on Tranco top-200: measured at 0.72% (1/138: unity3d.com) on 2026-05-01, **above the 0.1% target**; a same-organization domain-groups fix (`domain_groups.ts`, PR #24/#32, `fix/fp-gate-multi-domain`) was added to suppress the unity3d.com cross-site penalty, **but the post-fix rate was never re-measured** — <0.1% remains unconfirmed and the figure is stale vs. current code; a top-1000 re-measurement is required (#416)
 - [x] At least 50 real phishing pages tested, TP rate measured (P1-06 infrastructure merged via PR #30; corpus run: 100 pages tested, 28% overall TP, 100% credential guard TP on 5 pages with detectable password forms; ~16 additional password-form pages missed due to dynamic JS injection in static snapshots)
 - [x] CDS evasion red-team suite exists and composite evasion is caught (PR #25 merged)
 - [x] Prompt telemetry is recording locally (PR #21 merged)
@@ -689,8 +689,7 @@ Run the same test corpus against competing tools to quantify NavSentinel's addit
 
 **Files**: new `scripts/benchmark.mjs`, new `tests/benchmark-results/`
 
-**Done when**: Benchmark runs. NavSentinel demonstrates additive value over Safe Browsing
-alone for interaction-level attacks. Results documented.
+**Done when**: Benchmark harness runs and results are documented. **NOT PROVEN** — `scripts/benchmark.mjs` has no Safe Browsing arm, `scripts/benchmark-baseline.json` has `lastRun: null`, and `tests/benchmark-results/` holds only `.gitkeep`, so no competitive additive-value comparison over Safe Browsing has ever been produced (#418).
 
 #### P2-11: NRS scoring ceiling and compound FP mitigation
 
@@ -755,7 +754,7 @@ Phase 2 is complete when:
 - [x] DOM mutations are monitored for post-load injection (PR #45 merged: MutationObserver with cookie/chat/ARIA exclusions, 100ms debounce, 50-alert cap)
 - [x] History.pushState gating detects URL manipulation (PR #60 merged: 2+ dot domain-like path check, %2E decode, rapid-fire detection, +20 NRS factor)
 - [x] Phase 2 gym fixtures have comprehensive E2E coverage (PR #61 merged: 22 tests across 6 detection types, 4 new fixtures)
-- [x] Competitive benchmark demonstrates additive value (PR #70 merged: Playwright-based benchmark suite with baseline comparison and regression detection)
+- [ ] Competitive benchmark demonstrates additive value — the benchmark *suite* exists (PR #70) but has never produced a competitive result: `benchmark.mjs` has no Safe Browsing arm, baseline `lastRun` is `null`, and `tests/benchmark-results/` holds only `.gitkeep`; additive value over Safe Browsing is unproven (#418)
 - [ ] No regression in Phase 1 measurements (FP rate, TP rate) — needs re-run after P4 additions (blocked on FP re-measurement run)
 
 ---
@@ -893,7 +892,7 @@ Prepare and submit for CWS distribution.
 "The only browser extension that detects DoubleClickjacking, ClickFix overlays, and OAuth
 consent flow abuse -- without sending your data anywhere."
 
-**Done when**: Extension is listed and installable from CWS.
+**Done when**: Extension is listed and installable from CWS. **NOT MET (2026-07-03)** — the extension has never been submitted to the Chrome Web Store (0 git tags, 0 GitHub releases). Listing copy and the privacy disclosure are drafted under `docs/cws-listing/` (PR #81), but actual submission/listing is an open manual gate (#321 / AI-9, release umbrella #415).
 
 #### P3-07: Release infrastructure
 
@@ -907,7 +906,7 @@ consent flow abuse -- without sending your data anywhere."
 **Files**: `extension/manifest.json`, new `CHANGELOG.md`, new `scripts/release.mjs`,
 `.github/workflows/ci.yml`
 
-**Done when**: Release workflow exists. Version bumps are scripted. Tags create GitHub Releases.
+**Done when**: Release workflow exists (`scripts/release.mjs` + tag-triggered CI job in `ci.yml`). Version bumps are scripted. The CI job is configured to create a GitHub Release on tag push, but it has never run — 0 git tags and 0 GitHub Releases exist to date.
 
 #### P3-08: Issue templates and repo hygiene
 

@@ -29,7 +29,7 @@ In `chrome.storage.local`, the extension also stores prompt outcome data includi
 The extension ships with two static data assets compiled at build time:
 
 - a Public Suffix List (PSL) snapshot for accurate registrable-domain extraction
-- a bloom filter of known-bad domains compiled from public threat feeds (URLhaus, OpenPhish)
+- a bloom filter mechanism for known-bad domains (the shipped build currently bundles a small placeholder/test dataset; the production filter compiled from public threat feeds such as URLhaus and OpenPhish lands with the first release — see issue #321)
 
 These are read-only. They are never updated at runtime and require no network calls.
 

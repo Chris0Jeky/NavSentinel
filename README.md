@@ -6,7 +6,7 @@ NavSentinel is a local-first Chrome MV3 extension that hardens several abuse-hea
 - risky credential submissions such as HTTP password posts, lookalike domains, untrusted domains, and suspicious cross-site form actions
 - DoubleClickjacking attacks that hijack a double-click gesture to land on sensitive buttons (OAuth consent, MFA, payment)
 - ClickFix / fake CAPTCHA overlays that write malicious commands to the clipboard and instruct users to paste them
-- known-bad domains via a build-time bloom filter compiled from public threat feeds (no network calls)
+- known-bad domains via a build-time bloom-filter mechanism (no network calls); the current build ships a placeholder ~15-domain `.example` test filter, so real public-threat-feed data is not yet active and lands with the first release (issue #321)
 
 The current `main` branch ships the merged suite baseline. That means the extension now includes the navigation firewall, the credential guard, a popup, a full options page, trusted-domain management, and a bounded local event log.
 
@@ -18,7 +18,7 @@ The current `main` branch ships the merged suite baseline. That means the extens
 - Intercepts password-form submission and computes local credential risk before allowing the submit.
 - Detects DoubleClickjacking attack patterns across main-world, isolated-world, and service-worker layers.
 - Detects ClickFix / fake CAPTCHA overlays that combine clipboard writes with deceptive instruction text.
-- Checks destination domains against a build-time bloom filter of known-bad domains from public threat feeds.
+- Checks destination domains against a build-time bloom filter (no network calls). The runtime check and bloom code path are implemented, but the shipped `reputation_data.bin` is currently a placeholder 15-domain `.example` test filter (52 bytes) with no real-feed build step wired into the release/package pipeline — so it does not yet match real domains. Loading real known-bad domains from public threat feeds is tracked as release-blocker issue #321.
 - Stores only local settings, allowlists, trusted domains, and a bounded event log in `chrome.storage.local`.
 - Provides a popup for the current tab and an options page for persistent configuration, import/export, and log review.
 
@@ -54,7 +54,7 @@ The current `main` branch ships the merged suite baseline. That means the extens
 
 - `extension/`: MV3 source, manifest, assets, and build output
 - `gym/`: deterministic HTML fixtures for navigation and credential scenarios
-- `tests/`: Vitest unit tests (38 files) and Playwright E2E tests (10 specs)
+- `tests/`: Vitest unit tests (92 files) and Playwright E2E tests (14 specs)
 - `docs/`: architecture, threat model, testing, release, roadmap, and redesign docs
 - `scripts/`: release, bloom filter build, benchmark, PSL update, and agent hook scripts
 - `autodoc/`: agent-facing code orientation index
@@ -108,7 +108,7 @@ The options page is the durable operator view. It lets you:
 
 ### Gym
 
-The Gym gives you 112 deterministic fixtures for attack and edge-case patterns:
+The Gym gives you 122 deterministic fixtures for attack and edge-case patterns:
 
 - Levels 1-12: overlay, retargeting, popunder, programmatic click, delayed redirects, credential prompts, and legitimacy edge cases
 - DoubleClickjacking: basic, OAuth consent, payment, and legitimate double-click variants
