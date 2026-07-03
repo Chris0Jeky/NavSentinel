@@ -441,7 +441,7 @@ Phase 1 is complete when:
 - [x] CDS resists the 5 specific evasion patterns from the Thesis Review (PR #20 merged, PR #25 red-team suite confirms)
 - [x] Lookalike detection catches subdomain stuffing, homoglyphs, and brand keywords (PR #22 merged)
 - [x] NRS is implemented per spec and wired into navigation decisions (PR #28 merged)
-- [x] False positive rate on Tranco top-200: measured at 0.72% (1/138: unity3d.com) on 2026-05-01, **above the 0.1% target**; a same-organization domain-groups fix (`domain_groups.ts`, PR #24/#32, `fix/fp-gate-multi-domain`) was added to suppress the unity3d.com cross-site penalty, **but the post-fix rate was never re-measured** — <0.1% remains unconfirmed and the figure is stale vs. current code; a top-1000 re-measurement is required (#416)
+- [ ] False positive rate on Tranco top-200: measured at 0.72% (1/138: unity3d.com) on 2026-05-01, **above the 0.1% target**; a same-organization domain-groups fix (`domain_groups.ts`, PR #24/#32, `fix/fp-gate-multi-domain`) was added to suppress the unity3d.com cross-site penalty, **but the post-fix rate was never re-measured** — <0.1% remains unconfirmed and the figure is stale vs. current code; a top-1000 re-measurement is required (#416)
 - [x] At least 50 real phishing pages tested, TP rate measured (P1-06 infrastructure merged via PR #30; corpus run: 100 pages tested, 28% overall TP, 100% credential guard TP on 5 pages with detectable password forms; ~16 additional password-form pages missed due to dynamic JS injection in static snapshots)
 - [x] CDS evasion red-team suite exists and composite evasion is caught (PR #25 merged)
 - [x] Prompt telemetry is recording locally (PR #21 merged)
