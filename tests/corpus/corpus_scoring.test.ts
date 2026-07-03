@@ -4,6 +4,7 @@ import {
   tallyCorpusOutcomes,
   PROTECTED_EVENT_KINDS,
   FIRED_LATE_EVENT_KINDS,
+  DETECTION_EVENT_KINDS,
   type CorpusOutcome,
 } from "./corpus_scoring";
 
@@ -30,10 +31,22 @@ describe("classifyCorpusOutcome", () => {
     expect(out.protectedBy).toContain("credential_modal");
   });
 
-  it("treats a shown risk toast/prompt as protected", () => {
-    const out = classifyCorpusOutcome({ hadToastPrompt: true });
-    expect(out.level).toBe("protected");
-    expect(out.protectedBy).toContain("toast_prompt");
+  it("treats a bare toast as fired-late, NOT protected", () => {
+    // A toast on its own is post-render (rollback toast / reputation late-warn /
+    // mutation overlay), so it must not upgrade a page to protected.
+    const out = classifyCorpusOutcome({ hadToast: true });
+    expect(out.level).toBe("fired");
+    expect(out.firedBy).toContain("toast");
+    expect(out.protectedBy).toEqual([]);
+  });
+
+  it("keeps a post-render rollback + its own toast as fired (regression: #417 toast-upgrade bug)", () => {
+    // The rollback path also shows a persistent toast; a rollback must NOT be
+    // upgraded to protected just because it rendered a toast.
+    const out = classifyCorpusOutcome({ detectionKinds: ["nav_rollback"], hadToast: true });
+    expect(out.level).toBe("fired");
+    expect(out.protectedBy).toEqual([]);
+    expect(out.firedBy).toEqual(expect.arrayContaining(["nav_rollback", "toast"]));
   });
 
   it("classifies a lone post-render rollback as fired (not protected)", () => {
@@ -41,6 +54,13 @@ describe("classifyCorpusOutcome", () => {
     expect(out.level).toBe("fired");
     expect(out.firedBy).toEqual(["nav_rollback"]);
     expect(out.protectedBy).toEqual([]);
+  });
+
+  it("still prefers protected when a pre-harm kind co-occurs with a toast", () => {
+    const out = classifyCorpusOutcome({ detectionKinds: ["cred_submit_prompt"], hadToast: true });
+    expect(out.level).toBe("protected");
+    expect(out.protectedBy).toEqual(["cred_submit_prompt"]);
+    expect(out.firedBy).toEqual(["toast"]);
   });
 
   it("prefers protected when both a pre-harm block and a rollback fired", () => {
@@ -76,6 +96,15 @@ describe("classifyCorpusOutcome", () => {
     for (const k of PROTECTED_EVENT_KINDS) {
       expect(FIRED_LATE_EVENT_KINDS.has(k)).toBe(false);
     }
+  });
+
+  it("exposes DETECTION_EVENT_KINDS as exactly the union of protected + fired-late", () => {
+    // The Playwright lane filters its event log by DETECTION_EVENT_KINDS; keeping
+    // it derived here prevents drift (a kind in the filter but neither bucket
+    // would silently classify as miss).
+    const union = new Set([...PROTECTED_EVENT_KINDS, ...FIRED_LATE_EVENT_KINDS]);
+    expect(new Set(DETECTION_EVENT_KINDS)).toEqual(union);
+    expect(DETECTION_EVENT_KINDS.size).toBe(PROTECTED_EVENT_KINDS.size + FIRED_LATE_EVENT_KINDS.size);
   });
 });
 

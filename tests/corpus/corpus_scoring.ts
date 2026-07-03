@@ -3,10 +3,18 @@
  *
  * The pre-corpus-v2 harness collapsed every NavSentinel signal into a single
  * `detected` boolean, which conflated a *pre-interaction block/prompt* (the user
- * was actually protected) with a *post-render rollback* (the phishing page had
- * already rendered and could have harvested credentials before the rollback
+ * was actually protected) with a *post-render* signal (the phishing page had
+ * already rendered and could have harvested credentials before the signal
  * fired). Per #417 the corpus TP number should mean "the user was protected",
  * so this module scores those two cases separately.
+ *
+ * IMPORTANT (why a bare toast is NOT "protected"): several NavSentinel toasts
+ * fire *after* the page renders — the `nav_rollback` rollback toast, the
+ * reputation late-warn, and the mutation/overlay warning. A toast on its own is
+ * therefore a post-render (weak) signal, so it counts toward `fired`, never
+ * `protected`. The genuine pre-harm interventions are captured by their own
+ * event kinds (nav_blank_prompt / nav_click_block / cred_submit_prompt /
+ * cred_paste_warn) and by the credential modal (the pre-submit interceptor UI).
  *
  * Pure + dependency-free: unit-tested under Vitest (`tests/corpus/corpus_scoring.test.ts`)
  * and imported by the Playwright lane (`tests/e2e/corpus-validation.spec.ts`).
@@ -15,9 +23,9 @@
 export type ProtectionLevel = "protected" | "fired" | "miss";
 
 /**
- * Signals that intervene BEFORE the phishing page can harm the user — a block or
- * prompt at click-time or credential-submit/paste-time. If one of these fires,
- * the user got a real, pre-harm intervention.
+ * Event kinds that intervene BEFORE the phishing page can harm the user — a
+ * block or prompt at click-time or credential-submit/paste-time. If one of
+ * these fires, the user got a real, pre-harm intervention.
  */
 export const PROTECTED_EVENT_KINDS: ReadonlySet<string> = new Set([
   "nav_blank_prompt", // prompted on a blank-anchor navigation before proceeding
@@ -27,21 +35,37 @@ export const PROTECTED_EVENT_KINDS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Signals that fire only AFTER the navigation/render already happened — weaker
- * protection, because the phishing page may have rendered (and could have
- * harvested credentials) before the rollback fired.
+ * Event kinds that fire only AFTER the navigation/render already happened —
+ * weaker protection, because the phishing page may have rendered (and could
+ * have harvested credentials) before the signal fired.
  */
 export const FIRED_LATE_EVENT_KINDS: ReadonlySet<string> = new Set([
   "nav_rollback", // navigation committed, then rolled back post-render
 ]);
 
+/**
+ * The union of the two sets — the event kinds that count as *any* detection on a
+ * phishing page. Exported as the single source of truth so the Playwright lane's
+ * event-log filter cannot silently drift from the classifier (a kind in one but
+ * not the other would be mis-bucketed).
+ */
+export const DETECTION_EVENT_KINDS: ReadonlySet<string> = new Set([
+  ...PROTECTED_EVENT_KINDS,
+  ...FIRED_LATE_EVENT_KINDS,
+]);
+
 export interface CorpusSignals {
   /** NavSentinel event-log `kind` values observed on the page. */
   detectionKinds?: readonly string[];
-  /** The credential modal was shown (a pre-submit block → protected). */
+  /** The credential modal was shown (the pre-submit interceptor → protected). */
   hadCredentialModal?: boolean;
-  /** A risk toast/prompt requiring user action was shown (→ protected). */
-  hadToastPrompt?: boolean;
+  /**
+   * A risk toast was shown. Treated as a post-render / late signal (→ `fired`),
+   * NOT as protection: in this lane a bare toast without a pre-harm event kind
+   * comes from the rollback toast, the reputation late-warn, or a mutation
+   * overlay — all after the page rendered.
+   */
+  hadToast?: boolean;
 }
 
 export interface CorpusOutcome {
@@ -56,24 +80,25 @@ const unique = (xs: string[]): string[] => [...new Set(xs)];
 
 /**
  * Classify a corpus page's outcome:
- *  - `protected` — a pre-harm block/prompt fired (or the credential modal / a
- *    risk toast was shown);
- *  - `fired` — only a post-render signal (e.g. `nav_rollback`) fired: the event
- *    fired but the protection is weak/late;
+ *  - `protected` — a pre-harm block/prompt fired (a PROTECTED_EVENT_KINDS event
+ *    or the credential modal);
+ *  - `fired` — only post-render signals fired (`nav_rollback` and/or a bare
+ *    toast): the signal fired but the protection is weak/late;
  *  - `miss` — nothing fired.
  *
  * Precedence is protected > fired > miss, so a page that both prompts a
- * credential submit *and* rolls a redirect back counts as `protected`. Unknown
- * event kinds are ignored (contribute to neither class).
+ * credential submit *and* rolls a redirect back counts as `protected`, while a
+ * page whose only signals are a rollback and its own toast stays `fired`.
+ * Unknown event kinds are ignored (contribute to neither class).
  */
 export function classifyCorpusOutcome(signals: CorpusSignals): CorpusOutcome {
   const kinds = signals.detectionKinds ?? [];
 
   const protectedBy = kinds.filter((k) => PROTECTED_EVENT_KINDS.has(k));
   if (signals.hadCredentialModal) protectedBy.push("credential_modal");
-  if (signals.hadToastPrompt) protectedBy.push("toast_prompt");
 
   const firedBy = kinds.filter((k) => FIRED_LATE_EVENT_KINDS.has(k));
+  if (signals.hadToast) firedBy.push("toast");
 
   let level: ProtectionLevel;
   if (protectedBy.length > 0) level = "protected";

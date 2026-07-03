@@ -7,6 +7,7 @@ import { fileURLToPath } from "url";
 import {
   classifyCorpusOutcome,
   tallyCorpusOutcomes,
+  DETECTION_EVENT_KINDS,
   type ProtectionLevel,
 } from "../corpus/corpus_scoring";
 
@@ -39,18 +40,10 @@ const manifestPath = path.resolve(corpusDir, "manifest.json");
 
 const EVENT_LOG_KEY = "sentinelsuite:event_log_v1";
 
-/**
- * NavSentinel event kinds that count as a "detection" on a phishing page.
- * These are the same events tracked in measure-fp.mjs — on a phishing
- * page, any of these firing is a true positive.
- */
-const DETECTION_EVENT_KINDS = new Set([
-  "nav_blank_prompt",
-  "nav_click_block",
-  "nav_rollback",
-  "cred_submit_prompt",
-  "cred_paste_warn",
-]);
+// NavSentinel event kinds that count as a "detection" on a phishing page.
+// DETECTION_EVENT_KINDS is imported from ../corpus/corpus_scoring (the union of
+// the protected + fired-late kind sets) so the event-log filter and the
+// classifier cannot drift apart (#417).
 
 // ── Local snapshot server ──────────────────────────────────────────
 
@@ -399,7 +392,7 @@ test("Phishing corpus validation @corpus", async () => {
                 .map((e) => e.kind)
                 .filter((k): k is string => typeof k === "string"),
               hadCredentialModal: hasCredentialModal,
-              hadToastPrompt: toastText !== null && toastText.length > 0,
+              hadToast: toastText !== null && toastText.length > 0,
             });
             const detected = outcome.level !== "miss";
 
