@@ -10,7 +10,7 @@
 - **Baseline:** typecheck/lint clean, **2856 unit tests** (94 files), perf 12/12. CI green on `main`.
 - **Open PRs (all human-gated, browser-surface / measure:fp):** #399 (AI-14, `measure:fp`), #356 (AI-13, Gate-3), #273 (AI-8, Gate-3). At the WIP cap of 3 — **do not open more browser-surface PRs** (D-2026-07-03-D).
 - **Last session (2026-07-03):** merged **#429** (claims-honesty #423 — public docs now match shipped reality) and **#430** (release guard #321-companion + fixed an unparseable `release.mjs` that had blocked *all* releases). See ORCHESTRATOR cycle 43.
-- **This session (cycles 44–46, agent, no runtime code):** #427 hygiene sweep (closed #322/#350/#395/#427, re-bodied #339, parked 16 residue) → #418 benchmark honest re-scope (#433 merged; #418 re-bodied to the gated Safe-Browsing arm) → this checkpoint. Open issues **62→58**. ⚠️ **#426 corpus triage is #417-gated** (committed corpus data is the stale 4-25 run, untagged, no FN list; the 5-01 number is methodologically invalid per #417). See ORCHESTRATOR cycles 44–46.
+- **This session (cycles 44–46, agent, no runtime code):** #427 hygiene sweep (closed #322/#350/#395/#427, re-bodied #339, parked 16 residue) → #418 benchmark honest re-scope (#433 merged; #418 re-bodied to the gated Safe-Browsing arm) → this checkpoint. Open issues **62→58**. ⚠️ **#426 corpus triage is #417-gated** (the only committed corpus artifact is the 5-01 report — no manifest, no FN list, no raw results in-repo [gitignored/local-only]; the 5-01 number is methodologically invalid per #417). See ORCHESTRATOR cycles 44–46.
 
 ## 🚨 Open human items (flag these in every summary — see `ACTION_ITEMS.md`)
 
@@ -22,7 +22,7 @@
 ## Next safe slices (agent, ungated, in ladder order)
 
 1. **#417** corpus methodology v2 — **the real unblock** (and #426 depends on it). Extract the **protected-vs-fired classification as a pure, unit-tested module** (in-sandbox verifiable, per Q3), commit the corpus **manifest** for reproducibility, and write the Playwright wiring (real-hostname `page.route` routing + trusted clicks in `tests/e2e/corpus-validation.spec.ts`) marked clearly **needs a headed run (Gate-3/CI)** — the sandbox cannot run it.
-2. **#426** corpus TP triage — **#417-gated.** The only committed corpus data is the stale 2026-04-25 run (untagged, no FN list); the 5-01 28% number is methodologically invalid (#417) and its 72 FN aren't enumerated in-repo. A valid per-page triage needs the corpus-v2 re-run. Do **after** #417 + a headed run.
+2. **#426** corpus TP triage — **#417-gated.** The only committed corpus artifact is the 5-01 markdown report (28 TP listed, 72 FN not enumerated); the manifest + raw per-page results are gitignored/local-only. The 5-01 28% number is methodologically invalid (#417). A valid per-page triage needs the corpus-v2 re-run. Do **after** #417 + a headed run.
 3. **#374** chunk split → then the **visual-sim excision** (D-2026-07-03-F). Browser-surface (capture_isolated) → Gate-3.
 
 > **Done this session:** **#427** hygiene sweep (cycle 44) + **#418** benchmark honest re-scope (cycle 45, #433 merged; #418 re-bodied to the gated SB-arm). No longer next-slices.
