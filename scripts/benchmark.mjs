@@ -1,7 +1,12 @@
 #!/usr/bin/env node
 
 /**
- * benchmark.mjs — Competitive benchmark suite for NavSentinel
+ * benchmark.mjs — NavSentinel gym-fixture regression benchmark
+ *
+ * NOTE: despite the "competitive benchmark" label in the roadmap (P2-10), this is a
+ * NavSentinel-ONLY regression harness — it has NO Safe-Browsing / competitor arm and
+ * does NOT measure additive value over any other tool. Building the competitive
+ * comparison arm is tracked by #418; see docs/Project_Roadmap.md P2-10.
  *
  * Launches Chromium with NavSentinel loaded, visits each gym fixture,
  * records whether the extension detected/missed/false-positived each
