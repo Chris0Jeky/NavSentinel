@@ -1,54 +1,33 @@
-# Session Handoff - NavSentinel Autonomous Loop
+# Session Handoff — NavSentinel Autonomous Loop
 
-**Last updated:** 2026-06-25
-**Status (2026-06-24/25 autonomous-loop checkpoint):** `main` @ **`11a2aa2`** (verify with `git rev-parse origin/main`). This session merged **#359 / #323** (SW send-race store-then-send redesign) and **#361 / #327** (unify `onCommitted` hydration gate + chain-anchored icon reset). Each: multiple independent adversarial review rounds (read-only `feature-dev:code-reviewer` Workflows) + green CI incl. E2E + regression tests proven to fail pre-fix. **#361 took 3 rounds** — R2 caught a deferred-icon-paint regression that could hide a threat badge; R3 caught a ghost-cache gap; both fixed. Closed **#323/#324/#327**; seeded **#360/#362**. **Open PRs: #356 (AI-13) + #273 (AI-8) — BOTH browser-surface, held for Gate-3.** **Open human items: 🚨 AI-9 (#321 release blocker), AI-13 (#356), AI-8 (#273)** — see `ACTION_ITEMS.md`. Baseline: typecheck/lint clean, **2743 unit tests**, perf **12/12**. Autonomous queue is thin (most open issues gated by Q2 budget / FP-measurement / browser-Gate-3 / Q6 main_guard-testability); next ungated candidates: **#176** (sw URL minimization), **#282** (credential_guard cleanup), **#252 pt1** (silent-decision e2e). Phase 5 plan: [`docs/NORTHSTAR_ROADMAP.md`](../NORTHSTAR_ROADMAP.md); live open North-Star issues **#232**, **#237–#246**, **#252**.
+**Last updated:** 2026-07-03 · **`main` @ `f2c3652`** (always verify: `git rev-parse origin/main`, `gh pr list`).
 
-> **Historical (superseded):** 2026-06-14 — exact `main` SHA not hardcoded; merged #254/#256/#257/#258 + docs cleanup; #249 was the open gate (AI-6, since resolved).
+> Short, always-current next-loop entry point. Trust live git/GitHub over any snapshot. The append-only history is in `docs/agentic/ORCHESTRATOR.md` (cycle log); standing decisions are in `docs/agentic/DECISIONS.md`; human-only tasks are in `ACTION_ITEMS.md`.
 
-Trust live git and GitHub over this snapshot. Re-check `git status -sb`, `git rev-parse main`, `git rev-parse origin/main`, PR checks, review threads, and comments before merging or branching.
+## Current state
 
-## Codex Pickup Addendum (2026-06-14)
+- **Direction:** ship/measure, **not** hardening (adopted — `docs/agentic/DECISIONS.md` D-2026-07-03-A). Follow the **Priority Ladder** in `ORCHESTRATOR.md`; discovery passes are milestone-gated; LOW residue → `docs/agentic/ICEBOX.md`.
+- **Baseline:** typecheck/lint clean, **2856 unit tests** (94 files), perf 12/12. CI green on `main`.
+- **Open PRs (all human-gated, browser-surface / measure:fp):** #399 (AI-14, `measure:fp`), #356 (AI-13, Gate-3), #273 (AI-8, Gate-3). At the WIP cap of 3 — **do not open more browser-surface PRs** (D-2026-07-03-D).
+- **Last session (2026-07-03):** merged **#429** (claims-honesty #423 — public docs now match shipped reality) and **#430** (release guard #321-companion + fixed an unparseable `release.mjs` that had blocked *all* releases). See ORCHESTRATOR cycle 43.
 
-- Exact `main` SHA is live-state only; run `git rev-parse origin/main` before branching or merging. Issues #234 and #235 are complete via merged PRs, and post-merge status docs were synchronized after #258.
-- **#249** (P5-C1 / #238) is refreshed from the post-#257 feature base in `3e0389e` and remains open/clean/green against current `main`. It remains blocked only on AI-6 manual Chrome Gate-3 + merge. Conflict resolution preserved both replay-grade `PromptOutcomeEntry` fields and top-sites tier-adjusted threshold recording. Local verification after the refresh: `build:topsites`, `check:topsites`, focused replay/storage/silent/Smart/OAuth/scoring/top-sites/dom-builder tests 483 pass, typecheck, build, lint, perf budget 12/12 (`capture_isolated` 65.0KB / 66KB; total dist 459.7KB / 500KB), and `git diff --check`. Fresh GitHub Build/Unit + E2E are green.
-- **#253** (P5-B1 / #236) merged into `main` as `db63192` after clean merge state, green Build/Unit + E2E, and all 14 audited review threads resolved. The merged branch persists same-tab silent navigation decisions only after matching top-frame commits, covers JS-driven allowed same-tab navigations, filters non-web schemes, avoids duplicate `_self`/`_top`/`_parent` logging, logs explicit-new-tab silent allows immediately, restricts queued target allowance to top-frame same-tab document commits, and gives GET form submissions query-prefix commit matching without widening ordinary exact target matching. Two delegated supplemental review agents failed on Codex usage limits; the failure is ledgered and replaced by direct local review plus review-thread audit.
-- **#254** (Codex contract/status refresh) merged as `6faa856`; its docs/workflow branch and worktree were pruned.
-- **#255** (P5-A2 / #233) merged into `main` as `69400fc` after green Build/Unit + E2E, latest Codex clean on `4a77b39`, and all six fixed review threads resolved; issue #233 is now closed.
-- **#256** (P5-A4 / #235) merged as `c63f832`; its branch and worktree were pruned.
-- **#257** (P5-A3 / #234) merged as `213ebcb`; its branch and worktree were pruned.
-- **#258** (post-merge status sync) merged as `bc06c65`; its branch was pruned.
-- Human-owned OPEN items remain **AI-5** (reference brand logos) and **AI-6** (manual Gate-3 on #249).
+## 🚨 Open human items (flag these in every summary — see `ACTION_ITEMS.md`)
 
-## Historical Snapshot (Superseded)
+- **AI-15** — the 60–90 min batch session (clears the whole gate queue + go/no-go on v0.5.0). Highest-leverage item in the project.
+- **AI-9 (#321)** — build & ship the **real** bloom filter (`npm run build:bloom`, needs network). The release guard from #430 now blocks releasing without it.
+- **AI-8 (#273) · AI-13 (#356) · AI-14 (#399)** — Gate-3 checks / `measure:fp` run on the 3 open PRs.
 
-The following section is retained as session history. The live pickup state is the 2026-06-14 Codex Pickup Addendum above; do not treat this section as current.
+## Next safe slices (agent, ungated, in ladder order)
 
-- `main` == **`1b0a4a9`**. This session merged **#247** (North-Star docs; 10 bot review findings fixed), **#248** (failure-ledger: auto-captures → gitignored `failure_autolog.jsonl`; curated ledger scrubbed 78→7 real entries; `agent:hooks:smoke` made branch-aware), and **#250** (status-doc reconciliation). A small follow-up PR fixes **`npm run gym:serve`** for Vite 8 (`vite --root gym` → `vite gym`; the `--root` CLI flag was dropped in v8 — root is now positional).
-- **1 open feature PR: #249** (P5-C1 / #238) — branch `feat/p5c1-enrich-prompt-outcome`, green CI (Build/Unit + E2E), CLEAN/mergeable, 2 review rounds resolved. **Blocked only on Gate-3 manual Chrome test** (sandbox can't run a browser) — see **AI-6** in `ACTION_ITEMS.md` + the "Pending PRE-merge: #249" walkthrough in `docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md`. `fix/jsb-stale-todos-and-tests` gone (AI-3 ✅).
-- **Gotcha:** `npm run check:perf-budget` is a CI-only gate (not in `test`/`lint`/`typecheck`/`build`). It flagged a `capture_isolated` budget tip-over in #249; bumped 61→62KB (documented). Run it locally for extension changes.
-- **Since the 2026-06-05 D-series batch (#180–#195):** discovery cycles 3–4 merged **2026-06-06** — #197 (#196 credential-field helper), #202 (#188 options-failure surfacing), #208 (homoglyph/IPv6 domain hardening), #210 (#206 clickfix CAPTCHA), #212 (#204 adaptive gate), #214 (#205 popup gauge), #220 (#207 oauth callback), #230 (#211 mutation-monitor iframe). Each: green CI + 2× adversarial review.
-- **North-Star (2026-06-13):** 153-finding internal audit + **4** deep-research passes (broad + 2 gap-fill + **GAP-D done**, 24 verified claims, unblocks P5-C5) → Phase-5 roadmap (`docs/NORTHSTAR_ROADMAP.md`) + 15 issues (#232–#246). Artifacts under `docs/research/NORTHSTAR_*`.
+1. **#417** corpus methodology v2 — real-hostname routing (`--host-resolver-rules`) + trusted Playwright clicks + protected-vs-fired scoring. Harness understood (`tests/e2e/corpus-validation.spec.ts`); the re-run itself is headed-Chrome/CI-gated (build + typecheck verifiable in-sandbox; a real run is Gate-3).
+2. **#426** corpus TP triage — classify the 72 missed pages (first split: harness-artifact vs real gap). Analysis on committed data where available.
+3. **#418** benchmark truth-up — add the Safe-Browsing comparison arm or re-scope the headline.
+4. **#427** hygiene sweep — close resolved issues, reconcile; apply the icebox.
+5. **#374** chunk split → then the **visual-sim excision** (D-2026-07-03-F).
 
-## Merge Gate Posture
+## Reliability notes
 
-- **Gate 3 was WAIVED for the 2026-06-05 batch by the maintainer (Chris)** on the strength of green CI + 2× adversarial review. Manual checks were not dropped — they are deferred to **`docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md`** (run on next build + load).
-- For *future* batches, re-confirm the posture unless the maintainer says the waiver is standing. The sandbox cannot launch a browser, so manual/behavioral verification remains a human task.
-
-## Next Safe Action
-
-Do not start duplicate Phase-5 slices while **#249** is still open for human Gate-3. After #249 settles, pick the next unstarted North-Star slice from [`docs/NORTHSTAR_ROADMAP.md`](../NORTHSTAR_ROADMAP.md), likely **#232** (P5-A1 Smart-Mode silence CI gate), **#237** (P5-B3 Decision Journal UI), or **#252** (P5-B1 follow-up e2e/import trim), unless a higher-priority review/CI failure appears. The Firefox stack **FF-02→FF-04** is unblocked (**AI-4 = `web-ext`**) but should wait behind the active Phase-5 PR gate.
-
-## Active Backlog
-
-- **North-Star Phase 5:** original slices **#232–#246** (`north-star` label) plus follow-up **#252**. Live open set is **#232**, **#237–#246**, and **#252**; #233/#234/#235/#236 are merged/closed, and #238 is active in #249. See `docs/NORTHSTAR_ROADMAP.md`.
-- **Firefox port FF-02→FF-04** — AI-4 decided (`web-ext`); FF-01 shim merged (#173). Prereq: `session_state.ts` shim routing (P5-D3; session_state tracked by **#228**). Note: **#245 is P5-D5 (on-device ML), not Firefox.**
-- **Discovery cycle 3–4 backlog (open):** popup #205/#215/#216/#218/#219, oauth #207/#221/#222/#223, adaptive #204/#213, scoring #209/#217, credential/storage #199/#200/#201/#203/#227, iframe #225/#226, session_state #228, icon #229.
-- Older: #127 (JS behavior), #175/#176/#178/#179/#181/#186 (discovery), #184 (docs reconciliation).
-- **P4-01c / AI-5:** visual-sim — the **logo-embedding pivot** is confirmed; AI-5 is now the human task to supply or approve reference brand logos for P5-D6 / #246.
-
-## Reliability Notes
-
-- Verify every state-changing claim with git SHA or GitHub API output (a 2026-05-30 incident saw fabricated tool outputs).
-- Use `gh pr view`, `gh pr checks`, review-thread GraphQL, and flat review comments before merge decisions.
-- Do not edit `extension/dist/` or generated data.
-- Use `git merge main` to update branches from main; do not rebase shared branches.
+- The sandbox cannot run headed Chrome — browser/behavioral verification is a human task (why Gate-3 exists). Playwright e2e is verified via CI.
+- A read-only review Workflow reads the **working tree**, not the reviewed commit — never switch branches mid-review; commit fixes before any checkout-based pre-fix proof.
+- The working tree is **CRLF**; new files are LF-normalized by `.gitattributes`. For string-literal edits use a CRLF-aware applier with single-occurrence asserts.
+- Verify every state-changing claim by git SHA / GitHub API (a 2026-05-30 incident saw fabricated tool outputs). Do not edit `extension/dist/` or generated data. Update branches with `git merge main` (no rebase of shared branches).

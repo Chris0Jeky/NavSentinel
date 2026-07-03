@@ -13,6 +13,8 @@ This is the compact session contract for Claude Code in `NavSentinel/`. Keep it 
 
 When sources conflict, follow the higher source and report the conflict.
 
+**Standing direction (2026-07-03):** ship/measure, not hardening. Follow the Priority Ladder and posture in `docs/agentic/DECISIONS.md` — discovery is milestone-gated (LOW residue -> `docs/agentic/ICEBOX.md`), human-gated PRs are capped at 3, and browser-surface is defined by runtime blast radius (MAIN-world / submit path / service-worker nav / MutationObserver / visible UI), not file type.
+
 ## First 5 Minutes
 
 1. Read `ACTION_ITEMS.md` (human-owned tasks + current-state snapshot — see Human Action Items below).
