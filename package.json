@@ -36,6 +36,7 @@
     "check:topsites": "node scripts/build-topsites-tier.mjs --check",
     "build:templates": "node scripts/build-brand-templates.mjs",
     "check:bloom-size": "node scripts/check-bloom-size.mjs",
+    "check:bloom-real": "node scripts/check-bloom-real.mjs",
     "release": "node scripts/release.mjs",
     "release:patch": "node scripts/release.mjs patch",
     "release:minor": "node scripts/release.mjs minor",
