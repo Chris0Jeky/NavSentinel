@@ -1,6 +1,6 @@
 # Session Handoff — NavSentinel Autonomous Loop
 
-**Last updated:** 2026-07-03 (cycle 44) · **`main` @ `8b667c0`** (always verify: `git rev-parse origin/main`, `gh pr list`).
+**Last updated:** 2026-07-03 (cycle 46) · **`main` @ `de2d7ce`** (always verify: `git rev-parse origin/main`, `gh pr list`).
 
 > Short, always-current next-loop entry point. Trust live git/GitHub over any snapshot. The append-only history is in `docs/agentic/ORCHESTRATOR.md` (cycle log); standing decisions are in `docs/agentic/DECISIONS.md`; human-only tasks are in `ACTION_ITEMS.md`.
 
@@ -10,7 +10,7 @@
 - **Baseline:** typecheck/lint clean, **2856 unit tests** (94 files), perf 12/12. CI green on `main`.
 - **Open PRs (all human-gated, browser-surface / measure:fp):** #399 (AI-14, `measure:fp`), #356 (AI-13, Gate-3), #273 (AI-8, Gate-3). At the WIP cap of 3 — **do not open more browser-surface PRs** (D-2026-07-03-D).
 - **Last session (2026-07-03):** merged **#429** (claims-honesty #423 — public docs now match shipped reality) and **#430** (release guard #321-companion + fixed an unparseable `release.mjs` that had blocked *all* releases). See ORCHESTRATOR cycle 43.
-- **This session (cycle 44):** **#427 backlog hygiene sweep** (no code) — audited + adversarially re-verified 4 umbrellas, then **closed #322 / #350 / #395** and **re-bodied #339** to its 7 gated residuals; parked 16 LOW sub-findings in `ICEBOX.md`. Open issues **62→59**. Opened as a docs PR (Closes #427). See ORCHESTRATOR cycle 44.
+- **This session (cycles 44–46, agent, no runtime code):** #427 hygiene sweep (closed #322/#350/#395/#427, re-bodied #339, parked 16 residue) → #418 benchmark honest re-scope (#433 merged; #418 re-bodied to the gated Safe-Browsing arm) → this checkpoint. Open issues **62→58**. ⚠️ **#426 corpus triage is #417-gated** (the only committed corpus artifact is the 5-01 report — no manifest, no FN list, no raw results in-repo [gitignored/local-only]; the 5-01 number is methodologically invalid per #417). See ORCHESTRATOR cycles 44–46.
 
 ## 🚨 Open human items (flag these in every summary — see `ACTION_ITEMS.md`)
 
@@ -21,12 +21,11 @@
 
 ## Next safe slices (agent, ungated, in ladder order)
 
-1. **#418** benchmark truth-up — the **honest re-scope** path is fully in-sandbox: re-scope P2-10 in the roadmap to "gym regression benchmark", make `benchmark.mjs` state the missing Safe-Browsing arm, downgrade the "only extension that…" store headline to the evidenced thesis claim. (The actual Safe-Browsing comparison arm needs network → gated.) **Most cleanly landable next.**
-2. **#426** corpus TP triage — classify the missed pages (first split: harness-artifact vs real gap). Analysis on committed data (`tests/corpus/results/validation-2026-05-01.md`) where available; a fresh corpus re-run is headed-Chrome/network-gated.
-3. **#417** corpus methodology v2 — real-hostname routing (`page.route`) + trusted Playwright clicks + protected-vs-fired scoring. Harness (`tests/e2e/corpus-validation.spec.ts`) buildable + typecheck-verifiable in-sandbox; a real run is Gate-3/CI.
-4. **#374** chunk split → then the **visual-sim excision** (D-2026-07-03-F). Browser-surface (capture_isolated) → Gate-3.
+1. **#417** corpus methodology v2 — **the real unblock** (and #426 depends on it). Extract the **protected-vs-fired classification as a pure, unit-tested module** (in-sandbox verifiable, per Q3), commit the corpus **manifest** for reproducibility, and write the Playwright wiring (real-hostname `page.route` routing + trusted clicks in `tests/e2e/corpus-validation.spec.ts`) marked clearly **needs a headed run (Gate-3/CI)** — the sandbox cannot run it.
+2. **#426** corpus TP triage — **#417-gated.** The only committed corpus artifact is the 5-01 markdown report (28 TP listed, 72 FN not enumerated); the manifest + raw per-page results are gitignored/local-only. The 5-01 28% number is methodologically invalid (#417). A valid per-page triage needs the corpus-v2 re-run. Do **after** #417 + a headed run.
+3. **#374** chunk split → then the **visual-sim excision** (D-2026-07-03-F). Browser-surface (capture_isolated) → Gate-3.
 
-> **#427** hygiene sweep — ✅ DONE cycle 44 (closed #322/#350/#395, re-bodied #339, parked 16 sub-findings). No longer a next-slice.
+> **Done this session:** **#427** hygiene sweep (cycle 44) + **#418** benchmark honest re-scope (cycle 45, #433 merged; #418 re-bodied to the gated SB-arm). No longer next-slices.
 
 ## Reliability notes
 
