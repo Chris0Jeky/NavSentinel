@@ -17,7 +17,7 @@ know it's done. It synthesizes the findings from
 | 1 | Validate Foundation | 8 | 8 | **Done** (last FP measurement 0.72% on 2026-05-01, above the 0.1% target; same-org domain-groups fix added but never re-measured — see P1-05) |
 | 2 | Target 2025-2026 Threats | 13 | 13 | **Done** |
 | 3 | Productize | 12 | 12 | **Done** |
-| 4 | Differentiate | 8 | 4 | In progress (P4-05–P4-08 done; P4-01 visual sim plumbing merged but detection non-functional — ships placeholder templates the E2E `visual-sim.spec.ts` asserts can never match, and the true-positive path is superseded by P5-D6 #246, P4-02 JS behavior in progress, P4-03–P4-04 pending) |
+| 4 | Differentiate | 8 | 4 | In progress (P4-05–P4-08 done; P4-01 visual sim plumbing merged but detection non-functional — ships placeholder templates the E2E `visual-sim.spec.ts` asserts can never match; the true-positive path is superseded by P5-D6 #246; P4-02 JS behavior in progress; P4-03–P4-04 pending) |
 
 Total: **47 tasks** across 5 phases. **43/47 complete**. P4-01 and P4-02 have foundational PRs merged but need completion work. P4-03 (Firefox port) and P4-04 (community intelligence) are pending.
 
@@ -57,7 +57,7 @@ Decisions taken during this planning session. Each is final unless explicitly re
 | D09 | **DoubleClickjacking = headline feature** | No consumer extension detects this. The attack bypasses all traditional defenses. NavSentinel is architecturally positioned. This is the single strongest differentiator. |
 | D10 | **Drop "(Dev)" branding** | Ship as "NavSentinel". The Dev suffix signals unfinished work and undermines trust. |
 | D11 | **Local prompt telemetry** | Track allow/dismiss/trust/block outcomes in `chrome.storage.local`. Display in options page. No data leaves the machine. Enables evidence-based threshold tuning. |
-| D12 | **Position: "Catches what Safe Browsing can't see"** | Don't compete on URL reputation (Google wins). Compete on interaction-level detection that cloud tools structurally can't do. Complementary layer positioning. |
+| D12 | **Position: "Catches what Safe Browsing can't see"** | Don't compete on URL reputation (Google wins). Compete on interaction-level detection that cloud tools structurally can't do. Complementary layer positioning. **(Positioning stance, not yet evidenced — the Safe Browsing comparison arm is unbuilt; see #418 before using as a store headline.)** |
 | D13 | **Content analysis = pattern matching, not ML** | Match against 20-30 known phishing kit HTML fingerprints. Check brand logo/domain mismatches. Simple, auditable, effective against commodity phishing. |
 | D14 | **Phase gates are mandatory** | Don't start Phase N+1 until Phase N gates are met. Prevents scope creep and ensures each layer is solid before building on it. |
 | D15 | **Archive old planning docs** | Move `Execution_Tracker.md` and `Implementation_Roadmap.md` to `docs/archive/`. They're historical records of the merge era. |
@@ -235,7 +235,7 @@ Phase 0 is complete when:
 | P1-02 | Harden CDS against trivial evasion | L | **done** | P0-04 | `feat/cds-hardening` (PR #20) |
 | P1-03 | Enhance lookalike detection | M | **done** | P1-01 | `feat/lookalike-v2` |
 | P1-04 | Implement NRS | L | **done** | P1-02 | `feat/nrs-impl` (PR #28) |
-| P1-05 | False positive measurement on Tranco top-1000 | L | **done** | P1-01 | `test/fp-measurement` (PR #24); FP rate fix on `fix/fp-rate-reduction` (PR #32); re-run on `test/fp-measurement-rerun` (PR #39) |
+| P1-05 | False positive measurement on Tranco top-1000 | L | **done** | P1-01 | `test/fp-measurement` (PR #24); FP rate fix on `fix/fp-rate-reduction` (PR #32); definitive 0.72% re-run on `test/fp-measurement-rerun` (PR #39) — predates the same-org domain-groups fix and was never re-measured (see P1-05 detail / #416) |
 | P1-06 | Real-world phishing test corpus | L | **done** | P1-01 | `test/phishing-corpus` (PR #30); corpus run on `test/phishing-corpus-run` (PR #38) |
 | P1-07 | CDS evasion red-team test suite | M | **done** | P1-02 | `test/cds-evasion` (PR #25) |
 | P1-08 | Local prompt telemetry | M | **done** | P0 gate | `feat/prompt-telemetry` (PR #21) |
@@ -463,7 +463,7 @@ Phase 1 is complete when:
 | P2-07 | DOM mutation monitoring | M | **done** | P1 gate | `feat/dom-mutation` (PR #45) |
 | P2-08 | History.pushState gating | M | **done** | P2-06 | `feat/pushstate-gating` (PR #60) |
 | P2-09 | Gym fixtures for new detections | M | **done** | P2-01, P2-02 | `test/phase2-gym` (PR #61) |
-| P2-10 | Competitive benchmark suite | L | **done** | P1-05, P1-06 | `test/competitive-bench` (PR #70) |
+| P2-10 | Competitive benchmark suite | L | **suite done; additive value unproven — #418** | P1-05, P1-06 | `test/competitive-bench` (PR #70) |
 | P2-11 | NRS scoring ceiling and compound FP mitigation | M | **done** | P2-01, P2-03 | `fix/nrs-scoring-ceiling` (PR #57) |
 | P2-12 | Integrate ClickFix scoring into NRS pipeline | M | **done** | P2-02 | `feat/clickfix-nrs-integration` (PR #44) |
 | P2-13 | Bloom filter per-frame loading optimization | S | **done** | P2-03 | `fix/bloom-per-frame` (PR #46) |

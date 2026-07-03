@@ -6,7 +6,7 @@ NavSentinel is a local-first Chrome MV3 extension that hardens several abuse-hea
 - risky credential submissions such as HTTP password posts, lookalike domains, untrusted domains, and suspicious cross-site form actions
 - DoubleClickjacking attacks that hijack a double-click gesture to land on sensitive buttons (OAuth consent, MFA, payment)
 - ClickFix / fake CAPTCHA overlays that write malicious commands to the clipboard and instruct users to paste them
-- known-bad domains via a build-time bloom-filter mechanism (no network calls); the current build ships a placeholder ~15-domain `.example` test filter, so real public-threat-feed data is not yet active and lands with the first release (issue #321)
+- known-bad domains via a build-time bloom-filter mechanism (no network calls); the current build ships a placeholder 15-domain `.example` test filter, so real public-threat-feed data is not yet active and lands with the first release (issue #321)
 
 The current `main` branch ships the merged suite baseline. That means the extension now includes the navigation firewall, the credential guard, a popup, a full options page, trusted-domain management, and a bounded local event log.
 

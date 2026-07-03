@@ -198,7 +198,7 @@ Do not claim tests passed unless they actually ran in the current environment.
 - Reputation and content analysis: `extension/src/shared/reputation.ts`, `extension/src/content/content_analyzer.ts`, `extension/src/shared/domain_profile.ts`, `extension/src/content/sri_checker.ts`, `extension/src/content/csp_analyzer.ts`.
 - Popup/options UI: `extension/src/popup/*`, `extension/src/options/*`, `extension/src/onboarding/*`.
 - Shared helpers: `extension/src/shared/explanations.ts`, `extension/src/shared/event_tone.ts`, `extension/src/shared/smart_defaults.ts`, `extension/src/shared/domain_groups.ts`.
-- Test surfaces: `tests/*.test.ts` (92 files), `tests/e2e/*.spec.ts` (14 files), `gym/*` (123 files).
+- Test surfaces: `tests/*.test.ts` (92 files), `tests/e2e/*.spec.ts` (14 files), `gym/*` (123 files: 122 fixtures + `index.html` launcher).
 
 ## Local Settings
 
