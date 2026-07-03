@@ -149,7 +149,13 @@ async function extractEventLog(context: import("@playwright/test").BrowserContex
     const res = await chrome.storage.local.get(key);
     return Array.isArray(res[key]) ? res[key] : [];
   }, EVENT_LOG_KEY);
-  return log as Array<{ kind?: string; site?: string; score?: number; reasons?: string[] }>;
+  return log as Array<{
+    kind?: string;
+    site?: string;
+    score?: number;
+    reasons?: string[];
+    extra?: { error?: string } | undefined;
+  }>;
 }
 
 async function clearEventLog(context: import("@playwright/test").BrowserContext) {
@@ -382,7 +388,14 @@ test("Phishing corpus validation @corpus", async () => {
             // Check event log for detections
             const events = await extractEventLog(context);
             const detectionEvents = events.filter(
-              (e) => e.kind && DETECTION_EVENT_KINDS.has(e.kind)
+              (e) =>
+                e.kind &&
+                DETECTION_EVENT_KINDS.has(e.kind) &&
+                // #417: a cred_submit_prompt carrying extra.error is the credential
+                // guard's fail-open / TOCTOU-error path (credential_guard.ts) — the
+                // submission may have been resumed, so it is NOT clean pre-harm
+                // protection. Exclude it so it can't inflate the protected rate.
+                !(e.kind === "cred_submit_prompt" && e.extra?.error)
             );
 
             // #417: classify protected (pre-harm block/prompt) vs fired
@@ -488,11 +501,11 @@ test("Phishing corpus validation @corpus", async () => {
   console.log(`  Errors:               ${errored.length}`);
   console.log(`  True positives (TP):  ${truePositives.length}`);
   console.log(`  False negatives (FN): ${falseNegatives.length}`);
-  console.log(`  Overall detection:    ${detectionRate}%`);
+  console.log(`  Any-signal detection: ${detectionRate}%  (protected+fired — LEGACY, not the honest rate)`);
   console.log(`${"-".repeat(60)}`);
   console.log(`  #417 protected-vs-fired (of ${totals.total} tested):`);
-  console.log(`    Protected (pre-harm block/prompt): ${totals.protected} (${protectedRate}%)`);
-  console.log(`    Fired-late only (post-render rollback): ${totals.fired}`);
+  console.log(`    Protected (pre-harm block/prompt): ${totals.protected} (${protectedRate}%)  <- honest TP rate`);
+  console.log(`    Fired-late only (post-render rollback/toast): ${totals.fired}`);
   console.log(`    Miss (no signal): ${totals.miss}`);
   console.log(`${"-".repeat(60)}`);
   console.log(`  Pages with password forms:     ${withPwForm.length}`);
@@ -531,6 +544,9 @@ test("Phishing corpus validation @corpus", async () => {
           truePositives: truePositives.length,
           falseNegatives: falseNegatives.length,
           detectionRate: tested.length > 0 ? truePositives.length / tested.length : null,
+          // #417: `detectionRate`/`truePositives` are ANY-signal (protected+fired) — the
+          // legacy conflated number. The honest TP rate is `protectedRate` below.
+          detectionRateBasis: "any-signal (protected+fired); LEGACY — use protectedRate for the honest #417 number",
           pagesWithPasswordForm: withPwForm.length,
           passwordFormDetected: withPwFormDetected.length,
           passwordFormDetectionRate: withPwForm.length > 0 ? withPwFormDetected.length / withPwForm.length : null,

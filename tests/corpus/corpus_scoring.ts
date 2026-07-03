@@ -76,8 +76,6 @@ export interface CorpusOutcome {
   firedBy: string[];
 }
 
-const unique = (xs: string[]): string[] => [...new Set(xs)];
-
 /**
  * Classify a corpus page's outcome:
  *  - `protected` — a pre-harm block/prompt fired (a PROTECTED_EVENT_KINDS event
@@ -92,12 +90,14 @@ const unique = (xs: string[]): string[] => [...new Set(xs)];
  * Unknown event kinds are ignored (contribute to neither class).
  */
 export function classifyCorpusOutcome(signals: CorpusSignals): CorpusOutcome {
-  const kinds = signals.detectionKinds ?? [];
+  // Dedupe the observed kinds up front; `credential_modal` / `toast` are not
+  // event kinds, so pushing them once cannot introduce duplicates.
+  const kinds = new Set(signals.detectionKinds ?? []);
 
-  const protectedBy = kinds.filter((k) => PROTECTED_EVENT_KINDS.has(k));
+  const protectedBy = [...kinds].filter((k) => PROTECTED_EVENT_KINDS.has(k));
   if (signals.hadCredentialModal) protectedBy.push("credential_modal");
 
-  const firedBy = kinds.filter((k) => FIRED_LATE_EVENT_KINDS.has(k));
+  const firedBy = [...kinds].filter((k) => FIRED_LATE_EVENT_KINDS.has(k));
   if (signals.hadToast) firedBy.push("toast");
 
   let level: ProtectionLevel;
@@ -105,7 +105,7 @@ export function classifyCorpusOutcome(signals: CorpusSignals): CorpusOutcome {
   else if (firedBy.length > 0) level = "fired";
   else level = "miss";
 
-  return { level, protectedBy: unique(protectedBy), firedBy: unique(firedBy) };
+  return { level, protectedBy, firedBy };
 }
 
 /** Aggregate counts for a corpus run's summary (protected vs merely-fired vs miss). */
