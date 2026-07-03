@@ -20,9 +20,9 @@ This is a living pointer, not a source of truth — reconcile against `gh issue 
 
 ## Discovery-pass sub-findings (no standalone issue — parked here)
 
-LOW-severity findings that live *inside* a umbrella issue's body (no GitHub number of their own), dispositioned to the icebox by the #427 hygiene sweep (2026-07-03). Full per-finding detail + evidence is in each umbrella's disposition comment.
+LOW-severity findings that live *inside* an umbrella issue's body (no GitHub number of their own), dispositioned to the icebox by the #427 hygiene sweep (2026-07-03). Full per-finding detail + evidence is in each umbrella's disposition comment.
 
-- **#339 discovery-pass-4 residue (13 findings)** — detail in the [#339 disposition comment](https://github.com/Chris0Jeky/NavSentinel/issues/339) (2026-07-03):
+- **#339 discovery-pass-4 residue (13 findings)** — detail in the [#339 disposition comment](https://github.com/Chris0Jeky/NavSentinel/issues/339#issuecomment-4879407971) (2026-07-03):
   - `release.mjs` diagnostics: dry-run hard-abort (#1), dead `!dryRun` guard (#2), missing-`version` TypeError vs friendly error (#3).
   - `build-bloom-filter` `optimalParams` can return `m < MIN` for unusual in-range `p` (#4); `build-test-bloom` `insertDomain` guards `m===0` not `m<8` (#8).
   - `measure-fp.mjs` ZIP `dataOffset` bounds-check (#5); `--resume` with missing `--out` silently starts fresh (#7).
@@ -30,7 +30,7 @@ LOW-severity findings that live *inside* a umbrella issue's body (no GitHub numb
   - sw `ns-dblclick-opener-nav` dangling port on early-return (#10); `icon_manager.tabUpdateChains` map not pruned (#13).
   - storage `replacePromptOutcomesDirect` double-bound (#19).
   - `adaptive` `updateAdaptiveScores` overwrite (by-design) (#26); `computeAdjustment` inconsistency (#29).
-- **#395 discovery-pass-2 residue (3 findings)** — detail in the [#395 disposition comment](https://github.com/Chris0Jeky/NavSentinel/issues/395) (2026-07-03):
+- **#395 discovery-pass-2 residue (3 findings)** — detail in the [#395 disposition comment](https://github.com/Chris0Jeky/NavSentinel/issues/395#issuecomment-4879407912) (2026-07-03):
   - `adaptive_scoring.refreshAdaptiveScores` fire-and-forget RMW (D2-3) — self-correcting (pure recompute of all outcomes).
   - `domain_profile.applyDecay` omits `maxNRS` (D2-4) — `maxNRS` has **no reader** in `extension/src`, zero measured impact.
   - `nrs` tests lack csp/navAnomaly-gate × negative-factor combinations (D2-5) — test-only residue.

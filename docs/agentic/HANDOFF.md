@@ -25,7 +25,8 @@
 2. **#426** corpus TP triage — classify the missed pages (first split: harness-artifact vs real gap). Analysis on committed data (`tests/corpus/results/validation-2026-05-01.md`) where available; a fresh corpus re-run is headed-Chrome/network-gated.
 3. **#417** corpus methodology v2 — real-hostname routing (`page.route`) + trusted Playwright clicks + protected-vs-fired scoring. Harness (`tests/e2e/corpus-validation.spec.ts`) buildable + typecheck-verifiable in-sandbox; a real run is Gate-3/CI.
 4. **#374** chunk split → then the **visual-sim excision** (D-2026-07-03-F). Browser-surface (capture_isolated) → Gate-3.
-5. **#427** hygiene sweep — ✅ DONE cycle 44 (closed #322/#350/#395, re-bodied #339, parked 16 sub-findings).
+
+> **#427** hygiene sweep — ✅ DONE cycle 44 (closed #322/#350/#395, re-bodied #339, parked 16 sub-findings). No longer a next-slice.
 
 ## Reliability notes
 
