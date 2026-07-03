@@ -10,7 +10,7 @@
 - **Baseline:** typecheck/lint clean, **2856 unit tests** (94 files), perf 12/12. CI green on `main`.
 - **Open PRs (all human-gated, browser-surface / measure:fp):** #399 (AI-14, `measure:fp`), #356 (AI-13, Gate-3), #273 (AI-8, Gate-3). At the WIP cap of 3 — **do not open more browser-surface PRs** (D-2026-07-03-D).
 - **Last session (2026-07-03):** merged **#429** (claims-honesty #423 — public docs now match shipped reality) and **#430** (release guard #321-companion + fixed an unparseable `release.mjs` that had blocked *all* releases). See ORCHESTRATOR cycle 43.
-- **This session (cycles 44–46, agent, no runtime code):** #427 hygiene sweep (closed #322/#350/#395/#427, re-bodied #339, parked 16 residue) → #418 benchmark honest re-scope (#433 merged; #418 re-bodied to the gated Safe-Browsing arm) → this checkpoint. Open issues **62→57**. ⚠️ **#426 corpus triage is #417-gated** (committed corpus data is the stale 4-25 run, untagged, no FN list; the 5-01 number is methodologically invalid per #417). See ORCHESTRATOR cycles 44–46.
+- **This session (cycles 44–46, agent, no runtime code):** #427 hygiene sweep (closed #322/#350/#395/#427, re-bodied #339, parked 16 residue) → #418 benchmark honest re-scope (#433 merged; #418 re-bodied to the gated Safe-Browsing arm) → this checkpoint. Open issues **62→58**. ⚠️ **#426 corpus triage is #417-gated** (committed corpus data is the stale 4-25 run, untagged, no FN list; the 5-01 number is methodologically invalid per #417). See ORCHESTRATOR cycles 44–46.
 
 ## 🚨 Open human items (flag these in every summary — see `ACTION_ITEMS.md`)
 
