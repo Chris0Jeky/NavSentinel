@@ -465,7 +465,7 @@ Phase 1 is complete when:
 | P2-07 | DOM mutation monitoring | M | **done** | P1 gate | `feat/dom-mutation` (PR #45) |
 | P2-08 | History.pushState gating | M | **done** | P2-06 | `feat/pushstate-gating` (PR #60) |
 | P2-09 | Gym fixtures for new detections | M | **done** | P2-01, P2-02 | `test/phase2-gym` (PR #61) |
-| P2-10 | Competitive benchmark suite | L | **suite done; additive value unproven — #418** | P1-05, P1-06 | `test/competitive-bench` (PR #70) |
+| P2-10 | Benchmark suite (gym regression; competitor arm unbuilt) | L | **gym-regression suite done; competitive/Safe-Browsing arm never built — additive value unproven, #418** | P1-05, P1-06 | `test/competitive-bench` (PR #70) |
 | P2-11 | NRS scoring ceiling and compound FP mitigation | M | **done** | P2-01, P2-03 | `fix/nrs-scoring-ceiling` (PR #57) |
 | P2-12 | Integrate ClickFix scoring into NRS pipeline | M | **done** | P2-02 | `feat/clickfix-nrs-integration` (PR #44) |
 | P2-13 | Bloom filter per-frame loading optimization | S | **done** | P2-03 | `fix/bloom-per-frame` (PR #46) |
@@ -675,10 +675,16 @@ Create comprehensive gym coverage for all Phase 2 detection capabilities.
 **Done when**: Each Phase 2 detection capability has at least 2 gym fixtures (one attack,
 one legitimate variant). E2E tests cover all fixtures.
 
-#### P2-10: Competitive benchmark suite
+#### P2-10: Benchmark suite (gym regression; competitor arm unbuilt)
 
-Run the same test corpus against competing tools to quantify NavSentinel's additive value
-(Thesis Review, Section 8.5).
+*Intended* to run the same test corpus against competing tools to quantify NavSentinel's
+additive value (Thesis Review, Section 8.5). **As shipped (PR #70), `scripts/benchmark.mjs`
+is a NavSentinel-only gym-fixture regression harness** — it records per-scenario
+detect/miss/false-positive against a committed baseline. The competitive arm described below
+(Safe Browsing / competitor extensions) was **never built**, so the name "competitive" does
+**not** denote evidenced additive value. Building that arm is network / headed-Chrome-gated
+and tracked by **#418**; the benchmark-baseline re-run belongs to the measurement-reset
+session **#416**.
 
 **What to do**:
 - Create `scripts/benchmark.mjs` that runs a test corpus against:
@@ -890,9 +896,17 @@ Prepare and submit for CWS distribution.
 - Prepare promotional assets
 - Handle CWS review requirements
 
-**Headline claim** (from Thesis Review, Section 10):
+**Headline claim** (from Thesis Review, Section 10) — ⚠️ **UNEVIDENCED SUPERLATIVE; do not ship as-is (#418):**
 "The only browser extension that detects DoubleClickjacking, ClickFix overlays, and OAuth
 consent flow abuse -- without sending your data anywhere."
+
+The "only … that detects" wording is a competitive superlative with **no competitive benchmark
+behind it** (P2-10's Safe-Browsing arm was never built — see #418), and the landscape has since
+shifted (Chrome now ships local Gemini Nano scam detection — NORTHSTAR D21). The checked-in
+store-listing drafts (`docs/STORE_LISTING.md` and the canonical `docs/cws-listing/STORE_LISTING.md`,
+PR #81 — **neither yet submitted**) already avoid the superlative ("protects two high-risk browser
+surfaces that other extensions miss"). Use the structural-positioning framing (D12), not "the
+only", until #418 produces comparative data.
 
 **Done when**: Extension is listed and installable from CWS. **NOT MET (2026-07-03)** — the extension has never been submitted to the Chrome Web Store (0 git tags, 0 GitHub releases). Listing copy and the privacy disclosure are drafted under `docs/cws-listing/` (PR #81), but actual submission/listing is an open manual gate (#321 / AI-9, release umbrella #415).
 

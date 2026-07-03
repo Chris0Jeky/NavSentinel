@@ -8,6 +8,7 @@ Detects DoubleClickjacking, ClickFix, and OAuth abuse — all locally, no data s
 
 ## Detailed Description (max 16,000 characters)
 
+<!-- #418 release-path caveat: "Safe Browsing structurally cannot see" is the D12 structural-positioning thesis (interaction layer vs URL-reputation layer), NOT a benchmark-superiority claim — and it is not yet backed by the P2-10 competitive benchmark (the Safe-Browsing comparison arm is unbuilt; see #418). Keep it as a complementary-layer claim; confirm or soften before CWS submission. -->
 **NavSentinel is a local-first browser defense extension that detects interaction-level attacks Safe Browsing structurally cannot see.**
 
 Traditional browser protection compares URLs against known-bad lists. NavSentinel goes deeper — it watches how pages interact with your clicks, navigations, and credentials in real time.
