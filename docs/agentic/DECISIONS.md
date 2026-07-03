@@ -35,7 +35,7 @@ Chris delegated: *"take a stance yourself and call the shots in the best way pos
 ### D-2026-07-03-D — Risk-tier by runtime blast radius + WIP cap (#419)
 **Decision:**
 - **Browser-surface (HOLD for Gate-3)** = MAIN-world / isolated-world patches, credential/submit path, service-worker navigation/rollback handlers, MutationObserver lifecycle, and any user-visible popup/options/onboarding change — **regardless of unit coverage**.
-- **Non-browser (agent may auto-merge** after aging + 2 adversarial rounds + green CI + bot comments addressed**)** = shared pure-logic with unit tests, scripts, build config, tests, docs, CI.
+- **Non-browser** (agent may auto-merge after aging + 2 adversarial rounds + green CI + bot comments addressed) = shared pure-logic with unit tests, scripts, build config, tests, docs, CI.
 - **WIP cap: ≤ 3 open human-gated PRs.** At the cap, do **not** open more browser-surface PRs — surface to Chris and switch to non-browser work.
 **Dependency (stated plainly):** the stricter tier only works if Gate-3 has a cadence — either a committed periodic maintainer sitting *or* the headed lane (D-2026-07-03-E). Until then, **the stricter tier is still enforced** — browser-surface work simply queues for Gate-3, and we accept that the North-Star spine (much of which is browser-surface) throttles through this gate as the known cost. This is **not** a licence to keep auto-merging MAIN-world changes.
 **Why:** the old classification keyed on surface *visibility* (a chip color waited 13 days while MAIN-world global patches auto-merged) — backwards vs. actual risk.

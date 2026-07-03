@@ -16,6 +16,7 @@
 - **AI-15** — the 60–90 min batch session (clears the whole gate queue + go/no-go on v0.5.0). Highest-leverage item in the project.
 - **AI-9 (#321)** — build & ship the **real** bloom filter (`npm run build:bloom`, needs network). The release guard from #430 now blocks releasing without it.
 - **AI-8 (#273) · AI-13 (#356) · AI-14 (#399)** — Gate-3 checks / `measure:fp` run on the 3 open PRs.
+- **AI-16** — ratify or amend the 2026-07-03 standing decisions (`docs/agentic/DECISIONS.md`); your veto checkpoint (esp. D-E). Nothing blocks on it — the loop already follows them.
 
 ## Next safe slices (agent, ungated, in ladder order)
 
