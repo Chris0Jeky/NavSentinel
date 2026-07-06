@@ -6,9 +6,7 @@ user-invocable: true
 
 # NavSentinel Repo Onramp
 
-Read first: `AGENTS.md`, `autodoc/AGENT_INDEX.md`, `docs/Project_Roadmap.md`, `CONTRIBUTING.md`.
-
-Read when relevant: architecture, scoring, testing/Gym, threat model, real-world adversarial program, and `docs/agentic/QUESTION_PROTOCOL.md`.
+Read first: `autodoc/AGENT_INDEX.md` (the seam map) and `docs/agentic/HANDOFF.md` (the "now" doc). `AGENTS.md` is your operating contract (Authority Order). Read `docs/Project_Roadmap.md` for phase status, or the single domain doc the seam map names (architecture/scoring/testing/threat), only as the task needs it — not as a mandate.
 
 Produce a compact working summary: likely change surface, active roadmap task if relevant, constraints, verification target, and docs-sync target.
 

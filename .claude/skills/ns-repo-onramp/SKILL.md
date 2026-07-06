@@ -10,21 +10,13 @@ Establish current truth before touching code or docs.
 
 ## Read First
 
-1. `CLAUDE.md`
-2. `AGENTS.md`
-3. `autodoc/AGENT_INDEX.md`
-4. `docs/Project_Roadmap.md`
-5. `CONTRIBUTING.md`
-6. `docs/README.md` when deeper orientation is needed
+1. `autodoc/AGENT_INDEX.md` — the seam map (entry points, invariants, verification, and the
+   Do-Not-Read-By-Default index).
+2. `docs/agentic/HANDOFF.md` — the latest session handoff (the "now" doc).
 
-Read when relevant:
-
-- `docs/Architecture_and_Data_Flow.md` for runtime layers, bridge, or service worker work
-- `docs/Intent_Model_and_Scoring.md` for CDS, NRS, or credential-risk heuristics
-- `docs/Testing_and_Gym.md` for test surfaces, Gym coverage, and local/CI lanes
-- `docs/Real_World_Adversarial_Program.md` for adversarial scenario design
-- `docs/Threat_Model_and_Cases.md` for threat-model changes
-- `docs/agentic/QUESTION_PROTOCOL.md` when scope or acceptance criteria are ambiguous
+`CLAUDE.md` and `AGENTS.md` are auto-loaded every session — do not re-read them. Then, only as
+the task needs it (not a mandate): `docs/Project_Roadmap.md` for phase status, or the single
+domain doc the seam map names for your change surface (architecture/scoring/testing/threat).
 
 ## Produce A Working Summary
 
