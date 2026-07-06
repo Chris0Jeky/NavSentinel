@@ -202,8 +202,10 @@ See `docs/agentic/GIT_WORKFLOW.md` for full details and recovery procedures.
 
 ### Branch safety tiers
 
-- **Protected branches** (`main`, `master`, `develop`, `release`): No rebase, force-push, hard reset, or history rewriting. Always blocked by the pre-tool-use hook.
-- **Other branches**: These operations are allowed but require user approval. You must explain what you are doing and the risks before attempting.
+For Claude, the deny floor (`.claude/hooks/dispatch.py`, tier from `.claude/tier.json`) blocks only the **irreversible**: force-push in all spellings, `rm -rf` outside the project, pipe-to-shell, `sudo`, secret-file mutation. Codex has no such hook (see Local Settings) and must enforce the same intent by command discipline. At this tier (T2), work-loss ops (`reset --hard`, `rebase`, `checkout -- .`) are recoverable from origin and allowed — the rules below are convention:
+
+- **Never force-push `main`/`master`/`develop`/`release`.** Server-side branch protection is the real wall (tracked in `ACTION_ITEMS.md` until enabled).
+- Any history-rewriting or work-discarding command: explain in plain language what it does and whether it is reversible, then wait for user approval before running it.
 
 ### Default workflow
 
