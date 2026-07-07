@@ -28,6 +28,14 @@ programs derived from the 2026-06-13 research + audit initiative are tracked in
 [**`NORTHSTAR_ROADMAP.md`**](NORTHSTAR_ROADMAP.md) (4 programs as `P5-{prog}{seq}` slices; revisits
 **D08** "No ML" → conditional on-device ML). Source artifacts under `docs/research/NORTHSTAR_*`.
 
+**Horizon Epics (direction, not a phase):** 15 higher-leverage conceptual mechanics from a
+2026-07-07 21-agent design initiative are mapped in [**`HORIZON_EPICS.md`**](HORIZON_EPICS.md) and
+seeded as `epic`-labelled issues **#439–#453** (EP-01…EP-15: e.g. Signal Fabric, Calibrated
+Judgment, Agent Conduct Layer, the Proving Ground, a native companion, mobile). They are
+**milestone-gated behind the v0.5.0 release** and do **not** reorder the ship/measure priority
+ladder — awaiting the maintainer's cull/ratify. Several extend or absorb existing North-Star and
+measurement issues (named per epic).
+
 **Open issues (status checkpoint 2026-06-14):** North-Star Phase 5 (`north-star` label) started as **#232–#246** (see [`NORTHSTAR_ROADMAP.md`](NORTHSTAR_ROADMAP.md)); live open North-Star issues are now **#232**, **#237–#246**, and **#252** (a #236 follow-up). Several slices are merged or in active PRs. Use [`docs/agentic/HANDOFF.md`](agentic/HANDOFF.md), [`docs/agentic/ORCHESTRATOR.md`](agentic/ORCHESTRATOR.md), and live GitHub state for the current PR/issue inventory before branching.
 
 **Repo state (live pointer 2026-07-03, cycle 48):** `main` @ **`eba5d71`** (verify with `git rev-parse origin/main` + `gh pr list`). **Direction adopted: ship/measure, not hardening** — Priority Ladder, milestone-gated discovery, and icebox in [`docs/agentic/DECISIONS.md`](agentic/DECISIONS.md). Baseline: **2874 unit tests** (95 files), perf 12/12, CI green. **3 open PRs, all human-gated at the WIP cap:** #399 (AI-14) / #356 (AI-13) / #273 (AI-8). Cycles 44–47 (agent): #427 hygiene sweep (closed #322/#350/#395/#427, re-bodied #339) + #418 benchmark honest re-scope (#433) + #417 corpus-v2 pillar 1 (#435, protected-vs-fired classifier). Open issues 62→58. ⚠️ **Boundary:** the remaining measurement rung is headed-Chrome/network-gated — highest-leverage next is the human AI-15 batch (see `ACTION_ITEMS.md`). Live human tasks + snapshot in [`ACTION_ITEMS.md`](../ACTION_ITEMS.md); cycle log in [`docs/agentic/ORCHESTRATOR.md`](agentic/ORCHESTRATOR.md); next-loop entry in [`docs/agentic/HANDOFF.md`](agentic/HANDOFF.md). The checkpoints below are historical.

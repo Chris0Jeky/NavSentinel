@@ -28,6 +28,10 @@ This folder documents the current merged `main` branch.
 
 - `docs/Project_Roadmap.md`
   - **The active planning document.** 47 tasks across 5 phases, decision log, phase gates, success criteria. Supersedes `Execution_Tracker.md` and `Implementation_Roadmap.md`.
+- `docs/NORTHSTAR_ROADMAP.md`
+  - Phase-5 North-Star track (zero-FP / friend-advisor / feedback-capture / architecture programs A–D).
+- `docs/HORIZON_EPICS.md`
+  - Horizon direction: 15 high-leverage conceptual epics (EP-01…EP-15, issues #439–#453) from the 2026-07-07 design initiative. Milestone-gated behind v0.5.0; awaiting maintainer cull/ratify.
 - `docs/REDESIGN_ORCHESTRATION.md`
   - UI redesign plan (9 phases, R1–R9). Complete as of 2026-05-16.
 - `docs/STORE_LISTING.md`
