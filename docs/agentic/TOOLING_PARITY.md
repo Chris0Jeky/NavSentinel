@@ -59,6 +59,10 @@ Codex should use:
 - Playwright/browser tooling for browser-only extension behavior when available.
 - `tool_search` for current library, SDK, framework, browser, and API docs when available.
 - web verification for unstable current facts, official sources first.
+- `.codex/hooks.json` for project-local lifecycle wiring after reviewing and
+  trusting the definitions with `/hooks`.
+- the shared irreversible-command floor, session orientation, agentic-change
+  reminder, and sanitized failure capture under `scripts/agent_hooks/`.
 
 Codex-specific strengths:
 
@@ -73,6 +77,9 @@ Codex-specific strengths:
 - Keep Claude and Codex workflow names aligned where the task class is the same.
 - Let runtime-specific tooling differ when that is the stronger path.
 - Do not make Claude depend on `.agents` files or Codex depend on `.claude/settings.json`.
+- The canonical irreversible-command floor currently lives at
+  `.claude/hooks/dispatch.py`; both runtimes execute that script, while Codex does
+  not depend on Claude's settings or permission model.
 - When adding a durable workflow, add or update both runtime skill trees unless the workflow is intentionally runtime-specific.
 - When updating safety rules, update root contracts, shared protocols, and runtime-specific guardrails together.
 - When a task changes only one runtime, state that explicitly in the handoff.

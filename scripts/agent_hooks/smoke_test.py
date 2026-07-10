@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Smoke-test NavSentinel Claude hook configuration and behavior.
+"""Smoke-test NavSentinel Claude Code and Codex hook behavior.
 
 Two layers:
   1. The irreversible deny FLOOR is the canonical `.claude/hooks/dispatch.py`
@@ -25,6 +25,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SETTINGS = ROOT / ".claude" / "settings.json"
+CODEX_HOOKS = ROOT / ".codex" / "hooks.json"
 MCP = ROOT / ".mcp.json"
 FLOOR_SMOKE = ROOT / ".claude" / "hooks" / "smoke_test.py"
 VALID_EVENTS = {
@@ -114,14 +115,17 @@ def validate_hook_shape(settings: dict) -> None:
                     raise AssertionError(f"{event} hook references missing script {script}")
 
 
-def hook_command(settings: dict, event: str) -> dict:
+def hook_command(settings: dict, event: str, handler_index: int = 0) -> dict:
     entries = settings["hooks"].get(event, [])
     if not entries:
         raise AssertionError(f"missing {event} hook")
     hooks = entries[0].get("hooks", [])
     if not hooks:
         raise AssertionError(f"{event} has no command hook")
-    return hooks[0]
+    try:
+        return hooks[handler_index]
+    except IndexError as exc:
+        raise AssertionError(f"{event} has no hook handler {handler_index}") from exc
 
 
 def run_configured_hook(hook: dict, payload: dict, extra_env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
@@ -137,6 +141,25 @@ def run_configured_hook(hook: dict, payload: dict, extra_env: dict[str, str] | N
         args = [shell, "-c", command]
     return subprocess.run(
         args,
+        input=json.dumps(payload),
+        text=True,
+        capture_output=True,
+        cwd=ROOT,
+        env=env,
+        timeout=int(hook.get("timeout", 10)) + 5,
+        check=False,
+    )
+
+
+def run_codex_hook(hook: dict, payload: dict, extra_env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+    """Run a project Codex hook using its Windows override and no Claude env."""
+    env = os.environ.copy()
+    env.pop("CLAUDE_PROJECT_DIR", None)
+    if extra_env:
+        env.update(extra_env)
+    command = hook.get("commandWindows") or hook.get("command")
+    return subprocess.run(
+        ["powershell", "-NoProfile", "-Command", command],
         input=json.dumps(payload),
         text=True,
         capture_output=True,
@@ -262,6 +285,131 @@ def test_session_start(settings: dict) -> None:
         raise AssertionError("SessionStart did not emit NavSentinel context")
 
 
+def validate_codex_hooks(hooks_config: dict) -> None:
+    required = {"SessionStart", "PreToolUse", "PostToolUse"}
+    configured = set(hooks_config.get("hooks", {}))
+    if not required.issubset(configured):
+        raise AssertionError(f"Codex hooks missing {sorted(required - configured)}")
+    validate_hook_shape(hooks_config)
+    for event, entry in iter_hook_entries(hooks_config):
+        for hook in entry["hooks"]:
+            if not hook.get("commandWindows"):
+                raise AssertionError(f"Codex {event} hook needs commandWindows")
+
+
+def test_codex_hooks(hooks_config: dict) -> None:
+    pre = hook_command(hooks_config, "PreToolUse")
+    denied = run_codex_hook(pre, {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "git push --force origin main"},
+        "cwd": str(ROOT),
+    })
+    if denied.returncode != 0 or not is_denied(denied.stdout):
+        raise AssertionError(f"Codex PreToolUse did not deny force-push: {denied.stderr!r}")
+
+    session = run_codex_hook(hook_command(hooks_config, "SessionStart"), {
+        "hook_event_name": "SessionStart",
+        "source": "startup",
+        "cwd": str(ROOT),
+    })
+    if session.returncode != 0 or "NavSentinel agent context" not in session.stdout:
+        raise AssertionError("Codex SessionStart did not emit repository context")
+
+    post = run_codex_hook(hook_command(hooks_config, "PostToolUse"), {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "apply_patch",
+        "tool_input": {"command": "*** Begin Patch\n*** Update File: .codex/hooks.json\n*** End Patch"},
+        "tool_response": {"success": True},
+        "cwd": str(ROOT),
+    })
+    if post.returncode != 0:
+        raise AssertionError(f"Codex PostToolUse reminder failed: {post.stderr!r}")
+    output = json.loads(post.stdout).get("hookSpecificOutput", {})
+    if "agent:hooks:smoke" not in output.get("additionalContext", ""):
+        raise AssertionError("Codex apply_patch did not trigger agentic-change reminder")
+
+    failure_hook = hook_command(hooks_config, "PostToolUse", 1)
+    root_probe = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import runpy; "
+                "data=runpy.run_path(r'scripts/agent_hooks/post_tool_failure.py'); "
+                "print(data['ROOT'])"
+            ),
+        ],
+        text=True,
+        capture_output=True,
+        cwd=ROOT,
+        timeout=10,
+        check=False,
+    )
+    nested_probe = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import runpy; "
+                f"data=runpy.run_path(r'{ROOT / 'scripts' / 'agent_hooks' / 'post_tool_failure.py'}'); "
+                "print(data['ROOT'])"
+            ),
+        ],
+        text=True,
+        capture_output=True,
+        cwd=ROOT / "scripts",
+        timeout=10,
+        check=False,
+    )
+    expected_root = str(ROOT.resolve()).lower()
+    if root_probe.stdout.strip().lower() != expected_root or nested_probe.stdout.strip().lower() != expected_root:
+        raise AssertionError("Codex failure capture is not anchored to the repository root")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        ledger = Path(tmp) / "failure_ledger.jsonl"
+        failed = run_codex_hook(failure_hook, {
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "echo token=codex-secret"},
+            "tool_response": {
+                "metadata": {"exit_code": 1},
+                "error": "Bearer raw-codex-token",
+                "api_key": "structured-api-secret",
+                "nested": {"password": "structured-password"},
+                "headers": {"Set-Cookie": "session=structured-cookie-secret"},
+            },
+            "cwd": str(ROOT),
+        }, {"NAVSENTINEL_FAILURE_LEDGER": str(ledger)})
+        if failed.returncode != 0 or not ledger.exists():
+            raise AssertionError(f"Codex failure capture did not write: {failed.stderr!r}")
+        captured = ledger.read_text(encoding="utf-8")
+        leaked = (
+            "codex-secret",
+            "raw-codex-token",
+            "structured-api-secret",
+            "structured-password",
+            "structured-cookie-secret",
+        )
+        if any(raw in captured for raw in leaked):
+            raise AssertionError("Codex failure capture leaked a raw secret")
+
+        ledger.unlink()
+        succeeded = run_codex_hook(failure_hook, {
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "git status --short"},
+            "tool_response": {
+                "metadata": {"exit_code": 0},
+                "success": True,
+                "result": {"status": "failed", "error": "application-domain-data"},
+            },
+            "cwd": str(ROOT),
+        }, {"NAVSENTINEL_FAILURE_LEDGER": str(ledger)})
+        if succeeded.returncode != 0 or ledger.exists():
+            raise AssertionError("Codex failure capture logged a successful tool call")
+
+
 def validate_mcp() -> None:
     if not MCP.exists():
         raise AssertionError(".mcp.json is missing")
@@ -281,15 +429,19 @@ def validate_mcp() -> None:
 
 def main() -> int:
     settings = load_json(SETTINGS)
+    codex_hooks = load_json(CODEX_HOOKS)
     checks = [
         ("settings JSON", lambda: load_json(SETTINGS)),
+        ("Codex hooks JSON", lambda: load_json(CODEX_HOOKS)),
         ("MCP JSON", validate_mcp),
         ("hook shape", lambda: validate_hook_shape(settings)),
+        ("Codex hook shape", lambda: validate_codex_hooks(codex_hooks)),
         ("deny floor matrix (canonical)", test_floor_matrix),
         ("PreToolUse wiring", lambda: test_pre_tool_use_wiring(settings)),
         ("PostToolUse context", lambda: test_post_tool_use(settings)),
         ("PostToolUseFailure redaction", lambda: test_post_tool_use_failure(settings)),
         ("SessionStart output", lambda: test_session_start(settings)),
+        ("Codex hook wiring", lambda: test_codex_hooks(codex_hooks)),
     ]
 
     failures: list[str] = []

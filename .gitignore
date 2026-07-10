@@ -14,6 +14,11 @@ playwright-report/
 /RESOURCES
 /.claude/worktrees/
 /.claude/settings.local.json
+# Keep the shared Codex harness versioned even when a developer's local
+# .git/info/exclude ignores the rest of .codex/.
+!/.codex/
+/.codex/*
+!/.codex/hooks.json
 # Downloaded threat feed data (build-bloom-filter.mjs downloads)
 *.csv.tmp
 feeds/

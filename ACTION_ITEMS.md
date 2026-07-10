@@ -34,6 +34,16 @@
 
 ## Action items
 
+**OPEN: AI-18 — Review and trust the new Codex project hooks.** The Codex parity
+setup adds `.codex/hooks.json` for session orientation, the shared irreversible
+command floor, agentic-change verification reminders, and sanitized failure
+capture. Codex deliberately skips new or changed non-managed hooks until their
+exact definitions are trusted. **Guide:** start a new Codex session in this
+repository, run `/hooks`, inspect the project-local entries from
+`.codex/hooks.json`, and choose **Trust** if they match the committed file. Run
+`/hooks` again after future hook edits because trust is hash-based. Then tell me
+"AI-18 done".
+
 **🚨 OPEN: AI-15 — Read the strategic review, then run the release-unblock batch session (60-90 min, one sitting).** A full strategic review (2026-07-02) produced two documents — **`docs/Strategic_Outlook.md`** (what's working + the path) and **`docs/Course_Correction.md`** (what's broken + the sort-out plan) — and seeded issues **#415-#427** (`strategy` label). Its headline finding: the project has never shipped (no release, no CWS submission, 0 external users) while ~100 PRs of internal hardening merged in 3 weeks, and every open PR + the release blocker is waiting on you. **Guide:** (1) read `docs/Course_Correction.md` §1/§2/§6 (~10 min); confirm or amend the direction. (2) In ONE sitting, clear the whole gate queue: **AI-9** (#321 bloom build — needs your network), **AI-8** (#273 chip check), **AI-13** (#356 proto de-harden check), **AI-14** (#399 `measure:fp` run) — step-by-step guides are in each item below; #419 tracks an agent-built runner/checklist to make this one continuous flow — and while the extension is loaded, run the **real-Chrome regression sweep** (refreshed watchlist golden paths + #347-class console checks) covering the ~27 runtime-behavior PRs merged unverified since 2026-06-23. (3) Install the build in your daily browser (dogfooding starts BEFORE any CWS submission), then say go/no-go on the **v0.5.0 release train (#415)**. Clearing this one item un-gates more value than weeks of further autonomous hardening. Then tell me "AI-15 done" (or which parts).
 
 **🆕 OPEN: AI-16 — Ratify or amend the 2026-07-03 standing decisions.** On your "call the shots" delegation I resolved the deferred decisions and enacted the #421/#422 policy changes in **`docs/agentic/DECISIONS.md`** (D-2026-07-03-A..H: ship/measure direction, priority ladder + icebox, status-doc collapse, browser-surface re-tiering + WIP cap, headed-lane/Q5, visual-sim excise, distribution sequence). Most are low-stakes + reversible and the loop already follows them, but two want your explicit nod: **D-E** — making a headed lane the primary Gate-3 *reduces* manual oversight, and both strategic docs reserved this Q5 revision for your explicit call, so it is a **recommendation only** until you confirm; and the direction adoption itself. **Guide:** skim `DECISIONS.md` (~5 min); reply "ratify decisions" (or name which to amend/veto). This is your veto checkpoint — nothing blocks on it.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Claude Code SessionStart hook for compact NavSentinel orientation."""
+"""Claude Code and Codex SessionStart hook for compact NavSentinel orientation."""
 from __future__ import annotations
 
 import json

@@ -29,7 +29,10 @@ Use the best available Codex tools for the job:
 - Use web verification for unstable current facts, official sources first.
 - Use subagents only when the user explicitly asks for delegation or parallel agents.
 
-Do not rely on Claude-only `.claude/settings.json` hooks for Codex safety. Apply the same safety rules through this file, `.agents/skills`, and explicit command discipline.
+Do not rely on Claude-only `.claude/settings.json` for Codex safety. Codex loads
+the project-local `.codex/hooks.json` only after the repository is trusted and
+the exact hooks are reviewed through `/hooks`; also apply this file,
+`.agents/skills`, and explicit command discipline.
 
 ## Default Work Style
 
@@ -202,7 +205,15 @@ See `docs/agentic/GIT_WORKFLOW.md` for full details and recovery procedures.
 
 ### Branch safety tiers
 
-For Claude, the deny floor (`.claude/hooks/dispatch.py`, tier from `.claude/tier.json`) blocks only the **irreversible**: force-push in all spellings, `rm -rf` outside the project, pipe-to-shell, `sudo`, secret-file mutation. Codex has no such hook (see Local Settings) and must enforce the same intent by command discipline. At this tier (T2), work-loss ops (`reset --hard`, `rebase`, `checkout -- .`) are recoverable from origin and allowed — the rules below are convention:
+For Claude and Codex, the shared deny floor (`.claude/hooks/dispatch.py`, tier
+from `.claude/tier.json`) blocks only the **irreversible**: force-push in all
+spellings, `rm -rf` outside the project, pipe-to-shell, `sudo`, secret-file
+mutation. Claude wires it through `.claude/settings.json`; Codex wires it
+through `.codex/hooks.json`. This remains a tripwire rather than a complete
+security boundary, so both runtimes must enforce the same intent by command
+discipline. At this tier (T2), work-loss ops (`reset --hard`, `rebase`,
+`checkout -- .`) are recoverable from origin and allowed — the rules below are
+convention:
 
 - **Never force-push `main`/`master`/`develop`/`release`.** Server-side branch protection is the real wall (tracked in `ACTION_ITEMS.md` until enabled).
 - Any history-rewriting or work-discarding command: explain in plain language what it does and whether it is reversible, then wait for user approval before running it.
@@ -231,6 +242,10 @@ Stop. Explain the situation and options (safest first). Let the user choose. Nev
 
 ## Local Settings
 
-`.claude/settings.json` is Claude-only. Codex must follow the same safety intent through this file, `.agents/skills/*`, explicit command discipline, and the tools actually exposed in the current runtime.
+`.claude/settings.json` is Claude-only. Codex uses `.codex/hooks.json`, this
+file, `.agents/skills/*`, explicit command discipline, and the tools actually
+exposed in the current runtime. After adding or changing Codex hooks, review and
+trust their current definitions with `/hooks`; changed hook hashes are skipped
+until trusted.
 
 Project-scoped MCP defaults live in `.mcp.json` and are credential-free. Verify live MCP/tool availability before relying on any server or authenticated connector.

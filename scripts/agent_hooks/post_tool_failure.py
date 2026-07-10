@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Record sanitized Claude Code tool failures to a raw, gitignored autolog.
+"""Record sanitized Claude Code and Codex tool failures to a raw autolog.
 
 Raw machine-captured failures are appended to ``docs/agentic/failure_autolog.jsonl``
 (gitignored) so routine diagnostic-command failures never pollute the curated,
@@ -22,7 +22,16 @@ import sys
 from pathlib import Path
 
 
-ROOT = Path(os.environ.get("CLAUDE_PROJECT_DIR", ".")).resolve()
+def find_repo_root(start: str | Path) -> Path:
+    """Find the enclosing checkout even when a session starts in a subdirectory."""
+    path = Path(start).resolve()
+    for candidate in (path, *path.parents):
+        if (candidate / ".git").exists():
+            return candidate
+    return path
+
+
+ROOT = find_repo_root(os.environ.get("CLAUDE_PROJECT_DIR", "."))
 LEDGER = Path(
     os.environ.get(
         "NAVSENTINEL_FAILURE_LEDGER",
@@ -36,7 +45,12 @@ SECRET_RE = re.compile(
     r"\b(bearer)\s+\S+|"
     r"(token|secret|password|api[_-]?key|authorization)\s*[:=]\s*\S+|"
     r"(AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|X-Api-Key)\s*[:=]\s*\S+|"
+    r"(cookie|set-cookie)\s*[:=]\s*\S+|"
     r"(-----BEGIN\s[A-Z ]*PRIVATE\sKEY-----)"
+)
+SECRET_KEY_RE = re.compile(
+    r"(?i)(token|secret|password|api[_-]?key|authorization|credential|"
+    r"private[_-]?key|cookie)"
 )
 
 
@@ -49,8 +63,26 @@ def redact_secret(match: re.Match[str]) -> str:
     return f"{prefix}=<redacted>"
 
 
+def sanitize_structure(value: object) -> object:
+    """Recursively redact structured tool results before string conversion."""
+    if isinstance(value, dict):
+        return {
+            str(key): "<redacted>" if SECRET_KEY_RE.search(str(key)) else sanitize_structure(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [sanitize_structure(item) for item in value]
+    if isinstance(value, str):
+        return SECRET_RE.sub(redact_secret, value)
+    return value
+
+
 def scrub(text: object, limit: int = 800) -> str:
-    value = str(text or "")
+    sanitized = sanitize_structure(text)
+    if isinstance(sanitized, (dict, list)):
+        value = json.dumps(sanitized, ensure_ascii=True, sort_keys=True)
+    else:
+        value = str(sanitized or "")
     value = SECRET_RE.sub(redact_secret, value)
     value = value.replace(str(ROOT), ".")
     if len(value) > limit:
@@ -59,10 +91,43 @@ def scrub(text: object, limit: int = 800) -> str:
     return value
 
 
+def response_failed(response: object) -> bool:
+    """Recognize Codex transport-envelope failures, not nested application data."""
+    if not isinstance(response, dict):
+        return False
+    if response.get("success") is True:
+        return False
+    if (
+        response.get("success") is False
+        or response.get("is_error") is True
+        or response.get("isError") is True
+    ):
+        return True
+    for key in ("exit_code", "exitCode", "returncode"):
+        value = response.get(key)
+        if isinstance(value, int) and value != 0:
+            return True
+    status = response.get("status")
+    if isinstance(status, str) and status.lower() in {"error", "failed", "failure"}:
+        return True
+    if response.get("error"):
+        return True
+    metadata = response.get("metadata")
+    if isinstance(metadata, dict):
+        return response_failed(metadata)
+    return False
+
+
 def main() -> int:
     try:
         payload = json.load(sys.stdin)
     except json.JSONDecodeError:
+        return 0
+
+    event = payload.get("hook_event_name")
+    if event == "PostToolUse" and not response_failed(payload.get("tool_response")):
+        return 0
+    if event not in {"PostToolUse", "PostToolUseFailure"}:
         return 0
 
     tool_name = payload.get("tool_name", "unknown")
@@ -76,7 +141,11 @@ def main() -> int:
             500,
         ),
         "failure": scrub(
-            payload.get("error") or payload.get("stderr") or payload.get("message") or payload,
+            payload.get("error")
+            or payload.get("stderr")
+            or payload.get("message")
+            or payload.get("tool_response")
+            or payload,
             1000,
         ),
         "workaround": "",
