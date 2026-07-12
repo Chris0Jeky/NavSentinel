@@ -1630,6 +1630,10 @@ window.addEventListener(
   "pointerdown",
   (e) => {
     if (!(e instanceof PointerEvent)) return;
+    // Page scripts can dispatch synthetic pointer events. The later click can
+    // still be scored, but a synthetic pointerdown is never evidence of user
+    // intent and must not mint the tab-wide SW rollback allowance.
+    if (!e.isTrusted) return;
     notifyNavGesture();
     lastDown = capturePointerDown(e);
     const token = makeToken({
@@ -1660,7 +1664,9 @@ window.addEventListener(
 
     const isKeyboardActivation = e.isTrusted && e.detail === 0;
     const downForClick =
-      !isKeyboardActivation && lastDown && performance.now() - lastDown.ts < 1500 ? lastDown : null;
+      e.isTrusted && !isKeyboardActivation && lastDown && performance.now() - lastDown.ts < 1500
+        ? lastDown
+        : null;
 
     const ctx = (() => {
       if (isKeyboardActivation) {
@@ -1935,7 +1941,7 @@ window.addEventListener(
         nrsFactors,
         blockThreshold,
       });
-      if (parsed?.href && shouldQueueSameTabSilentCommit({
+      if (e.isTrusted && parsed?.href && shouldQueueSameTabSilentCommit({
         isTopFrame: topFrame,
         isDocumentNavigation: silentNavEvent !== null,
         isSameTabAnchor,
@@ -1943,12 +1949,18 @@ window.addEventListener(
       })) {
         notifyAllowedTarget(parsed.href, NAV_TARGET_ALLOW_TTL_MS, silentNavEvent ?? undefined);
       }
-      notifyNavGesture();
-      notifyNavAllow();
-      postToMain("ns-allow", {
-        allowOpen: mode === "off" || explicitNewTab,
-        allowRedirect: true
-      });
+      // A synthetic click may still be scored, but it cannot create either an
+      // exact target allowance or the broad tab/main-world windows that suppress
+      // rollback. Otherwise a hostile page can dispatch pointerdown/click and
+      // self-authorize its own navigation.
+      if (e.isTrusted) {
+        notifyNavGesture();
+        notifyNavAllow();
+        postToMain("ns-allow", {
+          allowOpen: mode === "off" || explicitNewTab,
+          allowRedirect: true
+        });
+      }
 
       // Same-tab candidates are persisted from the SW after the navigation
       // actually commits. A _blank anchor needs immediate logging because the
