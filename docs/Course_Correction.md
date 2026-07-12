@@ -1,5 +1,11 @@
 # NavSentinel: Course Correction
 
+> **Historical input:** the inner-loop/outer-loop diagnosis remains useful, but
+> current product direction and actions live in
+> [`Product_Strategy.md`](Product_Strategy.md) and
+> [`Project_Roadmap.md`](Project_Roadmap.md). Its D26 runtime-refresh proposal
+> is not active authorization; the beta boundary now has no runtime network.
+
 *Written 2026-07-02 against `main @ 4ad9dd4`. Companion to
 [Strategic_Outlook.md](Strategic_Outlook.md) (what is working and where the project is headed —
 this document is deliberately the critical half). Derived from a five-lens adversarial analysis;

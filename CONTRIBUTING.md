@@ -37,6 +37,30 @@ npm run gym:serve
 5. Run the narrowest useful checks first, then the broader suite before pushing.
 6. Update docs when behavior, settings, commands, or workflows changed.
 
+## Claims and evidence
+
+Security-product claims are part of the implementation and receive the same
+review discipline as code.
+
+- Describe a capability as shipped only when its production path and production
+  asset are enabled in the packaged release. A placeholder, test fixture,
+  never-firing path, or experimental toggle is not a shipped protection.
+- Separate **implemented**, **regression-tested**, **measured**, **externally
+  reviewed**, and **released**. Do not use one as shorthand for another.
+- Comparative, efficacy, false-positive, performance, and privacy claims need a
+  dated source or reproducible artifact. Include sample size, environment, and
+  limitations; use confidence intervals for rate claims.
+- Do not claim "only", "no competitor", "browsers cannot see", or superiority
+  without a current comparative review. Browser and extension capabilities are
+  time-sensitive.
+- Keep exact test/signal/fixture counts out of public copy unless release tooling
+  generates and verifies them.
+- `docs/cws-listing/STORE_LISTING.md` is the single store-copy source. The root
+  `docs/STORE_LISTING.md` is only a pointer.
+- Every release claim must be checked against the exact packaged artifact during
+  release review. If evidence is absent, narrow the claim rather than projecting
+  planned behavior.
+
 ## Where to change things
 
 - navigation scoring and click decisions

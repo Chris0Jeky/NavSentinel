@@ -8,7 +8,9 @@
 
 **Purpose:** the running list of things only *you* (Chris) can do — and the context an agent needs to not lose the thread between sessions. Agents flag the open items in every summary; you clear them by saying so.
 
-**Last updated:** 2026-07-03 — ship/measure direction adopted + status docs collapsed (#421/#422). This session merged **#429** (claims-honesty #423) + **#430** (release guard #321-companion + fixed an unparseable `release.mjs`). Standing decisions: `docs/agentic/DECISIONS.md`. See the single snapshot below; historical snapshots are archived (link at the end of the snapshot).
+**Last updated:** 2026-07-10 — full product/architecture/market posture
+review. Product thesis: `docs/Product_Strategy.md`. Corrective program:
+`docs/Project_Roadmap.md`. Standing decisions: `docs/agentic/DECISIONS.md`.
 
 > **Why this file exists separately from the usual docs:** it is the durable human-task
 > register while status-doc PRs are in flight. `docs/agentic/HANDOFF.md`,
@@ -19,20 +21,63 @@
 
 ---
 
-## Current state snapshot (verified 2026-07-03)
+## Current state snapshot (verified 2026-07-10)
 
-`main` @ **`eba5d71`** (verify: `git rev-parse origin/main` + `gh pr list`). typecheck/lint clean, **2874 unit tests** (95 files), perf 12/12, CI green on `main`.
+At the 2026-07-10 verification point, `main` matched `origin/main`. Run
+`git rev-parse main`, `git rev-parse origin/main`, and live `gh` checks before
+acting; the exact audit baseline lives in `docs/Product_Strategy.md`, not this
+live snapshot. Typecheck, lint, build, version check, 2,874 unit tests (95
+files), perf 12/12, and smoke E2E passed locally; current-main GitHub CI was
+green. v0.4.0 had no tag, GitHub release, CWS release, or external-user evidence.
 
-- **Direction:** ship/measure, **not** hardening — adopted 2026-07-03 (`docs/agentic/DECISIONS.md` D-2026-07-03-A). Follow the **Priority Ladder** in `docs/agentic/ORCHESTRATOR.md`; discovery is milestone-gated; LOW residue -> `docs/agentic/ICEBOX.md`.
-- **Open PRs (all human-gated, at the WIP cap of 3 - D-2026-07-03-D):** #399 (AI-14 `measure:fp`), #356 (AI-13 Gate-3), #273 (AI-8 Gate-3). **Do not open more browser-surface PRs until this drains.**
-- **Last session (2026-07-03):** merged **#429** (claims-honesty #423 - README/store/roadmap/orientation now match shipped+measured reality: the fake 52-byte bloom, 0 releases, benchmark `lastRun:null`, dead visual-sim, stale test counts) and **#430** (release guard `check-bloom-real.mjs` + **fixed a pre-existing syntax error that made `release.mjs` unparseable** = the literal reason `npm run release` never ran). Then resolved all deferred decisions (D-2026-07-03-A..H) and collapsed the status docs.
-- **Cycles 44–47 (2026-07-03, agent):** **#427** hygiene sweep (closed #322/#350/#395/#427, re-bodied #339, parked 16 sub-findings) + **#418** benchmark honest re-scope (#433; #418 re-bodied to the gated SB-arm) + a docs checkpoint + **#417 corpus-v2 pillar 1** (#435: unit-tested protected-vs-fired classifier; a review caught a HIGH toast-inflation bug + Codex a fail-open-cred edge, both fixed). Open issues **62→58**. No open-item state changed.
-- ⚠️ **BOUNDARY (agent):** the clean in-sandbox ungated engineering queue is thinning. The measurement rung (#417 pillars 2–4 / #426 / #416 / #232) is **headed-Chrome/network-gated** and North-Star UI is Gate-3, so the **highest-leverage move is now the AI-15 batch** (below). Deferred **Q-CORPUS** (build #417's unrunnable browser-wiring now vs. defer to a headed session) is logged in `docs/agentic/ORCHESTRATOR.md`.
+- **Product posture:** strong pre-release alpha, not a market-ready or
+  efficacy-validated security product. `docs/Product_Strategy.md` owns the
+  current thesis, beta profile, and evidence gates; `docs/Project_Roadmap.md`
+  owns the corrective action register.
+- **Release-integrity blockers:** page-controlled injected UI currently owns
+  allow/trust/resume authority and can be redressed under genuine input
+  (RI-01); visual-sim can process the wrong active
+  tab and has no production value (RI-02/#424); frozen MAIN-world prototypes in
+  #356 are site-breaking; fake DNR and unmeasured JS behavior should be absent
+  or off; stored URLs require minimization (RI-05/RI-06).
+- **Release/profile blockers:** the 52-byte reputation test filter plus the
+  current ~474/500KB package makes the old "150KB/100K domains" plan
+  impossible as written. AI-9/AI-16 must choose the recommended interaction-
+  only beta or a fully specified real-filter profile.
+- **Brand blocker:** the exact name `NavSentinel` is already used by an active
+  GNSS security product. AI-19 requires clearance or an early rename before
+  CWS submission; this is a risk flag, not a legal conclusion.
+- **Open PRs at WIP cap 3:** #273 is 255 commits behind `main`; #356 is 159
+  commits behind and E2E red; #399 is a draft 70 commits behind. **Do not spend
+  human Gate-3 time until an agent refreshes/fixes/re-reviews them.** #399 is
+  not a beta blocker; #273 may be recreated or deferred; #356 is a prerequisite.
+- **Portfolio:** 74 open issues, none assigned or milestoned; #439–#453 are 15
+  frozen Horizon proposals. No new feature/epic issue seeding until the queue is
+  culled and milestone-categorized.
+- **Infrastructure:** branch protection remains absent (`404 Branch not
+  protected`). AI-17 remains open. Codex hook trust remains AI-18.
 - **Historical snapshots** (pre-2026-07-03, ~28 session bullets) archived to [`docs/archive/ACTION_ITEMS_snapshots.md`](docs/archive/ACTION_ITEMS_snapshots.md).
 
 ---
 
 ## Action items
+
+> **Gate-queue hold (2026-07-10):** do not run the old branch checkout guides
+> for AI-8, AI-13, or AI-14. Their branches must first be refreshed from current
+> `main`, re-reviewed twice, and rerun through CI; #356 is currently red. AI-15
+> remains BLOCKED until an agent posts a current preflight handoff.
+
+**🚨 OPEN: AI-19 — Clear or replace the working product name before CWS
+submission.** An active TruNav GNSS anti-spoofing product uses the exact name
+`NavSentinel` and was publicized by the US Department of Transportation in May
+2026. This is not a legal conclusion, but shipping under the name without a
+search/domain/CWS/trademark review creates avoidable brand and discovery risk.
+**Guide:** (1) search UK/US and intended-market trademark databases and company/
+product usage; (2) check practical domain, GitHub, social, and CWS availability;
+(3) obtain professional advice if a public/commercial launch is intended; (4)
+record **keep** or **rename**. If renaming, do it before screenshots, CWS
+submission, and external beta invitations. Then tell me "AI-19 done" with the
+decision.
 
 **OPEN: AI-18 — Review and trust the new Codex project hooks.** The Codex parity
 setup adds `.codex/hooks.json` for session orientation, the shared irreversible
@@ -44,25 +89,69 @@ repository, run `/hooks`, inspect the project-local entries from
 `/hooks` again after future hook edits because trust is hash-based. Then tell me
 "AI-18 done".
 
-**🚨 OPEN: AI-15 — Read the strategic review, then run the release-unblock batch session (60-90 min, one sitting).** A full strategic review (2026-07-02) produced two documents — **`docs/Strategic_Outlook.md`** (what's working + the path) and **`docs/Course_Correction.md`** (what's broken + the sort-out plan) — and seeded issues **#415-#427** (`strategy` label). Its headline finding: the project has never shipped (no release, no CWS submission, 0 external users) while ~100 PRs of internal hardening merged in 3 weeks, and every open PR + the release blocker is waiting on you. **Guide:** (1) read `docs/Course_Correction.md` §1/§2/§6 (~10 min); confirm or amend the direction. (2) In ONE sitting, clear the whole gate queue: **AI-9** (#321 bloom build — needs your network), **AI-8** (#273 chip check), **AI-13** (#356 proto de-harden check), **AI-14** (#399 `measure:fp` run) — step-by-step guides are in each item below; #419 tracks an agent-built runner/checklist to make this one continuous flow — and while the extension is loaded, run the **real-Chrome regression sweep** (refreshed watchlist golden paths + #347-class console checks) covering the ~27 runtime-behavior PRs merged unverified since 2026-06-23. (3) Install the build in your daily browser (dogfooding starts BEFORE any CWS submission), then say go/no-go on the **v0.5.0 release train (#415)**. Clearing this one item un-gates more value than weeks of further autonomous hardening. Then tell me "AI-15 done" (or which parts).
+**🚨 BLOCKED: AI-15 — Run the headed release session only after agent
+preflight.** The prior 60–90 minute one-sitting guide is withdrawn: all three
+PRs are heavily stale, #356 is red, the reputation/package plan needs a product
+decision, and new release-integrity blockers precede manual testing. #399 is
+stale but remains deferred measurement work, not a beta prerequisite. **Do not
+checkout or test the current PR branches yet.** Agent preflight must first:
+(1) fix RI-01; (2) refresh/fix #356 and recreate or defer #273, with two fresh
+reviews and green CI; (3) excise visual-sim and remove fake DNR; (4) complete
+RI-06's purpose-specific data minimization/reset; (5) complete RI-07's explicit
+JS-behavior beta-off profile; (6) prepare the chosen AI-9 release profile; and
+(7) provide one current headed checklist. Then split human work into a browser
+session, any network/feed session, an overnight measurement run, and a short
+result review. Read `docs/Product_Strategy.md` first. This item becomes
+actionable only when the preflight handoff explicitly says so.
 
-**🆕 OPEN: AI-16 — Ratify or amend the 2026-07-03 standing decisions.** On your "call the shots" delegation I resolved the deferred decisions and enacted the #421/#422 policy changes in **`docs/agentic/DECISIONS.md`** (D-2026-07-03-A..H: ship/measure direction, priority ladder + icebox, status-doc collapse, browser-surface re-tiering + WIP cap, headed-lane/Q5, visual-sim excise, distribution sequence). Most are low-stakes + reversible and the loop already follows them, but two want your explicit nod: **D-E** — making a headed lane the primary Gate-3 *reduces* manual oversight, and both strategic docs reserved this Q5 revision for your explicit call, so it is a **recommendation only** until you confirm; and the direction adoption itself. **Guide:** skim `DECISIONS.md` (~5 min); reply "ratify decisions" (or name which to amend/veto). This is your veto checkpoint — nothing blocks on it.
+**🆕 OPEN: AI-16 — Ratify or amend the standing product/process decisions.**
+The 2026-07-10 posture review extends the July 3 direction: narrow unlisted beta,
+interaction-only by default unless real reputation is fully specified, release
+integrity before human Gate-3, frozen Horizon/North-Star work, evidence before
+claims, and one post-beta visible bet. **Guide:** read the verdict, Beta Product
+Profile, and Portfolio sections of `docs/Product_Strategy.md`, then skim
+`docs/agentic/DECISIONS.md`. Reply "ratify decisions" or name any amendment.
+AI-9's release-profile choice and AI-19's name choice still require explicit
+answers; the reversible prioritization is already the working posture.
 
 **🆕 OPEN: AI-17 — Enable GitHub branch protection on `main` (the harness wall).** The 2026-07-06 harness migration to the estate T2 blueprint found `main` has **no server-side branch protection** (`gh api repos/Chris0Jeky/NavSentinel/branches/main/protection` → 404). The local Claude deny floor blocks bare force-push, but it is a *tripwire*, not a *wall*: Codex and any non-hooked client bypass it, and `--force-with-lease origin main` is allowed at T2. The real wall is GitHub branch protection. **Guide:** GitHub → repo Settings → Branches → Add branch protection rule for `main`: (1) **Require status checks to pass before merging** → select `Build / Unit` and `E2E`; (2) optionally **Require a pull request before merging** (matches the current workflow); (3) enable **Do not allow force pushes** and **Do not allow deletions**. (CLI equivalent: `gh api -X PUT repos/Chris0Jeky/NavSentinel/branches/main/protection -f ...`.) Until it is on, agents must never force-push `main` — that is convention only. Then tell me "AI-17 done".
 
-**🚨 OPEN: AI-9 — Build & ship the REAL reputation filter before any real-user release (#321, release blocker).** Discovery pass 3 (2026-06-20) confirmed the shipped `extension/public/reputation_data.bin` is **52 bytes (m=288 bits) = the 15-domain TEST filter**, not real threat intel. CI only runs `build:bloom:test`; `release.mjs`/`package.mjs` have **no bloom-build step**. So `reputationReady()` returns true but `isKnownBadDomain()` only matches 15 `.example` names — **reputation-based detection (+50 known-bad NRS factor) is effectively disabled in production.** Likely intentional for the current pre-release phase, but **must be fixed before shipping to real users.** This needs you because building the real filter requires **network access to URLhaus/OpenPhish** (the local-first sandbox can't/shouldn't fetch external feeds) plus a feed-source + refresh-cadence decision. **Guide:** decide feeds/cadence → `npm run build:bloom` (real builder, needs network) → commit the resulting `reputation_data.bin` (or add a release step that builds it) → verify `m` is in the millions, not 288. Companion code hardening is now **shipped** (was seeded as **#322**, CLOSED 2026-07-03): `build-bloom-filter.mjs` fails closed on the test-domain fallback (#330), and the release path refuses to ship a placeholder — `check-bloom-real.mjs` asserts the packaged `.bin` has a real-filter `m` floor, wired into `release.mjs` + tag-CI (#430). So the **only remaining AI-9 work is the network-gated real-filter build itself**: decide feeds/cadence → `npm run build:bloom` (real builder, needs network) → commit the resulting `reputation_data.bin` (or add the build to the release step) → verify `m` is in the millions, not 288. Then tell me "AI-9 done".
+**🚨 OPEN: AI-9 — Choose the beta reputation profile (#321).** The current
+asset is a 52-byte test fixture. The old instruction to simply run
+`npm run build:bloom` is unsafe: the package is already ~474/500KB, a 150KB
+filter cannot meet the stated 0.01%/100K-domain combination, and feed licensing,
+provenance, cadence, cardinality, and rollback are unresolved. **Recommended
+choice:** ship the unlisted beta interaction-only, disable/omit reputation, and
+remove every reputation claim; test the actual differentiator without delay.
+**Alternative:** authorize a real-filter profile only after an agent proposes a
+separate data/package budget, feed/cadence/licensing plan, provenance manifest,
+sentinel checks, and reproducible build. Reply "AI-9 interaction-only" or
+"AI-9 real-filter" (plus constraints). Do not build/commit a feed artifact until
+that decision is recorded.
 
-**OPEN: AI-8 — Gate-3 visual check + merge PR #273 (#217 neutral chip).** The one browser-surface PR from session 2: it recolours the popup `nrs_user_activation_active` signal chip from green to a NEUTRAL grey (you chose option (b) — it carries +5 NRS, so green was wrong; grey avoids both a false reassurance and crying wolf on every clicked nav). 2 clean adversarial rounds + green CI; presentation-only (no scoring change). Per the standing posture (browser-surface PRs hold for Gate-3) it was NOT auto-merged. **Guide:** `git fetch && git checkout fix/user-activation-neutral-chip && npm run build`; load `extension/dist` in Chrome; open the popup on a page with a recent clicked navigation; confirm the "active user gesture" signal chip renders **grey** (distinct from green/orange) and looks acceptable. Then `gh pr merge 273 --merge --delete-branch`, or tell me "merge #273" / "AI-8 done". (Review seeded **#274** — chip text-contrast, design-system-wide.)
+**BLOCKED: AI-8 — PR #273 neutral-chip Gate-3.** The presentation intent is
+still reasonable, but the branch is 255 commits behind `main`; its old reviews,
+CI, and checkout guide are not actionable. An agent must recreate/refresh or
+defer the tiny change, run two fresh reviews and CI, then post a new visual-check
+guide. Do not checkout or merge #273 until that handoff exists.
 
 **AI-10 — Gate-3 + merge the SPA-breakage fix (#352) · ✅ RESOLVED 2026-06-23.** Chris ran the manual Chrome check ("manual checks on chrome for #352 done, it seems to be working fine now") → **#352 merged into `main`** (`#347` pushState de-harden + `#348` reputation WAR). The claude.ai grey screen / infinite-load and the per-page `reputation_data.bin`/`pushState` console errors are fixed; top-frame reputation is re-enabled.
 
 **AI-11 — Toast count-pill (#351 → PR #353) · ✅ RESOLVED 2026-06-23 — MERGED.** Chris said "merge #353"; green CI (incl. the RW-19 e2e fix to accept the coalesced pill) → **#353 merged into `main`** (`d0e0412`). Repeated blocked-popup/redirect prompts now coalesce into one count pill after 3-in-8s (expandable to the latest prompt's Allow once / Always allow). The pill is live on the next `git checkout main && npm run build`.
 
-**🚨 OPEN: AI-13 — Gate-3 verify + merge the enforcement-proto de-harden (#349 → PR #356).** Completes the breakage-class fix: `form.submit`/`requestSubmit`, `location.assign`/`replace`, `window.open` (proto + instance) are now writable+configurable, so legit pages/libraries that wrap them no longer throw. Also revives `js_behavior`'s dead programmatic-submit detection (stacks cleanly, no double-fire). Browser-surface (MAIN-world patching). **Guide:** `git fetch && git checkout feat/dehard-enforcement-protos && npm run build`; load in Chrome. (1) On an analytics-heavy site (one that wraps `window.open`/`form.submit`) confirm **no** console `Cannot assign to read only property` and the page works. (2) Confirm gating is intact: a blocked popup/redirect/form still prompts; the `gym/proto-wrap-05.html` fixture shows all wraps "ok". (3) Confirm the new e2e is green on CI. Then `gh pr merge 356 --merge --delete-branch`, or "AI-13 done".
+**🚨 BLOCKED: AI-13 — #356 MAIN-world compatibility Gate-3.** This remains a
+beta prerequisite, but the branch is 159 commits behind `main` and its E2E check
+is red. An agent must merge current `main`, fix the failure, complete two fresh
+adversarial reviews, and post a current compatibility/gating checklist. Do not
+checkout, test, or merge the present branch.
 
-**🚨 OPEN: AI-14 — `measure:fp` + merge the OAuth coupon-FP fix (#223 → held draft PR #399).** The directed Q1 "implement + HOLD for `measure:fp`" OAuth work. The redirect-mismatch now fires only when the OAuth response is **corroborated** — a query/fragment `code`/`error` co-occurs with a `state` echo, or the fragment carries an access/id token (`hasCorroboratedOAuthResponse`). This kills the false mismatch on a benign cross-domain page carrying a generic `?code=` coupon during an active flow, while still catching real attack callbacks (which echo `state`; query, implicit-fragment, and OIDC `response_mode=fragment` forms are all covered). **Why it's yours:** there is a deliberate, measured **FP↔FN tradeoff** — a flow whose callback omits `state` *entirely* loses redirect-mismatch coverage (`state` is recommended-but-optional). The sandbox can't run `measure:fp` (needs headed Chromium + live Tranco). It is opened as a **draft** so it cannot auto-merge. A 1-round self-review (Workflow) caught + got fixed a `response_mode=fragment` regression; CI green; 2820 unit tests. **Guide:** `git fetch && git checkout fix/oauth-require-state-corroboration-223 && npm run build`; run `npm run measure:fp` (and the OAuth corpus) to confirm the FP reduction outweighs the residual state-less FN. If good: mark the PR ready + `gh pr merge 399 --merge --delete-branch`, or tell me "AI-14 done / merge #399". If the FN is unacceptable, tell me and I'll switch to a narrower variant.
+**🚨 BLOCKED: AI-14 — #399 OAuth tradeoff measurement.** The draft is 70
+commits behind `main` and its old CI/counts are stale. It is not a beta blocker.
+Keep it draft until #417 supplies valid methodology and an agent refreshes the
+branch, runs two reviews, and posts a reproducible headed measurement plan. Do
+not checkout or merge the current branch.
 
-**AI-12 — Top-site FP relief + D1 (#350 → PR #354) · ✅ RESOLVED 2026-06-23 — MERGED.** Chris manually confirmed the relief works on LinkedIn ("tested it on linkedin and it seemed to work fine now") = his measure/Gate-3 in lieu of the full `measure:fp` run (which needs headed Chromium + live Tranco, sandbox-can't). **#354 merged into `main`** (`c4426cf`): `getTierAdjustedBlockThreshold` now relieves TOP_SITE + CDS-only (benign-structural whitelist) by `NRS_TOP_SITE_CDS_RELIEF`; trust list grew 24→42 with safe `includeSubdomains`. Green CI (Build/Unit + E2E) on the main-merged head. **⚠️ Follow-up (not blocking): `+20` is a starting value — if FPs persist on any top-site, bump `NRS_TOP_SITE_CDS_RELIEF` in `nrs.ts`; a full `measure:fp` corpus run is still worthwhile for rigor when convenient.**
+**AI-12 — Top-site FP relief + D1 (#350 → PR #354) · ✅ RESOLVED 2026-06-23 — MERGED.** Chris manually confirmed the relief works on LinkedIn ("tested it on linkedin and it seemed to work fine now") = his measure/Gate-3 in lieu of the full `measure:fp` run (which needs headed Chromium + live Tranco, sandbox-can't). **#354 merged into `main`** (`c4426cf`): `getTierAdjustedBlockThreshold` now relieves TOP_SITE + CDS-only (benign-structural whitelist) by `NRS_TOP_SITE_CDS_RELIEF`; trust list grew 24→42 with safe `includeSubdomains`. Green CI (Build/Unit + E2E) on the main-merged head. **Follow-up:** `+20` is an unvalidated starting value; do not tune it again without the valid #417/#416 FP/TP evidence required by D25.
 
 AI-1, AI-2 resolved 2026-06-05; AI-3, AI-4 resolved 2026-06-13; **AI-5 resolved 2026-06-19** (Phishpedia public logo set approved); **AI-6 resolved 2026-06-19** (#249 merged after Gate-3 waiver). See Completed log. Deferred manual checks remain on the regression watchlist `docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md` (run on next build + load; now also covers #249 enriched-capture, #263 credential-submit, and #265 SW-hydration behavior). Standing posture (confirmed 2026-06-19): the agent **may autonomously merge non-browser PRs** (logic/test/build/docs) once aged + 2 adversarial rounds + green CI; **browser-surface PRs still hold for Gate-3**.
 

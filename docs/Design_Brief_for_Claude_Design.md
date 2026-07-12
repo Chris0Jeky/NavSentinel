@@ -1,5 +1,10 @@
 # NavSentinel — Complete Design Brief for Claude Design
 
+> **Historical design input:** do not reuse its name, competitive copy, feature
+> counts, or release claims without reconciling them against
+> `Product_Strategy.md` and `docs/cws-listing/STORE_LISTING.md`. The product name
+> is pending AI-19 and the beta feature profile is narrower than this brief.
+
 > **Purpose**: This document gives Claude Design (or any designer) everything needed to create four UI surfaces for NavSentinel: a product landing page, an extension popup, a settings/control-panel page, and the Chrome Web Store listing page. It includes copy, feature lists, architecture details, visual direction, and operational prompts.
 
 ---

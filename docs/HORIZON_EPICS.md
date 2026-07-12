@@ -1,5 +1,12 @@
 # NavSentinel — Horizon Epics
 
+> **Frozen option portfolio (2026-07-10):** this is not an active backlog.
+> [`Product_Strategy.md`](Product_Strategy.md) requires beta evidence and a
+> maintainer cull before any epic activates. Duplicate epic issues should be
+> closed or moved to an explicitly post-beta milestone. All competitive,
+> efficacy, funding, and feasibility statements below are hypotheses from the
+> dated design exercise and may not be reused as current claims.
+
 *Created 2026-07-07. A horizon/vision addendum to [`Project_Roadmap.md`](Project_Roadmap.md) and
 [`NORTHSTAR_ROADMAP.md`](NORTHSTAR_ROADMAP.md) — **not** a replacement for either, and **not** a
 change to the standing ship/measure direction.*
@@ -29,13 +36,16 @@ re-verify-at-implementation.
 
 ## The covenant these epics must not break
 
-Every epic preserves the local-first thesis (**D16**): no runtime network calls, no telemetry, no
-password-value storage, no remote code. The **only** sanctioned network touch remains the signed,
-integrity-checked, fail-closed bloom/rule refresh (**D26**). Where an epic adds a channel (model
+Every epic preserves the local-first thesis (**D16**): no browsing-data upload,
+no telemetry, no password-value storage, and no remote code. The beta makes no
+runtime network calls. D26's signed inbound bloom/rule-refresh concept is
+historical and deferred; any activation requires a renewed explicit product,
+privacy, and release decision. Where an epic adds a channel (model
 weights, community rule packs, family config, exported reports) it is **explicit, inspectable,
 user-initiated, and signed** — sharing is a human act over a file the user can read, never a silent
-pipe. Local-first is treated not as a limitation to work around but as the **moat**: every
-"telemetry-funded incumbents structurally cannot do this" note below is load-bearing.
+pipe. Local-first is a differentiation hypothesis, not proof of exclusivity.
+Every claim that an incumbent structurally cannot offer the same benefit needs
+fresh competitor evidence before it can become product positioning.
 
 ---
 
@@ -271,8 +281,8 @@ advised first; the Glass Ledger's typed reason-code registry (shared).
 **Horizon:** mid · **Effort:** XL · **Absorbs:** unification of redirect/OAuth/ClickFix statefulness;
 extends #237; feeds EP-10's actor lattice.
 
-**Problem.** Real 2026 attacks are multi-step narratives — ClickFix (47% of initial access, Microsoft
-2025) is copy→instruct→paste; BITB is build-fake-window→harvest; device-code phishing is
+**Problem.** Real 2026 attacks are multi-step narratives — ClickFix is
+copy→instruct→paste; BITB is build-fake-window→harvest; device-code phishing is
 out-of-band-code→legitimate-IdP. NavSentinel models these with scattered module-level singletons and
 **cliff TTLs** (ClickFix 30 s buffer, OAuth 60 s latches, JS-behavior 5 s window, mutation 5 min
 disconnect, redirect chains in the SW). An attacker who stretches an attack past a TTL or splits
@@ -495,13 +505,12 @@ human-gated on #321/AI-9 network/signing); EP-07's hash-chain util; Gate-3; Chri
 **Horizon:** mid · **Effort:** L · **Absorbs:** the family-tier monetization thesis (the critic's
 "Sustaining Engine" gap); pricing/positioning under #425.
 
-**Problem.** The 60+ segment loses ~$7.75B/yr (FBI IC3 2025, +59% YoY) to exactly NavSentinel's best
-detections — tech-support locks, ClickFix, fake CAPTCHA, courier lures — and adult children
-demonstrably pay recurring fees (Aura $9+/mo) to protect parents. But every existing product routes
-the parent's browsing through a **caregiver cloud**; the competitive brief names "elderly protection
-without surveillance" as unoccupied whitespace. NavSentinel has no concept of a second person.
-Separately, **not one of 34 candidates said who pays** — a local-first tool that can't fund its
-maintainer becomes abandonware, itself a security failure for the elders depending on it.
+**Problem hypothesis.** A dated design pass linked large reported elder-fraud
+losses to several attack families NavSentinel explores and hypothesized that
+adult children might pay for privacy-preserving help. It did not prove buyer
+demand, competitor absence, setup feasibility, or fit between those losses and
+the current detectors. Fresh caregiver/user interviews and a current competitor
+map are prerequisites. NavSentinel currently has no second-person product model.
 
 **Mechanism.** Three pieces, covenant-pure because the transport is human. (1) **Provisioning:** the
 guardian's extension generates a local WebCrypto keypair and exports a **signed Guardian Bundle** —
@@ -510,12 +519,13 @@ allowlist of the parent's real sites — imported on the parent's machine via fi
 settings lock behind the guardian signature, and the parent can always eject (autonomy is a feature).
 (2) **Digest:** a weekly, locally-rendered, self-contained HTML digest from the Decision Journal
 ("3 fake-CAPTCHA pages blocked, 1 new site trusted") that the **parent chooses** to share over any
-channel — share-back is parent-initiated, never automatic. (3) **The distribution + revenue loop:**
-every guardian setup is a two-install acquisition; individuals stay free forever (Bitwarden
-trust-funnel shape), guardian tooling (family provisioning, digests, the Aftermath recovery copilot)
-is the paid tier; the benchmark (EP-11) is separately licensable to vendors/insurers. NLnet NGI Zero
-Commons (€5k–€50k, 1–2 page app) and Mozilla Builders (up to $100k, local-AI theme) fit the shape;
-GitHub Sponsors is a tip jar, not a plan.
+channel — share-back is parent-initiated, never automatic. (3) **The distribution
+and revenue hypothesis:** a successful guardian setup could create two installs;
+interviews must establish who pays, what remains free, and whether guardian
+tooling or a benchmark is independently valuable. No paid tier or licensing
+model is decided. Funding
+examples in the original design pass are historical and must be re-researched
+when this frozen epic is considered; GitHub Sponsors is a tip jar, not a plan.
 
 **Implementation.** S1 (agent): preset architecture over `storage.ts` + EP-13 rule selections; a
 "senior" preset (strict 50 threshold, tightened `mediumRiskThreshold`, simplified copy) that **must
@@ -525,13 +535,14 @@ bundle format — Ed25519 via WebCrypto, import/verify + settings-lock in option
 #237. **S4 (HUMAN-GATED, the kill-gate):** guardian onboarding — a "set up for a family member" path
 with QR/file handoff, **tested with real non-technical users**; the epic dies here if file-based
 provisioning fails mom-testing. S5 (HUMAN-GATED, product): positioning + the paid tier + CWS listing
-+ Featured-badge push (MV3-only eligibility since June 2026 is a live discovery tailwind).
++ a Featured-badge review against the then-current official criteria; no present
+  eligibility or review-time assumption.
 
-**Leverage.** The only epic that is *directly* a growth loop and a revenue thesis: proven
-willingness-to-pay, viral by construction (buyer ≠ user), and it weaponizes the covenant ("nothing
-leaves your parent's machine" — a pitch no telemetry-funded competitor can utter). It forces
-discipline that pays everywhere: the senior preset makes zero-FP (#232) existential, and plain-language
-digests battle-test the Friend-Advisor layer against the hardest audience.
+**Leverage hypothesis.** If buyer interviews, current competitor research, and
+an unaided setup test all pass, this could create a referral loop and a distinct
+buyer/user model. It is not viral by construction, willingness to pay is not
+proven, and privacy is not an exclusive claim. The senior preset and digest
+would still pressure-test quietness and plain-language explanation.
 
 **Risks.** File/QR provisioning may lose to cloud UX with real families — S4 is deliberately an early
 kill-gate. Support burden: the least technical segment on earth, supported by a solo dev. **Ethics
@@ -774,8 +785,9 @@ code with a **capped magnitude**. **Safety by construction:** rules can only *ra
 lower thresholds and never auto-block — the scoring engine still decides, so a malicious/sloppy
 pack's worst case is bounded FPs, never a silent allow. A **bounded evaluator** (fixed operator set,
 no `eval`, per-rule time budget, fuzz-tested) keeps the CWS remote-code line defensible (alongside the
-DNR precedent). Delivery rides the D26 channel — the same signed weekly fetch as the bloom list,
-fail-closed to bundled packs, pinned keys, and a **diff-inspectable pack viewer** in options (the
+DNR precedent). A future delivery design may reuse a newly authorized signed
+inbound channel; D26 does not currently authorize it. It must fail closed to
+bundled packs, use pinned keys, and provide a **diff-inspectable pack viewer** in options (the
 covenant made visible). Contribution follows the EasyList shape: a rule-request forum, fixture-required
 CI for pack PRs.
 
@@ -845,9 +857,10 @@ heuristics; agent-buildable against a mock, model integration human-verified). S
 observation feeding Fabric evidence (closes #179 on Chrome). Slice 6: signed installer, auto-update,
 macOS port — pure distribution weight, human-gated.
 
-**Leverage.** Converts NavSentinel's best detection story (ClickFix, 47% of initial access) from a
-warning into **actual prevention at the point of harm** — a demo no extension-only competitor can
-replicate and the sharpest possible articulation of "catches what Safe Browsing structurally can't."
+**Leverage.** Could convert NavSentinel's ClickFix detection story from a
+warning into prevention at the point of harm, potentially distinguishing it
+from extension-only approaches. That is a hypothesis requiring a current
+benchmark, not a competitor-absence or Safe-Browsing claim.
 Dissolves EP-06's hardware gate, gives EP-05/EP-08 durable state, and is the **escape hatch** if Chrome
 tightens MV3 or closes the agent aperture (the intelligence lives in a process Google doesn't control).
 

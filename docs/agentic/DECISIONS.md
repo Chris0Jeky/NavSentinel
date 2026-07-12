@@ -45,7 +45,7 @@ Chris delegated: *"take a stance yourself and call the shots in the best way pos
 **Why:** human activation-energy, not human time, is the bottleneck (13 days for a 10-minute check). Automating the class is the structural fix.
 
 ### D-2026-07-03-F — Excise the dead visual-sim capture path (#424); the logo-embedding pivot is a fresh future feature
-**Decision:** **Excise**, don't fund the pivot now. Remove the dead visual-sim capture path (placeholder templates, the never-firing NRS hook, the e2e that asserts it never matches) and reclaim its budget — pair with the #374 chunk split. The logo-embedding pivot (P5-D6 / #246) is built **fresh when a user base justifies it**, not carried as dead scaffolding. Seeded as a concrete slice `feat/excise-visual-sim`; roadmap P4-01 status already corrected to "non-functional" (#429).
+**Decision:** **Excise**, don't fund the pivot now. Remove the dead visual-sim capture path (placeholder templates, the never-firing NRS hook, the e2e that asserts it never matches) and reclaim its budget. This is an independent beta blocker; #374 may coordinate nearby chunk work but must not delay removal. The logo-embedding pivot (P5-D6 / #246) is built **fresh when a user base justifies it**, not carried as dead scaffolding. Seeded as a concrete slice `feat/excise-visual-sim`; roadmap P4-01 status already corrected to "non-functional" (#429).
 **Why:** it is detection theater shipping inside one of the two tightest chunks; ship-don't-polish. (This is a code change with real regression risk in `capture_isolated` — done as its own reviewed slice, not rushed.)
 
 ### D-2026-07-03-G — Distribution sequence (#425); dogfood starts before submission
@@ -57,8 +57,73 @@ Chris delegated: *"take a stance yourself and call the shots in the best way pos
 
 ---
 
+## 2026-07-10 — Product-posture review amendments
+
+These working decisions come from the full product, architecture, release,
+roadmap, and current-market review in `docs/Product_Strategy.md`. They remain
+reversible and are included in AI-16's maintainer ratification gate.
+
+### D-2026-07-10-I — Release integrity precedes the old human batch
+
+**Decision:** AI-15 is blocked until agent preflight moves prompt decision
+authority to extension-origin UI, refreshes/reviews the stale PRs, makes #356 green, excises
+visual-sim, removes fake DNR, and prepares the chosen release profile. Do not
+spend human Gate-3 time on old branches.
+
+**Why:** page script can currently activate protection-lowering prompt actions,
+and even trusted events can be induced through page-controlled host redressing;
+visual-sim can process the wrong active tab; #356 is red; all three PRs are far
+behind `main`. Manual verification before those repairs would be wasted and
+could create false confidence.
+
+### D-2026-07-10-J — Interaction-only is the default unlisted-beta profile
+
+**Decision:** Prefer a narrow beta containing core navigation/credential/
+interaction protections, explanations, rollback, and local decision history.
+Remove visual-sim and fake DNR; default-disable unmeasured JS behavior; omit or
+disable reputation and all reputation claims unless AI-9 authorizes a fully
+specified real-filter profile.
+
+**Amends D-2026-07-03-G:** a real bloom filter is no longer an unconditional
+unlisted-beta gate. Its current package/cardinality/provenance model is
+contradictory, and commodity reputation should not block testing the intended
+interaction-level differentiator.
+
+### D-2026-07-10-K — Evidence and one user-visible loop before architecture expansion
+
+**Decision:** Freeze North-Star/Horizon implementation and new feature-issue
+seeding. After release integrity, ship to a 10-user cohort, measure additive
+protection/quietness/comprehension/retention, then fund at most one visible loop:
+Decision Journal plus narrowly scoped recovery guidance.
+
+**Why:** 74 unmilestoned issues and 15 new epics are strategy-shaped backlog
+inflation while distribution and validation remain zero.
+
+### D-2026-07-10-L — Position as a complementary local interaction guard
+
+**Decision:** Do not use "only", "other extensions miss", "Safe Browsing cannot
+see", or broad OAuth-abuse claims. The initial retention cohort is privacy-
+conscious technical users running the beta in a daily profile. Security
+researchers are a separate design-partner/adversarial cohort and are excluded
+from retention/comprehension metrics. Comparative claims require #418 against
+current browser-native and extension protections.
+
+**Why:** Chrome, Edge, and Opera now provide local/on-device interaction or scam
+protections. Named detectors and local execution are features, not a moat.
+
+### D-2026-07-10-M — Product-name clearance before submission
+
+**Decision:** `NavSentinel` is a working name until AI-19 records a keep/rename
+decision after appropriate search/domain/CWS/legal review. No CWS submission or
+external beta branding precedes that decision.
+
+**Why:** an active GNSS anti-spoofing security product uses the exact name;
+rebranding is cheapest before distribution.
+
+---
+
 ## Earlier resolved (carried forward)
 
 - **Q1–Q6 (answered 2026-06-26):** Q1 OAuth FP cluster = implement + HOLD for `measure:fp`; **Q2** capture_isolated = split (#374) **and** bump 66→70KB; Q3 = prefer unit-testable extraction over CI-only e2e (CI-verified e2e acceptable when unavoidable); Q4 merge cadence confirmed; **Q5** Gate-3 = manual Chrome (**D-2026-07-03-E *proposes* revising this — awaits Chris's explicit sign-off**); Q6 = extract-to-testable + e2e for `main_guard`.
-- **Decision log D01–D20:** see `docs/Project_Roadmap.md`. **D21–D26** (North-Star): see `docs/NORTHSTAR_ROADMAP.md` (D24 visual-sim→logo-embedding; D25 measure-before-tune; D26 one signed bloom-refresh exception).
+- **Decision log D01–D20:** see `docs/Project_Roadmap.md`. **D21–D26** (North-Star): see `docs/NORTHSTAR_ROADMAP.md`. D26 is a historical concept approval only; the 2026-07-10 beta boundary defers any runtime refresh until a renewed explicit product/privacy/release decision.
 - **Gate-3 waiver (2026-06-05) + non-browser auto-merge authority (2026-06-19):** standing; superseded/formalized by D-2026-07-03-D/H.

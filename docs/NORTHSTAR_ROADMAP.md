@@ -1,5 +1,9 @@
 # NavSentinel North-Star Roadmap — Phase 5
 
+> **Post-beta option portfolio (2026-07-10):** this document does not authorize
+> current implementation. The release/evidence sequence and activation gates in
+> [`Product_Strategy.md`](Product_Strategy.md) take precedence.
+
 *Created 2026-06-13. An addendum to [`Project_Roadmap.md`](Project_Roadmap.md), not a replacement.
 Phase 5 is the "North-Star" track: the four programs that take NavSentinel from a strong
 interaction-level detector to a **near-zero-false-positive, explainable, self-tuning security
@@ -49,17 +53,17 @@ spot-checked against `main @ da400fb`; treat them as drift-prone anchors, not co
 
 | # | Decision | Rationale / evidence |
 |---|---|---|
-| **D21** | **Revisit D08 "No ML at this stage" → conditional on-device ML is now in-thesis.** | D08 deferred ML to "Phase 4 if heuristics plateau." Research confirms on-device inference is viable in an MV3 **offscreen document** (ONNX-runtime-web / TF.js, WebGPU default-on since Chrome 113), and Chrome itself now ships local Gemini Nano scam detection. ML enters as a **conditional enhancement with a heuristic fallback**, never a hard dependency — preserves the local-first thesis (D16). |
+| **D21** | **Revisit D08 "No ML at this stage" → conditional on-device ML is now in-thesis.** | D08 deferred ML to "Phase 4 if heuristics plateau." Research confirms on-device inference is viable in an MV3 **offscreen document** (ONNX-runtime-web / TF.js, WebGPU default-on since Chrome 113). Chrome's current on-device Gemini Nano signals feed Safe Browsing's final verdict for users opted into Enhanced Protection; reverify before implementation. ML remains only a conditional enhancement with a heuristic fallback. |
 | **D22** | **Top-sites prior must use a FILTERED list, never raw Tranco/Alexa.** | Tranco NDSS'19: raw top-lists are manipulable (rank 28798 reachable with one HTTP request; 4 phishing domains in the Alexa top-10k). Use Tranco's hardened list, *further filtered*, as a benign **prior** that lowers (never zeroes) intervention — combined with bad-signal overrides. |
 | **D23** | **The advisor channel is a non-interruptive Decision Journal (Chrome Side Panel), not more prompts.** | Warning-fatigue literature (Akhawe/Felt 2013, 25.4M impressions; Porter-Felt 2016): interruptive warnings habituate and lose efficacy. The friend-advisor goal is met by an on-demand journal/Side Panel (Chrome 114+, no host permissions), keeping prompts rare. |
 | **D24** | **Visual-sim pivots from perceptual-hash to logo-embedding (Siamese/CNN); pHash stays only as a cheap pre-filter.** ✅ **Confirmed by maintainer 2026-06-13.** | USENIX'21 Phishpedia (logo + Siamese): 98.2% precision / 87.1% recall / 0.19s/page, far above pHash/EMD/PhishZoo/LogoSENSE. On-device pHash (PhishSnap) is feasible but low-accuracy. This re-scopes **P4-01c** and **moots the original AI-5** (screenshot-derived pHash templates) → AI-5 re-scopes to reference brand *logos*. |
 | **D25** | **Instrument before tuning. No scoring/threshold change ships without a corpus-replay FP/TP delta and a Smart-Mode-Silence gate.** | The audit found all tuning today is guesswork because the capture payload can't be replayed. Rich capture (P5-C1) + a replay harness (P5-C5) + a CI silence gate (P5-A1) are prerequisites to every FP change. |
-| **D26** | **Bloom-list refresh gets ONE signed, integrity-checked network fetch — the single documented exception to D16.** ✅ **Decided by maintainer 2026-06-13.** | The bloom filter is build-time-only and goes 30–90 days stale (audit: critical). A ~weekly **signed** refresh (verify signature before applying; fail-closed to the bundled list) keeps detection fresh with minimal thesis compromise. All other runtime no-network rules stand; the native companion (P5-D4) remains the longer-term structural path. |
+| **D26** | **Historical concept approval: one signed, integrity-checked bloom-list fetch. Deferred 2026-07-10.** | This is not active implementation authorization. The beta has no runtime network calls. Any future inbound update channel requires a renewed explicit product/privacy/release decision under D16/AI-16, with no browsing state sent outbound. |
 
-> **Local-first thesis (D16) is preserved across all of Phase 5.** No runtime telemetry leaves the
-> machine. On-device ML and the native companion are local; the *only* runtime network touch is a
-> **single signed, integrity-checked bloom-list refresh** — approved as the one documented D16
-> exception (**D26**), fail-closed to the bundled list.
+> **Local-first thesis (D16) remains the boundary for this frozen portfolio.**
+> The beta has no runtime network calls, telemetry, or browsing-data upload.
+> D26 is a deferred historical exception concept, not active authorization;
+> any future inbound channel requires a renewed explicit decision.
 
 ---
 
@@ -286,7 +290,7 @@ Chromium-rebase treadmill is a full-time team's job; extension + companion + Fir
 | ID | Title | Effort | Depends on | Cross-ref |
 |---|---|---|---|---|
 | P5-D1 | declarativeNetRequest hard-block fed by the bloom list | M | — | the only MV3-native *prevent* |
-| P5-D2 | Bloom filter runtime refresh + staleness tracking | M | D26 ✅ (one signed refresh) | — |
+| P5-D2 | Bloom filter runtime refresh + staleness tracking | M | D26 historical; renewed decision required | — |
 | P5-D3 | Firefox build FF-02→FF-04 (blocking `webRequest` + header CSP) | L | AI-4 ✅ decided (`web-ext`) | P4-03; **prereq below** |
 | P5-D4 | Native-messaging companion — design spike + scoping | M (design) / XL (build) | product decision | — |
 | P5-D5 | On-device ML offscreen-doc spike (revisits D08/D21) | M (spike) | — | — |
@@ -301,13 +305,13 @@ known-bad domains — the only MV3-native way to block rather than react (today 
 reacts/rolls back). Confirm `declarativeNetRequest` is wired at all (audit flagged it may be unused).
 *Files:* `sw/sw.ts`, `manifest.json` (DNR permission), new rule-builder from `reputation.ts`.
 
-**P5-D2 — Bloom runtime refresh.** The bloom filter is build-time-only → users run 30–90 days stale
-against hourly threat feeds (audit: **critical**). **Decided (D26): one signed, integrity-checked
-weekly refresh** — verify the signature before applying, **fail-closed to the bundled list** on any
-error, track staleness in `chrome.storage.local`, age-graceful degradation, timestamp header in the
-`.bin`. This is the single documented exception to D16; the native companion (P5-D4) remains the
-longer-term structural path. *Files:* `scripts/build-bloom-filter.mjs`, `reputation.ts`, `sw/sw.ts`,
-`manifest.json` (host permission for the one signed endpoint).
+**P5-D2 — Bloom runtime refresh.** The build-time filter can age against live
+feeds, but D26's signed-refresh concept is now deferred. The beta makes no
+runtime network calls. Any future inbound update requires renewed explicit
+product/privacy/release authorization, signature verification, fail-closed
+fallback, staleness handling, and proof that no browsing state leaves the
+device. *Files (future only):* `scripts/build-bloom-filter.mjs`,
+`reputation.ts`, `sw/sw.ts`, `manifest.json`.
 
 **P5-D3 — Firefox build (the biggest unrealized lever).** FF-01 (`browser.*` shim) + `manifest.firefox.json`
 are merged but unwired; **AI-4 is now decided → `web-ext`** (Chris, 2026-06-13), so FF-02 implements

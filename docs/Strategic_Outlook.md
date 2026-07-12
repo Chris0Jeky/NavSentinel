@@ -1,5 +1,10 @@
 # NavSentinel: Strategic Outlook
 
+> **Historical input:** superseded for current product direction by
+> [`Product_Strategy.md`](Product_Strategy.md). Keep this dated analysis for
+> provenance; do not use its roadmap, D26 runtime-refresh proposal, or
+> competitive claims as live truth.
+
 *Written 2026-07-02 against `main @ 4ad9dd4`. Companion to [Course_Correction.md](Course_Correction.md)
 (what is broken and how to sort it out — read that one too; this document is deliberately the
 optimistic half). Derived from a five-lens adversarial analysis (product strategy, detection

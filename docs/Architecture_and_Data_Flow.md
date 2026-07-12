@@ -17,6 +17,32 @@ The manifest wires these together from:
 - `extension/src/content/credential_guard.ts`
 - `extension/src/sw/sw.ts`
 
+## Maturity and release boundaries
+
+This is the architecture of a pre-release alpha. The separation and local-first
+design are substantial, but several shipped paths are not production-capable:
+
+- `ui_toast.ts` and `credential_modal.ts` currently let page-injected UI
+  authorize protection-lowering actions. Script rejection/closed roots alone do
+  not solve page-controlled host redressing. RI-01 moves proceed/allow/trust/
+  resume authority to tab-bound extension-origin UI; injected UI becomes
+  warn/cancel only.
+- The visual-sim path is non-functional and can ask `captureVisibleTab` to
+  process a different active tab's pixels when the requester is in the
+  background. Standing decision D-2026-07-03-F and RI-02 require complete
+  removal before beta.
+- The bundled reputation binary is a 52-byte reserved-domain test fixture, not a
+  production threat feed. The beta release profile is unresolved under AI-9.
+- The DNR ruleset contains localhost test rules only; it is not a product
+  backstop and its permissions/toggle should not ship in the beta.
+- Broad JS-behavior API wrappers have not completed compatibility or runtime
+  overhead measurement and should be beta-off until they do.
+
+See [`Product_Strategy.md`](Product_Strategy.md) for product and release gates,
+and [`Project_Roadmap.md`](Project_Roadmap.md) for the corrective action
+register. Passing unit/E2E tests establishes regression discipline; it
+does not establish security efficacy or a completed external audit.
+
 ## Content-script split
 
 ### Isolated-world navigation controller
@@ -73,31 +99,48 @@ The main/isolated bridge is intentionally split into three phases:
 2. main world sends a random challenge nonce back through the `MessagePort`; isolated world echoes it — only then is the bridge considered verified
 3. steady-state traffic flows over the verified `MessagePort`
 
-The important constraints are:
+The implemented constraints are:
 
 - messages must carry the NavSentinel source marker
 - messages must match the current protocol version
 - messages must match the current per-document session nonce
 - only a narrow allowlist of bridge message types is accepted
-- the challenge-response handshake prevents malicious same-page scripts from racing to install a fake bridge port
+- the challenge-response handshake verifies liveness/possession of the selected port
 - a generation counter in the isolated world prevents stale retry timers from closing successfully-established connections
 
-This keeps actionable control traffic off the old page-visible `window.postMessage` path and makes the bridge state far less spoofable than the earlier fallback design.
+Steady-state traffic is narrower than the old page-visible `window.postMessage`
+fallback, but the setup/session material is page-visible and the challenge is
+echoable. The handshake does **not** authenticate an isolated-world identity
+against hostile same-page code. `document_start` ordering is a mitigation, not
+a security boundary. Issues #175/#186 and a fresh external review remain public-
+launch gates; do not describe the bridge as unspoofable before they are resolved.
 
 ## Domain reputation (bloom filter)
 
-`extension/src/shared/reputation.ts` provides a build-time compiled bloom filter of known-bad domains from public threat feeds (URLhaus, OpenPhish). The filter ships as a static binary asset (`reputation_data.bin`) and requires no runtime network calls.
+`extension/src/shared/reputation.ts` can read a build-time compiled bloom filter
+of known-bad domains without runtime network calls. The **current shipped asset
+is a 52-byte test fixture** containing reserved example domains. It provides no
+production reputation coverage.
 
 Key characteristics:
 - MurmurHash3-based bloom filter with double hashing
 - Binary format: 16-byte header (magic, version, k, m) + bit array
-- Target false positive rate: < 0.01%
-- Size budget: < 150KB
+- Builder target false positive rate: < 0.01% (not validated on a real feed)
+- Historical data-asset budget: < 150KB (incompatible with the claimed 100K
+  cardinality and current aggregate package cap)
 - Lookup time: < 1ms
 
-The build script (`scripts/build-bloom-filter.mjs`) fetches feeds and compiles the filter. A deterministic test filter can be built with `scripts/build-test-bloom-filter.mjs`.
+The build script (`scripts/build-bloom-filter.mjs`) can fetch feeds and compile
+the filter. A deterministic test filter can be built with
+`scripts/build-test-bloom-filter.mjs`. Before real reputation ships, the project
+must decide feed licensing/provenance, update cadence, cardinality, FP target,
+safe sentinel checks, and a separate immutable-data/package budget.
 
-At runtime, `capture_isolated.ts` loads the filter on startup via `chrome.runtime.getURL` and checks destination domains during navigation decisions. A bloom filter hit adds `nrs_known_bad_domain` (+50) to the Navigation Risk Score.
+At runtime, `capture_isolated.ts` loads the bundled asset via
+`chrome.runtime.getURL` and checks destination domains during navigation
+decisions. A hit adds `nrs_known_bad_domain` (+50) to the Navigation Risk Score.
+Store copy must not call this real threat-intelligence coverage while the test
+fixture is bundled.
 
 ## DoubleClickjacking detection
 
@@ -116,6 +159,15 @@ The `nrs_double_click_hijack` factor (+40) alone reaches the prompt threshold. C
 - suite settings under `sentinelsuite:settings_v1`
 - trusted domains under `sentinelsuite:trusted_domains_v1`
 - event log under `sentinelsuite:event_log_v1`
+- prompt outcomes under `sentinelsuite:prompt_outcomes_v1`
+
+Related modules also persist:
+
+- navigation allowlist pairs (`allowlist.ts`)
+- adaptive per-domain score adjustments (`adaptive_scoring.ts`, max 200)
+- domain behavior profiles (`domain_profile.ts`, max 500)
+- navigation-category counts and bounded recent bursts (`nav_anomaly.ts`)
+- smart-default cooldown domain pairs (`smart_defaults.ts`, max 200 / 24h)
 
 It also provides:
 
@@ -123,6 +175,12 @@ It also provides:
 - trusted-domain normalization to registrable domains
 - import/export helpers
 - bounded event-log behavior based on `logLimit`
+
+`exportAll()` includes settings, allowlist, trusted domains, event log, prompt
+outcomes, and adaptive scores. It does not include domain/category profiles,
+smart-default cooldowns, or session state. Current Options controls clear the
+event log, prompt/adaptive stats, and domain profiles separately; there is no
+complete behavioral reset yet (RI-06).
 
 `extension/src/shared/allowlist.ts` manages the per-site navigation allowlist, including legacy key migration and normalization.
 
