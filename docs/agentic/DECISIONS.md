@@ -48,8 +48,15 @@ Chris delegated: *"take a stance yourself and call the shots in the best way pos
 **Decision:** **Excise**, don't fund the pivot now. Remove the dead visual-sim capture path (placeholder templates, the never-firing NRS hook, the e2e that asserts it never matches) and reclaim its budget. This is an independent beta blocker; #374 may coordinate nearby chunk work but must not delay removal. The logo-embedding pivot (P5-D6 / #246) is built **fresh when a user base justifies it**, not carried as dead scaffolding. Seeded as a concrete slice `feat/excise-visual-sim`; roadmap P4-01 status already corrected to "non-functional" (#429).
 **Why:** it is detection theater shipping inside one of the two tightest chunks; ship-don't-polish. (This is a code change with real regression risk in `capture_isolated` — done as its own reviewed slice, not rushed.)
 
-### D-2026-07-03-G — Distribution sequence (#425); dogfood starts before submission
-**Decision:** dogfood **now** (Chris installs NavSentinel in his daily browser — local-first means field breakage is invisible except via his own reports) → **unlisted** CWS beta (5–10 people) once claims are honest (✓ #429) + the real bloom filter ships (#321) + a real-Chrome regression sweep has run → **public launch** only after the bridge structural cycle (#175/#186 + a fresh bridge security review). Chris-led; agent implements the release-path pieces.
+### D-2026-07-03-G — Distribution sequence (#425); daily-profile dogfood follows integrity preflight
+**Decision:** use only an isolated development profile while RI-01–RI-07 and
+agent preflight remain open. Chris may start daily-browser dogfood after prompt
+authority and wrong-tab capture are removed, the selected beta profile is
+implemented, and a current real-Chrome regression sweep passes → **unlisted**
+CWS beta (15 invitations, target 10 activated daily-use installs) → **public
+launch** only after the bridge structural cycle (#175/#186 + a fresh external
+security review). Chris-led; agent implements the release-path pieces. #425
+must be re-bodied to this integrity-gated, manual D14/D30 sequence before use.
 **Why:** a security product shouldn't invite Show-HN-grade adversarial attention while its self-declared highest-risk seam carries a stale review.
 
 ### D-2026-07-03-H — Autonomous merge authority is standing for non-browser PRs

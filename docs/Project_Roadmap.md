@@ -76,9 +76,10 @@ maintainer chooses disclosure/ownership.
 | RI-08 | Public-launch blocker | Complete bridge design cycle and independent external security review | Agent + external reviewer | #175/#186; P3-09 | Fresh scope and exact release commit/package reviewed; findings resolved or explicitly accepted |
 | PM-01 | P0 release blocker | Clear or replace the working product name | Chris | AI-19 | Search/domain/CWS/legal decision recorded before submission |
 | PM-02 | P0 release blocker | Verify one canonical store/privacy copy against the package | Agent + Chris submission | `docs/cws-listing/` | Correct category, complete data inventory, supported claims, derived minimum Chrome, assets/fresh install complete |
-| EV-01 | P1 after integrity | Recruit and measure the first daily-use cohort | Chris-led | #425 | 15 invitations; 10 activated; 7/10 enabled D14 and 6/10 D30; every non-install/disable reason recorded |
+| EV-01 | P1 after integrity | Recruit and measure the first daily-use cohort | Chris-led | #425 — rebody before use | 15 invitations; 10 activated; 7/10 enabled D14 and 6/10 D30; every non-install/disable reason recorded |
 | EV-02 | P1 | Finish valid FP/TP methodology and reproducible runs | Agent + headed/network gate | #416/#417/#426 | Committed inputs/results and confidence-aware reporting; no tune-before-measure |
 | EV-03 | P1 | Compare additive value with current protections | Agent + headed lane | #418 | Pre-registered scenarios/configurations; wins, misses, interruption, performance, and data flow published |
+| EV-04 | P1 after integrity | Measure representative-site compatibility and runtime overhead | Agent + headed lane | Reuse #127/#420; no new issue before queue cull | Declared normal journeys have zero unexplained functional breakage/page errors; startup/action latency and CPU budgets are fixed, measured, and published before broad instrumentation is enabled |
 | OPS-01 | P1 | Rotate roadmap/orchestrator and cull duplicate epics | Agent + Chris dispositions | #437 and #439–#453 | Short current roadmap, archived history, one milestone-categorized queue |
 
 ### Existing issue dispositions
@@ -89,6 +90,10 @@ maintainer chooses disclosure/ownership.
 - #419/#421/#422: close enacted scope; retain only concrete unfinished work.
 - #423: close when the verified-claims policy lands.
 - #424: rebody as RI-02; move #245/#246 to post-beta or close them.
+- #425: replace public-launch-first/WAU wording with integrity-gated dogfood,
+  15 invitations, 10 activated installs, and manual D14/D30 measurement; no
+  public launch before the external review and no WAU KPI without an approved
+  collection mechanism.
 - #426: rebody as blocked on #417 plus a headed rerun.
 - #437: rotate this file and ORCHESTRATOR after release-integrity work.
 - #439 duplicates #420; cull or post-beta-milestone the remaining Horizon issues.
@@ -102,8 +107,8 @@ maintainer chooses disclosure/ownership.
 2. **Weeks 3–4:** package/submit unlisted; invite 15 daily-use users; record
    every failed install/onboarding and establish the 10-user activated cohort.
 3. **Weeks 5–8:** weekly check-ins; classify interventions/overrides; finish
-   corpus and comparison lanes; fix only release defects, severe compatibility,
-   or measured costly false positives.
+   corpus, comparison, and representative-site compatibility/performance lanes;
+   fix only release defects, severe compatibility, or measured costly false positives.
 4. **Weeks 9–12:** report D14/D30, corpus, and comparison evidence. If credible,
    fund only Decision Journal + recovery guidance; otherwise change segment/
    position or stop before advanced architecture.
@@ -886,7 +891,7 @@ Phase 2 is complete when:
 | P3-06 | Chrome Web Store listing | M | **in progress** | P3-01, P3-02 | Drafts exist; name, assets, release profile, fresh-install verification, and submission remain |
 | P3-07 | Release infrastructure | M | **done** | P2 gate | `infra/release` (PR #67) |
 | P3-08 | Issue templates and repo hygiene | S | **done** | -- | `docs/issue-templates` (PR #50) |
-| P3-09 | Obtain external security audit | S | **in progress** | P2 gate | Scope exists; no external review has occurred |
+| P3-09 | Prepare and obtain independent external security review | XL / external | **blocked** | RI-01–RI-07, #175/#186 | Scope preparation exists; immutable release target, outreach, review, and remediation remain |
 | P3-10 | Migrate SW ephemeral state to chrome.storage.session | M | **done** | P2-01 | `feat/sw-session-storage` (PR #63) |
 | P3-11 | jsdom/happy-dom test environment for ClickFix DOM tests | S | **done** | P2-02 | `test/jsdom-clickfix-tests` (PR #49) |
 | P3-12 | Bloom filter size monitoring in CI | S | **monitor merged; release-profile check open** | P2-03 | `infra/bloom-ci-check` (PR #48); current test-stub check does not prove a real-filter package |
@@ -1046,16 +1051,21 @@ fresh-install checks, and submission remain.
 
 **Done when**: Templates exist and render correctly on GitHub.
 
-#### P3-09: Seek volunteer security audit
+#### P3-09: Prepare and obtain independent external security review
 
 The code is clean and readable but hasn't been reviewed by an external security professional
 (Thesis Review, Section 6).
 
+This is not an S-sized implementation task. Scope preparation/outreach is
+separate from externally scheduled review and potentially cross-cutting
+remediation.
+
 **What to do**:
-- Identify potential reviewers (security-focused OSS contributors, academic contacts)
-- Prepare a focused audit scope document (bridge security, CDS evasion, storage isolation)
-- Reach out with the scope and a link to the repo
-- Address findings
+- complete RI-01–RI-07 and #175/#186, then freeze one immutable commit/package;
+- finalize the focused scope, browser/version, manifest, build inputs, and hash;
+- identify and engage an independent security reviewer;
+- publish or retain a complete report according to the agreed disclosure model;
+- resolve every finding or record an explicit owner-approved residual risk.
 
 **Done when**: At least one external security professional has reviewed the bridge design
 and CDS logic. Findings addressed or documented as accepted risks.
@@ -1310,10 +1320,12 @@ Extension bundle size budget (12 budgets enforced by `npm run check:perf-budget`
 | oauth_monitor (shared) | < 8KB | OAuth flow monitoring shared chunk |
 | domain_profile (shared) | < 6KB | Domain profiling shared chunk |
 | ui_toast (shared) | < 5KB | Toast notification shared chunk |
-| Bloom filter (reputation_data.bin) | < 150KB | Build-time compiled from threat feeds |
+| Bloom filter (reputation_data.bin) | < 150KB legacy CI ceiling | Current artifact is a test fixture, not a threat-feed product or approved allocation. Interaction-only omits it; a real-filter profile requires a new AI-9/RI-04 data + aggregate budget. |
 | Total dist (all files) | < 500KB | Aggregate cap on entire dist/ directory |
 
-See `scripts/check-perf-budget.mjs` for per-chunk enforcement details.
+See `scripts/check-perf-budget.mjs` for current per-chunk enforcement. These are
+CI guardrails, not authorization to fill each ceiling or proof that the invalid
+150KB/100K-domain reputation plan fits a release profile.
 
 ---
 

@@ -13,6 +13,7 @@ by monitoring click context and navigation patterns locally.
 |-----------|---------------|
 | `storage` | Stores settings, allow/trust lists, event and prompt-outcome history, adaptive/domain/category behavior profiles, smart-default cooldowns, and ephemeral security state. Nothing is transmitted. |
 | `declarativeNetRequest` | **Remove before beta.** The current ruleset contains localhost test stubs only and is not a user feature. |
+| `declarativeNetRequestWithHostAccess` | **Remove before beta with `declarativeNetRequest`.** It currently supports only the same disabled localhost test ruleset and is not a user feature. |
 | `webNavigation` | Monitors navigation commits to detect redirect chains, rollback suspicious navigations, and correlate gesture tokens with navigation events. |
 | `tabs` | Tracks tab creation/closure for DoubleClickjacking detection (child window monitoring) and rollback affordances. |
 | `host_permissions: <all_urls>` | Content scripts must run on all pages to detect click deception, credential risks, and overlay attacks. Interaction data is processed locally and configured security history may be stored locally; nothing is transmitted. |
