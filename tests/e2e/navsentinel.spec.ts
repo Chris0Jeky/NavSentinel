@@ -8,6 +8,7 @@ import {
   clickToastButton,
   dismissOnboarding,
   getGymBaseUrl,
+  getServiceWorker,
   waitForNavSentinelBridge,
   waitForToastMatch,
   waitForToastText
@@ -451,6 +452,109 @@ test("RW-06 legit auth popup allows the first window and blocks the second @regr
       await waitForToastText(page, "Blocked popup", 3000);
       await page.waitForTimeout(300);
       expect(context.pages().length).toBe(beforePages + 1);
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("Synthetic pointer and click events cannot mint navigation allowances @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/level1-basic-opacity.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+      await waitForNavSentinelBridge(page);
+
+      const serviceWorker = await getServiceWorker(context);
+      const allowanceMonitor = serviceWorker.evaluate(async ({ currentUrl, durationMs }) => {
+        const tabs = await chrome.tabs.query({});
+        const tab = tabs.find((candidate) => candidate.url === currentUrl);
+        if (typeof tab?.id !== "number") throw new Error("Test tab not found");
+        const key = String(tab.id);
+        const deadline = Date.now() + durationMs;
+        while (Date.now() < deadline) {
+          const stored = await chrome.storage.session.get([
+            "ns_sw:gestureUntil",
+            "ns_sw:allowUntil",
+            "ns_sw:allowTarget"
+          ]);
+          const gesture = !!(stored["ns_sw:gestureUntil"] as Record<string, unknown> | undefined)?.[key];
+          const broad = !!(stored["ns_sw:allowUntil"] as Record<string, unknown> | undefined)?.[key];
+          const target = !!(stored["ns_sw:allowTarget"] as Record<string, unknown> | undefined)?.[key];
+          if (gesture || broad || target) return true;
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+        return false;
+      }, { currentUrl: page.url(), durationMs: 1500 });
+
+      const trust = await page.evaluate(() => {
+        const button = document.createElement("button");
+        button.textContent = "Synthetic navigation trigger";
+        document.body.appendChild(button);
+
+        const pointer = new PointerEvent("pointerdown", {
+          bubbles: true,
+          button: 0,
+          ctrlKey: true
+        });
+        const click = new MouseEvent("click", {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+          ctrlKey: true
+        });
+        button.dispatchEvent(pointer);
+        button.dispatchEvent(click);
+
+        // A same-tab anchor is the exact-target path. Prevent its default action
+        // after the extension's capture listener so a vulnerable allowance stays
+        // observable in session state instead of being consumed by a commit.
+        const anchor = document.createElement("a");
+        anchor.href = `${location.origin}/synthetic-target?token=fixture#fragment`;
+        anchor.textContent = "Synthetic exact target";
+        anchor.addEventListener("click", (event) => event.preventDefault());
+        document.body.appendChild(anchor);
+        anchor.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+        return { pointer: pointer.isTrusted, click: click.isTrusted };
+      });
+      expect(trust).toEqual({ pointer: false, click: false });
+
+      // Probe across the whole allowance window instead of assuming MessagePort
+      // delivery completes within one fixed delay. On vulnerable code, any probe
+      // can spend the synthetic broad MAIN-world allowance.
+      const beforePages = context.pages().length;
+      const anyOpenSucceeded = await page.evaluate(async () => {
+        const deadline = Date.now() + 1000;
+        while (Date.now() < deadline) {
+          const opened = window.open("https://synthetic-popup.test/", "_blank");
+          if (opened !== null) {
+            opened.close();
+            return true;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+        return false;
+      });
+      expect(anyOpenSucceeded).toBe(false);
+      expect(context.pages()).toHaveLength(beforePages);
+      expect(await allowanceMonitor).toBe(false);
     } finally {
       await context.close();
     }
