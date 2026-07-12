@@ -1,6 +1,6 @@
 # Session Handoff — NavSentinel
 
-**Last updated:** 2026-07-10. Always refresh git/GitHub truth before acting.
+**Last updated:** 2026-07-12. Always refresh git/GitHub truth before acting.
 `ACTION_ITEMS.md` holds the live human-facing snapshot without pinning a SHA;
 the posture review's dated exact baseline is in `docs/Product_Strategy.md`.
 
@@ -35,6 +35,31 @@ rotation under #437.
   old 150KB/100K-domain plan cannot meet its stated 0.01% FP target or aggregate
   package cap as written.
 
+## RI-01 local progress — not complete
+
+- Local branch `fix/ri01-extension-origin-decisions` contains the reviewed
+  pending-decision broker foundation (`d2963f5`) and rejects synthetic
+  navigation allowances (`6283f49`). Product-posture docs are merged locally
+  at `f9bd121`; nothing has been pushed and no fourth PR was opened.
+- The broker binds decisions to verified tab/window/frame/document/source/top/
+  destination context, stores URL hashes plus display origins rather than exact
+  URLs, uses reason-specific actions, bounds each tab to eight 30-second
+  records, and consumes before delivery. Focused broker tests pass 13/13;
+  focused lint and TypeScript checks pass.
+- RI-01 remains **OPEN**. Service-worker handlers, active-tab sender checks,
+  content delivery, popup decision UI, and conversion of injected prompts to
+  warn/cancel-only are not wired. The physical cleanup policy for expired
+  hashed/origin metadata must also be decided before completion; current
+  access/hydration/tab-lifecycle pruning makes stale records inert but may leave
+  bounded metadata in `storage.session` until another lifecycle event.
+- Real-browser E2E and the full unit/build/performance suite were not run for
+  this branch. Windows Defender quarantined only the RI worktree copy of
+  `tests/clickfix-detector.property.test.ts` while it was read, reporting
+  `Trojan:HTML/FakeCaptcha.HNA!MTB`, `DidThreatExecute=False`, and
+  `IsActive=False`. The deletion is intentionally unstaged; do not bypass the
+  scanner. See the failure ledger and have Chris review the exact fixture before
+  any restore.
+
 ## Release blockers in order
 
 1. **RI-01:** page-injected UI currently authorizes allow/trust/resume. Move all
@@ -60,14 +85,14 @@ publish valid corpus, quietness, and current-browser comparative evidence.
 
 ## Next safe slice
 
-Prepare and review RI-01 locally as one browser-surface security slice. The
-three human-gated PR slots are already occupied, so do not open another PR until
-one stale branch is closed/deferred or Chris changes the cap. Acceptance: injected UI
-is warn/cancel only; pending actions are tab/destination-bound with a short TTL;
-only extension-origin popup/options UI can proceed/allow/trust/resume; synthetic
-input, trusted-click redressing, host mutation/removal, tab switching, and stale
-pending state cannot lower protection. Two independent adversarial reviews and
-Gate-3 are required.
+After Chris reviews the Defender detection, restore only the exact tracked
+fixture if it is confirmed expected adversarial test content and rerun the full
+branch gates. Then wire the reviewed RI-01 broker through the service worker,
+content guards, and extension popup as a second browser-surface slice. Injected
+UI must become warn/cancel-only; active-tab and exact-context checks must precede
+delivery; the real-browser adversarial lane and Gate-3 remain required. The
+three human-gated PR slots are already occupied, so do not push or open a fourth
+PR until one stale branch is closed/deferred or Chris changes the cap.
 
 ## Reliability notes
 

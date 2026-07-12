@@ -1,6 +1,6 @@
 # NavSentinel Project Roadmap
 
-*Created 2026-04-09. Truth refresh 2026-07-10.*
+*Created 2026-04-09. Truth refresh 2026-07-12.*
 
 This is the execution roadmap. [`Product_Strategy.md`](Product_Strategy.md) owns
 the product thesis, portfolio boundaries, and evidence gates; GitHub issues own
@@ -51,6 +51,18 @@ The three open PRs are not ready for human time:
 | #273 | 255 commits behind `main`; old-base CI only; refresh/recreate or defer |
 | #356 | 159 commits behind `main`; E2E red; release prerequisite after repair |
 | #399 | Draft, 70 commits behind `main`; measurement-held and not a beta blocker |
+
+**RI-01 local implementation note (2026-07-12):** the unpushed branch
+`fix/ri01-extension-origin-decisions` now has a two-round-reviewed broker
+foundation and a synthetic-navigation-allowance regression fix. RI-01 remains
+open: service-worker handlers, active-tab sender validation, exact-context
+delivery, popup actions, and warn/cancel-only injected prompts are not wired;
+real-browser/Gate-3 verification is outstanding. Expired hashes/origins are
+inert and pruned on access, hydration, or tab lifecycle, but the branch must
+either add exact-deadline physical cleanup or explicitly accept that bounded
+`storage.session` residue before RI-01 can close. Full branch verification is
+also blocked until Chris reviews a Windows Defender quarantine of the tracked
+ClickFix adversarial property fixture; see the failure ledger.
 
 The North-Star and Horizon documents are frozen option portfolios. Their 15
 Horizon issues (#439–#453) do not authorize implementation and should be culled
@@ -113,7 +125,7 @@ maintainer chooses disclosure/ownership.
    fund only Decision Journal + recovery guidance; otherwise change segment/
    position or stop before advanced architecture.
 
-Last updated: 2026-07-10
+Last updated: 2026-07-12
 
 ---
 

@@ -55,6 +55,11 @@ The most security-sensitive code lives in:
   lowering actions to page-controlled placement and scripted activation. RI-01
   blocks beta until injected UI is warn/cancel only and extension-origin UI owns
   every proceed/allow/trust/resume decision with tab/destination binding and TTL
+- the unmerged RI-01 branch has a reviewed decision-store foundation that keeps
+  only URL hashes and display origins, but it is not yet connected to the
+  service worker, content guards, or popup. Expired records are inert and
+  pruned on access/hydration/tab lifecycle; exact-deadline physical cleanup or
+  an explicit bounded-residue acceptance remains part of RI-01
 - the shipped build contains only a placeholder 15-domain `.example` reputation
   fixture. The recommended interaction-only beta omits reputation and its
   claims; if AI-9 selects a real-filter profile, feed provenance, licensing,
