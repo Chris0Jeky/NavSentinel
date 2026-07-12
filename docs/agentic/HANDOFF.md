@@ -60,7 +60,9 @@ publish valid corpus, quietness, and current-browser comparative evidence.
 
 ## Next safe slice
 
-Implement RI-01 as one browser-surface security slice. Acceptance: injected UI
+Prepare and review RI-01 locally as one browser-surface security slice. The
+three human-gated PR slots are already occupied, so do not open another PR until
+one stale branch is closed/deferred or Chris changes the cap. Acceptance: injected UI
 is warn/cancel only; pending actions are tab/destination-bound with a short TTL;
 only extension-origin popup/options UI can proceed/allow/trust/resume; synthetic
 input, trusted-click redressing, host mutation/removal, tab switching, and stale

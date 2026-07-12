@@ -17,12 +17,15 @@ The most security-sensitive code lives in:
 
 ### Main-world and isolated-world bridge
 
-- extension-runtime relaying scoped to the current tab/frame
-- challenge-response handshake verifies port ownership before trusting the connection
-- per-document session nonce rejects cross-document message replay
+- steady-state relaying uses a transferred `MessagePort` scoped to the current
+  document/frame rather than ordinary page-visible messages
+- challenge-response proves liveness and possession of the transferred port; it
+  does **not** authenticate an isolated-world identity against hostile same-page
+  code, so document-start ordering remains a mitigation pending #175/#186
+- per-document session and schema checks reject stale/cross-document traffic
 - explicit inbound message-type allowlists
 - replayable blocked actions with short-lived ids
-- no trust in arbitrary page-originated messages
+- no authorization decision should rely on an arbitrary page-originated message
 
 ### Navigation controls
 
@@ -34,7 +37,7 @@ The most security-sensitive code lives in:
 ### Credential controls
 
 - password submits are intercepted before dispatch completes
-- risky submits require explicit local user choice
+- risk and destination are evaluated before a blocked submit can resume
 - trusted domains are stored locally and scoped to registrable domains
 - paste warnings discourage silent use of saved secrets on untrusted surfaces
 
@@ -48,7 +51,15 @@ The most security-sensitive code lives in:
 
 - event logging is best-effort because `chrome.storage.local` is not transactional
 - domain normalization uses a build-time PSL snapshot; new TLDs require a data rebuild
-- the bloom filter is a build-time snapshot; the shipped build currently bundles a placeholder 15-domain `.example` test filter rather than a real known-bad-domain feed — a production feed is tracked for the first release (issue #321) and has not yet shipped — and new threats require a filter rebuild
+- page-injected navigation/credential prompts currently expose protection-
+  lowering actions to page-controlled placement and scripted activation. RI-01
+  blocks beta until injected UI is warn/cancel only and extension-origin UI owns
+  every proceed/allow/trust/resume decision with tab/destination binding and TTL
+- the shipped build contains only a placeholder 15-domain `.example` reputation
+  fixture. The recommended interaction-only beta omits reputation and its
+  claims; if AI-9 selects a real-filter profile, feed provenance, licensing,
+  cadence, cardinality, false-positive target, and package budget must first be
+  specified and verified
 - a browser extension cannot defend against a fully compromised browser or OS
 
 ## Reporting

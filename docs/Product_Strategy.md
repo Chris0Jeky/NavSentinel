@@ -231,6 +231,9 @@ All must be true:
   removal can cause denial only—not protection loss;
 - #356 is current, green, independently reviewed twice, and passes real Chrome;
 - visual-sim capture and fake DNR surfaces are absent;
+- the explicit beta capability profile leaves broad JS behavior instrumentation
+  off: fetch/XHR/beacon/password-value prototypes are not wrapped while core
+  navigation protection remains active;
 - the release profile and all store/privacy claims match the packaged artifact;
 - full-URL retention is minimized or explicitly justified and disclosed;
 - the product name has search, domain, CWS, and professional legal/trademark
@@ -276,6 +279,7 @@ evidence lanes:
 | Will people keep it? | Daily-use cohort with manual day-14/day-30 check-ins | Of 10 activated installs, at least 7 remain enabled at D14 and 6 at D30; reason for every disable/uninstall |
 | Is interruption tolerable? | Weekly check-in plus voluntary redacted export | Cohort median no more than 1 unexpected intervention/user-week; investigate every user with more than 2 |
 | Can permissions earn trust? | Fifteen invitations with install-warning/onboarding observation | At least 10 activated installs; record a reason for every non-install or abandoned onboarding |
+| Does it preserve ordinary site behavior and performance? | Representative headed journeys with page-error/breakage capture plus startup, click, submit, and navigation latency/CPU measurements | Zero unexplained functional breakages in the declared beta journey set; publish fixed latency/CPU budgets before enabling broad instrumentation |
 
 Because telemetry is prohibited, early evidence comes from CWS install state,
 opt-in check-ins, structured interviews, voluntary redacted exports, issue/store

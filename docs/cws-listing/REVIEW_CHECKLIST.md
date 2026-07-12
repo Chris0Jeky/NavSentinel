@@ -7,6 +7,8 @@
 - [ ] RI-01 injected UI is warn/cancel only; tab-bound extension-origin UI owns
   every proceed/allow/trust/resume action and resists redressing/tampering
 - [ ] RI-02 visual-sim viewport capture and placeholder assets removed
+- [ ] RI-07 beta capability profile proves fetch/XHR/beacon/password-value
+  wrappers are off while core navigation protection remains active
 - [ ] AI-9 release profile selected; package, claims, and privacy text agree
 - [ ] Open PR branches refreshed; #356 green/reviewed before human Gate-3
 - [ ] Persistent data is fully inventoried; URLs are minimized by purpose;
@@ -53,6 +55,8 @@
 - [ ] Extension-origin proceed-once and persistent allow/trust flows work and
   stale/tab-switched pending actions fail closed
 - [ ] Credential guard prompts on risky submits
+- [ ] Representative normal-site journeys record no unexplained breakage or page
+  errors and meet the declared startup/action latency and CPU budgets
 - [ ] No console errors during normal browsing
 
 ### Manifest Pre-Submission

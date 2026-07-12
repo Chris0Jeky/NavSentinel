@@ -44,13 +44,18 @@ the page's origin.
 
 ### Three Protection Modes
 
+Navigation and credential protection have independent mode selectors. Changing
+one does not disable or strengthen the other.
+
 - **Smart** (default) — Uses the standard intervention thresholds. It may warn,
   prompt, block, or roll back actions; compatibility/quietness is still being
   measured in beta.
 - **Strict** — Uses lower thresholds and therefore intervenes more often.
   Intended for controlled testing until efficacy and false-positive behavior are
   validated.
-- **Off** — Protection disabled. No navigations are blocked or prompted. Some internal scoring and event logging may still occur. Useful for debugging site compatibility.
+- **Off** — Disables only the selected navigation or credential guard; the
+  other guard keeps its own mode. Some internal scoring and event logging may
+  still occur. Useful for debugging site compatibility.
 
 ### Key Features
 

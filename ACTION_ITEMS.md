@@ -229,19 +229,20 @@ AI-1, AI-2 resolved 2026-06-05; AI-3, AI-4 resolved 2026-06-13; **AI-5 resolved 
 
 ### AI-4 — Decide Firefox build tooling for FF-02 · ✅ **DECIDED 2026-06-13 — option (b) `web-ext` + `manifest.firefox.json`**
 
-> Decided 2026-06-13 (Chris). **Chosen: (b) `web-ext` + a separate `manifest.firefox.json` and build script.** Rationale: runtime verification is human-gated (sandbox can't drive Firefox), which punishes experimental tooling — so the battle-tested Mozilla toolchain with a clean lint/build signal beats the experimental crxjs Firefox target (a) and the higher-maintenance hand-rolled Vite config (c). Also feeds the North-Star "Architecture" program (FF `blocking webRequest` escape hatch), arguing for the stable option. FF-02 should now be implemented against web-ext.
+> Decided 2026-06-13 (Chris). **Chosen: (b) `web-ext` + a separate `manifest.firefox.json` and build script.** **Superseded for scheduling on 2026-07-10:** the tooling choice remains valid history, but Firefox implementation is deferred until desktop-Chrome retention produces a real second-browser demand signal.
 
 **Why it was yours:** a tooling/architecture choice with trade-offs that shapes the whole Firefox port.
 
 **Context:** FF-01 (`browser.*` shim) merged (#173). FF-02 needs a Vite Firefox build; `@crxjs/vite-plugin` (v2.4.0) Firefox support is experimental. Options considered: (a) crxjs Firefox target; **(b) `web-ext` + separate `manifest.firefox.json` — CHOSEN**; (c) hand-rolled second Vite config + dual build scripts.
 
-**Next:** implement FF-02 against web-ext, then FF-03/FF-04 stack on top.
+**Next:** none before the post-retention Firefox activation gate. If that gate
+opens, implement FF-02 against web-ext, then reassess FF-03/FF-04.
 
 ---
 
 ### AI-5 — Visual-sim brand assets · ✅ **RESOLVED 2026-06-19 — public Phishpedia logo set approved**
 
-> **RESOLVED 2026-06-19 (Chris):** use the **public Phishpedia reference logo set** for the logo-embedding model (P5-D6 / #246, on-device-ML host P5-D5 / #245). The asset-approval question is settled — no further human input needed; implementation may proceed against the Phishpedia reference list. Decision history (the 2026-06-13 pivot) retained below.
+> **RESOLVED 2026-06-19 (Chris):** use the **public Phishpedia reference logo set** if a future logo-embedding model is authorized. **Superseded for scheduling on 2026-07-10:** RI-02 removes the current visual-sim path; logo embeddings are a fresh post-retention feature, so implementation must not proceed now. Decision history is retained below.
 
 > **DECIDED 2026-06-13 (Chris): pivot to logo-embedding (D24).** The original "sanctioned brand login *screenshots* for pHash" ask is **moot** — perceptual hashing is retired to a cheap pre-filter. **AI-5 re-scopes to:** supply/sanction a set of reference brand **logos** for the Siamese/CNN embedding model (or confirm using a public logo set, e.g. the Phishpedia reference list). This is now a smaller, lower-stakes asset task feeding **P5-D6 (#246)** + the on-device-ML host **P5-D5 (#245)**. Tracked as re-scoped-OPEN (logo set still to be confirmed), not blocking near-term Phase-5 work. Original deferral context retained below.
 
@@ -266,6 +267,6 @@ AI-1, AI-2 resolved 2026-06-05; AI-3, AI-4 resolved 2026-06-13; **AI-5 resolved 
 - **AI-1 — Gate 3 manual Chrome test · WAIVED → DEFERRED · 2026-06-05.** Chris waived the manual-test gate for the 11-PR batch; merges proceeded on fresh-green CI + 2× independent adversarial review. Manual checks preserved as a deferred regression watchlist in `docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md` (run on next build + load).
 - **AI-2 — Merge order + execution · DONE · 2026-06-05.** All 11 D-series PRs merged oldest-first (#180, #182, #183, #185, #187, #189, #190, #191, #193, #194, #195). #182 merged last after a docs-only conflict (resolved by taking `main`; verified tsc clean / lint 0/0 / 2298 unit tests + green CI on the merge head). `main` @ `4bd60ce`, 0 open PRs, branches pruned.
 - **AI-3 — Fate of `fix/jsb-stale-todos-and-tests` · RESOLVED (superseded) · 2026-06-13.** Verified on `main` @ `da400fb`: branch gone (local + origin), stale TODO markers gone from `js_behavior_monitor.ts`, and `computeJsBehaviorScore` now a live implemented function (`js_behavior_state.ts:67`). Both branch intents landed via later merges; nothing to do.
-- **AI-4 — Firefox build tooling for FF-02 · DECIDED · 2026-06-13.** Chose **(b) `web-ext` + separate `manifest.firefox.json`** over experimental crxjs Firefox (a) and hand-rolled Vite config (c), because FF runtime verification is human-gated and rewards a stable, well-documented toolchain. FF-02 to be implemented against web-ext.
-- **AI-5 — Visual-sim brand assets · RESOLVED · 2026-06-19.** Chris approved the **public Phishpedia reference logo set** for the logo-embedding model (P5-D6 / #246; host P5-D5 / #245). Asset-approval settled; implementation may proceed. (Path history: 2026-06-13 pivot from pHash screenshots → logo-embedding per D24.)
+- **AI-4 — Firefox build tooling for FF-02 · DECIDED · 2026-06-13; scheduling superseded 2026-07-10.** `web-ext` remains the chosen tooling if the post-retention Firefox demand gate opens; no implementation is active now.
+- **AI-5 — Visual-sim brand assets · RESOLVED · 2026-06-19; scheduling superseded 2026-07-10.** The Phishpedia set remains the approved future input, but RI-02 removes the current path and no logo-embedding implementation is active before retention evidence.
 - **AI-6 — Manual Gate-3 on PR #249 + merge · RESOLVED (Gate-3 WAIVED) · 2026-06-19.** Chris waived Gate-3 for the #249/#263/#265 batch and authorized the agent merge. **#249 merged** (replay-grade `PromptOutcomeEntry`) on green CI + 2 adversarial review rounds. Manual-browser check preserved on the deferred watchlist `docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md`. Standing posture confirmed: agent may autonomously merge non-browser PRs; browser-surface PRs still hold for Gate-3.
