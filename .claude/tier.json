@@ -6,11 +6,11 @@
   "model_routing": { "harness_and_review": "top", "slices": "mid", "maintenance": "cheap" },
   "budgets": { "standing_context_tokens": 3000, "session_baseline_tokens": null },
   "human_todo": "ACTION_ITEMS.md",
-  "last_reviewed": "2026-07-06",
+  "last_reviewed": "2026-07-13",
   "notes": [
     "human_todo alias: ACTION_ITEMS.md is the grandfathered HUMAN_TODO for this repo (recorded in ~/.claude/ESTATE.md).",
     "authority.merge is 'gated' not the T2 default 'free': repo posture (docs/agentic/DECISIONS.md, ACTION_ITEMS.md) is agent-merge OK for non-browser PRs after 2 adversarial rounds + green CI, but browser-surface PRs hold for human Gate-3.",
-    "Floor = canonical templates/hooks/dispatch.py (PreToolUse only), copied verbatim so `harness audit` can diff it against the template. Repo-tier events (SessionStart orientation ping, PostToolUse agentic-nudge, PostToolUseFailure autolog) stay in scripts/agent_hooks/ per repo convention and are NOT merged into dispatch.py.",
+    "One floor per runtime: Claude receives the canonical global `~/.claude/hooks/dispatch.py`; Codex's sole project PreToolUse adapter pins and invokes that same dispatcher with `--runtime codex`. Repo-local `.claude/hooks/{dispatch,smoke_test}.py` are exact agent-harness e8f79a7 v1.4.1 CI/audit fixtures, not a second runtime hook. Repo-tier SessionStart/PostToolUse handlers stay in scripts/agent_hooks/.",
     "Stricter-local tripwires live in .claude/settings.json deny (npm publish / chrome-webstore-upload / web-ext sign / git filter-branch / chmod -R 777) — these are release/permission tripwires the irreversible floor deliberately does not cover.",
     "Dual-runtime (Claude + Codex): .agents/skills mirrors .claude/skills; drift is enforced by scripts/agent_hooks/validate_skills.py (npm run agent:skills:validate), so the forked-mirror risk in BLUEPRINT §7 is controlled.",
     "GitHub branch protection on main is ABSENT as of 2026-07-06 (the real wall per BLUEPRINT law 5). Tracked as a human action in ACTION_ITEMS.md; until enabled, the floor blocks bare force-push everywhere but --force-with-lease to main is allowed at T2."
