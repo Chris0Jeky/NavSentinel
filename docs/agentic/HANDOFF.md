@@ -37,13 +37,13 @@ rotation under #437.
   frozen option portfolio, not active work.
 - Stale PRs #273 and #399 were closed on 2026-07-13 with re-entry paths and
   issue anchors preserved. #356 remains the sole active legacy browser-surface
-  PR; it is 159 commits behind with E2E red. Human Gate-3 would be premature.
+  PR; it is stale with E2E red. Human Gate-3 would be premature.
 - Package is about 474/500KB while reputation is a 52-byte test fixture. The
   old 150KB/100K-domain plan cannot meet its stated 0.01% FP target or aggregate
   package cap as written.
-- Product-posture and guided-workflow work is published through branch/PR
-  history; verify live `main` before assuming merge. The RI-01 checkpoint at
-  `5514288` is remotely backed up without the unstaged Defender deletion; its
+- Product-posture and guided-workflow work merged through PR #454; verify live
+  `main` rather than pinning its SHA. The RI-01 checkpoint branch is remotely
+  backed up without the unstaged Defender deletion; verify its SHA live. Its
   worktree remains dirty only by the Defender-quarantined fixture.
 - The RI-01 broker foundation is unit-tested but not wired into production.
   Only the synthetic-navigation allowance rejection changes active runtime
