@@ -280,6 +280,7 @@ def test_post_tool_use_alt_worktree_path() -> None:
     is_agentic_path = namespace["is_agentic_path"]
     with tempfile.TemporaryDirectory() as tmp:
         alternate_root = Path(tmp) / "NavSentinel-ri01"
+        alternate_root.mkdir(parents=True, exist_ok=True)
         normalized = normalize_path(alternate_root / ".codex" / "hooks.json", alternate_root)
         if normalized != ".codex/hooks.json" or not is_agentic_path(normalized):
             raise AssertionError(
