@@ -30,7 +30,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Bash|Edit|Write|mcp__.*",
+        "matcher": "Bash|Edit|Write|apply_patch|mcp__.*",
         "hooks": [
           {
             "type": "command",

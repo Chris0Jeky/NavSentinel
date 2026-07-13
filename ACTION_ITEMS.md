@@ -8,9 +8,11 @@
 
 **Purpose:** the running list of things only *you* (Chris) can do — and the context an agent needs to not lose the thread between sessions. Agents flag the open items in every summary; you clear them by saying so.
 
-**Last updated:** 2026-07-10 — full product/architecture/market posture
-review. Product thesis: `docs/Product_Strategy.md`. Corrective program:
-`docs/Project_Roadmap.md`. Standing decisions: `docs/agentic/DECISIONS.md`.
+**Last updated:** 2026-07-13 — product-posture/RI-01 audit plus guided
+human-action workflow and preservation pass. Product thesis:
+`docs/Product_Strategy.md`. Corrective
+program: `docs/Project_Roadmap.md`. Standing decisions:
+`docs/agentic/DECISIONS.md`.
 
 > **Why this file exists separately from the usual docs:** it is the durable human-task
 > register while status-doc PRs are in flight. `docs/agentic/HANDOFF.md`,
@@ -21,7 +23,7 @@ review. Product thesis: `docs/Product_Strategy.md`. Corrective program:
 
 ---
 
-## Current state snapshot (verified 2026-07-10)
+## Current state snapshot (live state rechecked 2026-07-13)
 
 At the 2026-07-10 verification point, `main` matched `origin/main`. Run
 `git rev-parse main`, `git rev-parse origin/main`, and live `gh` checks before
@@ -29,6 +31,17 @@ acting; the exact audit baseline lives in `docs/Product_Strategy.md`, not this
 live snapshot. Typecheck, lint, build, version check, 2,874 unit tests (95
 files), perf 12/12, and smoke E2E passed locally; current-main GitHub CI was
 green. v0.4.0 had no tag, GitHub release, CWS release, or external-user evidence.
+
+Live recheck on 2026-07-13 found 75 open issues, no tags/releases/classic branch
+protection or repository rulesets, and no milestones or assignees. Verify the
+current `main` SHA live rather than pinning it here. Stale PRs #273 and #399
+were closed with explicit re-entry paths; #356 remains the only active legacy
+browser-surface PR. The
+product-posture and guided-workflow work is preserved in branch history; verify live
+branch/PR/`main` state before assuming publication or merge. The RI-01 worktree
+checkpoint at `5514288` is remotely backed up without the unstaged Defender
+deletion; its worktree is dirty only because Windows Defender quarantined one
+tracked adversarial test fixture. These changes do not change shipped product state.
 
 - **Product posture:** strong pre-release alpha, not a market-ready or
   efficacy-validated security product. `docs/Product_Strategy.md` owns the
@@ -39,7 +52,8 @@ green. v0.4.0 had no tag, GitHub release, CWS release, or external-user evidence
   (RI-01); visual-sim can process the wrong active
   tab and has no production value (RI-02/#424); frozen MAIN-world prototypes in
   #356 are site-breaking; fake DNR and unmeasured JS behavior should be absent
-  or off; stored URLs require minimization (RI-05/RI-06).
+  or off; stored URLs require minimization (RI-05/RI-06); #175/#186 bridge
+  identity/recovery and #455 pre-collection disclosure/consent now block beta.
 - **Release/profile blockers:** the 52-byte reputation test filter plus the
   current ~474/500KB package makes the old "150KB/100K domains" plan
   impossible as written. AI-9/AI-16 must choose the recommended interaction-
@@ -47,74 +61,131 @@ green. v0.4.0 had no tag, GitHub release, CWS release, or external-user evidence
 - **Brand blocker:** the exact name `NavSentinel` is already used by an active
   GNSS security product. AI-19 requires clearance or an early rename before
   CWS submission; this is a risk flag, not a legal conclusion.
-- **Open PRs at WIP cap 3:** #273 is 255 commits behind `main`; #356 is 159
-  commits behind and E2E red; #399 is a draft 70 commits behind. **Do not spend
-  human Gate-3 time until an agent refreshes/fixes/re-reviews them.** #399 is
-  not a beta blocker; #273 may be recreated or deferred; #356 is a prerequisite.
-- **Portfolio:** 74 open issues, none assigned or milestoned; #439–#453 are 15
+- **Legacy PR cleanup:** #273 and draft #399 were closed on 2026-07-13 rather
+  than merged from stale bases; their commits, discussions, and open issue
+  anchors remain. #356 is still 159 commits behind with E2E red and is the only
+  active legacy browser-surface PR. **Do not spend human Gate-3 time until an
+  agent refreshes, fixes, and re-reviews it.**
+- **Portfolio:** 75 open issues, none assigned or milestoned; #439–#453 are 15
   frozen Horizon proposals. No new feature/epic issue seeding until the queue is
   culled and milestone-categorized.
-- **Infrastructure:** branch protection remains absent (`404 Branch not
-  protected`). AI-17 remains open. Codex hook trust remains AI-18.
+- **Infrastructure:** classic branch protection remains absent (`404 Branch not
+  protected`) and the rulesets API returns `[]`. AI-17 remains open. Codex hook
+  trust remains AI-18. GitHub private vulnerability reporting is enabled and
+  linked from `SECURITY.md`.
+- **Local verification blocker:** Defender quarantined only
+  `C:\Users\Public\codex-shell-home\NavSentinel-ri01\tests\clickfix-detector.property.test.ts`
+  as `Trojan:HTML/FakeCaptcha.HNA!MTB`; it reports `DidThreatExecute=False` and
+  `IsActive=False`. AI-20 owns the human review. Do not disable Defender or add
+  a broad exclusion.
 - **Historical snapshots** (pre-2026-07-03, ~28 session bullets) archived to [`docs/archive/ACTION_ITEMS_snapshots.md`](docs/archive/ACTION_ITEMS_snapshots.md).
 
 ---
 
 ## Action items
 
-> **Gate-queue hold (2026-07-10):** do not run the old branch checkout guides
-> for AI-8, AI-13, or AI-14. Their branches must first be refreshed from current
-> `main`, re-reviewed twice, and rerun through CI; #356 is currently red. AI-15
-> remains BLOCKED until an agent posts a current preflight handoff.
+**Guided resolution cursor:** `AI-16` (`Resume at: AI-16`; the next
+conversational label is `q-1`). Current ready order is AI-16 -> AI-9 -> AI-20 ->
+AI-17 -> AI-19 -> AI-18. The hook-editing slice is now committed; AI-18 remains
+human-owned until its exact definitions are reviewed and trusted. The `q-N`
+label may reset between conversations; the `AI-N` identifier is durable.
+AI-15/AI-8/AI-13/AI-14 remain visible but are not actionable questions until
+agent preflight clears them.
+
+> **Gate-queue hold (refreshed 2026-07-13):** do not run the old branch checkout
+> guides for AI-8, AI-13, or AI-14. AI-8 and AI-14 require new current-main
+> slices after their stale PRs were closed; AI-13/#356 must be refreshed,
+> re-reviewed twice, and rerun through CI. AI-15 remains BLOCKED until an agent
+> posts a current preflight handoff.
 
 **🚨 OPEN: AI-19 — Clear or replace the working product name before CWS
 submission.** An active TruNav GNSS anti-spoofing product uses the exact name
 `NavSentinel` and was publicized by the US Department of Transportation in May
 2026. This is not a legal conclusion, but shipping under the name without a
 search/domain/CWS/trademark review creates avoidable brand and discovery risk.
-**Guide:** (1) search UK/US and intended-market trademark databases and company/
-product usage; (2) check practical domain, GitHub, social, and CWS availability;
-(3) obtain professional advice if a public/commercial launch is intended; (4)
-record **keep** or **rename**. If renaming, do it before screenshots, CWS
-submission, and external beta invitations. Then tell me "AI-19 done" with the
-decision.
+**Recommendation:** rename early. Reply `AI-19 rename; generate shortlist` and
+the agent can generate and preliminarily screen replacements, or reply
+`AI-19 keep; begin formal clearance`. For either path: (1) define intended
+territories and browser-security goods/services; (2) search exact, similar,
+phonetic, joined, and spaced variants in the [UK IPO](https://www.gov.uk/search-for-trademark),
+[USPTO](https://www.uspto.gov/trademarks/search), [WIPO Global Brand
+Database](https://www.wipo.int/en/web/global-brand-database), and EUIPO if EU
+distribution matters; (3) search general product/company usage, Companies
+House, GitHub, Chrome Web Store, domains, and relevant handles; (4) save dated
+results and potentially conflicting classes/goods; (5) obtain professional
+trademark advice before a commercial/public launch; and (6) record **keep** or
+**rename**. If renaming, coordinate code, manifest, store copy, assets,
+screenshots, docs, and repository metadata before invitations or submission.
+Then tell the agent `AI-19 done: <decision>`.
 
 **OPEN: AI-18 — Review and trust the new Codex project hooks.** The Codex parity
 setup adds `.codex/hooks.json` for session orientation, the shared irreversible
 command floor, agentic-change verification reminders, and sanitized failure
 capture. Codex deliberately skips new or changed non-managed hooks until their
-exact definitions are trusted. **Guide:** start a new Codex session in this
-repository, run `/hooks`, inspect the project-local entries from
-`.codex/hooks.json`, and choose **Trust** if they match the committed file. Run
-`/hooks` again after future hook edits because trust is hash-based. Then tell me
-"AI-18 done".
+exact definitions are trusted. **Human-only guide (run after this agentic slice
+is final):** (1) start a fresh Codex session in the canonical repository; (2)
+run `/hooks`; (3) compare every project entry with `.codex/hooks.json` —
+SessionStart runs `session_start.py`, PreToolUse Bash runs
+`.claude/hooks/dispatch.py --event pre`, and PostToolUse runs
+`post_tool_use.py` plus sanitized `post_tool_failure.py`; (4) confirm each path
+is repository-root-relative and no unexpected command exists; (5) choose
+**Trust** for those exact project hooks; (6) run `/hooks` again and confirm they
+are trusted/enabled; and (7) restart once to exercise SessionStart. Then reply
+`AI-18 done`. Trust is definition-hash-based, so repeat after future hook
+definition changes.
 
 **🚨 BLOCKED: AI-15 — Run the headed release session only after agent
-preflight.** The prior 60–90 minute one-sitting guide is withdrawn: all three
-PRs are heavily stale, #356 is red, the reputation/package plan needs a product
-decision, and new release-integrity blockers precede manual testing. #399 is
-stale but remains deferred measurement work, not a beta prerequisite. **Do not
-checkout or test the current PR branches yet.** Agent preflight must first:
+preflight.** The prior 60–90 minute one-sitting guide is withdrawn: stale PRs
+#273 and #399 were closed, #356 remains stale/red, the reputation/package plan
+needs a product decision, and new release-integrity blockers precede manual
+testing. **Do not checkout or test #356 yet.** Agent preflight must first:
 (1) fix RI-01; (2) refresh/fix #356 and recreate or defer #273, with two fresh
 reviews and green CI; (3) excise visual-sim and remove fake DNR; (4) complete
 RI-06's purpose-specific data minimization/reset; (5) complete RI-07's explicit
-JS-behavior beta-off profile; (6) prepare the chosen AI-9 release profile; and
-(7) provide one current headed checklist. Then split human work into a browser
+JS-behavior beta-off profile; (6) complete #175/#186 bridge integrity and #455
+pre-collection consent; (7) prepare the chosen AI-9 release profile; and (8)
+provide one current headed checklist. Then split human work into a browser
 session, any network/feed session, an overnight measurement run, and a short
 result review. Read `docs/Product_Strategy.md` first. This item becomes
 actionable only when the preflight handoff explicitly says so.
 
 **🆕 OPEN: AI-16 — Ratify or amend the standing product/process decisions.**
-The 2026-07-10 posture review extends the July 3 direction: narrow unlisted beta,
+The July 10 posture review and July 13 merge-gate corrections extend the July 3
+direction: narrow unlisted beta,
 interaction-only by default unless real reputation is fully specified, release
 integrity before human Gate-3, frozen Horizon/North-Star work, evidence before
 claims, and one post-beta visible bet. **Guide:** read the verdict, Beta Product
 Profile, and Portfolio sections of `docs/Product_Strategy.md`, then skim
-`docs/agentic/DECISIONS.md`. Reply "ratify decisions" or name any amendment.
+`docs/agentic/DECISIONS.md`. **Recommended reply:** `AI-16 ratify the July 3,
+July 10, and July 13 decisions, including headed Chrome as the primary Gate-3
+once operational, with manual spot-checks retained.` Otherwise name only the
+amendments.
 AI-9's release-profile choice and AI-19's name choice still require explicit
 answers; the reversible prioritization is already the working posture.
 
-**🆕 OPEN: AI-17 — Enable GitHub branch protection on `main` (the harness wall).** The 2026-07-06 harness migration to the estate T2 blueprint found `main` has **no server-side branch protection** (`gh api repos/Chris0Jeky/NavSentinel/branches/main/protection` → 404). The local Claude deny floor blocks bare force-push, but it is a *tripwire*, not a *wall*: Codex and any non-hooked client bypass it, and `--force-with-lease origin main` is allowed at T2. The real wall is GitHub branch protection. **Guide:** GitHub → repo Settings → Branches → Add branch protection rule for `main`: (1) **Require status checks to pass before merging** → select `Build / Unit` and `E2E`; (2) optionally **Require a pull request before merging** (matches the current workflow); (3) enable **Do not allow force pushes** and **Do not allow deletions**. (CLI equivalent: `gh api -X PUT repos/Chris0Jeky/NavSentinel/branches/main/protection -f ...`.) Until it is on, agents must never force-push `main` — that is convention only. Then tell me "AI-17 done".
+**🆕 OPEN: AI-17 — Enable GitHub branch protection on `main` (the harness
+wall).** Live verification still returns `404 Branch not protected`. The local
+deny floor is a tripwire, not a server-side wall; non-hooked clients can bypass
+it. Until protection exists, never force-push `main`.
+
+**Recommended:** reply `AI-17 apply recommended protection` and an
+authenticated agent can apply and verify this reversible repository setting.
+If doing it yourself:
+
+1. Open GitHub → **Settings** → **Branches** → **Add branch protection rule**.
+2. Target `main` and require pull requests.
+3. Require the branch to be current; select only `Build / Unit` and `E2E`.
+4. Require conversation resolution and apply the rule to administrators.
+5. Leave force pushes and branch deletion disabled.
+6. Do not require an approval count that deadlocks a solo maintainer, the
+   scheduled Stress job, or the normally skipped release job.
+7. Save, then run
+   `gh api repos/Chris0Jeky/NavSentinel/branches/main/protection`. Confirm strict
+   checks, admin enforcement, conversation resolution,
+   `allow_force_pushes=false`, and `allow_deletions=false`.
+
+Official reference: [GitHub protected branches](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches).
+Then tell the agent `AI-17 done`.
 
 **🚨 OPEN: AI-9 — Choose the beta reputation profile (#321).** The current
 asset is a 52-byte test fixture. The old instruction to simply run
@@ -129,11 +200,37 @@ sentinel checks, and reproducible build. Reply "AI-9 interaction-only" or
 "AI-9 real-filter" (plus constraints). Do not build/commit a feed artifact until
 that decision is recorded.
 
-**BLOCKED: AI-8 — PR #273 neutral-chip Gate-3.** The presentation intent is
-still reasonable, but the branch is 255 commits behind `main`; its old reviews,
-CI, and checkout guide are not actionable. An agent must recreate/refresh or
-defer the tiny change, run two fresh reviews and CI, then post a new visual-check
-guide. Do not checkout or merge #273 until that handoff exists.
+**🚨 OPEN: AI-20 — Review the Defender quarantine and decide the exact
+fixture's fate.** The 2026-07-12 alert is
+`Trojan:HTML/FakeCaptcha.HNA!MTB`; Defender reports successful remediation,
+`DidThreatExecute=False`, and `IsActive=False`. The affected path is exactly
+`C:\Users\Public\codex-shell-home\NavSentinel-ri01\tests\clickfix-detector.property.test.ts`.
+The intact canonical copy matches tracked Git blob
+`434bbe10e17f754f62db913f28015bb327fe23f4` and SHA-256
+`BC317AB1D1B74AE9D8F9D80328818FED2FC304FFA0FEDDC4DBCB9991653AA769`.
+The file is a property-test keyword corpus for fake-CAPTCHA/ClickFix command
+detection; that strongly suggests a signature collision, but it is not a legal
+or malware-vendor determination.
+
+**Human-only guide:** (1) open **Windows Security -> Virus & threat protection
+-> Protection history**; (2) expand the 12 July 2026 alert and verify the exact
+name and path above; (3) if you accept it as the expected tracked test content,
+choose **Restore**; (4) if Defender immediately detects it again, re-verify the
+same exact name/path and choose **Allow on device** for that detection only; (5)
+do not disable Defender and do not add a repository/folder exclusion; (6) tell
+the agent `AI-20 restore exact fixture`. The agent will then verify both hashes
+and rerun full branch gates. If you prefer not to restore it, reply
+`AI-20 leave quarantined`; the agent will replace the signature-triggering test
+representation while preserving coverage, then rescan and rerun the gates.
+Microsoft references: [Protection History](https://support.microsoft.com/en-us/windows/protection-history-f1e5fd95-09b4-46d1-b8c7-1059a1e09708)
+and [file submission](https://www.microsoft.com/wdsi/filesubmission).
+
+**BLOCKED: AI-8 — Neutral-chip Gate-3 after closed PR #273.** The presentation
+intent is still reasonable, but stale PR #273 was closed on 2026-07-13 with its
+commit and two unresolved review threads preserved. An agent must recreate or
+defer the tiny change from current `main`, resolve both findings, run two fresh
+reviews and current CI, then post a new visual-check guide. Do not reuse the old
+branch checkout guide.
 
 **AI-10 — Gate-3 + merge the SPA-breakage fix (#352) · ✅ RESOLVED 2026-06-23.** Chris ran the manual Chrome check ("manual checks on chrome for #352 done, it seems to be working fine now") → **#352 merged into `main`** (`#347` pushState de-harden + `#348` reputation WAR). The claude.ai grey screen / infinite-load and the per-page `reputation_data.bin`/`pushState` console errors are fixed; top-frame reputation is re-enabled.
 
@@ -145,11 +242,12 @@ is red. An agent must merge current `main`, fix the failure, complete two fresh
 adversarial reviews, and post a current compatibility/gating checklist. Do not
 checkout, test, or merge the present branch.
 
-**🚨 BLOCKED: AI-14 — #399 OAuth tradeoff measurement.** The draft is 70
-commits behind `main` and its old CI/counts are stale. It is not a beta blocker.
-Keep it draft until #417 supplies valid methodology and an agent refreshes the
-branch, runs two reviews, and posts a reproducible headed measurement plan. Do
-not checkout or merge the current branch.
+**🚨 BLOCKED: AI-14 — OAuth tradeoff measurement after closed PR #399.** The
+measurement-held draft was closed on 2026-07-13 rather than merged from a stale
+base. It is not a beta blocker. Keep #223 blocked until #417 supplies valid
+methodology and an agent creates a current slice, runs two reviews, and posts a
+reproducible headed measurement plan. Do not use the closed branch as a current
+test or merge target.
 
 **AI-12 — Top-site FP relief + D1 (#350 → PR #354) · ✅ RESOLVED 2026-06-23 — MERGED.** Chris manually confirmed the relief works on LinkedIn ("tested it on linkedin and it seemed to work fine now") = his measure/Gate-3 in lieu of the full `measure:fp` run (which needs headed Chromium + live Tranco, sandbox-can't). **#354 merged into `main`** (`c4426cf`): `getTierAdjustedBlockThreshold` now relieves TOP_SITE + CDS-only (benign-structural whitelist) by `NRS_TOP_SITE_CDS_RELIEF`; trust list grew 24→42 with safe `includeSubdomains`. Green CI (Build/Unit + E2E) on the main-merged head. **Follow-up:** `+20` is an unvalidated starting value; do not tune it again without the valid #417/#416 FP/TP evidence required by D25.
 

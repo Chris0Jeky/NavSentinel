@@ -1,6 +1,6 @@
 # Session Handoff — NavSentinel
 
-**Last updated:** 2026-07-12. Always refresh git/GitHub truth before acting.
+**Last updated:** 2026-07-13. Always refresh git/GitHub truth before acting.
 `ACTION_ITEMS.md` holds the live human-facing snapshot without pinning a SHA;
 the posture review's dated exact baseline is in `docs/Product_Strategy.md`.
 
@@ -12,28 +12,64 @@ rotation under #437.
 
 ## Open human items — surface all of these
 
-- **AI-19:** clear or replace the product name before CWS submission.
-- **AI-18:** review/trust the project-local Codex hooks.
-- **AI-17:** enable `main` branch protection.
-- **AI-16:** ratify/amend the July 3 + July 10 standing decisions.
+- **Resume at: AI-16** (`q-1` in the current guided conversation).
+- **AI-16:** ratify/amend the July 3, July 10, and July 13 standing decisions.
 - **AI-9:** choose interaction-only or real-filter beta profile.
+- **AI-20:** review the Defender quarantine and restore/allow only the exact
+  tracked fixture, or choose the coverage-preserving rewrite path.
+- **AI-17:** enable `main` branch protection.
+- **AI-19:** clear or replace the product name before CWS submission.
+- **AI-18: READY:** the hook-editing slice is committed; review/trust the exact
+  project-local Codex hook definitions before relying on them.
 - **AI-15: BLOCKED** until agent preflight is complete.
 - **AI-8 / AI-13 / AI-14: BLOCKED** pending current branches, two fresh reviews,
   green CI, and replacement human guides.
 
 ## Verified state
 
-- v0.4.0; no tag, GitHub release, CWS release, branch protection, or external-
-  user evidence.
+- v0.4.0; no tag, GitHub release, CWS release, classic branch protection,
+  repository ruleset, or external-user evidence.
+- GitHub private vulnerability reporting is enabled and `SECURITY.md` links the
+  verified private advisory route.
 - Main: typecheck, lint, build, version check, 2,874 unit tests (95 files), perf
   12/12, smoke E2E, and current GitHub CI green.
-- 74 open issues with no milestone/assignee; 15 Horizon issues #439–#453 are a
+- 75 open issues with no milestone/assignee; 15 Horizon issues #439–#453 are a
   frozen option portfolio, not active work.
-- Open PRs at WIP cap 3: #273 (255 commits behind), #356 (159 behind and E2E
-  red), #399 (draft, 70 behind). Human Gate-3 would be premature.
+- Stale PRs #273 and #399 were closed on 2026-07-13 with re-entry paths and
+  issue anchors preserved. #356 remains the sole active legacy browser-surface
+  PR; it is 159 commits behind with E2E red. Human Gate-3 would be premature.
 - Package is about 474/500KB while reputation is a 52-byte test fixture. The
   old 150KB/100K-domain plan cannot meet its stated 0.01% FP target or aggregate
   package cap as written.
+- Product-posture and guided-workflow work is published through branch/PR
+  history; verify live `main` before assuming merge. The RI-01 checkpoint at
+  `5514288` is remotely backed up without the unstaged Defender deletion; its
+  worktree remains dirty only by the Defender-quarantined fixture.
+- The RI-01 broker foundation is unit-tested but not wired into production.
+  Only the synthetic-navigation allowance rejection changes active runtime
+  behavior; its new real-browser E2E has not run.
+
+## Local review evidence
+
+- **Audit caveat:** the earlier posture/RI handoff claims 11 documentation
+  findings and two RI-01 review rounds, but the inspected local branches do not
+  preserve a per-finding artifact. Treat those counts as process history, not
+  independently auditable merge-gate evidence.
+- **Agentic workflow round 1 (independent contract/parity lens, 2026-07-12):**
+  reviewed the new mirrored skill, root routing, question protocol, hook
+  dispatch, queue/status parity, and validation. Fixed four findings: Codex
+  `apply_patch` did not match PostToolUse, Claude lacked `Edit`/`Write`, `q-N`
+  increment/reset semantics were incomplete, and duplicate/conflicting AI IDs
+  or HANDOFF status drift could pass silently.
+- **Agentic workflow round 2 (fresh recovery/adversarial lens, 2026-07-12):**
+  reviewed the updated cursor recovery boundary and harness behavior. Fixed
+  stale, blocked, nonexistent, and absent-cursor fail-open paths; added positive
+  coverage for an all-blocked queue; and clarified that AI-18 becomes ready
+  only after hook definitions are final and unchanged. Those definitions are
+  now committed. Final re-review: clean.
+- **Forward-test lens:** exercised the sequence as a maintainer handoff. The
+  `q-1` / AI-16 guide, exact reply, durable `AI-N` resume semantics, and
+  AI-18 conditional readiness are internally consistent after fixes.
 
 ## RI-01 local progress — not complete
 
@@ -65,34 +101,40 @@ rotation under #437.
 1. **RI-01:** page-injected UI currently authorizes allow/trust/resume. Move all
    protection-lowering decisions to tab/destination-bound extension-origin UI;
    script rejection/closed roots alone do not stop trusted-click redressing.
-2. **RI-03/#356:** refresh branches, fix red CI, run two fresh reviews; recreate
-   or defer #273 and keep #399 outside the beta blocker set.
+2. **RI-03/#356:** refresh the branch, fix red CI, run two fresh reviews;
+   recreate or defer #273's intent and keep closed #399 outside beta blockers.
 3. **RI-02/#424:** excise visual-sim. It has no production match path and can
    process a different active tab's pixels.
 4. **RI-05/RI-06:** remove fake DNR; apply purpose-specific URL/data
    minimization, TTLs, controls, and complete behavioral reset.
 5. **RI-07:** add the explicit beta capability profile and prove broad JS
    behavior wrappers are off while core navigation protection remains active.
-6. **AI-9:** implement the chosen beta profile; the recommended default is
+6. **RI-08:** complete #175/#186 trusted bridge identity and bounded fail-closed
+   recovery before inviting beta users.
+7. **PM-03/#455:** evidence pre-install CWS disclosure/affirmative consent, then
+   keep fresh installs passive until in-product disclosure/activation; include
+   the Limited Use declaration and redact OAuth response secrets before storage/export.
+8. **AI-9:** implement the chosen beta profile; the recommended default is
    interaction-only with no reputation claim.
-7. **AI-19 + CWS:** settle name, then re-verify one canonical store/privacy copy,
+9. **AI-19 + CWS:** settle name, then re-verify one canonical store/privacy copy,
    assets, permissions, fresh install, and package.
-8. Run the current headed regression checklist, submit unlisted, and recruit the
+10. Run the current headed regression checklist, submit unlisted, and recruit the
    first 10-user cohort.
 
-Before public launch, complete #175/#186 plus an external security review and
-publish valid corpus, quietness, and current-browser comparative evidence.
+Before public launch, obtain an external security review of the exact beta
+commit/package and publish valid corpus, quietness, and current-browser
+comparative evidence.
 
 ## Next safe slice
 
-After Chris reviews the Defender detection, restore only the exact tracked
-fixture if it is confirmed expected adversarial test content and rerun the full
-branch gates. Then wire the reviewed RI-01 broker through the service worker,
-content guards, and extension popup as a second browser-surface slice. Injected
-UI must become warn/cancel-only; active-tab and exact-context checks must precede
-delivery; the real-browser adversarial lane and Gate-3 remain required. The
-three human-gated PR slots are already occupied, so do not push or open a fourth
-PR until one stale branch is closed/deferred or Chris changes the cap.
+After AI-20, restore only the exact tracked fixture (or implement the chosen
+coverage-preserving rewrite), normalize the RI worktree dependencies, and run
+the full typecheck/lint/build/unit/perf/relevant-E2E gates. Then continue RI-01
+as a separate integration slice: service-worker handlers, extension-sender and
+active-tab checks, exact-context delivery, popup actions, warn/cancel-only
+injected UI, and explicit expiry cleanup. With stale #273 and #399 closed, keep
+the RI checkpoint branch backup-only until the integration slice, full gates,
+two fresh durably recorded adversarial reviews, and Gate-3 are complete.
 
 ## Reliability notes
 

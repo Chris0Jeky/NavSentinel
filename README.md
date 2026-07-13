@@ -26,13 +26,13 @@ externally audited, or released.
 - Patches `window.open`, `location.assign`, `location.replace`, and form submission in the main world to catch script-driven navigation.
 - Uses a MessagePort bridge for steady-state isolated/main-world control
   traffic. Its challenge verifies port possession/liveness, not a hard
-  authenticated identity boundary; #175/#186 remain public-launch gates.
+  authenticated identity boundary; #175/#186 remain unlisted-beta gates.
 - Intercepts password-form submission and computes local credential risk before allowing the submit.
 - Detects DoubleClickjacking attack patterns across main-world, isolated-world, and service-worker layers.
 - Detects ClickFix / fake CAPTCHA overlays that combine clipboard writes with deceptive instruction text.
-- Can check destination domains against a build-time bloom asset with no runtime
-  lookup. The bundled 52-byte fixture matches reserved test domains only and is
-  not a user protection.
+- Can check destination domains via a local runtime lookup against a build-time
+  bloom asset, with no runtime network request. The bundled 52-byte fixture
+  matches reserved test domains only and is not a user protection.
 - Stores bounded local configuration, decision history, prompt outcomes, and
   behavioral profiles in `chrome.storage.local`; see `PRIVACY.md` for the full
   inventory, export gaps, and deletion controls.

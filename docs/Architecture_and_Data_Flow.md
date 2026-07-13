@@ -20,7 +20,7 @@ The manifest wires these together from:
 ## Maturity and release boundaries
 
 This is the architecture of a pre-release alpha. The separation and local-first
-design are substantial, but several shipped paths are not production-capable:
+design are substantial, but several current development paths are not production-capable:
 
 - `ui_toast.ts` and `credential_modal.ts` currently let page-injected UI
   authorize protection-lowering actions. Script rejection/closed roots alone do
@@ -112,13 +112,14 @@ Steady-state traffic is narrower than the old page-visible `window.postMessage`
 fallback, but the setup/session material is page-visible and the challenge is
 echoable. The handshake does **not** authenticate an isolated-world identity
 against hostile same-page code. `document_start` ordering is a mitigation, not
-a security boundary. Issues #175/#186 and a fresh external review remain public-
-launch gates; do not describe the bridge as unspoofable before they are resolved.
+a security boundary. Issues #175/#186 are unlisted-beta gates; a fresh external
+review of the exact package remains a separate public-launch gate. Do not
+describe the bridge as unspoofable before they are resolved.
 
 ## Domain reputation (bloom filter)
 
 `extension/src/shared/reputation.ts` can read a build-time compiled bloom filter
-of known-bad domains without runtime network calls. The **current shipped asset
+of known-bad domains without runtime network calls. The **current bundled asset
 is a 52-byte test fixture** containing reserved example domains. It provides no
 production reputation coverage.
 

@@ -1,6 +1,6 @@
 # NavSentinel Project Roadmap
 
-*Created 2026-04-09. Truth refresh 2026-07-12.*
+*Created 2026-04-09. Truth refresh 2026-07-10; live/status sync 2026-07-13.*
 
 This is the execution roadmap. [`Product_Strategy.md`](Product_Strategy.md) owns
 the product thesis, portfolio boundaries, and evidence gates; GitHub issues own
@@ -30,13 +30,13 @@ readiness is tracked only by the outcome gates below.
 
 | Gate | State | Required next move |
 |---|---|---|
-| Release integrity | **Blocked** | RI-01 extension-origin decision authority; refresh/fix #356; excise visual-sim (#424); remove fake DNR; purpose-specific data minimization; beta-off JS behavior |
+| Release integrity | **Blocked** | RI-01 extension-origin decision authority; refresh/fix #356; excise visual-sim (#424); remove fake DNR; purpose-specific data minimization; beta-off JS behavior; #175/#186 bridge identity/recovery |
 | Release profile | **Decision required** | AI-9/AI-16 choose the recommended interaction-only beta or a reproducible, budgeted real reputation build |
-| Brand/store | **Blocked** | AI-19 name clearance; one canonical claims-verified listing; assets and fresh-install checks |
+| Brand/store | **Blocked** | AI-19 name clearance; #455 pre-collection disclosure/consent; one canonical claims-verified listing; assets and fresh-install checks |
 | Detection validation | **Open** | #417 methodology, #416/#426 rerun, confidence-aware reporting |
 | Comparative value | **Open** | #418 against current Chrome and relevant Chrome extensions; Edge/Opera remain contextual until supported |
 | Distribution | **Not started** | unlisted beta, 15 invitations, 10 activated daily-use installs, D14/D30 check-ins |
-| Public security posture | **Blocked** | #175/#186 bridge cycle plus an external review |
+| Public security posture | **Blocked** | independent external review of the exact beta commit/package |
 
 ### Live execution truth
 
@@ -44,13 +44,22 @@ Verified 2026-07-10: `main` matched `origin/main`; v0.4.0; main CI green;
 2,874 unit tests; 74 open issues; no milestone, tag, GitHub release, CWS release,
 or branch protection. The exact audit baseline is recorded only in dated
 `Product_Strategy.md`; verify live.
-The three open PRs are not ready for human time:
+The legacy browser-surface PR queue is not ready for human time:
 
 | PR | Current state |
 |---|---|
-| #273 | 255 commits behind `main`; old-base CI only; refresh/recreate or defer |
+| #273 | Closed 2026-07-13 from a stale base; recreate from current `main` or defer |
 | #356 | 159 commits behind `main`; E2E red; release prerequisite after repair |
-| #399 | Draft, 70 commits behind `main`; measurement-held and not a beta blocker |
+| #399 | Closed 2026-07-13; measurement-held under #223/#417 and not a beta blocker |
+
+**RI-01 local implementation note (verified 2026-07-13):** remotely backed-up
+checkpoint branch `fix/ri01-extension-origin-decisions` at `5514288` contains a context-bound,
+hash-minimizing pending-decision broker plus a synthetic-navigation-allowance
+fix. Focused broker tests pass, but the broker is not wired into production:
+service-worker handlers, active-tab/sender validation, exact-context delivery,
+popup actions, warn/cancel-only injected prompts, full branch gates, and real
+Chrome remain open. Windows Defender quarantined one tracked adversarial
+ClickFix property fixture only in that worktree; AI-20 owns the human review.
 
 **RI-01 local implementation note (2026-07-12):** the unpushed branch
 `fix/ri01-extension-origin-decisions` now has a two-round-reviewed broker
@@ -85,9 +94,11 @@ maintainer chooses disclosure/ownership.
 | RI-05 | P0 beta blocker | Remove fake DNR feature surface and unused permissions | Agent + Gate-3 | CWS checklist; redesign #242/#243 later | No test rules/toggle/DNR permission in beta manifest |
 | RI-06 | P0 privacy blocker | Inventory every store; minimize by purpose; add complete reset | Agent + privacy review | Extend #176 or seed one scoped follow-up | Persistent records use least-identifying data; exact session URLs remain only for correctness with tab binding/TTL; rollback/OAuth/allow tests pass; all behavioral stores have one clear control and accurate export/disclosure |
 | RI-07 | P0 beta blocker | Add an explicit beta capability flag that leaves JS behavior instrumentation off | Agent + Gate-3 | #127 or a scoped release-profile issue | Fresh beta defaults/migration/UI/runtime agree; fetch/XHR/beacon/password-value prototypes are not wrapped; core navigation remains active; compatibility/perf evidence required to enable |
-| RI-08 | Public-launch blocker | Complete bridge design cycle and independent external security review | Agent + external reviewer | #175/#186; P3-09 | Fresh scope and exact release commit/package reviewed; findings resolved or explicitly accepted |
+| RI-08 | P0 beta blocker | Authenticate/recover the MAIN-world bridge and fail closed when unavailable | Agent + Gate-3 | #175/#186 | Hostile page code cannot become the trusted peer or suppress protection; reload/death recovery is bounded and tested |
+| RI-09 | Public-launch blocker | Obtain an independent external security review | Agent + external reviewer | P3-09 | Exact release commit/package reviewed; findings resolved or explicitly accepted |
 | PM-01 | P0 release blocker | Clear or replace the working product name | Chris | AI-19 | Search/domain/CWS/legal decision recorded before submission |
-| PM-02 | P0 release blocker | Verify one canonical store/privacy copy against the package | Agent + Chris submission | `docs/cws-listing/` | Correct category, complete data inventory, supported claims, derived minimum Chrome, assets/fresh install complete |
+| PM-02 | P0 release blocker | Verify one canonical store/privacy copy and reporting route against the package | Agent + Chris submission | `docs/cws-listing/`; `SECURITY.md` | Correct category, complete data inventory, supported claims, private vulnerability route, derived minimum Chrome, assets/fresh install complete |
+| PM-03 | P0 beta compliance blocker | Add pre-install disclosure/consent evidence plus in-product activation | Agent + Gate-3 | #455 | CWS listing/install consent mapping is evidenced; fresh installs stay passive until in-product activation; Limited Use declaration, categories/uses, and revocation/reset match the package |
 | EV-01 | P1 after integrity | Recruit and measure the first daily-use cohort | Chris-led | #425 — rebody before use | 15 invitations; 10 activated; 7/10 enabled D14 and 6/10 D30; every non-install/disable reason recorded |
 | EV-02 | P1 | Finish valid FP/TP methodology and reproducible runs | Agent + headed/network gate | #416/#417/#426 | Committed inputs/results and confidence-aware reporting; no tune-before-measure |
 | EV-03 | P1 | Compare additive value with current protections | Agent + headed lane | #418 | Pre-registered scenarios/configurations; wins, misses, interruption, performance, and data flow published |
@@ -98,7 +109,8 @@ maintainer chooses disclosure/ownership.
 
 - #415: create one `v0.5.0-unlisted-beta` milestone containing only real blockers.
 - #321: replace "build the filter" with RI-04 and the AI-9 decision.
-- #356: P0 after refresh/fix/review; #273 recreate/defer; #399 remains draft.
+- #356: P0 after refresh/fix/review; #273 recreate/defer; #399 is closed and
+  remains measurement-deferred under #223/#417.
 - #419/#421/#422: close enacted scope; retain only concrete unfinished work.
 - #423: close when the verified-claims policy lands.
 - #424: rebody as RI-02; move #245/#246 to post-beta or close them.
@@ -113,9 +125,9 @@ maintainer chooses disclosure/ownership.
 
 ### 90-day sequence
 
-1. **Weeks 0–2:** freeze features; complete RI-01–RI-07, refresh PRs, clear the
-   name/profile, and align package/store/privacy truth. Run headed checks only
-   after agent preflight.
+1. **Weeks 0–2:** freeze features; complete RI-01–RI-08 and PM-03, refresh PRs,
+   clear the name/profile, and align package/store/privacy truth. Run headed
+   checks only after agent preflight.
 2. **Weeks 3–4:** package/submit unlisted; invite 15 daily-use users; record
    every failed install/onboarding and establish the 10-user activated cohort.
 3. **Weeks 5–8:** weekly check-ins; classify interventions/overrides; finish
@@ -125,7 +137,7 @@ maintainer chooses disclosure/ownership.
    fund only Decision Journal + recovery guidance; otherwise change segment/
    position or stop before advanced architecture.
 
-Last updated: 2026-07-12
+Last updated: 2026-07-13
 
 ---
 
@@ -158,7 +170,7 @@ higher authority when wording conflicts.
 | D17 | **NRS: implement per existing spec** | The spec in `Intent_Model_and_Scoring.md` is the design doc. Implement the weights and thresholds as written, then tune based on Phase 1 testing data. |
 | D18 | **Test corpus separate from gym** | Phishing snapshots and clickjacking PoCs go under `tests/corpus/`, not `gym/`. Gym remains deterministic local fixtures. Corpus is external samples for validation. |
 | D19 | **Quietness needs operational and claim-grade gates** | A top-1000 run is descriptive, not enough to substantiate `<0.1%`. Report sample size and confidence intervals; keep named benign journeys as the beta operational gate. |
-| D20 | **External review before public launch** | An audit scope is not an audit. Complete the bridge cycle and obtain an external security review before public distribution. |
+| D20 | **Bridge integrity before beta; external review before public launch** | Document-start ordering is not peer authentication. Complete #175/#186 before beta; an audit scope is not an audit, so review the exact package before public distribution. |
 
 ---
 
@@ -903,7 +915,7 @@ Phase 2 is complete when:
 | P3-06 | Chrome Web Store listing | M | **in progress** | P3-01, P3-02 | Drafts exist; name, assets, release profile, fresh-install verification, and submission remain |
 | P3-07 | Release infrastructure | M | **done** | P2 gate | `infra/release` (PR #67) |
 | P3-08 | Issue templates and repo hygiene | S | **done** | -- | `docs/issue-templates` (PR #50) |
-| P3-09 | Prepare and obtain independent external security review | XL / external | **blocked** | RI-01–RI-07, #175/#186 | Scope preparation exists; immutable release target, outreach, review, and remediation remain |
+| P3-09 | Prepare and obtain independent external security review | XL / external | **blocked** | RI-01–RI-08, PM-03 | Scope preparation exists; immutable release target, outreach, review, and remediation remain |
 | P3-10 | Migrate SW ephemeral state to chrome.storage.session | M | **done** | P2-01 | `feat/sw-session-storage` (PR #63) |
 | P3-11 | jsdom/happy-dom test environment for ClickFix DOM tests | S | **done** | P2-02 | `test/jsdom-clickfix-tests` (PR #49) |
 | P3-12 | Bloom filter size monitoring in CI | S | **monitor merged; release-profile check open** | P2-03 | `infra/bloom-ci-check` (PR #48); current test-stub check does not prove a real-filter package |
@@ -1031,9 +1043,10 @@ shifted (Chrome now ships local Gemini Nano scam detection — NORTHSTAR D21). T
   "browsers cannot see" without current comparative evidence.
 
 **Done when**: Extension is listed and installable from CWS. **NOT MET
-(2026-07-10)** — no submission, tag, or GitHub release exists. Name clearance
-(AI-19), release-integrity tasks RI-01–RI-07, the release profile (AI-9), assets,
-fresh-install checks, and submission remain.
+(2026-07-13)** — no submission, tag, or GitHub release exists. Name clearance
+(AI-19), release-integrity tasks RI-01–RI-08, pre-collection disclosure and
+consent (#455/PM-03), the release profile (AI-9), assets, fresh-install checks,
+and submission remain.
 
 #### P3-07: Release infrastructure
 
@@ -1073,7 +1086,7 @@ separate from externally scheduled review and potentially cross-cutting
 remediation.
 
 **What to do**:
-- complete RI-01–RI-07 and #175/#186, then freeze one immutable commit/package;
+- complete RI-01–RI-08 and PM-03, then freeze one immutable commit/package;
 - finalize the focused scope, browser/version, manifest, build inputs, and hash;
 - identify and engage an independent security reviewer;
 - publish or retain a complete report according to the agreed disclosure model;
@@ -1082,8 +1095,9 @@ remediation.
 **Done when**: At least one external security professional has reviewed the bridge design
 and CDS logic. Findings addressed or documented as accepted risks.
 
-**Current state (2026-07-10): NOT MET.** `SECURITY_AUDIT_SCOPE.md` is preparation,
-not an external audit. #175/#186 and a fresh external review block public launch.
+**Current state (2026-07-13): NOT MET.** `SECURITY_AUDIT_SCOPE.md` is
+preparation, not an external audit. #175/#186 now block beta through RI-08; a
+fresh external review of the exact package separately blocks public launch.
 
 #### P3-10: Migrate SW ephemeral state to chrome.storage.session
 

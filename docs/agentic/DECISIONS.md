@@ -12,7 +12,7 @@ Chris delegated: *"take a stance yourself and call the shots in the best way pos
 
 ### D-2026-07-03-A — Adopt the ship/measure direction (was: Phase A row 1 "confirm or amend")
 **Decision:** Adopt the strategic review as the standing priority order. **No hardening PR outranks a release-path task while the product is unreleased.** The release umbrella (#415) is the top standing priority until v0.5.0 ships. Measure before publishing claims; improve only what measurement justifies.
-**Why:** the review's evidence is decisive — never shipped, 0 users, the "reputation layer" ships a 15-domain test stub, every efficacy number is stale/invalid, ~27% of throughput was docs-sync. The inner loop (harden/review/merge) ran at max while the outer loop (ship→users→feedback) ran at zero.
+**Why:** the review's evidence is decisive — never shipped, 0 users, the checked-in "reputation layer" contains a 15-domain test stub, every efficacy number is stale/invalid, ~27% of throughput was docs-sync. The inner loop (harden/review/merge) ran at max while the outer loop (ship→users→feedback) ran at zero.
 
 ### D-2026-07-03-B — Discovery is milestone-gated; LOW residue goes to the icebox (#422)
 **Decision:** Replace the old *"Never stop → run a Discovery pass"* rule with the **Priority Ladder** (below). Discovery passes resume **only after the next release milestone**. LOW-severity residue and speculative hardening go to `docs/agentic/ICEBOX.md`, not the active backlog.
@@ -21,7 +21,8 @@ Chris delegated: *"take a stance yourself and call the shots in the best way pos
 2. **Ship:** release-umbrella (#415) tasks — top standing priority until v0.5.0 ships.
 3. **Measure & serve day-one users:** the measurement-enablement set (#416/#417/#418/#426) and the North-Star spine slices that serve first users (#232, #237, explanations, #239/#240).
 4. **Correctness/security bugs** *backed by a current measurement or a clear user-impact story* (not speculative).
-5. **Scheduled structural cycles:** #374 chunk split; the bridge pair #175/#186 + a fresh bridge security review.
+5. **Structural gates:** #374 chunk split; #175/#186 before beta; a fresh
+   security review of the exact package before public launch.
 6. **Everything else → icebox.**
 **Why:** the marginal discovery finding is now `slice(-0)`-class trivia; each drain seeded more LOWs than it closed (self-feeding). The loop is a superb fix-machine pointed at an exhausted seam.
 
@@ -49,14 +50,16 @@ Chris delegated: *"take a stance yourself and call the shots in the best way pos
 **Why:** it is detection theater shipping inside one of the two tightest chunks; ship-don't-polish. (This is a code change with real regression risk in `capture_isolated` — done as its own reviewed slice, not rushed.)
 
 ### D-2026-07-03-G — Distribution sequence (#425); daily-profile dogfood follows integrity preflight
-**Decision:** use only an isolated development profile while RI-01–RI-07 and
+**Decision:** use only an isolated development profile while RI-01–RI-08,
+PM-03/#455, and
 agent preflight remain open. Chris may start daily-browser dogfood after prompt
-authority and wrong-tab capture are removed, the selected beta profile is
+authority, wrong-tab capture, trusted bridge identity/recovery, and
+pre-collection disclosure/consent are complete, the selected beta profile is
 implemented, and a current real-Chrome regression sweep passes → **unlisted**
 CWS beta (15 invitations, target 10 activated daily-use installs) → **public
-launch** only after the bridge structural cycle (#175/#186 + a fresh external
-security review). Chris-led; agent implements the release-path pieces. #425
-must be re-bodied to this integrity-gated, manual D14/D30 sequence before use.
+launch** only after a fresh external security review of the exact beta package.
+Chris-led; agent implements the release-path pieces. #425 must be re-bodied to
+this integrity-gated, manual D14/D30 sequence before use.
 **Why:** a security product shouldn't invite Show-HN-grade adversarial attention while its self-declared highest-risk seam carries a stale review.
 
 ### D-2026-07-03-H — Autonomous merge authority is standing for non-browser PRs
@@ -74,14 +77,15 @@ reversible and are included in AI-16's maintainer ratification gate.
 
 **Decision:** AI-15 is blocked until agent preflight moves prompt decision
 authority to extension-origin UI, refreshes/reviews the stale PRs, makes #356 green, excises
-visual-sim, removes fake DNR, and prepares the chosen release profile. Do not
-spend human Gate-3 time on old branches.
+visual-sim, removes fake DNR, completes #175/#186 bridge integrity and #455
+pre-collection consent, and prepares the chosen release profile. Do not spend
+human Gate-3 time on old branches.
 
 **Why:** page script can currently activate protection-lowering prompt actions,
 and even trusted events can be induced through page-controlled host redressing;
-visual-sim can process the wrong active tab; #356 is red; all three PRs are far
-behind `main`. Manual verification before those repairs would be wasted and
-could create false confidence.
+visual-sim can process the wrong active tab; #356 is red; stale #273/#399 were
+closed rather than merged. Manual verification before those repairs would be
+wasted and could create false confidence.
 
 ### D-2026-07-10-J — Interaction-only is the default unlisted-beta profile
 
@@ -103,7 +107,7 @@ seeding. After release integrity, ship to a 10-user cohort, measure additive
 protection/quietness/comprehension/retention, then fund at most one visible loop:
 Decision Journal plus narrowly scoped recovery guidance.
 
-**Why:** 74 unmilestoned issues and 15 new epics are strategy-shaped backlog
+**Why:** 75 unmilestoned issues and 15 new epics are strategy-shaped backlog
 inflation while distribution and validation remain zero.
 
 ### D-2026-07-10-L — Position as a complementary local interaction guard
@@ -126,6 +130,24 @@ external beta branding precedes that decision.
 
 **Why:** an active GNSS anti-spoofing security product uses the exact name;
 rebranding is cheapest before distribution.
+
+---
+
+## 2026-07-13 — Merge-gate corrections
+
+### D-2026-07-13-N — Bridge identity and informed activation precede beta
+
+**Decision:** Complete #175/#186 so hostile page code cannot become or suppress
+the trusted bridge peer, and complete #455 so fresh installs remain passive
+until prominent local-data disclosure and affirmative activation. Both are
+unlisted-beta gates. The independent external review remains a separate
+public-launch gate.
+
+**Why:** document-start ordering is not peer authentication. Chrome's 2026 CWS
+policy update also requires prominent disclosure for all collected data,
+including local handling; enforcement begins 2026-08-01. The current
+onboarding cannot truthfully say protection is already active before informed
+activation exists.
 
 ---
 
