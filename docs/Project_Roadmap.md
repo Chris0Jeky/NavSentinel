@@ -44,16 +44,16 @@ Verified 2026-07-10: `main` matched `origin/main`; v0.4.0; main CI green;
 2,874 unit tests; 74 open issues; no milestone, tag, GitHub release, CWS release,
 or branch protection. The exact audit baseline is recorded only in dated
 `Product_Strategy.md`; verify live.
-The three open PRs are not ready for human time:
+The legacy browser-surface PR queue is not ready for human time:
 
 | PR | Current state |
 |---|---|
-| #273 | 255 commits behind `main`; old-base CI only; refresh/recreate or defer |
+| #273 | Closed 2026-07-13 from a stale base; recreate from current `main` or defer |
 | #356 | 159 commits behind `main`; E2E red; release prerequisite after repair |
-| #399 | Draft, 70 commits behind `main`; measurement-held and not a beta blocker |
+| #399 | Closed 2026-07-13; measurement-held under #223/#417 and not a beta blocker |
 
-**RI-01 local implementation note (verified 2026-07-12):** checkpoint branch
-`fix/ri01-extension-origin-decisions` at `5514288` contains a context-bound,
+**RI-01 local implementation note (verified 2026-07-13):** remotely backed-up
+checkpoint branch `fix/ri01-extension-origin-decisions` at `5514288` contains a context-bound,
 hash-minimizing pending-decision broker plus a synthetic-navigation-allowance
 fix. Focused broker tests pass, but the broker is not wired into production:
 service-worker handlers, active-tab/sender validation, exact-context delivery,

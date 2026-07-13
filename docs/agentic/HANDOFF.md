@@ -33,15 +33,16 @@ rotation under #437.
   12/12, smoke E2E, and current GitHub CI green.
 - 74 open issues with no milestone/assignee; 15 Horizon issues #439–#453 are a
   frozen option portfolio, not active work.
-- Open PRs at WIP cap 3: #273 (255 commits behind), #356 (159 behind and E2E
-  red), #399 (draft, 70 behind). Human Gate-3 would be premature.
+- Stale PRs #273 and #399 were closed on 2026-07-13 with re-entry paths and
+  issue anchors preserved. #356 remains the sole active legacy browser-surface
+  PR; it is 159 commits behind with E2E red. Human Gate-3 would be premature.
 - Package is about 474/500KB while reputation is a 52-byte test fixture. The
   old 150KB/100K-domain plan cannot meet its stated 0.01% FP target or aggregate
   package cap as written.
-- Product-posture and guided-workflow work is preserved in branch history;
-  verify live branch/PR/`main` state before assuming publication or merge. The
-  RI-01 worktree is at `5514288`, stacked on the posture branch and dirty only
-  by the Defender-quarantined fixture.
+- Product-posture and guided-workflow work is published through branch/PR
+  history; verify live `main` before assuming merge. The RI-01 checkpoint at
+  `5514288` is remotely backed up without the unstaged Defender deletion; its
+  worktree remains dirty only by the Defender-quarantined fixture.
 - The RI-01 broker foundation is unit-tested but not wired into production.
   Only the synthetic-navigation allowance rejection changes active runtime
   behavior; its new real-browser E2E has not run.
@@ -73,8 +74,8 @@ rotation under #437.
 1. **RI-01:** page-injected UI currently authorizes allow/trust/resume. Move all
    protection-lowering decisions to tab/destination-bound extension-origin UI;
    script rejection/closed roots alone do not stop trusted-click redressing.
-2. **RI-03/#356:** refresh branches, fix red CI, run two fresh reviews; recreate
-   or defer #273 and keep #399 outside the beta blocker set.
+2. **RI-03/#356:** refresh the branch, fix red CI, run two fresh reviews;
+   recreate or defer #273's intent and keep closed #399 outside beta blockers.
 3. **RI-02/#424:** excise visual-sim. It has no production match path and can
    process a different active tab's pixels.
 4. **RI-05/RI-06:** remove fake DNR; apply purpose-specific URL/data
@@ -98,10 +99,9 @@ coverage-preserving rewrite), normalize the RI worktree dependencies, and run
 the full typecheck/lint/build/unit/perf/relevant-E2E gates. Then continue RI-01
 as a separate integration slice: service-worker handlers, extension-sender and
 active-tab checks, exact-context delivery, popup actions, warn/cancel-only
-injected UI, and explicit expiry cleanup. The cap blocks a fourth
-browser-surface/human-gated PR, not a separately reviewed docs-only PR; close or
-defer stale #273 before publishing RI-01. Two fresh, durably recorded
-adversarial reviews and Gate-3 remain required.
+injected UI, and explicit expiry cleanup. With stale #273 and #399 closed, keep
+the RI checkpoint branch backup-only until the integration slice, full gates,
+two fresh durably recorded adversarial reviews, and Gate-3 are complete.
 
 ## Reliability notes
 

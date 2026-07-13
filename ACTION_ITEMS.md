@@ -32,14 +32,15 @@ live snapshot. Typecheck, lint, build, version check, 2,874 unit tests (95
 files), perf 12/12, and smoke E2E passed locally; current-main GitHub CI was
 green. v0.4.0 had no tag, GitHub release, CWS release, or external-user evidence.
 
-Live recheck on 2026-07-13 found remote `main` still at `483ead1`, the same
-three stale PRs and 74 open issues, no tags/releases/classic branch protection
-or repository rulesets, and no milestones or assignees. The product-posture
-and guided-workflow work is preserved in branch history; verify live
+Live recheck on 2026-07-13 found remote `main` still at `483ead1`, 74 open
+issues, no tags/releases/classic branch protection or repository rulesets, and
+no milestones or assignees. Stale PRs #273 and #399 were closed with explicit
+re-entry paths; #356 remains the only active legacy browser-surface PR. The
+product-posture and guided-workflow work is preserved in branch history; verify live
 branch/PR/`main` state before assuming publication or merge. The RI-01 worktree
-is at `5514288` and is dirty only because Windows Defender quarantined one
-tracked adversarial test fixture. These changes do not change shipped product
-state.
+checkpoint at `5514288` is remotely backed up without the unstaged Defender
+deletion; its worktree is dirty only because Windows Defender quarantined one
+tracked adversarial test fixture. These changes do not change shipped product state.
 
 - **Product posture:** strong pre-release alpha, not a market-ready or
   efficacy-validated security product. `docs/Product_Strategy.md` owns the
@@ -58,10 +59,11 @@ state.
 - **Brand blocker:** the exact name `NavSentinel` is already used by an active
   GNSS security product. AI-19 requires clearance or an early rename before
   CWS submission; this is a risk flag, not a legal conclusion.
-- **Open PRs at WIP cap 3:** #273 is 255 commits behind `main`; #356 is 159
-  commits behind and E2E red; #399 is a draft 70 commits behind. **Do not spend
-  human Gate-3 time until an agent refreshes/fixes/re-reviews them.** #399 is
-  not a beta blocker; #273 may be recreated or deferred; #356 is a prerequisite.
+- **Legacy PR cleanup:** #273 and draft #399 were closed on 2026-07-13 rather
+  than merged from stale bases; their commits, discussions, and open issue
+  anchors remain. #356 is still 159 commits behind with E2E red and is the only
+  active legacy browser-surface PR. **Do not spend human Gate-3 time until an
+  agent refreshes, fixes, and re-reviews it.**
 - **Portfolio:** 74 open issues, none assigned or milestoned; #439–#453 are 15
   frozen Horizon proposals. No new feature/epic issue seeding until the queue is
   culled and milestone-categorized.
@@ -87,10 +89,11 @@ label may reset between conversations; the `AI-N` identifier is durable.
 AI-15/AI-8/AI-13/AI-14 remain visible but are not actionable questions until
 agent preflight clears them.
 
-> **Gate-queue hold (2026-07-10):** do not run the old branch checkout guides
-> for AI-8, AI-13, or AI-14. Their branches must first be refreshed from current
-> `main`, re-reviewed twice, and rerun through CI; #356 is currently red. AI-15
-> remains BLOCKED until an agent posts a current preflight handoff.
+> **Gate-queue hold (refreshed 2026-07-13):** do not run the old branch checkout
+> guides for AI-8, AI-13, or AI-14. AI-8 and AI-14 require new current-main
+> slices after their stale PRs were closed; AI-13/#356 must be refreshed,
+> re-reviewed twice, and rerun through CI. AI-15 remains BLOCKED until an agent
+> posts a current preflight handoff.
 
 **🚨 OPEN: AI-19 — Clear or replace the working product name before CWS
 submission.** An active TruNav GNSS anti-spoofing product uses the exact name
@@ -129,11 +132,10 @@ are trusted/enabled; and (7) restart once to exercise SessionStart. Then reply
 definition changes.
 
 **🚨 BLOCKED: AI-15 — Run the headed release session only after agent
-preflight.** The prior 60–90 minute one-sitting guide is withdrawn: all three
-PRs are heavily stale, #356 is red, the reputation/package plan needs a product
-decision, and new release-integrity blockers precede manual testing. #399 is
-stale but remains deferred measurement work, not a beta prerequisite. **Do not
-checkout or test the current PR branches yet.** Agent preflight must first:
+preflight.** The prior 60–90 minute one-sitting guide is withdrawn: stale PRs
+#273 and #399 were closed, #356 remains stale/red, the reputation/package plan
+needs a product decision, and new release-integrity blockers precede manual
+testing. **Do not checkout or test #356 yet.** Agent preflight must first:
 (1) fix RI-01; (2) refresh/fix #356 and recreate or defer #273, with two fresh
 reviews and green CI; (3) excise visual-sim and remove fake DNR; (4) complete
 RI-06's purpose-specific data minimization/reset; (5) complete RI-07's explicit
@@ -218,11 +220,12 @@ representation while preserving coverage, then rescan and rerun the gates.
 Microsoft references: [Protection History](https://support.microsoft.com/en-us/windows/protection-history-f1e5fd95-09b4-46d1-b8c7-1059a1e09708)
 and [file submission](https://www.microsoft.com/wdsi/filesubmission).
 
-**BLOCKED: AI-8 — PR #273 neutral-chip Gate-3.** The presentation intent is
-still reasonable, but the branch is 255 commits behind `main`; its old reviews,
-CI, and checkout guide are not actionable. An agent must recreate/refresh or
-defer the tiny change, run two fresh reviews and CI, then post a new visual-check
-guide. Do not checkout or merge #273 until that handoff exists.
+**BLOCKED: AI-8 — Neutral-chip Gate-3 after closed PR #273.** The presentation
+intent is still reasonable, but stale PR #273 was closed on 2026-07-13 with its
+commit and two unresolved review threads preserved. An agent must recreate or
+defer the tiny change from current `main`, resolve both findings, run two fresh
+reviews and current CI, then post a new visual-check guide. Do not reuse the old
+branch checkout guide.
 
 **AI-10 — Gate-3 + merge the SPA-breakage fix (#352) · ✅ RESOLVED 2026-06-23.** Chris ran the manual Chrome check ("manual checks on chrome for #352 done, it seems to be working fine now") → **#352 merged into `main`** (`#347` pushState de-harden + `#348` reputation WAR). The claude.ai grey screen / infinite-load and the per-page `reputation_data.bin`/`pushState` console errors are fixed; top-frame reputation is re-enabled.
 
@@ -234,11 +237,12 @@ is red. An agent must merge current `main`, fix the failure, complete two fresh
 adversarial reviews, and post a current compatibility/gating checklist. Do not
 checkout, test, or merge the present branch.
 
-**🚨 BLOCKED: AI-14 — #399 OAuth tradeoff measurement.** The draft is 70
-commits behind `main` and its old CI/counts are stale. It is not a beta blocker.
-Keep it draft until #417 supplies valid methodology and an agent refreshes the
-branch, runs two reviews, and posts a reproducible headed measurement plan. Do
-not checkout or merge the current branch.
+**🚨 BLOCKED: AI-14 — OAuth tradeoff measurement after closed PR #399.** The
+measurement-held draft was closed on 2026-07-13 rather than merged from a stale
+base. It is not a beta blocker. Keep #223 blocked until #417 supplies valid
+methodology and an agent creates a current slice, runs two reviews, and posts a
+reproducible headed measurement plan. Do not use the closed branch as a current
+test or merge target.
 
 **AI-12 — Top-site FP relief + D1 (#350 → PR #354) · ✅ RESOLVED 2026-06-23 — MERGED.** Chris manually confirmed the relief works on LinkedIn ("tested it on linkedin and it seemed to work fine now") = his measure/Gate-3 in lieu of the full `measure:fp` run (which needs headed Chromium + live Tranco, sandbox-can't). **#354 merged into `main`** (`c4426cf`): `getTierAdjustedBlockThreshold` now relieves TOP_SITE + CDS-only (benign-structural whitelist) by `NRS_TOP_SITE_CDS_RELIEF`; trust list grew 24→42 with safe `includeSubdomains`. Green CI (Build/Unit + E2E) on the main-merged head. **Follow-up:** `+20` is an unvalidated starting value; do not tune it again without the valid #417/#416 FP/TP evidence required by D25.
 
