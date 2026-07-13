@@ -1,5 +1,9 @@
 # NavSentinel: Product Thesis Review
 
+> **HISTORICAL ANALYSIS — 2026-04-09.** Product claims, market facts, metrics,
+> and recommendations may be stale. Use `docs/Product_Strategy.md` and
+> `docs/Project_Roadmap.md` for current posture and execution.
+
 *Critical assessment generated 2026-04-09, enriched with current threat landscape and
 academic research. This is an honest evaluation of the product's thesis, security value,
 usability, and path to becoming a real security tool.*

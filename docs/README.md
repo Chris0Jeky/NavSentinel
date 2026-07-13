@@ -1,9 +1,13 @@
 # NavSentinel Docs
 
-This folder documents the current merged `main` branch.
+This folder mixes current operating documents with explicitly dated historical
+analysis. Use the labels below rather than assuming every page describes the
+current merged `main` branch.
 
 ## Start here
 
+- `docs/Product_Strategy.md`
+  - **Current product thesis, intended user, portfolio boundaries, and beta/public-launch evidence gates.**
 - `docs/Project_Overview.md`
   - Product summary, protection model, and user-visible capabilities.
 - `docs/Architecture_and_Data_Flow.md`
@@ -16,9 +20,9 @@ This folder documents the current merged `main` branch.
 ## Project analysis
 
 - `docs/Strategic_Outlook.md`
-  - **What the project does well, where it's headed, and the effective path there** (next-ten-slices order, 90-day scoreboard). Generated 2026-07-02. Read together with `Course_Correction.md`.
+  - Dated 2026-07-02 input. Superseded for current product direction by `Product_Strategy.md`.
 - `docs/Course_Correction.md`
-  - **What isn't working — strategy and execution — and the sort-out plan** (hard truths with evidence, corrective principles, phased plan, seeded issues #415-#427). Generated 2026-07-02.
+  - Dated 2026-07-02 input. Its inner-loop/outer-loop diagnosis remains useful; current actions live in `Project_Roadmap.md`.
 - `docs/Comprehensive_Project_Analysis.md`
   - Full repo analysis with architecture deep dive, metrics, gap analysis, scorecard, and recommended roadmap. Generated 2026-04-09.
 - `docs/Product_Thesis_Review.md`
@@ -27,15 +31,15 @@ This folder documents the current merged `main` branch.
 ## Project planning
 
 - `docs/Project_Roadmap.md`
-  - **The active planning document.** 47 tasks across 5 phases, decision log, phase gates, success criteria. Supersedes `Execution_Tracker.md` and `Implementation_Roadmap.md`.
+  - **The active execution document.** Current outcome gates followed by the historical 47-task implementation registry.
 - `docs/NORTHSTAR_ROADMAP.md`
-  - Phase-5 North-Star track (zero-FP / friend-advisor / feedback-capture / architecture programs A–D).
+  - Post-beta option portfolio. It does not authorize current work.
 - `docs/HORIZON_EPICS.md`
-  - Horizon direction: 15 high-leverage conceptual epics (EP-01…EP-15, issues #439–#453) from the 2026-07-07 design initiative. Milestone-gated behind v0.5.0; awaiting maintainer cull/ratify.
+  - Post-beta option portfolio from the 2026-07-07 design initiative. Frozen pending evidence and maintainer cull; it is not an active backlog.
 - `docs/REDESIGN_ORCHESTRATION.md`
   - UI redesign plan (9 phases, R1–R9). Complete as of 2026-05-16.
 - `docs/STORE_LISTING.md`
-  - Chrome Web Store listing copy, description, and promotional asset requirements.
+  - Pointer to the canonical Chrome Web Store material under `docs/cws-listing/`.
 
 ## Active operational docs
 

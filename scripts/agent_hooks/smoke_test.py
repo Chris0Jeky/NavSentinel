@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import runpy
 import subprocess
 import sys
 import tempfile
@@ -27,6 +28,9 @@ ROOT = Path(__file__).resolve().parents[2]
 SETTINGS = ROOT / ".claude" / "settings.json"
 CODEX_HOOKS = ROOT / ".codex" / "hooks.json"
 MCP = ROOT / ".mcp.json"
+ACTION_ITEMS = ROOT / "ACTION_ITEMS.md"
+HANDOFF = ROOT / "docs" / "agentic" / "HANDOFF.md"
+QUESTION_PROTOCOL = ROOT / "docs" / "agentic" / "QUESTION_PROTOCOL.md"
 FLOOR_SMOKE = ROOT / ".claude" / "hooks" / "smoke_test.py"
 VALID_EVENTS = {
     "PreToolUse",
@@ -253,6 +257,36 @@ def test_post_tool_use(settings: dict) -> None:
     if "agent:hooks:smoke" not in output.get("additionalContext", ""):
         raise AssertionError("PostToolUse did not add agentic smoke-test context")
 
+    nested_payload = {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "apply_patch",
+        "cwd": str(ROOT / "docs"),
+        "tool_input": {"command": "*** Update File: ../AGENTS.md\n"},
+        "tool_response": {"success": True},
+    }
+    nested_result = run_configured_hook(hook, nested_payload)
+    if (
+        nested_result.returncode != 0
+        or "agent:hooks:smoke" not in nested_result.stdout
+    ):
+        raise AssertionError(
+            "PostToolUse ignored a relative agentic path from a nested payload cwd"
+        )
+
+
+def test_post_tool_use_alt_worktree_path() -> None:
+    namespace = runpy.run_path(str(ROOT / "scripts" / "agent_hooks" / "post_tool_use.py"))
+    normalize_path = namespace["normalize_path"]
+    is_agentic_path = namespace["is_agentic_path"]
+    with tempfile.TemporaryDirectory() as tmp:
+        alternate_root = Path(tmp) / "NavSentinel-ri01"
+        alternate_root.mkdir(parents=True, exist_ok=True)
+        normalized = normalize_path(alternate_root / ".codex" / "hooks.json", alternate_root)
+        if normalized != ".codex/hooks.json" or not is_agentic_path(normalized):
+            raise AssertionError(
+                "PostToolUse did not recognize an agentic file in an alternate-named worktree"
+            )
+
 
 def test_post_tool_use_failure(settings: dict) -> None:
     hook = hook_command(settings, "PostToolUseFailure")
@@ -278,11 +312,168 @@ def test_post_tool_use_failure(settings: dict) -> None:
 def test_session_start(settings: dict) -> None:
     hook = hook_command(settings, "SessionStart")
     payload = {"hook_event_name": "SessionStart", "cwd": str(ROOT)}
-    result = run_configured_hook(hook, payload)
+    with tempfile.TemporaryDirectory() as tmp:
+        action_items = Path(tmp) / "ACTION_ITEMS.md"
+        action_items.write_text(
+            "**Guided resolution cursor:** AI-101\n\n"
+            "**OPEN: AI-101 - choose**\n\n**BLOCKED: AI-102 - wait**\n",
+            encoding="utf-8",
+        )
+        result = run_configured_hook(
+            hook,
+            payload,
+            {"NAVSENTINEL_ACTION_ITEMS": str(action_items)},
+        )
+        duplicate_items = Path(tmp) / "ACTION_ITEMS-duplicate.md"
+        duplicate_items.write_text(
+            "**OPEN: AI-101 - choose**\n\n**BLOCKED: AI-101 - wait**\n",
+            encoding="utf-8",
+        )
+        duplicate_result = run_configured_hook(
+            hook,
+            payload,
+            {"NAVSENTINEL_ACTION_ITEMS": str(duplicate_items)},
+        )
+        invalid_cursor_results = []
+        invalid_cursor_cases = {
+            "absent": "**OPEN: AI-101 - choose**\n",
+            "missing": (
+                "**Guided resolution cursor:** AI-999\n\n"
+                "**OPEN: AI-101 - choose**\n"
+            ),
+            "blocked": (
+                "**Guided resolution cursor:** AI-102\n\n"
+                "**OPEN: AI-101 - choose**\n\n**BLOCKED: AI-102 - wait**\n"
+            ),
+            "empty": "**Guided resolution cursor:** AI-101\n",
+        }
+        for name, content in invalid_cursor_cases.items():
+            invalid_items = Path(tmp) / f"ACTION_ITEMS-{name}.md"
+            invalid_items.write_text(content, encoding="utf-8")
+            invalid_cursor_results.append(
+                run_configured_hook(
+                    hook,
+                    payload,
+                    {"NAVSENTINEL_ACTION_ITEMS": str(invalid_items)},
+                )
+            )
+        blocked_only_items = Path(tmp) / "ACTION_ITEMS-blocked-only.md"
+        blocked_only_items.write_text(
+            "**BLOCKED: AI-102 - wait**\n",
+            encoding="utf-8",
+        )
+        blocked_only_result = run_configured_hook(
+            hook,
+            payload,
+            {"NAVSENTINEL_ACTION_ITEMS": str(blocked_only_items)},
+        )
+        missing_result = run_configured_hook(
+            hook,
+            payload,
+            {"NAVSENTINEL_ACTION_ITEMS": str(Path(tmp) / "missing.md")},
+        )
+        malformed_items = Path(tmp) / "ACTION_ITEMS-malformed.md"
+        malformed_items.write_bytes(b"\xff")
+        malformed_result = run_configured_hook(
+            hook,
+            payload,
+            {"NAVSENTINEL_ACTION_ITEMS": str(malformed_items)},
+        )
     if result.returncode != 0:
         raise AssertionError(f"SessionStart failed: {result.stderr}")
-    if "NavSentinel agent context" not in result.stdout:
-        raise AssertionError("SessionStart did not emit NavSentinel context")
+    required = (
+        "NavSentinel agent context",
+        "ACTION_ITEMS.md",
+        "OPEN AI-101",
+        "BLOCKED AI-102",
+        "Resume at AI-101",
+        "ns-human-action-guide",
+    )
+    if any(marker not in result.stdout for marker in required):
+        raise AssertionError("SessionStart did not emit the guided human-action context")
+    if duplicate_result.returncode != 0 or "queue INVALID: duplicate AI-101" not in duplicate_result.stdout:
+        raise AssertionError("SessionStart silently accepted a duplicate/conflicting AI-N")
+    for invalid_result in invalid_cursor_results:
+        if (
+            invalid_result.returncode != 0
+            or "queue INVALID:" not in invalid_result.stdout
+            or "Resume at" in invalid_result.stdout
+        ):
+            raise AssertionError(
+                "SessionStart accepted an absent, missing, blocked, or empty-queue cursor"
+            )
+    if (
+        blocked_only_result.returncode != 0
+        or "BLOCKED AI-102" not in blocked_only_result.stdout
+        or "queue INVALID:" in blocked_only_result.stdout
+        or "Resume at" in blocked_only_result.stdout
+    ):
+        raise AssertionError("SessionStart mishandled an all-blocked queue without a cursor")
+    for unreadable_result in (missing_result, malformed_result):
+        if (
+            unreadable_result.returncode != 0
+            or "queue INVALID: cannot read ACTION_ITEMS.md"
+            not in unreadable_result.stdout
+            or "Resume at" in unreadable_result.stdout
+        ):
+            raise AssertionError(
+                "SessionStart silently accepted an unreadable action register"
+            )
+
+
+def test_guided_action_contract() -> None:
+    agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    claude = (ROOT / "CLAUDE.md").read_text(encoding="utf-8")
+    protocol = QUESTION_PROTOCOL.read_text(encoding="utf-8")
+    actions = ACTION_ITEMS.read_text(encoding="utf-8")
+    handoff = HANDOFF.read_text(encoding="utf-8")
+
+    for name, text in (("AGENTS.md", agents), ("CLAUDE.md", claude)):
+        if "ns-human-action-guide" not in text:
+            raise AssertionError(f"{name} does not route ns-human-action-guide")
+    required_protocol = (
+        "## Clarification Mode",
+        "## Guided Outstanding-Action Mode",
+        "q-N [AI-N]",
+        "Resume at: AI-N",
+    )
+    if any(marker not in protocol for marker in required_protocol):
+        raise AssertionError("QUESTION_PROTOCOL.md is missing the guided-action contract")
+
+    action_matches = re.findall(
+        r"^\*\*[^\n]*?\b(OPEN|BLOCKED):\s*(AI-\d+)\b",
+        actions,
+        re.MULTILINE,
+    )
+    action_ids_in_order = [action_id for _, action_id in action_matches]
+    if len(action_ids_in_order) != len(set(action_ids_in_order)):
+        raise AssertionError("ACTION_ITEMS contains duplicate/conflicting AI-N entries")
+    action_status = {action_id: status for status, action_id in action_matches}
+    open_section = re.search(
+        r"## Open human items.*?(?=\n## )",
+        handoff,
+        re.DOTALL,
+    )
+    if not open_section:
+        raise AssertionError("HANDOFF.md has no Open human items section")
+    handoff_status: dict[str, str] = {}
+    for line in open_section.group(0).splitlines():
+        if not line.startswith("- **AI-"):
+            continue
+        status = "BLOCKED" if "BLOCKED" in line else "OPEN"
+        for action_id in re.findall(r"\bAI-\d+\b", line):
+            if action_id in handoff_status:
+                raise AssertionError(f"HANDOFF contains duplicate {action_id}")
+            handoff_status[action_id] = status
+    if action_status != handoff_status:
+        raise AssertionError(
+            "ACTION_ITEMS/HANDOFF human status differs: "
+            f"actions={action_status} handoff={handoff_status}"
+        )
+
+    cursors = re.findall(r"Guided resolution cursor:\*\*\s*`?(AI-\d+)", actions)
+    if len(cursors) != 1 or action_status.get(cursors[0]) != "OPEN":
+        raise AssertionError("ACTION_ITEMS guided cursor is missing or not a current OPEN item")
 
 
 def validate_codex_hooks(hooks_config: dict) -> None:
@@ -295,6 +486,10 @@ def validate_codex_hooks(hooks_config: dict) -> None:
         for hook in entry["hooks"]:
             if not hook.get("commandWindows"):
                 raise AssertionError(f"Codex {event} hook needs commandWindows")
+    post_entries = hooks_config["hooks"].get("PostToolUse", [])
+    matcher = post_entries[0].get("matcher", "") if post_entries else ""
+    if not re.search(matcher, "apply_patch"):
+        raise AssertionError("Codex PostToolUse matcher does not include apply_patch")
 
 
 def test_codex_hooks(hooks_config: dict) -> None:
@@ -315,6 +510,8 @@ def test_codex_hooks(hooks_config: dict) -> None:
     })
     if session.returncode != 0 or "NavSentinel agent context" not in session.stdout:
         raise AssertionError("Codex SessionStart did not emit repository context")
+    if "ACTION_ITEMS.md" not in session.stdout or "ns-human-action-guide" not in session.stdout:
+        raise AssertionError("Codex SessionStart did not emit human-action routing")
 
     post = run_codex_hook(hook_command(hooks_config, "PostToolUse"), {
         "hook_event_name": "PostToolUse",
@@ -439,8 +636,10 @@ def main() -> int:
         ("deny floor matrix (canonical)", test_floor_matrix),
         ("PreToolUse wiring", lambda: test_pre_tool_use_wiring(settings)),
         ("PostToolUse context", lambda: test_post_tool_use(settings)),
+        ("PostToolUse alternate worktree path", test_post_tool_use_alt_worktree_path),
         ("PostToolUseFailure redaction", lambda: test_post_tool_use_failure(settings)),
         ("SessionStart output", lambda: test_session_start(settings)),
+        ("guided human-action contract", test_guided_action_contract),
         ("Codex hook wiring", lambda: test_codex_hooks(codex_hooks)),
     ]
 

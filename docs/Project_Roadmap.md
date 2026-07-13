@@ -1,56 +1,139 @@
 # NavSentinel Project Roadmap
 
-*Created 2026-04-09. Supersedes `Execution_Tracker.md` and `Implementation_Roadmap.md`.*
+*Created 2026-04-09. Truth refresh 2026-07-10; live/status sync 2026-07-13.*
 
-This is the single source of truth for what needs to be built, in what order, and how to
-know it's done. It synthesizes the findings from
-[Product Thesis Review](Product_Thesis_Review.md) and
-[Comprehensive Project Analysis](Comprehensive_Project_Analysis.md) into an actionable plan.
+This is the execution roadmap. [`Product_Strategy.md`](Product_Strategy.md) owns
+the product thesis, portfolio boundaries, and evidence gates; GitHub issues own
+implementation detail; [`ACTION_ITEMS.md`](../ACTION_ITEMS.md) owns human-only
+work. The phase/task material below remains useful implementation history, but
+phase labels and artifact counts must not be read as product readiness.
 
 ---
 
 ## Status Snapshot
 
-| Phase | Title | Tasks | Done | Status |
+| Phase | Title | Tasks | Implementation artifacts merged | Validation/release state |
 |---|---|---|---|---|
-| 0 | Stabilize | 6 | 6 | **Done** |
-| 1 | Validate Foundation | 8 | 8 | **Done** (last FP measurement 0.72% on 2026-05-01, above the 0.1% target; same-org domain-groups fix added but never re-measured — see P1-05) |
-| 2 | Target 2025-2026 Threats | 13 | 13 | **Done** |
-| 3 | Productize | 12 | 12 | **Done** |
-| 4 | Differentiate | 8 | 4 | In progress (P4-05–P4-08 done; P4-01 visual sim plumbing merged but detection non-functional — ships placeholder templates the E2E `visual-sim.spec.ts` asserts can never match; the true-positive path is superseded by P5-D6 #246; P4-02 JS behavior in progress; P4-03–P4-04 pending) |
+| 0 | Stabilize | 6 | 6 | Engineering baseline complete |
+| 1 | Validate Foundation | 8 | 8 | **Validation gate open** (stale FP result; invalid corpus result) |
+| 2 | Target interaction threats | 13 | 13 | **Efficacy/competitive gate open**; reputation asset is a test fixture |
+| 3 | Productize | 12 | 12 | **Release/distribution gate open**: drafts/scope are not CWS distribution or an audit |
+| 4 | Differentiate | 8 | 4 | **Frozen** until beta evidence; visual-sim is queued for removal and JS behavior is unmeasured |
 
-Total: **47 tasks** across 5 phases. **43/47 complete**. P4-01 and P4-02 have foundational PRs merged but need completion work. P4-03 (Firefox port) and P4-04 (community intelligence) are pending.
+The historical registry contains 47 implementation tasks; 43 have merged
+artifacts. Do not publish that ratio as a product-completion score. Product
+readiness is tracked only by the outcome gates below.
 
 **Completed cross-cutting initiative:** UI Redesign (9 phases, R1–R9) — done 2026-05-16. See [REDESIGN_ORCHESTRATION.md](REDESIGN_ORCHESTRATION.md).
 
-**North-Star track (Phase 5):** the zero-FP / friend-advisor / feedback-capture / architecture
-programs derived from the 2026-06-13 research + audit initiative are tracked in
-[**`NORTHSTAR_ROADMAP.md`**](NORTHSTAR_ROADMAP.md) (4 programs as `P5-{prog}{seq}` slices; revisits
-**D08** "No ML" → conditional on-device ML). Source artifacts under `docs/research/NORTHSTAR_*`.
+### Current outcome gates
 
-**Horizon Epics (direction, not a phase):** 15 higher-leverage conceptual mechanics from a
-2026-07-07 21-agent design initiative are mapped in [**`HORIZON_EPICS.md`**](HORIZON_EPICS.md) and
-seeded as `epic`-labelled issues **#439–#453** (EP-01…EP-15: e.g. Signal Fabric, Calibrated
-Judgment, Agent Conduct Layer, the Proving Ground, a native companion, mobile). They are
-**milestone-gated behind the v0.5.0 release** and do **not** reorder the ship/measure priority
-ladder — awaiting the maintainer's cull/ratify. Several extend or absorb existing North-Star and
-measurement issues (named per epic).
+| Gate | State | Required next move |
+|---|---|---|
+| Release integrity | **Blocked** | RI-01 extension-origin decision authority; refresh/fix #356; excise visual-sim (#424); remove fake DNR; purpose-specific data minimization; beta-off JS behavior; #175/#186 bridge identity/recovery |
+| Release profile | **Decision required** | AI-9/AI-16 choose the recommended interaction-only beta or a reproducible, budgeted real reputation build |
+| Brand/store | **Blocked** | AI-19 name clearance; #455 pre-collection disclosure/consent; one canonical claims-verified listing; assets and fresh-install checks |
+| Detection validation | **Open** | #417 methodology, #416/#426 rerun, confidence-aware reporting |
+| Comparative value | **Open** | #418 against current Chrome and relevant Chrome extensions; Edge/Opera remain contextual until supported |
+| Distribution | **Not started** | unlisted beta, 15 invitations, 10 activated daily-use installs, D14/D30 check-ins |
+| Public security posture | **Blocked** | independent external review of the exact beta commit/package |
 
-**Open issues (status checkpoint 2026-06-14):** North-Star Phase 5 (`north-star` label) started as **#232–#246** (see [`NORTHSTAR_ROADMAP.md`](NORTHSTAR_ROADMAP.md)); live open North-Star issues are now **#232**, **#237–#246**, and **#252** (a #236 follow-up). Several slices are merged or in active PRs. Use [`docs/agentic/HANDOFF.md`](agentic/HANDOFF.md), [`docs/agentic/ORCHESTRATOR.md`](agentic/ORCHESTRATOR.md), and live GitHub state for the current PR/issue inventory before branching.
+### Live execution truth
 
-**Repo state (live pointer 2026-07-03, cycle 48):** `main` @ **`eba5d71`** (verify with `git rev-parse origin/main` + `gh pr list`). **Direction adopted: ship/measure, not hardening** — Priority Ladder, milestone-gated discovery, and icebox in [`docs/agentic/DECISIONS.md`](agentic/DECISIONS.md). Baseline: **2874 unit tests** (95 files), perf 12/12, CI green. **3 open PRs, all human-gated at the WIP cap:** #399 (AI-14) / #356 (AI-13) / #273 (AI-8). Cycles 44–47 (agent): #427 hygiene sweep (closed #322/#350/#395/#427, re-bodied #339) + #418 benchmark honest re-scope (#433) + #417 corpus-v2 pillar 1 (#435, protected-vs-fired classifier). Open issues 62→58. ⚠️ **Boundary:** the remaining measurement rung is headed-Chrome/network-gated — highest-leverage next is the human AI-15 batch (see `ACTION_ITEMS.md`). Live human tasks + snapshot in [`ACTION_ITEMS.md`](../ACTION_ITEMS.md); cycle log in [`docs/agentic/ORCHESTRATOR.md`](agentic/ORCHESTRATOR.md); next-loop entry in [`docs/agentic/HANDOFF.md`](agentic/HANDOFF.md). The checkpoints below are historical.
+Verified 2026-07-10: `main` matched `origin/main`; v0.4.0; main CI green;
+2,874 unit tests; 74 open issues; no milestone, tag, GitHub release, CWS release,
+or branch protection. The exact audit baseline is recorded only in dated
+`Product_Strategy.md`; verify live.
+The legacy browser-surface PR queue is not ready for human time:
 
-**Repo state (status checkpoint 2026-06-20, session 3):** `main` @ **`14375ac`** (verify live with `git rev-parse origin/main` and `gh pr list`). **1 open PR (#273, held for Gate-3 = AI-8).** Session-3 merged **8** PRs end-to-end (each: 2 independent adversarial review rounds + green CI + a regression test proven to fail pre-fix): **#280/#266** (sw `tabs.onUpdated` hydration gate), **#281/#264** (credential_guard allowNext synchronous one-shot), **#283/#272** (icon_manager badge-blank chain-ordered), **#284/#252-pt2** (importAll→`trimEventLog`), **#291/#287** (reputation reject degenerate m=0/k=0, fail-closed), **#293/#290** (domain_profile zombie-LRU), **#294/#285** (redirect_chain allowlist FP), **#296/#286** (nav_anomaly phantom-burst rollback). Discovery-pass follow-ups seeded: **#282/#292/#295/#297**. Closed stale resolved issues #198/#203/#213/#222/#229. **Do not start duplicate work for #264/#266/#272/#285/#286/#287/#290** (and #252 *part 2* importAll-trim; **#252 part 1** — silent-decision e2e — remains OPEN). Baseline: typecheck clean, lint 0/0, perf **12/12**. ⚠️ **`capture_isolated` at 100% (65.9/66KB)** — any chunk growth fails the budget; **content_analyzer #288/#289 are blocked on this** (need a chunk-split or cap-bump decision). Next candidates (each needs a design/measurement/Gate-3 call): the **OAuth cluster #269/#223/#221** (FP-measurement-gated), **#200**/**#226** (capture_isolated-blocked), **#176** (minimize SW URL persistence), **#127** (JSB perf), popup-gauge stack **#205→#219→#215** (browser-surface), North-Star **#232/#237/#252**. See ORCHESTRATOR Cycle 33 for the session-3 deferred questions (Q1–Q5).
+| PR | Current state |
+|---|---|
+| #273 | Closed 2026-07-13 from a stale base; recreate from current `main` or defer |
+| #356 | 159 commits behind `main`; E2E red; release prerequisite after repair |
+| #399 | Closed 2026-07-13; measurement-held under #223/#417 and not a beta blocker |
 
-> **Picking up the autonomous loop? Start with [`docs/agentic/HANDOFF.md`](agentic/HANDOFF.md)** (point-in-time handoff) and [`docs/agentic/ORCHESTRATOR.md`](agentic/ORCHESTRATOR.md) (living backlog/cycle log). Also see `ACTION_ITEMS.md` for human-owned tasks: **AI-8 OPEN** (Gate-3 visual check + merge #273, the neutral-chip PR); AI-1…AI-6 resolved. Standing posture: agent may autonomously merge non-browser PRs; browser-surface PRs hold for Gate-3.
+**RI-01 local implementation note (verified 2026-07-13):** remotely backed-up
+checkpoint branch `fix/ri01-extension-origin-decisions` at `5514288` contains a context-bound,
+hash-minimizing pending-decision broker plus a synthetic-navigation-allowance
+fix. Focused broker tests pass, but the broker is not wired into production:
+service-worker handlers, active-tab/sender validation, exact-context delivery,
+popup actions, warn/cancel-only injected prompts, full branch gates, and real
+Chrome remain open. Windows Defender quarantined one tracked adversarial
+ClickFix property fixture only in that worktree; AI-20 owns the human review.
 
-Last updated: 2026-07-03
+The North-Star and Horizon documents are frozen option portfolios. Their 15
+Horizon issues (#439–#453) do not authorize implementation and should be culled
+or moved to a post-beta milestone. Start each session with
+[`HANDOFF.md`](agentic/HANDOFF.md), live GitHub state, and
+[`ACTION_ITEMS.md`](../ACTION_ITEMS.md).
+
+### Corrective action register
+
+This is the single mutable action register. Reuse existing issues to avoid
+backlog inflation; rows without a public issue remain release tasks until the
+maintainer chooses disclosure/ownership.
+
+| ID | Priority | Action | Owner/gate | Existing home | Done when |
+|---|---|---|---|---|---|
+| RI-01 | P0 beta blocker | Move all proceed/allow/trust/resume authority out of page-injected UI | Agent + Gate-3 | Private release task | Injected UI is warn/cancel only; extension-origin action is tab/destination-bound with TTL; synthetic input, trusted-click redressing, host tamper/removal, tab switch, and stale state cannot lower protection |
+| RI-02 | P0 beta blocker | Excise visual-sim capture, templates, scoring hook, WAR, tests, and state | Agent + Gate-3 | #424 | No viewport capture path or placeholder asset remains; #374 is optional coordination, not a prerequisite |
+| RI-03 | P0 beta blocker | Refresh/fix #356; recreate or defer #273; rerun two reviews and CI | Agent before human time | #273/#356; #399 stays deferred | Replacement human guides point only to current green branches; #399 remains outside beta blockers until its measurement methodology is ready |
+| RI-04 | P0 product decision | Implement the selected interaction-only or real-reputation profile | Chris + agent | #321 / AI-9 / AI-16 | Release script, tag CI, manifest/WAR, runtime initialization, package checks/budgets, tests, provenance/cadence (if real), and every claim agree for the selected profile; verify both only if both are intentionally retained |
+| RI-05 | P0 beta blocker | Remove fake DNR feature surface and unused permissions | Agent + Gate-3 | CWS checklist; redesign #242/#243 later | No test rules/toggle/DNR permission in beta manifest |
+| RI-06 | P0 privacy blocker | Inventory every store; minimize by purpose; add complete reset | Agent + privacy review | Extend #176 or seed one scoped follow-up | Persistent records use least-identifying data; exact session URLs remain only for correctness with tab binding/TTL; rollback/OAuth/allow tests pass; all behavioral stores have one clear control and accurate export/disclosure |
+| RI-07 | P0 beta blocker | Add an explicit beta capability flag that leaves JS behavior instrumentation off | Agent + Gate-3 | #127 or a scoped release-profile issue | Fresh beta defaults/migration/UI/runtime agree; fetch/XHR/beacon/password-value prototypes are not wrapped; core navigation remains active; compatibility/perf evidence required to enable |
+| RI-08 | P0 beta blocker | Authenticate/recover the MAIN-world bridge and fail closed when unavailable | Agent + Gate-3 | #175/#186 | Hostile page code cannot become the trusted peer or suppress protection; reload/death recovery is bounded and tested |
+| RI-09 | Public-launch blocker | Obtain an independent external security review | Agent + external reviewer | P3-09 | Exact release commit/package reviewed; findings resolved or explicitly accepted |
+| PM-01 | P0 release blocker | Clear or replace the working product name | Chris | AI-19 | Search/domain/CWS/legal decision recorded before submission |
+| PM-02 | P0 release blocker | Verify one canonical store/privacy copy and reporting route against the package | Agent + Chris submission | `docs/cws-listing/`; `SECURITY.md` | Correct category, complete data inventory, supported claims, private vulnerability route, derived minimum Chrome, assets/fresh install complete |
+| PM-03 | P0 beta compliance blocker | Add pre-install disclosure/consent evidence plus in-product activation | Agent + Gate-3 | #455 | CWS listing/install consent mapping is evidenced; fresh installs stay passive until in-product activation; Limited Use declaration, categories/uses, and revocation/reset match the package |
+| EV-01 | P1 after integrity | Recruit and measure the first daily-use cohort | Chris-led | #425 — rebody before use | 15 invitations; 10 activated; 7/10 enabled D14 and 6/10 D30; every non-install/disable reason recorded |
+| EV-02 | P1 | Finish valid FP/TP methodology and reproducible runs | Agent + headed/network gate | #416/#417/#426 | Committed inputs/results and confidence-aware reporting; no tune-before-measure |
+| EV-03 | P1 | Compare additive value with current protections | Agent + headed lane | #418 | Pre-registered scenarios/configurations; wins, misses, interruption, performance, and data flow published |
+| EV-04 | P1 after integrity | Measure representative-site compatibility and runtime overhead | Agent + headed lane | Reuse #127/#420; no new issue before queue cull | Declared normal journeys have zero unexplained functional breakage/page errors; startup/action latency and CPU budgets are fixed, measured, and published before broad instrumentation is enabled |
+| OPS-01 | P1 | Rotate roadmap/orchestrator and cull duplicate epics | Agent + Chris dispositions | #437 and #439–#453 | Short current roadmap, archived history, one milestone-categorized queue |
+
+### Existing issue dispositions
+
+- #415: create one `v0.5.0-unlisted-beta` milestone containing only real blockers.
+- #321: replace "build the filter" with RI-04 and the AI-9 decision.
+- #356: P0 after refresh/fix/review; #273 recreate/defer; #399 is closed and
+  remains measurement-deferred under #223/#417.
+- #419/#421/#422: close enacted scope; retain only concrete unfinished work.
+- #423: close when the verified-claims policy lands.
+- #424: rebody as RI-02; move #245/#246 to post-beta or close them.
+- #425: replace public-launch-first/WAU wording with integrity-gated dogfood,
+  15 invitations, 10 activated installs, and manual D14/D30 measurement; no
+  public launch before the external review and no WAU KPI without an approved
+  collection mechanism.
+- #426: rebody as blocked on #417 plus a headed rerun.
+- #437: rotate this file and ORCHESTRATOR after release-integrity work.
+- #439 duplicates #420; cull or post-beta-milestone the remaining Horizon issues.
+- Verify #184 against current truth and close it if reconciliation is complete.
+
+### 90-day sequence
+
+1. **Weeks 0–2:** freeze features; complete RI-01–RI-08 and PM-03, refresh PRs,
+   clear the name/profile, and align package/store/privacy truth. Run headed
+   checks only after agent preflight.
+2. **Weeks 3–4:** package/submit unlisted; invite 15 daily-use users; record
+   every failed install/onboarding and establish the 10-user activated cohort.
+3. **Weeks 5–8:** weekly check-ins; classify interventions/overrides; finish
+   corpus, comparison, and representative-site compatibility/performance lanes;
+   fix only release defects, severe compatibility, or measured costly false positives.
+4. **Weeks 9–12:** report D14/D30, corpus, and comparison evidence. If credible,
+   fund only Decision Journal + recovery guidance; otherwise change segment/
+   position or stop before advanced architecture.
+
+Last updated: 2026-07-13
 
 ---
 
 ## Decision Log
 
-Decisions taken during this planning session. Each is final unless explicitly revisited.
+Historical D01–D20 decisions are retained below. July-10 amendments are the
+working posture pending AI-16 ratification; `docs/agentic/DECISIONS.md` has
+higher authority when wording conflicts.
 
 > **Cross-cutting process/posture decisions (2026-07-03, D-2026-07-03-A..H)** live in [`docs/agentic/DECISIONS.md`](agentic/DECISIONS.md) — ship/measure direction, priority ladder, browser-surface re-tiering + WIP cap, visual-sim excision, distribution sequence. D21-D26 (North-Star) are in [`NORTHSTAR_ROADMAP.md`](NORTHSTAR_ROADMAP.md).
 
@@ -62,20 +145,20 @@ Decisions taken during this planning session. Each is final unless explicitly re
 | D04 | **Effort: S / M / L / XL** | S: < 4 hours, single focus. M: 4-12 hours, 2-5 files. L: 2-5 days, new subsystem. XL: 1-2 weeks, cross-cutting. |
 | D05 | **Branch convention: `{type}/{slug}`** | Types: `fix/`, `feat/`, `test/`, `infra/`, `docs/`. Replaces the `codex/` prefix from the merge era. |
 | D06 | **PSL: build-time bundled JSON** | Ship a static JSON asset compiled from publicsuffix.org at build time. No runtime network calls. Add a `scripts/update-psl.mjs` build script. Update manually or via dependabot-like cadence. |
-| D07 | **Bloom filter: build-time from free feeds** | Compile from URLhaus + OpenPhish at build time. ~150KB budget for 100K domains. Ship as binary asset. No runtime lookups. |
+| D07 | **Reputation is an optional build-time release profile** | The old 150KB/100K-domain assumption is mathematically incompatible with the 0.01% FP target and current 500KB package cap. The recommended beta omits reputation unless feed provenance, licensing, cadence, cardinality, FP target, and package budget are explicitly solved. |
 | D08 | **No ML at this stage** | ML adds model size, inference complexity, and update mechanism overhead. Heuristic/pattern detection keeps the extension light and auditable. Revisit in Phase 4 if heuristics plateau. |
-| D09 | **DoubleClickjacking = headline feature** | No consumer extension detects this. The attack bypasses all traditional defenses. NavSentinel is architecturally positioned. This is the single strongest differentiator. |
-| D10 | **Drop "(Dev)" branding** | Ship as "NavSentinel". The Dev suffix signals unfinished work and undermines trust. |
+| D09 | **Interaction correlation is the differentiator to test** | DoubleClickjacking remains useful coverage, but competitor-absence and superiority claims are unverified. The product must demonstrate additive wins against current browser protections. |
+| D10 | **Use a release-quality name only after clearance** | "NavSentinel" is a working name that collides with an active GNSS security product. AI-19 is required before CWS submission. |
 | D11 | **Local prompt telemetry** | Track allow/dismiss/trust/block outcomes in `chrome.storage.local`. Display in options page. No data leaves the machine. Enables evidence-based threshold tuning. |
-| D12 | **Position: "Catches what Safe Browsing can't see"** | Don't compete on URL reputation (Google wins). Compete on interaction-level detection that cloud tools structurally can't do. Complementary layer positioning. **(Positioning stance, not yet evidenced — the Safe Browsing comparison arm is unbuilt; see #418 before using as a store headline.)** |
+| D12 | **Position as an auditable local interaction guard** | Complement built-in browser protection; do not claim browsers structurally cannot see the same threats. #418 must establish any comparative claim. |
 | D13 | **Content analysis = pattern matching, not ML** | Match against 20-30 known phishing kit HTML fingerprints. Check brand logo/domain mismatches. Simple, auditable, effective against commodity phishing. |
-| D14 | **Phase gates are mandatory** | Don't start Phase N+1 until Phase N gates are met. Prevents scope creep and ensures each layer is solid before building on it. |
+| D14 | **Outcome gates are mandatory** | Earlier phases advanced while validation gates remained open. Future work is gated by release, evidence, and user outcomes—not artifact completion. |
 | D15 | **Archive old planning docs** | Move `Execution_Tracker.md` and `Implementation_Roadmap.md` to `docs/archive/`. They're historical records of the merge era. |
-| D16 | **Local-first thesis maintained across all phases** | No feature may introduce runtime network calls. Build-time data bundling is acceptable. This is the core product thesis and competitive moat. |
+| D16 | **Local-first privacy boundary** | The beta makes no runtime network calls and never uploads browsing data/telemetry. A future inbound signed-data update is not active authorization: it requires a new explicit product/privacy/release decision and must not carry browsing state outbound. |
 | D17 | **NRS: implement per existing spec** | The spec in `Intent_Model_and_Scoring.md` is the design doc. Implement the weights and thresholds as written, then tune based on Phase 1 testing data. |
 | D18 | **Test corpus separate from gym** | Phishing snapshots and clickjacking PoCs go under `tests/corpus/`, not `gym/`. Gym remains deterministic local fixtures. Corpus is external samples for validation. |
-| D19 | **FP measurement is a Phase 1 gate** | Cannot claim the foundation is validated without knowing the false positive rate. Automated Tranco top-1000 measurement is required before Phase 2 starts. |
-| D20 | **Security audit in Phase 3** | Seek a volunteer external security reviewer. The code is clean enough to audit now; the product needs to be feature-complete enough to be worth auditing. |
+| D19 | **Quietness needs operational and claim-grade gates** | A top-1000 run is descriptive, not enough to substantiate `<0.1%`. Report sample size and confidence intervals; keep named benign journeys as the beta operational gate. |
+| D20 | **Bridge integrity before beta; external review before public launch** | Document-start ordering is not peer authentication. Complete #175/#186 before beta; an audit scope is not an audit, so review the exact package before public distribution. |
 
 ---
 
@@ -98,7 +181,9 @@ Decisions taken during this planning session. Each is final unless explicitly re
 ### Phase 2: Target 2025-2026 Threats
 **Goal**: Add detection for the attack families growing fastest: DoubleClickjacking, ClickFix, OAuth abuse, phishing URLs, phishing content.
 
-**Why third**: The threat landscape has shifted toward browser-context interaction-level attacks. This is NavSentinel's natural territory. The window to be first-to-market on DoubleClickjacking and ClickFix detection is open but closing.
+**Historical rationale**: the threat landscape shifted toward interaction-level
+attacks. As of 2026-07-10, browser-native and extension competitors cover parts
+of this space; the task is to prove additive value, not claim first-mover status.
 
 **Timeline**: 8-16 weeks.
 
@@ -245,8 +330,8 @@ Phase 0 is complete when:
 | P1-02 | Harden CDS against trivial evasion | L | **done** | P0-04 | `feat/cds-hardening` (PR #20) |
 | P1-03 | Enhance lookalike detection | M | **done** | P1-01 | `feat/lookalike-v2` |
 | P1-04 | Implement NRS | L | **done** | P1-02 | `feat/nrs-impl` (PR #28) |
-| P1-05 | False positive measurement on Tranco top-1000 | L | **done** | P1-01 | `test/fp-measurement` (PR #24); FP rate fix on `fix/fp-rate-reduction` (PR #32); definitive 0.72% re-run on `test/fp-measurement-rerun` (PR #39) — predates the same-org domain-groups fix and was never re-measured (see P1-05 detail / #416) |
-| P1-06 | Real-world phishing test corpus | L | **done** | P1-01 | `test/phishing-corpus` (PR #30); corpus run on `test/phishing-corpus-run` (PR #38) |
+| P1-05 | False positive measurement on Tranco top-1000 | L | **harness merged; valid current measurement open** | P1-01 | `test/fp-measurement` (PR #24); old 0.72% run predates current code and the same-org fix; #416 must rerun committed methodology |
+| P1-06 | Real-world phishing test corpus | L | **harness merged; methodology/result invalid and open** | P1-01 | `test/phishing-corpus` (PR #30); #417/#426 must complete current-host/trusted-input methodology and rerun |
 | P1-07 | CDS evasion red-team test suite | M | **done** | P1-02 | `test/cds-evasion` (PR #25) |
 | P1-08 | Local prompt telemetry | M | **done** | P0 gate | `feat/prompt-telemetry` (PR #21) |
 
@@ -462,7 +547,10 @@ Phase 1 is complete when:
 - [x] Lookalike detection catches subdomain stuffing, homoglyphs, and brand keywords (PR #22 merged)
 - [x] NRS is implemented per spec and wired into navigation decisions (PR #28 merged)
 - [ ] False positive rate on Tranco top-200: measured at 0.72% (1/138: unity3d.com) on 2026-05-01, **above the 0.1% target**; a same-organization domain-groups fix (`domain_groups.ts`, PR #24/#32, `fix/fp-gate-multi-domain`) was added to suppress the unity3d.com cross-site penalty, **but the post-fix rate was never re-measured** — <0.1% remains unconfirmed and the figure is stale vs. current code; a top-1000 re-measurement is required (#416)
-- [x] At least 50 real phishing pages tested, TP rate measured (P1-06 infrastructure merged via PR #30; corpus run: 100 pages tested, 28% overall TP, 100% credential guard TP on 5 pages with detectable password forms; ~16 additional password-form pages missed due to dynamic JS injection in static snapshots)
+- [ ] At least 50 real phishing pages tested with valid current methodology and
+  a pre-harm TP result. The old 100-page/28% run used static localhost
+  snapshots and synthetic input; it is historical diagnostic evidence, not a
+  completed outcome gate. Complete #417 and rerun through #416/#426.
 - [x] CDS evasion red-team suite exists and composite evasion is caught (PR #25 merged)
 - [x] Prompt telemetry is recording locally (PR #21 merged)
 
@@ -476,7 +564,7 @@ Phase 1 is complete when:
 |---|---|---|---|---|---|
 | P2-01 | DoubleClickjacking detection | XL | **done** | P1 gate | `feat/double-clickjacking` (PR #36) |
 | P2-02 | ClickFix / fake CAPTCHA detection | L | **done** | P1 gate | `feat/clickfix-detection` (PR #37) |
-| P2-03 | Local bloom filter URL reputation | L | **done** | P1-01 | `feat/bloom-reputation` (PR #35) |
+| P2-03 | Local bloom filter URL reputation | L | **mechanism merged; production profile open (AI-9/RI-04)** | P1-01 | `feat/bloom-reputation` (PR #35); current asset is a test stub, not a production reputation layer |
 | P2-04 | Page content fingerprinting | L | **done** | P1 gate | `feat/content-fingerprint` (PR #53) |
 | P2-05 | OAuth consent flow monitoring | L | **done** | P2-01 | `feat/oauth-monitoring` (PR #47) |
 | P2-06 | Redirect chain correlation | L | **done** | P1-04 | `feat/redirect-chains` (PR #51) |
@@ -492,9 +580,11 @@ Phase 1 is complete when:
 
 #### P2-01: DoubleClickjacking detection (HEADLINE FEATURE)
 
-**This is NavSentinel's strongest differentiator opportunity** (Decision D09). No consumer
-extension detects DoubleClickjacking. The January 2025 attack bypasses X-Frame-Options, CSP
-frame-ancestors, AND SameSite cookies.
+This was the original differentiator hypothesis (Decision D09). Direct
+DoubleClickjacking extensions now exist, so #418 must establish whether
+NavSentinel's cross-event implementation adds measurable value. The January
+2025 attack can bypass X-Frame-Options, CSP frame-ancestors, and SameSite
+cookies.
 
 **Attack sequence to detect**:
 1. User double-clicks on attacker page
@@ -529,8 +619,11 @@ on legitimate double-click interactions or normal popup flows. At least 3 gym va
 
 #### P2-02: ClickFix / fake CAPTCHA detection
 
-ClickFix attacks accounted for **47% of all initial access in 2025** (Microsoft). They use
-fake CAPTCHA overlays that write malicious commands to clipboard and instruct users to paste.
+Microsoft reports heavy ClickFix use in its 2025 incident-response/Defender
+observations, but that dataset is not a global "all initial access" denominator.
+Treat prevalence as time-sensitive. The technique uses fake CAPTCHA overlays
+that write commands to the clipboard and instruct users to paste them. See the
+[Microsoft Digital Defense Report 2025](https://www.microsoft.com/en-us/security/security-insider/threat-landscape/microsoft-digital-defense-report-2025).
 
 **Detection approach**:
 - In `main_guard.ts`: intercept `navigator.clipboard.writeText()` in main world
@@ -557,8 +650,9 @@ real CAPTCHAs (reCAPTCHA, hCaptcha, Turnstile). At least 2 gym variants pass.
 
 #### P2-03: Local bloom filter URL reputation
 
-Bundle a bloom filter of known-bad domains. Catches 60-70% of active phishing campaigns
-without any network calls (Thesis Review, Section 7.2).
+Bundle an optional bloom filter of known-bad domains without runtime network
+calls. The historical 60–70% coverage estimate is unverified and must not be
+used as a product claim.
 
 **What to do**:
 - Add `scripts/build-bloom-filter.mjs` that:
@@ -571,13 +665,18 @@ without any network calls (Thesis Review, Section 7.2).
 - Wire reputation check into credential guard (risk factor: known-bad domain)
 - Add unit tests with known-bad domains and false positive verification
 
-**Size budget**: ~150KB for 100K domains (acceptable for extension bundle).
+**Budget correction (2026-07-10):** at a 0.01% target, 150KB supports about
+64,000 entries, not 100,000, and the current package has only about 26KB of
+aggregate headroom. Separate data/package budgets and release provenance are
+required if AI-9 selects a real-filter profile.
 
 **Files**: new `scripts/build-bloom-filter.mjs`, new `extension/src/shared/reputation.ts`,
 new `extension/public/reputation_data.bin`, `extension/src/shared/scoring.ts` or `nrs.ts`
 
-**Done when**: Bloom filter lookup works. Known-bad domains from test feed are caught.
-False positive rate of bloom filter itself is < 0.01%. No runtime network calls.
+**Done when**: the selected release profile is honest. For interaction-only,
+reputation is absent/disabled and unclaimed. For real-filter, feed licensing,
+provenance, cadence, cardinality, bit density, sentinel membership, package
+budget, and measured bloom FP all pass reproducibly. No runtime network calls.
 
 #### P2-04: Page content fingerprinting
 
@@ -604,8 +703,11 @@ kit fingerprints are detected. No false positives on legitimate brand login page
 
 #### P2-05: OAuth consent flow monitoring
 
-OAuth consent phishing rose 146% in 2024. ConsentFix attacks merge fake CAPTCHAs with OAuth
-abuse. NavSentinel already gates popups; this extends that to specifically track OAuth flows.
+OAuth and identity-flow abuse remain important, but the often-cited Microsoft
+146% figure refers to adversary-in-the-middle phishing, not OAuth consent
+phishing. ConsentFix attacks can combine fake CAPTCHAs with OAuth abuse.
+NavSentinel already gates popups; this extends that to track a limited set of
+OAuth redirect/callback behaviors.
 
 **What to do**:
 - Detect OAuth redirect patterns: URL contains `oauth`, `authorize`, `consent`, `login`
@@ -774,7 +876,9 @@ measurable on iframe-heavy pages.
 Phase 2 is complete when:
 - [x] DoubleClickjacking detection works and has gym coverage (PR #36 merged)
 - [x] ClickFix / fake CAPTCHA detection works and has gym coverage (PR #37 merged)
-- [x] Bloom filter catches known-bad domains without network calls (PR #35 merged)
+- [ ] Production reputation outcome is proven for the selected release profile.
+  PR #35 proves only reserved test-fixture membership; the current filter is a
+  stub and AI-9/RI-04 remain open.
 - [x] Page content fingerprinting detects brand/domain mismatches (PR #53 merged: 20 brands, 30 phishing kit fingerprints, tiered BrandSignal scoring)
 - [x] Redirect chains are correlated and scored as a unit (PR #51 merged: per-hop scoring with caps, known redirector detection, 15s stale pruning)
 - [x] DOM mutations are monitored for post-load injection (PR #45 merged: MutationObserver with cookie/chat/ARIA exclusions, 100ms debounce, 50-alert cap)
@@ -796,13 +900,13 @@ Phase 2 is complete when:
 | P3-03 | Smart defaults that learn | M | **done** | P1-08 | `feat/smart-defaults` (PR #62) |
 | P3-04 | Onboarding flow | L | **done** | P3-01, P3-02 | `feat/onboarding` (PR #73) |
 | P3-05 | Adaptive scoring with user feedback | L | **done** | P1-08, P3-03 | `feat/adaptive-scoring` (PR #66) |
-| P3-06 | Chrome Web Store listing | M | **done** | P3-01, P3-02 | `docs/cws-listing` (PR #81) |
+| P3-06 | Chrome Web Store listing | M | **in progress** | P3-01, P3-02 | Drafts exist; name, assets, release profile, fresh-install verification, and submission remain |
 | P3-07 | Release infrastructure | M | **done** | P2 gate | `infra/release` (PR #67) |
 | P3-08 | Issue templates and repo hygiene | S | **done** | -- | `docs/issue-templates` (PR #50) |
-| P3-09 | Seek volunteer security audit | S | **done** | P2 gate | `docs/security-audit-prep` (PR #82) |
+| P3-09 | Prepare and obtain independent external security review | XL / external | **blocked** | RI-01–RI-08, PM-03 | Scope preparation exists; immutable release target, outreach, review, and remediation remain |
 | P3-10 | Migrate SW ephemeral state to chrome.storage.session | M | **done** | P2-01 | `feat/sw-session-storage` (PR #63) |
 | P3-11 | jsdom/happy-dom test environment for ClickFix DOM tests | S | **done** | P2-02 | `test/jsdom-clickfix-tests` (PR #49) |
-| P3-12 | Bloom filter size monitoring in CI | S | **done** | P2-03 | `infra/bloom-ci-check` (PR #48) |
+| P3-12 | Bloom filter size monitoring in CI | S | **monitor merged; release-profile check open** | P2-03 | `infra/bloom-ci-check` (PR #48); current test-stub check does not prove a real-filter package |
 
 ### Task Details
 
@@ -921,12 +1025,16 @@ consent flow abuse -- without sending your data anywhere."
 The "only … that detects" wording is a competitive superlative with **no competitive benchmark
 behind it** (P2-10's Safe-Browsing arm was never built — see #418), and the landscape has since
 shifted (Chrome now ships local Gemini Nano scam detection — NORTHSTAR D21). The checked-in
-store-listing drafts (`docs/STORE_LISTING.md` and the canonical `docs/cws-listing/STORE_LISTING.md`,
-PR #81 — **neither yet submitted**) already avoid the superlative ("protects two high-risk browser
-surfaces that other extensions miss"). Use the structural-positioning framing (D12), not "the
-only", until #418 produces comparative data.
+  canonical store-listing draft (`docs/cws-listing/STORE_LISTING.md`, PR #81 —
+  **not submitted**) must use the complementary local-interaction position in
+  `Product_Strategy.md`. Do not use "only", "other extensions miss", or
+  "browsers cannot see" without current comparative evidence.
 
-**Done when**: Extension is listed and installable from CWS. **NOT MET (2026-07-03)** — the extension has never been submitted to the Chrome Web Store (0 git tags, 0 GitHub releases). Listing copy and the privacy disclosure are drafted under `docs/cws-listing/` (PR #81), but actual submission/listing is an open manual gate (#321 / AI-9, release umbrella #415).
+**Done when**: Extension is listed and installable from CWS. **NOT MET
+(2026-07-13)** — no submission, tag, or GitHub release exists. Name clearance
+(AI-19), release-integrity tasks RI-01–RI-08, pre-collection disclosure and
+consent (#455/PM-03), the release profile (AI-9), assets, fresh-install checks,
+and submission remain.
 
 #### P3-07: Release infrastructure
 
@@ -956,19 +1064,28 @@ only", until #418 produces comparative data.
 
 **Done when**: Templates exist and render correctly on GitHub.
 
-#### P3-09: Seek volunteer security audit
+#### P3-09: Prepare and obtain independent external security review
 
 The code is clean and readable but hasn't been reviewed by an external security professional
 (Thesis Review, Section 6).
 
+This is not an S-sized implementation task. Scope preparation/outreach is
+separate from externally scheduled review and potentially cross-cutting
+remediation.
+
 **What to do**:
-- Identify potential reviewers (security-focused OSS contributors, academic contacts)
-- Prepare a focused audit scope document (bridge security, CDS evasion, storage isolation)
-- Reach out with the scope and a link to the repo
-- Address findings
+- complete RI-01–RI-08 and PM-03, then freeze one immutable commit/package;
+- finalize the focused scope, browser/version, manifest, build inputs, and hash;
+- identify and engage an independent security reviewer;
+- publish or retain a complete report according to the agreed disclosure model;
+- resolve every finding or record an explicit owner-approved residual risk.
 
 **Done when**: At least one external security professional has reviewed the bridge design
 and CDS logic. Findings addressed or documented as accepted risks.
+
+**Current state (2026-07-13): NOT MET.** `SECURITY_AUDIT_SCOPE.md` is
+preparation, not an external audit. #175/#186 now block beta through RI-08; a
+fresh external review of the exact package separately blocks public launch.
 
 #### P3-10: Migrate SW ephemeral state to chrome.storage.session
 
@@ -1002,46 +1119,55 @@ that check for iframes, class names). Currently verified via gym fixtures only.
 
 #### P3-12: Bloom filter size monitoring in CI
 
-`reputation_data.bin` will grow when real phishing feeds are used. Need to enforce the 2MB
-cap and alert on unexpected size changes.
+The merged monitor catches unexpected changes to the checked-in asset. It does
+not establish that a real feed fits the extension's current aggregate and chunk
+budgets, nor that the release package contains the intended filter.
 
 **What to do**:
-- Add a CI step that checks `reputation_data.bin` size and fails if > 2MB
-- Add the bloom filter build to the CI pipeline
+- Keep a profile-aware check for cardinality, bit density, sentinel membership,
+  data provenance, and measured bloom false-positive rate.
+- Check the packaged asset and aggregate/chunk budgets, not an obsolete 2 MB
+  standalone cap.
+- For interaction-only beta, prove reputation is absent or disabled and no
+  reputation claim leaks into copy or runtime state.
 
-**Files**: `.github/workflows/ci.yml`, `scripts/build-bloom-filter.mjs`
+**Files**: `.github/workflows/ci.yml`, `scripts/build-bloom-filter.mjs`,
+`scripts/check-bloom-size.mjs`, release/package scripts
 
-**Done when**: CI fails if bloom filter exceeds 2MB. Bloom filter build is reproducible in CI.
+**Done when**: the selected release profile fails closed when its declared
+asset, provenance, cardinality, package, or runtime expectations are violated.
+If both variants are intentionally supported, verify each independently.
 
 ### Phase 3 Gate
 
-Phase 3 is complete when:
+The Phase 3 outcome gate closes when:
 - [x] All user-facing messages are in plain English (PR #64 merged)
 - [x] Icon changes color based on page risk (PR #65 merged)
 - [x] Smart defaults suggest allowlist additions (PR #62 merged: 24h cooldown, 25 unit tests)
 - [x] Onboarding flow exists and works on first install (PR #73 merged)
-- [x] CWS listing prep done (PR #81 merged; actual submission requires manual steps)
+- [ ] CWS listing is installable (draft copy exists; release/name/assets/submission remain)
 - [x] Release workflow is scripted (PR #67 merged: CHANGELOG, version bump script, CI release job)
 - [x] Issue templates exist (PR #50 merged)
 - [x] Adaptive scoring adjusts per-domain thresholds (PR #66 merged)
 - [x] SW state survives service worker restarts (PR #63 merged)
-- [x] Security audit scope doc prepared (PR #82 merged; actual external review requires outreach)
+- [ ] External security review completed and findings resolved (scope only exists today)
 
 ---
 
 ## Phase 4: Differentiate
 
-These tasks are the long game. They depend on a shipped, validated product (Phase 3) and are
-ordered by estimated impact. Timelines are intentionally open-ended.
+These tasks are a frozen option portfolio. They depend on a shipped, retained,
+validated product; none is authorized by this table. Current priority is the
+release/evidence sequence in `Product_Strategy.md`.
 
 ### Task Table
 
 | ID | Title | Effort | Status | Depends On |
 |---|---|---|---|---|
-| P4-01 | Visual similarity detection | XL | in progress | P3 gate (cleared) | PRs #109 (architecture), #110 (capture), #111 (templates) merged; #172 (NRS scoring integration) merged; P4-01b gym fixtures + E2E (`tests/e2e/visual-sim.spec.ts`) merged. North-Star D24 decided the remaining true-positive path should pivot from pHash templates to logo embeddings; implementation is now tracked by P5-D6 (#246), with AI-5 supplying/approving reference logos. |
-| P4-02 | JavaScript behavior analysis | XL | in progress | P3 gate (cleared) | PRs #98 (design), #101 (forms), #104 (creds), #105 (exfil), #107 (NRS), #108 (gym) merged; type dedup via #128/#129. Remaining work tracked in **issue #127**: perf validation (patch/getter overhead budgets) + residual `JsBehaviorState` dedup in `js_behavior_monitor.ts` |
-| P4-03 | Cross-browser port (Firefox MV3) | XL | pending | P3 gate (cleared) |
-| P4-04 | Community threat intelligence | XL | pending | P3 gate (cleared) |
+| P4-01 | Visual similarity detection | XL | **remove before beta** | #424 / RI-02 | Placeholder path never matches and can process the wrong active tab; a future opt-in design starts fresh only after evidence |
+| P4-02 | JavaScript behavior analysis | XL | **beta-off pending measurement** | #127 | Broad global wrappers require compatibility and runtime-overhead evidence |
+| P4-03 | Cross-browser port (Firefox MV3) | XL | **frozen** | Desktop-Chrome retention evidence |
+| P4-04 | Community threat intelligence | XL | **frozen** | User scale, privacy, governance, and infrastructure evidence |
 | P4-05 | CSP / permissions analysis | L | **done** | P2 gate | PR #71 |
 | P4-06 | Sub-resource integrity awareness | M | **done** | P2 gate | PR #68 |
 | P4-07 | Per-domain behavioral profiling | L | **done** | P1-08 | PR #69 |
@@ -1051,16 +1177,16 @@ ordered by estimated impact. Timelines are intentionally open-ended.
 
 #### P4-01: Visual similarity detection
 
-The shipped P4-01 plumbing captures visual evidence and feeds NRS, but the true-positive
-brand-spoof path has pivoted away from perceptual page hashes. North-Star decision D24
-keeps pHash only as a cheap pre-filter and moves the real brand match path to logo
-embeddings / Siamese-CNN style matching, tracked by P5-D6 (#246).
+**Current decision (D-2026-07-03-F, reinforced 2026-07-10): excise this path
+before beta.** It ships placeholder templates that cannot match, consumes scarce
+package/chunk budget, and can process the visible pixels of a different active
+tab when a background password page requests analysis. #424/RI-02 removes it.
+Any future visual analysis is a new opt-in, disclosed, measured design—not a
+continuation of this plumbing.
 
-**Key decisions (current)**:
-- Reference logo set: AI-5 asks Chris to supply/approve brand logos or a public reference set.
-- Model/runtime path: P5-D6 (#246) implements logo embeddings; P5-D5 (#245) provides the on-device ML host.
-- Performance budget: how often to capture/compare
-- Storage: where to keep the reference logo/model data
+**Historical implementation below is retained for removal scope, not as an
+active plan.** #245/#246 should be closed, deduplicated, or moved to a clearly
+post-beta hypothesis milestone.
 
 **Sub-slices:**
 - **W3 (merged):** capture pipeline (`visual_sim_capture.ts`), hashing (`visual_sim_hash.ts`),
@@ -1070,12 +1196,10 @@ embeddings / Siamese-CNN style matching, tracked by P5-D6 (#246).
   `gym/visual-sim-02-delayed-password.html`) + E2E (`tests/e2e/visual-sim.spec.ts`)
   proving the capture→SW pipeline fires end-to-end (immediate and delayed-password
   paths) with no error or false positive on benign login pages.
-- **P4-01c (superseded by D24 / P5-D6):** the original true-positive E2E
-  based on real perceptual brand templates is no longer the implementation path.
-  `scripts/build-brand-templates.mjs` still emits deterministic placeholder
-  hashes for the legacy pHash plumbing, but the active work is now logo embeddings
-  in P5-D6 (#246). AI-5 is the remaining human asset gate for approved reference
-  logos, not brand login screenshots.
+- **P4-01c (historical, cancelled):** the true-positive fixture was never built
+  and `scripts/build-brand-templates.mjs` emits placeholders. D-2026-07-10-J
+  chooses removal, not a logo-embedding continuation; #245/#246 are post-beta
+  hypotheses.
 
 #### P4-02: JavaScript behavior analysis
 
@@ -1210,10 +1334,12 @@ Extension bundle size budget (12 budgets enforced by `npm run check:perf-budget`
 | oauth_monitor (shared) | < 8KB | OAuth flow monitoring shared chunk |
 | domain_profile (shared) | < 6KB | Domain profiling shared chunk |
 | ui_toast (shared) | < 5KB | Toast notification shared chunk |
-| Bloom filter (reputation_data.bin) | < 150KB | Build-time compiled from threat feeds |
+| Bloom filter (reputation_data.bin) | < 150KB legacy CI ceiling | Current artifact is a test fixture, not a threat-feed product or approved allocation. Interaction-only omits it; a real-filter profile requires a new AI-9/RI-04 data + aggregate budget. |
 | Total dist (all files) | < 500KB | Aggregate cap on entire dist/ directory |
 
-See `scripts/check-perf-budget.mjs` for per-chunk enforcement details.
+See `scripts/check-perf-budget.mjs` for current per-chunk enforcement. These are
+CI guardrails, not authorization to fill each ceiling or proof that the invalid
+150KB/100K-domain reputation plan fits a release profile.
 
 ---
 

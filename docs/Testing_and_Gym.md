@@ -2,12 +2,18 @@
 
 ## Goals
 
-Testing in this repo is meant to answer two questions:
+Testing in this repo is meant to answer two engineering questions:
 
-1. Does the extension still catch the behaviors it claims to catch?
+1. Does the extension still produce the expected decisions on its declared fixtures?
 2. Did a change accidentally make the extension too noisy, too permissive, or too stateful under churn?
 
 The project uses a mix of deterministic Gym pages, Vitest unit tests, and Playwright-driven browser tests.
+
+Green tests do **not** by themselves prove open-web efficacy, `<0.1%` false-
+positive performance, compatibility, competitor superiority, or external audit.
+The corpus lane can skip when its local manifest/snapshots are absent, and the
+current corpus result is methodologically invalid. Keep regression, operational
+beta, and claim-grade evidence separate as defined in `Product_Strategy.md`.
 
 ## Local commands
 
@@ -50,7 +56,7 @@ Run these from the repo root in PowerShell after changing `AGENTS.md`, `CLAUDE.m
 ```powershell
 npm run agent:hooks:smoke
 npm run agent:skills:validate
-python -m py_compile scripts\agent_hooks\pre_tool_use.py scripts\agent_hooks\post_tool_use.py scripts\agent_hooks\post_tool_failure.py scripts\agent_hooks\session_start.py scripts\agent_hooks\render_failure_ledger.py scripts\agent_hooks\smoke_test.py scripts\agent_hooks\validate_skills.py
+python -m py_compile .claude\hooks\dispatch.py .claude\hooks\smoke_test.py scripts\agent_hooks\post_tool_use.py scripts\agent_hooks\post_tool_failure.py scripts\agent_hooks\session_start.py scripts\agent_hooks\render_failure_ledger.py scripts\agent_hooks\smoke_test.py scripts\agent_hooks\validate_skills.py
 python scripts\agent_hooks\render_failure_ledger.py
 git diff --exit-code -- docs\agentic\FAILURE_LEDGER.md
 rg -n "options_limits_backtest|series_tools_python|TODO|FIXME|PLACEHOLDER" AGENTS.md CLAUDE.md .agents .claude docs\agentic autodoc scripts\agent_hooks .mcp.json
@@ -134,7 +140,7 @@ These currently cover:
 
 ### Playwright E2E
 
-Current E2E coverage lives in:
+Representative E2E coverage lives in:
 
 - `tests/e2e/navsentinel.spec.ts`
 - `tests/e2e/credential-guard.spec.ts`
@@ -143,6 +149,9 @@ Current E2E coverage lives in:
 - `tests/e2e/navsentinel.stress.spec.ts`
 - `tests/e2e/corpus-validation.spec.ts`
 - `tests/e2e/phase2-detections.spec.ts`
+
+This list is intentionally representative because spec counts move. Use
+`rg --files tests/e2e -g '*.spec.ts'` for current inventory.
 
 It currently covers:
 
@@ -380,17 +389,20 @@ If E2E fails in CI, check these first:
 - the E2E specs are still using the shared extension helpers
 - the change did not break DOM readiness markers or shadow-root toast assertions
 
-## What is still outstanding
+## Current evidence work
 
-From the testing perspective, the clearest next steps are:
+As verified on 2026-07-10, the local regression baseline is 2,874 passing unit
+tests in 95 files and 14 E2E spec files are present. These counts are volatile;
+verify them live. Regression coverage does not establish efficacy.
 
-- tune NRS/CDS scoring to reduce FP rate below 0.1% target (currently 0.72% on Tranco top-200; 1 FP: unity3d.com)
-- add gym fixtures for remaining Phase 2 detections (redirect chains, DOM mutation, pushState abuse) — ClickFix and DoubleClickjacking fixtures are done
-- build competitive benchmark suite comparing NavSentinel against Safe Browsing alone
+The next evidence steps are:
 
-Completed measurement milestones:
+- fix RI-01 and the release profile before exposing users to the beta;
+- finish the corpus-v2 methodology under #417, then rerun through #416/#426;
+- run the pre-registered benign journeys and descriptive top-1000 lane; and
+- build #418 against current browser-native and extension protections.
 
-- FP measurement on Tranco top-200: 0.72% (1/138 sites prompted: unity3d.com) — PR #39
-- Phishing corpus validation: 100 pages tested, 28% overall TP, 100% credential guard TP on detectable password forms — PR #38
-
-Test count: **1003 passing** across 38 unit test files and 10 E2E spec files (as of 2026-05-16).
+The historical 0.72% FP run and 28% corpus result are stale or methodologically
+invalid. Preserve them as dated diagnostics, not completed milestones. Do not
+tune toward a `<0.1%` claim until the methodology, sample size, and confidence
+interval support it.

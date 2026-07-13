@@ -1,28 +1,51 @@
 # NavSentinel
 
+> **Pre-release alpha; not yet validated or distributed.** `NavSentinel` is a
+> working name pending clearance. See
+> [`docs/Product_Strategy.md`](docs/Product_Strategy.md) for the current product
+> thesis, release blockers, and evidence gates.
+
 NavSentinel is a local-first Chrome MV3 extension that hardens several abuse-heavy browser surfaces:
 
 - deceptive navigation flows such as hidden overlays, popunders, retargeted clicks, delayed redirects, and synthetic popup attempts
 - risky credential submissions such as HTTP password posts, lookalike domains, untrusted domains, and suspicious cross-site form actions
 - DoubleClickjacking attacks that hijack a double-click gesture to land on sensitive buttons (OAuth consent, MFA, payment)
 - ClickFix / fake CAPTCHA overlays that write malicious commands to the clipboard and instruct users to paste them
-- known-bad domains via a build-time bloom-filter mechanism (no network calls); the current build ships a placeholder 15-domain `.example` test filter, so real public-threat-feed data is not yet active and lands with the first release (issue #321)
+- an optional build-time bloom-filter mechanism; the current binary is a
+  reserved-domain test fixture with no real threat coverage, and AI-9 decides
+  whether the beta omits reputation or uses a separately reviewed real profile
 
-The current `main` branch ships the merged suite baseline. That means the extension now includes the navigation firewall, the credential guard, a popup, a full options page, trusted-domain management, and a bounded local event log.
+The current `main` branch contains the merged suite baseline: navigation and
+credential guards, popup/options surfaces, trusted-domain management, and a
+bounded local event log. "Implemented" here does not mean efficacy-validated,
+externally audited, or released.
 
 ## What it does
 
 - Scores clicks with a Click Deception Score (CDS) before allowing navigation side effects.
 - Patches `window.open`, `location.assign`, `location.replace`, and form submission in the main world to catch script-driven navigation.
-- Relays isolated-world and main-world control messages through the extension runtime instead of page-visible `window.postMessage` traffic.
+- Uses a MessagePort bridge for steady-state isolated/main-world control
+  traffic. Its challenge verifies port possession/liveness, not a hard
+  authenticated identity boundary; #175/#186 remain unlisted-beta gates.
 - Intercepts password-form submission and computes local credential risk before allowing the submit.
 - Detects DoubleClickjacking attack patterns across main-world, isolated-world, and service-worker layers.
 - Detects ClickFix / fake CAPTCHA overlays that combine clipboard writes with deceptive instruction text.
-- Checks destination domains against a build-time bloom filter (no network calls). The runtime check and bloom code path are implemented, but the shipped `reputation_data.bin` is currently a placeholder 15-domain `.example` test filter (52 bytes) with no real-feed build step wired into the release/package pipeline — so it does not yet match real domains. Loading real known-bad domains from public threat feeds is tracked as release-blocker issue #321.
-- Stores only local settings, allowlists, trusted domains, and a bounded event log in `chrome.storage.local`.
+- Can check destination domains via a local runtime lookup against a build-time
+  bloom asset, with no runtime network request. The bundled 52-byte fixture
+  matches reserved test domains only and is not a user protection.
+- Stores bounded local configuration, decision history, prompt outcomes, and
+  behavioral profiles in `chrome.storage.local`; see `PRIVACY.md` for the full
+  inventory, export gaps, and deletion controls.
 - Provides a popup for the current tab and an options page for persistent configuration, import/export, and log review.
 
 ## Effective usage
+
+Use this repository build only for controlled development and dogfooding until
+the beta gates pass. Do not rely on it as a sole security control. In particular,
+RI-01 must move every protection-lowering decision into extension-origin UI
+bound to the intended tab/destination; page-injected UI cannot safely authorize
+proceed/allow/trust/resume even with trusted-event checks. RI-02 must remove the
+non-functional viewport-capture path.
 
 ### Navigation protection modes
 
@@ -54,7 +77,7 @@ The current `main` branch ships the merged suite baseline. That means the extens
 
 - `extension/`: MV3 source, manifest, assets, and build output
 - `gym/`: deterministic HTML fixtures for navigation and credential scenarios
-- `tests/`: Vitest unit tests (94 files) and Playwright E2E tests (14 specs)
+- `tests/`: Vitest unit tests and Playwright E2E specs
 - `docs/`: architecture, threat model, testing, release, roadmap, and redesign docs
 - `scripts/`: release, bloom filter build, benchmark, PSL update, and agent hook scripts
 - `autodoc/`: agent-facing code orientation index
@@ -99,7 +122,8 @@ The popup is the fastest control surface for the current tab. It lets you:
 
 The options page is the durable operator view. It lets you:
 
-- configure navigation mode, debug overlay, and the experimental DNR backstop
+- configure navigation mode and debug overlay (the test-only DNR control is
+  scheduled for removal before beta)
 - configure credential prompts, paste warnings, medium-risk threshold, and lookalike sensitivity
 - tune the event log ring-buffer size
 - inspect and clear the navigation allowlist
@@ -108,7 +132,7 @@ The options page is the durable operator view. It lets you:
 
 ### Gym
 
-The Gym gives you 122 deterministic fixtures for attack and edge-case patterns:
+The Gym provides deterministic fixtures for attack and edge-case patterns:
 
 - Levels 1-12: overlay, retargeting, popunder, programmatic click, delayed redirects, credential prompts, and legitimacy edge cases
 - DoubleClickjacking: basic, OAuth consent, payment, and legitimate double-click variants
@@ -150,8 +174,13 @@ The Playwright config intentionally limits discovery to E2E specs so Vitest file
 - No remote telemetry
 - No remote reputation lookups (bloom filter is compiled at build time)
 - No password-value storage
-- No clipboard-content capture (ClickFix detection checks metadata only)
+- Clipboard content is inspected transiently in the page's MAIN world to derive
+  metadata for ClickFix detection; the content is not bridged, stored, or
+  transmitted
 - Local-only settings and logs
+- The current development-only visual-sim experiment can process a local
+  visible-tab screenshot and is scheduled for removal before beta; see
+  `PRIVACY.md`
 
 See:
 
@@ -164,6 +193,7 @@ See:
 Start with `docs/README.md`. The most useful follow-on docs are:
 
 - `docs/Project_Overview.md`
+- `docs/Product_Strategy.md`
 - `docs/Architecture_and_Data_Flow.md`
 - `docs/Intent_Model_and_Scoring.md`
 - `docs/Testing_and_Gym.md`
