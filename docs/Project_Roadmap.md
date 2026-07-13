@@ -52,6 +52,15 @@ The three open PRs are not ready for human time:
 | #356 | 159 commits behind `main`; E2E red; release prerequisite after repair |
 | #399 | Draft, 70 commits behind `main`; measurement-held and not a beta blocker |
 
+**RI-01 local implementation note (verified 2026-07-12):** checkpoint branch
+`fix/ri01-extension-origin-decisions` at `5514288` contains a context-bound,
+hash-minimizing pending-decision broker plus a synthetic-navigation-allowance
+fix. Focused broker tests pass, but the broker is not wired into production:
+service-worker handlers, active-tab/sender validation, exact-context delivery,
+popup actions, warn/cancel-only injected prompts, full branch gates, and real
+Chrome remain open. Windows Defender quarantined one tracked adversarial
+ClickFix property fixture only in that worktree; AI-20 owns the human review.
+
 The North-Star and Horizon documents are frozen option portfolios. Their 15
 Horizon issues (#439–#453) do not authorize implementation and should be culled
 or moved to a post-beta milestone. Start each session with
