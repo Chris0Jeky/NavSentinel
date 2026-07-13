@@ -22,11 +22,17 @@ def action_items_path() -> Path:
     return Path(override) if override else ROOT / "ACTION_ITEMS.md"
 
 
-def current_actions(path: Path | None = None) -> list[tuple[str, str]]:
+def read_action_items(path: Path | None = None) -> str:
     try:
-        text = (path or action_items_path()).read_text(encoding="utf-8")
-    except (OSError, UnicodeError):
-        return []
+        return (path or action_items_path()).read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise ValueError(
+            f"cannot read ACTION_ITEMS.md ({type(exc).__name__})"
+        ) from exc
+
+
+def current_actions(path: Path | None = None) -> list[tuple[str, str]]:
+    text = read_action_items(path)
 
     actions: list[tuple[str, str]] = []
     seen: dict[str, str] = {}
@@ -41,10 +47,7 @@ def current_actions(path: Path | None = None) -> list[tuple[str, str]]:
 
 
 def current_cursor(path: Path | None = None) -> str | None:
-    try:
-        text = (path or action_items_path()).read_text(encoding="utf-8")
-    except (OSError, UnicodeError):
-        return None
+    text = read_action_items(path)
     matches = GUIDED_CURSOR_RE.findall(text)
     if len(matches) > 1:
         raise ValueError("multiple guided resolution cursors")

@@ -257,6 +257,22 @@ def test_post_tool_use(settings: dict) -> None:
     if "agent:hooks:smoke" not in output.get("additionalContext", ""):
         raise AssertionError("PostToolUse did not add agentic smoke-test context")
 
+    nested_payload = {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "apply_patch",
+        "cwd": str(ROOT / "docs"),
+        "tool_input": {"command": "*** Update File: ../AGENTS.md\n"},
+        "tool_response": {"success": True},
+    }
+    nested_result = run_configured_hook(hook, nested_payload)
+    if (
+        nested_result.returncode != 0
+        or "agent:hooks:smoke" not in nested_result.stdout
+    ):
+        raise AssertionError(
+            "PostToolUse ignored a relative agentic path from a nested payload cwd"
+        )
+
 
 def test_post_tool_use_alt_worktree_path() -> None:
     namespace = runpy.run_path(str(ROOT / "scripts" / "agent_hooks" / "post_tool_use.py"))
@@ -350,6 +366,18 @@ def test_session_start(settings: dict) -> None:
             payload,
             {"NAVSENTINEL_ACTION_ITEMS": str(blocked_only_items)},
         )
+        missing_result = run_configured_hook(
+            hook,
+            payload,
+            {"NAVSENTINEL_ACTION_ITEMS": str(Path(tmp) / "missing.md")},
+        )
+        malformed_items = Path(tmp) / "ACTION_ITEMS-malformed.md"
+        malformed_items.write_bytes(b"\xff")
+        malformed_result = run_configured_hook(
+            hook,
+            payload,
+            {"NAVSENTINEL_ACTION_ITEMS": str(malformed_items)},
+        )
     if result.returncode != 0:
         raise AssertionError(f"SessionStart failed: {result.stderr}")
     required = (
@@ -380,6 +408,16 @@ def test_session_start(settings: dict) -> None:
         or "Resume at" in blocked_only_result.stdout
     ):
         raise AssertionError("SessionStart mishandled an all-blocked queue without a cursor")
+    for unreadable_result in (missing_result, malformed_result):
+        if (
+            unreadable_result.returncode != 0
+            or "queue INVALID: cannot read ACTION_ITEMS.md"
+            not in unreadable_result.stdout
+            or "Resume at" in unreadable_result.stdout
+        ):
+            raise AssertionError(
+                "SessionStart silently accepted an unreadable action register"
+            )
 
 
 def test_guided_action_contract() -> None:
