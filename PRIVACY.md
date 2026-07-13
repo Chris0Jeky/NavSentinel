@@ -5,9 +5,12 @@ NavSentinel is designed to be local-first.
 Local handling still counts as user-data handling under current Chrome Web
 Store policy. The current development build starts content scripts at
 `document_start` before an affirmative activation gate exists. #455/PM-03
-blocks beta until fresh installs remain passive, onboarding prominently
-discloses every handled category/use, and the user explicitly enables
-protection; revocation/reset must also be available and tested.
+blocks beta on two separate boundaries: before installation, the CWS listing
+and Privacy Practices must disclose every category/use and dated evidence or
+CWS support confirmation must establish affirmative install consent; after
+installation and before handling, the extension must remain passive until
+in-product disclosure and explicit activation. Revocation/reset must also be
+available and tested.
 
 NavSentinel's use of information received through Chrome APIs adheres to the
 Chrome Web Store User Data Policy, including the Limited Use requirements. Data
