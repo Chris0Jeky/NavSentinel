@@ -32,10 +32,11 @@ live snapshot. Typecheck, lint, build, version check, 2,874 unit tests (95
 files), perf 12/12, and smoke E2E passed locally; current-main GitHub CI was
 green. v0.4.0 had no tag, GitHub release, CWS release, or external-user evidence.
 
-Live recheck on 2026-07-13 found remote `main` still at `483ead1`, 75 open
-issues, no tags/releases/classic branch protection or repository rulesets, and
-no milestones or assignees. Stale PRs #273 and #399 were closed with explicit
-re-entry paths; #356 remains the only active legacy browser-surface PR. The
+Live recheck on 2026-07-13 found 75 open issues, no tags/releases/classic branch
+protection or repository rulesets, and no milestones or assignees. Verify the
+current `main` SHA live rather than pinning it here. Stale PRs #273 and #399
+were closed with explicit re-entry paths; #356 remains the only active legacy
+browser-surface PR. The
 product-posture and guided-workflow work is preserved in branch history; verify live
 branch/PR/`main` state before assuming publication or merge. The RI-01 worktree
 checkpoint at `5514288` is remotely backed up without the unstaged Defender
