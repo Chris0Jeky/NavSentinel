@@ -166,15 +166,16 @@ These are active blockers, not future hardening:
 4. **MAIN-world compatibility.** Current frozen prototype replacements are
    known to break legitimate wrappers. PR #356 is a beta prerequisite, but it
    must first be refreshed from `main`, fixed, re-reviewed, and made green.
-5. **Fake DNR surface.** The shipped ruleset contains localhost test rules while
+5. **Fake DNR surface.** The checked-in ruleset contains localhost test rules while
    the manifest requests two DNR permissions and options expose an experimental
    blocklist. Remove the toggle, rules, and permissions from the beta. Re-add an
    exact, signed, bounded rule list only when it is a real product feature.
-6. **Bridge overclaim.** The challenge-response handshake demonstrates port
-   possession/liveness; it does not authenticate an isolated-world identity
-   against hostile same-page code. Treat document-start ordering as mitigation,
-   correct the docs, and complete #175/#186 plus a fresh security review before
-   public launch.
+6. **Bridge identity and recovery.** The challenge-response handshake
+   demonstrates port possession/liveness; it does not authenticate an
+   isolated-world identity against hostile same-page code. Document-start
+   ordering is mitigation, not an authorization boundary. Complete #186's
+   trusted-context binding and #175's fail-closed recovery before any beta;
+   retain an independent external review as a public-launch gate.
 7. **Unmeasured global instrumentation.** The JS behavior monitor wraps broad
    page APIs but its compatibility and runtime-overhead work is incomplete.
    Default-disable it in the beta unless headed compatibility and overhead
@@ -213,6 +214,8 @@ The recommended unlisted beta is **interaction-only by default**:
   interaction detections, explanations, and the local decision log;
 - remove visual-sim and fake DNR completely;
 - default-disable unmeasured JS behavior instrumentation;
+- keep fresh installs passive until the user has seen the complete local-data
+  disclosure and affirmatively enabled protection;
 - do not advertise reputation protection while the test stub is present; and
 - enable real reputation only if a reproducible feed build, provenance record,
   update cadence, package budget, and licensing review all pass without delaying
@@ -234,6 +237,15 @@ All must be true:
 - the explicit beta capability profile leaves broad JS behavior instrumentation
   off: fetch/XHR/beacon/password-value prototypes are not wrapped while core
   navigation protection remains active;
+- #175/#186 provide trusted bridge identity, liveness/recovery, and a
+  fail-closed path when the MAIN/isolated-world channel is unavailable;
+- fresh installs remain passive until prominent in-product disclosure and an
+  affirmative activation action occur; the pre-install listing, onboarding,
+  privacy policy, and package disclose every handled CWS data category and use,
+  including local browsing activity, URL/domain data, bounded page text/HTML,
+  transient clipboard content, structural signals, interaction/decision
+  history, credential/form context, and ephemeral state (never password
+  values); #455 owns implementation and verification;
 - the release profile and all store/privacy claims match the packaged artifact;
 - full-URL retention is minimized or explicitly justified and disclosed;
 - the product name has search, domain, CWS, and professional legal/trademark
@@ -241,7 +253,8 @@ All must be true:
 - fresh-install, onboarding, popup, options, allow-once, credential, and normal
   browsing checks pass in real Chrome;
 - screenshots/assets, package checks, and an unlisted CWS submission are ready;
-  and
+- GitHub private vulnerability reporting is enabled and `SECURITY.md` points to
+  the verified private advisory route; and
 - every remaining known limitation has an owner and a dated decision.
 
 The exact name `NavSentinel` is already used for a
@@ -254,7 +267,9 @@ release gate; rebranding is cheapest before a store listing exists.
 
 In addition to beta gates:
 
-- complete the #175/#186 bridge cycle and an external security review;
+- obtain an independent external security review of the exact beta commit and
+  packaged artifact, then resolve every finding or explicitly accept the
+  residual risk;
 - publish reproducible benign and attack results with sample sizes, misses, and
   limitations;
 - show additive wins against current Chrome and relevant Chrome extensions;
@@ -327,10 +342,12 @@ Horizon-specific rejection gates:
 ### Now: release integrity and first users
 
 - Fix prompt action authenticity.
-- Refresh/fix #356; recreate or defer #273; keep #399 out of the beta blocker
-  set until measurement justifies it.
+- Refresh/fix #356; recreate or defer closed #273's intent; keep closed #399
+  out of the beta blocker set until measurement justifies it.
 - Excise visual-sim; remove fake DNR; minimize full URLs; choose the beta
   reputation profile.
+- Complete #175/#186 bridge identity/recovery and #455 pre-collection
+  disclosure/consent.
 - Clear the name, claims, privacy, assets, fresh-install, and real-Chrome gates.
 - Submit an unlisted beta and recruit the first cohort.
 
@@ -361,7 +378,7 @@ Horizon-specific rejection gates:
 - No "only extension," "no competitor," or "browsers cannot see this" claims.
 - No security theater: placeholders, never-firing paths, or experimental toggles
   in the default release.
-- No more active issue seeding until the 74-issue queue is milestone-categorized,
+- No more feature/epic issue seeding until the active queue is milestone-categorized,
   duplicate Horizon trackers are closed, and the WIP cap is below three.
 - No feature work whose success metric, data source, owner, and kill condition
   are undefined.

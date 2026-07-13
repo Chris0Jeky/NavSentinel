@@ -32,7 +32,7 @@ live snapshot. Typecheck, lint, build, version check, 2,874 unit tests (95
 files), perf 12/12, and smoke E2E passed locally; current-main GitHub CI was
 green. v0.4.0 had no tag, GitHub release, CWS release, or external-user evidence.
 
-Live recheck on 2026-07-13 found remote `main` still at `483ead1`, 74 open
+Live recheck on 2026-07-13 found remote `main` still at `483ead1`, 75 open
 issues, no tags/releases/classic branch protection or repository rulesets, and
 no milestones or assignees. Stale PRs #273 and #399 were closed with explicit
 re-entry paths; #356 remains the only active legacy browser-surface PR. The
@@ -51,7 +51,8 @@ tracked adversarial test fixture. These changes do not change shipped product st
   (RI-01); visual-sim can process the wrong active
   tab and has no production value (RI-02/#424); frozen MAIN-world prototypes in
   #356 are site-breaking; fake DNR and unmeasured JS behavior should be absent
-  or off; stored URLs require minimization (RI-05/RI-06).
+  or off; stored URLs require minimization (RI-05/RI-06); #175/#186 bridge
+  identity/recovery and #455 pre-collection disclosure/consent now block beta.
 - **Release/profile blockers:** the 52-byte reputation test filter plus the
   current ~474/500KB package makes the old "150KB/100K domains" plan
   impossible as written. AI-9/AI-16 must choose the recommended interaction-
@@ -64,12 +65,13 @@ tracked adversarial test fixture. These changes do not change shipped product st
   anchors remain. #356 is still 159 commits behind with E2E red and is the only
   active legacy browser-surface PR. **Do not spend human Gate-3 time until an
   agent refreshes, fixes, and re-reviews it.**
-- **Portfolio:** 74 open issues, none assigned or milestoned; #439–#453 are 15
+- **Portfolio:** 75 open issues, none assigned or milestoned; #439–#453 are 15
   frozen Horizon proposals. No new feature/epic issue seeding until the queue is
   culled and milestone-categorized.
 - **Infrastructure:** classic branch protection remains absent (`404 Branch not
   protected`) and the rulesets API returns `[]`. AI-17 remains open. Codex hook
-  trust remains AI-18.
+  trust remains AI-18. GitHub private vulnerability reporting is enabled and
+  linked from `SECURITY.md`.
 - **Local verification blocker:** Defender quarantined only
   `C:\Users\Public\codex-shell-home\NavSentinel-ri01\tests\clickfix-detector.property.test.ts`
   as `Trojan:HTML/FakeCaptcha.HNA!MTB`; it reports `DidThreatExecute=False` and
@@ -139,21 +141,23 @@ testing. **Do not checkout or test #356 yet.** Agent preflight must first:
 (1) fix RI-01; (2) refresh/fix #356 and recreate or defer #273, with two fresh
 reviews and green CI; (3) excise visual-sim and remove fake DNR; (4) complete
 RI-06's purpose-specific data minimization/reset; (5) complete RI-07's explicit
-JS-behavior beta-off profile; (6) prepare the chosen AI-9 release profile; and
-(7) provide one current headed checklist. Then split human work into a browser
+JS-behavior beta-off profile; (6) complete #175/#186 bridge integrity and #455
+pre-collection consent; (7) prepare the chosen AI-9 release profile; and (8)
+provide one current headed checklist. Then split human work into a browser
 session, any network/feed session, an overnight measurement run, and a short
 result review. Read `docs/Product_Strategy.md` first. This item becomes
 actionable only when the preflight handoff explicitly says so.
 
 **🆕 OPEN: AI-16 — Ratify or amend the standing product/process decisions.**
-The 2026-07-10 posture review extends the July 3 direction: narrow unlisted beta,
+The July 10 posture review and July 13 merge-gate corrections extend the July 3
+direction: narrow unlisted beta,
 interaction-only by default unless real reputation is fully specified, release
 integrity before human Gate-3, frozen Horizon/North-Star work, evidence before
 claims, and one post-beta visible bet. **Guide:** read the verdict, Beta Product
 Profile, and Portfolio sections of `docs/Product_Strategy.md`, then skim
-`docs/agentic/DECISIONS.md`. **Recommended reply:** `AI-16 ratify the July 3
-and July 10 decisions, including headed Chrome as the primary Gate-3 once
-operational, with manual spot-checks retained.` Otherwise name only the
+`docs/agentic/DECISIONS.md`. **Recommended reply:** `AI-16 ratify the July 3,
+July 10, and July 13 decisions, including headed Chrome as the primary Gate-3
+once operational, with manual spot-checks retained.` Otherwise name only the
 amendments.
 AI-9's release-profile choice and AI-19's name choice still require explicit
 answers; the reversible prioritization is already the working posture.

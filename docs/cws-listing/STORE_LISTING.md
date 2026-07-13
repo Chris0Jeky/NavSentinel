@@ -18,7 +18,8 @@ browser's built-in security.**
 It checks consequential browser actions—clicks, popups, redirects, clipboard
 writes, OAuth callbacks, and password submissions—at the moment they happen.
 Scoring and event history stay in your browser; there is no account, telemetry,
-cloud scoring, or runtime reputation lookup.
+cloud scoring, or remote reputation lookup. The current development profile can
+perform a local runtime lookup against a bundled test asset.
 
 ### What It Detects
 

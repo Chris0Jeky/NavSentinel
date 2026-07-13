@@ -13,7 +13,7 @@ rotation under #437.
 ## Open human items — surface all of these
 
 - **Resume at: AI-16** (`q-1` in the current guided conversation).
-- **AI-16:** ratify/amend the July 3 + July 10 standing decisions.
+- **AI-16:** ratify/amend the July 3, July 10, and July 13 standing decisions.
 - **AI-9:** choose interaction-only or real-filter beta profile.
 - **AI-20:** review the Defender quarantine and restore/allow only the exact
   tracked fixture, or choose the coverage-preserving rewrite path.
@@ -29,9 +29,11 @@ rotation under #437.
 
 - v0.4.0; no tag, GitHub release, CWS release, classic branch protection,
   repository ruleset, or external-user evidence.
+- GitHub private vulnerability reporting is enabled and `SECURITY.md` links the
+  verified private advisory route.
 - Main: typecheck, lint, build, version check, 2,874 unit tests (95 files), perf
   12/12, smoke E2E, and current GitHub CI green.
-- 74 open issues with no milestone/assignee; 15 Horizon issues #439–#453 are a
+- 75 open issues with no milestone/assignee; 15 Horizon issues #439–#453 are a
   frozen option portfolio, not active work.
 - Stale PRs #273 and #399 were closed on 2026-07-13 with re-entry paths and
   issue anchors preserved. #356 remains the sole active legacy browser-surface
@@ -82,15 +84,20 @@ rotation under #437.
    minimization, TTLs, controls, and complete behavioral reset.
 5. **RI-07:** add the explicit beta capability profile and prove broad JS
    behavior wrappers are off while core navigation protection remains active.
-6. **AI-9:** implement the chosen beta profile; the recommended default is
+6. **RI-08:** complete #175/#186 trusted bridge identity and bounded fail-closed
+   recovery before inviting beta users.
+7. **PM-03/#455:** keep fresh installs passive until prominent disclosure and
+   affirmative activation; redact OAuth response secrets before storage/export.
+8. **AI-9:** implement the chosen beta profile; the recommended default is
    interaction-only with no reputation claim.
-7. **AI-19 + CWS:** settle name, then re-verify one canonical store/privacy copy,
+9. **AI-19 + CWS:** settle name, then re-verify one canonical store/privacy copy,
    assets, permissions, fresh install, and package.
-8. Run the current headed regression checklist, submit unlisted, and recruit the
+10. Run the current headed regression checklist, submit unlisted, and recruit the
    first 10-user cohort.
 
-Before public launch, complete #175/#186 plus an external security review and
-publish valid corpus, quietness, and current-browser comparative evidence.
+Before public launch, obtain an external security review of the exact beta
+commit/package and publish valid corpus, quietness, and current-browser
+comparative evidence.
 
 ## Next safe slice
 

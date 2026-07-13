@@ -2,6 +2,13 @@
 
 NavSentinel is designed to be local-first.
 
+Local handling still counts as user-data handling under current Chrome Web
+Store policy. The current development build starts content scripts at
+`document_start` before an affirmative activation gate exists. #455/PM-03
+blocks beta until fresh installs remain passive, onboarding prominently
+discloses every handled category/use, and the user explicitly enables
+protection; revocation/reset must also be available and tested.
+
 ## What The Extension Stores
 
 `chrome.storage.local` contains more than settings and the visible event log.
@@ -24,6 +31,12 @@ and other decision inputs. Routine navigation records are host-oriented, but
 some credential/event paths can include the submitting page's full URL. Paths,
 queries, and fragments can contain sensitive identifiers.
 
+Detection also transiently processes bounded page text/HTML, title/form/image
+signals, structural click/element properties, and clipboard text/selection in
+the page's MAIN world to derive command metadata. That raw page/clipboard
+content is not stored, exported, or transmitted, but it still belongs in the
+#455 pre-collection disclosure and consent boundary.
+
 RI-06 in `docs/Project_Roadmap.md` requires a purpose-specific data policy
 before beta: minimize persistent logs/profiles to the least identifying form;
 retain exact URLs in `chrome.storage.session` only where target authorization,
@@ -33,13 +46,16 @@ short TTL; and add one user-facing reset that clears every behavioral store.
 `chrome.storage.session` holds ephemeral per-tab security state such as allow
 windows, gesture tokens, exact rollback/forward/OAuth URLs, redirect chains,
 and child-window tracking so behavior survives service-worker restarts. It is
-cleared when the browser closes. Exact operational URLs must not be stripped
-with a blanket sanitizer because doing so can widen an allowance or break
-recovery; RI-06 requires field-by-field purpose and TTL tests.
+cleared when the browser closes. OAuth callback URLs can contain authorization
+codes, access/ID tokens, or other response parameters; RI-06/#455 must redact
+those secrets before storage, export, or logging. Exact operational URLs must
+not be stripped with a blanket sanitizer because doing so can widen an
+allowance or break recovery; RI-06 requires field-by-field purpose and TTL
+tests that preserve security-critical host/target binding.
 
 ## Build-Time Bundled Assets
 
-The extension ships with two static data assets compiled at build time:
+The current development build bundles two static data assets compiled at build time:
 
 - a Public Suffix List (PSL) snapshot for accurate registrable-domain extraction
 - a bloom filter mechanism whose current binary is a small reserved-domain test

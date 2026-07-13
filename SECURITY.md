@@ -21,7 +21,7 @@ The most security-sensitive code lives in:
   document/frame rather than ordinary page-visible messages
 - challenge-response proves liveness and possession of the transferred port; it
   does **not** authenticate an isolated-world identity against hostile same-page
-  code, so document-start ordering remains a mitigation pending #175/#186
+  code, so document-start ordering remains a mitigation and #175/#186 block beta
 - per-document session and schema checks reject stale/cross-document traffic
 - explicit inbound message-type allowlists
 - replayable blocked actions with short-lived ids
@@ -55,7 +55,7 @@ The most security-sensitive code lives in:
   lowering actions to page-controlled placement and scripted activation. RI-01
   blocks beta until injected UI is warn/cancel only and extension-origin UI owns
   every proceed/allow/trust/resume decision with tab/destination binding and TTL
-- the shipped build contains only a placeholder 15-domain `.example` reputation
+- the current development build contains only a placeholder 15-domain `.example` reputation
   fixture. The recommended interaction-only beta omits reputation and its
   claims; if AI-9 selects a real-filter profile, feed provenance, licensing,
   cadence, cardinality, false-positive target, and package budget must first be
@@ -64,7 +64,11 @@ The most security-sensitive code lives in:
 
 ## Reporting
 
-If you find a security issue in the repository, report it privately to the maintainers before opening a public issue if the bug could materially weaken the extension's protections.
+If a bug could materially weaken the extension's protections, use the
+[private vulnerability report](https://github.com/Chris0Jeky/NavSentinel/security/advisories/new)
+instead of opening a public issue. GitHub private vulnerability reporting is
+enabled for this repository; the report and follow-up remain private to the
+reporter and repository maintainers until coordinated disclosure is appropriate.
 
 When reporting, include:
 
