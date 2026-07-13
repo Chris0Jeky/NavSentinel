@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 
+ROOT = Path(__file__).resolve().parents[2]
 AGENTIC_PREFIXES = (
     ".agents/",
     ".claude/",
@@ -18,16 +19,22 @@ AGENTIC_PREFIXES = (
 AGENTIC_FILES = {"AGENTS.md", "CLAUDE.md", ".mcp.json", "package.json"}
 
 
-def normalize_path(value: object) -> str:
+def normalize_path(value: object, root: Path = ROOT) -> str:
     try:
-        path = Path(str(value)).as_posix()
+        candidate = Path(str(value))
     except (TypeError, ValueError):
         return ""
-    parts = path.split("NavSentinel/", 1)
-    path = parts[-1]
+
+    if candidate.is_absolute():
+        try:
+            path = candidate.resolve().relative_to(root.resolve()).as_posix()
+        except (OSError, RuntimeError, ValueError):
+            path = candidate.as_posix()
+    else:
+        path = candidate.as_posix()
     while path.startswith("./"):
         path = path[2:]
-    return path.lstrip("/")
+    return path
 
 
 def is_agentic_path(path: str) -> bool:

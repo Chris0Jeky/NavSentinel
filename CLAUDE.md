@@ -71,7 +71,7 @@ Orient: `ns-repo-onramp` (vague scope), `ns-repo-map` (find seams), `ns-program-
 slice). Implement: `ns-safe-slice`, `ns-ext-dev` (MV3 runtime), `ns-issue-to-pr`. Verify:
 `ns-test-harness`, `ns-threat-validation`, `ns-security-review`, `ns-verify-handoff`. UI:
 `ns-ui-ux`. Meta: `ns-question-batch`, `ns-failure-capture`, `ns-interface-map`,
-`ns-roadmap-sync`, `ns-claude-tooling`. Codex parity layer: `.agents/skills/*` (see
+`ns-roadmap-sync`, `ns-human-action-guide`, `ns-claude-tooling`. Codex parity layer: `.agents/skills/*` (see
 `docs/agentic/TOOLING_PARITY.md`).
 
 ## Project Hot Spots

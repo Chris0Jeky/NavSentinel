@@ -67,6 +67,10 @@ Do not bulk-read `node_modules`, build output, generated data, archive docs, or 
 3. Clear an item only on explicit user confirmation; move it to the Completed log with date + one-line result. Never self-clear.
 4. Keep the current-state snapshot accurate when verified truth changes. While `main`'s status docs are stale/conflicted by open PRs, this file plus session memory are the source of truth.
 5. When you find a new human-only task, add it as a new `AI-N` item with a step-by-step guide and tell the user.
+6. When the user asks to work through a cumulative queue, use
+   `ns-human-action-guide`: keep `ACTION_ITEMS.md` as the only durable queue,
+   complete agent-owned prerequisites first, and present one ready `q-N [AI-N]`
+   action at a time with comprehensive human-only steps.
 
 ## Project Structure
 
@@ -138,6 +142,7 @@ Use these Codex workflows when relevant:
 - `ns-security-review`: bridge, permissions, storage, credentials, data isolation, and remote-call risk.
 - `ns-ui-ux`: popup, options, onboarding, prompt copy, and accessibility.
 - `ns-question-batch`: ask only blocker questions.
+- `ns-human-action-guide`: walk a known human-owned queue one ready action at a time.
 - `ns-failure-capture`: classify failed tools/tests/workarounds.
 - `ns-interface-map`: update agent-facing maps.
 - `ns-roadmap-sync`: update roadmap/status docs when truth changes.
@@ -156,6 +161,9 @@ When a review is performed on a PR (unless the user explicitly says otherwise):
 4. Do not skip or defer findings labeled "non-blocking", "minor", or "informational". Every finding must be resolved in the current work or explicitly documented with a seeded follow-up.
 5. If a finding drifts genuinely out of scope (different extension layer, unrelated seam, pre-existing tech debt), document it and seed a fix: open a GitHub issue, add a roadmap entry, or append to `docs/agentic/FAILURE_LEDGER.md` with a concrete future-fix path.
 6. Tech debt accrual from reviews is not acceptable. "Non-blocking" means "fix it now, not later."
+7. For local-only work with no PR thread, record each review round's scope,
+   independent reviewer/lens, findings, and resolutions in the handoff or a
+   small review artifact. A summary claim alone is not auditable gate evidence.
 
 ## PR Merge Protocol
 
