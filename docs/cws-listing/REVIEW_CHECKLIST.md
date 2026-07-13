@@ -44,10 +44,14 @@
   bounded page text/HTML, transient clipboard content, structural signals,
   interaction/decision history, credential/form context, settings/profiles,
   and ephemeral state
-- [ ] Pre-install listing and in-product onboarding prominently disclose every
-  handled category/use under the 2026 CWS policy
-- [ ] Fresh install is passive until affirmative activation; revocation/reset
-  and update migration are tested
+- [ ] Before installation, CWS listing/Privacy Practices prominently disclose
+  every category/use; dated evidence confirms the actual CWS install flow
+  obtains affirmative informed consent, or CWS support confirms the mapping
+- [ ] After installation, the extension remains passive until in-product
+  disclosure and affirmative activation; revocation/reset and update migration
+  are tested
+- [x] Privacy policy and CWS disclosure contain the affirmative Chrome Web
+  Store User Data Policy Limited Use declaration
 - [ ] OAuth callback `code`, `access_token`, and `id_token` values are redacted
   before storage/export/logging while host/target binding still works
 - [ ] PRIVACY.md re-verified after visual-sim/DNR/release-profile changes

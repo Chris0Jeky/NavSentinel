@@ -9,6 +9,11 @@ blocks beta until fresh installs remain passive, onboarding prominently
 discloses every handled category/use, and the user explicitly enables
 protection; revocation/reset must also be available and tested.
 
+NavSentinel's use of information received through Chrome APIs adheres to the
+Chrome Web Store User Data Policy, including the Limited Use requirements. Data
+is used only to provide or improve the disclosed local security purpose; it is
+not transferred for advertising, credit, data-broker, or unrelated purposes.
+
 ## What The Extension Stores
 
 `chrome.storage.local` contains more than settings and the visible event log.

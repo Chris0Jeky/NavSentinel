@@ -86,8 +86,9 @@ rotation under #437.
    behavior wrappers are off while core navigation protection remains active.
 6. **RI-08:** complete #175/#186 trusted bridge identity and bounded fail-closed
    recovery before inviting beta users.
-7. **PM-03/#455:** keep fresh installs passive until prominent disclosure and
-   affirmative activation; redact OAuth response secrets before storage/export.
+7. **PM-03/#455:** evidence pre-install CWS disclosure/affirmative consent, then
+   keep fresh installs passive until in-product disclosure/activation; include
+   the Limited Use declaration and redact OAuth response secrets before storage/export.
 8. **AI-9:** implement the chosen beta profile; the recommended default is
    interaction-only with no reputation claim.
 9. **AI-19 + CWS:** settle name, then re-verify one canonical store/privacy copy,

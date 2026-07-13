@@ -240,12 +240,16 @@ All must be true:
 - #175/#186 provide trusted bridge identity, liveness/recovery, and a
   fail-closed path when the MAIN/isolated-world channel is unavailable;
 - fresh installs remain passive until prominent in-product disclosure and an
-  affirmative activation action occur; the pre-install listing, onboarding,
-  privacy policy, and package disclose every handled CWS data category and use,
+  affirmative activation action occur; before installation, the CWS listing
+  and Privacy Practices disclose every handled category/use and the actual CWS
+  install-consent mapping is evidenced or confirmed by CWS support; onboarding,
+  privacy policy, and package disclose the same data categories and uses,
   including local browsing activity, URL/domain data, bounded page text/HTML,
   transient clipboard content, structural signals, interaction/decision
   history, credential/form context, and ephemeral state (never password
   values); #455 owns implementation and verification;
+- the public privacy page contains the affirmative Chrome Web Store User Data
+  Policy Limited Use declaration;
 - the release profile and all store/privacy claims match the packaged artifact;
 - full-URL retention is minimized or explicitly justified and disclosed;
 - the product name has search, domain, CWS, and professional legal/trademark

@@ -95,8 +95,17 @@ Chrome's [2026 policy update](https://developer.chrome.com/blog/cws-policy-updat
 requires prominent disclosure of all collected data regardless of relation to
 the extension's single purpose, with enforcement beginning 2026-08-01. The
 [official FAQ](https://developer.chrome.com/docs/webstore/program-policies/user-data-faq/)
-confirms that local processing/storage counts and that prominent disclosure and
-affirmative consent must precede handling.
+confirms that local processing/storage counts. #455 must prove two separate
+boundaries rather than assuming onboarding satisfies both:
+
+1. **Before installation:** the CWS listing and Privacy Practices fields
+   prominently disclose every category/use, and the actual CWS install flow
+   supplies affirmative informed consent. Record the exact dashboard/install
+   UI and dated evidence at submission; if its consent semantics are unclear,
+   obtain CWS support confirmation before inviting users.
+2. **After installation, before handling:** the installed extension remains
+   passive until an in-product disclosure repeats the categories/uses and the
+   user affirmatively enables protection.
 
 The current development build starts content scripts at `document_start` and
 does not yet have that activation boundary. #455/PM-03 therefore blocks beta:
@@ -105,6 +114,13 @@ onboarding disclose every category/use above and the user affirmatively enables
 protection. Tests must cover pre-consent passivity, activation, revocation,
 reset, and redaction of OAuth `code`, `access_token`, and `id_token` values
 before storage/export/logging.
+
+### Limited Use Declaration
+
+NavSentinel's use of information received through Chrome APIs adheres to the
+Chrome Web Store User Data Policy, including the Limited Use requirements. Data
+is used only to provide or improve the disclosed local security purpose; it is
+not transferred for advertising, credit, data-broker, or unrelated purposes.
 
 ## Certification Answers
 
