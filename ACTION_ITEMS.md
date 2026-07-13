@@ -37,11 +37,11 @@ protection or repository rulesets, and no milestones or assignees. Verify the
 current `main` SHA live rather than pinning it here. Stale PRs #273 and #399
 were closed with explicit re-entry paths; #356 remains the only active legacy
 browser-surface PR. The
-product-posture and guided-workflow work is preserved in branch history; verify live
-branch/PR/`main` state before assuming publication or merge. The RI-01 worktree
-checkpoint at `5514288` is remotely backed up without the unstaged Defender
-deletion; its worktree is dirty only because Windows Defender quarantined one
-tracked adversarial test fixture. These changes do not change shipped product state.
+product-posture and guided-workflow work merged through PR #454; verify live
+`main` rather than pinning its SHA here. The RI-01 checkpoint branch is remotely
+backed up without the unstaged Defender deletion; verify its SHA live. Its
+worktree is dirty only because Windows Defender quarantined one tracked
+adversarial test fixture. These changes do not change shipped product state.
 
 - **Product posture:** strong pre-release alpha, not a market-ready or
   efficacy-validated security product. `docs/Product_Strategy.md` owns the
@@ -63,7 +63,7 @@ tracked adversarial test fixture. These changes do not change shipped product st
   CWS submission; this is a risk flag, not a legal conclusion.
 - **Legacy PR cleanup:** #273 and draft #399 were closed on 2026-07-13 rather
   than merged from stale bases; their commits, discussions, and open issue
-  anchors remain. #356 is still 159 commits behind with E2E red and is the only
+  anchors remain. #356 is still stale with E2E red and is the only
   active legacy browser-surface PR. **Do not spend human Gate-3 time until an
   agent refreshes, fixes, and re-reviews it.**
 - **Portfolio:** 75 open issues, none assigned or milestoned; #439–#453 are 15
@@ -237,8 +237,8 @@ branch checkout guide.
 **AI-11 — Toast count-pill (#351 → PR #353) · ✅ RESOLVED 2026-06-23 — MERGED.** Chris said "merge #353"; green CI (incl. the RW-19 e2e fix to accept the coalesced pill) → **#353 merged into `main`** (`d0e0412`). Repeated blocked-popup/redirect prompts now coalesce into one count pill after 3-in-8s (expandable to the latest prompt's Allow once / Always allow). The pill is live on the next `git checkout main && npm run build`.
 
 **🚨 BLOCKED: AI-13 — #356 MAIN-world compatibility Gate-3.** This remains a
-beta prerequisite, but the branch is 159 commits behind `main` and its E2E check
-is red. An agent must merge current `main`, fix the failure, complete two fresh
+beta prerequisite, but the branch is stale and its E2E check is red. An agent
+must merge current `main`, fix the failure, complete two fresh
 adversarial reviews, and post a current compatibility/gating checklist. Do not
 checkout, test, or merge the present branch.
 
