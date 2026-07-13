@@ -44,7 +44,7 @@ rotation under #437.
 - Product-posture and guided-workflow work merged through PR #454; verify live
   `main` rather than pinning its SHA. The RI-01 checkpoint branch is remotely
   backed up without the unstaged Defender deletion; verify its SHA live. Its
-  worktree remains dirty only by the Defender-quarantined fixture.
+  worktree remains dirty only because of the Defender-quarantined fixture.
 - The RI-01 broker foundation is unit-tested but not wired into production.
   Only the synthetic-navigation allowance rejection changes active runtime
   behavior; its new real-browser E2E has not run.
