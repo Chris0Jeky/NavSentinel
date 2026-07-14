@@ -35,12 +35,12 @@ HANDOFF = ROOT / "docs" / "agentic" / "HANDOFF.md"
 QUESTION_PROTOCOL = ROOT / "docs" / "agentic" / "QUESTION_PROTOCOL.md"
 FLOOR_SMOKE = ROOT / ".claude" / "hooks" / "smoke_test.py"
 FLOOR_DISPATCH = ROOT / ".claude" / "hooks" / "dispatch.py"
-FLOOR_PROVENANCE = "e8f79a7bc0c7531d6c89b822fd772f281c9522af"
+FLOOR_PROVENANCE = "ba0f67d9d3b24d69662cf5ede8dc21cef82d3908"
 EXPECTED_DISPATCH_SHA256 = (
-    "ace3844cef6cb291e1ed89d34d1c2f924288d550589a785a51cb10f460f463f9"
+    "d45e7dc6071f7e4a9f43424bbc67a7f938c9a1316529d1f5642abf76086f2bb9"
 )
 EXPECTED_SMOKE_SHA256 = (
-    "b1ed27f8c874a8caa87e38416ab046fde77064787332cd4eb921b93b4522b27b"
+    "f8ec6b1da4e8d44e51aa17e399541d377ba1cb2262c49251c297b7143ab726b0"
 )
 VALID_EVENTS = {
     "PreToolUse",
