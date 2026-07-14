@@ -31,7 +31,7 @@ rotation under #437.
   repository ruleset, or external-user evidence.
 - GitHub private vulnerability reporting is enabled and `SECURITY.md` links the
   verified private advisory route.
-- Harness integration is in flight on `infra/harness-deny-floor-v141`: exact
+- Harness integration is in flight on PR #457 (`infra/harness-deny-floor-v141`): exact
   agent-harness `e8f79a7` fixtures, one floor per runtime, pinned Codex global
   adapter, and Windows/Linux CI enforcement. Main still has the stale v1.0.0
   local floor until that PR lands; AI-18 trust therefore remains pending.
