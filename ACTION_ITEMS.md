@@ -71,7 +71,7 @@ adversarial test fixture. These changes do not change shipped product state.
   culled and milestone-categorized.
 - **Infrastructure:** classic branch protection remains absent (`404 Branch not
   protected`) and the rulesets API returns `[]`. AI-17 remains open. The shared
-  v1.4.1 floor integration is in flight on `infra/harness-deny-floor-v141`, so
+  v1.4.2 floor integration is in flight on `infra/harness-deny-floor-v141`, so
   prior Codex hook trust is invalid; AI-18 remains open. GitHub private
   vulnerability reporting is enabled and linked from `SECURITY.md`.
 - **Local verification blocker:** Defender quarantined only
@@ -121,14 +121,14 @@ screenshots, docs, and repository metadata before invitations or submission.
 Then tell the agent `AI-19 done: <decision>`.
 
 **OPEN: AI-18 — Review and trust the new Codex project hooks.** The exact
-definition changed during the v1.4.1 floor integration, invalidating any prior
+definition changed during the v1.4.2 floor integration, invalidating any prior
 trust. Claude now receives the shared global floor exactly once; Codex keeps one
 project `PreToolUse` adapter plus the repo-specific lifecycle handlers. **Run
 only after the harness PR reaches its final reviewed head:** (1) start a fresh
 Codex session in the canonical repository at that head; (2) run `/hooks`; (3)
 compare every project entry with `.codex/hooks.json`; (4) verify SessionStart
 runs `session_start.py`; (5) verify the sole PreToolUse entry pins normalized
-SHA-256 `ace3844cef6cb291e1ed89d34d1c2f924288d550589a785a51cb10f460f463f9`,
+SHA-256 `d45e7dc6071f7e4a9f43424bbc67a7f938c9a1316529d1f5642abf76086f2bb9`,
 invokes only `~/.claude/hooks/dispatch.py`, passes `--runtime codex`, and does
 not use `git rev-parse` or the repo-local fixture; (6) verify PostToolUse runs
 `post_tool_use.py` plus sanitized `post_tool_failure.py`; (7) choose **Trust**

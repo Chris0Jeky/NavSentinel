@@ -19,7 +19,7 @@ rotation under #437.
   tracked fixture, or choose the coverage-preserving rewrite path.
 - **AI-17:** enable `main` branch protection.
 - **AI-19:** clear or replace the product name before CWS submission.
-- **AI-18: WAIT FOR FINAL HARNESS HEAD:** v1.4.1 changes the exact Codex hook
+- **AI-18: WAIT FOR FINAL HARNESS HEAD:** v1.4.2 changes the exact Codex hook
   definition; review/trust it only after the harness PR is final and reviewed.
 - **AI-15: BLOCKED** until agent preflight is complete.
 - **AI-8 / AI-13 / AI-14: BLOCKED** pending current branches, two fresh reviews,
@@ -32,7 +32,7 @@ rotation under #437.
 - GitHub private vulnerability reporting is enabled and `SECURITY.md` links the
   verified private advisory route.
 - Harness integration is in flight on PR #457 (`infra/harness-deny-floor-v141`): exact
-  agent-harness `e8f79a7` fixtures, one floor per runtime, pinned Codex global
+  agent-harness `ba0f67d` fixtures, one floor per runtime, pinned Codex global
   adapter, and Windows/Linux CI enforcement. Main still has the stale v1.0.0
   local floor until that PR lands; AI-18 trust therefore remains pending.
 - Main: typecheck, lint, build, version check, 2,874 unit tests (95 files), perf
@@ -71,7 +71,7 @@ rotation under #437.
   coverage for an all-blocked queue; and clarified that AI-18 becomes ready
   only after hook definitions are final and unchanged. That review covered the
   superseded v1.0.0 project-local floor definition; it is historical evidence,
-  not review evidence for the current v1.4.1 harness branch.
+  not review evidence for the current v1.4.2 harness branch.
 - **Forward-test lens:** exercised the sequence as a maintainer handoff. The
   `q-1` / AI-16 guide, exact reply, durable `AI-N` resume semantics, and
   AI-18 conditional readiness are internally consistent after fixes.
