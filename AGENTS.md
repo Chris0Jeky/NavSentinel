@@ -99,7 +99,8 @@ Do not bulk-read `node_modules`, build output, generated data, archive docs, or 
 - `npm run test:e2e:smoke`, `npm run test:e2e:regression`, `npm run test:e2e:rollback`, `npm run test:e2e:stress`, `npm run test:e2e:corpus`: targeted E2E lanes.
 - `npm run gym:serve`: serve the Gym at port 5173.
 - `npm run verify:versions`, `npm run package:ext`: release/package checks.
-- `npm run agent:hooks:smoke`: parse and exercise shared Claude hook/MCP guardrails.
+- `npm run agent:hooks:smoke`: verify pinned floor artifacts, one-floor runtime
+  topology, Codex fail-closed wiring, lifecycle hooks, and MCP guardrails.
 - `npm run agent:skills:validate`: validate Claude/Codex local skill metadata and parity.
 
 ## Coding Style And Naming
@@ -213,13 +214,15 @@ See `docs/agentic/GIT_WORKFLOW.md` for full details and recovery procedures.
 
 ### Branch safety tiers
 
-For Claude and Codex, the shared deny floor (`.claude/hooks/dispatch.py`, tier
-from `.claude/tier.json`) blocks only the **irreversible**: force-push in all
-spellings, `rm -rf` outside the project, pipe-to-shell, `sudo`, secret-file
-mutation. Claude wires it through `.claude/settings.json`; Codex wires it
-through `.codex/hooks.json`. This remains a tripwire rather than a complete
-security boundary, so both runtimes must enforce the same intent by command
-discipline. At this tier (T2), work-loss ops (`reset --hard`, `rebase`,
+For Claude and Codex, the shared global deny floor
+(`~/.claude/hooks/dispatch.py`, tier from `.claude/tier.json`) blocks only the
+**irreversible**: force-push in all spellings, `rm -rf` outside the project,
+pipe-to-shell, `sudo`, secret-file mutation. Claude receives it globally;
+Codex's sole project `PreToolUse` adapter in `.codex/hooks.json` pins the same
+dispatcher and passes `--runtime codex`. Repo-local `.claude/hooks/*` files are
+exact CI/audit fixtures, not a second hook. This remains a tripwire rather than
+a complete security boundary, so both runtimes must enforce the same intent by
+command discipline. At this tier (T2), work-loss ops (`reset --hard`, `rebase`,
 `checkout -- .`) are recoverable from origin and allowed — the rules below are
 convention:
 

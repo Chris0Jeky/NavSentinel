@@ -70,9 +70,10 @@ adversarial test fixture. These changes do not change shipped product state.
   frozen Horizon proposals. No new feature/epic issue seeding until the queue is
   culled and milestone-categorized.
 - **Infrastructure:** classic branch protection remains absent (`404 Branch not
-  protected`) and the rulesets API returns `[]`. AI-17 remains open. Codex hook
-  trust remains AI-18. GitHub private vulnerability reporting is enabled and
-  linked from `SECURITY.md`.
+  protected`) and the rulesets API returns `[]`. AI-17 remains open. The shared
+  v1.4.1 floor integration is in flight on `infra/harness-deny-floor-v141`, so
+  prior Codex hook trust is invalid; AI-18 remains open. GitHub private
+  vulnerability reporting is enabled and linked from `SECURITY.md`.
 - **Local verification blocker:** Defender quarantined only
   `C:\Users\Public\codex-shell-home\NavSentinel-ri01\tests\clickfix-detector.property.test.ts`
   as `Trojan:HTML/FakeCaptcha.HNA!MTB`; it reports `DidThreatExecute=False` and
@@ -86,8 +87,9 @@ adversarial test fixture. These changes do not change shipped product state.
 
 **Guided resolution cursor:** `AI-16` (`Resume at: AI-16`; the next
 conversational label is `q-1`). Current ready order is AI-16 -> AI-9 -> AI-20 ->
-AI-17 -> AI-19 -> AI-18. The hook-editing slice is now committed; AI-18 remains
-human-owned until its exact definitions are reviewed and trusted. The `q-N`
+AI-17 -> AI-19 -> AI-18. The replacement hook definition is committed on the
+harness branch but not yet integrated; AI-18 remains human-owned until the
+exact final definition is reviewed and trusted. The `q-N`
 label may reset between conversations; the `AI-N` identifier is durable.
 AI-15/AI-8/AI-13/AI-14 remain visible but are not actionable questions until
 agent preflight clears them.
@@ -118,21 +120,23 @@ trademark advice before a commercial/public launch; and (6) record **keep** or
 screenshots, docs, and repository metadata before invitations or submission.
 Then tell the agent `AI-19 done: <decision>`.
 
-**OPEN: AI-18 — Review and trust the new Codex project hooks.** The Codex parity
-setup adds `.codex/hooks.json` for session orientation, the shared irreversible
-command floor, agentic-change verification reminders, and sanitized failure
-capture. Codex deliberately skips new or changed non-managed hooks until their
-exact definitions are trusted. **Human-only guide (run after this agentic slice
-is final):** (1) start a fresh Codex session in the canonical repository; (2)
-run `/hooks`; (3) compare every project entry with `.codex/hooks.json` —
-SessionStart runs `session_start.py`, PreToolUse Bash runs
-`.claude/hooks/dispatch.py --event pre`, and PostToolUse runs
-`post_tool_use.py` plus sanitized `post_tool_failure.py`; (4) confirm each path
-is repository-root-relative and no unexpected command exists; (5) choose
-**Trust** for those exact project hooks; (6) run `/hooks` again and confirm they
-are trusted/enabled; and (7) restart once to exercise SessionStart. Then reply
-`AI-18 done`. Trust is definition-hash-based, so repeat after future hook
-definition changes.
+**OPEN: AI-18 — Review and trust the new Codex project hooks.** The exact
+definition changed during the v1.4.1 floor integration, invalidating any prior
+trust. Claude now receives the shared global floor exactly once; Codex keeps one
+project `PreToolUse` adapter plus the repo-specific lifecycle handlers. **Run
+only after the harness PR reaches its final reviewed head:** (1) start a fresh
+Codex session in the canonical repository at that head; (2) run `/hooks`; (3)
+compare every project entry with `.codex/hooks.json`; (4) verify SessionStart
+runs `session_start.py`; (5) verify the sole PreToolUse entry pins normalized
+SHA-256 `ace3844cef6cb291e1ed89d34d1c2f924288d550589a785a51cb10f460f463f9`,
+invokes only `~/.claude/hooks/dispatch.py`, passes `--runtime codex`, and does
+not use `git rev-parse` or the repo-local fixture; (6) verify PostToolUse runs
+`post_tool_use.py` plus sanitized `post_tool_failure.py`; (7) choose **Trust**
+for those exact project definitions and confirm `/hooks` reports one trusted
+project PreToolUse; (8) run `git status` (allowed), then
+`git push --force --dry-run origin main` (blocked before Git); and (9) restart
+once to exercise SessionStart. Then reply `AI-18 done`. Trust is
+definition-hash-based, so repeat after every hook-definition change.
 
 **🚨 BLOCKED: AI-15 — Run the headed release session only after agent
 preflight.** The prior 60–90 minute one-sitting guide is withdrawn: stale PRs
