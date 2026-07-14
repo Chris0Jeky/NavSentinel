@@ -34,7 +34,7 @@ import sys
 import tempfile
 import time
 
-FLOOR_VERSION = "1.4.1 (2026-07-13)"
+FLOOR_VERSION = "1.4.2 (2026-07-14)"
 
 # --- helpers ---------------------------------------------------------------
 
@@ -200,16 +200,17 @@ _QUOTED_HEREDOC = re.compile(
 )
 
 
-def inert_heredoc_receiver(header: str) -> bool:
+def inert_heredoc_receiver(prefix: str, suffix: str) -> bool:
     """Return whether a quoted heredoc is data for a known non-executing sink."""
-    if "|" in header:
+    suffix_flow = quote_aware_segments_with_operators("true " + suffix)
+    if suffix_flow and suffix_flow[0][1] == "|":
         return False
-    parsed = quote_aware_segments(header.split("<<", 1)[0])
+    parsed = quote_aware_segments(prefix)
     if not parsed:
         return False
     head, toks = command_head(parsed[-1])
     if head == "cat":
-        return ">" not in header
+        return ">" not in prefix and ">" not in suffix
     if head == "git" and git_subcommand(toks) == "commit":
         return ("-F" in toks or "--file" in toks) and "-" in toks
     if head == "gh" and len(toks) >= 3 and toks[1:3] == ["pr", "create"]:
@@ -221,29 +222,29 @@ def strip_quoted_heredoc_bodies(command: str) -> str:
     """Remove inert bodies whose quoted delimiter disables shell expansion."""
     lines = command.splitlines(keepends=True)
     result = []
-    pending: list[tuple[str, bool]] = []
-    in_body: tuple[str, bool] | None = None
+    pending: list[tuple[str, bool, bool]] = []
+    in_body: tuple[str, bool, bool] | None = None
     for line in lines:
         if in_body:
-            delimiter, strip_tabs = in_body
+            delimiter, strip_tabs, inert = in_body
             candidate = line.rstrip("\r\n")
             if strip_tabs:
                 candidate = candidate.lstrip("\t")
             if candidate == delimiter:
-                result.append("\n")
+                result.append("\n" if inert else line)
                 in_body = pending.pop(0) if pending else None
             else:
-                result.append("\n")
+                result.append("\n" if inert else line)
             continue
         result.append(line)
         for match in _QUOTED_HEREDOC.finditer(line):
-            if inert_heredoc_receiver(line):
-                pending.append(
-                    (
-                        match.group("single") or match.group("double"),
-                        bool(match.group("tabs")),
-                    )
+            pending.append(
+                (
+                    match.group("single") or match.group("double"),
+                    bool(match.group("tabs")),
+                    inert_heredoc_receiver(line[: match.start()], line[match.end() :]),
                 )
+            )
         if pending:
             in_body = pending.pop(0)
     return "".join(result)
@@ -923,7 +924,7 @@ def is_git_config_environment_mutation(raw: list[str]) -> bool:
         return True
     if first in {"export", "set", "setx"}:
         return any(
-            re.match(r'^"?git_config[a-z0-9_]*=', token, re.IGNORECASE)
+            re.fullmatch(r'"?git_config[a-z0-9_]*(?:=.*)?"?', token, re.IGNORECASE)
             for token in raw[1:]
         )
     if first in {"set-item", "new-item", "si", "ni"}:
@@ -947,6 +948,39 @@ _GIT_PUSH_VALUE_LONG_OPTIONS = {
     "--recurse-submodules",
     "--repo",
 }
+
+_SHARED_BRANCH_NAMES = {
+    "dev",
+    "develop",
+    "development",
+    "main",
+    "master",
+    "prod",
+    "production",
+    "release",
+    "stable",
+    "staging",
+    "trunk",
+}
+
+
+def force_with_lease_targets_shared(refspecs: list[str]) -> bool:
+    """Reject lease updates whose explicit destination is shared or ambiguous."""
+    for refspec in refspecs:
+        candidate = refspec.lstrip("+")
+        if ":" in candidate:
+            _source, target = candidate.rsplit(":", 1)
+        else:
+            target = candidate
+        target = target.removeprefix("refs/heads/").strip("/").lower()
+        if (
+            not target
+            or target in {"@", "head"}
+            or target in _SHARED_BRANCH_NAMES
+            or target.startswith("release/")
+        ):
+            return True
+    return False
 
 
 def abbreviated_git_push_value_option(token: str) -> bool:
@@ -2113,10 +2147,10 @@ def check(
                 "deny",
                 "sudo is blocked at the floor. If elevation is truly needed, the human runs it.",
             )
-        if head in {"start-process", "saps"}:
+        if head in {"start", "start-process", "saps"}:
             return (
                 "deny",
-                "Start-Process can conceal an irreversible child command. Run the child directly.",
+                "A process launcher can conceal an irreversible child command. Run the child directly.",
             )
         if head == "call":
             if len(toks) < 2 or is_dynamic_value(" ".join(toks[1:])):
@@ -2220,7 +2254,12 @@ def check(
                         nested_script = bound_value
                     elif index + 1 < len(toks):
                         if head in {"bash", "sh", "zsh"}:
-                            nested_script = toks[index + 1]
+                            script_index = index + 1
+                            if toks[script_index] == "--" and script_index + 1 < len(
+                                toks
+                            ):
+                                script_index += 1
+                            nested_script = toks[script_index]
                         elif is_command_with_args:
                             nested_script = toks[index + 1]
                         else:
@@ -2402,6 +2441,7 @@ def check(
                         "deny",
                         "sensitive_data repo: recursive submodule pushes have additional destinations.",
                     )
+                lease_requested = False
                 for t in args:
                     short_flags, _short_consumes_next = git_push_short_option_shape(t)
                     dangerous_options = {
@@ -2430,6 +2470,7 @@ def check(
                                 "deny",
                                 "T4/wave: no force variants at all — other work rides on these refs.",
                             )
+                        lease_requested = True
                         continue
                     if "f" in short_flags:
                         return (
@@ -2478,6 +2519,14 @@ def check(
                     return (
                         "deny",
                         "A git push without an explicit refspec can inherit opaque config.",
+                    )
+                if lease_requested and (
+                    explicit_selector
+                    or force_with_lease_targets_shared(positionals[1:])
+                ):
+                    return (
+                        "deny",
+                        "Force-with-lease is allowed only for an explicit non-shared feature branch.",
                     )
                 if sensitive:
                     if cwd_uncertain:
@@ -2808,6 +2857,8 @@ def check(
                     lowered = token.lower()
                     if lowered in {"-x", "--method"} and index + 1 < len(toks):
                         method = toks[index + 1].upper()
+                    elif lowered.startswith("-x") and len(token) > 2:
+                        method = token[2:].lstrip("=").upper()
                     elif lowered.startswith("--method="):
                         method = token.split("=", 1)[1].upper()
                     elif lowered in {"-f", "-F", "--raw-field", "--field", "--input"}:
@@ -2857,20 +2908,22 @@ def main():
             event = sys.argv[sys.argv.index("--event") + 1]
         except IndexError:
             pass
-    if "--runtime" in sys.argv:
+    runtime_options = [
+        token
+        for token in sys.argv[1:]
+        if token == "--runtime" or token.startswith("--runtime=")
+    ]
+    if len(runtime_options) > 1:
+        runtime = "invalid"
+    elif runtime_options and runtime_options[0].startswith("--runtime="):
+        runtime = runtime_options[0].split("=", 1)[1].lower() or "invalid"
+    elif runtime_options:
         try:
             runtime = sys.argv[sys.argv.index("--runtime") + 1].lower()
         except IndexError:
             runtime = "invalid"
     if event != "pre":
         sys.exit(0)  # global layer wires only the floor; other events are repo-tier
-
-    runtime = "claude"
-    if "--runtime" in sys.argv:
-        try:
-            runtime = sys.argv[sys.argv.index("--runtime") + 1].lower()
-        except IndexError:
-            pass
 
     try:
         payload = json.load(sys.stdin)

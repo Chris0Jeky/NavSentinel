@@ -77,6 +77,26 @@ def run_case(
     return decision
 
 
+def run_case_with_argv(command: str, argv_tail: list[str], tier: int = 3):
+    """Invoke the dispatcher with an exact CLI tail for parser regressions."""
+    with tempfile.TemporaryDirectory() as project:
+        write_tier(project, tier, {})
+        env = dict(os.environ)
+        env["CLAUDE_PROJECT_DIR"] = project
+        payload = json.dumps(
+            {"tool_name": "Bash", "tool_input": {"command": command}, "cwd": project}
+        )
+        proc = subprocess.run(
+            [sys.executable, DISPATCH, *argv_tail],
+            input=payload,
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=10,
+        )
+        return parse_decision(proc)
+
+
 def write_tier(project: str, tier: int, flags: dict | None = None):
     cfg_dir = os.path.join(project, ".claude")
     os.makedirs(cfg_dir, exist_ok=True)
@@ -232,6 +252,12 @@ CASES = [
     ("git checkout -- .", 3, {}, "ask"),
     ("git checkout -- .", 4, {}, "deny"),
     ("git push --force-with-lease origin feat", 2, {}, "allow"),
+    ("git push --force-with-lease origin HEAD:feature/topic", 2, {}, "allow"),
+    ("git push --force-with-lease origin HEAD:main", 2, {}, "deny"),
+    ("git push --force-with-lease origin HEAD:refs/heads/main", 2, {}, "deny"),
+    ("git push --force-with-lease origin HEAD:release/1.4", 2, {}, "deny"),
+    ("git push --force-with-lease origin HEAD", 2, {}, "deny"),
+    ("git push --force-with-lease --all origin", 2, {}, "deny"),
     ("git push --force-with-lease origin feat", 4, {}, "deny"),
     # --- relaxed_work_loss_guards: declared relaxed-git posture, allow below T4/wave ---
     ("git reset --hard HEAD~1", 3, {"relaxed_work_loss_guards": True}, "allow"),
@@ -550,6 +576,14 @@ CASES = [
         {},
         "deny",
     ),
+    (
+        "export GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0; "
+        "GIT_CONFIG_COUNT=1; GIT_CONFIG_KEY_0=remote.origin.push; "
+        "GIT_CONFIG_VALUE_0=+HEAD:refs/heads/main; git push origin feature",
+        1,
+        {},
+        "deny",
+    ),
     ("git config --rename-section remote.origin remote.other", 1, {}, "deny"),
     ("git config --rename-s remote.origin remote.other", 1, {}, "deny"),
     (
@@ -671,6 +705,7 @@ CASES = [
     ("`echo git` push --force origin main", 1, {}, "deny"),
     ("call git push --force origin main", 1, {}, "deny"),
     ("Start-Process git -ArgumentList 'push','--force','origin','main'", 1, {}, "deny"),
+    ('cmd /c "start /b git push --force origin main"', 1, {}, "deny"),
     ("find . -exec git push --force origin main \\;", 1, {}, "deny"),
     ("find . -exec rm -rf / \\;", 1, {}, "deny"),
     ("find . -delete", 1, {}, "deny"),
@@ -758,6 +793,28 @@ CASES = [
         "deny",
     ),
     (
+        "git commit -F - <<'EOF'; bash <<'RUN'\n"
+        "message\nEOF\nrm -rf /critical/outside\nRUN",
+        1,
+        {},
+        "deny",
+    ),
+    (
+        "bash <<'RUN'; git commit -F - <<'EOF'\n"
+        "rm -rf /critical/outside\nRUN\nmessage\nEOF",
+        1,
+        {},
+        "deny",
+    ),
+    ("gh api -XPOST /user/repos", 1, {"sensitive_data": True}, "deny"),
+    (
+        "gh api -XDELETE /repos/example/private",
+        1,
+        {"sensitive_data": True},
+        "deny",
+    ),
+    ("bash -c -- 'git push --force origin main'", 1, {}, "deny"),
+    (
         "git config --remove-section --file --get-a remote.origin",
         1,
         {},
@@ -777,6 +834,9 @@ CASES = [
     ("curl https://api.example.com/data -o data.json", 1, {}, "allow"),
     ("dotnet test backend/Taskdeck.sln", 1, {}, "allow"),
     ("bash -c 'git status'", 1, {}, "allow"),
+    ("bash -c -- 'git status'", 1, {}, "allow"),
+    ("gh api -XGET /user", 1, {"sensitive_data": True}, "allow"),
+    ("export PATH", 1, {}, "allow"),
     ("cd src && rm -rf build", 1, {}, "allow"),
     ("Set-Location src && Remove-Item -Recurse build", 1, {}, "allow"),
     ("cd src && bash -c 'rm -rf build'", 1, {}, "allow"),
@@ -817,6 +877,13 @@ CASES = [
         "allow",
     ),
     ("cat <<'EOF'\nsudo id\nEOF", 1, {}, "allow"),
+    (
+        "git commit -F - <<'EOF'; gh pr create --body-file - <<'BODY'\n"
+        "git push --force\nEOF\nrm -rf /\nBODY",
+        1,
+        {},
+        "allow",
+    ),
 ]
 
 
@@ -1215,6 +1282,35 @@ def main():
             "Codex runtime still allows safe command",
             run_case("git status", 3, {}, runtime="codex"),
             "allow",
+        ),
+        (
+            "attached Codex runtime translates ask to deny",
+            run_case_with_argv(
+                "git reset --hard HEAD~1", ["--event", "pre", "--runtime=codex"]
+            ),
+            "deny",
+        ),
+        (
+            "missing runtime value fails closed",
+            run_case_with_argv(
+                "git reset --hard HEAD~1", ["--event", "pre", "--runtime"]
+            ),
+            "deny",
+        ),
+        (
+            "duplicate runtime flags fail closed",
+            run_case_with_argv(
+                "git reset --hard HEAD~1",
+                ["--event", "pre", "--runtime", "claude", "--runtime", "codex"],
+            ),
+            "deny",
+        ),
+        (
+            "invalid runtime value fails closed",
+            run_case_with_argv(
+                "git status", ["--event", "pre", "--runtime", "unknown"]
+            ),
+            "deny",
         ),
     ]
     for label, got, expected in runtime_cases:
@@ -1718,6 +1814,7 @@ def main():
         if got != expected:
             failures.append((label, 2, sensitive_cfg["flags"], expected, got))
         print(f"  [{status}] expected={expected} got={got}  {label}")
+    asserted_sensitive_case_count = len(sensitive_remote_cases)
 
     remote_resolution_cases = [
         (
@@ -2009,6 +2106,24 @@ def main():
             None,
         )
     )
+    late_sensitive_cases = sensitive_remote_cases[asserted_sensitive_case_count:]
+    for label, got, expected in late_sensitive_cases:
+        status = "ok" if got == expected else "FAIL"
+        if got != expected:
+            failures.append((label, 2, sensitive_cfg["flags"], expected, got))
+        print(f"  [{status}] expected={expected} got={got}  {label}")
+    asserted_sensitive_case_count += len(late_sensitive_cases)
+    if asserted_sensitive_case_count != len(sensitive_remote_cases):
+        failures.append(
+            (
+                "unasserted sensitive remote cases",
+                2,
+                sensitive_cfg["flags"],
+                len(sensitive_remote_cases),
+                asserted_sensitive_case_count,
+            )
+        )
+
     for label, got, expected in remote_resolution_cases:
         status = "ok" if got == expected else "FAIL"
         if got != expected:
