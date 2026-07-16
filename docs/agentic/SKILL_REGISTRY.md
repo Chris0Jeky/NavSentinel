@@ -11,7 +11,7 @@ NavSentinel keeps Claude and Codex equally capable through parallel, runtime-nat
 | Claude Code | `CLAUDE.md` | `.claude/skills/*/SKILL.md` | `.claude/settings.json`, hooks in `scripts/agent_hooks/` |
 | Codex | `AGENTS.md` | `.agents/skills/*/SKILL.md` | `.codex/hooks.json`, `AGENTS.md`, Codex tool discipline, shared protocols in `docs/agentic/` |
 
-The workflows should stay aligned in purpose and trigger, but not identical in implementation. Claude should use Claude-native skills/settings/hooks. Codex should use `AGENTS.md`, `update_plan`, `multi_tool_use.parallel`, `apply_patch`, shell verification, Playwright/browser tooling, `tool_search`, and web verification when those tools are available and appropriate.
+The workflows should stay aligned in purpose and trigger, but not identical in implementation. Claude should use Claude-native skills/settings/hooks. Codex should use `AGENTS.md`, `update_plan`, parallel native reads/searches when exposed, `apply_patch`, shell verification, Playwright/browser tooling, `tool_search`, and web verification when those tools are available and appropriate.
 
 ## Shared Skill Names
 
