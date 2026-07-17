@@ -10,6 +10,30 @@ standing decisions are in `docs/agentic/DECISIONS.md`; human-only work is in
 `ACTION_ITEMS.md`; historical cycle detail remains in `ORCHESTRATOR.md` pending
 rotation under #437.
 
+## Clean-stop checkpoint — 2026-07-17
+
+- Root `main` is clean at `2888483` and matches `origin/main`.
+- PR #356 exact head `f8028c9` is twice independently reviewed, Codex-clean,
+  thread-clean, and green in GitHub run `29560572081`; AI-13 is the only
+  remaining gate.
+- PR #466 exact runtime head `0266107` is twice independently reviewed,
+  Codex-clean, 4/4 thread-resolved, and green in run `29561311422`; AI-22 is the
+  only remaining gate. No merge is authorized.
+- PR #464's fresh second review found a HIGH trusted-pointerdown authority gap
+  on `6332142`. Runtime commit `8aee243` is pushed and locally proven: a trusted
+  pointerdown now sends only a top-frame rollback baseline, not a gesture,
+  broad, target, or recent-user allowance. Its pre-fix Chromium regression
+  failed by observing stored authority; the fixed test passes, as do eight
+  affected attack/compatibility controls, typecheck, lint, build, and the
+  28-test session-state file. GitHub run `29571521818` was still in progress at
+  the stop snapshot. The final documentation commit changes the PR head again,
+  so both independent reviews, Codex bot review, thread audit, and CI must be
+  rerun on that final exact head before AI-21 becomes actionable.
+- The only dirty worktree is the known Defender-quarantined checkpoint at
+  `C:/Users/Public/codex-shell-home/NavSentinel-ri01`, where tracked
+  `tests/clickfix-detector.property.test.ts` remains deleted. Do not restore,
+  clean, reset, or stage it without Chris completing AI-20.
+
 ## Open human items — surface all of these
 
 - **Resume at: AI-16** (`q-1` in the current guided conversation).
@@ -45,12 +69,11 @@ rotation under #437.
 - PR #463 merged exact green dependency head `91aab4f` as `2888483` and closed
   #459. It carries CRXJS 2.7.1, Vite 8.1.5, Rollup 2.80.0, Rolldown 1.1.5,
   audit zero, and the aligned Node engine floor.
-- PR #356 and #464 were twice reviewed, thread-clean, and exact-head CI-green
-  before #463 changed `main`'s dependency graph. Their current-main refreshes are
-  on their branches. #356 passes 2,875 unit plus 65/65 one-worker E2E; #464
-  passes 2,874 unit plus 65/65 one-worker E2E. Each guide's live precheck must
-  confirm local/remote/PR equality, full exact-head CI, and both fresh reviews;
-  neither may merge without its human Gate-3 evidence.
+- PR #356's current-main exact head is fully gated and human-held by AI-13.
+  PR #464's refreshed runtime passed 2,874 unit plus 65/65 one-worker E2E before
+  the later trusted-pointerdown review finding; `8aee243` fixes that finding and
+  has focused proof, but its final exact-head reviews/CI remain intentionally
+  unfinished at this clean stop. Neither may merge without its human Gate-3.
 - PR #466's Cycle 53 runtime tree passed 176 focused broker/SW tests, typecheck,
   lint, build, 2,901 units, rollback 3/3, all 64 one-worker E2E, package, and
   all 12 performance budgets after merging current `main`. The first exact-head
@@ -70,8 +93,12 @@ rotation under #437.
   follow-up then proved the lexer alone accepted unsupported static import
   attributes/assertions. `c0305f9` adds syntax-aware rejection plus four pre-fix-
   failing fixtures (21 total); the real five-module emitted graph passes.
-  Local/remote/PR equality, exact-head reviews, thread accounting, and CI remain
-  live-authoritative.
+  Final runtime `0266107` additionally restricts persisted signal values to the
+  finite `cross_site` / `NRS-high` set. Local/remote/PR heads match; both fresh
+  independent reviews and exact Codex review are clean, all four historical
+  threads are resolved, closing references are empty, and GitHub run
+  `29561311422` passed Build/Unit and E2E (release skipped as configured).
+  AI-22 remains mandatory and human-owned.
 - PR #466's package is about 492.9/500KB while reputation is a 52-byte test fixture. The
   old 150KB/100K-domain plan cannot meet its stated 0.01% FP target or aggregate
   package cap as written.
@@ -122,6 +149,21 @@ rotation under #437.
   not pre-claim its own final review or CI outcome. The exact SHA, CI run,
   bot/thread accounting, and final review evidence must live on PR #464 after
   this commit; any later head invalidates them.
+
+- **PR #464 fresh round 2 finding and fix (`6332142` -> runtime `8aee243`,
+  2026-07-17):** round 1 was clean, but the independent second lens proved a
+  trusted pointerdown alone emitted targetless `ns-nav-gesture` authority that a
+  delayed synthetic same-tab cross-site link could spend. A repository Chromium
+  regression failed before the fix because `ns_sw:gestureUntil` was populated.
+  Removing that call exposed a cold-worker baseline dependency: without a known
+  previous URL the worker could not roll back the first suspicious commit. The
+  final fix adds `ns-nav-context`, accepted only from top-frame content and
+  sourced from Chrome's `sender.tab.url`; it persists `lastUrl` without creating
+  any authority. The regression and eight trusted/synthetic compatibility cases
+  pass after the fix. This is not final review evidence: the next session must
+  run two independent reviews from the final exact head, fix every finding,
+  rerun affected checks after every head change, request an exact-head Codex
+  review, audit all threads, and require green CI.
 
 - **Agentic contract round 1 (runtime/parity lens, 2026-07-17):** compared
   Codex instructions, hooks, skills, and shared references against the compact
@@ -201,23 +243,61 @@ comparative evidence.
 
 ## Next safe slice
 
-On PR #466, confirm live local/remote/PR equality, two fresh exact-head reviews,
-bot/thread accounting, and green CI; leave it human-held for AI-22. Apply the
-same live precheck to the current-main refreshes on #356 and #464 before AI-13 or
-AI-21 is actionable. Do not start a fourth browser-held slice.
+Resume PR #464 only. Fetch and confirm the final local/origin/PR head equality,
+then inspect the current CI run, every review comment, and every unresolved
+thread. Run independent adversarial round 1 on that exact head; fix all findings
+and rerun affected checks. Run a fresh independent round 2 on the new exact
+head, then request/audit the Codex review and exact-head CI. Update the PR body
+and evidence comment only after those gates are current. Leave #356 and #466
+unchanged and human-held by AI-13/AI-22. Do not merge or start a fourth browser
+slice.
+
+## Copy-paste prompt for the next session
+
+```text
+Resume the NavSentinel clean-stop checkpoint from the repository root. Begin
+with the worktree guard preamble, read ACTION_ITEMS.md, AGENTS.md, CLAUDE.md,
+docs/Project_Roadmap.md, autodoc/AGENT_INDEX.md,
+docs/agentic/HANDOFF.md, and docs/agentic/ORCHESTRATOR.md, then refresh live
+git/GitHub truth. Preserve every existing worktree and do not touch the known
+Defender-quarantined deletion in C:/Users/Public/codex-shell-home/NavSentinel-ri01.
+
+Own PR #464 only until it is cleanly handed to AI-21. Confirm the final
+local/origin/PR head equality, current CI, PR body, comments, unresolved threads,
+and closing references. Review the trusted-pointerdown fix adversarially from
+the exact head: correctness, security/privacy, cold-worker lifecycle, frame
+provenance, message ordering, false positives, performance, test validity, and
+documentation. Fix every finding and rerun affected proof. Then run a fresh,
+independent second review on the new exact head; request and audit the exact-head
+Codex review; require green Build/Unit and E2E; update the PR body/evidence,
+ACTION_ITEMS.md, roadmap, HANDOFF, and the single ORCHESTRATOR ledger only where
+truth changed. Run hook smoke, skill validation, JSON/Python syntax, and
+git diff --check for agentic changes. Do not merge: AI-21 real-Chrome Gate-3 is
+human-owned.
+
+Audit but do not rework PR #356 (exact f8028c9, automated gates green, AI-13)
+or PR #466 (exact 0266107, automated gates green, AI-22) unless live truth has
+changed. Leave root main clean, commit/push small logical increments, account
+for every touched item, and finish with changed / verified / not verified /
+failures / both review rounds / docs sync / all OPEN-BLOCKED AI-N items / queue
+accounting / next safe slice.
+```
 
 ## Queue accounting
 
-- **Open / human-held:** #356 (AI-13), #464 (AI-21), and #466 (AI-22);
-  none may merge from automation alone.
+- **Open / human-held:** #356 is ready for AI-13; #466 is ready for AI-22;
+  #464 remains pre-human-gate until its final exact-head reviews, bot/thread
+  audit, and CI are green. None may merge from automation alone.
 - **Merged:** #463 / #459 as `2888483`; intended close link verified.
 - **Open / in progress:** PR #466 pending-decision SW boundary; the three runtime
   blockers, emitted-graph gate, lexer gaps, and unsupported import-attribute gap
   are fixed. Its live precheck requires local/remote/PR equality, exact-head
   reviews, bot/thread accounting, green CI, and AI-22.
-  #356's current-main refresh passes 2,875 unit plus 65/65 E2E; #464's refresh
-  passes 2,874 unit plus 65/65 E2E. Each live precheck requires local/remote/PR
-  equality before its fresh exact-head gates count.
+  #356's final exact head passes its full gates. #464's older refresh passes
+  2,874 unit plus 65/65 E2E; runtime `8aee243` adds focused post-finding proof,
+  but the final documentation head still needs both reviews and CI. #466's
+  `0266107` exact head passes its full automated gates. Every human guide still
+  begins with live local/remote/PR equality.
 - **Parked:** draft #457 agent-harness tooling; closed #273/#399 retain explicit
   re-entry paths.
 - **Blocked:** AI-15, AI-8, and AI-14.
@@ -227,6 +307,12 @@ AI-21 is actionable. Do not start a fourth browser-held slice.
 
 ## Reliability notes
 
+- The first #464 fix removed pointerdown authority but also removed the only
+  source-URL baseline when a cold worker missed the initial commit. The new E2E
+  stayed on the synthetic destination and a temporary service-worker trace
+  showed empty `lastCommitted`/`pendingRollback` plus only the destination in
+  `lastUrl`. Replacing the call with non-authorizing, top-frame `ns-nav-context`
+  fixed the regression. The temporary diagnostic listener/output was removed.
 - The current environment did not perform real Chrome behavior, CWS submission,
   real-feed building, external audit, or trademark/legal clearance.
 - Treat successful CI as regression evidence, not efficacy evidence.

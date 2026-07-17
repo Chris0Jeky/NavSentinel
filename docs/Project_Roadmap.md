@@ -48,19 +48,21 @@ protection. The exact audit baseline is recorded only in dated
 | PR | Current state |
 |---|---|
 | #273 | Closed 2026-07-13 from a stale base; recreate from current `main` or defer |
-| #356 | Current-main refresh passes 2,875 unit plus 65/65 E2E; its live precheck must confirm local/remote/PR equality, two fresh exact-head reviews, and green CI before AI-13 |
+| #356 | Exact head `f8028c9` is local/remote/PR-equal, twice reviewed, bot/thread-clean, and green in run `29560572081`; AI-13 human Chrome Gate-3 remains |
 | #399 | Closed 2026-07-13; measurement-held under #223/#417 and not a beta blocker |
 | #463 | Merged exact green dependency head `91aab4f` as `2888483`; #459 closed as intended |
-| #464 | Current-main refresh passes 2,874 unit plus 65/65 E2E; its live precheck must confirm local/remote/PR equality, two fresh exact-head reviews, and green CI before AI-21 |
-| #466 | Open RI-01 dormant pending-decision SW boundary; three runtime blockers fixed, emitted static-worker gate added in `dfea4da`, parser replaced by a real module lexer in `ddfacf0`, and unsupported import attributes rejected in `c0305f9`; live exact-head reviews/CI and AI-22 remain |
+| #464 | Runtime `8aee243` fixes the fresh round-2 trusted-pointerdown authority finding with a non-authorizing top-frame baseline and Chromium regression; pushed, but the final status-only head still needs two exact-head reviews, bot/thread audit, green CI, and AI-21 |
+| #466 | Exact runtime head `0266107` fixes the broker, emitted-graph/parser/import-attribute, and finite-signal privacy findings; local/remote/PR-equal, twice reviewed, bot/thread-clean, and green in run `29561311422`; AI-22 remains |
 
 **RI-01 implementation note (verified 2026-07-17):** PR #464 isolates the
-production synthetic-navigation sub-slice: only trusted input can mint
-navigation allowances, a preceding trusted pointerdown remains risk evidence,
-and an untrusted `_blank` click cannot enter the benign-anchor exemption. Its
-targeted attack/compatibility checks and all 65 one-worker E2E tests passed on
-its pre-dependency head; AI-21 real-Chrome Gate-3 remains mandatory after its
-current-main refresh. PR #466 now supplies a dormant, context-bound
+production synthetic-navigation sub-slice: only an approved trusted click can
+mint navigation allowances, a preceding trusted pointerdown remains risk
+evidence and seeds only a non-authorizing top-frame rollback baseline, and an
+untrusted `_blank` click cannot enter the benign-anchor exemption. The new
+pointerdown-only regression failed before `8aee243` and passes after it alongside
+eight affected attack/compatibility Chromium controls. Exact-head reviews/CI
+restart after the handoff commit; AI-21 real-Chrome Gate-3 remains mandatory.
+PR #466 now supplies a dormant, context-bound
 pending-decision service-worker boundary: shared contracts/store, authenticated
 content/extension senders, browser-derived tab/frame/document context, a
 worker-owned destination capability, positive current-frame enumeration,

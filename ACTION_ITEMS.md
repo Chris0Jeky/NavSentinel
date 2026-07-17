@@ -39,11 +39,13 @@ Live recheck on 2026-07-17 found 80 open issues, no tags/releases/classic branch
 protection or repository rulesets, and no milestones or assignees. Verify the
 current `main` SHA live rather than pinning it here. Open PRs are #356, draft
 #457, #464, and #466; PR #463 merged as `2888483` and closed #459. Stale
-PRs #273 and #399 were closed with explicit re-entry paths. #356 and #464 were twice
-reviewed, thread-clean, and exact-head CI-green before #463 changed `main`'s
-dependency graph. Their current-`main` refreshes are on their branches and both
-pass their full one-worker E2E lanes. Each guide's live precheck must confirm
-local/remote/PR head equality, two fresh reviews, and green CI before AI-13 or
+PRs #273 and #399 were closed with explicit re-entry paths. #356 is now exact-
+head reviewed, thread-clean, and CI-green after its current-`main` refresh, but
+remains human-held by AI-13. PR #464's second independent review found that a
+trusted pointerdown still minted targetless service-worker authority. Runtime
+commit `8aee243` replaces that with a top-frame, non-authorizing rollback
+baseline and adds a pre-fix-failing Chromium regression; exact-head reviews,
+bot accounting, and CI must restart after the handoff/status commit before
 AI-21 is actionable.
 PR #466 is the third and final browser-held lane. Its first review recheck found
 three valid blockers: an MV3-incompatible dynamic import, a consume contract
@@ -60,8 +62,9 @@ passed exact-head CI. The first independent adversarial re-review then found
   `ddfacf0` replaces the hand-rolled edge regex with `es-module-lexer`. A fresh
   follow-up then proved unsupported static import attributes/assertions still
   passed; `c0305f9` adds syntax-aware rejection and four pre-fix-failing fixtures
-  (21 total). AI-22's live precheck must confirm local/remote/PR head equality,
-  green exact-head CI, both fresh review rounds, and zero unresolved threads.
+  (21 total). Exact runtime head `02661076` passed both fresh reviews, the Codex
+  bot, all four historical-thread resolutions, and GitHub run `29561311422`;
+  AI-22 still performs a live equality/gate precheck and remains human-owned.
 The product-posture and guided-workflow work merged through PR #454; verify live
 `main` rather than pinning its SHA here. The RI-01 checkpoint branch is remotely
 backed up without the unstaged Defender deletion; verify its SHA live. Its
@@ -354,11 +357,13 @@ remains human-owned; only Chris can record Gate-3 as done.
 LIVE EXACT-HEAD PRECHECK REQUIRED).** This browser-surface slice prevents page
 scripts from minting navigation authority with dispatched pointer/click events,
 while retaining a preceding real pointerdown only as attack-correlation
-evidence. Automated Chromium proves the attack and compatibility paths, but a
-real Chrome pass must confirm trusted mouse/keyboard flows and synthetic-event
-rejection before merge. Its current-main refresh passes the affected local
-checks; before use, an agent must confirm live local/remote/PR equality, both
-fresh exact-head reviews, and green CI. Only Chris can record this item complete.
+evidence. A trusted pointerdown now sends only a top-frame rollback baseline;
+it cannot create gesture, broad, target, or recent-user authority. Automated
+Chromium proves the pointerdown-only attack, existing synthetic attacks, and
+trusted compatibility paths, but a real Chrome pass must confirm them before
+merge. Runtime commit `8aee243` is pushed; the later handoff/status-only head
+still needs two fresh independent reviews, current bot/thread accounting, and
+green CI. Only Chris can record this item complete.
 
 **Current guide:**
 
@@ -424,6 +429,31 @@ fresh exact-head reviews, and green CI. Only Chris can record this item complete
    ```
 
    Stop if `gymTabId` is missing. In that Gym page's DevTools console, execute:
+
+   - On a fresh `level1-basic-opacity.html`, wait out the independent typed-URL
+     context and stage a trusted-pointerdown-only mutation:
+
+   ```js
+   await new Promise((resolve) => setTimeout(resolve, 6000));
+   const a = document.body.appendChild(document.createElement("a"));
+   a.href = "http://localhost:5173/level2-moving-target.html?ai21=trusted-down";
+   a.style.cssText = "position:fixed;left:-9999px;top:-9999px";
+   a.addEventListener("click", (event) => console.log("synthetic click", event.isTrusted));
+   const b = document.body.appendChild(document.createElement("button"));
+   b.textContent = "AI-21 trusted pointerdown only";
+   b.style.cssText = "position:fixed;left:0;top:0;width:180px;height:120px;z-index:2147483647";
+   b.addEventListener("pointerdown", (event) => {
+     console.log("trusted pointerdown", event.isTrusted);
+     setTimeout(() => a.click(), 150);
+   }, { once: true });
+   "Physically press and hold this button; do not release until the page returns";
+   ```
+
+   Physically press and hold the button without releasing. Expect
+   `trusted pointerdown true`, `synthetic click false`, and automatic rollback
+   to `127.0.0.1/.../level1-basic-opacity.html`; the `localhost` destination must
+   not stick. Release only after rollback. In the service-worker inspector,
+   re-read `allowanceKeys` for `gymTab.id`; all three values must be `undefined`.
 
    - On a fresh `level1-basic-opacity.html`, synthetic pointer/click ->
      `window.open`:

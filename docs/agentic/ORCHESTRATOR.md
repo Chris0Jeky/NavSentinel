@@ -97,15 +97,16 @@ PRs D-* are independent (different files) → parallel branches off `main`, **no
 
 ## In-Flight
 
-**Active checkpoint (2026-07-17, Cycle 57):** PR #463 merged its exact green
-dependency head as `2888483` and closed #459. That dependency graph must now be
-integrated into all browser-held lanes. PR #356 (AI-13) and #464 (AI-21) were
-twice reviewed, thread-clean, and exact-head CI-green before the merge. Their
-current-main refreshes are on their branches in isolated worktrees: #356 passes
-2,875 unit plus 65/65 one-worker E2E, while #464 passes 2,874 unit plus 65/65.
-Each live precheck must confirm local/remote/PR equality, two fresh exact-head
-reviews, and green CI before its human guide becomes actionable. Do not merge
-either from automation alone.
+**Active checkpoint (2026-07-17, Cycle 59 clean stop):** PR #463 merged its
+exact green dependency head as `2888483` and closed #459. Root `main` remains
+clean at that head. PR #356 exact head `f8028c9` is twice reviewed, Codex-clean,
+thread-clean, and CI-green; it remains human-held by AI-13. PR #466 exact runtime
+head `0266107` is likewise twice reviewed, Codex-clean, 4/4 thread-resolved, and
+CI-green; it remains human-held by AI-22. PR #464 is the sole agent-owned resume
+lane: fresh round 2 found a HIGH pointerdown-only authority gap on `6332142`.
+Runtime fix `8aee243` is pushed and locally proven, but the final status-only
+head requires two new independent reviews, exact bot/thread accounting, and
+green CI before AI-21 is actionable. Do not merge any of these from automation.
 
 **Cycle 53 implementation / PR #466:** `fix/ri01-pending-decision-sw` ports the clean
 checkpoint broker foundation and wires a dormant service-worker
@@ -140,10 +141,10 @@ remain authoritative. No automation merge is authorized.
 
 | Slice | Branch | Base | Worktree | PR | State | Proving gates |
 |---|---|---|---|---|---|---|
-| RI-03 MAIN compatibility | `feat/dehard-enforcement-protos` | current branch head | `.worktrees/pr356-refresh` | #356 | OPEN / EXACT-HEAD GATES / AI-13 | live local/remote/PR equality; full exact-head CI/reviews; human Chrome Gate-3 |
+| RI-03 MAIN compatibility | `feat/dehard-enforcement-protos` | current branch head | `.worktrees/pr356-refresh` | #356 | OPEN / AUTOMATED GATES GREEN / AI-13 | exact `f8028c9`; run `29560572081`; human Chrome Gate-3 |
 | #459 dependency advisories | `fix/release-dependency-advisories` | `ebddd27` | `.worktrees/deps-audit` | #463 | MERGED `2888483` | audit zero; exact-head CI; two reviews; all threads resolved; intended #459 close verified |
-| RI-01 synthetic allowance rejection | `fix/ri01-reject-synthetic-nav-allowances` | current branch head | `.worktrees/ri01-synthetic-nav` | #464 | OPEN / EXACT-HEAD GATES / AI-21 | live local/remote/PR equality; full exact-head CI/reviews; human Chrome Gate-3 |
-| RI-01 SW pending-decision boundary | `fix/ri01-pending-decision-sw` | current branch head | `.worktrees/ri01-pending-sw` | #466 | OPEN / EXACT-HEAD GATES / AI-22 | live local/remote/PR equality; focused broker/store/SW lifecycle tests; automated emitted static-worker graph; rollback; type/lint/build/unit; full E2E; perf/package; two fresh exact-head reviews/CI; human Chrome Gate-3 |
+| RI-01 synthetic allowance rejection | `fix/ri01-reject-synthetic-nav-allowances` | current branch head | `.worktrees/ri01-synthetic-nav` | #464 | OPEN / POST-FINDING EXACT-HEAD GATES / AI-21 | runtime `8aee243` pushed; final head needs two reviews, bot/thread audit, green CI, then human Chrome Gate-3 |
+| RI-01 SW pending-decision boundary | `fix/ri01-pending-decision-sw` | current branch head | `.worktrees/ri01-pending-sw` | #466 | OPEN / AUTOMATED GATES GREEN / AI-22 | exact `0266107`; run `29561311422`; two reviews, bot and threads clean; human Chrome Gate-3 |
 
 **Historical checkpoint (2026-07-10):** no new slice started during that audit.
 At that time PRs #273/#356/#399 were stale and #356 was red. Rows below are
@@ -166,6 +167,7 @@ historical (all merged); Cycle 53 above supersedes that snapshot.
 
 | # | Date | Slice | Action | Result |
 |---|------|-------|--------|--------|
+| 59 | 2026-07-17 | CLEAN STOP / PR #464 pointerdown authority | Fresh independent round 2 on exact `6332142` found that trusted pointerdown emitted targetless `ns-nav-gesture` authority before click approval. A new Chromium mutation failed pre-fix by observing stored authority. Removing the call exposed a cold-worker rollback-baseline dependency; the destination still stuck because the worker had missed the source commit. Runtime `8aee243` adds top-frame `ns-nav-context`, sourced from Chrome's sender tab, which persists only `lastUrl` and creates no gesture/broad/target/recent-user authority. Typecheck, lint, build, 28 session-state tests, the focused regression, and eight affected Chromium controls pass; the branch is pushed. Per user clean-stop request, final exact-head reviews, bot/thread audit, CI, PR-body/evidence finalization, and AI-21 are explicitly deferred. PRs #356/#466 are already automated-gate green and remain human-held. | PR #464 OPEN / FIX PUSHED / FINAL REVIEWS+CI+AI-21 HELD |
 | 57 | 2026-07-17 | VERIFY / PR #466 static-import capability gate | A fresh independent round-2 follow-up proved the lexer-backed emitted-worker gate still accepted Chrome-unsupported static import attributes and legacy assertions. Four fixtures covering import/re-export `with` and `assert` failed before the fix. `c0305f9` adds a TypeScript syntax pass that rejects both forms and invalid JavaScript before graph traversal; all 21 fixtures, the real five-module graph, typecheck, lint, build, and diff checks pass. Shared browser-held status now uses live head-equality/review/CI prechecks instead of transient push wording. Both exact-head reviews and CI restart after this status commit; AI-22 remains mandatory. | PR #466 OPEN / FINDING FIXED / EXACT-HEAD GATES+AI-22 HELD |
 | 56 | 2026-07-17 | VERIFY / PR #466 graph-parser adversarial round 2 | Exact `7e173eb` passed Build/Unit and E2E in GitHub run `29558561505`, was local/remote/PR-equal, thread-clean, and passed a clean independent round-1 recheck plus a clean exact-head Codex review. Fresh independent round 2 then proved the release gate missed valid comment-separated dynamic/static imports and re-exports plus namespace re-exports; it also found the handoff still described the completed push as future work. `5d6ad17` and `ab6d845` add eight pre-fix-failing fixtures (17 total); `ddfacf0` replaces the regex parser with direct `es-module-lexer` metadata. This status sync fixes the low finding. Both review rounds and CI restart on the final exact head; AI-22 remains mandatory. | PR #466 OPEN / R2 FINDINGS FIXED / EXACT-HEAD GATES+AI-22 HELD |
 | 55 | 2026-07-17 | VERIFY / PR #466 MV3 worker gate | The first independent adversarial re-review on pushed, CI-green `af0ccb2` validated all three runtime blocker fixes but found build/package had no regression gate for the exact MV3 static-import defect and found stale pre-push status wording. `dfea4da` adds a recursive emitted-worker closure verifier to ordinary build and package. It requires MV3 module type and pending-runtime reachability, follows local static imports, and rejects dynamic/preload, remote, out-of-dist, or missing imports. Nine pass/fail fixtures, typecheck, focused lint, build, perf 12/12, package, Node syntax, and diff checks pass. This status sync fixes the low finding. Both adversarial rounds and CI restart on the final exact head; AI-22 remains mandatory. | PR #466 OPEN / R1 FINDINGS FIXED / EXACT-HEAD GATES+AI-22 HELD |
