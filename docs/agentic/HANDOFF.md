@@ -72,9 +72,14 @@ rotation under #437.
   coverage. Fixed in `aa9fa3a`: trusted-only `lastDown` remains correlation
   evidence, allowance writes remain gated by the current event's trust, the
   benign-anchor exemption now requires a trusted click, and the tests assert no
-  popup plus SW/MAIN/native-anchor/redirect rejection. The fresh final round(s)
-  and bot/thread accounting are authoritative only when posted against PR
-  #464's live exact head; any later head invalidates them.
+  popup plus SW/MAIN/native-anchor/redirect rejection. Gemini's two follow-up
+  threads then exposed one valid logging leak and one adjacent modifier-seeded
+  authority leak. `76da96b` prevents synthetic allowed clicks from emitting a
+  silent-navigation log; `8874459` requires the current click to be trusted
+  before modifier/new-tab intent can lower its risk. Mutation probes failed
+  before each fix and pass after it. The fresh final round(s) and bot/thread
+  accounting are authoritative only when posted against PR #464's live exact
+  head; any later head invalidates them.
 
 - **Agentic contract round 1 (runtime/parity lens, 2026-07-17):** compared
   Codex instructions, hooks, skills, and shared references against the compact

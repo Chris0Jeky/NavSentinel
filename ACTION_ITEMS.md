@@ -375,6 +375,11 @@ rejection before merge. Only Chris can record this item complete.
    Physically click **Continue**. No new tab may open and NavSentinel must show
    `Blocked new tab`. A Chrome popup-blocked badge without a NavSentinel card is
    inconclusive and must be reported.
+
+   Reload the fixture, then hold **Ctrl** while physically clicking **Continue**
+   (**Command** on macOS). The trusted modifier press must not authorize the
+   page's hidden synthetic click: no new tab may open and NavSentinel must again
+   show `Blocked new tab`.
 5. Before the synthetic probes, open the extension service-worker inspector
    from `chrome://extensions` and run the following only in this disposable
    profile:
