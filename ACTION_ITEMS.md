@@ -41,10 +41,10 @@ current `main` SHA live rather than pinning it here. Open PRs are #356, draft
 #457, #464, and #466; PR #463 merged as `2888483` and closed #459. Stale
 PRs #273 and #399 were closed with explicit re-entry paths. #356 and #464 were twice
 reviewed, thread-clean, and exact-head CI-green before #463 changed `main`'s
-dependency graph. Their current-`main` refreshes are committed locally as
-`5692e08` and `c7870aa`, respectively, and both pass their full one-worker E2E
-  lanes. Each refresh must reach local/remote/PR equality; fresh reviews and CI
-must pass before their AI-13/AI-21 guides are actionable.
+dependency graph. Their current-`main` refreshes are on their branches and both
+pass their full one-worker E2E lanes. Each guide's live precheck must confirm
+local/remote/PR head equality, two fresh reviews, and green CI before AI-13 or
+AI-21 is actionable.
 PR #466 is the third and final browser-held lane. Its first review recheck found
 three valid blockers: an MV3-incompatible dynamic import, a consume contract
 that required a raw destination unavailable to the UI, and stale child-frame
@@ -57,10 +57,11 @@ passed exact-head CI. The first independent adversarial re-review then found
   runtime tests. Fresh round 2 then found three valid parser gaps: comment-
   separated dynamic imports, namespace re-exports, and comment-separated static
   imports/re-exports. `5d6ad17` and `ab6d845` add the 17-fixture regression set;
-  `ddfacf0` replaces the hand-rolled edge regex with `es-module-lexer`. The
-  candidate must reach local/remote/PR equality;
-  AI-22 remains conditional on green exact-head CI, both fresh review rounds,
-  and zero unresolved threads.
+  `ddfacf0` replaces the hand-rolled edge regex with `es-module-lexer`. A fresh
+  follow-up then proved unsupported static import attributes/assertions still
+  passed; `c0305f9` adds syntax-aware rejection and four pre-fix-failing fixtures
+  (21 total). AI-22's live precheck must confirm local/remote/PR head equality,
+  green exact-head CI, both fresh review rounds, and zero unresolved threads.
 The product-posture and guided-workflow work merged through PR #454; verify live
 `main` rather than pinning its SHA here. The RI-01 checkpoint branch is remotely
 backed up without the unstaged Defender deletion; verify its SHA live. Its
@@ -89,10 +90,10 @@ adversarial test fixture. These changes do not change shipped product state.
 - **Legacy PR cleanup:** #273 and draft #399 were closed on 2026-07-13 rather
   than merged from stale bases; their commits, discussions, and open issue
   anchors remain. #356 was twice reviewed, thread-clean, and exact-head CI-green
-  before #463 merged. Its current-main refresh is committed locally and must
-  reach remote/PR equality. **Use the current AI-13 guide only after #356 repeats
-  both reviews/CI and its step-1
-  live precheck passes. The PR remains unmergeable without Chris's Gate-3
+  before #463 merged. Its current-main refresh is on the branch and passes local
+  proving gates. **Use the current AI-13 guide only after its step-1 precheck
+  confirms live local/remote/PR equality, both fresh reviews, and green CI. The
+  PR remains unmergeable without Chris's Gate-3
   evidence.**
 - **Portfolio:** 80 open issues, none assigned or milestoned; #439–#453 are 15
   frozen Horizon proposals. No new feature/epic issue seeding until the queue is
@@ -166,7 +167,7 @@ definition changes.
 
 **🚨 BLOCKED: AI-15 — Run the headed release session only after agent
 preflight.** The prior 60–90 minute one-sitting guide is withdrawn: stale PRs
-#273 and #399 were closed, #356 must publish its refresh and repeat its gates before AI-13,
+#273 and #399 were closed, #356 must pass its refreshed exact-head gates before AI-13,
 the reputation/package plan needs a product decision, and other
 release-integrity blockers precede a full manual release session. Use only the
 current AI-13, AI-21, and AI-22 guides for those narrow PRs. Agent preflight must still:
@@ -272,9 +273,10 @@ branch checkout guide.
 LIVE CI PRECHECK REQUIRED).** PR #356's pre-#463 exact head `ee0f9b7` passed
 GitHub Build/Unit plus E2E, 2,875 local unit tests, 65/65 one-worker E2E,
 build/package, all 12 size budgets, and resolved all three review threads. PR
-#463 then changed `main`'s dependency graph, so an agent must first integrate
-current `main` and repeat both reviews, CI, and affected local checks. The
-refreshed guide commit must independently satisfy step 1 before use. This item
+#463 then changed `main`'s dependency graph. Its current-main refresh now passes
+the affected local checks; before use, an agent must confirm live local/remote/PR
+equality, both fresh exact-head reviews, and green CI. The refreshed guide must
+independently satisfy step 1. This item
 remains human-owned; only Chris can record Gate-3 as done.
 
 **Current guide:**
@@ -354,9 +356,9 @@ scripts from minting navigation authority with dispatched pointer/click events,
 while retaining a preceding real pointerdown only as attack-correlation
 evidence. Automated Chromium proves the attack and compatibility paths, but a
 real Chrome pass must confirm trusted mouse/keyboard flows and synthetic-event
-rejection before merge. Its prior final gates predate #463, so an agent must
-first integrate current `main` and repeat both reviews, CI, and affected local
-checks. Only Chris can record this item complete.
+rejection before merge. Its current-main refresh passes the affected local
+checks; before use, an agent must confirm live local/remote/PR equality, both
+fresh exact-head reviews, and green CI. Only Chris can record this item complete.
 
 **Current guide:**
 

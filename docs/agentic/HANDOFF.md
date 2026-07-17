@@ -47,11 +47,10 @@ rotation under #437.
   audit zero, and the aligned Node engine floor.
 - PR #356 and #464 were twice reviewed, thread-clean, and exact-head CI-green
   before #463 changed `main`'s dependency graph. Their current-main refreshes are
-  committed locally as `5692e08` and `c7870aa`, respectively. #356 passes 2,875
-  unit plus 65/65 one-worker E2E; #464 passes 2,874 unit plus 65/65 one-worker
-  E2E. Each refresh must reach local/remote/PR equality, full exact-head CI, and
-  both fresh reviews; neither may merge
-  without its human Gate-3 evidence.
+  on their branches. #356 passes 2,875 unit plus 65/65 one-worker E2E; #464
+  passes 2,874 unit plus 65/65 one-worker E2E. Each guide's live precheck must
+  confirm local/remote/PR equality, full exact-head CI, and both fresh reviews;
+  neither may merge without its human Gate-3 evidence.
 - PR #466's Cycle 53 runtime tree passed 176 focused broker/SW tests, typecheck,
   lint, build, 2,901 units, rollback 3/3, all 64 one-worker E2E, package, and
   all 12 performance budgets after merging current `main`. The first exact-head
@@ -67,7 +66,10 @@ rotation under #437.
   then proved the regex missed comment-separated dynamic imports, namespace
   re-exports, and comment-separated static imports/re-exports. `5d6ad17` and
   `ab6d845` add the 17-fixture regression set; `ddfacf0` replaces the hand-
-  rolled regex parser with direct `es-module-lexer` import metadata.
+  rolled regex parser with direct `es-module-lexer` import metadata. A fresh
+  follow-up then proved the lexer alone accepted unsupported static import
+  attributes/assertions. `c0305f9` adds syntax-aware rejection plus four pre-fix-
+  failing fixtures (21 total); the real five-module emitted graph passes.
   Local/remote/PR equality, exact-head reviews, thread accounting, and CI remain
   live-authoritative.
 - PR #466's package is about 492.9/500KB while reputation is a 52-byte test fixture. The
@@ -172,8 +174,8 @@ rotation under #437.
 1. **RI-01:** page-injected UI currently authorizes allow/trust/resume. Move all
    protection-lowering decisions to tab/destination-bound extension-origin UI;
    script rejection/closed roots alone do not stop trusted-click redressing.
-2. **RI-03/#356:** integrate current `main`, repeat exact-head reviews/CI, then
-   complete AI-13 human Gate-3;
+2. **RI-03/#356:** confirm the refreshed branch's live head equality, both
+   exact-head reviews, and green CI, then complete AI-13 human Gate-3;
    recreate or defer #273's intent and keep closed #399 outside beta blockers.
 3. **RI-02/#424:** excise visual-sim. It has no production match path and can
    process a different active tab's pixels.
@@ -199,12 +201,10 @@ comparative evidence.
 
 ## Next safe slice
 
-Publish PR #466 through `ddfacf0` plus this status sync until local/remote/PR
-heads match, then run two fresh exact-head reviews, bot/thread accounting, and
-CI; leave it human-held for AI-22. Then publish the committed current-main
-refreshes for #356 and #464; both must repeat exact-head reviews/CI before AI-13
-or AI-21 is actionable. Do
-not start a fourth browser-held slice.
+On PR #466, confirm live local/remote/PR equality, two fresh exact-head reviews,
+bot/thread accounting, and green CI; leave it human-held for AI-22. Apply the
+same live precheck to the current-main refreshes on #356 and #464 before AI-13 or
+AI-21 is actionable. Do not start a fourth browser-held slice.
 
 ## Queue accounting
 
@@ -212,12 +212,12 @@ not start a fourth browser-held slice.
   none may merge from automation alone.
 - **Merged:** #463 / #459 as `2888483`; intended close link verified.
 - **Open / in progress:** PR #466 pending-decision SW boundary; the three runtime
-  blockers, emitted-graph gate, and round-2 parser gaps are fixed. Publish until
-  local/remote/PR heads match, then require exact-head reviews, bot/thread
-  accounting, CI, and AI-22.
-  #356's current-main merge is committed as `5692e08` and passes 2,875 unit plus
-  65/65 E2E; #464's merge is committed as `c7870aa` and passes 2,874 unit plus
-  65/65 E2E. Each must reach local/remote/PR equality before its fresh gates.
+  blockers, emitted-graph gate, lexer gaps, and unsupported import-attribute gap
+  are fixed. Its live precheck requires local/remote/PR equality, exact-head
+  reviews, bot/thread accounting, green CI, and AI-22.
+  #356's current-main refresh passes 2,875 unit plus 65/65 E2E; #464's refresh
+  passes 2,874 unit plus 65/65 E2E. Each live precheck requires local/remote/PR
+  equality before its fresh exact-head gates count.
 - **Parked:** draft #457 agent-harness tooling; closed #273/#399 retain explicit
   re-entry paths.
 - **Blocked:** AI-15, AI-8, and AI-14.
