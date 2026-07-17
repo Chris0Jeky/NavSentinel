@@ -1664,7 +1664,7 @@ window.addEventListener(
 
     const isKeyboardActivation = e.isTrusted && e.detail === 0;
     const downForClick =
-      e.isTrusted && !isKeyboardActivation && lastDown && performance.now() - lastDown.ts < 1500
+      !isKeyboardActivation && lastDown && performance.now() - lastDown.ts < 1500
         ? lastDown
         : null;
 
@@ -1842,7 +1842,7 @@ window.addEventListener(
       ...(ctx ? { ctx } : {})
     });
     const smartAllowsBlank =
-      mode === "smart" && !!anchor && isLegitBlankAnchor(anchor, ctx, cds, cdsReasons);
+      mode === "smart" && e.isTrusted && !!anchor && isLegitBlankAnchor(anchor, ctx, cds, cdsReasons);
     const smartSuppressesBlankPrompt = shouldSuppressSmartBlankPrompt({
       mode,
       isBlankAnchor,

@@ -483,6 +483,8 @@ test("Synthetic pointer and click events cannot mint navigation allowances @regr
       await waitForNavSentinelBridge(page);
 
       const serviceWorker = await getServiceWorker(context);
+      const originalUrl = page.url();
+      const beforePages = context.pages().length;
       const allowanceMonitor = serviceWorker.evaluate(async ({ currentUrl, durationMs }) => {
         const tabs = await chrome.tabs.query({});
         const tab = tabs.find((candidate) => candidate.url === currentUrl);
@@ -539,7 +541,6 @@ test("Synthetic pointer and click events cannot mint navigation allowances @regr
       // Probe across the whole allowance window instead of assuming MessagePort
       // delivery completes within one fixed delay. On vulnerable code, any probe
       // can spend the synthetic broad MAIN-world allowance.
-      const beforePages = context.pages().length;
       const anyOpenSucceeded = await page.evaluate(async () => {
         const deadline = Date.now() + 1000;
         while (Date.now() < deadline) {
@@ -555,6 +556,43 @@ test("Synthetic pointer and click events cannot mint navigation allowances @regr
       expect(anyOpenSucceeded).toBe(false);
       expect(context.pages()).toHaveLength(beforePages);
       expect(await allowanceMonitor).toBe(false);
+
+      // Native anchor activation is a separate path from window.open. An
+      // off-screen synthetic _blank click must not enter the benign-anchor
+      // exemption and escape before the service worker can roll it back.
+      const syntheticAnchorPopup = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
+      await page.evaluate(() => {
+        const anchor = document.createElement("a");
+        anchor.href = `${location.origin}/synthetic-blank?token=fixture`;
+        anchor.target = "_blank";
+        anchor.textContent = "Synthetic hidden anchor";
+        anchor.style.cssText = "position:fixed;left:-9999px;top:-9999px";
+        document.body.appendChild(anchor);
+        anchor.click();
+      });
+      expect(await syntheticAnchorPopup, "Expected the synthetic anchor new tab to be blocked").toBeNull();
+      expect(context.pages()).toHaveLength(beforePages);
+
+      // A plain synthetic click previously minted the MAIN-world redirect
+      // window even without opening a popup. Give a vulnerable bridge message
+      // time to arrive, then prove Location.assign remains blocked.
+      await page.evaluate(() => {
+        const button = document.createElement("button");
+        button.textContent = "Synthetic redirect trigger";
+        document.body.appendChild(button);
+        button.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      });
+      await page.waitForTimeout(100);
+      const redirectTarget = `${baseUrl}/level2-moving-target.html?synthetic=1`;
+      const redirectObserved = page
+        .waitForURL(redirectTarget, { timeout: 1000 })
+        .then(() => true)
+        .catch(() => false);
+      // Exercise the hardened prototype path directly. Normal Location
+      // instance-method coverage is the separate, tracked #458 seam.
+      await page.evaluate((url) => Location.prototype.assign.call(location, url), redirectTarget);
+      expect(await redirectObserved).toBe(false);
+      await expect(page).toHaveURL(originalUrl);
     } finally {
       await context.close();
     }
@@ -1061,7 +1099,12 @@ test("Level 6 blocks programmatic click new tab @regression", async () => {
       });
 
       await waitForNavSentinelBridge(page);
+      const beforePages = context.pages().length;
+      const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
       await page.click("#real");
+      const popup = await popupPromise;
+      expect(popup, "Expected the programmatic new tab to be blocked").toBeNull();
+      expect(context.pages()).toHaveLength(beforePages);
       await waitForToastText(page, "Blocked new tab", 3000);
     } finally {
       await context.close();
