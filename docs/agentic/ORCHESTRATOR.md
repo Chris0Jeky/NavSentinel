@@ -103,10 +103,11 @@ clean at that head. PR #356 exact head `f8028c9` is twice reviewed, Codex-clean,
 thread-clean, and CI-green; it remains human-held by AI-13. PR #466 exact runtime
 head `0266107` is likewise twice reviewed, Codex-clean, 4/4 thread-resolved, and
 CI-green; it remains human-held by AI-22. PR #464 is the sole agent-owned resume
-lane: fresh round 2 found a HIGH pointerdown-only authority gap on `6332142`.
-Runtime fix `8aee243` is pushed and locally proven, but the final status-only
-head requires two new independent reviews, exact bot/thread accounting, and
-green CI before AI-21 is actionable. Do not merge any of these from automation.
+lane. Runtime `8aee243` removed service-worker pointerdown authority; resumed
+round 1 then found a medium MAIN-world pointerdown popup path. `a14f70d` removes
+that path with mutation-proven negative and trusted-click positive coverage.
+The final head's live round-2, Codex/thread, closing-reference, and CI evidence
+decide whether AI-21 is actionable. Do not merge any of these from automation.
 
 **Cycle 53 implementation / PR #466:** `fix/ri01-pending-decision-sw` ports the clean
 checkpoint broker foundation and wires a dormant service-worker
@@ -143,7 +144,7 @@ remain authoritative. No automation merge is authorized.
 |---|---|---|---|---|---|---|
 | RI-03 MAIN compatibility | `feat/dehard-enforcement-protos` | current branch head | `.worktrees/pr356-refresh` | #356 | OPEN / AUTOMATED GATES GREEN / AI-13 | exact `f8028c9`; run `29560572081`; human Chrome Gate-3 |
 | #459 dependency advisories | `fix/release-dependency-advisories` | `ebddd27` | `.worktrees/deps-audit` | #463 | MERGED `2888483` | audit zero; exact-head CI; two reviews; all threads resolved; intended #459 close verified |
-| RI-01 synthetic allowance rejection | `fix/ri01-reject-synthetic-nav-allowances` | current branch head | `.worktrees/ri01-synthetic-nav` | #464 | OPEN / POST-FINDING EXACT-HEAD GATES / AI-21 | runtime `8aee243` pushed; final head needs two reviews, bot/thread audit, green CI, then human Chrome Gate-3 |
+| RI-01 synthetic allowance rejection | `fix/ri01-reject-synthetic-nav-allowances` | current branch head | `.worktrees/ri01-synthetic-nav` | #464 | OPEN / FINAL EXACT-HEAD GATES / AI-21 | runtime `8aee243` + `a14f70d`; round 1 finding fixed with mutation proof; live round-2, Codex/thread, closing-reference, CI, then human Chrome Gate-3 |
 | RI-01 SW pending-decision boundary | `fix/ri01-pending-decision-sw` | current branch head | `.worktrees/ri01-pending-sw` | #466 | OPEN / AUTOMATED GATES GREEN / AI-22 | exact `0266107`; run `29561311422`; two reviews, bot and threads clean; human Chrome Gate-3 |
 
 **Historical checkpoint (2026-07-10):** no new slice started during that audit.

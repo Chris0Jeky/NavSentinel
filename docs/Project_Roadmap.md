@@ -51,7 +51,7 @@ protection. The exact audit baseline is recorded only in dated
 | #356 | Exact head `f8028c9` is local/remote/PR-equal, twice reviewed, bot/thread-clean, and green in run `29560572081`; AI-13 human Chrome Gate-3 remains |
 | #399 | Closed 2026-07-13; measurement-held under #223/#417 and not a beta blocker |
 | #463 | Merged exact green dependency head `91aab4f` as `2888483`; #459 closed as intended |
-| #464 | Runtime `8aee243` fixes the fresh round-2 trusted-pointerdown authority finding with a non-authorizing top-frame baseline and Chromium regression; pushed, but the final status-only head still needs two exact-head reviews, bot/thread audit, green CI, and AI-21 |
+| #464 | Runtime `8aee243` removes service-worker pointerdown authority and `a14f70d` removes MAIN-world pointerdown popup authority; both have pre-fix-failing Chromium proof, while the final exact head still needs round-2, Codex/thread, green-CI, and AI-21 evidence |
 | #466 | Exact runtime head `0266107` fixes the broker, emitted-graph/parser/import-attribute, and finite-signal privacy findings; local/remote/PR-equal, twice reviewed, bot/thread-clean, and green in run `29561311422`; AI-22 remains |
 
 **RI-01 implementation note (verified 2026-07-17):** PR #464 isolates the
@@ -60,8 +60,11 @@ mint navigation allowances, a preceding trusted pointerdown remains risk
 evidence and seeds only a non-authorizing top-frame rollback baseline, and an
 untrusted `_blank` click cannot enter the benign-anchor exemption. The new
 pointerdown-only regression failed before `8aee243` and passes after it alongside
-eight affected attack/compatibility Chromium controls. Exact-head reviews/CI
-restart after the handoff commit; AI-21 real-Chrome Gate-3 remains mandatory.
+the affected attack/compatibility Chromium controls. Resumed round 1 then found
+that MAIN-world smart mode still armed one popup on pointerdown; `a14f70d`
+requires the trusted click and adds a mutation-proven negative plus positive
+compatibility control. Live exact-head review/Codex/CI evidence remains
+authoritative; AI-21 real-Chrome Gate-3 remains mandatory.
 PR #466 now supplies a dormant, context-bound
 pending-decision service-worker boundary: shared contracts/store, authenticated
 content/extension senders, browser-derived tab/frame/document context, a

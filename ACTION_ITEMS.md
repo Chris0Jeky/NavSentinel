@@ -41,12 +41,12 @@ current `main` SHA live rather than pinning it here. Open PRs are #356, draft
 #457, #464, and #466; PR #463 merged as `2888483` and closed #459. Stale
 PRs #273 and #399 were closed with explicit re-entry paths. #356 is now exact-
 head reviewed, thread-clean, and CI-green after its current-`main` refresh, but
-remains human-held by AI-13. PR #464's second independent review found that a
-trusted pointerdown still minted targetless service-worker authority. Runtime
-commit `8aee243` replaces that with a top-frame, non-authorizing rollback
-baseline and adds a pre-fix-failing Chromium regression; exact-head reviews,
-bot accounting, and CI must restart after the handoff/status commit before
-AI-21 is actionable.
+remains human-held by AI-13. PR #464's resumed round 1 found that MAIN-world
+smart mode still armed one popup directly from trusted pointerdown. Runtime
+commit `a14f70d` now requires a trusted click for that popup intent; its new
+Chromium mutation fails on the vulnerable code and preserves the trusted-click
+compatibility path after the fix. The final exact head still requires fresh
+round-2, Codex, thread, and CI evidence before AI-21 is actionable.
 PR #466 is the third and final browser-held lane. Its first review recheck found
 three valid blockers: an MV3-incompatible dynamic import, a consume contract
 that required a raw destination unavailable to the UI, and stale child-frame
@@ -359,11 +359,12 @@ scripts from minting navigation authority with dispatched pointer/click events,
 while retaining a preceding real pointerdown only as attack-correlation
 evidence. A trusted pointerdown now sends only a top-frame rollback baseline;
 it cannot create gesture, broad, target, or recent-user authority. Automated
-Chromium proves the pointerdown-only attack, existing synthetic attacks, and
-trusted compatibility paths, but a real Chrome pass must confirm them before
-merge. Runtime commit `8aee243` is pushed; the later handoff/status-only head
-still needs two fresh independent reviews, current bot/thread accounting, and
-green CI. Only Chris can record this item complete.
+Chromium proves the pointerdown-only rollback attack, the synchronous
+MAIN-world popup attack, existing synthetic attacks, and trusted compatibility
+paths, but a real Chrome pass must confirm them before merge. Runtime commits
+`8aee243` and `a14f70d` are pushed; live round-2, Codex/thread, and CI evidence
+must all belong to the same final exact head. Only Chris can record this item
+complete.
 
 **Current guide:**
 
@@ -454,6 +455,28 @@ green CI. Only Chris can record this item complete.
    to `127.0.0.1/.../level1-basic-opacity.html`; the `localhost` destination must
    not stick. Release only after rollback. In the service-worker inspector,
    re-read `allowanceKeys` for `gymTab.id`; all three values must be `undefined`.
+
+   - On a fresh `level1-basic-opacity.html`, prove a real pointerdown alone
+     cannot authorize MAIN-world popup intent:
+
+   ```js
+   const b = document.body.appendChild(document.createElement("button"));
+   b.textContent = "AI-21 pointerdown popup";
+   b.style.cssText = "position:fixed;left:0;top:0;width:180px;height:120px;z-index:2147483647";
+   b.addEventListener("pointerdown", (event) => {
+     const w = window.open(
+       `${location.origin}/level8-oauth-consent.html?ai21=pointerdown`,
+       "ai21-pointerdown",
+       "popup,width=520,height=640"
+     );
+     console.log("pointerdown popup", event.isTrusted, w === null ? "blocked" : "opened");
+   }, { once: true });
+   "Physically press and hold this button, then release after the console result";
+   ```
+
+   Expect `pointerdown popup true blocked`, no new tab, and NavSentinel's
+   `Blocked popup` card. This call is inside genuine browser user activation,
+   so Chrome's own popup blocker is not sufficient evidence.
 
    - On a fresh `level1-basic-opacity.html`, synthetic pointer/click ->
      `window.open`:
