@@ -91,7 +91,9 @@ changes do not change shipped product state.
 
 **Guided resolution cursor:** `AI-16` (`Resume at: AI-16`; the next
 conversational label is `q-1`). Current ready order is AI-16 -> AI-9 -> AI-20 ->
-AI-17 -> AI-19 -> AI-18. The hook-editing slice is now committed; AI-18 remains
+AI-17 -> AI-19 -> AI-18. AI-13 is a separate conditional Gate-3 lane: use its
+guide only when the exact-head precheck passes; it does not replace the stable
+AI-16 resume cursor. The hook-editing slice is now committed; AI-18 remains
 human-owned until its exact definitions are reviewed and trusted. The `q-N`
 label may reset between conversations; the `AI-N` identifier is durable.
 AI-15/AI-8/AI-14 remain visible but are not actionable questions until agent
