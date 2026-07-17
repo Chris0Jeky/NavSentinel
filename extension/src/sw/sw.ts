@@ -665,18 +665,43 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === "ns-nav-context") {
-    return runWhenHydrated(() => {
+    return runWhenHydrated(async () => {
       const tabId = sender.tab?.id;
-      const currentUrl = typeof sender.tab?.url === "string" ? sender.tab.url : "";
-      if (typeof tabId === "number" && currentUrl) {
+      const senderUrl = typeof sender.tab?.url === "string" ? sender.tab.url : "";
+      if (typeof tabId === "number" && senderUrl) {
         // This message restores only the source-page baseline when a cold worker
         // missed its initial commit. It deliberately creates no gesture, allow,
         // target, or user-navigation-context capability. A trusted pointerdown
         // in any frame may precede top navigation, so accept content-script
         // child frames but use only Chrome's top-tab URL, never page-supplied
-        // data or a subframe URL.
-        lastUrlByTab.set(tabId, currentUrl);
-        swState.persistMap(lastUrlByTab, "lastUrl");
+        // data or a subframe URL. Re-read the live tab before applying a sender
+        // snapshot that may have waited for hydration. If the baseline changed
+        // while an API read was in flight, read once more: a newer top commit
+        // must win, while a stable SPA URL may still refresh an older baseline.
+        try {
+          let baselineBeforeRead = lastUrlByTab.get(tabId);
+          let liveUrl = (await chrome.tabs.get(tabId)).url ?? "";
+          let baselineAfterRead = lastUrlByTab.get(tabId);
+          if (baselineAfterRead !== undefined && baselineAfterRead !== senderUrl) {
+            baselineBeforeRead = baselineAfterRead;
+            liveUrl = (await chrome.tabs.get(tabId)).url ?? "";
+            baselineAfterRead = lastUrlByTab.get(tabId);
+            if (
+              baselineAfterRead !== baselineBeforeRead &&
+              baselineAfterRead !== senderUrl
+            ) {
+              sendResponse?.({ ok: true });
+              return;
+            }
+          }
+          if (liveUrl === senderUrl) {
+            lastUrlByTab.set(tabId, senderUrl);
+            swState.persistMap(lastUrlByTab, "lastUrl");
+          }
+        } catch {
+          // The tab may close or navigate away between the trusted event and
+          // this read. In that case do not persist a stale rollback baseline.
+        }
       }
       sendResponse?.({ ok: true });
     });

@@ -908,7 +908,7 @@ test("Trusted pointerdown alone cannot authorize delayed synthetic same-tab navi
   }
 });
 
-test("Trusted child-frame pointerdown preserves the cold-worker rollback baseline @regression", async () => {
+test("Trusted child-frame pointerdown preserves top rollback without authority @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
@@ -929,8 +929,9 @@ test("Trusted child-frame pointerdown preserves the cold-worker rollback baselin
       });
       await waitForNavSentinelBridge(page);
 
-      // Let Playwright's typed-origin context expire so the child pointerdown
-      // is the only opportunity to restore a cold worker's source baseline.
+      // Let Playwright's independent typed-origin allowance expire. Deterministic
+      // missing-baseline and stale-after-commit ordering live in the SW integration
+      // tests; this Chromium control validates real frame provenance and rollback.
       await page.waitForTimeout(5200);
 
       const originalUrl = page.url();
