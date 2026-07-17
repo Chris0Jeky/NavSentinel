@@ -7,14 +7,12 @@ import {
   isPendingDecisionAction,
   isSha256Fingerprint,
   parsePendingDecision,
-  parsePendingDecisionConsumeContext,
   parsePendingDecisionSemantics,
   parsePendingDecisionVerifiedContext,
   parsePendingDecisionVerifiedTabContext,
   pendingDecisionScopeKey,
   type PendingDecision,
   type PendingDecisionAction,
-  type PendingDecisionConsumeContext,
   type PendingDecisionSemantics,
   type PendingDecisionVerifiedContext,
   type PendingDecisionVerifiedTabContext,
@@ -79,11 +77,6 @@ interface FingerprintedContext {
   topUrlHash: string;
   sourceOrigin: string;
   topOrigin: string;
-}
-
-interface FingerprintedConsumeContext extends FingerprintedContext {
-  destinationUrlHash: string;
-  destinationOrigin: string;
 }
 
 function defaultSessionStorage(): PendingDecisionSessionStorage {
@@ -387,11 +380,36 @@ export class PendingDecisionStore {
     });
   }
 
+  /** Verify that a listed record still belongs to the exact live frame context. */
+  async matchesVerifiedContext(
+    untrustedDecision: PendingDecision,
+    verifiedContext: PendingDecisionVerifiedContext,
+  ): Promise<boolean> {
+    const now = this.now();
+    const decision = parsePendingDecision(untrustedDecision, now);
+    const context = parsePendingDecisionVerifiedContext(verifiedContext);
+    if (!decision || !context) {
+      throw new TypeError("Invalid pending-decision context verification request");
+    }
+    if (decision.expiresAt <= now) return false;
+    const fingerprinted = await this.fingerprintVerifiedContext(context);
+    return (
+      decision.tabId === context.tabId &&
+      decision.windowId === context.windowId &&
+      decision.frameId === context.frameId &&
+      decision.documentId === context.documentId &&
+      decision.sourceUrlHash === fingerprinted.sourceUrlHash &&
+      decision.topUrlHash === fingerprinted.topUrlHash &&
+      decision.sourceOrigin === fingerprinted.sourceOrigin &&
+      decision.topOrigin === fingerprinted.topOrigin
+    );
+  }
+
   async consume(
-    verifiedContextAndDestination: PendingDecisionConsumeContext,
+    verifiedContext: PendingDecisionVerifiedContext,
     authorization: PendingDecisionConsumeAuthorization,
   ): Promise<PendingDecisionConsumeStatus> {
-    const context = parsePendingDecisionConsumeContext(verifiedContextAndDestination);
+    const context = parsePendingDecisionVerifiedContext(verifiedContext);
     if (
       !context ||
       !isOpaquePendingDecisionValue(authorization.id) ||
@@ -401,7 +419,7 @@ export class PendingDecisionStore {
       throw new TypeError("Invalid pending-decision consume request");
     }
     await this.hydrate();
-    const fingerprinted = await this.fingerprintConsumeContext(context);
+    const fingerprinted = await this.fingerprintVerifiedContext(context);
 
     return this.runSerialized(async () => {
       const records = this.recordsByTab.get(context.tabId);
@@ -421,10 +439,8 @@ export class PendingDecisionStore {
         decision.documentId !== context.documentId ||
         decision.sourceUrlHash !== fingerprinted.sourceUrlHash ||
         decision.topUrlHash !== fingerprinted.topUrlHash ||
-        decision.destinationUrlHash !== fingerprinted.destinationUrlHash ||
         decision.sourceOrigin !== fingerprinted.sourceOrigin ||
-        decision.topOrigin !== fingerprinted.topOrigin ||
-        decision.destinationOrigin !== fingerprinted.destinationOrigin
+        decision.topOrigin !== fingerprinted.topOrigin
       ) {
         return { status: "mismatch" };
       }
@@ -489,24 +505,6 @@ export class PendingDecisionStore {
       topUrlHash,
       sourceOrigin: getExactHttpOrigin(context.sourceUrl),
       topOrigin: getExactHttpOrigin(context.topUrl),
-    };
-  }
-
-  private async fingerprintConsumeContext(
-    context: PendingDecisionConsumeContext,
-  ): Promise<FingerprintedConsumeContext> {
-    const [sourceUrlHash, topUrlHash, destinationUrlHash] = await Promise.all([
-      this.checkedFingerprint(context.sourceUrl),
-      this.checkedFingerprint(context.topUrl),
-      this.checkedFingerprint(context.destinationUrl),
-    ]);
-    return {
-      sourceUrlHash,
-      topUrlHash,
-      destinationUrlHash,
-      sourceOrigin: getExactHttpOrigin(context.sourceUrl),
-      topOrigin: getExactHttpOrigin(context.topUrl),
-      destinationOrigin: getExactHttpOrigin(context.destinationUrl),
     };
   }
 

@@ -57,10 +57,6 @@ export interface PendingDecisionVerifiedTabContext {
   topUrl: string;
 }
 
-export interface PendingDecisionConsumeContext extends PendingDecisionVerifiedContext {
-  destinationUrl: string;
-}
-
 interface PendingDecisionSemanticsBase {
   destinationUrl: string;
   score?: number;
@@ -266,14 +262,6 @@ export function parsePendingDecisionVerifiedTabContext(
   return { tabId: value.tabId, windowId: value.windowId, topUrl: value.topUrl };
 }
 
-export function parsePendingDecisionConsumeContext(
-  value: unknown,
-): PendingDecisionConsumeContext | null {
-  const verified = parsePendingDecisionVerifiedContext(value);
-  if (!verified || !isRecord(value) || !isExactHttpUrl(value.destinationUrl)) return null;
-  return { ...verified, destinationUrl: value.destinationUrl };
-}
-
 function parseActions(value: unknown, allowed: ReadonlySet<string>): PendingDecisionAction[] | null {
   if (
     !Array.isArray(value) ||
@@ -443,7 +431,6 @@ export interface PendingDecisionConsumeMessage {
   id: unknown;
   deliveryToken: unknown;
   action: unknown;
-  destinationUrl: unknown;
 }
 
 export type PendingDecisionRuntimeMessage =

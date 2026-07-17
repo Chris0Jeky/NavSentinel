@@ -28,6 +28,7 @@ export interface PendingDecisionTabSnapshot {
 }
 
 export interface PendingDecisionFrameSnapshot {
+  frameId?: number | undefined;
   url?: string | undefined;
   documentId?: string | undefined;
   documentLifecycle?: string | undefined;
@@ -39,10 +40,7 @@ export interface PendingDecisionRuntimeBrokerDependencies {
   extensionBaseUrl: () => string | undefined;
   getTab: (tabId: number) => Promise<PendingDecisionTabSnapshot>;
   queryActiveTabs: () => Promise<readonly PendingDecisionTabSnapshot[]>;
-  getFrame: (
-    tabId: number,
-    frameId: number,
-  ) => Promise<PendingDecisionFrameSnapshot | null>;
+  getAllFrames: (tabId: number) => Promise<readonly PendingDecisionFrameSnapshot[]>;
   getLifecycleGeneration: (tabId: number) => number;
 }
 
@@ -51,9 +49,11 @@ interface ActiveTabContext {
   windowId: number;
   topUrl: string;
   topDocumentId: string;
+  liveFrames: ReadonlyMap<number, LiveFrameContext>;
 }
 
 interface LiveFrameContext {
+  frameId: number;
   url: string;
   documentId: string;
 }
@@ -72,7 +72,7 @@ function defaultDependencies(): PendingDecisionRuntimeBrokerDependencies {
     extensionBaseUrl: () => chrome.runtime.getURL(""),
     getTab: (tabId) => chrome.tabs.get(tabId),
     queryActiveTabs: () => chrome.tabs.query({ active: true, lastFocusedWindow: true }),
-    getFrame: (tabId, frameId) => chrome.webNavigation.getFrame({ tabId, frameId }),
+    getAllFrames: async (tabId) => (await chrome.webNavigation.getAllFrames({ tabId })) ?? [],
     getLifecycleGeneration: () => 0,
   };
 }
@@ -123,9 +123,9 @@ function failure(
   return { ok: false, operation, status };
 }
 
-function asLiveFrame(frame: PendingDecisionFrameSnapshot | null): LiveFrameContext | null {
+function asLiveFrame(frame: PendingDecisionFrameSnapshot): LiveFrameContext | null {
   if (
-    !frame ||
+    !isBrowserId(frame.frameId) ||
     frame.documentLifecycle !== "active" ||
     frame.errorOccurred !== false ||
     !isExactHttpUrl(frame.url) ||
@@ -133,7 +133,34 @@ function asLiveFrame(frame: PendingDecisionFrameSnapshot | null): LiveFrameConte
   ) {
     return null;
   }
-  return { url: frame.url, documentId: frame.documentId };
+  return { frameId: frame.frameId, url: frame.url, documentId: frame.documentId };
+}
+
+function indexLiveFrames(
+  frames: readonly PendingDecisionFrameSnapshot[],
+): ReadonlyMap<number, LiveFrameContext> | null {
+  const liveFrames = new Map<number, LiveFrameContext>();
+  for (const snapshot of frames) {
+    const frame = asLiveFrame(snapshot);
+    if (!frame) continue;
+    // A frame ID must identify exactly one live document in an enumeration.
+    if (liveFrames.has(frame.frameId)) return null;
+    liveFrames.set(frame.frameId, frame);
+  }
+  return liveFrames;
+}
+
+function liveFramesEqual(
+  left: LiveFrameContext | undefined,
+  right: LiveFrameContext | undefined,
+): boolean {
+  return (
+    !!left &&
+    !!right &&
+    left.frameId === right.frameId &&
+    left.url === right.url &&
+    left.documentId === right.documentId
+  );
 }
 
 function activeContextsEqual(left: ActiveTabContext, right: ActiveTabContext): boolean {
@@ -233,30 +260,50 @@ export class PendingDecisionRuntimeBroker {
       topUrl: activeBefore.topUrl,
     });
 
-    const liveDecisions: PendingDecision[] = [];
+    const activeConfirmed = await this.resolveActiveTab();
+    if (!activeConfirmed || !activeContextsEqual(activeBefore, activeConfirmed)) {
+      return failure("list", "context-changed");
+    }
+
+    const verifiedDecisions: Array<{ decision: PendingDecision; frame: LiveFrameContext }> = [];
     if (listed.status === "pending") {
-      const frameResults = await Promise.all(
+      const contextResults = await Promise.all(
         listed.decisions.map(async (decision) => {
-          const frame = asLiveFrame(
-            await this.dependencies.getFrame(decision.tabId, decision.frameId),
-          );
-          return frame &&
-            decision.tabId === activeBefore.tabId &&
-            decision.windowId === activeBefore.windowId &&
-            frame.documentId === decision.documentId
-            ? decision
-            : null;
+          const frame = activeConfirmed.liveFrames.get(decision.frameId);
+          if (
+            !frame ||
+            decision.tabId !== activeConfirmed.tabId ||
+            decision.windowId !== activeConfirmed.windowId ||
+            frame.documentId !== decision.documentId
+          ) {
+            return null;
+          }
+          const matches = await this.store.matchesVerifiedContext(decision, {
+            tabId: activeConfirmed.tabId,
+            windowId: activeConfirmed.windowId,
+            frameId: frame.frameId,
+            documentId: frame.documentId,
+            sourceUrl: frame.url,
+            topUrl: activeConfirmed.topUrl,
+          });
+          return matches ? { decision, frame } : null;
         }),
       );
-      liveDecisions.push(
-        ...frameResults.filter((decision): decision is PendingDecision => decision !== null),
+      verifiedDecisions.push(
+        ...contextResults.filter(
+          (result): result is { decision: PendingDecision; frame: LiveFrameContext } =>
+            result !== null,
+        ),
       );
     }
 
     const activeAfter = await this.resolveActiveTab();
-    if (!activeAfter || !activeContextsEqual(activeBefore, activeAfter)) {
+    if (!activeAfter || !activeContextsEqual(activeConfirmed, activeAfter)) {
       return failure("list", "context-changed");
     }
+    const liveDecisions = verifiedDecisions
+      .filter(({ frame }) => liveFramesEqual(frame, activeAfter.liveFrames.get(frame.frameId)))
+      .map(({ decision }) => decision);
     return {
       ok: true,
       operation: "list",
@@ -273,11 +320,10 @@ export class PendingDecisionRuntimeBroker {
   ): Promise<PendingDecisionRuntimeResponse> {
     if (
       message.type !== "ns-pending-decision-consume" ||
-      !hasExactKeys(message, ["type", "id", "deliveryToken", "action", "destinationUrl"]) ||
+      !hasExactKeys(message, ["type", "id", "deliveryToken", "action"]) ||
       !isOpaquePendingDecisionValue(message.id) ||
       !isOpaquePendingDecisionValue(message.deliveryToken) ||
-      !isPendingDecisionAction(message.action) ||
-      !isExactHttpUrl(message.destinationUrl)
+      !isPendingDecisionAction(message.action)
     ) {
       return failure("consume", "invalid-request");
     }
@@ -296,9 +342,7 @@ export class PendingDecisionRuntimeBroker {
         : undefined;
     if (!decision) return failure("consume", "missing");
 
-    const frameBefore = asLiveFrame(
-      await this.dependencies.getFrame(decision.tabId, decision.frameId),
-    );
+    const frameBefore = activeBefore.liveFrames.get(decision.frameId);
     if (!frameBefore || frameBefore.documentId !== decision.documentId) {
       return failure("consume", "context-changed");
     }
@@ -306,16 +350,19 @@ export class PendingDecisionRuntimeBroker {
     if (!activeConfirmed || !activeContextsEqual(activeBefore, activeConfirmed)) {
       return failure("consume", "context-changed");
     }
+    const frameConfirmed = activeConfirmed.liveFrames.get(decision.frameId);
+    if (!frameConfirmed || !liveFramesEqual(frameBefore, frameConfirmed)) {
+      return failure("consume", "context-changed");
+    }
 
     const consumed = await this.store.consume(
       {
         tabId: activeConfirmed.tabId,
         windowId: activeConfirmed.windowId,
-        frameId: decision.frameId,
-        documentId: frameBefore.documentId,
-        sourceUrl: frameBefore.url,
+        frameId: frameConfirmed.frameId,
+        documentId: frameConfirmed.documentId,
+        sourceUrl: frameConfirmed.url,
         topUrl: activeConfirmed.topUrl,
-        destinationUrl: message.destinationUrl,
       },
       {
         id: message.id,
@@ -326,15 +373,11 @@ export class PendingDecisionRuntimeBroker {
     if (consumed.status !== "consumed") return failure("consume", consumed.status);
 
     const activeAfter = await this.resolveActiveTab();
-    const frameAfter = asLiveFrame(
-      await this.dependencies.getFrame(decision.tabId, decision.frameId),
-    );
+    const frameAfter = activeAfter?.liveFrames.get(decision.frameId);
     if (
       !activeAfter ||
       !activeContextsEqual(activeConfirmed, activeAfter) ||
-      !frameAfter ||
-      frameAfter.documentId !== frameBefore.documentId ||
-      frameAfter.url !== frameBefore.url
+      !liveFramesEqual(frameConfirmed, frameAfter)
     ) {
       return failure("consume", "context-changed");
     }
@@ -385,14 +428,13 @@ export class PendingDecisionRuntimeBroker {
     sender: chrome.runtime.MessageSender,
   ): Promise<PendingDecisionVerifiedContext | null> {
     if (!sender.tab || !isBrowserId(sender.tab.id) || !isBrowserId(sender.frameId)) return null;
-    const tab = await this.dependencies.getTab(sender.tab.id);
-    const sourceFrame = asLiveFrame(
-      await this.dependencies.getFrame(sender.tab.id, sender.frameId),
-    );
-    const topFrame =
-      sender.frameId === 0
-        ? sourceFrame
-        : asLiveFrame(await this.dependencies.getFrame(sender.tab.id, 0));
+    const [tab, frameSnapshots] = await Promise.all([
+      this.dependencies.getTab(sender.tab.id),
+      this.dependencies.getAllFrames(sender.tab.id),
+    ]);
+    const liveFrames = indexLiveFrames(frameSnapshots);
+    const sourceFrame = liveFrames?.get(sender.frameId);
+    const topFrame = liveFrames?.get(0);
     if (
       !isBrowserId(tab.id) ||
       tab.id !== sender.tab.id ||
@@ -434,13 +476,16 @@ export class PendingDecisionRuntimeBroker {
     ) {
       return null;
     }
-    const topFrame = asLiveFrame(await this.dependencies.getFrame(tab.id, 0));
+    const liveFrames = indexLiveFrames(await this.dependencies.getAllFrames(tab.id));
+    if (!liveFrames) return null;
+    const topFrame = liveFrames.get(0);
     if (!topFrame || topFrame.url !== tab.url) return null;
     return {
       tabId: tab.id,
       windowId: tab.windowId,
       topUrl: topFrame.url,
       topDocumentId: topFrame.documentId,
+      liveFrames,
     };
   }
 }

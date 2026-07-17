@@ -121,7 +121,7 @@ function createChromeMock() {
         onBeforeNavigate: beforeNavigate,
         onCommitted: committed,
         onErrorOccurred: errorOccurred,
-        getFrame: vi.fn().mockResolvedValue(null),
+        getAllFrames: vi.fn().mockResolvedValue([]),
       },
       tabs: {
         onCreated: tabCreated,
@@ -240,18 +240,20 @@ function configurePendingDecisionBrowser(mock: ReturnType<typeof createChromeMoc
   };
   mock.chrome.tabs.get.mockResolvedValue(tab);
   mock.chrome.tabs.query.mockResolvedValue([tab]);
-  mock.chrome.webNavigation.getFrame.mockImplementation(
-    async ({ tabId, frameId }: { tabId: number; frameId: number }) =>
-      tabId === tab.id && frameId === 0
-        ? {
-            tabId,
-            frameId,
-            url: PENDING_SOURCE_URL,
-            documentId: "document-top-41",
-            documentLifecycle: "active",
-            errorOccurred: false,
-          }
-        : null,
+  mock.chrome.webNavigation.getAllFrames.mockImplementation(
+    async ({ tabId }: { tabId: number }) =>
+      tabId === tab.id
+        ? [
+            {
+              tabId,
+              frameId: 0,
+              url: PENDING_SOURCE_URL,
+              documentId: "document-top-41",
+              documentLifecycle: "active",
+              errorOccurred: false,
+            },
+          ]
+        : [],
   );
   return tab;
 }
@@ -347,7 +349,6 @@ describe("service worker handlers", () => {
           id: authorization.id,
           deliveryToken: authorization.deliveryToken,
           action: "proceed-once",
-          destinationUrl: PENDING_DESTINATION_URL,
         },
         pendingExtensionSender(),
       );
@@ -369,7 +370,6 @@ describe("service worker handlers", () => {
           id: authorization.id,
           deliveryToken: authorization.deliveryToken,
           action: "proceed-once",
-          destinationUrl: PENDING_DESTINATION_URL,
         },
         pendingExtensionSender(),
       );

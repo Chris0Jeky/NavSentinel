@@ -5,7 +5,6 @@ import {
   PENDING_DECISION_TTL_MS,
   type PendingCredentialDecisionSemantics,
   type PendingDecision,
-  type PendingDecisionConsumeContext,
   type PendingDecisionSemantics,
   type PendingDecisionVerifiedContext,
   type PendingNavigationDecisionSemantics,
@@ -63,13 +62,6 @@ function credentialSemantics(
     actions: ["proceed-once", "trust-source", "trust-destination"],
     ...overrides,
   };
-}
-
-function consumeContext(
-  context: PendingDecisionVerifiedContext,
-  destinationUrl: string,
-): PendingDecisionConsumeContext {
-  return { ...context, destinationUrl };
 }
 
 interface StorageMock extends PendingDecisionSessionStorage {
@@ -247,7 +239,7 @@ describe("PendingDecisionStore", () => {
     expect(validPaste.decision.actions).toEqual(["trust-source"]);
   });
 
-  it("requires exact hashed context, rolls back failed deletion, and consumes once", async () => {
+  it("requires exact hashed context, keeps destination binding worker-owned, and consumes once", async () => {
     const storage = createStorage();
     const context = verifiedContext();
     const semantics = navigationSemantics({ actions: ["proceed-once"] });
@@ -261,27 +253,16 @@ describe("PendingDecisionStore", () => {
 
     expect(
       (
-        await store.consume(
-          consumeContext({ ...context, sourceUrl: `${context.sourceUrl}&changed=1` }, semantics.destinationUrl),
-          authorization,
-        )
+        await store.consume({ ...context, sourceUrl: `${context.sourceUrl}&changed=1` }, authorization)
       ).status,
     ).toBe("mismatch");
     expect(
-      (
-        await store.consume(
-          consumeContext(context, "https://destination.test/private/path?token=other#dest-fragment"),
-          authorization,
-        )
-      ).status,
-    ).toBe("mismatch");
-    expect(
-      (await store.consume(consumeContext(context, semantics.destinationUrl), { ...authorization, action: "allow-route" })).status,
+      (await store.consume(context, { ...authorization, action: "allow-route" })).status,
     ).toBe("action-not-allowed");
 
     storage.failNextSet = true;
     await expect(
-      store.consume(consumeContext(context, semantics.destinationUrl), authorization),
+      store.consume(context, authorization),
     ).rejects.toThrow("session write failed");
     expect(
       (
@@ -293,10 +274,14 @@ describe("PendingDecisionStore", () => {
       ).status,
     ).toBe("pending");
 
-    const consumed = await store.consume(consumeContext(context, semantics.destinationUrl), authorization);
+    const consumed = await store.consume(context, authorization);
     expect(didConsumePendingDecision(consumed)).toBe(true);
+    if (consumed.status === "consumed") {
+      expect(consumed.decision.destinationUrlHash).toBe(created.decision.destinationUrlHash);
+      expect(consumed.decision.destinationOrigin).toBe(created.decision.destinationOrigin);
+    }
     expect(
-      (await store.consume(consumeContext(context, semantics.destinationUrl), authorization)).status,
+      (await store.consume(context, authorization)).status,
     ).toBe("missing");
   });
 

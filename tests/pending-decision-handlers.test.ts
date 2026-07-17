@@ -16,6 +16,8 @@ const SOURCE_URL = "https://source.test/private/page?session=source-secret#sourc
 const DESTINATION_URL =
   "https://destination.test/private/continue?token=destination-secret#dest-fragment";
 const TOP_DOCUMENT_ID = "document-top-7";
+const CHILD_SOURCE_URL = "https://child.test/private/frame?session=child-secret";
+const CHILD_DOCUMENT_ID = "document-child-7";
 
 interface TestStorage extends PendingDecisionSessionStorage {
   data: Record<string, unknown>;
@@ -55,6 +57,16 @@ function frameKey(tabId: number, frameId: number): string {
   return `${tabId}:${frameId}`;
 }
 
+function frameSnapshots(
+  frames: ReadonlyMap<string, PendingDecisionFrameSnapshot>,
+  tabId: number,
+): PendingDecisionFrameSnapshot[] {
+  const prefix = `${tabId}:`;
+  return [...frames.entries()]
+    .filter(([key]) => key.startsWith(prefix))
+    .map(([, frame]) => ({ ...frame }));
+}
+
 function createHarness() {
   const storage = createStorage();
   const now = { value: 10_000 };
@@ -69,6 +81,7 @@ function createHarness() {
     [
       frameKey(7, 0),
       {
+        frameId: 0,
         url: SOURCE_URL,
         documentId: TOP_DOCUMENT_ID,
         documentLifecycle: "active",
@@ -78,10 +91,7 @@ function createHarness() {
   ]);
   const getTab = vi.fn(async (_tabId: number) => ({ ...activeTab }));
   const queryActiveTabs = vi.fn(async () => [{ ...activeTab }]);
-  const getFrame = vi.fn(async (tabId: number, frameId: number) => {
-    const frame = frames.get(frameKey(tabId, frameId));
-    return frame ? { ...frame } : null;
-  });
+  const getAllFrames = vi.fn(async (tabId: number) => frameSnapshots(frames, tabId));
   const store = new PendingDecisionStore({
     storage,
     now: () => now.value,
@@ -93,14 +103,14 @@ function createHarness() {
     extensionBaseUrl: () => "chrome-extension://test-extension-id/",
     getTab,
     queryActiveTabs,
-    getFrame,
+    getAllFrames,
     getLifecycleGeneration: () => lifecycleGeneration.value,
   });
   return {
     activeTab,
     broker,
     frames,
-    getFrame,
+    getAllFrames,
     getTab,
     lifecycleGeneration,
     now,
@@ -138,6 +148,25 @@ function extensionSender(
     origin: "chrome-extension://test-extension-id",
     ...overrides,
   } as chrome.runtime.MessageSender;
+}
+
+function childContentSender(): chrome.runtime.MessageSender {
+  return contentSender({
+    url: CHILD_SOURCE_URL,
+    origin: "https://child.test",
+    documentId: CHILD_DOCUMENT_ID,
+    frameId: 2,
+  });
+}
+
+function installChildFrame(harness: ReturnType<typeof createHarness>, url = CHILD_SOURCE_URL): void {
+  harness.frames.set(frameKey(7, 2), {
+    frameId: 2,
+    url,
+    documentId: CHILD_DOCUMENT_ID,
+    documentLifecycle: "active",
+    errorOccurred: false,
+  });
 }
 
 function createMessage(): PendingDecisionRuntimeMessage {
@@ -186,7 +215,6 @@ function consumeMessage(
     id: decision.id,
     deliveryToken: decision.deliveryToken,
     action: "proceed-once",
-    destinationUrl: DESTINATION_URL,
     ...overrides,
   };
 }
@@ -281,6 +309,7 @@ describe("PendingDecisionRuntimeBroker", () => {
         name: "live document mismatch",
         mutate: (harness) => {
           harness.frames.set(frameKey(7, 0), {
+            frameId: 0,
             url: SOURCE_URL,
             documentId: "replacement-document",
             documentLifecycle: "active",
@@ -350,6 +379,7 @@ describe("PendingDecisionRuntimeBroker", () => {
     const harness = createHarness();
     const decision = await createAndList(harness);
     harness.frames.set(frameKey(7, 0), {
+      frameId: 0,
       url: SOURCE_URL,
       documentId: "same-url-reload-document",
       documentLifecycle: "active",
@@ -364,11 +394,85 @@ describe("PendingDecisionRuntimeBroker", () => {
     ).toEqual({ ok: false, operation: "consume", status: "context-changed" });
 
     harness.frames.set(frameKey(7, 0), {
+      frameId: 0,
       url: SOURCE_URL,
       documentId: TOP_DOCUMENT_ID,
       documentLifecycle: "active",
       errorOccurred: false,
     });
+    expect(
+      await harness.broker.handle(consumeMessage(decision), extensionSender()),
+    ).toMatchObject({ ok: true, operation: "consume", status: "consumed" });
+  });
+
+  it("filters a removed child frame and requires its exact restored URL before consume", async () => {
+    const harness = createHarness();
+    installChildFrame(harness);
+    expect(await harness.broker.handle(createMessage(), childContentSender())).toMatchObject({
+      ok: true,
+      operation: "create",
+      status: "created",
+    });
+    const listed = await harness.broker.handle(
+      { type: "ns-pending-decision-list" },
+      extensionSender(),
+    );
+    if (!listed || !listed.ok || listed.operation !== "list" || listed.decisions.length !== 1) {
+      throw new Error("Expected one child-frame pending decision");
+    }
+    const decision = listed.decisions[0]!;
+
+    harness.frames.delete(frameKey(7, 2));
+    expect(
+      await harness.broker.handle({ type: "ns-pending-decision-list" }, extensionSender()),
+    ).toMatchObject({ ok: true, operation: "list", status: "missing", decisions: [] });
+    expect(
+      await harness.broker.handle(consumeMessage(decision), extensionSender()),
+    ).toEqual({ ok: false, operation: "consume", status: "context-changed" });
+
+    installChildFrame(harness, `${CHILD_SOURCE_URL}&changed=1`);
+    expect(
+      await harness.broker.handle({ type: "ns-pending-decision-list" }, extensionSender()),
+    ).toMatchObject({ ok: true, operation: "list", status: "missing", decisions: [] });
+    expect(
+      await harness.broker.handle(consumeMessage(decision), extensionSender()),
+    ).toEqual({ ok: false, operation: "consume", status: "mismatch" });
+
+    installChildFrame(harness);
+    expect(
+      await harness.broker.handle(consumeMessage(decision), extensionSender()),
+    ).toMatchObject({ ok: true, operation: "consume", status: "consumed" });
+  });
+
+  it("fails closed when a child disappears between positive frame enumerations", async () => {
+    const harness = createHarness();
+    installChildFrame(harness);
+    expect(await harness.broker.handle(createMessage(), childContentSender())).toMatchObject({
+      ok: true,
+      operation: "create",
+      status: "created",
+    });
+    const listed = await harness.broker.handle(
+      { type: "ns-pending-decision-list" },
+      extensionSender(),
+    );
+    if (!listed || !listed.ok || listed.operation !== "list" || listed.decisions.length !== 1) {
+      throw new Error("Expected one child-frame pending decision");
+    }
+    const decision = listed.decisions[0]!;
+
+    let enumerationCount = 0;
+    harness.getAllFrames.mockImplementation(async (tabId) => {
+      enumerationCount++;
+      const frames = frameSnapshots(harness.frames, tabId);
+      return enumerationCount === 1 ? frames : frames.filter((frame) => frame.frameId !== 2);
+    });
+    expect(
+      await harness.broker.handle(consumeMessage(decision), extensionSender()),
+    ).toEqual({ ok: false, operation: "consume", status: "context-changed" });
+    expect(enumerationCount).toBeGreaterThanOrEqual(2);
+
+    harness.getAllFrames.mockImplementation(async (tabId) => frameSnapshots(harness.frames, tabId));
     expect(
       await harness.broker.handle(consumeMessage(decision), extensionSender()),
     ).toMatchObject({ ok: true, operation: "consume", status: "consumed" });
@@ -380,14 +484,13 @@ describe("PendingDecisionRuntimeBroker", () => {
     const frameGate = new Promise<void>((resolve) => {
       releaseFrame = resolve;
     });
-    harness.getFrame.mockImplementationOnce(async (tabId, frameId) => {
+    harness.getAllFrames.mockImplementationOnce(async (tabId) => {
       await frameGate;
-      const frame = harness.frames.get(frameKey(tabId, frameId));
-      return frame ? { ...frame } : null;
+      return frameSnapshots(harness.frames, tabId);
     });
 
     const create = harness.broker.handle(createMessage(), contentSender());
-    await vi.waitFor(() => expect(harness.getFrame).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(harness.getAllFrames).toHaveBeenCalledTimes(1));
     harness.lifecycleGeneration.value++;
     expect(await harness.broker.removeForTabLifecycle(7)).toEqual({
       status: "missing",
@@ -403,7 +506,7 @@ describe("PendingDecisionRuntimeBroker", () => {
     expect(harness.storage.data[PENDING_DECISION_STORAGE_KEY]).toBeUndefined();
   });
 
-  it("binds token, action, and destination path/query/fragment without burning mismatches", async () => {
+  it("binds token and action while rejecting a caller-supplied raw destination", async () => {
     const harness = createHarness();
     const decision = await createAndList(harness);
     const attempts = [
@@ -416,25 +519,8 @@ describe("PendingDecisionRuntimeBroker", () => {
         status: "action-not-allowed",
       },
       {
-        message: consumeMessage(decision, {
-          destinationUrl:
-            "https://destination.test/private/other?token=destination-secret#dest-fragment",
-        }),
-        status: "mismatch",
-      },
-      {
-        message: consumeMessage(decision, {
-          destinationUrl:
-            "https://destination.test/private/continue?token=other#dest-fragment",
-        }),
-        status: "mismatch",
-      },
-      {
-        message: consumeMessage(decision, {
-          destinationUrl:
-            "https://destination.test/private/continue?token=destination-secret#other",
-        }),
-        status: "mismatch",
+        message: consumeMessage(decision, { destinationUrl: DESTINATION_URL }),
+        status: "invalid-request",
       },
     ];
 
@@ -472,6 +558,7 @@ describe("PendingDecisionRuntimeBroker", () => {
     const harness = createHarness();
     const decision = await createAndList(harness);
     harness.frames.set(frameKey(8, 0), {
+      frameId: 0,
       url: "https://other.test/",
       documentId: "other-document",
       documentLifecycle: "active",
@@ -523,7 +610,7 @@ describe("PendingDecisionRuntimeBroker", () => {
     });
 
     const dependencyHarness = createHarness();
-    dependencyHarness.getFrame.mockRejectedValueOnce(
+    dependencyHarness.getAllFrames.mockRejectedValueOnce(
       new Error("frame lookup failed with sensitive detail"),
     );
     const dependencyFailure = await dependencyHarness.broker.handle(
