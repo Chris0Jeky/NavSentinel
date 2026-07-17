@@ -10,22 +10,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { init, parse } from "es-module-lexer";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const root = path.resolve(__dirname, "..");
 
-const JS_TRIVIA = String.raw`(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\r\n]*(?:\r?\n|$))*`;
-const DYNAMIC_IMPORT_PATTERN = new RegExp(String.raw`\bimport${JS_TRIVIA}\(`);
 const PRELOAD_PATTERN = /\b(?:__vitePreload|modulepreload)\b/;
-const STATIC_IMPORT_PATTERN = new RegExp(
-  String.raw`\bimport${JS_TRIVIA}(?:[^"'();]+?\bfrom${JS_TRIVIA})?["']([^"']+)["']`,
-  "g",
-);
-const STATIC_REEXPORT_PATTERN = new RegExp(
-  String.raw`\bexport${JS_TRIVIA}(?:\*${JS_TRIVIA}(?:as${JS_TRIVIA}[\w$]+${JS_TRIVIA})?|\{[^}]*\}${JS_TRIVIA})from${JS_TRIVIA}["']([^"']+)["']`,
-  "g",
-);
+
+await init;
 
 function readJson(filePath, label) {
   try {
@@ -77,16 +70,26 @@ function resolveStaticImport(distDir, importer, specifier) {
   );
 }
 
-function collectStaticImports(source) {
-  const imports = [];
-  for (const pattern of [STATIC_IMPORT_PATTERN, STATIC_REEXPORT_PATTERN]) {
-    pattern.lastIndex = 0;
-    let match;
-    while ((match = pattern.exec(source)) !== null) {
-      if (match[1] !== undefined) imports.push(match[1]);
-    }
+function collectStaticImports(source, relativePath) {
+  let imports;
+  try {
+    [imports] = parse(source, relativePath);
+  } catch (error) {
+    throw new Error(`Worker graph module is invalid JavaScript: ${relativePath}`, { cause: error });
   }
-  return imports;
+
+  const staticImports = [];
+  for (const entry of imports) {
+    if (entry.d === -2) continue; // import.meta is not a dependency edge.
+    if (entry.d !== -1) {
+      throw new Error(`Worker graph contains unsupported dynamic import() in ${relativePath}.`);
+    }
+    if (typeof entry.n !== "string" || entry.n.length === 0) {
+      throw new Error(`Worker graph has an unreadable static import in ${relativePath}.`);
+    }
+    staticImports.push(entry.n);
+  }
+  return staticImports;
 }
 
 export function verifyMv3WorkerImports(distPath = path.join(root, "extension", "dist")) {
@@ -114,15 +117,12 @@ export function verifyMv3WorkerImports(distPath = path.join(root, "extension", "
 
     const source = fs.readFileSync(current, "utf8");
     const relative = path.relative(distDir, current).replaceAll(path.sep, "/");
-    if (DYNAMIC_IMPORT_PATTERN.test(source)) {
-      throw new Error(`Worker graph contains unsupported dynamic import() in ${relative}.`);
-    }
     if (PRELOAD_PATTERN.test(source)) {
       throw new Error(`Worker graph contains a browser preload helper in ${relative}.`);
     }
 
     visited.add(current);
-    for (const specifier of collectStaticImports(source)) {
+    for (const specifier of collectStaticImports(source, relative)) {
       pending.push(resolveStaticImport(distDir, current, specifier));
     }
   }

@@ -54,6 +54,7 @@
     "@playwright/test": "^1.49.0",
     "@types/chrome": "^0.0.260",
     "@types/node": "^20.19.37",
+    "es-module-lexer": "^2.1.0",
     "eslint": "^10.4.0",
     "fast-check": "^4.6.0",
     "happy-dom": "^20.9.0",
