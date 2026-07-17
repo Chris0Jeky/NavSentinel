@@ -97,9 +97,32 @@ PRs D-* are independent (different files) → parallel branches off `main`, **no
 
 ## In-Flight
 
-**In-Flight (2026-07-10):** no new slice started by this audit. Existing open
-PRs #273/#356/#399 are stale and require preflight; #356 is red. Rows below are
-historical (all merged). Verify with `gh pr list` before branching.
+**Active checkpoint (2026-07-17, Cycle 51):** #459 is the smallest unblocked
+non-browser release-integrity slice while #356 is held only for AI-13 human
+Gate-3 at exact reviewed/CI-green guide head `ee0f9b7`. Dependency head
+`3f858df` upgrades only CRXJS/Vite declarations
+and their lock graph: CRXJS 2.7.1, Vite 8.1.5, Rollup 2.80.0, and Rolldown 1.1.5.
+`npm ci` and audit zero passed, as did version, typecheck, lint, build, 2,874 unit
+tests, 64/64 one-worker E2E, perf 12/12, package, and Windows Gym HTTP serving.
+Fresh round 1 found no release blocker; it seeded #462 for CRXJS's deprecated
+Vite HMR option and unverified MAIN-world HMR, without expanding the manifest.
+The same root-extraneous npm optional artifact reproduces on untouched main.
+Fresh round 2 found one pre-existing release-guide Node-engine mismatch, fixed
+in `614953b`, then re-reviewed clean. PR #463 is open. Revalidate every later
+docs-only head, require live exact-head Linux CI, and inspect all later comments
+before any merge decision. Gemini's exact-range-format finding is fixed in
+`da44f56`. Codex then found the root engine still admitted Node 22.12/23 despite
+ESLint 10's narrower range; the candidate aligns package, lock root, and release
+guide to `^20.19.0 || ^22.13.0 || >=24`. Reply to and resolve every thread only
+after its fix is published.
+
+| Slice | Branch | Base | Worktree | PR | State | Proving gates |
+|---|---|---|---|---|---|---|
+| #459 dependency advisories | `fix/release-dependency-advisories` | `origin/main` at `ebddd27` | `.worktrees/deps-audit` | #463 | PR OPEN / LOCAL REVIEWS CLEAN / LIVE CI REQUIRED | audit zero; clean install; Windows Gym HTTP; version/type/lint/build/unit 2,874/E2E 64/perf/package; R1 fixed handoff/HMR tracking; R2 fixed Node release guide; both clean through `614953b`; exact later head, CI, and comments must be rechecked |
+
+**Historical checkpoint (2026-07-10):** no new slice started during that audit.
+At that time PRs #273/#356/#399 were stale and #356 was red. Rows below are
+historical; Cycle 51 above supersedes this snapshot.
 
 | Slice | Branch | Base | Worktree | PR | Round 1 | Round 2 | Bots | Opened |
 |-------|--------|------|----------|----|---------|---------|------|--------|
@@ -118,6 +141,7 @@ historical (all merged). Verify with `gh pr list` before branching.
 
 | # | Date | Slice | Action | Result |
 |---|------|-------|--------|--------|
+| 51 | 2026-07-17 | UNBLOCK / #459 dependency advisories | Upgraded only CRXJS/Vite and the generated lock graph: 2.7.1 / 8.1.5 / Rollup 2.80.0 / Rolldown 1.1.5. Audit 3 high → 0; clean install, version/type/lint/build, 2,874 unit, 64/64 one-worker E2E, perf 12/12, package, and Windows Gym HTTP passed. R1 fixed stale evidence and tracked CRXJS dev/HMR debt in #462; the optional npm artifact reproduces on main. Fresh R2 found the pre-existing Node release-guide mismatch, fixed in `614953b`, then re-reviewed clean. Gemini's exact-range-format follow-up is fixed in `da44f56`; Codex's narrower ESLint 10 engine-intersection finding aligns package/lock/docs to `^20.19.0 || ^22.13.0 || >=24`. PR #463 is open; its final exact head, CI, comments, and closing link require live verification. | PR OPEN / LOCAL REVIEWS CLEAN / LIVE GATES REQUIRED |
 | 49 | 2026-07-10 | PRODUCT POSTURE / architecture + market + roadmap review | Re-verified live git/GitHub/release truth; ran local build/test/perf/smoke baselines; reviewed architecture, feature portfolio, claims, privacy, store readiness, current competitors, and product-name collision. Found release-blocking page-controlled prompt decision authority, wrong-tab dead visual-sim capture, stale/red human PR queue, reputation/package contradiction, fake DNR surface, bridge overclaim, and false roadmap completion states. Established `docs/Product_Strategy.md`; consolidated RI-01–RI-08/PM/EV/OPS actions in `docs/Project_Roadmap.md`; corrected roadmap/store/privacy/architecture truth; blocked AI-15 pending preflight; and added AI-19 name clearance. No runtime code, PR, issue, merge, or external release state changed. | DOCS / REVIEW |
 | 47 | 2026-07-03 | MEASURE / #417 corpus-v2 pillar 1 (protected-vs-fired) — 1 merged | Merged **#435 / #417** (pillar 1 of 4). New pure, unit-tested `tests/corpus/corpus_scoring.ts` `classifyCorpusOutcome()`: **protected** (pre-harm block/prompt: nav_click_block/nav_blank_prompt/cred_submit_prompt/cred_paste_warn + credential modal) vs **fired** (post-render nav_rollback and/or a bare toast) vs **miss**; precedence protected>fired>miss. Wired into `tests/e2e/corpus-validation.spec.ts` (reports/persists the split; legacy detectionRate relabeled ANY-signal). **My 2-lens review caught a HIGH:** a bare toast mapped to `protected`, but the rollback path *also* shows a persistent toast → every post-render rollback would inflate to protected, making `fired` unreachable and the honest rate dishonest → fixed (toast → fired). **Codex independently corroborated (P1)** + caught (P2) that `cred_submit_prompt` is also logged with `extra.error` on the credential-guard fail-open/TOCTOU path → the spec now excludes those from detection. Gemini simplify (Set-input) + union-import both handled. 2 full adversarial rounds + both bots addressed; 2874 tests (+18), typecheck/lint clean. The e2e wiring is type-checked but **unrun in-sandbox** (headed Chrome = Gate-3/CI) — pillars 2–4 (real-hostname routing / trusted clicks / committed manifest) remain on #417. **#417 kept OPEN** (careful phrasing — the close-keyword gotcha bit #418 twice this session; see failure ledger). `main` @ **`eba5d71`**. | DONE / 1 MERGED |
 | 46 | 2026-07-03 | CHECKPOINT / #426 assessed → #417-gated + docs-sync | Started #426 (corpus TP triage), but assessment found it **cannot be done validly in-sandbox now**: the committed corpus artifacts are only the 5-01 markdown report (lists the 28 TP but **not** the 72 FN) + README — the manifest + raw per-page results (the 4-25 manifest [120 entries, url+status only, no tags] and both runs' JSON) are **gitignored/local-only**, unavailable to a fresh checkout; and #417 itself deems the 28% number "methodologically invalid in both directions." Seeding detection-gap fixes from that data would violate D25 (measure-before-tune). **Conclusion: #426 is #417-gated** (corrects the earlier #418→#426→#417 ladder order — #426 now depends on #417). Recorded the finding + refreshed current-state/HANDOFF + added the close-keyword-negation failure-ledger entry. **Next: build #417 (unit-testable protected-vs-fired core + committed manifest; wiring marked needs-headed-run).** | DONE / docs |
