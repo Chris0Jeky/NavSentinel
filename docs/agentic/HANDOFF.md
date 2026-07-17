@@ -43,9 +43,9 @@ rotation under #437.
   frozen option portfolio, not active work.
 - Stale PRs #273 and #399 were closed on 2026-07-13 with re-entry paths and
   issue anchors preserved. Open PRs are #356, draft #457, and #463. #356's
-  pre-guide head passed Build/Unit and E2E with all three threads resolved; its
-  current human-guide head must satisfy the live head/review/CI precheck before
-  Gate-3.
+  exact guide head `ee0f9b7` passed both local reviews plus GitHub Build/Unit
+  and E2E with all three threads resolved. AI-13 human Gate-3 is its only
+  remaining gate; the guide still requires its live precheck before use.
 - Package is about 474/500KB while reputation is a 52-byte test fixture. The
   old 150KB/100K-domain plan cannot meet its stated 0.01% FP target or aggregate
   package cap as written.
@@ -99,16 +99,17 @@ rotation under #437.
   branch-introduced runtime, graph, provenance, or build defect. It found a
   pre-existing release-guide mismatch: Node 20.18.1 was documented while the
   effective graph requires `^20.19.0 || >=22.12.0`. `614953b` aligns the guide;
-  exact-head re-review was clean. Copilot's quota-limit response on #463 is an
-  invalid review signal, not a skipped finding.
+  exact-head re-review was clean. Gemini then requested the exact semver syntax
+  rather than natural-language `or`; `da44f56` fixes it. Copilot's quota-limit
+  response on #463 is an invalid review signal, not a skipped finding.
 
 ## Release blockers in order
 
 1. **RI-01:** page-injected UI currently authorizes allow/trust/resume. Move all
    protection-lowering decisions to tab/destination-bound extension-origin UI;
    script rejection/closed roots alone do not stop trusted-click redressing.
-2. **RI-03/#356:** finish the current guide head's push/review/CI, then obtain
-   human Gate-3; keep closed #399 outside beta blockers.
+2. **RI-03/#356:** obtain AI-13 human Gate-3 on the current exact head after its
+   live precheck; keep closed #399 outside beta blockers.
 3. **#459/#463:** require live exact-head Linux CI and resolve any later PR
    comments; do not claim real-Chrome dev/HMR verification.
 4. **RI-02/#424:** excise visual-sim. It has no production match path and can
