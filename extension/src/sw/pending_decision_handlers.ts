@@ -223,19 +223,22 @@ export class PendingDecisionRuntimeBroker {
 
     const liveDecisions: PendingDecision[] = [];
     if (listed.status === "pending") {
-      for (const decision of listed.decisions) {
-        const frame = asLiveFrame(
-          await this.dependencies.getFrame(decision.tabId, decision.frameId),
-        );
-        if (
-          frame &&
-          decision.tabId === activeBefore.tabId &&
-          decision.windowId === activeBefore.windowId &&
-          frame.documentId === decision.documentId
-        ) {
-          liveDecisions.push(decision);
-        }
-      }
+      const frameResults = await Promise.all(
+        listed.decisions.map(async (decision) => {
+          const frame = asLiveFrame(
+            await this.dependencies.getFrame(decision.tabId, decision.frameId),
+          );
+          return frame &&
+            decision.tabId === activeBefore.tabId &&
+            decision.windowId === activeBefore.windowId &&
+            frame.documentId === decision.documentId
+            ? decision
+            : null;
+        }),
+      );
+      liveDecisions.push(
+        ...frameResults.filter((decision): decision is PendingDecision => decision !== null),
+      );
     }
 
     const activeAfter = await this.resolveActiveTab();
