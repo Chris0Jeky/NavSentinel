@@ -1,6 +1,6 @@
 # Agent Index - NavSentinel
 
-Last reviewed: 2026-07-13.
+Last reviewed: 2026-07-17.
 
 This is a fast orientation layer for coding agents. It should point to interfaces and seams, not duplicate implementation details.
 
@@ -9,8 +9,10 @@ This is a fast orientation layer for coding agents. It should point to interface
 0. **Resuming the autonomous work loop?** Read `ACTION_ITEMS.md`,
    `docs/Product_Strategy.md`, `docs/Project_Roadmap.md`, and
    `docs/agentic/HANDOFF.md`, then verify live git/GitHub state. The oversized
-   ORCHESTRATOR/detail tables are historical pending #437. Current next slice is
-   RI-01 prompt-action authenticity; AI-15 is blocked pending agent preflight.
+   ORCHESTRATOR/detail tables are historical pending #437. PR #464 is the
+   current browser-held synthetic-allowance sub-slice; extension-origin
+   prompt-action authority remains unfinished RI-01 work. AI-15 is blocked
+   pending the remaining agent preflight.
 1. `AGENTS.md` - repo operating rules.
 2. `CLAUDE.md` - Claude-specific compact contract.
 3. `docs/Project_Roadmap.md` - active phase status, gates, decisions, and next tasks.

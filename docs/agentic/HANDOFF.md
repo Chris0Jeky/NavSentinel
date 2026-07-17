@@ -21,9 +21,13 @@ rotation under #437.
 - **AI-19:** clear or replace the product name before CWS submission.
 - **AI-18: READY:** the hook-editing slice is committed; review/trust the exact
   project-local Codex hook definitions before relying on them.
+- **AI-13: OPEN / READY:** run the exact-head-guarded #356 Chrome Gate-3 guide;
+  only Chris can record it complete.
+- **AI-21: OPEN / CONDITIONAL:** run PR #464's exact-head-guarded synthetic
+  navigation Chrome Gate-3 guide after live CI/review prechecks pass.
 - **AI-15: BLOCKED** until agent preflight is complete.
-- **AI-8 / AI-13 / AI-14: BLOCKED** pending current branches, two fresh reviews,
-  green CI, and replacement human guides.
+- **AI-8 / AI-14: BLOCKED** pending current branches, two fresh reviews, green
+  CI, and replacement human guides.
 
 ## Verified state
 
@@ -31,13 +35,22 @@ rotation under #437.
   repository ruleset, or external-user evidence.
 - GitHub private vulnerability reporting is enabled and `SECURITY.md` links the
   verified private advisory route.
-- Main: typecheck, lint, build, version check, 2,874 unit tests (95 files), perf
-  12/12, smoke E2E, and current GitHub CI green.
-- 75 open issues with no milestone/assignee; 15 Horizon issues #439–#453 are a
+- Root `main` is clean and matches `origin/main`; its current GitHub CI is green.
+- 80 open issues with no milestone/assignee; 15 Horizon issues #439–#453 are a
   frozen option portfolio, not active work.
 - Stale PRs #273 and #399 were closed on 2026-07-13 with re-entry paths and
-  issue anchors preserved. #356 remains the sole active legacy browser-surface
-  PR; it is stale with E2E red. Human Gate-3 would be premature.
+  issue anchors preserved. Open PRs are #356, draft #457, #463, and #464.
+- PR #356 exact guide head `ee0f9b7` is twice reviewed, thread-clean, and green
+  in GitHub Build/Unit and E2E. AI-13 real-Chrome Gate-3 is its only remaining
+  gate; do not merge without Chris's evidence.
+- PR #463 exact head `91aab4f` is twice reviewed, thread-clean, audit-zero, and
+  green in GitHub Build/Unit and E2E. It is open/ready but intentionally
+  unmerged because the repository's aging rule is not yet satisfied.
+- PR #464 rejects synthetic pointer/click authority without discarding a real
+  pointerdown's risk evidence. Local exact-code proof includes typecheck, lint,
+  build, targeted attack/compatibility E2E, three repeated Level 6 passes, and
+  65/65 one-worker E2E. Its exact-head GitHub/review evidence must be checked on
+  the PR after this handoff commit; AI-21 human Gate-3 remains mandatory.
 - Package is about 474/500KB while reputation is a 52-byte test fixture. The
   old 150KB/100K-domain plan cannot meet its stated 0.01% FP target or aggregate
   package cap as written.
@@ -46,10 +59,22 @@ rotation under #437.
   backed up without the unstaged Defender deletion; verify its SHA live. Its
   worktree remains dirty only because of the Defender-quarantined fixture.
 - The RI-01 broker foundation is unit-tested but not wired into production.
-  Only the synthetic-navigation allowance rejection changes active runtime
-  behavior; its new real-browser E2E has not run.
+  PR #464 changes only the synthetic-navigation authority sub-slice; it does
+  not move allow/trust/resume into extension-origin UI or complete RI-01.
 
 ## Local review evidence
+
+- **PR #464 pre-final adversarial round (two independent lenses, 2026-07-17):**
+  the initial isolated commit regressed Level 6. One lens found that discarding
+  the preceding trusted pointerdown removed retarget/fast-attempt evidence and
+  could let a hidden synthetic `_blank` activation escape. The other reproduced
+  the escaped tab and identified missing native-anchor and MAIN redirect
+  coverage. Fixed in `aa9fa3a`: trusted-only `lastDown` remains correlation
+  evidence, allowance writes remain gated by the current event's trust, the
+  benign-anchor exemption now requires a trusted click, and the tests assert no
+  popup plus SW/MAIN/native-anchor/redirect rejection. The fresh final round(s)
+  and bot/thread accounting are authoritative only when posted against PR
+  #464's live exact head; any later head invalidates them.
 
 - **Agentic contract round 1 (runtime/parity lens, 2026-07-17):** compared
   Codex instructions, hooks, skills, and shared references against the compact
@@ -87,7 +112,7 @@ rotation under #437.
 1. **RI-01:** page-injected UI currently authorizes allow/trust/resume. Move all
    protection-lowering decisions to tab/destination-bound extension-origin UI;
    script rejection/closed roots alone do not stop trusted-click redressing.
-2. **RI-03/#356:** refresh the branch, fix red CI, run two fresh reviews;
+2. **RI-03/#356:** complete AI-13 human Gate-3 on the current green head;
    recreate or defer #273's intent and keep closed #399 outside beta blockers.
 3. **RI-02/#424:** excise visual-sim. It has no production match path and can
    process a different active tab's pixels.
@@ -113,14 +138,25 @@ comparative evidence.
 
 ## Next safe slice
 
-After AI-20, restore only the exact tracked fixture (or implement the chosen
-coverage-preserving rewrite), normalize the RI worktree dependencies, and run
-the full typecheck/lint/build/unit/perf/relevant-E2E gates. Then continue RI-01
-as a separate integration slice: service-worker handlers, extension-sender and
-active-tab checks, exact-context delivery, popup actions, warn/cancel-only
-injected UI, and explicit expiry cleanup. With stale #273 and #399 closed, keep
-the RI checkpoint branch backup-only until the integration slice, full gates,
-two fresh durably recorded adversarial reviews, and Gate-3 are complete.
+After PR #464's automated/review gates settle, take one narrow remaining RI-01
+integration slice from a fresh worktree: service-worker pending-decision
+handlers with extension-sender, active-tab, destination-context, TTL, and stale
+state validation. Do not mix popup UI or credential-guard work into that slice.
+The old dirty checkpoint worktree remains quarantined and untouched under AI-20;
+use its clean remote backup only as read-only source material.
+
+## Queue accounting
+
+- **Open / human-held:** #356 (AI-13) and #464 (AI-21); neither may merge from
+  automation alone.
+- **Open / ready but aging:** #463; no red checks, unresolved threads, or known
+  untracked debt remain at its recorded exact head.
+- **Parked:** draft #457 agent-harness tooling; closed #273/#399 retain explicit
+  re-entry paths.
+- **Blocked:** AI-15, AI-8, and AI-14.
+- **Deferred human decisions/actions:** AI-16 (resume cursor), AI-9, AI-20,
+  AI-17, AI-19, AI-18, AI-13, and AI-21. No item was silently dropped or
+  self-cleared.
 
 ## Reliability notes
 

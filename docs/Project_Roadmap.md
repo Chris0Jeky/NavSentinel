@@ -1,6 +1,6 @@
 # NavSentinel Project Roadmap
 
-*Created 2026-04-09. Truth refresh 2026-07-10; live/status sync 2026-07-13.*
+*Created 2026-04-09. Truth refresh 2026-07-10; live/status sync 2026-07-17.*
 
 This is the execution roadmap. [`Product_Strategy.md`](Product_Strategy.md) owns
 the product thesis, portfolio boundaries, and evidence gates; GitHub issues own
@@ -30,7 +30,7 @@ readiness is tracked only by the outcome gates below.
 
 | Gate | State | Required next move |
 |---|---|---|
-| Release integrity | **Blocked** | RI-01 extension-origin decision authority; refresh/fix #356; excise visual-sim (#424); remove fake DNR; purpose-specific data minimization; beta-off JS behavior; #175/#186 bridge identity/recovery |
+| Release integrity | **Blocked** | RI-01 extension-origin decision authority beyond #464's synthetic-input slice; finish #356 Gate-3; excise visual-sim (#424); remove fake DNR; purpose-specific data minimization; beta-off JS behavior; #175/#186 bridge identity/recovery |
 | Release profile | **Decision required** | AI-9/AI-16 choose the recommended interaction-only beta or a reproducible, budgeted real reputation build |
 | Brand/store | **Blocked** | AI-19 name clearance; #455 pre-collection disclosure/consent; one canonical claims-verified listing; assets and fresh-install checks |
 | Detection validation | **Open** | #417 methodology, #416/#426 rerun, confidence-aware reporting |
@@ -40,25 +40,30 @@ readiness is tracked only by the outcome gates below.
 
 ### Live execution truth
 
-Verified 2026-07-10: `main` matched `origin/main`; v0.4.0; main CI green;
-2,874 unit tests; 74 open issues; no milestone, tag, GitHub release, CWS release,
-or branch protection. The exact audit baseline is recorded only in dated
-`Product_Strategy.md`; verify live.
-The legacy browser-surface PR queue is not ready for human time:
+Verified 2026-07-17: root `main` matched `origin/main`; v0.4.0; main CI green;
+80 open issues; no milestone, tag, GitHub release, CWS release, or branch
+protection. The exact audit baseline is recorded only in dated
+`Product_Strategy.md`; verify live. Current PR truth:
 
 | PR | Current state |
 |---|---|
 | #273 | Closed 2026-07-13 from a stale base; recreate from current `main` or defer |
-| #356 | Stale with E2E red; release prerequisite after refresh and repair |
+| #356 | Refreshed, twice reviewed, thread-clean, exact-head CI-green; held only for AI-13 human Chrome Gate-3 |
 | #399 | Closed 2026-07-13; measurement-held under #223/#417 and not a beta blocker |
+| #463 | Dependency advisory repair is twice reviewed, thread-clean, audit-zero, and exact-head CI-green; ready under the aging rule |
+| #464 | RI-01 synthetic-navigation authority rejection; local 65/65 one-worker E2E green, browser-held for reviews, exact-head CI, and AI-21 |
 
-**RI-01 local implementation note (verified 2026-07-13):** remotely backed-up
-checkpoint branch `fix/ri01-extension-origin-decisions` contains a context-bound,
-hash-minimizing pending-decision broker plus a synthetic-navigation-allowance
-fix. Focused broker tests pass, but the broker is not wired into production:
+**RI-01 implementation note (verified 2026-07-17):** PR #464 isolates the
+production synthetic-navigation sub-slice: only trusted input can mint
+navigation allowances, a preceding trusted pointerdown remains risk evidence,
+and an untrusted `_blank` click cannot enter the benign-anchor exemption. Its
+targeted attack/compatibility checks and all 65 one-worker E2E tests pass
+locally; AI-21 real-Chrome Gate-3 remains mandatory. The separately backed-up
+`fix/ri01-extension-origin-decisions` checkpoint still contains the unwired,
+context-bound pending-decision broker. Remaining RI-01 work includes
 service-worker handlers, active-tab/sender validation, exact-context delivery,
 popup actions, warn/cancel-only injected prompts, full branch gates, and real
-Chrome remain open. Windows Defender quarantined one tracked adversarial
+Chrome verification. Windows Defender quarantined one tracked adversarial
 ClickFix property fixture only in that worktree; AI-20 owns the human review.
 
 The North-Star and Horizon documents are frozen option portfolios. Their 15
@@ -77,7 +82,7 @@ maintainer chooses disclosure/ownership.
 |---|---|---|---|---|---|
 | RI-01 | P0 beta blocker | Move all proceed/allow/trust/resume authority out of page-injected UI | Agent + Gate-3 | Private release task | Injected UI is warn/cancel only; extension-origin action is tab/destination-bound with TTL; synthetic input, trusted-click redressing, host tamper/removal, tab switch, and stale state cannot lower protection |
 | RI-02 | P0 beta blocker | Excise visual-sim capture, templates, scoring hook, WAR, tests, and state | Agent + Gate-3 | #424 | No viewport capture path or placeholder asset remains; #374 is optional coordination, not a prerequisite |
-| RI-03 | P0 beta blocker | Refresh/fix #356; recreate or defer #273; rerun two reviews and CI | Agent before human time | #273/#356; #399 stays deferred | Replacement human guides point only to current green branches; #399 remains outside beta blockers until its measurement methodology is ready |
+| RI-03 | P0 beta blocker | Finish #356 human Gate-3; recreate or defer #273 | Chris + agent | #273/#356; #399 stays deferred | #356's current exact head passes Gate-3 and merge gates; any #273 replacement guide points only to a current green branch; #399 remains outside beta blockers until its measurement methodology is ready |
 | RI-04 | P0 product decision | Implement the selected interaction-only or real-reputation profile | Chris + agent | #321 / AI-9 / AI-16 | Release script, tag CI, manifest/WAR, runtime initialization, package checks/budgets, tests, provenance/cadence (if real), and every claim agree for the selected profile; verify both only if both are intentionally retained |
 | RI-05 | P0 beta blocker | Remove fake DNR feature surface and unused permissions | Agent + Gate-3 | CWS checklist; redesign #242/#243 later | No test rules/toggle/DNR permission in beta manifest |
 | RI-06 | P0 privacy blocker | Inventory every store; minimize by purpose; add complete reset | Agent + privacy review | Extend #176 or seed one scoped follow-up | Persistent records use least-identifying data; exact session URLs remain only for correctness with tab binding/TTL; rollback/OAuth/allow tests pass; all behavioral stores have one clear control and accurate export/disclosure |
@@ -97,8 +102,8 @@ maintainer chooses disclosure/ownership.
 
 - #415: create one `v0.5.0-unlisted-beta` milestone containing only real blockers.
 - #321: replace "build the filter" with RI-04 and the AI-9 decision.
-- #356: P0 after refresh/fix/review; #273 recreate/defer; #399 is closed and
-  remains measurement-deferred under #223/#417.
+- #356: P0 and held only for AI-13 human Gate-3; #273 recreate/defer; #399 is
+  closed and remains measurement-deferred under #223/#417.
 - #419/#421/#422: close enacted scope; retain only concrete unfinished work.
 - #423: close when the verified-claims policy lands.
 - #424: rebody as RI-02; move #245/#246 to post-beta or close them.
