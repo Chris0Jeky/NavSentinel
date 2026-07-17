@@ -2,7 +2,7 @@
 
 ## Preconditions
 
-- Node `20.18.1` or newer
+- Node `^20.19.0 || ^22.13.0 || >=24`
 - Clean working tree on the `main` branch
 - `package.json`, `extension/manifest.json`, and `package-lock.json` versions aligned
 - Unreleased entries present in `CHANGELOG.md`

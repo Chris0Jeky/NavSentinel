@@ -97,38 +97,32 @@ PRs D-* are independent (different files) → parallel branches off `main`, **no
 
 ## In-Flight
 
-**Active checkpoint (2026-07-17, Cycle 53):** three recoverable PR lanes and
-one selected local slice are open.
-PR #356 exact head `ee0f9b7` is twice reviewed, thread-clean, and exact-head
-CI-green, held only for AI-13. PR #463 exact head `91aab4f` is twice reviewed,
-thread-clean, audit-zero, and exact-head CI-green, ready but deliberately
-unmerged under the aging rule. PR #464 isolates RI-01's synthetic-navigation
-authority rejection from the unwired broker and dirty/quarantined checkpoint.
-Its runtime/test commits preserve a real pointerdown as risk evidence but gate
-all authority and the benign `_blank` exemption on the current click's trust.
-Local targeted controls, 2,874 units, all 65 one-worker E2E tests, and 12/12
-performance budgets pass, and all bot threads are resolved. This ledger commit
-creates a new candidate head, so final review and GitHub CI truth must be
-checked against the live SHA and evidence comment on #464. AI-21 remains
-conditional and human Chrome Gate-3 remains mandatory. Do not merge either
-browser PR from automation alone.
+**Active checkpoint (2026-07-17, Cycle 53):** PR #463 merged its exact green
+dependency head as `2888483` and closed #459. That dependency graph must now be
+integrated into all browser-held lanes. PR #356 (AI-13) and #464 (AI-21) were
+twice reviewed, thread-clean, and exact-head CI-green before the merge; both
+must refresh from current `main` and repeat exact-head reviews/CI before their
+human guides become actionable. Do not merge either from automation alone.
 
-**Cycle 53 selection:** `fix/ri01-pending-decision-sw` is a fresh, non-stacked
-branch from `origin/main` at `ebddd27`. It will port only the clean broker
-foundation from checkpoint commit `d2963f58`, then wire the service-worker
-pending-decision boundary: extension-sender and sender-derived context,
-active-tab validation, destination/token/action matching, TTL, one-shot
-consumption, hydration, and tab-lifecycle cleanup. Popup/UI, capture producers,
-credential guard, manifest, network, telemetry, and generated output are out of
-scope. Opening this browser-surface slice will consume the third and final
-human-held PR slot.
+**Cycle 53 implementation:** `fix/ri01-pending-decision-sw` ports the clean
+checkpoint broker foundation and wires a dormant service-worker
+create/list/consume boundary with extension/content sender provenance,
+browser-derived tab/frame/document context, active-tab revalidation, exact
+destination/token/action binding, 30-second TTL, one-shot consumption,
+hydration, and top-navigation/tab-removal cleanup. It intentionally executes no
+allow/trust/proceed action and adds no popup/UI, producer, credential-guard,
+manifest, network, telemetry, or generated-output change. Before dependency
+integration it passed 172 focused tests, typecheck, lint, build, 2,897 units,
+rollback 3/3, smoke 4/4, and full one-worker E2E 64/64. Post-merge revalidation,
+PR creation, two exact-head reviews, CI, and AI-22 remain. Opening it consumes
+the third and final human-held browser slot.
 
 | Slice | Branch | Base | Worktree | PR | State | Proving gates |
 |---|---|---|---|---|---|---|
-| RI-03 MAIN compatibility | `feat/dehard-enforcement-protos` | current `origin/main` merged | `.worktrees/pr356-refresh` | #356 | OPEN / AUTOMATED GATES GREEN / AI-13 | exact-head CI; two reviews; all threads resolved; human Chrome Gate-3 |
-| #459 dependency advisories | `fix/release-dependency-advisories` | `origin/main` at `ebddd27` | `.worktrees/deps-audit` | #463 | OPEN / READY / AGING | audit zero; exact-head CI; two reviews; all threads resolved |
-| RI-01 synthetic allowance rejection | `fix/ri01-reject-synthetic-nav-allowances` | `origin/main` at `ebddd27` | `.worktrees/ri01-synthetic-nav` | #464 | OPEN / LOCAL GATES GREEN / AI-21 CONDITIONAL | synthetic-negative E2E; trusted pointer/keyboard/input positives; full one-worker E2E; type/lint/build/unit/perf/package; exact-head reviews/CI; human Gate-3 |
-| RI-01 SW pending-decision boundary | `fix/ri01-pending-decision-sw` | `origin/main` at `ebddd27` | `.worktrees/ri01-pending-sw` | — | LOCAL / SELECTED / NOT YET IMPLEMENTED | focused broker/store/SW lifecycle tests; rollback; type/lint/build/unit; smoke/full E2E; perf/package; exact-head reviews/CI; human Gate-3 |
+| RI-03 MAIN compatibility | `feat/dehard-enforcement-protos` | pre-#463 `main` | `.worktrees/pr356-refresh` | #356 | OPEN / REFRESH REQUIRED / AI-13 | merge current main; rerun exact-head CI/reviews; human Chrome Gate-3 |
+| #459 dependency advisories | `fix/release-dependency-advisories` | `ebddd27` | `.worktrees/deps-audit` | #463 | MERGED `2888483` | audit zero; exact-head CI; two reviews; all threads resolved; intended #459 close verified |
+| RI-01 synthetic allowance rejection | `fix/ri01-reject-synthetic-nav-allowances` | pre-#463 `main` | `.worktrees/ri01-synthetic-nav` | #464 | OPEN / REFRESH REQUIRED / AI-21 | merge current main; rerun exact-head CI/reviews; human Chrome Gate-3 |
+| RI-01 SW pending-decision boundary | `fix/ri01-pending-decision-sw` | merging current `main` | `.worktrees/ri01-pending-sw` | — | LOCAL / IMPLEMENTED / REVALIDATING | focused broker/store/SW lifecycle tests; rollback; type/lint/build/unit; smoke/full E2E; perf/package; exact-head reviews/CI; human Gate-3 |
 
 **Historical checkpoint (2026-07-10):** no new slice started during that audit.
 At that time PRs #273/#356/#399 were stale and #356 was red. Rows below are
@@ -151,9 +145,9 @@ historical (all merged); Cycle 53 above supersedes that snapshot.
 
 | # | Date | Slice | Action | Result |
 |---|------|-------|--------|--------|
-| 53 | 2026-07-17 | UNBLOCK / RI-01 SW pending-decision boundary | Selected the smallest remaining RI-01 integration slice from a fresh detached `origin/main` worktree. The branch is deliberately not stacked on #464; only the clean committed foundation at `d2963f58` may be used from the quarantined checkpoint. The first combined worktree command accidentally ran `git switch` in the root checkout; root was clean, was immediately returned to `main`, and the branch was attached to the intended worktree with no file or commit loss. Future worktree creation keeps the target-worktree branch switch as a separate command. No runtime implementation has started. | IN PROGRESS / LOCAL |
+| 53 | 2026-07-17 | UNBLOCK / RI-01 SW pending-decision boundary | Selected the smallest remaining RI-01 integration slice from a fresh detached `origin/main` worktree and ported only the clean checkpoint broker foundation. The first combined worktree command accidentally ran `git switch` in root; root was clean, immediately restored to `main`, and no file/commit was lost. Added shared runtime contracts, a dependency-injected SW broker, exact sender/tab/frame/document and destination/token/action binding, one-shot consume with post-consume context checks, eager hydration, and serialized top-navigation/tab-removal cleanup. The boundary is dormant: no producer, popup, or protection-lowering executor was added. Focused 172, type/lint/build, 2,897 units, rollback 3/3, smoke 4/4, and full one-worker E2E 64/64 passed before #463 integration. Pre-existing Happy DOM fetch teardown noise was isolated and tracked as #465. PR #463 then merged as `2888483`; Cycle 53 is merging current `main` and must rerun exact-head local/CI/review gates before AI-22. | IN PROGRESS / IMPLEMENTED / POST-MERGE REVALIDATING |
 | 52 | 2026-07-17 | UNBLOCK / RI-01 synthetic allowance rejection | Opened #464 from fresh detached `origin/main`. The initial isolated commit correctly rejected synthetic authority but regressed Level 6: the full 65-test lane deterministically exposed an escaped hidden programmatic tab. Two independent diagnostic lenses traced the loss of trusted pointerdown correlation and the untrusted benign-anchor bypass. `aa9fa3a` restores trusted `lastDown` only as risk evidence, keeps authority writes trusted-only, requires a trusted click for the benign `_blank` exemption, and adds no-popup plus SW/MAIN/native-anchor/redirect coverage. Gemini's follow-up threads exposed a valid synthetic silent-log leak and an adjacent modifier-seeded synthetic new-tab authority leak; mutation probes failed before the fixes, then `76da96b` and `8874459` closed them. Targeted attack/compatibility controls pass, Level 6 passes 3/3 repeated, the full lane passes 65/65, and all bot threads are resolved. Final exact-head review/CI evidence must be posted on #464 after this ledger commit rather than pre-claimed here. The normal Location instance bypass observed while extending coverage is pre-existing #458; the test exercises the hardened prototype rather than widening this slice. AI-21 remains conditional and mandatory. | PR #464 OPEN / LOCAL GATES GREEN / FINAL REVIEW+CI+GATE-3 HELD |
-| 51 | 2026-07-17 | UNBLOCK / #459 dependency advisories | Opened #463 and upgraded only the release dependency graph to CRXJS 2.7.1, Vite 8.1.5, Rollup 2.80.0, and Rolldown 1.1.5. Audit 3 high -> 0; clean install, dependency/engine/provenance checks, type/lint/build, 2,874 unit, 64/64 one-worker E2E, perf 12/12, package, and Windows Gym HTTP passed. Four GitHub findings were fixed (stale handoff, exact semver, AI-13 queue sync, full ESLint Node-engine intersection); all threads are resolved. Exact head `91aab4f` passed GitHub Build/Unit and E2E. #462 tracks CRXJS's deprecated HMR option/real-Chrome HMR without widening `externally_connectable`. | PR #463 OPEN / READY / AGING |
+| 51 | 2026-07-17 | UNBLOCK / #459 dependency advisories | Opened #463 and upgraded only the release dependency graph to CRXJS 2.7.1, Vite 8.1.5, Rollup 2.80.0, and Rolldown 1.1.5. Audit 3 high -> 0; clean install, dependency/engine/provenance checks, type/lint/build, 2,874 unit, 64/64 one-worker E2E, perf 12/12, package, and Windows Gym HTTP passed. Four GitHub findings were fixed (stale handoff, exact semver, AI-13 queue sync, full ESLint Node-engine intersection); all threads were resolved. Exact head `91aab4f` passed GitHub Build/Unit and E2E, aged beyond repo precedent, and merged as `2888483`; #459 closed as intended. #462 tracks CRXJS's deprecated HMR option/real-Chrome HMR without widening `externally_connectable`. | MERGED / #459 CLOSED |
 | 50 | 2026-07-17 | UNBLOCK / RI-03 #356 | Refreshed the 174-behind branch, fixed stale descriptor E2E, resolved all three review threads, and ran two independent review rounds with every finding fixed. Exact head `ee0f9b7` passed GitHub Build/Unit and E2E plus local type/lint/build/package, 2,875 unit, 65/65 one-worker E2E, and perf 12/12. Tracked separate pre-existing or residual work as #458 (ordinary Location-call bypass), #460 (Windows four-worker E2E nondeterminism), #461 (Windows CRLF top-sites false-stale), and #462 (CRXJS dev HMR). The exact-head-guarded AI-13 guide is published. | PR #356 OPEN / AUTOMATED GATES GREEN / AI-13 HELD |
 | 49 | 2026-07-10 | PRODUCT POSTURE / architecture + market + roadmap review | Re-verified live git/GitHub/release truth; ran local build/test/perf/smoke baselines; reviewed architecture, feature portfolio, claims, privacy, store readiness, current competitors, and product-name collision. Found release-blocking page-controlled prompt decision authority, wrong-tab dead visual-sim capture, stale/red human PR queue, reputation/package contradiction, fake DNR surface, bridge overclaim, and false roadmap completion states. Established `docs/Product_Strategy.md`; consolidated RI-01–RI-08/PM/EV/OPS actions in `docs/Project_Roadmap.md`; corrected roadmap/store/privacy/architecture truth; blocked AI-15 pending preflight; and added AI-19 name clearance. No runtime code, PR, issue, merge, or external release state changed. | DOCS / REVIEW |
 | 47 | 2026-07-03 | MEASURE / #417 corpus-v2 pillar 1 (protected-vs-fired) — 1 merged | Merged **#435 / #417** (pillar 1 of 4). New pure, unit-tested `tests/corpus/corpus_scoring.ts` `classifyCorpusOutcome()`: **protected** (pre-harm block/prompt: nav_click_block/nav_blank_prompt/cred_submit_prompt/cred_paste_warn + credential modal) vs **fired** (post-render nav_rollback and/or a bare toast) vs **miss**; precedence protected>fired>miss. Wired into `tests/e2e/corpus-validation.spec.ts` (reports/persists the split; legacy detectionRate relabeled ANY-signal). **My 2-lens review caught a HIGH:** a bare toast mapped to `protected`, but the rollback path *also* shows a persistent toast → every post-render rollback would inflate to protected, making `fired` unreachable and the honest rate dishonest → fixed (toast → fired). **Codex independently corroborated (P1)** + caught (P2) that `cred_submit_prompt` is also logged with `extra.error` on the credential-guard fail-open/TOCTOU path → the spec now excludes those from detection. Gemini simplify (Set-input) + union-import both handled. 2 full adversarial rounds + both bots addressed; 2874 tests (+18), typecheck/lint clean. The e2e wiring is type-checked but **unrun in-sandbox** (headed Chrome = Gate-3/CI) — pillars 2–4 (real-hostname routing / trusted clicks / committed manifest) remain on #417. **#417 kept OPEN** (careful phrasing — the close-keyword gotcha bit #418 twice this session; see failure ledger). `main` @ **`eba5d71`**. | DONE / 1 MERGED |

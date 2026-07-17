@@ -35,24 +35,21 @@ rotation under #437.
   repository ruleset, or external-user evidence.
 - GitHub private vulnerability reporting is enabled and `SECURITY.md` links the
   verified private advisory route.
-- Root `main` is clean and matches `origin/main`; its current GitHub CI is green.
+- Root `main` is clean and matches `origin/main` at merge commit `2888483`.
 - 80 open issues with no milestone/assignee; 15 Horizon issues #439–#453 are a
   frozen option portfolio, not active work.
 - Stale PRs #273 and #399 were closed on 2026-07-13 with re-entry paths and
-  issue anchors preserved. Open PRs are #356, draft #457, #463, and #464.
-- PR #356 exact guide head `ee0f9b7` is twice reviewed, thread-clean, and green
-  in GitHub Build/Unit and E2E. AI-13 real-Chrome Gate-3 is its only remaining
-  gate; do not merge without Chris's evidence.
-- PR #463 exact head `91aab4f` is twice reviewed, thread-clean, audit-zero, and
-  green in GitHub Build/Unit and E2E. It is open/ready but intentionally
-  unmerged because the repository's aging rule is not yet satisfied.
-- PR #464 rejects synthetic pointer/click authority without discarding a real
-  pointerdown's risk evidence. Local exact-code proof includes typecheck, lint,
-  build, 2,874 unit tests, targeted attack/compatibility E2E, three repeated
-  Level 6 passes, 65/65 one-worker E2E, 12/12 performance budgets, and package
-  creation. Both bot threads are resolved. This handoff commit creates a new
-  candidate head, so final review and GitHub CI truth must be checked against
-  the live head and evidence comment on the PR; AI-21 remains conditional.
+  issue anchors preserved. Open PRs are #356, draft #457, and #464.
+- PR #463 merged exact green dependency head `91aab4f` as `2888483` and closed
+  #459. It carries CRXJS 2.7.1, Vite 8.1.5, Rollup 2.80.0, Rolldown 1.1.5,
+  audit zero, and the aligned Node engine floor.
+- PR #356 and #464 were twice reviewed, thread-clean, and exact-head CI-green
+  before #463 changed `main`'s dependency graph. Their human guides are now
+  conditional on integrating current `main` and rerunning exact-head CI plus
+  both reviews; neither may merge without its human Gate-3 evidence.
+- The local Cycle 53 broker boundary passed 172 focused tests, typecheck, lint,
+  build, 2,897 units, rollback 3/3, smoke 4/4, and all 64 one-worker E2E before
+  merging current `main`. Its post-merge exact head still needs revalidation.
 - Package is about 474/500KB while reputation is a 52-byte test fixture. The
   old 150KB/100K-domain plan cannot meet its stated 0.01% FP target or aggregate
   package cap as written.
@@ -60,9 +57,10 @@ rotation under #437.
   `main` rather than pinning its SHA. The RI-01 checkpoint branch is remotely
   backed up without the unstaged Defender deletion; verify its SHA live. Its
   worktree remains dirty only because of the Defender-quarantined fixture.
-- The RI-01 broker foundation is unit-tested but not wired into production.
-  PR #464 changes only the synthetic-navigation authority sub-slice; it does
-  not move allow/trust/resume into extension-origin UI or complete RI-01.
+- The RI-01 broker foundation is now wired as a dormant service-worker
+  create/list/consume boundary with top-navigation/tab-removal cleanup. It does
+  not yet have a producer, popup UI, or privileged action executor, and it does
+  not remove the legacy injected allow/trust/resume authority or complete RI-01.
 
 ## Local review evidence
 
@@ -114,13 +112,29 @@ rotation under #437.
 - **Forward-test lens:** exercised the sequence as a maintainer handoff. The
   `q-1` / AI-16 guide, exact reply, durable `AI-N` resume semantics, and
   AI-18 conditional readiness are internally consistent after fixes.
+- **#459 round 1 (fresh supply-chain/build-portability lens, 2026-07-17):** no
+  lockfile, peer-range, audit, or production-build defect. It found unverified
+  CRXJS/Vite dev-HMR debt and stale handoff evidence. The HMR debt is tracked in
+  #462 without widening `externally_connectable`; this sync fixes the evidence.
+  A root `@emnapi/runtime` entry can appear extraneous after clean install, but
+  untouched `origin/main` reproduces the same npm optional-dependency behavior.
+- **#459 round 2 (fresh supply-chain/portability/docs lens, 2026-07-17):** no
+  branch-introduced runtime, graph, provenance, or build defect. It found a
+  pre-existing release-guide mismatch: Node 20.18.1 was documented while the
+  root engine required a newer range. `614953b` aligned that guide and exact-head
+  re-review was clean. Gemini then requested exact semver syntax rather than
+  natural-language `or`; `da44f56` fixed it. A later Codex portability review
+  found the full ESLint 10 graph is narrower still, so the root declaration,
+  lock root, and release guide now use `^20.19.0 || ^22.13.0 || >=24`. Copilot's
+  quota-limit response on #463 is an invalid review signal, not a skipped finding.
 
 ## Release blockers in order
 
 1. **RI-01:** page-injected UI currently authorizes allow/trust/resume. Move all
    protection-lowering decisions to tab/destination-bound extension-origin UI;
    script rejection/closed roots alone do not stop trusted-click redressing.
-2. **RI-03/#356:** complete AI-13 human Gate-3 on the current green head;
+2. **RI-03/#356:** integrate current `main`, repeat exact-head reviews/CI, then
+   complete AI-13 human Gate-3;
    recreate or defer #273's intent and keep closed #399 outside beta blockers.
 3. **RI-02/#424:** excise visual-sim. It has no production match path and can
    process a different active tab's pixels.
@@ -146,22 +160,19 @@ comparative evidence.
 
 ## Next safe slice
 
-Take one narrow remaining RI-01 integration slice from a fresh detached
-`origin/main` worktree: service-worker pending-decision handlers with
-extension-sender, sender/tab/frame/document context, active-tab,
-destination/token/action matching, TTL, one-shot consumption, hydration, and
-tab-lifecycle validation. Port only the clean broker foundation from checkpoint
-commit `d2963f58`; do not mix popup UI, capture producers, injected UI,
-credential-guard, manifest, or network work into that slice. It will consume
-the third and final human-held browser PR slot and requires a new Gate-3 item.
-The old dirty checkpoint worktree remains quarantined and untouched under AI-20.
+Finish integrating dependency merge `2888483` into Cycle 53, rerun its local
+gates, open the third and final browser-held PR, and add its exact-head-guarded
+AI-22 guide. Then refresh #356 and #464 from current `main`; both must repeat
+exact-head reviews/CI before AI-13 or AI-21 is actionable. Do not start a fourth
+browser-held slice.
 
 ## Queue accounting
 
 - **Open / human-held:** #356 (AI-13) and #464 (AI-21); neither may merge from
   automation alone.
-- **Open / ready but aging:** #463; no red checks, unresolved threads, or known
-  untracked debt remain at its recorded exact head.
+- **Merged:** #463 / #459 as `2888483`; intended close link verified.
+- **Local / in progress:** Cycle 53 pending-decision SW boundary; post-merge
+  revalidation, PR, reviews, CI, and AI-22 remain.
 - **Parked:** draft #457 agent-harness tooling; closed #273/#399 retain explicit
   re-entry paths.
 - **Blocked:** AI-15, AI-8, and AI-14.
@@ -174,6 +185,12 @@ The old dirty checkpoint worktree remains quarantined and untouched under AI-20.
 - The current environment did not perform real Chrome behavior, CWS submission,
   real-feed building, external audit, or trademark/legal clearance.
 - Treat successful CI as regression evidence, not efficacy evidence.
+- #462 tracks CRXJS 2.7.1's deprecated Vite HMR option and unverified MAIN-world
+  HMR. Production build/package/E2E passed; no `externally_connectable` widening
+  is authorized by #459.
+- #460 tracks nondeterministic Windows four-worker blank-anchor misses; use the
+  supported one-worker proving topology. #461 tracks Windows CRLF false-stale
+  output from `check:topsites`; exact-head Linux CI remains authoritative.
 - Update shared branches with `git merge main`, never rebase; do not discard work
   or rewrite history without the explain-and-approve protocol.
 - Do not edit `extension/dist/` or generated data directly.

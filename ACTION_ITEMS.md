@@ -8,8 +8,8 @@
 
 **Purpose:** the running list of things only *you* (Chris) can do — and the context an agent needs to not lose the thread between sessions. Agents flag the open items in every summary; you clear them by saying so.
 
-**Last updated:** 2026-07-17 — live PR recovery plus RI-01 synthetic-navigation
-Gate-3 preparation. Product thesis:
+**Last updated:** 2026-07-17 — dependency merge plus RI-01 browser-lane
+integration. Product thesis:
 `docs/Product_Strategy.md`. Corrective
 program: `docs/Project_Roadmap.md`. Standing decisions:
 `docs/agentic/DECISIONS.md`.
@@ -26,24 +26,23 @@ program: `docs/Project_Roadmap.md`. Standing decisions:
 ## Current state snapshot (live state rechecked 2026-07-17)
 
 The root `main` worktree is clean and matches `origin/main`; its exact-head CI
-is green. Run
-`git rev-parse main`, `git rev-parse origin/main`, and live `gh` checks before
-acting; the exact audit baseline lives in `docs/Product_Strategy.md`, not this
-live snapshot. PR #464's local candidate passed typecheck, lint, build, 2,874
-unit tests (95 files), targeted attack/compatibility E2E, and all 65 one-worker
-E2E tests. v0.4.0 still has no tag, GitHub release, CWS release, or
+was green before PR #463 merged. Run `git rev-parse main`,
+`git rev-parse origin/main`, and live `gh` checks before acting; the exact audit
+baseline lives in `docs/Product_Strategy.md`, not this live snapshot. The local
+RI-01 pending-decision candidate passed typecheck, lint, build, 2,897 unit tests
+(97 files), rollback 3/3, smoke 4/4, and all 64 one-worker E2E tests before the
+dependency merge. v0.4.0 still has no tag, GitHub release, CWS release, or
 external-user evidence.
 
 Live recheck on 2026-07-17 found 80 open issues, no tags/releases/classic branch
 protection or repository rulesets, and no milestones or assignees. Verify the
 current `main` SHA live rather than pinning it here. Open PRs are #356, draft
-#457, #463, and #464. Stale PRs #273 and #399 were closed with explicit
-re-entry paths. #356 exact guide head `ee0f9b7` is twice reviewed,
-thread-clean, and exact-head CI-green; AI-13 is now its only gate. #463 exact
-head `91aab4f` is twice reviewed, thread-clean, and exact-head CI-green; it is
-ready but deliberately unmerged under the aging rule. PR #464 is the separate
-RI-01 synthetic-navigation browser slice and remains held for AI-21. The
-product-posture and guided-workflow work merged through PR #454; verify live
+#457, and #464; PR #463 merged as `2888483` and closed #459. Stale PRs #273 and
+#399 were closed with explicit re-entry paths. #356 and #464 were twice
+reviewed, thread-clean, and exact-head CI-green before #463 changed `main`'s
+dependency graph. Both browser branches must now integrate current `main` and
+repeat exact-head checks/reviews before their AI-13/AI-21 guides are actionable.
+The product-posture and guided-workflow work merged through PR #454; verify live
 `main` rather than pinning its SHA here. The RI-01 checkpoint branch is remotely
 backed up without the unstaged Defender deletion; verify its SHA live. Its
 worktree is dirty only because Windows Defender quarantined one tracked
@@ -56,8 +55,9 @@ adversarial test fixture. These changes do not change shipped product state.
 - **Release-integrity blockers:** page-controlled injected UI currently owns
   allow/trust/resume authority and can be redressed under genuine input
   (RI-01); visual-sim can process the wrong active
-  tab and has no production value (RI-02/#424); frozen MAIN-world prototypes in
-  #356 are site-breaking; fake DNR and unmeasured JS behavior should be absent
+  tab and has no production value (RI-02/#424); current `main`'s frozen
+  MAIN-world prototypes remain site-breaking until #356 lands; fake DNR and
+  unmeasured JS behavior should be absent
   or off; stored URLs require minimization (RI-05/RI-06); #175/#186 bridge
   identity/recovery and #455 pre-collection disclosure/consent now block beta.
 - **Release/profile blockers:** the 52-byte reputation test filter plus the
@@ -69,9 +69,11 @@ adversarial test fixture. These changes do not change shipped product state.
   CWS submission; this is a risk flag, not a legal conclusion.
 - **Legacy PR cleanup:** #273 and draft #399 were closed on 2026-07-13 rather
   than merged from stale bases; their commits, discussions, and open issue
-  anchors remain. #356 is refreshed, reviewed twice, thread-clean, and
-  exact-head CI-green. **Use only its current AI-13 guide after the mandatory
-  live head/CI precheck.**
+  anchors remain. #356 is refreshed, pushed, twice reviewed, thread-clean, and
+  was exact-head CI-green before #463 merged. **Use the current AI-13 guide only
+  after #356 integrates current `main`, repeats both reviews/CI, and its step-1
+  live precheck passes. The PR remains unmergeable without Chris's Gate-3
+  evidence.**
 - **Portfolio:** 80 open issues, none assigned or milestoned; #439–#453 are 15
   frozen Horizon proposals. No new feature/epic issue seeding until the queue is
   culled and milestone-categorized.
@@ -325,7 +327,6 @@ item remains human-owned; only Chris can record Gate-3 as done.
    unexpected prompt text, or differing outcome. Do not merge on a partial pass;
    after a full pass the agent will recheck the exact head, CI, comments, and
    merge gate before acting.
-
 **🚨 OPEN: AI-21 — Run PR #464 synthetic-navigation Gate-3 (GUIDE PREPARED;
 LIVE EXACT-HEAD PRECHECK REQUIRED).** This browser-surface slice prevents page
 scripts from minting navigation authority with dispatched pointer/click events,
@@ -500,7 +501,6 @@ rejection before merge. Only Chris can record this item complete.
    `AI-21 failed on PR #464 at <SHA>: <step and observed result>`. Do not merge
    on a partial pass; the agent must recheck the exact head, CI, comments, and
    merge gate afterward. AI-21 stays open until Chris explicitly confirms it.
-
 **🚨 BLOCKED: AI-14 — OAuth tradeoff measurement after closed PR #399.** The
 measurement-held draft was closed on 2026-07-13 rather than merged from a stale
 base. It is not a beta blocker. Keep #223 blocked until #417 supplies valid
