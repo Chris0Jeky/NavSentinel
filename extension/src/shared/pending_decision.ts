@@ -428,3 +428,143 @@ export function pendingDecisionScopeKey(
 ): string {
   return `${decision.documentId}\u0000${decision.frameId}\u0000${decision.kind}`;
 }
+
+export interface PendingDecisionCreateMessage {
+  type: "ns-pending-decision-create";
+  semantics: unknown;
+}
+
+export interface PendingDecisionListMessage {
+  type: "ns-pending-decision-list";
+}
+
+export interface PendingDecisionConsumeMessage {
+  type: "ns-pending-decision-consume";
+  id: unknown;
+  deliveryToken: unknown;
+  action: unknown;
+  destinationUrl: unknown;
+}
+
+export type PendingDecisionRuntimeMessage =
+  | PendingDecisionCreateMessage
+  | PendingDecisionListMessage
+  | PendingDecisionConsumeMessage;
+
+export type PendingDecisionRuntimeOperation = "create" | "list" | "consume";
+
+export type PendingDecisionRuntimeFailureStatus =
+  | "unauthorized"
+  | "invalid-request"
+  | "no-active-http-tab"
+  | "missing"
+  | "expired"
+  | "mismatch"
+  | "action-not-allowed"
+  | "context-changed"
+  | "rejected-capacity"
+  | "unavailable";
+
+interface PendingDecisionViewBase {
+  id: string;
+  deliveryToken: string;
+  sourceOrigin: string;
+  topOrigin: string;
+  destinationOrigin: string;
+  createdAt: number;
+  expiresAt: number;
+  score?: number;
+  signals?: readonly string[];
+}
+
+/** URL-free, bounded capability view exposed only to extension-origin UI. */
+export interface PendingNavigationDecisionView extends PendingDecisionViewBase {
+  kind: "navigation";
+  reason: NavigationDecisionReason;
+  actions: readonly NavigationDecisionAction[];
+}
+
+/** URL-free, bounded capability view exposed only to extension-origin UI. */
+export interface PendingCredentialDecisionView extends PendingDecisionViewBase {
+  kind: "credential";
+  reason: CredentialDecisionReason;
+  actions: readonly CredentialDecisionAction[];
+}
+
+export type PendingDecisionView =
+  | PendingNavigationDecisionView
+  | PendingCredentialDecisionView;
+
+export interface PendingDecisionRuntimeFailureResponse {
+  ok: false;
+  operation: PendingDecisionRuntimeOperation;
+  status: PendingDecisionRuntimeFailureStatus;
+}
+
+export interface PendingDecisionCreateSuccessResponse {
+  ok: true;
+  operation: "create";
+  status: "created";
+}
+
+export interface PendingDecisionListSuccessResponse {
+  ok: true;
+  operation: "list";
+  status: "missing" | "pending";
+  tabId: number;
+  windowId: number;
+  decisions: PendingDecisionView[];
+}
+
+export interface PendingDecisionConsumeSuccessResponse {
+  ok: true;
+  operation: "consume";
+  status: "consumed";
+  kind: PendingDecision["kind"];
+  action: PendingDecisionAction;
+}
+
+export type PendingDecisionRuntimeResponse =
+  | PendingDecisionRuntimeFailureResponse
+  | PendingDecisionCreateSuccessResponse
+  | PendingDecisionListSuccessResponse
+  | PendingDecisionConsumeSuccessResponse;
+
+export function isPendingDecisionRuntimeMessage(
+  value: unknown,
+): value is PendingDecisionRuntimeMessage {
+  if (!isRecord(value)) return false;
+  return (
+    value.type === "ns-pending-decision-create" ||
+    value.type === "ns-pending-decision-list" ||
+    value.type === "ns-pending-decision-consume"
+  );
+}
+
+export function toPendingDecisionView(decision: PendingDecision): PendingDecisionView {
+  const common = {
+    id: decision.id,
+    deliveryToken: decision.deliveryToken,
+    sourceOrigin: decision.sourceOrigin,
+    topOrigin: decision.topOrigin,
+    destinationOrigin: decision.destinationOrigin,
+    createdAt: decision.createdAt,
+    expiresAt: decision.expiresAt,
+    ...(decision.score !== undefined ? { score: decision.score } : {}),
+    ...(decision.signals !== undefined ? { signals: [...decision.signals] } : {}),
+  };
+  if (decision.kind === "navigation") {
+    return {
+      ...common,
+      kind: decision.kind,
+      reason: decision.reason,
+      actions: [...decision.actions],
+    };
+  }
+  return {
+    ...common,
+    kind: decision.kind,
+    reason: decision.reason,
+    actions: [...decision.actions],
+  };
+}
