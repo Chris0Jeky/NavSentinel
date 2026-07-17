@@ -58,6 +58,7 @@ function frameKey(tabId: number, frameId: number): string {
 function createHarness() {
   const storage = createStorage();
   const now = { value: 10_000 };
+  const lifecycleGeneration = { value: 0 };
   const activeTab: PendingDecisionTabSnapshot = {
     id: 7,
     windowId: 2,
@@ -93,6 +94,7 @@ function createHarness() {
     getTab,
     queryActiveTabs,
     getFrame,
+    getLifecycleGeneration: () => lifecycleGeneration.value,
   });
   return {
     activeTab,
@@ -100,6 +102,7 @@ function createHarness() {
     frames,
     getFrame,
     getTab,
+    lifecycleGeneration,
     now,
     queryActiveTabs,
     storage,
@@ -369,6 +372,35 @@ describe("PendingDecisionRuntimeBroker", () => {
     expect(
       await harness.broker.handle(consumeMessage(decision), extensionSender()),
     ).toMatchObject({ ok: true, operation: "consume", status: "consumed" });
+  });
+
+  it("rejects a delayed create after lifecycle cleanup has already run", async () => {
+    const harness = createHarness();
+    let releaseFrame!: () => void;
+    const frameGate = new Promise<void>((resolve) => {
+      releaseFrame = resolve;
+    });
+    harness.getFrame.mockImplementationOnce(async (tabId, frameId) => {
+      await frameGate;
+      const frame = harness.frames.get(frameKey(tabId, frameId));
+      return frame ? { ...frame } : null;
+    });
+
+    const create = harness.broker.handle(createMessage(), contentSender());
+    await vi.waitFor(() => expect(harness.getFrame).toHaveBeenCalledTimes(1));
+    harness.lifecycleGeneration.value++;
+    expect(await harness.broker.removeForTabLifecycle(7)).toEqual({
+      status: "missing",
+      removedCount: 0,
+    });
+    releaseFrame();
+
+    expect(await create).toEqual({
+      ok: false,
+      operation: "create",
+      status: "context-changed",
+    });
+    expect(harness.storage.data[PENDING_DECISION_STORAGE_KEY]).toBeUndefined();
   });
 
   it("binds token, action, and destination path/query/fragment without burning mismatches", async () => {

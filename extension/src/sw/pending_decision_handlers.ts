@@ -43,6 +43,7 @@ export interface PendingDecisionRuntimeBrokerDependencies {
     tabId: number,
     frameId: number,
   ) => Promise<PendingDecisionFrameSnapshot | null>;
+  getLifecycleGeneration: (tabId: number) => number;
 }
 
 interface ActiveTabContext {
@@ -72,6 +73,7 @@ function defaultDependencies(): PendingDecisionRuntimeBrokerDependencies {
     getTab: (tabId) => chrome.tabs.get(tabId),
     queryActiveTabs: () => chrome.tabs.query({ active: true, lastFocusedWindow: true }),
     getFrame: (tabId, frameId) => chrome.webNavigation.getFrame({ tabId, frameId }),
+    getLifecycleGeneration: () => 0,
   };
 }
 
@@ -194,10 +196,20 @@ export class PendingDecisionRuntimeBroker {
     const semantics = parsePendingDecisionSemantics(message.semantics);
     if (!semantics) return failure("create", "invalid-request");
     if (!this.isOwnContentSender(sender)) return failure("create", "unauthorized");
+    const tabId = sender.tab?.id;
+    if (!isBrowserId(tabId)) return failure("create", "unauthorized");
+    const lifecycleGeneration = this.dependencies.getLifecycleGeneration(tabId);
 
     const verifiedContext = await this.resolveContentContext(sender);
     if (!verifiedContext) return failure("create", "context-changed");
-    const created = await this.store.create(verifiedContext, semantics);
+    const created = await this.store.create(
+      verifiedContext,
+      semantics,
+      () => this.dependencies.getLifecycleGeneration(tabId) === lifecycleGeneration,
+    );
+    if (created.status === "context-changed") {
+      return failure("create", "context-changed");
+    }
     if (created.status === "rejected-capacity") {
       return failure("create", "rejected-capacity");
     }
@@ -434,6 +446,8 @@ export class PendingDecisionRuntimeBroker {
 }
 
 /** Create the production broker without forcing it into the service-worker entry chunk. */
-export function createDefaultPendingDecisionRuntimeBroker(): PendingDecisionRuntimeBroker {
-  return new PendingDecisionRuntimeBroker(new PendingDecisionStore());
+export function createDefaultPendingDecisionRuntimeBroker(
+  dependencies: Partial<PendingDecisionRuntimeBrokerDependencies> = {},
+): PendingDecisionRuntimeBroker {
+  return new PendingDecisionRuntimeBroker(new PendingDecisionStore(), dependencies);
 }

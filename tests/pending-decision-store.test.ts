@@ -560,6 +560,45 @@ describe("PendingDecisionStore", () => {
     expect(storedByTab(storage)[String(context.tabId)]).toBeUndefined();
   });
 
+  it("rechecks lifecycle validity after hashing and before persistence", async () => {
+    const storage = createStorage();
+    let releaseHash!: () => void;
+    let markHashStarted!: () => void;
+    const hashGate = new Promise<void>((resolve) => {
+      releaseHash = resolve;
+    });
+    const hashStarted = new Promise<void>((resolve) => {
+      markHashStarted = resolve;
+    });
+    const store = new PendingDecisionStore({
+      storage,
+      now: () => 68_000,
+      generateOpaqueValue: createOpaqueGenerator(),
+      fingerprintUrl: async (url) => {
+        if (url.includes("lifecycle-guard")) {
+          markHashStarted();
+          await hashGate;
+        }
+        return fingerprintUrl(url);
+      },
+    });
+    let lifecycleCurrent = true;
+    const create = store.create(
+      verifiedContext({
+        sourceUrl: "https://source.test/lifecycle-guard",
+        topUrl: "https://source.test/lifecycle-guard",
+      }),
+      navigationSemantics(),
+      () => lifecycleCurrent,
+    );
+    await hashStarted;
+    lifecycleCurrent = false;
+    releaseHash();
+
+    expect(await create).toEqual({ status: "context-changed" });
+    expect(storage.data[PENDING_DECISION_STORAGE_KEY]).toBeUndefined();
+  });
+
   it("rolls back failed creation and logically expires before physical cleanup", async () => {
     const storage = createStorage();
     let now = 70_000;

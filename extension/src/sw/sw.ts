@@ -151,12 +151,27 @@ const oauthFlowByTab = swState.oauthFlowByTab;
 // bodies await this promise so the first event after a restart sees restored state.
 const hydrateReady = swState.hydrate();
 let pendingDecisionRuntimePromise: Promise<PendingDecisionRuntimeBroker> | null = null;
+const pendingDecisionLifecycleGenerationByTab = new Map<number, number>();
+
+function getPendingDecisionLifecycleGeneration(tabId: number): number {
+  return pendingDecisionLifecycleGenerationByTab.get(tabId) ?? 0;
+}
+
+function advancePendingDecisionLifecycleGeneration(tabId: number): void {
+  const current = getPendingDecisionLifecycleGeneration(tabId);
+  pendingDecisionLifecycleGenerationByTab.set(
+    tabId,
+    current === Number.MAX_SAFE_INTEGER ? 1 : current + 1,
+  );
+}
 
 function loadPendingDecisionRuntime(): Promise<PendingDecisionRuntimeBroker> {
   if (!pendingDecisionRuntimePromise) {
     const attempt = import("./pending_decision_handlers").then(
       ({ createDefaultPendingDecisionRuntimeBroker }) =>
-        createDefaultPendingDecisionRuntimeBroker(),
+        createDefaultPendingDecisionRuntimeBroker({
+          getLifecycleGeneration: getPendingDecisionLifecycleGeneration,
+        }),
     );
     pendingDecisionRuntimePromise = attempt;
     void attempt.catch(() => {
@@ -957,6 +972,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 chrome.webNavigation.onBeforeNavigate.addListener((details) => {
   if (details.frameId !== 0) return;
+  advancePendingDecisionLifecycleGeneration(details.tabId);
   void loadPendingDecisionRuntime()
     .then((runtime) => runtime.removeForTabLifecycle(details.tabId))
     .catch(() => {
@@ -1239,6 +1255,7 @@ function onCreatedHandler(tabId: number, openerTabId: number): void {
 }
 
 chrome.tabs.onRemoved.addListener((tabId) => {
+  advancePendingDecisionLifecycleGeneration(tabId);
   void loadPendingDecisionRuntime()
     .then((runtime) => runtime.removeForTabLifecycle(tabId))
     .catch(() => {

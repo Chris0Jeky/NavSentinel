@@ -51,7 +51,8 @@ export type PendingDecisionCreateStatus =
       replacedDecisionId?: string;
       evictedDecisionId?: string;
     }
-  | { status: "rejected-capacity" };
+  | { status: "rejected-capacity" }
+  | { status: "context-changed" };
 
 export type PendingDecisionListStatus =
   | { status: "missing"; decisions: [] }
@@ -233,6 +234,7 @@ export class PendingDecisionStore {
   async create(
     verifiedContext: PendingDecisionVerifiedContext,
     untrustedSemantics: PendingDecisionSemantics,
+    isLifecycleCurrent: () => boolean = () => true,
   ): Promise<PendingDecisionCreateStatus> {
     const context = parsePendingDecisionVerifiedContext(verifiedContext);
     const semantics = parsePendingDecisionSemantics(untrustedSemantics);
@@ -241,12 +243,17 @@ export class PendingDecisionStore {
     await this.hydrate();
 
     return this.runSerialized(async () => {
+      if (!isLifecycleCurrent()) return { status: "context-changed" };
       // Hashing stays inside the mutation queue. If it ran before enqueueing, a
       // slow older create could replace a faster newer one, or complete after
       // tabs.onRemoved cleanup and resurrect state for a dead tab.
       const fingerprinted = await this.fingerprintVerifiedContext(context);
       const destinationUrlHash = await this.checkedFingerprint(semantics.destinationUrl);
       const destinationOrigin = getExactHttpOrigin(semantics.destinationUrl);
+      // A lifecycle event can arrive while the async digests are running. The
+      // final guard is inside the serialized mutation, immediately before any
+      // in-memory or persisted state is changed.
+      if (!isLifecycleCurrent()) return { status: "context-changed" };
       const before = cloneRecordMap(this.recordsByTab);
       const createdAt = this.now();
       const active = (this.recordsByTab.get(context.tabId) ?? []).filter(
