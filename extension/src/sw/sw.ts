@@ -668,11 +668,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return runWhenHydrated(() => {
       const tabId = sender.tab?.id;
       const currentUrl = typeof sender.tab?.url === "string" ? sender.tab.url : "";
-      if (typeof tabId === "number" && sender.frameId === 0 && currentUrl) {
+      if (typeof tabId === "number" && currentUrl) {
         // This message restores only the source-page baseline when a cold worker
         // missed its initial commit. It deliberately creates no gesture, allow,
-        // target, or user-navigation-context capability. Use Chrome's top-tab URL,
-        // not page-supplied data or a subframe URL.
+        // target, or user-navigation-context capability. A trusted pointerdown
+        // in any frame may precede top navigation, so accept content-script
+        // child frames but use only Chrome's top-tab URL, never page-supplied
+        // data or a subframe URL.
         lastUrlByTab.set(tabId, currentUrl);
         swState.persistMap(lastUrlByTab, "lastUrl");
       }

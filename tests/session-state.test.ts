@@ -981,11 +981,15 @@ describe("SW integration: state persistence through session storage", () => {
     expect(mock.sessionStore["ns_sw:userNavContextUntil"]).toBeUndefined();
 
     mock.dispatchRuntimeMessage(
-      { type: "ns-nav-context" },
+      { type: "ns-nav-context", url: "https://child-spoofed.test/" },
       { tab: { id: 9, url: "https://top.test/" }, frameId: 2 },
     );
     await flushAsync();
-    expect(mock.sessionStore["ns_sw:lastUrl"]).toEqual({ "9": "https://origin.test/page" });
+    expect(mock.sessionStore["ns_sw:lastUrl"]).toEqual({ "9": "https://top.test/" });
+    expect(mock.sessionStore["ns_sw:gestureUntil"]).toBeUndefined();
+    expect(mock.sessionStore["ns_sw:allowUntil"]).toBeUndefined();
+    expect(mock.sessionStore["ns_sw:allowTarget"]).toBeUndefined();
+    expect(mock.sessionStore["ns_sw:userNavContextUntil"]).toBeUndefined();
   });
 
   it("persists allow-nav state to session storage", async () => {

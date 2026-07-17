@@ -1643,8 +1643,10 @@ window.addEventListener(
     // tab-wide SW rollback allowance before a trusted click is approved.
     if (!e.isTrusted) return;
     // A cold worker can miss the page's initial onCommitted event. Seed only
-    // the rollback baseline here; ns-nav-context grants no navigation authority.
-    if (isTopFrame()) notifyNavContext();
+    // the top-tab rollback baseline here, including when a trusted down occurs
+    // inside a child frame that can navigate the top context. ns-nav-context
+    // grants no navigation authority and the worker ignores page-supplied URLs.
+    notifyNavContext();
     lastDown = capturePointerDown(e);
     const token = makeToken({
       siteKey: siteKeyFromLocation(),

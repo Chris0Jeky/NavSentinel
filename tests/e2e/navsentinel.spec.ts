@@ -908,6 +908,99 @@ test("Trusted pointerdown alone cannot authorize delayed synthetic same-tab navi
   }
 });
 
+test("Trusted child-frame pointerdown preserves the cold-worker rollback baseline @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/level1-basic-opacity.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+      await waitForNavSentinelBridge(page);
+
+      // Let Playwright's typed-origin context expire so the child pointerdown
+      // is the only opportunity to restore a cold worker's source baseline.
+      await page.waitForTimeout(5200);
+
+      const originalUrl = page.url();
+      const destination = new URL("/level2-moving-target.html?child-frame-pointerdown=1", baseUrl);
+      destination.hostname = destination.hostname === "localhost" ? "127.0.0.1" : "localhost";
+      const marker = "NS_TEST_CHILD_POINTERDOWN_CONTEXT";
+      const trustSignals: string[] = [];
+      page.on("console", (message) => {
+        if (message.text().startsWith(marker)) trustSignals.push(message.text());
+      });
+
+      const frameUrl = `${baseUrl}/level2-moving-target.html?navsentinel-child-frame=1`;
+      await page.evaluate((src) => {
+        const frame = document.createElement("iframe");
+        frame.id = "navsentinel-child-frame";
+        frame.src = src;
+        frame.style.cssText = "position:fixed;left:0;top:0;width:320px;height:220px;z-index:2147483647";
+        document.body.appendChild(frame);
+      }, frameUrl);
+
+      const child = page.frames().find((frame) => frame.url() === frameUrl) ??
+        await page.waitForEvent("framenavigated", {
+          predicate: (frame) => frame.url() === frameUrl,
+          timeout: 10_000
+        });
+      await child.waitForFunction(
+        () =>
+          document.documentElement.getAttribute("data-navsentinel-capture-ready") === "1" &&
+          document.documentElement.getAttribute("data-navsentinel-bridge-ready") === "1"
+      );
+
+      await child.evaluate(({ targetUrl, consoleMarker }) => {
+        const button = document.createElement("button");
+        button.id = "child-pointerdown-navigation";
+        button.textContent = "Child-frame pointerdown navigation";
+        button.style.cssText = "position:fixed;left:0;top:0;width:260px;height:160px;z-index:2147483647";
+        button.addEventListener(
+          "pointerdown",
+          (event) => {
+            console.log(`${consoleMarker} pointerdown ${event.isTrusted}`);
+            window.setTimeout(() => {
+              window.top!.location.href = targetUrl;
+            }, 150);
+          },
+          { once: true }
+        );
+        document.body.appendChild(button);
+      }, { targetUrl: destination.href, consoleMarker: marker });
+
+      const button = child.locator("#child-pointerdown-navigation");
+      const box = await button.boundingBox();
+      expect(box, "Expected the child-frame pointerdown button to be visible").toBeTruthy();
+      await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+      await page.mouse.down();
+
+      await expect.poll(() => trustSignals, { timeout: 1000 }).toContain(
+        `${marker} pointerdown true`
+      );
+      await page.waitForTimeout(2500);
+      await expect(page).toHaveURL(originalUrl);
+      await page.mouse.up();
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
 test("Level 7 legit modal backdrop closes without a false positive @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
