@@ -2,26 +2,38 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SUITE_SETTINGS_KEY } from "../extension/src/shared/storage";
 
 type RuntimeMessage = Record<string, unknown>;
-type RuntimeSender = { tab?: { id?: number; windowId?: number }; frameId?: number };
+type RuntimeSender = {
+  id?: string;
+  url?: string;
+  origin?: string;
+  documentId?: string;
+  documentLifecycle?: string;
+  tab?: {
+    id?: number;
+    windowId?: number;
+    url?: string;
+    active?: boolean;
+    pendingUrl?: string;
+  };
+  frameId?: number;
+};
 type SendResponse = (response?: unknown) => void;
 
-function createEvent<T extends (...args: never[]) => void>() {
+function createEvent<T extends (...args: never[]) => unknown>() {
   const listeners: T[] = [];
   return {
     addListener(listener: T) {
       listeners.push(listener);
     },
     emit(...args: Parameters<T>) {
-      for (const listener of listeners) {
-        listener(...args);
-      }
+      return listeners.map((listener) => listener(...args) as ReturnType<T>);
     },
   };
 }
 
 function createChromeMock() {
   const runtimeOnMessage = createEvent<
-    (message: RuntimeMessage, sender: RuntimeSender, sendResponse: SendResponse) => void
+    (message: RuntimeMessage, sender: RuntimeSender, sendResponse: SendResponse) => boolean | void
   >();
   const runtimeOnInstalled = createEvent<(details: { reason: string }) => void>();
   const runtimeOnStartup = createEvent<() => void>();
@@ -60,6 +72,7 @@ function createChromeMock() {
   return {
     chrome: {
       runtime: {
+        id: "mock-id",
         onMessage: runtimeOnMessage,
         onInstalled: runtimeOnInstalled,
         onStartup: runtimeOnStartup,
@@ -108,6 +121,7 @@ function createChromeMock() {
         onBeforeNavigate: beforeNavigate,
         onCommitted: committed,
         onErrorOccurred: errorOccurred,
+        getFrame: vi.fn().mockResolvedValue(null),
       },
       tabs: {
         onCreated: tabCreated,
@@ -119,6 +133,7 @@ function createChromeMock() {
             callback("data:image/png;base64,mockdata");
           },
         ),
+        get: vi.fn().mockRejectedValue(new Error("tab not configured")),
         query: vi.fn().mockResolvedValue([]),
         sendMessage: vi.fn(
           (
@@ -184,6 +199,19 @@ function createChromeMock() {
       });
       return response;
     },
+    dispatchRuntimeMessageAsync(message: RuntimeMessage, sender: RuntimeSender = {}) {
+      let responded = false;
+      let resolveResponse!: (value: unknown) => void;
+      const response = new Promise<unknown>((resolve) => {
+        resolveResponse = resolve;
+      });
+      const listenerReturns = runtimeOnMessage.emit(message, sender, (value) => {
+        responded = true;
+        resolveResponse(value);
+      });
+      if (!responded && !listenerReturns.includes(true)) resolveResponse(undefined);
+      return { listenerReturns, response };
+    },
     setLastError(err: { message: string } | undefined) {
       lastErrorValue = err;
     },
@@ -200,6 +228,69 @@ async function loadSw(mock: ReturnType<typeof createChromeMock>) {
   await import("../extension/src/sw/sw");
 }
 
+const PENDING_SOURCE_URL = "https://source.example/account";
+const PENDING_DESTINATION_URL = "https://destination.example/continue?step=2#confirm";
+
+function configurePendingDecisionBrowser(mock: ReturnType<typeof createChromeMock>) {
+  const tab = {
+    id: 41,
+    windowId: 7,
+    url: PENDING_SOURCE_URL,
+    active: true,
+  };
+  mock.chrome.tabs.get.mockResolvedValue(tab);
+  mock.chrome.tabs.query.mockResolvedValue([tab]);
+  mock.chrome.webNavigation.getFrame.mockImplementation(
+    async ({ tabId, frameId }: { tabId: number; frameId: number }) =>
+      tabId === tab.id && frameId === 0
+        ? {
+            tabId,
+            frameId,
+            url: PENDING_SOURCE_URL,
+            documentId: "document-top-41",
+            documentLifecycle: "active",
+            errorOccurred: false,
+          }
+        : null,
+  );
+  return tab;
+}
+
+function pendingContentSender(): RuntimeSender {
+  return {
+    id: "mock-id",
+    url: PENDING_SOURCE_URL,
+    origin: "https://source.example",
+    documentId: "document-top-41",
+    documentLifecycle: "active",
+    frameId: 0,
+    tab: {
+      id: 41,
+      windowId: 7,
+      url: PENDING_SOURCE_URL,
+      active: true,
+    },
+  };
+}
+
+function pendingExtensionSender(): RuntimeSender {
+  return {
+    id: "mock-id",
+    url: "chrome-extension://mock-id/popup.html",
+    origin: "chrome-extension://mock-id",
+  };
+}
+
+async function dispatchPendingDecision(
+  mock: ReturnType<typeof createChromeMock>,
+  message: RuntimeMessage,
+  sender: RuntimeSender,
+): Promise<unknown> {
+  const dispatched = mock.dispatchRuntimeMessageAsync(message, sender);
+  expect(dispatched.listenerReturns).toContain(true);
+  return dispatched.response;
+}
+
 describe("service worker handlers", () => {
   beforeEach(() => {
     vi.resetModules();
@@ -210,6 +301,117 @@ describe("service worker handlers", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
+  });
+
+  describe("pending-decision broker boundary", () => {
+    it("keeps the async port open and completes sanitized create/list/consume flow", async () => {
+      const mock = createChromeMock();
+      configurePendingDecisionBrowser(mock);
+      await loadSw(mock);
+
+      const created = await dispatchPendingDecision(
+        mock,
+        {
+          type: "ns-pending-decision-create",
+          semantics: {
+            kind: "navigation",
+            reason: "navigation-blocked",
+            actions: ["proceed-once"],
+            destinationUrl: PENDING_DESTINATION_URL,
+          },
+        },
+        pendingContentSender(),
+      );
+      expect(created).toEqual({ ok: true, operation: "create", status: "created" });
+      expect(JSON.stringify(mock.chrome.storage.session._store)).not.toContain("/account");
+      expect(JSON.stringify(mock.chrome.storage.session._store)).not.toContain("/continue");
+      expect(JSON.stringify(mock.chrome.storage.session._store)).not.toContain("step=2");
+
+      const listed = (await dispatchPendingDecision(
+        mock,
+        { type: "ns-pending-decision-list" },
+        pendingExtensionSender(),
+      )) as {
+        ok: true;
+        decisions: Array<{ id: string; deliveryToken: string }>;
+      };
+      expect(listed.ok).toBe(true);
+      expect(listed.decisions).toHaveLength(1);
+      expect(JSON.stringify(listed)).not.toMatch(/UrlHash|documentId|frameId|sourceUrl|topUrl/);
+
+      const authorization = listed.decisions[0]!;
+      const consumed = await dispatchPendingDecision(
+        mock,
+        {
+          type: "ns-pending-decision-consume",
+          id: authorization.id,
+          deliveryToken: authorization.deliveryToken,
+          action: "proceed-once",
+          destinationUrl: PENDING_DESTINATION_URL,
+        },
+        pendingExtensionSender(),
+      );
+      expect(consumed).toEqual({
+        ok: true,
+        operation: "consume",
+        status: "consumed",
+        kind: "navigation",
+        action: "proceed-once",
+      });
+      expect(mock.chrome.storage.session._store["ns_sw:allowUntil"]).toBeUndefined();
+      expect(mock.chrome.storage.session._store["ns_sw:allowTarget"]).toBeUndefined();
+      expect(mock.chrome.storage.session._store["ns_sw:gestureUntil"]).toBeUndefined();
+
+      const replay = await dispatchPendingDecision(
+        mock,
+        {
+          type: "ns-pending-decision-consume",
+          id: authorization.id,
+          deliveryToken: authorization.deliveryToken,
+          action: "proceed-once",
+          destinationUrl: PENDING_DESTINATION_URL,
+        },
+        pendingExtensionSender(),
+      );
+      expect(replay).toEqual({ ok: false, operation: "consume", status: "missing" });
+    });
+
+    it("retains a decision on child navigation and clears it on top navigation or tab removal", async () => {
+      const mock = createChromeMock();
+      configurePendingDecisionBrowser(mock);
+      await loadSw(mock);
+      const create = () =>
+        dispatchPendingDecision(
+          mock,
+          {
+            type: "ns-pending-decision-create",
+            semantics: {
+              kind: "navigation",
+              reason: "navigation-blocked",
+              actions: ["proceed-once"],
+              destinationUrl: PENDING_DESTINATION_URL,
+            },
+          },
+          pendingContentSender(),
+        );
+      const list = () =>
+        dispatchPendingDecision(
+          mock,
+          { type: "ns-pending-decision-list" },
+          pendingExtensionSender(),
+        ) as Promise<{ status: string; decisions?: unknown[] }>;
+
+      await create();
+      mock.emitBeforeNavigate({ tabId: 41, frameId: 2, url: "https://child.example/" });
+      expect((await list()).status).toBe("pending");
+
+      mock.emitBeforeNavigate({ tabId: 41, frameId: 0, url: "https://next.example/" });
+      expect(await list()).toMatchObject({ status: "missing", decisions: [] });
+
+      await create();
+      mock.emitTabRemoved(41);
+      expect(await list()).toMatchObject({ status: "missing", decisions: [] });
+    });
   });
 
   describe("ns-reputation-check", () => {

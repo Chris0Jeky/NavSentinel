@@ -434,7 +434,7 @@ export class PendingDecisionStore {
     });
   }
 
-  /** Awaited cleanup for chrome.tabs.onRemoved only; not an authorization lookup. */
+  /** Awaited cleanup for top-frame navigation/tab removal; not an authorization lookup. */
   async removeForTabLifecycle(tabId: number): Promise<PendingDecisionLifecycleRemovalStatus> {
     if (!isTabId(tabId)) throw new TypeError("Invalid pending-decision tab ID");
     await this.hydrate();
