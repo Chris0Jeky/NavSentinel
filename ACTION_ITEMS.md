@@ -48,9 +48,13 @@ Chromium mutation fails on the vulnerable code and preserves the trusted-click
 compatibility path after the fix. Round 2 then found that the same trust gate
 removed Navigation Off's explicit programmatic-navigation bypass. `f824381`
 restores that bypass without granting authority in enforcing modes, with a
-pre-fix-failing rollback/forward regression. The final exact head still
-requires fresh round-2, Codex, thread, and CI evidence before AI-21 is
-actionable.
+pre-fix-failing rollback/forward regression. The fresh final-head review then
+found that a cold worker still missed its rollback baseline when a trusted
+pointerdown occurred inside a child frame. `e26dba9` accepts the non-authorizing
+context signal from any content-script frame while sourcing only Chrome's
+top-tab URL; its child-frame mutation fails before the fix and rolls back after
+it. The final exact head still requires fresh round-2, Codex, thread, and CI
+evidence before AI-21 is actionable.
 PR #466 is the third and final browser-held lane. Its first review recheck found
 three valid blockers: an MV3-incompatible dynamic import, a consume contract
 that required a raw destination unavailable to the UI, and stale child-frame
@@ -366,9 +370,9 @@ it cannot create gesture, broad, target, or recent-user authority. Automated
 Chromium proves the pointerdown-only rollback attack, the synchronous
 MAIN-world popup attack, existing synthetic attacks, and trusted compatibility
 paths, plus Navigation Off's programmatic bypass, but a real Chrome pass must
-confirm them before merge. Runtime commits `8aee243`, `a14f70d`, and `f824381`
-are pushed; live round-2, Codex/thread, and CI evidence must all belong to the
-same final exact head. Only Chris can record this item complete.
+confirm them before merge. Runtime commits `8aee243`, `a14f70d`, `f824381`, and
+`e26dba9` are pushed; live round-2, Codex/thread, and CI evidence must all
+belong to the same final exact head. Only Chris can record this item complete.
 
 **Current guide:**
 
@@ -459,6 +463,34 @@ same final exact head. Only Chris can record this item complete.
    to `127.0.0.1/.../level1-basic-opacity.html`; the `localhost` destination must
    not stick. Release only after rollback. In the service-worker inspector,
    re-read `allowanceKeys` for `gymTab.id`; all three values must be `undefined`.
+
+   - On a fresh `level1-basic-opacity.html`, prove that a trusted pointerdown
+     inside a child frame preserves rollback without creating authority:
+
+   ```js
+   await (async () => {
+     const frame = document.body.appendChild(document.createElement("iframe"));
+     frame.src = `${location.origin}/level2-moving-target.html?ai21=child-frame`;
+     frame.style.cssText = "position:fixed;left:0;top:0;width:320px;height:220px;z-index:2147483647";
+     await new Promise((resolve) => frame.addEventListener("load", resolve, { once: true }));
+     const b = frame.contentDocument.body.appendChild(frame.contentDocument.createElement("button"));
+     b.textContent = "AI-21 child-frame pointerdown";
+     b.style.cssText = "width:260px;height:160px";
+     b.addEventListener("pointerdown", (event) => {
+       console.log("child pointerdown", event.isTrusted);
+       setTimeout(() => {
+         top.location.href = "http://localhost:5173/level2-moving-target.html?ai21=child-top";
+       }, 150);
+     }, { once: true });
+     return "Physically press and hold the button inside the frame";
+   })();
+   ```
+
+   Physically press and hold the frame button. Expect `child pointerdown true`
+   and automatic rollback to the original `127.0.0.1` Level 1 page; the
+   `localhost` destination must not stick. Release after rollback. In the
+   service-worker inspector, re-read `allowanceKeys` for `gymTab.id`; all three
+   values must remain `undefined`.
 
    - On a fresh `level1-basic-opacity.html`, prove a real pointerdown alone
      cannot authorize MAIN-world popup intent:

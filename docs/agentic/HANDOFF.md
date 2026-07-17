@@ -26,9 +26,13 @@ rotation under #437.
   Chromium negative/positive control that fails on the vulnerable mutation.
   Round 2 then found Navigation Off's programmatic bypass had been lost;
   `f824381` restores the explicit Off behavior without weakening enforcing
-  modes, again with pre-fix-failing Chromium proof. The final documentation
-  head must receive fresh round-2, Codex/thread, and CI evidence before AI-21
-  becomes actionable.
+  modes, again with pre-fix-failing Chromium proof. Fresh final-head review then
+  found that child-frame pointerdown could not seed a cold worker's top-tab
+  rollback baseline. `e26dba9` accepts the non-authorizing context signal from
+  any content-script frame while trusting only Chrome's `sender.tab.url`, with
+  a pre-fix-failing child-frame Chromium control. The final documentation head
+  must receive fresh round-2, Codex/thread, and CI evidence before AI-21 becomes
+  actionable.
 - The only dirty worktree is the known Defender-quarantined checkpoint at
   `C:/Users/Public/codex-shell-home/NavSentinel-ri01`, where tracked
   `tests/clickfix-detector.property.test.ts` remains deleted. Do not restore,
@@ -71,7 +75,8 @@ rotation under #437.
   audit zero, and the aligned Node engine floor.
 - PR #356's current-main exact head is fully gated and human-held by AI-13.
   PR #464's `8aee243` service-worker fix, `a14f70d` MAIN-world follow-up, and
-  `f824381` Navigation Off preservation have mutation-proven Chromium coverage;
+  `f824381` Navigation Off preservation, and `e26dba9` child-frame cold-worker
+  context fix have mutation-proven Chromium coverage;
   the latest tree passes typecheck, lint, build, 2,875 units, affected Chromium
   controls, and all 12 performance budgets. Live exact-head review/Codex/CI
   evidence remains authoritative.
@@ -191,6 +196,19 @@ rotation under #437.
   round 2, exact-head Codex review, thread audit, and CI must target the final
   documentation head.
 
+- **PR #464 fresh final-head round 2 (`f5acaef` -> runtime `e26dba9`,
+  2026-07-17):** found one medium lifecycle/provenance gap. A trusted
+  pointerdown in a child frame could top-navigate while a cold worker lacked
+  `lastUrlByTab`, because both the sender and receiver restricted
+  `ns-nav-context` to frame 0. `e26dba9` emits the non-authorizing context from
+  trusted pointerdown in every frame and accepts content-script child frames,
+  but continues to derive the baseline solely from Chrome's `sender.tab.url`.
+  The new unit proves a child-supplied URL is ignored and no authority maps are
+  created. The Chromium mutation sticks on the cross-host destination before
+  the fix and rolls back after it; four affected E2E controls, 28 session-state
+  tests, typecheck, lint, build, 2,875 units, and performance 12/12 pass. Final
+  round-2, Codex/thread audit, and CI restart on the next documentation head.
+
 - **Agentic contract round 1 (runtime/parity lens, 2026-07-17):** compared
   Codex instructions, hooks, skills, and shared references against the compact
   Claude contract and current Codex hook guidance. Fixed the oversized Codex
@@ -291,8 +309,10 @@ local/origin/PR head equality, current CI, PR body, comments, unresolved threads
 and closing references. Round 1 on `cdcfb45` found MAIN-world pointerdown popup
 authority; runtime `a14f70d` fixes it with mutation-proven Chromium coverage.
 Round 2 on `897cadd` found Navigation Off's bypass regression; `f824381` fixes
-it with a pre-fix-failing rollback/forward control. Run a fresh independent
-round 2 on the final documentation head, request and
+it with a pre-fix-failing rollback/forward control. Fresh final-head review on
+`f5acaef` found the child-frame cold-worker baseline gap; `e26dba9` fixes it
+without accepting page URL input. Run a fresh independent round 2 on the final
+documentation head, request and
 audit exact-head Codex review, and require green Build/Unit plus E2E. Fix every
 finding and restart invalidated gates. Update the PR body/evidence after the
 head is stable; edit status docs again only if a new finding changes their
@@ -318,8 +338,9 @@ accounting / next safe slice.
   are fixed. Its live precheck requires local/remote/PR equality, exact-head
   reviews, bot/thread accounting, green CI, and AI-22.
   #356's final exact head passes its full gates. PR #464's runtime fixes are
-  `8aee243`, `a14f70d`, and `f824381`; the final documentation head uses live
-  PR evidence for round-2, Codex/thread, closing-reference, and CI status. #466's
+  `8aee243`, `a14f70d`, `f824381`, and `e26dba9`; the final documentation head
+  uses live PR evidence for round-2, Codex/thread, closing-reference, and CI
+  status. #466's
   `0266107` exact head passes its full automated gates. Every human guide still
   begins with live local/remote/PR equality.
 - **Parked:** draft #457 agent-harness tooling; closed #273/#399 retain explicit
