@@ -53,8 +53,13 @@ found that a cold worker still missed its rollback baseline when a trusted
 pointerdown occurred inside a child frame. `e26dba9` accepts the non-authorizing
 context signal from any content-script frame while sourcing only Chrome's
 top-tab URL; its child-frame mutation fails before the fix and rolls back after
-it. The final exact head still requires fresh round-2, Codex, thread, and CI
-evidence before AI-21 is actionable.
+it. Re-review on `d887270` then found that a hydration-delayed context snapshot
+could overwrite a newer commit and that the browser guide overstated its cold-
+worker setup. `7a9243a` revalidates the live tab with a generation-sensitive
+second read, adds deterministic missing-baseline/stale-after-commit integration
+coverage, and scopes the browser probe to frame provenance and rollback. The
+final exact head still requires fresh round-2, Codex, thread, and CI evidence
+before AI-21 is actionable.
 PR #466 is the third and final browser-held lane. Its first review recheck found
 three valid blockers: an MV3-incompatible dynamic import, a consume contract
 that required a raw destination unavailable to the UI, and stale child-frame
@@ -370,9 +375,10 @@ it cannot create gesture, broad, target, or recent-user authority. Automated
 Chromium proves the pointerdown-only rollback attack, the synchronous
 MAIN-world popup attack, existing synthetic attacks, and trusted compatibility
 paths, plus Navigation Off's programmatic bypass, but a real Chrome pass must
-confirm them before merge. Runtime commits `8aee243`, `a14f70d`, `f824381`, and
-`e26dba9` are pushed; live round-2, Codex/thread, and CI evidence must all
-belong to the same final exact head. Only Chris can record this item complete.
+confirm them before merge. Runtime commits `8aee243`, `a14f70d`, `f824381`,
+`e26dba9`, and `7a9243a` are pushed; live round-2, Codex/thread, and CI evidence
+must all belong to the same final exact head. Only Chris can record this item
+complete.
 
 **Current guide:**
 
@@ -464,8 +470,11 @@ belong to the same final exact head. Only Chris can record this item complete.
    not stick. Release only after rollback. In the service-worker inspector,
    re-read `allowanceKeys` for `gymTab.id`; all three values must be `undefined`.
 
-   - On a fresh `level1-basic-opacity.html`, prove that a trusted pointerdown
-     inside a child frame preserves rollback without creating authority:
+   - On a fresh `level1-basic-opacity.html`, validate real-Chrome frame
+     provenance: a trusted pointerdown inside a child frame must preserve
+     rollback without creating authority. The open inspector means this is not
+     a cold-worker probe; deterministic missing-baseline and stale-after-commit
+     sequencing is covered by the automated session-state tests.
 
    ```js
    await (async () => {

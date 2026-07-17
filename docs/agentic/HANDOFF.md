@@ -30,9 +30,12 @@ rotation under #437.
   found that child-frame pointerdown could not seed a cold worker's top-tab
   rollback baseline. `e26dba9` accepts the non-authorizing context signal from
   any content-script frame while trusting only Chrome's `sender.tab.url`, with
-  a pre-fix-failing child-frame Chromium control. The final documentation head
-  must receive fresh round-2, Codex/thread, and CI evidence before AI-21 becomes
-  actionable.
+  a pre-fix-failing child-frame Chromium control. Re-review on `d887270` found a
+  delayed context could rewind a newer commit and the browser control did not
+  deterministically create a cold worker. `7a9243a` adds live-tab/generation
+  revalidation, deterministic missing/stale integration sequencing, and honest
+  browser-proof scope. The final documentation head must receive fresh round-2,
+  Codex/thread, and CI evidence before AI-21 becomes actionable.
 - The only dirty worktree is the known Defender-quarantined checkpoint at
   `C:/Users/Public/codex-shell-home/NavSentinel-ri01`, where tracked
   `tests/clickfix-detector.property.test.ts` remains deleted. Do not restore,
@@ -76,8 +79,8 @@ rotation under #437.
 - PR #356's current-main exact head is fully gated and human-held by AI-13.
   PR #464's `8aee243` service-worker fix, `a14f70d` MAIN-world follow-up, and
   `f824381` Navigation Off preservation, and `e26dba9` child-frame cold-worker
-  context fix have mutation-proven Chromium coverage;
-  the latest tree passes typecheck, lint, build, 2,875 units, affected Chromium
+  context fix, plus `7a9243a` stale-ordering guard, have mutation/integration
+  coverage; the latest tree passes typecheck, lint, build, 2,876 units, affected Chromium
   controls, and all 12 performance budgets. Live exact-head review/Codex/CI
   evidence remains authoritative.
   Neither PR may merge without its human Gate-3.
@@ -209,6 +212,21 @@ rotation under #437.
   tests, typecheck, lint, build, 2,875 units, and performance 12/12 pass. Final
   round-2, Codex/thread audit, and CI restart on the next documentation head.
 
+- **PR #464 final-head re-review (`d887270` -> runtime `7a9243a`,
+  2026-07-17):** found two medium code/test gaps plus the expected stale PR
+  body. A hydration-delayed `ns-nav-context` snapshot could overwrite a newer
+  top-frame commit, causing the next rollback/forward offer to reference the
+  wrong page. The child-frame E2E and inspector-open AI-21 step also did not
+  deterministically create a cold worker. `7a9243a` validates the sender's
+  Chrome-derived URL against the live tab, repeats the read when the baseline
+  changes during the async gap, and lets a newer commit win while preserving a
+  stable SPA URL refresh. Session-state tests now deterministically cover a
+  missing child-frame baseline, ignored child URL input, stable SPA refresh,
+  no authority maps, and stale-after-commit rejection. Chromium/AI-21 evidence
+  is accurately scoped to frame provenance and rollback. Four affected E2E,
+  29 session-state, typecheck, lint, build, 2,876 units, and performance 12/12
+  pass. The PR body is updated only after the next exact head is fully gated.
+
 - **Agentic contract round 1 (runtime/parity lens, 2026-07-17):** compared
   Codex instructions, hooks, skills, and shared references against the compact
   Claude contract and current Codex hook guidance. Fixed the oversized Codex
@@ -311,7 +329,9 @@ authority; runtime `a14f70d` fixes it with mutation-proven Chromium coverage.
 Round 2 on `897cadd` found Navigation Off's bypass regression; `f824381` fixes
 it with a pre-fix-failing rollback/forward control. Fresh final-head review on
 `f5acaef` found the child-frame cold-worker baseline gap; `e26dba9` fixes it
-without accepting page URL input. Run a fresh independent round 2 on the final
+without accepting page URL input. Re-review on `d887270` found stale context
+ordering and overclaimed cold-worker browser setup; `7a9243a` fixes the ordering
+and adds deterministic integration coverage. Run a fresh independent round 2 on the final
 documentation head, request and
 audit exact-head Codex review, and require green Build/Unit plus E2E. Fix every
 finding and restart invalidated gates. Update the PR body/evidence after the
@@ -338,7 +358,7 @@ accounting / next safe slice.
   are fixed. Its live precheck requires local/remote/PR equality, exact-head
   reviews, bot/thread accounting, green CI, and AI-22.
   #356's final exact head passes its full gates. PR #464's runtime fixes are
-  `8aee243`, `a14f70d`, `f824381`, and `e26dba9`; the final documentation head
+  `8aee243`, `a14f70d`, `f824381`, `e26dba9`, and `7a9243a`; the final documentation head
   uses live PR evidence for round-2, Codex/thread, closing-reference, and CI
   status. #466's
   `0266107` exact head passes its full automated gates. Every human guide still

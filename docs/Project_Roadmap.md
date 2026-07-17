@@ -51,7 +51,7 @@ protection. The exact audit baseline is recorded only in dated
 | #356 | Exact head `f8028c9` is local/remote/PR-equal, twice reviewed, bot/thread-clean, and green in run `29560572081`; AI-13 human Chrome Gate-3 remains |
 | #399 | Closed 2026-07-13; measurement-held under #223/#417 and not a beta blocker |
 | #463 | Merged exact green dependency head `91aab4f` as `2888483`; #459 closed as intended |
-| #464 | Runtime `8aee243` removes service-worker pointerdown authority, `a14f70d` removes MAIN-world pointerdown popup authority, `f824381` preserves Navigation Off's explicit programmatic bypass, and `e26dba9` restores cold-worker rollback context from trusted child-frame pointerdown without granting authority; all have pre-fix-failing Chromium proof, while the final exact head still needs round-2, Codex/thread, green-CI, and AI-21 evidence |
+| #464 | Runtime `8aee243` removes service-worker pointerdown authority, `a14f70d` removes MAIN-world pointerdown popup authority, `f824381` preserves Navigation Off's explicit programmatic bypass, `e26dba9` restores rollback context from trusted child-frame pointerdown without granting authority, and `7a9243a` prevents stale context from rewinding a newer commit; attack paths have pre-fix-failing proof, while the final exact head still needs round-2, Codex/thread, green-CI, and AI-21 evidence |
 | #466 | Exact runtime head `0266107` fixes the broker, emitted-graph/parser/import-attribute, and finite-signal privacy findings; local/remote/PR-equal, twice reviewed, bot/thread-clean, and green in run `29561311422`; AI-22 remains |
 
 **RI-01 implementation note (verified 2026-07-17):** PR #464 isolates the
@@ -70,8 +70,12 @@ final-head review then found that child-frame pointerdown could not restore a
 cold worker's top-tab baseline; `e26dba9` accepts that non-authorizing signal
 from any content-script frame while continuing to source only Chrome's
 `sender.tab.url`. Its child-frame Chromium mutation sticks before the fix and
-rolls back after it. Exact-head review/Codex/CI evidence remains authoritative;
-AI-21 real-Chrome Gate-3 remains mandatory.
+rolls back after it. Re-review then found hydration-delayed context could rewind
+a newer commit and that the Chromium/manual controls did not deterministically
+create a cold worker. `7a9243a` revalidates the live tab, repeats the read when
+the baseline changed, adds deterministic missing/stale integration sequencing,
+and scopes browser evidence to frame provenance/rollback. Exact-head
+review/Codex/CI remains authoritative; AI-21 real-Chrome Gate-3 is mandatory.
 PR #466 now supplies a dormant, context-bound
 pending-decision service-worker boundary: shared contracts/store, authenticated
 content/extension senders, browser-derived tab/frame/document context, a
