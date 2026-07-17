@@ -452,8 +452,9 @@ const nativeFormRequestSubmit = HTMLFormElement.prototype.requestSubmit;
 
 /**
  * Install a patched method on an object/prototype as a WRITABLE + CONFIGURABLE
- * data property (native methods are non-enumerable, so we keep enumerable:false),
- * with a plain-assignment fallback.
+ * data property, preserving an existing own property's enumerability. Chromium
+ * exposes several Web IDL methods as enumerable; changing that is observable to
+ * page feature-detection. A newly-created compatibility slot defaults to false.
  *
  * NavSentinel used to FREEZE these slots (non-writable/non-configurable), but a
  * frozen inherited data property throws "Cannot assign to read only property"
@@ -482,11 +483,12 @@ function softPatchProto(
   label: string
 ): void {
   try {
+    const existing = Object.getOwnPropertyDescriptor(proto, prop);
     Object.defineProperty(proto, prop, {
       value,
       writable: true,
       configurable: true,
-      enumerable: false,
+      enumerable: existing?.enumerable ?? false,
     });
   } catch {
     try {
