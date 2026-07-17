@@ -1147,6 +1147,18 @@ test("Level 6 blocks programmatic click new tab @regression", async () => {
       expect(popup, "Expected the programmatic new tab to be blocked").toBeNull();
       expect(context.pages()).toHaveLength(beforePages);
       await waitForToastText(page, "Blocked new tab", 3000);
+
+      // A synthetic hidden-anchor click must not inherit Ctrl/middle-click
+      // authority from the real button's preceding trusted pointerdown.
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await waitForNavSentinelBridge(page);
+      const modifierBeforePages = context.pages().length;
+      const modifierPopupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
+      await page.click("#real", { modifiers: ["Control"] });
+      const modifierPopup = await modifierPopupPromise;
+      expect(modifierPopup, "Expected the modifier-seeded programmatic new tab to be blocked").toBeNull();
+      expect(context.pages()).toHaveLength(modifierBeforePages);
+      await waitForToastText(page, "Blocked new tab", 3000);
     } finally {
       await context.close();
     }

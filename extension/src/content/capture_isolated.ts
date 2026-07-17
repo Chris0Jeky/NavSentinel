@@ -1707,7 +1707,7 @@ window.addEventListener(
             meta: e.metaKey
           };
 
-    const explicitNewTab = !!ctx.explicitNewTabIntent;
+    const explicitNewTab = e.isTrusted && !!ctx.explicitNewTabIntent;
     const anchor = findAnchorFromEvent(e);
     const anchorTarget = (anchor?.target ?? "").toLowerCase();
     const isBlankAnchor = !!(anchor && anchorTarget === "_blank");
