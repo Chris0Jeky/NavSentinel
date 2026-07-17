@@ -33,17 +33,19 @@ rotation under #437.
   verified private advisory route.
 - Root `main` is clean and matches `origin/main` at `ebddd27`; its exact-head
   GitHub CI is green.
-- The #459 candidate at dependency head `3f858df` resolves CRXJS 2.7.1, Vite
+- PR #463 / #459 at dependency head `3f858df` resolves CRXJS 2.7.1, Vite
   8.1.5, Rollup 2.80.0, and Rolldown 1.1.5. `npm ci` and audit zero passed, as
   did typecheck, lint, build, version, 2,874 unit tests (95 files), 64/64
   one-worker E2E, all 12 size budgets, package, and Windows Gym HTTP proof.
-  Round 2, final docs, push, PR, and exact-head CI remain open.
+  Two independent local rounds have no remaining findings through `614953b`;
+  every later docs-only head still requires exact revalidation and live CI.
 - 80 open issues with no milestone/assignee; 15 Horizon issues #439–#453 are a
   frozen option portfolio, not active work.
 - Stale PRs #273 and #399 were closed on 2026-07-13 with re-entry paths and
-  issue anchors preserved. Open PRs are #356 and draft #457. #356's pushed
+  issue anchors preserved. Open PRs are #356, draft #457, and #463. #356's
   pre-guide head passed Build/Unit and E2E with all three threads resolved; its
-  current human-guide head still requires live push/review/CI before Gate-3.
+  current human-guide head must satisfy the live head/review/CI precheck before
+  Gate-3.
 - Package is about 474/500KB while reputation is a 52-byte test fixture. The
   old 150KB/100K-domain plan cannot meet its stated 0.01% FP target or aggregate
   package cap as written.
@@ -93,6 +95,12 @@ rotation under #437.
   #462 without widening `externally_connectable`; this sync fixes the evidence.
   A root `@emnapi/runtime` entry can appear extraneous after clean install, but
   untouched `origin/main` reproduces the same npm optional-dependency behavior.
+- **#459 round 2 (fresh supply-chain/portability/docs lens, 2026-07-17):** no
+  branch-introduced runtime, graph, provenance, or build defect. It found a
+  pre-existing release-guide mismatch: Node 20.18.1 was documented while the
+  effective graph requires `^20.19.0 || >=22.12.0`. `614953b` aligns the guide;
+  exact-head re-review was clean. Copilot's quota-limit response on #463 is an
+  invalid review signal, not a skipped finding.
 
 ## Release blockers in order
 
@@ -101,8 +109,8 @@ rotation under #437.
    script rejection/closed roots alone do not stop trusted-click redressing.
 2. **RI-03/#356:** finish the current guide head's push/review/CI, then obtain
    human Gate-3; keep closed #399 outside beta blockers.
-3. **#459:** finish the second review, publish the dependency-only PR, and
-   require exact-head Linux CI; do not claim real-Chrome dev/HMR verification.
+3. **#459/#463:** require live exact-head Linux CI and resolve any later PR
+   comments; do not claim real-Chrome dev/HMR verification.
 4. **RI-02/#424:** excise visual-sim. It has no production match path and can
    process a different active tab's pixels.
 5. **RI-05/RI-06:** remove fake DNR; apply purpose-specific URL/data
@@ -127,7 +135,7 @@ comparative evidence.
 
 ## Next safe slice
 
-Finish #459's fresh round 2, exact-head PR/CI, and comment accounting. Then
+Verify #463's live exact-head CI/comments and keep #459 open until merge. Then
 isolate only the active two-file RI-01 synthetic-navigation allowance rejection
 from commit `6283f49` onto fresh `origin/main`; keep it browser Gate-3 held. The
 larger RI checkpoint remains backup-only until AI-20 and its full integration
