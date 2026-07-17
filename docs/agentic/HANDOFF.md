@@ -34,8 +34,11 @@ rotation under #437.
   delayed context could rewind a newer commit and the browser control did not
   deterministically create a cold worker. `7a9243a` adds live-tab/generation
   revalidation, deterministic missing/stale integration sequencing, and honest
-  browser-proof scope. The final documentation head must receive fresh round-2,
-  Codex/thread, and CI evidence before AI-21 becomes actionable.
+  browser-proof scope. Review on `0475c6a` found the special second-read branch
+  still lacked mutation-sensitive proof; `716a60e` now holds the first read
+  across an intervening commit and fails when the second read is removed. The
+  final documentation head must receive fresh round-2, Codex/thread, and CI
+  evidence before AI-21 becomes actionable.
 - The only dirty worktree is the known Defender-quarantined checkpoint at
   `C:/Users/Public/codex-shell-home/NavSentinel-ri01`, where tracked
   `tests/clickfix-detector.property.test.ts` remains deleted. Do not restore,
@@ -80,7 +83,7 @@ rotation under #437.
   PR #464's `8aee243` service-worker fix, `a14f70d` MAIN-world follow-up, and
   `f824381` Navigation Off preservation, and `e26dba9` child-frame cold-worker
   context fix, plus `7a9243a` stale-ordering guard, have mutation/integration
-  coverage; the latest tree passes typecheck, lint, build, 2,876 units, affected Chromium
+  coverage; the latest tree passes typecheck, lint, build, 2,877 units, affected Chromium
   controls, and all 12 performance budgets. Live exact-head review/Codex/CI
   evidence remains authoritative.
   Neither PR may merge without its human Gate-3.
@@ -227,6 +230,18 @@ rotation under #437.
   29 session-state, typecheck, lint, build, 2,876 units, and performance 12/12
   pass. The PR body is updated only after the next exact head is fully gated.
 
+- **PR #464 async-gap proof review (`0475c6a` -> tests `716a60e` +
+  `d2fbd8c`, 2026-07-17):** found one medium test-validity gap. The existing
+  stale-context test committed before dispatch and would still pass if the
+  generation-sensitive second tab read were removed. The new controllable
+  `tabs.get` mock holds the first stale read from source A, commits B during the
+  gap, then requires a second live read and asserts B remains plus exactly two
+  API calls. Removing the second-read branch fails at the pending-call
+  assertion; restored runtime passes 30/30 session-state tests. `d2fbd8c`
+  preserves exact-optional typing in the mock. Typecheck, lint, and full 2,877
+  units pass. Final round-2, Codex/thread audit, and CI restart on the next
+  documentation head.
+
 - **Agentic contract round 1 (runtime/parity lens, 2026-07-17):** compared
   Codex instructions, hooks, skills, and shared references against the compact
   Claude contract and current Codex hook guidance. Fixed the oversized Codex
@@ -331,7 +346,9 @@ it with a pre-fix-failing rollback/forward control. Fresh final-head review on
 `f5acaef` found the child-frame cold-worker baseline gap; `e26dba9` fixes it
 without accepting page URL input. Re-review on `d887270` found stale context
 ordering and overclaimed cold-worker browser setup; `7a9243a` fixes the ordering
-and adds deterministic integration coverage. Run a fresh independent round 2 on the final
+and adds deterministic integration coverage. Review on `0475c6a` found the
+second-read proof gap; `716a60e` makes it mutation-sensitive. Run a fresh
+independent round 2 on the final
 documentation head, request and
 audit exact-head Codex review, and require green Build/Unit plus E2E. Fix every
 finding and restart invalidated gates. Update the PR body/evidence after the
@@ -358,7 +375,8 @@ accounting / next safe slice.
   are fixed. Its live precheck requires local/remote/PR equality, exact-head
   reviews, bot/thread accounting, green CI, and AI-22.
   #356's final exact head passes its full gates. PR #464's runtime fixes are
-  `8aee243`, `a14f70d`, `f824381`, `e26dba9`, and `7a9243a`; the final documentation head
+  `8aee243`, `a14f70d`, `f824381`, `e26dba9`, and `7a9243a`; `716a60e` proves
+  the async-gap branch. The final documentation head
   uses live PR evidence for round-2, Codex/thread, closing-reference, and CI
   status. #466's
   `0266107` exact head passes its full automated gates. Every human guide still

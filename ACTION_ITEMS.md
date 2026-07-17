@@ -58,8 +58,11 @@ could overwrite a newer commit and that the browser guide overstated its cold-
 worker setup. `7a9243a` revalidates the live tab with a generation-sensitive
 second read, adds deterministic missing-baseline/stale-after-commit integration
 coverage, and scopes the browser probe to frame provenance and rollback. The
-final exact head still requires fresh round-2, Codex, thread, and CI evidence
-before AI-21 is actionable.
+next exact-head review found that the special two-read async-gap defense lacked
+a mutation-sensitive test. `716a60e` now holds the first tab read across an
+intervening commit and proves the second read preserves the newer baseline; the
+test fails when that branch is removed. The final exact head still requires
+fresh round-2, Codex, thread, and CI evidence before AI-21 is actionable.
 PR #466 is the third and final browser-held lane. Its first review recheck found
 three valid blockers: an MV3-incompatible dynamic import, a consume contract
 that required a raw destination unavailable to the UI, and stale child-frame
@@ -377,8 +380,8 @@ MAIN-world popup attack, existing synthetic attacks, and trusted compatibility
 paths, plus Navigation Off's programmatic bypass, but a real Chrome pass must
 confirm them before merge. Runtime commits `8aee243`, `a14f70d`, `f824381`,
 `e26dba9`, and `7a9243a` are pushed; live round-2, Codex/thread, and CI evidence
-must all belong to the same final exact head. Only Chris can record this item
-complete.
+plus `716a60e`'s mutation-sensitive proof must all belong to the same final
+exact head. Only Chris can record this item complete.
 
 **Current guide:**
 
