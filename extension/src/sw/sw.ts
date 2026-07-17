@@ -10,7 +10,7 @@ import {
   SUITE_SETTINGS_KEY,
 } from "../shared/storage";
 import { RedirectChainTracker } from "../shared/redirect_chain";
-import { isPendingDecisionRuntimeMessage } from "../shared/pending_decision";
+import type { PendingDecisionRuntimeMessage } from "../shared/pending_decision";
 import {
   isOAuthUrl,
   extractRedirectUri,
@@ -20,8 +20,7 @@ import {
 } from "../content/oauth_monitor";
 import { swState } from "../shared/session_state";
 import { updateTabIcon, updateTabIconWhen, clearTabIcon, setAllTabsGray } from "./icon_manager";
-import { PendingDecisionRuntimeBroker } from "./pending_decision_handlers";
-import { PendingDecisionStore } from "./pending_decision_store";
+import type { PendingDecisionRuntimeBroker } from "./pending_decision_handlers";
 
 const BASELINE_RULESET_ID = "baseline";
 
@@ -151,10 +150,33 @@ const oauthFlowByTab = swState.oauthFlowByTab;
 // Event listeners are registered synchronously (required by MV3), but handler
 // bodies await this promise so the first event after a restart sees restored state.
 const hydrateReady = swState.hydrate();
-const pendingDecisionRuntime = new PendingDecisionRuntimeBroker(new PendingDecisionStore());
-void pendingDecisionRuntime.hydrate().catch(() => {
-  console.warn("[NavSentinel] pending-decision session hydration failed");
-});
+let pendingDecisionRuntimePromise: Promise<PendingDecisionRuntimeBroker> | null = null;
+
+function loadPendingDecisionRuntime(): Promise<PendingDecisionRuntimeBroker> {
+  if (!pendingDecisionRuntimePromise) {
+    const attempt = import("./pending_decision_handlers").then(
+      ({ createDefaultPendingDecisionRuntimeBroker }) =>
+        createDefaultPendingDecisionRuntimeBroker(),
+    );
+    pendingDecisionRuntimePromise = attempt;
+    void attempt.catch(() => {
+      if (pendingDecisionRuntimePromise === attempt) pendingDecisionRuntimePromise = null;
+    });
+  }
+  return pendingDecisionRuntimePromise;
+}
+
+function isPendingDecisionRuntimeMessage(
+  value: unknown,
+): value is PendingDecisionRuntimeMessage {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const type = (value as { type?: unknown }).type;
+  return (
+    type === "ns-pending-decision-create" ||
+    type === "ns-pending-decision-list" ||
+    type === "ns-pending-decision-consume"
+  );
+}
 
 // Refresh the synchronously-read cachedDefaultMode on every worker start. MV3
 // restarts the SW on any waking event (navigation/message), not just install or
@@ -615,8 +637,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message !== "object") return;
 
   if (isPendingDecisionRuntimeMessage(message)) {
-    void pendingDecisionRuntime
-      .handle(message, sender)
+    void loadPendingDecisionRuntime()
+      .then((runtime) => runtime.handle(message, sender))
       .then((response) => {
         sendResponse?.(
           response ?? {
@@ -935,9 +957,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 chrome.webNavigation.onBeforeNavigate.addListener((details) => {
   if (details.frameId !== 0) return;
-  void pendingDecisionRuntime.removeForTabLifecycle(details.tabId).catch(() => {
-    console.warn("[NavSentinel] pending-decision navigation cleanup failed");
-  });
+  void loadPendingDecisionRuntime()
+    .then((runtime) => runtime.removeForTabLifecycle(details.tabId))
+    .catch(() => {
+      console.warn("[NavSentinel] pending-decision navigation cleanup failed");
+    });
   if (!swState.hydrated) { void hydrateReady.then(() => onBeforeNavigateHandler(details)); return; }
   onBeforeNavigateHandler(details);
 });
@@ -1215,9 +1239,11 @@ function onCreatedHandler(tabId: number, openerTabId: number): void {
 }
 
 chrome.tabs.onRemoved.addListener((tabId) => {
-  void pendingDecisionRuntime.removeForTabLifecycle(tabId).catch(() => {
-    console.warn("[NavSentinel] pending-decision tab cleanup failed");
-  });
+  void loadPendingDecisionRuntime()
+    .then((runtime) => runtime.removeForTabLifecycle(tabId))
+    .catch(() => {
+      console.warn("[NavSentinel] pending-decision tab cleanup failed");
+    });
   if (!swState.hydrated) { void hydrateReady.then(() => onRemovedHandler(tabId)); return; }
   onRemovedHandler(tabId);
 });

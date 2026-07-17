@@ -429,3 +429,8 @@ export class PendingDecisionRuntimeBroker {
     };
   }
 }
+
+/** Create the production broker without forcing it into the service-worker entry chunk. */
+export function createDefaultPendingDecisionRuntimeBroker(): PendingDecisionRuntimeBroker {
+  return new PendingDecisionRuntimeBroker(new PendingDecisionStore());
+}
