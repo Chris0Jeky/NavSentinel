@@ -30,7 +30,7 @@ readiness is tracked only by the outcome gates below.
 
 | Gate | State | Required next move |
 |---|---|---|
-| Release integrity | **Blocked** | RI-01 extension-origin decision authority; finish #356 exact-head CI and Gate-3; clear #459 dependency advisories; excise visual-sim (#424); remove fake DNR; purpose-specific data minimization; beta-off JS behavior; #175/#186 bridge identity/recovery |
+| Release integrity | **Blocked** | RI-01 extension-origin decision authority; complete #356 human Gate-3; clear #459 dependency advisories; excise visual-sim (#424); remove fake DNR; purpose-specific data minimization; beta-off JS behavior; #175/#186 bridge identity/recovery |
 | Release profile | **Decision required** | AI-9/AI-16 choose the recommended interaction-only beta or a reproducible, budgeted real reputation build |
 | Brand/store | **Blocked** | AI-19 name clearance; #455 pre-collection disclosure/consent; one canonical claims-verified listing; assets and fresh-install checks |
 | Detection validation | **Open** | #417 methodology, #416/#426 rerun, confidence-aware reporting |
@@ -49,7 +49,7 @@ live. The browser-surface PR queue is not yet ready for human time:
 | PR | Current state |
 |---|---|
 | #273 | Closed 2026-07-13 from a stale base; recreate from current `main` or defer |
-| #356 | Refreshed runtime candidate locally green and twice reviewed; final head still needs push, current CI/thread resolution, replacement Gate-3 guide, and human Gate-3 |
+| #356 | Refreshed/pushed, twice reviewed, exact-head Build/Unit + E2E green, all threads resolved; current AI-13 guide ready for human Gate-3 |
 | #399 | Closed 2026-07-13; measurement-held under #223/#417 and not a beta blocker |
 
 **RI-01 local implementation note (verified 2026-07-13):** remotely backed-up
@@ -77,7 +77,7 @@ maintainer chooses disclosure/ownership.
 |---|---|---|---|---|---|
 | RI-01 | P0 beta blocker | Move all proceed/allow/trust/resume authority out of page-injected UI | Agent + Gate-3 | Private release task | Injected UI is warn/cancel only; extension-origin action is tab/destination-bound with TTL; synthetic input, trusted-click redressing, host tamper/removal, tab switch, and stale state cannot lower protection |
 | RI-02 | P0 beta blocker | Excise visual-sim capture, templates, scoring hook, WAR, tests, and state | Agent + Gate-3 | #424 | No viewport capture path or placeholder asset remains; #374 is optional coordination, not a prerequisite |
-| RI-03 | P0 beta blocker | Finish #356 exact-head CI/thread resolution and human Gate-3; recreate or defer #273 | Agent then Chris | #273/#356; #399 stays deferred | Replacement human guides point only to current green branches; #356 has human Gate-3 evidence; #399 remains outside beta blockers until its measurement methodology is ready |
+| RI-03 | P0 beta blocker | Complete #356 human Gate-3; recreate or defer #273 | Chris then agent | #273/#356; #399 stays deferred | Current guide points only to a live green branch; #356 has human Gate-3 evidence; #399 remains outside beta blockers until its measurement methodology is ready |
 | RI-04 | P0 product decision | Implement the selected interaction-only or real-reputation profile | Chris + agent | #321 / AI-9 / AI-16 | Release script, tag CI, manifest/WAR, runtime initialization, package checks/budgets, tests, provenance/cadence (if real), and every claim agree for the selected profile; verify both only if both are intentionally retained |
 | RI-05 | P0 beta blocker | Remove fake DNR feature surface and unused permissions | Agent + Gate-3 | CWS checklist; redesign #242/#243 later | No test rules/toggle/DNR permission in beta manifest |
 | RI-06 | P0 privacy blocker | Inventory every store; minimize by purpose; add complete reset | Agent + privacy review | Extend #176 or seed one scoped follow-up | Persistent records use least-identifying data; exact session URLs remain only for correctness with tab binding/TTL; rollback/OAuth/allow tests pass; all behavioral stores have one clear control and accurate export/disclosure |
@@ -97,8 +97,8 @@ maintainer chooses disclosure/ownership.
 
 - #415: create one `v0.5.0-unlisted-beta` milestone containing only real blockers.
 - #321: replace "build the filter" with RI-04 and the AI-9 decision.
-- #356: P0 local candidate ready, exact-head CI/thread resolution and Gate-3
-  pending; #273 recreate/defer; #399 is closed and
+- #356: P0 agent preflight complete, human Gate-3 pending; #273 recreate/defer;
+  #399 is closed and
   remains measurement-deferred under #223/#417.
 - #419/#421/#422: close enacted scope; retain only concrete unfinished work.
 - #423: close when the verified-claims policy lands.

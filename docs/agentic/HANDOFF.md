@@ -24,8 +24,8 @@ rotation under #437.
 - **AI-15: BLOCKED** until agent preflight is complete.
 - **AI-8 / AI-14: BLOCKED** pending current branches, two fresh reviews, green
   CI, and replacement human guides.
-- **AI-13: BLOCKED** pending #356's final push/current CI/thread resolution, a
-  replacement guide, and Chris's manual Gate-3; its local candidate is reviewed.
+- **AI-13: READY / OPEN** for the current #356 guide; agent preflight, exact-head
+  CI, threads, and reviews are complete. Chris's manual Gate-3 remains required.
 
 ## Verified state
 
@@ -38,8 +38,10 @@ rotation under #437.
   reset or overwritten.
 - PR #356 / RI-03 was refreshed by merging current `origin/main`. Its runtime
   head `2a30c63` passed two independent adversarial rounds, 2,875 unit tests,
-  all 65 one-worker E2E tests, build/package, and perf 12/12. The final PR head
-  and CI must still be refreshed live; AI-13 human Gate-3 remains mandatory.
+  all 65 one-worker E2E tests, build/package, and perf 12/12. Pushed head
+  `1accb43` passed GitHub Build/Unit and E2E in run `29546364063`; all three
+  review threads are resolved. Recheck the live head/CI before following the
+  current ACTION_ITEMS guide. AI-13 human Gate-3 remains mandatory.
 - 79 open issues with no milestone/assignee; 15 Horizon issues #439–#453 are a
   frozen option portfolio, not active work.
 - Open PRs are #356 (browser-surface, Gate-3 held) and draft #457 (shared deny
@@ -101,8 +103,8 @@ rotation under #437.
 1. **RI-01:** page-injected UI currently authorizes allow/trust/resume. Move all
    protection-lowering decisions to tab/destination-bound extension-origin UI;
    script rejection/closed roots alone do not stop trusted-click redressing.
-2. **RI-03/#356:** refresh live exact-head CI and obtain AI-13 manual Chrome
-   Gate-3; do not merge from local/browser automation alone.
+2. **RI-03/#356:** obtain AI-13 manual Chrome Gate-3 using the current guide; do
+   not merge from local/browser automation alone.
 3. **#459:** clear the current Vite/Rollup advisories with the available
    non-major dependency update and prove Windows Gym/build/package behavior.
 4. **RI-02/#424:** excise visual-sim. It has no production match path and can
