@@ -144,8 +144,9 @@ definition changes.
 
 **🚨 BLOCKED: AI-15 — Run the headed release session only after agent
 preflight.** The prior 60–90 minute one-sitting guide is withdrawn: stale PRs
-#273 and #399 were closed, #356 is ready for its isolated human Gate-3 but not
-merged, the reputation/package plan needs a product decision, and other
+#273 and #399 were closed, #356 has an isolated human Gate-3 guide whose live
+head and CI must pass the guide precheck before use, the reputation/package plan
+needs a product decision, and other
 release-integrity blockers precede a full manual release session. **Do not use
 the old #356 guide; use the current AI-13 guide below.** Agent preflight must
 first: (1) fix RI-01; (2) finish #356 exact-head CI/Gate-3 and keep #273 deferred
@@ -261,9 +262,11 @@ before use. This item remains human-owned; only Chris can record Gate-3 as done.
    `git -C .worktrees/pr356-refresh fetch origin`, then
    `git -C .worktrees/pr356-refresh status --short --branch`,
    `git -C .worktrees/pr356-refresh rev-parse HEAD`, and
-   `git ls-remote origin refs/heads/feat/dehard-enforcement-protos`. The worktree
-   must be clean, the two SHAs must match, and `gh pr checks 356` must show
-   Build/Unit and E2E green. Stop and report the mismatch if any check differs.
+   `git ls-remote origin refs/heads/feat/dehard-enforcement-protos`, then
+   `gh pr view 356 --json headRefOid --jq .headRefOid`. The worktree must be
+   clean, all three SHAs must match, and only then may `gh pr checks 356` be
+   accepted as evidence that Build/Unit and E2E are green for that exact head.
+   Stop and report the mismatch if any SHA or check differs.
 2. In that worktree run `npm ci` and `npm run build`. To avoid starting the
    branch's known-vulnerable pre-#459 Vite server, keep
    `python -m http.server 5173 --bind 127.0.0.1 --directory gym` open in a second
