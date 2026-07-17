@@ -51,9 +51,10 @@ that required a raw destination unavailable to the UI, and stale child-frame
 liveness based on `getFrame`; the pushed `af0ccb2` candidate fixed all three and
 passed exact-head CI. The first independent adversarial re-review then found
 that build/package did not enforce the emitted MV3 graph. `dfea4da` adds a
-post-build/package gate plus nine pass/fail fixtures for the static module
-closure, worker-owned destination capability, positive `getAllFrames`
-enumeration, and deterministic tests. AI-22 remains conditional on live remote
+post-build/package gate plus nine pass/fail fixtures for the emitted static
+module closure. The candidate separately retains `6a18f1d`'s worker-owned
+destination capability, positive `getAllFrames` enumeration, and deterministic
+runtime tests. AI-22 remains conditional on live remote
 equality, green exact-head CI, both fresh review rounds, and zero unresolved
 threads.
 The product-posture and guided-workflow work merged through PR #454; verify live

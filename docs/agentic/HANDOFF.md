@@ -242,6 +242,12 @@ not start a fourth browser-held slice.
   lane passed 3/3, and the full one-worker lane passed 64/64. This is retained as
   a non-blocking nondeterministic signal: capture a trace plus worker/page logs
   and seed a dedicated harness issue if it recurs; do not silently retry it.
+- The first `c8119c1` full one-worker lane reached 63/64 because Chromium's
+  persistent context timed out during launch before RW-10 Space executed, after
+  47 earlier cases passed. No Chrome process or test profile remained afterward;
+  the exact case then passed 3/3 in fresh contexts. Retain this as a non-blocking
+  Windows harness signal: if it recurs, capture `DEBUG=pw:browser` launch logs
+  and seed a dedicated issue rather than treating a retry as the full-suite gate.
 - Update shared branches with `git merge main`, never rebase; do not discard work
   or rewrite history without the explain-and-approve protocol.
 - Do not edit `extension/dist/` or generated data directly.
