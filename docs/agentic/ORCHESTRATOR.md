@@ -97,6 +97,21 @@ PRs D-* are independent (different files) → parallel branches off `main`, **no
 
 ## In-Flight
 
+**Active checkpoint (2026-07-17, Cycle 50):** #356 / RI-03 is the current
+smallest unblocked release-integrity slice. RI-01 remains parked at its existing
+checkpoint because AI-20 owns the Defender-quarantined property fixture needed
+for full branch verification. PR #356 was 174 commits behind `origin/main`, had
+one deterministic stale E2E assertion, and had three unresolved actionable
+review threads. The branch was refreshed by merging `origin/main` (no history
+rewrite) in `.worktrees/pr356-refresh`; implementation now addresses every
+thread and updates the stale assertion before two fresh independent reviews.
+Because this is MAIN-world browser-surface work, a green exact head remains
+held for human Gate-3 and is not merge-authorized by this cycle.
+
+| Slice | Branch | Base | Worktree | PR | State | Proving gates |
+|---|---|---|---|---|---|---|
+| RI-03 / #356 | `feat/dehard-enforcement-protos` | current `origin/main` merged at `e4c852c` | `.worktrees/pr356-refresh` | #356 | IN PROGRESS | resolve all 3 review threads; update the obsolete hardening assertion; targeted E2E, typecheck, lint, build, unit, perf; two fresh adversarial rounds; exact-head CI; human Gate-3 hold |
+
 **In-Flight (2026-07-10):** no new slice started by this audit. Existing open
 PRs #273/#356/#399 are stale and require preflight; #356 is red. Rows below are
 historical (all merged). Verify with `gh pr list` before branching.
