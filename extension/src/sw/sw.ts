@@ -653,8 +653,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const ttl = clampTtl(message.ttlMs, NAV_GESTURE_TTL_MS, MAX_GESTURE_TTL_MS);
         const now = Date.now();
         gestureUntilByTab.set(tabId, now + ttl);
-        if (typeof message.url === "string" && message.url) {
-          lastUrlByTab.set(tabId, message.url);
+        const topUrl = typeof sender.tab?.url === "string" ? sender.tab.url : "";
+        if (topUrl) {
+          // A gesture may originate in a child frame. The rollback baseline is
+          // always the top tab URL supplied by Chrome, never the frame-local URL
+          // supplied in the message.
+          lastUrlByTab.set(tabId, topUrl);
         }
         rememberUserNavigationContext(tabId, now);
         typedOriginByTab.delete(tabId);
@@ -678,8 +682,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // snapshot that may have waited for hydration. If the baseline changed
         // while an API read was in flight, read once more: a newer top commit
         // must win, while a stable SPA URL may still refresh an older baseline.
+        const existingBaseline = lastUrlByTab.get(tabId);
+        if (existingBaseline === undefined) {
+          // This is the cold/missed-commit repair. Seed synchronously before a
+          // pointerdown page handler can top-navigate; an async tab read here
+          // would let the destination replace the source before validation.
+          lastUrlByTab.set(tabId, senderUrl);
+          swState.persistMap(lastUrlByTab, "lastUrl");
+          sendResponse?.({ ok: true });
+          return;
+        }
+        if (existingBaseline === senderUrl) {
+          sendResponse?.({ ok: true });
+          return;
+        }
         try {
-          let baselineBeforeRead = lastUrlByTab.get(tabId);
+          let baselineBeforeRead = existingBaseline;
           let liveUrl = (await chrome.tabs.get(tabId)).url ?? "";
           let baselineAfterRead = lastUrlByTab.get(tabId);
           if (baselineAfterRead !== undefined && baselineAfterRead !== senderUrl) {

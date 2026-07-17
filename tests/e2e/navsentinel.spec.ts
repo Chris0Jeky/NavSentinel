@@ -972,9 +972,7 @@ test("Trusted child-frame pointerdown preserves top rollback without authority @
           "pointerdown",
           (event) => {
             console.log(`${consoleMarker} pointerdown ${event.isTrusted}`);
-            window.setTimeout(() => {
-              window.top!.location.href = targetUrl;
-            }, 150);
+            window.top!.location.href = targetUrl;
           },
           { once: true }
         );
