@@ -20,7 +20,10 @@ import {
 } from "../content/oauth_monitor";
 import { swState } from "../shared/session_state";
 import { updateTabIcon, updateTabIconWhen, clearTabIcon, setAllTabsGray } from "./icon_manager";
-import type { PendingDecisionRuntimeBroker } from "./pending_decision_handlers";
+import {
+  createDefaultPendingDecisionRuntimeBroker,
+  type PendingDecisionRuntimeBroker,
+} from "./pending_decision_handlers";
 
 const BASELINE_RULESET_ID = "baseline";
 
@@ -167,11 +170,10 @@ function advancePendingDecisionLifecycleGeneration(tabId: number): void {
 
 function loadPendingDecisionRuntime(): Promise<PendingDecisionRuntimeBroker> {
   if (!pendingDecisionRuntimePromise) {
-    const attempt = import("./pending_decision_handlers").then(
-      ({ createDefaultPendingDecisionRuntimeBroker }) =>
-        createDefaultPendingDecisionRuntimeBroker({
-          getLifecycleGeneration: getPendingDecisionLifecycleGeneration,
-        }),
+    const attempt = Promise.resolve().then(() =>
+      createDefaultPendingDecisionRuntimeBroker({
+        getLifecycleGeneration: getPendingDecisionLifecycleGeneration,
+      }),
     );
     pendingDecisionRuntimePromise = attempt;
     void attempt.catch(() => {
