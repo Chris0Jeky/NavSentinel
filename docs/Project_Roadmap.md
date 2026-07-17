@@ -48,11 +48,11 @@ protection. The exact audit baseline is recorded only in dated
 | PR | Current state |
 |---|---|
 | #273 | Closed 2026-07-13 from a stale base; recreate from current `main` or defer |
-| #356 | Current-main merge resolved/staged and locally passes 2,875 unit plus 65/65 E2E; audit/commit/push, repeat exact-head reviews/CI, then AI-13 |
+| #356 | Current-main merge committed locally as `5692e08` and passes 2,875 unit plus 65/65 E2E; push, repeat exact-head reviews/CI, then AI-13 |
 | #399 | Closed 2026-07-13; measurement-held under #223/#417 and not a beta blocker |
 | #463 | Merged exact green dependency head `91aab4f` as `2888483`; #459 closed as intended |
-| #464 | Current-main merge resolved/staged and locally passes 2,874 unit plus targeted 3/3 E2E; audit/commit/push, full exact-head gates, then AI-21 |
-| #466 | Open RI-01 dormant pending-decision SW boundary; three exact-head review blockers fixed locally and proven, awaiting fresh reviews/CI and AI-22 |
+| #464 | Current-main merge committed locally as `c7870aa` and passes 2,874 unit plus 65/65 E2E; push, repeat exact-head reviews/CI, then AI-21 |
+| #466 | Open RI-01 dormant pending-decision SW boundary; three runtime blockers fixed, plus an emitted static-worker gate in `dfea4da`; live exact-head reviews/CI and AI-22 remain |
 
 **RI-01 implementation note (verified 2026-07-17):** PR #464 isolates the
 production synthetic-navigation sub-slice: only trusted input can mint
@@ -67,7 +67,9 @@ worker-owned destination capability, positive current-frame enumeration,
 one-shot consumption, and top-navigation/tab cleanup. Its broker factory is
 statically imported through a dedicated MV3-compatible module chunk while
 construction stays deferred, preserving the service-worker budget without
-unsupported `import()`. It executes no action. Remaining RI-01 work includes a real producer and extension-origin
+unsupported `import()`. Build and package now fail if that emitted worker graph
+regresses to dynamic/preload, missing, remote, or out-of-dist imports. It executes
+no action. Remaining RI-01 work includes a real producer and extension-origin
 presentation/actions, removing injected allow/trust/resume authority, integrated
 branch gates, trusted-click redressing coverage, and real Chrome verification.
 Windows Defender quarantined one tracked adversarial ClickFix property fixture

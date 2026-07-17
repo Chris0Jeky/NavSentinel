@@ -41,17 +41,21 @@ current `main` SHA live rather than pinning it here. Open PRs are #356, draft
 #457, #464, and #466; PR #463 merged as `2888483` and closed #459. Stale
 PRs #273 and #399 were closed with explicit re-entry paths. #356 and #464 were twice
 reviewed, thread-clean, and exact-head CI-green before #463 changed `main`'s
-dependency graph. Both browser branches now have current-`main` merges resolved
-and staged in isolated worktrees, but neither merge is committed or pushed.
-They must pass coordinator audit and repeat exact-head checks/reviews before
-their AI-13/AI-21 guides are actionable.
+dependency graph. Their current-`main` refreshes are committed locally as
+`5692e08` and `c7870aa`, respectively, and both pass their full one-worker E2E
+lanes. Neither refresh is pushed; live remote equality, fresh reviews, and CI
+must pass before their AI-13/AI-21 guides are actionable.
 PR #466 is the third and final browser-held lane. Its first review recheck found
 three valid blockers: an MV3-incompatible dynamic import, a consume contract
 that required a raw destination unavailable to the UI, and stale child-frame
-liveness based on `getFrame`. All three are fixed locally with a static module
-split, a worker-owned destination capability, positive `getAllFrames`
-enumeration, and deterministic tests. AI-22 remains conditional on a pushed
-exact head, live green CI, both fresh review rounds, and zero unresolved threads.
+liveness based on `getFrame`; the pushed `af0ccb2` candidate fixed all three and
+passed exact-head CI. The first independent adversarial re-review then found
+that build/package did not enforce the emitted MV3 graph. `dfea4da` adds a
+post-build/package gate plus nine pass/fail fixtures for the static module
+closure, worker-owned destination capability, positive `getAllFrames`
+enumeration, and deterministic tests. AI-22 remains conditional on live remote
+equality, green exact-head CI, both fresh review rounds, and zero unresolved
+threads.
 The product-posture and guided-workflow work merged through PR #454; verify live
 `main` rather than pinning its SHA here. The RI-01 checkpoint branch is remotely
 backed up without the unstaged Defender deletion; verify its SHA live. Its
