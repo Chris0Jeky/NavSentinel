@@ -1663,6 +1663,10 @@ window.addEventListener(
     if (!(e instanceof MouseEvent)) return;
 
     const isKeyboardActivation = e.isTrusted && e.detail === 0;
+    // A recent trusted down remains risk-correlation evidence even when page
+    // code synchronously dispatches the click: target/timing mismatches should
+    // raise suspicion. It never grants authority; the current click's
+    // `e.isTrusted` separately gates prompt suppression and every allowance.
     const downForClick =
       !isKeyboardActivation && lastDown && performance.now() - lastDown.ts < 1500
         ? lastDown
@@ -1933,14 +1937,16 @@ window.addEventListener(
     }
 
     if (decision === "allow") {
-      const silentNavEvent = buildSilentNavEvent({
-        destHref: parsed?.href,
-        destHost,
-        nrs,
-        reasonCodes,
-        nrsFactors,
-        blockThreshold,
-      });
+      const silentNavEvent = e.isTrusted
+        ? buildSilentNavEvent({
+            destHref: parsed?.href,
+            destHost,
+            nrs,
+            reasonCodes,
+            nrsFactors,
+            blockThreshold,
+          })
+        : null;
       if (e.isTrusted && parsed?.href && shouldQueueSameTabSilentCommit({
         isTopFrame: topFrame,
         isDocumentNavigation: silentNavEvent !== null,

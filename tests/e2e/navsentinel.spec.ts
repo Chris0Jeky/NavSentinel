@@ -593,6 +593,47 @@ test("Synthetic pointer and click events cannot mint navigation allowances @regr
       await page.evaluate((url) => Location.prototype.assign.call(location, url), redirectTarget);
       expect(await redirectObserved).toBe(false);
       await expect(page).toHaveURL(originalUrl);
+
+      // A durable user allowlist may permit a destination, but a page-script
+      // click is still not a user navigation decision and must not pollute the
+      // review/tuning corpus as nav_silent_allow.
+      const siteKey = new URL(originalUrl).hostname;
+      await serviceWorker.evaluate(
+        async ({ allowlistKey, eventLogKey, site, destination }) => {
+          await chrome.storage.local.set({
+            [allowlistKey]: { [site]: [destination] },
+            [eventLogKey]: []
+          });
+        },
+        {
+          allowlistKey: "sentinelsuite:nav_allowlist_v1",
+          eventLogKey: "sentinelsuite:event_log_v1",
+          site: siteKey,
+          destination: siteKey
+        }
+      );
+      await page.waitForTimeout(100);
+      await page.evaluate(() => {
+        const anchor = document.createElement("a");
+        anchor.href = `${location.origin}/synthetic-allowlisted?token=fixture`;
+        anchor.target = "_blank";
+        anchor.textContent = "Synthetic allowlisted anchor";
+        anchor.addEventListener("click", (event) => event.preventDefault());
+        document.body.appendChild(anchor);
+        anchor.click();
+      });
+      const untrustedSilentAllows = await serviceWorker.evaluate(async ({ eventLogKey }) => {
+        const deadline = Date.now() + 1000;
+        while (Date.now() < deadline) {
+          const stored = await chrome.storage.local.get(eventLogKey);
+          const events = Array.isArray(stored[eventLogKey]) ? stored[eventLogKey] : [];
+          const matches = events.filter((entry: { kind?: unknown }) => entry?.kind === "nav_silent_allow");
+          if (matches.length > 0) return matches.length;
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+        return 0;
+      }, { eventLogKey: "sentinelsuite:event_log_v1" });
+      expect(untrustedSilentAllows).toBe(0);
     } finally {
       await context.close();
     }
