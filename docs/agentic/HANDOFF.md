@@ -100,10 +100,12 @@ rotation under #437.
 - **#459 round 2 (fresh supply-chain/portability/docs lens, 2026-07-17):** no
   branch-introduced runtime, graph, provenance, or build defect. It found a
   pre-existing release-guide mismatch: Node 20.18.1 was documented while the
-  effective graph requires `^20.19.0 || >=22.12.0`. `614953b` aligns the guide;
-  exact-head re-review was clean. Gemini then requested the exact semver syntax
-  rather than natural-language `or`; `da44f56` fixes it. Copilot's quota-limit
-  response on #463 is an invalid review signal, not a skipped finding.
+  root engine required a newer range. `614953b` aligned that guide and exact-head
+  re-review was clean. Gemini then requested exact semver syntax rather than
+  natural-language `or`; `da44f56` fixed it. A later Codex portability review
+  found the full ESLint 10 graph is narrower still, so the root declaration,
+  lock root, and release guide now use `^20.19.0 || ^22.13.0 || >=24`. Copilot's
+  quota-limit response on #463 is an invalid review signal, not a skipped finding.
 
 ## Release blockers in order
 
