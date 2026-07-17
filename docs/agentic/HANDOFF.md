@@ -69,6 +69,17 @@ rotation under #437.
 
 ## Local review evidence
 
+- **Agentic contract round 1 (runtime/parity lens, 2026-07-17):** compared
+  Codex instructions, hooks, skills, and shared references against the compact
+  Claude contract and current Codex hook guidance. Fixed the oversized Codex
+  root contract, a stale named parallel-tool reference, and retired
+  pre-dispatch hook references. The actual `.codex/hooks.json` definitions were
+  unchanged and remain covered by AI-18 trust review.
+- **Agentic contract round 2 (fresh hook/recovery lens, 2026-07-17):** checked
+  supported Codex hook matchers and trust behavior, reviewed the revised Git
+  safety/recovery instructions, and reran Python compilation, hook smoke, skill
+  parity, and diff-whitespace checks. No remaining actionable findings.
+
 - **Audit caveat:** the earlier posture/RI handoff claims 11 documentation
   findings and two RI-01 review rounds, but the inspected local branches do not
   preserve a per-finding artifact. Treat those counts as process history, not

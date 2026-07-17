@@ -36,7 +36,7 @@ Claude should use:
 - `CLAUDE.md` as the compact root contract.
 - `.claude/skills/*/SKILL.md` for lazy-loaded workflows.
 - `.claude/settings.json` for conservative permissions and hooks.
-- `scripts/agent_hooks/pre_tool_use.py` to block destructive Bash commands.
+- `.claude/hooks/dispatch.py` as the shared irreversible-command floor.
 - `scripts/agent_hooks/post_tool_failure.py` to capture sanitized tool failures to the gitignored raw autolog (`docs/agentic/failure_autolog.jsonl`), keeping the curated `failure_ledger.jsonl` clean.
 
 Claude-specific strengths:
@@ -53,7 +53,7 @@ Codex should use:
 - `AGENTS.md` as the compact root contract.
 - `.agents/skills/*/SKILL.md` for Codex-native workflows.
 - `update_plan` for multi-step execution tracking.
-- `multi_tool_use.parallel` for independent reads/searches.
+- parallel native reads/searches when the active Codex surface exposes them.
 - `apply_patch` for manual edits.
 - shell verification through npm scripts and targeted commands.
 - Playwright/browser tooling for browser-only extension behavior when available.
@@ -63,6 +63,10 @@ Codex should use:
   trusting the definitions with `/hooks`.
 - the shared irreversible-command floor, session orientation, agentic-change
   reminder, and sanitized failure capture under `scripts/agent_hooks/`.
+
+Codex project-local configuration and hooks load only after the project is
+trusted. Hook trust is definition-hash-based: review/trust the exact current
+definitions through `/hooks` again after a hook change.
 
 Codex-specific strengths:
 
@@ -90,7 +94,7 @@ Before closing agentic-infrastructure work, verify:
 
 ```bash
 rg --files .claude/skills .agents/skills docs/agentic autodoc
-python -m py_compile scripts/agent_hooks/pre_tool_use.py scripts/agent_hooks/post_tool_use.py scripts/agent_hooks/post_tool_failure.py scripts/agent_hooks/session_start.py scripts/agent_hooks/render_failure_ledger.py scripts/agent_hooks/smoke_test.py scripts/agent_hooks/validate_skills.py
+python -m py_compile .claude/hooks/dispatch.py scripts/agent_hooks/post_tool_use.py scripts/agent_hooks/post_tool_failure.py scripts/agent_hooks/session_start.py scripts/agent_hooks/render_failure_ledger.py scripts/agent_hooks/smoke_test.py scripts/agent_hooks/validate_skills.py
 npm run agent:hooks:smoke
 npm run agent:skills:validate
 python scripts/agent_hooks/render_failure_ledger.py
