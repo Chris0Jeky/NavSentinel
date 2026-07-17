@@ -21,9 +21,11 @@ rotation under #437.
 - **AI-19:** clear or replace the product name before CWS submission.
 - **AI-18: READY:** the hook-editing slice is committed; review/trust the exact
   project-local Codex hook definitions before relying on them.
+- **AI-13: OPEN / READY:** run the exact-head-guarded #356 Chrome Gate-3 guide;
+  only Chris can record it complete.
 - **AI-15: BLOCKED** until agent preflight is complete.
-- **AI-8 / AI-13 / AI-14: BLOCKED** pending current branches, two fresh reviews,
-  green CI, and replacement human guides.
+- **AI-8 / AI-14: BLOCKED** pending current branches, two fresh reviews, green
+  CI, and replacement human guides.
 
 ## Verified state
 

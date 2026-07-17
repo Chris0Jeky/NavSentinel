@@ -8,8 +8,8 @@
 
 **Purpose:** the running list of things only *you* (Chris) can do — and the context an agent needs to not lose the thread between sessions. Agents flag the open items in every summary; you clear them by saying so.
 
-**Last updated:** 2026-07-13 — product-posture/RI-01 audit plus guided
-human-action workflow and preservation pass. Product thesis:
+**Last updated:** 2026-07-17 — PR #356 recovery plus human-gate and live-status
+refresh. Product thesis:
 `docs/Product_Strategy.md`. Corrective
 program: `docs/Project_Roadmap.md`. Standing decisions:
 `docs/agentic/DECISIONS.md`.
@@ -23,25 +23,28 @@ program: `docs/Project_Roadmap.md`. Standing decisions:
 
 ---
 
-## Current state snapshot (live state rechecked 2026-07-13)
+## Current state snapshot (live state rechecked 2026-07-17)
 
-At the 2026-07-10 verification point, `main` matched `origin/main`. Run
-`git rev-parse main`, `git rev-parse origin/main`, and live `gh` checks before
-acting; the exact audit baseline lives in `docs/Product_Strategy.md`, not this
-live snapshot. Typecheck, lint, build, version check, 2,874 unit tests (95
-files), perf 12/12, and smoke E2E passed locally; current-main GitHub CI was
-green. v0.4.0 had no tag, GitHub release, CWS release, or external-user evidence.
+The root `main` worktree is clean and matches `origin/main`; its exact-head CI
+is green. Run `git rev-parse main`, `git rev-parse origin/main`, and live `gh`
+checks before acting; the exact audit baseline lives in
+`docs/Product_Strategy.md`, not this live snapshot. PR #356's runtime candidate
+passed typecheck, lint, build, version/package checks, 2,875 unit tests (95
+files), perf 12/12, and all 65 one-worker E2E tests locally. v0.4.0 still has no
+tag, GitHub release, CWS release, or external-user evidence.
 
-Live recheck on 2026-07-13 found 75 open issues, no tags/releases/classic branch
+Live recheck on 2026-07-17 found 80 open issues, no tags/releases/classic branch
 protection or repository rulesets, and no milestones or assignees. Verify the
-current `main` SHA live rather than pinning it here. Stale PRs #273 and #399
-were closed with explicit re-entry paths; #356 remains the only active legacy
-browser-surface PR. The
-product-posture and guided-workflow work merged through PR #454; verify live
-`main` rather than pinning its SHA here. The RI-01 checkpoint branch is remotely
-backed up without the unstaged Defender deletion; verify its SHA live. Its
-worktree is dirty only because Windows Defender quarantined one tracked
-adversarial test fixture. These changes do not change shipped product state.
+current `main` SHA live rather than pinning it here. Open PRs are #356, draft
+#457, and #463. Stale PRs #273 and #399 were closed with explicit re-entry
+paths. #356 exact guide head `ee0f9b7` is published with green Build/Unit and
+E2E; all three review threads are resolved. Its step-1 live precheck remains
+mandatory before Chris's AI-13 Gate-3. The product-posture and guided-workflow
+work merged through PR #454; verify live `main` rather than pinning its SHA
+here. The RI-01 checkpoint branch is remotely backed up without the unstaged
+Defender deletion; verify its SHA live. Its worktree is dirty only because
+Windows Defender quarantined one tracked adversarial test fixture. These
+changes do not change shipped product state.
 
 - **Product posture:** strong pre-release alpha, not a market-ready or
   efficacy-validated security product. `docs/Product_Strategy.md` owns the
@@ -50,8 +53,9 @@ adversarial test fixture. These changes do not change shipped product state.
 - **Release-integrity blockers:** page-controlled injected UI currently owns
   allow/trust/resume authority and can be redressed under genuine input
   (RI-01); visual-sim can process the wrong active
-  tab and has no production value (RI-02/#424); frozen MAIN-world prototypes in
-  #356 are site-breaking; fake DNR and unmeasured JS behavior should be absent
+  tab and has no production value (RI-02/#424); current `main`'s frozen
+  MAIN-world prototypes remain site-breaking until #356 lands; fake DNR and
+  unmeasured JS behavior should be absent
   or off; stored URLs require minimization (RI-05/RI-06); #175/#186 bridge
   identity/recovery and #455 pre-collection disclosure/consent now block beta.
 - **Release/profile blockers:** the 52-byte reputation test filter plus the
@@ -63,10 +67,11 @@ adversarial test fixture. These changes do not change shipped product state.
   CWS submission; this is a risk flag, not a legal conclusion.
 - **Legacy PR cleanup:** #273 and draft #399 were closed on 2026-07-13 rather
   than merged from stale bases; their commits, discussions, and open issue
-  anchors remain. #356 is still stale with E2E red and is the only
-  active legacy browser-surface PR. **Do not spend human Gate-3 time until an
-  agent refreshes, fixes, and re-reviews it.**
-- **Portfolio:** 75 open issues, none assigned or milestoned; #439–#453 are 15
+  anchors remain. #356 is refreshed, pushed, twice reviewed, thread-clean, and
+  exact-head CI-green. **The current AI-13 guide is actionable only when its
+  step-1 live head/CI check passes. The PR remains unmergeable without Chris's
+  Gate-3 evidence.**
+- **Portfolio:** 80 open issues, none assigned or milestoned; #439–#453 are 15
   frozen Horizon proposals. No new feature/epic issue seeding until the queue is
   culled and milestone-categorized.
 - **Infrastructure:** classic branch protection remains absent (`404 Branch not
@@ -89,14 +94,16 @@ conversational label is `q-1`). Current ready order is AI-16 -> AI-9 -> AI-20 ->
 AI-17 -> AI-19 -> AI-18. The hook-editing slice is now committed; AI-18 remains
 human-owned until its exact definitions are reviewed and trusted. The `q-N`
 label may reset between conversations; the `AI-N` identifier is durable.
-AI-15/AI-8/AI-13/AI-14 remain visible but are not actionable questions until
-agent preflight clears them.
+AI-15/AI-8/AI-14 remain visible but are not actionable questions until agent
+preflight clears them. AI-13's current guide is prepared; its live precheck
+decides readiness.
 
-> **Gate-queue hold (refreshed 2026-07-13):** do not run the old branch checkout
+> **Gate-queue hold (refreshed 2026-07-17):** do not run the old branch checkout
 > guides for AI-8, AI-13, or AI-14. AI-8 and AI-14 require new current-main
-> slices after their stale PRs were closed; AI-13/#356 must be refreshed,
-> re-reviewed twice, and rerun through CI. AI-15 remains BLOCKED until an agent
-> posts a current preflight handoff.
+> slices after their stale PRs were closed. AI-13's agent preflight is complete;
+> use only the current guide below and verify its live exact head/CI before
+> starting. AI-15 remains BLOCKED until the remaining release-integrity program
+> has a current preflight handoff.
 
 **🚨 OPEN: AI-19 — Clear or replace the working product name before CWS
 submission.** An active TruNav GNSS anti-spoofing product uses the exact name
@@ -136,11 +143,13 @@ definition changes.
 
 **🚨 BLOCKED: AI-15 — Run the headed release session only after agent
 preflight.** The prior 60–90 minute one-sitting guide is withdrawn: stale PRs
-#273 and #399 were closed, #356 remains stale/red, the reputation/package plan
-needs a product decision, and new release-integrity blockers precede manual
-testing. **Do not checkout or test #356 yet.** Agent preflight must first:
-(1) fix RI-01; (2) refresh/fix #356 and recreate or defer #273, with two fresh
-reviews and green CI; (3) excise visual-sim and remove fake DNR; (4) complete
+#273 and #399 were closed, #356 has an isolated human Gate-3 guide whose live
+head and CI must pass the guide precheck before use, the reputation/package plan
+needs a product decision, and other release-integrity blockers precede a full
+manual release session. **Do not use the old #356 guide; use the current AI-13
+guide below.** Agent preflight must first: (1) fix RI-01; (2) finish #356
+exact-head CI/Gate-3 and keep #273 deferred or recreate it on current `main`;
+(3) excise visual-sim and remove fake DNR; (4) complete
 RI-06's purpose-specific data minimization/reset; (5) complete RI-07's explicit
 JS-behavior beta-off profile; (6) complete #175/#186 bridge integrity and #455
 pre-collection consent; (7) prepare the chosen AI-9 release profile; and (8)
@@ -236,11 +245,85 @@ branch checkout guide.
 
 **AI-11 — Toast count-pill (#351 → PR #353) · ✅ RESOLVED 2026-06-23 — MERGED.** Chris said "merge #353"; green CI (incl. the RW-19 e2e fix to accept the coalesced pill) → **#353 merged into `main`** (`d0e0412`). Repeated blocked-popup/redirect prompts now coalesce into one count pill after 3-in-8s (expandable to the latest prompt's Allow once / Always allow). The pill is live on the next `git checkout main && npm run build`.
 
-**🚨 BLOCKED: AI-13 — #356 MAIN-world compatibility Gate-3.** This remains a
-beta prerequisite, but the branch is stale and its E2E check is red. An agent
-must merge current `main`, fix the failure, complete two fresh
-adversarial reviews, and post a current compatibility/gating checklist. Do not
-checkout, test, or merge the present branch.
+**🚨 OPEN: AI-13 — Run #356 MAIN-world compatibility Gate-3 (GUIDE PREPARED;
+LIVE CI PRECHECK REQUIRED).** PR #356 is refreshed from current `origin/main`
+and all three review threads are resolved. Exact guide head `ee0f9b7` passed
+GitHub Build/Unit plus E2E; the source-bearing runtime head passed 2,875 unit
+tests, 65/65 one-worker E2E, build/package, and all 12 size budgets locally.
+The current guide commit must independently satisfy step 1 before use. This
+item remains human-owned; only Chris can record Gate-3 as done.
+
+**Current guide:**
+
+1. From the repository root, use the existing isolated worktree; do not switch
+   or reset the root `main` checkout:
+   `git -C .worktrees/pr356-refresh fetch origin`, then
+   `git -C .worktrees/pr356-refresh status --short --branch`,
+   `git -C .worktrees/pr356-refresh rev-parse HEAD`, and
+   `git ls-remote origin refs/heads/feat/dehard-enforcement-protos`, then
+   `gh pr view 356 --json headRefOid --jq .headRefOid`. The worktree must be
+   clean, all three SHAs must match, and only then may `gh pr checks 356` be
+   accepted as evidence that Build/Unit and E2E are green for that exact head.
+   Stop and report the mismatch if any SHA or check differs.
+2. In that worktree run `npm ci` and `npm run build`. To avoid starting the
+   branch's known-vulnerable pre-#459 Vite server, keep
+   `python -m http.server 5173 --bind 127.0.0.1 --directory gym` open in a second
+   terminal instead. Create a temporary local Chrome profile from the profile
+   picker, do not sign it into a Google account, and leave every established
+   profile/extension untouched. In the temporary profile's Extensions page,
+   enable Developer mode and load
+   `.worktrees/pr356-refresh/extension/dist` unpacked. In NavSentinel Options,
+   confirm Smart mode and no localhost/127.0.0.1 trusted-domain or allowlist
+   entry before testing. Do not remove an established unpacked copy or its data.
+3. Open `http://localhost:5173/proto-wrap-05.html`. Confirm the page reaches
+   `Status: OK — all wraps succeeded` with no uncaught page error or
+   `Cannot assign to read only property` console error.
+4. Click each of the eight exercise buttons once, in their displayed order. In
+   DevTools, evaluate this exact object:
+
+   ```js
+   ({
+     calls: JSON.parse(document.body.dataset.wrapperCalls ?? "{}"),
+     formSubmitCall: document.body.dataset.formSubmitCall,
+     formTarget: document.querySelector("#submitFrame")?.contentWindow?.location.href,
+     formRequestSubmitCall: document.body.dataset.formRequestSubmitCall,
+     requestSubmitEvents: document.body.dataset.requestSubmitEvents,
+     locationCall: document.body.dataset.locationCall,
+     locationReplaceCall: document.body.dataset.locationReplaceCall,
+     hash: location.hash,
+     unboundOpenCall: document.body.dataset.unboundOpenCall,
+     protoOpenCall: document.body.dataset.protoOpenCall,
+     crossRealmOpen: document.body.dataset.crossRealmOpen,
+     invalidOpenReceiver: document.body.dataset.invalidOpenReceiver
+   })
+   ```
+
+   `calls` must contain six `1` values (`formSubmit`, `formRequestSubmit`,
+   `locationAssign`, `locationReplace`, `windowOpen`, `windowProtoOpen`). The
+   other expected values are `called`, a `formTarget` containing `via=submit`,
+   `called`, `"1"`, `called`, `called`, `#proto-wrap-replace`, `opened`,
+   `opened`, `child`, and `error:TypeError`, in object order. Report any popup
+   blocked by Chrome itself instead of treating it as a NavSentinel pass.
+5. Preserve the security gate using a fresh Level 10 page for each action:
+   immediate redirect should reach Level 4. Reopen Level 10, click delayed
+   redirect, and after two seconds confirm Chromium first reaches Level 4 and
+   NavSentinel automatically rolls back to Level 10 with the rollback toast;
+   normal Location calls bypass the prototype hook (#458), so this is not a
+   pre-navigation `Blocked redirect`. Click `Proceed` and confirm Level 4 opens.
+   Reopen Level 10, click programmatic form submit, and confirm `Blocked form
+   submit` appears before navigation. Choose `Allow once`, confirm only the exact
+   form action reaches Level 1 with `from=level10`, then reopen Level 10 and
+   repeat it to confirm a fresh attempt blocks again. Finally, on a fresh
+   `level5-window-open-popunder.html`, click the fixture's `Click area` control
+   (`#area`); `Blocked popup` must appear and no popup may open.
+6. Close every test popup/tab, stop the Python Gym server with Ctrl+C, close the
+   temporary Chrome profile, and remove only that deliberately disposable local
+   profile from Chrome's profile manager. Do not alter or delete an established
+   profile; if you chose to disable an older copy instead, re-enable it now.
+7. Reply `AI-13 done; Gate-3 passed on PR #356` and include any console error,
+   unexpected prompt text, or differing outcome. Do not merge on a partial pass;
+   after a full pass the agent will recheck the exact head, CI, comments, and
+   merge gate before acting.
 
 **🚨 BLOCKED: AI-14 — OAuth tradeoff measurement after closed PR #399.** The
 measurement-held draft was closed on 2026-07-13 rather than merged from a stale
