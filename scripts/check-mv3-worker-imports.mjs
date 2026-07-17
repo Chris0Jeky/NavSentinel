@@ -15,12 +15,17 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const root = path.resolve(__dirname, "..");
 
-const DYNAMIC_IMPORT_PATTERN =
-  /\bimport(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\r\n]*(?:\r?\n|$))*\(/;
+const JS_TRIVIA = String.raw`(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\r\n]*(?:\r?\n|$))*`;
+const DYNAMIC_IMPORT_PATTERN = new RegExp(String.raw`\bimport${JS_TRIVIA}\(`);
 const PRELOAD_PATTERN = /\b(?:__vitePreload|modulepreload)\b/;
-const STATIC_IMPORT_PATTERN = /\bimport\s*(?:[^"'();]+?\bfrom\s*)?["']([^"']+)["']/g;
-const STATIC_REEXPORT_PATTERN =
-  /\bexport\s*(?:\*\s*(?:as\s+[\w$]+\s*)?|\{[^}]*\})\s*from\s*["']([^"']+)["']/g;
+const STATIC_IMPORT_PATTERN = new RegExp(
+  String.raw`\bimport${JS_TRIVIA}(?:[^"'();]+?\bfrom${JS_TRIVIA})?["']([^"']+)["']`,
+  "g",
+);
+const STATIC_REEXPORT_PATTERN = new RegExp(
+  String.raw`\bexport${JS_TRIVIA}(?:\*${JS_TRIVIA}(?:as${JS_TRIVIA}[\w$]+${JS_TRIVIA})?|\{[^}]*\}${JS_TRIVIA})from${JS_TRIVIA}["']([^"']+)["']`,
+  "g",
+);
 
 function readJson(filePath, label) {
   try {

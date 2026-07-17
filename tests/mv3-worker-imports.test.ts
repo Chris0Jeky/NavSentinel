@@ -99,6 +99,24 @@ describe("MV3 emitted service-worker import check", () => {
     expect(result.stdout).toContain("PASS: 3 statically linked worker modules");
   });
 
+  it.each([
+    ["block-comment side-effect import", 'import/* emitted */"./missing-static.js";'],
+    ["line-comment side-effect import", 'import// emitted\n"./missing-static.js";'],
+    ["commented import-from edge", 'import{x}/* emitted */from/* path */"./missing-static.js";'],
+    ["commented export-star edge", 'export/* emitted */*from"./missing-static.js";'],
+    ["commented export-list edge", 'export/* emitted */{x}/* path */from"./missing-static.js";'],
+  ])("follows and rejects a missing %s", (_label, commentedEdge) => {
+    const dist = makeDist({
+      "service-worker-loader.js": 'import"./assets/sw.js";',
+      "assets/sw.js": `${commentedEdge} import"./pending-decision-runtime~sw.js";`,
+      "assets/pending-decision-runtime~sw.js": "export {};",
+    });
+
+    const result = runCheck(dist);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("missing-static.js");
+  });
+
   it("rejects a static graph that omits the pending-decision runtime", () => {
     const dist = makeDist({ "service-worker-loader.js": "export {};" });
 
