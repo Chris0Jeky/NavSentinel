@@ -46,11 +46,12 @@ rotation under #437.
   #459. It carries CRXJS 2.7.1, Vite 8.1.5, Rollup 2.80.0, Rolldown 1.1.5,
   audit zero, and the aligned Node engine floor.
 - PR #356 and #464 were twice reviewed, thread-clean, and exact-head CI-green
-  before #463 changed `main`'s dependency graph. Their current-main merge
-  resolutions are now staged but uncommitted in separate worktrees. #356 passes
-  2,875 unit plus 65/65 one-worker E2E; #464 passes 2,874 unit plus its targeted
-  3/3 E2E. Coordinator audit, commit/push, full exact-head CI, and both fresh
-  reviews remain; neither may merge without its human Gate-3 evidence.
+  before #463 changed `main`'s dependency graph. Their current-main refreshes are
+  committed locally as `5692e08` and `c7870aa`, respectively. #356 passes 2,875
+  unit plus 65/65 one-worker E2E; #464 passes 2,874 unit plus 65/65 one-worker
+  E2E. Each refresh must reach local/remote/PR equality, full exact-head CI, and
+  both fresh reviews; neither may merge
+  without its human Gate-3 evidence.
 - PR #466's Cycle 53 runtime tree passed 176 focused broker/SW tests, typecheck,
   lint, build, 2,901 units, rollback 3/3, all 64 one-worker E2E, package, and
   all 12 performance budgets after merging current `main`. The first exact-head
@@ -58,7 +59,17 @@ rotation under #437.
   request requiring an unavailable raw destination, and stale child-frame
   liveness based on `getFrame`. Commits `6a18f1d` and `8c0fed1` replace those
   with a worker-owned capability, exact `getAllFrames` verification, and a
-  static module split. Fresh exact-head reviews, thread accounting, and CI remain.
+  static module split. Candidate `af0ccb2` was pushed, passed exact-head CI, and
+  had all four historical threads resolved. The first independent re-review then
+  found a new medium gate gap: build/package could still pass if bundling
+  reintroduced an unloadable worker graph. `dfea4da` adds the emitted-graph
+  verifier to both paths plus the initial nine pass/fail fixtures. Fresh round 2
+  then proved the regex missed comment-separated dynamic imports, namespace
+  re-exports, and comment-separated static imports/re-exports. `5d6ad17` and
+  `ab6d845` add the 17-fixture regression set; `ddfacf0` replaces the hand-
+  rolled regex parser with direct `es-module-lexer` import metadata.
+  Local/remote/PR equality, exact-head reviews, thread accounting, and CI remain
+  live-authoritative.
 - PR #466's package is about 492.9/500KB while reputation is a 52-byte test fixture. The
   old 150KB/100K-domain plan cannot meet its stated 0.01% FP target or aggregate
   package cap as written.
@@ -72,6 +83,25 @@ rotation under #437.
   not remove the legacy injected allow/trust/resume authority or complete RI-01.
 
 ## Local review evidence
+
+- **PR #466 independent round 1 (exact `af0ccb2`, 2026-07-17):** validated the
+  worker-owned consume capability, positive child-frame enumeration, and static
+  emitted graph, but found one medium release-gate gap and one low status-truth
+  gap. Build/package did not automatically reject dynamic/preload, missing,
+  remote, or out-of-dist worker imports; the durable queue still called the
+  pushed, CI-green candidate local. `dfea4da` fixes the gate with a recursive
+  emitted-closure verifier and nine pass/fail fixtures; this status sync fixes
+  the low finding. Both review rounds must restart from the final exact head.
+
+- **PR #466 independent round 2 (exact `7e173eb`, 2026-07-17):** found one
+  medium release-gate bypass and one low status gap. The graph regex missed
+  valid comment-separated dynamic/static imports and re-exports plus namespace
+  re-export edges, so it could omit an unloadable or missing reachable chunk;
+  `5d6ad17`/`ab6d845` add eight fixtures and `ddfacf0` moves edge discovery to
+  a real module lexer. The handoff
+  still described push as future after `7e173eb` was already remote/PR-equal and
+  exact-head CI-green; this status sync removes that transient claim. Both
+  independent rounds restart on the final exact head.
 
 - **PR #464 pre-final adversarial round (two independent lenses, 2026-07-17):**
   the initial isolated commit regressed Level 6. One lens found that discarding
@@ -169,10 +199,11 @@ comparative evidence.
 
 ## Next safe slice
 
-Push PR #466's review fixes, resolve each finding with commit evidence, then run
-two fresh exact-head reviews, bot/thread accounting, and CI; leave it human-held
-for AI-22. Then finish the staged current-main refreshes for #356 and #464;
-both must repeat exact-head reviews/CI before AI-13 or AI-21 is actionable. Do
+Publish PR #466 through `ddfacf0` plus this status sync until local/remote/PR
+heads match, then run two fresh exact-head reviews, bot/thread accounting, and
+CI; leave it human-held for AI-22. Then publish the committed current-main
+refreshes for #356 and #464; both must repeat exact-head reviews/CI before AI-13
+or AI-21 is actionable. Do
 not start a fourth browser-held slice.
 
 ## Queue accounting
@@ -180,12 +211,13 @@ not start a fourth browser-held slice.
 - **Open / human-held:** #356 (AI-13), #464 (AI-21), and #466 (AI-22);
   none may merge from automation alone.
 - **Merged:** #463 / #459 as `2888483`; intended close link verified.
-- **Open / in progress:** PR #466 pending-decision SW boundary; three review
-  blockers are fixed and locally proven, while push, exact-head reviews,
-  bot/thread accounting, CI, and AI-22 remain. #356's current-main merge is
-  staged and locally passes 2,875 unit plus 65/65 E2E; it is not committed or
-  pushed. #464's current-main merge is also staged, uncommitted, and unpushed;
-  its 2,874 unit and targeted 3/3 E2E pass, but its full 65-test lane remains.
+- **Open / in progress:** PR #466 pending-decision SW boundary; the three runtime
+  blockers, emitted-graph gate, and round-2 parser gaps are fixed. Publish until
+  local/remote/PR heads match, then require exact-head reviews, bot/thread
+  accounting, CI, and AI-22.
+  #356's current-main merge is committed as `5692e08` and passes 2,875 unit plus
+  65/65 E2E; #464's merge is committed as `c7870aa` and passes 2,874 unit plus
+  65/65 E2E. Each must reach local/remote/PR equality before its fresh gates.
 - **Parked:** draft #457 agent-harness tooling; closed #273/#399 retain explicit
   re-entry paths.
 - **Blocked:** AI-15, AI-8, and AI-14.
@@ -209,8 +241,9 @@ not start a fourth browser-held slice.
   but the pending native fetch should be drained or mocked by the harness.
 - PR #466 leaves only about 7.1KB aggregate and 1.7KB service-worker budget
   margin. Its static pending-runtime chunk is required because Chrome MV3
-  extension service workers do not support dynamic `import()`; future growth
-  must re-prove the emitted static import graph and both budgets.
+  extension service workers do not support dynamic `import()`; ordinary build
+  and package now re-prove the emitted graph automatically, while perf still
+  enforces both size budgets.
 - The first emitted-worker verifier used an incomplete import regex, then an
   overbroad page-global check against a pre-existing shared storage chunk. Both
   were invalid verifier signals; the corrected targeted check proved a module
@@ -219,11 +252,23 @@ not start a fourth browser-held slice.
 - The first post-fix full E2E command was killed by an incorrectly short shell
   timeout and Playwright's reporter emitted `EPIPE`. That was a coordinator
   invalid signal; the unchanged, correctly timed one-worker rerun passed 64/64.
+- PowerShell did not expand `scripts/agent_hooks/*.py` for `py_compile`; that was
+  an invalid syntax-check invocation. `python -m compileall -q
+  scripts/agent_hooks` is the working cross-file check and passed.
+- The bundled GitHub thread helper first failed decoding CLI output with Windows
+  `cp1252`; rerunning it with `PYTHONUTF8=1` produced the complete four-thread
+  audit. Preserve UTF-8 mode for future thread audits on this machine.
 - The first post-round-1 rollback lane timed out once waiting for Level 10's
   return navigation. That exact case then passed 3/3 repeated, the full rollback
   lane passed 3/3, and the full one-worker lane passed 64/64. This is retained as
   a non-blocking nondeterministic signal: capture a trace plus worker/page logs
   and seed a dedicated harness issue if it recurs; do not silently retry it.
+- The first `c8119c1` full one-worker lane reached 63/64 because Chromium's
+  persistent context timed out during launch before RW-10 Space executed, after
+  47 earlier cases passed. No Chrome process or test profile remained afterward;
+  the exact case then passed 3/3 in fresh contexts. Retain this as a non-blocking
+  Windows harness signal: if it recurs, capture `DEBUG=pw:browser` launch logs
+  and seed a dedicated issue rather than treating a retry as the full-suite gate.
 - Update shared branches with `git merge main`, never rebase; do not discard work
   or rewrite history without the explain-and-approve protocol.
 - Do not edit `extension/dist/` or generated data directly.
