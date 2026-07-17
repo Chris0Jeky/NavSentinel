@@ -228,10 +228,11 @@ export class RedirectChainTracker {
   private pruneStale(now: number): void {
     for (const [tabId, chain] of this.chains) {
       const lastHop = chain.hops[chain.hops.length - 1];
-      // An empty-hops chain (e.g. one restored from session storage, whose persisted
-      // validation does not require hops.length > 0) has no lastHop, so the lastHop-based
-      // staleness check never fired and the entry persisted indefinitely. Fall back to
-      // startedAt so such chains are still time-pruned. (#285)
+      // Defensive: an empty-hops chain has no lastHop, so the lastHop-based staleness check
+      // never fires and the entry would persist indefinitely. Session restore now rejects
+      // empty-hops chains (#390), so this only guards a chain set directly into the backing
+      // map outside the recordHop path (tests, future callers); fall back to startedAt so it
+      // is still time-pruned. (#285, #390)
       const refTs = lastHop ? lastHop.ts : chain.startedAt;
       if (now - refTs > CHAIN_STALE_MS) {
         this.chains.delete(tabId);

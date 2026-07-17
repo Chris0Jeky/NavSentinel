@@ -254,9 +254,17 @@ describe("service worker handlers", () => {
   describe("hydration gating of session-backed handlers (#228.1)", () => {
     it("defers ns-check-rollback until hydration so it reflects restored state", async () => {
       const mock = createChromeMock();
-      // Seed a pending rollback for tab 5 in session storage.
+      // Seed a pending rollback for tab 5 in session storage. (Full lastCommitted shape, as
+      // onCommittedHandler always writes it — the #339 restore validator requires it.)
       mock.chrome.storage.session._store["ns_sw:lastCommitted"] = {
-        "5": { allowedAtCommit: false, prevUrl: "https://prev.test/" },
+        "5": {
+          url: "https://cur.test/",
+          prevUrl: "https://prev.test/",
+          transitionType: "link",
+          qualifiers: [],
+          ts: 1000,
+          allowedAtCommit: false,
+        },
       };
       // Gate the hydrate read so the message arrives BEFORE hydration completes.
       let releaseGet!: () => void;
@@ -332,7 +340,11 @@ describe("service worker handlers", () => {
       const mock = createChromeMock();
       mock.chrome.storage.session._store["ns_sw:redirectChains"] = {
         "5": {
-          hops: [{ url: "https://a.test/" }, { url: "https://b.test/" }],
+          // Full RedirectHop shape ({ url, ts, transitionType }) — the #339 restore validator requires it.
+          hops: [
+            { url: "https://a.test/", ts: 1, transitionType: "link" },
+            { url: "https://b.test/", ts: 2, transitionType: "link" },
+          ],
           startedAt: 1,
         },
       };
@@ -1216,6 +1228,166 @@ describe("service worker handlers", () => {
       expect(flow.phase).toBe("redirect");
     });
 
+    it("removes the completed flow from the map and session storage instead of leaking it (#366)", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+      const oauthStore = () =>
+        (mock.chrome.storage.session._store["ns_sw:oauthFlow"] ?? {}) as Record<string, unknown>;
+
+      const authUrl =
+        "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&redirect_uri=https%3A%2F%2Fapp.com%2Fcb&response_type=code";
+      mock.emitBeforeNavigate({ tabId: 10, frameId: 0, url: authUrl });
+      mock.emitCommitted({ tabId: 10, frameId: 0, url: authUrl, transitionType: "link" });
+      expect(oauthStore()["10"]).toBeTruthy(); // resident while active
+
+      // The callback commit (OAuth response params) completes the flow.
+      mock.emitBeforeNavigate({ tabId: 10, frameId: 0, url: "https://app.com/cb?code=done" });
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        url: "https://app.com/cb?code=done",
+        transitionType: "link",
+        transitionQualifiers: ["client_redirect"],
+      });
+
+      // Pre-fix: the entry lingered as phase:'complete'. Post-fix: it is deleted.
+      expect(oauthStore()["10"]).toBeUndefined();
+      // The terminal 'complete' update is still delivered to the content script.
+      const completeMsg = mock.sentMessages.find(
+        (m) =>
+          (m.message as { type: string }).type === "ns-oauth-flow-update" &&
+          (m.message as { flow: { phase: string } }).flow.phase === "complete",
+      );
+      expect(completeMsg).toBeDefined();
+    });
+
+    it("prunes stale flows during an in-place update, not only on new-flow creation (#366)", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+      const oauthStore = () =>
+        (mock.chrome.storage.session._store["ns_sw:oauthFlow"] ?? {}) as Record<string, unknown>;
+
+      // Tab 10 starts a flow at T0.
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        transitionType: "link",
+        url: "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&redirect_uri=https%3A%2F%2Fapp-a.com%2Fcb&response_type=code",
+      });
+      // +40s: tab 20 starts a flow (tab 10 still fresh at 40s < 60s max age).
+      vi.setSystemTime(new Date("2026-03-17T12:00:40.000Z"));
+      mock.emitCommitted({
+        tabId: 20,
+        frameId: 0,
+        transitionType: "link",
+        url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=x&redirect_uri=https%3A%2F%2Fapp-b.com%2Fcb&response_type=code",
+      });
+      expect(oauthStore()["10"]).toBeTruthy();
+      expect(oauthStore()["20"]).toBeTruthy();
+
+      // +30s more: tab 10 is now 70s old (stale); tab 20 is 30s (fresh). Tab 20 gets a
+      // SECOND authorize → the IN-PLACE update path. Pre-fix that branch never pruned,
+      // so tab 10's stale flow lingered; post-fix the prune-before-branch drops the OTHER
+      // tab's stale entry while the updating tab is excluded from pruning.
+      vi.setSystemTime(new Date("2026-03-17T12:01:10.000Z"));
+      mock.emitCommitted({
+        tabId: 20,
+        frameId: 0,
+        transitionType: "link",
+        transitionQualifiers: ["server_redirect"],
+        url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=x&redirect_uri=https%3A%2F%2Fapp-b.com%2Fcb&response_type=code&prompt=consent",
+      });
+
+      expect(oauthStore()["10"]).toBeUndefined(); // other tab's stale flow pruned
+      expect(oauthStore()["20"]).toBeTruthy(); // the updating tab is never pruned
+    });
+
+    it("never prunes the active tab's own flow during an in-place update, preserving its callback domain (#366)", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+
+      // Tab 10 starts a flow with redirect_uri -> expectedCallbackDomain = app-a.com.
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        transitionType: "link",
+        url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=x&redirect_uri=https%3A%2F%2Fapp-a.com%2Fcb&response_type=code",
+      });
+
+      // The user lingers on consent for 70s (> 60s max age), THEN the page does an
+      // in-place authorize hop WITHOUT a redirect_uri (the #324 case). The flow is past
+      // max-age, but as the active tab it must NOT be pruned — otherwise it would restart
+      // as a fresh flow with expectedCallbackDomain "" and lose redirect-mismatch coverage.
+      vi.setSystemTime(new Date("2026-03-17T12:01:10.000Z"));
+      mock.sentMessages.length = 0;
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        transitionType: "link",
+        transitionQualifiers: ["server_redirect"],
+        url: "https://login.live.com/oauth20_authorize.srf?client_id=x&response_type=code&scope=openid",
+      });
+
+      const flowMsg = mock.sentMessages.find(
+        (m) => (m.message as { type: string }).type === "ns-oauth-flow-update" && m.tabId === 10,
+      );
+      const flow = (flowMsg?.message as { flow: { phase: string; expectedCallbackDomain: string } } | undefined)?.flow;
+      expect(flow?.phase).toBe("consent"); // updated in place, not restarted as 'redirect'
+      expect(flow?.expectedCallbackDomain).toBe("app-a.com"); // preserved (pre-bug-fix: "")
+    });
+
+    it("excludes the active tab from SIZE-CAP pruning, preserving its callback domain (#366 R2)", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+      const oauthStore = () =>
+        (mock.chrome.storage.session._store["ns_sw:oauthFlow"] ?? {}) as Record<string, unknown>;
+
+      // Tab 10 starts the OLDEST flow (redirect_uri -> expectedCallbackDomain app-a.com).
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        transitionType: "link",
+        url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=x&redirect_uri=https%3A%2F%2Fapp-a.com%2Fcb&response_type=code",
+      });
+      // Fill to 51 entries total (> OAUTH_FLOW_PRUNE_LIMIT of 50), all fresh (no age prune).
+      for (let t = 11; t <= 60; t++) {
+        mock.emitCommitted({
+          tabId: t,
+          frameId: 0,
+          transitionType: "link",
+          url: `https://accounts.google.com/o/oauth2/v2/auth?client_id=x&redirect_uri=https%3A%2F%2Fapp-${t}.com%2Fcb&response_type=code`,
+        });
+      }
+      expect(Object.keys(oauthStore()).length).toBe(51); // over the 50 cap, none aged out
+
+      // Tab 10 (the OLDEST entry, and the active tab) does an in-place authorize hop WITHOUT
+      // a redirect_uri. The size cap fires (51 > 50) and would, without the active-tab
+      // filter, evict tab 10 as the oldest — losing expectedCallbackDomain. The filter must
+      // protect it and drop the oldest OTHER entry instead.
+      vi.setSystemTime(new Date("2026-03-17T12:00:50.000Z")); // still < 60s for every flow
+      mock.sentMessages.length = 0;
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        transitionType: "link",
+        transitionQualifiers: ["server_redirect"],
+        url: "https://login.live.com/oauth20_authorize.srf?client_id=x&response_type=code&scope=openid",
+      });
+
+      const flowMsg = mock.sentMessages.find(
+        (m) => (m.message as { type: string }).type === "ns-oauth-flow-update" && m.tabId === 10,
+      );
+      const flow = (flowMsg?.message as { flow: { phase: string; expectedCallbackDomain: string } } | undefined)?.flow;
+      expect(flow?.phase).toBe("consent"); // updated in place, not restarted
+      expect(flow?.expectedCallbackDomain).toBe("app-a.com"); // preserved under size-cap pruning
+      expect(oauthStore()["10"]).toBeTruthy(); // active tab survived the cap
+      expect(Object.keys(oauthStore()).length).toBe(50); // exactly one OTHER entry pruned
+    });
+
     it("transitions to consent on second OAuth URL with OAuth params", async () => {
       const mock = createChromeMock();
       await loadSw(mock);
@@ -2037,11 +2209,87 @@ describe("service worker handlers", () => {
       expect(mock.chrome.action.setBadgeText).not.toHaveBeenCalledWith({ tabId: 10, text: "✓" });
     });
 
+    it("retries the mode read after a transient storage failure, avoiding a false green badge (#362)", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const mock = createChromeMock();
+      // Persisted mode is "off", but the FIRST cachedDefaultMode read rejects (a transient
+      // storage failure). The retry must recover "off" so the badge does not flash green.
+      let localGetCalls = 0;
+      mock.chrome.storage.local.get = (async () => {
+        localGetCalls++;
+        if (localGetCalls === 1) throw new Error("transient storage failure");
+        return { [SUITE_SETTINGS_KEY]: { nav: { defaultMode: "off" } } };
+      }) as unknown as typeof mock.chrome.storage.local.get;
+
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        url: "https://example.com/",
+        transitionType: "link",
+      });
+      await vi.runAllTimersAsync();
+
+      // The failure was surfaced (no longer a silent catch) and the retry ran.
+      expect(
+        warnSpy.mock.calls.some((c) => String(c[0]).includes("cachedDefaultMode read failed")),
+      ).toBe(true);
+      expect(localGetCalls).toBeGreaterThanOrEqual(2); // initial read + retry
+      // mode "off" => gray badge; pre-fix the swallowed failure left "smart" => green.
+      expect(mock.chrome.action.setBadgeBackgroundColor).not.toHaveBeenCalledWith(
+        expect.objectContaining({ tabId: 10, color: "#16a34a" }),
+      );
+      warnSpy.mockRestore();
+    });
+
+    it("does not let a slow startup read clobber a newer onChanged mode (race) (#362)", async () => {
+      const mock = createChromeMock();
+      // Startup mode read is SLOW and returns the OLD mode ("smart" => green).
+      let releaseLocal!: () => void;
+      const localGate = new Promise<void>((r) => { releaseLocal = r; });
+      mock.chrome.storage.local.get = (async () => {
+        await localGate;
+        return { [SUITE_SETTINGS_KEY]: { nav: { defaultMode: "smart" } } };
+      }) as unknown as typeof mock.chrome.storage.local.get;
+
+      await loadSw(mock);
+
+      // While the startup read is in flight, the user switches to "off" -> onChanged delivers it.
+      mock.emitStorageChanged(
+        {
+          [SUITE_SETTINGS_KEY]: {
+            oldValue: { nav: { defaultMode: "smart" } },
+            newValue: { nav: { defaultMode: "off" } },
+          },
+        },
+        "local",
+      );
+
+      // Now let the slow startup read resolve with the now-STALE "smart".
+      releaseLocal();
+      await vi.runAllTimersAsync();
+
+      // The newer "off" from onChanged must win -> a fresh commit paints gray, not green.
+      // Pre-fix the late startup read overwrote "off" with "smart" => green badge.
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        url: "https://example.com/",
+        transitionType: "link",
+      });
+      await vi.runAllTimersAsync();
+      expect(mock.chrome.action.setBadgeBackgroundColor).not.toHaveBeenCalledWith(
+        expect.objectContaining({ tabId: 10, color: "#16a34a" }),
+      );
+    });
+
     it("the deferred wake-up navigation waits for the mode read before painting (#303)", async () => {
       const mock = createChromeMock();
-      // Gate BOTH reads so the worker is un-hydrated AND the mode is unread when
-      // the waking navigation arrives -> it must take the deferred path and wait
-      // on startupReady (hydration + mode) before choosing the badge color.
+      // Gate BOTH reads so the worker is un-hydrated AND the mode is unread when the
+      // waking navigation arrives -> it defers on hydration; once hydrated, the handler
+      // runs and the icon paint awaits the mode read before choosing the badge color.
       let releaseLocal!: () => void;
       let releaseSession!: () => void;
       const localGate = new Promise<void>((r) => { releaseLocal = r; });
@@ -2067,7 +2315,7 @@ describe("service worker handlers", () => {
         url: "https://example.com/",
         transitionType: "link",
       });
-      // Handler is deferred on startupReady -> nothing painted for this tab yet.
+      // Handler is deferred on hydration -> nothing painted for this tab yet.
       expect(mock.chrome.action.setBadgeBackgroundColor).not.toHaveBeenCalledWith(
         expect.objectContaining({ tabId: 10 }),
       );
@@ -2083,7 +2331,7 @@ describe("service worker handlers", () => {
       );
     });
 
-    it("a nav after hydration but before the mode read still defers (session-before-local window) (#303)", async () => {
+    it("runs the nav state machine on hydration but defers ONLY the icon paint until the mode read (#327)", async () => {
       const mock = createChromeMock();
       let releaseLocal!: () => void;
       let releaseSession!: () => void;
@@ -2108,9 +2356,6 @@ describe("service worker handlers", () => {
       releaseSession();
       await vi.runAllTimersAsync();
 
-      // A nav in this window must STILL defer -- the guard is startupSettled, not
-      // swState.hydrated. With the old swState.hydrated guard it would take the
-      // synchronous path and paint green from the stale "smart" default.
       mock.emitCommitted({
         tabId: 11,
         frameId: 0,
@@ -2118,15 +2363,145 @@ describe("service worker handlers", () => {
         transitionType: "link",
       });
       await vi.runAllTimersAsync();
+
+      // #327: the nav state machine runs as soon as the session maps are hydrated -- the
+      // handler did NOT defer on the mode read (the pre-#327 startupSettled gate would
+      // have). Observable: it recorded lastUrl for the tab.
+      const lastUrl = (mock.chrome.storage.session._store["ns_sw:lastUrl"] ?? {}) as Record<
+        string,
+        string
+      >;
+      expect(lastUrl["11"]).toBe("https://example.com/");
+
+      // ...but ONLY the icon paint is deferred on the still-pending mode read, so no badge
+      // has been painted for this tab yet -- in particular not a stale-"smart" green.
+      expect(mock.chrome.action.setBadgeText).not.toHaveBeenCalledWith({ tabId: 11, text: "" });
+      expect(mock.chrome.action.setBadgeText).not.toHaveBeenCalledWith({ tabId: 11, text: "✓" });
+      expect(mock.chrome.action.setBadgeBackgroundColor).not.toHaveBeenCalledWith(
+        expect.objectContaining({ tabId: 11 }),
+      );
+
+      // Release the mode read; the icon now paints with the restored "off" mode (gray).
+      releaseLocal();
+      await vi.runAllTimersAsync();
+      expect(mock.chrome.action.setBadgeText).toHaveBeenCalledWith({ tabId: 11, text: "" });
+      // And green/"✓" must NEVER have reached tab 11 at any point — no stale-"smart" flash.
       expect(mock.chrome.action.setBadgeText).not.toHaveBeenCalledWith({ tabId: 11, text: "✓" });
       expect(mock.chrome.action.setBadgeBackgroundColor).not.toHaveBeenCalledWith(
         expect.objectContaining({ tabId: 11, color: "#16a34a" }),
       );
+      // The gray paint is definitively the LAST write for the tab (no trailing green flash).
+      const tab11Texts = (mock.chrome.action.setBadgeText as unknown as {
+        mock: { calls: Array<[{ tabId: number; text: string }]> };
+      }).mock.calls.filter((c) => c[0].tabId === 11);
+      expect(tab11Texts[tab11Texts.length - 1]?.[0]).toEqual({ tabId: 11, text: "" });
+    });
 
-      // Release the mode read; the deferred handler now runs with mode "off".
+    it("with the mode read settled first, the nav still defers on hydration, then paints gray (#327 local-first)", async () => {
+      const mock = createChromeMock();
+      let releaseLocal!: () => void;
+      let releaseSession!: () => void;
+      const localGate = new Promise<void>((r) => { releaseLocal = r; });
+      const sessionGate = new Promise<void>((r) => { releaseSession = r; });
+
+      mock.chrome.storage.local.get = (async () => {
+        await localGate;
+        return { [SUITE_SETTINGS_KEY]: { nav: { defaultMode: "off" } } };
+      }) as unknown as typeof mock.chrome.storage.local.get;
+
+      const origSessionGet = mock.chrome.storage.session.get.bind(mock.chrome.storage.session);
+      mock.chrome.storage.session.get = (async (keys?: string | string[]) => {
+        await sessionGate;
+        return origSessionGet(keys);
+      }) as typeof mock.chrome.storage.session.get;
+
+      await loadSw(mock);
+
+      // Opposite ordering from the test above: the mode read (local) resolves FIRST while
+      // session hydration is still pending.
       releaseLocal();
       await vi.runAllTimersAsync();
-      expect(mock.chrome.action.setBadgeText).toHaveBeenCalledWith({ tabId: 11, text: "" });
+
+      // A nav in this window must STILL defer -- the handler gates on swState.hydrated,
+      // which is not yet true even though the mode is already read.
+      mock.emitCommitted({
+        tabId: 12,
+        frameId: 0,
+        url: "https://example.com/",
+        transitionType: "link",
+      });
+      await vi.runAllTimersAsync();
+      const lastUrlPending = (mock.chrome.storage.session._store["ns_sw:lastUrl"] ?? {}) as Record<
+        string,
+        string
+      >;
+      expect(lastUrlPending["12"]).toBeUndefined();
+      expect(mock.chrome.action.setBadgeText).not.toHaveBeenCalledWith({ tabId: 12, text: "" });
+
+      // Release hydration; the deferred handler runs and the icon paints gray immediately
+      // (cachedModeReady already settled, so the .then enqueues without further waiting).
+      releaseSession();
+      await vi.runAllTimersAsync();
+      const lastUrl = (mock.chrome.storage.session._store["ns_sw:lastUrl"] ?? {}) as Record<
+        string,
+        string
+      >;
+      expect(lastUrl["12"]).toBe("https://example.com/");
+      expect(mock.chrome.action.setBadgeText).toHaveBeenCalledWith({ tabId: 12, text: "" });
+      expect(mock.chrome.action.setBadgeBackgroundColor).not.toHaveBeenCalledWith(
+        expect.objectContaining({ tabId: 12, color: "#16a34a" }),
+      );
+    });
+
+    it("a threat escalation in the mode-pending window survives the deferred baseline reset (#327)", async () => {
+      const mock = createChromeMock();
+      let releaseLocal!: () => void;
+      let releaseSession!: () => void;
+      const localGate = new Promise<void>((r) => { releaseLocal = r; });
+      const sessionGate = new Promise<void>((r) => { releaseSession = r; });
+
+      // Mode is "smart" (on) -> the baseline reset would paint GREEN. The escalation paints
+      // red; with a naive deferred paint the late green would overwrite the red and hide the
+      // threat. The chain-anchored reset must be ordered BEFORE the escalation so red wins.
+      mock.chrome.storage.local.get = (async () => {
+        await localGate;
+        return { [SUITE_SETTINGS_KEY]: { nav: { defaultMode: "smart" } } };
+      }) as unknown as typeof mock.chrome.storage.local.get;
+
+      const origSessionGet = mock.chrome.storage.session.get.bind(mock.chrome.storage.session);
+      mock.chrome.storage.session.get = (async (keys?: string | string[]) => {
+        await sessionGate;
+        return origSessionGet(keys);
+      }) as typeof mock.chrome.storage.session.get;
+
+      await loadSw(mock);
+      releaseSession(); // hydrated; mode read still pending
+      await vi.runAllTimersAsync();
+
+      // Fresh top-frame nav reserves the baseline-reset chain slot (color deferred on mode).
+      mock.emitCommitted({ tabId: 13, frameId: 0, url: "https://example.com/", transitionType: "link" });
+      await vi.runAllTimersAsync();
+
+      // The content script detects a threat and escalates to red BEFORE the mode read resolves.
+      (mock.chrome.runtime.onMessage as unknown as {
+        emit: (m: unknown, s: unknown, r: (v?: unknown) => void) => void;
+      }).emit({ type: "ns-tab-risk-update", state: "red", blockCount: 0 }, { tab: { id: 13 } }, () => {});
+      await vi.runAllTimersAsync();
+
+      // Mode read resolves: the green reset runs, then the escalation — red is the final state.
+      releaseLocal();
+      await vi.runAllTimersAsync();
+
+      const colorCalls = (mock.chrome.action.setBadgeBackgroundColor as unknown as {
+        mock: { calls: Array<[{ tabId: number; color: string }]> };
+      }).mock.calls.filter((c) => c[0].tabId === 13);
+      const textCalls = (mock.chrome.action.setBadgeText as unknown as {
+        mock: { calls: Array<[{ tabId: number; text: string }]> };
+      }).mock.calls.filter((c) => c[0].tabId === 13);
+      // Final badge is red (✕ / #dc2626), NOT green (✓ / #16a34a). Pre-fix: the late green
+      // overwrote the red -> last write would be green.
+      expect(colorCalls[colorCalls.length - 1]?.[0].color).toBe("#dc2626");
+      expect(textCalls[textCalls.length - 1]?.[0].text).toBe("✕");
     });
   });
 
@@ -2134,7 +2509,7 @@ describe("service worker handlers", () => {
     it("a second suspicious URL within the suppress window still triggers a rollback", async () => {
       const mock = createChromeMock();
       await loadSw(mock);
-      await vi.runAllTimersAsync(); // hydration + startupSettled
+      await vi.runAllTimersAsync(); // hydration + mode read
 
       const TAB = 30; // not in readyTabs -> rollbacks queue into pendingRollbackByTab
 
@@ -2229,8 +2604,9 @@ describe("service worker handlers", () => {
 
       // Pre-fix (no in-flight guard): the deferred first callback hasn't resolved the
       // entry, so the second onUpdated re-reads it and re-sends -> [10, 10]. Post-fix:
-      // trySendRollback adds tabId to rollbackSendInFlight synchronously, so the second
-      // onUpdated sees the set populated and returns early -> [10].
+      // trySendRollback adds the tab+URL string key for the pending entry to
+      // rollbackSendInFlight synchronously (#360), so the second onUpdated sees that same
+      // key in the set and returns early -> [10].
       expect(rollbackSends).toEqual([10]);
     });
 
@@ -2249,6 +2625,40 @@ describe("service worker handlers", () => {
       mock.emitTabUpdated(13, { status: "complete" }, { url: "https://current.com/" });
 
       // Pre-fix: two forward-offer sends. Post-fix: forwardSendInFlight blocks the second.
+      expect(forwardSends).toEqual([13]);
+    });
+
+    it("does not double-send a forward offer when ns-store-forward rewrites the same-URL offer mid-send (#360)", async () => {
+      const mock = createChromeMock();
+      const { forwardSends } = deferSends(mock);
+      mock.chrome.storage.session._store["ns_sw:pendingForward"] = {
+        "13": { url: "https://evil.com/", ts: Date.now() },
+      };
+      mock.chrome.storage.session._store["ns_sw:readyTabs"] = [13];
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+
+      // First onUpdated dispatches the forward offer for evil.com (send deferred, in flight).
+      mock.emitTabUpdated(13, { status: "complete" }, { url: "https://current.com/" });
+      expect(forwardSends).toEqual([13]);
+
+      // ns-store-forward rewrites pendingForward with a FRESH object for the SAME url
+      // (to add a returnUrl) while the first send is still in flight.
+      (mock.chrome.runtime.onMessage as unknown as {
+        emit: (m: unknown, s: unknown, r: (v?: unknown) => void) => void;
+      }).emit(
+        { type: "ns-store-forward", url: "https://evil.com/", returnUrl: "https://origin.com/" },
+        { tab: { id: 13 } },
+        () => {}
+      );
+      await vi.runAllTimersAsync();
+
+      // A later onUpdated must NOT fire a second offer WHILE A is in flight: the tab+URL
+      // in-flight key still matches the rewritten same-URL offer. With the earlier
+      // object-identity keying the fresh rewrite object looked not-in-flight and produced a
+      // concurrent duplicate -> [13, 13]. (The separate *post-delivery* serialized re-send
+      // of the rewritten offer is a pre-existing edge tracked in #382, out of scope here.)
+      mock.emitTabUpdated(13, { status: "complete" }, { url: "https://current.com/" });
       expect(forwardSends).toEqual([13]);
     });
 
@@ -2324,6 +2734,288 @@ describe("service worker handlers", () => {
         unknown
       >;
       expect(stored["12"]).toBeUndefined();
+    });
+
+    it("does not clobber a newer queued rollback when a stale in-flight send errors (disc#5)", async () => {
+      const mock = createChromeMock();
+      const { captured } = deferSends(mock);
+      // Tab 11 is NOT ready and has a stale rollback seeded in storage. onUpdatedHandler
+      // flushes that seeded entry (dispatches the stale send; callback deferred below).
+      mock.chrome.storage.session._store["ns_sw:pendingRollback"] = {
+        "11": { url: "https://stale-evil.com/", qualifiers: [] },
+      };
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+
+      // Establish a prevUrl for tab 11 so the later cross-site commit is suspicious.
+      mock.emitCommitted({ tabId: 11, frameId: 0, url: "https://a.com/", transitionType: "link" });
+      // onUpdated dispatches the seeded (now stale) rollback; its callback is deferred.
+      mock.emitTabUpdated(11, { status: "complete" }, { url: "https://a.com/" });
+      // During the async send gap a NEWER suspicious commit (tab still not ready) writes a
+      // fresh entry into pendingRollbackByTab, overwriting the map slot with the newer URL.
+      mock.emitBeforeNavigate({ tabId: 11, frameId: 0, url: "https://newer-evil.com/" });
+      mock.emitCommitted({ tabId: 11, frameId: 0, url: "https://newer-evil.com/", transitionType: "link" });
+      await vi.runAllTimersAsync();
+
+      // The stale send now fails (e.g. tab busy / port gone). Its error callback must
+      // leave the map untouched, not resurrect the captured stale `pending`.
+      mock.setLastError({ message: "Could not establish connection." });
+      captured.forEach((cb) => cb());
+      mock.setLastError(undefined);
+      await vi.runAllTimersAsync();
+
+      const stored = (mock.chrome.storage.session._store["ns_sw:pendingRollback"] ?? {}) as Record<
+        string,
+        { url: string }
+      >;
+      // Pre-fix (main): the stale error callback re-inserted "stale-evil.com", clobbering
+      // the newer entry. Post-fix: the error callback leaves the map, so the newer entry
+      // of record survives.
+      expect(stored["11"]?.url).toBe("https://newer-evil.com/");
+    });
+
+    it("does not clobber a newer forward offer when a stale in-flight send errors (disc#6)", async () => {
+      const mock = createChromeMock();
+      const { captured } = deferSends(mock);
+      mock.chrome.storage.session._store["ns_sw:pendingForward"] = {
+        "12": { url: "https://offer-1.com/", ts: Date.now() },
+      };
+      mock.chrome.storage.session._store["ns_sw:readyTabs"] = [12];
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+
+      // A commit to a different URL on a ready tab dispatches the (now stale) forward
+      // offer; the callback is deferred.
+      mock.emitTabUpdated(12, { status: "complete" }, { url: "https://current.com/" });
+      // During the send gap the content script stores a NEWER forward offer. The stale
+      // offer-1.com entry is still in pendingForwardByTab (the send did not pre-delete it),
+      // so ns-store-forward OVERWRITES the slot from offer-1.com to offer-2.com.
+      (mock.chrome.runtime.onMessage as unknown as {
+        emit: (m: unknown, s: unknown, r: (v?: unknown) => void) => void;
+      }).emit({ type: "ns-store-forward", url: "https://offer-2.com/" }, { tab: { id: 12 } }, () => {});
+      await vi.runAllTimersAsync();
+
+      // The stale forward send fails; its error callback must leave the (newer) map entry.
+      mock.setLastError({ message: "Could not establish connection." });
+      captured.forEach((cb) => cb());
+      mock.setLastError(undefined);
+      await vi.runAllTimersAsync();
+
+      const stored = (mock.chrome.storage.session._store["ns_sw:pendingForward"] ?? {}) as Record<
+        string,
+        { url: string }
+      >;
+      // Pre-fix (main): stale "offer-1.com" clobbers the newer offer. Post-fix: newer survives.
+      expect(stored["12"]?.url).toBe("https://offer-2.com/");
+    });
+
+    it("a stale rollback SUCCESS callback does not delete a newer queued rollback (disc#5 success)", async () => {
+      const mock = createChromeMock();
+      const { captured } = deferSends(mock);
+      // Seed a stale rollback for a NOT-ready tab; onUpdated flushes it (deferred send).
+      mock.chrome.storage.session._store["ns_sw:pendingRollback"] = {
+        "21": { url: "https://stale-evil.com/", qualifiers: [] },
+      };
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+      mock.emitCommitted({ tabId: 21, frameId: 0, url: "https://a.com/", transitionType: "link" });
+      mock.emitTabUpdated(21, { status: "complete" }, { url: "https://a.com/" });
+      // During the gap a newer suspicious commit overwrites the slot.
+      mock.emitBeforeNavigate({ tabId: 21, frameId: 0, url: "https://newer-evil.com/" });
+      mock.emitCommitted({ tabId: 21, frameId: 0, url: "https://newer-evil.com/", transitionType: "link" });
+      await vi.runAllTimersAsync();
+
+      // The stale send now SUCCEEDS (no lastError). The success callback must delete ONLY
+      // the exact entry it sent (identity), not the newer entry now occupying the slot.
+      captured.forEach((cb) => cb());
+      await vi.runAllTimersAsync();
+
+      const stored = (mock.chrome.storage.session._store["ns_sw:pendingRollback"] ?? {}) as Record<
+        string,
+        { url: string }
+      >;
+      // Pre-fix (main): the success branch unconditionally deleted the slot, dropping the
+      // newer rollback. Post-fix (identity guard): the newer entry survives.
+      expect(stored["21"]?.url).toBe("https://newer-evil.com/");
+    });
+
+    it("a stale forward SUCCESS callback does not delete a newer ns-store-forward offer (disc#6 success)", async () => {
+      const mock = createChromeMock();
+      const { captured } = deferSends(mock);
+      mock.chrome.storage.session._store["ns_sw:pendingForward"] = {
+        "22": { url: "https://offer-1.com/", ts: Date.now() },
+      };
+      mock.chrome.storage.session._store["ns_sw:readyTabs"] = [22];
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+      mock.emitTabUpdated(22, { status: "complete" }, { url: "https://current.com/" });
+      // Newer offer overwrites the slot during the in-flight gap.
+      (mock.chrome.runtime.onMessage as unknown as {
+        emit: (m: unknown, s: unknown, r: (v?: unknown) => void) => void;
+      }).emit({ type: "ns-store-forward", url: "https://offer-2.com/" }, { tab: { id: 22 } }, () => {});
+      await vi.runAllTimersAsync();
+
+      // The stale forward send SUCCEEDS; the success callback must not delete the newer offer.
+      captured.forEach((cb) => cb());
+      await vi.runAllTimersAsync();
+
+      const stored = (mock.chrome.storage.session._store["ns_sw:pendingForward"] ?? {}) as Record<
+        string,
+        { url: string }
+      >;
+      // Pre-fix (main): unconditional delete dropped offer-2. Post-fix: it survives.
+      expect(stored["22"]?.url).toBe("https://offer-2.com/");
+    });
+
+    it("a stale rollback error callback does not resurrect an entry onBeforeNavigate cleared mid-flight", async () => {
+      const mock = createChromeMock();
+      const { captured } = deferSends(mock);
+      // Seed a rollback for tab 23; onUpdated dispatches it (deferred send).
+      mock.chrome.storage.session._store["ns_sw:pendingRollback"] = {
+        "23": { url: "https://evil.com/", qualifiers: [] },
+      };
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+      mock.emitTabUpdated(23, { status: "complete" }, { url: "https://evil.com/" });
+      // A new top-frame navigation begins: onBeforeNavigate clears pendingRollbackByTab.
+      mock.emitBeforeNavigate({ tabId: 23, frameId: 0, url: "https://legit-next.com/" });
+      await vi.runAllTimersAsync();
+
+      // The send for the superseded navigation now fails (port closed by the new nav).
+      mock.setLastError({ message: "Could not establish connection." });
+      captured.forEach((cb) => cb());
+      mock.setLastError(undefined);
+      await vi.runAllTimersAsync();
+
+      const stored = (mock.chrome.storage.session._store["ns_sw:pendingRollback"] ?? {}) as Record<
+        string,
+        unknown
+      >;
+      // Pre-fix (main / the interim !has guard): the empty slot let the stale value be
+      // re-inserted → a zombie that fires a false rollback on the legitimate next page.
+      // Post-fix: the error callback leaves the cleared slot empty.
+      expect(stored["23"]).toBeUndefined();
+    });
+
+    it("a stale forward error callback does not resurrect an offer onBeforeNavigate cleared mid-flight", async () => {
+      const mock = createChromeMock();
+      const { captured } = deferSends(mock);
+      mock.chrome.storage.session._store["ns_sw:pendingForward"] = {
+        "24": { url: "https://offer.com/", ts: Date.now() },
+      };
+      mock.chrome.storage.session._store["ns_sw:readyTabs"] = [24];
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+      mock.emitTabUpdated(24, { status: "complete" }, { url: "https://current.com/" });
+      // A genuine new navigation clears the forward offer (no rollback-return preserve).
+      mock.emitBeforeNavigate({ tabId: 24, frameId: 0, url: "https://legit-next.com/" });
+      await vi.runAllTimersAsync();
+
+      mock.setLastError({ message: "Could not establish connection." });
+      captured.forEach((cb) => cb());
+      mock.setLastError(undefined);
+      await vi.runAllTimersAsync();
+
+      const stored = (mock.chrome.storage.session._store["ns_sw:pendingForward"] ?? {}) as Record<
+        string,
+        unknown
+      >;
+      // Post-fix: the cleared forward slot stays empty (no zombie offer on the next page).
+      expect(stored["24"]).toBeUndefined();
+    });
+
+    it("still retries a rollback on a transient send error because the entry stays queued (no regression)", async () => {
+      const mock = createChromeMock();
+      const { captured } = deferSends(mock);
+      // Tab 16 is ready: the suspicious commit stores the rollback AND sends it (the
+      // store-then-send invariant). A transient send failure must leave it queued.
+      mock.chrome.storage.session._store["ns_sw:readyTabs"] = [16];
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+
+      mock.emitCommitted({ tabId: 16, frameId: 0, url: "https://a.com/", transitionType: "link" });
+      mock.emitBeforeNavigate({ tabId: 16, frameId: 0, url: "https://evil.com/" });
+      mock.emitCommitted({ tabId: 16, frameId: 0, url: "https://evil.com/", transitionType: "link" });
+      await vi.runAllTimersAsync();
+
+      // The send fails transiently; the entry was stored before dispatch and nothing
+      // superseded it, so it must remain queued for the next onUpdated retry.
+      mock.setLastError({ message: "Could not establish connection." });
+      captured.forEach((cb) => cb());
+      mock.setLastError(undefined);
+      await vi.runAllTimersAsync();
+
+      const stored = (mock.chrome.storage.session._store["ns_sw:pendingRollback"] ?? {}) as Record<
+        string,
+        { url: string }
+      >;
+      expect(stored["16"]?.url).toBe("https://evil.com/");
+    });
+
+    it("deletes the delivered rollback on a clean success (positive identity match)", async () => {
+      const mock = createChromeMock();
+      const { captured } = deferSends(mock);
+      // The real delivery path: a queued rollback is dispatched by onUpdated and the send
+      // succeeds with no competing write. The success branch's identity check must hold
+      // (get === sent) and delete the delivered entry. (The ready-tab onCommitted
+      // direct-send is a rare edge — onBeforeNavigate clears readyTabs for the new page —
+      // so the queue-then-deliver-on-onUpdated/ns-ready path is the common one.)
+      mock.chrome.storage.session._store["ns_sw:pendingRollback"] = {
+        "40": { url: "https://evil.com/", qualifiers: [] },
+      };
+      mock.chrome.storage.session._store["ns_sw:readyTabs"] = [40];
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+      mock.emitTabUpdated(40, { status: "complete" }, { url: "https://evil.com/" });
+      // No competing navigation; release the deferred success callback.
+      captured.forEach((cb) => cb());
+      await vi.runAllTimersAsync();
+
+      const stored = (mock.chrome.storage.session._store["ns_sw:pendingRollback"] ?? {}) as Record<
+        string,
+        unknown
+      >;
+      expect(stored["40"]).toBeUndefined();
+    });
+
+    it("deletes the delivered forward offer on a clean success (positive identity match)", async () => {
+      const mock = createChromeMock();
+      const { captured } = deferSends(mock);
+      mock.chrome.storage.session._store["ns_sw:pendingForward"] = {
+        "41": { url: "https://offer.com/", ts: Date.now() },
+      };
+      mock.chrome.storage.session._store["ns_sw:readyTabs"] = [41];
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+      mock.emitTabUpdated(41, { status: "complete" }, { url: "https://current.com/" });
+      captured.forEach((cb) => cb());
+      await vi.runAllTimersAsync();
+
+      const stored = (mock.chrome.storage.session._store["ns_sw:pendingForward"] ?? {}) as Record<
+        string,
+        unknown
+      >;
+      expect(stored["41"]).toBeUndefined();
+    });
+
+    it("persists the rollback at commit time even when the tab is not ready (always-store durability)", async () => {
+      const mock = createChromeMock();
+      deferSends(mock);
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+      // A suspicious commit on a NOT-ready tab (onBeforeNavigate cleared readyTabs for the
+      // new page) must still PERSIST the rollback so a worker death before the content
+      // script announces ns-ready re-delivers it on restart, instead of dropping it.
+      mock.emitCommitted({ tabId: 42, frameId: 0, url: "https://a.com/", transitionType: "link" });
+      mock.emitBeforeNavigate({ tabId: 42, frameId: 0, url: "https://evil.com/" });
+      mock.emitCommitted({ tabId: 42, frameId: 0, url: "https://evil.com/", transitionType: "link" });
+      await vi.runAllTimersAsync();
+
+      const stored = (mock.chrome.storage.session._store["ns_sw:pendingRollback"] ?? {}) as Record<
+        string,
+        { url: string }
+      >;
+      expect(stored["42"]?.url).toBe("https://evil.com/");
     });
   });
 });

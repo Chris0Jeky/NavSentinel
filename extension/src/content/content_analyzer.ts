@@ -193,6 +193,53 @@ export const BRAND_DB: ReadonlyArray<BrandEntry> = [
  */
 export const HTML_SNIPPET_MAX = 10000;
 
+/**
+ * Max chars scanned from `document.title`. `title` has no platform length limit
+ * and is fully attacker-controlled, yet detectBrand/analyzeSnapshot run ~60 brand
+ * titlePatterns + a loginSignals regex against it on the synchronous credential-
+ * submit path, so an unbounded title would blow the documented <50ms budget. The
+ * title is reduced via `boundedSample` (full head + short tail) so simple front-
+ * padding doesn't push the brand/login text out of the scanned range; a calibrated
+ * boundary placement can still evade the title channel (see #401), with the
+ * bodyText/imgSignals channels as the backstop.
+ */
+export const MAX_TITLE_LEN = 1000;
+
+/**
+ * Max chars scanned from each `<img>` alt/src attribute. A `data:`-URI src can be
+ * multi-MB; bounding each attribute (combined with the 50-image limit) caps the
+ * whole signal string at ~50·2·(MAX_IMG_ATTR + a short tail) without an unbounded
+ * concat. Reduced via `boundedSample` (full head + short tail) so a long URL path
+ * can't bury the brand keyword (e.g. `.../paypal-logo.png`); every image's signal
+ * is retained regardless of order (no truncating total cap that could drop a late
+ * logo).
+ */
+export const MAX_IMG_ATTR = 512;
+
+/**
+ * Max number of `<form>` elements snapshotted, mirroring the 50-image limit. A
+ * page with thousands of forms would otherwise pay a per-form getAttribute +
+ * password querySelector + a full checkFormActions scan (URL parse + base64
+ * regex) on the synchronous credential-submit path. Forms beyond the cap are not
+ * snapshot-scanned for suspicious actions — an accepted bound consistent with the
+ * module's other caps. A *credential* form beyond the cap is still covered:
+ * credential_guard independently assesses the actual submitting form's own
+ * action/formaction destination host at submit time, regardless of this list. (#401)
+ */
+export const MAX_FORMS = 50;
+
+/**
+ * Max chars kept from each form `action`. An `action` attribute has no length
+ * limit and is attacker-controlled; a multi-MB action would make the base64
+ * regex + URL parse in checkFormActions O(MB) each on the <50ms submit path. A
+ * plain head slice (NOT boundedSample — the space boundedSample inserts is not in
+ * the base64 alphabet and would defeat the base64-shape heuristic) preserves
+ * detection: the scheme+host sit at the front (cross-domain check intact) and a
+ * genuine base64 blob truncated to a multiple-of-4 head still satisfies
+ * length%4===0 + the strict alphabet. Kept a multiple of 4 for exactly that. (#401)
+ */
+export const MAX_FORM_ACTION_LEN = 2048;
+
 export interface KitFingerprint {
   name: string;
   /** CSS selectors or attribute patterns to look for */
@@ -271,6 +318,17 @@ export const KIT_FINGERPRINTS: ReadonlyArray<KitFingerprint> = [
   {
     name: "Phish-Hidden-Iframe",
     selectors: ['iframe[style*="display:none"]', 'iframe[style*="visibility:hidden"]', 'iframe[width="0"]', 'iframe[height="0"]'],
+    // The substring selectors only match the no-space form `display:none`; a phishing page
+    // writing the standard `display: none` (space after the colon), or hiding via inline CSS
+    // dimensions `width: 0`/`height: 0` instead of the width/height attributes, evades them
+    // entirely (#289). Mirror Exfil-Hidden-Form's HTML_SNIPPET_MAX-bounded fallback so the
+    // space and CSS-dimension variants are still caught against the htmlSnippet.
+    htmlPatterns: [
+      new RegExp(
+        String.raw`<iframe[^>]{0,${HTML_SNIPPET_MAX}}style\s*=\s*["'][^"']{0,${HTML_SNIPPET_MAX}}(?:display\s*:\s*none|visibility\s*:\s*hidden|(?:width|height)\s*:\s*0)`,
+        "i",
+      ),
+    ],
   },
   {
     name: "Base64-Form-Action",
@@ -392,6 +450,23 @@ export function domainMatchesBrand(currentDomain: string, brand: BrandEntry): bo
 // Snapshot builder (runs in content script with real DOM)
 // ---------------------------------------------------------------------------
 
+/**
+ * Bounded sample of an attacker-controlled string for content scanning. Keeps the
+ * full first `max` chars — so it never drops anything a plain head-only
+ * `slice(0, max)` would have kept — PLUS a short `max>>2`-char tail, so brand/login
+ * text pushed toward the front (a hostile `<title>`) or buried at the end of a long
+ * URL path is still scanned. This is a bounded sample, not a full scan: content
+ * placed precisely past the head boundary with calibrated trailing padding can
+ * still land in the omitted middle `[max, len-(max>>2))`. That residual title-
+ * channel gap (tracked on #401) is an inherent tradeoff of the O(max) budget and is
+ * backstopped by the untouched bodyText/imgSignals detection channels.
+ */
+export function boundedSample(s: string, max: number): string {
+  if (s.length <= max) return s;
+  const tailStart = Math.max(max, s.length - (max >> 2));
+  return s.slice(0, max) + " " + s.slice(tailStart);
+}
+
 /** Build a PageSnapshot from a live Document. Called in content script context. */
 export function buildPageSnapshot(doc: Document): PageSnapshot {
   // Credential-page gate: shared visible-credential-field helper (#196).
@@ -418,22 +493,47 @@ export function buildPageSnapshot(doc: Document): PageSnapshot {
   }
   scriptText = scriptText.slice(0, 30000);
 
-  // Image signals
+  // Image signals -- each alt/src is head+tail sampled to ~MAX_IMG_ATTR chars (a
+  // multi-MB data:-URI src would otherwise blow the analysis budget). The 50-image
+  // limit bounds the total; every image's signal is retained so image order can't
+  // drop a brand match (see MAX_IMG_ATTR / boundedSample). Only slice/lowercase
+  // present attributes to avoid needless allocations on the hot path.
   const imgs = doc.querySelectorAll("img");
   let imgSignals = "";
   const imgLimit = Math.min(imgs.length, 50);
   for (let i = 0; i < imgLimit; i++) {
     const img = imgs[i] as HTMLImageElement;
-    imgSignals += " " + (img.getAttribute("alt") || "").toLowerCase() +
-                  " " + (img.getAttribute("src") || "").toLowerCase();
+    const alt = img.getAttribute("alt");
+    const src = img.getAttribute("src");
+    imgSignals += " " + (alt ? boundedSample(alt, MAX_IMG_ATTR).toLowerCase() : "") +
+                  " " + (src ? boundedSample(src, MAX_IMG_ATTR).toLowerCase() : "");
   }
 
-  // Form actions
+  // Form actions -- capped at MAX_FORMS, and each action head-sliced to
+  // MAX_FORM_ACTION_LEN so a multi-MB action can't blow the analysis budget (see
+  // the constants). A plain slice (not boundedSample) is used to keep the base64
+  // heuristic's alphabet/length%4 semantics intact.
   const formActions: Array<{ action: string; hasPassword: boolean }> = [];
   const forms = doc.querySelectorAll("form");
-  for (let i = 0; i < forms.length; i++) {
+  const formLimit = Math.min(forms.length, MAX_FORMS);
+  for (let i = 0; i < formLimit; i++) {
     const form = forms[i] as HTMLFormElement;
-    const action = (form.getAttribute("action") || "").trim();
+    // Slice the RAW attribute BEFORE trimming. .trim() scans inward to the
+    // whitespace boundary, so trimming first leaves that scan O(len) on the full
+    // attacker-controlled string — an action padded with megabytes of leading
+    // whitespace would re-open the exact synchronous-DoS the cap closes. Slicing
+    // first bounds trim() to O(MAX_FORM_ACTION_LEN). Consequence: meaningful
+    // content buried past MAX_FORM_ACTION_LEN of leading whitespace is dropped
+    // here (fundamental to any O(cap) bound), so a hostile page could pad a
+    // password form's action to evade THIS page-wide cross-domain scan — but
+    // credential_guard independently re-resolves the submitting form's real
+    // destination host at submit time via `new URL` (which strips whitespace),
+    // so the credential path is unaffected. (#407 R1)
+    const rawAttr = form.getAttribute("action") || "";
+    const bounded = rawAttr.length > MAX_FORM_ACTION_LEN
+      ? rawAttr.slice(0, MAX_FORM_ACTION_LEN)
+      : rawAttr;
+    const action = bounded.trim();
     const hasPw = !!form.querySelector('input[type="password"]');
     formActions.push({ action, hasPassword: hasPw });
   }
@@ -468,7 +568,7 @@ export function buildPageSnapshot(doc: Document): PageSnapshot {
   });
 
   return {
-    title: (doc.title || "").toLowerCase(),
+    title: boundedSample(doc.title || "", MAX_TITLE_LEN).toLowerCase(),
     bodyText,
     htmlSnippet,
     scriptText,
@@ -630,8 +730,20 @@ function checkFormActions(snapshot: PageSnapshot, currentDomain: string): Suspic
       continue;
     }
 
-    // Base64-encoded URL in action
-    if (/^[A-Za-z0-9+/=]{20,}$/.test(rawAction) || actionLower.includes("base64")) {
+    // Base64-encoded URL in action. The base64 alphabet shares '/' with URL paths, so the
+    // bare charset+length test false-flagged ordinary relative actions like
+    // "/loginProcessSubmitFormUser" and "/api/v2/auth/submitCredentials" (#288). Tighten it
+    // to genuine base64 shape: a length that is a multiple of 4 (base64 block alignment),
+    // the strict alphabet with padding only at the very end, and NOT an absolute path
+    // (leading '/') — the form every documented false positive took. A real encoded blob
+    // such as the "https://..."-encoding `aHR0cHM6Ly9...` still matches. The explicit
+    // "base64" keyword check is retained.
+    const looksBase64Action =
+      rawAction.length >= 20 &&
+      rawAction.length % 4 === 0 &&
+      !rawAction.startsWith("/") &&
+      /^[A-Za-z0-9+/]+={0,2}$/.test(rawAction);
+    if (looksBase64Action || actionLower.includes("base64")) {
       reasons.push("Form action appears to be base64-encoded");
       continue;
     }

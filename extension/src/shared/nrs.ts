@@ -3,6 +3,7 @@ import { NRS_WEIGHT_JS_BEHAVIOR_CAP } from "./js_behavior_state";
 import type { NavigationTrustTier } from "./top_sites";
 import {
   TRUST_TIER_KNOWN_BAD,
+  TRUST_TIER_TOP_SITE,
 } from "./top_sites";
 import { NRS_WEIGHT_VISUAL_SIM_CAP } from "./visual_sim_types";
 
@@ -86,19 +87,70 @@ const NRS_DIMINISHING_RETURNS_FACTOR = 0.5;
 export const NRS_BLOCK_THRESHOLD = 70;
 export const NRS_STRICT_BLOCK_THRESHOLD = 50;
 
+/**
+ * NRS factors that are benign navigation *structure* (a new tab, a cross-site
+ * hop, a fast click, an active user gesture, explicit new-tab intent, an
+ * allowlist/previously-allowed match) rather than attack signals. A score built
+ * only from these plus CDS layout reasons is a candidate for top-site relief: a
+ * vetted top-site destination is very unlikely to be running a layout clickjack
+ * against its own users, while every genuine attack carries a factor NOT in this
+ * set — known-bad, redirector, oauth-mismatch, opener-manipulation, clickfix,
+ * double-click hijack, pushstate abuse, js-behavior, visual brand-match,
+ * repeat-offender, multiple-attempts, nav-anomaly, csp-weakness — which still
+ * blocks at full strength.
+ */
+const BENIGN_STRUCTURAL_NRS_FACTORS = new Set<string>([
+  "nrs_new_tab_window",
+  "nrs_cross_site",
+  "nrs_fast_attempt",
+  "nrs_user_activation_active",
+  "nrs_explicit_new_tab_intent",
+  "nrs_allowlisted",
+  "nrs_opener_previously_allowed",
+]);
+
+/**
+ * Block-threshold relief (raise the bar) for a trusted top-site destination whose
+ * score is driven only by CDS layout reasons + benign structural NRS — i.e. no
+ * attack factor at all. This is the "threshold = f(tier)" lever the top-site trust
+ * tier (#234 / P5-A3) was meant to provide but never did (only KNOWN_BAD was ever
+ * adjusted, so top-sites got zero relief).
+ *
+ * STARTING VALUE, not a validated number: Decision D25 forbids shipping a scoring
+ * change without a measure:fp / corpus FP-TP delta + Gate-3. Tune against the
+ * benign-journey harness (#232) and the attack gym before relying on +20.
+ */
+export const NRS_TOP_SITE_CDS_RELIEF = 20;
+
+/**
+ * True when every NRS factor present is benign navigation structure (no attack
+ * signal). CDS layout reasons live in `reasonCodes`, not `nrsFactors`, so an empty
+ * or all-benign `nrsFactors` means the score is driven only by page layout +
+ * navigation structure — the false-positive-heavy path on SPA top-sites.
+ */
+export function isTopSiteReliefEligible(nrsFactors: readonly string[]): boolean {
+  return nrsFactors.every((f) => BENIGN_STRUCTURAL_NRS_FACTORS.has(f));
+}
+
 export function getTierAdjustedBlockThreshold(
   baseThreshold: number,
   trustTier?: NavigationTrustTier | undefined,
+  nrsFactors?: readonly string[] | undefined,
 ): number {
   const base = Number.isFinite(baseThreshold) ? baseThreshold : NRS_BLOCK_THRESHOLD;
-  const adjustment = (() => {
-    switch (trustTier) {
-      case TRUST_TIER_KNOWN_BAD:
-        return -20;
-      default:
-        return 0;
-    }
-  })();
+  let adjustment = 0;
+  if (trustTier === TRUST_TIER_KNOWN_BAD) {
+    adjustment = -20;
+  } else if (
+    trustTier === TRUST_TIER_TOP_SITE &&
+    nrsFactors !== undefined &&
+    isTopSiteReliefEligible(nrsFactors)
+  ) {
+    // Only relieve when no attack factor is present — a top-site destination
+    // reached purely via layout heuristics + benign structure. Any attack signal
+    // (known-bad, oauth, clickfix, dblclick, pushstate, etc.) keeps the full bar.
+    adjustment = NRS_TOP_SITE_CDS_RELIEF;
+  }
   return Math.max(30, Math.min(100, base + adjustment));
 }
 

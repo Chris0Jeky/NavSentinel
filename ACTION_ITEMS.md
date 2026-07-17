@@ -8,7 +8,11 @@
 
 **Purpose:** the running list of things only *you* (Chris) can do — and the context an agent needs to not lose the thread between sessions. Agents flag the open items in every summary; you clear them by saying so.
 
-**Last updated:** 2026-06-23 (Claude session — site-breakage fixes + FP/UX seeding; see the top snapshot bullet & **AI-10**). Prior: 2026-06-20 session 5 · `main` @ **`a78c788`** (verify with `git rev-parse origin/main`; note #346 advanced `main` to `f016f11`). **Session 5 merged 24 PRs** end-to-end (each 2 adversarial review rounds — or 1 confirm pass for trivial test-only — + green CI incl. E2E + a regression test proven to fail pre-fix): completed the **#322 build-script-hardening cluster** (#329/#330/#331/#335/#336/#337/#338) and **drained the discovery-pass-4 ungated backlog** (#340 storage RMW · #341 sw forward-offer · **#342 credential_guard TOCTOU [security]** · #343 eventlog reasons · #344 NRS-code coverage · #345 session-state restore). New discovery pass 4 (29 findings) is the umbrella issue **#339**. **1 open PR: #273** (browser-surface, Gate-3). **OPEN human items: 🚨 AI-9 (#321 release blocker) + AI-8 (#273 Gate-3).** Remaining autonomous work is **gated**: capture_isolated 66KB budget (Q2) blocks ~6 findings; the release.mjs hardening cluster needs a refactor + has un-verifiable git-integration risk; the rest are browser/Gate-3 or FP-measurement/ownership-decision gated. **Deferred questions: Q1–Q6 (below).**
+**Last updated:** 2026-07-13 — product-posture/RI-01 audit plus guided
+human-action workflow and preservation pass. Product thesis:
+`docs/Product_Strategy.md`. Corrective
+program: `docs/Project_Roadmap.md`. Standing decisions:
+`docs/agentic/DECISIONS.md`.
 
 > **Why this file exists separately from the usual docs:** it is the durable human-task
 > register while status-doc PRs are in flight. `docs/agentic/HANDOFF.md`,
@@ -19,68 +23,233 @@
 
 ---
 
-## Current state snapshot (verified 2026-06-23)
+## Current state snapshot (live state rechecked 2026-07-13)
 
-- **(2026-06-23 Claude session — user-reported site-breakage fixes + FP/UX, 3 PRs opened - CURRENT):** Branched `fix/spa-pushstate-and-reputation-war` off `main` (@ `f016f11`). **PR #352** (`652967d`): the SPA-breakage fix — `main_guard.ts` now installs `History.pushState`/`replaceState` as **writable+configurable** (`softPatchProto`) instead of frozen non-writable, which was throwing `Cannot assign to read only property 'pushState'` when strict-mode SPA routers (claude.ai/TanStack) reassign it → **grey screen** (#347); **+** `reputation_data.bin` added to manifest `web_accessible_resources` (#348 — fixes per-page `Failed to fetch`/WAR-denied console error AND re-enables top-frame reputation, which was silently disabled). Green: typecheck / lint / **2702 unit** / build / **perf 12/12** (`main_guard` 18.7/20KB, `capture_isolated` untouched at cap); added `gym/pushstate-04-router-wrap.html` + `tests/e2e/spa-router-pushstate.spec.ts` (CI/Gate-3-verified) + `tests/manifest-web-accessible-resources.test.ts` (sandbox unit guard). **Seeded follow-ups: #349** (de-harden the *enforcement* protos — `form.submit`/`location.assign`/`window.open` — same breakage class but needs `js_behavior_monitor` double-wrap coordination), **#350** (ship the *unshipped* #234/P5-A3 top-site `threshold = f(tier)` FP relief — Option B [cap CDS-only blocks on top-site dests] + D1 [expand the 24-entry list + `includeSubdomains`]; **gated** by D25 / `measure:fp` / #232 / Gate-3), **#351** (coalesce repeated block toasts into a count pill — `ns-ui-ux`). **Then implemented two of the follow-ups as their own PRs: #353** (toast count-pill, #351 — `ui_toast` budget 5→8KB, 2709 unit green) and **#354** (top-site FP relief, #350 — `nrs.ts` `getTierAdjustedBlockThreshold` now relieves TOP_SITE+CDS-only via a benign-structural whitelist, `+20` starting value, capture_isolated stays 65.9/66KB, 2708 unit green; **HELD for measure:fp/D25**). #349 remains seeded (not implemented — needs `js_behavior` coordination). **New human items: 🚨 AI-10** (#352 Gate-3), **AI-11** (#353 Gate-3), **🔒 AI-12** (#354 measure:fp + Gate-3, gated). Root-cause analysis driven by a 4-agent read-only workflow (backlog survey + FP map + toast design + adversarial fix-verify).
+At the 2026-07-10 verification point, `main` matched `origin/main`. Run
+`git rev-parse main`, `git rev-parse origin/main`, and live `gh` checks before
+acting; the exact audit baseline lives in `docs/Product_Strategy.md`, not this
+live snapshot. Typecheck, lint, build, version check, 2,874 unit tests (95
+files), perf 12/12, and smoke E2E passed locally; current-main GitHub CI was
+green. v0.4.0 had no tag, GitHub release, CWS release, or external-user evidence.
 
-- **(2026-06-20 Claude autonomous-loop session 5 [continuation] - superseded):** `main` @ **`a78c788`** (verify `git rev-parse origin/main`). **24 PRs merged** this continuation, each end-to-end (2 adversarial rounds via read-only no-Bash reviewer Workflows, or 1 confirm for trivial test-only; green CI incl. E2E; a pre-fix-failing regression test). **(a) #322 build-script-hardening cluster COMPLETE:** #335/#17 (build-topsites code-unit sort = runtime binary search), #336/#16 (brand-templates drop non-deterministic date), #337/#18 (update-psl fail-closed on malformed rules), #338/#14 (bloom optimalParams non-finite-p guard) — plus earlier #329/#330/#331. **(b) Discovery pass 4** (5 read-only explorers over scripts/sw/storage/credential/scoring) = **29 findings, all seeded in umbrella issue #339**; drained every ungated HIGH+MED+worthwhile-LOW: **#340** (storage trusted-domain RMW serialize, HIGH), **#341** (sw onErrorOccurred dropped forward offer's rollbackReturn + suppress, HIGH), **#342** (credential_guard TOCTOU — 2nd action re-check before resume; **security**, breaker-clean), **#343** (eventlog reasons sanitize; kept trimEventLog defense-in-depth), **#344** (test: 2 NRS codes missing from ALL_KNOWN_CODES), **#345** (session-state captureTimestamps shape-validate on restore). **1 open PR: #273** (Gate-3). **Remaining = all gated/deferred** (tracked on #339): release.mjs #1/#2/#3 (real HIGH+2MED but needs main-guard+overridable-root refactor AND has un-verifiable git-commit/tag integration risk — recommend a deliberate decision); other structured-value-map restore validation (LOW, seeded); **budget-gated (capture_isolated 66KB, Q2):** nrs gate-bypass, scoring nameLength, allowlist RMW, adaptive_scoring overwrite/computeAdjustment, drift-proof ALL_KNOWN_CODES. **OPEN human items: 🚨 AI-9 (#321) + AI-8 (#273).** **Housekeeping for Chris: 4 stale `feat/js-behavior-*` git stashes still need `git stash clear` (kept for JSB-127 #127 — confirm abandoned first).** Deferred Qs Q1-Q6 unchanged.
+Live recheck on 2026-07-13 found 75 open issues, no tags/releases/classic branch
+protection or repository rulesets, and no milestones or assignees. Verify the
+current `main` SHA live rather than pinning it here. Stale PRs #273 and #399
+were closed with explicit re-entry paths; #356 remains the only active legacy
+browser-surface PR. The
+product-posture and guided-workflow work merged through PR #454; verify live
+`main` rather than pinning its SHA here. The RI-01 checkpoint branch is remotely
+backed up without the unstaged Defender deletion; verify its SHA live. Its
+worktree is dirty only because Windows Defender quarantined one tracked
+adversarial test fixture. These changes do not change shipped product state.
 
-- **(2026-06-20 Claude autonomous-loop session 4 [post-compaction continuation] - superseded):** main has advanced well past `14375ac` (verify `git rev-parse origin/main`). Merged **6** PRs end-to-end (each 2+ independent adversarial review rounds + green CI incl. E2E + a regression test proven to fail pre-fix): **#313/#305** (storage `updateSuiteSettings` RMW serialized), **#314/#307** (smart_defaults `always_allow` extends the allow-streak), **#316/#303** (sw `cachedDefaultMode` refreshed on every worker start — wrong-badge after mid-session restart; hardened over 4 review passes), **#317/#306** (allowlist falsy `ALLOWLIST_KEY` no longer bypasses legacy migration), **#318/#292** (reputation rejects sub-byte `m<8` filters, fail-closed), **#319/#309+#310** (domain `BRAND_KNOWN_ALIASES` dead/dup cleanup + registrable-domain invariant). Closed **#304** wontfix (zero-behavior). **#326/#325** (rollback-suppress window cleared on a non-return nav — disc#1 HIGH) **IN REVIEW** (2 rounds approve). Then ran **discovery pass 3** (sw chunk + build scripts) → **18 findings, ALL SEEDED**: 🚨 **#321 = AI-9 RELEASE BLOCKER** (ships the 15-domain TEST reputation filter), **#322** (build-script fail-closed cluster: PSL fail-open #15, bloom fallback exits-0 #12, check-bloom no header-validate #11), **#323** (sw rollback/forward send races), **#324** (OAuth consent-flow wipes expectedCallbackDomain + icon prune), **#325** (suppress gap → #326), **#327** (disc#2: the #303-introduced onCommitted/onBeforeNavigate hydration-gate asymmetry — has the icon-split fix design). Also seeded #308 (cooldown cap, budget-blocked), #315 (smart-defaults allowlist guard, budget), #320 (alias ownership, web-research). **Next mergeable autonomous work = the #322/#323/#324 clusters** (all budget-safe + unit-testable). **OPEN human items: AI-9 (#321, release blocker) + AI-8 (#273 Gate-3).** Deferred Qs Q1-Q6 below; **Q2 (capture_isolated 65.9/66KB) now blocks the largest gated cluster** (#288/#289/#200/#216/#226/#308/#315/#297). **Q6** (new): main_guard.ts not unit-importable → #301/#302 can't get a pre-fix-failing unit test (extract-to-testable, E2E, or Gate-3?).
-
-- **(2026-06-20 Claude autonomous-loop session 3 [pre-compaction] - superseded):** `main` @ **`14375ac`** (verify `git rev-parse origin/main`). **1 open PR: #273** (#217 neutral chip, browser-surface, **held for Gate-3 = AI-8**). Merged **8** PRs end-to-end this session, each with 2 independent adversarial review rounds (read-only no-Bash reviewer agents) + green CI (incl. E2E) + a regression test proven to fail pre-fix: **#280/#266** (sw `tabs.onUpdated` hydration gate), **#281/#264** (credential_guard allowNext synchronous one-shot), **#283/#272** (icon_manager badge-blank chain-ordered), **#284/#252-pt2** (importAll→`trimEventLog`), **#291/#287** (reputation reject degenerate m=0/k=0 fail-closed — *was silently disabling all domain reputation checks*), **#293/#290** (domain_profile zombie profiles evading LRU eviction), **#294/#285** (redirect_chain allowlisted-host false positives), **#296/#286** (nav_anomaly phantom-burst on storage failure). Reconciled the backlog: closed 5 resolved-but-merged-not-closed issues (#198/#203/#213/#222/#229). Ran a 6-module discovery pass (find→adversarial-verify); seeded follow-ups **#282** (WeakSet allowNext cleanup), **#292** (reputation m<8 floor), **#295** (redirect allowlist authenticity audit incl. `go.googleprod.com`), **#297** (primeAnomalySession guard asymmetry). content_analyzer #288/#289 **deferred** — capture_isolated at **65.9/66KB** blocks any chunk growth. Baseline: typecheck/lint clean, perf **12/12**. **DEFERRED QUESTIONS (ask Chris at wrap):** **Q1** — OAuth cluster #269/#223/#221 needs `measure:fp`/Chrome the sandbox can't run; implement+review+HOLD for your FP-gate, or defer? **Q2** — capture_isolated at the cap: split into lazy chunks (needs design), bump the 66KB cap with rationale, or keep avoiding it? (blocks #200/#216/#226/#288/#289). **Q3** — OK to write Playwright e2e (e.g. #252 pt1) verified via CI only, since the sandbox can't run it? **Q4** — confirm the merge cadence (auto-merge non-browser PRs after 2 adversarial rounds + green CI + aging behind a sibling). **Q5** — #273 (AI-8) Gate-3 timing.
-
-- **(2026-06-20 Claude autonomous-loop session 2 WRAP - superseded):** `main` @ **`b42bf2b`**, working tree clean, **1 open PR (#273, held for Gate-3)**. Full session-2 run merged **8** PRs (each non-trivial PR had 2 independent adversarial rounds + green CI; all non-browser auto-merged per posture): #267/#275 docs-sync, **#268/#222** (OAuth `isOAuthUrl` callback bypass; R1 seeded #269, R2's 3 "new" findings refuted), **#270/#203** (importAll single atomic set), **#271/#229** (icon badge serialization; R1 fixed a newly-introduced resurrection race, R2 seeded #272), **#276/#213** (adaptive effective-sample-size scaling, RELAXATION-ONLY — R1 caught + fixed that symmetric scaling weakened the protective/block direction), **#277/#181** (cross-context lost-update CLOSED as accept+document — low-stakes counter, lost updates only under-count → no false-positive path; independently verified), **#278/#198** (happy-dom external-resource-loading disabled in vitest config → ECONNREFUSED/NetworkError test noise 77→0; 2 rounds CLEAN). **Only open PR: #273/#217** neutral chip (option (b)) — browser-surface, **held for Gate-3 = AI-8** (the sole open human item). Baseline: typecheck clean, lint 0/0, **2581 unit tests** on main (2583 with #273), perf **12/12**, capture_isolated still **100%** (none touched it). Seeded follow-ups still open: **#269** (empty expectedCallbackDomain, FP-sensitive), **#272** (badge-write race, cosmetic), **#274** (chip-contrast a11y, design-system). Spring cleaning: pruned all stale remote+local branches (only `main` + `#273` left); kept 4 `feat/js-behavior-*` stashes for **JSB-127 (#127)**. **Both prior deferred design Qs are now resolved** (#213 done, #181 accepted). Next-loop backlog needs design/measurement/Gate-3 input: #200 (credential presence/visibility shared helper), #226 (iframe-provider hostname helper), #176 (minimize SW URL persistence), #127 (JSB perf), North-Star #232/#237/#252, plus the popup-gauge stack #205→#219→#215 (browser-surface).
-
-- **(2026-06-19 Claude autonomous-loop session 2 - superseded):** `main` @ **`f2c28ac`**. Resumed the loop after session 1's wrap. Merged **4** PRs (all non-browser → auto-merged per standing posture, each with 2 independent adversarial rounds + green CI): **#267** (docs-sync), **#268 / #222** (OAuth callback `isOAuthUrl` bypass — hoisted callback detection above the `isOAuthUrl` gate in `processOAuthNavigation`; R1 seeded **#269**, R2's 3 "new" findings all refuted vs ground truth), **#270 / #203** (`importAll` atomicity — single atomic `chrome.storage.local.set` for core sections; 2 rounds CLEAN incl. verified 5→1 onChanged coalescing), **#271 / #229** (icon badge per-tab serialization + cache-after-apply; R1 caught + fixed a newly-introduced resurrection race via a `resetGeneration` guard, R2 seeded **#272**). **1 open PR: #273 / #217** (recolour `nrs_user_activation_active` popup chip green→NEUTRAL grey; maintainer chose option (b)) — presentation-only, 2 rounds CLEAN, green CI, but **browser-surface → held for Gate-3 = AI-8**; R1 seeded **#274** (chip-contrast a11y). Baseline: typecheck clean, lint 0/0, **2583 unit tests** (with #273), perf **12/12**, capture_isolated still 100% (none of these touched it). **Deferred design questions (next loop):** #181 (cross-context lost-update → SW-delegation vs accept-residual), #213 (adaptive pure-allow discount → which resolution; measurement-gated). Human-owned OPEN: **AI-8** only.
-
-- **(2026-06-19 Claude autonomous-loop session 1 - superseded):** `main` @ **`656a1ac`**, **0 open PRs**, working tree clean. Merged 3 PRs this session (maintainer **waived Gate-3 for the batch** and **authorized autonomous agent merges of non-browser PRs**): **#249** (P5-C1 / #238 replay-grade `PromptOutcomeEntry`), **#263** (#227 credential_guard submit hardening — 2 HIGH credential-exfil bypasses [formaction exfil, disabled-decoy password fields] + TOCTOU action-mutation re-check + fail-closed `resumeSubmit` + cached cred-mode; 9 incremental commits, R1 6 findings + R2 11 findings all fixed), **#265** (#228 SW session-state hydration — `runWhenHydrated` gating of 10 session-backed onMessage handlers + degraded-mode persist suppression via `_canPersist`; built in a junctioned worktree, R1 6 + R2 3 NIT all fixed). Final merged `main`: typecheck clean, lint 0/0, **2572 unit tests pass**, perf **12/12**. ⚠️⚠️ **`capture_isolated` is now at 100% (65.8/66KB)** post-#249 — ANY further growth FAILS the budget; do **#217** (shrinks the chunk) before #216/#200/#213 (grow it), or bump the 66KB cap with rationale. **Seeded follow-ups:** **#264** (`allowNext` bypass token lingers on requestSubmit constraint no-op, pre-existing), **#266** (`tabs.onUpdated` reads session maps ungated — same class as #228.1, pre-existing). Closed already-fixed: #204/#206/#207/#231. Human-owned OPEN items: **none** (AI-5 + AI-6 both resolved).
-
-- **(2026-06-14 Claude independent-review session - superseded):** Reviewed the overnight Codex run (8 PRs merged: features #253/#255/#256/#257 + docs #254/#258/#259/#260). Ran a 6-agent independent adversarial review of the four FP-suppression merges — **all SOUND, no live bypass**. Baseline on `main`: **2520+ unit tests pass**, perf budget **12/12** (note `capture_isolated` at **99%** = 65.6/66KB — tight; **#249 grows this chunk**, so re-measure at its merge). The review found two real follow-ups on **#257** → fixed and merged as **#261** (`main` @ `8b18afe`): `build-topsites-tier.mjs` now **fails closed** on duplicate seed domains (was OR-merging `includeSubdomains` → silent subdomain-trust widening) + added `minimal_accessible_name` top-site and duplicate-domain tests (generated data unchanged; no runtime/browser surface). #261 had 2 clean adversarial review rounds + green CI. **#249 remains the only open PR**, blocked solely on **AI-6** manual Gate-3. Human-owned OPEN items: **AI-5** (logos) and **AI-6** (#249 Gate-3).
-
-- **(2026-06-14 Codex durable live-state checkpoint):** PR **#254** merged as **`6faa856`** (Codex contract/status refresh + CI Xvfb apt cleanup), PR **#256** merged as **`c63f832`** (P5-A4 / #235 container intent heuristic), PR **#257** merged as **`213ebcb`** (P5-A3 / #234 top-sites trust tier), PR **#258** merged as **`bc06c65`** (post-merge status sync), and later docs cleanup removed volatile current-main SHA claims. Their local/remote branches and worktrees were pruned. PR **#249** was refreshed from current feature base in **`3e0389e`** after resolving `capture_isolated.ts` and `scripts/check-perf-budget.mjs` conflicts; the replay-grade outcome snapshot now records the tier-adjusted NRS threshold from the top-sites trust tier. Local verification: `build:topsites`, `check:topsites`, focused replay/storage/silent/Smart/OAuth/scoring/top-sites/dom-builder tests 483 pass, `typecheck`, `build`, `lint`, perf budget 12/12 (`capture_isolated` 65.0KB / 66KB; total dist 459.7KB / 500KB), and `git diff --check`. GitHub Build/Unit + E2E are green on `3e0389e`. Issue **#233** is closed by #255; live open North-Star issues are **#232**, **#237–#246**, and **#252**. Human-owned OPEN items remain **AI-5** and **AI-6**.
-
-- **(2026-06-14 Codex checkpoint - P5-A3 opened, superseded):** PR **#257** (P5-A3 / #234 top-sites trust tier) is open at **`46a0c0d`** on `feat/p5a3-top-sites-tier`. Scope: filtered generated top-sites tier data, exact-host top-site trust policy with explicit `includeSubdomains` future opt-in, top-frame-only benign top-site relief, known-bad precedence, Smart Mode low-risk blank-prompt suppression for trusted top sites, CI `check:topsites`, and stricter generated-data validation. Review findings fixed: removed dead `seenBeforeBenign` tier, removed top-site NRS/threshold relaxation, removed shared-hosting/infrastructure/user-content entries, replaced blob lookup with generated sorted entries, fixed delayed silent-log threshold recording, resolved quoted-CSV/cwd path issues, closed tenant subdomain trust, preserved child-frame known-bad precedence, and made CSV category/column handling fail closed. Local verification: focused tests 129 pass, `typecheck`, `lint`, `build`, `check:topsites`, `check:perf-budget` 12/12 (`capture_isolated` 65.1KB / 66KB; total dist 457.5KB / 500KB), full unit 2511 pass with known happy-dom/network stderr, and `git diff --check`. Two independent final adversarial reviews found no remaining findings. GitHub Build/Unit + E2E are green and merge state is clean. Human-owned OPEN items remain **AI-5** and **AI-6**.
-
-- **(2026-06-14 Codex pickup - #253 merged / branch refresh, superseded):** PR **#253** (P5-B1 / #236) merged into `main` as **`db63192`** after clean merge state, green Build/Unit + E2E, and all 14 audited review threads resolved. Issue **#236** is closed. The local merged feature branch and temporary helper `main` worktree were pruned. PR **#249** was refreshed from `main` in **`47e4fb9`**; conflicts were resolved in `capture_isolated.ts` and `scripts/check-perf-budget.mjs`, focused tests 248 pass, `typecheck`, `build`, `lint`, perf budget 12/12 (`capture_isolated` 65.0KB / 66KB; total dist 459.7KB / 500KB), full unit 2510 pass, and fresh GitHub Build/Unit + E2E are green. PR **#256** was refreshed from `main` in **`b69bf69`**, then review finding `PRRT_kwDOQ8ajA86JXkh5` was fixed in **`1890ef0`** by limiting structural-nav mismatch suppression to small contained nav footprints; focused tests 122 pass, `typecheck`, `build`, `lint`, perf budget 12/12 (`capture_isolated` 65.2KB / 66KB; total dist 456.8KB / 500KB), full unit 2501 pass, review threads are resolved, and fresh GitHub Build/Unit + E2E are green. Human-owned OPEN items remain **AI-5** and **AI-6**.
-
-- **(2026-06-14 Codex pickup - P5-B1 latest, superseded):** PR **#253** now includes merge commit `ad91b16` on top of `main` after **#255**, budget follow-up `b52f7f6`, and review follow-up `fafb870`. The branch persists same-tab silent navigation decisions only after matching top-frame commits, covers JS-driven allowed same-tab navigations, filters non-web schemes, avoids duplicate `_self`/`_top`/`_parent` logging, logs explicit-new-tab silent allows immediately, restricts queued target allowance to top-frame same-tab document commits, and gives GET form submissions query-prefix commit matching without widening ordinary exact target matching. All previously unresolved #253 review threads are resolved. Local verification for `fafb870`: focused silent/SW/storage/popup tests 195 pass, `typecheck`, `build`, `lint`, perf budget 12/12 (`capture_isolated` 64.8KB / 65KB, total dist 456.3KB / 500KB), full unit 2492 pass with known happy-dom/network stderr, and `git diff --check` with only Windows line-ending warnings. Fresh GitHub Build/Unit + E2E are green on `fafb870`. Human-owned OPEN items remain **AI-5** and **AI-6**.
-
-- **(2026-06-14 Codex pickup - PR gate refresh, superseded):** PR **#249** was clean/mergeable again after merging `main` in **`ae0de8e`**; fresh GitHub Build/Unit and E2E were green, and local verification after the merge passed focused replay/Smart/OAuth tests (217), `typecheck`, `build`, `lint`, perf budget 12/12 (`capture_isolated` 62.8KB / 63KB; total dist 453.8KB / 500KB), full unit 2461, and `git diff --check`. It remained blocked only by **AI-6** manual Chrome Gate-3. PR **#253** had latest `fafb870`; all review threads were resolved and fresh GitHub Build/Unit + E2E were green after the follow-up. Delegated subagent review attempts failed on Codex usage limits, so the failure was recorded in `docs/agentic/failure_ledger.jsonl` and direct local review plus review-thread audit drove the fixes. PR **#254** was a draft docs/status branch whose CI reran after status commits. PR **#256** was clean/green and aging. Human-owned OPEN items remained **AI-5** and **AI-6**.
-
-- **(2026-06-14 Codex pickup - P5-A4 update, superseded):** PR **#256** is open for P5-A4 / #235 (`feat/p5a4-container-intent`, latest commit `fcb6f4d`, merging `main` after #255). Scope: container-aware `intent_mismatch_under_interactive` suppression for structural navigation containers only when the top container actually contains the underlying action; sibling/full-page/delegated overlays without containment remain blockable. Two independent local adversarial reviews both found the high-severity delegated overlay evasion in the first implementation; fixed before opening PR. Gemini later asked for `hasActionIntent` cursor fallback robustness; fixed in `a31287f` by treating cursor values ending with `pointer` as action intent and sharing that semantics with `cursor_pointer_no_affordance`. Local verification after merging `main`: focused scoring/dom-builder/Smart/OAuth tests 212 pass, `typecheck`, `lint`, `build`, perf budget 12/12 (`capture_isolated` 61.0KB / 63KB; total dist 448.9KB / 500KB), full unit 2450 pass with known happy-dom/network stderr. Fresh GitHub Build/Unit and E2E are green. Human-owned OPEN items remain **AI-5** and **AI-6**.
-
-- **(2026-06-14 Codex pickup - P5-A2 merged):** PR **#255** (P5-A2 / #233) merged into `main` as **`69400fc`** after green Build/Unit + E2E, a clean latest Codex review on `4a77b39`, and all six fixed review threads explicitly resolved. Scope: Smart-Mode blank-anchor prompt suppression for narrow benign contexts with trusted pointer/click or keyboard gating, NRS block/factor safeguards, curated IdP/payment matching including Microsoft Live OAuth authorize endpoints, OAuth monitor tracking parity for Microsoft Live endpoints, and new Gym/E2E regression. Human-owned OPEN items remain **AI-5** and **AI-6**.
-
-- **(2026-06-14 Codex pickup - superseded):** `main` == **`69400fc`** after **#255** merged. Reused canonical orchestrator `docs/agentic/ORCHESTRATOR.md`. Open PRs were **#249** (P5-C1 / #238; latest `ae0de8e`, clean/green, still waiting on AI-6 manual Chrome Gate-3), **#253** (P5-B1 / #236 silent-decision events; latest `fafb870`, all review threads resolved, fresh GitHub Build/Unit + E2E green), **#254** (draft docs/CI PR refreshing `AGENTS.md` against `CLAUDE.md`; status branch whose CI reran after docs commits), and **#256** (P5-A4 / #235 container intent heuristic; latest `fcb6f4d`, clean/green and aging). Human-owned OPEN items remain **AI-5** and **AI-6**.
-
-- **(2026-06-13 session 2 — superseded):** `main` == **`1b0a4a9`**. This session merged: **#247** (North-Star roadmap/research docs — fixed all 10 gemini+codex review findings first), **#248** (failure-ledger hygiene: `PostToolUseFailure` → **gitignored `failure_autolog.jsonl`**; curated `failure_ledger.jsonl` scrubbed 78→**7 real entries** [71 were `unclassified` noise]; `agent:hooks:smoke` made branch-aware), and **#250** (status-doc reconciliation). A follow-up PR fixed **`npm run gym:serve`** for Vite 8 (`vite --root gym` → `vite gym`; v8 dropped the `--root` flag, root is now positional — the Gym + Gate-3 testing work again). **#249 OPEN** = P5-C1 / **#238** (replay-grade `PromptOutcomeEntry`: adds `cds`/`nrsFactors`/`navAnomalyScore`/`adaptiveAdj`/`thresholdUsed`/`elementContext`, fixes nav-drops-`reasons` + cred-lacks-`destDomain`): **green CI (Build/Unit + E2E), 2 adversarial review rounds (self-run workflow + Codex) all fixed, 2444 unit tests, all 12 perf budgets pass** — **awaiting Gate-3 manual Chrome test + merge (= AI-6, walkthrough in `POST_MERGE_MANUAL_VERIFICATION.md`).** **Gotcha learned:** `npm run check:perf-budget` is a CI-only gate (not in `test`/`lint`/`typecheck`/`build`); run it locally for any extension change.
-- *(2026-06-13 session 1, superseded):* `main` == `da400fb`, working tree clean apart from the North-Star docs (`docs/NORTHSTAR_ROADMAP.md`, `docs/research/`) + status-doc re-hydration. **0 open PRs.** The `fix/jsb-stale-todos-and-tests` branch is gone (AI-3 ✅ resolved). Baseline: typecheck clean, lint 0/0, **2426 unit tests pass**. **48 open issues**, incl. North-Star **#232–#246**.
-- *History (2026-06-05, superseded by the header above):* the snapshot below describes the D-series batch at `4bd60ce`; cycles 3–4 (2026-06-06, PRs #197/#202/#208/#210/#212/#214/#220/#230) and the North-Star initiative (2026-06-13) have since landed.
-- **ALL 11 D-series discovery PRs MERGED 2026-06-05** (oldest-first, merge commits): **#180, #182, #183, #185, #187, #189, #190, #191, #193, #194, #195.** Each had **fresh-green CI (Build/Unit + E2E)** + **two or more independent adversarial review rounds with ALL findings (every severity) fixed**.
-- **Gate 3 (manual Chrome test) was explicitly WAIVED by Chris for this batch** (decision 2026-06-05) and the merges proceeded. The waiver did **not** discard the manual checks — they are **deferred** to a regression watchlist: **`docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md`**. Accepted risk = time/difficulty if debugging is needed, not silent regressions. **Run that checklist next time you build & load the extension** (see AI-1 in the Completed log; the watchlist supersedes it).
-- **#182 needed a docs-only conflict resolution** (status files diverged once the other 10 landed). Resolved by taking `main`'s side, then verified locally: **tsc clean, lint 0/0, 2298 unit tests pass**; CI re-ran **green (Build/Unit + E2E)** on the merge head before merge.
-- **Docs reconciliation (#184) done in this pass:** `docs/Project_Roadmap.md`, `autodoc/AGENT_INDEX.md`, `docs/agentic/HANDOFF.md`, `docs/agentic/ORCHESTRATOR.md` brought to current truth. The form-submit patch-order bug (fixed in #185) is now recorded in `docs/agentic/failure_ledger.jsonl`.
-- **Spring cleaning (2026-06-05):** archived the two stale root orchestration docs → `docs/archive/ORCHESTRATOR.md` + `docs/archive/ORCHESTRATION.md` (the ONE canonical orchestrator is now unambiguously `docs/agentic/ORCHESTRATOR.md`); pruned 60 shell-typo junk entries from `failure_ledger.jsonl` (138→78 lines, every real entry kept, all valid JSON); removed the stale `%TEMP%\ns-review` git worktree; triaged git stashes (13 noise/superseded dropped, **4 `feat/js-behavior-*` WIP kept for JSB-127**). Remote branches + tags were already clean; working tree clean.
-- **#192** is closed (findings 1+2→#193, 3→#195, 4→#194). **#196** seeded (DRY the inline-hidden password detection into a shared helper across `sri_checker` + `content_analyzer`).
-- **Agent sandbox cannot run a browser or spawn threads** — `npm run test:e2e` / `agent:hooks:smoke` fail with launch/thread errors locally; the same E2E passes on GitHub CI. That is *why* Gate 3 is a human task and why the deferred watchlist exists.
-- **Remaining backlog (next, not yet started):** **#196** (small DRY refactor) → **FF-02 → FF-03 → FF-04** (stacked Firefox port; FF-02 = Vite Firefox build config — **needs a tooling decision**: `@crxjs/vite-plugin` Firefox support is experimental; runtime verification is human-gated) → **JSB-127** (inspect local `fix/jsb-stale-todos-and-tests` first — AI-3) → another fresh discovery pass.
-- Open issues: #175 #176 #178 #179 #181 (discovery) + #127 (JS behavior) + #184 (housekeeping — substantially done this pass) + **#186** (bridge init-auth: echo-verify/replay-repin/thrash — needs SW-vouched token) + **#188** (options should surface prompt-outcome import/clear failure) + **#196** (shared hidden-password helper).
-- **Resolved question:** the "merge systematically" vs. Gate 3 tension is settled — Chris waived Gate 3 for the 2026-06-05 batch and authorized the merges, with manual checks deferred to the watchlist. (For *future* batches, confirm the posture again unless told it's standing.)
-- **North-Star initiative (2026-06-13, historical):** the research + audit initiative completed this session (main @ `da400fb`; discovery cycles 3–4 added issues up to #231). Internal audit = **153 verified findings**; **4** deep-research passes done (broad + 2 gap-fill + GAP-D). All artifacts persisted under **`docs/research/NORTHSTAR_*`**, and the program plan is **`docs/NORTHSTAR_ROADMAP.md`** (Phase 5: FP-Elimination / Friend-Advisor / Feedback-Capture / Architecture). The original top unblockers were signal-level Smart-Mode gating (#233), enrich the capture record (#238), and top-sites trust-tier prior (#234); those are now merged or in active PRs. The ~15 new P5 slices are **filed: #232–#246** (`north-star` label). **No open research gaps remain** (GAP-D done: conformal/rrweb/single-user loop, 24 verified claims, unblocks P5-C5).
+- **Product posture:** strong pre-release alpha, not a market-ready or
+  efficacy-validated security product. `docs/Product_Strategy.md` owns the
+  current thesis, beta profile, and evidence gates; `docs/Project_Roadmap.md`
+  owns the corrective action register.
+- **Release-integrity blockers:** page-controlled injected UI currently owns
+  allow/trust/resume authority and can be redressed under genuine input
+  (RI-01); visual-sim can process the wrong active
+  tab and has no production value (RI-02/#424); frozen MAIN-world prototypes in
+  #356 are site-breaking; fake DNR and unmeasured JS behavior should be absent
+  or off; stored URLs require minimization (RI-05/RI-06); #175/#186 bridge
+  identity/recovery and #455 pre-collection disclosure/consent now block beta.
+- **Release/profile blockers:** the 52-byte reputation test filter plus the
+  current ~474/500KB package makes the old "150KB/100K domains" plan
+  impossible as written. AI-9/AI-16 must choose the recommended interaction-
+  only beta or a fully specified real-filter profile.
+- **Brand blocker:** the exact name `NavSentinel` is already used by an active
+  GNSS security product. AI-19 requires clearance or an early rename before
+  CWS submission; this is a risk flag, not a legal conclusion.
+- **Legacy PR cleanup:** #273 and draft #399 were closed on 2026-07-13 rather
+  than merged from stale bases; their commits, discussions, and open issue
+  anchors remain. #356 is still stale with E2E red and is the only
+  active legacy browser-surface PR. **Do not spend human Gate-3 time until an
+  agent refreshes, fixes, and re-reviews it.**
+- **Portfolio:** 75 open issues, none assigned or milestoned; #439–#453 are 15
+  frozen Horizon proposals. No new feature/epic issue seeding until the queue is
+  culled and milestone-categorized.
+- **Infrastructure:** classic branch protection remains absent (`404 Branch not
+  protected`) and the rulesets API returns `[]`. AI-17 remains open. Codex hook
+  trust remains AI-18. GitHub private vulnerability reporting is enabled and
+  linked from `SECURITY.md`.
+- **Local verification blocker:** Defender quarantined only
+  `C:\Users\Public\codex-shell-home\NavSentinel-ri01\tests\clickfix-detector.property.test.ts`
+  as `Trojan:HTML/FakeCaptcha.HNA!MTB`; it reports `DidThreatExecute=False` and
+  `IsActive=False`. AI-20 owns the human review. Do not disable Defender or add
+  a broad exclusion.
+- **Historical snapshots** (pre-2026-07-03, ~28 session bullets) archived to [`docs/archive/ACTION_ITEMS_snapshots.md`](docs/archive/ACTION_ITEMS_snapshots.md).
 
 ---
 
 ## Action items
 
-**🚨 OPEN: AI-9 — Build & ship the REAL reputation filter before any real-user release (#321, release blocker).** Discovery pass 3 (2026-06-20) confirmed the shipped `extension/public/reputation_data.bin` is **52 bytes (m=288 bits) = the 15-domain TEST filter**, not real threat intel. CI only runs `build:bloom:test`; `release.mjs`/`package.mjs` have **no bloom-build step**. So `reputationReady()` returns true but `isKnownBadDomain()` only matches 15 `.example` names — **reputation-based detection (+50 known-bad NRS factor) is effectively disabled in production.** Likely intentional for the current pre-release phase, but **must be fixed before shipping to real users.** This needs you because building the real filter requires **network access to URLhaus/OpenPhish** (the local-first sandbox can't/shouldn't fetch external feeds) plus a feed-source + refresh-cadence decision. **Guide:** decide feeds/cadence → `npm run build:bloom` (real builder, needs network) → commit the resulting `reputation_data.bin` (or add a release step that builds it) → verify `m` is in the millions, not 288. Companion code hardening is seeded: **#322** (make `build-bloom-filter.mjs` exit non-zero on the test-domain fallback so the test filter can never ship silently) + a release/CI assert that the shipped `.bin` has `m` above a real-filter floor. Then tell me "AI-9 done".
+**Guided resolution cursor:** `AI-16` (`Resume at: AI-16`; the next
+conversational label is `q-1`). Current ready order is AI-16 -> AI-9 -> AI-20 ->
+AI-17 -> AI-19 -> AI-18. The hook-editing slice is now committed; AI-18 remains
+human-owned until its exact definitions are reviewed and trusted. The `q-N`
+label may reset between conversations; the `AI-N` identifier is durable.
+AI-15/AI-8/AI-13/AI-14 remain visible but are not actionable questions until
+agent preflight clears them.
 
-**OPEN: AI-8 — Gate-3 visual check + merge PR #273 (#217 neutral chip).** The one browser-surface PR from session 2: it recolours the popup `nrs_user_activation_active` signal chip from green to a NEUTRAL grey (you chose option (b) — it carries +5 NRS, so green was wrong; grey avoids both a false reassurance and crying wolf on every clicked nav). 2 clean adversarial rounds + green CI; presentation-only (no scoring change). Per the standing posture (browser-surface PRs hold for Gate-3) it was NOT auto-merged. **Guide:** `git fetch && git checkout fix/user-activation-neutral-chip && npm run build`; load `extension/dist` in Chrome; open the popup on a page with a recent clicked navigation; confirm the "active user gesture" signal chip renders **grey** (distinct from green/orange) and looks acceptable. Then `gh pr merge 273 --merge --delete-branch`, or tell me "merge #273" / "AI-8 done". (Review seeded **#274** — chip text-contrast, design-system-wide.)
+> **Gate-queue hold (refreshed 2026-07-13):** do not run the old branch checkout
+> guides for AI-8, AI-13, or AI-14. AI-8 and AI-14 require new current-main
+> slices after their stale PRs were closed; AI-13/#356 must be refreshed,
+> re-reviewed twice, and rerun through CI. AI-15 remains BLOCKED until an agent
+> posts a current preflight handoff.
+
+**🚨 OPEN: AI-19 — Clear or replace the working product name before CWS
+submission.** An active TruNav GNSS anti-spoofing product uses the exact name
+`NavSentinel` and was publicized by the US Department of Transportation in May
+2026. This is not a legal conclusion, but shipping under the name without a
+search/domain/CWS/trademark review creates avoidable brand and discovery risk.
+**Recommendation:** rename early. Reply `AI-19 rename; generate shortlist` and
+the agent can generate and preliminarily screen replacements, or reply
+`AI-19 keep; begin formal clearance`. For either path: (1) define intended
+territories and browser-security goods/services; (2) search exact, similar,
+phonetic, joined, and spaced variants in the [UK IPO](https://www.gov.uk/search-for-trademark),
+[USPTO](https://www.uspto.gov/trademarks/search), [WIPO Global Brand
+Database](https://www.wipo.int/en/web/global-brand-database), and EUIPO if EU
+distribution matters; (3) search general product/company usage, Companies
+House, GitHub, Chrome Web Store, domains, and relevant handles; (4) save dated
+results and potentially conflicting classes/goods; (5) obtain professional
+trademark advice before a commercial/public launch; and (6) record **keep** or
+**rename**. If renaming, coordinate code, manifest, store copy, assets,
+screenshots, docs, and repository metadata before invitations or submission.
+Then tell the agent `AI-19 done: <decision>`.
+
+**OPEN: AI-18 — Review and trust the new Codex project hooks.** The Codex parity
+setup adds `.codex/hooks.json` for session orientation, the shared irreversible
+command floor, agentic-change verification reminders, and sanitized failure
+capture. Codex deliberately skips new or changed non-managed hooks until their
+exact definitions are trusted. **Human-only guide (run after this agentic slice
+is final):** (1) start a fresh Codex session in the canonical repository; (2)
+run `/hooks`; (3) compare every project entry with `.codex/hooks.json` —
+SessionStart runs `session_start.py`, PreToolUse Bash runs
+`.claude/hooks/dispatch.py --event pre`, and PostToolUse runs
+`post_tool_use.py` plus sanitized `post_tool_failure.py`; (4) confirm each path
+is repository-root-relative and no unexpected command exists; (5) choose
+**Trust** for those exact project hooks; (6) run `/hooks` again and confirm they
+are trusted/enabled; and (7) restart once to exercise SessionStart. Then reply
+`AI-18 done`. Trust is definition-hash-based, so repeat after future hook
+definition changes.
+
+**🚨 BLOCKED: AI-15 — Run the headed release session only after agent
+preflight.** The prior 60–90 minute one-sitting guide is withdrawn: stale PRs
+#273 and #399 were closed, #356 remains stale/red, the reputation/package plan
+needs a product decision, and new release-integrity blockers precede manual
+testing. **Do not checkout or test #356 yet.** Agent preflight must first:
+(1) fix RI-01; (2) refresh/fix #356 and recreate or defer #273, with two fresh
+reviews and green CI; (3) excise visual-sim and remove fake DNR; (4) complete
+RI-06's purpose-specific data minimization/reset; (5) complete RI-07's explicit
+JS-behavior beta-off profile; (6) complete #175/#186 bridge integrity and #455
+pre-collection consent; (7) prepare the chosen AI-9 release profile; and (8)
+provide one current headed checklist. Then split human work into a browser
+session, any network/feed session, an overnight measurement run, and a short
+result review. Read `docs/Product_Strategy.md` first. This item becomes
+actionable only when the preflight handoff explicitly says so.
+
+**🆕 OPEN: AI-16 — Ratify or amend the standing product/process decisions.**
+The July 10 posture review and July 13 merge-gate corrections extend the July 3
+direction: narrow unlisted beta,
+interaction-only by default unless real reputation is fully specified, release
+integrity before human Gate-3, frozen Horizon/North-Star work, evidence before
+claims, and one post-beta visible bet. **Guide:** read the verdict, Beta Product
+Profile, and Portfolio sections of `docs/Product_Strategy.md`, then skim
+`docs/agentic/DECISIONS.md`. **Recommended reply:** `AI-16 ratify the July 3,
+July 10, and July 13 decisions, including headed Chrome as the primary Gate-3
+once operational, with manual spot-checks retained.` Otherwise name only the
+amendments.
+AI-9's release-profile choice and AI-19's name choice still require explicit
+answers; the reversible prioritization is already the working posture.
+
+**🆕 OPEN: AI-17 — Enable GitHub branch protection on `main` (the harness
+wall).** Live verification still returns `404 Branch not protected`. The local
+deny floor is a tripwire, not a server-side wall; non-hooked clients can bypass
+it. Until protection exists, never force-push `main`.
+
+**Recommended:** reply `AI-17 apply recommended protection` and an
+authenticated agent can apply and verify this reversible repository setting.
+If doing it yourself:
+
+1. Open GitHub → **Settings** → **Branches** → **Add branch protection rule**.
+2. Target `main` and require pull requests.
+3. Require the branch to be current; select only `Build / Unit` and `E2E`.
+4. Require conversation resolution and apply the rule to administrators.
+5. Leave force pushes and branch deletion disabled.
+6. Do not require an approval count that deadlocks a solo maintainer, the
+   scheduled Stress job, or the normally skipped release job.
+7. Save, then run
+   `gh api repos/Chris0Jeky/NavSentinel/branches/main/protection`. Confirm strict
+   checks, admin enforcement, conversation resolution,
+   `allow_force_pushes=false`, and `allow_deletions=false`.
+
+Official reference: [GitHub protected branches](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches).
+Then tell the agent `AI-17 done`.
+
+**🚨 OPEN: AI-9 — Choose the beta reputation profile (#321).** The current
+asset is a 52-byte test fixture. The old instruction to simply run
+`npm run build:bloom` is unsafe: the package is already ~474/500KB, a 150KB
+filter cannot meet the stated 0.01%/100K-domain combination, and feed licensing,
+provenance, cadence, cardinality, and rollback are unresolved. **Recommended
+choice:** ship the unlisted beta interaction-only, disable/omit reputation, and
+remove every reputation claim; test the actual differentiator without delay.
+**Alternative:** authorize a real-filter profile only after an agent proposes a
+separate data/package budget, feed/cadence/licensing plan, provenance manifest,
+sentinel checks, and reproducible build. Reply "AI-9 interaction-only" or
+"AI-9 real-filter" (plus constraints). Do not build/commit a feed artifact until
+that decision is recorded.
+
+**🚨 OPEN: AI-20 — Review the Defender quarantine and decide the exact
+fixture's fate.** The 2026-07-12 alert is
+`Trojan:HTML/FakeCaptcha.HNA!MTB`; Defender reports successful remediation,
+`DidThreatExecute=False`, and `IsActive=False`. The affected path is exactly
+`C:\Users\Public\codex-shell-home\NavSentinel-ri01\tests\clickfix-detector.property.test.ts`.
+The intact canonical copy matches tracked Git blob
+`434bbe10e17f754f62db913f28015bb327fe23f4` and SHA-256
+`BC317AB1D1B74AE9D8F9D80328818FED2FC304FFA0FEDDC4DBCB9991653AA769`.
+The file is a property-test keyword corpus for fake-CAPTCHA/ClickFix command
+detection; that strongly suggests a signature collision, but it is not a legal
+or malware-vendor determination.
+
+**Human-only guide:** (1) open **Windows Security -> Virus & threat protection
+-> Protection history**; (2) expand the 12 July 2026 alert and verify the exact
+name and path above; (3) if you accept it as the expected tracked test content,
+choose **Restore**; (4) if Defender immediately detects it again, re-verify the
+same exact name/path and choose **Allow on device** for that detection only; (5)
+do not disable Defender and do not add a repository/folder exclusion; (6) tell
+the agent `AI-20 restore exact fixture`. The agent will then verify both hashes
+and rerun full branch gates. If you prefer not to restore it, reply
+`AI-20 leave quarantined`; the agent will replace the signature-triggering test
+representation while preserving coverage, then rescan and rerun the gates.
+Microsoft references: [Protection History](https://support.microsoft.com/en-us/windows/protection-history-f1e5fd95-09b4-46d1-b8c7-1059a1e09708)
+and [file submission](https://www.microsoft.com/wdsi/filesubmission).
+
+**BLOCKED: AI-8 — Neutral-chip Gate-3 after closed PR #273.** The presentation
+intent is still reasonable, but stale PR #273 was closed on 2026-07-13 with its
+commit and two unresolved review threads preserved. An agent must recreate or
+defer the tiny change from current `main`, resolve both findings, run two fresh
+reviews and current CI, then post a new visual-check guide. Do not reuse the old
+branch checkout guide.
 
 **AI-10 — Gate-3 + merge the SPA-breakage fix (#352) · ✅ RESOLVED 2026-06-23.** Chris ran the manual Chrome check ("manual checks on chrome for #352 done, it seems to be working fine now") → **#352 merged into `main`** (`#347` pushState de-harden + `#348` reputation WAR). The claude.ai grey screen / infinite-load and the per-page `reputation_data.bin`/`pushState` console errors are fixed; top-frame reputation is re-enabled.
 
-**OPEN: AI-11 — Gate-3 verify + merge the toast count-pill (#351 → PR #353).** UI/UX: repeated low-stakes block notices coalesce into one small bottom-right count pill (after 3 within 8s) instead of a Dismiss-per-block. **Guide:** build + load; on a page that blocks several redirects in a row, confirm the cards collapse into one pill after the 3rd, the count increments, it fades and auto-removes (~12s idle), and clicking it expands details — while an Allow/credential prompt still renders as a full card. Then `gh pr merge 353 --merge --delete-branch`, or "AI-11 done".
+**AI-11 — Toast count-pill (#351 → PR #353) · ✅ RESOLVED 2026-06-23 — MERGED.** Chris said "merge #353"; green CI (incl. the RW-19 e2e fix to accept the coalesced pill) → **#353 merged into `main`** (`d0e0412`). Repeated blocked-popup/redirect prompts now coalesce into one count pill after 3-in-8s (expandable to the latest prompt's Allow once / Always allow). The pill is live on the next `git checkout main && npm run build`.
 
-**🔒 OPEN (gated): AI-12 — measure:fp + Gate-3 before merging the top-site FP relief (#350 → PR #354).** The false-positive fix (github.com etc.). Per **Decision D25 this scoring change must NOT merge on green CI alone.** **Guide:** (1) ideally land #232 (benign-journey harness) first; (2) `npm run measure:fp` (or the benign corpus) → confirm the FP drop on github/google/youtube with **no TP regression**; (3) run the attack gym → clickjacking/overlay fixtures targeting a top-site destination must still at least **PROMPT** (never silently allow); (4) Gate-3 on github/google/youtube; (5) **tune `NRS_TOP_SITE_CDS_RELIEF` — +20 is a starting value, not validated.** Then merge. **D1 is now INCLUDED in PR #354** (commit `3f0c9f7`): the trust list grew 24→42 (claude.ai/anthropic.com/gitlab/figma/npm/pypi/docker/vercel/netlify/gmail/proton + Google SSO subdomains) with `includeSubdomains` set only on fully-first-party brands (github/gitlab/microsoft/apple/mozilla/wikipedia/anthropic/claude); google.com stays apex-only so sites.google.com stays untrusted. **Note: `measure:fp` launches headed Chromium + visits the live Tranco top-1000 — it cannot run in the agent sandbox, so this step is yours.**
+**🚨 BLOCKED: AI-13 — #356 MAIN-world compatibility Gate-3.** This remains a
+beta prerequisite, but the branch is stale and its E2E check is red. An agent
+must merge current `main`, fix the failure, complete two fresh
+adversarial reviews, and post a current compatibility/gating checklist. Do not
+checkout, test, or merge the present branch.
+
+**🚨 BLOCKED: AI-14 — OAuth tradeoff measurement after closed PR #399.** The
+measurement-held draft was closed on 2026-07-13 rather than merged from a stale
+base. It is not a beta blocker. Keep #223 blocked until #417 supplies valid
+methodology and an agent creates a current slice, runs two reviews, and posts a
+reproducible headed measurement plan. Do not use the closed branch as a current
+test or merge target.
+
+**AI-12 — Top-site FP relief + D1 (#350 → PR #354) · ✅ RESOLVED 2026-06-23 — MERGED.** Chris manually confirmed the relief works on LinkedIn ("tested it on linkedin and it seemed to work fine now") = his measure/Gate-3 in lieu of the full `measure:fp` run (which needs headed Chromium + live Tranco, sandbox-can't). **#354 merged into `main`** (`c4426cf`): `getTierAdjustedBlockThreshold` now relieves TOP_SITE + CDS-only (benign-structural whitelist) by `NRS_TOP_SITE_CDS_RELIEF`; trust list grew 24→42 with safe `includeSubdomains`. Green CI (Build/Unit + E2E) on the main-merged head. **Follow-up:** `+20` is an unvalidated starting value; do not tune it again without the valid #417/#416 FP/TP evidence required by D25.
 
 AI-1, AI-2 resolved 2026-06-05; AI-3, AI-4 resolved 2026-06-13; **AI-5 resolved 2026-06-19** (Phishpedia public logo set approved); **AI-6 resolved 2026-06-19** (#249 merged after Gate-3 waiver). See Completed log. Deferred manual checks remain on the regression watchlist `docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md` (run on next build + load; now also covers #249 enriched-capture, #263 credential-submit, and #265 SW-hydration behavior). Standing posture (confirmed 2026-06-19): the agent **may autonomously merge non-browser PRs** (logic/test/build/docs) once aged + 2 adversarial rounds + green CI; **browser-surface PRs still hold for Gate-3**.
 
@@ -158,19 +327,20 @@ AI-1, AI-2 resolved 2026-06-05; AI-3, AI-4 resolved 2026-06-13; **AI-5 resolved 
 
 ### AI-4 — Decide Firefox build tooling for FF-02 · ✅ **DECIDED 2026-06-13 — option (b) `web-ext` + `manifest.firefox.json`**
 
-> Decided 2026-06-13 (Chris). **Chosen: (b) `web-ext` + a separate `manifest.firefox.json` and build script.** Rationale: runtime verification is human-gated (sandbox can't drive Firefox), which punishes experimental tooling — so the battle-tested Mozilla toolchain with a clean lint/build signal beats the experimental crxjs Firefox target (a) and the higher-maintenance hand-rolled Vite config (c). Also feeds the North-Star "Architecture" program (FF `blocking webRequest` escape hatch), arguing for the stable option. FF-02 should now be implemented against web-ext.
+> Decided 2026-06-13 (Chris). **Chosen: (b) `web-ext` + a separate `manifest.firefox.json` and build script.** **Superseded for scheduling on 2026-07-10:** the tooling choice remains valid history, but Firefox implementation is deferred until desktop-Chrome retention produces a real second-browser demand signal.
 
 **Why it was yours:** a tooling/architecture choice with trade-offs that shapes the whole Firefox port.
 
 **Context:** FF-01 (`browser.*` shim) merged (#173). FF-02 needs a Vite Firefox build; `@crxjs/vite-plugin` (v2.4.0) Firefox support is experimental. Options considered: (a) crxjs Firefox target; **(b) `web-ext` + separate `manifest.firefox.json` — CHOSEN**; (c) hand-rolled second Vite config + dual build scripts.
 
-**Next:** implement FF-02 against web-ext, then FF-03/FF-04 stack on top.
+**Next:** none before the post-retention Firefox activation gate. If that gate
+opens, implement FF-02 against web-ext, then reassess FF-03/FF-04.
 
 ---
 
 ### AI-5 — Visual-sim brand assets · ✅ **RESOLVED 2026-06-19 — public Phishpedia logo set approved**
 
-> **RESOLVED 2026-06-19 (Chris):** use the **public Phishpedia reference logo set** for the logo-embedding model (P5-D6 / #246, on-device-ML host P5-D5 / #245). The asset-approval question is settled — no further human input needed; implementation may proceed against the Phishpedia reference list. Decision history (the 2026-06-13 pivot) retained below.
+> **RESOLVED 2026-06-19 (Chris):** use the **public Phishpedia reference logo set** if a future logo-embedding model is authorized. **Superseded for scheduling on 2026-07-10:** RI-02 removes the current visual-sim path; logo embeddings are a fresh post-retention feature, so implementation must not proceed now. Decision history is retained below.
 
 > **DECIDED 2026-06-13 (Chris): pivot to logo-embedding (D24).** The original "sanctioned brand login *screenshots* for pHash" ask is **moot** — perceptual hashing is retired to a cheap pre-filter. **AI-5 re-scopes to:** supply/sanction a set of reference brand **logos** for the Siamese/CNN embedding model (or confirm using a public logo set, e.g. the Phishpedia reference list). This is now a smaller, lower-stakes asset task feeding **P5-D6 (#246)** + the on-device-ML host **P5-D5 (#245)**. Tracked as re-scoped-OPEN (logo set still to be confirmed), not blocking near-term Phase-5 work. Original deferral context retained below.
 
@@ -189,10 +359,12 @@ AI-1, AI-2 resolved 2026-06-05; AI-3, AI-4 resolved 2026-06-13; **AI-5 resolved 
 
 ## Completed log
 
+- **AI-12 — Top-site FP relief + D1 (#354) · DONE · 2026-06-23.** Chris manually confirmed the relief works on LinkedIn ("seemed to work fine now") = his measure/Gate-3 (the full `measure:fp` needs headed Chromium + live Tranco, which the sandbox can't run). **#354 merged into `main`** (`c4426cf`) on green CI (Build/Unit + E2E, including the main-merge head): `nrs.ts getTierAdjustedBlockThreshold` now relieves TOP_SITE + CDS-only (benign-structural whitelist) by `NRS_TOP_SITE_CDS_RELIEF` (+20, tunable); top-site trust list grew 24→42 with safe `includeSubdomains`. This is the lever #234/P5-A3 promised but never shipped.
+- **AI-11 — Toast count-pill (#353) · DONE · 2026-06-23.** Chris approved the merge; **#353 merged into `main`** (`d0e0412`). Repeated blocked-popup/redirect prompts coalesce into one count pill after 3-in-8s (expandable to the latest prompt's Allow once / Always allow). Included an e2e fix (RW-19 now accepts the coalesced pill while keeping the no-popup-opened security assertion). Green CI (Build/Unit + E2E).
 - **AI-10 — Gate-3 + merge the SPA-breakage fix · DONE · 2026-06-23.** Chris manually verified #352 in Chrome ("working fine now"); **#352 merged into `main`** (`#347` History.pushState/replaceState de-hardened to writable via `softPatchProto` — fixes the claude.ai grey screen; `#348` `reputation_data.bin` added to `web_accessible_resources` — fixes the per-page console error + re-enables top-frame reputation). Green CI (Build/Unit + E2E). Remaining session PRs: **#353** (toast pill, AI-11) and **#354** (top-site FP relief + D1, AI-12, gated on `measure:fp`).
 - **AI-1 — Gate 3 manual Chrome test · WAIVED → DEFERRED · 2026-06-05.** Chris waived the manual-test gate for the 11-PR batch; merges proceeded on fresh-green CI + 2× independent adversarial review. Manual checks preserved as a deferred regression watchlist in `docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md` (run on next build + load).
 - **AI-2 — Merge order + execution · DONE · 2026-06-05.** All 11 D-series PRs merged oldest-first (#180, #182, #183, #185, #187, #189, #190, #191, #193, #194, #195). #182 merged last after a docs-only conflict (resolved by taking `main`; verified tsc clean / lint 0/0 / 2298 unit tests + green CI on the merge head). `main` @ `4bd60ce`, 0 open PRs, branches pruned.
 - **AI-3 — Fate of `fix/jsb-stale-todos-and-tests` · RESOLVED (superseded) · 2026-06-13.** Verified on `main` @ `da400fb`: branch gone (local + origin), stale TODO markers gone from `js_behavior_monitor.ts`, and `computeJsBehaviorScore` now a live implemented function (`js_behavior_state.ts:67`). Both branch intents landed via later merges; nothing to do.
-- **AI-4 — Firefox build tooling for FF-02 · DECIDED · 2026-06-13.** Chose **(b) `web-ext` + separate `manifest.firefox.json`** over experimental crxjs Firefox (a) and hand-rolled Vite config (c), because FF runtime verification is human-gated and rewards a stable, well-documented toolchain. FF-02 to be implemented against web-ext.
-- **AI-5 — Visual-sim brand assets · RESOLVED · 2026-06-19.** Chris approved the **public Phishpedia reference logo set** for the logo-embedding model (P5-D6 / #246; host P5-D5 / #245). Asset-approval settled; implementation may proceed. (Path history: 2026-06-13 pivot from pHash screenshots → logo-embedding per D24.)
+- **AI-4 — Firefox build tooling for FF-02 · DECIDED · 2026-06-13; scheduling superseded 2026-07-10.** `web-ext` remains the chosen tooling if the post-retention Firefox demand gate opens; no implementation is active now.
+- **AI-5 — Visual-sim brand assets · RESOLVED · 2026-06-19; scheduling superseded 2026-07-10.** The Phishpedia set remains the approved future input, but RI-02 removes the current path and no logo-embedding implementation is active before retention evidence.
 - **AI-6 — Manual Gate-3 on PR #249 + merge · RESOLVED (Gate-3 WAIVED) · 2026-06-19.** Chris waived Gate-3 for the #249/#263/#265 batch and authorized the agent merge. **#249 merged** (replay-grade `PromptOutcomeEntry`) on green CI + 2 adversarial review rounds. Manual-browser check preserved on the deferred watchlist `docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md`. Standing posture confirmed: agent may autonomously merge non-browser PRs; browser-surface PRs still hold for Gate-3.

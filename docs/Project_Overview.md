@@ -1,8 +1,12 @@
 # Project Overview
 
+> **Maturity:** pre-release alpha. This file describes implemented behavior, not
+> validated efficacy or release readiness. Product direction and current gates
+> live in [`Product_Strategy.md`](Product_Strategy.md).
+
 ## Summary
 
-NavSentinel is a local-first Chrome MV3 extension that protects two high-risk browser surfaces:
+NavSentinel is a local-first Chrome MV3 extension designed to guard two high-risk browser surfaces:
 
 - deceptive navigation attempts that try to move the user somewhere they did not clearly intend to go
 - risky credential submissions that look like phishing or unsafe login handling
@@ -45,7 +49,9 @@ remote verdict services, telemetry pipelines, or password uploads.
 
 ## Effective deployment guidance
 
-- use `smart` mode for normal daily browsing and regression testing
+- use only as a development/dogfood build until the beta gates in
+  `Product_Strategy.md` pass; do not rely on it as the sole security control
+- use `smart` mode for controlled compatibility and regression testing
 - use `strict` mode when validating new heuristics or running adversarial Gym scenarios
 - keep the trusted-domain list small and deliberate
 - treat the navigation allowlist as a site-specific exception list, not a global trust signal
@@ -53,7 +59,7 @@ remote verdict services, telemetry pipelines, or password uploads.
 
 ## Current status
 
-The merged `main` branch now includes the full SentinelSuite-style baseline:
+The merged `main` branch includes a substantial engineering baseline:
 
 - hardened navigation interception across isolated-world and main-world surfaces
 - credential-submit protection and trusted-domain workflows
@@ -61,11 +67,20 @@ The merged `main` branch now includes the full SentinelSuite-style baseline:
 - bounded local event logging
 - packaging, CI, and strict type verification
 
-What remains is follow-up work, not the original merge:
+It is not yet a released or validated product. Immediate blockers include:
 
-- broader automated coverage across the remaining Gym levels and stress scenarios
-- better operator ergonomics around event-log filtering and trust/allowlist clarity
-- release/repo polish such as issue templates, changelog flow, and optional release-tag automation
+- scripted page input can activate protection-lowering prompt/modal actions;
+- the dead visual-sim path can process a different active tab's pixels;
+- MAIN-world compatibility work in #356 is stale/red;
+- DNR and reputation surfaces are test/placeholder implementations;
+- FP/TP and comparative efficacy evidence is incomplete;
+- no external audit, tag, release, CWS listing, or external-user cohort exists;
+  and
+- the working product name requires clearance or replacement.
+
+The next sequence is release integrity → narrow unlisted beta → real-user
+evidence → one evidence-backed differentiator. North-Star/Horizon work is
+frozen until that sequence produces a credible signal.
 
 ## Main code entry points
 

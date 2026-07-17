@@ -22,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CSP analysis as NRS risk modifier (P4-05)
 - Sub-resource integrity awareness for credential pages (P4-06)
 - Per-domain behavioral profiling (P4-07)
-- Competitive benchmark suite (P2-10)
+- Benchmark suite (gym-fixture regression; competitive/Safe-Browsing arm unbuilt — #418) (P2-10)
 - First-install onboarding flow (P3-04)
 - Security audit scope document (P3-09)
 - Performance budget verification in CI (AUD-04)

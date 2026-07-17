@@ -13,6 +13,8 @@ This is the Codex operating contract for NavSentinel. Keep this file compact; pu
 
 When sources conflict, use the higher source and report the conflict.
 
+**Standing direction (2026-07-03):** ship/measure, not hardening. Follow the Priority Ladder and posture in `docs/agentic/DECISIONS.md` — discovery is milestone-gated (LOW residue -> `docs/agentic/ICEBOX.md`), human-gated PRs are capped at 3, and browser-surface is defined by runtime blast radius (MAIN-world / submit path / service-worker nav / MutationObserver / visible UI), not file type.
+
 ## Codex Tooling
 
 Use the best available Codex tools for the job:
@@ -27,7 +29,10 @@ Use the best available Codex tools for the job:
 - Use web verification for unstable current facts, official sources first.
 - Use subagents only when the user explicitly asks for delegation or parallel agents.
 
-Do not rely on Claude-only `.claude/settings.json` hooks for Codex safety. Apply the same safety rules through this file, `.agents/skills`, and explicit command discipline.
+Do not rely on Claude-only `.claude/settings.json` for Codex safety. Codex loads
+the project-local `.codex/hooks.json` only after the repository is trusted and
+the exact hooks are reviewed through `/hooks`; also apply this file,
+`.agents/skills`, and explicit command discipline.
 
 ## Default Work Style
 
@@ -62,6 +67,10 @@ Do not bulk-read `node_modules`, build output, generated data, archive docs, or 
 3. Clear an item only on explicit user confirmation; move it to the Completed log with date + one-line result. Never self-clear.
 4. Keep the current-state snapshot accurate when verified truth changes. While `main`'s status docs are stale/conflicted by open PRs, this file plus session memory are the source of truth.
 5. When you find a new human-only task, add it as a new `AI-N` item with a step-by-step guide and tell the user.
+6. When the user asks to work through a cumulative queue, use
+   `ns-human-action-guide`: keep `ACTION_ITEMS.md` as the only durable queue,
+   complete agent-owned prerequisites first, and present one ready `q-N [AI-N]`
+   action at a time with comprehensive human-only steps.
 
 ## Project Structure
 
@@ -133,6 +142,7 @@ Use these Codex workflows when relevant:
 - `ns-security-review`: bridge, permissions, storage, credentials, data isolation, and remote-call risk.
 - `ns-ui-ux`: popup, options, onboarding, prompt copy, and accessibility.
 - `ns-question-batch`: ask only blocker questions.
+- `ns-human-action-guide`: walk a known human-owned queue one ready action at a time.
 - `ns-failure-capture`: classify failed tools/tests/workarounds.
 - `ns-interface-map`: update agent-facing maps.
 - `ns-roadmap-sync`: update roadmap/status docs when truth changes.
@@ -151,6 +161,9 @@ When a review is performed on a PR (unless the user explicitly says otherwise):
 4. Do not skip or defer findings labeled "non-blocking", "minor", or "informational". Every finding must be resolved in the current work or explicitly documented with a seeded follow-up.
 5. If a finding drifts genuinely out of scope (different extension layer, unrelated seam, pre-existing tech debt), document it and seed a fix: open a GitHub issue, add a roadmap entry, or append to `docs/agentic/FAILURE_LEDGER.md` with a concrete future-fix path.
 6. Tech debt accrual from reviews is not acceptable. "Non-blocking" means "fix it now, not later."
+7. For local-only work with no PR thread, record each review round's scope,
+   independent reviewer/lens, findings, and resolutions in the handoff or a
+   small review artifact. A summary claim alone is not auditable gate evidence.
 
 ## PR Merge Protocol
 
@@ -200,8 +213,18 @@ See `docs/agentic/GIT_WORKFLOW.md` for full details and recovery procedures.
 
 ### Branch safety tiers
 
-- **Protected branches** (`main`, `master`, `develop`, `release`): No rebase, force-push, hard reset, or history rewriting. Always blocked by the pre-tool-use hook.
-- **Other branches**: These operations are allowed but require user approval. You must explain what you are doing and the risks before attempting.
+For Claude and Codex, the shared deny floor (`.claude/hooks/dispatch.py`, tier
+from `.claude/tier.json`) blocks only the **irreversible**: force-push in all
+spellings, `rm -rf` outside the project, pipe-to-shell, `sudo`, secret-file
+mutation. Claude wires it through `.claude/settings.json`; Codex wires it
+through `.codex/hooks.json`. This remains a tripwire rather than a complete
+security boundary, so both runtimes must enforce the same intent by command
+discipline. At this tier (T2), work-loss ops (`reset --hard`, `rebase`,
+`checkout -- .`) are recoverable from origin and allowed — the rules below are
+convention:
+
+- **Never force-push `main`/`master`/`develop`/`release`.** Server-side branch protection is the real wall (tracked in `ACTION_ITEMS.md` until enabled).
+- Any history-rewriting or work-discarding command: explain in plain language what it does and whether it is reversible, then wait for user approval before running it.
 
 ### Default workflow
 
@@ -227,6 +250,10 @@ Stop. Explain the situation and options (safest first). Let the user choose. Nev
 
 ## Local Settings
 
-`.claude/settings.json` is Claude-only. Codex must follow the same safety intent through this file, `.agents/skills/*`, explicit command discipline, and the tools actually exposed in the current runtime.
+`.claude/settings.json` is Claude-only. Codex uses `.codex/hooks.json`, this
+file, `.agents/skills/*`, explicit command discipline, and the tools actually
+exposed in the current runtime. After adding or changing Codex hooks, review and
+trust their current definitions with `/hooks`; changed hook hashes are skipped
+until trusted.
 
 Project-scoped MCP defaults live in `.mcp.json` and are credential-free. Verify live MCP/tool availability before relying on any server or authenticated connector.

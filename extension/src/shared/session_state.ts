@@ -74,6 +74,93 @@ export interface LastCommittedEntry {
 }
 
 // ---------------------------------------------------------------------------
+// Restore shape validators (#339). chrome.storage.session is the extension's own
+// storage, but a corrupt/partial write or a future schema change could leave a malformed
+// value. _restoreMap drops any entry that fails its validator on hydrate, so a bad value
+// never poisons SW logic: a non-number ts / startedAt / createdAt makes a downstream
+// `now - x` comparison NaN, which silently disables a prune, makes a size-cap sort
+// non-deterministic, or (for lastCommitted) flips a same-site nav into a FALSE rollback
+// after a worker restart; a corrupt oauthFlow.phase can evade redirect-mismatch detection.
+// Mirrors the captureTimestamps gate added in #345.
+// ---------------------------------------------------------------------------
+const isFiniteNumber = (v: unknown): v is number =>
+  typeof v === "number" && Number.isFinite(v);
+const isString = (v: unknown): v is string => typeof v === "string";
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null && !Array.isArray(v);
+const isStringArray = (v: unknown): boolean =>
+  Array.isArray(v) && v.every((s) => typeof s === "string");
+
+const isValidAllowTarget = (v: unknown): boolean =>
+  isRecord(v) &&
+  isString(v.url) &&
+  isFiniteNumber(v.expiresAt) &&
+  // matchQueryPrefix is optional and the write-site sets it only on strict `=== true`; a
+  // corrupt truthy non-boolean would otherwise widen exact-match to prefix-match.
+  (v.matchQueryPrefix === undefined || v.matchQueryPrefix === true) &&
+  // silentEvent is optional; if present it must at least be an object. The write-site
+  // isEventLogAppendMessage guard is the primary defence — this drops only a wholly
+  // non-object value that restore-tampering could inject before it reaches appendEvent.
+  (v.silentEvent === undefined || isRecord(v.silentEvent));
+const isValidPendingRollback = (v: unknown): boolean =>
+  isRecord(v) &&
+  isString(v.url) &&
+  isStringArray(v.qualifiers) &&
+  // prevUrl is optional; a corrupt truthy non-string flows into the content-script
+  // rollback message and isSameRegistrableNavigation's URL parse — keep it string-or-absent.
+  (v.prevUrl === undefined || isString(v.prevUrl));
+const isValidPendingForward = (v: unknown): boolean =>
+  isRecord(v) &&
+  isString(v.url) &&
+  isFiniteNumber(v.ts) &&
+  // returnUrl is optional; a corrupt truthy non-string matches neither the `=== currentUrl`
+  // offer branch nor the `!returnUrl` branch, silently stranding the forward offer until
+  // expiry after a restart — drop it instead of restoring poison.
+  (v.returnUrl === undefined || isString(v.returnUrl));
+const isValidRollbackReturn = (v: unknown): boolean =>
+  isRecord(v) && isString(v.url) && isFiniteNumber(v.expiresAt);
+const isValidLastCommitted = (v: unknown): boolean =>
+  isRecord(v) &&
+  isString(v.url) &&
+  isString(v.transitionType) &&
+  isStringArray(v.qualifiers) &&
+  isFiniteNumber(v.ts) &&
+  typeof v.allowedAtCommit === "boolean" &&
+  // prevUrl is optional; same string-or-absent gate as pendingRollback (it reaches the same
+  // same-registrable URL-parse path).
+  (v.prevUrl === undefined || isString(v.prevUrl));
+const isValidChildWindow = (v: unknown): boolean =>
+  isRecord(v) &&
+  isFiniteNumber(v.openerTabId) &&
+  // Chrome tab IDs are always positive (>= 1); the producer writes tab.openerTabId verbatim.
+  // A corrupt 0 / -1 (chrome.tabs.TAB_ID_NONE) would pass isFiniteNumber but make the
+  // onRemoved `chrome.tabs.sendMessage(openerTabId, ns-dblclick-child-closed)` fail silently,
+  // suppressing the DoubleClickjacking child-closed notification. (#339)
+  v.openerTabId > 0 &&
+  isFiniteNumber(v.createdAt) &&
+  typeof v.openerNavObserved === "boolean";
+const isValidTypedOrigin = (v: unknown): boolean =>
+  isRecord(v) && isFiniteNumber(v.ts) && isFiniteNumber(v.deadline);
+// Restorable phases. A LIVE flow is only ever 'redirect' or 'consent' in storage:
+// 'callback' is set transiently and advanced to 'complete' before any persistMap, and since
+// #366 the callback branch DELETES the flow before persisting, so 'complete' is never
+// written either. 'complete' is nonetheless accepted here as defence-in-depth: paired with
+// the dblclick opener guard's `phase !== "complete"` check (sw.ts), it neutralises a
+// corrupt/tampered restored 'complete' (treated as a finished flow, not active) instead of
+// letting it masquerade. 'callback' is rejected outright — the callback branch only treats
+// redirect/consent as active, so a tampered 'callback' would slip past the very
+// redirect-mismatch check this validator protects (#339).
+const OAUTH_PHASES = new Set(["redirect", "consent", "complete"]);
+const isValidOAuthFlow = (v: unknown): boolean =>
+  isRecord(v) &&
+  isString(v.initiatorUrl) &&
+  isString(v.consentUrl) &&
+  isString(v.expectedCallbackDomain) &&
+  isFiniteNumber(v.startedAt) &&
+  typeof v.phase === "string" &&
+  OAUTH_PHASES.has(v.phase);
+
+// ---------------------------------------------------------------------------
 // Session storage key constants
 // ---------------------------------------------------------------------------
 
@@ -225,21 +312,21 @@ export class SessionStateManager {
       return;
     }
 
-    this._restoreMap(this.allowUntilByTab, data[KEYS.allowUntil]);
-    this._restoreMap(this.gestureUntilByTab, data[KEYS.gestureUntil]);
-    this._restoreMap(this.allowStartedByTab, data[KEYS.allowStarted]);
-    this._restoreMap(this.allowTargetByTab, data[KEYS.allowTarget]);
-    this._restoreMap(this.userNavContextUntilByTab, data[KEYS.userNavContextUntil]);
-    this._restoreMap(this.suppressUntilByTab, data[KEYS.suppressUntil]);
-    this._restoreMap(this.typedOriginByTab, data[KEYS.typedOrigin]);
+    this._restoreMap(this.allowUntilByTab, data[KEYS.allowUntil], isFiniteNumber);
+    this._restoreMap(this.gestureUntilByTab, data[KEYS.gestureUntil], isFiniteNumber);
+    this._restoreMap(this.allowStartedByTab, data[KEYS.allowStarted], isString);
+    this._restoreMap(this.allowTargetByTab, data[KEYS.allowTarget], isValidAllowTarget);
+    this._restoreMap(this.userNavContextUntilByTab, data[KEYS.userNavContextUntil], isFiniteNumber);
+    this._restoreMap(this.suppressUntilByTab, data[KEYS.suppressUntil], isFiniteNumber);
+    this._restoreMap(this.typedOriginByTab, data[KEYS.typedOrigin], isValidTypedOrigin);
     this._restoreSet(this.readyTabs, data[KEYS.readyTabs]);
-    this._restoreMap(this.pendingRollbackByTab, data[KEYS.pendingRollback]);
-    this._restoreMap(this.pendingForwardByTab, data[KEYS.pendingForward]);
-    this._restoreMap(this.rollbackReturnByTab, data[KEYS.rollbackReturn]);
-    this._restoreMap(this.lastUrlByTab, data[KEYS.lastUrl]);
-    this._restoreMap(this.lastCommittedByTab, data[KEYS.lastCommitted]);
-    this._restoreMap(this.childWindowByTab, data[KEYS.childWindow]);
-    this._restoreMap(this.oauthFlowByTab, data[KEYS.oauthFlow]);
+    this._restoreMap(this.pendingRollbackByTab, data[KEYS.pendingRollback], isValidPendingRollback);
+    this._restoreMap(this.pendingForwardByTab, data[KEYS.pendingForward], isValidPendingForward);
+    this._restoreMap(this.rollbackReturnByTab, data[KEYS.rollbackReturn], isValidRollbackReturn);
+    this._restoreMap(this.lastUrlByTab, data[KEYS.lastUrl], isString);
+    this._restoreMap(this.lastCommittedByTab, data[KEYS.lastCommitted], isValidLastCommitted);
+    this._restoreMap(this.childWindowByTab, data[KEYS.childWindow], isValidChildWindow);
+    this._restoreMap(this.oauthFlowByTab, data[KEYS.oauthFlow], isValidOAuthFlow);
     this._restoreRedirectChains(data[KEYS.redirectChains]);
     this._restoreMap(
       this.captureTimestampsByTab,
@@ -355,10 +442,36 @@ export class SessionStateManager {
 
   private _restoreRedirectChains(raw: unknown): void {
     const restored = objToMap<RedirectChain>(raw);
+    let skipped = 0;
     for (const [k, v] of restored) {
-      if (v && Array.isArray(v.hops) && typeof v.startedAt === "number") {
-        this.redirectChainData.set(k, v);
+      // #339: require a FINITE startedAt and well-formed hops (each { url: string; ts: number }).
+      // `typeof === "number"` accepted NaN, which poisons pruneStale (`now - NaN > X` is always
+      // false → never time-pruned) and makes enforceMapLimit's startedAt sort non-deterministic
+      // — the same corruption class the per-map validators above close. A NaN hop.ts likewise
+      // breaks hasActiveChain / the chain-window comparison.
+      // #390: require hops.length > 0. A live chain is always created with its first hop
+      // (redirect_chain.recordHop), so a 0-hop chain is never legitimate — restoring one
+      // would seat a depth-0 entry that occupies a map slot until time-pruned. Rejecting it
+      // keeps restore consistent with the live "a chain has >= 1 hop" invariant.
+      if (
+        isRecord(v) &&
+        isFiniteNumber(v.startedAt) &&
+        Array.isArray(v.hops) &&
+        v.hops.length > 0 &&
+        v.hops.every(
+          (h: unknown) =>
+            isRecord(h) && isString(h.url) && isFiniteNumber(h.ts) && isString(h.transitionType),
+        )
+      ) {
+        this.redirectChainData.set(k, v as unknown as RedirectChain);
+      } else {
+        skipped++;
       }
+    }
+    if (skipped > 0) {
+      console.warn(
+        `[NavSentinel] session restore: skipped ${skipped} malformed redirect-chain entr${skipped === 1 ? "y" : "ies"}`,
+      );
     }
   }
 

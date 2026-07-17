@@ -83,6 +83,7 @@ const KIT_HTML_TRIGGERS: Record<string, string> = {
   "Robin-Banks": "robin-banks",
   "BulletProofPanel": "bp-panel",
   "Base64-Form-Action": 'action="data:text/html"',
+  "Phish-Hidden-Iframe": '<iframe style="display: none">',
   "Exfil-Hidden-Form": '<form style="display:none">',
   "Data-Exfil-Iframe": '<iframe src="https://evil.com/collect">',
   "Telegram-Exfil": "api.telegram.org/bot12345",

@@ -14,6 +14,9 @@ import {
   getMutationAlerts,
   getMutationAlertCount,
   _resetMutationState,
+  _getShadowObserverCountForTesting,
+  _getPendingMutationCountForTesting,
+  _feedMutationRecordsForTesting,
   type MutationAlert,
 } from "../extension/src/content/mutation_monitor";
 
@@ -850,6 +853,192 @@ describe("mutation_monitor shadow DOM observation", () => {
 
     const passwordAlerts = alerts.filter((a) => a.type === "password_injected");
     expect(passwordAlerts.length).toBe(0);
+
+    stopMutationMonitor();
+  });
+
+  it("disconnects NESTED shadow observers when a light-DOM ancestor is removed (#401)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    // wrapper (light DOM) → outer host (shadow root) → inner host (nested shadow root).
+    // Removing `wrapper` reaches the outer host via querySelectorAll, but the inner
+    // host lives INSIDE the outer shadow root, which that light-DOM walk can't pierce.
+    const wrapper = document.createElement("div");
+    const outerHost = document.createElement("div");
+    const outerSr = outerHost.attachShadow({ mode: "open" });
+    const innerHost = document.createElement("div");
+    const innerSr = innerHost.attachShadow({ mode: "open" });
+    outerSr.appendChild(innerHost);
+    wrapper.appendChild(outerHost);
+    document.body.appendChild(wrapper);
+
+    await vi.advanceTimersByTimeAsync(200);
+    expect(_getShadowObserverCountForTesting()).toBe(2);
+
+    wrapper.remove();
+    await vi.advanceTimersByTimeAsync(200);
+
+    // Pre-fix the inner host's observer leaked here (count stayed 1) until the
+    // 5-minute AUTO_DISCONNECT_MS timer.
+    expect(_getShadowObserverCountForTesting()).toBe(0);
+
+    // And the detached nested root must not fire ghost alerts.
+    const input = document.createElement("input");
+    input.type = "password";
+    innerSr.appendChild(input);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(alerts.filter((a) => a.type === "password_injected").length).toBe(0);
+
+    stopMutationMonitor();
+  });
+
+  it("disconnects deeply nested shadow observers when the outer HOST itself is removed (#401)", async () => {
+    startMutationMonitor(document, () => {});
+
+    // Three levels of nesting, outer host directly in the light DOM.
+    const outerHost = document.createElement("div");
+    const outerSr = outerHost.attachShadow({ mode: "open" });
+    const midHost = document.createElement("div");
+    const midSr = midHost.attachShadow({ mode: "open" });
+    const innerHost = document.createElement("div");
+    innerHost.attachShadow({ mode: "open" });
+    midSr.appendChild(innerHost);
+    outerSr.appendChild(midHost);
+    document.body.appendChild(outerHost);
+
+    await vi.advanceTimersByTimeAsync(200);
+    expect(_getShadowObserverCountForTesting()).toBe(3);
+
+    outerHost.remove();
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(_getShadowObserverCountForTesting()).toBe(0);
+
+    stopMutationMonitor();
+  });
+
+  it("re-observes nested shadow roots when the removed subtree is re-added (#401)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    const wrapper = document.createElement("div");
+    const outerHost = document.createElement("div");
+    const outerSr = outerHost.attachShadow({ mode: "open" });
+    const innerHost = document.createElement("div");
+    const innerSr = innerHost.attachShadow({ mode: "open" });
+    outerSr.appendChild(innerHost);
+    wrapper.appendChild(outerHost);
+    document.body.appendChild(wrapper);
+
+    await vi.advanceTimersByTimeAsync(200);
+    expect(_getShadowObserverCountForTesting()).toBe(2);
+
+    wrapper.remove();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(_getShadowObserverCountForTesting()).toBe(0);
+
+    // Re-adding the same subtree must re-register both observers (the WeakSet
+    // dedup entry is cleared on disconnect) and detection must work again.
+    document.body.appendChild(wrapper);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(_getShadowObserverCountForTesting()).toBe(2);
+
+    const input = document.createElement("input");
+    input.type = "password";
+    innerSr.appendChild(input);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(alerts.filter((a) => a.type === "password_injected").length).toBe(1);
+
+    wrapper.remove();
+    stopMutationMonitor();
+  });
+
+  it("does not tear down a still-CONNECTED host that appears in a removedNodes record (self-replace evasion, #401 R1)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    // outer host (shadow) → inner host (nested shadow), both observed.
+    const outerHost = document.createElement("div");
+    const outerSr = outerHost.attachShadow({ mode: "open" });
+    const innerHost = document.createElement("div");
+    const innerSr = innerHost.attachShadow({ mode: "open" });
+    outerSr.appendChild(innerHost);
+    document.body.appendChild(outerHost);
+
+    await vi.advanceTimersByTimeAsync(200);
+    expect(_getShadowObserverCountForTesting()).toBe(2);
+    expect(outerHost.isConnected).toBe(true);
+
+    // Real browsers emit a SINGLE MutationRecord with the host in BOTH addedNodes
+    // and removedNodes for a self-replace (replaceChild(host, host) /
+    // host.replaceWith(host)) per the WHATWG DOM "replace" algorithm — the host
+    // never leaves the document. The add-path is processed first (no-op: root
+    // already observed), then the remove-path would tear the observer down.
+    // happy-dom instead treats self-replace as a plain disconnect, so we feed the
+    // spec-accurate record directly. Pre-fix this tore down outerHost's observer AND
+    // recursed into innerHost, permanently blinding the whole subtree (count → 0)
+    // while the content stayed live. The isConnected guard defeats it.
+    const selfReplace = {
+      type: "childList",
+      target: document.body,
+      addedNodes: [outerHost] as unknown as NodeList,
+      removedNodes: [outerHost] as unknown as NodeList,
+    } as unknown as MutationRecord;
+    _feedMutationRecordsForTesting([selfReplace]);
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(_getShadowObserverCountForTesting()).toBe(2);
+
+    // And detection into the still-live nested shadow root must keep working.
+    const input = document.createElement("input");
+    input.type = "password";
+    innerSr.appendChild(input);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(alerts.filter((a) => a.type === "password_injected").length).toBe(1);
+
+    outerHost.remove();
+    stopMutationMonitor();
+  });
+});
+
+describe("mutation_monitor alert-cap cleanup (#409)", () => {
+  beforeEach(() => {
+    _resetMutationState();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    _resetMutationState();
+    vi.useRealTimers();
+  });
+
+  it("still disconnects shadow observers + drains the queue after the alert cap is reached (#409)", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    host.attachShadow({ mode: "open" });
+
+    startMutationMonitor(document, () => {});
+    await vi.advanceTimersByTimeAsync(200);
+    expect(_getShadowObserverCountForTesting()).toBe(1);
+
+    // Drive past MAX_ALERTS (50) with injected password fields.
+    for (let i = 0; i < 60; i++) {
+      const input = document.createElement("input");
+      input.type = "password";
+      document.body.appendChild(input);
+    }
+    await vi.advanceTimersByTimeAsync(200);
+    expect(getMutationAlertCount()).toBe(50); // capped
+
+    // Remove the shadow host. Pre-fix, processBatch early-returned on the cap, so
+    // removed-node cleanup was skipped (observer leaked, count stayed 1) and the
+    // queue was never drained. Post-fix, cleanup + drain run unconditionally.
+    host.remove();
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(_getShadowObserverCountForTesting()).toBe(0);
+    expect(_getPendingMutationCountForTesting()).toBe(0);
 
     stopMutationMonitor();
   });

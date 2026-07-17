@@ -61,7 +61,16 @@ const budgets = [
     // capture growth should land before a split/trim slice.
     // #238 / P5-C1 then adds replay-grade outcome wiring at the call sites while
     // keeping the pure feature-selection builder in the storage chunk.
-    maxKB: 66,
+    // Bumped 66 -> 70 (Q2 decision 2026-06-26: "split + bump"). The chunk had been
+    // pinned AT the 66KB cap, which blocked a cluster of pure-correctness fixes
+    // (#373 nonfinite-totalNavigations gate bypass [this PR], #315/#288/#289/#200/
+    // #216/#226/#308). This is the *bump* half — a deliberate, owner-authorized
+    // stopgap, NOT death-by-a-thousand-cuts. The *split* half (lazy-load the
+    // dev-only debug_overlay + the conditionally-used visual_sim modules out of the
+    // always-on chunk, with a debug-mode e2e so the lazy path is CI-verified) is
+    // tracked in #374; once it lands, lower this cap back toward 66 to reclaim the
+    // headroom. Do not treat the +4KB as free space for unrelated growth.
+    maxKB: 70,
   },
   {
     label: "main_guard (MAIN world)",
@@ -105,9 +114,14 @@ const budgets = [
     maxKB: 6,
   },
   {
+    // Bumped 5 -> 8 KB for the burst-coalescing count pill (#351): when many
+    // block notices fire in quick succession they collapse into one small pill
+    // (count + expand) instead of a full card each, which added the pill render
+    // path, idle/navigation reset logic, and pill CSS (~2.6KB). Still a tiny
+    // shared chunk; total-dist budget (500KB) remains the aggregate guard.
     label: "ui_toast (shared)",
     glob: "assets/ui_toast-*.js",
-    maxKB: 5,
+    maxKB: 8,
   },
   // C-02: Separate budget for the reputation bloom filter (150 KB).
   // check-bloom-size.mjs enforces a coarse 2 MB absolute max on the source

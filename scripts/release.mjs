@@ -17,6 +17,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { inspectBloomFilter, MIN_REAL_FILTER_BITS } from "./check-bloom-real.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -93,6 +94,29 @@ if (branch !== "main") {
   console.log("[dry-run] WARNING: not on main branch -- real release would abort.");
 }
 
+// 1c. Refuse to release the placeholder/test reputation filter (#321 companion).
+//     The production feed (npm run build:bloom) has m in the millions; the
+//     committed placeholder is ~300 bits. Shipping it would contradict the
+//     threat-feed protection claimed in README/PRIVACY/SECURITY/the store listing.
+const bloomPath = path.join(root, "extension", "public", "reputation_data.bin");
+try {
+  const info = inspectBloomFilter(fs.readFileSync(bloomPath));
+  if (!info.real) {
+    const detail = `reputation_data.bin is not a production threat-feed filter (m=${info.m} bits < ${MIN_REAL_FILTER_BITS} floor). Build/rebuild the real feed with 'npm run build:bloom' first — the committed default is a placeholder, and a below-floor filter can also mean a threat feed failed at build time (issue #321 / AI-9).`;
+    if (process.env.NAVSENTINEL_ALLOW_TEST_BLOOM === "1") {
+      console.log(`WARNING (NAVSENTINEL_ALLOW_TEST_BLOOM=1): releasing with ${detail}`);
+    } else {
+      console.error(`Refusing to release: ${detail}`);
+      if (!dryRun) process.exit(1);
+      console.log("[dry-run] WARNING: real release would abort on the placeholder bloom filter.");
+    }
+  }
+} catch (err) {
+  console.error(`Refusing to release: cannot validate reputation_data.bin (${err instanceof Error ? err.message : String(err)}).`);
+  if (!dryRun) process.exit(1);
+  console.log("[dry-run] WARNING: real release would abort -- bloom filter unreadable/invalid.");
+}
+
 // 2. Read current version
 const packagePath = path.join(root, "package.json");
 const manifestPath = path.join(root, "extension", "manifest.json");
@@ -118,8 +142,7 @@ if (!/^\d+\.\d+\.\d+$/.test(newVersion)) {
 }
 
 // 3b. Abort if tag already exists
-const existingTags = run("git tag --list").split("
-").map(t => t.trim());
+const existingTags = run("git tag --list").split("\n").map(t => t.trim()).filter(Boolean);
 if (existingTags.includes(`v${newVersion}`)) {
   console.error(`Tag v${newVersion} already exists. Aborting.`);
   process.exit(1);

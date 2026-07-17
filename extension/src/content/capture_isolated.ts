@@ -1386,6 +1386,14 @@ function checkSmartDefaultSuggestion(sourceDomain: string, destDomain: string): 
       const onCooldown = await isPairOnCooldown(sourceDomain, destDomain);
       if (onCooldown) return;
 
+      // Don't suggest adding a pair already on the allowlist. After #307 a historical
+      // always_allow outcome keeps counting toward the streak, so a pair the user
+      // already made permanent (or re-allowed in options) could otherwise re-surface
+      // the toast. Read the live allowlist (not the cached module copy) so an
+      // options-page removal correctly re-enables the suggestion. (#315)
+      const currentAllowlist = await getAllowlist();
+      if (isAllowlisted(currentAllowlist, sourceDomain, destDomain)) return;
+
       const outcomes = await getPromptOutcomes();
       const suggestion = analyzeOutcomesForPair(outcomes, sourceDomain, destDomain);
       if (!suggestion) return;
@@ -1495,6 +1503,11 @@ function showAllowPrompt(params: {
   showToast({
     message: `${params.title}: ${params.host ?? params.url}`,
     actions,
+    // Coalesce a burst of blocked-nav prompts (ad-heavy / malicious-popup pages)
+    // into the count pill so the user is not forced to act on each. The blocked
+    // navigation stays blocked; the pill expands to the latest prompt's actions
+    // if a popup was actually wanted.
+    coalesce: true,
     onDismiss: () => {
       appendOutcomeSafely({
         domain: sourceDomain,
@@ -1809,7 +1822,7 @@ window.addEventListener(
     setActiveToken(token);
 
     let decision: "allow" | "prompt" | "block" = "allow";
-    const blockThreshold = getTierAdjustedBlockThreshold(getNrsBlockThreshold(mode), trustTier);
+    const blockThreshold = getTierAdjustedBlockThreshold(getNrsBlockThreshold(mode), trustTier, nrsFactors);
     // Replay-grade feature snapshot (P5-C1 / #238). Built from LOCAL decision
     // scope here — `lastDebug` is only assigned below (after the branches), so
     // it would carry the previous click's data at the outcome call sites.
@@ -1877,7 +1890,7 @@ window.addEventListener(
           const prefix = hasClickfix
             ? "NavSentinel blocked a new tab with fake dialog detected"
             : "NavSentinel blocked a suspicious new tab";
-          showToast({ message: buildPlainMessage(prefix, reasonCodes) });
+          showToast({ message: buildPlainMessage(prefix, reasonCodes), coalesce: !hasClickfix });
           if (hasClickfix) clickFixAlertedAt = Date.now();
         }
       } else if (!isBlankAnchor && nrs >= blockThreshold) {
@@ -1902,7 +1915,7 @@ window.addEventListener(
         const blockPrefix = hasClickfix
           ? "NavSentinel blocked a deceptive click with fake dialog"
           : "NavSentinel blocked a deceptive click";
-        showToast({ message: buildPlainMessage(blockPrefix, reasonCodes) });
+        showToast({ message: buildPlainMessage(blockPrefix, reasonCodes), coalesce: !hasClickfix });
         if (hasClickfix) clickFixAlertedAt = Date.now();
       }
     }

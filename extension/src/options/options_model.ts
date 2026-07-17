@@ -1,3 +1,5 @@
+import type { PromptOutcome } from "../shared/storage";
+
 export function pct(n: number, total: number): string {
   if (total === 0) return "--";
   return `${((n / total) * 100).toFixed(1)}%`;
@@ -18,8 +20,72 @@ export function fmtTime(ts: number): string {
 }
 
 export function parseIntSafe(value: string, fallback: number): number {
+  // An empty / whitespace-only string must use the fallback. `Number("")` and
+  // `Number("   ")` are both `0` (finite), so without this guard clearing a
+  // numeric field and saving would silently store `0` (then clamp to the field
+  // minimum) instead of the documented default. (#367)
+  if (value.trim() === "") return fallback;
   const n = Number(value);
   return Number.isFinite(n) ? Math.trunc(n) : fallback;
+}
+
+/** Display strings for the options Prompt Statistics panel. */
+export interface PromptOutcomeStats {
+  total: number;
+  allowRate: string;
+  blockRate: string;
+  trustRate: string;
+  dismissRate: string;
+  avgScoreAllow: string;
+  avgScoreBlock: string;
+}
+
+/**
+ * Aggregate prompt-outcome entries into the display strings the options Prompt
+ * Statistics panel renders. Pure (no DOM) so the aggregation is unit-testable.
+ *
+ * The buckets partition EVERY PromptOutcome variant:
+ *   allows  = allow | allow_once | always_allow   blocks = block | cancel
+ *   trusts  = trust                               dismisses = dismiss
+ * so the four displayed rates sum to 100%. The bare `allow` variant was
+ * previously dropped from the allows bucket — it was counted in `total` but in
+ * none of the four arrays, understating the allow-rate and excluding those
+ * scores from the allow average. (#367)
+ */
+export function computePromptOutcomeStats(
+  outcomes: ReadonlyArray<{ outcome: PromptOutcome; score: number }>,
+): PromptOutcomeStats {
+  // Single pass over the (bounded, ~500-entry) outcome list — one bucket per entry,
+  // no intermediate filter/map allocations.
+  let allowCount = 0;
+  let blockCount = 0;
+  let trustCount = 0;
+  let dismissCount = 0;
+  const allowScores: number[] = [];
+  const blockScores: number[] = [];
+  for (const { outcome, score } of outcomes) {
+    if (outcome === "allow" || outcome === "allow_once" || outcome === "always_allow") {
+      allowCount++;
+      allowScores.push(score);
+    } else if (outcome === "block" || outcome === "cancel") {
+      blockCount++;
+      blockScores.push(score);
+    } else if (outcome === "trust") {
+      trustCount++;
+    } else if (outcome === "dismiss") {
+      dismissCount++;
+    }
+  }
+  const total = outcomes.length;
+  return {
+    total,
+    allowRate: pct(allowCount, total),
+    blockRate: pct(blockCount, total),
+    trustRate: pct(trustCount, total),
+    dismissRate: pct(dismissCount, total),
+    avgScoreAllow: avg(allowScores),
+    avgScoreBlock: avg(blockScores),
+  };
 }
 
 export interface ImportErrorOutcome {

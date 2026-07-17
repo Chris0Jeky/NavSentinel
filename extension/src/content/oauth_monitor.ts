@@ -12,9 +12,21 @@
  * to the content script via runtime messages. This module processes
  * those messages and exposes signals for NRS scoring.
  *
- * Known limitation: MV3 service worker restarts lose in-memory flow
- * state (same pattern as DoubleClickjacking tracking). P3-10 will
- * address this with chrome.storage.session persistence.
+ * Known limitations:
+ *   1. MV3 service worker restarts lose in-memory flow state (same pattern as
+ *      DoubleClickjacking tracking). P3-10 addresses this with
+ *      chrome.storage.session persistence.
+ *   2. Callback detection is URL-only (query + fragment). It therefore does not
+ *      see `response_mode=form_post` callbacks (the auth `code` / `id_token`
+ *      arrives in the POST body, so the committed URL carries no response
+ *      params) nor implicit/hybrid callbacks whose fragment a platform omits
+ *      from the committed-navigation URL. This is an ACCEPTED limitation, not a
+ *      tracked gap, because it does not widen the consent-phishing threat model:
+ *      a legitimate form_post lands on the *declared* redirect_uri (no domain
+ *      mismatch to detect), and an attacker who controls `response_mode` also
+ *      controls `redirect_uri` — the very field URL-only mismatch detection
+ *      already inspects. Revisit only if form_post/POST-body correlation via
+ *      `chrome.webRequest` is added for an unrelated reason. (#221)
  */
 
 import { getRegistrableDomain, normalizeHost } from "../shared/domain";
@@ -84,7 +96,9 @@ const LOCALHOST_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
 
 /**
  * Check whether a keyword appears at a path-segment boundary.
- * Matches "/keyword/", "/keyword?", "/keyword" at end of path.
+ * Matches "/keyword/" or "/keyword" at the end of the path. The sole caller
+ * passes `URL.pathname`, which never contains '?' (the query is split off at
+ * parse time), so only the '/' and end-of-path boundaries are possible. (#366)
  */
 function hasPathSegment(lowerPath: string, keyword: string): boolean {
   let idx = 0;
@@ -96,11 +110,10 @@ function hasPathSegment(lowerPath: string, keyword: string): boolean {
       idx += 1;
       continue;
     }
-    // Must be followed by '/', '?', or end-of-string
+    // Must be followed by '/' or be at the end of the path.
     const afterIdx = idx + keyword.length;
     if (afterIdx >= lowerPath.length) return true;
-    const after = lowerPath[afterIdx];
-    if (after === "/" || after === "?") return true;
+    if (lowerPath[afterIdx] === "/") return true;
     idx += 1;
   }
 }
@@ -215,8 +228,9 @@ export function isUnexpectedCallback(
  *
  * Limitation: this inspects only the URL (query + fragment). `response_mode=form_post`
  * delivers the response in the POST body, and a platform may omit the fragment from a
- * committed-navigation URL, so those callbacks are not detected here (URL-only by
- * design — see the module header). Tracked as a follow-up (#221).
+ * committed-navigation URL, so those callbacks are not detected here. URL-only is by
+ * design and an accepted limitation — see Known limitations (2) in the module header
+ * for why it does not widen the threat model. (#221)
  */
 export function hasOAuthResponseParams(url: string): boolean {
   let parsed: URL;
@@ -333,6 +347,13 @@ export function isOAuthOpenerManipulation(): boolean {
  */
 export function getOAuthFlowState(): OAuthFlowState | null {
   if (currentFlow && (Date.now() - currentFlow.startedAt) >= OAUTH_FLAG_TTL_MS) {
+    currentFlow = null;
+  }
+  // A 'complete' flow is finished, not active. The SW forwards the terminal
+  // 'complete' update (then drops the flow), but the contract here is "null if no
+  // flow is active". Clear the reference now rather than holding the dead flow object
+  // until the TTL check above eventually nulls it. (#366)
+  if (currentFlow && currentFlow.phase === "complete") {
     currentFlow = null;
   }
   return currentFlow;

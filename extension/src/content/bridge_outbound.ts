@@ -23,17 +23,25 @@ export interface OutboundMessage {
 interface QueuedMessage {
   message: OutboundMessage;
   priority: boolean;
+  floodable: boolean;
 }
 
 export class OutboundQueue {
   private readonly cap: number;
+  private readonly reservedForScarce: number;
   private readonly items: QueuedMessage[] = [];
+  private floodableCount = 0;
   private dropped = 0;
 
-  constructor(cap: number) {
+  constructor(cap: number, reservedForScarce = 0) {
     // Guard against a non-finite cap (e.g. NaN), which would otherwise make the
     // length comparison always false and leave the queue effectively unbounded.
     this.cap = Number.isFinite(cap) ? Math.max(0, Math.floor(cap)) : 0;
+    // Slots that floodable alerts may never occupy, so a per-navigation flood cannot
+    // crowd out the scarce once-per-event signals. Clamped to [0, cap].
+    this.reservedForScarce = Number.isFinite(reservedForScarce)
+      ? Math.max(0, Math.min(Math.floor(reservedForScarce), this.cap))
+      : 0;
   }
 
   /**
@@ -41,10 +49,25 @@ export class OutboundQueue {
    * evicted by routine traffic. On overflow the oldest routine message is
    * dropped to make room; if every buffered message is priority, the earliest
    * are kept and this incoming one is dropped.
+   *
+   * `floodable` marks high-frequency per-navigation priority telemetry
+   * (`ns-nav-blocked`/`ns-nav-allowed`). A synchronous flood of these before the
+   * bridge handshake would otherwise fill all `cap` slots and starve the scarce
+   * once-per-event correlation signals (`ns-dblclick-*`, `ns-js-*`,
+   * `ns-pushstate-suspicious`), which are then dropped — losing irreplaceable
+   * evidence. Floodable priority alerts are therefore capped at `cap -
+   * reservedForScarce`; beyond that the surplus is dropped (the navigation is still
+   * blocked/allowed and recorded; only the redundant bridge telemetry is shed).
+   * (#377/F2)
    */
-  enqueue(message: OutboundMessage, priority = false): void {
+  enqueue(message: OutboundMessage, priority = false, floodable = false): void {
+    if (priority && floodable && this.floodableCount >= this.cap - this.reservedForScarce) {
+      this.dropped++;
+      return;
+    }
     if (this.items.length < this.cap) {
-      this.items.push({ message, priority });
+      this.items.push({ message, priority, floodable });
+      if (floodable) this.floodableCount++;
       return;
     }
     if (!priority) {
@@ -61,7 +84,8 @@ export class OutboundQueue {
     }
     this.items.splice(routineIdx, 1);
     this.dropped++;
-    this.items.push({ message, priority });
+    this.items.push({ message, priority, floodable });
+    if (floodable) this.floodableCount++;
   }
 
   /**
@@ -72,6 +96,7 @@ export class OutboundQueue {
     const items = this.items.splice(0, this.items.length).map((q) => q.message);
     const dropped = this.dropped;
     this.dropped = 0;
+    this.floodableCount = 0;
     return { items, dropped };
   }
 
@@ -86,7 +111,11 @@ export class OutboundQueue {
   }
 }
 
-// Non-droppable detection signals on the MAIN-world → isolated direction.
+// Priority detection signals on the MAIN-world → isolated direction (never evicted by
+// routine traffic). Note: the members that are also FLOODABLE_ALERT_TYPES
+// (ns-nav-blocked, ns-nav-allowed) are additionally capped at cap - reservedForScarce
+// slots and dropped beyond that under a flood, so they are not unconditionally
+// non-droppable. (#377/F2)
 const MAIN_GUARD_ALERT_TYPES = new Set<string>([
   "ns-nav-blocked",
   "ns-nav-allowed",
@@ -114,4 +143,29 @@ export function isMainGuardAlertType(type: string): boolean {
     type.startsWith("ns-dblclick-") ||
     type.startsWith("ns-allow")
   );
+}
+
+// Priority messages emitted once per navigation decision. A page can drive these in a
+// synchronous loop (many blocked/allowed window.open / location.assign / form.submit
+// calls), so under the pre-bridge buffer they are the flood source. They are tagged
+// `floodable` so the OutboundQueue caps them and reserves room for the scarce
+// once-per-event correlation signals (dblclick / js / pushstate). (#377/F2)
+//
+// `ns-allow-target-nav` is the per-allowed-nav SW pre-authorization relay that accompanies
+// every `ns-nav-allowed`. It is `priority` (never evicted by routine traffic — dropping one
+// under NORMAL pressure would re-block a user-approved nav), but it is ALSO `floodable`: an
+// allowed-nav flood would otherwise queue one uncapped relay per nav and refill the buffer
+// past the reservation, starving the scarce signals. Capping it shifts only the SURPLUS
+// relays in a flood; the SW then re-evaluates those navs (fail-safe — more restrictive,
+// never a bypass), an acceptable trade vs losing irreplaceable detection signals. (#377/F2)
+const FLOODABLE_ALERT_TYPES = new Set<string>([
+  "ns-nav-blocked",
+  "ns-nav-allowed",
+  "ns-allow-target-nav",
+]);
+
+/** Whether an alert is high-frequency per-navigation telemetry subject to the
+ *  OutboundQueue floodable cap. (#377/F2) */
+export function isFloodableAlertType(type: string): boolean {
+  return FLOODABLE_ALERT_TYPES.has(type);
 }

@@ -129,6 +129,202 @@ describe("SessionStateManager", () => {
     warnSpy.mockRestore();
   });
 
+  it("drops malformed structured-map entries (corrupt numeric / shape fields) on restore (#339)", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await sessionStorage.mock.set({
+      // oauthFlow: corrupt startedAt (NaN-poisons pruneStaleOAuthFlows) + bad phase
+      // (evades redirect-mismatch detection); one valid entry survives.
+      "ns_sw:oauthFlow": {
+        "1": { initiatorUrl: "https://app.test/", consentUrl: "https://accounts.google.com/authorize", expectedCallbackDomain: "app.test", startedAt: null, phase: "redirect" },
+        "2": { initiatorUrl: "https://app.test/", consentUrl: "https://accounts.google.com/authorize", expectedCallbackDomain: "app.test", startedAt: 1000, phase: "not-a-phase" },
+        "3": { initiatorUrl: "https://app.test/", consentUrl: "https://accounts.google.com/authorize", expectedCallbackDomain: "app.test", startedAt: 1000, phase: "consent" },
+        // NaN startedAt survives structured-clone (chrome.storage.session is NOT JSON) and
+        // would poison pruneStaleOAuthFlows' `now - startedAt` comparison — only Number.isFinite
+        // rejects it (a plain typeof===number check would pass). (#365 review F-1)
+        "4": { initiatorUrl: "https://app.test/", consentUrl: "https://accounts.google.com/authorize", expectedCallbackDomain: "app.test", startedAt: NaN, phase: "redirect" },
+      },
+      // childWindow: corrupt createdAt -> NaN prune + DoubleClickjacking false-negative;
+      // openerTabId 0 passes isFiniteNumber but makes the child-closed sendMessage fail
+      // silently (Chrome tab IDs are always >= 1). (#365 review SEC-02)
+      "ns_sw:childWindow": {
+        "10": { openerTabId: 7, createdAt: "bad", openerNavObserved: true },
+        "11": { openerTabId: 7, createdAt: 100000, openerNavObserved: true },
+        "12": { openerTabId: 0, createdAt: 100000, openerNavObserved: true },
+      },
+      // pendingForward: corrupt ts -> stale offer never reaped by the ts-expiry guard.
+      "ns_sw:pendingForward": {
+        "20": { url: "https://evil.test/", ts: null, returnUrl: "https://safe.test/" },
+        "21": { url: "https://e.test/", ts: 5000 },
+      },
+      // lastCommitted: corrupt ts -> false rollback for a same-site nav after restart.
+      "ns_sw:lastCommitted": {
+        "30": { url: "https://example.com/p1", prevUrl: "https://example.com/", transitionType: "link", qualifiers: [], ts: "corrupted", allowedAtCommit: true },
+        "31": { url: "https://example.com/p2", transitionType: "link", qualifiers: [], ts: 9000, allowedAtCommit: false },
+      },
+      // rollbackReturn: corrupt expiresAt (string -> coercion keeps a stale return alive).
+      "ns_sw:rollbackReturn": {
+        "40": { url: "https://safe.test/", expiresAt: "99999999999999" },
+        "41": { url: "https://safe.test/", expiresAt: 123456 },
+      },
+      // allowTarget: corrupt expiresAt / silentEvent / matchQueryPrefix; one fully-valid.
+      "ns_sw:allowTarget": {
+        "50": { url: "https://t.test/", expiresAt: null },
+        "51": { url: "https://t.test/", expiresAt: 123456 },
+        "52": { url: "https://t.test/", expiresAt: 123456, silentEvent: "not-an-object" },
+        "53": { url: "https://t.test/", expiresAt: 123456, matchQueryPrefix: "yes" },
+        "54": { url: "https://t.test/", expiresAt: 123456, matchQueryPrefix: true, silentEvent: { type: "ns-event-log-append" } },
+      },
+      // pendingRollback: corrupt qualifiers (not a string array).
+      "ns_sw:pendingRollback": {
+        "60": { url: "https://r.test/", qualifiers: "nope" },
+        "61": { url: "https://r.test/", qualifiers: ["foo"] },
+      },
+      // typedOrigin: corrupt ts -> would invalidate the typed-origin TTL window. The NaN ts
+      // and Infinity deadline cases prove the Number.isFinite gate is load-bearing (both
+      // survive structured-clone and pass a plain typeof===number check). (#365 review F-1)
+      "ns_sw:typedOrigin": {
+        "70": { ts: "bad", deadline: 1000 },
+        "71": { ts: 5, deadline: 1000 },
+        "72": { ts: NaN, deadline: 1000 },
+        "73": { ts: 5, deadline: Infinity },
+      },
+      // simple number map: a non-number per-entry value would NaN a navigation-allow check.
+      "ns_sw:allowUntil": {
+        "80": "not-a-number",
+        "81": 12345,
+      },
+      // suppressUntil: a far-future numeric STRING coerces under `now <= suppressUntil` to a
+      // permanently-active suppress window, silently dropping every suspicious nav after a
+      // restart; isFiniteNumber rejects it. (#365 review F-2)
+      "ns_sw:suppressUntil": {
+        "82": "9999999999999999",
+        "83": 500,
+      },
+      // userNavContextUntil: a NaN/string value would fake a recent-user-nav context and
+      // suppress rollback triggering; previously had NO test of any kind. (#365 review F-2)
+      "ns_sw:userNavContextUntil": {
+        "84": NaN,
+        "85": 1000,
+      },
+      // simple string map: a numeric value would break domain parsing on prevUrl.
+      "ns_sw:lastUrl": {
+        "90": 42,
+        "91": "https://ok.test/",
+      },
+      // redirectChains: corrupt startedAt / hop.ts / hop.transitionType -> NaN sort +
+      // never-pruned (#339); empty-hops is rejected (a live chain always has >= 1 hop, #390).
+      "ns_sw:redirectChains": {
+        "100": { hops: [{ url: "https://a.test/", ts: 10, transitionType: "link" }], startedAt: "bad" },
+        "101": { hops: [{ url: "https://a.test/", ts: null, transitionType: "link" }], startedAt: 1000 },
+        "102": { hops: [{ url: "https://a.test/", ts: 10, transitionType: "link" }], startedAt: 1000 },
+        "103": { hops: [], startedAt: 1000 },
+        "104": { hops: [{ url: "https://a.test/", ts: 10, transitionType: 42 }], startedAt: 1000 },
+        // Infinity startedAt: never time-pruned (`now - Infinity > X` is false) + NaN sort key.
+        "105": { hops: [{ url: "https://a.test/", ts: 10, transitionType: "link" }], startedAt: Infinity },
+      },
+    });
+
+    const mgr = new SessionStateManager();
+    await mgr.hydrate();
+
+    // Corrupt entries are dropped on restore; valid ones survive. (Pre-fix: all restored.)
+    expect(mgr.oauthFlowByTab.has(1)).toBe(false); // startedAt null
+    expect(mgr.oauthFlowByTab.has(2)).toBe(false); // bad phase
+    expect(mgr.oauthFlowByTab.get(3)?.phase).toBe("consent");
+    expect(mgr.oauthFlowByTab.has(4)).toBe(false); // startedAt NaN
+    expect(mgr.childWindowByTab.has(10)).toBe(false); // createdAt "bad"
+    expect(mgr.childWindowByTab.get(11)?.createdAt).toBe(100000);
+    expect(mgr.childWindowByTab.has(12)).toBe(false); // openerTabId 0 (Chrome IDs are >= 1)
+    expect(mgr.pendingForwardByTab.has(20)).toBe(false); // ts null
+    expect(mgr.pendingForwardByTab.get(21)?.ts).toBe(5000);
+    expect(mgr.lastCommittedByTab.has(30)).toBe(false); // ts "corrupted"
+    expect(mgr.lastCommittedByTab.get(31)?.ts).toBe(9000);
+    expect(mgr.rollbackReturnByTab.has(40)).toBe(false); // expiresAt string
+    expect(mgr.rollbackReturnByTab.get(41)?.expiresAt).toBe(123456);
+    expect(mgr.allowTargetByTab.has(50)).toBe(false); // expiresAt null
+    expect(mgr.allowTargetByTab.get(51)?.expiresAt).toBe(123456);
+    expect(mgr.allowTargetByTab.has(52)).toBe(false); // silentEvent not an object
+    expect(mgr.allowTargetByTab.has(53)).toBe(false); // matchQueryPrefix not true
+    expect(mgr.allowTargetByTab.get(54)?.expiresAt).toBe(123456); // valid incl. silentEvent
+    expect(mgr.pendingRollbackByTab.has(60)).toBe(false); // qualifiers not array
+    expect(mgr.pendingRollbackByTab.get(61)?.qualifiers).toEqual(["foo"]);
+    expect(mgr.typedOriginByTab.has(70)).toBe(false); // ts "bad"
+    expect(mgr.typedOriginByTab.get(71)?.ts).toBe(5);
+    expect(mgr.typedOriginByTab.has(72)).toBe(false); // ts NaN (passes typeof, fails isFinite)
+    expect(mgr.typedOriginByTab.has(73)).toBe(false); // deadline Infinity
+    expect(mgr.allowUntilByTab.has(80)).toBe(false); // non-number
+    expect(mgr.allowUntilByTab.get(81)).toBe(12345);
+    expect(mgr.suppressUntilByTab.has(82)).toBe(false); // numeric string coerces under `<=`
+    expect(mgr.suppressUntilByTab.get(83)).toBe(500);
+    expect(mgr.userNavContextUntilByTab.has(84)).toBe(false); // NaN
+    expect(mgr.userNavContextUntilByTab.get(85)).toBe(1000);
+    expect(mgr.lastUrlByTab.has(90)).toBe(false); // numeric, not a string
+    expect(mgr.lastUrlByTab.get(91)).toBe("https://ok.test/");
+    expect(mgr.redirectChainData.has(100)).toBe(false); // startedAt "bad"
+    expect(mgr.redirectChainData.has(101)).toBe(false); // hop.ts null
+    expect(mgr.redirectChainData.get(102)?.startedAt).toBe(1000);
+    expect(mgr.redirectChainData.has(103)).toBe(false); // empty hops rejected (#390)
+    expect(mgr.redirectChainData.has(104)).toBe(false); // hop.transitionType not a string
+    expect(mgr.redirectChainData.has(105)).toBe(false); // startedAt Infinity
+    expect(warnSpy).toHaveBeenCalled(); // corrupt restore is surfaced, not silent
+    warnSpy.mockRestore();
+  });
+
+  it("drops corrupt optional-string fields, non-durable OAuth phases, and array-typed values on restore (#365 review)", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await sessionStorage.mock.set({
+      // oauthFlow phase 'callback' is never durably persisted (set transiently then advanced
+      // to 'complete' before persistMap); a restored 'callback' would slip past the
+      // redirect/consent-only mismatch branch, so it must be dropped. 'complete' is durable.
+      "ns_sw:oauthFlow": {
+        "1": { initiatorUrl: "https://app.test/", consentUrl: "https://accounts.google.com/authorize", expectedCallbackDomain: "app.test", startedAt: 1000, phase: "callback" },
+        "2": { initiatorUrl: "https://app.test/", consentUrl: "https://accounts.google.com/authorize", expectedCallbackDomain: "app.test", startedAt: 1000, phase: "complete" },
+      },
+      // pendingForward returnUrl: a corrupt truthy non-string strands the forward offer
+      // (matches neither the `=== currentUrl` nor the `!returnUrl` branch).
+      "ns_sw:pendingForward": {
+        "10": { url: "https://e.test/", ts: 5000, returnUrl: 42 },
+        "11": { url: "https://e.test/", ts: 5000, returnUrl: "https://ok.test/" },
+        "12": { url: "https://e.test/", ts: 5000 }, // returnUrl absent is valid
+      },
+      // pendingRollback prevUrl: corrupt non-string reaches the rollback message + URL parse.
+      "ns_sw:pendingRollback": {
+        "20": { url: "https://r.test/", qualifiers: [], prevUrl: 99 },
+        "21": { url: "https://r.test/", qualifiers: [], prevUrl: "https://prev.test/" },
+      },
+      // lastCommitted prevUrl: same string-or-absent gate.
+      "ns_sw:lastCommitted": {
+        "30": { url: "https://example.com/p", transitionType: "link", qualifiers: [], ts: 1, allowedAtCommit: true, prevUrl: {} },
+        "31": { url: "https://example.com/p", transitionType: "link", qualifiers: [], ts: 1, allowedAtCommit: true, prevUrl: "https://example.com/" },
+      },
+      // an array where a record is expected must be rejected (isRecord excludes arrays);
+      // likewise an array-typed silentEvent must not pass the `isRecord` check.
+      "ns_sw:allowTarget": {
+        "40": [],
+        "41": { url: "https://t.test/", expiresAt: 123456, silentEvent: ["not", "a", "record"] },
+        "42": { url: "https://t.test/", expiresAt: 123456 },
+      },
+    });
+
+    const mgr = new SessionStateManager();
+    await mgr.hydrate();
+
+    expect(mgr.oauthFlowByTab.has(1)).toBe(false); // phase 'callback' is not durable
+    expect(mgr.oauthFlowByTab.get(2)?.phase).toBe("complete");
+    expect(mgr.pendingForwardByTab.has(10)).toBe(false); // returnUrl non-string
+    expect(mgr.pendingForwardByTab.get(11)?.returnUrl).toBe("https://ok.test/");
+    expect(mgr.pendingForwardByTab.get(12)?.url).toBe("https://e.test/"); // absent is valid
+    expect(mgr.pendingRollbackByTab.has(20)).toBe(false); // prevUrl non-string
+    expect(mgr.pendingRollbackByTab.get(21)?.prevUrl).toBe("https://prev.test/");
+    expect(mgr.lastCommittedByTab.has(30)).toBe(false); // prevUrl non-string (object)
+    expect(mgr.lastCommittedByTab.get(31)?.prevUrl).toBe("https://example.com/");
+    expect(mgr.allowTargetByTab.has(40)).toBe(false); // array, not a record
+    expect(mgr.allowTargetByTab.has(41)).toBe(false); // silentEvent is an array
+    expect(mgr.allowTargetByTab.get(42)?.expiresAt).toBe(123456);
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
   it("enters degraded mode and suppresses persistence when the hydrate read fails (#228.2)", async () => {
     // Intact stored state that a transient read failure must not wipe.
     await sessionStorage.mock.set({ "ns_sw:allowUntil": { "7": 123456 } });

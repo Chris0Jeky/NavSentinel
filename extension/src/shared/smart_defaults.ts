@@ -15,6 +15,17 @@ export const SMART_DEFAULT_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours
 /** Storage key for cooldown timestamps. */
 export const SMART_DEFAULT_COOLDOWNS_KEY = "sentinelsuite:smart_default_cooldowns_v1";
 
+/**
+ * Upper bound on the number of active cooldown entries kept in storage. setCooldown
+ * adds one entry per dismissed source->dest pair, and getCooldowns only prunes
+ * TTL-expired entries — so within the 24h window a stream of distinct dismissals (or
+ * an adversarial site forcing many suggestion toasts) could grow the map unbounded.
+ * Mirrors the bounds on the prompt-outcome log (500) and event log. When the cap is
+ * exceeded the soonest-to-expire entries are dropped first (they would lapse next
+ * anyway, at worst re-showing a suggestion slightly early). (#308)
+ */
+export const SMART_DEFAULT_COOLDOWN_LIMIT = 200;
+
 export interface SmartDefaultSuggestion {
   sourceDomain: string;
   destDomain: string;
@@ -144,6 +155,28 @@ export async function isPairOnCooldown(
 }
 
 /**
+ * Pure helper: bound a cooldown map to at most `limit` entries, keeping the entries
+ * with the latest expiry (most future cooldowns) and dropping the soonest-to-expire.
+ * Returns the same object reference when already within the limit so callers can skip
+ * a redundant write. (#308)
+ */
+export function capCooldowns(
+  cooldowns: CooldownMap,
+  limit: number = SMART_DEFAULT_COOLDOWN_LIMIT
+): CooldownMap {
+  const keys = Object.keys(cooldowns);
+  if (keys.length <= limit) return cooldowns;
+  // Sort by expiry descending (latest first) and keep the first `limit`.
+  keys.sort((a, b) => (cooldowns[b] ?? 0) - (cooldowns[a] ?? 0));
+  const kept: CooldownMap = {};
+  for (let i = 0; i < limit; i++) {
+    const key = keys[i]!;
+    kept[key] = cooldowns[key]!;
+  }
+  return kept;
+}
+
+/**
  * Set a cooldown for a domain pair (called when user dismisses the suggestion).
  */
 export async function setCooldown(
@@ -152,7 +185,9 @@ export async function setCooldown(
 ): Promise<void> {
   const cooldowns = await getCooldowns();
   cooldowns[pairKey(sourceDomain, destDomain)] = Date.now() + SMART_DEFAULT_COOLDOWN_MS;
-  await chrome.storage.local.set({ [SMART_DEFAULT_COOLDOWNS_KEY]: cooldowns });
+  await chrome.storage.local.set({
+    [SMART_DEFAULT_COOLDOWNS_KEY]: capCooldowns(cooldowns)
+  });
 }
 
 /**

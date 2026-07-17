@@ -1,0 +1,4 @@
+interface:
+  display_name: "NavSentinel Human Actions"
+  short_description: "Guide human-owned actions one step at a time"
+  default_prompt: "Use $ns-human-action-guide to walk me through the open NavSentinel human actions one at a time."

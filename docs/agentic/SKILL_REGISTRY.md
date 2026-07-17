@@ -9,7 +9,7 @@ NavSentinel keeps Claude and Codex equally capable through parallel, runtime-nat
 | Runtime | Root contract | Workflow skills | Runtime guardrails |
 | --- | --- | --- | --- |
 | Claude Code | `CLAUDE.md` | `.claude/skills/*/SKILL.md` | `.claude/settings.json`, hooks in `scripts/agent_hooks/` |
-| Codex | `AGENTS.md` | `.agents/skills/*/SKILL.md` | `AGENTS.md`, Codex tool discipline, shared protocols in `docs/agentic/` |
+| Codex | `AGENTS.md` | `.agents/skills/*/SKILL.md` | `.codex/hooks.json`, `AGENTS.md`, Codex tool discipline, shared protocols in `docs/agentic/` |
 
 The workflows should stay aligned in purpose and trigger, but not identical in implementation. Claude should use Claude-native skills/settings/hooks. Codex should use `AGENTS.md`, `update_plan`, `multi_tool_use.parallel`, `apply_patch`, shell verification, Playwright/browser tooling, `tool_search`, and web verification when those tools are available and appropriate.
 
@@ -27,6 +27,7 @@ The workflows should stay aligned in purpose and trigger, but not identical in i
 | `ns-ui-ux` | Popup, options, onboarding, copy, accessibility | Keeps extension UI compact and task-focused. |
 | `ns-verify-handoff` | Before ending meaningful work | Verifies changed seam and states residual risk. |
 | `ns-question-batch` | Ambiguous task | Avoids context-expensive question loops. |
+| `ns-human-action-guide` | Multiple human-owned actions or an explicit "guide me through the outstanding tasks" request | Uses `ACTION_ITEMS.md` as the only queue and walks one ready `q-N [AI-N]` action at a time. |
 | `ns-failure-capture` | Tool, test, dependency, docs, or workaround failure | Records unresolved friction. |
 | `ns-interface-map` | Add/split/refactor domain seams | Keeps agent-facing maps current. |
 | `ns-roadmap-sync` | Status, roadmap, phase gates, decision log | Updates `docs/Project_Roadmap.md` only when truth changes. |

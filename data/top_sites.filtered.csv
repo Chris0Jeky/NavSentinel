@@ -1,17 +1,46 @@
+# NavSentinel top-site trust seed (tier 2 = vetted benign prior; lowers, never zeroes, intervention).
+# Columns: domain,tier,source,category,include_subdomains
+# - Only tier 2 + ALLOWED categories are emitted; BANNED categories (adult, gambling,
+#   hosting, infrastructure, parking, piracy, streaming, user_content) are skipped by the
+#   build script so a popularity list never becomes an allowlist by accident. That is why
+#   social / streaming / user-content giants (facebook, netflix, reddit, spotify, x) are
+#   intentionally absent — they are common impersonation targets and host user content.
+# - include_subdomains=true is set ONLY for brands whose subdomains are entirely
+#   first-party (no customer tenants, no user-content, no public hosting). It is FALSE for:
+#     google.com (sites.google.com user content -> explicit accounts/mail/drive entries),
+#     okta.com / auth0.com / salesforce.com (customer tenant subdomains),
+#     slack.com (workspace subdomains), shopify.com (*.myshopify.com merchant stores),
+#     vercel.com / netlify.com / notion.so / bitbucket.org (separate *.app/*.site/*.io
+#     user-content domains live on a different registrable domain, but kept false for safety).
+# The build sorts + dedups; insertion order here does not matter.
 domain,tier,source,category,include_subdomains
 google.com,2,seed,search,false
+accounts.google.com,2,seed,identity,false
+mail.google.com,2,seed,productivity,false
+drive.google.com,2,seed,cloud,false
 youtube.com,2,seed,video_platform,false
-microsoft.com,2,seed,software,false
+microsoft.com,2,seed,software,true
 office.com,2,seed,productivity,false
 login.microsoftonline.com,2,seed,identity,false
-apple.com,2,seed,technology,false
+apple.com,2,seed,technology,true
 icloud.com,2,seed,cloud,false
 amazon.com,2,seed,commerce,false
-wikipedia.org,2,seed,reference,false
-github.com,2,seed,developer,false
+wikipedia.org,2,seed,reference,true
+github.com,2,seed,developer,true
+gitlab.com,2,seed,developer,true
+bitbucket.org,2,seed,developer,false
 stackoverflow.com,2,seed,developer,false
+npmjs.com,2,seed,developer,false
+pypi.org,2,seed,developer,false
+docker.com,2,seed,developer,false
+jetbrains.com,2,seed,software,false
+vercel.com,2,seed,developer,false
+netlify.com,2,seed,developer,false
+heroku.com,2,seed,developer,false
 linkedin.com,2,seed,professional,false
 adobe.com,2,seed,software,false
+figma.com,2,seed,software,false
+notion.so,2,seed,productivity,false
 salesforce.com,2,seed,business,false
 slack.com,2,seed,business,false
 zoom.us,2,seed,business,false
@@ -22,4 +51,8 @@ stripe.com,2,seed,payments,false
 paypal.com,2,seed,payments,false
 shopify.com,2,seed,commerce,false
 dropbox.com,2,seed,cloud,false
-mozilla.org,2,seed,browser,false
+mozilla.org,2,seed,browser,true
+anthropic.com,2,seed,technology,true
+claude.ai,2,seed,technology,true
+gmail.com,2,seed,productivity,false
+proton.me,2,seed,productivity,false
