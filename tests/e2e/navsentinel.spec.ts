@@ -544,6 +544,80 @@ test("MAIN-world popup intent requires a trusted click, not pointerdown @regress
   }
 });
 
+test("Navigation Off does not roll back a programmatic cross-site link @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/level1-basic-opacity.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+      await waitForNavSentinelBridge(page);
+
+      const serviceWorker = await getServiceWorker(context);
+      await serviceWorker.evaluate(async () => {
+        const key = "sentinelsuite:settings_v1";
+        const stored = await chrome.storage.local.get(key);
+        const current = (stored[key] ?? {}) as Record<string, unknown>;
+        const nav = (current.nav ?? {}) as Record<string, unknown>;
+        await chrome.storage.local.set({
+          [key]: { ...current, nav: { ...nav, defaultMode: "off" } }
+        });
+      });
+
+      await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
+      await waitForNavSentinelBridge(page);
+      await page.waitForTimeout(5200);
+
+      const destination = new URL("/level2-moving-target.html?navigation-off=1", baseUrl);
+      destination.hostname = destination.hostname === "localhost" ? "127.0.0.1" : "localhost";
+      await page.evaluate((targetUrl) => {
+        const anchor = document.createElement("a");
+        anchor.href = targetUrl;
+        anchor.textContent = "Programmatic Off-mode navigation";
+        document.body.appendChild(anchor);
+        anchor.click();
+      }, destination.href);
+
+      await page.waitForURL(destination.href, { timeout: 5000 });
+      await page.waitForTimeout(2500);
+      await expect(page).toHaveURL(destination.href);
+
+      const pending = await serviceWorker.evaluate(async ({ currentUrl }) => {
+        const tabs = await chrome.tabs.query({});
+        const tab = tabs.find((candidate) => candidate.url === currentUrl);
+        if (typeof tab?.id !== "number") throw new Error("Test tab not found");
+        const key = String(tab.id);
+        const stored = await chrome.storage.session.get([
+          "ns_sw:pendingRollback",
+          "ns_sw:pendingForward"
+        ]);
+        return {
+          rollback: (stored["ns_sw:pendingRollback"] as Record<string, unknown> | undefined)?.[key],
+          forward: (stored["ns_sw:pendingForward"] as Record<string, unknown> | undefined)?.[key]
+        };
+      }, { currentUrl: destination.href });
+      expect(pending).toEqual({ rollback: undefined, forward: undefined });
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
 test("Synthetic pointer and click events cannot mint navigation allowances @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 

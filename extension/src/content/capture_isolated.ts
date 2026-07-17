@@ -1965,11 +1965,12 @@ window.addEventListener(
       })) {
         notifyAllowedTarget(parsed.href, NAV_TARGET_ALLOW_TTL_MS, silentNavEvent ?? undefined);
       }
-      // A synthetic click may still be scored, but it cannot create either an
-      // exact target allowance or the broad tab/main-world windows that suppress
-      // rollback. Otherwise a hostile page can dispatch pointerdown/click and
-      // self-authorize its own navigation.
-      if (e.isTrusted) {
+      // A synthetic click may still be scored, but in an enforcing mode it
+      // cannot create the broad tab/main-world windows that suppress rollback.
+      // Otherwise a hostile page can dispatch pointerdown/click and self-
+      // authorize its own navigation. Off is the explicit user-selected bypass,
+      // so preserve its no-intervention contract for programmatic links too.
+      if (e.isTrusted || mode === "off") {
         notifyNavGesture();
         notifyNavAllow();
         postToMain("ns-allow", {
