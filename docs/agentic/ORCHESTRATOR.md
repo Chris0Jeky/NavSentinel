@@ -110,7 +110,7 @@ Finish round 2, docs, push/PR, and exact-head Linux CI before any merge decision
 
 | Slice | Branch | Base | Worktree | PR | State | Proving gates |
 |---|---|---|---|---|---|---|
-| #459 dependency advisories | `fix/release-dependency-advisories` | `origin/main` at `cfa6f3c` | `.worktrees/deps-audit` | pending | LOCAL GATES GREEN / R2 PENDING | audit zero; clean install; Windows Gym HTTP; version/type/lint/build/unit 2,874/E2E 64/perf/package; R1 complete with #462; fresh R2 and exact-head CI pending |
+| #459 dependency advisories | `fix/release-dependency-advisories` | `origin/main` at `ebddd27` | `.worktrees/deps-audit` | pending | LOCAL GATES GREEN / R2 PENDING | audit zero; clean install; Windows Gym HTTP; version/type/lint/build/unit 2,874/E2E 64/perf/package; R1 complete with #462; fresh R2 and exact-head CI pending |
 
 **Historical checkpoint (2026-07-10):** no new slice started during that audit.
 At that time PRs #273/#356/#399 were stale and #356 was red. Rows below are
