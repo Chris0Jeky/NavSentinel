@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && npm run check:mv3-worker",
     "watch": "vite build --watch",
     "verify:versions": "node scripts/check_versions.mjs",
     "lint": "eslint extension/src/ tests/",
@@ -26,7 +26,7 @@
     "demo:showcase:operator": "node scripts/run_demo.mjs operator",
     "demo:showcase:recovery": "node scripts/run_demo.mjs recovery",
     "demo:showcase:record": "node scripts/run_demo.mjs core --record",
-    "package:ext": "node scripts/package.mjs",
+    "package:ext": "npm run check:mv3-worker && node scripts/package.mjs",
     "gym:serve": "vite gym --port 5173 --strictPort",
     "update:psl": "node scripts/update-psl.mjs",
     "measure:fp": "node scripts/measure-fp.mjs",
@@ -45,7 +45,8 @@
     "agent:hooks:smoke": "python scripts/agent_hooks/smoke_test.py",
     "agent:skills:validate": "python scripts/agent_hooks/validate_skills.py",
     "benchmark": "node scripts/benchmark.mjs",
-    "check:perf-budget": "node scripts/check-perf-budget.mjs"
+    "check:perf-budget": "node scripts/check-perf-budget.mjs",
+    "check:mv3-worker": "node scripts/check-mv3-worker-imports.mjs"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.7.1",
