@@ -914,7 +914,11 @@ describe("SW integration: state persistence through session storage", () => {
       resolveNextTabGet(url?: string) {
         const pending = pendingTabGets.shift();
         if (!pending) throw new Error("No pending tabs.get call");
-        pending.resolve({ id: pending.tabId, url: url ?? tabUrls.get(pending.tabId) });
+        const resolvedUrl = url ?? tabUrls.get(pending.tabId);
+        pending.resolve({
+          id: pending.tabId,
+          ...(resolvedUrl !== undefined ? { url: resolvedUrl } : {}),
+        });
       },
       get pendingTabGetCount() {
         return pendingTabGets.length;
