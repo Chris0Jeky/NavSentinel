@@ -97,20 +97,32 @@ PRs D-* are independent (different files) → parallel branches off `main`, **no
 
 ## In-Flight
 
-**Active checkpoint (2026-07-17, Cycle 50):** #356 / RI-03 is the current
-smallest unblocked release-integrity slice. RI-01 remains parked at its existing
-checkpoint because AI-20 owns the Defender-quarantined property fixture needed
-for full branch verification. PR #356 was 174 commits behind `origin/main`, had
-one deterministic stale E2E assertion, and had three unresolved actionable
-review threads. The branch was refreshed by merging `origin/main` (no history
-rewrite) in `.worktrees/pr356-refresh`; implementation now addresses every
-thread and updates the stale assertion before two fresh independent reviews.
-Because this is MAIN-world browser-surface work, a green exact head remains
-held for human Gate-3 and is not merge-authorized by this cycle.
+**Active checkpoint (2026-07-17, Cycle 50):** #356 / RI-03 was the smallest
+unblocked release-integrity slice. Its branch was 174 commits behind
+`origin/main`, had one deterministic stale E2E assertion, and had three
+unresolved actionable review threads. The branch was refreshed by merging
+`origin/main` without rewriting history in `.worktrees/pr356-refresh`.
+
+Runtime head `2a30c63` addresses every thread and passed two fresh independent
+adversarial rounds. Round 1 fixed cross-realm/invalid open receivers, Chromium's
+absent Location prototype native, and stale patch-order docs. Round 2 preserved
+native enumerability and replaced assignment-only coverage with deterministic
+one-call wrapper-chain/native-outcome assertions. Local proof: 2,875 unit tests,
+65/65 one-worker E2E, typecheck, lint, build, package, and perf 12/12. The
+official Windows `check:topsites` command has a CRLF false-stale defect (#461),
+with normalized content proven equal; exact-head Linux CI must be refreshed.
+This is MAIN-world browser-surface work, so AI-13 human Gate-3 still holds and
+the PR is not merge-authorized by this cycle.
+
+The full RI-01 checkpoint remains parked because AI-20 owns its quarantined
+property fixture, but that is not a blanket development block: the active
+two-file synthetic-navigation rejection from `6283f49` can be isolated later on
+fresh `origin/main`. Newly durable follow-ups are #458 (Location boundary), #459
+(Vite/Rollup advisories), #460 (Windows parallel E2E), and #461 (top-sites CRLF).
 
 | Slice | Branch | Base | Worktree | PR | State | Proving gates |
 |---|---|---|---|---|---|---|
-| RI-03 / #356 | `feat/dehard-enforcement-protos` | current `origin/main` merged at `e4c852c` | `.worktrees/pr356-refresh` | #356 | IN PROGRESS | resolve all 3 review threads; update the obsolete hardening assertion; targeted E2E, typecheck, lint, build, unit, perf; two fresh adversarial rounds; exact-head CI; human Gate-3 hold |
+| RI-03 / #356 | `feat/dehard-enforcement-protos` | current `origin/main` merged at `e4c852c` | `.worktrees/pr356-refresh` | #356 | LOCAL READY / GATE-3 HELD | local gates + two reviews complete through runtime head `2a30c63`; refresh live exact-head CI/comments; human AI-13 Gate-3 |
 
 **In-Flight (2026-07-10):** no new slice started by this audit. Existing open
 PRs #273/#356/#399 are stale and require preflight; #356 is red. Rows below are
@@ -133,6 +145,7 @@ historical (all merged). Verify with `gh pr list` before branching.
 
 | # | Date | Slice | Action | Result |
 |---|------|-------|--------|--------|
+| 50 | 2026-07-17 | UNBLOCK / RI-03 #356 | Refreshed the 174-behind branch by merging current `origin/main`; fixed the stale descriptor E2E and all three existing threads; seeded #458 for Chromium's ordinary Location-call bypass. R1 found and fixed two P2 receiver/Location-native bugs plus a P3 stale comment (`1a36bee`). Fresh R2 found and fixed native-enumerability and assignment-only-test P2s (`2a30c63`), then re-reviewed clean. Local exact runtime proof: 2,875 unit, 65/65 one-worker E2E, typecheck, lint, build/package, perf 12/12, agent hooks/skills. Investigated rather than skipped: three current dependency advisories → #459; pre-existing Windows four-worker blank-anchor misses reproduced on untouched `origin/main` → #460; Windows top-sites CRLF false-stale with normalized equality → #461. PR remains human AI-13 Gate-3 held; refresh final GitHub head/CI/thread state live. | LOCAL READY / GATE-3 HELD |
 | 49 | 2026-07-10 | PRODUCT POSTURE / architecture + market + roadmap review | Re-verified live git/GitHub/release truth; ran local build/test/perf/smoke baselines; reviewed architecture, feature portfolio, claims, privacy, store readiness, current competitors, and product-name collision. Found release-blocking page-controlled prompt decision authority, wrong-tab dead visual-sim capture, stale/red human PR queue, reputation/package contradiction, fake DNR surface, bridge overclaim, and false roadmap completion states. Established `docs/Product_Strategy.md`; consolidated RI-01–RI-08/PM/EV/OPS actions in `docs/Project_Roadmap.md`; corrected roadmap/store/privacy/architecture truth; blocked AI-15 pending preflight; and added AI-19 name clearance. No runtime code, PR, issue, merge, or external release state changed. | DOCS / REVIEW |
 | 47 | 2026-07-03 | MEASURE / #417 corpus-v2 pillar 1 (protected-vs-fired) — 1 merged | Merged **#435 / #417** (pillar 1 of 4). New pure, unit-tested `tests/corpus/corpus_scoring.ts` `classifyCorpusOutcome()`: **protected** (pre-harm block/prompt: nav_click_block/nav_blank_prompt/cred_submit_prompt/cred_paste_warn + credential modal) vs **fired** (post-render nav_rollback and/or a bare toast) vs **miss**; precedence protected>fired>miss. Wired into `tests/e2e/corpus-validation.spec.ts` (reports/persists the split; legacy detectionRate relabeled ANY-signal). **My 2-lens review caught a HIGH:** a bare toast mapped to `protected`, but the rollback path *also* shows a persistent toast → every post-render rollback would inflate to protected, making `fired` unreachable and the honest rate dishonest → fixed (toast → fired). **Codex independently corroborated (P1)** + caught (P2) that `cred_submit_prompt` is also logged with `extra.error` on the credential-guard fail-open/TOCTOU path → the spec now excludes those from detection. Gemini simplify (Set-input) + union-import both handled. 2 full adversarial rounds + both bots addressed; 2874 tests (+18), typecheck/lint clean. The e2e wiring is type-checked but **unrun in-sandbox** (headed Chrome = Gate-3/CI) — pillars 2–4 (real-hostname routing / trusted clicks / committed manifest) remain on #417. **#417 kept OPEN** (careful phrasing — the close-keyword gotcha bit #418 twice this session; see failure ledger). `main` @ **`eba5d71`**. | DONE / 1 MERGED |
 | 46 | 2026-07-03 | CHECKPOINT / #426 assessed → #417-gated + docs-sync | Started #426 (corpus TP triage), but assessment found it **cannot be done validly in-sandbox now**: the committed corpus artifacts are only the 5-01 markdown report (lists the 28 TP but **not** the 72 FN) + README — the manifest + raw per-page results (the 4-25 manifest [120 entries, url+status only, no tags] and both runs' JSON) are **gitignored/local-only**, unavailable to a fresh checkout; and #417 itself deems the 28% number "methodologically invalid in both directions." Seeding detection-gap fixes from that data would violate D25 (measure-before-tune). **Conclusion: #426 is #417-gated** (corrects the earlier #418→#426→#417 ladder order — #426 now depends on #417). Recorded the finding + refreshed current-state/HANDOFF + added the close-keyword-negation failure-ledger entry. **Next: build #417 (unit-testable protected-vs-fired core + committed manifest; wiring marked needs-headed-run).** | DONE / docs |
