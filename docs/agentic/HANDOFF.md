@@ -70,6 +70,10 @@ rotation under #437.
   follow-up then proved the lexer alone accepted unsupported static import
   attributes/assertions. `c0305f9` adds syntax-aware rejection plus four pre-fix-
   failing fixtures (21 total); the real five-module emitted graph passes.
+  Fresh exact-head round 1 then found the signal-label field accepted and
+  persisted secret-shaped page values. `2402297` narrows it to two finite
+  display codes; new handler/store probes fail before the fix and prove invalid
+  labels are rejected before session persistence.
   Local/remote/PR equality, exact-head reviews, thread accounting, and CI remain
   live-authoritative.
 - PR #466's package is about 492.9/500KB while reputation is a 52-byte test fixture. The
@@ -213,7 +217,8 @@ AI-21 is actionable. Do not start a fourth browser-held slice.
 - **Merged:** #463 / #459 as `2888483`; intended close link verified.
 - **Open / in progress:** PR #466 pending-decision SW boundary; the three runtime
   blockers, emitted-graph gate, lexer gaps, and unsupported import-attribute gap
-  are fixed. Its live precheck requires local/remote/PR equality, exact-head
+  plus the free-form signal persistence gap are fixed. Its live precheck
+  requires local/remote/PR equality, exact-head
   reviews, bot/thread accounting, green CI, and AI-22.
   #356's current-main refresh passes 2,875 unit plus 65/65 E2E; #464's refresh
   passes 2,874 unit plus 65/65 E2E. Each live precheck requires local/remote/PR

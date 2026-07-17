@@ -52,7 +52,7 @@ protection. The exact audit baseline is recorded only in dated
 | #399 | Closed 2026-07-13; measurement-held under #223/#417 and not a beta blocker |
 | #463 | Merged exact green dependency head `91aab4f` as `2888483`; #459 closed as intended |
 | #464 | Current-main refresh passes 2,874 unit plus 65/65 E2E; its live precheck must confirm local/remote/PR equality, two fresh exact-head reviews, and green CI before AI-21 |
-| #466 | Open RI-01 dormant pending-decision SW boundary; three runtime blockers fixed, emitted static-worker gate added in `dfea4da`, parser replaced by a real module lexer in `ddfacf0`, and unsupported import attributes rejected in `c0305f9`; live exact-head reviews/CI and AI-22 remain |
+| #466 | Open RI-01 dormant pending-decision SW boundary; three runtime blockers fixed, emitted static-worker gate added in `dfea4da`, parser replaced by a real module lexer in `ddfacf0`, unsupported import attributes rejected in `c0305f9`, and session-stored signals restricted to finite codes in `2402297`; live exact-head reviews/CI and AI-22 remain |
 
 **RI-01 implementation note (verified 2026-07-17):** PR #464 isolates the
 production synthetic-navigation sub-slice: only trusted input can mint

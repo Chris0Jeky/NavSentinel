@@ -97,7 +97,7 @@ PRs D-* are independent (different files) → parallel branches off `main`, **no
 
 ## In-Flight
 
-**Active checkpoint (2026-07-17, Cycle 57):** PR #463 merged its exact green
+**Active checkpoint (2026-07-17, Cycle 58):** PR #463 merged its exact green
 dependency head as `2888483` and closed #459. That dependency graph must now be
 integrated into all browser-held lanes. PR #356 (AI-13) and #464 (AI-21) were
 twice reviewed, thread-clean, and exact-head CI-green before the merge. Their
@@ -133,7 +133,10 @@ namespace re-exports escaped that parser; `5d6ad17`/`ab6d845` add the 17-fixture
 regression set and `ddfacf0` replaces the regex with `es-module-lexer`. A fresh
 follow-up proved unsupported static import attributes/assertions still passed;
 `c0305f9` adds syntax-aware rejection and four pre-fix-failing fixtures (21
-total). PR #466 and AI-22 consume the third and
+total). Fresh exact-head round 1 then found free-form signal labels could persist
+secret-shaped page values. `2402297` replaces them with a finite two-code
+allowlist; handler/store probes prove invalid labels are rejected before any
+session write. PR #466 and AI-22 consume the third and
 final human-held browser slot. Local/remote/PR equality, two fresh exact-head
 reviews, bot/thread accounting, and CI
 remain authoritative. No automation merge is authorized.
@@ -166,6 +169,7 @@ historical (all merged); Cycle 53 above supersedes that snapshot.
 
 | # | Date | Slice | Action | Result |
 |---|------|-------|--------|--------|
+| 58 | 2026-07-17 | VERIFY / PR #466 session-data minimization | Fresh exact-head round 1 found a medium privacy boundary defect: page-provided `signals` accepted arbitrary bounded identifiers, so secret-shaped values could be copied into `chrome.storage.session` despite the no-password/form-value contract. A handler probe and a direct store probe both failed before the fix by creating and persisting `Apassword123`. `2402297` defines a finite two-code signal allowlist, narrows semantics/record/view types, and rejects both password-like and base64url token-shaped labels before persistence. Focused 26/26, typecheck, lint, and diff checks pass. Exact-head reviews and CI restart after this status commit; AI-22 remains mandatory. | PR #466 OPEN / MED FIXED / EXACT-HEAD GATES+AI-22 HELD |
 | 57 | 2026-07-17 | VERIFY / PR #466 static-import capability gate | A fresh independent round-2 follow-up proved the lexer-backed emitted-worker gate still accepted Chrome-unsupported static import attributes and legacy assertions. Four fixtures covering import/re-export `with` and `assert` failed before the fix. `c0305f9` adds a TypeScript syntax pass that rejects both forms and invalid JavaScript before graph traversal; all 21 fixtures, the real five-module graph, typecheck, lint, build, and diff checks pass. Shared browser-held status now uses live head-equality/review/CI prechecks instead of transient push wording. Both exact-head reviews and CI restart after this status commit; AI-22 remains mandatory. | PR #466 OPEN / FINDING FIXED / EXACT-HEAD GATES+AI-22 HELD |
 | 56 | 2026-07-17 | VERIFY / PR #466 graph-parser adversarial round 2 | Exact `7e173eb` passed Build/Unit and E2E in GitHub run `29558561505`, was local/remote/PR-equal, thread-clean, and passed a clean independent round-1 recheck plus a clean exact-head Codex review. Fresh independent round 2 then proved the release gate missed valid comment-separated dynamic/static imports and re-exports plus namespace re-exports; it also found the handoff still described the completed push as future work. `5d6ad17` and `ab6d845` add eight pre-fix-failing fixtures (17 total); `ddfacf0` replaces the regex parser with direct `es-module-lexer` metadata. This status sync fixes the low finding. Both review rounds and CI restart on the final exact head; AI-22 remains mandatory. | PR #466 OPEN / R2 FINDINGS FIXED / EXACT-HEAD GATES+AI-22 HELD |
 | 55 | 2026-07-17 | VERIFY / PR #466 MV3 worker gate | The first independent adversarial re-review on pushed, CI-green `af0ccb2` validated all three runtime blocker fixes but found build/package had no regression gate for the exact MV3 static-import defect and found stale pre-push status wording. `dfea4da` adds a recursive emitted-worker closure verifier to ordinary build and package. It requires MV3 module type and pending-runtime reachability, follows local static imports, and rejects dynamic/preload, remote, out-of-dist, or missing imports. Nine pass/fail fixtures, typecheck, focused lint, build, perf 12/12, package, Node syntax, and diff checks pass. This status sync fixes the low finding. Both adversarial rounds and CI restart on the final exact head; AI-22 remains mandatory. | PR #466 OPEN / R1 FINDINGS FIXED / EXACT-HEAD GATES+AI-22 HELD |

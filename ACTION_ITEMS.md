@@ -60,7 +60,11 @@ passed exact-head CI. The first independent adversarial re-review then found
   `ddfacf0` replaces the hand-rolled edge regex with `es-module-lexer`. A fresh
   follow-up then proved unsupported static import attributes/assertions still
   passed; `c0305f9` adds syntax-aware rejection and four pre-fix-failing fixtures
-  (21 total). AI-22's live precheck must confirm local/remote/PR head equality,
+  (21 total). Fresh exact-head round 1 then found free-form signal labels could
+  carry secret-shaped page values into session storage; `2402297` replaces that
+  field with a finite display-code allowlist, with handler/store regressions that
+  failed before the fix and prove rejection before persistence. AI-22's live
+  precheck must confirm local/remote/PR head equality,
   green exact-head CI, both fresh review rounds, and zero unresolved threads.
 The product-posture and guided-workflow work merged through PR #454; verify live
 `main` rather than pinning its SHA here. The RI-01 checkpoint branch is remotely
