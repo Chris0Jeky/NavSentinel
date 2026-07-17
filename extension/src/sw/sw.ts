@@ -664,6 +664,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
   }
 
+  if (message.type === "ns-nav-context") {
+    return runWhenHydrated(() => {
+      const tabId = sender.tab?.id;
+      const currentUrl = typeof sender.tab?.url === "string" ? sender.tab.url : "";
+      if (typeof tabId === "number" && sender.frameId === 0 && currentUrl) {
+        // This message restores only the source-page baseline when a cold worker
+        // missed its initial commit. It deliberately creates no gesture, allow,
+        // target, or user-navigation-context capability. Use Chrome's top-tab URL,
+        // not page-supplied data or a subframe URL.
+        lastUrlByTab.set(tabId, currentUrl);
+        swState.persistMap(lastUrlByTab, "lastUrl");
+      }
+      sendResponse?.({ ok: true });
+    });
+  }
+
   if (message.type === "ns-allow-target-nav") {
     return runWhenHydrated(() => {
       const tabId = sender.tab?.id;

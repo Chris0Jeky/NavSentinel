@@ -643,6 +643,114 @@ test("Synthetic pointer and click events cannot mint navigation allowances @regr
   }
 });
 
+test("Trusted pointerdown alone cannot authorize delayed synthetic same-tab navigation @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/level1-basic-opacity.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+      await waitForNavSentinelBridge(page);
+
+      // A Playwright page.goto can establish the service worker's short typed-
+      // origin context. Let that independent allowance expire so this mutation
+      // isolates authority created by the later pointerdown.
+      await page.waitForTimeout(5200);
+
+      const originalUrl = page.url();
+      const destination = new URL("/level2-moving-target.html?trusted-down-synthetic=1", baseUrl);
+      destination.hostname = destination.hostname === "localhost" ? "127.0.0.1" : "localhost";
+      const serviceWorker = await getServiceWorker(context);
+      const trustSignals: string[] = [];
+      const trustMarker = "NS_TEST_POINTERDOWN_AUTHORITY";
+      page.on("console", (message) => {
+        if (message.text().startsWith(trustMarker)) trustSignals.push(message.text());
+      });
+
+      await page.evaluate(({ targetUrl, marker }) => {
+        const anchor = document.createElement("a");
+        anchor.href = targetUrl;
+        anchor.textContent = "Delayed synthetic cross-site navigation";
+        anchor.style.cssText = "position:fixed;left:-9999px;top:-9999px";
+        anchor.addEventListener("click", (event) => {
+          console.log(`${marker} click ${event.isTrusted}`);
+        });
+        document.body.appendChild(anchor);
+
+        const button = document.createElement("button");
+        button.id = "trusted-pointerdown-only";
+        button.textContent = "Trusted pointerdown only";
+        button.style.cssText =
+          "position:fixed;left:0;top:0;width:160px;height:120px;z-index:2147483647";
+        button.addEventListener(
+          "pointerdown",
+          (event) => {
+            console.log(`${marker} pointerdown ${event.isTrusted}`);
+            window.setTimeout(() => anchor.click(), 150);
+          },
+          { once: true }
+        );
+        document.body.appendChild(button);
+      }, { targetUrl: destination.href, marker: trustMarker });
+
+      const button = page.locator("#trusted-pointerdown-only");
+      const box = await button.boundingBox();
+      expect(box, "Expected the trusted-pointerdown fixture button to be visible").toBeTruthy();
+      await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+      await page.mouse.down();
+
+      await expect.poll(() => trustSignals, { timeout: 1000 }).toContain(
+        `${trustMarker} pointerdown true`
+      );
+      const pointerdownMintedAuthority = await serviceWorker.evaluate(async ({ currentUrl }) => {
+        const tabs = await chrome.tabs.query({});
+        const tab = tabs.find((candidate) => candidate.url === currentUrl);
+        if (typeof tab?.id !== "number") throw new Error("Test tab not found");
+        const key = String(tab.id);
+        const deadline = Date.now() + 100;
+        while (Date.now() < deadline) {
+          const stored = await chrome.storage.session.get([
+            "ns_sw:gestureUntil",
+            "ns_sw:allowUntil",
+            "ns_sw:allowTarget"
+          ]);
+          const gesture = !!(stored["ns_sw:gestureUntil"] as Record<string, unknown> | undefined)?.[key];
+          const broad = !!(stored["ns_sw:allowUntil"] as Record<string, unknown> | undefined)?.[key];
+          const target = !!(stored["ns_sw:allowTarget"] as Record<string, unknown> | undefined)?.[key];
+          if (gesture || broad || target) return true;
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+        return false;
+      }, { currentUrl: originalUrl });
+      expect(pointerdownMintedAuthority).toBe(false);
+
+      await expect.poll(() => trustSignals, { timeout: 1000 }).toContain(
+        `${trustMarker} click false`
+      );
+      await page.waitForTimeout(2500);
+      await expect(page).toHaveURL(originalUrl);
+      await page.mouse.up();
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
 test("Level 7 legit modal backdrop closes without a false positive @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 

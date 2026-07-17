@@ -727,6 +727,14 @@ function notifyNavGesture(ttlMs = NAV_GESTURE_TTL_MS): void {
   }
 }
 
+function notifyNavContext(): void {
+  try {
+    chrome.runtime.sendMessage({ type: "ns-nav-context" });
+  } catch {
+    // ignore
+  }
+}
+
 function notifyAllowedTarget(
   url: string,
   ttlMs = NAV_TARGET_ALLOW_TTL_MS,
@@ -1630,11 +1638,13 @@ window.addEventListener(
   "pointerdown",
   (e) => {
     if (!(e instanceof PointerEvent)) return;
-    // Page scripts can dispatch synthetic pointer events. The later click can
-    // still be scored, but a synthetic pointerdown is never evidence of user
-    // intent and must not mint the tab-wide SW rollback allowance.
+    // Pointerdown is risk-correlation evidence only. Even a trusted down can be
+    // cancelled or followed by page-script navigation, so it must not mint the
+    // tab-wide SW rollback allowance before a trusted click is approved.
     if (!e.isTrusted) return;
-    notifyNavGesture();
+    // A cold worker can miss the page's initial onCommitted event. Seed only
+    // the rollback baseline here; ns-nav-context grants no navigation authority.
+    if (isTopFrame()) notifyNavContext();
     lastDown = capturePointerDown(e);
     const token = makeToken({
       siteKey: siteKeyFromLocation(),
