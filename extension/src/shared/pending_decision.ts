@@ -12,7 +12,9 @@ export const PENDING_DECISION_MAX_URL_LENGTH = 8_192;
 export const PENDING_DECISION_MAX_ACTIONS = 3;
 export const PENDING_DECISION_MAX_DOCUMENT_ID_LENGTH = 128;
 export const PENDING_DECISION_MAX_SIGNALS = 8;
-export const PENDING_DECISION_MAX_SIGNAL_LENGTH = 64;
+
+/** Finite display codes only; never accept page-provided free-form text here. */
+export const PENDING_DECISION_SIGNAL_CODES = ["cross_site", "NRS-high"] as const;
 
 export const NAVIGATION_DECISION_REASONS = [
   "navigation-blocked",
@@ -39,6 +41,7 @@ export type CredentialDecisionReason = (typeof CREDENTIAL_DECISION_REASONS)[numb
 export type NavigationDecisionAction = (typeof NAVIGATION_DECISION_ACTIONS)[number];
 export type CredentialDecisionAction = (typeof CREDENTIAL_DECISION_ACTIONS)[number];
 export type PendingDecisionAction = NavigationDecisionAction | CredentialDecisionAction;
+export type PendingDecisionSignalCode = (typeof PENDING_DECISION_SIGNAL_CODES)[number];
 
 /** Context sourced from MessageSender/tab state, never from page-provided semantics. */
 export interface PendingDecisionVerifiedContext {
@@ -60,7 +63,7 @@ export interface PendingDecisionVerifiedTabContext {
 interface PendingDecisionSemanticsBase {
   destinationUrl: string;
   score?: number;
-  signals?: readonly string[];
+  signals?: readonly PendingDecisionSignalCode[];
 }
 
 export interface PendingNavigationDecisionSemantics extends PendingDecisionSemanticsBase {
@@ -95,7 +98,7 @@ interface PendingDecisionRecordBase {
   createdAt: number;
   expiresAt: number;
   score?: number;
-  signals?: readonly string[];
+  signals?: readonly PendingDecisionSignalCode[];
 }
 
 export interface PendingNavigationDecision extends PendingDecisionRecordBase {
@@ -133,9 +136,9 @@ const ALL_ACTION_SET = new Set<string>([
   ...NAVIGATION_DECISION_ACTIONS,
   ...CREDENTIAL_DECISION_ACTIONS,
 ]);
+const PENDING_DECISION_SIGNAL_SET = new Set<string>(PENDING_DECISION_SIGNAL_CODES);
 const OPAQUE_VALUE_RE = /^[A-Za-z0-9_-]{22,128}$/;
 const DOCUMENT_ID_RE = /^[A-Za-z0-9_-]+$/;
-const SIGNAL_RE = /^[A-Za-z][A-Za-z0-9_-]*$/;
 const SHA256_RE = /^[a-f0-9]{64}$/;
 const VERIFIED_IDENTITY_FIELDS = [
   "tabId",
@@ -280,22 +283,20 @@ function parseActions(value: unknown, allowed: ReadonlySet<string>): PendingDeci
   return actions;
 }
 
-function parseSignals(value: unknown): string[] | null {
+function parseSignals(value: unknown): PendingDecisionSignalCode[] | null {
   if (!Array.isArray(value) || value.length > PENDING_DECISION_MAX_SIGNALS) return null;
-  const signals: string[] = [];
+  const signals: PendingDecisionSignalCode[] = [];
   const seen = new Set<string>();
   for (const signal of value) {
     if (
       typeof signal !== "string" ||
-      signal.length === 0 ||
-      signal.length > PENDING_DECISION_MAX_SIGNAL_LENGTH ||
-      !SIGNAL_RE.test(signal) ||
+      !PENDING_DECISION_SIGNAL_SET.has(signal) ||
       seen.has(signal)
     ) {
       return null;
     }
     seen.add(signal);
-    signals.push(signal);
+    signals.push(signal as PendingDecisionSignalCode);
   }
   return signals;
 }
@@ -305,7 +306,7 @@ interface ParsedSemanticFields {
   reason: NavigationDecisionReason | CredentialDecisionReason;
   actions: PendingDecisionAction[];
   score?: number;
-  signals?: string[];
+  signals?: PendingDecisionSignalCode[];
 }
 
 function parseSemanticFields(value: Record<string, unknown>): ParsedSemanticFields | null {
@@ -461,7 +462,7 @@ interface PendingDecisionViewBase {
   createdAt: number;
   expiresAt: number;
   score?: number;
-  signals?: readonly string[];
+  signals?: readonly PendingDecisionSignalCode[];
 }
 
 /** URL-free, bounded capability view exposed only to extension-origin UI. */

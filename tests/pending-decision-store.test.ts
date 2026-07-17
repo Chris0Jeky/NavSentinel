@@ -203,10 +203,13 @@ describe("PendingDecisionStore", () => {
       navigationSemantics({ score: -1 }),
       navigationSemantics({ score: 101 }),
       navigationSemantics({ score: 1.5 }),
-      navigationSemantics({ signals: Array.from({ length: 9 }, (_, index) => `signal_${index}`) }),
-      navigationSemantics({ signals: ["a".repeat(65)] }),
-      navigationSemantics({ signals: ["duplicate", "duplicate"] }),
-      navigationSemantics({ signals: ["contains whitespace"] }),
+      {
+        ...navigationSemantics(),
+        signals: Array.from({ length: 9 }, (_, index) => `signal_${index}`),
+      } as unknown as PendingDecisionSemantics,
+      { ...navigationSemantics(), signals: ["a".repeat(65)] } as unknown as PendingDecisionSemantics,
+      { ...navigationSemantics(), signals: ["duplicate", "duplicate"] } as unknown as PendingDecisionSemantics,
+      { ...navigationSemantics(), signals: ["contains whitespace"] } as unknown as PendingDecisionSemantics,
       { ...navigationSemantics(), actions: ["trust-source"] } as unknown as PendingDecisionSemantics,
       { ...credentialSemantics(), actions: ["allow-route"] } as unknown as PendingDecisionSemantics,
       navigationSemantics({ reason: "navigation-rollback", actions: ["allow-route"] }),
@@ -237,6 +240,21 @@ describe("PendingDecisionStore", () => {
       ),
     );
     expect(validPaste.decision.actions).toEqual(["trust-source"]);
+  });
+
+  it("rejects secret-shaped signal labels before session persistence", async () => {
+    const storage = createStorage();
+    const store = makeStore(storage, () => 1_000);
+
+    for (const signal of ["Apassword123", "ZXhhbXBsZS1zZWNyZXQtdG9rZW4"]) {
+      await expect(
+        store.create(
+          verifiedContext(),
+          { ...credentialSemantics(), signals: [signal] } as unknown as PendingDecisionSemantics,
+        ),
+      ).rejects.toThrow("Invalid pending-decision semantics");
+      expect(storage.data[PENDING_DECISION_STORAGE_KEY]).toBeUndefined();
+    }
   });
 
   it("requires exact hashed context, keeps destination binding worker-owned, and consumes once", async () => {

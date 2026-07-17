@@ -278,6 +278,17 @@ describe("PendingDecisionRuntimeBroker", () => {
         status: "invalid-request",
       },
       {
+        name: "secret-shaped signal label",
+        message: {
+          ...createMessage(),
+          semantics: {
+            ...(createMessage() as { semantics: object }).semantics,
+            signals: ["Apassword123"],
+          },
+        },
+        status: "invalid-request",
+      },
+      {
         name: "wrong extension ID",
         sender: contentSender({ id: "other-extension" }),
         status: "unauthorized",
