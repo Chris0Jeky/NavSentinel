@@ -24,8 +24,8 @@ rotation under #437.
 - **AI-15: BLOCKED** until agent preflight is complete.
 - **AI-8 / AI-14: BLOCKED** pending current branches, two fresh reviews, green
   CI, and replacement human guides.
-- **AI-13: READY / OPEN** for the current #356 guide; agent preflight, exact-head
-  CI, threads, and reviews are complete. Chris's manual Gate-3 remains required.
+- **AI-13: OPEN, guide prepared:** use it only when step 1 confirms the current
+  pushed head and CI are exact/green. Chris's manual Gate-3 remains required.
 
 ## Verified state
 
@@ -40,8 +40,9 @@ rotation under #437.
   head `2a30c63` passed two independent adversarial rounds, 2,875 unit tests,
   all 65 one-worker E2E tests, build/package, and perf 12/12. Pushed head
   `1accb43` passed GitHub Build/Unit and E2E in run `29546364063`; all three
-  review threads are resolved. Recheck the live head/CI before following the
-  current ACTION_ITEMS guide. AI-13 human Gate-3 remains mandatory.
+  review threads are resolved. The current guide-only head must be pushed,
+  reviewed, and re-green; ACTION_ITEMS step 1 enforces that boundary. AI-13
+  human Gate-3 remains mandatory.
 - 79 open issues with no milestone/assignee; 15 Horizon issues #439–#453 are a
   frozen option portfolio, not active work.
 - Open PRs are #356 (browser-surface, Gate-3 held) and draft #457 (shared deny

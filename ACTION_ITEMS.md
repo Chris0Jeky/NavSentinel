@@ -37,10 +37,10 @@ Live recheck on 2026-07-17 found 79 open issues, no tags/releases/classic branch
 protection or repository rulesets, and no milestones or assignees. Verify the
 current `main` SHA live rather than pinning it here. Open PRs are #356 and draft
 #457. Stale PRs #273 and #399 were closed with explicit re-entry paths. #356's
-refreshed candidate is published; exact-head Build/Unit and E2E are green, all
-three review threads are resolved, and two independent final reviews are clean.
-Only Chris's manual AI-13 Gate-3 remains. The product-posture and guided-workflow
-work merged
+pre-guide head `1accb43` is published with green Build/Unit and E2E; all three
+review threads are resolved. The current guide commit must itself be pushed,
+reviewed, and green before use, as enforced by its live precheck. Only Chris's
+manual AI-13 Gate-3 then remains. The product-posture and guided-workflow work merged
 through PR #454; verify live `main` rather than pinning its SHA here. The RI-01
 checkpoint branch is remotely backed up without the unstaged Defender deletion;
 verify its SHA live. Its worktree is dirty only because Windows Defender
@@ -68,9 +68,10 @@ shipped product state.
   CWS submission; this is a risk flag, not a legal conclusion.
 - **Legacy PR cleanup:** #273 and draft #399 were closed on 2026-07-13 rather
   than merged from stale bases; their commits, discussions, and open issue
-  anchors remain. #356 is refreshed, pushed, twice reviewed, exact-head CI
-  green, and thread-clean. **AI-13 is now ready for Chris's manual Gate-3 using
-  the current guide below; it remains unmergeable without that evidence.**
+  anchors remain. #356 is refreshed, pushed, twice reviewed, and thread-clean;
+  pre-guide head `1accb43` is CI-green. **The current AI-13 guide is prepared but
+  becomes actionable only when its step-1 live head/CI check passes. The PR
+  remains unmergeable without Chris's Gate-3 evidence.**
 - **Portfolio:** 79 open issues, none assigned or milestoned; #439–#453 are 15
   frozen Horizon proposals. No new feature/epic issue seeding until the queue is
   culled and milestone-categorized.
@@ -95,7 +96,8 @@ AI-17 -> AI-19 -> AI-18. The hook-editing slice is now committed; AI-18 remains
 human-owned until its exact definitions are reviewed and trusted. The `q-N`
 label may reset between conversations; the `AI-N` identifier is durable.
 AI-15/AI-8/AI-14 remain visible but are not actionable questions until agent
-preflight clears them. AI-13 is ready using the current guide below.
+preflight clears them. AI-13's current guide is prepared; its live precheck
+decides readiness.
 
 > **Gate-queue hold (refreshed 2026-07-17):** do not run the old branch checkout
 > guides for AI-8, AI-13, or AI-14. AI-8 and AI-14 require new current-main
@@ -244,13 +246,13 @@ branch checkout guide.
 
 **AI-11 — Toast count-pill (#351 → PR #353) · ✅ RESOLVED 2026-06-23 — MERGED.** Chris said "merge #353"; green CI (incl. the RW-19 e2e fix to accept the coalesced pill) → **#353 merged into `main`** (`d0e0412`). Repeated blocked-popup/redirect prompts now coalesce into one count pill after 3-in-8s (expandable to the latest prompt's Allow once / Always allow). The pill is live on the next `git checkout main && npm run build`.
 
-**🚨 OPEN: AI-13 — Run #356 MAIN-world compatibility Gate-3 (READY).** The
-agent preflight is complete: PR #356 is refreshed from current `origin/main`,
-all three review threads are resolved, both independent final reviews are clean,
-and exact-head GitHub Build/Unit plus E2E passed in run
-`29546364063`. The source-bearing runtime head passed 2,875 unit tests, 65/65
-one-worker E2E, build/package, and all 12 size budgets locally. This item remains
-human-owned; only Chris can record Gate-3 as done.
+**🚨 OPEN: AI-13 — Run #356 MAIN-world compatibility Gate-3 (GUIDE PREPARED;
+LIVE CI PRECHECK REQUIRED).** PR #356 is refreshed from current `origin/main`
+and all three review threads are resolved. Pre-guide head `1accb43` passed
+GitHub Build/Unit plus E2E in run `29546364063`; the source-bearing runtime head
+passed 2,875 unit tests, 65/65 one-worker E2E, build/package, and all 12 size
+budgets locally. The current guide commit must independently satisfy step 1
+before use. This item remains human-owned; only Chris can record Gate-3 as done.
 
 **Current guide:**
 
@@ -262,28 +264,62 @@ human-owned; only Chris can record Gate-3 as done.
    `git ls-remote origin refs/heads/feat/dehard-enforcement-protos`. The worktree
    must be clean, the two SHAs must match, and `gh pr checks 356` must show
    Build/Unit and E2E green. Stop and report the mismatch if any check differs.
-2. In that worktree run `npm ci`, `npm run build`, then keep
-   `npm run gym:serve` open in a second terminal. In Chrome's Extensions page,
-   enable Developer mode and load
-   `.worktrees/pr356-refresh/extension/dist` unpacked. Remove or disable any
-   older NavSentinel unpacked copy first so only this build is active.
+2. In that worktree run `npm ci` and `npm run build`. To avoid starting the
+   branch's known-vulnerable pre-#459 Vite server, keep
+   `python -m http.server 5173 --bind 127.0.0.1 --directory gym` open in a second
+   terminal instead. Create a temporary local Chrome profile from the profile
+   picker, do not sign it into a Google account, and
+   leave every established profile/extension untouched. In the temporary
+   profile's Extensions page, enable Developer mode and load
+   `.worktrees/pr356-refresh/extension/dist` unpacked. In NavSentinel Options,
+   confirm Smart mode and no localhost/127.0.0.1 trusted-domain or allowlist
+   entry before testing. Do not remove an established unpacked copy or its data.
 3. Open `http://localhost:5173/proto-wrap-05.html`. Confirm the page reaches
    `Status: OK — all wraps succeeded` with no uncaught page error or
    `Cannot assign to read only property` console error.
-4. Click each of the eight exercise buttons once. In DevTools, inspect
-   `JSON.parse(document.body.dataset.wrapperCalls)`: every counter must be `1`.
-   Confirm both form fields say `called`, `requestSubmitEvents` is `1`, both
-   Location fields say `called` and the hash changes, own/prototype open report
-   `opened`, `crossRealmOpen` is `child`, and `invalidOpenReceiver` is
-   `error:TypeError`. Report any popup blocked by Chrome itself instead of
-   treating it as a NavSentinel pass.
-5. Preserve the security gate: on `level10-redirects-and-forms.html`, immediate
-   redirect should work, while the two-second delayed redirect and programmatic
-   form submit must each show the matching NavSentinel block/prompt before
-   navigation. On `level5-window-open-popunder.html`, clicking the trap must show
-   `Blocked popup` and open no popup. Test Allow once on one blocked Level 10
-   action and confirm only that exact action resumes.
-6. Reply `AI-13 done; Gate-3 passed on PR #356` and include any console error,
+4. Click each of the eight exercise buttons once, in their displayed order. In
+   DevTools, evaluate this exact object:
+
+   ```js
+   ({
+     calls: JSON.parse(document.body.dataset.wrapperCalls ?? "{}"),
+     formSubmitCall: document.body.dataset.formSubmitCall,
+     formTarget: document.querySelector("#submitFrame")?.contentWindow?.location.href,
+     formRequestSubmitCall: document.body.dataset.formRequestSubmitCall,
+     requestSubmitEvents: document.body.dataset.requestSubmitEvents,
+     locationCall: document.body.dataset.locationCall,
+     locationReplaceCall: document.body.dataset.locationReplaceCall,
+     hash: location.hash,
+     unboundOpenCall: document.body.dataset.unboundOpenCall,
+     protoOpenCall: document.body.dataset.protoOpenCall,
+     crossRealmOpen: document.body.dataset.crossRealmOpen,
+     invalidOpenReceiver: document.body.dataset.invalidOpenReceiver
+   })
+   ```
+
+   `calls` must contain six `1` values (`formSubmit`, `formRequestSubmit`,
+   `locationAssign`, `locationReplace`, `windowOpen`, `windowProtoOpen`). The
+   other expected values are `called`, a `formTarget` containing `via=submit`,
+   `called`, `"1"`, `called`, `called`, `#proto-wrap-replace`, `opened`,
+   `opened`, `child`, and `error:TypeError`, in object order. Report any popup
+   blocked by Chrome itself instead of treating it as a NavSentinel pass.
+5. Preserve the security gate using a fresh Level 10 page for each action:
+   immediate redirect should reach Level 4. Reopen Level 10, click delayed
+   redirect, and after two seconds confirm Chromium first reaches Level 4 and
+   NavSentinel automatically rolls back to Level 10 with the rollback toast;
+   normal Location calls bypass the prototype hook (#458), so this is not a
+   pre-navigation `Blocked redirect`. Click `Proceed` and confirm Level 4 opens.
+   Reopen Level 10, click programmatic form submit, and confirm `Blocked form
+   submit` appears before navigation. Choose `Allow once`, confirm only the exact
+   form action reaches Level 1 with `from=level10`, then reopen Level 10 and
+   repeat it to confirm a fresh attempt blocks again. Finally, on a fresh
+   `level5-window-open-popunder.html`, click the fixture's `Click area` control
+   (`#area`); `Blocked popup` must appear and no popup may open.
+6. Close every test popup/tab, stop the Python Gym server with Ctrl+C, close the
+   temporary Chrome profile, and remove only that deliberately disposable local
+   profile from Chrome's profile manager. Do not alter or delete an established
+   profile; if you chose to disable an older copy instead, re-enable it now.
+7. Reply `AI-13 done; Gate-3 passed on PR #356` and include any console error,
    unexpected prompt text, or differing outcome. Do not merge on a partial pass;
    after a full pass the agent will recheck the exact head, CI, comments, and
    merge gate before acting.
