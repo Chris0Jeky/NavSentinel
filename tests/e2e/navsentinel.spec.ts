@@ -461,6 +461,89 @@ test("RW-06 legit auth popup allows the first window and blocks the second @regr
   }
 });
 
+test("MAIN-world popup intent requires a trusted click, not pointerdown @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/level1-basic-opacity.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+      await waitForNavSentinelBridge(page);
+      await dismissOnboarding(context);
+
+      await page.evaluate((origin) => {
+        const makeButton = (id: string, label: string, left: number) => {
+          const button = document.createElement("button");
+          button.id = id;
+          button.textContent = label;
+          button.style.cssText =
+            `position:fixed;left:${left}px;top:20px;width:180px;height:80px;z-index:2147483647`;
+          document.body.appendChild(button);
+          return button;
+        };
+
+        makeButton("pointerdown-popup", "Pointerdown popup", 20).addEventListener(
+          "pointerdown",
+          () => window.open(
+            `${origin}/level8-oauth-consent.html?source=pointerdown`,
+            "pointerdown-popup",
+            "popup,width=520,height=640"
+          )
+        );
+        makeButton("trusted-click-popup", "Trusted click popup", 220).addEventListener(
+          "click",
+          () => window.open(
+            `${origin}/level8-oauth-consent.html?source=trusted-click`,
+            "trusted-click-popup",
+            "popup,width=520,height=640"
+          )
+        );
+      }, baseUrl);
+
+      const beforePages = context.pages().length;
+      const pointerdownPopup = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
+      const pointerdownButton = page.locator("#pointerdown-popup");
+      const pointerdownBox = await pointerdownButton.boundingBox();
+      expect(pointerdownBox, "Expected the pointerdown fixture button to be visible").toBeTruthy();
+      await page.mouse.move(
+        pointerdownBox!.x + pointerdownBox!.width / 2,
+        pointerdownBox!.y + pointerdownBox!.height / 2
+      );
+      await page.mouse.down();
+      expect(
+        await pointerdownPopup,
+        "A trusted pointerdown without click confirmation must not authorize window.open"
+      ).toBeNull();
+      await page.mouse.up();
+      expect(context.pages()).toHaveLength(beforePages);
+
+      const trustedClickPopup = context.waitForEvent("page", { timeout: 5000 }).catch(() => null);
+      await page.click("#trusted-click-popup");
+      const popup = await trustedClickPopup;
+      expect(popup, "A trusted click must retain the one-popup compatibility path").not.toBeNull();
+      await popup?.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
+      expect(popup?.url()).toContain("source=trusted-click");
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
 test("Synthetic pointer and click events cannot mint navigation allowances @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
