@@ -123,11 +123,21 @@ test("a page can wrap form.submit / location.assign / window.open without throwi
     expect(wrapped, "form.submit / location.assign / window.open must be wrappable").toBeTruthy();
     const parsed = JSON.parse(wrapped ?? "{}") as Record<string, string>;
     expect(parsed.formSubmit).toBe("ok");
+    // Compatibility only: Chromium's own window.location methods bypass the
+    // prototype wrapper during ordinary calls; the interception gap is #458.
     expect(parsed.locationAssign).toBe("ok");
     expect(parsed.windowOpen).toBe("ok");
 
     // The module finished (no uncaught throw aborted the app render).
     expect(await page.locator("#app").textContent()).toContain("Booted");
+
+    // The page's arrow wrapper invokes its captured open function unbound.
+    // NavSentinel must restore the Window receiver before calling the native.
+    await page.click("#testOpen");
+    await expect.poll(
+      () => page.evaluate(() => document.body.dataset.unboundOpenCall),
+      { timeout: 2_000 }
+    ).toBe("opened");
 
     const frozenError = pageErrors.find(
       (m) => /read only/i.test(m) && /(submit|assign|open)/i.test(m)

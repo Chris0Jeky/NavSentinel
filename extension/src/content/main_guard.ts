@@ -461,12 +461,15 @@ const nativeFormRequestSubmit = HTMLFormElement.prototype.requestSubmit;
  * MAIN-world adversary shares this realm and bypasses the hook regardless
  * (cross-realm native, wholesale overwrite, or simply not calling the API).
  *
- * Both the observational hooks (history) and the enforcement hooks
- * (open/location/form) keep working when a page wraps them, because each wrapper
- * delegates to the module-captured native (not to `proto[prop]`), so a
- * capture-then-wrap chains safely (page wrapper -> our wrapper -> native) with no
- * re-entrancy. The real gate for the enforcement hooks is the click/gesture
- * allowance inside each wrapper, not the descriptor.
+ * History, form, and open wrappers keep working when a page wraps them because
+ * each wrapper delegates to the module-captured native (not to `proto[prop]`),
+ * so a capture-then-wrap chains safely without re-entrancy. Location is a
+ * compatibility-only exception here: Chromium exposes assign/replace as
+ * non-configurable own properties on window.location, so making the prototype
+ * reassignable avoids a strict-mode initialization throw but does not prove that
+ * ordinary location calls traverse our wrapper. #458 tracks that pre-navigation
+ * interception boundary. The real gate for supported enforcement hooks is the
+ * click/gesture allowance inside each wrapper, not the descriptor.
  */
 function softPatchProto(
   proto: object,
@@ -485,9 +488,13 @@ function softPatchProto(
   } catch {
     try {
       (proto as Record<string, unknown>)[prop] = value;
-    } catch { /* ignore — already patched or frozen */ }
-    if (debug) {
-      console.debug(`[NavSentinel] softPatchProto fallback for ${label}, used assignment`);
+      if (debug) {
+        console.debug(`[NavSentinel] softPatchProto fallback for ${label}, used assignment`);
+      }
+    } catch {
+      if (debug) {
+        console.debug(`[NavSentinel] softPatchProto failed for ${label}`);
+      }
     }
   }
 }
@@ -547,11 +554,17 @@ function recordWindowOpen(): void {
 }
 
 function patchedOpen(
-  this: Window,
+  this: Window | undefined,
   url?: string | URL,
   target?: string,
   features?: string
 ): Window | null {
+  // Pages commonly capture `window.open` and call the saved function from an
+  // arrow/strict wrapper, which supplies no receiver. Native open still expects
+  // a Window receiver, so preserve normal method calls and default unbound calls
+  // to this page's window.
+  const receiver = this instanceof Window ? this : window;
+
   if (isOff() || (isSubframe() && isSubframeSelfTarget(target))) {
     postAllowed({
       kind: "window_open",
@@ -560,7 +573,7 @@ function patchedOpen(
     });
     notifyAllowedTarget(url);
     recordWindowOpen();
-    return callNativeOpen(this, url, target, features);
+    return callNativeOpen(receiver, url, target, features);
   }
 
   const allowance = consumeOpenAllowance();
@@ -572,7 +585,7 @@ function patchedOpen(
     });
     notifyAllowedTarget(url);
     recordWindowOpen();
-    return callNativeOpen(this, url, target, features);
+    return callNativeOpen(receiver, url, target, features);
   }
 
   if (consumePopupIntentAllowance(target, features)) {
@@ -583,7 +596,7 @@ function patchedOpen(
     });
     notifyAllowedTarget(url);
     recordWindowOpen();
-    return callNativeOpen(this, url, target, features);
+    return callNativeOpen(receiver, url, target, features);
   }
 
   registerBlockedAction({
@@ -593,7 +606,7 @@ function patchedOpen(
     ...(features !== undefined ? { features } : {}),
     action: () => {
       recordWindowOpen();
-      callNativeOpen(this, url, target, features);
+      callNativeOpen(receiver, url, target, features);
     }
   });
 
@@ -657,15 +670,14 @@ function patchLocation(): void {
     });
   };
 
-  // Install writable+configurable (softPatchProto) so a page/library that wraps
-  // these (routing or analytics shims do `Location.prototype.assign = wrapper`)
-  // does not throw "Cannot assign to read only property" in strict mode and abort.
-  // The capturing gate is the click/gesture allowance + the wrapper itself, not
-  // the non-writability — a MAIN-world adversary bypasses either way (#349).
+  // Keep the prototype slots writable+configurable so strict-mode libraries can
+  // reassign them without aborting. Chromium's LegacyUnforgeable instance methods
+  // still bypass these prototype wrappers for ordinary window.location calls;
+  // #458 owns the real interception design. Do not attempt an instance patch:
+  // those own methods are non-writable/non-configurable, and the failed fallback
+  // previously produced misleading debug output.
   softPatchProto(Location.prototype, "assign", patchedAssign, "Location.prototype.assign");
   softPatchProto(Location.prototype, "replace", patchedReplace, "Location.prototype.replace");
-  softPatchProto(window.location, "assign", patchedAssign, "window.location.assign");
-  softPatchProto(window.location, "replace", patchedReplace, "window.location.replace");
 
   if (debug) {
     postToIsolated("ns-location-patch-info", {

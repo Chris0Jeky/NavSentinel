@@ -19,6 +19,9 @@
     froze those slots non-writable, these assignments would throw
     <code>TypeError: Cannot assign to read only property</code> and abort init.
     Expected: all wraps succeed and the app renders.
+    The Location check is initialization-only: Chromium's browser-owned
+    <code>window.location.assign</code> method bypasses prototype dispatch; #458
+    tracks the actual interception boundary.
   </p>
 
   <!-- Realistic library pattern: an UNGUARDED strict-mode module. If any wrap
@@ -40,10 +43,21 @@
     results.locationAssign = "ok";
 
     const origOpen = window.open;
-    window.open = function (...args) {
-      return origOpen.apply(this, args);
-    };
+    // Analytics wrappers commonly capture open and call it from an arrow,
+    // leaving the saved function with an undefined receiver in strict mode.
+    window.open = (...args) => origOpen(...args);
     results.windowOpen = "ok";
+
+    document.getElementById("testOpen").addEventListener("click", () => {
+      try {
+        const popup = window.open("about:blank", "proto-wrap-open");
+        document.body.dataset.unboundOpenCall = popup ? "opened" : "blocked";
+        popup?.close();
+      } catch (error) {
+        document.body.dataset.unboundOpenCall =
+          `error:${error instanceof Error ? error.message : String(error)}`;
+      }
+    });
 
     document.body.dataset.protoWrap = JSON.stringify(results);
     document.getElementById("app").textContent =
@@ -53,5 +67,6 @@
 
   <div id="app"><!-- rendered by the module above --></div>
   <div id="status">Status: waiting…</div>
+  <button id="testOpen" type="button">Exercise captured window.open</button>
 </body>
 </html>
