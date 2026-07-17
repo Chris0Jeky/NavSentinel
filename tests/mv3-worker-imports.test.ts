@@ -50,6 +50,16 @@ describe("MV3 emitted service-worker import check", () => {
 
   it.each([
     ["dynamic import", 'import("./pending-decision-runtime~sw.js")', "unsupported dynamic import()"],
+    [
+      "line-comment dynamic import",
+      'import // emitted comment\n("./pending-decision-runtime~sw.js")',
+      "unsupported dynamic import()",
+    ],
+    [
+      "multi-comment dynamic import",
+      'import /* first */ /* second */ ("./pending-decision-runtime~sw.js")',
+      "unsupported dynamic import()",
+    ],
     ["preload helper", "__vitePreload(loadWorker);", "browser preload helper"],
     ["module preload", 'const relation = "modulepreload";', "browser preload helper"],
     ["remote import", 'import "https://example.test/worker.js";', "non-local import"],
@@ -75,6 +85,18 @@ describe("MV3 emitted service-worker import check", () => {
     const result = runCheck(dist);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('background.type must be "module"');
+  });
+
+  it("follows a static namespace re-export edge", () => {
+    const dist = makeDist({
+      "service-worker-loader.js": 'import"./assets/sw.js";',
+      "assets/sw.js": 'export*as pendingDecision from"./pending-decision-runtime~sw.js";',
+      "assets/pending-decision-runtime~sw.js": "export const createBroker = () => {};",
+    });
+
+    const result = runCheck(dist);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("PASS: 3 statically linked worker modules");
   });
 
   it("rejects a static graph that omits the pending-decision runtime", () => {

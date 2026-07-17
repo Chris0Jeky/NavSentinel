@@ -15,10 +15,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const root = path.resolve(__dirname, "..");
 
-const DYNAMIC_IMPORT_PATTERN = /\bimport\s*(?:\/\*[\s\S]*?\*\/\s*)?\(/;
+const DYNAMIC_IMPORT_PATTERN =
+  /\bimport(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\r\n]*(?:\r?\n|$))*\(/;
 const PRELOAD_PATTERN = /\b(?:__vitePreload|modulepreload)\b/;
 const STATIC_IMPORT_PATTERN = /\bimport\s*(?:[^"'();]+?\bfrom\s*)?["']([^"']+)["']/g;
-const STATIC_REEXPORT_PATTERN = /\bexport\s*(?:\*|\{[^}]*\})\s*from\s*["']([^"']+)["']/g;
+const STATIC_REEXPORT_PATTERN =
+  /\bexport\s*(?:\*\s*(?:as\s+[\w$]+\s*)?|\{[^}]*\})\s*from\s*["']([^"']+)["']/g;
 
 function readJson(filePath, label) {
   try {
