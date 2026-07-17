@@ -8,8 +8,8 @@
 
 **Purpose:** the running list of things only *you* (Chris) can do — and the context an agent needs to not lose the thread between sessions. Agents flag the open items in every summary; you clear them by saying so.
 
-**Last updated:** 2026-07-13 — product-posture/RI-01 audit plus guided
-human-action workflow and preservation pass. Product thesis:
+**Last updated:** 2026-07-17 — PR #356 recovery plus human-gate and live-status
+refresh. Product thesis:
 `docs/Product_Strategy.md`. Corrective
 program: `docs/Project_Roadmap.md`. Standing decisions:
 `docs/agentic/DECISIONS.md`.
@@ -37,7 +37,8 @@ Live recheck on 2026-07-17 found 79 open issues, no tags/releases/classic branch
 protection or repository rulesets, and no milestones or assignees. Verify the
 current `main` SHA live rather than pinning it here. Open PRs are #356 and draft
 #457. Stale PRs #273 and #399 were closed with explicit re-entry paths. #356's
-refreshed local candidate is gate-green and twice reviewed, but its final head
+refreshed local candidate passed its local proving lanes and two reviews, but
+its final head
 still needs publication, current GitHub CI, comment/thread reconciliation, and
 Chris's manual AI-13 Gate-3. The product-posture and guided-workflow work merged
 through PR #454; verify live `main` rather than pinning its SHA here. The RI-01
@@ -53,8 +54,9 @@ shipped product state.
 - **Release-integrity blockers:** page-controlled injected UI currently owns
   allow/trust/resume authority and can be redressed under genuine input
   (RI-01); visual-sim can process the wrong active
-  tab and has no production value (RI-02/#424); frozen MAIN-world prototypes in
-  #356 are site-breaking; fake DNR and unmeasured JS behavior should be absent
+  tab and has no production value (RI-02/#424); current `main`'s frozen
+  MAIN-world prototypes remain site-breaking until #356 lands; fake DNR and
+  unmeasured JS behavior should be absent
   or off; stored URLs require minimization (RI-05/RI-06); #175/#186 bridge
   identity/recovery and #455 pre-collection disclosure/consent now block beta.
 - **Release/profile blockers:** the 52-byte reputation test filter plus the

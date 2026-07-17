@@ -1,6 +1,6 @@
 # NavSentinel Project Roadmap
 
-*Created 2026-04-09. Truth refresh 2026-07-10; live/status sync 2026-07-13.*
+*Created 2026-04-09. Truth refresh 2026-07-10; live/status sync 2026-07-17.*
 
 This is the execution roadmap. [`Product_Strategy.md`](Product_Strategy.md) owns
 the product thesis, portfolio boundaries, and evidence gates; GitHub issues own
