@@ -814,6 +814,19 @@ describe("SW integration: state persistence through session storage", () => {
 
     const sessionStore: Record<string, unknown> = {};
     const tabUrls = new Map<number, string>();
+    const pendingTabGets: Array<{
+      tabId: number;
+      resolve: (tab: { id: number; url?: string }) => void;
+    }> = [];
+    let deferTabGets = false;
+    const tabsGet = vi.fn((tabId: number) => {
+      if (!deferTabGets) {
+        return Promise.resolve({ id: tabId, url: tabUrls.get(tabId) });
+      }
+      return new Promise<{ id: number; url?: string }>((resolve) => {
+        pendingTabGets.push({ tabId, resolve });
+      });
+    });
 
     return {
       chrome: {
@@ -870,7 +883,7 @@ describe("SW integration: state persistence through session storage", () => {
           onCreated: tabCreated,
           onRemoved: tabRemoved,
           onUpdated: tabUpdated,
-          get: vi.fn(async (tabId: number) => ({ id: tabId, url: tabUrls.get(tabId) })),
+          get: tabsGet,
           sendMessage: vi.fn(
             (
               tabId: number,
@@ -895,6 +908,18 @@ describe("SW integration: state persistence through session storage", () => {
       setTabUrl(tabId: number, url: string) {
         tabUrls.set(tabId, url);
       },
+      deferTabGets() {
+        deferTabGets = true;
+      },
+      resolveNextTabGet(url?: string) {
+        const pending = pendingTabGets.shift();
+        if (!pending) throw new Error("No pending tabs.get call");
+        pending.resolve({ id: pending.tabId, url: url ?? tabUrls.get(pending.tabId) });
+      },
+      get pendingTabGetCount() {
+        return pendingTabGets.length;
+      },
+      tabsGet,
       emitBeforeNavigate(details: { tabId: number; frameId: number; url: string }) {
         beforeNavigate.emit(details);
       },
@@ -1032,6 +1057,37 @@ describe("SW integration: state persistence through session storage", () => {
     await flushAsync();
 
     expect(mock.sessionStore["ns_sw:lastUrl"]).toEqual({ "12": "https://newer.test/page" });
+  });
+
+  it("rechecks the live tab when a top commit lands during nav-context validation", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+    await flushAsync();
+
+    mock.setTabUrl(13, "https://source.test/page");
+    mock.deferTabGets();
+    mock.dispatchRuntimeMessage(
+      { type: "ns-nav-context" },
+      { tab: { id: 13, url: "https://source.test/page" }, frameId: 4 },
+    );
+    expect(mock.pendingTabGetCount).toBe(1);
+
+    mock.emitCommitted({
+      tabId: 13,
+      frameId: 0,
+      url: "https://newer.test/page",
+      transitionType: "typed",
+    });
+    mock.resolveNextTabGet("https://source.test/page");
+    await flushAsync();
+    expect(mock.pendingTabGetCount).toBe(1);
+
+    mock.resolveNextTabGet();
+    await flushAsync();
+
+    expect(mock.tabsGet).toHaveBeenCalledTimes(2);
+    expect(mock.sessionStore["ns_sw:lastUrl"]).toEqual({ "13": "https://newer.test/page" });
   });
 
   it("persists allow-nav state to session storage", async () => {
