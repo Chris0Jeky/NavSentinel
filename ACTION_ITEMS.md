@@ -72,7 +72,7 @@ shipped product state.
   pre-guide head `1accb43` is CI-green. **The current AI-13 guide is prepared but
   becomes actionable only when its step-1 live head/CI check passes. The PR
   remains unmergeable without Chris's Gate-3 evidence.**
-- **Portfolio:** 79 open issues, none assigned or milestoned; #439–#453 are 15
+- **Portfolio:** 80 open issues, none assigned or milestoned; #439–#453 are 15
   frozen Horizon proposals. No new feature/epic issue seeding until the queue is
   culled and milestone-categorized.
 - **Infrastructure:** classic branch protection remains absent (`404 Branch not
