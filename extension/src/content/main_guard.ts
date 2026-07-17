@@ -442,8 +442,11 @@ function registerBlockedAction(params: {
 
 const nativeProtoOpen = Window.prototype.open;
 const nativeOpen = window.open;
-const nativeAssign = Location.prototype.assign;
-const nativeReplace = Location.prototype.replace;
+// Chromium exposes assign/replace as LegacyUnforgeable own methods on each
+// Location instance; the prototype slots are absent. Capture the real instance
+// methods so our compatibility prototype wrappers remain callable.
+const nativeAssign = window.location.assign;
+const nativeReplace = window.location.replace;
 const nativeFormSubmit = HTMLFormElement.prototype.submit;
 const nativeFormRequestSubmit = HTMLFormElement.prototype.requestSubmit;
 
@@ -554,16 +557,17 @@ function recordWindowOpen(): void {
 }
 
 function patchedOpen(
-  this: Window | undefined,
+  this: Window | null | undefined,
   url?: string | URL,
   target?: string,
   features?: string
 ): Window | null {
   // Pages commonly capture `window.open` and call the saved function from an
-  // arrow/strict wrapper, which supplies no receiver. Native open still expects
-  // a Window receiver, so preserve normal method calls and default unbound calls
-  // to this page's window.
-  const receiver = this instanceof Window ? this : window;
+  // arrow/strict wrapper, which supplies no receiver. Default only that nullish
+  // case to this page's window. Preserve same-origin cross-realm Window receivers
+  // (which fail this realm's instanceof Window), and let the native throw its
+  // normal Illegal invocation TypeError for genuinely invalid receivers.
+  const receiver = this === null || this === undefined ? window : this;
 
   if (isOff() || (isSubframe() && isSubframeSelfTarget(target))) {
     postAllowed({

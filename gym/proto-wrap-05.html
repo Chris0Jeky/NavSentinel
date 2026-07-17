@@ -19,9 +19,10 @@
     froze those slots non-writable, these assignments would throw
     <code>TypeError: Cannot assign to read only property</code> and abort init.
     Expected: all wraps succeed and the app renders.
-    The Location check is initialization-only: Chromium's browser-owned
-    <code>window.location.assign</code> method bypasses prototype dispatch; #458
-    tracks the actual interception boundary.
+    Chromium's browser-owned <code>window.location.assign</code> method bypasses
+    prototype dispatch; #458 tracks that normal-call interception boundary. The
+    compatibility wrapper is still invoked explicitly below to prove it delegates
+    to Chromium's real own method instead of calling an absent prototype native.
   </p>
 
   <!-- Realistic library pattern: an UNGUARDED strict-mode module. If any wrap
@@ -59,6 +60,50 @@
       }
     });
 
+    document.getElementById("testLocation").addEventListener("click", () => {
+      // Let the isolated-world click allowance cross the bridge before the
+      // library-style wrapper delegates into the guarded Location method.
+      window.setTimeout(() => {
+        try {
+          Location.prototype.assign.call(window.location, "#proto-wrap-location");
+          document.body.dataset.locationCall = "called";
+        } catch (error) {
+          document.body.dataset.locationCall =
+            `error:${error instanceof Error ? error.message : String(error)}`;
+        }
+      }, 0);
+    });
+
+    document.getElementById("testCrossRealmOpen").addEventListener("click", () => {
+      try {
+        const child = document.getElementById("receiverFrame").contentWindow;
+        if (!child) throw new Error("missing child window");
+        const popup = origOpen.call(child, "about:blank", "proto-wrap-child-open");
+        document.body.dataset.crossRealmOpen = popup?.opener === child
+          ? "child"
+          : popup?.opener === window
+            ? "top"
+            : popup
+              ? "other"
+              : "blocked";
+        popup?.close();
+      } catch (error) {
+        document.body.dataset.crossRealmOpen =
+          `error:${error instanceof Error ? error.message : String(error)}`;
+      }
+    });
+
+    document.getElementById("testInvalidOpenReceiver").addEventListener("click", () => {
+      try {
+        const popup = origOpen.call({}, "about:blank", "proto-wrap-invalid-open");
+        document.body.dataset.invalidOpenReceiver = popup ? "opened" : "blocked";
+        popup?.close();
+      } catch (error) {
+        document.body.dataset.invalidOpenReceiver =
+          `error:${error instanceof Error ? error.name : String(error)}`;
+      }
+    });
+
     document.body.dataset.protoWrap = JSON.stringify(results);
     document.getElementById("app").textContent =
       "Booted; wrapped: " + Object.keys(results).join(", ");
@@ -67,6 +112,10 @@
 
   <div id="app"><!-- rendered by the module above --></div>
   <div id="status">Status: waiting…</div>
+  <iframe id="receiverFrame" title="same-origin receiver frame" srcdoc="<!doctype html><p>child</p>" hidden></iframe>
+  <button id="testLocation" type="button">Exercise wrapped location.assign</button>
   <button id="testOpen" type="button">Exercise captured window.open</button>
+  <button id="testCrossRealmOpen" type="button">Exercise child receiver</button>
+  <button id="testInvalidOpenReceiver" type="button">Exercise invalid receiver</button>
 </body>
 </html>

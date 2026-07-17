@@ -532,9 +532,10 @@ function patchCredentialValueGetter(_cfg: JsBehaviorMonitorConfig): void {
 // ============================================================================
 
 /**
- * Initialize the JS behavior monitor from main_guard.ts. Form submit
- * observation must install before main_guard hardens form prototypes; network
- * and credential-read wrappers install with the rest of the monitor patches.
+ * Initialize the JS behavior monitor from main_guard.ts. The main guard installs
+ * its writable form gate first; form-submit observation then chains on top of
+ * that wrapper. Network and credential-read wrappers install with the rest of
+ * the monitor patches.
  *
  * Installs prototype patches for:
  * - fetch() wrapper

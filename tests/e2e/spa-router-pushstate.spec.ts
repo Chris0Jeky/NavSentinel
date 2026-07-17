@@ -131,6 +131,15 @@ test("a page can wrap form.submit / location.assign / window.open without throwi
     // The module finished (no uncaught throw aborted the app render).
     expect(await page.locator("#app").textContent()).toContain("Booted");
 
+    // Chromium has no Location.prototype.assign native. The compatibility
+    // wrapper must delegate to the captured own window.location method.
+    await page.click("#testLocation");
+    await expect.poll(
+      () => page.evaluate(() => document.body.dataset.locationCall),
+      { timeout: 2_000 }
+    ).toBe("called");
+    await expect(page).toHaveURL(/#proto-wrap-location$/);
+
     // The page's arrow wrapper invokes its captured open function unbound.
     // NavSentinel must restore the Window receiver before calling the native.
     await page.click("#testOpen");
@@ -138,6 +147,22 @@ test("a page can wrap form.submit / location.assign / window.open without throwi
       () => page.evaluate(() => document.body.dataset.unboundOpenCall),
       { timeout: 2_000 }
     ).toBe("opened");
+
+    // Same-origin child windows fail the parent realm's instanceof Window.
+    // Preserve the child receiver so the native popup opener remains the child.
+    await page.click("#testCrossRealmOpen");
+    await expect.poll(
+      () => page.evaluate(() => document.body.dataset.crossRealmOpen),
+      { timeout: 2_000 }
+    ).toBe("child");
+
+    // Only nullish/unbound calls get a default receiver. An arbitrary object
+    // must still reach the native brand check and throw Illegal invocation.
+    await page.click("#testInvalidOpenReceiver");
+    await expect.poll(
+      () => page.evaluate(() => document.body.dataset.invalidOpenReceiver),
+      { timeout: 2_000 }
+    ).toBe("error:TypeError");
 
     const frozenError = pageErrors.find(
       (m) => /read only/i.test(m) && /(submit|assign|open)/i.test(m)
