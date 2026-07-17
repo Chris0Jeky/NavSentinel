@@ -62,7 +62,12 @@ next exact-head review found that the special two-read async-gap defense lacked
 a mutation-sensitive test. `716a60e` now holds the first tab read across an
 intervening commit and proves the second read preserves the newer baseline; the
 test fails when that branch is removed. The final exact head still requires
-fresh round-2, Codex, thread, and CI evidence before AI-21 is actionable.
+fresh round-2, Codex, thread, and CI evidence before AI-21 is actionable. Final-
+head Codex then found that child-frame click gestures could overwrite the top
+baseline with the iframe URL and that an async live-tab read could lose a
+synchronous pointerdown navigation. `aab9ac5` sources gesture baselines only
+from Chrome's top-tab URL and synchronously seeds a genuinely missing baseline
+before any await, with both mutations failing before the fix.
 PR #466 is the third and final browser-held lane. Its first review recheck found
 three valid blockers: an MV3-incompatible dynamic import, a consume contract
 that required a raw destination unavailable to the UI, and stale child-frame
@@ -379,8 +384,8 @@ Chromium proves the pointerdown-only rollback attack, the synchronous
 MAIN-world popup attack, existing synthetic attacks, and trusted compatibility
 paths, plus Navigation Off's programmatic bypass, but a real Chrome pass must
 confirm them before merge. Runtime commits `8aee243`, `a14f70d`, `f824381`,
-`e26dba9`, and `7a9243a` are pushed; live round-2, Codex/thread, and CI evidence
-plus `716a60e`'s mutation-sensitive proof must all belong to the same final
+`e26dba9`, `7a9243a`, and `aab9ac5` are pushed; live round-2, Codex/thread, and
+CI evidence plus `716a60e`'s mutation-sensitive proof must all belong to the same final
 exact head. Only Chris can record this item complete.
 
 **Current guide:**
@@ -490,9 +495,7 @@ exact head. Only Chris can record this item complete.
      b.style.cssText = "width:260px;height:160px";
      b.addEventListener("pointerdown", (event) => {
        console.log("child pointerdown", event.isTrusted);
-       setTimeout(() => {
-         top.location.href = "http://localhost:5173/level2-moving-target.html?ai21=child-top";
-       }, 150);
+       top.location.href = "http://localhost:5173/level2-moving-target.html?ai21=child-top";
      }, { once: true });
      return "Physically press and hold the button inside the frame";
    })();

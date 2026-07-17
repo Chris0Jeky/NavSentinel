@@ -51,7 +51,7 @@ protection. The exact audit baseline is recorded only in dated
 | #356 | Exact head `f8028c9` is local/remote/PR-equal, twice reviewed, bot/thread-clean, and green in run `29560572081`; AI-13 human Chrome Gate-3 remains |
 | #399 | Closed 2026-07-13; measurement-held under #223/#417 and not a beta blocker |
 | #463 | Merged exact green dependency head `91aab4f` as `2888483`; #459 closed as intended |
-| #464 | Runtime `8aee243` removes service-worker pointerdown authority, `a14f70d` removes MAIN-world pointerdown popup authority, `f824381` preserves Navigation Off's explicit programmatic bypass, `e26dba9` restores rollback context from trusted child-frame pointerdown without granting authority, and `7a9243a` prevents stale context from rewinding a newer commit; attack paths plus `716a60e`'s async-gap branch have mutation-sensitive proof, while the final exact head still needs round-2, Codex/thread, green-CI, and AI-21 evidence |
+| #464 | Runtime `8aee243` removes service-worker pointerdown authority, `a14f70d` removes MAIN-world pointerdown popup authority, `f824381` preserves Navigation Off's programmatic bypass, `e26dba9` restores child-frame context, `7a9243a` rejects stale context, and `aab9ac5` preserves the Chrome-derived top baseline across child gestures and synchronous pointerdown navigation; attack paths plus `716a60e`'s async-gap branch have mutation-sensitive proof, while the final exact head still needs round-2, Codex/thread, green-CI, and AI-21 evidence |
 | #466 | Exact runtime head `0266107` fixes the broker, emitted-graph/parser/import-attribute, and finite-signal privacy findings; local/remote/PR-equal, twice reviewed, bot/thread-clean, and green in run `29561311422`; AI-22 remains |
 
 **RI-01 implementation note (verified 2026-07-17):** PR #464 isolates the
@@ -78,7 +78,12 @@ and scopes browser evidence to frame provenance/rollback. Exact-head
 review then found the two-read async-gap defense was not mutation-sensitive;
 `716a60e` holds the first tab read across an intervening commit, requires the
 second read, and fails when that branch is removed. Exact-head review/Codex/CI
-remains authoritative; AI-21 real-Chrome Gate-3 is mandatory.
+then found child gesture messages could store the iframe URL and a synchronous
+pointerdown navigation could beat the async live-tab check. `aab9ac5` trusts
+only Chrome's top-tab sender URL for gestures and seeds a missing context
+synchronously before any await; both mutations fail before the fix, and the
+Chromium control now navigates during the pointerdown task. Exact-head gates
+remain authoritative; AI-21 real-Chrome Gate-3 is mandatory.
 PR #466 now supplies a dormant, context-bound
 pending-decision service-worker boundary: shared contracts/store, authenticated
 content/extension senders, browser-derived tab/frame/document context, a

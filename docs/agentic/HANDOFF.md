@@ -36,9 +36,13 @@ rotation under #437.
   revalidation, deterministic missing/stale integration sequencing, and honest
   browser-proof scope. Review on `0475c6a` found the special second-read branch
   still lacked mutation-sensitive proof; `716a60e` now holds the first read
-  across an intervening commit and fails when the second read is removed. The
-  final documentation head must receive fresh round-2, Codex/thread, and CI
-  evidence before AI-21 becomes actionable.
+  across an intervening commit and fails when the second read is removed. Final-
+  head Codex then found child gestures could store the iframe URL and a
+  synchronous pointerdown navigation could beat the async read. `aab9ac5`
+  sources gesture baselines from Chrome's top-tab sender and seeds a genuinely
+  missing context before any await, with mutation-sensitive unit and synchronous
+  Chromium coverage. The final documentation head must receive fresh round-2,
+  Codex/thread, and CI evidence before AI-21 becomes actionable.
 - The only dirty worktree is the known Defender-quarantined checkpoint at
   `C:/Users/Public/codex-shell-home/NavSentinel-ri01`, where tracked
   `tests/clickfix-detector.property.test.ts` remains deleted. Do not restore,
@@ -83,7 +87,7 @@ rotation under #437.
   PR #464's `8aee243` service-worker fix, `a14f70d` MAIN-world follow-up, and
   `f824381` Navigation Off preservation, and `e26dba9` child-frame cold-worker
   context fix, plus `7a9243a` stale-ordering guard, have mutation/integration
-  coverage; the latest tree passes typecheck, lint, build, 2,877 units, affected Chromium
+  coverage; the latest tree passes typecheck, lint, build, 2,878 units, affected Chromium
   controls, and all 12 performance budgets. Live exact-head review/Codex/CI
   evidence remains authoritative.
   Neither PR may merge without its human Gate-3.
@@ -201,6 +205,19 @@ rotation under #437.
   lint, build, 2,875 units, performance 12/12, and diff check pass. A fresh
   round 2, exact-head Codex review, thread audit, and CI must target the final
   documentation head.
+
+- **PR #464 exact-head Codex (`369046d` -> runtime `aab9ac5`,
+  2026-07-17):** found two actionable baseline gaps. `ns-nav-gesture` trusted
+  the message's frame-local URL, so a completed child-frame click could replace
+  the top rollback baseline with the iframe URL. The live-tab validation for a
+  missing context also awaited before seeding, so a synchronous pointerdown
+  handler could commit the destination first and leave no previous URL.
+  `aab9ac5` derives gesture baseline only from Chrome's `sender.tab.url` and
+  synchronously persists a genuinely absent context; async revalidation remains
+  only for refreshing an existing different baseline. Both mutations fail in
+  session-state tests, the child Chromium control now top-navigates synchronously,
+  31 session-state and 84 rollback/session tests pass, all four affected E2E
+  pass, and full 2,878 units, typecheck, lint, build, and performance 12/12 pass.
 
 - **PR #464 fresh final-head round 2 (`f5acaef` -> runtime `e26dba9`,
   2026-07-17):** found one medium lifecycle/provenance gap. A trusted
@@ -347,9 +364,11 @@ it with a pre-fix-failing rollback/forward control. Fresh final-head review on
 without accepting page URL input. Re-review on `d887270` found stale context
 ordering and overclaimed cold-worker browser setup; `7a9243a` fixes the ordering
 and adds deterministic integration coverage. Review on `0475c6a` found the
-second-read proof gap; `716a60e` makes it mutation-sensitive. Run a fresh
-independent round 2 on the final
-documentation head, request and
+second-read proof gap; `716a60e` makes it mutation-sensitive. Exact-head Codex
+on `369046d` found child-
+gesture URL provenance and synchronous pointerdown ordering gaps; `aab9ac5`
+fixes both with mutation-sensitive proof. Run a fresh independent round 2 on
+the final documentation head, request and
 audit exact-head Codex review, and require green Build/Unit plus E2E. Fix every
 finding and restart invalidated gates. Update the PR body/evidence after the
 head is stable; edit status docs again only if a new finding changes their
@@ -375,8 +394,8 @@ accounting / next safe slice.
   are fixed. Its live precheck requires local/remote/PR equality, exact-head
   reviews, bot/thread accounting, green CI, and AI-22.
   #356's final exact head passes its full gates. PR #464's runtime fixes are
-  `8aee243`, `a14f70d`, `f824381`, `e26dba9`, and `7a9243a`; `716a60e` proves
-  the async-gap branch. The final documentation head
+  `8aee243`, `a14f70d`, `f824381`, `e26dba9`, `7a9243a`, and `aab9ac5`;
+  `716a60e` proves the async-gap branch. The final documentation head
   uses live PR evidence for round-2, Codex/thread, closing-reference, and CI
   status. #466's
   `0266107` exact head passes its full automated gates. Every human guide still
