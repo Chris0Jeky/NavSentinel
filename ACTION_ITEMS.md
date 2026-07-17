@@ -23,25 +23,28 @@ program: `docs/Project_Roadmap.md`. Standing decisions:
 
 ---
 
-## Current state snapshot (live state rechecked 2026-07-13)
+## Current state snapshot (live state rechecked 2026-07-17)
 
-At the 2026-07-10 verification point, `main` matched `origin/main`. Run
-`git rev-parse main`, `git rev-parse origin/main`, and live `gh` checks before
-acting; the exact audit baseline lives in `docs/Product_Strategy.md`, not this
-live snapshot. Typecheck, lint, build, version check, 2,874 unit tests (95
-files), perf 12/12, and smoke E2E passed locally; current-main GitHub CI was
-green. v0.4.0 had no tag, GitHub release, CWS release, or external-user evidence.
+The root `main` worktree is clean but one unpushed agent-tooling commit ahead of
+`origin/main`; do not reset or overwrite it. Run `git rev-parse main`, `git
+rev-parse origin/main`, and live `gh` checks before acting; the exact audit
+baseline lives in `docs/Product_Strategy.md`, not this live snapshot. PR #356's
+runtime candidate passed typecheck, lint, build, version/package checks, 2,875
+unit tests (95 files), perf 12/12, and all 65 one-worker E2E tests locally.
+v0.4.0 still has no tag, GitHub release, CWS release, or external-user evidence.
 
-Live recheck on 2026-07-13 found 75 open issues, no tags/releases/classic branch
+Live recheck on 2026-07-17 found 79 open issues, no tags/releases/classic branch
 protection or repository rulesets, and no milestones or assignees. Verify the
-current `main` SHA live rather than pinning it here. Stale PRs #273 and #399
-were closed with explicit re-entry paths; #356 remains the only active legacy
-browser-surface PR. The
-product-posture and guided-workflow work merged through PR #454; verify live
-`main` rather than pinning its SHA here. The RI-01 checkpoint branch is remotely
-backed up without the unstaged Defender deletion; verify its SHA live. Its
-worktree is dirty only because Windows Defender quarantined one tracked
-adversarial test fixture. These changes do not change shipped product state.
+current `main` SHA live rather than pinning it here. Open PRs are #356 and draft
+#457. Stale PRs #273 and #399 were closed with explicit re-entry paths. #356's
+refreshed local candidate is gate-green and twice reviewed, but its final head
+still needs publication, current GitHub CI, comment/thread reconciliation, and
+Chris's manual AI-13 Gate-3. The product-posture and guided-workflow work merged
+through PR #454; verify live `main` rather than pinning its SHA here. The RI-01
+checkpoint branch is remotely backed up without the unstaged Defender deletion;
+verify its SHA live. Its worktree is dirty only because Windows Defender
+quarantined one tracked adversarial test fixture. These changes do not change
+shipped product state.
 
 - **Product posture:** strong pre-release alpha, not a market-ready or
   efficacy-validated security product. `docs/Product_Strategy.md` owns the
@@ -63,10 +66,11 @@ adversarial test fixture. These changes do not change shipped product state.
   CWS submission; this is a risk flag, not a legal conclusion.
 - **Legacy PR cleanup:** #273 and draft #399 were closed on 2026-07-13 rather
   than merged from stale bases; their commits, discussions, and open issue
-  anchors remain. #356 is still stale with E2E red and is the only
-  active legacy browser-surface PR. **Do not spend human Gate-3 time until an
-  agent refreshes, fixes, and re-reviews it.**
-- **Portfolio:** 75 open issues, none assigned or milestoned; #439–#453 are 15
+  anchors remain. #356's local runtime candidate is refreshed, locally green,
+  and twice reviewed. **Do not spend human Gate-3 time until the final head is
+  pushed, GitHub CI is green, all threads are resolved, and the current guide is
+  posted.**
+- **Portfolio:** 79 open issues, none assigned or milestoned; #439–#453 are 15
   frozen Horizon proposals. No new feature/epic issue seeding until the queue is
   culled and milestone-categorized.
 - **Infrastructure:** classic branch protection remains absent (`404 Branch not
@@ -92,11 +96,12 @@ label may reset between conversations; the `AI-N` identifier is durable.
 AI-15/AI-8/AI-13/AI-14 remain visible but are not actionable questions until
 agent preflight clears them.
 
-> **Gate-queue hold (refreshed 2026-07-13):** do not run the old branch checkout
+> **Gate-queue hold (refreshed 2026-07-17):** do not run the old branch checkout
 > guides for AI-8, AI-13, or AI-14. AI-8 and AI-14 require new current-main
-> slices after their stale PRs were closed; AI-13/#356 must be refreshed,
-> re-reviewed twice, and rerun through CI. AI-15 remains BLOCKED until an agent
-> posts a current preflight handoff.
+> slices after their stale PRs were closed. AI-13's local runtime candidate is
+> reviewed and gate-green, but wait for its final pushed head, current GitHub CI,
+> resolved threads, and replacement Gate-3 guide. AI-15 remains BLOCKED until an
+> agent posts a current preflight handoff.
 
 **🚨 OPEN: AI-19 — Clear or replace the working product name before CWS
 submission.** An active TruNav GNSS anti-spoofing product uses the exact name
@@ -136,11 +141,13 @@ definition changes.
 
 **🚨 BLOCKED: AI-15 — Run the headed release session only after agent
 preflight.** The prior 60–90 minute one-sitting guide is withdrawn: stale PRs
-#273 and #399 were closed, #356 remains stale/red, the reputation/package plan
-needs a product decision, and new release-integrity blockers precede manual
-testing. **Do not checkout or test #356 yet.** Agent preflight must first:
-(1) fix RI-01; (2) refresh/fix #356 and recreate or defer #273, with two fresh
-reviews and green CI; (3) excise visual-sim and remove fake DNR; (4) complete
+#273 and #399 were closed, #356 is locally repaired but not yet current-CI/Gate-3
+complete, the reputation/package plan needs a product decision, and other
+release-integrity blockers precede a full manual release session. **Do not use
+the old #356 guide; wait for the replacement AI-13 guide.** Agent preflight must
+first: (1) fix RI-01; (2) finish #356 exact-head CI/Gate-3 and keep #273 deferred
+or recreate it on current `main`; (3) excise visual-sim and remove fake DNR;
+(4) complete
 RI-06's purpose-specific data minimization/reset; (5) complete RI-07's explicit
 JS-behavior beta-off profile; (6) complete #175/#186 bridge integrity and #455
 pre-collection consent; (7) prepare the chosen AI-9 release profile; and (8)
@@ -237,10 +244,12 @@ branch checkout guide.
 **AI-11 — Toast count-pill (#351 → PR #353) · ✅ RESOLVED 2026-06-23 — MERGED.** Chris said "merge #353"; green CI (incl. the RW-19 e2e fix to accept the coalesced pill) → **#353 merged into `main`** (`d0e0412`). Repeated blocked-popup/redirect prompts now coalesce into one count pill after 3-in-8s (expandable to the latest prompt's Allow once / Always allow). The pill is live on the next `git checkout main && npm run build`.
 
 **🚨 BLOCKED: AI-13 — #356 MAIN-world compatibility Gate-3.** This remains a
-beta prerequisite, but the branch is stale and its E2E check is red. An agent
-must merge current `main`, fix the failure, complete two fresh
-adversarial reviews, and post a current compatibility/gating checklist. Do not
-checkout, test, or merge the present branch.
+beta prerequisite. The refreshed local runtime candidate passed two independent
+adversarial reviews and the full local proving lanes. Its final docs-only head
+still needs to be pushed, pass current GitHub CI, and have every review thread
+resolved before an agent posts a replacement compatibility/gating checklist.
+Do not use the old checkout guide or merge without Chris's explicit manual
+Gate-3 evidence.
 
 **🚨 BLOCKED: AI-14 — OAuth tradeoff measurement after closed PR #399.** The
 measurement-held draft was closed on 2026-07-13 rather than merged from a stale

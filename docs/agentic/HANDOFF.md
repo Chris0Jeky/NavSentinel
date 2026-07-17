@@ -22,8 +22,10 @@ rotation under #437.
 - **AI-18: READY:** the hook-editing slice is committed; review/trust the exact
   project-local Codex hook definitions before relying on them.
 - **AI-15: BLOCKED** until agent preflight is complete.
-- **AI-8 / AI-13 / AI-14: BLOCKED** pending current branches, two fresh reviews,
-  green CI, and replacement human guides.
+- **AI-8 / AI-14: BLOCKED** pending current branches, two fresh reviews, green
+  CI, and replacement human guides.
+- **AI-13: BLOCKED** pending #356's final push/current CI/thread resolution, a
+  replacement guide, and Chris's manual Gate-3; its local candidate is reviewed.
 
 ## Verified state
 
@@ -56,7 +58,7 @@ rotation under #437.
   checkpoint, but its new real-browser E2E has not run.
 - Current dev/build dependencies produce three high-severity `npm audit`
   findings with non-major fixes available (#459). Windows four-worker headed
-  E2E also has a pre-existing blank-anchor interception race (#460), while the
+  E2E also has pre-existing nondeterministic blank-anchor misses (#460), while the
   supported one-worker CI topology is green locally. `check:topsites` has a
   Windows CRLF false-stale signal with content proven equal after normalization
   (#461). Ordinary Chromium `location.assign`/`replace` calls still bypass the
@@ -140,8 +142,9 @@ integration/gate sequence are complete.
 - The current environment did not perform real Chrome behavior, CWS submission,
   real-feed building, external audit, or trademark/legal clearance.
 - Treat successful CI as regression evidence, not efficacy evidence.
-- Run the local headed E2E proof with one worker until #460 resolves the
-  unsupported four-window activation race; do not add retries or weaken tests.
+- Run the local headed E2E proof with one worker until #460 determines whether
+  the four-worker Windows nondeterminism is product or harness behavior; do not
+  add retries or weaken tests.
 - On Windows, #461 means `check:topsites` can fail solely on CRLF. The normalized
   content equality was proven this cycle, but only Linux CI currently proves the
   official command without that false signal.

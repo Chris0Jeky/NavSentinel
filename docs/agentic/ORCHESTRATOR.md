@@ -124,9 +124,9 @@ fresh `origin/main`. Newly durable follow-ups are #458 (Location boundary), #459
 |---|---|---|---|---|---|---|
 | RI-03 / #356 | `feat/dehard-enforcement-protos` | current `origin/main` merged at `e4c852c` | `.worktrees/pr356-refresh` | #356 | LOCAL READY / GATE-3 HELD | local gates + two reviews complete through runtime head `2a30c63`; refresh live exact-head CI/comments; human AI-13 Gate-3 |
 
-**In-Flight (2026-07-10):** no new slice started by this audit. Existing open
-PRs #273/#356/#399 are stale and require preflight; #356 is red. Rows below are
-historical (all merged). Verify with `gh pr list` before branching.
+**Historical checkpoint (2026-07-10):** no new slice started during that audit.
+At that time PRs #273/#356/#399 were stale and #356 was red. Rows below are
+historical (all merged); the Cycle 50 checkpoint above supersedes this snapshot.
 
 | Slice | Branch | Base | Worktree | PR | Round 1 | Round 2 | Bots | Opened |
 |-------|--------|------|----------|----|---------|---------|------|--------|
