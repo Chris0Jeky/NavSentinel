@@ -21,10 +21,12 @@ rotation under #437.
 - **AI-19:** clear or replace the product name before CWS submission.
 - **AI-18: READY:** the hook-editing slice is committed; review/trust the exact
   project-local Codex hook definitions before relying on them.
-- **AI-13: OPEN / READY:** run the exact-head-guarded #356 Chrome Gate-3 guide;
-  only Chris can record it complete.
+- **AI-13: OPEN / CONDITIONAL:** run the exact-head-guarded #356 Chrome Gate-3
+  guide only after its current-main refresh and live review/CI prechecks pass.
 - **AI-21: OPEN / CONDITIONAL:** run PR #464's exact-head-guarded synthetic
   navigation Chrome Gate-3 guide only after its live review/CI prechecks pass.
+- **AI-22: OPEN / CONDITIONAL:** run PR #466's exact-head-guarded dormant broker
+  Chrome Gate-3 guide only after its live review/CI prechecks pass.
 - **AI-15: BLOCKED** until agent preflight is complete.
 - **AI-8 / AI-14: BLOCKED** pending current branches, two fresh reviews, green
   CI, and replacement human guides.
@@ -39,7 +41,7 @@ rotation under #437.
 - 80 open issues with no milestone/assignee; 15 Horizon issues #439–#453 are a
   frozen option portfolio, not active work.
 - Stale PRs #273 and #399 were closed on 2026-07-13 with re-entry paths and
-  issue anchors preserved. Open PRs are #356, draft #457, and #464.
+  issue anchors preserved. Open PRs are #356, draft #457, #464, and draft #466.
 - PR #463 merged exact green dependency head `91aab4f` as `2888483` and closed
   #459. It carries CRXJS 2.7.1, Vite 8.1.5, Rollup 2.80.0, Rolldown 1.1.5,
   audit zero, and the aligned Node engine floor.
@@ -47,10 +49,11 @@ rotation under #437.
   before #463 changed `main`'s dependency graph. Their human guides are now
   conditional on integrating current `main` and rerunning exact-head CI plus
   both reviews; neither may merge without its human Gate-3 evidence.
-- The local Cycle 53 broker boundary passed 172 focused tests, typecheck, lint,
-  build, 2,897 units, rollback 3/3, smoke 4/4, and all 64 one-worker E2E before
-  merging current `main`. Its post-merge exact head still needs revalidation.
-- Package is about 474/500KB while reputation is a 52-byte test fixture. The
+- PR #466's Cycle 53 runtime tree passed focused broker/SW tests, typecheck,
+  lint, build, 2,897 units, rollback 3/3, all 64 one-worker E2E, package, and
+  all 12 performance budgets after merging current `main`. Its final exact head
+  still requires two independent reviews, thread accounting, and green CI.
+- PR #466's package is about 493/500KB while reputation is a 52-byte test fixture. The
   old 150KB/100K-domain plan cannot meet its stated 0.01% FP target or aggregate
   package cap as written.
 - Product-posture and guided-workflow work merged through PR #454; verify live
@@ -160,24 +163,23 @@ comparative evidence.
 
 ## Next safe slice
 
-Finish integrating dependency merge `2888483` into Cycle 53, rerun its local
-gates, open the third and final browser-held PR, and add its exact-head-guarded
-AI-22 guide. Then refresh #356 and #464 from current `main`; both must repeat
-exact-head reviews/CI before AI-13 or AI-21 is actionable. Do not start a fourth
-browser-held slice.
+Finish PR #466's two fresh exact-head reviews, bot/thread accounting, and CI;
+leave it human-held for AI-22. Then refresh #356 and #464 from current `main`;
+both must repeat exact-head reviews/CI before AI-13 or AI-21 is actionable. Do
+not start a fourth browser-held slice.
 
 ## Queue accounting
 
-- **Open / human-held:** #356 (AI-13) and #464 (AI-21); neither may merge from
-  automation alone.
+- **Open / human-held:** #356 (AI-13), #464 (AI-21), and draft #466 (AI-22);
+  none may merge from automation alone.
 - **Merged:** #463 / #459 as `2888483`; intended close link verified.
-- **Local / in progress:** Cycle 53 pending-decision SW boundary; post-merge
-  revalidation, PR, reviews, CI, and AI-22 remain.
+- **Open / in progress:** PR #466 pending-decision SW boundary; exact-head
+  reviews, bot/thread accounting, CI, and AI-22 remain.
 - **Parked:** draft #457 agent-harness tooling; closed #273/#399 retain explicit
   re-entry paths.
 - **Blocked:** AI-15, AI-8, and AI-14.
 - **Deferred human decisions/actions:** AI-16 (resume cursor), AI-9, AI-20,
-  AI-17, AI-19, AI-18, AI-13, and AI-21. No item was silently dropped or
+  AI-17, AI-19, AI-18, AI-13, AI-21, and AI-22. No item was silently dropped or
   self-cleared.
 
 ## Reliability notes
@@ -191,6 +193,11 @@ browser-held slice.
 - #460 tracks nondeterministic Windows four-worker blank-anchor misses; use the
   supported one-worker proving topology. #461 tracks Windows CRLF false-stale
   output from `check:topsites`; exact-head Linux CI remains authoritative.
+- #465 tracks reproducible Happy DOM native-fetch teardown stacks in two
+  pre-existing JS-behavior suites. Both suites and the full 2,897-test run pass,
+  but the pending native fetch should be drained or mocked by the harness.
+- PR #466 leaves only about 7KB aggregate and 0.5KB service-worker budget
+  margin. Its lazy broker split is required; future growth must re-prove both.
 - Update shared branches with `git merge main`, never rebase; do not discard work
   or rewrite history without the explain-and-approve protocol.
 - Do not edit `extension/dist/` or generated data directly.

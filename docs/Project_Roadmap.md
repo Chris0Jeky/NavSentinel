@@ -30,7 +30,7 @@ readiness is tracked only by the outcome gates below.
 
 | Gate | State | Required next move |
 |---|---|---|
-| Release integrity | **Blocked** | RI-01 extension-origin decision authority beyond #464's synthetic-input slice; finish #356 Gate-3; excise visual-sim (#424); remove fake DNR; purpose-specific data minimization; beta-off JS behavior; #175/#186 bridge identity/recovery |
+| Release integrity | **Blocked** | Complete RI-01 beyond #464's synthetic-input rejection and #466's dormant broker boundary; finish #356 Gate-3; excise visual-sim (#424); remove fake DNR; purpose-specific data minimization; beta-off JS behavior; #175/#186 bridge identity/recovery |
 | Release profile | **Decision required** | AI-9/AI-16 choose the recommended interaction-only beta or a reproducible, budgeted real reputation build |
 | Brand/store | **Blocked** | AI-19 name clearance; #455 pre-collection disclosure/consent; one canonical claims-verified listing; assets and fresh-install checks |
 | Detection validation | **Open** | #417 methodology, #416/#426 rerun, confidence-aware reporting |
@@ -48,23 +48,28 @@ protection. The exact audit baseline is recorded only in dated
 | PR | Current state |
 |---|---|
 | #273 | Closed 2026-07-13 from a stale base; recreate from current `main` or defer |
-| #356 | Refreshed, twice reviewed, thread-clean, exact-head CI-green; held only for AI-13 human Chrome Gate-3 |
+| #356 | Pre-#463 head was twice reviewed, thread-clean, and CI-green; integrate current `main`, repeat exact-head reviews/CI, then AI-13 |
 | #399 | Closed 2026-07-13; measurement-held under #223/#417 and not a beta blocker |
-| #463 | Dependency advisory repair is twice reviewed, thread-clean, audit-zero, and exact-head CI-green; ready under the aging rule |
-| #464 | RI-01 synthetic-navigation authority rejection; local 65/65 one-worker E2E green, browser-held for reviews, exact-head CI, and AI-21 |
+| #463 | Merged exact green dependency head `91aab4f` as `2888483`; #459 closed as intended |
+| #464 | Pre-#463 RI-01 synthetic-navigation head passed local 65/65 E2E and final gates; integrate current `main`, repeat exact-head reviews/CI, then AI-21 |
+| #466 | Draft RI-01 dormant pending-decision SW boundary; post-#463 local runtime gates green, awaiting exact-head reviews/CI and AI-22 |
 
 **RI-01 implementation note (verified 2026-07-17):** PR #464 isolates the
 production synthetic-navigation sub-slice: only trusted input can mint
 navigation allowances, a preceding trusted pointerdown remains risk evidence,
 and an untrusted `_blank` click cannot enter the benign-anchor exemption. Its
-targeted attack/compatibility checks and all 65 one-worker E2E tests pass
-locally; AI-21 real-Chrome Gate-3 remains mandatory. The separately backed-up
-`fix/ri01-extension-origin-decisions` checkpoint still contains the unwired,
-context-bound pending-decision broker. Remaining RI-01 work includes
-service-worker handlers, active-tab/sender validation, exact-context delivery,
-popup actions, warn/cancel-only injected prompts, full branch gates, and real
-Chrome verification. Windows Defender quarantined one tracked adversarial
-ClickFix property fixture only in that worktree; AI-20 owns the human review.
+targeted attack/compatibility checks and all 65 one-worker E2E tests passed on
+its pre-dependency head; AI-21 real-Chrome Gate-3 remains mandatory after its
+current-main refresh. Draft PR #466 now supplies a dormant, context-bound
+pending-decision service-worker boundary: shared contracts/store, authenticated
+content/extension senders, browser-derived tab/frame/document context, exact
+destination/token/action binding, one-shot consumption, and top-navigation/tab
+cleanup. It is lazy-loaded to preserve the service-worker budget and executes
+no action. Remaining RI-01 work includes a real producer and extension-origin
+presentation/actions, removing injected allow/trust/resume authority, integrated
+branch gates, trusted-click redressing coverage, and real Chrome verification.
+Windows Defender quarantined one tracked adversarial ClickFix property fixture
+only in the older checkpoint worktree; AI-20 owns the human review.
 
 The North-Star and Horizon documents are frozen option portfolios. Their 15
 Horizon issues (#439–#453) do not authorize implementation and should be culled
@@ -102,8 +107,9 @@ maintainer chooses disclosure/ownership.
 
 - #415: create one `v0.5.0-unlisted-beta` milestone containing only real blockers.
 - #321: replace "build the filter" with RI-04 and the AI-9 decision.
-- #356: P0 and held only for AI-13 human Gate-3; #273 recreate/defer; #399 is
-  closed and remains measurement-deferred under #223/#417.
+- #356: P0; integrate current `main`, repeat exact-head reviews/CI, then hold for
+  AI-13 human Gate-3. Recreate/defer #273; #399 is closed and remains
+  measurement-deferred under #223/#417.
 - #419/#421/#422: close enacted scope; retain only concrete unfinished work.
 - #423: close when the verified-claims policy lands.
 - #424: rebody as RI-02; move #245/#246 to post-beta or close them.
@@ -130,7 +136,7 @@ maintainer chooses disclosure/ownership.
    fund only Decision Journal + recovery guidance; otherwise change segment/
    position or stop before advanced architecture.
 
-Last updated: 2026-07-13
+Last updated: 2026-07-17
 
 ---
 

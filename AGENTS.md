@@ -103,7 +103,8 @@ merge go/no-go, and its verified current-state snapshot.
   safe agent prerequisites, show the whole queue compactly, and present exactly one ready
   `q-N [AI-N]` action. Resume by the stable `AI-N`, not a transient q-number.
 
-Current queue: OPEN AI-19, AI-18, AI-16, AI-17, AI-9, AI-20, AI-13, AI-21; BLOCKED AI-15, AI-8, AI-14.
+Current queue: OPEN AI-19, AI-18, AI-16, AI-17, AI-9, AI-20, AI-13, AI-21,
+AI-22; BLOCKED AI-15, AI-8, AI-14.
 Resume at AI-16.
 
 ## Project Map And Commands

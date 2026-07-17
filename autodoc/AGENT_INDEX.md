@@ -10,9 +10,10 @@ This is a fast orientation layer for coding agents. It should point to interface
    `docs/Product_Strategy.md`, `docs/Project_Roadmap.md`, and
    `docs/agentic/HANDOFF.md`, then verify live git/GitHub state. The oversized
    ORCHESTRATOR/detail tables are historical pending #437. PR #464 is the
-   current browser-held synthetic-allowance sub-slice; extension-origin
-   prompt-action authority remains unfinished RI-01 work. AI-15 is blocked
-   pending the remaining agent preflight.
+   browser-held synthetic-allowance sub-slice; draft #466 adds the dormant
+   pending-decision service-worker boundary. Neither supplies a production
+   extension-origin prompt/action flow, so RI-01 remains unfinished. AI-15 is
+   blocked pending the remaining agent preflight.
 1. `AGENTS.md` - repo operating rules.
 2. `CLAUDE.md` - Claude-specific compact contract.
 3. `docs/Project_Roadmap.md` - active phase status, gates, decisions, and next tasks.
@@ -43,13 +44,13 @@ This is a fast orientation layer for coding agents. It should point to interface
 | Navigation capture and CDS/NRS | `capture_isolated.ts`, `scoring.ts`, `nrs.ts`, `nav_anomaly.ts`, `adaptive_scoring.ts` | `dom_builder.ts`, `debug_overlay.ts`, `domain_groups.ts` | scoring/NRS/nav-anomaly/adaptive tests, Gym E2E. |
 | Main-world guard and bridge | `main_guard.ts`, `pushstate_guard.ts`, `dblclick_guard.ts` | `clickfix_detector.ts`, `mutation_monitor.ts`, `oauth_monitor.ts` | `npm run build`, phase2-detections E2E, pushstate/dblclick/clickfix unit tests. |
 | Credential guard | `credential_guard.ts`, `credential_guard_model.ts` | `credential_modal.ts`, `domain.ts`, `allowlist.ts` | credential/domain/allowlist tests, credential-guard E2E. |
-| Service worker state and rollback | `sw.ts`, `session_state.ts` | `redirect_chain.ts`, `icon_manager.ts` | sw-rollback, session-state, redirect-chain tests, rollback/stress E2E. |
+| Service worker state and rollback | `sw.ts`, `session_state.ts`, `pending_decision.ts` | `pending_decision_handlers.ts`, `pending_decision_store.ts`, `redirect_chain.ts`, `icon_manager.ts` | pending-decision handler/SW lifecycle tests, sw-rollback, session-state, redirect-chain tests, rollback/stress E2E. |
 | JS behavior analysis | `js_behavior_monitor.ts` | Integrated: `main_guard.ts` (init), `capture_isolated.ts` (bridge + state), `nrs.ts` (scoring), `js_behavior_state.ts` (shared state) | js-behavior-monitor tests, js-behavior-state tests, js-behavior-integration tests, gym fixtures (01-07). Design: `docs/design/js_behavior_analysis.md`. |
 | Visual similarity removal (RI-02/#424) | `visual_sim_capture.ts`, `visual_sim_templates.ts`, `visual_sim_brand_domains.ts` | `visual_sim_hash.ts`, `visual_sim_loader.ts`, `visual_sim_types.ts`; scheduler in `capture_isolated.ts`; screenshot handler in `sw.ts`; NRS hook; WAR/templates/tests/session state | Remove as one reviewed browser-surface slice. Current templates never match and `captureVisibleTab` can process a different active tab. Prove no viewport-capture message/asset/state remains. |
 | Reputation and content analysis | `reputation.ts`, `content_analyzer.ts`, `domain_profile.ts` | `sri_checker.ts`, `csp_analyzer.ts`, `build-bloom-filter.mjs` | reputation/domain-profile/sri/csp tests, corpus E2E. |
 | Popup/options UI | `popup.ts`, `popup_model.ts`, `options.ts` | popup/options CSS/HTML, `design_tokens.css`, `icons.ts`, `event_tone.ts`, `explanations.ts`, `smart_defaults.ts` | popup-model/popup-a11y/toggle-a11y/icons unit tests, suite-ui E2E. UI uses segmented controls (`#navModeSeg`/`#credModeSeg` with `.seg-btn[data-value]` + `aria-pressed`), toggle buttons (`role="switch"` + `aria-checked`), and sidebar nav (`data-section`). Accessibility (merged #132-#135): radiogroup pattern + shared `seg_control.ts`, `aria-labelledby`/`aria-describedby`, popup ARIA landmarks/live regions, decorative SVG `aria-hidden`. |
 | Onboarding | `onboarding/onboarding.ts` | onboarding HTML/CSS, imports `icons.ts` | `tests/onboarding.test.ts`, `npm run build`. |
-| Prompt decision authority (RI-01) | `ui_toast.ts`, `credential_modal.ts`, popup/pending-action state | `credential_guard.ts`, `capture_isolated.ts`, `tests/e2e/extension_test_utils.ts` | Page-injected UI becomes warn/cancel only. Proceed/allow/trust/resume moves to tab/destination-bound extension-origin UI with TTL. Test synthetic input, trusted-click redressing, host tamper/removal, tab switch, and stale state; Gate-3 required. |
+| Prompt decision authority (RI-01) | `pending_decision.ts`, `pending_decision_handlers.ts`, `pending_decision_store.ts`, `ui_toast.ts`, `credential_modal.ts` | `sw.ts`, `credential_guard.ts`, `capture_isolated.ts`, popup/pending-action state, `tests/e2e/extension_test_utils.ts` | #466's create/list/consume broker is dormant and URL-minimized; it has no producer/UI/executor. Page-injected UI still must become warn/cancel only, while proceed/allow/trust/resume moves to tab/destination-bound extension-origin UI with TTL. Test synthetic input, trusted-click redressing, host tamper/removal, tab/document switch, stale state, and broker lifecycle; Gate-3 required. |
 | Gym and E2E harness | `gym/index.html`, `tests/e2e/extension_test_utils.ts` | Gym HTML fixtures and E2E specs under `tests/e2e/` | Playwright spec, `npm run gym:serve`; verify volatile counts live. |
 | Build/release | `package.json`, `vite.config.ts`, `extension/manifest.json` | `scripts/package.mjs`, `scripts/release.mjs`, `scripts/check_versions.mjs`, `scripts/check-perf-budget.mjs` | `npm run verify:versions`, `npm run build`, `npm run package:ext`. |
 | Data pipeline | `scripts/build-bloom-filter.mjs`, `scripts/fetch-phishing-corpus.mjs` | `scripts/build-test-bloom-filter.mjs`, `scripts/measure-fp.mjs`, `scripts/check-bloom-size.mjs`, `scripts/update-psl.mjs` | `npm run build:bloom`, `npm run check:bloom-size`. |
