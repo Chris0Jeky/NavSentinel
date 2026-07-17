@@ -23,8 +23,8 @@ rotation under #437.
   project-local Codex hook definitions before relying on them.
 - **AI-13: OPEN / READY:** run the exact-head-guarded #356 Chrome Gate-3 guide;
   only Chris can record it complete.
-- **AI-21: OPEN / CONDITIONAL:** run PR #464's exact-head-guarded synthetic
-  navigation Chrome Gate-3 guide after live CI/review prechecks pass.
+- **AI-21: OPEN / READY:** run PR #464's exact-head-guarded synthetic navigation
+  Chrome Gate-3 guide after rechecking the PR's live head and gates.
 - **AI-15: BLOCKED** until agent preflight is complete.
 - **AI-8 / AI-14: BLOCKED** pending current branches, two fresh reviews, green
   CI, and replacement human guides.
@@ -48,9 +48,11 @@ rotation under #437.
   unmerged because the repository's aging rule is not yet satisfied.
 - PR #464 rejects synthetic pointer/click authority without discarding a real
   pointerdown's risk evidence. Local exact-code proof includes typecheck, lint,
-  build, targeted attack/compatibility E2E, three repeated Level 6 passes, and
-  65/65 one-worker E2E. Its exact-head GitHub/review evidence must be checked on
-  the PR after this handoff commit; AI-21 human Gate-3 remains mandatory.
+  build, 2,874 unit tests, targeted attack/compatibility E2E, three repeated
+  Level 6 passes, 65/65 one-worker E2E, 12/12 performance budgets, and package
+  creation. Two fresh final reviews are clean, every bot thread is resolved,
+  and GitHub Build/Unit plus E2E are green on the live exact head recorded on
+  the PR. AI-21 human Gate-3 is the only remaining gate.
 - Package is about 474/500KB while reputation is a 52-byte test fixture. The
   old 150KB/100K-domain plan cannot meet its stated 0.01% FP target or aggregate
   package cap as written.
@@ -77,9 +79,11 @@ rotation under #437.
   authority leak. `76da96b` prevents synthetic allowed clicks from emitting a
   silent-navigation log; `8874459` requires the current click to be trusted
   before modifier/new-tab intent can lower its risk. Mutation probes failed
-  before each fix and pass after it. The fresh final round(s) and bot/thread
-  accounting are authoritative only when posted against PR #464's live exact
-  head; any later head invalidates them.
+  before each fix and pass after it. Two fresh final reviewers independently
+  rechecked the complete updated diff and surrounding trust boundary without
+  relying on those diagnostic conclusions; both returned clean. The exact SHA,
+  CI run, bot/thread accounting, and final review evidence live on PR #464;
+  any later head invalidates them.
 
 - **Agentic contract round 1 (runtime/parity lens, 2026-07-17):** compared
   Codex instructions, hooks, skills, and shared references against the compact
@@ -143,12 +147,15 @@ comparative evidence.
 
 ## Next safe slice
 
-After PR #464's automated/review gates settle, take one narrow remaining RI-01
-integration slice from a fresh worktree: service-worker pending-decision
-handlers with extension-sender, active-tab, destination-context, TTL, and stale
-state validation. Do not mix popup UI or credential-guard work into that slice.
-The old dirty checkpoint worktree remains quarantined and untouched under AI-20;
-use its clean remote backup only as read-only source material.
+Take one narrow remaining RI-01 integration slice from a fresh detached
+`origin/main` worktree: service-worker pending-decision handlers with
+extension-sender, sender/tab/frame/document context, active-tab,
+destination/token/action matching, TTL, one-shot consumption, hydration, and
+tab-lifecycle validation. Port only the clean broker foundation from checkpoint
+commit `d2963f58`; do not mix popup UI, capture producers, injected UI,
+credential-guard, manifest, or network work into that slice. It will consume
+the third and final human-held browser PR slot and requires a new Gate-3 item.
+The old dirty checkpoint worktree remains quarantined and untouched under AI-20.
 
 ## Queue accounting
 
