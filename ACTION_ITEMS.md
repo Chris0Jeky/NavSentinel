@@ -8,8 +8,8 @@
 
 **Purpose:** the running list of things only *you* (Chris) can do — and the context an agent needs to not lose the thread between sessions. Agents flag the open items in every summary; you clear them by saying so.
 
-**Last updated:** 2026-07-17 — dependency merge plus RI-01 pending-decision
-boundary handoff. Product thesis:
+**Last updated:** 2026-07-17 — RI-01 pending-decision review-remediation
+handoff. Product thesis:
 `docs/Product_Strategy.md`. Corrective
 program: `docs/Project_Roadmap.md`. Standing decisions:
 `docs/agentic/DECISIONS.md`.
@@ -29,8 +29,8 @@ The root `main` worktree is clean and matches `origin/main` at merge commit
 `2888483`. Run `git rev-parse main`,
 `git rev-parse origin/main`, and live `gh` checks before acting; the exact audit
 baseline lives in `docs/Product_Strategy.md`, not this live snapshot. PR #466's
-dormant RI-01 pending-decision boundary passed 174 focused broker/SW tests,
-typecheck, lint, build, 2,899 unit tests (97 files), rollback 3/3, all 64
+dormant RI-01 pending-decision boundary passed 176 focused broker/SW tests,
+typecheck, lint, build, 2,901 unit tests (97 files), rollback 3/3, all 64
 one-worker E2E tests, package, and
 all 12 performance budgets after integrating that dependency merge. v0.4.0
 still has no tag, GitHub release, CWS release, or external-user evidence.
@@ -41,11 +41,17 @@ current `main` SHA live rather than pinning it here. Open PRs are #356, draft
 #457, #464, and #466; PR #463 merged as `2888483` and closed #459. Stale
 PRs #273 and #399 were closed with explicit re-entry paths. #356 and #464 were twice
 reviewed, thread-clean, and exact-head CI-green before #463 changed `main`'s
-dependency graph. Both browser branches must now integrate current `main` and
-repeat exact-head checks/reviews before their AI-13/AI-21 guides are actionable.
-PR #466 is the third and final browser-held lane: its runtime tree is locally
-proven, but AI-22 is conditional on live exact-head CI, both fresh reviews, and
-zero unresolved threads.
+dependency graph. Both browser branches now have current-`main` merges resolved
+and staged in isolated worktrees, but neither merge is committed or pushed.
+They must pass coordinator audit and repeat exact-head checks/reviews before
+their AI-13/AI-21 guides are actionable.
+PR #466 is the third and final browser-held lane. Its first review recheck found
+three valid blockers: an MV3-incompatible dynamic import, a consume contract
+that required a raw destination unavailable to the UI, and stale child-frame
+liveness based on `getFrame`. All three are fixed locally with a static module
+split, a worker-owned destination capability, positive `getAllFrames`
+enumeration, and deterministic tests. AI-22 remains conditional on a pushed
+exact head, live green CI, both fresh review rounds, and zero unresolved threads.
 The product-posture and guided-workflow work merged through PR #454; verify live
 `main` rather than pinning its SHA here. The RI-01 checkpoint branch is remotely
 backed up without the unstaged Defender deletion; verify its SHA live. Its
@@ -65,7 +71,7 @@ adversarial test fixture. These changes do not change shipped product state.
   or off; stored URLs require minimization (RI-05/RI-06); #175/#186 bridge
   identity/recovery and #455 pre-collection disclosure/consent now block beta.
 - **Release/profile blockers:** the 52-byte reputation test filter plus PR
-  #466's current ~493/500KB package makes the old "150KB/100K domains" plan
+  #466's current ~492.9/500KB package makes the old "150KB/100K domains" plan
   impossible as written. AI-9/AI-16 must choose the recommended interaction-
   only beta or a fully specified real-filter profile.
 - **Brand blocker:** the exact name `NavSentinel` is already used by an active
@@ -512,7 +518,8 @@ checks. Only Chris can record this item complete.
 **🚨 OPEN: AI-22 — Run PR #466 pending-decision service-worker Gate-3 (GUIDE
 PREPARED; LIVE EXACT-HEAD PRECHECK REQUIRED).** This narrow browser-surface
 guide validates real Chrome `MessageSender`, active-tab/document binding,
-session-store minimization, lifecycle cleanup, and lazy broker loading. Worker-
+session-store minimization, lifecycle cleanup, positive child-frame liveness,
+and static module startup plus deferred broker initialization. Worker-
 restart hydration remains automated-only in this narrow pass. PR #466 is a
 dormant authorization boundary: it intentionally has no product producer,
 popup presentation, or privileged action executor. Passing this guide therefore
@@ -543,7 +550,7 @@ Gate-3. Only Chris can record this item complete.
    `.worktrees/ri01-pending-sw/extension/dist` unpacked. In NavSentinel Options
    select Smart mode and confirm no localhost/127.0.0.1 allowlist entry. From
    `chrome://extensions`, open NavSentinel's service-worker inspector and keep
-   it open to catch any error from the first lazy broker load.
+   it open to catch any startup or first broker-initialization error.
 3. Open `http://127.0.0.1:5173/level1-basic-opacity.html?ai22-source=source-secret#ai22-source-fragment`.
    In page DevTools,
    select NavSentinel's isolated content-script execution context; do not run
@@ -573,8 +580,6 @@ Gate-3. Only Chris can record this item complete.
    console run:
 
    ```js
-   var destinationUrl =
-     "http://127.0.0.1:5173/level2-moving-target.html?ai22=exact#target";
    var listed = await chrome.runtime.sendMessage({
      type: "ns-pending-decision-list"
    });
@@ -604,32 +609,60 @@ Gate-3. Only Chris can record this item complete.
        id: decision.id,
        deliveryToken: decision.deliveryToken,
        action: "proceed-once",
-       destinationUrl,
        ...overrides
      });
      const wrongToken = await consume({
        deliveryToken: flip(decision.deliveryToken)
      });
      const wrongAction = await consume({ action: "allow-route" });
-     const wrongDestination = await consume({
-       destinationUrl: destinationUrl.replace("ai22=exact", "ai22=changed")
+     const rawDestinationRejected = await consume({
+       destinationUrl:
+         "http://127.0.0.1:5173/level2-moving-target.html?ai22=changed#target"
      });
      const afterMismatches = await chrome.runtime.sendMessage({
        type: "ns-pending-decision-list"
      });
      const consumed = await consume();
      const replay = await consume();
-     return { wrongToken, wrongAction, wrongDestination, afterMismatches, consumed, replay };
+     return {
+       wrongToken,
+       wrongAction,
+       rawDestinationRejected,
+       afterMismatches,
+       consumed,
+       replay
+     };
    })();
    ```
 
-   Expect `mismatch`, `action-not-allowed`, and `mismatch`; the exact decision
-   must remain `pending` after those denials. The exact consume must return
+   Expect `mismatch`, `action-not-allowed`, and `invalid-request`; consume must
+   require no raw destination side channel, and the exact decision must remain
+   `pending` after those denials. The exact consume must return
    `{ok:true, operation:"consume", status:"consumed", kind:"navigation",
    action:"proceed-once"}`, and replay must return `missing`. No tab navigation,
    popup, allowlist change, or other privileged action should occur because this
    slice has no executor.
-6. Prove active-tab and document binding using fresh entries. Create one again
+6. Prove removed child frames are not listable. In the first Gym tab's default
+   page world, create and wait for a same-origin child frame:
+
+   ```js
+   var ai22Frame = document.createElement("iframe");
+   ai22Frame.id = "ai22-child";
+   ai22Frame.src = "/level2-moving-target.html?ai22-child=1";
+   var ai22Loaded = new Promise((resolve) =>
+     ai22Frame.addEventListener("load", resolve, { once: true })
+   );
+   document.body.append(ai22Frame);
+   await ai22Loaded;
+   ```
+
+   Select that child frame and NavSentinel's isolated content-script execution
+   context in DevTools, then repeat step 3's create message with a fresh
+   destination. Return to the top frame's default page world and run
+   `document.querySelector("#ai22-child").remove()`. In the popup console, a
+   fresh `ns-pending-decision-list` request must return `missing` with an empty
+   array. A stale child capability must never be exposed after removal.
+7. Prove active-tab and document binding using fresh entries. Create one again
    from the first Gym tab, open a second loopback Gym tab and make it active,
    then reopen/inspect the popup there: list must return `missing` with an empty
    array, never the first tab's decision. Return to the first tab, create and
@@ -650,7 +683,7 @@ Gate-3. Only Chris can record this item complete.
      throw new Error("pending-decision navigation cleanup did not finish");
    })();
    ```
-7. Prove tab-removal cleanup with one final fresh entry. In the popup console,
+8. Prove tab-removal cleanup with one final fresh entry. In the popup console,
    list it and record `listed.tabId`. In the already-open service-worker
    inspector run `await chrome.tabs.remove(<recorded-tab-id>)`, then poll:
 
@@ -669,11 +702,11 @@ Gate-3. Only Chris can record this item complete.
    The closed tab's key must be absent. Capture any differing response,
    unexpected persisted raw URL, extension/page console error, or unexpected
    navigation/action as a failure.
-8. Close all test tabs and DevTools windows, stop the Python server with Ctrl+C,
+9. Close all test tabs and DevTools windows, stop the Python server with Ctrl+C,
    close the disposable Chrome profile, and remove only that deliberately
    disposable profile. Do not alter an established profile or disable security
    software.
-9. Reply `AI-22 done; Gate-3 passed on PR #466 at <40-character SHA>; Chrome
+10. Reply `AI-22 done; Gate-3 passed on PR #466 at <40-character SHA>; Chrome
    <version>` with any console observations. On failure reply `AI-22 failed on
    PR #466 at <SHA>: <step and observed result>`. Do not merge on a partial pass;
    the agent must recheck the exact head, CI, comments, and merge gate afterward.
