@@ -41,7 +41,7 @@ rotation under #437.
 - 80 open issues with no milestone/assignee; 15 Horizon issues #439–#453 are a
   frozen option portfolio, not active work.
 - Stale PRs #273 and #399 were closed on 2026-07-13 with re-entry paths and
-  issue anchors preserved. Open PRs are #356, draft #457, #464, and draft #466.
+  issue anchors preserved. Open PRs are #356, draft #457, #464, and #466.
 - PR #463 merged exact green dependency head `91aab4f` as `2888483` and closed
   #459. It carries CRXJS 2.7.1, Vite 8.1.5, Rollup 2.80.0, Rolldown 1.1.5,
   audit zero, and the aligned Node engine floor.
@@ -49,8 +49,8 @@ rotation under #437.
   before #463 changed `main`'s dependency graph. Their human guides are now
   conditional on integrating current `main` and rerunning exact-head CI plus
   both reviews; neither may merge without its human Gate-3 evidence.
-- PR #466's Cycle 53 runtime tree passed focused broker/SW tests, typecheck,
-  lint, build, 2,897 units, rollback 3/3, all 64 one-worker E2E, package, and
+- PR #466's Cycle 53 runtime tree passed 174 focused broker/SW tests, typecheck,
+  lint, build, 2,899 units, rollback 3/3, all 64 one-worker E2E, package, and
   all 12 performance budgets after merging current `main`. Its final exact head
   still requires two independent reviews, thread accounting, and green CI.
 - PR #466's package is about 493/500KB while reputation is a 52-byte test fixture. The
@@ -170,7 +170,7 @@ not start a fourth browser-held slice.
 
 ## Queue accounting
 
-- **Open / human-held:** #356 (AI-13), #464 (AI-21), and draft #466 (AI-22);
+- **Open / human-held:** #356 (AI-13), #464 (AI-21), and #466 (AI-22);
   none may merge from automation alone.
 - **Merged:** #463 / #459 as `2888483`; intended close link verified.
 - **Open / in progress:** PR #466 pending-decision SW boundary; exact-head
@@ -194,10 +194,15 @@ not start a fourth browser-held slice.
   supported one-worker proving topology. #461 tracks Windows CRLF false-stale
   output from `check:topsites`; exact-head Linux CI remains authoritative.
 - #465 tracks reproducible Happy DOM native-fetch teardown stacks in two
-  pre-existing JS-behavior suites. Both suites and the full 2,897-test run pass,
+  pre-existing JS-behavior suites. Both suites and the full 2,899-test run pass,
   but the pending native fetch should be drained or mocked by the harness.
-- PR #466 leaves only about 7KB aggregate and 0.5KB service-worker budget
+- PR #466 leaves only about 6.3KB aggregate and 0.4KB service-worker budget
   margin. Its lazy broker split is required; future growth must re-prove both.
+- The first post-round-1 rollback lane timed out once waiting for Level 10's
+  return navigation. That exact case then passed 3/3 repeated, the full rollback
+  lane passed 3/3, and the full one-worker lane passed 64/64. This is retained as
+  a non-blocking nondeterministic signal: capture a trace plus worker/page logs
+  and seed a dedicated harness issue if it recurs; do not silently retry it.
 - Update shared branches with `git merge main`, never rebase; do not discard work
   or rewrite history without the explain-and-approve protocol.
 - Do not edit `extension/dist/` or generated data directly.

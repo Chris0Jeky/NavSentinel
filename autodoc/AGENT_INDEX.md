@@ -10,7 +10,7 @@ This is a fast orientation layer for coding agents. It should point to interface
    `docs/Product_Strategy.md`, `docs/Project_Roadmap.md`, and
    `docs/agentic/HANDOFF.md`, then verify live git/GitHub state. The oversized
    ORCHESTRATOR/detail tables are historical pending #437. PR #464 is the
-   browser-held synthetic-allowance sub-slice; draft #466 adds the dormant
+   browser-held synthetic-allowance sub-slice; PR #466 adds the dormant
    pending-decision service-worker boundary. Neither supplies a production
    extension-origin prompt/action flow, so RI-01 remains unfinished. AI-15 is
    blocked pending the remaining agent preflight.

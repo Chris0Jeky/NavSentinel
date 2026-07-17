@@ -29,15 +29,16 @@ The root `main` worktree is clean and matches `origin/main` at merge commit
 `2888483`. Run `git rev-parse main`,
 `git rev-parse origin/main`, and live `gh` checks before acting; the exact audit
 baseline lives in `docs/Product_Strategy.md`, not this live snapshot. PR #466's
-dormant RI-01 pending-decision boundary passed typecheck, lint, build, 2,897
-unit tests (97 files), rollback 3/3, all 64 one-worker E2E tests, package, and
+dormant RI-01 pending-decision boundary passed 174 focused broker/SW tests,
+typecheck, lint, build, 2,899 unit tests (97 files), rollback 3/3, all 64
+one-worker E2E tests, package, and
 all 12 performance budgets after integrating that dependency merge. v0.4.0
 still has no tag, GitHub release, CWS release, or external-user evidence.
 
 Live recheck on 2026-07-17 found 80 open issues, no tags/releases/classic branch
 protection or repository rulesets, and no milestones or assignees. Verify the
 current `main` SHA live rather than pinning it here. Open PRs are #356, draft
-#457, #464, and draft #466; PR #463 merged as `2888483` and closed #459. Stale
+#457, #464, and #466; PR #463 merged as `2888483` and closed #459. Stale
 PRs #273 and #399 were closed with explicit re-entry paths. #356 and #464 were twice
 reviewed, thread-clean, and exact-head CI-green before #463 changed `main`'s
 dependency graph. Both browser branches must now integrate current `main` and
@@ -543,7 +544,8 @@ Gate-3. Only Chris can record this item complete.
    select Smart mode and confirm no localhost/127.0.0.1 allowlist entry. From
    `chrome://extensions`, open NavSentinel's service-worker inspector and keep
    it open to catch any error from the first lazy broker load.
-3. Open `http://127.0.0.1:5173/level1-basic-opacity.html`. In page DevTools,
+3. Open `http://127.0.0.1:5173/level1-basic-opacity.html?ai22-source=source-secret#ai22-source-fragment`.
+   In page DevTools,
    select NavSentinel's isolated content-script execution context; do not run
    this from the page's default JavaScript world. Execute the following within
    30 seconds of the later list step because pending entries expire quickly:
@@ -586,7 +588,8 @@ Gate-3. Only Chris can record this item complete.
    `decision` must contain opaque `id`/`deliveryToken`, origins, bounded
    timestamps, the declared reason and action, but no raw URL, URL hash, or
    tab/window/frame/document identity. The persisted JSON may contain origins,
-   hashes, and opaque values, but must not contain `/level2-moving-target.html`,
+   hashes, and opaque values, but must not contain `/level1-basic-opacity.html`,
+   `?ai22-source=`, `#ai22-source-fragment`, `/level2-moving-target.html`,
    `?ai22=`, or `#target`.
    If the item expired, return to step 3 and create a fresh one.
 5. With that same fresh decision, run this as one popup-console snippet before
