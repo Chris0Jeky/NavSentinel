@@ -24,8 +24,11 @@ rotation under #437.
   found a remaining medium MAIN-world path: smart mode still armed one popup
   directly on pointerdown. `a14f70d` now requires a trusted click and adds a
   Chromium negative/positive control that fails on the vulnerable mutation.
-  The final documentation head must receive fresh round-2, Codex/thread, and CI
-  evidence before AI-21 becomes actionable.
+  Round 2 then found Navigation Off's programmatic bypass had been lost;
+  `f824381` restores the explicit Off behavior without weakening enforcing
+  modes, again with pre-fix-failing Chromium proof. The final documentation
+  head must receive fresh round-2, Codex/thread, and CI evidence before AI-21
+  becomes actionable.
 - The only dirty worktree is the known Defender-quarantined checkpoint at
   `C:/Users/Public/codex-shell-home/NavSentinel-ri01`, where tracked
   `tests/clickfix-detector.property.test.ts` remains deleted. Do not restore,
@@ -67,10 +70,11 @@ rotation under #437.
   #459. It carries CRXJS 2.7.1, Vite 8.1.5, Rollup 2.80.0, Rolldown 1.1.5,
   audit zero, and the aligned Node engine floor.
 - PR #356's current-main exact head is fully gated and human-held by AI-13.
-  PR #464's `8aee243` service-worker fix and `a14f70d` MAIN-world follow-up have
-  mutation-proven Chromium coverage; the latest tree passes typecheck, lint,
-  build, 2,875 units, eight affected Chromium controls, and all 12 performance
-  budgets. Live exact-head review/Codex/CI evidence remains authoritative.
+  PR #464's `8aee243` service-worker fix, `a14f70d` MAIN-world follow-up, and
+  `f824381` Navigation Off preservation have mutation-proven Chromium coverage;
+  the latest tree passes typecheck, lint, build, 2,875 units, affected Chromium
+  controls, and all 12 performance budgets. Live exact-head review/Codex/CI
+  evidence remains authoritative.
   Neither PR may merge without its human Gate-3.
 - PR #466's Cycle 53 runtime tree passed 176 focused broker/SW tests, typecheck,
   lint, build, 2,901 units, rollback 3/3, all 64 one-worker E2E, package, and
@@ -175,6 +179,18 @@ rotation under #437.
   must all target the final documentation head; their exact evidence belongs on
   PR #464 so this durable ledger does not pre-claim a later head.
 
+- **PR #464 independent round 2 (`897cadd` -> runtime `f824381`,
+  2026-07-17):** found one medium compatibility regression. The trusted-event
+  gate in the isolated capture also suppressed Navigation Off's intentional
+  programmatic-navigation bypass, allowing the worker to queue rollback and
+  forward state even though Off promises no intervention. `f824381` permits
+  allowance emission only for trusted clicks or explicit Off mode. The new
+  Chromium control fails on the vulnerable mutation with both session entries
+  populated and passes after the fix; four affected E2E controls, typecheck,
+  lint, build, 2,875 units, performance 12/12, and diff check pass. A fresh
+  round 2, exact-head Codex review, thread audit, and CI must target the final
+  documentation head.
+
 - **Agentic contract round 1 (runtime/parity lens, 2026-07-17):** compared
   Codex instructions, hooks, skills, and shared references against the compact
   Claude contract and current Codex hook guidance. Fixed the oversized Codex
@@ -274,7 +290,9 @@ Own PR #464 only until it is cleanly handed to AI-21. Confirm the final
 local/origin/PR head equality, current CI, PR body, comments, unresolved threads,
 and closing references. Round 1 on `cdcfb45` found MAIN-world pointerdown popup
 authority; runtime `a14f70d` fixes it with mutation-proven Chromium coverage.
-Run a fresh independent round 2 on the final documentation head, request and
+Round 2 on `897cadd` found Navigation Off's bypass regression; `f824381` fixes
+it with a pre-fix-failing rollback/forward control. Run a fresh independent
+round 2 on the final documentation head, request and
 audit exact-head Codex review, and require green Build/Unit plus E2E. Fix every
 finding and restart invalidated gates. Update the PR body/evidence after the
 head is stable; edit status docs again only if a new finding changes their
@@ -300,8 +318,8 @@ accounting / next safe slice.
   are fixed. Its live precheck requires local/remote/PR equality, exact-head
   reviews, bot/thread accounting, green CI, and AI-22.
   #356's final exact head passes its full gates. PR #464's runtime fixes are
-  `8aee243` and `a14f70d`; the final documentation head uses live PR evidence
-  for round-2, Codex/thread, closing-reference, and CI status. #466's
+  `8aee243`, `a14f70d`, and `f824381`; the final documentation head uses live
+  PR evidence for round-2, Codex/thread, closing-reference, and CI status. #466's
   `0266107` exact head passes its full automated gates. Every human guide still
   begins with live local/remote/PR equality.
 - **Parked:** draft #457 agent-harness tooling; closed #273/#399 retain explicit

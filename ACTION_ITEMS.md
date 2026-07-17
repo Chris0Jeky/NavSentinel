@@ -45,8 +45,12 @@ remains human-held by AI-13. PR #464's resumed round 1 found that MAIN-world
 smart mode still armed one popup directly from trusted pointerdown. Runtime
 commit `a14f70d` now requires a trusted click for that popup intent; its new
 Chromium mutation fails on the vulnerable code and preserves the trusted-click
-compatibility path after the fix. The final exact head still requires fresh
-round-2, Codex, thread, and CI evidence before AI-21 is actionable.
+compatibility path after the fix. Round 2 then found that the same trust gate
+removed Navigation Off's explicit programmatic-navigation bypass. `f824381`
+restores that bypass without granting authority in enforcing modes, with a
+pre-fix-failing rollback/forward regression. The final exact head still
+requires fresh round-2, Codex, thread, and CI evidence before AI-21 is
+actionable.
 PR #466 is the third and final browser-held lane. Its first review recheck found
 three valid blockers: an MV3-incompatible dynamic import, a consume contract
 that required a raw destination unavailable to the UI, and stale child-frame
@@ -361,10 +365,10 @@ evidence. A trusted pointerdown now sends only a top-frame rollback baseline;
 it cannot create gesture, broad, target, or recent-user authority. Automated
 Chromium proves the pointerdown-only rollback attack, the synchronous
 MAIN-world popup attack, existing synthetic attacks, and trusted compatibility
-paths, but a real Chrome pass must confirm them before merge. Runtime commits
-`8aee243` and `a14f70d` are pushed; live round-2, Codex/thread, and CI evidence
-must all belong to the same final exact head. Only Chris can record this item
-complete.
+paths, plus Navigation Off's programmatic bypass, but a real Chrome pass must
+confirm them before merge. Runtime commits `8aee243`, `a14f70d`, and `f824381`
+are pushed; live round-2, Codex/thread, and CI evidence must all belong to the
+same final exact head. Only Chris can record this item complete.
 
 **Current guide:**
 
@@ -564,17 +568,34 @@ complete.
 
    All three values must be `undefined`. Capture any different value, popup,
    navigation, prompt text, or page/service-worker console error as a failure.
-6. Prove trusted compatibility with a fresh page for each activation. At
+6. Prove Navigation Off's explicit bypass before the positive trusted cases.
+   In Options, set **Navigation** to **Off**, then reload a fresh Level 1 tab.
+   In that tab's DevTools console, run:
+
+   ```js
+   (() => {
+     const host = location.hostname === "127.0.0.1" ? "localhost" : "127.0.0.1";
+     const a = document.body.appendChild(document.createElement("a"));
+     a.href = `${location.protocol}//${host}:${location.port}/level2-moving-target.html?ai21=off`;
+     a.textContent = "AI-21 Navigation Off";
+     a.click();
+   })();
+   ```
+
+   The destination must remain loaded after six seconds, with no rollback,
+   forward navigation, or NavSentinel prompt. Restore **Navigation** to
+   **Smart** before continuing.
+7. Prove trusted compatibility with a fresh page for each activation. At
    `level8-legit-oauth-popup.html`, physically click **Sign in**: exactly one
    OAuth popup must open with no NavSentinel prompt. Reopen the page, focus
    **Sign in** with Tab and press Enter: exactly one popup must open with no
    prompt. Repeat on `level8-legit-oauth-popup.html?input=1` using its submit
    input. Close each popup before the next case; do not use `.click()` or
    DevTools for these positive activations.
-7. Close all test tabs/popups, stop the Python server with Ctrl+C, close the
+8. Close all test tabs/popups, stop the Python server with Ctrl+C, close the
    temporary Chrome profile, and remove only that deliberately disposable
    profile. Do not alter an established profile or disable security software.
-8. Reply `AI-21 done; Gate-3 passed on PR #464 at <40-character SHA>` with
+9. Reply `AI-21 done; Gate-3 passed on PR #464 at <40-character SHA>` with
    Chrome's version and any console observations. On failure reply
    `AI-21 failed on PR #464 at <SHA>: <step and observed result>`. Do not merge
    on a partial pass; the agent must recheck the exact head, CI, comments, and
