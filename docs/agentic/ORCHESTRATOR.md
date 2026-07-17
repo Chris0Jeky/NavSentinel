@@ -97,15 +97,15 @@ PRs D-* are independent (different files) → parallel branches off `main`, **no
 
 ## In-Flight
 
-**Active checkpoint (2026-07-17, Cycle 56):** PR #463 merged its exact green
+**Active checkpoint (2026-07-17, Cycle 57):** PR #463 merged its exact green
 dependency head as `2888483` and closed #459. That dependency graph must now be
 integrated into all browser-held lanes. PR #356 (AI-13) and #464 (AI-21) were
 twice reviewed, thread-clean, and exact-head CI-green before the merge. Their
-current-main refreshes are committed locally in isolated worktrees: #356
-`5692e08` passes 2,875 unit plus 65/65 one-worker E2E, while #464 `c7870aa`
-passes 2,874 unit plus 65/65. Both must reach local/remote/PR equality plus fresh
-exact-head reviews/CI before their human guides become
-actionable. Do not merge either from automation alone.
+current-main refreshes are on their branches in isolated worktrees: #356 passes
+2,875 unit plus 65/65 one-worker E2E, while #464 passes 2,874 unit plus 65/65.
+Each live precheck must confirm local/remote/PR equality, two fresh exact-head
+reviews, and green CI before its human guide becomes actionable. Do not merge
+either from automation alone.
 
 **Cycle 53 implementation / PR #466:** `fix/ri01-pending-decision-sw` ports the clean
 checkpoint broker foundation and wires a dormant service-worker
@@ -130,18 +130,20 @@ package did not enforce that compatibility property. `dfea4da` adds a recursive
 emitted-worker closure gate and the initial nine pass/fail fixtures. Fresh round
 2 then proved comment-separated dynamic/static imports and re-exports plus
 namespace re-exports escaped that parser; `5d6ad17`/`ab6d845` add the 17-fixture
-regression set and `ddfacf0` replaces the regex with `es-module-lexer`. PR #466
-and AI-22 consume the third and
+regression set and `ddfacf0` replaces the regex with `es-module-lexer`. A fresh
+follow-up proved unsupported static import attributes/assertions still passed;
+`c0305f9` adds syntax-aware rejection and four pre-fix-failing fixtures (21
+total). PR #466 and AI-22 consume the third and
 final human-held browser slot. Local/remote/PR equality, two fresh exact-head
 reviews, bot/thread accounting, and CI
 remain authoritative. No automation merge is authorized.
 
 | Slice | Branch | Base | Worktree | PR | State | Proving gates |
 |---|---|---|---|---|---|---|
-| RI-03 MAIN compatibility | `feat/dehard-enforcement-protos` | `5692e08` local refresh | `.worktrees/pr356-refresh` | #356 | OPEN / REFRESH COMMITTED / AI-13 | publish until local/remote/PR equal; full exact-head CI/reviews; human Chrome Gate-3 |
+| RI-03 MAIN compatibility | `feat/dehard-enforcement-protos` | current branch head | `.worktrees/pr356-refresh` | #356 | OPEN / EXACT-HEAD GATES / AI-13 | live local/remote/PR equality; full exact-head CI/reviews; human Chrome Gate-3 |
 | #459 dependency advisories | `fix/release-dependency-advisories` | `ebddd27` | `.worktrees/deps-audit` | #463 | MERGED `2888483` | audit zero; exact-head CI; two reviews; all threads resolved; intended #459 close verified |
-| RI-01 synthetic allowance rejection | `fix/ri01-reject-synthetic-nav-allowances` | `c7870aa` local refresh | `.worktrees/ri01-synthetic-nav` | #464 | OPEN / REFRESH COMMITTED / AI-21 | publish until local/remote/PR equal; full exact-head CI/reviews; human Chrome Gate-3 |
-| RI-01 SW pending-decision boundary | `fix/ri01-pending-decision-sw` | current branch head | `.worktrees/ri01-pending-sw` | #466 | OPEN / ROUND-2 FIXES LOCAL / AI-22 | publish until local/remote/PR equal; focused broker/store/SW lifecycle tests; automated emitted static-worker graph; rollback; type/lint/build/unit; full E2E; perf/package; two fresh exact-head reviews/CI; human Chrome Gate-3 |
+| RI-01 synthetic allowance rejection | `fix/ri01-reject-synthetic-nav-allowances` | current branch head | `.worktrees/ri01-synthetic-nav` | #464 | OPEN / EXACT-HEAD GATES / AI-21 | live local/remote/PR equality; full exact-head CI/reviews; human Chrome Gate-3 |
+| RI-01 SW pending-decision boundary | `fix/ri01-pending-decision-sw` | current branch head | `.worktrees/ri01-pending-sw` | #466 | OPEN / EXACT-HEAD GATES / AI-22 | live local/remote/PR equality; focused broker/store/SW lifecycle tests; automated emitted static-worker graph; rollback; type/lint/build/unit; full E2E; perf/package; two fresh exact-head reviews/CI; human Chrome Gate-3 |
 
 **Historical checkpoint (2026-07-10):** no new slice started during that audit.
 At that time PRs #273/#356/#399 were stale and #356 was red. Rows below are
@@ -164,6 +166,7 @@ historical (all merged); Cycle 53 above supersedes that snapshot.
 
 | # | Date | Slice | Action | Result |
 |---|------|-------|--------|--------|
+| 57 | 2026-07-17 | VERIFY / PR #466 static-import capability gate | A fresh independent round-2 follow-up proved the lexer-backed emitted-worker gate still accepted Chrome-unsupported static import attributes and legacy assertions. Four fixtures covering import/re-export `with` and `assert` failed before the fix. `c0305f9` adds a TypeScript syntax pass that rejects both forms and invalid JavaScript before graph traversal; all 21 fixtures, the real five-module graph, typecheck, lint, build, and diff checks pass. Shared browser-held status now uses live head-equality/review/CI prechecks instead of transient push wording. Both exact-head reviews and CI restart after this status commit; AI-22 remains mandatory. | PR #466 OPEN / FINDING FIXED / EXACT-HEAD GATES+AI-22 HELD |
 | 56 | 2026-07-17 | VERIFY / PR #466 graph-parser adversarial round 2 | Exact `7e173eb` passed Build/Unit and E2E in GitHub run `29558561505`, was local/remote/PR-equal, thread-clean, and passed a clean independent round-1 recheck plus a clean exact-head Codex review. Fresh independent round 2 then proved the release gate missed valid comment-separated dynamic/static imports and re-exports plus namespace re-exports; it also found the handoff still described the completed push as future work. `5d6ad17` and `ab6d845` add eight pre-fix-failing fixtures (17 total); `ddfacf0` replaces the regex parser with direct `es-module-lexer` metadata. This status sync fixes the low finding. Both review rounds and CI restart on the final exact head; AI-22 remains mandatory. | PR #466 OPEN / R2 FINDINGS FIXED / EXACT-HEAD GATES+AI-22 HELD |
 | 55 | 2026-07-17 | VERIFY / PR #466 MV3 worker gate | The first independent adversarial re-review on pushed, CI-green `af0ccb2` validated all three runtime blocker fixes but found build/package had no regression gate for the exact MV3 static-import defect and found stale pre-push status wording. `dfea4da` adds a recursive emitted-worker closure verifier to ordinary build and package. It requires MV3 module type and pending-runtime reachability, follows local static imports, and rejects dynamic/preload, remote, out-of-dist, or missing imports. Nine pass/fail fixtures, typecheck, focused lint, build, perf 12/12, package, Node syntax, and diff checks pass. This status sync fixes the low finding. Both adversarial rounds and CI restart on the final exact head; AI-22 remains mandatory. | PR #466 OPEN / R1 FINDINGS FIXED / EXACT-HEAD GATES+AI-22 HELD |
 | 54 | 2026-07-17 | UNBLOCK / browser-held dependency refresh | Refreshed #356 and #464 against dependency merge `2888483` in their existing isolated worktrees with `--no-commit --no-ff`. Only the expected status-document conflicts occurred; each resolution preserves its PR runtime/test intent plus current dependency and human-queue truth. Coordinator audit then committed the merges as #356 `5692e08` and #464 `c7870aa`. #356 passes install/audit zero, type/lint/build/perf, 2,875 unit, and full 65/65 one-worker E2E. #464 passes install/audit zero, type/lint/build/perf/package, 2,874 unit, and full 65/65 E2E. Hook/skill, JSON/Python, and diff checks pass in both. Unit runs emit the known #465 Happy DOM teardown stacks while exiting zero. Old-head review/CI evidence is invalid after the dependency merge; each unpushed lane still needs two fresh exact-head reviews, green CI, and its human Gate-3. | #356 + #464 REFRESHES COMMITTED / NO PUSH / HUMAN HELD |
