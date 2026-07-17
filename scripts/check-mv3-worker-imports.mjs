@@ -11,6 +11,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { init, parse } from "es-module-lexer";
+import ts from "typescript";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -71,6 +72,16 @@ function resolveStaticImport(distDir, importer, specifier) {
 }
 
 function collectStaticImports(source, relativePath) {
+  const sourceFile = ts.createSourceFile(relativePath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+  if (sourceFile.parseDiagnostics.length > 0) {
+    throw new Error(`Worker graph module is invalid JavaScript: ${relativePath}`);
+  }
+  for (const statement of sourceFile.statements) {
+    if ((ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement)) && statement.attributes) {
+      throw new Error(`Worker graph contains unsupported import attributes in ${relativePath}.`);
+    }
+  }
+
   let imports;
   try {
     [imports] = parse(source, relativePath);

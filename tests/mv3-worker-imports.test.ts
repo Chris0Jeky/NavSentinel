@@ -65,6 +65,26 @@ describe("MV3 emitted service-worker import check", () => {
     ["remote import", 'import "https://example.test/worker.js";', "non-local import"],
     ["out-of-dist import", 'import "../../outside-worker.js";', "escapes extension/dist"],
     ["missing import", 'import "./pending-decision-runtime~sw.js";', "import is missing"],
+    [
+      "import attributes",
+      'import value from "./pending-decision-runtime~sw.js" with { type: "json" };',
+      "unsupported import attributes",
+    ],
+    [
+      "legacy import assertions",
+      'import value from "./pending-decision-runtime~sw.js" assert { type: "json" };',
+      "unsupported import attributes",
+    ],
+    [
+      "re-export attributes",
+      'export { value } from "./pending-decision-runtime~sw.js" with { type: "json" };',
+      "unsupported import attributes",
+    ],
+    [
+      "legacy re-export assertions",
+      'export { value } from "./pending-decision-runtime~sw.js" assert { type: "json" };',
+      "unsupported import attributes",
+    ],
   ])("rejects %s in the reachable worker graph", (_label, workerSource, expectedError) => {
     const dist = makeDist({ "service-worker-loader.js": workerSource });
 
