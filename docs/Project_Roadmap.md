@@ -30,7 +30,7 @@ readiness is tracked only by the outcome gates below.
 
 | Gate | State | Required next move |
 |---|---|---|
-| Release integrity | **Blocked** | RI-01 extension-origin decision authority; complete #356 human Gate-3; clear #459 dependency advisories; excise visual-sim (#424); remove fake DNR; purpose-specific data minimization; beta-off JS behavior; #175/#186 bridge identity/recovery |
+| Release integrity | **Blocked** | Complete RI-01 beyond #464's synthetic-input rejection and #466's dormant broker boundary; finish #356 Gate-3; excise visual-sim (#424); remove fake DNR; purpose-specific data minimization; beta-off JS behavior; #175/#186 bridge identity/recovery |
 | Release profile | **Decision required** | AI-9/AI-16 choose the recommended interaction-only beta or a reproducible, budgeted real reputation build |
 | Brand/store | **Blocked** | AI-19 name clearance; #455 pre-collection disclosure/consent; one canonical claims-verified listing; assets and fresh-install checks |
 | Detection validation | **Open** | #417 methodology, #416/#426 rerun, confidence-aware reporting |
@@ -40,26 +40,40 @@ readiness is tracked only by the outcome gates below.
 
 ### Live execution truth
 
-Verified 2026-07-17: the root `main` worktree is clean and matches
-`origin/main`; v0.4.0; exact-head `main` CI green; 80 open
-issues; no milestone, tag, GitHub release, CWS release, or branch protection.
-The exact audit baseline is recorded only in dated `Product_Strategy.md`; verify
-live. The browser-surface PR queue is not yet ready for human time:
+Verified 2026-07-17: root `main` matched `origin/main`; v0.4.0; main CI green;
+80 open issues; no milestone, tag, GitHub release, CWS release, or branch
+protection. The exact audit baseline is recorded only in dated
+`Product_Strategy.md`; verify live. Current PR truth:
 
 | PR | Current state |
 |---|---|
 | #273 | Closed 2026-07-13 from a stale base; recreate from current `main` or defer |
-| #356 | Refreshed/pushed and thread-clean; pre-guide `1accb43` Build/Unit + E2E green; current guide prepared and usable only after its live exact-head CI precheck, then human Gate-3 |
+| #356 | Current-main merge committed as `5692e08` and passes 2,875 unit plus 65/65 E2E; reach local/remote/PR equality, repeat exact-head reviews/CI, then AI-13 |
 | #399 | Closed 2026-07-13; measurement-held under #223/#417 and not a beta blocker |
+| #463 | Merged exact green dependency head `91aab4f` as `2888483`; #459 closed as intended |
+| #464 | Current-main merge committed as `c7870aa` and passes 2,874 unit plus 65/65 E2E; reach local/remote/PR equality, repeat exact-head reviews/CI, then AI-21 |
+| #466 | Open RI-01 dormant pending-decision SW boundary; three runtime blockers fixed, emitted static-worker gate added in `dfea4da`, parser replaced by a real module lexer in `ddfacf0`; live exact-head reviews/CI and AI-22 remain |
 
-**RI-01 local implementation note (verified 2026-07-13):** remotely backed-up
-checkpoint branch `fix/ri01-extension-origin-decisions` contains a context-bound,
-hash-minimizing pending-decision broker plus a synthetic-navigation-allowance
-fix. Focused broker tests pass, but the broker is not wired into production:
-service-worker handlers, active-tab/sender validation, exact-context delivery,
-popup actions, warn/cancel-only injected prompts, full branch gates, and real
-Chrome remain open. Windows Defender quarantined one tracked adversarial
-ClickFix property fixture only in that worktree; AI-20 owns the human review.
+**RI-01 implementation note (verified 2026-07-17):** PR #464 isolates the
+production synthetic-navigation sub-slice: only trusted input can mint
+navigation allowances, a preceding trusted pointerdown remains risk evidence,
+and an untrusted `_blank` click cannot enter the benign-anchor exemption. Its
+targeted attack/compatibility checks and all 65 one-worker E2E tests passed on
+its pre-dependency head; AI-21 real-Chrome Gate-3 remains mandatory after its
+current-main refresh. PR #466 now supplies a dormant, context-bound
+pending-decision service-worker boundary: shared contracts/store, authenticated
+content/extension senders, browser-derived tab/frame/document context, a
+worker-owned destination capability, positive current-frame enumeration,
+one-shot consumption, and top-navigation/tab cleanup. Its broker factory is
+statically imported through a dedicated MV3-compatible module chunk while
+construction stays deferred, preserving the service-worker budget without
+unsupported `import()`. Build and package now fail if that emitted worker graph
+regresses to dynamic/preload, missing, remote, or out-of-dist imports. It executes
+no action. Remaining RI-01 work includes a real producer and extension-origin
+presentation/actions, removing injected allow/trust/resume authority, integrated
+branch gates, trusted-click redressing coverage, and real Chrome verification.
+Windows Defender quarantined one tracked adversarial ClickFix property fixture
+only in the older checkpoint worktree; AI-20 owns the human review.
 
 The North-Star and Horizon documents are frozen option portfolios. Their 15
 Horizon issues (#439–#453) do not authorize implementation and should be culled
@@ -77,7 +91,7 @@ maintainer chooses disclosure/ownership.
 |---|---|---|---|---|---|
 | RI-01 | P0 beta blocker | Move all proceed/allow/trust/resume authority out of page-injected UI | Agent + Gate-3 | Private release task | Injected UI is warn/cancel only; extension-origin action is tab/destination-bound with TTL; synthetic input, trusted-click redressing, host tamper/removal, tab switch, and stale state cannot lower protection |
 | RI-02 | P0 beta blocker | Excise visual-sim capture, templates, scoring hook, WAR, tests, and state | Agent + Gate-3 | #424 | No viewport capture path or placeholder asset remains; #374 is optional coordination, not a prerequisite |
-| RI-03 | P0 beta blocker | Re-green the current #356 guide head, then complete human Gate-3; recreate or defer #273 | Agent then Chris | #273/#356; #399 stays deferred | Guide's live precheck points only to a green exact head; #356 has human Gate-3 evidence; #399 remains outside beta blockers until its measurement methodology is ready |
+| RI-03 | P0 beta blocker | Finish #356 human Gate-3; recreate or defer #273 | Chris + agent | #273/#356; #399 stays deferred | #356's current exact head passes Gate-3 and merge gates; any #273 replacement guide points only to a current green branch; #399 remains outside beta blockers until its measurement methodology is ready |
 | RI-04 | P0 product decision | Implement the selected interaction-only or real-reputation profile | Chris + agent | #321 / AI-9 / AI-16 | Release script, tag CI, manifest/WAR, runtime initialization, package checks/budgets, tests, provenance/cadence (if real), and every claim agree for the selected profile; verify both only if both are intentionally retained |
 | RI-05 | P0 beta blocker | Remove fake DNR feature surface and unused permissions | Agent + Gate-3 | CWS checklist; redesign #242/#243 later | No test rules/toggle/DNR permission in beta manifest |
 | RI-06 | P0 privacy blocker | Inventory every store; minimize by purpose; add complete reset | Agent + privacy review | Extend #176 or seed one scoped follow-up | Persistent records use least-identifying data; exact session URLs remain only for correctness with tab binding/TTL; rollback/OAuth/allow tests pass; all behavioral stores have one clear control and accurate export/disclosure |
@@ -97,9 +111,9 @@ maintainer chooses disclosure/ownership.
 
 - #415: create one `v0.5.0-unlisted-beta` milestone containing only real blockers.
 - #321: replace "build the filter" with RI-04 and the AI-9 decision.
-- #356: P0 guide prepared, current exact-head CI plus human Gate-3 pending; #273
-  recreate/defer; #399 is closed and
-  remains measurement-deferred under #223/#417.
+- #356: P0; publish the committed current-main refresh, repeat exact-head
+  reviews/CI, then hold for AI-13 human Gate-3. Recreate/defer #273; #399 is closed and remains
+  measurement-deferred under #223/#417.
 - #419/#421/#422: close enacted scope; retain only concrete unfinished work.
 - #423: close when the verified-claims policy lands.
 - #424: rebody as RI-02; move #245/#246 to post-beta or close them.
@@ -126,7 +140,7 @@ maintainer chooses disclosure/ownership.
    fund only Decision Journal + recovery guidance; otherwise change segment/
    position or stop before advanced architecture.
 
-Last updated: 2026-07-13
+Last updated: 2026-07-17
 
 ---
 
