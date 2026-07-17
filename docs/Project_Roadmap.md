@@ -48,11 +48,11 @@ protection. The exact audit baseline is recorded only in dated
 | PR | Current state |
 |---|---|
 | #273 | Closed 2026-07-13 from a stale base; recreate from current `main` or defer |
-| #356 | Current-main merge committed locally as `5692e08` and passes 2,875 unit plus 65/65 E2E; push, repeat exact-head reviews/CI, then AI-13 |
+| #356 | Current-main merge committed as `5692e08` and passes 2,875 unit plus 65/65 E2E; reach local/remote/PR equality, repeat exact-head reviews/CI, then AI-13 |
 | #399 | Closed 2026-07-13; measurement-held under #223/#417 and not a beta blocker |
 | #463 | Merged exact green dependency head `91aab4f` as `2888483`; #459 closed as intended |
-| #464 | Current-main merge committed locally as `c7870aa` and passes 2,874 unit plus 65/65 E2E; push, repeat exact-head reviews/CI, then AI-21 |
-| #466 | Open RI-01 dormant pending-decision SW boundary; three runtime blockers fixed, plus an emitted static-worker gate in `dfea4da`; live exact-head reviews/CI and AI-22 remain |
+| #464 | Current-main merge committed as `c7870aa` and passes 2,874 unit plus 65/65 E2E; reach local/remote/PR equality, repeat exact-head reviews/CI, then AI-21 |
+| #466 | Open RI-01 dormant pending-decision SW boundary; three runtime blockers fixed, emitted static-worker gate added in `dfea4da`, parser replaced by a real module lexer in `ddfacf0`; live exact-head reviews/CI and AI-22 remain |
 
 **RI-01 implementation note (verified 2026-07-17):** PR #464 isolates the
 production synthetic-navigation sub-slice: only trusted input can mint
@@ -111,8 +111,8 @@ maintainer chooses disclosure/ownership.
 
 - #415: create one `v0.5.0-unlisted-beta` milestone containing only real blockers.
 - #321: replace "build the filter" with RI-04 and the AI-9 decision.
-- #356: P0; integrate current `main`, repeat exact-head reviews/CI, then hold for
-  AI-13 human Gate-3. Recreate/defer #273; #399 is closed and remains
+- #356: P0; publish the committed current-main refresh, repeat exact-head
+  reviews/CI, then hold for AI-13 human Gate-3. Recreate/defer #273; #399 is closed and remains
   measurement-deferred under #223/#417.
 - #419/#421/#422: close enacted scope; retain only concrete unfinished work.
 - #423: close when the verified-claims policy lands.

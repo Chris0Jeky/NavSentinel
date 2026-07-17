@@ -97,14 +97,14 @@ PRs D-* are independent (different files) → parallel branches off `main`, **no
 
 ## In-Flight
 
-**Active checkpoint (2026-07-17, Cycle 55):** PR #463 merged its exact green
+**Active checkpoint (2026-07-17, Cycle 56):** PR #463 merged its exact green
 dependency head as `2888483` and closed #459. That dependency graph must now be
 integrated into all browser-held lanes. PR #356 (AI-13) and #464 (AI-21) were
 twice reviewed, thread-clean, and exact-head CI-green before the merge. Their
 current-main refreshes are committed locally in isolated worktrees: #356
 `5692e08` passes 2,875 unit plus 65/65 one-worker E2E, while #464 `c7870aa`
-passes 2,874 unit plus 65/65. Both remain unpushed and must pass live remote
-equality plus fresh exact-head reviews/CI before their human guides become
+passes 2,874 unit plus 65/65. Both must reach local/remote/PR equality plus fresh
+exact-head reviews/CI before their human guides become
 actionable. Do not merge either from automation alone.
 
 **Cycle 53 implementation / PR #466:** `fix/ri01-pending-decision-sw` ports the clean
@@ -127,18 +127,21 @@ and a static Rolldown module chunk. The emitted worker is about 23.3/25KB and
 the total package about 492.9/500KB. Candidate `af0ccb2` was pushed, exact-head
 CI-green, and thread-clean, but the first independent re-review found build and
 package did not enforce that compatibility property. `dfea4da` adds a recursive
-emitted-worker closure gate and nine pass/fail fixtures for module type, static
-reachability, preload/dynamic imports, remote/escaping paths, and missing chunks.
-PR #466 and AI-22 consume the third and final human-held browser slot. Live
-remote equality, two fresh exact-head reviews, bot/thread accounting, and CI
+emitted-worker closure gate and the initial nine pass/fail fixtures. Fresh round
+2 then proved comment-separated dynamic/static imports and re-exports plus
+namespace re-exports escaped that parser; `5d6ad17`/`ab6d845` add the 17-fixture
+regression set and `ddfacf0` replaces the regex with `es-module-lexer`. PR #466
+and AI-22 consume the third and
+final human-held browser slot. Local/remote/PR equality, two fresh exact-head
+reviews, bot/thread accounting, and CI
 remain authoritative. No automation merge is authorized.
 
 | Slice | Branch | Base | Worktree | PR | State | Proving gates |
 |---|---|---|---|---|---|---|
-| RI-03 MAIN compatibility | `feat/dehard-enforcement-protos` | `5692e08` local refresh | `.worktrees/pr356-refresh` | #356 | OPEN / REFRESH COMMITTED / AI-13 | push; full exact-head CI/reviews; human Chrome Gate-3 |
+| RI-03 MAIN compatibility | `feat/dehard-enforcement-protos` | `5692e08` local refresh | `.worktrees/pr356-refresh` | #356 | OPEN / REFRESH COMMITTED / AI-13 | publish until local/remote/PR equal; full exact-head CI/reviews; human Chrome Gate-3 |
 | #459 dependency advisories | `fix/release-dependency-advisories` | `ebddd27` | `.worktrees/deps-audit` | #463 | MERGED `2888483` | audit zero; exact-head CI; two reviews; all threads resolved; intended #459 close verified |
-| RI-01 synthetic allowance rejection | `fix/ri01-reject-synthetic-nav-allowances` | `c7870aa` local refresh | `.worktrees/ri01-synthetic-nav` | #464 | OPEN / REFRESH COMMITTED / AI-21 | push; full exact-head CI/reviews; human Chrome Gate-3 |
-| RI-01 SW pending-decision boundary | `fix/ri01-pending-decision-sw` | current branch head | `.worktrees/ri01-pending-sw` | #466 | OPEN / REVIEW GATE FIXED / AI-22 | live remote equality; focused broker/store/SW lifecycle tests; automated emitted static-worker graph; rollback; type/lint/build/unit; full E2E; perf/package; two fresh exact-head reviews/CI; human Chrome Gate-3 |
+| RI-01 synthetic allowance rejection | `fix/ri01-reject-synthetic-nav-allowances` | `c7870aa` local refresh | `.worktrees/ri01-synthetic-nav` | #464 | OPEN / REFRESH COMMITTED / AI-21 | publish until local/remote/PR equal; full exact-head CI/reviews; human Chrome Gate-3 |
+| RI-01 SW pending-decision boundary | `fix/ri01-pending-decision-sw` | current branch head | `.worktrees/ri01-pending-sw` | #466 | OPEN / ROUND-2 FIXES LOCAL / AI-22 | publish until local/remote/PR equal; focused broker/store/SW lifecycle tests; automated emitted static-worker graph; rollback; type/lint/build/unit; full E2E; perf/package; two fresh exact-head reviews/CI; human Chrome Gate-3 |
 
 **Historical checkpoint (2026-07-10):** no new slice started during that audit.
 At that time PRs #273/#356/#399 were stale and #356 was red. Rows below are
@@ -161,6 +164,7 @@ historical (all merged); Cycle 53 above supersedes that snapshot.
 
 | # | Date | Slice | Action | Result |
 |---|------|-------|--------|--------|
+| 56 | 2026-07-17 | VERIFY / PR #466 graph-parser adversarial round 2 | Exact `7e173eb` passed Build/Unit and E2E in GitHub run `29558561505`, was local/remote/PR-equal, thread-clean, and passed a clean independent round-1 recheck plus a clean exact-head Codex review. Fresh independent round 2 then proved the release gate missed valid comment-separated dynamic/static imports and re-exports plus namespace re-exports; it also found the handoff still described the completed push as future work. `5d6ad17` and `ab6d845` add eight pre-fix-failing fixtures (17 total); `ddfacf0` replaces the regex parser with direct `es-module-lexer` metadata. This status sync fixes the low finding. Both review rounds and CI restart on the final exact head; AI-22 remains mandatory. | PR #466 OPEN / R2 FINDINGS FIXED / EXACT-HEAD GATES+AI-22 HELD |
 | 55 | 2026-07-17 | VERIFY / PR #466 MV3 worker gate | The first independent adversarial re-review on pushed, CI-green `af0ccb2` validated all three runtime blocker fixes but found build/package had no regression gate for the exact MV3 static-import defect and found stale pre-push status wording. `dfea4da` adds a recursive emitted-worker closure verifier to ordinary build and package. It requires MV3 module type and pending-runtime reachability, follows local static imports, and rejects dynamic/preload, remote, out-of-dist, or missing imports. Nine pass/fail fixtures, typecheck, focused lint, build, perf 12/12, package, Node syntax, and diff checks pass. This status sync fixes the low finding. Both adversarial rounds and CI restart on the final exact head; AI-22 remains mandatory. | PR #466 OPEN / R1 FINDINGS FIXED / EXACT-HEAD GATES+AI-22 HELD |
 | 54 | 2026-07-17 | UNBLOCK / browser-held dependency refresh | Refreshed #356 and #464 against dependency merge `2888483` in their existing isolated worktrees with `--no-commit --no-ff`. Only the expected status-document conflicts occurred; each resolution preserves its PR runtime/test intent plus current dependency and human-queue truth. Coordinator audit then committed the merges as #356 `5692e08` and #464 `c7870aa`. #356 passes install/audit zero, type/lint/build/perf, 2,875 unit, and full 65/65 one-worker E2E. #464 passes install/audit zero, type/lint/build/perf/package, 2,874 unit, and full 65/65 E2E. Hook/skill, JSON/Python, and diff checks pass in both. Unit runs emit the known #465 Happy DOM teardown stacks while exiting zero. Old-head review/CI evidence is invalid after the dependency merge; each unpushed lane still needs two fresh exact-head reviews, green CI, and its human Gate-3. | #356 + #464 REFRESHES COMMITTED / NO PUSH / HUMAN HELD |
 | 53 | 2026-07-17 | UNBLOCK / RI-01 SW pending-decision boundary | Selected the smallest remaining RI-01 integration slice from a fresh detached `origin/main` worktree and ported only the clean checkpoint broker foundation. The first combined worktree command accidentally ran `git switch` in root; root was clean, immediately restored to `main`, and no file/commit was lost. Added shared runtime contracts, a dependency-injected dormant SW broker, exact sender/tab/frame/document context, a URL-minimized destination capability, one-shot consume with post-consume checks, hydration, and serialized top-navigation/tab-removal cleanup; no producer, popup, or protection-lowering executor was added. PR #463 merged as `2888483` during the slice and was integrated without widening scope. The initial eager implementation exceeded the 25KB SW budget (40.5KB, then 29.2KB); a dynamic lazy split first reached 24.6KB but the exact-head recheck correctly found Chrome MV3 does not support `import()`. That recheck also found the popup could not construct consume without a raw destination side channel and `getFrame` could retain removed-child metadata. `6a18f1d` removes the raw consume field, keeps the destination fingerprint worker-owned, requires positive `getAllFrames` membership plus exact source/top hashes across enumerations, and adds removed-child/URL/race tests. `8c0fed1` statically imports the factory through a documented Vite/Rolldown chunk; the emitted module graph contains no dynamic import, the worker is about 23.3/25KB, and total dist is about 492.9/500KB. Earlier round-1 findings (a delayed-create lifecycle race and two docs/guide gaps) remain fixed. The resulting tree passes 176 focused tests, type/lint/build, 2,901 units, rollback 3/3 after one retained timeout signal, full one-worker E2E 64/64, package, audit zero, and perf 12/12. Pre-existing Happy DOM fetch teardown noise is #465. AI-22 now includes removed-child and no-raw-side-channel checks. Candidate `af0ccb2` was pushed, passed exact-head CI, and resolved all historical threads before Cycle 55's independent re-review superseded it with the automated graph-gate finding. | PR #466 OPEN / CANDIDATE SUPERSEDED / CYCLE 55 GATES+AI-22 HELD |

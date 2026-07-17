@@ -49,7 +49,8 @@ rotation under #437.
   before #463 changed `main`'s dependency graph. Their current-main refreshes are
   committed locally as `5692e08` and `c7870aa`, respectively. #356 passes 2,875
   unit plus 65/65 one-worker E2E; #464 passes 2,874 unit plus 65/65 one-worker
-  E2E. Push, full exact-head CI, and both fresh reviews remain; neither may merge
+  E2E. Each refresh must reach local/remote/PR equality, full exact-head CI, and
+  both fresh reviews; neither may merge
   without its human Gate-3 evidence.
 - PR #466's Cycle 53 runtime tree passed 176 focused broker/SW tests, typecheck,
   lint, build, 2,901 units, rollback 3/3, all 64 one-worker E2E, package, and
@@ -62,8 +63,13 @@ rotation under #437.
   had all four historical threads resolved. The first independent re-review then
   found a new medium gate gap: build/package could still pass if bundling
   reintroduced an unloadable worker graph. `dfea4da` adds the emitted-graph
-  verifier to both paths plus nine pass/fail fixtures. Live remote equality,
-  exact-head reviews, thread accounting, and CI remain authoritative.
+  verifier to both paths plus the initial nine pass/fail fixtures. Fresh round 2
+  then proved the regex missed comment-separated dynamic imports, namespace
+  re-exports, and comment-separated static imports/re-exports. `5d6ad17` and
+  `ab6d845` add the 17-fixture regression set; `ddfacf0` replaces the hand-
+  rolled regex parser with direct `es-module-lexer` import metadata.
+  Local/remote/PR equality, exact-head reviews, thread accounting, and CI remain
+  live-authoritative.
 - PR #466's package is about 492.9/500KB while reputation is a 52-byte test fixture. The
   old 150KB/100K-domain plan cannot meet its stated 0.01% FP target or aggregate
   package cap as written.
@@ -86,6 +92,16 @@ rotation under #437.
   pushed, CI-green candidate local. `dfea4da` fixes the gate with a recursive
   emitted-closure verifier and nine pass/fail fixtures; this status sync fixes
   the low finding. Both review rounds must restart from the final exact head.
+
+- **PR #466 independent round 2 (exact `7e173eb`, 2026-07-17):** found one
+  medium release-gate bypass and one low status gap. The graph regex missed
+  valid comment-separated dynamic/static imports and re-exports plus namespace
+  re-export edges, so it could omit an unloadable or missing reachable chunk;
+  `5d6ad17`/`ab6d845` add eight fixtures and `ddfacf0` moves edge discovery to
+  a real module lexer. The handoff
+  still described push as future after `7e173eb` was already remote/PR-equal and
+  exact-head CI-green; this status sync removes that transient claim. Both
+  independent rounds restart on the final exact head.
 
 - **PR #464 pre-final adversarial round (two independent lenses, 2026-07-17):**
   the initial isolated commit regressed Level 6. One lens found that discarding
@@ -183,10 +199,11 @@ comparative evidence.
 
 ## Next safe slice
 
-Push PR #466's gate/status fixes, map the round-1 finding to `dfea4da`, then run
-two fresh exact-head reviews, bot/thread accounting, and CI; leave it human-held
-for AI-22. Then push the committed current-main refreshes for #356 and #464;
-both must repeat exact-head reviews/CI before AI-13 or AI-21 is actionable. Do
+Publish PR #466 through `ddfacf0` plus this status sync until local/remote/PR
+heads match, then run two fresh exact-head reviews, bot/thread accounting, and
+CI; leave it human-held for AI-22. Then publish the committed current-main
+refreshes for #356 and #464; both must repeat exact-head reviews/CI before AI-13
+or AI-21 is actionable. Do
 not start a fourth browser-held slice.
 
 ## Queue accounting
@@ -195,11 +212,12 @@ not start a fourth browser-held slice.
   none may merge from automation alone.
 - **Merged:** #463 / #459 as `2888483`; intended close link verified.
 - **Open / in progress:** PR #466 pending-decision SW boundary; the three runtime
-  blockers and the emitted-graph gate finding are fixed, while live remote
-  equality, exact-head reviews, bot/thread accounting, CI, and AI-22 remain.
-  #356's current-main merge is committed locally as `5692e08`, passes 2,875 unit
-  plus 65/65 E2E, and is unpushed. #464's merge is committed locally as
-  `c7870aa`, passes 2,874 unit plus 65/65 E2E, and is unpushed.
+  blockers, emitted-graph gate, and round-2 parser gaps are fixed. Publish until
+  local/remote/PR heads match, then require exact-head reviews, bot/thread
+  accounting, CI, and AI-22.
+  #356's current-main merge is committed as `5692e08` and passes 2,875 unit plus
+  65/65 E2E; #464's merge is committed as `c7870aa` and passes 2,874 unit plus
+  65/65 E2E. Each must reach local/remote/PR equality before its fresh gates.
 - **Parked:** draft #457 agent-harness tooling; closed #273/#399 retain explicit
   re-entry paths.
 - **Blocked:** AI-15, AI-8, and AI-14.
@@ -237,6 +255,9 @@ not start a fourth browser-held slice.
 - PowerShell did not expand `scripts/agent_hooks/*.py` for `py_compile`; that was
   an invalid syntax-check invocation. `python -m compileall -q
   scripts/agent_hooks` is the working cross-file check and passed.
+- The bundled GitHub thread helper first failed decoding CLI output with Windows
+  `cp1252`; rerunning it with `PYTHONUTF8=1` produced the complete four-thread
+  audit. Preserve UTF-8 mode for future thread audits on this machine.
 - The first post-round-1 rollback lane timed out once waiting for Level 10's
   return navigation. That exact case then passed 3/3 repeated, the full rollback
   lane passed 3/3, and the full one-worker lane passed 64/64. This is retained as
