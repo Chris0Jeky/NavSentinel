@@ -33,17 +33,16 @@ rotation under #437.
   repository ruleset, or external-user evidence.
 - GitHub private vulnerability reporting is enabled and `SECURITY.md` links the
   verified private advisory route.
-- `origin/main` remains at the last verified green GitHub head; the root `main`
-  worktree is clean but carries one unpushed agent-tooling commit and must not be
-  reset or overwritten.
+- The root `main` worktree is clean and matches `origin/main` at `ebddd27`; its
+  exact-head GitHub CI is green.
 - PR #356 / RI-03 was refreshed by merging current `origin/main`. Its runtime
   head `2a30c63` passed two independent adversarial rounds, 2,875 unit tests,
   all 65 one-worker E2E tests, build/package, and perf 12/12. Pushed head
   `1accb43` passed GitHub Build/Unit and E2E in run `29546364063`; all three
-  review threads are resolved. The current guide-only head must be pushed,
+  review threads are resolved. The current post-merge guide head must be pushed,
   reviewed, and re-green; ACTION_ITEMS step 1 enforces that boundary. AI-13
   human Gate-3 remains mandatory.
-- 79 open issues with no milestone/assignee; 15 Horizon issues #439–#453 are a
+- 80 open issues with no milestone/assignee; 15 Horizon issues #439–#453 are a
   frozen option portfolio, not active work.
 - Open PRs are #356 (browser-surface, Gate-3 held) and draft #457 (shared deny
   floor, green at its separately verified head). Stale PRs #273 and #399 remain

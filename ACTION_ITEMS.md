@@ -25,15 +25,15 @@ program: `docs/Project_Roadmap.md`. Standing decisions:
 
 ## Current state snapshot (live state rechecked 2026-07-17)
 
-The root `main` worktree is clean but one unpushed agent-tooling commit ahead of
-`origin/main`; do not reset or overwrite it. Run `git rev-parse main`, `git
-rev-parse origin/main`, and live `gh` checks before acting; the exact audit
+The root `main` worktree is clean and matches `origin/main`; its exact-head CI
+is green. Run `git rev-parse main`, `git rev-parse origin/main`, and live `gh`
+checks before acting; the exact audit
 baseline lives in `docs/Product_Strategy.md`, not this live snapshot. PR #356's
 runtime candidate passed typecheck, lint, build, version/package checks, 2,875
 unit tests (95 files), perf 12/12, and all 65 one-worker E2E tests locally.
 v0.4.0 still has no tag, GitHub release, CWS release, or external-user evidence.
 
-Live recheck on 2026-07-17 found 79 open issues, no tags/releases/classic branch
+Live recheck on 2026-07-17 found 80 open issues, no tags/releases/classic branch
 protection or repository rulesets, and no milestones or assignees. Verify the
 current `main` SHA live rather than pinning it here. Open PRs are #356 and draft
 #457. Stale PRs #273 and #399 were closed with explicit re-entry paths. #356's

@@ -40,8 +40,8 @@ readiness is tracked only by the outcome gates below.
 
 ### Live execution truth
 
-Verified 2026-07-17: the root `main` worktree is clean but has one unpushed
-agent-tooling commit; v0.4.0; last verified `origin/main` CI green; 79 open
+Verified 2026-07-17: the root `main` worktree is clean and matches
+`origin/main`; v0.4.0; exact-head `main` CI green; 80 open
 issues; no milestone, tag, GitHub release, CWS release, or branch protection.
 The exact audit baseline is recorded only in dated `Product_Strategy.md`; verify
 live. The browser-surface PR queue is not yet ready for human time:
