@@ -107,6 +107,35 @@ describe("suite storage and allowlist migration", () => {
     });
   });
 
+  it("minimizes event-log URLs on export, including a pre-seeded legacy full URL (RI-06)", async () => {
+    const { chrome } = createChromeMock({
+      "sentinelsuite:event_log_v1": [
+        // Legacy entry persisted BEFORE the append-path change: a full URL with a
+        // reset token in the query and an OAuth code in the fragment.
+        {
+          id: "legacy-1",
+          ts: 100,
+          kind: "cred_submit_prompt",
+          site: "accounts.example.com",
+          url: "https://accounts.example.com/reset?token=super-secret#code=abc123",
+        },
+        // Entry with no url must be exported untouched.
+        { id: "no-url-1", ts: 101, kind: "nav_click_block", site: "x.com" },
+      ],
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { exportAll } = await import("../extension/src/shared/storage");
+    const exported = await exportAll();
+
+    const byId = Object.fromEntries(exported.eventLog.map((e) => [e.id, e]));
+    // Legacy full URL reduced to origin+path on the way out.
+    expect(byId["legacy-1"]!.url).toBe("https://accounts.example.com/reset");
+    // Host-level field untouched; the no-url entry still carries no url.
+    expect(byId["legacy-1"]!.site).toBe("accounts.example.com");
+    expect("url" in byId["no-url-1"]!).toBe(false);
+  });
+
   it("normalizes imported allowlist payloads before storage", async () => {
     const { chrome, store } = createChromeMock();
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);

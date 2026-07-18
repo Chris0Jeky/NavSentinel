@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   EVENT_LOG_KEY,
   PROMPT_OUTCOMES_KEY,
+  minimizeEventUrl,
 } from "../extension/src/shared/storage";
 
 type Store = Record<string, unknown>;
@@ -57,6 +58,55 @@ const CONTENT_SCRIPT_SENDER = {
   tab: { id: 7 },
   url: "https://evil.example/page",
 } as chrome.runtime.MessageSender;
+
+// RI-06: event-log URLs are a review/tuning corpus, not a correctness store, and
+// the pages most likely logged (credential/submit) carry reset/magic-link/session/
+// OAuth tokens in the query or fragment. minimizeEventUrl reduces a URL to
+// origin+path so those tokens are never persisted or exported.
+describe("minimizeEventUrl (RI-06)", () => {
+  it("drops both query and fragment, keeping origin+path", () => {
+    expect(minimizeEventUrl("https://x.com/a/b?token=secret#frag")).toBe("https://x.com/a/b");
+  });
+
+  it("leaves a URL with no query/fragment unchanged", () => {
+    expect(minimizeEventUrl("https://x.com/a/b")).toBe("https://x.com/a/b");
+  });
+
+  it("drops a query string only", () => {
+    expect(minimizeEventUrl("https://x.com/reset?token=abc123")).toBe("https://x.com/reset");
+  });
+
+  it("drops a fragment only (e.g. an OAuth/magic-link access_token in the hash)", () => {
+    expect(
+      minimizeEventUrl("https://mail.example.com/verify#access_token=eyJhbGciOi&expires=3600")
+    ).toBe("https://mail.example.com/verify");
+  });
+
+  it("strips userinfo (credentials) from the authority as a side benefit", () => {
+    expect(minimizeEventUrl("https://user:pass@x.com/a?b=c")).toBe("https://x.com/a");
+  });
+
+  it("handles a malformed/non-parseable URL without throwing (string strip from first ? or #)", () => {
+    let out: string | undefined;
+    expect(() => {
+      out = minimizeEventUrl("not a valid url with spaces?token=secret#frag");
+    }).not.toThrow();
+    // Fallback strips from the first delimiter (the '?' here precedes the '#').
+    expect(out).toBe("not a valid url with spaces");
+  });
+
+  it("strips at the first '#' when the fragment precedes any '?' in a malformed value", () => {
+    expect(minimizeEventUrl("garbage-no-scheme#frag?later=1")).toBe("garbage-no-scheme");
+  });
+
+  it("passes undefined through unchanged", () => {
+    expect(minimizeEventUrl(undefined)).toBeUndefined();
+  });
+
+  it("passes an empty string through unchanged", () => {
+    expect(minimizeEventUrl("")).toBe("");
+  });
+});
 
 describe("appendEvent", () => {
   beforeEach(() => {
@@ -324,6 +374,25 @@ describe("appendEvent", () => {
     expect(log[0]!.score).toBe(85);
     expect(log[0]!.reasons).toEqual(["nrs_cross_site", "nrs_new_tab_window"]);
     expect(log[0]!.extra).toEqual({ tabId: 42 });
+  });
+
+  it("persists only origin+path, dropping query+fragment tokens at the persist path (RI-06)", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { appendEvent } = await import("../extension/src/shared/storage");
+    await appendEvent({
+      kind: "cred_submit_prompt",
+      site: "accounts.example.com",
+      // A reset/magic-link page: the sensitive token rides in the query + fragment.
+      url: "https://accounts.example.com/reset?token=super-secret#code=abc123",
+    });
+
+    const log = store[EVENT_LOG_KEY] as Array<Record<string, unknown>>;
+    expect(log).toHaveLength(1);
+    expect(log[0]!.url).toBe("https://accounts.example.com/reset");
+    // Host-level fields are untouched.
+    expect(log[0]!.site).toBe("accounts.example.com");
   });
 
   it("sanitizes non-string reasons so the event persists instead of being silently dropped (#339)", async () => {
