@@ -504,13 +504,54 @@ function queueEventLogWrite<T>(operation: () => Promise<T>): Promise<T> {
   return next;
 }
 
+/**
+ * Reduce an event-log URL to `origin + pathname`, dropping the query string and
+ * fragment (RI-06). The event log is a REVIEW/tuning corpus, not a correctness
+ * store, and the pages most likely logged (credential/submit) are exactly those
+ * that carry reset/magic-link/session/OAuth tokens in the query or fragment — so
+ * exact URLs are both unnecessary and a privacy liability here. No consumer reads
+ * the query/fragment of an event-log url (options/popup render site/destHost/
+ * score/reasons only; the gauge matches on registrable domain), so origin+path
+ * suffices everywhere. Host-level fields (site/destHost) are already minimal and
+ * left untouched.
+ *
+ * Robust by contract: undefined/empty pass through unchanged; a parseable URL is
+ * reduced via the URL API (which also strips any userinfo in the authority); a
+ * non-parseable value (or an opaque/unknown origin) falls back to a pure string
+ * strip from the first `?` or `#` so this NEVER throws and never emits a "null…"
+ * origin.
+ */
+export function minimizeEventUrl(rawUrl: string): string;
+export function minimizeEventUrl(rawUrl: string | undefined): string | undefined;
+export function minimizeEventUrl(rawUrl: string | undefined): string | undefined {
+  if (!rawUrl) return rawUrl; // undefined or "" — preserve as-is
+  const parsed = safeUrlParse(rawUrl);
+  if (parsed && parsed.origin && parsed.origin !== "null") {
+    return parsed.origin + parsed.pathname;
+  }
+  // Non-parseable input, or an opaque origin (data:/blob:/about:/mailto:, file:
+  // on some engines): strip from the first query/fragment delimiter without
+  // reformatting the rest, so a display-only string stays intact and never throws.
+  return stripUrlQueryAndFragment(rawUrl);
+}
+
+function stripUrlQueryAndFragment(raw: string): string {
+  let end = raw.length;
+  const q = raw.indexOf("?");
+  if (q >= 0 && q < end) end = q;
+  const h = raw.indexOf("#");
+  if (h >= 0 && h < end) end = h;
+  return raw.slice(0, end);
+}
+
 function buildEventLogEntry(partial: EventLogAppendPartial): EventLogEntry {
   return {
     id: partial.id ?? makeId(),
     ts: Number.isFinite(partial.ts) ? (partial.ts as number) : Date.now(),
     kind: partial.kind,
     ...(partial.site !== undefined ? { site: partial.site } : {}),
-    ...(partial.url !== undefined ? { url: partial.url } : {}),
+    // RI-06: persist only origin+path for new entries (drop query+fragment tokens).
+    ...(partial.url !== undefined ? { url: minimizeEventUrl(partial.url) } : {}),
     ...(partial.destHost !== undefined ? { destHost: partial.destHost } : {}),
     ...(partial.score !== undefined ? { score: Number.isFinite(partial.score) ? partial.score : 0 } : {}),
     // Sanitize reasons to a bounded string[] (reuses the prompt-outcome helper). A
@@ -1198,7 +1239,12 @@ export async function exportAll(): Promise<{
   const settings = await getSuiteSettings();
   const allowlist = await getAllowlist();
   const trustedDomains = await getTrustedDomains();
-  const eventLog = await getEventLog();
+  // RI-06: minimize every event-log URL on the way out (drop query+fragment) so
+  // already-stored LEGACY full URLs — persisted before the append-path change —
+  // are also reduced in exports, matching what new entries now store.
+  const eventLog = (await getEventLog()).map((entry) =>
+    entry.url !== undefined ? { ...entry, url: minimizeEventUrl(entry.url) } : entry
+  );
   const promptOutcomes = await getPromptOutcomes();
   const adaptiveScores = await getAdaptiveScores();
   return {
