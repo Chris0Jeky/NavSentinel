@@ -54,7 +54,7 @@ Codex should use:
 - `AGENTS.md` as the compact root contract.
 - `.agents/skills/*/SKILL.md` for Codex-native workflows.
 - `update_plan` for multi-step execution tracking.
-- `multi_tool_use.parallel` for independent reads/searches.
+- parallel native reads/searches when the active Codex surface exposes them.
 - `apply_patch` for manual edits.
 - shell verification through npm scripts and targeted commands.
 - Playwright/browser tooling for browser-only extension behavior when available.
@@ -64,6 +64,10 @@ Codex should use:
   trusting the definitions with `/hooks`.
 - one pinned adapter to the shared global irreversible-command floor, plus
   session orientation, agentic-change reminders, and sanitized failure capture.
+
+Codex project-local configuration and hooks load only after the project is
+trusted. Hook trust is definition-hash-based: review/trust the exact current
+definitions through `/hooks` again after a hook change.
 
 Codex-specific strengths:
 
