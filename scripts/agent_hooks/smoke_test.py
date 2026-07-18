@@ -35,12 +35,12 @@ HANDOFF = ROOT / "docs" / "agentic" / "HANDOFF.md"
 QUESTION_PROTOCOL = ROOT / "docs" / "agentic" / "QUESTION_PROTOCOL.md"
 FLOOR_SMOKE = ROOT / ".claude" / "hooks" / "smoke_test.py"
 FLOOR_DISPATCH = ROOT / ".claude" / "hooks" / "dispatch.py"
-FLOOR_PROVENANCE = "ba0f67d9d3b24d69662cf5ede8dc21cef82d3908"
+FLOOR_PROVENANCE = "agent-harness canonical deny floor v1.5.1"
 EXPECTED_DISPATCH_SHA256 = (
-    "d45e7dc6071f7e4a9f43424bbc67a7f938c9a1316529d1f5642abf76086f2bb9"
+    "5d306592724630cde96305bfd586c7973a2072209d4884cdc2d3d88629c2e231"
 )
 EXPECTED_SMOKE_SHA256 = (
-    "f8ec6b1da4e8d44e51aa17e399541d377ba1cb2262c49251c297b7143ab726b0"
+    "7518915384623dc285314d510d1d9dedb4f8ec6cce7326913756084ea783bf3a"
 )
 VALID_EVENTS = {
     "PreToolUse",
@@ -239,7 +239,11 @@ def test_floor_matrix() -> None:
         capture_output=True,
         text=True,
         cwd=ROOT,
-        timeout=120,
+        # The canonical v1.5.1 floor matrix is ~1604 cases; on Windows (slow
+        # per-case subprocess spawning) it runs ~190s, well over the old 120s cap.
+        # The floor smoke exits fast on a real failure, so this bound only guards a
+        # genuine hang, not normal completion. Keep headroom above the CI spread.
+        timeout=600,
         check=False,
     )
     if result.returncode != 0:

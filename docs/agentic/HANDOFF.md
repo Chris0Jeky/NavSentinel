@@ -19,7 +19,7 @@ rotation under #437.
   tracked fixture, or choose the coverage-preserving rewrite path.
 - **AI-17:** enable `main` branch protection.
 - **AI-19:** clear or replace the product name before CWS submission.
-- **AI-18:** review/trust the exact v1.4.2 `.codex/hooks.json` Codex hook
+- **AI-18:** review/trust the exact v1.5.1 `.codex/hooks.json` Codex hook
   definitions once the #457 floor integration lands; the new head changes the
   exact bytes, so prior trust is invalid (definition-hash-based).
 - **AI-13: OPEN / READY:** run the exact-head-guarded #356 Chrome Gate-3 guide;
@@ -89,7 +89,7 @@ rotation under #437.
   coverage for an all-blocked queue; and clarified that AI-18 becomes ready
   only after hook definitions are final and unchanged. That review covered the
   superseded v1.0.0 project-local floor definition; it is historical evidence,
-  not review evidence for the current v1.4.2 harness branch.
+  not review evidence for the current v1.5.1 harness branch.
 - **Forward-test lens:** exercised the sequence as a maintainer handoff. The
   `q-1` / AI-16 guide, exact reply, durable `AI-N` resume semantics, and
   AI-18 conditional readiness are internally consistent after fixes.
