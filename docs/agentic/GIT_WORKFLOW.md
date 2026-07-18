@@ -6,12 +6,14 @@ Git operations.
 
 ## Branch Safety Tiers
 
-The shared dispatcher `.claude/hooks/dispatch.py` is the canonical deny floor.
-Claude runs it through `.claude/settings.json`; Codex runs the same script
-through `.codex/hooks.json` after the project and exact hook definitions are
-trusted. It blocks only irreversible operations: force-push patterns, `rm -rf`
-outside the project, pipe-to-shell, `sudo`, and secret-file mutation. It is a
-tripwire, not a complete safety boundary.
+The canonical deny floor is the global dispatcher `~/.claude/hooks/dispatch.py`.
+Claude receives it globally; Codex's sole project `PreToolUse` adapter in
+`.codex/hooks.json` pins the same dispatcher with `--runtime codex` after the
+project and exact hook definitions are trusted. Repo-local `.claude/hooks/*`
+files are exact CI/audit fixtures, not a second active hook. It blocks only
+irreversible operations: force-push patterns, `rm -rf` outside the project,
+pipe-to-shell, `sudo`, and secret-file mutation. It is a tripwire, not a
+complete safety boundary.
 
 At NavSentinel's T2 tier, `reset --hard`, `rebase`, and `checkout -- .` are
 recoverable from origin and may be technically permitted. They still require

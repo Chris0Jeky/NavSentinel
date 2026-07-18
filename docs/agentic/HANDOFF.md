@@ -19,8 +19,9 @@ rotation under #437.
   tracked fixture, or choose the coverage-preserving rewrite path.
 - **AI-17:** enable `main` branch protection.
 - **AI-19:** clear or replace the product name before CWS submission.
-- **AI-18: READY:** the hook-editing slice is committed; review/trust the exact
-  project-local Codex hook definitions before relying on them.
+- **AI-18:** review/trust the exact v1.4.2 `.codex/hooks.json` Codex hook
+  definitions once the #457 floor integration lands; the new head changes the
+  exact bytes, so prior trust is invalid (definition-hash-based).
 - **AI-13: OPEN / READY:** run the exact-head-guarded #356 Chrome Gate-3 guide;
   only Chris can record it complete.
 - **AI-15: BLOCKED** until agent preflight is complete.

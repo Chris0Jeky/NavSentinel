@@ -21,7 +21,7 @@ Use this when the task needs Claude Code-specific tool choice or guardrail disci
 ## Safety
 
 - Do not rely on Codex-only `.agents` workflow files for Claude behavior.
-- Let the shared `.claude/hooks/dispatch.py` deny floor block irreversible commands.
+- Let the shared global `~/.claude/hooks/dispatch.py` deny floor block irreversible commands (repo-local `.claude/hooks/*` are CI/audit fixtures).
 - Treat hook denials as signal, not friction to bypass.
 - Record unresolved failures in the handoff and ledger when recurring or instructive.
 

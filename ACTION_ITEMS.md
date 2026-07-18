@@ -75,10 +75,10 @@ changes do not change shipped product state.
   frozen Horizon proposals. No new feature/epic issue seeding until the queue is
   culled and milestone-categorized.
 - **Infrastructure:** classic branch protection remains absent (`404 Branch not
-  protected`) and the rulesets API returns `[]`. AI-17 remains open. The shared
-  v1.4.2 floor integration is in flight on `infra/harness-deny-floor-v141`, so
-  prior Codex hook trust is invalid; AI-18 remains open. GitHub private
-  vulnerability reporting is enabled and linked from `SECURITY.md`.
+  protected`) and the rulesets API returns `[]`. AI-17 remains open. The v1.4.2
+  floor integration (#457) changes the exact Codex hook definitions, so prior
+  Codex hook trust is invalid; AI-18 remains open until re-trusted after it lands.
+  GitHub private vulnerability reporting is enabled and linked from `SECURITY.md`.
 - **Local verification blocker:** Defender quarantined only
   `C:\Users\Public\codex-shell-home\NavSentinel-ri01\tests\clickfix-detector.property.test.ts`
   as `Trojan:HTML/FakeCaptcha.HNA!MTB`; it reports `DidThreatExecute=False` and
@@ -132,7 +132,7 @@ Then tell the agent `AI-19 done: <decision>`.
 definition changed during the v1.4.2 floor integration, invalidating any prior
 trust. Claude now receives the shared global floor exactly once; Codex keeps one
 project `PreToolUse` adapter plus the repo-specific lifecycle handlers. **Run
-only after the harness PR reaches its final reviewed head:** (1) start a fresh
+after the v1.4.2 floor integration (#457) lands on `main`:** (1) start a fresh
 Codex session in the canonical repository at that head; (2) run `/hooks`; (3)
 compare every project entry with `.codex/hooks.json`; (4) verify SessionStart
 runs `session_start.py`; (5) verify the sole PreToolUse entry pins normalized
