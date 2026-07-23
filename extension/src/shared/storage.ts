@@ -1242,9 +1242,11 @@ export async function exportAll(): Promise<{
   // RI-06: minimize every event-log URL on the way out (drop query+fragment) so
   // already-stored LEGACY full URLs — persisted before the append-path change —
   // are also reduced in exports, matching what new entries now store.
-  const eventLog = (await getEventLog()).map((entry) =>
-    entry.url !== undefined ? { ...entry, url: minimizeEventUrl(entry.url) } : entry
-  );
+  const eventLog = (await getEventLog()).map((entry) => {
+    if (entry.url === undefined) return entry;
+    const minimized = minimizeEventUrl(entry.url);
+    return minimized === entry.url ? entry : { ...entry, url: minimized };
+  });
   const promptOutcomes = await getPromptOutcomes();
   const adaptiveScores = await getAdaptiveScores();
   return {
