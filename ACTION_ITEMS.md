@@ -75,7 +75,7 @@ changes do not change shipped product state.
   frozen Horizon proposals. No new feature/epic issue seeding until the queue is
   culled and milestone-categorized.
 - **Infrastructure:** classic branch protection remains absent (`404 Branch not
-  protected`) and the rulesets API returns `[]`. AI-17 remains open. The v1.5.1
+  protected`) and the rulesets API returns `[]`. AI-17 remains open. The v1.5.2
   floor integration (#457) changes the exact Codex hook definitions, so prior
   Codex hook trust is invalid; AI-18 remains open until re-trusted after it lands.
   GitHub private vulnerability reporting is enabled and linked from `SECURITY.md`.
@@ -129,14 +129,14 @@ screenshots, docs, and repository metadata before invitations or submission.
 Then tell the agent `AI-19 done: <decision>`.
 
 **OPEN: AI-18 — Review and trust the new Codex project hooks.** The exact
-definition changed during the v1.5.1 floor integration, invalidating any prior
+definition changed during the v1.5.2 floor integration, invalidating any prior
 trust. Claude now receives the shared global floor exactly once; Codex keeps one
 project `PreToolUse` adapter plus the repo-specific lifecycle handlers. **Run
-after the v1.5.1 floor integration (#457) lands on `main`:** (1) start a fresh
+after the v1.5.2 floor integration (#457) lands on `main`:** (1) start a fresh
 Codex session in the canonical repository at that head; (2) run `/hooks`; (3)
 compare every project entry with `.codex/hooks.json`; (4) verify SessionStart
 runs `session_start.py`; (5) verify the sole PreToolUse entry pins normalized
-SHA-256 `5d306592724630cde96305bfd586c7973a2072209d4884cdc2d3d88629c2e231`,
+SHA-256 `9f38e906d49dd84de196bf22fc6388a5551494cf9b303610014ee6539783ebbb`,
 invokes only `~/.claude/hooks/dispatch.py`, passes `--runtime codex`, and does
 not use `git rev-parse` or the repo-local fixture; (6) verify PostToolUse runs
 `post_tool_use.py` plus sanitized `post_tool_failure.py`; (7) choose **Trust**

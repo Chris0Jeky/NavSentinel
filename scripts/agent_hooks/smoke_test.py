@@ -35,9 +35,9 @@ HANDOFF = ROOT / "docs" / "agentic" / "HANDOFF.md"
 QUESTION_PROTOCOL = ROOT / "docs" / "agentic" / "QUESTION_PROTOCOL.md"
 FLOOR_SMOKE = ROOT / ".claude" / "hooks" / "smoke_test.py"
 FLOOR_DISPATCH = ROOT / ".claude" / "hooks" / "dispatch.py"
-FLOOR_PROVENANCE = "agent-harness canonical deny floor v1.5.1"
+FLOOR_PROVENANCE = "agent-harness canonical deny floor v1.5.2"
 EXPECTED_DISPATCH_SHA256 = (
-    "5d306592724630cde96305bfd586c7973a2072209d4884cdc2d3d88629c2e231"
+    "9f38e906d49dd84de196bf22fc6388a5551494cf9b303610014ee6539783ebbb"
 )
 EXPECTED_SMOKE_SHA256 = (
     "7518915384623dc285314d510d1d9dedb4f8ec6cce7326913756084ea783bf3a"
@@ -239,7 +239,7 @@ def test_floor_matrix() -> None:
         capture_output=True,
         text=True,
         cwd=ROOT,
-        # The canonical v1.5.1 floor matrix is ~1604 cases; on Windows (slow
+        # The canonical v1.5.2 floor matrix is ~1604 cases; on Windows (slow
         # per-case subprocess spawning) it runs ~190s, well over the old 120s cap.
         # The floor smoke exits fast on a real failure, so this bound only guards a
         # genuine hang, not normal completion. Keep headroom above the CI spread.
