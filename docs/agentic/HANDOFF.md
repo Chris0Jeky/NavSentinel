@@ -19,8 +19,9 @@ rotation under #437.
   tracked fixture, or choose the coverage-preserving rewrite path.
 - **AI-17:** enable `main` branch protection.
 - **AI-19:** clear or replace the product name before CWS submission.
-- **AI-18: READY:** the hook-editing slice is committed; review/trust the exact
-  project-local Codex hook definitions before relying on them.
+- **AI-18: HELD** (was READY): PR #457 rewrites `.codex/hooks.json` and Codex
+  trust is definition-hash-based, so trusting today's definitions would be
+  undone immediately. Do it after #457's final reviewed head.
 - **AI-13: OPEN / READY:** run the exact-head-guarded #356 Chrome Gate-3 guide
   against head `f8028c9`; only Chris can record it complete. The guide's old
   `ee0f9b7` pin was corrected on 2026-07-24 — a run against the stale SHA
@@ -166,21 +167,33 @@ human, not agent: AI-13 Gate-3 on #356, the oldest PR.
 Agent-doable candidates, cheapest first:
 
 1. **Status-doc and hygiene reconciliation** (this slice) — no runtime surface.
-2. **RI-05 fake-DNR excision.** `extension/rules/dnr_static.json` holds exactly
-   two gym-fixture rules scoped to `localhost`/`127.0.0.1`, while
-   `extension/manifest.json` requests both `declarativeNetRequest` and
-   `declarativeNetRequestWithHostAccess` for a ruleset registered
-   `"enabled": false`. `docs/cws-listing/PRIVACY_DISCLOSURE.md` already marks
-   both permissions "Remove before beta". Roughly 150-200 deleted lines. Note it
-   *does* touch the manifest, so confirm the Gate-3 classification before
-   opening a PR rather than assuming it is ungated.
-3. **RI-02 visual-sim excision (#424)** — the largest package lever
-   (~31.7KB `brand_templates.json` alone, against a 474/500KB budget) and a real
-   defect, not just dead code: the service worker captures the window's *active*
-   tab while the request originates from `sender.tab`, after a delay window of
-   up to 30s. Browser-surface, so it must wait for cap headroom.
-4. **Issue-queue cull** — 81 open issues, none milestoned, including the 15
-   frozen Horizon proposals #439-#453.
+2. **Issue-queue cull** — 81 open issues, none milestoned, including the 15
+   frozen Horizon proposals #439-#453. Issues-and-docs only, no runtime surface.
+   Note that closing issues is outward-facing and partly a product call, so
+   agree the cull criteria with Chris before mass-closing anything.
+3. **Gate-3 batch checklist (#419/#420)** — consolidate #356 + the queued
+   deletion slices into one headed-Chrome sitting, as a `scripts/` and `docs/`
+   change with no extension-runtime edits.
+
+**Do NOT start these while the cap is full** — the roadmap classifies both as
+`Agent + Gate-3`, so opening either now creates the forbidden fourth
+human-gated PR:
+
+- **RI-05 fake-DNR excision.** `extension/rules/dnr_static.json` holds exactly
+  two gym-fixture rules scoped to `localhost`/`127.0.0.1`, while
+  `extension/manifest.json` requests both `declarativeNetRequest` and
+  `declarativeNetRequestWithHostAccess` for a ruleset registered
+  `"enabled": false`. `docs/cws-listing/PRIVACY_DISCLOSURE.md` already marks
+  both permissions "Remove before beta". ~150-200 deleted lines. It removes
+  manifest permissions, i.e. it changes shipped browser behavior.
+- **RI-02 visual-sim excision (#424)** — the largest package lever
+  (~31.7KB `brand_templates.json` alone, against a 474/500KB budget) and a real
+  defect, not just dead code: the service worker captures the window's *active*
+  tab while the request originates from `sender.tab`, after a delay window of
+  up to 30s.
+
+Both become the top candidates the moment a Gate-3 slot frees up, i.e. as soon
+as #356 merges.
 
 Verify any of these live before starting; this list was accurate on 2026-07-24.
 

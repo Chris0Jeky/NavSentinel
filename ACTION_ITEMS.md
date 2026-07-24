@@ -84,15 +84,26 @@ changes do not change shipped product state.
 - **Infrastructure:** classic branch protection remains absent (`404 Branch not
   protected`) and the rulesets API returns `[]`. AI-17 remains open. Codex hook
   trust remains AI-18. GitHub private vulnerability reporting is enabled and
-  linked from `SECURITY.md`. **AI-17 got more urgent on 2026-07-24:** the
-  vendored deny floor (`.claude/hooks/dispatch.py` 1.5.2) was shown locally to
-  allow a charter command it denies bare, once wrapped in any of three
-  PowerShell one-liner shapes (9/9 wrapped combinations allowed across three
-  charter payloads). The floor is a local tripwire, not the wall — server-side
-  branch protection is — so this raises AI-17's priority rather than blocking
-  work. Root cause is upstream (agent-harness #37); see
-  `docs/agentic/FAILURE_LEDGER.md`. Do not patch the vendored copy locally: it
-  is synced verbatim from canonical.
+  linked from `SECURITY.md`. **Deny-floor bypass verified 2026-07-24:** the
+  vendored floor (`.claude/hooks/dispatch.py` 1.5.2) allows a charter command it
+  denies bare, once wrapped in any of three PowerShell one-liner shapes — 9/9
+  wrapped combinations allowed across three charter payloads. Root cause is
+  upstream (agent-harness #37); see `docs/agentic/FAILURE_LEDGER.md`. Do not
+  patch the vendored copy locally: it is synced verbatim from canonical.
+
+  **Scope this honestly.** AI-17 branch protection mitigates only the
+  `git push --force` class. It does **nothing** for the other two payload
+  classes — a wrapped `rm -rf` outside the project, or a wrapped download piped
+  to a shell — so 6 of the 9 demonstrated combinations stay host-destructive
+  even after AI-17 is done. Branch protection is therefore necessary but **not
+  sufficient**, and this bypass is not "just an AI-17 priority bump".
+  Until a fixed canonical floor lands, the only real host-side controls are
+  operator ones: do not run unreviewed PowerShell one-liners containing
+  `iex`/`Invoke-Expression`, treat a scriptblock-wrapped command as unguarded
+  regardless of the floor's verdict, and prefer plain non-wrapped commands so
+  the floor can actually see them. Agents must not rely on the floor to catch a
+  destructive command inside `if (...) { }`, `Where-Object { }`, or a compound
+  assignment.
 - **Local verification blocker:** Defender quarantined only
   `C:\Users\Public\codex-shell-home\NavSentinel-ri01\tests\clickfix-detector.property.test.ts`
   as `Trojan:HTML/FakeCaptcha.HNA!MTB`; it reports `DidThreatExecute=False` and
@@ -106,7 +117,9 @@ changes do not change shipped product state.
 
 **Guided resolution cursor:** `AI-16` (`Resume at: AI-16`; the next
 conversational label is `q-1`). Current ready order is AI-16 -> AI-9 -> AI-20 ->
-AI-17 -> AI-19 -> AI-18. AI-13, AI-21, and AI-22 are separate conditional Gate-3
+AI-17 -> AI-19. **AI-18 is HELD, not ready** — see its entry; do not route to it
+until PR #457 reaches its final reviewed head, or the trust will be immediately
+invalidated. AI-13, AI-21, and AI-22 are separate conditional Gate-3
 lanes: use each guide only when its exact-head precheck passes; they do not
 replace the stable AI-16 resume cursor. Run them oldest-PR-first
 (AI-13/#356 -> AI-21/#464 -> AI-22/#466), per the merge-oldest-first law. The hook-editing slice is now committed; AI-18 remains
@@ -299,10 +312,19 @@ item remains human-owned; only Chris can record Gate-3 as done.
    clean, all three SHAs must match, and only then may `gh pr checks 356` be
    accepted as evidence that Build/Unit and E2E are green for that exact head.
    Stop and report the mismatch if any SHA or check differs.
-2. In that worktree run `npm ci` and `npm run build`. To avoid starting the
-   branch's known-vulnerable pre-#459 Vite server, keep
+2. In that worktree run `npm ci` and `npm run build`. Keep
    `python -m http.server 5173 --bind 127.0.0.1 --directory gym` open in a second
-   terminal instead. Create a temporary local Chrome profile from the profile
+   terminal to serve the fixtures. (This instruction previously said the static
+   server was needed to avoid the branch's "known-vulnerable pre-#459 Vite
+   server". That reason is **stale and was removed on 2026-07-24**: the branch
+   already contains #459/#463's dependency fix — it contains merge commit
+   `2888483` and its `package.json` pins `vite ^8.1.5` / `@crxjs/vite-plugin
+   ^2.7.1`, identical to `main`. The branch trails `main` only by the two
+   deny-floor sync commits, which are agent-hook files and do not affect the
+   extension build. A static server is still the simpler choice for a Gate-3
+   run, so the step is unchanged — only its justification was wrong. Do **not**
+   merge `main` into #356 on the strength of the old wording; that would
+   invalidate its exact-head CI and review evidence for no benefit.) Create a temporary local Chrome profile from the profile
    picker, do not sign it into a Google account, and leave every established
    profile/extension untouched. In the temporary profile's Extensions page,
    enable Developer mode and load
@@ -381,19 +403,13 @@ swap in `vite.config.ts` as a first-class target: build, load unpacked in real
 Chrome, and confirm the MV3 service worker actually registers, because that
 change alters the shipped bundle layout. Only Chris can record this complete.
 
-> **Where the full AI-21/AI-22 guides live (2026-07-24):** the complete
-> step-by-step guides are carried in `ACTION_ITEMS.md` **on their own PR
-> branches** (`fix/ri01-reject-synthetic-nav-allowances` and
-> `fix/ri01-pending-decision-sw`), which hold a much longer version of this file
-> than `main` does. They are summarized here — not duplicated — so that landing
-> those PRs does not fight a 500-line docs conflict on `main`. Read the full
-> guide with
-> `git show origin/fix/ri01-reject-synthetic-nav-allowances:ACTION_ITEMS.md`
-> (AI-21 at line ~377) or
-> `git show origin/fix/ri01-pending-decision-sw:ACTION_ITEMS.md` (AI-22).
-> Both remain queued behind AI-13/#356 under the merge-oldest-first law. This
-> entry exists so the durable register never silently omits a human-gated item
-> while its PR is in flight — which is this file's whole purpose.
+> **Full AI-21/AI-22 guides:** [`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md)
+> — tracked on `main`, verbatim from their PR branches. Both remain queued
+> behind AI-13/#356 under the merge-oldest-first law. These entries exist so the
+> durable register never silently omits a human-gated item while its PR is in
+> flight, which is this file's whole purpose; the guides live in a separate
+> tracked file only so landing those PRs does not collide with a large
+> `ACTION_ITEMS.md` rewrite. Do **not** move them back onto a branch-only path.
 
 **OPEN (low priority): AI-23 — Prune two finished worktrees and their merged
 branches.** Agents cannot do this: `git worktree remove` is floor-blocked
