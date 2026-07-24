@@ -86,10 +86,12 @@ describe("minimizeEventUrl (RI-06)", () => {
     expect(minimizeEventUrl("https://user:pass@x.com/a?b=c")).toBe("https://x.com/a");
   });
 
-  it("treats blob URLs as opaque instead of duplicating their nested origin", () => {
-    expect(
-      minimizeEventUrl("blob:https://accounts.example/reset?token=super-secret#code=abc")
-    ).toBe("blob:https://accounts.example/reset");
+  it("reduces opaque and local URLs to a scheme marker", () => {
+    expect(minimizeEventUrl("blob:https://accounts.example/reset?token=secret")).toBe("blob:");
+    expect(minimizeEventUrl("data:text/html,<input value=reset-secret>")).toBe("data:");
+    expect(minimizeEventUrl("mailto:alice+private@example.com")).toBe("mailto:");
+    expect(minimizeEventUrl("file:///C:/Users/chris/private/reset-token.txt")).toBe("file:");
+    expect(minimizeEventUrl("javascript:submitSecret('reset-token')")).toBe("javascript:");
   });
 
   it("handles a malformed/non-parseable URL without throwing (string strip from first ? or #)", () => {
@@ -134,6 +136,21 @@ describe("appendEvent", () => {
     expect(log).toHaveLength(1);
     expect(log[0]!.kind).toBe("nav_click_block");
     expect(log[0]!.site).toBe("example.com");
+  });
+
+  it("persists only a scheme marker for an opaque event URL", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { appendEvent } = await import("../extension/src/shared/storage");
+    await appendEvent({
+      id: "opaque-1",
+      kind: "nav_click_block",
+      url: "data:text/html,<input value=reset-secret>",
+    });
+
+    const log = store[EVENT_LOG_KEY] as Array<{ url?: string }>;
+    expect(log[0]!.url).toBe("data:");
   });
 
   it("appends to an existing log", async () => {

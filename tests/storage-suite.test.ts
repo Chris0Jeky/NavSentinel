@@ -121,6 +121,12 @@ describe("suite storage and allowlist migration", () => {
         },
         // Entry with no url must be exported untouched.
         { id: "no-url-1", ts: 101, kind: "nav_click_block", site: "x.com" },
+        {
+          id: "opaque-1",
+          ts: 102,
+          kind: "nav_click_block",
+          url: "file:///C:/Users/chris/private/reset-token.txt",
+        },
       ],
     });
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
@@ -134,6 +140,7 @@ describe("suite storage and allowlist migration", () => {
     // Host-level field untouched; the no-url entry still carries no url.
     expect(byId["legacy-1"]!.site).toBe("accounts.example.com");
     expect("url" in byId["no-url-1"]!).toBe(false);
+    expect(byId["opaque-1"]!.url).toBe("file:");
   });
 
   it("minimizes legacy event-log URLs before imported backups reach storage (RI-06)", async () => {
@@ -150,6 +157,12 @@ describe("suite storage and allowlist migration", () => {
           site: "accounts.example.com",
           url: "https://accounts.example.com/reset?token=super-secret#code=abc123",
         },
+        {
+          id: "opaque-import-1",
+          ts: 103,
+          kind: "nav_click_block",
+          url: "mailto:alice+private@example.com",
+        },
       ],
     });
 
@@ -160,6 +173,12 @@ describe("suite storage and allowlist migration", () => {
         kind: "cred_submit_prompt",
         site: "accounts.example.com",
         url: "https://accounts.example.com/reset",
+      },
+      {
+        id: "opaque-import-1",
+        ts: 103,
+        kind: "nav_click_block",
+        url: "mailto:",
       },
     ]);
   });

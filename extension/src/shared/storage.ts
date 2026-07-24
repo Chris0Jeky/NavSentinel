@@ -526,11 +526,16 @@ export function minimizeEventUrl(rawUrl: string | undefined): string | undefined
 export function minimizeEventUrl(rawUrl: string | undefined): string | undefined {
   if (!rawUrl) return rawUrl; // undefined or "" — preserve as-is
   const parsed = safeUrlParse(rawUrl);
-  if (parsed && (parsed.protocol === "http:" || parsed.protocol === "https:")) {
-    return parsed.origin + parsed.pathname;
+  if (parsed) {
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      return parsed.origin + parsed.pathname;
+    }
+    // Opaque and local schemes can carry a document, address, local path, or
+    // script before any ?/# delimiter. The event log only needs to identify
+    // the non-web scheme, so retain that marker alone.
+    return parsed.protocol;
   }
-  // Non-parseable input, or an opaque origin (data:/blob:/about:/mailto:, file:
-  // on some engines): strip from the first query/fragment delimiter without
+  // Non-parseable input: strip from the first query/fragment delimiter without
   // reformatting the rest, so a display-only string stays intact and never throws.
   return stripUrlQueryAndFragment(rawUrl);
 }
