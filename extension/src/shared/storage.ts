@@ -540,6 +540,25 @@ export function minimizeEventUrl(rawUrl: string | undefined): string | undefined
   return stripUrlQueryAndFragment(rawUrl);
 }
 
+/** Rewrite pre-RI-06 event URLs through the service worker's serialized write lane. */
+export function migrateStoredEventLogUrls(): Promise<void> {
+  return queueEventLogWrite(async () => {
+    const res = await chrome.storage.local.get(EVENT_LOG_KEY);
+    const current = normalizeEventLog(res[EVENT_LOG_KEY]);
+    let changed = false;
+    const minimized = current.map((entry) => {
+      if (entry.url === undefined) return entry;
+      const url = minimizeEventUrl(entry.url);
+      if (url === entry.url) return entry;
+      changed = true;
+      return { ...entry, url };
+    });
+    if (changed) {
+      await chrome.storage.local.set({ [EVENT_LOG_KEY]: minimized });
+    }
+  });
+}
+
 function stripUrlQueryAndFragment(raw: string): string {
   let end = raw.length;
   const q = raw.indexOf("?");

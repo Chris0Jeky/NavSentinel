@@ -7,6 +7,7 @@ import {
   handlePromptOutcomeStorageMessage,
   isEventLogAppendMessage,
   isPromptOutcomeStorageMessage,
+  migrateStoredEventLogUrls,
   SUITE_SETTINGS_KEY,
 } from "../shared/storage";
 import { RedirectChainTracker } from "../shared/redirect_chain";
@@ -49,6 +50,12 @@ async function loadReputationFilter(): Promise<void> {
 }
 
 void loadReputationFilter();
+// RI-06: scrub legacy full/opaque event URLs in the same serialized service-
+// worker write lane used by appends, so an installed user's on-disk corpus is
+// minimized without racing a concurrent event.
+void migrateStoredEventLogUrls().catch((err) => {
+  console.warn("[NavSentinel] event-log URL migration failed; will retry on worker restart:", err);
+});
 const NAV_ALLOW_TTL_MS = 1500;
 const NAV_GESTURE_TTL_MS = 1500;
 const NAV_TARGET_ALLOW_TTL_MS = 10000;

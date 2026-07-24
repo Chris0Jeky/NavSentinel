@@ -153,6 +153,43 @@ describe("appendEvent", () => {
     expect(log[0]!.url).toBe("data:");
   });
 
+  it("migrates stored legacy URLs without losing a queued service-worker append", async () => {
+    const { chrome, store } = createChromeMock({
+      [EVENT_LOG_KEY]: [
+        {
+          id: "legacy-1",
+          ts: 1,
+          kind: "cred_submit_prompt",
+          url: "https://accounts.example/reset?token=secret#code=abc",
+        },
+      ],
+    });
+    vi.stubGlobal("chrome", {
+      ...chrome,
+      clients: {},
+      registration: {},
+    } as unknown as typeof globalThis.chrome);
+
+    const storage = await import("../extension/src/shared/storage");
+    await Promise.all([
+      storage.migrateStoredEventLogUrls(),
+      storage.handleEventLogAppendMessage({
+        type: "ns-event-log-append",
+        entry: { id: "new-1", ts: 2, kind: "nav_click_block", url: "data:text/plain,secret" },
+      }),
+    ]);
+
+    expect(store[EVENT_LOG_KEY]).toEqual([
+      {
+        id: "legacy-1",
+        ts: 1,
+        kind: "cred_submit_prompt",
+        url: "https://accounts.example/reset",
+      },
+      { id: "new-1", ts: 2, kind: "nav_click_block", url: "data:" },
+    ]);
+  });
+
   it("appends to an existing log", async () => {
     const { chrome, store } = createChromeMock({
       [EVENT_LOG_KEY]: [{ id: "old-1", ts: 1000, kind: "suite_config_update" }],
