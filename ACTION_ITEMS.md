@@ -395,6 +395,32 @@ change alters the shipped bundle layout. Only Chris can record this complete.
 > entry exists so the durable register never silently omits a human-gated item
 > while its PR is in flight — which is this file's whole purpose.
 
+**OPEN (low priority): AI-23 — Prune two finished worktrees and their merged
+branches.** Agents cannot do this: `git worktree remove` is floor-blocked
+(`[floor 1.5.2] Git worktree removal is floor-blocked.`), verified 2026-07-24,
+and the branches cannot be deleted while a worktree still holds them. Both
+targets are clean and fully merged into `main`, so this is pure housekeeping
+with nothing to lose.
+
+```sh
+git worktree remove "C:/Users/jekyt/Desktop/Printer Config/Others/Git/nav-floor-sync"
+git worktree remove .worktrees/deps-audit
+git branch -d chore/deny-floor-v1.5.2 fix/release-dependency-advisories
+```
+
+`git branch -d` (not `-D`) is deliberate: it refuses anything not merged, so it
+cannot silently drop work. Leave the other five worktrees — they back the open
+PRs #356/#464/#466/#468/#457.
+
+Three local branches are also prunable but are **not** included above, because
+deleting an unmerged local branch is the one irreversible step here and is your
+call: `fix/cooldown-map-cap` (superseded — its fix landed on `main` as
+`capCooldowns` via PR #381, and it is the only copy of commit `d682f14`),
+`fix/user-activation-neutral-chip` and `fix/oauth-require-state-corroboration-223`
+(both redundant — their heads are preserved server-side at `refs/pull/273/head`
+and `refs/pull/399/head`, so deleting the local copies loses nothing). Reply
+`AI-23 done` when pruned.
+
 **🚨 BLOCKED: AI-14 — OAuth tradeoff measurement after closed PR #399.** The
 measurement-held draft was closed on 2026-07-13 rather than merged from a stale
 base. It is not a beta blocker. Keep #223 blocked until #417 supplies valid
