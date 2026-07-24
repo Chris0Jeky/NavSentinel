@@ -31,6 +31,8 @@ rotation under #437.
 - **AI-22: OPEN:** #466 pending-decision service-worker Gate-3 (head `0266107`,
   green, 4/4 threads resolved). Queued behind AI-21. Its Gate-3 must also prove
   the MV3 worker still registers after the rolldown bundle-layout change.
+- **AI-23: OPEN (low priority):** prune two finished worktrees and their
+  merged branches; agent-blocked because `git worktree remove` is floor-blocked.
 - **AI-15: BLOCKED** until agent preflight is complete.
 - **AI-8 / AI-14: BLOCKED** pending current branches, two fresh reviews, green
   CI, and replacement human guides.
@@ -53,8 +55,8 @@ rotation under #437.
   frozen option portfolio, not active work.
 - Stale PRs #273 and #399 were closed on 2026-07-13 with re-entry paths and
   issue anchors preserved; their heads remain fetchable at `refs/pull/273/head`
-  and `refs/pull/399/head`. Open PRs are #356, #457, #464, #466, and draft
-  #468 — #457 is CONFLICTING against current `main`, not a draft. #356's exact
+  and `refs/pull/399/head`. Open PRs are #356, #457, #464, #466, draft #468,
+  and docs PR #471 — #457 is CONFLICTING against current `main`, not a draft. #356's exact
   guide head is **`f8028c9`** (`ee0f9b7` is stale) and passed both local reviews
   plus GitHub Build/Unit and E2E on that exact head, with all three threads
   resolved. AI-13 human Gate-3 is its only remaining gate; the guide still
@@ -70,8 +72,11 @@ rotation under #437.
   backed up without the unstaged Defender deletion; verify its SHA live. Its
   worktree remains dirty only because of the Defender-quarantined fixture.
 - The RI-01 broker foundation is unit-tested but not wired into production.
-  Only the synthetic-navigation allowance rejection changes active runtime
-  behavior; its new real-browser E2E has not run.
+  **Corrected 2026-07-24:** the rest of this bullet described the pre-PR
+  checkpoint branch. The synthetic-navigation allowance rejection now ships as
+  PR #464, whose E2E lane HAS run and is green on head `cf66b28`. What has not
+  run is the human real-Chrome Gate-3 (AI-21); automated Chromium coverage is
+  not a substitute for it.
 
 ## Local review evidence
 
@@ -160,8 +165,11 @@ comparative evidence.
 synthetic-navigation allowance rejection shipped as PR #464.
 
 Take **non-browser work only.** The human-gated queue is at its cap of three
-(#356/AI-13, #464/AI-21, #466/AI-22), so opening a fourth browser-surface PR
-would exceed the cap in `docs/agentic/DECISIONS.md`. The unblocking action is
+ready PRs (#356/AI-13, #464/AI-21, #466/AI-22), so opening another
+browser-surface PR would exceed the cap in `docs/agentic/DECISIONS.md`. Draft
+#468 is Gate-3-bound too, but is excluded from the count while it is a draft
+pending author action — if it leaves draft it takes a slot and needs its own
+`AI-N` entry. The unblocking action is
 human, not agent: AI-13 Gate-3 on #356, the oldest PR.
 
 Agent-doable candidates, cheapest first:

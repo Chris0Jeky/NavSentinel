@@ -111,7 +111,7 @@ Live state on 2026-07-24:
 | #466 | MERGEABLE, green on `0266107`, 4/4 threads resolved | human Gate-3 — **AI-22** |
 | #468 | DRAFT, green on `bea0077`, but **zero review rounds on that head** | author action, then Gate-3 |
 | #457 | CONFLICTING; deny-floor topology, pin stale vs the global floor | held pending agent-harness #37 |
-| #471 | docs-only status reconciliation | agent-mergeable |
+| #471 | docs-only status reconciliation | no human Gate-3 needed, but **not yet mergeable** — it is the newest PR and the aging rule above applies |
 
 The human-gated queue is therefore **at its cap of three**. Next agent slice must
 be non-browser; the unblocking action is human (AI-13 on the oldest PR, #356).

@@ -17,12 +17,14 @@ Long-form procedures for the human-owned manual Chrome gates tracked in
 `ACTION_ITEMS.md` *on their own PR branches*, which carry a far longer version of that file than
 `main`. That made the durable register incomplete on `main` and made the guides reachable only via
 `git show` against a remote-tracking ref a fresh checkout may not have. Both guides are now
-tracked here on `main`, verbatim from their branches. Kept as a separate file so that landing
+tracked here, verbatim from their branches (on `main` once this change merges). Kept as a separate file so that landing
 those PRs does not collide with a large `ACTION_ITEMS.md` rewrite.
 
-**Heads move.** Every head SHA below was live on 2026-07-24. Re-derive each one with step 1 rather
-than trusting what is written here — a stale pin is exactly what made the AI-13 guide abort on its
-own precheck.
+**Heads move.** These guides deliberately carry no head pins — each derives its head in step 1,
+which is the right pattern. The pins live in `ACTION_ITEMS.md`, `HANDOFF.md`,
+`Project_Roadmap.md` and `ORCHESTRATOR.md`, and were live on 2026-07-24. Trust step 1 over any
+SHA written elsewhere: a stale pin is exactly what made the AI-13 guide abort on its own
+precheck.
 
 ## Index
 
@@ -69,7 +71,7 @@ exact head. Only Chris can record this item complete.
    output.
 2. In that worktree run `npm ci`, then `npm run build`. Keep
    `python -m http.server 5173 --bind 127.0.0.1 --directory gym` open in a second
-   terminal; do not use the branch's pre-#463 Vite dev server. Create a temporary
+   terminal; use the static server rather than the Vite dev server. **(Correction 2026-07-24: the imported guide justified this as avoiding the branch's "pre-#463 Vite dev server". That reason is stale — `fix/ri01-reject-synthetic-nav-allowances` pins `vite ^8.1.5` / `@crxjs/vite-plugin ^2.7.1`, identical to `main`. The static server is still the simpler choice for a Gate-3 run, so the step stands, but do NOT merge `main` into #464 on the strength of the old wording — that would invalidate the exact-head CI and 6/6 resolved threads AI-21's own step 1 requires.)** Create a temporary
    local Chrome profile, do not sign it in, and leave established profiles and
    extensions untouched. Load
    `.worktrees/ri01-synthetic-nav/extension/dist` unpacked. In NavSentinel

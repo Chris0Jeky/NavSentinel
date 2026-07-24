@@ -37,7 +37,7 @@ tag, GitHub release, CWS release, or external-user evidence.
 Live recheck on 2026-07-24 found 81 open issues, no tags/releases/classic branch
 protection or repository rulesets, and no milestones or assignees. Verify the
 current `main` SHA live rather than pinning it here. Open PRs are #356, #457,
-#464, #466, and draft #468; only #468 is a draft, and #457 is **CONFLICTING**
+#464, #466, draft #468, and docs PR #471; only #468 is a draft, and #457 is **CONFLICTING**
 against current `main` rather than the draft this file previously called it.
 Stale PRs #273 and #399 were closed with explicit re-entry paths; their heads
 remain fetchable server-side at `refs/pull/273/head` and `refs/pull/399/head`,
@@ -117,7 +117,8 @@ changes do not change shipped product state.
 
 **Guided resolution cursor:** `AI-16` (`Resume at: AI-16`; the next
 conversational label is `q-1`). Current ready order is AI-16 -> AI-9 -> AI-20 ->
-AI-17 -> AI-19. **AI-18 is HELD, not ready** — see its entry; do not route to it
+AI-17 -> AI-19 -> AI-23 (low priority housekeeping, last).
+**AI-18 is HELD, not ready** — see its entry; do not route to it
 until PR #457 reaches its final reviewed head, or the trust will be immediately
 invalidated. AI-13, AI-21, and AI-22 are separate conditional Gate-3
 lanes: use each guide only when its exact-head precheck passes; they do not
@@ -319,9 +320,11 @@ item remains human-owned; only Chris can record Gate-3 as done.
    server". That reason is **stale and was removed on 2026-07-24**: the branch
    already contains #459/#463's dependency fix — it contains merge commit
    `2888483` and its `package.json` pins `vite ^8.1.5` / `@crxjs/vite-plugin
-   ^2.7.1`, identical to `main`. The branch trails `main` only by the two
-   deny-floor sync commits, which are agent-hook files and do not affect the
-   extension build. A static server is still the simpler choice for a Gate-3
+   ^2.7.1`, identical to `main`. The branch trails `main` by five commits — the
+   two deny-floor syncs (#467/#469), their two merge commits, and
+   `d7528f9 Update package-lock.json`. The floor syncs touch only
+   `.claude/hooks/` and do not affect the extension build; the lockfile commit
+   is the one to check yourself if `npm ci` behaves unexpectedly. A static server is still the simpler choice for a Gate-3
    run, so the step is unchanged — only its justification was wrong. Do **not**
    merge `main` into #356 on the strength of the old wording; that would
    invalidate its exact-head CI and review evidence for no benefit.) Create a temporary local Chrome profile from the profile
@@ -381,8 +384,8 @@ item remains human-owned; only Chris can record Gate-3 as done.
    after a full pass the agent will recheck the exact head, CI, comments, and
    merge gate before acting.
 
-**🚨 OPEN: AI-21 — Run PR #464 synthetic-navigation Gate-3 (GUIDE PREPARED ON
-THE PR BRANCH; LIVE EXACT-HEAD PRECHECK REQUIRED).** This browser-surface slice
+**🚨 OPEN: AI-21 — Run PR #464 synthetic-navigation Gate-3 (GUIDE IN
+`docs/agentic/GATE3_GUIDES.md`; LIVE EXACT-HEAD PRECHECK REQUIRED).** This browser-surface slice
 stops page scripts from minting navigation authority with dispatched
 pointer/click events, keeping a preceding real pointerdown only as
 attack-correlation evidence: a trusted pointerdown now sends only a top-frame
@@ -393,8 +396,8 @@ pointerdown-only rollback attack, the synchronous MAIN-world popup attack, the
 existing synthetic attacks, and the trusted compatibility paths, but a real
 Chrome pass must confirm them before merge. Only Chris can record this complete.
 
-**🚨 OPEN: AI-22 — Run PR #466 pending-decision service-worker Gate-3 (GUIDE
-PREPARED ON THE PR BRANCH; LIVE EXACT-HEAD PRECHECK REQUIRED).** Adds the
+**🚨 OPEN: AI-22 — Run PR #466 pending-decision service-worker Gate-3 (GUIDE IN
+`docs/agentic/GATE3_GUIDES.md`; LIVE EXACT-HEAD PRECHECK REQUIRED).** Adds the
 URL-minimized, session-backed pending-decision boundary so prompt authority is
 derived from Chrome rather than page messages. Live state on 2026-07-24: head
 `0266107`, MERGEABLE, Build/Unit and E2E green, 4 review threads all resolved.
@@ -404,29 +407,43 @@ Chrome, and confirm the MV3 service worker actually registers, because that
 change alters the shipped bundle layout. Only Chris can record this complete.
 
 > **Full AI-21/AI-22 guides:** [`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md)
-> — tracked on `main`, verbatim from their PR branches. Both remain queued
+> — verbatim from their PR branches, tracked here rather than branch-only. Both remain queued
 > behind AI-13/#356 under the merge-oldest-first law. These entries exist so the
 > durable register never silently omits a human-gated item while its PR is in
 > flight, which is this file's whole purpose; the guides live in a separate
 > tracked file only so landing those PRs does not collide with a large
 > `ACTION_ITEMS.md` rewrite. Do **not** move them back onto a branch-only path.
 
-**OPEN (low priority): AI-23 — Prune two finished worktrees and their merged
-branches.** Agents cannot do this: `git worktree remove` is floor-blocked
+**OPEN: AI-23 — Prune two finished worktrees and their merged branches**
+(low priority housekeeping). Agents cannot do this: `git worktree remove` is floor-blocked
 (`[floor 1.5.2] Git worktree removal is floor-blocked.`), verified 2026-07-24,
 and the branches cannot be deleted while a worktree still holds them. Both
 targets are clean and fully merged into `main`, so this is pure housekeeping
 with nothing to lose.
 
+**Re-derive the branch names before running this** — `nav-floor-sync` was
+observed switching from `chore/deny-floor-v1.5.2` to `chore/deny-floor-v1.6.0`
+mid-session, so a pinned name here goes stale quickly. Check
+`git worktree list` first, then:
+
 ```sh
+git worktree list
 git worktree remove "C:/Users/jekyt/Desktop/Printer Config/Others/Git/nav-floor-sync"
 git worktree remove .worktrees/deps-audit
-git branch -d chore/deny-floor-v1.5.2 fix/release-dependency-advisories
+git branch -d <branch nav-floor-sync held> fix/release-dependency-advisories
 ```
 
 `git branch -d` (not `-D`) is deliberate: it refuses anything not merged, so it
-cannot silently drop work. Leave the other five worktrees — they back the open
-PRs #356/#464/#466/#468/#457.
+cannot silently drop work.
+
+**Leave the other SIX worktrees.** Five back open PRs — `.worktrees/pr356-refresh`
+(#356), `.worktrees/harness-v141` (#457), `.worktrees/ri01-synthetic-nav` (#464),
+`.worktrees/ri01-pending-sw` (#466), `.worktrees/ri06-eventlog-min` (#468) — and
+the sixth is **not** cruft despite backing no PR:
+`C:/Users/Public/codex-shell-home/NavSentinel-ri01` on
+`fix/ri01-extension-origin-decisions` is the RI-01 checkpoint worktree that holds
+the AI-20 Defender-quarantine evidence referenced above. **Do not delete it**
+while AI-20 is open.
 
 Three local branches are also prunable but are **not** included above, because
 deleting an unmerged local branch is the one irreversible step here and is your
