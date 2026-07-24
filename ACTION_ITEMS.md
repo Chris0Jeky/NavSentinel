@@ -159,6 +159,16 @@ are trusted/enabled; and (7) restart once to exercise SessionStart. Then reply
 `AI-18 done`. Trust is definition-hash-based, so repeat after future hook
 definition changes.
 
+> **Hold AI-18 for now (2026-07-24).** Trusting the *current* definitions is
+> largely wasted effort: PR #457 replaces `.codex/hooks.json` with a SHA-pinned,
+> fail-closed adapter, and because trust is definition-hash-based it would have
+> to be redone immediately after that lands. #457 is itself held (see its
+> 2026-07-24 state review) until the upstream floor release closing
+> agent-harness #37 arrives. Do this after #457's final reviewed head, not
+> before. Separately recorded in `docs/agentic/FAILURE_LEDGER.md`: this repo
+> currently wires **two** PreToolUse floors at once — the global 1.5.3 and the
+> vendored 1.5.2 — which is exactly the topology #457 removes.
+
 **🚨 BLOCKED: AI-15 — Run the headed release session only after agent
 preflight.** The prior 60–90 minute one-sitting guide is withdrawn: stale PRs
 #273 and #399 were closed, #356 has an isolated human Gate-3 guide whose live
