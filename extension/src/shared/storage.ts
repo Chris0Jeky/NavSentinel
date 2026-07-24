@@ -1413,16 +1413,15 @@ async function replacePromptOutcomes(outcomes: PromptOutcomeEntry[]): Promise<vo
  */
 function isTrustedExtensionPageSender(sender?: chrome.runtime.MessageSender): boolean {
   if (!sender) return false;
-  // Primary boundary: content scripts (injected on <all_urls>) always carry
-  // sender.tab; extension pages (options/popup) do not.
-  if (sender.tab !== undefined) return false;
-  // Defense-in-depth: when we can identify our own extension origin, require the
-  // sender to match it. These checks only constrain when the info is available;
-  // they do not fail-closed if getURL/id are absent (e.g. some test runtimes).
+  // Options pages opened in a normal Chrome tab also carry sender.tab, so the
+  // tab field alone cannot distinguish them from content scripts. Require a
+  // tab-bearing sender to prove this extension's own origin instead.
   const runtime = (globalThis as { chrome?: typeof chrome }).chrome?.runtime;
   if (sender.id && runtime?.id && sender.id !== runtime.id) return false;
   const base = runtime?.getURL?.("");
-  if (base && sender.url && !sender.url.startsWith(base)) return false;
+  const isOwnExtensionUrl = Boolean(base && sender.url?.startsWith(base));
+  if (sender.tab !== undefined && !isOwnExtensionUrl) return false;
+  if (base && sender.url && !isOwnExtensionUrl) return false;
   return true;
 }
 

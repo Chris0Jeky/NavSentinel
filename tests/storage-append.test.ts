@@ -1524,6 +1524,39 @@ describe("event-log control messages — sender authorization", () => {
     expect(store[EVENT_LOG_KEY]).toEqual([{ id: "new-1", ts: 2, kind: "cred_submit_prompt" }]);
   });
 
+  it("accepts an extension options page opened in a tab but still rejects a web content script", async () => {
+    const { chrome, store } = createChromeMock({ [EVENT_LOG_KEY]: [] });
+    (chrome as unknown as { runtime: Record<string, unknown> }).runtime = {
+      id: "navsentinel-test",
+      getURL: (path: string) => `chrome-extension://navsentinel-test/${path}`,
+    };
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const { handleEventLogControlMessage } = await import("../extension/src/shared/storage");
+
+    await expect(
+      handleEventLogControlMessage(
+        { type: "ns-event-log-clear" },
+        {
+          id: "navsentinel-test",
+          url: "chrome-extension://navsentinel-test/src/options/options.html",
+          tab: {} as chrome.tabs.Tab,
+        }
+      )
+    ).resolves.toEqual({ ok: true });
+    await expect(
+      handleEventLogControlMessage(
+        { type: "ns-event-log-import-core", writes: { [EVENT_LOG_KEY]: [] } },
+        {
+          id: "navsentinel-test",
+          url: "https://example.test/page",
+          tab: {} as chrome.tabs.Tab,
+        }
+      )
+    ).resolves.toMatchObject({ ok: false, code: "unauthorized" });
+
+    expect(store[EVENT_LOG_KEY]).toEqual([]);
+  });
+
   it("delegates the complete atomic core import rather than directly writing an event log", async () => {
     const { chrome, store } = createChromeMock();
     const sent: unknown[] = [];
