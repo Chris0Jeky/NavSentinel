@@ -97,9 +97,26 @@ PRs D-* are independent (different files) → parallel branches off `main`, **no
 
 ## In-Flight
 
-**Active checkpoint (2026-07-17, Cycle 51):** #459 is the smallest unblocked
-non-browser release-integrity slice while #356 is held only for AI-13 human
-Gate-3 at exact reviewed/CI-green guide head `ee0f9b7`. Dependency head
+**Active checkpoint (2026-07-24, Cycle 52).** The Cycle 51 block below is CLOSED
+and retained only as history — do not action it. #459/#463 **merged** on
+2026-07-17 (merge commit `2888483`), so the dependency slice it describes is
+done.
+
+Live state on 2026-07-24:
+
+| PR | State | Gate |
+|---|---|---|
+| #356 | MERGEABLE, green on exact head **`f8028c9`** (not the `ee0f9b7` pinned below), 3/3 threads resolved | human Gate-3 — **AI-13** |
+| #464 | MERGEABLE, green on `cf66b28`, 6/6 threads resolved | human Gate-3 — **AI-21** |
+| #466 | MERGEABLE, green on `0266107`, 4/4 threads resolved | human Gate-3 — **AI-22** |
+| #468 | DRAFT, green on `bea0077`, but **zero review rounds on that head** | author action, then Gate-3 |
+| #457 | CONFLICTING; deny-floor topology, pin stale vs the global floor | held pending agent-harness #37 |
+| #471 | docs-only status reconciliation | agent-mergeable |
+
+The human-gated queue is therefore **at its cap of three**. Next agent slice must
+be non-browser; the unblocking action is human (AI-13 on the oldest PR, #356).
+
+*Cycle 51 history follows.* Dependency head
 `3f858df` upgrades only CRXJS/Vite declarations
 and their lock graph: CRXJS 2.7.1, Vite 8.1.5, Rollup 2.80.0, and Rolldown 1.1.5.
 `npm ci` and audit zero passed, as did version, typecheck, lint, build, 2,874 unit
