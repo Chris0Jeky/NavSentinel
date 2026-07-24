@@ -195,7 +195,7 @@ describe("appendEvent", () => {
     ]);
   });
 
-  it("waits for the service-worker migration barrier before clearing from an extension page", async () => {
+  it("delegates a clear to the service-worker event-log queue from an extension page", async () => {
     const { chrome, store } = createChromeMock({
       [EVENT_LOG_KEY]: [{ id: "legacy-1", ts: 1, kind: "nav_click_block" }],
     });
@@ -211,8 +211,11 @@ describe("appendEvent", () => {
     const { clearEventLog } = await import("../extension/src/shared/storage");
     await clearEventLog();
 
-    expect(sent).toEqual([{ type: "ns-event-log-migrate" }]);
-    expect(store[EVENT_LOG_KEY]).toEqual([]);
+    expect(sent).toEqual([{ type: "ns-event-log-clear" }]);
+    // The extension page must not race the worker with a direct set(). The
+    // worker owns the mutation, so this deliberately-simple transport mock does
+    // not change local storage.
+    expect(store[EVENT_LOG_KEY]).toEqual([{ id: "legacy-1", ts: 1, kind: "nav_click_block" }]);
   });
 
   it("appends to an existing log", async () => {
@@ -405,6 +408,63 @@ describe("appendEvent", () => {
 
     const ids = (store[EVENT_LOG_KEY] as Array<{ id: string }>).map((entry) => entry.id);
     expect(ids).toEqual(["sw-concurrent-1", "sw-concurrent-2", "sw-concurrent-3"]);
+  });
+
+  it("serializes a queued clear after an append so the append cannot resurrect cleared data", async () => {
+    const { chrome, store } = createChromeMock({
+      [EVENT_LOG_KEY]: [{ id: "stale-1", ts: 1, kind: "nav_click_block" }],
+    });
+    vi.stubGlobal("chrome", {
+      ...chrome,
+      clients: {},
+      registration: {},
+    } as unknown as typeof globalThis.chrome);
+
+    const { handleEventLogAppendMessage, handleEventLogControlMessage } = await import("../extension/src/shared/storage");
+    await Promise.all([
+      handleEventLogAppendMessage({
+        type: "ns-event-log-append",
+        entry: { id: "racing-append", ts: 2, kind: "nav_silent_allow" },
+      }),
+      handleEventLogControlMessage({ type: "ns-event-log-clear" }, OPTIONS_SENDER),
+    ]);
+
+    // Queue order is append then clear. Without the shared queue, a delayed
+    // append can set its stale snapshot after clear and restore stale-1.
+    expect(store[EVENT_LOG_KEY]).toEqual([]);
+  });
+
+  it("serializes a core import after an append while retaining importAll's one-set core payload", async () => {
+    const { chrome, store } = createChromeMock({
+      [EVENT_LOG_KEY]: [{ id: "stale-1", ts: 1, kind: "nav_click_block" }],
+    });
+    vi.stubGlobal("chrome", {
+      ...chrome,
+      clients: {},
+      registration: {},
+    } as unknown as typeof globalThis.chrome);
+
+    const { handleEventLogAppendMessage, handleEventLogControlMessage } = await import("../extension/src/shared/storage");
+    const imported = [{ id: "import-1", ts: 3, kind: "cred_submit_prompt" }];
+    await Promise.all([
+      handleEventLogAppendMessage({
+        type: "ns-event-log-append",
+        entry: { id: "racing-append", ts: 2, kind: "nav_silent_allow" },
+      }),
+      handleEventLogControlMessage(
+        {
+          type: "ns-event-log-import-core",
+          writes: {
+            [SETTINGS_KEY]: { logLimit: 300 },
+            [EVENT_LOG_KEY]: imported,
+          },
+        },
+        OPTIONS_SENDER
+      ),
+    ]);
+
+    expect(store[EVENT_LOG_KEY]).toEqual(imported);
+    expect(store[SETTINGS_KEY]).toEqual({ logLimit: 300 });
   });
 
   it("clamps logLimit below minimum to 50", async () => {
@@ -1312,6 +1372,84 @@ describe("clearEventLog", () => {
   });
 });
 
+describe("event-log control messages — sender authorization", () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("rejects clear and core-import messages from a content script without mutating storage", async () => {
+    const seed = [{ id: "keep-1", ts: 1, kind: "nav_click_block" }];
+    const { chrome, store } = createChromeMock({ [EVENT_LOG_KEY]: seed });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const { handleEventLogControlMessage } = await import("../extension/src/shared/storage");
+
+    await expect(
+      handleEventLogControlMessage({ type: "ns-event-log-clear" }, CONTENT_SCRIPT_SENDER)
+    ).resolves.toMatchObject({ ok: false, code: "unauthorized" });
+    await expect(
+      handleEventLogControlMessage(
+        { type: "ns-event-log-import-core", writes: { [EVENT_LOG_KEY]: [] } },
+        CONTENT_SCRIPT_SENDER
+      )
+    ).resolves.toMatchObject({ ok: false, code: "unauthorized" });
+
+    expect(store[EVENT_LOG_KEY]).toEqual(seed);
+  });
+
+  it("accepts a core import from a trusted extension page", async () => {
+    const { chrome, store } = createChromeMock({
+      [EVENT_LOG_KEY]: [{ id: "old-1", ts: 1, kind: "nav_click_block" }],
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const { handleEventLogControlMessage } = await import("../extension/src/shared/storage");
+
+    await expect(
+      handleEventLogControlMessage(
+        {
+          type: "ns-event-log-import-core",
+          writes: { [EVENT_LOG_KEY]: [{ id: "new-1", ts: 2, kind: "cred_submit_prompt" }] },
+        },
+        OPTIONS_SENDER
+      )
+    ).resolves.toEqual({ ok: true });
+
+    expect(store[EVENT_LOG_KEY]).toEqual([{ id: "new-1", ts: 2, kind: "cred_submit_prompt" }]);
+  });
+
+  it("delegates the complete atomic core import rather than directly writing an event log", async () => {
+    const { chrome, store } = createChromeMock();
+    const sent: unknown[] = [];
+    (chrome as unknown as { runtime: unknown }).runtime = {
+      sendMessage(message: unknown, callback?: (response: unknown) => void) {
+        sent.push(message);
+        callback?.({ ok: true });
+      },
+    };
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const { importAll } = await import("../extension/src/shared/storage");
+
+    await importAll({
+      settings: { logLimit: 300 },
+      eventLog: [{ id: "import-1", ts: 2, kind: "cred_submit_prompt" }],
+    });
+
+    expect(store[EVENT_LOG_KEY]).toBeUndefined();
+    expect(sent).toEqual([
+      {
+        type: "ns-event-log-import-core",
+        writes: {
+          [SETTINGS_KEY]: expect.objectContaining({ logLimit: 300 }),
+          [EVENT_LOG_KEY]: [{ id: "import-1", ts: 2, kind: "cred_submit_prompt" }],
+          "sentinelsuite:adaptive_scores_v1": {},
+        },
+      },
+    ]);
+  });
+});
+
 describe("getPromptOutcomes and clearPromptOutcomes", () => {
   beforeEach(() => {
     vi.resetModules();
@@ -1587,11 +1725,11 @@ describe("prompt outcome delegation — retry, drop, and refusal", () => {
       sendMessage: (message: unknown, callback?: (response: unknown) => void) => void;
     } = {
       sendMessage(message, callback) {
-        if (
-          message &&
-          typeof message === "object" &&
-          (message as { type?: unknown }).type === "ns-event-log-migrate"
-        ) {
+        if (message && typeof message === "object" && (message as { type?: unknown }).type === "ns-event-log-import-core") {
+          // The core import is now delegated into the same SW queue as appends.
+          // Model the worker's one-set commit, then make only the subsequent
+          // prompt-outcome message unavailable.
+          Object.assign(store, (message as { writes: Record<string, unknown> }).writes);
           callback?.({ ok: true });
           return;
         }

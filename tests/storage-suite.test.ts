@@ -145,13 +145,6 @@ describe("suite storage and allowlist migration", () => {
 
   it("minimizes legacy event-log URLs before imported backups reach storage (RI-06)", async () => {
     const { chrome, store } = createChromeMock();
-    const sent: unknown[] = [];
-    (chrome as unknown as { runtime: unknown }).runtime = {
-      sendMessage(message: unknown, callback?: (response: unknown) => void) {
-        sent.push(message);
-        callback?.({ ok: true });
-      },
-    };
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const { importAll } = await import("../extension/src/shared/storage");
@@ -188,7 +181,6 @@ describe("suite storage and allowlist migration", () => {
         url: "mailto:",
       },
     ]);
-    expect(sent).toEqual([{ type: "ns-event-log-migrate" }]);
   });
 
   it("normalizes imported allowlist payloads before storage", async () => {

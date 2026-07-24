@@ -4,8 +4,10 @@ import {
   getNavSettings,
   appendEvent,
   handleEventLogAppendMessage,
+  handleEventLogControlMessage,
   handlePromptOutcomeStorageMessage,
   isEventLogAppendMessage,
+  isEventLogControlMessage,
   isEventLogMigrationMessage,
   isPromptOutcomeStorageMessage,
   migrateStoredEventLogUrls,
@@ -626,6 +628,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (isEventLogAppendMessage(message)) {
     void handleEventLogAppendMessage(message)
+      .then((response) => sendResponse?.(response))
+      .catch((err) => {
+        sendResponse?.({ ok: false, error: err instanceof Error ? err.message : String(err) });
+      });
+    return true;
+  }
+
+  if (isEventLogControlMessage(message)) {
+    void handleEventLogControlMessage(message, sender)
       .then((response) => sendResponse?.(response))
       .catch((err) => {
         sendResponse?.({ ok: false, error: err instanceof Error ? err.message : String(err) });

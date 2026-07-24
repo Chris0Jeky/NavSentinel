@@ -416,10 +416,13 @@ export interface EventLogEntry {
 
 export type EventLogAppendMessage = { type: "ns-event-log-append"; entry: EventLogEntry };
 export type EventLogMigrationMessage = { type: "ns-event-log-migrate" };
+export type EventLogControlMessage =
+  | { type: "ns-event-log-clear" }
+  | { type: "ns-event-log-import-core"; writes: Record<string, unknown> };
 
-type EventLogAppendResponse =
+type EventLogStorageResponse =
   | { ok: true }
-  | { ok: false; error: string };
+  | { ok: false; error: string; code?: "unauthorized" };
 
 const STORAGE_DELEGATE_RETRY_DELAYS_MS = [50, 150, 400];
 
@@ -454,6 +457,29 @@ export function isEventLogMigrationMessage(message: unknown): message is EventLo
       typeof message === "object" &&
       (message as Record<string, unknown>).type === "ns-event-log-migrate"
   );
+}
+
+const EVENT_LOG_IMPORT_CORE_KEYS = new Set([
+  SUITE_SETTINGS_KEY,
+  ALLOWLIST_KEY,
+  TRUSTED_DOMAINS_KEY,
+  EVENT_LOG_KEY,
+  ADAPTIVE_SCORES_KEY,
+]);
+
+function isEventLogImportCoreWrites(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const writes = value as Record<string, unknown>;
+  return Array.isArray(writes[EVENT_LOG_KEY]) &&
+    writes[EVENT_LOG_KEY].every(isEventLogEntry) &&
+    Object.keys(writes).every((key) => EVENT_LOG_IMPORT_CORE_KEYS.has(key));
+}
+
+export function isEventLogControlMessage(message: unknown): message is EventLogControlMessage {
+  if (!message || typeof message !== "object") return false;
+  const candidate = message as Record<string, unknown>;
+  if (candidate.type === "ns-event-log-clear") return true;
+  return candidate.type === "ns-event-log-import-core" && isEventLogImportCoreWrites(candidate.writes);
 }
 
 function normalizeEventLog(value: unknown): EventLogEntry[] {
@@ -636,6 +662,17 @@ function appendEventDirect(entry: EventLogEntry): Promise<void> {
   return queueEventLogWrite(() => persistEventLogEntry(entry));
 }
 
+function clearEventLogDirect(): Promise<void> {
+  return queueEventLogWrite(() => chrome.storage.local.set({ [EVENT_LOG_KEY]: [] }));
+}
+
+function importEventLogCoreDirect(writes: Record<string, unknown>): Promise<void> {
+  // Keep settings/allowlist/trusted-domains/event-log in the single storage.set
+  // built by importAll. Moving this into the service worker must not turn that
+  // existing atomic core import into separate writes.
+  return queueEventLogWrite(() => chrome.storage.local.set(writes));
+}
+
 function shouldDelegateEventLogWrite(): boolean {
   const runtime = (globalThis as { chrome?: typeof chrome }).chrome?.runtime;
   return !isExtensionServiceWorkerContext() && typeof runtime?.sendMessage === "function";
@@ -644,7 +681,7 @@ function shouldDelegateEventLogWrite(): boolean {
 function sendEventLogAppendMessage(message: EventLogAppendMessage): Promise<void> {
   return new Promise((resolve, reject) => {
     try {
-      chrome.runtime.sendMessage(message, (response?: EventLogAppendResponse) => {
+      chrome.runtime.sendMessage(message, (response?: EventLogStorageResponse) => {
         const lastError = chrome.runtime.lastError;
         if (lastError) {
           reject(new Error(lastError.message ?? "runtime.sendMessage failed"));
@@ -662,44 +699,49 @@ function sendEventLogAppendMessage(message: EventLogAppendMessage): Promise<void
   });
 }
 
-function sendEventLogMigrationMessage(): Promise<void> {
+class EventLogRetryableError extends Error {}
+class EventLogUnauthorizedError extends Error {}
+export class EventLogDeliveryError extends Error {}
+
+function sendEventLogControlMessage(message: EventLogControlMessage): Promise<void> {
   return new Promise((resolve, reject) => {
     try {
-      chrome.runtime.sendMessage({ type: "ns-event-log-migrate" }, (response?: EventLogAppendResponse) => {
+      chrome.runtime.sendMessage(message, (response?: EventLogStorageResponse) => {
         const lastError = chrome.runtime.lastError;
         if (lastError) {
-          reject(new Error(lastError.message ?? "runtime.sendMessage failed"));
+          reject(new EventLogRetryableError(lastError.message ?? "runtime.sendMessage failed"));
           return;
         }
         if (response?.ok) {
           resolve();
           return;
         }
-        reject(new Error(response?.error ?? "Event-log migration barrier failed"));
+        if (response?.code === "unauthorized") {
+          reject(new EventLogUnauthorizedError(response.error));
+          return;
+        }
+        reject(new EventLogRetryableError(response?.error ?? "Event-log control write failed"));
       });
     } catch (err) {
-      reject(err instanceof Error ? err : new Error(String(err)));
+      reject(new EventLogRetryableError(err instanceof Error ? err.message : String(err)));
     }
   });
 }
 
-async function waitForEventLogMigration(): Promise<void> {
-  if (!shouldDelegateEventLogWrite()) {
-    await migrateStoredEventLogUrls();
-    return;
-  }
+async function delegateEventLogControl(message: EventLogControlMessage): Promise<void> {
   let lastErr: unknown;
   for (let attempt = 0; attempt <= STORAGE_DELEGATE_RETRY_DELAYS_MS.length; attempt++) {
     try {
-      await sendEventLogMigrationMessage();
+      await sendEventLogControlMessage(message);
       return;
     } catch (err) {
+      if (err instanceof EventLogUnauthorizedError) throw err;
       lastErr = err;
       const delay = STORAGE_DELEGATE_RETRY_DELAYS_MS[attempt];
       if (delay !== undefined) await delayMs(delay);
     }
   }
-  throw new Error("Event-log migration barrier unavailable; refusing a competing mutation", {
+  throw new EventLogDeliveryError("Event-log control write unavailable; refusing an unqueued mutation", {
     cause: lastErr,
   });
 }
@@ -731,7 +773,7 @@ export async function appendEvent(partial: EventLogAppendPartial): Promise<void>
   return appendEventDirect(entry);
 }
 
-export async function handleEventLogAppendMessage(message: EventLogAppendMessage): Promise<EventLogAppendResponse> {
+export async function handleEventLogAppendMessage(message: EventLogAppendMessage): Promise<EventLogStorageResponse> {
   try {
     // Re-build through buildEventLogEntry so the entry is sanitized at the SW trust
     // boundary too. The normal sender already calls buildEventLogEntry before delegating,
@@ -745,9 +787,38 @@ export async function handleEventLogAppendMessage(message: EventLogAppendMessage
   }
 }
 
+export async function handleEventLogControlMessage(
+  message: EventLogControlMessage,
+  sender?: chrome.runtime.MessageSender
+): Promise<EventLogStorageResponse> {
+  // A content script runs on arbitrary web pages and therefore may append only.
+  // Clear/import replace the whole event corpus, so accept them only from this
+  // extension's options/popup pages (the same authorization boundary as prompt
+  // outcome clear/replace).
+  if (!isTrustedExtensionPageSender(sender)) {
+    return {
+      ok: false,
+      error: "Unauthorized event-log mutation from untrusted sender",
+      code: "unauthorized",
+    };
+  }
+  try {
+    if (message.type === "ns-event-log-clear") {
+      await clearEventLogDirect();
+    } else {
+      await importEventLogCoreDirect(message.writes);
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 export async function clearEventLog(): Promise<void> {
-  await waitForEventLogMigration();
-  await chrome.storage.local.set({ [EVENT_LOG_KEY]: [] });
+  if (shouldDelegateEventLogWrite()) {
+    return delegateEventLogControl({ type: "ns-event-log-clear" });
+  }
+  return clearEventLogDirect();
 }
 
 const PROMPT_OUTCOMES_LIMIT = 500;
@@ -1402,8 +1473,19 @@ export async function importAll(payload: unknown): Promise<void> {
 
   // --- Phase 2: commit the core sections in a single atomic set ---
   if (Object.keys(writes).length > 0) {
-    if (EVENT_LOG_KEY in writes) await waitForEventLogMigration();
-    await chrome.storage.local.set(writes);
+    if (EVENT_LOG_KEY in writes) {
+      // The append/migration lane is authoritative for every event-log mutation.
+      // Delegating the COMPLETE core object keeps importAll's existing one-set
+      // atomicity while preventing a cross-context clear/import from overwriting
+      // an append that already read the old log.
+      if (shouldDelegateEventLogWrite()) {
+        await delegateEventLogControl({ type: "ns-event-log-import-core", writes });
+      } else {
+        await importEventLogCoreDirect(writes);
+      }
+    } else {
+      await chrome.storage.local.set(writes);
+    }
   }
 
   // --- Phase 3: prompt outcomes LAST (separate by design; recomputes adaptive
