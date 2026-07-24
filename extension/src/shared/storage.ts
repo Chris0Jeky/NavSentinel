@@ -526,7 +526,7 @@ export function minimizeEventUrl(rawUrl: string | undefined): string | undefined
 export function minimizeEventUrl(rawUrl: string | undefined): string | undefined {
   if (!rawUrl) return rawUrl; // undefined or "" — preserve as-is
   const parsed = safeUrlParse(rawUrl);
-  if (parsed && parsed.origin && parsed.origin !== "null") {
+  if (parsed && (parsed.protocol === "http:" || parsed.protocol === "https:")) {
     return parsed.origin + parsed.pathname;
   }
   // Non-parseable input, or an opaque origin (data:/blob:/about:/mailto:, file:
@@ -727,7 +727,7 @@ function sanitizeImportedEventLogEntry(e: EventLogEntry): EventLogEntry {
   const cap = (s: string): string => (s.length > MAX_EVENT_STRING_LEN ? s.slice(0, MAX_EVENT_STRING_LEN) : s);
   const out: EventLogEntry = { id: cap(e.id), ts: e.ts, kind: e.kind };
   if (e.site !== undefined) out.site = cap(e.site);
-  if (e.url !== undefined) out.url = cap(e.url);
+  if (e.url !== undefined) out.url = cap(minimizeEventUrl(e.url));
   if (e.destHost !== undefined) out.destHost = cap(e.destHost);
   if (e.score !== undefined) out.score = e.score;
   // reasons elements are already strings here (isEventLogEntry pre-filtered them in

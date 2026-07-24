@@ -136,6 +136,34 @@ describe("suite storage and allowlist migration", () => {
     expect("url" in byId["no-url-1"]!).toBe(false);
   });
 
+  it("minimizes legacy event-log URLs before imported backups reach storage (RI-06)", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { importAll } = await import("../extension/src/shared/storage");
+    await importAll({
+      eventLog: [
+        {
+          id: "legacy-import-1",
+          ts: 102,
+          kind: "cred_submit_prompt",
+          site: "accounts.example.com",
+          url: "https://accounts.example.com/reset?token=super-secret#code=abc123",
+        },
+      ],
+    });
+
+    expect(store["sentinelsuite:event_log_v1"]).toEqual([
+      {
+        id: "legacy-import-1",
+        ts: 102,
+        kind: "cred_submit_prompt",
+        site: "accounts.example.com",
+        url: "https://accounts.example.com/reset",
+      },
+    ]);
+  });
+
   it("normalizes imported allowlist payloads before storage", async () => {
     const { chrome, store } = createChromeMock();
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);

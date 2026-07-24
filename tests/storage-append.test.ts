@@ -86,6 +86,12 @@ describe("minimizeEventUrl (RI-06)", () => {
     expect(minimizeEventUrl("https://user:pass@x.com/a?b=c")).toBe("https://x.com/a");
   });
 
+  it("treats blob URLs as opaque instead of duplicating their nested origin", () => {
+    expect(
+      minimizeEventUrl("blob:https://accounts.example/reset?token=super-secret#code=abc")
+    ).toBe("blob:https://accounts.example/reset");
+  });
+
   it("handles a malformed/non-parseable URL without throwing (string strip from first ? or #)", () => {
     let out: string | undefined;
     expect(() => {
