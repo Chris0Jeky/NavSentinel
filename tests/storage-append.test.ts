@@ -103,6 +103,11 @@ describe("minimizeEventUrl (RI-06)", () => {
     expect(out).toBe("not a valid url with spaces");
   });
 
+  it("reduces malformed scheme-bearing values instead of retaining userinfo", () => {
+    expect(minimizeEventUrl("https://user:pass@/reset?token=x")).toBe("https:");
+    expect(minimizeEventUrl("HTTPS://user:pass@/reset")).toBe("https:");
+  });
+
   it("strips at the first '#' when the fragment precedes any '?' in a malformed value", () => {
     expect(minimizeEventUrl("garbage-no-scheme#frag?later=1")).toBe("garbage-no-scheme");
   });
@@ -188,6 +193,26 @@ describe("appendEvent", () => {
       },
       { id: "new-1", ts: 2, kind: "nav_click_block", url: "data:" },
     ]);
+  });
+
+  it("waits for the service-worker migration barrier before clearing from an extension page", async () => {
+    const { chrome, store } = createChromeMock({
+      [EVENT_LOG_KEY]: [{ id: "legacy-1", ts: 1, kind: "nav_click_block" }],
+    });
+    const sent: unknown[] = [];
+    (chrome as unknown as { runtime: unknown }).runtime = {
+      sendMessage(message: unknown, callback?: (response: unknown) => void) {
+        sent.push(message);
+        callback?.({ ok: true });
+      },
+    };
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { clearEventLog } = await import("../extension/src/shared/storage");
+    await clearEventLog();
+
+    expect(sent).toEqual([{ type: "ns-event-log-migrate" }]);
+    expect(store[EVENT_LOG_KEY]).toEqual([]);
   });
 
   it("appends to an existing log", async () => {
@@ -1561,7 +1586,15 @@ describe("prompt outcome delegation — retry, drop, and refusal", () => {
       lastError?: { message?: string };
       sendMessage: (message: unknown, callback?: (response: unknown) => void) => void;
     } = {
-      sendMessage(_message, callback) {
+      sendMessage(message, callback) {
+        if (
+          message &&
+          typeof message === "object" &&
+          (message as { type?: unknown }).type === "ns-event-log-migrate"
+        ) {
+          callback?.({ ok: true });
+          return;
+        }
         calls++;
         runtime.lastError = { message: "Could not establish connection. Receiving end does not exist." };
         callback?.(undefined);

@@ -6,6 +6,7 @@ import {
   handleEventLogAppendMessage,
   handlePromptOutcomeStorageMessage,
   isEventLogAppendMessage,
+  isEventLogMigrationMessage,
   isPromptOutcomeStorageMessage,
   migrateStoredEventLogUrls,
   SUITE_SETTINGS_KEY,
@@ -626,6 +627,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (isEventLogAppendMessage(message)) {
     void handleEventLogAppendMessage(message)
       .then((response) => sendResponse?.(response))
+      .catch((err) => {
+        sendResponse?.({ ok: false, error: err instanceof Error ? err.message : String(err) });
+      });
+    return true;
+  }
+
+  if (isEventLogMigrationMessage(message)) {
+    void migrateStoredEventLogUrls()
+      .then(() => sendResponse?.({ ok: true }))
       .catch((err) => {
         sendResponse?.({ ok: false, error: err instanceof Error ? err.message : String(err) });
       });

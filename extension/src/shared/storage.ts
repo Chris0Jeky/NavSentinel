@@ -415,6 +415,7 @@ export interface EventLogEntry {
 }
 
 export type EventLogAppendMessage = { type: "ns-event-log-append"; entry: EventLogEntry };
+export type EventLogMigrationMessage = { type: "ns-event-log-migrate" };
 
 type EventLogAppendResponse =
   | { ok: true }
@@ -445,6 +446,14 @@ export function isEventLogAppendMessage(message: unknown): message is EventLogAp
   if (!message || typeof message !== "object") return false;
   const candidate = message as Record<string, unknown>;
   return candidate.type === "ns-event-log-append" && isEventLogEntry(candidate.entry);
+}
+
+export function isEventLogMigrationMessage(message: unknown): message is EventLogMigrationMessage {
+  return Boolean(
+    message &&
+      typeof message === "object" &&
+      (message as Record<string, unknown>).type === "ns-event-log-migrate"
+  );
 }
 
 function normalizeEventLog(value: unknown): EventLogEntry[] {
@@ -535,6 +544,8 @@ export function minimizeEventUrl(rawUrl: string | undefined): string | undefined
     // the non-web scheme, so retain that marker alone.
     return parsed.protocol;
   }
+  const scheme = /^([A-Za-z][A-Za-z0-9+.-]*):/.exec(rawUrl);
+  if (scheme) return `${scheme[1]!.toLowerCase()}:`;
   // Non-parseable input: strip from the first query/fragment delimiter without
   // reformatting the rest, so a display-only string stays intact and never throws.
   return stripUrlQueryAndFragment(rawUrl);
@@ -651,6 +662,48 @@ function sendEventLogAppendMessage(message: EventLogAppendMessage): Promise<void
   });
 }
 
+function sendEventLogMigrationMessage(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    try {
+      chrome.runtime.sendMessage({ type: "ns-event-log-migrate" }, (response?: EventLogAppendResponse) => {
+        const lastError = chrome.runtime.lastError;
+        if (lastError) {
+          reject(new Error(lastError.message ?? "runtime.sendMessage failed"));
+          return;
+        }
+        if (response?.ok) {
+          resolve();
+          return;
+        }
+        reject(new Error(response?.error ?? "Event-log migration barrier failed"));
+      });
+    } catch (err) {
+      reject(err instanceof Error ? err : new Error(String(err)));
+    }
+  });
+}
+
+async function waitForEventLogMigration(): Promise<void> {
+  if (!shouldDelegateEventLogWrite()) {
+    await migrateStoredEventLogUrls();
+    return;
+  }
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= STORAGE_DELEGATE_RETRY_DELAYS_MS.length; attempt++) {
+    try {
+      await sendEventLogMigrationMessage();
+      return;
+    } catch (err) {
+      lastErr = err;
+      const delay = STORAGE_DELEGATE_RETRY_DELAYS_MS[attempt];
+      if (delay !== undefined) await delayMs(delay);
+    }
+  }
+  throw new Error("Event-log migration barrier unavailable; refusing a competing mutation", {
+    cause: lastErr,
+  });
+}
+
 async function delegateEventLogAppend(message: EventLogAppendMessage): Promise<void> {
   let lastErr: unknown;
   for (let attempt = 0; attempt <= STORAGE_DELEGATE_RETRY_DELAYS_MS.length; attempt++) {
@@ -693,6 +746,7 @@ export async function handleEventLogAppendMessage(message: EventLogAppendMessage
 }
 
 export async function clearEventLog(): Promise<void> {
+  await waitForEventLogMigration();
   await chrome.storage.local.set({ [EVENT_LOG_KEY]: [] });
 }
 
@@ -1348,6 +1402,7 @@ export async function importAll(payload: unknown): Promise<void> {
 
   // --- Phase 2: commit the core sections in a single atomic set ---
   if (Object.keys(writes).length > 0) {
+    if (EVENT_LOG_KEY in writes) await waitForEventLogMigration();
     await chrome.storage.local.set(writes);
   }
 
