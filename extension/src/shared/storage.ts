@@ -530,6 +530,9 @@ function trimValidEventLog(validEntries: EventLogEntry[], limit: number): EventL
 
 type EventLogAppendPartial = Omit<EventLogEntry, "id" | "ts"> & { id?: string; ts?: number };
 let eventLogPending: Promise<unknown> = Promise.resolve();
+const EVENT_LOG_RESET_TS_KEY = "ns_sw:eventLogResetTs";
+let eventLogResetCutoffTs = Number.NEGATIVE_INFINITY;
+let eventLogResetHydrate: Promise<void> | null = null;
 
 function queueEventLogWrite<T>(operation: () => Promise<T>): Promise<T> {
   const next = eventLogPending.then(operation);
@@ -537,6 +540,55 @@ function queueEventLogWrite<T>(operation: () => Promise<T>): Promise<T> {
     console.warn("[NavSentinel] event log serialization error:", err);
   });
   return next;
+}
+
+type EventLogBarrierStorage = Pick<chrome.storage.StorageArea, "get" | "set">;
+
+// Keep the event-log reset barrier in session storage: a content script can
+// retry an append after the service worker that processed a clear/import has
+// been reclaimed. The next worker must still recognize that old entry as
+// pre-control state. (Firefox MV3 currently has no storage.session shim; this
+// remains fail-open across a worker restart there, matching the prompt-outcome
+// compatibility limitation tracked under FF-03.)
+function getEventLogBarrierStorage(): EventLogBarrierStorage | null {
+  const storage = (globalThis as { chrome?: { storage?: { session?: EventLogBarrierStorage } } })
+    .chrome?.storage?.session;
+  return typeof storage?.get === "function" && typeof storage.set === "function" ? storage : null;
+}
+
+function normalizeEventLogResetCutoff(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : Number.NEGATIVE_INFINITY;
+}
+
+function hydrateEventLogResetCutoff(): Promise<void> {
+  if (eventLogResetHydrate) return eventLogResetHydrate;
+  eventLogResetHydrate = (async () => {
+    const session = getEventLogBarrierStorage();
+    if (!session) return;
+    try {
+      const res = await session.get(EVENT_LOG_RESET_TS_KEY);
+      eventLogResetCutoffTs = Math.max(
+        eventLogResetCutoffTs,
+        normalizeEventLogResetCutoff(res[EVENT_LOG_RESET_TS_KEY])
+      );
+    } catch (err) {
+      console.warn("[NavSentinel] event-log reset barrier hydration failed:", err);
+      throw err;
+    }
+  })();
+  return eventLogResetHydrate;
+}
+
+async function setEventLogResetCutoff(ts = Date.now()): Promise<void> {
+  eventLogResetCutoffTs = Math.max(eventLogResetCutoffTs, ts);
+  const session = getEventLogBarrierStorage();
+  if (!session) return;
+  try {
+    await session.set({ [EVENT_LOG_RESET_TS_KEY]: eventLogResetCutoffTs });
+  } catch (err) {
+    console.warn("[NavSentinel] event-log reset barrier persist failed:", err);
+    throw err;
+  }
 }
 
 /**
@@ -659,18 +711,44 @@ async function persistEventLogEntry(entry: EventLogEntry): Promise<void> {
 }
 
 function appendEventDirect(entry: EventLogEntry): Promise<void> {
-  return queueEventLogWrite(() => persistEventLogEntry(entry));
+  return queueEventLogWrite(async () => {
+    await hydrateEventLogResetCutoff();
+    // `<=` deliberately rejects the one-millisecond control boundary as well:
+    // a delayed/retried message created before a clear/import must never
+    // resurrect the prior corpus. An append issued after a queued control is
+    // already ordered after it, so only cross-message retries can take this
+    // bounded same-ms path.
+    if (entry.ts <= eventLogResetCutoffTs) return;
+    await persistEventLogEntry(entry);
+  });
 }
 
 function clearEventLogDirect(): Promise<void> {
-  return queueEventLogWrite(() => chrome.storage.local.set({ [EVENT_LOG_KEY]: [] }));
+  return queueEventLogWrite(async () => {
+    await hydrateEventLogResetCutoff();
+    const resetTs = Date.now();
+    // Persist the barrier first so worker termination cannot leave a completed
+    // clear without restart protection. If the subsequent local write fails,
+    // the conservative cutoff is safe and the surfaced control error is
+    // retryable.
+    await setEventLogResetCutoff(resetTs);
+    await chrome.storage.local.set({ [EVENT_LOG_KEY]: [] });
+  });
 }
 
 function importEventLogCoreDirect(writes: Record<string, unknown>): Promise<void> {
   // Keep settings/allowlist/trusted-domains/event-log in the single storage.set
   // built by importAll. Moving this into the service worker must not turn that
   // existing atomic core import into separate writes.
-  return queueEventLogWrite(() => chrome.storage.local.set(writes));
+  return queueEventLogWrite(async () => {
+    await hydrateEventLogResetCutoff();
+    const resetTs = Date.now();
+    // The cutoff is the control time, NOT the newest imported event timestamp:
+    // backups can contain future-dated rows, which must not suppress genuinely
+    // new runtime events after a successful import.
+    await setEventLogResetCutoff(resetTs);
+    await chrome.storage.local.set(writes);
+  });
 }
 
 function shouldDelegateEventLogWrite(): boolean {

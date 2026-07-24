@@ -9,9 +9,11 @@ type Store = Record<string, unknown>;
 
 function createChromeMock(initial: Store = {}) {
   const store: Store = { ...initial };
+  const sessionStore: Store = {};
 
   return {
     store,
+    sessionStore,
     chrome: {
       storage: {
         local: {
@@ -37,6 +39,27 @@ function createChromeMock(initial: Store = {}) {
           async remove(keys: string | string[]) {
             const allKeys = Array.isArray(keys) ? keys : [keys];
             for (const key of allKeys) delete store[key];
+          },
+        },
+        session: {
+          async get(keys?: string | string[] | Record<string, unknown>) {
+            if (keys === undefined) return { ...sessionStore };
+            if (typeof keys === "string") {
+              return keys in sessionStore ? { [keys]: sessionStore[keys] } : {};
+            }
+            if (Array.isArray(keys)) {
+              return Object.fromEntries(
+                keys.filter((key) => key in sessionStore).map((key) => [key, sessionStore[key]]),
+              );
+            }
+            return Object.fromEntries(
+              Object.entries(keys).map(([key, fallback]) => [key, key in sessionStore ? sessionStore[key] : fallback]),
+            );
+          },
+          async set(next: Record<string, unknown>) {
+            for (const [key, value] of Object.entries(next)) {
+              sessionStore[key] = value;
+            }
           },
         },
         onChanged: {
@@ -465,6 +488,88 @@ describe("appendEvent", () => {
 
     expect(store[EVENT_LOG_KEY]).toEqual(imported);
     expect(store[SETTINGS_KEY]).toEqual({ logLimit: 300 });
+  });
+
+  it("drops a delayed append created before a clear control", async () => {
+    const { chrome, store } = createChromeMock({
+      [EVENT_LOG_KEY]: [{ id: "old-1", ts: 1, kind: "nav_click_block" }],
+    });
+    vi.stubGlobal("chrome", {
+      ...chrome,
+      clients: {},
+      registration: {},
+    } as unknown as typeof globalThis.chrome);
+    vi.spyOn(Date, "now").mockReturnValue(1000);
+
+    const { handleEventLogAppendMessage, handleEventLogControlMessage } = await import("../extension/src/shared/storage");
+    await handleEventLogControlMessage({ type: "ns-event-log-clear" }, OPTIONS_SENDER);
+    await handleEventLogAppendMessage({
+      type: "ns-event-log-append",
+      entry: { id: "delayed-before-clear", ts: 999, kind: "nav_click_block" },
+    });
+
+    expect(store[EVENT_LOG_KEY]).toEqual([]);
+  });
+
+  it("drops a delayed append after an import but permits new events despite future-dated imported rows", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", {
+      ...chrome,
+      clients: {},
+      registration: {},
+    } as unknown as typeof globalThis.chrome);
+    vi.spyOn(Date, "now").mockReturnValue(1000);
+
+    const { handleEventLogAppendMessage, handleEventLogControlMessage } = await import("../extension/src/shared/storage");
+    await handleEventLogControlMessage(
+      {
+        type: "ns-event-log-import-core",
+        writes: {
+          [EVENT_LOG_KEY]: [{ id: "future-import", ts: 9_999_999, kind: "cred_submit_prompt" }],
+        },
+      },
+      OPTIONS_SENDER
+    );
+    await handleEventLogAppendMessage({
+      type: "ns-event-log-append",
+      entry: { id: "delayed-before-import", ts: 999, kind: "nav_click_block" },
+    });
+    await handleEventLogAppendMessage({
+      type: "ns-event-log-append",
+      entry: { id: "new-after-import", ts: 1001, kind: "nav_click_block" },
+    });
+
+    expect((store[EVENT_LOG_KEY] as Array<{ id: string }>).map((entry) => entry.id)).toEqual([
+      "future-import",
+      "new-after-import",
+    ]);
+  });
+
+  it("hydrates the clear cutoff after a service-worker restart before accepting a retried append", async () => {
+    const { chrome, store, sessionStore } = createChromeMock({
+      [EVENT_LOG_KEY]: [{ id: "old-1", ts: 1, kind: "nav_click_block" }],
+    });
+    vi.stubGlobal("chrome", {
+      ...chrome,
+      clients: {},
+      registration: {},
+    } as unknown as typeof globalThis.chrome);
+    vi.spyOn(Date, "now").mockReturnValue(1000);
+
+    const firstWorker = await import("../extension/src/shared/storage");
+    await firstWorker.handleEventLogControlMessage({ type: "ns-event-log-clear" }, OPTIONS_SENDER);
+    expect(sessionStore).toMatchObject({ "ns_sw:eventLogResetTs": 1000 });
+
+    // A fresh module models a reclaimed/restarted MV3 service worker while
+    // retaining chrome.storage.session, which is browser-owned.
+    vi.resetModules();
+    const restartedWorker = await import("../extension/src/shared/storage");
+    await restartedWorker.handleEventLogAppendMessage({
+      type: "ns-event-log-append",
+      entry: { id: "retried-pre-clear", ts: 1000, kind: "nav_click_block" },
+    });
+
+    expect(store[EVENT_LOG_KEY]).toEqual([]);
   });
 
   it("clamps logLimit below minimum to 50", async () => {
