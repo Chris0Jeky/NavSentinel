@@ -415,10 +415,14 @@ export interface EventLogEntry {
 }
 
 export type EventLogAppendMessage = { type: "ns-event-log-append"; entry: EventLogEntry };
+export type EventLogMigrationMessage = { type: "ns-event-log-migrate" };
+export type EventLogControlMessage =
+  | { type: "ns-event-log-clear" }
+  | { type: "ns-event-log-import-core"; writes: Record<string, unknown> };
 
-type EventLogAppendResponse =
+type EventLogStorageResponse =
   | { ok: true }
-  | { ok: false; error: string };
+  | { ok: false; error: string; code?: "unauthorized" };
 
 const STORAGE_DELEGATE_RETRY_DELAYS_MS = [50, 150, 400];
 
@@ -445,6 +449,37 @@ export function isEventLogAppendMessage(message: unknown): message is EventLogAp
   if (!message || typeof message !== "object") return false;
   const candidate = message as Record<string, unknown>;
   return candidate.type === "ns-event-log-append" && isEventLogEntry(candidate.entry);
+}
+
+export function isEventLogMigrationMessage(message: unknown): message is EventLogMigrationMessage {
+  return Boolean(
+    message &&
+      typeof message === "object" &&
+      (message as Record<string, unknown>).type === "ns-event-log-migrate"
+  );
+}
+
+const EVENT_LOG_IMPORT_CORE_KEYS = new Set([
+  SUITE_SETTINGS_KEY,
+  ALLOWLIST_KEY,
+  TRUSTED_DOMAINS_KEY,
+  EVENT_LOG_KEY,
+  ADAPTIVE_SCORES_KEY,
+]);
+
+function isEventLogImportCoreWrites(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const writes = value as Record<string, unknown>;
+  return Array.isArray(writes[EVENT_LOG_KEY]) &&
+    writes[EVENT_LOG_KEY].every(isEventLogEntry) &&
+    Object.keys(writes).every((key) => EVENT_LOG_IMPORT_CORE_KEYS.has(key));
+}
+
+export function isEventLogControlMessage(message: unknown): message is EventLogControlMessage {
+  if (!message || typeof message !== "object") return false;
+  const candidate = message as Record<string, unknown>;
+  if (candidate.type === "ns-event-log-clear") return true;
+  return candidate.type === "ns-event-log-import-core" && isEventLogImportCoreWrites(candidate.writes);
 }
 
 function normalizeEventLog(value: unknown): EventLogEntry[] {
@@ -495,6 +530,9 @@ function trimValidEventLog(validEntries: EventLogEntry[], limit: number): EventL
 
 type EventLogAppendPartial = Omit<EventLogEntry, "id" | "ts"> & { id?: string; ts?: number };
 let eventLogPending: Promise<unknown> = Promise.resolve();
+const EVENT_LOG_RESET_TS_KEY = "ns_sw:eventLogResetTs";
+let eventLogResetCutoffTs = Number.NEGATIVE_INFINITY;
+let eventLogResetHydrate: Promise<void> | null = null;
 
 function queueEventLogWrite<T>(operation: () => Promise<T>): Promise<T> {
   const next = eventLogPending.then(operation);
@@ -504,13 +542,129 @@ function queueEventLogWrite<T>(operation: () => Promise<T>): Promise<T> {
   return next;
 }
 
+type EventLogBarrierStorage = Pick<chrome.storage.StorageArea, "get" | "set">;
+
+// Keep the event-log reset barrier in session storage: a content script can
+// retry an append after the service worker that processed a clear/import has
+// been reclaimed. The next worker must still recognize that old entry as
+// pre-control state. (Firefox MV3 currently has no storage.session shim; this
+// remains fail-open across a worker restart there, matching the prompt-outcome
+// compatibility limitation tracked under FF-03.)
+function getEventLogBarrierStorage(): EventLogBarrierStorage | null {
+  const storage = (globalThis as { chrome?: { storage?: { session?: EventLogBarrierStorage } } })
+    .chrome?.storage?.session;
+  return typeof storage?.get === "function" && typeof storage.set === "function" ? storage : null;
+}
+
+function normalizeEventLogResetCutoff(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : Number.NEGATIVE_INFINITY;
+}
+
+function hydrateEventLogResetCutoff(): Promise<void> {
+  if (eventLogResetHydrate) return eventLogResetHydrate;
+  eventLogResetHydrate = (async () => {
+    const session = getEventLogBarrierStorage();
+    if (!session) return;
+    try {
+      const res = await session.get(EVENT_LOG_RESET_TS_KEY);
+      eventLogResetCutoffTs = Math.max(
+        eventLogResetCutoffTs,
+        normalizeEventLogResetCutoff(res[EVENT_LOG_RESET_TS_KEY])
+      );
+    } catch (err) {
+      console.warn("[NavSentinel] event-log reset barrier hydration failed:", err);
+      throw err;
+    }
+  })();
+  return eventLogResetHydrate;
+}
+
+async function setEventLogResetCutoff(ts = Date.now()): Promise<void> {
+  eventLogResetCutoffTs = Math.max(eventLogResetCutoffTs, ts);
+  const session = getEventLogBarrierStorage();
+  if (!session) return;
+  try {
+    await session.set({ [EVENT_LOG_RESET_TS_KEY]: eventLogResetCutoffTs });
+  } catch (err) {
+    console.warn("[NavSentinel] event-log reset barrier persist failed:", err);
+    throw err;
+  }
+}
+
+/**
+ * Reduce an event-log URL to `origin + pathname`, dropping the query string and
+ * fragment (RI-06). The event log is a REVIEW/tuning corpus, not a correctness
+ * store, and the pages most likely logged (credential/submit) are exactly those
+ * that carry reset/magic-link/session/OAuth tokens in the query or fragment — so
+ * exact URLs are both unnecessary and a privacy liability here. No consumer reads
+ * the query/fragment of an event-log url (options/popup render site/destHost/
+ * score/reasons only; the gauge matches on registrable domain), so origin+path
+ * suffices everywhere. Host-level fields (site/destHost) are already minimal and
+ * left untouched.
+ *
+ * Robust by contract: undefined/empty pass through unchanged; a parseable URL is
+ * reduced via the URL API (which also strips any userinfo in the authority); a
+ * non-parseable value (or an opaque/unknown origin) falls back to a pure string
+ * strip from the first `?` or `#` so this NEVER throws and never emits a "null…"
+ * origin.
+ */
+export function minimizeEventUrl(rawUrl: string): string;
+export function minimizeEventUrl(rawUrl: string | undefined): string | undefined;
+export function minimizeEventUrl(rawUrl: string | undefined): string | undefined {
+  if (!rawUrl) return rawUrl; // undefined or "" — preserve as-is
+  const parsed = safeUrlParse(rawUrl);
+  if (parsed) {
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      return parsed.origin + parsed.pathname;
+    }
+    // Opaque and local schemes can carry a document, address, local path, or
+    // script before any ?/# delimiter. The event log only needs to identify
+    // the non-web scheme, so retain that marker alone.
+    return parsed.protocol;
+  }
+  const scheme = /^([A-Za-z][A-Za-z0-9+.-]*):/.exec(rawUrl);
+  if (scheme) return `${scheme[1]!.toLowerCase()}:`;
+  // Non-parseable input: strip from the first query/fragment delimiter without
+  // reformatting the rest, so a display-only string stays intact and never throws.
+  return stripUrlQueryAndFragment(rawUrl);
+}
+
+/** Rewrite pre-RI-06 event URLs through the service worker's serialized write lane. */
+export function migrateStoredEventLogUrls(): Promise<void> {
+  return queueEventLogWrite(async () => {
+    const res = await chrome.storage.local.get(EVENT_LOG_KEY);
+    const current = normalizeEventLog(res[EVENT_LOG_KEY]);
+    let changed = false;
+    const minimized = current.map((entry) => {
+      if (entry.url === undefined) return entry;
+      const url = minimizeEventUrl(entry.url);
+      if (url === entry.url) return entry;
+      changed = true;
+      return { ...entry, url };
+    });
+    if (changed) {
+      await chrome.storage.local.set({ [EVENT_LOG_KEY]: minimized });
+    }
+  });
+}
+
+function stripUrlQueryAndFragment(raw: string): string {
+  let end = raw.length;
+  const q = raw.indexOf("?");
+  if (q >= 0 && q < end) end = q;
+  const h = raw.indexOf("#");
+  if (h >= 0 && h < end) end = h;
+  return raw.slice(0, end);
+}
+
 function buildEventLogEntry(partial: EventLogAppendPartial): EventLogEntry {
   return {
     id: partial.id ?? makeId(),
     ts: Number.isFinite(partial.ts) ? (partial.ts as number) : Date.now(),
     kind: partial.kind,
     ...(partial.site !== undefined ? { site: partial.site } : {}),
-    ...(partial.url !== undefined ? { url: partial.url } : {}),
+    // RI-06: persist only origin+path for new entries (drop query+fragment tokens).
+    ...(partial.url !== undefined ? { url: minimizeEventUrl(partial.url) } : {}),
     ...(partial.destHost !== undefined ? { destHost: partial.destHost } : {}),
     ...(partial.score !== undefined ? { score: Number.isFinite(partial.score) ? partial.score : 0 } : {}),
     // Sanitize reasons to a bounded string[] (reuses the prompt-outcome helper). A
@@ -557,7 +711,44 @@ async function persistEventLogEntry(entry: EventLogEntry): Promise<void> {
 }
 
 function appendEventDirect(entry: EventLogEntry): Promise<void> {
-  return queueEventLogWrite(() => persistEventLogEntry(entry));
+  return queueEventLogWrite(async () => {
+    await hydrateEventLogResetCutoff();
+    // `<=` deliberately rejects the one-millisecond control boundary as well:
+    // a delayed/retried message created before a clear/import must never
+    // resurrect the prior corpus. An append issued after a queued control is
+    // already ordered after it, so only cross-message retries can take this
+    // bounded same-ms path.
+    if (entry.ts <= eventLogResetCutoffTs) return;
+    await persistEventLogEntry(entry);
+  });
+}
+
+function clearEventLogDirect(): Promise<void> {
+  return queueEventLogWrite(async () => {
+    await hydrateEventLogResetCutoff();
+    const resetTs = Date.now();
+    // Persist the barrier first so worker termination cannot leave a completed
+    // clear without restart protection. If the subsequent local write fails,
+    // the conservative cutoff is safe and the surfaced control error is
+    // retryable.
+    await setEventLogResetCutoff(resetTs);
+    await chrome.storage.local.set({ [EVENT_LOG_KEY]: [] });
+  });
+}
+
+function importEventLogCoreDirect(writes: Record<string, unknown>): Promise<void> {
+  // Keep settings/allowlist/trusted-domains/event-log in the single storage.set
+  // built by importAll. Moving this into the service worker must not turn that
+  // existing atomic core import into separate writes.
+  return queueEventLogWrite(async () => {
+    await hydrateEventLogResetCutoff();
+    const resetTs = Date.now();
+    // The cutoff is the control time, NOT the newest imported event timestamp:
+    // backups can contain future-dated rows, which must not suppress genuinely
+    // new runtime events after a successful import.
+    await setEventLogResetCutoff(resetTs);
+    await chrome.storage.local.set(writes);
+  });
 }
 
 function shouldDelegateEventLogWrite(): boolean {
@@ -568,7 +759,7 @@ function shouldDelegateEventLogWrite(): boolean {
 function sendEventLogAppendMessage(message: EventLogAppendMessage): Promise<void> {
   return new Promise((resolve, reject) => {
     try {
-      chrome.runtime.sendMessage(message, (response?: EventLogAppendResponse) => {
+      chrome.runtime.sendMessage(message, (response?: EventLogStorageResponse) => {
         const lastError = chrome.runtime.lastError;
         if (lastError) {
           reject(new Error(lastError.message ?? "runtime.sendMessage failed"));
@@ -583,6 +774,53 @@ function sendEventLogAppendMessage(message: EventLogAppendMessage): Promise<void
     } catch (err) {
       reject(err instanceof Error ? err : new Error(String(err)));
     }
+  });
+}
+
+class EventLogRetryableError extends Error {}
+class EventLogUnauthorizedError extends Error {}
+export class EventLogDeliveryError extends Error {}
+
+function sendEventLogControlMessage(message: EventLogControlMessage): Promise<void> {
+  return new Promise((resolve, reject) => {
+    try {
+      chrome.runtime.sendMessage(message, (response?: EventLogStorageResponse) => {
+        const lastError = chrome.runtime.lastError;
+        if (lastError) {
+          reject(new EventLogRetryableError(lastError.message ?? "runtime.sendMessage failed"));
+          return;
+        }
+        if (response?.ok) {
+          resolve();
+          return;
+        }
+        if (response?.code === "unauthorized") {
+          reject(new EventLogUnauthorizedError(response.error));
+          return;
+        }
+        reject(new EventLogRetryableError(response?.error ?? "Event-log control write failed"));
+      });
+    } catch (err) {
+      reject(new EventLogRetryableError(err instanceof Error ? err.message : String(err)));
+    }
+  });
+}
+
+async function delegateEventLogControl(message: EventLogControlMessage): Promise<void> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= STORAGE_DELEGATE_RETRY_DELAYS_MS.length; attempt++) {
+    try {
+      await sendEventLogControlMessage(message);
+      return;
+    } catch (err) {
+      if (err instanceof EventLogUnauthorizedError) throw err;
+      lastErr = err;
+      const delay = STORAGE_DELEGATE_RETRY_DELAYS_MS[attempt];
+      if (delay !== undefined) await delayMs(delay);
+    }
+  }
+  throw new EventLogDeliveryError("Event-log control write unavailable; refusing an unqueued mutation", {
+    cause: lastErr,
   });
 }
 
@@ -613,7 +851,7 @@ export async function appendEvent(partial: EventLogAppendPartial): Promise<void>
   return appendEventDirect(entry);
 }
 
-export async function handleEventLogAppendMessage(message: EventLogAppendMessage): Promise<EventLogAppendResponse> {
+export async function handleEventLogAppendMessage(message: EventLogAppendMessage): Promise<EventLogStorageResponse> {
   try {
     // Re-build through buildEventLogEntry so the entry is sanitized at the SW trust
     // boundary too. The normal sender already calls buildEventLogEntry before delegating,
@@ -627,8 +865,38 @@ export async function handleEventLogAppendMessage(message: EventLogAppendMessage
   }
 }
 
+export async function handleEventLogControlMessage(
+  message: EventLogControlMessage,
+  sender?: chrome.runtime.MessageSender
+): Promise<EventLogStorageResponse> {
+  // A content script runs on arbitrary web pages and therefore may append only.
+  // Clear/import replace the whole event corpus, so accept them only from this
+  // extension's options/popup pages (the same authorization boundary as prompt
+  // outcome clear/replace).
+  if (!isTrustedExtensionPageSender(sender)) {
+    return {
+      ok: false,
+      error: "Unauthorized event-log mutation from untrusted sender",
+      code: "unauthorized",
+    };
+  }
+  try {
+    if (message.type === "ns-event-log-clear") {
+      await clearEventLogDirect();
+    } else {
+      await importEventLogCoreDirect(message.writes);
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 export async function clearEventLog(): Promise<void> {
-  await chrome.storage.local.set({ [EVENT_LOG_KEY]: [] });
+  if (shouldDelegateEventLogWrite()) {
+    return delegateEventLogControl({ type: "ns-event-log-clear" });
+  }
+  return clearEventLogDirect();
 }
 
 const PROMPT_OUTCOMES_LIMIT = 500;
@@ -686,7 +954,7 @@ function sanitizeImportedEventLogEntry(e: EventLogEntry): EventLogEntry {
   const cap = (s: string): string => (s.length > MAX_EVENT_STRING_LEN ? s.slice(0, MAX_EVENT_STRING_LEN) : s);
   const out: EventLogEntry = { id: cap(e.id), ts: e.ts, kind: e.kind };
   if (e.site !== undefined) out.site = cap(e.site);
-  if (e.url !== undefined) out.url = cap(e.url);
+  if (e.url !== undefined) out.url = cap(minimizeEventUrl(e.url));
   if (e.destHost !== undefined) out.destHost = cap(e.destHost);
   if (e.score !== undefined) out.score = e.score;
   // reasons elements are already strings here (isEventLogEntry pre-filtered them in
@@ -1145,16 +1413,15 @@ async function replacePromptOutcomes(outcomes: PromptOutcomeEntry[]): Promise<vo
  */
 function isTrustedExtensionPageSender(sender?: chrome.runtime.MessageSender): boolean {
   if (!sender) return false;
-  // Primary boundary: content scripts (injected on <all_urls>) always carry
-  // sender.tab; extension pages (options/popup) do not.
-  if (sender.tab !== undefined) return false;
-  // Defense-in-depth: when we can identify our own extension origin, require the
-  // sender to match it. These checks only constrain when the info is available;
-  // they do not fail-closed if getURL/id are absent (e.g. some test runtimes).
+  // Options pages opened in a normal Chrome tab also carry sender.tab, so the
+  // tab field alone cannot distinguish them from content scripts. Require a
+  // tab-bearing sender to prove this extension's own origin instead.
   const runtime = (globalThis as { chrome?: typeof chrome }).chrome?.runtime;
   if (sender.id && runtime?.id && sender.id !== runtime.id) return false;
   const base = runtime?.getURL?.("");
-  if (base && sender.url && !sender.url.startsWith(base)) return false;
+  const isOwnExtensionUrl = Boolean(base && sender.url?.startsWith(base));
+  if (sender.tab !== undefined && !isOwnExtensionUrl) return false;
+  if (base && sender.url && !isOwnExtensionUrl) return false;
   return true;
 }
 
@@ -1198,7 +1465,14 @@ export async function exportAll(): Promise<{
   const settings = await getSuiteSettings();
   const allowlist = await getAllowlist();
   const trustedDomains = await getTrustedDomains();
-  const eventLog = await getEventLog();
+  // RI-06: minimize every event-log URL on the way out (drop query+fragment) so
+  // already-stored LEGACY full URLs — persisted before the append-path change —
+  // are also reduced in exports, matching what new entries now store.
+  const eventLog = (await getEventLog()).map((entry) => {
+    if (entry.url === undefined) return entry;
+    const minimized = minimizeEventUrl(entry.url);
+    return minimized === entry.url ? entry : { ...entry, url: minimized };
+  });
   const promptOutcomes = await getPromptOutcomes();
   const adaptiveScores = await getAdaptiveScores();
   return {
@@ -1276,7 +1550,19 @@ export async function importAll(payload: unknown): Promise<void> {
 
   // --- Phase 2: commit the core sections in a single atomic set ---
   if (Object.keys(writes).length > 0) {
-    await chrome.storage.local.set(writes);
+    if (EVENT_LOG_KEY in writes) {
+      // The append/migration lane is authoritative for every event-log mutation.
+      // Delegating the COMPLETE core object keeps importAll's existing one-set
+      // atomicity while preventing a cross-context clear/import from overwriting
+      // an append that already read the old log.
+      if (shouldDelegateEventLogWrite()) {
+        await delegateEventLogControl({ type: "ns-event-log-import-core", writes });
+      } else {
+        await importEventLogCoreDirect(writes);
+      }
+    } else {
+      await chrome.storage.local.set(writes);
+    }
   }
 
   // --- Phase 3: prompt outcomes LAST (separate by design; recomputes adaptive

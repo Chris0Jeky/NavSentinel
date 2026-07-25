@@ -4,9 +4,13 @@ import {
   getNavSettings,
   appendEvent,
   handleEventLogAppendMessage,
+  handleEventLogControlMessage,
   handlePromptOutcomeStorageMessage,
   isEventLogAppendMessage,
+  isEventLogControlMessage,
+  isEventLogMigrationMessage,
   isPromptOutcomeStorageMessage,
+  migrateStoredEventLogUrls,
   SUITE_SETTINGS_KEY,
 } from "../shared/storage";
 import { RedirectChainTracker } from "../shared/redirect_chain";
@@ -54,6 +58,12 @@ async function loadReputationFilter(): Promise<void> {
 }
 
 void loadReputationFilter();
+// RI-06: scrub legacy full/opaque event URLs in the same serialized service-
+// worker write lane used by appends, so an installed user's on-disk corpus is
+// minimized without racing a concurrent event.
+void migrateStoredEventLogUrls().catch((err) => {
+  console.warn("[NavSentinel] event-log URL migration failed; will retry on worker restart:", err);
+});
 const NAV_ALLOW_TTL_MS = 1500;
 const NAV_GESTURE_TTL_MS = 1500;
 const NAV_TARGET_ALLOW_TTL_MS = 10000;
@@ -697,6 +707,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (isEventLogAppendMessage(message)) {
     void handleEventLogAppendMessage(message)
       .then((response) => sendResponse?.(response))
+      .catch((err) => {
+        sendResponse?.({ ok: false, error: err instanceof Error ? err.message : String(err) });
+      });
+    return true;
+  }
+
+  if (isEventLogControlMessage(message)) {
+    void handleEventLogControlMessage(message, sender)
+      .then((response) => sendResponse?.(response))
+      .catch((err) => {
+        sendResponse?.({ ok: false, error: err instanceof Error ? err.message : String(err) });
+      });
+    return true;
+  }
+
+  if (isEventLogMigrationMessage(message)) {
+    void migrateStoredEventLogUrls()
+      .then(() => sendResponse?.({ ok: true }))
       .catch((err) => {
         sendResponse?.({ ok: false, error: err instanceof Error ? err.message : String(err) });
       });

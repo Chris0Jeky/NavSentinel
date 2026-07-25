@@ -2,15 +2,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   EVENT_LOG_KEY,
   PROMPT_OUTCOMES_KEY,
+  minimizeEventUrl,
 } from "../extension/src/shared/storage";
 
 type Store = Record<string, unknown>;
 
 function createChromeMock(initial: Store = {}) {
   const store: Store = { ...initial };
+  const sessionStore: Store = {};
 
   return {
     store,
+    sessionStore,
     chrome: {
       storage: {
         local: {
@@ -38,6 +41,27 @@ function createChromeMock(initial: Store = {}) {
             for (const key of allKeys) delete store[key];
           },
         },
+        session: {
+          async get(keys?: string | string[] | Record<string, unknown>) {
+            if (keys === undefined) return { ...sessionStore };
+            if (typeof keys === "string") {
+              return keys in sessionStore ? { [keys]: sessionStore[keys] } : {};
+            }
+            if (Array.isArray(keys)) {
+              return Object.fromEntries(
+                keys.filter((key) => key in sessionStore).map((key) => [key, sessionStore[key]]),
+              );
+            }
+            return Object.fromEntries(
+              Object.entries(keys).map(([key, fallback]) => [key, key in sessionStore ? sessionStore[key] : fallback]),
+            );
+          },
+          async set(next: Record<string, unknown>) {
+            for (const [key, value] of Object.entries(next)) {
+              sessionStore[key] = value;
+            }
+          },
+        },
         onChanged: {
           addListener() {},
         },
@@ -57,6 +81,68 @@ const CONTENT_SCRIPT_SENDER = {
   tab: { id: 7 },
   url: "https://evil.example/page",
 } as chrome.runtime.MessageSender;
+
+// RI-06: event-log URLs are a review/tuning corpus, not a correctness store, and
+// the pages most likely logged (credential/submit) carry reset/magic-link/session/
+// OAuth tokens in the query or fragment. minimizeEventUrl reduces a URL to
+// origin+path so those tokens are never persisted or exported.
+describe("minimizeEventUrl (RI-06)", () => {
+  it("drops both query and fragment, keeping origin+path", () => {
+    expect(minimizeEventUrl("https://x.com/a/b?token=secret#frag")).toBe("https://x.com/a/b");
+  });
+
+  it("leaves a URL with no query/fragment unchanged", () => {
+    expect(minimizeEventUrl("https://x.com/a/b")).toBe("https://x.com/a/b");
+  });
+
+  it("drops a query string only", () => {
+    expect(minimizeEventUrl("https://x.com/reset?token=abc123")).toBe("https://x.com/reset");
+  });
+
+  it("drops a fragment only (e.g. an OAuth/magic-link access_token in the hash)", () => {
+    expect(
+      minimizeEventUrl("https://mail.example.com/verify#access_token=eyJhbGciOi&expires=3600")
+    ).toBe("https://mail.example.com/verify");
+  });
+
+  it("strips userinfo (credentials) from the authority as a side benefit", () => {
+    expect(minimizeEventUrl("https://user:pass@x.com/a?b=c")).toBe("https://x.com/a");
+  });
+
+  it("reduces opaque and local URLs to a scheme marker", () => {
+    expect(minimizeEventUrl("blob:https://accounts.example/reset?token=secret")).toBe("blob:");
+    expect(minimizeEventUrl("data:text/html,<input value=reset-secret>")).toBe("data:");
+    expect(minimizeEventUrl("mailto:alice+private@example.com")).toBe("mailto:");
+    expect(minimizeEventUrl("file:///C:/Users/chris/private/reset-token.txt")).toBe("file:");
+    expect(minimizeEventUrl("javascript:submitSecret('reset-token')")).toBe("javascript:");
+  });
+
+  it("handles a malformed/non-parseable URL without throwing (string strip from first ? or #)", () => {
+    let out: string | undefined;
+    expect(() => {
+      out = minimizeEventUrl("not a valid url with spaces?token=secret#frag");
+    }).not.toThrow();
+    // Fallback strips from the first delimiter (the '?' here precedes the '#').
+    expect(out).toBe("not a valid url with spaces");
+  });
+
+  it("reduces malformed scheme-bearing values instead of retaining userinfo", () => {
+    expect(minimizeEventUrl("https://user:pass@/reset?token=x")).toBe("https:");
+    expect(minimizeEventUrl("HTTPS://user:pass@/reset")).toBe("https:");
+  });
+
+  it("strips at the first '#' when the fragment precedes any '?' in a malformed value", () => {
+    expect(minimizeEventUrl("garbage-no-scheme#frag?later=1")).toBe("garbage-no-scheme");
+  });
+
+  it("passes undefined through unchanged", () => {
+    expect(minimizeEventUrl(undefined)).toBeUndefined();
+  });
+
+  it("passes an empty string through unchanged", () => {
+    expect(minimizeEventUrl("")).toBe("");
+  });
+});
 
 describe("appendEvent", () => {
   beforeEach(() => {
@@ -78,6 +164,81 @@ describe("appendEvent", () => {
     expect(log).toHaveLength(1);
     expect(log[0]!.kind).toBe("nav_click_block");
     expect(log[0]!.site).toBe("example.com");
+  });
+
+  it("persists only a scheme marker for an opaque event URL", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { appendEvent } = await import("../extension/src/shared/storage");
+    await appendEvent({
+      id: "opaque-1",
+      kind: "nav_click_block",
+      url: "data:text/html,<input value=reset-secret>",
+    });
+
+    const log = store[EVENT_LOG_KEY] as Array<{ url?: string }>;
+    expect(log[0]!.url).toBe("data:");
+  });
+
+  it("migrates stored legacy URLs without losing a queued service-worker append", async () => {
+    const { chrome, store } = createChromeMock({
+      [EVENT_LOG_KEY]: [
+        {
+          id: "legacy-1",
+          ts: 1,
+          kind: "cred_submit_prompt",
+          url: "https://accounts.example/reset?token=secret#code=abc",
+        },
+      ],
+    });
+    vi.stubGlobal("chrome", {
+      ...chrome,
+      clients: {},
+      registration: {},
+    } as unknown as typeof globalThis.chrome);
+
+    const storage = await import("../extension/src/shared/storage");
+    await Promise.all([
+      storage.migrateStoredEventLogUrls(),
+      storage.handleEventLogAppendMessage({
+        type: "ns-event-log-append",
+        entry: { id: "new-1", ts: 2, kind: "nav_click_block", url: "data:text/plain,secret" },
+      }),
+    ]);
+
+    expect(store[EVENT_LOG_KEY]).toEqual([
+      {
+        id: "legacy-1",
+        ts: 1,
+        kind: "cred_submit_prompt",
+        url: "https://accounts.example/reset",
+      },
+      { id: "new-1", ts: 2, kind: "nav_click_block", url: "data:" },
+    ]);
+  });
+
+  it("delegates a clear to the service-worker event-log queue from an extension page", async () => {
+    const { chrome, store } = createChromeMock({
+      [EVENT_LOG_KEY]: [{ id: "legacy-1", ts: 1, kind: "nav_click_block" }],
+    });
+    const sent: unknown[] = [];
+    (chrome as unknown as { runtime: unknown }).runtime = {
+      sendMessage(message: unknown, callback?: (response: unknown) => void) {
+        sent.push(message);
+        callback?.({ ok: true });
+      },
+    };
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { clearEventLog } = await import("../extension/src/shared/storage");
+    await clearEventLog();
+
+    expect(sent).toEqual([{ type: "ns-event-log-clear" }]);
+    // The extension page must not race the worker with a direct set(). The
+    // worker owns the mutation, so this deliberately-simple transport mock does
+    // not change local storage.
+    expect(store[EVENT_LOG_KEY]).toEqual([{ id: "legacy-1", ts: 1, kind: "nav_click_block" }]);
   });
 
   it("appends to an existing log", async () => {
@@ -272,6 +433,145 @@ describe("appendEvent", () => {
     expect(ids).toEqual(["sw-concurrent-1", "sw-concurrent-2", "sw-concurrent-3"]);
   });
 
+  it("serializes a queued clear after an append so the append cannot resurrect cleared data", async () => {
+    const { chrome, store } = createChromeMock({
+      [EVENT_LOG_KEY]: [{ id: "stale-1", ts: 1, kind: "nav_click_block" }],
+    });
+    vi.stubGlobal("chrome", {
+      ...chrome,
+      clients: {},
+      registration: {},
+    } as unknown as typeof globalThis.chrome);
+
+    const { handleEventLogAppendMessage, handleEventLogControlMessage } = await import("../extension/src/shared/storage");
+    await Promise.all([
+      handleEventLogAppendMessage({
+        type: "ns-event-log-append",
+        entry: { id: "racing-append", ts: 2, kind: "nav_silent_allow" },
+      }),
+      handleEventLogControlMessage({ type: "ns-event-log-clear" }, OPTIONS_SENDER),
+    ]);
+
+    // Queue order is append then clear. Without the shared queue, a delayed
+    // append can set its stale snapshot after clear and restore stale-1.
+    expect(store[EVENT_LOG_KEY]).toEqual([]);
+  });
+
+  it("serializes a core import after an append while retaining importAll's one-set core payload", async () => {
+    const { chrome, store } = createChromeMock({
+      [EVENT_LOG_KEY]: [{ id: "stale-1", ts: 1, kind: "nav_click_block" }],
+    });
+    vi.stubGlobal("chrome", {
+      ...chrome,
+      clients: {},
+      registration: {},
+    } as unknown as typeof globalThis.chrome);
+
+    const { handleEventLogAppendMessage, handleEventLogControlMessage } = await import("../extension/src/shared/storage");
+    const imported = [{ id: "import-1", ts: 3, kind: "cred_submit_prompt" }];
+    await Promise.all([
+      handleEventLogAppendMessage({
+        type: "ns-event-log-append",
+        entry: { id: "racing-append", ts: 2, kind: "nav_silent_allow" },
+      }),
+      handleEventLogControlMessage(
+        {
+          type: "ns-event-log-import-core",
+          writes: {
+            [SETTINGS_KEY]: { logLimit: 300 },
+            [EVENT_LOG_KEY]: imported,
+          },
+        },
+        OPTIONS_SENDER
+      ),
+    ]);
+
+    expect(store[EVENT_LOG_KEY]).toEqual(imported);
+    expect(store[SETTINGS_KEY]).toEqual({ logLimit: 300 });
+  });
+
+  it("drops a delayed append created before a clear control", async () => {
+    const { chrome, store } = createChromeMock({
+      [EVENT_LOG_KEY]: [{ id: "old-1", ts: 1, kind: "nav_click_block" }],
+    });
+    vi.stubGlobal("chrome", {
+      ...chrome,
+      clients: {},
+      registration: {},
+    } as unknown as typeof globalThis.chrome);
+    vi.spyOn(Date, "now").mockReturnValue(1000);
+
+    const { handleEventLogAppendMessage, handleEventLogControlMessage } = await import("../extension/src/shared/storage");
+    await handleEventLogControlMessage({ type: "ns-event-log-clear" }, OPTIONS_SENDER);
+    await handleEventLogAppendMessage({
+      type: "ns-event-log-append",
+      entry: { id: "delayed-before-clear", ts: 999, kind: "nav_click_block" },
+    });
+
+    expect(store[EVENT_LOG_KEY]).toEqual([]);
+  });
+
+  it("drops a delayed append after an import but permits new events despite future-dated imported rows", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", {
+      ...chrome,
+      clients: {},
+      registration: {},
+    } as unknown as typeof globalThis.chrome);
+    vi.spyOn(Date, "now").mockReturnValue(1000);
+
+    const { handleEventLogAppendMessage, handleEventLogControlMessage } = await import("../extension/src/shared/storage");
+    await handleEventLogControlMessage(
+      {
+        type: "ns-event-log-import-core",
+        writes: {
+          [EVENT_LOG_KEY]: [{ id: "future-import", ts: 9_999_999, kind: "cred_submit_prompt" }],
+        },
+      },
+      OPTIONS_SENDER
+    );
+    await handleEventLogAppendMessage({
+      type: "ns-event-log-append",
+      entry: { id: "delayed-before-import", ts: 999, kind: "nav_click_block" },
+    });
+    await handleEventLogAppendMessage({
+      type: "ns-event-log-append",
+      entry: { id: "new-after-import", ts: 1001, kind: "nav_click_block" },
+    });
+
+    expect((store[EVENT_LOG_KEY] as Array<{ id: string }>).map((entry) => entry.id)).toEqual([
+      "future-import",
+      "new-after-import",
+    ]);
+  });
+
+  it("hydrates the clear cutoff after a service-worker restart before accepting a retried append", async () => {
+    const { chrome, store, sessionStore } = createChromeMock({
+      [EVENT_LOG_KEY]: [{ id: "old-1", ts: 1, kind: "nav_click_block" }],
+    });
+    vi.stubGlobal("chrome", {
+      ...chrome,
+      clients: {},
+      registration: {},
+    } as unknown as typeof globalThis.chrome);
+    vi.spyOn(Date, "now").mockReturnValue(1000);
+
+    const firstWorker = await import("../extension/src/shared/storage");
+    await firstWorker.handleEventLogControlMessage({ type: "ns-event-log-clear" }, OPTIONS_SENDER);
+    expect(sessionStore).toMatchObject({ "ns_sw:eventLogResetTs": 1000 });
+
+    // A fresh module models a reclaimed/restarted MV3 service worker while
+    // retaining chrome.storage.session, which is browser-owned.
+    vi.resetModules();
+    const restartedWorker = await import("../extension/src/shared/storage");
+    await restartedWorker.handleEventLogAppendMessage({
+      type: "ns-event-log-append",
+      entry: { id: "retried-pre-clear", ts: 1000, kind: "nav_click_block" },
+    });
+
+    expect(store[EVENT_LOG_KEY]).toEqual([]);
+  });
+
   it("clamps logLimit below minimum to 50", async () => {
     const { chrome, store } = createChromeMock({
       [SETTINGS_KEY]: { logLimit: 3 },
@@ -324,6 +624,25 @@ describe("appendEvent", () => {
     expect(log[0]!.score).toBe(85);
     expect(log[0]!.reasons).toEqual(["nrs_cross_site", "nrs_new_tab_window"]);
     expect(log[0]!.extra).toEqual({ tabId: 42 });
+  });
+
+  it("persists only origin+path, dropping query+fragment tokens at the persist path (RI-06)", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { appendEvent } = await import("../extension/src/shared/storage");
+    await appendEvent({
+      kind: "cred_submit_prompt",
+      site: "accounts.example.com",
+      // A reset/magic-link page: the sensitive token rides in the query + fragment.
+      url: "https://accounts.example.com/reset?token=super-secret#code=abc123",
+    });
+
+    const log = store[EVENT_LOG_KEY] as Array<Record<string, unknown>>;
+    expect(log).toHaveLength(1);
+    expect(log[0]!.url).toBe("https://accounts.example.com/reset");
+    // Host-level fields are untouched.
+    expect(log[0]!.site).toBe("accounts.example.com");
   });
 
   it("sanitizes non-string reasons so the event persists instead of being silently dropped (#339)", async () => {
@@ -1158,6 +1477,117 @@ describe("clearEventLog", () => {
   });
 });
 
+describe("event-log control messages — sender authorization", () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("rejects clear and core-import messages from a content script without mutating storage", async () => {
+    const seed = [{ id: "keep-1", ts: 1, kind: "nav_click_block" }];
+    const { chrome, store } = createChromeMock({ [EVENT_LOG_KEY]: seed });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const { handleEventLogControlMessage } = await import("../extension/src/shared/storage");
+
+    await expect(
+      handleEventLogControlMessage({ type: "ns-event-log-clear" }, CONTENT_SCRIPT_SENDER)
+    ).resolves.toMatchObject({ ok: false, code: "unauthorized" });
+    await expect(
+      handleEventLogControlMessage(
+        { type: "ns-event-log-import-core", writes: { [EVENT_LOG_KEY]: [] } },
+        CONTENT_SCRIPT_SENDER
+      )
+    ).resolves.toMatchObject({ ok: false, code: "unauthorized" });
+
+    expect(store[EVENT_LOG_KEY]).toEqual(seed);
+  });
+
+  it("accepts a core import from a trusted extension page", async () => {
+    const { chrome, store } = createChromeMock({
+      [EVENT_LOG_KEY]: [{ id: "old-1", ts: 1, kind: "nav_click_block" }],
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const { handleEventLogControlMessage } = await import("../extension/src/shared/storage");
+
+    await expect(
+      handleEventLogControlMessage(
+        {
+          type: "ns-event-log-import-core",
+          writes: { [EVENT_LOG_KEY]: [{ id: "new-1", ts: 2, kind: "cred_submit_prompt" }] },
+        },
+        OPTIONS_SENDER
+      )
+    ).resolves.toEqual({ ok: true });
+
+    expect(store[EVENT_LOG_KEY]).toEqual([{ id: "new-1", ts: 2, kind: "cred_submit_prompt" }]);
+  });
+
+  it("accepts an extension options page opened in a tab but still rejects a web content script", async () => {
+    const { chrome, store } = createChromeMock({ [EVENT_LOG_KEY]: [] });
+    (chrome as unknown as { runtime: Record<string, unknown> }).runtime = {
+      id: "navsentinel-test",
+      getURL: (path: string) => `chrome-extension://navsentinel-test/${path}`,
+    };
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const { handleEventLogControlMessage } = await import("../extension/src/shared/storage");
+
+    await expect(
+      handleEventLogControlMessage(
+        { type: "ns-event-log-clear" },
+        {
+          id: "navsentinel-test",
+          url: "chrome-extension://navsentinel-test/src/options/options.html",
+          tab: {} as chrome.tabs.Tab,
+        }
+      )
+    ).resolves.toEqual({ ok: true });
+    await expect(
+      handleEventLogControlMessage(
+        { type: "ns-event-log-import-core", writes: { [EVENT_LOG_KEY]: [] } },
+        {
+          id: "navsentinel-test",
+          url: "https://example.test/page",
+          tab: {} as chrome.tabs.Tab,
+        }
+      )
+    ).resolves.toMatchObject({ ok: false, code: "unauthorized" });
+
+    expect(store[EVENT_LOG_KEY]).toEqual([]);
+  });
+
+  it("delegates the complete atomic core import rather than directly writing an event log", async () => {
+    const { chrome, store } = createChromeMock();
+    const sent: unknown[] = [];
+    (chrome as unknown as { runtime: unknown }).runtime = {
+      sendMessage(message: unknown, callback?: (response: unknown) => void) {
+        sent.push(message);
+        callback?.({ ok: true });
+      },
+    };
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const { importAll } = await import("../extension/src/shared/storage");
+
+    await importAll({
+      settings: { logLimit: 300 },
+      eventLog: [{ id: "import-1", ts: 2, kind: "cred_submit_prompt" }],
+    });
+
+    expect(store[EVENT_LOG_KEY]).toBeUndefined();
+    expect(sent).toEqual([
+      {
+        type: "ns-event-log-import-core",
+        writes: {
+          [SETTINGS_KEY]: expect.objectContaining({ logLimit: 300 }),
+          [EVENT_LOG_KEY]: [{ id: "import-1", ts: 2, kind: "cred_submit_prompt" }],
+          "sentinelsuite:adaptive_scores_v1": {},
+        },
+      },
+    ]);
+  });
+});
+
 describe("getPromptOutcomes and clearPromptOutcomes", () => {
   beforeEach(() => {
     vi.resetModules();
@@ -1432,7 +1862,15 @@ describe("prompt outcome delegation — retry, drop, and refusal", () => {
       lastError?: { message?: string };
       sendMessage: (message: unknown, callback?: (response: unknown) => void) => void;
     } = {
-      sendMessage(_message, callback) {
+      sendMessage(message, callback) {
+        if (message && typeof message === "object" && (message as { type?: unknown }).type === "ns-event-log-import-core") {
+          // The core import is now delegated into the same SW queue as appends.
+          // Model the worker's one-set commit, then make only the subsequent
+          // prompt-outcome message unavailable.
+          Object.assign(store, (message as { writes: Record<string, unknown> }).writes);
+          callback?.({ ok: true });
+          return;
+        }
         calls++;
         runtime.lastError = { message: "Could not establish connection. Receiving end does not exist." };
         callback?.(undefined);
