@@ -97,12 +97,37 @@ PRs D-* are independent (different files) → parallel branches off `main`, **no
 
 ## In-Flight
 
-**Active checkpoint (2026-07-24, Cycle 52).** The Cycle 51 block below is CLOSED
-and retained only as history — do not action it. #459/#463 **merged** on
-2026-07-17 (merge commit `2888483`), so the dependency slice it describes is
-done.
+**Active checkpoint (2026-07-25, Cycle 53) — THE PR QUEUE IS EMPTY.** All seven
+open PRs merged on 2026-07-25, oldest-first within their dependency order, each
+with a merge commit (never squashed): **#472** (floor v1.6.0) → **#471** (docs) →
+**#356** (`3bd9e02`, closed #349) → **#464** (`c4f6183`) → **#466** (`4ff6341`) →
+**#468** (`ebeb922`) → **#457**. Note the order is *not* pure age: #457 had to go
+last because merging it before #472 would have regressed the vendored floor from
+v1.6.0 back to v1.5.1, and #464/#466/#468 all overlap in `sw.ts` so they were
+integrated sequentially rather than in parallel.
 
-Live state on 2026-07-24:
+Each merge was gated on the CI run's `head_sha` being verified equal to the PR
+head immediately beforehand, and `main`'s resulting tree was confirmed
+byte-identical to the last verified branch tree — so `main` is the exact state
+that was tested, not an untested combination of individually-green branches.
+
+**The three browser-surface gates were cleared by automated equivalent, not by a
+manual pass** (Chris's choice, 2026-07-25). AI-13/AI-21/AI-22 are resolved and
+replaced by the single optional **AI-24** confirmation pass. Nothing is blocked
+on it. What automation could not cover is written down per-PR and in AI-24: real
+Chrome rather than Chromium, manual profile hygiene, and human eyes on toast
+wording.
+
+Two verification lessons from this cycle, both ledgered: local E2E defaults to
+`workers: 4` and produces false failures under contention (use `CI=1`), and
+Playwright's list reporter prints failed titles *unprefixed* with no `not ok`
+line — so a wrapper ending in `echo "exit=$?"` reports 0 for a failing run. Write
+the exit code to a file.
+
+The Cycle 51/52 blocks below are CLOSED and retained only as history — do not
+action them. #459/#463 merged on 2026-07-17 (merge commit `2888483`).
+
+Historical live state (2026-07-24):
 
 | PR | State | Gate |
 |---|---|---|

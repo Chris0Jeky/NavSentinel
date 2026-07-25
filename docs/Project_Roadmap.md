@@ -50,12 +50,12 @@ The legacy browser-surface PR queue is not ready for human time:
 | PR | Current state |
 |---|---|
 | #273 | Closed 2026-07-13 from a stale base; recreate from current `main` or defer |
-| #356 | **Refreshed and green (2026-07-24).** Head `f8028c9`, MERGEABLE, Build/Unit + E2E green on that exact head, 3/3 review threads resolved. Sole remaining gate is human Gate-3 (AI-13). The earlier "stale with E2E red" state is history |
+| #356 | **MERGED 2026-07-25** as `3bd9e02`, closing #349. Merged head `631461e` (= `f8028c9` + `Merge origin/main`); exact-head CI green, 3/3 threads resolved. Manual Gate-3 (AI-13) waived by Chris in favour of the automated equivalent — `spa-router-pushstate.spec.ts:91` covers the guide's wrapper-call assertions and pre-existing specs cover its security gates |
 | #399 | Closed 2026-07-13; measurement-held under #223/#417 and not a beta blocker |
-| #464 | Open, MERGEABLE, green on head `cf66b28`, 6/6 threads resolved. RI-01 synthetic-navigation allowance rejection. Human Gate-3 as AI-21 |
-| #466 | Open, MERGEABLE, green on head `0266107`, 4/4 threads resolved. RI-01 pending-decision service-worker boundary. Human Gate-3 as AI-22 |
-| #468 | Draft; RI-06 event-log URL minimization. Needs a fresh adversarial round on head `bea0077` before leaving draft |
-| #457 | CONFLICTING; deny-floor topology. Held pending the upstream release closing agent-harness #37 — see its 2026-07-24 state review |
+| #464 | **MERGED 2026-07-25** as `c4f6183`. Merged head `d7c7090`; exact-head CI green, 6/6 threads resolved. RI-01 synthetic-navigation allowance rejection. Manual Gate-3 (AI-21) waived — ships 5 new regression specs covering the guide's attack cases, with trusted-activation compatibility covered by the existing Level 8 / RW-10 specs |
+| #466 | **MERGED 2026-07-25** as `4ff6341`. Merged head `ebde166`; exact-head CI green, 4/4 threads resolved. RI-01 pending-decision SW boundary — **dormant** (no production path sends `ns-pending-decision-*`). Manual Gate-3 (AI-22) waived; its `rolldownOptions` bundle-layout risk is covered by the `check:mv3-worker` gate the PR itself adds |
+| #468 | **MERGED 2026-07-25** as `ebeb922`. Merged head `5bac99b` (clean auto-merge, zero conflicts); exact-head CI green. RI-06 event-log URL minimization — advances RI-06 without closing it; remaining slices tracked in **#474** |
+| #457 | **MERGED 2026-07-25** — reworked from CONFLICTING. Its superseded v1.5.1 floor payload was dropped in favour of `main`'s canonical **v1.6.0** (byte-identical, sha256-verified) and the three stale hash pins re-pinned; all 4 review findings confirmed fixed upstream in 1.6.0. Delivers one-floor-per-runtime (repo-local `PreToolUse` removed), the SHA-pinned fail-closed Codex adapter, a `harness` CI matrix (ubuntu+windows), and the `120s→600s` floor-matrix timeout fix that finally makes `agent:hooks:smoke` exit 0 |
 
 **RI-01 local implementation note (verified 2026-07-13):** remotely backed-up
 checkpoint branch `fix/ri01-extension-origin-decisions` contains a context-bound,

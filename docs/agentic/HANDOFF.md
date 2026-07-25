@@ -19,20 +19,20 @@ rotation under #437.
   tracked fixture, or choose the coverage-preserving rewrite path.
 - **AI-17:** enable `main` branch protection.
 - **AI-19:** clear or replace the product name before CWS submission.
-- **AI-18: HELD** (was READY): PR #457 rewrites `.codex/hooks.json` and Codex
-  trust is definition-hash-based, so trusting today's definitions would be
-  undone immediately. Do it after #457's final reviewed head.
-- **AI-13: OPEN / READY:** run the exact-head-guarded #356 Chrome Gate-3 guide
-  against head `f8028c9`; only Chris can record it complete. The guide's old
-  `ee0f9b7` pin was corrected on 2026-07-24 — a run against the stale SHA
-  aborts at step 1.
-- **AI-21: OPEN:** #464 synthetic-navigation Gate-3 (head `cf66b28`, green,
-  6/6 threads resolved). Queued behind AI-13.
-- **AI-22: OPEN:** #466 pending-decision service-worker Gate-3 (head `0266107`,
-  green, 4/4 threads resolved). Queued behind AI-21. Its Gate-3 must also prove
-  the MV3 worker still registers after the rolldown bundle-layout change.
-- **AI-23: OPEN (low priority):** prune two finished worktrees and their
-  merged branches; agent-blocked because `git worktree remove` is floor-blocked.
+- **AI-18: OPEN / READY** (hold lifted 2026-07-25): #457 merged, so
+  `.codex/hooks.json` is final and its definition hash is stable. Note a future
+  floor sync must bump the adapter pin and the two `EXPECTED_*_SHA256` values or
+  the new `harness` CI job fails.
+- **AI-24: OPEN (optional):** one post-merge real-Chrome confirmation pass over
+  #356 + #464 + #466 now that all three are on `main`. Replaces the three
+  per-PR manual gates Chris waived on 2026-07-25 in favour of automated
+  equivalents; this closes the residual risk if he wants it closed. Nothing is
+  blocked on it.
+- **AI-23: OPEN (low priority):** prune the finished worktrees and their merged
+  branches — now six of eight, since all seven PRs merged; agent-blocked because
+  `git worktree remove` is floor-blocked. Do not remove the
+  `codex-shell-home/NavSentinel-ri01` worktree — it holds the Defender-quarantine
+  evidence referenced elsewhere in this list.
 - **AI-15: BLOCKED** until agent preflight is complete.
 - **AI-8 / AI-14: BLOCKED** pending current branches, two fresh reviews, green
   CI, and replacement human guides.
