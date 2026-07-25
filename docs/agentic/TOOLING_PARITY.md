@@ -35,8 +35,9 @@ Claude should use:
 
 - `CLAUDE.md` as the compact root contract.
 - `.claude/skills/*/SKILL.md` for lazy-loaded workflows.
-- `.claude/settings.json` for conservative permissions and hooks.
-- `.claude/hooks/dispatch.py` as the shared irreversible-command floor.
+- `.claude/settings.json` for conservative permissions and repo-specific
+  lifecycle hooks; the irreversible floor arrives once from Claude's global hook.
+- `~/.claude/hooks/dispatch.py` for the canonical shared deny floor.
 - `scripts/agent_hooks/post_tool_failure.py` to capture sanitized tool failures to the gitignored raw autolog (`docs/agentic/failure_autolog.jsonl`), keeping the curated `failure_ledger.jsonl` clean.
 
 Claude-specific strengths:
@@ -61,8 +62,8 @@ Codex should use:
 - web verification for unstable current facts, official sources first.
 - `.codex/hooks.json` for project-local lifecycle wiring after reviewing and
   trusting the definitions with `/hooks`.
-- the shared irreversible-command floor, session orientation, agentic-change
-  reminder, and sanitized failure capture under `scripts/agent_hooks/`.
+- one pinned adapter to the shared global irreversible-command floor, plus
+  session orientation, agentic-change reminders, and sanitized failure capture.
 
 Codex project-local configuration and hooks load only after the project is
 trusted. Hook trust is definition-hash-based: review/trust the exact current
@@ -81,9 +82,11 @@ Codex-specific strengths:
 - Keep Claude and Codex workflow names aligned where the task class is the same.
 - Let runtime-specific tooling differ when that is the stronger path.
 - Do not make Claude depend on `.agents` files or Codex depend on `.claude/settings.json`.
-- The canonical irreversible-command floor currently lives at
-  `.claude/hooks/dispatch.py`; both runtimes execute that script, while Codex does
-  not depend on Claude's settings or permission model.
+- The canonical irreversible-command floor lives at
+  `~/.claude/hooks/dispatch.py`: Claude receives it globally, and Codex's sole
+  project `PreToolUse` adapter pins the same bytes and passes `--runtime codex`.
+  Repo-local `.claude/hooks/*` files are exact CI/audit fixtures, not runtime
+  duplicates; Codex does not depend on Claude's settings or permission model.
 - When adding a durable workflow, add or update both runtime skill trees unless the workflow is intentionally runtime-specific.
 - When updating safety rules, update root contracts, shared protocols, and runtime-specific guardrails together.
 - When a task changes only one runtime, state that explicitly in the handoff.
@@ -94,7 +97,7 @@ Before closing agentic-infrastructure work, verify:
 
 ```bash
 rg --files .claude/skills .agents/skills docs/agentic autodoc
-python -m py_compile .claude/hooks/dispatch.py scripts/agent_hooks/post_tool_use.py scripts/agent_hooks/post_tool_failure.py scripts/agent_hooks/session_start.py scripts/agent_hooks/render_failure_ledger.py scripts/agent_hooks/smoke_test.py scripts/agent_hooks/validate_skills.py
+python -m py_compile .claude/hooks/dispatch.py .claude/hooks/smoke_test.py scripts/agent_hooks/post_tool_use.py scripts/agent_hooks/post_tool_failure.py scripts/agent_hooks/session_start.py scripts/agent_hooks/render_failure_ledger.py scripts/agent_hooks/smoke_test.py scripts/agent_hooks/validate_skills.py
 npm run agent:hooks:smoke
 npm run agent:skills:validate
 python scripts/agent_hooks/render_failure_ledger.py

@@ -62,7 +62,11 @@ git diff --exit-code -- docs\agentic\FAILURE_LEDGER.md
 rg -n "options_limits_backtest|series_tools_python|TODO|FIXME|PLACEHOLDER" AGENTS.md CLAUDE.md .agents .claude docs\agentic autodoc scripts\agent_hooks .mcp.json
 ```
 
-`npm run agent:hooks:smoke` parses `.claude/settings.json` and `.mcp.json`, checks hook event shape and referenced scripts, exercises dangerous-command blocking, verifies PostToolUse context, writes a fake failure ledger entry to a temp path to test redaction, and confirms SessionStart output.
+`npm run agent:hooks:smoke` pins the exact local CI/audit floor artifacts,
+executes the canonical deny matrix, proves one floor per runtime, exercises the
+Codex global-dispatch adapter (including missing/tampered fail-closed paths),
+checks lifecycle-hook shape, tests redaction and human-action routing, and parses
+`.mcp.json`. CI runs it on Windows and Linux alongside skill-parity validation.
 
 ## Test layers
 
