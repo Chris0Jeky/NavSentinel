@@ -11,9 +11,14 @@
 **Last updated:** 2026-07-25 — **the open-PR queue was cleared: all seven open PRs
 merged** (#472 floor v1.6.0, #471 docs, #356 main-guard de-hardening, #464 synthetic-nav
 rejection, #466 pending-decision SW boundary, #468 RI-06 event-log minimization, #457
-one-floor-per-runtime + harness CI gate). Chris waived the three per-PR manual Chrome
-gates in favour of automated equivalents, so AI-13/AI-21/AI-22 are resolved and replaced
-by the single optional **AI-24** confirmation pass; **AI-18's hold is lifted**. Product thesis:
+one-floor-per-runtime + harness CI gate, merged as `dc3d0da`). Chris waived the three
+per-PR manual Chrome gates in favour of automated equivalents, so AI-13/AI-21/AI-22 are
+resolved and replaced by the single optional **AI-24** confirmation pass; **AI-18's hold
+is lifted**. Two findings were filed rather than dropped: **#474** (remaining RI-06
+slices — path-token redaction, PromptOutcomeEntry minimization, unified clear-all) and
+**#475** (after the one-floor topology, Claude's floor is fail-**open** where Codex's is
+fail-closed). `npm run agent:hooks:smoke` now exits **0** — #457 raised the floor-matrix
+timeout that had been failing it. Product thesis:
 `docs/Product_Strategy.md`. Corrective
 program: `docs/Project_Roadmap.md`. Standing decisions:
 `docs/agentic/DECISIONS.md`.
