@@ -101,9 +101,13 @@ PRs D-* are independent (different files) → parallel branches off `main`, **no
 open PRs merged on 2026-07-25, oldest-first within their dependency order, each
 with a merge commit (never squashed): **#472** (floor v1.6.0) → **#471** (docs) →
 **#356** (`3bd9e02`, closed #349) → **#464** (`c4f6183`) → **#466** (`4ff6341`) →
-**#468** (`ebeb922`) → **#457**. Note the order is *not* pure age: #457 had to go
-last because merging it before #472 would have regressed the vendored floor from
-v1.6.0 back to v1.5.1, and #464/#466/#468 all overlap in `sw.ts` so they were
+**#468** (`ebeb922`) → **#457** (`dc3d0da`). Note the order is *not* pure age:
+#457 had to go last because its floor payload predated `main`'s. Precisely: its
+**published** head `aab1e2f` had folded canonical **v1.5.1**, while an unpushed
+local commit on the same branch had already re-aligned it to **v1.5.2** (which is
+what the historical table further down records). Either way it was behind the
+**v1.6.0** that #472 put on `main`, so merging it earlier would have regressed the
+vendored floor. Separately, #464/#466/#468 all overlap in `sw.ts`, so they were
 integrated sequentially rather than in parallel.
 
 Each merge was gated on the CI run's `head_sha` being verified equal to the PR
@@ -136,10 +140,13 @@ Historical live state (2026-07-24):
 | #466 | MERGEABLE, green on `0266107`, 4/4 threads resolved | human Gate-3 — **AI-22** |
 | #468 | DRAFT, green on `bea0077`, but **zero review rounds on that head** | author action, then Gate-3 |
 | #457 | CONFLICTING; deny-floor topology, pin stale vs the global floor | held pending agent-harness #37 |
-| #471 | docs-only status reconciliation | no human Gate-3 needed, but **not yet mergeable** — it is the newest PR and the aging rule above applies |
+| #471 | docs-only status reconciliation | **MERGED 2026-07-25** (`2c101af`) — it had aged past the newest-PR rule, its 8 threads were resolved, and exact-head CI was green |
 
-The human-gated queue is therefore **at its cap of three**. Next agent slice must
-be non-browser; the unblocking action is human (AI-13 on the oldest PR, #356).
+*As of 2026-07-24, superseded by the Cycle 53 checkpoint above:* the human-gated
+queue was then at its cap of three, so the next agent slice had to be non-browser
+and the unblocking action was human (AI-13 on #356). **All three of those gates
+were waived and their PRs merged on 2026-07-25 — the cap is now empty and AI-13 no
+longer exists.**
 
 *Cycle 51 history follows.* Dependency head
 `3f858df` upgrades only CRXJS/Vite declarations
@@ -184,6 +191,7 @@ historical; Cycle 51 above supersedes this snapshot.
 
 | # | Date | Slice | Action | Result |
 |---|------|-------|--------|--------|
+| 53 | 2026-07-25 | SESSION / cleared the entire open-PR queue (7 merged) | Merged all seven open PRs in content-dependency order, not pure age: **#472** (vendored floor synced to canonical v1.6.0 — audited byte-identical to the global install, and `main`'s dispatcher history confirmed to contain no local patches), **#471** (docs, aged past the newest-PR rule), **#356** `3bd9e02` closing #349, **#464** `c4f6183`, **#466** `4ff6341`, **#468** `ebeb922`, **#457** `dc3d0da` last. Each merge used a merge commit, gated on the CI run's `head_sha` equalling the PR head immediately beforehand; `main`'s tree was then confirmed byte-identical to the last verified branch tree (2954 unit / 98 files, 70 E2E at `workers=1`). **Chris chose to clear the three browser-surface Gate-3 items by automated equivalent** — recorded as *manual gate waived*, never as a Gate-3 pass; AI-13/AI-21/AI-22 resolved, replaced by optional **AI-24**; AI-18's hold lifted. #457 was reworked rather than closed: its superseded floor payload was dropped for `main`'s v1.6.0 and its three stale hash pins re-pinned (the old pin would have made the fail-closed Codex adapter `exit 2` on every command), and all 4 of its review findings were verified fixed upstream in 1.6.0 by direct `check()` reproduction with discriminating controls. Its new `harness` CI matrix passed on ubuntu **and** windows, and its 120s→600s timeout fix means `agent:hooks:smoke` finally exits 0 (15/15, ~294s). Filed **#474** (remaining RI-06 slices) and **#475** (Claude's floor is fail-**open** where Codex's is fail-closed) rather than dropping them. **🔑 LESSONS:** local E2E defaults to `workers:4` and produces false failures under contention (7 of them, all passing at `workers=1`) — use `CI=1`; and Playwright's list reporter prints failed titles *unprefixed* with no `not ok` line, so a wrapper ending in `echo "exit=$?"` reports 0 for a failing run — write the exit code to a file. Both ledgered. | DONE / 7 MERGED |
 | 51 | 2026-07-17 | UNBLOCK / #459 dependency advisories | Upgraded only CRXJS/Vite and the generated lock graph: 2.7.1 / 8.1.5 / Rollup 2.80.0 / Rolldown 1.1.5. Audit 3 high → 0; clean install, version/type/lint/build, 2,874 unit, 64/64 one-worker E2E, perf 12/12, package, and Windows Gym HTTP passed. R1 fixed stale evidence and tracked CRXJS dev/HMR debt in #462; the optional npm artifact reproduces on main. Fresh R2 found the pre-existing Node release-guide mismatch, fixed in `614953b`, then re-reviewed clean. Gemini's exact-range-format follow-up is fixed in `da44f56`; Codex's narrower ESLint 10 engine-intersection finding aligns package/lock/docs to `^20.19.0 || ^22.13.0 || >=24`. PR #463 is open; its final exact head, CI, comments, and closing link require live verification. | PR OPEN / LOCAL REVIEWS CLEAN / LIVE GATES REQUIRED |
 | 51 | 2026-07-14 | HARNESS / v1.4.2 review recovery (parallel harness lane, PR #457) | A late downstream bot pass and the first exact PR #457 reviewer invalidated the v1.4.1 approvals: nested launcher/heredoc/config/API gaps, unasserted cases, lease-to-shared-ref behavior, and malformed runtime fallback. Reproduced every claim, fixed the canonical source in five small commits through `ba0f67d`, expanded the matrix to 499 Windows / 497 WSL, and re-synced the pinned NavSentinel adapter and fixtures. | LOCAL VERIFIED / 2 FRESH REVIEWS + CI SUCCESSOR HEAD PENDING; AI-18 WAITING |
 | 50 | 2026-07-13 | HARNESS / shared deny floor v1.4.1 | Confirmed the passing v1.0.0 local matrix missed real force-push/home/secret-file bypass forms and that Claude's project hook duplicated its global floor. Synced exact agent-harness `e8f79a7` fixtures, removed the duplicate Claude PreToolUse, pinned Codex's sole adapter to the shared global dispatcher with `--runtime codex`, added identity/topology/tamper/missing/nested-root regressions, and added Windows/Linux CI harness gates. | LOCAL VERIFIED / PR + 2 REVIEWS PENDING; AI-18 WAITING |

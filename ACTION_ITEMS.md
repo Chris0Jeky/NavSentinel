@@ -32,7 +32,7 @@ program: `docs/Project_Roadmap.md`. Standing decisions:
 
 ---
 
-## Current state snapshot (live state rechecked 2026-07-24)
+## Current state snapshot (live state rechecked 2026-07-25)
 
 The root `main` worktree is clean and matches `origin/main`; its exact-head CI
 is green. Run `git rev-parse main`, `git rev-parse origin/main`, and live `gh`
@@ -53,11 +53,12 @@ untested combination of separately-green branches.
 Stale PRs #273 and #399 were closed with explicit re-entry paths; their heads
 remain fetchable server-side at `refs/pull/273/head` and `refs/pull/399/head`,
 so the matching local branches are redundant copies, not the only copies.
-#356's exact guide head is **`f8028c9`** (the previously published `ee0f9b7` is
-stale and would fail the AI-13 step-1 precheck); `f8028c9` has green Build/Unit
-and E2E on that exact head via run `29560572081`, all three review threads are
-resolved, and the PR is MERGEABLE. Its step-1 live precheck remains mandatory
-before Chris's AI-13 Gate-3. The product-posture and guided-workflow
+#356 **merged 2026-07-25** as `3bd9e02`, auto-closing #349. Its merged head was
+`631461e` (= `f8028c9` + `Merge origin/main`), green on that exact head with all
+three review threads resolved; the manual Gate-3 was waived rather than run, so
+AI-13 no longer exists as an item.  The historical `ee0f9b7`/`f8028c9` pin
+confusion is retained in AI-13's superseded entry only as a lesson about stale
+head pins. The product-posture and guided-workflow
 work merged through PR #454; verify live `main` rather than pinning its SHA
 here. The RI-01 checkpoint branch is remotely backed up without the unstaged
 Defender deletion; verify its SHA live. Its worktree is dirty only because
@@ -71,8 +72,8 @@ changes do not change shipped product state.
 - **Release-integrity blockers:** page-controlled injected UI currently owns
   allow/trust/resume authority and can be redressed under genuine input
   (RI-01); visual-sim can process the wrong active
-  tab and has no production value (RI-02/#424); current `main`'s frozen
-  MAIN-world prototypes remain site-breaking until #356 lands; fake DNR and
+  tab and has no production value (RI-02/#424); the frozen MAIN-world prototypes
+  were site-breaking until #356 landed on 2026-07-25 (`3bd9e02`); fake DNR and
   unmeasured JS behavior should be absent
   or off; stored URLs require minimization (RI-05/RI-06); #175/#186 bridge
   identity/recovery and #455 pre-collection disclosure/consent now block beta.
@@ -85,12 +86,13 @@ changes do not change shipped product state.
   CWS submission; this is a risk flag, not a legal conclusion.
 - **Legacy PR cleanup:** #273 and draft #399 were closed on 2026-07-13 rather
   than merged from stale bases; their commits, discussions, and open issue
-  anchors remain. #356 is refreshed, pushed, twice reviewed, thread-clean, and
-  exact-head CI-green. **The current AI-13 guide is actionable only when its
-  step-1 live head/CI check passes. The PR remains unmergeable without Chris's
-  Gate-3 evidence.**
-- **Portfolio:** 81 open issues, none assigned or milestoned; #439–#453 are 15
-  frozen Horizon proposals. No new feature/epic issue seeding until the queue is
+  anchors remain. **#356 merged 2026-07-25** (`3bd9e02`) — twice reviewed,
+  thread-clean, exact-head CI-green, with its manual Gate-3 waived in favour of the
+  automated equivalent. AI-13 is resolved; the optional AI-24 carries the residue.
+- **Portfolio:** re-derive the open-issue count with `gh issue list --state open`
+  — it moved on 2026-07-25 (#349 auto-closed with #356; #474 and #475 filed), so a
+  number written here is stale on arrival. None assigned or milestoned; #439–#453
+  are 15 frozen Horizon proposals. No new feature/epic issue seeding until the queue is
   culled and milestone-categorized.
 - **Infrastructure:** classic branch protection remains absent (`404 Branch not
   protected`) and the rulesets API returns `[]`. AI-17 remains open. Codex hook
@@ -147,12 +149,12 @@ merged result. The `q-N` label may reset between conversations; the `AI-N`
 identifier is durable. AI-15/AI-8/AI-14 remain visible but are not actionable
 questions until agent preflight clears them.
 
-> **Gate-queue hold (refreshed 2026-07-17):** do not run the old branch checkout
-> guides for AI-8, AI-13, or AI-14. AI-8 and AI-14 require new current-main
-> slices after their stale PRs were closed. AI-13's agent preflight is complete;
-> use only the current guide below and verify its live exact head/CI before
-> starting. AI-15 remains BLOCKED until the remaining release-integrity program
-> has a current preflight handoff.
+> **Gate-queue hold (refreshed 2026-07-25):** do not run the old branch checkout
+> guides for AI-8 or AI-14 — both require new current-main slices after their stale
+> PRs were closed. AI-13 is **resolved** (its PR merged with the manual gate
+> waived), so its retained procedure is reference material for AI-24, not a queue
+> item. AI-15 remains BLOCKED until the remaining release-integrity program has a
+> current preflight handoff.
 
 **🚨 OPEN: AI-19 — Clear or replace the working product name before CWS
 submission.** An active TruNav GNSS anti-spoofing product uses the exact name
@@ -230,12 +232,10 @@ Only Chris can record this complete; nothing is blocked on it.
 
 **🚨 BLOCKED: AI-15 — Run the headed release session only after agent
 preflight.** The prior 60–90 minute one-sitting guide is withdrawn: stale PRs
-#273 and #399 were closed, #356 has an isolated human Gate-3 guide whose live
-head and CI must pass the guide precheck before use, the reputation/package plan
-needs a product decision, and other release-integrity blockers precede a full
-manual release session. **Do not use the old #356 guide; use the current AI-13
-guide below.** Agent preflight must first: (1) fix RI-01; (2) finish #356
-exact-head CI/Gate-3 and keep #273 deferred or recreate it on current `main`;
+#273 and #399 were closed, **#356 merged 2026-07-25** (`3bd9e02`) with its manual
+Gate-3 waived, the reputation/package plan needs a product decision, and other
+release-integrity blockers precede a full manual release session. Agent preflight
+must first: (1) fix RI-01; (2) keep #273 deferred or recreate it on current `main`;
 (3) excise visual-sim and remove fake DNR; (4) complete
 RI-06's purpose-specific data minimization/reset; (5) complete RI-07's explicit
 JS-behavior beta-off profile; (6) complete #175/#186 bridge integrity and #455
@@ -347,6 +347,13 @@ item remains human-owned; only Chris can record Gate-3 as done.
 > aborts at step 1 on a SHA mismatch. The live head is `f8028c9`; re-verify it
 > yourself with step 1 rather than trusting either SHA written here.
 
+**Retained procedure (steps 1 and 7 are SUPERSEDED).** Step 1's exact-head
+precheck cannot pass — it compares a worktree against `gh pr view 356
+--json headRefOid` and `git ls-remote` for a branch whose PR is merged. Step 7's
+reply line (`AI-13 done; Gate-3 passed on PR #356`) would record exactly the
+Gate-3 pass this file says was never recorded. For a confirmation run use **AI-24**
+instead: build from current `main` and execute steps 2–6 below against it.
+
 **Current guide:**
 
 1. From the repository root, use the existing isolated worktree; do not switch
@@ -425,10 +432,10 @@ item remains human-owned; only Chris can record Gate-3 as done.
    temporary Chrome profile, and remove only that deliberately disposable local
    profile from Chrome's profile manager. Do not alter or delete an established
    profile; if you chose to disable an older copy instead, re-enable it now.
-7. Reply `AI-13 done; Gate-3 passed on PR #356` and include any console error,
-   unexpected prompt text, or differing outcome. Do not merge on a partial pass;
-   after a full pass the agent will recheck the exact head, CI, comments, and
-   merge gate before acting.
+7. **SUPERSEDED — do not use this reply line.** It would record a Gate-3 pass that
+   was never taken. For a confirmation run reply `AI-24 done` instead, with Chrome's
+   version and any console error, unexpected prompt text, or differing outcome.
+   *Original step: Reply `AI-13 done; Gate-3 passed on PR #356` …*
 
 **RESOLVED 2026-07-25 (manual gate waived) — AI-21 — #464 synthetic-navigation Gate-3.** PR #464 merged as `c4f6183`. Chris chose the automated-equivalent path on 2026-07-25 rather than a manual pass; the PR carries the mapping from each guide step to the spec that covers it, plus what automation cannot establish (real Chrome vs Chromium, manual profile hygiene, human eyes on toast wording). This was **never recorded as a Gate-3 pass** — only Chris can do that. Residual risk accepted under the waiver; **AI-24** is the single confirmation pass that closes it if he wants one. Procedure retained below for that purpose.
 
@@ -457,16 +464,17 @@ Chrome, and confirm the MV3 service worker actually registers, because that
 change alters the shipped bundle layout. Only Chris can record this complete.
 
 > **Full AI-21/AI-22 guides:** [`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md)
-> — verbatim from their PR branches, tracked here rather than branch-only. Both remain queued
-> behind AI-13/#356 under the merge-oldest-first law. These entries exist so the
-> durable register never silently omits a human-gated item while its PR is in
-> flight, which is this file's whole purpose; the guides live in a separate
-> tracked file only so landing those PRs does not collide with a large
+> — verbatim from their PR branches, tracked here rather than branch-only. **Both are
+> now reference material for AI-24, not a queue** (their PRs merged 2026-07-25 with the
+> manual gates waived), and that file carries a superseding banner saying so. These
+> entries exist so the durable register never silently omits a human-gated item while
+> its PR is in flight, which is this file's whole purpose; the guides live in a separate
+> tracked file only so landing those PRs did not collide with a large
 > `ACTION_ITEMS.md` rewrite. Do **not** move them back onto a branch-only path.
 
 **OPEN: AI-23 — Prune the finished worktrees and their merged branches**
 (low priority housekeeping). Agents cannot do this: `git worktree remove` is floor-blocked
-(`[floor 1.6.0] Git worktree removal is floor-blocked.`), re-verified 2026-07-25,
+(`[floor 1.6.0 (2026-07-24)] Git worktree removal is floor-blocked.`), re-verified 2026-07-25,
 and the branches cannot be deleted while a worktree still holds them.
 
 **Updated 2026-07-25 — the list grew.** All seven PRs merged, so six of the eight
@@ -484,23 +492,38 @@ mid-session, so a pinned name here goes stale quickly. Check
 `git worktree list` first, then:
 
 ```sh
-git worktree list
+git worktree list          # re-derive names first; they move between sessions
+
+# all six PR worktrees now hold branches merged into main (2026-07-25)
 git worktree remove "C:/Users/jekyt/Desktop/Printer Config/Others/Git/nav-floor-sync"
-git worktree remove .worktrees/deps-audit
-git branch -d <branch nav-floor-sync held> fix/release-dependency-advisories
+git worktree remove .worktrees/pr356-refresh
+git worktree remove .worktrees/ri01-synthetic-nav
+git worktree remove .worktrees/ri01-pending-sw
+git worktree remove .worktrees/ri06-eventlog-min
+git worktree remove .worktrees/harness-v141
+git worktree remove .worktrees/deps-audit   # backs no PR
+
+# only then can the branches they held be deleted
+git branch -d chore/deny-floor-v1.6.0 feat/dehard-enforcement-protos \
+  fix/ri01-reject-synthetic-nav-allowances fix/ri01-pending-decision-sw \
+  fix/ri06-event-log-url-minimization infra/harness-deny-floor-v141 \
+  fix/release-dependency-advisories
 ```
 
 `git branch -d` (not `-D`) is deliberate: it refuses anything not merged, so it
-cannot silently drop work.
+cannot silently drop work. If it refuses one of the seven, stop and report which —
+that would mean the branch is not actually merged and the premise here is wrong.
 
-**Leave the other SIX worktrees.** Five back open PRs — `.worktrees/pr356-refresh`
-(#356), `.worktrees/harness-v141` (#457), `.worktrees/ri01-synthetic-nav` (#464),
-`.worktrees/ri01-pending-sw` (#466), `.worktrees/ri06-eventlog-min` (#468) — and
-the sixth is **not** cruft despite backing no PR:
+**Leave exactly ONE worktree.**
 `C:/Users/Public/codex-shell-home/NavSentinel-ri01` on
-`fix/ri01-extension-origin-decisions` is the RI-01 checkpoint worktree that holds
-the AI-20 Defender-quarantine evidence referenced above. **Do not delete it**
-while AI-20 is open.
+`fix/ri01-extension-origin-decisions` backs no PR but is **not** cruft: it is the
+RI-01 checkpoint worktree holding the Defender-quarantine evidence referenced two
+sections above. **Do not delete it** while that item is open.
+
+*(Corrected 2026-07-25: this paragraph previously said "leave the other SIX ...
+five back open PRs". That was true before the queue cleared and is now false —
+there are no open PRs, so those five worktrees are prunable, and the command block
+above was only removing two of the seven.)*
 
 Three local branches are also prunable but are **not** included above, because
 deleting an unmerged local branch is the one irreversible step here and is your

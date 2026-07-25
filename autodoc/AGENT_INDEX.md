@@ -9,11 +9,13 @@ This is a fast orientation layer for coding agents. It should point to interface
 0. **Resuming the autonomous work loop?** Read `ACTION_ITEMS.md`,
    `docs/Product_Strategy.md`, `docs/Project_Roadmap.md`, and
    `docs/agentic/HANDOFF.md`, then verify live git/GitHub state. The oversized
-   ORCHESTRATOR/detail tables are historical pending #437. PR #464 is the
-   browser-held synthetic-allowance sub-slice; PR #466 adds the dormant
-   pending-decision service-worker boundary. Neither supplies a production
-   extension-origin prompt/action flow, so RI-01 remains unfinished. AI-15 is
-   blocked pending the remaining agent preflight.
+   ORCHESTRATOR/detail tables are historical pending #437. **#356, #464 and #466
+   merged on 2026-07-25** (`3bd9e02`, `c4f6183`, `4ff6341`), with their manual
+   Chrome gates waived in favour of automated equivalents — so the
+   synthetic-allowance rejection and the (dormant) pending-decision service-worker
+   boundary are now on `main`. Neither supplies a production extension-origin
+   prompt/action flow, so **RI-01 remains unfinished**. AI-15 is blocked pending the
+   remaining agent preflight.
 1. `AGENTS.md` - repo operating rules.
 2. `CLAUDE.md` - Claude-specific compact contract.
 3. `docs/Project_Roadmap.md` - active phase status, gates, decisions, and next tasks.
