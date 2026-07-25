@@ -1,6 +1,6 @@
 # Session Handoff — NavSentinel
 
-**Last updated:** 2026-07-17. Always refresh git/GitHub truth before acting.
+**Last updated:** 2026-07-24. Always refresh git/GitHub truth before acting.
 `ACTION_ITEMS.md` holds the live human-facing snapshot without pinning a SHA;
 the posture review's dated exact baseline is in `docs/Product_Strategy.md`.
 
@@ -19,14 +19,20 @@ rotation under #437.
   tracked fixture, or choose the coverage-preserving rewrite path.
 - **AI-17:** enable `main` branch protection.
 - **AI-19:** clear or replace the product name before CWS submission.
-- **AI-18: READY:** the hook-editing slice is committed; review/trust the exact
-  project-local Codex hook definitions before relying on them.
-- **AI-13: OPEN / CONDITIONAL:** run the exact-head-guarded #356 Chrome Gate-3
-  guide only after its current-main refresh and live review/CI prechecks pass.
-- **AI-21: OPEN / CONDITIONAL:** run PR #464's exact-head-guarded synthetic
-  navigation Chrome Gate-3 guide only after its live review/CI prechecks pass.
-- **AI-22: OPEN / CONDITIONAL:** run PR #466's exact-head-guarded dormant broker
-  Chrome Gate-3 guide only after its live review/CI prechecks pass.
+- **AI-18: HELD** (was READY): PR #457 rewrites `.codex/hooks.json` and Codex
+  trust is definition-hash-based, so trusting today's definitions would be
+  undone immediately. Do it after #457's final reviewed head.
+- **AI-13: OPEN / READY:** run the exact-head-guarded #356 Chrome Gate-3 guide
+  against head `f8028c9`; only Chris can record it complete. The guide's old
+  `ee0f9b7` pin was corrected on 2026-07-24 — a run against the stale SHA
+  aborts at step 1.
+- **AI-21: OPEN:** #464 synthetic-navigation Gate-3 (head `cf66b28`, green,
+  6/6 threads resolved). Queued behind AI-13.
+- **AI-22: OPEN:** #466 pending-decision service-worker Gate-3 (head `0266107`,
+  green, 4/4 threads resolved). Queued behind AI-21. Its Gate-3 must also prove
+  the MV3 worker still registers after the rolldown bundle-layout change.
+- **AI-23: OPEN (low priority):** prune two finished worktrees and their
+  merged branches; agent-blocked because `git worktree remove` is floor-blocked.
 - **AI-15: BLOCKED** until agent preflight is complete.
 - **AI-8 / AI-14: BLOCKED** pending current branches, two fresh reviews, green
   CI, and replacement human guides.
@@ -37,95 +43,42 @@ rotation under #437.
   repository ruleset, or external-user evidence.
 - GitHub private vulnerability reporting is enabled and `SECURITY.md` links the
   verified private advisory route.
-- Root `main` is clean and matches `origin/main` at merge commit `2888483`.
-- 80 open issues with no milestone/assignee; 15 Horizon issues #439–#453 are a
+- Root `main` is clean and matches `origin/main` at `d7528f9` (2026-07-24;
+  `ebddd27` was 18 commits stale); its exact-head GitHub CI is green. Prefer
+  re-deriving this live over trusting the pin.
+- PR #463 / #459 **MERGED 2026-07-17** (merge commit `2888483`), resolving
+  CRXJS 2.7.1, Vite 8.1.5, Rollup 2.80.0, and Rolldown 1.1.5. `npm ci` and
+  audit zero passed, as did typecheck, lint, build, version, 2,874 unit tests
+  (95 files), 64/64 one-worker E2E, all 12 size budgets, package, and Windows
+  Gym HTTP proof. This is now history, not an open lane.
+- 81 open issues with no milestone/assignee; 15 Horizon issues #439–#453 are a
   frozen option portfolio, not active work.
 - Stale PRs #273 and #399 were closed on 2026-07-13 with re-entry paths and
-  issue anchors preserved. Open PRs are #356, draft #457, #464, and #466.
-- PR #463 merged exact green dependency head `91aab4f` as `2888483` and closed
-  #459. It carries CRXJS 2.7.1, Vite 8.1.5, Rollup 2.80.0, Rolldown 1.1.5,
-  audit zero, and the aligned Node engine floor.
-- PR #356 and #464 were twice reviewed, thread-clean, and exact-head CI-green
-  before #463 changed `main`'s dependency graph. Their current-main refreshes are
-  on their branches. #356 passes 2,875 unit plus 65/65 one-worker E2E; #464
-  passes 2,874 unit plus 65/65 one-worker E2E. Each guide's live precheck must
-  confirm local/remote/PR equality, full exact-head CI, and both fresh reviews;
-  neither may merge without its human Gate-3 evidence.
-- PR #466's Cycle 53 runtime tree passed 176 focused broker/SW tests, typecheck,
-  lint, build, 2,901 units, rollback 3/3, all 64 one-worker E2E, package, and
-  all 12 performance budgets after merging current `main`. The first exact-head
-  recheck found three valid blockers: unsupported MV3 `import()`, a consume
-  request requiring an unavailable raw destination, and stale child-frame
-  liveness based on `getFrame`. Commits `6a18f1d` and `8c0fed1` replace those
-  with a worker-owned capability, exact `getAllFrames` verification, and a
-  static module split. Candidate `af0ccb2` was pushed, passed exact-head CI, and
-  had all four historical threads resolved. The first independent re-review then
-  found a new medium gate gap: build/package could still pass if bundling
-  reintroduced an unloadable worker graph. `dfea4da` adds the emitted-graph
-  verifier to both paths plus the initial nine pass/fail fixtures. Fresh round 2
-  then proved the regex missed comment-separated dynamic imports, namespace
-  re-exports, and comment-separated static imports/re-exports. `5d6ad17` and
-  `ab6d845` add the 17-fixture regression set; `ddfacf0` replaces the hand-
-  rolled regex parser with direct `es-module-lexer` import metadata. A fresh
-  follow-up then proved the lexer alone accepted unsupported static import
-  attributes/assertions. `c0305f9` adds syntax-aware rejection plus four pre-fix-
-  failing fixtures (21 total); the real five-module emitted graph passes.
-  Fresh exact-head round 1 then found the signal-label field accepted and
-  persisted secret-shaped page values. `2402297` narrows it to two finite
-  display codes; new handler/store probes fail before the fix and prove invalid
-  labels are rejected before session persistence.
-  Local/remote/PR equality, exact-head reviews, thread accounting, and CI remain
-  live-authoritative.
-- PR #466's package is about 492.9/500KB while reputation is a 52-byte test fixture. The
+  issue anchors preserved; their heads remain fetchable at `refs/pull/273/head`
+  and `refs/pull/399/head`. Open PRs are #356, #457, #464, #466, draft #468,
+  and docs PR #471 — #457 is CONFLICTING against current `main`, not a draft. #356's exact
+  guide head is **`f8028c9`** (`ee0f9b7` is stale) and passed both local reviews
+  plus GitHub Build/Unit and E2E on that exact head, with all three threads
+  resolved. AI-13 human Gate-3 is its only remaining gate; the guide still
+  requires its live precheck before use.
+- #464 (head `cf66b28`, 6/6 threads resolved) and #466 (head `0266107`, 4/4
+  resolved) are both MERGEABLE and green, and are human-gated as AI-21 and
+  AI-22. With #356 that puts the human-gated queue at its cap of three.
+- Package is about 474/500KB while reputation is a 52-byte test fixture. The
   old 150KB/100K-domain plan cannot meet its stated 0.01% FP target or aggregate
   package cap as written.
 - Product-posture and guided-workflow work merged through PR #454; verify live
   `main` rather than pinning its SHA. The RI-01 checkpoint branch is remotely
   backed up without the unstaged Defender deletion; verify its SHA live. Its
   worktree remains dirty only because of the Defender-quarantined fixture.
-- The RI-01 broker foundation is now wired as a dormant service-worker
-  create/list/consume boundary with top-navigation/tab-removal cleanup. It does
-  not yet have a producer, popup UI, or privileged action executor, and it does
-  not remove the legacy injected allow/trust/resume authority or complete RI-01.
+- The RI-01 broker foundation is unit-tested but not wired into production.
+  **Corrected 2026-07-24:** the rest of this bullet described the pre-PR
+  checkpoint branch. The synthetic-navigation allowance rejection now ships as
+  PR #464, whose E2E lane HAS run and is green on head `cf66b28`. What has not
+  run is the human real-Chrome Gate-3 (AI-21); automated Chromium coverage is
+  not a substitute for it.
 
 ## Local review evidence
-
-- **PR #466 independent round 1 (exact `af0ccb2`, 2026-07-17):** validated the
-  worker-owned consume capability, positive child-frame enumeration, and static
-  emitted graph, but found one medium release-gate gap and one low status-truth
-  gap. Build/package did not automatically reject dynamic/preload, missing,
-  remote, or out-of-dist worker imports; the durable queue still called the
-  pushed, CI-green candidate local. `dfea4da` fixes the gate with a recursive
-  emitted-closure verifier and nine pass/fail fixtures; this status sync fixes
-  the low finding. Both review rounds must restart from the final exact head.
-
-- **PR #466 independent round 2 (exact `7e173eb`, 2026-07-17):** found one
-  medium release-gate bypass and one low status gap. The graph regex missed
-  valid comment-separated dynamic/static imports and re-exports plus namespace
-  re-export edges, so it could omit an unloadable or missing reachable chunk;
-  `5d6ad17`/`ab6d845` add eight fixtures and `ddfacf0` moves edge discovery to
-  a real module lexer. The handoff
-  still described push as future after `7e173eb` was already remote/PR-equal and
-  exact-head CI-green; this status sync removes that transient claim. Both
-  independent rounds restart on the final exact head.
-
-- **PR #464 pre-final adversarial round (two independent lenses, 2026-07-17):**
-  the initial isolated commit regressed Level 6. One lens found that discarding
-  the preceding trusted pointerdown removed retarget/fast-attempt evidence and
-  could let a hidden synthetic `_blank` activation escape. The other reproduced
-  the escaped tab and identified missing native-anchor and MAIN redirect
-  coverage. Fixed in `aa9fa3a`: trusted-only `lastDown` remains correlation
-  evidence, allowance writes remain gated by the current event's trust, the
-  benign-anchor exemption now requires a trusted click, and the tests assert no
-  popup plus SW/MAIN/native-anchor/redirect rejection. Gemini's two follow-up
-  threads then exposed one valid logging leak and one adjacent modifier-seeded
-  authority leak. `76da96b` prevents synthetic allowed clicks from emitting a
-  silent-navigation log; `8874459` requires the current click to be trusted
-  before modifier/new-tab intent can lower its risk. Mutation probes failed
-  before each fix and pass after it. This committed ledger intentionally does
-  not pre-claim its own final review or CI outcome. The exact SHA, CI run,
-  bot/thread accounting, and final review evidence must live on PR #464 after
-  this commit; any later head invalidates them.
 
 - **Agentic contract round 1 (runtime/parity lens, 2026-07-17):** compared
   Codex instructions, hooks, skills, and shared references against the compact
@@ -178,25 +131,27 @@ rotation under #437.
 1. **RI-01:** page-injected UI currently authorizes allow/trust/resume. Move all
    protection-lowering decisions to tab/destination-bound extension-origin UI;
    script rejection/closed roots alone do not stop trusted-click redressing.
-2. **RI-03/#356:** confirm the refreshed branch's live head equality, both
-   exact-head reviews, and green CI, then complete AI-13 human Gate-3;
-   recreate or defer #273's intent and keep closed #399 outside beta blockers.
-3. **RI-02/#424:** excise visual-sim. It has no production match path and can
+2. **RI-03/#356:** obtain AI-13 human Gate-3 on the current exact head after its
+   live precheck; keep closed #399 outside beta blockers.
+3. ~~**#459/#463:** dependency advisories.~~ **CLEARED 2026-07-17** — merged as
+   `2888483`. Retained as a numbered slot so the blocker numbering in older
+   handoffs still lines up.
+4. **RI-02/#424:** excise visual-sim. It has no production match path and can
    process a different active tab's pixels.
-4. **RI-05/RI-06:** remove fake DNR; apply purpose-specific URL/data
+5. **RI-05/RI-06:** remove fake DNR; apply purpose-specific URL/data
    minimization, TTLs, controls, and complete behavioral reset.
-5. **RI-07:** add the explicit beta capability profile and prove broad JS
+6. **RI-07:** add the explicit beta capability profile and prove broad JS
    behavior wrappers are off while core navigation protection remains active.
-6. **RI-08:** complete #175/#186 trusted bridge identity and bounded fail-closed
+7. **RI-08:** complete #175/#186 trusted bridge identity and bounded fail-closed
    recovery before inviting beta users.
-7. **PM-03/#455:** evidence pre-install CWS disclosure/affirmative consent, then
+8. **PM-03/#455:** evidence pre-install CWS disclosure/affirmative consent, then
    keep fresh installs passive until in-product disclosure/activation; include
    the Limited Use declaration and redact OAuth response secrets before storage/export.
-8. **AI-9:** implement the chosen beta profile; the recommended default is
+9. **AI-9:** implement the chosen beta profile; the recommended default is
    interaction-only with no reputation claim.
-9. **AI-19 + CWS:** settle name, then re-verify one canonical store/privacy copy,
+10. **AI-19 + CWS:** settle name, then re-verify one canonical store/privacy copy,
    assets, permissions, fresh install, and package.
-10. Run the current headed regression checklist, submit unlisted, and recruit the
+11. Run the current headed regression checklist, submit unlisted, and recruit the
    first 10-user cohort.
 
 Before public launch, obtain an external security review of the exact beta
@@ -205,30 +160,50 @@ comparative evidence.
 
 ## Next safe slice
 
-On PR #466, confirm live local/remote/PR equality, two fresh exact-head reviews,
-bot/thread accounting, and green CI; leave it human-held for AI-22. Apply the
-same live precheck to the current-main refreshes on #356 and #464 before AI-13 or
-AI-21 is actionable. Do not start a fourth browser-held slice.
+**Both actions previously named here were already complete and were removed on
+2026-07-24:** #463 merged on 2026-07-17 (merge commit `2888483`), and the RI-01
+synthetic-navigation allowance rejection shipped as PR #464.
 
-## Queue accounting
+Take **non-browser work only.** The human-gated queue is at its cap of three
+ready PRs (#356/AI-13, #464/AI-21, #466/AI-22), so opening another
+browser-surface PR would exceed the cap in `docs/agentic/DECISIONS.md`. Draft
+#468 is Gate-3-bound too, but is excluded from the count while it is a draft
+pending author action — if it leaves draft it takes a slot and needs its own
+`AI-N` entry. The unblocking action is
+human, not agent: AI-13 Gate-3 on #356, the oldest PR.
 
-- **Open / human-held:** #356 (AI-13), #464 (AI-21), and #466 (AI-22);
-  none may merge from automation alone.
-- **Merged:** #463 / #459 as `2888483`; intended close link verified.
-- **Open / in progress:** PR #466 pending-decision SW boundary; the three runtime
-  blockers, emitted-graph gate, lexer gaps, and unsupported import-attribute gap
-  plus the free-form signal persistence gap are fixed. Its live precheck
-  requires local/remote/PR equality, exact-head
-  reviews, bot/thread accounting, green CI, and AI-22.
-  #356's current-main refresh passes 2,875 unit plus 65/65 E2E; #464's refresh
-  passes 2,874 unit plus 65/65 E2E. Each live precheck requires local/remote/PR
-  equality before its fresh exact-head gates count.
-- **Parked:** draft #457 agent-harness tooling; closed #273/#399 retain explicit
-  re-entry paths.
-- **Blocked:** AI-15, AI-8, and AI-14.
-- **Deferred human decisions/actions:** AI-16 (resume cursor), AI-9, AI-20,
-  AI-17, AI-19, AI-18, AI-13, AI-21, and AI-22. No item was silently dropped or
-  self-cleared.
+Agent-doable candidates, cheapest first:
+
+1. **Status-doc and hygiene reconciliation** (this slice) — no runtime surface.
+2. **Issue-queue cull** — 81 open issues, none milestoned, including the 15
+   frozen Horizon proposals #439-#453. Issues-and-docs only, no runtime surface.
+   Note that closing issues is outward-facing and partly a product call, so
+   agree the cull criteria with Chris before mass-closing anything.
+3. **Gate-3 batch checklist (#419/#420)** — consolidate #356 + the queued
+   deletion slices into one headed-Chrome sitting, as a `scripts/` and `docs/`
+   change with no extension-runtime edits.
+
+**Do NOT start these while the cap is full** — the roadmap classifies both as
+`Agent + Gate-3`, so opening either now creates the forbidden fourth
+human-gated PR:
+
+- **RI-05 fake-DNR excision.** `extension/rules/dnr_static.json` holds exactly
+  two gym-fixture rules scoped to `localhost`/`127.0.0.1`, while
+  `extension/manifest.json` requests both `declarativeNetRequest` and
+  `declarativeNetRequestWithHostAccess` for a ruleset registered
+  `"enabled": false`. `docs/cws-listing/PRIVACY_DISCLOSURE.md` already marks
+  both permissions "Remove before beta". ~150-200 deleted lines. It removes
+  manifest permissions, i.e. it changes shipped browser behavior.
+- **RI-02 visual-sim excision (#424)** — the largest package lever
+  (~31.7KB `brand_templates.json` alone, against a 474/500KB budget) and a real
+  defect, not just dead code: the service worker captures the window's *active*
+  tab while the request originates from `sender.tab`, after a delay window of
+  up to 30s.
+
+Both become the top candidates the moment a Gate-3 slot frees up, i.e. as soon
+as #356 merges.
+
+Verify any of these live before starting; this list was accurate on 2026-07-24.
 
 ## Reliability notes
 
@@ -241,39 +216,6 @@ AI-21 is actionable. Do not start a fourth browser-held slice.
 - #460 tracks nondeterministic Windows four-worker blank-anchor misses; use the
   supported one-worker proving topology. #461 tracks Windows CRLF false-stale
   output from `check:topsites`; exact-head Linux CI remains authoritative.
-- #465 tracks reproducible Happy DOM native-fetch teardown stacks in two
-  pre-existing JS-behavior suites. Both suites and the full 2,901-test run pass,
-  but the pending native fetch should be drained or mocked by the harness.
-- PR #466 leaves only about 7.1KB aggregate and 1.7KB service-worker budget
-  margin. Its static pending-runtime chunk is required because Chrome MV3
-  extension service workers do not support dynamic `import()`; ordinary build
-  and package now re-prove the emitted graph automatically, while perf still
-  enforces both size budgets.
-- The first emitted-worker verifier used an incomplete import regex, then an
-  overbroad page-global check against a pre-existing shared storage chunk. Both
-  were invalid verifier signals; the corrected targeted check proved a module
-  background, a static worker-to-pending-runtime edge, and no `import()` or
-  module-preload helper in the new worker/pending path.
-- The first post-fix full E2E command was killed by an incorrectly short shell
-  timeout and Playwright's reporter emitted `EPIPE`. That was a coordinator
-  invalid signal; the unchanged, correctly timed one-worker rerun passed 64/64.
-- PowerShell did not expand `scripts/agent_hooks/*.py` for `py_compile`; that was
-  an invalid syntax-check invocation. `python -m compileall -q
-  scripts/agent_hooks` is the working cross-file check and passed.
-- The bundled GitHub thread helper first failed decoding CLI output with Windows
-  `cp1252`; rerunning it with `PYTHONUTF8=1` produced the complete four-thread
-  audit. Preserve UTF-8 mode for future thread audits on this machine.
-- The first post-round-1 rollback lane timed out once waiting for Level 10's
-  return navigation. That exact case then passed 3/3 repeated, the full rollback
-  lane passed 3/3, and the full one-worker lane passed 64/64. This is retained as
-  a non-blocking nondeterministic signal: capture a trace plus worker/page logs
-  and seed a dedicated harness issue if it recurs; do not silently retry it.
-- The first `c8119c1` full one-worker lane reached 63/64 because Chromium's
-  persistent context timed out during launch before RW-10 Space executed, after
-  47 earlier cases passed. No Chrome process or test profile remained afterward;
-  the exact case then passed 3/3 in fresh contexts. Retain this as a non-blocking
-  Windows harness signal: if it recurs, capture `DEBUG=pw:browser` launch logs
-  and seed a dedicated issue rather than treating a retry as the full-suite gate.
 - Update shared branches with `git merge main`, never rebase; do not discard work
   or rewrite history without the explain-and-approve protocol.
 - Do not edit `extension/dist/` or generated data directly.
