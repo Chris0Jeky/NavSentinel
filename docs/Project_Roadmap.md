@@ -40,17 +40,22 @@ readiness is tracked only by the outcome gates below.
 
 ### Live execution truth
 
-Verified 2026-07-10: `main` matched `origin/main`; v0.4.0; main CI green;
-2,874 unit tests; 74 open issues; no milestone, tag, GitHub release, CWS release,
-or branch protection. The exact audit baseline is recorded only in dated
+Verified 2026-07-24: `main` matched `origin/main` at `d7528f9`; v0.4.0; main CI
+green; 2,874 unit tests across 95 files, plus typecheck and lint clean locally;
+**81** open issues; no milestone, tag, GitHub release, CWS release, or branch
+protection. The exact audit baseline is recorded only in dated
 `Product_Strategy.md`; verify live.
 The legacy browser-surface PR queue is not ready for human time:
 
 | PR | Current state |
 |---|---|
 | #273 | Closed 2026-07-13 from a stale base; recreate from current `main` or defer |
-| #356 | Stale with E2E red; release prerequisite after refresh and repair |
+| #356 | **Refreshed and green (2026-07-24).** Head `f8028c9`, MERGEABLE, Build/Unit + E2E green on that exact head, 3/3 review threads resolved. Sole remaining gate is human Gate-3 (AI-13). The earlier "stale with E2E red" state is history |
 | #399 | Closed 2026-07-13; measurement-held under #223/#417 and not a beta blocker |
+| #464 | Open, MERGEABLE, green on head `cf66b28`, 6/6 threads resolved. RI-01 synthetic-navigation allowance rejection. Human Gate-3 as AI-21 |
+| #466 | Open, MERGEABLE, green on head `0266107`, 4/4 threads resolved. RI-01 pending-decision service-worker boundary. Human Gate-3 as AI-22 |
+| #468 | Draft; RI-06 event-log URL minimization. Needs a fresh adversarial round on head `bea0077` before leaving draft |
+| #457 | CONFLICTING; deny-floor topology. Held pending the upstream release closing agent-harness #37 — see its 2026-07-24 state review |
 
 **RI-01 local implementation note (verified 2026-07-13):** remotely backed-up
 checkpoint branch `fix/ri01-extension-origin-decisions` contains a context-bound,
@@ -77,7 +82,7 @@ maintainer chooses disclosure/ownership.
 |---|---|---|---|---|---|
 | RI-01 | P0 beta blocker | Move all proceed/allow/trust/resume authority out of page-injected UI | Agent + Gate-3 | Private release task | Injected UI is warn/cancel only; extension-origin action is tab/destination-bound with TTL; synthetic input, trusted-click redressing, host tamper/removal, tab switch, and stale state cannot lower protection |
 | RI-02 | P0 beta blocker | Excise visual-sim capture, templates, scoring hook, WAR, tests, and state | Agent + Gate-3 | #424 | No viewport capture path or placeholder asset remains; #374 is optional coordination, not a prerequisite |
-| RI-03 | P0 beta blocker | Refresh/fix #356; recreate or defer #273; rerun two reviews and CI | Agent before human time | #273/#356; #399 stays deferred | Replacement human guides point only to current green branches; #399 remains outside beta blockers until its measurement methodology is ready |
+| RI-03 | P0 beta blocker | ~~Refresh/fix #356~~ **done: #356 is refreshed, reviewed, thread-clean and green on `f8028c9`**; **still open: recreate or defer #273** | Two steps remain: human Gate-3 on #356 (AI-13) **and** the agent step to recreate-or-defer #273 (AI-8, still BLOCKED). RI-03 is **not** complete when AI-13 passes | #273/#356; #399 stays deferred | Replacement human guides point only to current green branches; #399 remains outside beta blockers until its measurement methodology is ready |
 | RI-04 | P0 product decision | Implement the selected interaction-only or real-reputation profile | Chris + agent | #321 / AI-9 / AI-16 | Release script, tag CI, manifest/WAR, runtime initialization, package checks/budgets, tests, provenance/cadence (if real), and every claim agree for the selected profile; verify both only if both are intentionally retained |
 | RI-05 | P0 beta blocker | Remove fake DNR feature surface and unused permissions | Agent + Gate-3 | CWS checklist; redesign #242/#243 later | No test rules/toggle/DNR permission in beta manifest |
 | RI-06 | P0 privacy blocker | Inventory every store; minimize by purpose; add complete reset | Agent + privacy review | Extend #176 or seed one scoped follow-up | Persistent records use least-identifying data; exact session URLs remain only for correctness with tab binding/TTL; rollback/OAuth/allow tests pass; all behavioral stores have one clear control and accurate export/disclosure |
