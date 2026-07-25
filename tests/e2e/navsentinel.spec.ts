@@ -225,17 +225,25 @@ test("Level 10 delayed form submit prompts @regression", async () => {
       );
       expect(bridgeReady, "Expected bridge to be ready (patches applied)").toBe(true);
 
-      const patchHardened = await page.evaluate(() => {
-        const desc = Object.getOwnPropertyDescriptor(window, "open");
-        return desc ? !desc.writable : false;
+      const patchDescriptors = await page.evaluate(() => {
+        const own = Object.getOwnPropertyDescriptor(window, "open");
+        const proto = Object.getOwnPropertyDescriptor(Window.prototype, "open");
+        return {
+          ownWritable: own?.writable === true,
+          ownConfigurable: own?.configurable === true,
+          protoWritable: proto?.writable === true,
+          protoConfigurable: proto?.configurable === true,
+        };
       });
-      expect(patchHardened, "Expected window.open to be non-writable").toBe(true);
-
-      const protoHardened = await page.evaluate(() => {
-        const desc = Object.getOwnPropertyDescriptor(Window.prototype, "open");
-        return desc ? !desc.writable && !desc.configurable : false;
+      expect(
+        patchDescriptors,
+        "Expected window.open patches to remain wrappable without weakening the runtime gate"
+      ).toEqual({
+        ownWritable: true,
+        ownConfigurable: true,
+        protoWritable: true,
+        protoConfigurable: true,
       });
-      expect(protoHardened, "Expected Window.prototype.open to be non-writable and non-configurable").toBe(true);
 
       await page.click("#submitDelayed");
       await page.waitForTimeout(2600);
