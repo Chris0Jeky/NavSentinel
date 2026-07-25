@@ -8,8 +8,9 @@
 
 **Purpose:** the running list of things only *you* (Chris) can do — and the context an agent needs to not lose the thread between sessions. Agents flag the open items in every summary; you clear them by saying so.
 
-**Last updated:** 2026-07-17 — PR #356 recovery plus human-gate and live-status
-refresh. Product thesis:
+**Last updated:** 2026-07-24 — live-state reconciliation: corrected the AI-13
+guide head, the open-PR list, and the issue count, and registered the two
+Gate-3 lanes (AI-21/AI-22) that existed only on PR branches. Product thesis:
 `docs/Product_Strategy.md`. Corrective
 program: `docs/Project_Roadmap.md`. Standing decisions:
 `docs/agentic/DECISIONS.md`.
@@ -23,7 +24,7 @@ program: `docs/Project_Roadmap.md`. Standing decisions:
 
 ---
 
-## Current state snapshot (live state rechecked 2026-07-17)
+## Current state snapshot (live state rechecked 2026-07-24)
 
 The root `main` worktree is clean and matches `origin/main`; its exact-head CI
 is green. Run `git rev-parse main`, `git rev-parse origin/main`, and live `gh`
@@ -33,13 +34,19 @@ passed typecheck, lint, build, version/package checks, 2,875 unit tests (95
 files), perf 12/12, and all 65 one-worker E2E tests locally. v0.4.0 still has no
 tag, GitHub release, CWS release, or external-user evidence.
 
-Live recheck on 2026-07-17 found 80 open issues, no tags/releases/classic branch
+Live recheck on 2026-07-24 found 81 open issues, no tags/releases/classic branch
 protection or repository rulesets, and no milestones or assignees. Verify the
-current `main` SHA live rather than pinning it here. Open PRs are #356, draft
-#457, and #463. Stale PRs #273 and #399 were closed with explicit re-entry
-paths. #356 exact guide head `ee0f9b7` is published with green Build/Unit and
-E2E; all three review threads are resolved. Its step-1 live precheck remains
-mandatory before Chris's AI-13 Gate-3. The product-posture and guided-workflow
+current `main` SHA live rather than pinning it here. Open PRs are #356, #457,
+#464, #466, draft #468, and docs PR #471; only #468 is a draft, and #457 is **CONFLICTING**
+against current `main` rather than the draft this file previously called it.
+Stale PRs #273 and #399 were closed with explicit re-entry paths; their heads
+remain fetchable server-side at `refs/pull/273/head` and `refs/pull/399/head`,
+so the matching local branches are redundant copies, not the only copies.
+#356's exact guide head is **`f8028c9`** (the previously published `ee0f9b7` is
+stale and would fail the AI-13 step-1 precheck); `f8028c9` has green Build/Unit
+and E2E on that exact head via run `29560572081`, all three review threads are
+resolved, and the PR is MERGEABLE. Its step-1 live precheck remains mandatory
+before Chris's AI-13 Gate-3. The product-posture and guided-workflow
 work merged through PR #454; verify live `main` rather than pinning its SHA
 here. The RI-01 checkpoint branch is remotely backed up without the unstaged
 Defender deletion; verify its SHA live. Its worktree is dirty only because
@@ -71,14 +78,32 @@ changes do not change shipped product state.
   exact-head CI-green. **The current AI-13 guide is actionable only when its
   step-1 live head/CI check passes. The PR remains unmergeable without Chris's
   Gate-3 evidence.**
-- **Portfolio:** 80 open issues, none assigned or milestoned; #439–#453 are 15
+- **Portfolio:** 81 open issues, none assigned or milestoned; #439–#453 are 15
   frozen Horizon proposals. No new feature/epic issue seeding until the queue is
   culled and milestone-categorized.
 - **Infrastructure:** classic branch protection remains absent (`404 Branch not
-  protected`) and the rulesets API returns `[]`. AI-17 remains open. The v1.5.2
-  floor integration (#457) changes the exact Codex hook definitions, so prior
-  Codex hook trust is invalid; AI-18 remains open until re-trusted after it lands.
-  GitHub private vulnerability reporting is enabled and linked from `SECURITY.md`.
+  protected`) and the rulesets API returns `[]`. AI-17 remains open. Codex hook
+  trust remains AI-18. GitHub private vulnerability reporting is enabled and
+  linked from `SECURITY.md`. **Deny-floor bypass verified 2026-07-24:** the
+  vendored floor (`.claude/hooks/dispatch.py` 1.5.2) allows a charter command it
+  denies bare, once wrapped in any of three PowerShell one-liner shapes — 9/9
+  wrapped combinations allowed across three charter payloads. Root cause is
+  upstream (agent-harness #37); see `docs/agentic/FAILURE_LEDGER.md`. Do not
+  patch the vendored copy locally: it is synced verbatim from canonical.
+
+  **Scope this honestly.** AI-17 branch protection mitigates only the
+  `git push --force` class. It does **nothing** for the other two payload
+  classes — a wrapped `rm -rf` outside the project, or a wrapped download piped
+  to a shell — so 6 of the 9 demonstrated combinations stay host-destructive
+  even after AI-17 is done. Branch protection is therefore necessary but **not
+  sufficient**, and this bypass is not "just an AI-17 priority bump".
+  Until a fixed canonical floor lands, the only real host-side controls are
+  operator ones: do not run unreviewed PowerShell one-liners containing
+  `iex`/`Invoke-Expression`, treat a scriptblock-wrapped command as unguarded
+  regardless of the floor's verdict, and prefer plain non-wrapped commands so
+  the floor can actually see them. Agents must not rely on the floor to catch a
+  destructive command inside `if (...) { }`, `Where-Object { }`, or a compound
+  assignment.
 - **Local verification blocker:** Defender quarantined only
   `C:\Users\Public\codex-shell-home\NavSentinel-ri01\tests\clickfix-detector.property.test.ts`
   as `Trojan:HTML/FakeCaptcha.HNA!MTB`; it reports `DidThreatExecute=False` and
@@ -92,9 +117,13 @@ changes do not change shipped product state.
 
 **Guided resolution cursor:** `AI-16` (`Resume at: AI-16`; the next
 conversational label is `q-1`). Current ready order is AI-16 -> AI-9 -> AI-20 ->
-AI-17 -> AI-19 -> AI-18. AI-13 is a separate conditional Gate-3 lane: use its
-guide only when the exact-head precheck passes; it does not replace the stable
-AI-16 resume cursor. The hook-editing slice is now committed; AI-18 remains
+AI-17 -> AI-19 -> AI-23 (low priority housekeeping, last).
+**AI-18 is HELD, not ready** — see its entry; do not route to it
+until PR #457 reaches its final reviewed head, or the trust will be immediately
+invalidated. AI-13, AI-21, and AI-22 are separate conditional Gate-3
+lanes: use each guide only when its exact-head precheck passes; they do not
+replace the stable AI-16 resume cursor. Run them oldest-PR-first
+(AI-13/#356 -> AI-21/#464 -> AI-22/#466), per the merge-oldest-first law. The hook-editing slice is now committed; AI-18 remains
 human-owned until its exact definitions are reviewed and trusted. The `q-N`
 label may reset between conversations; the `AI-N` identifier is durable.
 AI-15/AI-8/AI-14 remain visible but are not actionable questions until agent
@@ -128,23 +157,31 @@ trademark advice before a commercial/public launch; and (6) record **keep** or
 screenshots, docs, and repository metadata before invitations or submission.
 Then tell the agent `AI-19 done: <decision>`.
 
-**OPEN: AI-18 — Review and trust the new Codex project hooks.** The exact
-definition changed during the v1.5.2 floor integration, invalidating any prior
-trust. Claude now receives the shared global floor exactly once; Codex keeps one
-project `PreToolUse` adapter plus the repo-specific lifecycle handlers. **Run
-after the v1.5.2 floor integration (#457) lands on `main`:** (1) start a fresh
-Codex session in the canonical repository at that head; (2) run `/hooks`; (3)
-compare every project entry with `.codex/hooks.json`; (4) verify SessionStart
-runs `session_start.py`; (5) verify the sole PreToolUse entry pins normalized
-SHA-256 `9f38e906d49dd84de196bf22fc6388a5551494cf9b303610014ee6539783ebbb`,
-invokes only `~/.claude/hooks/dispatch.py`, passes `--runtime codex`, and does
-not use `git rev-parse` or the repo-local fixture; (6) verify PostToolUse runs
-`post_tool_use.py` plus sanitized `post_tool_failure.py`; (7) choose **Trust**
-for those exact project definitions and confirm `/hooks` reports one trusted
-project PreToolUse; (8) run `git status` (allowed), then
-`git push --force --dry-run origin main` (blocked before Git); and (9) restart
-once to exercise SessionStart. Then reply `AI-18 done`. Trust is
-definition-hash-based, so repeat after every hook-definition change.
+**OPEN: AI-18 — Review and trust the new Codex project hooks.** The Codex parity
+setup adds `.codex/hooks.json` for session orientation, the shared irreversible
+command floor, agentic-change verification reminders, and sanitized failure
+capture. Codex deliberately skips new or changed non-managed hooks until their
+exact definitions are trusted. **Human-only guide (run after this agentic slice
+is final):** (1) start a fresh Codex session in the canonical repository; (2)
+run `/hooks`; (3) compare every project entry with `.codex/hooks.json` —
+SessionStart runs `session_start.py`, PreToolUse Bash runs
+`.claude/hooks/dispatch.py --event pre`, and PostToolUse runs
+`post_tool_use.py` plus sanitized `post_tool_failure.py`; (4) confirm each path
+is repository-root-relative and no unexpected command exists; (5) choose
+**Trust** for those exact project hooks; (6) run `/hooks` again and confirm they
+are trusted/enabled; and (7) restart once to exercise SessionStart. Then reply
+`AI-18 done`. Trust is definition-hash-based, so repeat after future hook
+definition changes.
+
+> **Hold AI-18 for now (2026-07-24).** Trusting the *current* definitions is
+> largely wasted effort: PR #457 replaces `.codex/hooks.json` with a SHA-pinned,
+> fail-closed adapter, and because trust is definition-hash-based it would have
+> to be redone immediately after that lands. #457 is itself held (see its
+> 2026-07-24 state review) until the upstream floor release closing
+> agent-harness #37 arrives. Do this after #457's final reviewed head, not
+> before. Separately recorded in `docs/agentic/FAILURE_LEDGER.md`: this repo
+> currently wires **two** PreToolUse floors at once — the global 1.5.3 and the
+> vendored 1.5.2 — which is exactly the topology #457 removes.
 
 **🚨 BLOCKED: AI-15 — Run the headed release session only after agent
 preflight.** The prior 60–90 minute one-sitting guide is withdrawn: stale PRs
@@ -252,11 +289,17 @@ branch checkout guide.
 
 **🚨 OPEN: AI-13 — Run #356 MAIN-world compatibility Gate-3 (GUIDE PREPARED;
 LIVE CI PRECHECK REQUIRED).** PR #356 is refreshed from current `origin/main`
-and all three review threads are resolved. Exact guide head `ee0f9b7` passed
-GitHub Build/Unit plus E2E; the source-bearing runtime head passed 2,875 unit
+and all three review threads are resolved. Exact guide head **`f8028c9`** passed
+GitHub Build/Unit plus E2E (run `29560572081`, `head_sha` verified equal to the
+PR head on 2026-07-24); the source-bearing runtime head passed 2,875 unit
 tests, 65/65 one-worker E2E, build/package, and all 12 size budgets locally.
 The current guide commit must independently satisfy step 1 before use. This
 item remains human-owned; only Chris can record Gate-3 as done.
+
+> **Head correction (2026-07-24):** this guide previously pinned `ee0f9b7`,
+> which the branch has since moved past. Any run started against `ee0f9b7`
+> aborts at step 1 on a SHA mismatch. The live head is `f8028c9`; re-verify it
+> yourself with step 1 rather than trusting either SHA written here.
 
 **Current guide:**
 
@@ -270,10 +313,21 @@ item remains human-owned; only Chris can record Gate-3 as done.
    clean, all three SHAs must match, and only then may `gh pr checks 356` be
    accepted as evidence that Build/Unit and E2E are green for that exact head.
    Stop and report the mismatch if any SHA or check differs.
-2. In that worktree run `npm ci` and `npm run build`. To avoid starting the
-   branch's known-vulnerable pre-#459 Vite server, keep
+2. In that worktree run `npm ci` and `npm run build`. Keep
    `python -m http.server 5173 --bind 127.0.0.1 --directory gym` open in a second
-   terminal instead. Create a temporary local Chrome profile from the profile
+   terminal to serve the fixtures. (This instruction previously said the static
+   server was needed to avoid the branch's "known-vulnerable pre-#459 Vite
+   server". That reason is **stale and was removed on 2026-07-24**: the branch
+   already contains #459/#463's dependency fix — it contains merge commit
+   `2888483` and its `package.json` pins `vite ^8.1.5` / `@crxjs/vite-plugin
+   ^2.7.1`, identical to `main`. The branch trails `main` by five commits — the
+   two deny-floor syncs (#467/#469), their two merge commits, and
+   `d7528f9 Update package-lock.json`. The floor syncs touch only
+   `.claude/hooks/` and do not affect the extension build; the lockfile commit
+   is the one to check yourself if `npm ci` behaves unexpectedly. A static server is still the simpler choice for a Gate-3
+   run, so the step is unchanged — only its justification was wrong. Do **not**
+   merge `main` into #356 on the strength of the old wording; that would
+   invalidate its exact-head CI and review evidence for no benefit.) Create a temporary local Chrome profile from the profile
    picker, do not sign it into a Google account, and leave every established
    profile/extension untouched. In the temporary profile's Extensions page,
    enable Developer mode and load
@@ -329,6 +383,76 @@ item remains human-owned; only Chris can record Gate-3 as done.
    unexpected prompt text, or differing outcome. Do not merge on a partial pass;
    after a full pass the agent will recheck the exact head, CI, comments, and
    merge gate before acting.
+
+**🚨 OPEN: AI-21 — Run PR #464 synthetic-navigation Gate-3 (GUIDE IN
+`docs/agentic/GATE3_GUIDES.md`; LIVE EXACT-HEAD PRECHECK REQUIRED).** This browser-surface slice
+stops page scripts from minting navigation authority with dispatched
+pointer/click events, keeping a preceding real pointerdown only as
+attack-correlation evidence: a trusted pointerdown now sends only a top-frame
+rollback baseline and cannot create gesture, broad, target, or recent-user
+authority. Live state on 2026-07-24: head `cf66b28`, MERGEABLE, Build/Unit and
+E2E green, 6 review threads all resolved. Automated Chromium proves the
+pointerdown-only rollback attack, the synchronous MAIN-world popup attack, the
+existing synthetic attacks, and the trusted compatibility paths, but a real
+Chrome pass must confirm them before merge. Only Chris can record this complete.
+
+**🚨 OPEN: AI-22 — Run PR #466 pending-decision service-worker Gate-3 (GUIDE IN
+`docs/agentic/GATE3_GUIDES.md`; LIVE EXACT-HEAD PRECHECK REQUIRED).** Adds the
+URL-minimized, session-backed pending-decision boundary so prompt authority is
+derived from Chrome rather than page messages. Live state on 2026-07-24: head
+`0266107`, MERGEABLE, Build/Unit and E2E green, 4 review threads all resolved.
+Its Gate-3 must additionally treat the `rollupOptions` -> `rolldownOptions`
+swap in `vite.config.ts` as a first-class target: build, load unpacked in real
+Chrome, and confirm the MV3 service worker actually registers, because that
+change alters the shipped bundle layout. Only Chris can record this complete.
+
+> **Full AI-21/AI-22 guides:** [`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md)
+> — verbatim from their PR branches, tracked here rather than branch-only. Both remain queued
+> behind AI-13/#356 under the merge-oldest-first law. These entries exist so the
+> durable register never silently omits a human-gated item while its PR is in
+> flight, which is this file's whole purpose; the guides live in a separate
+> tracked file only so landing those PRs does not collide with a large
+> `ACTION_ITEMS.md` rewrite. Do **not** move them back onto a branch-only path.
+
+**OPEN: AI-23 — Prune two finished worktrees and their merged branches**
+(low priority housekeeping). Agents cannot do this: `git worktree remove` is floor-blocked
+(`[floor 1.5.2] Git worktree removal is floor-blocked.`), verified 2026-07-24,
+and the branches cannot be deleted while a worktree still holds them. Both
+targets are clean and fully merged into `main`, so this is pure housekeeping
+with nothing to lose.
+
+**Re-derive the branch names before running this** — `nav-floor-sync` was
+observed switching from `chore/deny-floor-v1.5.2` to `chore/deny-floor-v1.6.0`
+mid-session, so a pinned name here goes stale quickly. Check
+`git worktree list` first, then:
+
+```sh
+git worktree list
+git worktree remove "C:/Users/jekyt/Desktop/Printer Config/Others/Git/nav-floor-sync"
+git worktree remove .worktrees/deps-audit
+git branch -d <branch nav-floor-sync held> fix/release-dependency-advisories
+```
+
+`git branch -d` (not `-D`) is deliberate: it refuses anything not merged, so it
+cannot silently drop work.
+
+**Leave the other SIX worktrees.** Five back open PRs — `.worktrees/pr356-refresh`
+(#356), `.worktrees/harness-v141` (#457), `.worktrees/ri01-synthetic-nav` (#464),
+`.worktrees/ri01-pending-sw` (#466), `.worktrees/ri06-eventlog-min` (#468) — and
+the sixth is **not** cruft despite backing no PR:
+`C:/Users/Public/codex-shell-home/NavSentinel-ri01` on
+`fix/ri01-extension-origin-decisions` is the RI-01 checkpoint worktree that holds
+the AI-20 Defender-quarantine evidence referenced above. **Do not delete it**
+while AI-20 is open.
+
+Three local branches are also prunable but are **not** included above, because
+deleting an unmerged local branch is the one irreversible step here and is your
+call: `fix/cooldown-map-cap` (superseded — its fix landed on `main` as
+`capCooldowns` via PR #381, and it is the only copy of commit `d682f14`),
+`fix/user-activation-neutral-chip` and `fix/oauth-require-state-corroboration-223`
+(both redundant — their heads are preserved server-side at `refs/pull/273/head`
+and `refs/pull/399/head`, so deleting the local copies loses nothing). Reply
+`AI-23 done` when pruned.
 
 **🚨 BLOCKED: AI-14 — OAuth tradeoff measurement after closed PR #399.** The
 measurement-held draft was closed on 2026-07-13 rather than merged from a stale

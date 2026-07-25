@@ -10,6 +10,7 @@ import {
   SUITE_SETTINGS_KEY,
 } from "../shared/storage";
 import { RedirectChainTracker } from "../shared/redirect_chain";
+import type { PendingDecisionRuntimeMessage } from "../shared/pending_decision";
 import {
   isOAuthUrl,
   extractRedirectUri,
@@ -19,6 +20,10 @@ import {
 } from "../content/oauth_monitor";
 import { swState } from "../shared/session_state";
 import { updateTabIcon, updateTabIconWhen, clearTabIcon, setAllTabsGray } from "./icon_manager";
+import {
+  createDefaultPendingDecisionRuntimeBroker,
+  type PendingDecisionRuntimeBroker,
+} from "./pending_decision_handlers";
 
 const BASELINE_RULESET_ID = "baseline";
 
@@ -148,6 +153,47 @@ const oauthFlowByTab = swState.oauthFlowByTab;
 // Event listeners are registered synchronously (required by MV3), but handler
 // bodies await this promise so the first event after a restart sees restored state.
 const hydrateReady = swState.hydrate();
+let pendingDecisionRuntimePromise: Promise<PendingDecisionRuntimeBroker> | null = null;
+const pendingDecisionLifecycleGenerationByTab = new Map<number, number>();
+
+function getPendingDecisionLifecycleGeneration(tabId: number): number {
+  return pendingDecisionLifecycleGenerationByTab.get(tabId) ?? 0;
+}
+
+function advancePendingDecisionLifecycleGeneration(tabId: number): void {
+  const current = getPendingDecisionLifecycleGeneration(tabId);
+  pendingDecisionLifecycleGenerationByTab.set(
+    tabId,
+    current === Number.MAX_SAFE_INTEGER ? 1 : current + 1,
+  );
+}
+
+function loadPendingDecisionRuntime(): Promise<PendingDecisionRuntimeBroker> {
+  if (!pendingDecisionRuntimePromise) {
+    const attempt = Promise.resolve().then(() =>
+      createDefaultPendingDecisionRuntimeBroker({
+        getLifecycleGeneration: getPendingDecisionLifecycleGeneration,
+      }),
+    );
+    pendingDecisionRuntimePromise = attempt;
+    void attempt.catch(() => {
+      if (pendingDecisionRuntimePromise === attempt) pendingDecisionRuntimePromise = null;
+    });
+  }
+  return pendingDecisionRuntimePromise;
+}
+
+function isPendingDecisionRuntimeMessage(
+  value: unknown,
+): value is PendingDecisionRuntimeMessage {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const type = (value as { type?: unknown }).type;
+  return (
+    type === "ns-pending-decision-create" ||
+    type === "ns-pending-decision-list" ||
+    type === "ns-pending-decision-consume"
+  );
+}
 
 // Refresh the synchronously-read cachedDefaultMode on every worker start. MV3
 // restarts the SW on any waking event (navigation/message), not just install or
@@ -607,6 +653,38 @@ function runWhenHydrated(run: () => void, keepPortOpen = true): boolean {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message !== "object") return;
 
+  if (isPendingDecisionRuntimeMessage(message)) {
+    void loadPendingDecisionRuntime()
+      .then((runtime) => runtime.handle(message, sender))
+      .then((response) => {
+        sendResponse?.(
+          response ?? {
+            ok: false,
+            operation:
+              message.type === "ns-pending-decision-create"
+                ? "create"
+                : message.type === "ns-pending-decision-list"
+                  ? "list"
+                  : "consume",
+            status: "unavailable",
+          },
+        );
+      })
+      .catch(() => {
+        sendResponse?.({
+          ok: false,
+          operation:
+            message.type === "ns-pending-decision-create"
+              ? "create"
+              : message.type === "ns-pending-decision-list"
+                ? "list"
+                : "consume",
+          status: "unavailable",
+        });
+      });
+    return true;
+  }
+
   if (isPromptOutcomeStorageMessage(message)) {
     void handlePromptOutcomeStorageMessage(message, sender)
       .then((response) => sendResponse?.(response))
@@ -653,12 +731,73 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const ttl = clampTtl(message.ttlMs, NAV_GESTURE_TTL_MS, MAX_GESTURE_TTL_MS);
         const now = Date.now();
         gestureUntilByTab.set(tabId, now + ttl);
-        if (typeof message.url === "string" && message.url) {
-          lastUrlByTab.set(tabId, message.url);
+        const topUrl = typeof sender.tab?.url === "string" ? sender.tab.url : "";
+        if (topUrl) {
+          // A gesture may originate in a child frame. The rollback baseline is
+          // always the top tab URL supplied by Chrome, never the frame-local URL
+          // supplied in the message.
+          lastUrlByTab.set(tabId, topUrl);
         }
         rememberUserNavigationContext(tabId, now);
         typedOriginByTab.delete(tabId);
         swState.persistAll();
+      }
+      sendResponse?.({ ok: true });
+    });
+  }
+
+  if (message.type === "ns-nav-context") {
+    return runWhenHydrated(async () => {
+      const tabId = sender.tab?.id;
+      const senderUrl = typeof sender.tab?.url === "string" ? sender.tab.url : "";
+      if (typeof tabId === "number" && senderUrl) {
+        // This message restores only the source-page baseline when a cold worker
+        // missed its initial commit. It deliberately creates no gesture, allow,
+        // target, or user-navigation-context capability. A trusted pointerdown
+        // in any frame may precede top navigation, so accept content-script
+        // child frames but use only Chrome's top-tab URL, never page-supplied
+        // data or a subframe URL. Re-read the live tab before applying a sender
+        // snapshot that may have waited for hydration. If the baseline changed
+        // while an API read was in flight, read once more: a newer top commit
+        // must win, while a stable SPA URL may still refresh an older baseline.
+        const existingBaseline = lastUrlByTab.get(tabId);
+        if (existingBaseline === undefined) {
+          // This is the cold/missed-commit repair. Seed synchronously before a
+          // pointerdown page handler can top-navigate; an async tab read here
+          // would let the destination replace the source before validation.
+          lastUrlByTab.set(tabId, senderUrl);
+          swState.persistMap(lastUrlByTab, "lastUrl");
+          sendResponse?.({ ok: true });
+          return;
+        }
+        if (existingBaseline === senderUrl) {
+          sendResponse?.({ ok: true });
+          return;
+        }
+        try {
+          let baselineBeforeRead = existingBaseline;
+          let liveUrl = (await chrome.tabs.get(tabId)).url ?? "";
+          let baselineAfterRead = lastUrlByTab.get(tabId);
+          if (baselineAfterRead !== undefined && baselineAfterRead !== senderUrl) {
+            baselineBeforeRead = baselineAfterRead;
+            liveUrl = (await chrome.tabs.get(tabId)).url ?? "";
+            baselineAfterRead = lastUrlByTab.get(tabId);
+            if (
+              baselineAfterRead !== baselineBeforeRead &&
+              baselineAfterRead !== senderUrl
+            ) {
+              sendResponse?.({ ok: true });
+              return;
+            }
+          }
+          if (liveUrl === senderUrl) {
+            lastUrlByTab.set(tabId, senderUrl);
+            swState.persistMap(lastUrlByTab, "lastUrl");
+          }
+        } catch {
+          // The tab may close or navigate away between the trusted event and
+          // this read. In that case do not persist a stale rollback baseline.
+        }
       }
       sendResponse?.({ ok: true });
     });
@@ -896,6 +1035,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 chrome.webNavigation.onBeforeNavigate.addListener((details) => {
   if (details.frameId !== 0) return;
+  advancePendingDecisionLifecycleGeneration(details.tabId);
+  void loadPendingDecisionRuntime()
+    .then((runtime) => runtime.removeForTabLifecycle(details.tabId))
+    .catch(() => {
+      console.warn("[NavSentinel] pending-decision navigation cleanup failed");
+    });
   if (!swState.hydrated) { void hydrateReady.then(() => onBeforeNavigateHandler(details)); return; }
   onBeforeNavigateHandler(details);
 });
@@ -1173,6 +1318,12 @@ function onCreatedHandler(tabId: number, openerTabId: number): void {
 }
 
 chrome.tabs.onRemoved.addListener((tabId) => {
+  advancePendingDecisionLifecycleGeneration(tabId);
+  void loadPendingDecisionRuntime()
+    .then((runtime) => runtime.removeForTabLifecycle(tabId))
+    .catch(() => {
+      console.warn("[NavSentinel] pending-decision tab cleanup failed");
+    });
   if (!swState.hydrated) { void hydrateReady.then(() => onRemovedHandler(tabId)); return; }
   onRemovedHandler(tabId);
 });

@@ -35,12 +35,12 @@ HANDOFF = ROOT / "docs" / "agentic" / "HANDOFF.md"
 QUESTION_PROTOCOL = ROOT / "docs" / "agentic" / "QUESTION_PROTOCOL.md"
 FLOOR_SMOKE = ROOT / ".claude" / "hooks" / "smoke_test.py"
 FLOOR_DISPATCH = ROOT / ".claude" / "hooks" / "dispatch.py"
-FLOOR_PROVENANCE = "agent-harness canonical deny floor v1.5.2"
+FLOOR_PROVENANCE = "agent-harness canonical deny floor v1.6.0"
 EXPECTED_DISPATCH_SHA256 = (
-    "9f38e906d49dd84de196bf22fc6388a5551494cf9b303610014ee6539783ebbb"
+    "e76c358aeee70bea8c18f69afc9aa8c3bd8440fc86f72060103ad4029e7cb299"
 )
 EXPECTED_SMOKE_SHA256 = (
-    "7518915384623dc285314d510d1d9dedb4f8ec6cce7326913756084ea783bf3a"
+    "3ca6e732236763049ee82819388a2802459590bf82bb0543378245b03de9311f"
 )
 VALID_EVENTS = {
     "PreToolUse",
