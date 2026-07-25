@@ -653,12 +653,73 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const ttl = clampTtl(message.ttlMs, NAV_GESTURE_TTL_MS, MAX_GESTURE_TTL_MS);
         const now = Date.now();
         gestureUntilByTab.set(tabId, now + ttl);
-        if (typeof message.url === "string" && message.url) {
-          lastUrlByTab.set(tabId, message.url);
+        const topUrl = typeof sender.tab?.url === "string" ? sender.tab.url : "";
+        if (topUrl) {
+          // A gesture may originate in a child frame. The rollback baseline is
+          // always the top tab URL supplied by Chrome, never the frame-local URL
+          // supplied in the message.
+          lastUrlByTab.set(tabId, topUrl);
         }
         rememberUserNavigationContext(tabId, now);
         typedOriginByTab.delete(tabId);
         swState.persistAll();
+      }
+      sendResponse?.({ ok: true });
+    });
+  }
+
+  if (message.type === "ns-nav-context") {
+    return runWhenHydrated(async () => {
+      const tabId = sender.tab?.id;
+      const senderUrl = typeof sender.tab?.url === "string" ? sender.tab.url : "";
+      if (typeof tabId === "number" && senderUrl) {
+        // This message restores only the source-page baseline when a cold worker
+        // missed its initial commit. It deliberately creates no gesture, allow,
+        // target, or user-navigation-context capability. A trusted pointerdown
+        // in any frame may precede top navigation, so accept content-script
+        // child frames but use only Chrome's top-tab URL, never page-supplied
+        // data or a subframe URL. Re-read the live tab before applying a sender
+        // snapshot that may have waited for hydration. If the baseline changed
+        // while an API read was in flight, read once more: a newer top commit
+        // must win, while a stable SPA URL may still refresh an older baseline.
+        const existingBaseline = lastUrlByTab.get(tabId);
+        if (existingBaseline === undefined) {
+          // This is the cold/missed-commit repair. Seed synchronously before a
+          // pointerdown page handler can top-navigate; an async tab read here
+          // would let the destination replace the source before validation.
+          lastUrlByTab.set(tabId, senderUrl);
+          swState.persistMap(lastUrlByTab, "lastUrl");
+          sendResponse?.({ ok: true });
+          return;
+        }
+        if (existingBaseline === senderUrl) {
+          sendResponse?.({ ok: true });
+          return;
+        }
+        try {
+          let baselineBeforeRead = existingBaseline;
+          let liveUrl = (await chrome.tabs.get(tabId)).url ?? "";
+          let baselineAfterRead = lastUrlByTab.get(tabId);
+          if (baselineAfterRead !== undefined && baselineAfterRead !== senderUrl) {
+            baselineBeforeRead = baselineAfterRead;
+            liveUrl = (await chrome.tabs.get(tabId)).url ?? "";
+            baselineAfterRead = lastUrlByTab.get(tabId);
+            if (
+              baselineAfterRead !== baselineBeforeRead &&
+              baselineAfterRead !== senderUrl
+            ) {
+              sendResponse?.({ ok: true });
+              return;
+            }
+          }
+          if (liveUrl === senderUrl) {
+            lastUrlByTab.set(tabId, senderUrl);
+            swState.persistMap(lastUrlByTab, "lastUrl");
+          }
+        } catch {
+          // The tab may close or navigate away between the trusted event and
+          // this read. In that case do not persist a stale rollback baseline.
+        }
       }
       sendResponse?.({ ok: true });
     });

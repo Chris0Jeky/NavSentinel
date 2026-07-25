@@ -727,6 +727,14 @@ function notifyNavGesture(ttlMs = NAV_GESTURE_TTL_MS): void {
   }
 }
 
+function notifyNavContext(): void {
+  try {
+    chrome.runtime.sendMessage({ type: "ns-nav-context" });
+  } catch {
+    // ignore
+  }
+}
+
 function notifyAllowedTarget(
   url: string,
   ttlMs = NAV_TARGET_ALLOW_TTL_MS,
@@ -1630,7 +1638,15 @@ window.addEventListener(
   "pointerdown",
   (e) => {
     if (!(e instanceof PointerEvent)) return;
-    notifyNavGesture();
+    // Pointerdown is risk-correlation evidence only. Even a trusted down can be
+    // cancelled or followed by page-script navigation, so it must not mint the
+    // tab-wide SW rollback allowance before a trusted click is approved.
+    if (!e.isTrusted) return;
+    // A cold worker can miss the page's initial onCommitted event. Seed only
+    // the top-tab rollback baseline here, including when a trusted down occurs
+    // inside a child frame that can navigate the top context. ns-nav-context
+    // grants no navigation authority and the worker ignores page-supplied URLs.
+    notifyNavContext();
     lastDown = capturePointerDown(e);
     const token = makeToken({
       siteKey: siteKeyFromLocation(),
@@ -1659,8 +1675,14 @@ window.addEventListener(
     if (!(e instanceof MouseEvent)) return;
 
     const isKeyboardActivation = e.isTrusted && e.detail === 0;
+    // A recent trusted down remains risk-correlation evidence even when page
+    // code synchronously dispatches the click: target/timing mismatches should
+    // raise suspicion. It never grants authority; the current click's
+    // `e.isTrusted` separately gates prompt suppression and every allowance.
     const downForClick =
-      !isKeyboardActivation && lastDown && performance.now() - lastDown.ts < 1500 ? lastDown : null;
+      !isKeyboardActivation && lastDown && performance.now() - lastDown.ts < 1500
+        ? lastDown
+        : null;
 
     const ctx = (() => {
       if (isKeyboardActivation) {
@@ -1697,7 +1719,7 @@ window.addEventListener(
             meta: e.metaKey
           };
 
-    const explicitNewTab = !!ctx.explicitNewTabIntent;
+    const explicitNewTab = e.isTrusted && !!ctx.explicitNewTabIntent;
     const anchor = findAnchorFromEvent(e);
     const anchorTarget = (anchor?.target ?? "").toLowerCase();
     const isBlankAnchor = !!(anchor && anchorTarget === "_blank");
@@ -1836,7 +1858,7 @@ window.addEventListener(
       ...(ctx ? { ctx } : {})
     });
     const smartAllowsBlank =
-      mode === "smart" && !!anchor && isLegitBlankAnchor(anchor, ctx, cds, cdsReasons);
+      mode === "smart" && e.isTrusted && !!anchor && isLegitBlankAnchor(anchor, ctx, cds, cdsReasons);
     const smartSuppressesBlankPrompt = shouldSuppressSmartBlankPrompt({
       mode,
       isBlankAnchor,
@@ -1927,15 +1949,17 @@ window.addEventListener(
     }
 
     if (decision === "allow") {
-      const silentNavEvent = buildSilentNavEvent({
-        destHref: parsed?.href,
-        destHost,
-        nrs,
-        reasonCodes,
-        nrsFactors,
-        blockThreshold,
-      });
-      if (parsed?.href && shouldQueueSameTabSilentCommit({
+      const silentNavEvent = e.isTrusted
+        ? buildSilentNavEvent({
+            destHref: parsed?.href,
+            destHost,
+            nrs,
+            reasonCodes,
+            nrsFactors,
+            blockThreshold,
+          })
+        : null;
+      if (e.isTrusted && parsed?.href && shouldQueueSameTabSilentCommit({
         isTopFrame: topFrame,
         isDocumentNavigation: silentNavEvent !== null,
         isSameTabAnchor,
@@ -1943,12 +1967,19 @@ window.addEventListener(
       })) {
         notifyAllowedTarget(parsed.href, NAV_TARGET_ALLOW_TTL_MS, silentNavEvent ?? undefined);
       }
-      notifyNavGesture();
-      notifyNavAllow();
-      postToMain("ns-allow", {
-        allowOpen: mode === "off" || explicitNewTab,
-        allowRedirect: true
-      });
+      // A synthetic click may still be scored, but in an enforcing mode it
+      // cannot create the broad tab/main-world windows that suppress rollback.
+      // Otherwise a hostile page can dispatch pointerdown/click and self-
+      // authorize its own navigation. Off is the explicit user-selected bypass,
+      // so preserve its no-intervention contract for programmatic links too.
+      if (e.isTrusted || mode === "off") {
+        notifyNavGesture();
+        notifyNavAllow();
+        postToMain("ns-allow", {
+          allowOpen: mode === "off" || explicitNewTab,
+          allowRedirect: true
+        });
+      }
 
       // Same-tab candidates are persisted from the SW after the navigation
       // actually commits. A _blank anchor needs immediate logging because the

@@ -848,16 +848,6 @@ window.addEventListener(
   (event) => {
     if (!(event instanceof PointerEvent)) return;
     if (event.isTrusted) lastGestureTs = nowMs();
-    maybeArmPopupIntent(event);
-  },
-  true
-);
-
-window.addEventListener(
-  "mousedown",
-  (event) => {
-    if (!(event instanceof MouseEvent)) return;
-    maybeArmPopupIntent(event);
   },
   true
 );
