@@ -239,8 +239,9 @@ def test_floor_matrix() -> None:
         capture_output=True,
         text=True,
         cwd=ROOT,
-        # The canonical v1.5.2 floor matrix is ~1604 cases; on Windows (slow
-        # per-case subprocess spawning) it runs ~190s, well over the old 120s cap.
+        # The canonical v1.6.0 floor matrix is large; on Windows (slow per-case
+        # subprocess spawning) the whole smoke run measured ~294s on 2026-07-25,
+        # well over the old 120s cap that used to fail this check outright.
         # The floor smoke exits fast on a real failure, so this bound only guards a
         # genuine hang, not normal completion. Keep headroom above the CI spread.
         timeout=600,
