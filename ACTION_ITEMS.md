@@ -118,9 +118,11 @@ changes do not change shipped product state.
 **Guided resolution cursor:** `AI-16` (`Resume at: AI-16`; the next
 conversational label is `q-1`). Current ready order is AI-16 -> AI-9 -> AI-20 ->
 AI-17 -> AI-19 -> AI-23 (low priority housekeeping, last).
-**AI-18 is HELD, not ready** — see its entry; do not route to it
-until PR #457 reaches its final reviewed head, or the trust will be immediately
-invalidated. AI-13, AI-21, and AI-22 are separate conditional Gate-3
+**AI-18 is now the highest-value item once PR #477 merges** — its earlier hold
+on PR #457 is cleared (#457 merged). The Codex deny floor in this repo is
+currently **failing closed** on a stale pinned digest, so no Codex `Bash` call
+works here until #477 lands *and* the `/hooks` re-trust in AI-18 is done; route
+to it ahead of AI-17/AI-19 once #477 is merged. AI-13, AI-21, and AI-22 are separate conditional Gate-3
 lanes: use each guide only when its exact-head precheck passes; they do not
 replace the stable AI-16 resume cursor. Run them oldest-PR-first
 (AI-13/#356 -> AI-21/#464 -> AI-22/#466), per the merge-oldest-first law. The hook-editing slice is now committed; AI-18 remains
@@ -161,27 +163,42 @@ Then tell the agent `AI-19 done: <decision>`.
 setup adds `.codex/hooks.json` for session orientation, the shared irreversible
 command floor, agentic-change verification reminders, and sanitized failure
 capture. Codex deliberately skips new or changed non-managed hooks until their
-exact definitions are trusted. **Human-only guide (run after this agentic slice
-is final):** (1) start a fresh Codex session in the canonical repository; (2)
-run `/hooks`; (3) compare every project entry with `.codex/hooks.json` —
-SessionStart runs `session_start.py`, PreToolUse Bash runs
-`.claude/hooks/dispatch.py --event pre`, and PostToolUse runs
-`post_tool_use.py` plus sanitized `post_tool_failure.py`; (4) confirm each path
-is repository-root-relative and no unexpected command exists; (5) choose
+exact definitions are trusted. **Human-only guide (run after PR #477 merges):**
+(1) start a fresh Codex session in the canonical repository; (2) run `/hooks`;
+(3) compare every project entry with `.codex/hooks.json` — SessionStart runs
+`session_start.py`; **PreToolUse Bash runs the SHA-pinned adapter, which execs
+the _global_ `$HOME/.claude/hooks/dispatch.py --event pre --runtime codex` only
+after its digest matches the embedded `expected=` constant, and fails closed
+otherwise**; and PostToolUse runs `post_tool_use.py` plus sanitized
+`post_tool_failure.py`; (4) confirm the pinned digest reads
+`55a9db7c1aa5b8d3a73a887dc96f04b949397e2d3afc9dec8eb6468386eecd04` in **both**
+the POSIX `command` and the `commandWindows` form, that every other path is
+repository-root-relative, and that no unexpected command exists; (5) choose
 **Trust** for those exact project hooks; (6) run `/hooks` again and confirm they
 are trusted/enabled; and (7) restart once to exercise SessionStart. Then reply
 `AI-18 done`. Trust is definition-hash-based, so repeat after future hook
 definition changes.
 
-> **Hold AI-18 for now (2026-07-24).** Trusting the *current* definitions is
-> largely wasted effort: PR #457 replaces `.codex/hooks.json` with a SHA-pinned,
-> fail-closed adapter, and because trust is definition-hash-based it would have
-> to be redone immediately after that lands. #457 is itself held (see its
-> 2026-07-24 state review) until the upstream floor release closing
-> agent-harness #37 arrives. Do this after #457's final reviewed head, not
-> before. Separately recorded in `docs/agentic/FAILURE_LEDGER.md`: this repo
-> currently wires **two** PreToolUse floors at once — the global 1.5.3 and the
-> vendored 1.5.2 — which is exactly the topology #457 removes.
+> **AI-18 is UNBLOCKED once PR #477 merges (2026-07-25).** The earlier hold was
+> waiting on PR #457, which has since merged and delivered the SHA-pinned,
+> fail-closed adapter. PR #477 is the last hook-definition change in this
+> sequence: it advances the floor to canonical **v1.6.3** and refreshes the
+> pinned digest. Trust after #477, not before, or the trust record is
+> invalidated again.
+>
+> **This is currently a live outage, not just hygiene.** The pinned digest on
+> `main` is the **1.6.0** value `e76c358a…`, while the global dispatcher that
+> the adapter execs was upgraded estate-wide to **1.6.3** (`55a9db7c…`). The two
+> no longer match, so every Codex `Bash` call in this repo fails closed with
+> `Codex deny floor unavailable: shared dispatcher identity mismatch`. #477
+> fixes the digest; **the `/hooks` re-trust above is what actually restores
+> Codex tool use here.** Claude sessions are unaffected — they ride the global
+> 1.6.3 dispatcher directly, since `.claude/settings.json` declares no
+> `PreToolUse` floor hook.
+>
+> The older note that this repo wires **two** PreToolUse floors at once is now
+> obsolete: `.claude/hooks/*` are canonical CI/audit fixtures, not a runtime
+> hook, and there is exactly one floor per runtime.
 
 **🚨 BLOCKED: AI-15 — Run the headed release session only after agent
 preflight.** The prior 60–90 minute one-sitting guide is withdrawn: stale PRs
