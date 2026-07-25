@@ -50,11 +50,13 @@ the task requires them.
 
 ## Git Workflow
 
-Full details and recovery: `docs/agentic/GIT_WORKFLOW.md`. The deny floor
-(`.claude/hooks/dispatch.py`, tier read from `.claude/tier.json`) blocks only the
-**irreversible**: force-push in all spellings, `rm -rf` outside the project, pipe-to-shell,
-`sudo`, secret-file mutation. Work-loss ops (`reset --hard`, `rebase`, `checkout -- .`) are
-**allowed at T2** (recoverable from origin); the discipline below is convention, not a gate:
+Full details and recovery: `docs/agentic/GIT_WORKFLOW.md`. Claude receives the
+shared global deny floor (`~/.claude/hooks/dispatch.py`, tier read from
+`.claude/tier.json`) exactly once; repo-local `.claude/hooks/*` files are pinned
+CI/audit fixtures. The floor blocks only the **irreversible**: force-push in all
+spellings, `rm -rf` outside the project, pipe-to-shell, `sudo`, secret-file
+mutation. Work-loss ops (`reset --hard`, `rebase`, `checkout -- .`) are **allowed
+at T2** (recoverable from origin); the discipline below is convention, not a gate:
 
 - Update a branch from main with `git merge main` (not rebase); reconcile divergence with
   `git merge origin/<branch>`.

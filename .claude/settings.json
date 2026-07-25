@@ -53,19 +53,6 @@
         ]
       }
     ],
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "shell": "powershell",
-            "command": "python \"$env:CLAUDE_PROJECT_DIR\\.claude\\hooks\\dispatch.py\" --event pre",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
     "PostToolUse": [
       {
         "matcher": "Edit|Write|MultiEdit",

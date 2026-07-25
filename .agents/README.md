@@ -4,10 +4,12 @@ This directory mirrors the Claude `.claude/skills` layer in Codex-native form.
 
 Codex reads `AGENTS.md` as the compact root contract, then uses these workflow files as lazy-loaded procedures when a task needs more detail.
 
-Project-local Codex lifecycle hooks live in `.codex/hooks.json`. They reuse the
-shared session orientation, irreversible-command floor, agentic-change reminder,
-and sanitized failure capture. Codex requires the exact hook definitions to be
-reviewed and trusted through `/hooks` before they run.
+Project-local Codex lifecycle hooks live in `.codex/hooks.json`. Its sole
+`PreToolUse` adapter pins and invokes the same global irreversible-command floor
+Claude receives, with `--runtime codex`; the other handlers provide session
+orientation, agentic-change reminders, and sanitized failure capture. Codex
+requires the exact hook definitions to be reviewed and trusted through `/hooks`
+before they run.
 
 Shared cross-agent protocols live in:
 

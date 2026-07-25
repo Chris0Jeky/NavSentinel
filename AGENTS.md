@@ -169,10 +169,13 @@ Next safe slice: <one concrete action>
 
 ## Git Discipline
 
-See `docs/agentic/GIT_WORKFLOW.md` for recovery details. The shared deny floor
-(`.claude/hooks/dispatch.py`, tier from `.claude/tier.json`) blocks only irreversible operations:
-force-push, `rm -rf` outside the project, pipe-to-shell, `sudo`, and secret-file mutation. At T2,
-work-loss commands remain recoverable from origin but require the discipline below.
+See `docs/agentic/GIT_WORKFLOW.md` for recovery details. The shared irreversible-command floor
+lives at `~/.claude/hooks/dispatch.py` (tier from `.claude/tier.json`): Claude receives it
+globally, and Codex's sole project `PreToolUse` adapter in `.codex/hooks.json` pins the same
+dispatcher with `--runtime codex`. Repo-local `.claude/hooks/*` files are exact CI/audit
+fixtures, not a second active hook. The floor blocks only irreversible operations: force-push,
+`rm -rf` outside the project, pipe-to-shell, `sudo`, and secret-file mutation. At T2, work-loss
+commands remain recoverable from origin but require the discipline below.
 
 - Update from `main` with `git merge main`; reconcile with `git merge origin/<branch>`.
 - Do not amend pushed commits; create a new commit. Never force-push `main`, `master`, `develop`,
