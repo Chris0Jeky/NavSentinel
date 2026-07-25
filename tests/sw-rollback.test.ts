@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EVENT_LOG_KEY, type EventLogEntry } from "../extension/src/shared/storage";
 
 type RuntimeMessage = Record<string, unknown>;
-type RuntimeSender = { tab?: { id?: number }; frameId?: number };
+type RuntimeSender = { tab?: { id?: number; url?: string }; frameId?: number };
 type SendResponse = (response?: unknown) => void;
 
 type _ChromeMock = ReturnType<typeof createChromeMock>;
@@ -265,7 +265,7 @@ describe("service worker rollback gating", () => {
 
     mock.dispatchRuntimeMessage(
       { type: "ns-nav-gesture", ttlMs: 800, url: "https://example.test/origin" },
-      { tab: { id: 11 } }
+      { tab: { id: 11, url: "https://example.test/origin" } }
     );
     vi.setSystemTime(new Date("2026-03-17T12:00:02.200Z"));
     mock.emitBeforeNavigate({
@@ -1168,7 +1168,7 @@ describe("service worker rollback gating", () => {
 
     mock.dispatchRuntimeMessage(
       { type: "ns-nav-gesture", ttlMs: 800, url: "https://example.test/origin" },
-      { tab: { id: 17 } }
+      { tab: { id: 17, url: "https://example.test/origin" } }
     );
     vi.setSystemTime(new Date("2026-03-17T12:00:00.300Z"));
     mock.emitBeforeNavigate({
@@ -1777,7 +1777,7 @@ describe("service worker rollback gating", () => {
     // Establish user nav context via gesture + allowed commit
     mock.dispatchRuntimeMessage(
       { type: "ns-nav-gesture", ttlMs: 1500, url: "https://example.test/origin" },
-      { tab: { id: 70 } }
+      { tab: { id: 70, url: "https://example.test/origin" } }
     );
     mock.emitBeforeNavigate({
       tabId: 70,

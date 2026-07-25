@@ -8,6 +8,7 @@ import {
   clickToastButton,
   dismissOnboarding,
   getGymBaseUrl,
+  getServiceWorker,
   waitForNavSentinelBridge,
   waitForToastMatch,
   waitForToastText
@@ -224,17 +225,25 @@ test("Level 10 delayed form submit prompts @regression", async () => {
       );
       expect(bridgeReady, "Expected bridge to be ready (patches applied)").toBe(true);
 
-      const patchHardened = await page.evaluate(() => {
-        const desc = Object.getOwnPropertyDescriptor(window, "open");
-        return desc ? !desc.writable : false;
+      const patchDescriptors = await page.evaluate(() => {
+        const own = Object.getOwnPropertyDescriptor(window, "open");
+        const proto = Object.getOwnPropertyDescriptor(Window.prototype, "open");
+        return {
+          ownWritable: own?.writable === true,
+          ownConfigurable: own?.configurable === true,
+          protoWritable: proto?.writable === true,
+          protoConfigurable: proto?.configurable === true,
+        };
       });
-      expect(patchHardened, "Expected window.open to be non-writable").toBe(true);
-
-      const protoHardened = await page.evaluate(() => {
-        const desc = Object.getOwnPropertyDescriptor(Window.prototype, "open");
-        return desc ? !desc.writable && !desc.configurable : false;
+      expect(
+        patchDescriptors,
+        "Expected window.open patches to remain wrappable without weakening the runtime gate"
+      ).toEqual({
+        ownWritable: true,
+        ownConfigurable: true,
+        protoWritable: true,
+        protoConfigurable: true,
       });
-      expect(protoHardened, "Expected Window.prototype.open to be non-writable and non-configurable").toBe(true);
 
       await page.click("#submitDelayed");
       await page.waitForTimeout(2600);
@@ -451,6 +460,545 @@ test("RW-06 legit auth popup allows the first window and blocks the second @regr
       await waitForToastText(page, "Blocked popup", 3000);
       await page.waitForTimeout(300);
       expect(context.pages().length).toBe(beforePages + 1);
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("MAIN-world popup intent requires a trusted click, not pointerdown @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/level1-basic-opacity.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+      await waitForNavSentinelBridge(page);
+      await dismissOnboarding(context);
+
+      await page.evaluate((origin) => {
+        const makeButton = (id: string, label: string, left: number) => {
+          const button = document.createElement("button");
+          button.id = id;
+          button.textContent = label;
+          button.style.cssText =
+            `position:fixed;left:${left}px;top:20px;width:180px;height:80px;z-index:2147483647`;
+          document.body.appendChild(button);
+          return button;
+        };
+
+        makeButton("pointerdown-popup", "Pointerdown popup", 20).addEventListener(
+          "pointerdown",
+          () => window.open(
+            `${origin}/level8-oauth-consent.html?source=pointerdown`,
+            "pointerdown-popup",
+            "popup,width=520,height=640"
+          )
+        );
+        makeButton("trusted-click-popup", "Trusted click popup", 220).addEventListener(
+          "click",
+          () => window.open(
+            `${origin}/level8-oauth-consent.html?source=trusted-click`,
+            "trusted-click-popup",
+            "popup,width=520,height=640"
+          )
+        );
+      }, baseUrl);
+
+      const beforePages = context.pages().length;
+      const pointerdownPopup = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
+      const pointerdownButton = page.locator("#pointerdown-popup");
+      const pointerdownBox = await pointerdownButton.boundingBox();
+      expect(pointerdownBox, "Expected the pointerdown fixture button to be visible").toBeTruthy();
+      await page.mouse.move(
+        pointerdownBox!.x + pointerdownBox!.width / 2,
+        pointerdownBox!.y + pointerdownBox!.height / 2
+      );
+      await page.mouse.down();
+      expect(
+        await pointerdownPopup,
+        "A trusted pointerdown without click confirmation must not authorize window.open"
+      ).toBeNull();
+      await page.mouse.up();
+      expect(context.pages()).toHaveLength(beforePages);
+
+      const trustedClickPopup = context.waitForEvent("page", { timeout: 5000 }).catch(() => null);
+      await page.click("#trusted-click-popup");
+      const popup = await trustedClickPopup;
+      expect(popup, "A trusted click must retain the one-popup compatibility path").not.toBeNull();
+      await popup?.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
+      expect(popup?.url()).toContain("source=trusted-click");
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("Navigation Off does not roll back a programmatic cross-site link @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/level1-basic-opacity.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+      await waitForNavSentinelBridge(page);
+
+      const serviceWorker = await getServiceWorker(context);
+      await serviceWorker.evaluate(async () => {
+        const key = "sentinelsuite:settings_v1";
+        const stored = await chrome.storage.local.get(key);
+        const current = (stored[key] ?? {}) as Record<string, unknown>;
+        const nav = (current.nav ?? {}) as Record<string, unknown>;
+        await chrome.storage.local.set({
+          [key]: { ...current, nav: { ...nav, defaultMode: "off" } }
+        });
+      });
+
+      await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
+      await waitForNavSentinelBridge(page);
+      await page.waitForTimeout(5200);
+
+      const destination = new URL("/level2-moving-target.html?navigation-off=1", baseUrl);
+      destination.hostname = destination.hostname === "localhost" ? "127.0.0.1" : "localhost";
+      await page.evaluate((targetUrl) => {
+        const anchor = document.createElement("a");
+        anchor.href = targetUrl;
+        anchor.textContent = "Programmatic Off-mode navigation";
+        document.body.appendChild(anchor);
+        anchor.click();
+      }, destination.href);
+
+      await page.waitForURL(destination.href, { timeout: 5000 });
+      await page.waitForTimeout(2500);
+      await expect(page).toHaveURL(destination.href);
+
+      const pending = await serviceWorker.evaluate(async ({ currentUrl }) => {
+        const tabs = await chrome.tabs.query({});
+        const tab = tabs.find((candidate) => candidate.url === currentUrl);
+        if (typeof tab?.id !== "number") throw new Error("Test tab not found");
+        const key = String(tab.id);
+        const stored = await chrome.storage.session.get([
+          "ns_sw:pendingRollback",
+          "ns_sw:pendingForward"
+        ]);
+        return {
+          rollback: (stored["ns_sw:pendingRollback"] as Record<string, unknown> | undefined)?.[key],
+          forward: (stored["ns_sw:pendingForward"] as Record<string, unknown> | undefined)?.[key]
+        };
+      }, { currentUrl: destination.href });
+      expect(pending).toEqual({ rollback: undefined, forward: undefined });
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("Synthetic pointer and click events cannot mint navigation allowances @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/level1-basic-opacity.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+      await waitForNavSentinelBridge(page);
+
+      const serviceWorker = await getServiceWorker(context);
+      const originalUrl = page.url();
+      const beforePages = context.pages().length;
+      const allowanceMonitor = serviceWorker.evaluate(async ({ currentUrl, durationMs }) => {
+        const tabs = await chrome.tabs.query({});
+        const tab = tabs.find((candidate) => candidate.url === currentUrl);
+        if (typeof tab?.id !== "number") throw new Error("Test tab not found");
+        const key = String(tab.id);
+        const deadline = Date.now() + durationMs;
+        while (Date.now() < deadline) {
+          const stored = await chrome.storage.session.get([
+            "ns_sw:gestureUntil",
+            "ns_sw:allowUntil",
+            "ns_sw:allowTarget"
+          ]);
+          const gesture = !!(stored["ns_sw:gestureUntil"] as Record<string, unknown> | undefined)?.[key];
+          const broad = !!(stored["ns_sw:allowUntil"] as Record<string, unknown> | undefined)?.[key];
+          const target = !!(stored["ns_sw:allowTarget"] as Record<string, unknown> | undefined)?.[key];
+          if (gesture || broad || target) return true;
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+        return false;
+      }, { currentUrl: page.url(), durationMs: 1500 });
+
+      const trust = await page.evaluate(() => {
+        const button = document.createElement("button");
+        button.textContent = "Synthetic navigation trigger";
+        document.body.appendChild(button);
+
+        const pointer = new PointerEvent("pointerdown", {
+          bubbles: true,
+          button: 0,
+          ctrlKey: true
+        });
+        const click = new MouseEvent("click", {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+          ctrlKey: true
+        });
+        button.dispatchEvent(pointer);
+        button.dispatchEvent(click);
+
+        // A same-tab anchor is the exact-target path. Prevent its default action
+        // after the extension's capture listener so a vulnerable allowance stays
+        // observable in session state instead of being consumed by a commit.
+        const anchor = document.createElement("a");
+        anchor.href = `${location.origin}/synthetic-target?token=fixture#fragment`;
+        anchor.textContent = "Synthetic exact target";
+        anchor.addEventListener("click", (event) => event.preventDefault());
+        document.body.appendChild(anchor);
+        anchor.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+        return { pointer: pointer.isTrusted, click: click.isTrusted };
+      });
+      expect(trust).toEqual({ pointer: false, click: false });
+
+      // Probe across the whole allowance window instead of assuming MessagePort
+      // delivery completes within one fixed delay. On vulnerable code, any probe
+      // can spend the synthetic broad MAIN-world allowance.
+      const anyOpenSucceeded = await page.evaluate(async () => {
+        const deadline = Date.now() + 1000;
+        while (Date.now() < deadline) {
+          const opened = window.open("https://synthetic-popup.test/", "_blank");
+          if (opened !== null) {
+            opened.close();
+            return true;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+        return false;
+      });
+      expect(anyOpenSucceeded).toBe(false);
+      expect(context.pages()).toHaveLength(beforePages);
+      expect(await allowanceMonitor).toBe(false);
+
+      // Native anchor activation is a separate path from window.open. An
+      // off-screen synthetic _blank click must not enter the benign-anchor
+      // exemption and escape before the service worker can roll it back.
+      const syntheticAnchorPopup = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
+      await page.evaluate(() => {
+        const anchor = document.createElement("a");
+        anchor.href = `${location.origin}/synthetic-blank?token=fixture`;
+        anchor.target = "_blank";
+        anchor.textContent = "Synthetic hidden anchor";
+        anchor.style.cssText = "position:fixed;left:-9999px;top:-9999px";
+        document.body.appendChild(anchor);
+        anchor.click();
+      });
+      expect(await syntheticAnchorPopup, "Expected the synthetic anchor new tab to be blocked").toBeNull();
+      expect(context.pages()).toHaveLength(beforePages);
+
+      // A plain synthetic click previously minted the MAIN-world redirect
+      // window even without opening a popup. Give a vulnerable bridge message
+      // time to arrive, then prove Location.assign remains blocked.
+      await page.evaluate(() => {
+        const button = document.createElement("button");
+        button.textContent = "Synthetic redirect trigger";
+        document.body.appendChild(button);
+        button.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      });
+      await page.waitForTimeout(100);
+      const redirectTarget = `${baseUrl}/level2-moving-target.html?synthetic=1`;
+      const redirectObserved = page
+        .waitForURL(redirectTarget, { timeout: 1000 })
+        .then(() => true)
+        .catch(() => false);
+      // Exercise the hardened prototype path directly. Normal Location
+      // instance-method coverage is the separate, tracked #458 seam.
+      await page.evaluate((url) => Location.prototype.assign.call(location, url), redirectTarget);
+      expect(await redirectObserved).toBe(false);
+      await expect(page).toHaveURL(originalUrl);
+
+      // A durable user allowlist may permit a destination, but a page-script
+      // click is still not a user navigation decision and must not pollute the
+      // review/tuning corpus as nav_silent_allow.
+      const siteKey = new URL(originalUrl).hostname;
+      await serviceWorker.evaluate(
+        async ({ allowlistKey, eventLogKey, site, destination }) => {
+          await chrome.storage.local.set({
+            [allowlistKey]: { [site]: [destination] },
+            [eventLogKey]: []
+          });
+        },
+        {
+          allowlistKey: "sentinelsuite:nav_allowlist_v1",
+          eventLogKey: "sentinelsuite:event_log_v1",
+          site: siteKey,
+          destination: siteKey
+        }
+      );
+      await page.waitForTimeout(100);
+      await page.evaluate(() => {
+        const anchor = document.createElement("a");
+        anchor.href = `${location.origin}/synthetic-allowlisted?token=fixture`;
+        anchor.target = "_blank";
+        anchor.textContent = "Synthetic allowlisted anchor";
+        anchor.addEventListener("click", (event) => event.preventDefault());
+        document.body.appendChild(anchor);
+        anchor.click();
+      });
+      const untrustedSilentAllows = await serviceWorker.evaluate(async ({ eventLogKey }) => {
+        const deadline = Date.now() + 1000;
+        while (Date.now() < deadline) {
+          const stored = await chrome.storage.local.get(eventLogKey);
+          const events = Array.isArray(stored[eventLogKey]) ? stored[eventLogKey] : [];
+          const matches = events.filter((entry: { kind?: unknown }) => entry?.kind === "nav_silent_allow");
+          if (matches.length > 0) return matches.length;
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+        return 0;
+      }, { eventLogKey: "sentinelsuite:event_log_v1" });
+      expect(untrustedSilentAllows).toBe(0);
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("Trusted pointerdown alone cannot authorize delayed synthetic same-tab navigation @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/level1-basic-opacity.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+      await waitForNavSentinelBridge(page);
+
+      // A Playwright page.goto can establish the service worker's short typed-
+      // origin context. Let that independent allowance expire so this mutation
+      // isolates authority created by the later pointerdown.
+      await page.waitForTimeout(5200);
+
+      const originalUrl = page.url();
+      const destination = new URL("/level2-moving-target.html?trusted-down-synthetic=1", baseUrl);
+      destination.hostname = destination.hostname === "localhost" ? "127.0.0.1" : "localhost";
+      const serviceWorker = await getServiceWorker(context);
+      const trustSignals: string[] = [];
+      const trustMarker = "NS_TEST_POINTERDOWN_AUTHORITY";
+      page.on("console", (message) => {
+        if (message.text().startsWith(trustMarker)) trustSignals.push(message.text());
+      });
+
+      await page.evaluate(({ targetUrl, marker }) => {
+        const anchor = document.createElement("a");
+        anchor.href = targetUrl;
+        anchor.textContent = "Delayed synthetic cross-site navigation";
+        anchor.style.cssText = "position:fixed;left:-9999px;top:-9999px";
+        anchor.addEventListener("click", (event) => {
+          console.log(`${marker} click ${event.isTrusted}`);
+        });
+        document.body.appendChild(anchor);
+
+        const button = document.createElement("button");
+        button.id = "trusted-pointerdown-only";
+        button.textContent = "Trusted pointerdown only";
+        button.style.cssText =
+          "position:fixed;left:0;top:0;width:160px;height:120px;z-index:2147483647";
+        button.addEventListener(
+          "pointerdown",
+          (event) => {
+            console.log(`${marker} pointerdown ${event.isTrusted}`);
+            window.setTimeout(() => anchor.click(), 150);
+          },
+          { once: true }
+        );
+        document.body.appendChild(button);
+      }, { targetUrl: destination.href, marker: trustMarker });
+
+      const button = page.locator("#trusted-pointerdown-only");
+      const box = await button.boundingBox();
+      expect(box, "Expected the trusted-pointerdown fixture button to be visible").toBeTruthy();
+      await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+      await page.mouse.down();
+
+      await expect.poll(() => trustSignals, { timeout: 1000 }).toContain(
+        `${trustMarker} pointerdown true`
+      );
+      const pointerdownMintedAuthority = await serviceWorker.evaluate(async ({ currentUrl }) => {
+        const tabs = await chrome.tabs.query({});
+        const tab = tabs.find((candidate) => candidate.url === currentUrl);
+        if (typeof tab?.id !== "number") throw new Error("Test tab not found");
+        const key = String(tab.id);
+        const deadline = Date.now() + 100;
+        while (Date.now() < deadline) {
+          const stored = await chrome.storage.session.get([
+            "ns_sw:gestureUntil",
+            "ns_sw:allowUntil",
+            "ns_sw:allowTarget"
+          ]);
+          const gesture = !!(stored["ns_sw:gestureUntil"] as Record<string, unknown> | undefined)?.[key];
+          const broad = !!(stored["ns_sw:allowUntil"] as Record<string, unknown> | undefined)?.[key];
+          const target = !!(stored["ns_sw:allowTarget"] as Record<string, unknown> | undefined)?.[key];
+          if (gesture || broad || target) return true;
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+        return false;
+      }, { currentUrl: originalUrl });
+      expect(pointerdownMintedAuthority).toBe(false);
+
+      await expect.poll(() => trustSignals, { timeout: 1000 }).toContain(
+        `${trustMarker} click false`
+      );
+      await page.waitForTimeout(2500);
+      await expect(page).toHaveURL(originalUrl);
+      await page.mouse.up();
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("Trusted child-frame pointerdown preserves top rollback without authority @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/level1-basic-opacity.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+      await waitForNavSentinelBridge(page);
+
+      // Let Playwright's independent typed-origin allowance expire. Deterministic
+      // missing-baseline and stale-after-commit ordering live in the SW integration
+      // tests; this Chromium control validates real frame provenance and rollback.
+      await page.waitForTimeout(5200);
+
+      const originalUrl = page.url();
+      const destination = new URL("/level2-moving-target.html?child-frame-pointerdown=1", baseUrl);
+      destination.hostname = destination.hostname === "localhost" ? "127.0.0.1" : "localhost";
+      const marker = "NS_TEST_CHILD_POINTERDOWN_CONTEXT";
+      const trustSignals: string[] = [];
+      page.on("console", (message) => {
+        if (message.text().startsWith(marker)) trustSignals.push(message.text());
+      });
+
+      const frameUrl = `${baseUrl}/level2-moving-target.html?navsentinel-child-frame=1`;
+      await page.evaluate((src) => {
+        const frame = document.createElement("iframe");
+        frame.id = "navsentinel-child-frame";
+        frame.src = src;
+        frame.style.cssText = "position:fixed;left:0;top:0;width:320px;height:220px;z-index:2147483647";
+        document.body.appendChild(frame);
+      }, frameUrl);
+
+      const child = page.frames().find((frame) => frame.url() === frameUrl) ??
+        await page.waitForEvent("framenavigated", {
+          predicate: (frame) => frame.url() === frameUrl,
+          timeout: 10_000
+        });
+      await child.waitForFunction(
+        () =>
+          document.documentElement.getAttribute("data-navsentinel-capture-ready") === "1" &&
+          document.documentElement.getAttribute("data-navsentinel-bridge-ready") === "1"
+      );
+
+      await child.evaluate(({ targetUrl, consoleMarker }) => {
+        const button = document.createElement("button");
+        button.id = "child-pointerdown-navigation";
+        button.textContent = "Child-frame pointerdown navigation";
+        button.style.cssText = "position:fixed;left:0;top:0;width:260px;height:160px;z-index:2147483647";
+        button.addEventListener(
+          "pointerdown",
+          (event) => {
+            console.log(`${consoleMarker} pointerdown ${event.isTrusted}`);
+            window.top!.location.href = targetUrl;
+          },
+          { once: true }
+        );
+        document.body.appendChild(button);
+      }, { targetUrl: destination.href, consoleMarker: marker });
+
+      const button = child.locator("#child-pointerdown-navigation");
+      const box = await button.boundingBox();
+      expect(box, "Expected the child-frame pointerdown button to be visible").toBeTruthy();
+      await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+      await page.mouse.down();
+
+      await expect.poll(() => trustSignals, { timeout: 1000 }).toContain(
+        `${marker} pointerdown true`
+      );
+      await page.waitForTimeout(2500);
+      await expect(page).toHaveURL(originalUrl);
+      await page.mouse.up();
     } finally {
       await context.close();
     }
@@ -957,7 +1505,24 @@ test("Level 6 blocks programmatic click new tab @regression", async () => {
       });
 
       await waitForNavSentinelBridge(page);
+      const beforePages = context.pages().length;
+      const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
       await page.click("#real");
+      const popup = await popupPromise;
+      expect(popup, "Expected the programmatic new tab to be blocked").toBeNull();
+      expect(context.pages()).toHaveLength(beforePages);
+      await waitForToastText(page, "Blocked new tab", 3000);
+
+      // A synthetic hidden-anchor click must not inherit Ctrl/middle-click
+      // authority from the real button's preceding trusted pointerdown.
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await waitForNavSentinelBridge(page);
+      const modifierBeforePages = context.pages().length;
+      const modifierPopupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
+      await page.click("#real", { modifiers: ["Control"] });
+      const modifierPopup = await modifierPopupPromise;
+      expect(modifierPopup, "Expected the modifier-seeded programmatic new tab to be blocked").toBeNull();
+      expect(context.pages()).toHaveLength(modifierBeforePages);
       await waitForToastText(page, "Blocked new tab", 3000);
     } finally {
       await context.close();

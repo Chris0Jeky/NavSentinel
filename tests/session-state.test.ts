@@ -764,7 +764,7 @@ describe("SW integration: state persistence through session storage", () => {
   // This group tests the actual sw.ts module's interaction with session storage
 
   type RuntimeMessage = Record<string, unknown>;
-  type RuntimeSender = { tab?: { id?: number }; frameId?: number };
+  type RuntimeSender = { tab?: { id?: number; url?: string }; frameId?: number };
   type SendResponse = (response?: unknown) => void;
 
   function createEvent<T extends (...args: never[]) => void>() {
@@ -813,6 +813,20 @@ describe("SW integration: state persistence through session storage", () => {
     }> = [];
 
     const sessionStore: Record<string, unknown> = {};
+    const tabUrls = new Map<number, string>();
+    const pendingTabGets: Array<{
+      tabId: number;
+      resolve: (tab: { id: number; url?: string }) => void;
+    }> = [];
+    let deferTabGets = false;
+    const tabsGet = vi.fn((tabId: number) => {
+      if (!deferTabGets) {
+        return Promise.resolve({ id: tabId, url: tabUrls.get(tabId) });
+      }
+      return new Promise<{ id: number; url?: string }>((resolve) => {
+        pendingTabGets.push({ tabId, resolve });
+      });
+    });
 
     return {
       chrome: {
@@ -869,6 +883,7 @@ describe("SW integration: state persistence through session storage", () => {
           onCreated: tabCreated,
           onRemoved: tabRemoved,
           onUpdated: tabUpdated,
+          get: tabsGet,
           sendMessage: vi.fn(
             (
               tabId: number,
@@ -890,6 +905,25 @@ describe("SW integration: state persistence through session storage", () => {
         },
       },
       sessionStore,
+      setTabUrl(tabId: number, url: string) {
+        tabUrls.set(tabId, url);
+      },
+      deferTabGets() {
+        deferTabGets = true;
+      },
+      resolveNextTabGet(url?: string) {
+        const pending = pendingTabGets.shift();
+        if (!pending) throw new Error("No pending tabs.get call");
+        const resolvedUrl = url ?? tabUrls.get(pending.tabId);
+        pending.resolve({
+          id: pending.tabId,
+          ...(resolvedUrl !== undefined ? { url: resolvedUrl } : {}),
+        });
+      },
+      get pendingTabGetCount() {
+        return pendingTabGets.length;
+      },
+      tabsGet,
       emitBeforeNavigate(details: { tabId: number; frameId: number; url: string }) {
         beforeNavigate.emit(details);
       },
@@ -900,6 +934,7 @@ describe("SW integration: state persistence through session storage", () => {
         transitionType: string;
         transitionQualifiers?: string[];
       }) {
+        if (details.frameId === 0) tabUrls.set(details.tabId, details.url);
         committed.emit(details);
       },
       emitErrorOccurred(details: { tabId: number; frameId: number; url?: string }) {
@@ -951,8 +986,8 @@ describe("SW integration: state persistence through session storage", () => {
     await flushAsync();
 
     mock.dispatchRuntimeMessage(
-      { type: "ns-nav-gesture", ttlMs: 1200 },
-      { tab: { id: 7 } },
+      { type: "ns-nav-gesture", ttlMs: 1200, url: "https://frame.test/child" },
+      { tab: { id: 7, url: "https://top.test/page" }, frameId: 3 },
     );
     await flushAsync();
 
@@ -960,6 +995,144 @@ describe("SW integration: state persistence through session storage", () => {
     expect(stored).toBeDefined();
     expect(stored["7"]).toBeDefined();
     expect(typeof stored["7"]).toBe("number");
+    expect(mock.sessionStore["ns_sw:lastUrl"]).toEqual({ "7": "https://top.test/page" });
+  });
+
+  it("persists nav context without minting navigation authority", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+    await flushAsync();
+
+    mock.setTabUrl(9, "https://origin.test/page");
+    mock.dispatchRuntimeMessage(
+      { type: "ns-nav-context", url: "https://spoofed.test/" },
+      { tab: { id: 9, url: "https://origin.test/page" }, frameId: 0 },
+    );
+    await flushAsync();
+
+    expect(mock.sessionStore["ns_sw:lastUrl"]).toEqual({ "9": "https://origin.test/page" });
+    expect(mock.sessionStore["ns_sw:gestureUntil"]).toBeUndefined();
+    expect(mock.sessionStore["ns_sw:allowUntil"]).toBeUndefined();
+    expect(mock.sessionStore["ns_sw:allowTarget"]).toBeUndefined();
+    expect(mock.sessionStore["ns_sw:userNavContextUntil"]).toBeUndefined();
+
+    mock.setTabUrl(9, "https://origin.test/spa-route");
+    mock.dispatchRuntimeMessage(
+      { type: "ns-nav-context" },
+      { tab: { id: 9, url: "https://origin.test/spa-route" }, frameId: 0 },
+    );
+    await flushAsync();
+    expect(mock.sessionStore["ns_sw:lastUrl"]).toEqual({
+      "9": "https://origin.test/spa-route",
+    });
+
+    mock.setTabUrl(10, "https://top.test/");
+    mock.dispatchRuntimeMessage(
+      { type: "ns-nav-context", url: "https://child-spoofed.test/" },
+      { tab: { id: 10, url: "https://top.test/" }, frameId: 2 },
+    );
+    await flushAsync();
+    expect(mock.sessionStore["ns_sw:lastUrl"]).toEqual({
+      "9": "https://origin.test/spa-route",
+      "10": "https://top.test/",
+    });
+    expect(mock.sessionStore["ns_sw:gestureUntil"]).toBeUndefined();
+    expect(mock.sessionStore["ns_sw:allowUntil"]).toBeUndefined();
+    expect(mock.sessionStore["ns_sw:allowTarget"]).toBeUndefined();
+    expect(mock.sessionStore["ns_sw:userNavContextUntil"]).toBeUndefined();
+  });
+
+  it("does not let a stale nav context rewind a newer top-frame commit", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+    await flushAsync();
+
+    mock.emitCommitted({
+      tabId: 12,
+      frameId: 0,
+      url: "https://newer.test/page",
+      transitionType: "typed",
+    });
+    mock.dispatchRuntimeMessage(
+      { type: "ns-nav-context" },
+      { tab: { id: 12, url: "https://stale.test/page" }, frameId: 3 },
+    );
+    await flushAsync();
+
+    expect(mock.sessionStore["ns_sw:lastUrl"]).toEqual({ "12": "https://newer.test/page" });
+  });
+
+  it("rechecks the live tab when a top commit lands during nav-context validation", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+    await flushAsync();
+
+    mock.emitCommitted({
+      tabId: 13,
+      frameId: 0,
+      url: "https://source.test/older-route",
+      transitionType: "typed",
+    });
+    mock.setTabUrl(13, "https://source.test/page");
+    mock.deferTabGets();
+    mock.dispatchRuntimeMessage(
+      { type: "ns-nav-context" },
+      { tab: { id: 13, url: "https://source.test/page" }, frameId: 4 },
+    );
+    expect(mock.pendingTabGetCount).toBe(1);
+
+    mock.emitCommitted({
+      tabId: 13,
+      frameId: 0,
+      url: "https://newer.test/page",
+      transitionType: "typed",
+    });
+    mock.resolveNextTabGet("https://source.test/page");
+    await flushAsync();
+    expect(mock.pendingTabGetCount).toBe(1);
+
+    mock.resolveNextTabGet();
+    await flushAsync();
+
+    expect(mock.tabsGet).toHaveBeenCalledTimes(2);
+    expect(mock.sessionStore["ns_sw:lastUrl"]).toEqual({ "13": "https://newer.test/page" });
+  });
+
+  it("seeds a missing child-frame baseline before an immediate top commit", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+    await flushAsync();
+
+    mock.dispatchRuntimeMessage(
+      { type: "ns-nav-context" },
+      { tab: { id: 14, url: "https://source.test/page" }, frameId: 5 },
+    );
+    mock.emitCommitted({
+      tabId: 14,
+      frameId: 0,
+      url: "https://destination.test/page",
+      transitionType: "link",
+    });
+    await flushAsync();
+
+    expect(mock.tabsGet).not.toHaveBeenCalled();
+    expect(mock.sessionStore["ns_sw:lastUrl"]).toEqual({
+      "14": "https://destination.test/page",
+    });
+    expect(mock.sessionStore["ns_sw:pendingRollback"]).toEqual({
+      "14": {
+        url: "https://destination.test/page",
+        prevUrl: "https://source.test/page",
+        qualifiers: [],
+      },
+    });
+    expect(mock.sessionStore["ns_sw:pendingForward"]).toEqual({
+      "14": { url: "https://destination.test/page", ts: Date.now() },
+    });
   });
 
   it("persists allow-nav state to session storage", async () => {
