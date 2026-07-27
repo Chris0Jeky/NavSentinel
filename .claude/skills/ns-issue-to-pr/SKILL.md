@@ -48,13 +48,8 @@ Only update roadmap, docs, or agent index when their truth changed.
 
 ### 6. Review Follow-Through
 
-If the PR was reviewed (by self or another agent):
-
-- Read existing PR comments and address any unresolved feedback before adding new findings.
-- Fix every finding — both from your review and from existing unaddressed PR comments, regardless of severity tier.
-- If a finding is genuinely out of scope, seed a follow-up: GitHub issue, roadmap entry, or failure ledger entry.
-- Post all findings as a PR comment using `gh pr comment` (unless the user says otherwise).
-- Do not merge or hand off with unaddressed findings.
+Not restated here — run the `review-and-ship` skill (global laws 2 and 11). NavSentinel is T2:
+merge on green proving checks at the reviewed head plus one triage pass over every comment.
 
 ### 7. Handoff
 

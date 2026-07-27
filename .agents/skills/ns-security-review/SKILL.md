@@ -12,6 +12,6 @@ Checklist: no unapproved runtime network calls, no password value storage, bridg
 
 Verify with the smallest relevant checks: `npm run typecheck`, `npm run test`, `npm run build`, and targeted E2E for browser-only attack paths.
 
-When reviewing a PR: read existing PR comments and address any unresolved feedback first. Post all findings as a PR comment using `gh pr comment` (unless the user says otherwise). Fix every finding — both from your review and from existing unaddressed PR comments. If genuinely out of scope, seed a follow-up (GitHub issue, roadmap entry, or failure ledger entry). No tech debt accrual from reviews.
+The review pipeline is not restated here: it lives in global law 2 (`~/.claude/CLAUDE.md`) and `AGENTS.md`. This skill supplies the security *lens*; the pipeline decides what is fixed versus tracked.
 
-Output a short security assessment, threats mitigated or left open, tests run or added, and all findings addressed or seeded as follow-ups.
+Output a short security assessment, threats mitigated or left open, tests run or added, and how findings were triaged.

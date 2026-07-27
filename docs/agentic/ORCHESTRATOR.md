@@ -17,7 +17,7 @@
 3. **Implement** in small, incremental commits — one concern per commit. Keep nav-guard / credential-guard / SW / UI concerns separate.
 4. **Verify** with the narrowest sufficient lane: `npm run typecheck`, `npm run lint`, `npm run test`; add E2E/Gym/corpus only when the seam needs it.
 5. **Open PR** with a factual summary, verification evidence, and residual risk.
-6. **Review Gate** — two *independent* adversarial review rounds (see below). Address **every** finding of all severities. Address all bot comments.
+6. **Review Gate** — per `AGENTS.md` → the global laws; not restated here.
 7. **Docs sync** — roadmap/index/ledger only when truth changed.
 8. **Log** the cycle outcome below, update Backlog statuses, then pick the next slice.
 
@@ -32,19 +32,19 @@
 
 **Discovery is milestone-gated:** no new discovery passes until after the next release milestone; LOW residue goes to the icebox, not the active backlog. When rungs 1-5 are genuinely empty, **escalate to the maintainer (session-end handoff) rather than manufacturing a discovery pass.**
 
-## PR & Merge Gates (from CLAUDE.md)
+## PR & Merge Gates
 
-- **Gate 1:** Two independent adversarial review rounds; all findings fixed between/after rounds.
-- **Gate 2:** CI green — typecheck, lint, build, unit, E2E. No new failures.
-- **Gate 3:** Manual/behavioral verification where applicable.
-- **Gate 4:** Zero tech debt — no TODO without a linked issue, no undocumented workaround, no skipped tests.
-- **Gate 5:** Docs sync.
+Not restated here. One home: the twelve global laws in `~/.claude/CLAUDE.md` plus the tier table
+in agent-harness `BLUEPRINT.md` §1, summarized for this repo in `AGENTS.md`. NavSentinel is
+**T2 — merge free**: green proving checks at the reviewed head plus one triage pass over every
+comment. The two repo-specific facts an orchestrator still needs:
 
-### Merge timing rule
+- **Gate-3 manual Chrome verification** holds *browser-surface* PRs only, and is human-owned
+  (`ACTION_ITEMS.md`). Non-browser PRs merge without it.
+- **Stacked PRs merge oldest/bottom first** (global law 4), never the newest first.
 
-- **Never merge the newest open PR.** Let it age.
-- A PR may be considered for merge once it is roughly **3 PRs old**, has passed both adversarial rounds, has all bot comments addressed, and some time has elapsed since opening.
-- Stacked PRs merge bottom-up (parent before child).
+There is no PR-aging rule and no round-per-push rule: a PR is merged when its gate is met, not
+when it is old enough.
 
 ### Stacked branch policy
 
