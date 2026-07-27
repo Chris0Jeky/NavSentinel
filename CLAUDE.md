@@ -33,8 +33,8 @@ Do not bulk-read `node_modules/`, `extension/dist/`, `dist/`, `test-results/`, `
 | one unit seam | `npx vitest run tests/<name>.test.ts` — 97 spec files; scope it rather than `npm test` |
 | shared / content / SW logic | `npm test` |
 | manifest, SW imports, bundling | `npm run build` (chains `check:mv3-worker`) |
-| MAIN-world guard, bridge, detections | `npm run build`, then `npm run test:e2e:smoke` |
-| SW lifecycle / rollback | `npm run test:e2e:rollback` |
+| MAIN-world guard, bridge, detections | `npm run build`, then `npm run test:e2e` (not `:smoke` alone — 4 tests) |
+| SW lifecycle / rollback | `npm run build`, then `npm run test:e2e:rollback` |
 | reputation / corpus data | `npm run check:topsites`, `npm run build:bloom:test`, `npm run check:bloom-size` |
 | perf-sensitive paths | `npm run build && npm run check:perf-budget` |
 | version or manifest bumps | `npm run verify:versions` |
@@ -44,8 +44,12 @@ Do not bulk-read `node_modules/`, `extension/dist/`, `dist/`, `test-results/`, `
 `.github/workflows/ci.yml` runs three jobs per PR — **harness** (Ubuntu + Windows: hooks smoke,
 skill parity), **build-and-unit** (verify:versions → lint → typecheck → unit → topsites → bloom
 build/size → build → perf-budget → package), **e2e** (xvfb + `npm run test:e2e`) — plus a
-tag-only **release** job. Reproduce that order locally. E2E needs a build first; `npm run
-gym:serve` hosts the fixture pages on :5173.
+tag-only **release** job. Reproduce that order locally. Every e2e lane needs a build first — the
+specs `test.skip` when `extension/dist/` is absent, so an unbuilt lane reports green having run
+nothing. `playwright.config.ts` declares only the `smoke` (4 tests) and `regression` (the
+guard/detection body) projects, so the 22 `@phase2` cases in
+`tests/e2e/phase2-detections.spec.ts` are selected by no lane, and a CLI `--grep` is ANDed with
+the project grep rather than replacing it. `npm run gym:serve` hosts the fixture pages on :5173.
 
 ## Repo pitfalls
 
