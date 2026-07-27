@@ -51,7 +51,7 @@ Claude-specific strengths:
 
 Codex should use:
 
-- `AGENTS.md` as the compact root contract.
+- `CLAUDE.md` as the shared repo canon, plus `AGENTS.md` as the Codex delta over it.
 - `.agents/skills/*/SKILL.md` for Codex-native workflows.
 - `update_plan` for multi-step execution tracking.
 - parallel native reads/searches when the active Codex surface exposes them.

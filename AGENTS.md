@@ -1,177 +1,79 @@
-# Codex Operating Contract — NavSentinel
+# NavSentinel — Codex contract (delta over CLAUDE.md)
 
-Tier: daily driver (T2) — authority: push free / merge free.
-*(Derived from `.claude/tier.json`; do not hand-edit the tier line.)*
+**Read `CLAUDE.md` first.** It is this repo's shared canon: what NavSentinel is, the first
+actions, the proving-check table per change class, the CI job order, the repo pitfalls, the
+Gate-3 rule, the skill list, and the settings/hook layout. None of that is repeated here — this
+file carries only what differs for Codex, because duplicating it is what grew this file to 177
+lines and let it drift.
 
-Compact Codex contract for `NavSentinel/`. Repeatable procedures belong in
-`.agents/skills/*/SKILL.md`, `docs/agentic/*`, and `autodoc/*`.
+Tier: **T2 daily driver** — push free / merge free (`.agent-harness/tier.json`; do not hand-edit
+the tier line).
 
-## Global Laws (one home, not restated here)
+## Global laws (one home)
 
-The twelve global laws live in `~/.claude/CLAUDE.md`, with the tier ladder and the review /
-merge gate table in the sibling agent-harness checkout's `BLUEPRINT.md` §1. Read them there —
-this file previously carried a mirror, which drifted and is deleted (agent-harness #101). Codex
-sessions: open both files at session start; they are plain Markdown on disk.
+The twelve global laws live in `~/.claude/CLAUDE.md`, and the tier ladder in the sibling
+agent-harness checkout's `BLUEPRINT.md` §1. Both are plain Markdown on disk. Claude receives them
+automatically; **Codex does not** — open both at session start. They are not mirrored here
+(agent-harness #101 deleted the mirror that had drifted).
 
-NavSentinel's tier row: **T2 daily driver — push free, merge free.** Merge on green checks at
-the reviewed head plus one triage pass over every comment (bots included). One review round,
-one bounded fix round, then ship or park; no independent review round is owed at T2, and
-review rounds do not expire with PR age.
-
-Commit small, logical increments as work proceeds. Start inline; use a small number of agents
-only when the prompt or an applicable skill requests delegation, the work is disjoint, or an
-independent lens materially helps. Do not add `Co-Authored-By` or generated-by trailers.
-
-## Authority Order
+## Authority order
 
 1. User prompt for the current turn.
-2. This file — Codex-specific operating rules and repo protocols.
-3. `docs/Project_Roadmap.md` — active phase status, priorities, and gates.
-4. `autodoc/AGENT_INDEX.md` — code seams, invariants, and verification.
-5. Relevant `.agents/skills/*/SKILL.md` workflow.
-6. Deeper docs, archives, generated artifacts, and historical material only when needed.
+2. `CLAUDE.md` (shared repo canon), then this file for Codex-specific rules.
+3. `docs/Project_Roadmap.md` — active phase, priorities, gates.
+4. `autodoc/AGENT_INDEX.md` — code seams, invariants, verification.
+5. The relevant `.agents/skills/*/SKILL.md`.
+6. Deeper docs, archives, and generated artifacts only when the task needs them.
 
-When sources conflict, follow the higher source and report the conflict.
+On conflict, follow the higher source and report the conflict. For autonomous-loop resumption
+also read `docs/agentic/HANDOFF.md` and `docs/agentic/ORCHESTRATOR.md`.
 
-**Standing direction (2026-07-03):** ship/measure, not hardening. Follow the
-Priority Ladder and posture in `docs/agentic/DECISIONS.md`: discovery is
-milestone-gated (LOW residue → `docs/agentic/ICEBOX.md`), human-gated PRs are
-capped at 3, and browser surface is defined by runtime blast radius rather than
-file type.
-
-## First 5 Minutes
-
-1. Read `ACTION_ITEMS.md`; surface every current OPEN or BLOCKED item in summaries. Clear an
-   item only after Chris explicitly confirms it.
-2. Read this file, `CLAUDE.md`, `docs/Project_Roadmap.md`, and `autodoc/AGENT_INDEX.md`.
-3. For autonomous-loop resumption, also read `docs/agentic/HANDOFF.md` and
-   `docs/agentic/ORCHESTRATOR.md`.
-4. Select one primary skill and at most one support skill.
-5. Identify the smallest safe, reviewable change and state blockers, assumptions, verification,
-   and docs-sync targets before editing.
-
-Do not bulk-read `node_modules`, generated output, archives, research dumps, or prior artifacts
-unless the task requires them.
-
-## Codex Tooling And Settings
+## Codex tooling
 
 - Search with `rg` / `rg --files`; parallelize independent reads or searches when the active
-  Codex surface exposes a safe native facility.
-- Use `update_plan` for multi-step work, `apply_patch` for manual edits, and shell commands for
-  concrete verification. Use browser tooling for browser-only behavior when available.
-- Use the active docs integration or official sources for unstable framework, API, or product
-  facts. Do not claim an MCP or connector is live unless it was verified in this runtime.
-- Project-local hooks live in `.codex/hooks.json`. They load only after the project is trusted;
-  inspect and trust each exact definition with `/hooks`. A changed definition must be trusted
-  again. The hooks run the shared irreversible-command floor, session orientation, agentic-change
-  reminder, and sanitized failure capture; they do not inherit Claude's settings or permissions.
-- `.mcp.json` is credential-free project configuration. Use only tools actually exposed in the
-  active Codex session.
-- After changing agentic tooling, run `npm run agent:hooks:smoke` and
-  `npm run agent:skills:validate` before handoff.
+  surface exposes a safe native facility.
+- `update_plan` for multi-step work, `apply_patch` for edits, shell commands for verification,
+  browser tooling for browser-only behavior when available.
+- Project hooks are `.codex/hooks.json`. They load only after the project is trusted — inspect
+  and trust each exact definition with `/hooks`, and re-trust after any change (trust is
+  definition-hash based). The sole `PreToolUse` adapter pins the global
+  `~/.claude/hooks/dispatch.py` with `--runtime codex`; Codex inherits none of Claude's settings
+  or permissions. Do not edit the floor, its pins, or `.claude/hooks/*`.
+- `.mcp.json` is credential-free project config. Use only the tools actually exposed in this
+  session; never claim a connector or MCP server is live unless it was verified in this runtime.
+## Skills (`.agents/skills/`)
 
-## Default Work Style And Security
+The same `ns-*` set as Claude, minus `ns-claude-tooling` and plus `ns-codex-tooling`. Keep
+matching workflow names aligned but implement each in its runtime's native tools —
+`scripts/agent_hooks/validate_skills.py` (`npm run agent:skills:validate`) fails on name drift, so
+add or rename in both trees. Policy: `docs/agentic/TOOLING_PARITY.md`.
 
-- Prefer narrow diffs; preserve behavior unless the request changes it.
-- Keep extension behavior local-first: no runtime network calls, telemetry, credential
-  exfiltration, or password-value storage.
-- Do not mix navigation-guard, credential-guard, service-worker, and UI work in one slice unless
-  the seam requires it. Do not edit `extension/dist/`.
-- For MV3 work, persist short-lived critical state in `chrome.storage.session` where appropriate;
-  make MAIN-world patches narrow and bridge-validated; run content scripts in all required frames.
-- Classify every failure as blocker, non-blocking risk, pre-existing noise, or invalid signal.
-  Record unresolved workarounds and their fix path; never silently skip a failure or finding.
+## Human action queue
 
-## Human Action Queue
+`ACTION_ITEMS.md` is the only durable queue for Chris-owned decisions, manual browser testing, and
+merge go/no-go, plus its verified current-state snapshot.
 
-`ACTION_ITEMS.md` is the only durable queue for Chris-owned decisions, manual browser testing,
-merge go/no-go, and its verified current-state snapshot.
+- Add a new `AI-N` item with a complete human guide whenever a new human-only action appears.
+- Never self-clear an item; keep `docs/agentic/HANDOFF.md` consistent when verified status changes.
+- When Chris asks to work the queue, use `ns-human-action-guide`: finish the safe agent
+  prerequisites, show the queue compactly, present exactly one ready `q-N [AI-N]` action, and
+  resume by the stable `AI-N`, never a transient q-number.
 
-- Add a new `AI-N` item with a complete human guide when a new human-only action appears.
-- Never self-clear an item. Keep `docs/agentic/HANDOFF.md` consistent when verified status changes.
-- When Chris asks to work through cumulative actions, use `ns-human-action-guide`: complete
-  safe agent prerequisites, show the whole queue compactly, and present exactly one ready
-  `q-N [AI-N]` action. Resume by the stable `AI-N`, not a transient q-number.
+## Handoff shape
 
-Current queue: OPEN AI-19, AI-16, AI-17, AI-9, AI-20, AI-13, AI-21, AI-22, AI-23;
-HELD AI-18 (blocked on PR #457's final head — trust is definition-hash-based);
-BLOCKED AI-15, AI-8, AI-14. Resume at AI-16.
-AI-13/AI-21/AI-22 are conditional Gate-3 lanes, run oldest-PR-first
-(#356 -> #464 -> #466); their guides are in `docs/agentic/GATE3_GUIDES.md`.
-
-## Project Map And Commands
-
-- `extension/src/content/`, `extension/src/shared/`, `extension/src/sw/`, `extension/src/popup/`,
-  and `extension/src/options/` contain the MV3 source. `gym/` and `tests/e2e/` cover browser
-  behavior. `docs/` contains plans and protocols. `extension/dist/` is generated output.
-- Core commands: `npm run typecheck`, `npm run build`, `npm run test`, `npm run test:e2e`,
-  `npm run test:e2e:smoke`, `npm run test:e2e:regression`, `npm run test:e2e:rollback`,
-  `npm run test:e2e:stress`, `npm run test:e2e:corpus`, `npm run gym:serve`,
-  `npm run verify:versions`, and `npm run package:ext`.
-- Use `autodoc/AGENT_INDEX.md` for exact entry points and seam-specific checks. Highest-risk
-  seams are MAIN-world patching, bridge messages, service-worker lifecycle state, and
-  credential/privacy behavior.
-
-## Skill Routing
-
-Orient with `ns-repo-onramp`, `ns-repo-map`, or `ns-program-board`. Implement with
-`ns-safe-slice`, `ns-ext-dev`, or `ns-issue-to-pr`. Verify with `ns-test-harness`,
-`ns-threat-validation`, `ns-security-review`, or `ns-verify-handoff`. Use `ns-ui-ux` for
-interface work. Meta workflows are `ns-question-batch`, `ns-human-action-guide`,
-`ns-failure-capture`, `ns-interface-map`, `ns-roadmap-sync`, and `ns-codex-tooling`.
-
-Keep matching Claude and Codex workflow names aligned, but use each runtime's native tools.
-See `docs/agentic/TOOLING_PARITY.md`.
-
-## Reviews, Merge Gates, And Handoff
-
-The review pipeline is not restated here — see "Global Laws (one home)" above. Only the two
-NavSentinel-specific gates are repo truth:
-
-- **Proving checks:** typecheck, lint, build, unit, and the seam-specific E2E lane must be green
-  on the exact head being merged.
-- **Gate-3 manual Chrome verification** is human-owned and holds **browser-surface** PRs only
-  (runtime blast radius: MAIN-world / submit path / service-worker nav / MutationObserver /
-  visible UI — not file type). Track the need in `ACTION_ITEMS.md`; non-browser PRs do not wait
-  for it.
-
-Use `docs/agentic/QUESTION_PROTOCOL.md`, `FAILURE_LEDGER.md`, and
-`GUIDE_UPDATE_PROTOCOL.md` for their respective workflows. Before handoff, re-read the requested
-outcome, verify the exact seam, state commands/results and what was not verified, and update
-status docs only when truth changed. Do not claim a test passed unless it ran here.
-
-Minimum handoff:
+Verify the exact seam, then state the commands, their results, and what was NOT verified. Do not
+claim a test passed unless it ran here. Update `docs/Project_Roadmap.md`,
+`autodoc/AGENT_INDEX.md`, `docs/agentic/ORCHESTRATOR.md`, `docs/agentic/HANDOFF.md`, or the
+failure ledger only when the implementation changed their truth.
 
 ```text
 Changed: <files/seams>
 Verified: <commands/results>
 Not verified: <reason>
-Failures/workarounds: <classification + future fix>
-Review findings: <all addressed | N seeded as issues>
+Failures/workarounds: <classification + fix path>
 Docs/status sync: <updated or not needed>
 Next safe slice: <one concrete action>
 ```
 
-## Git Discipline
-
-See `docs/agentic/GIT_WORKFLOW.md` for recovery details. The shared irreversible-command floor
-lives at `~/.claude/hooks/dispatch.py` (tier from `.claude/tier.json`): Claude receives it
-globally, and Codex's sole project `PreToolUse` adapter in `.codex/hooks.json` pins the same
-dispatcher with `--runtime codex`. Repo-local `.claude/hooks/*` files are exact CI/audit
-fixtures, not a second active hook. The floor blocks only irreversible operations: force-push,
-`rm -rf` outside the project, pipe-to-shell, `sudo`, and secret-file mutation. At T2, work-loss
-commands remain recoverable from origin but require the discipline below.
-
-- Update from `main` with `git merge main`; reconcile with `git merge origin/<branch>`.
-- Do not amend pushed commits; create a new commit. Never force-push `main`, `master`, `develop`,
-  or `release`; server-side protection remains AI-17.
-- Before a history-rewriting or work-discarding command, explain what it does, what could be
-  lost, and how it is reversible, then wait for approval. If branches are tangled, stop and give
-  safest-first options; never discard work silently.
-
-## Documentation Ownership
-
-Update `docs/Project_Roadmap.md`, `autodoc/AGENT_INDEX.md`,
-`docs/agentic/ORCHESTRATOR.md`, `docs/agentic/HANDOFF.md`, or the failure ledger only when the
-implementation changes their truth. `ACTION_ITEMS.md` remains human-owned; agents may add or
-refresh items but never mark them complete without Chris's explicit confirmation.
+Protocols: `docs/agentic/QUESTION_PROTOCOL.md`, `FAILURE_LEDGER.md`, `GUIDE_UPDATE_PROTOCOL.md`,
+`GIT_WORKFLOW.md`.
