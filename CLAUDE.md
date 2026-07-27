@@ -50,22 +50,19 @@ the task requires them.
 
 ## Git Workflow
 
-Full details and recovery: `docs/agentic/GIT_WORKFLOW.md`. Claude receives the
-shared global deny floor (`~/.claude/hooks/dispatch.py`, tier read from
-`.claude/tier.json`) exactly once; repo-local `.claude/hooks/*` files are pinned
-CI/audit fixtures. The floor blocks only the **irreversible**: force-push in all
-spellings, `rm -rf` outside the project, pipe-to-shell, `sudo`, secret-file
-mutation. Work-loss ops (`reset --hard`, `rebase`, `checkout -- .`) are **allowed
-at T2** (recoverable from origin); the discipline below is convention, not a gate:
+Full details, the floor/fixture architecture, dangerous-command explanations, and recovery:
+`docs/agentic/GIT_WORKFLOW.md`. The deny floor blocks only the **irreversible**: force-push in
+all spellings, `rm -rf` outside the project, pipe-to-shell, `sudo`, secret-file mutation.
+Work-loss ops (`reset --hard`, `rebase`, `checkout -- .`) are **allowed at T2**. Convention,
+not a gate:
 
-- Update a branch from main with `git merge main` (not rebase); reconcile divergence with
-  `git merge origin/<branch>`.
-- Do not `git commit --amend` after pushing — create a new commit.
-- Never force-push `main`/`develop`/`release`. Server-side branch protection is the real wall
-  (tracked in `ACTION_ITEMS.md` until enabled).
-- Before any history-rewriting or work-discarding command, explain in plain language what it
-  does and whether it is reversible, then wait for approval. When tangled, stop and surface
-  options — never silently discard work.
+- Update from main with `git merge main` (not rebase); reconcile with `git merge origin/<branch>`.
+- Never `git commit --amend` after pushing (make a new commit); never force-push
+  `main`/`develop`/`release` — server-side branch protection is the real wall (tracked in
+  `ACTION_ITEMS.md` until enabled).
+- Before any history-rewriting or work-discarding command, explain plainly what it does and
+  whether it is reversible, then wait for approval. When tangled, stop and surface options —
+  never silently discard work.
 
 ## Skill Routing (Claude)
 
@@ -78,21 +75,18 @@ slice). Implement: `ns-safe-slice`, `ns-ext-dev` (MV3 runtime), `ns-issue-to-pr`
 
 ## Project Hot Spots
 
-The seam map with entry points, invariants, and verification commands is
-`autodoc/AGENT_INDEX.md`. Highest-risk seams: main-world patching, bridge messages,
-service-worker lifecycle state, and credential/data-privacy behavior.
+The seam map (entry points, invariants, verification commands) is `autodoc/AGENT_INDEX.md`.
+Highest-risk seams: main-world patching, bridge messages, service-worker lifecycle state, and
+credential/data-privacy behavior.
 
 ## Shared Protocols (one home)
 
-The review pipeline and merge gates are **not** restated in this repo. One home: the twelve
-global laws in `~/.claude/CLAUDE.md` (laws 2 and 11) plus the tier table in agent-harness
-`BLUEPRINT.md` §1, executed by the `review-and-ship` skill — one review round, one bounded fix
-round, then ship or park. NavSentinel's tier row (T2, daily driver): merge on green checks at
-the reviewed head plus one triage pass over every comment, bots included; no independent
-review round is owed. Question, failure, and verification protocols live in `AGENTS.md`.
-NavSentinel-specific gate: **Gate-3 manual Chrome testing** is human-owned and tracked in
-`ACTION_ITEMS.md` (the agent sandbox cannot drive a real browser) — it holds browser-surface
-PRs only.
+Review, merge-gate, question, failure, and verification protocols are **not** restated here —
+`AGENTS.md` is their home (it carries NavSentinel's T2 tier row), over the global laws in
+`~/.claude/CLAUDE.md` (laws 2 and 11) and the agent-harness `BLUEPRINT.md` §1 tier table,
+executed by the `review-and-ship` skill. Repo-specific gate: **Gate-3 manual Chrome testing**
+is human-owned and tracked in `ACTION_ITEMS.md` (the agent sandbox cannot drive a real
+browser) — it holds browser-surface PRs only.
 
 ## Local Settings
 
