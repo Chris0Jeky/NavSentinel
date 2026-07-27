@@ -1,97 +1,103 @@
-# Claude Operating Contract — NavSentinel
+# NavSentinel — repo canon (Claude contract)
 
-Tier: daily driver (T2) — authority: push free / merge free.
-*(Derived from `.claude/tier.json`; do not hand-edit the tier line.)*
+NavSentinel is a local-first Chrome MV3 extension (TypeScript + Vite, Vitest + Playwright) that
+hardens abuse-heavy browser surfaces: deceptive navigation, risky credential submits,
+DoubleClickjacking, and ClickFix / fake-CAPTCHA overlays. Pre-release alpha, `private: true`, and
+**zero runtime network calls** by design. Source lives in
+`extension/src/{content,shared,sw,popup,options,onboarding}`; `extension/dist/` is build output.
+This file is the shared repo canon — `AGENTS.md` is the thin Codex delta over it, so land a
+repo-wide change here and only the Codex-specific part there.
 
-Compact session contract for Claude Code in `NavSentinel/`. The global laws in
-`~/.claude/CLAUDE.md` apply and are **not** restated here. Repeatable procedures live in
-`.claude/skills/*/SKILL.md`, `docs/agentic/*`, and `autodoc/*`.
+Tier: **T2 daily driver** — push free / merge free (`.agent-harness/tier.json`; do not hand-edit
+the tier line). Global laws live in `~/.claude/CLAUDE.md`, are auto-injected every session, and
+are not restated here.
 
-## Authority Order
+## First actions
 
-1. User prompt for the current turn.
-2. `AGENTS.md` — the repo-wide rulebook (review, PR-merge gates, question / failure /
-   verification protocols, git workflow). One home; this file links there, never restates.
-3. `docs/Project_Roadmap.md` — active phase status, priorities, and gates.
-4. `autodoc/AGENT_INDEX.md` — the code-seam map (entry points, invariants, verification).
-5. Relevant skill under `.claude/skills/*/SKILL.md`.
-6. Deeper docs, archives, and generated artifacts only when the task needs them.
+1. `ACTION_ITEMS.md` — the human queue (this repo's HUMAN_TODO alias, stable `AI-N` ids). Surface
+   every OPEN/BLOCKED item in every summary; never self-clear one.
+2. `autodoc/AGENT_INDEX.md` — the seam map (interface files, meaty files, per-seam verification).
+   Use it instead of grepping the tree.
+3. `docs/Project_Roadmap.md` — active phase, gates, next tasks.
+4. Pick one primary `ns-*` skill (plus at most one support skill), then the smallest reviewable
+   slice; state blockers, assumptions, verification target, and docs-sync target before editing.
 
-When sources conflict, follow the higher source and report the conflict.
+Do not bulk-read `node_modules/`, `extension/dist/`, `dist/`, `test-results/`, `artifacts/`,
+`RESOURCES/`, `HistoryDump.txt`, or `docs/archive/`.
 
-**Standing direction (2026-07-03):** ship/measure, not hardening. Follow the Priority Ladder
-and posture in `docs/agentic/DECISIONS.md` — discovery is milestone-gated (LOW residue →
-`docs/agentic/ICEBOX.md`), human-gated PRs are capped at 3, and browser-surface is defined by
-runtime blast radius (MAIN-world / submit path / service-worker nav / MutationObserver /
-visible UI), not file type.
+## Proving checks by change class (narrowest that exercises the seam)
 
-## First 5 Minutes
+| Changed | Command |
+| --- | --- |
+| any TypeScript | `npm run typecheck` and `npm run lint` |
+| one unit seam | `npx vitest run tests/<name>.test.ts` — 97 spec files; scope it rather than `npm test` |
+| shared / content / SW logic | `npm test` |
+| manifest, SW imports, bundling | `npm run build` (chains `check:mv3-worker`) |
+| MAIN-world guard, bridge, detections | `npm run build`, then `npm run test:e2e` (not `:smoke` alone — 4 tests) |
+| SW lifecycle / rollback | `npm run build`, then `npm run test:e2e:rollback` |
+| reputation / corpus data | `npm run check:topsites`, `npm run build:bloom:test`, `npm run check:bloom-size` |
+| perf-sensitive paths | `npm run build && npm run check:perf-budget` |
+| version or manifest bumps | `npm run verify:versions` |
+| packaging / release | `npm run package:ext` |
+| skills, hooks, agentic docs | `npm run agent:hooks:smoke` and `npm run agent:skills:validate` |
 
-1. `ACTION_ITEMS.md` — human-owned tasks + current-state snapshot. Surface every OPEN/BLOCKED
-   item near the top of every summary or handoff (global law 5); clear items only on Chris's
-   explicit confirmation.
-2. `AGENTS.md`, `docs/Project_Roadmap.md`, `autodoc/AGENT_INDEX.md`.
-3. Select one primary skill and at most one support skill.
-4. Identify the smallest safe, reviewable change; state blockers, assumptions, verification
-   target, and docs-sync target before editing.
+`.github/workflows/ci.yml` runs three jobs per PR — **harness** (Ubuntu + Windows: hooks smoke,
+skill parity), **build-and-unit** (verify:versions → lint → typecheck → unit → topsites → bloom
+build/size → build → perf-budget → package), **e2e** (xvfb + `npm run test:e2e`) — plus a
+tag-only **release** job. Reproduce that order locally. Every e2e lane needs a build first — the
+specs `test.skip` when `extension/dist/` is absent, so an unbuilt lane reports green having run
+nothing. `playwright.config.ts` declares only the `smoke` (4 tests) and `regression` (the
+guard/detection body) projects, so the 22 `@phase2` cases in
+`tests/e2e/phase2-detections.spec.ts` are selected by no lane, and a CLI `--grep` is ANDed with
+the project grep rather than replacing it. `npm run gym:serve` hosts the fixture pages on :5173.
 
-Do not bulk-read archives, generated build output, `node_modules`, or prior artifacts unless
-the task requires them.
+## Repo pitfalls
 
-## Default Work Style
+- **Never edit `extension/dist/`** (generated) or `.claude/hooks/*` — the latter are vendored
+  floor/CI fixtures, not this repo's code. They move only when a canonical floor sync refreshes
+  them wholesale alongside the `.codex/hooks.json` pin (`AGENTS.md`), never by hand.
+- Local-first is a product invariant, not a preference: no runtime network call, no telemetry, no
+  credential exfiltration, no password-value storage. A new `fetch` to a remote origin in
+  production code is a defect; fetching a bundled local resource is the established pattern
+  (`chrome.runtime.getURL(...)` in `sw.ts`, `capture_isolated.ts`, `visual_sim_loader.ts`; a
+  `data:` URL in `visual_sim_capture.ts`) and stays allowed.
+- MV3: persist short-lived critical state in `chrome.storage.session`; keep MAIN-world patches
+  narrow and bridge-validated; content scripts must run in every required frame.
+- Do not mix navigation-guard, credential-guard, service-worker, and UI work in one slice unless
+  the seam forces it.
+- The bundled `reputation_data.bin` is a 52-byte reserved-domain fixture, not user protection
+  (AI-9 / #321). Only the tagged release job fail-closes on it; per-PR CI does not.
+- Classify every failure — blocker / non-blocking risk / pre-existing noise / invalid signal — and
+  record the workaround plus its fix path in `docs/agentic/FAILURE_LEDGER.md`. No silent skips.
+- Git: update from main with `git merge main` (never rebase a shared branch); never amend a pushed
+  commit; never force-push `main`/`develop`/`release` — server-side branch protection is still
+  missing (AI-17), so the convention is the only wall. Recovery: `docs/agentic/GIT_WORKFLOW.md`.
 
-- Prefer narrow diffs over rewrites; preserve existing behavior unless the task asks otherwise.
-- Keep extension logic local-first: no runtime network calls, telemetry, credential
-  exfiltration, or password-value storage.
-- Do not mix navigation-guard, credential-guard, service-worker, and UI work in one slice
-  unless the seam requires it.
-- Classify every failure (blocker / non-blocking risk / pre-existing noise / invalid signal)
-  and record any workaround plus its fix path. No silent skips. See `docs/agentic/FAILURE_LEDGER.md`.
+## Repo-specific gate (not a tier gate)
 
-## Git Workflow
+**Gate-3 manual Chrome verification** is human-owned and holds **browser-surface** PRs only,
+defined by runtime blast radius — MAIN-world / submit path / service-worker nav / MutationObserver
+/ visible UI — never by file type. Track the need in `ACTION_ITEMS.md`; non-browser PRs never wait
+for it. Guides: `docs/agentic/GATE3_GUIDES.md`, run oldest-PR-first.
 
-Full details, the floor/fixture architecture, dangerous-command explanations, and recovery:
-`docs/agentic/GIT_WORKFLOW.md`. The deny floor blocks only the **irreversible**: force-push in
-all spellings, `rm -rf` outside the project, pipe-to-shell, `sudo`, secret-file mutation.
-Work-loss ops (`reset --hard`, `rebase`, `checkout -- .`) are **allowed at T2**. Convention,
-not a gate:
+Standing direction (2026-07-03): ship and measure, not harden. The Priority Ladder and posture are
+in `docs/agentic/DECISIONS.md` — discovery is milestone-gated with LOW residue to
+`docs/agentic/ICEBOX.md`, and human-gated PRs are capped at 3.
 
-- Update from main with `git merge main` (not rebase); reconcile with `git merge origin/<branch>`.
-- Never `git commit --amend` after pushing (make a new commit); never force-push
-  `main`/`develop`/`release` — server-side branch protection is the real wall (tracked in
-  `ACTION_ITEMS.md` until enabled).
-- Before any history-rewriting or work-discarding command, explain plainly what it does and
-  whether it is reversible, then wait for approval. When tangled, stop and surface options —
-  never silently discard work.
+## Skills (`.claude/skills/`)
 
-## Skill Routing (Claude)
+Orient `ns-repo-onramp` · `ns-repo-map` · `ns-program-board`. Implement `ns-safe-slice` ·
+`ns-ext-dev` (MV3 runtime) · `ns-issue-to-pr`. Verify `ns-test-harness` · `ns-threat-validation` ·
+`ns-security-review` · `ns-verify-handoff`. UI `ns-ui-ux`. Meta `ns-question-batch` ·
+`ns-failure-capture` · `ns-interface-map` · `ns-roadmap-sync` · `ns-human-action-guide` ·
+`ns-claude-tooling`. Codex mirrors live in `.agents/skills/` and `validate_skills.py` enforces name
+parity, so add or rename a skill in **both** trees. Policy: `docs/agentic/TOOLING_PARITY.md`.
 
-Orient: `ns-repo-onramp` (vague scope), `ns-repo-map` (find seams), `ns-program-board` (next
-slice). Implement: `ns-safe-slice`, `ns-ext-dev` (MV3 runtime), `ns-issue-to-pr`. Verify:
-`ns-test-harness`, `ns-threat-validation`, `ns-security-review`, `ns-verify-handoff`. UI:
-`ns-ui-ux`. Meta: `ns-question-batch`, `ns-failure-capture`, `ns-interface-map`,
-`ns-roadmap-sync`, `ns-human-action-guide`, `ns-claude-tooling`. Codex parity layer: `.agents/skills/*` (see
-`docs/agentic/TOOLING_PARITY.md`).
+## Settings and hooks
 
-## Project Hot Spots
-
-The seam map (entry points, invariants, verification commands) is `autodoc/AGENT_INDEX.md`.
-Highest-risk seams: main-world patching, bridge messages, service-worker lifecycle state, and
-credential/data-privacy behavior.
-
-## Shared Protocols (one home)
-
-Review, merge-gate, question, failure, and verification protocols are **not** restated here —
-`AGENTS.md` is their home (it carries NavSentinel's T2 tier row), over the global laws in
-`~/.claude/CLAUDE.md` (laws 2 and 11) and the agent-harness `BLUEPRINT.md` §1 tier table,
-executed by the `review-and-ship` skill. Repo-specific gate: **Gate-3 manual Chrome testing**
-is human-owned and tracked in `ACTION_ITEMS.md` (the agent sandbox cannot drive a real
-browser) — it holds browser-surface PRs only.
-
-## Local Settings
-
-Committed `.claude/settings.json` holds shared guardrails (acceptEdits + stack allowlist +
-deny tripwires + hooks). `.claude/settings.local.json` (gitignored) is machine-specific only;
-`bypassPermissions` belongs only in a disposable VM. `.mcp.json` holds credential-free project
-MCP defaults — check `/mcp` before claiming a server is connected. After any agentic-tooling
-change, run `npm run agent:hooks:smoke` and `npm run agent:skills:validate` before handoff.
+Committed `.claude/settings.json` = acceptEdits + stack allowlist + repo tripwire denies
+(`npm publish`, `chrome-webstore-upload`, `web-ext sign`, `git filter-branch`, `chmod -R 777`) +
+hook wiring. `.claude/settings.local.json` is gitignored and machine-local. `.mcp.json` is
+credential-free — check `/mcp` before claiming a server is live. The irreversible-command floor is
+the global `~/.claude/hooks/dispatch.py`; repo-tier SessionStart/PostToolUse handlers are
+`scripts/agent_hooks/*`. Leave both wirings alone.

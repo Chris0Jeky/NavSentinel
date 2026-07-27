@@ -14,8 +14,8 @@ This is a fast orientation layer for coding agents. It should point to interface
    pending-decision service-worker boundary. Neither supplies a production
    extension-origin prompt/action flow, so RI-01 remains unfinished. AI-15 is
    blocked pending the remaining agent preflight.
-1. `AGENTS.md` - repo operating rules.
-2. `CLAUDE.md` - Claude-specific compact contract.
+1. `CLAUDE.md` - the shared repo canon (tier, first actions, proving checks, pitfalls, gates).
+2. `AGENTS.md` - the Codex delta over it (Codex tooling, hooks, human-action queue, handoff).
 3. `docs/Project_Roadmap.md` - active phase status, gates, decisions, and next tasks.
 4. `CONTRIBUTING.md` - change-surface guidance and style expectations.
 5. `docs/README.md` - documentation map.
