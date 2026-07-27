@@ -30,7 +30,7 @@ Do not bulk-read `node_modules/`, `extension/dist/`, `dist/`, `test-results/`, `
 | Changed | Command |
 | --- | --- |
 | any TypeScript | `npm run typecheck` and `npm run lint` |
-| one unit seam | `npx vitest run tests/<name>.test.ts` — the full lane is thousands of specs; scope it |
+| one unit seam | `npx vitest run tests/<name>.test.ts` — 97 spec files; scope it rather than `npm test` |
 | shared / content / SW logic | `npm test` |
 | manifest, SW imports, bundling | `npm run build` (chains `check:mv3-worker`) |
 | MAIN-world guard, bridge, detections | `npm run build`, then `npm run test:e2e:smoke` |
