@@ -54,7 +54,8 @@ the project grep rather than replacing it. `npm run gym:serve` hosts the fixture
 ## Repo pitfalls
 
 - **Never edit `extension/dist/`** (generated) or `.claude/hooks/*` — the latter are vendored
-  floor/CI fixtures, not this repo's code.
+  floor/CI fixtures, not this repo's code. They move only when a canonical floor sync refreshes
+  them wholesale alongside the `.codex/hooks.json` pin (`AGENTS.md`), never by hand.
 - Local-first is a product invariant, not a preference: no runtime network call, no telemetry, no
   credential exfiltration, no password-value storage. A new `fetch` to a remote origin in
   production code is a defect; fetching a bundled local resource is the established pattern

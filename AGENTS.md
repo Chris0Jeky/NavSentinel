@@ -38,7 +38,13 @@ also read `docs/agentic/HANDOFF.md` and `docs/agentic/ORCHESTRATOR.md`.
   and trust each exact definition with `/hooks`, and re-trust after any change (trust is
   definition-hash based). The sole `PreToolUse` adapter pins the global
   `~/.claude/hooks/dispatch.py` with `--runtime codex`; Codex inherits none of Claude's settings
-  or permissions. Do not edit the floor, its pins, or `.claude/hooks/*`.
+  or permissions. Never edit the floor, its pins, or `.claude/hooks/*` on their own — an ad hoc or
+  independent pin edit is a defect. The pin moves only as part of a synchronized canonical floor
+  sync: the adapter embeds the dispatcher's SHA-256 twice (`expected=` for POSIX, `$e=` for
+  Windows) and fails closed on a mismatch, disabling every Codex Bash command, so when the
+  canonical `~/.claude/hooks/dispatch.py` changes, both hashes and the vendored `.claude/hooks/*`
+  fixtures are refreshed in the same commit (see `213987c`) and the project is re-trusted with
+  `/hooks`.
 - `.mcp.json` is credential-free project config. Use only the tools actually exposed in this
   session; never claim a connector or MCP server is live unless it was verified in this runtime.
 ## Skills (`.agents/skills/`)
