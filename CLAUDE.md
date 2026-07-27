@@ -56,7 +56,10 @@ the project grep rather than replacing it. `npm run gym:serve` hosts the fixture
 - **Never edit `extension/dist/`** (generated) or `.claude/hooks/*` — the latter are vendored
   floor/CI fixtures, not this repo's code.
 - Local-first is a product invariant, not a preference: no runtime network call, no telemetry, no
-  credential exfiltration, no password-value storage. A new `fetch` in production code is a defect.
+  credential exfiltration, no password-value storage. A new `fetch` to a remote origin in
+  production code is a defect; fetching a bundled local resource is the established pattern
+  (`chrome.runtime.getURL(...)` in `sw.ts`, `capture_isolated.ts`, `visual_sim_loader.ts`; a
+  `data:` URL in `visual_sim_capture.ts`) and stays allowed.
 - MV3: persist short-lived critical state in `chrome.storage.session`; keep MAIN-world patches
   narrow and bridge-validated; content scripts must run in every required frame.
 - Do not mix navigation-guard, credential-guard, service-worker, and UI work in one slice unless
