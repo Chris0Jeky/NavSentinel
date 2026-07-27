@@ -1,32 +1,22 @@
 # Codex Operating Contract — NavSentinel
 
-Tier: daily driver (T2) — authority: push free / merge gated.
+Tier: daily driver (T2) — authority: push free / merge free.
 *(Derived from `.claude/tier.json`; do not hand-edit the tier line.)*
 
-Compact Codex contract for `NavSentinel/`. The global source of truth is
-`~/.claude/CLAUDE.md`; its essential laws are mirrored below because Codex does
-not load that file. Keep the two in sync. Repeatable procedures belong in
+Compact Codex contract for `NavSentinel/`. Repeatable procedures belong in
 `.agents/skills/*/SKILL.md`, `docs/agentic/*`, and `autodoc/*`.
 
-## Global Laws (Codex mirror)
+## Global Laws (one home, not restated here)
 
-1. Never merge a PR with failing CI. Investigate every failure; never dismiss it as flaky.
-2. Reviews are zero-skip: inspect and post findings, fix every severity, address all existing
-   comments including bots, and map each fix to evidence. Seed genuinely out-of-scope findings.
-3. Never claim done or verified without the proving command/check. State what was not verified
-   and close with changed / verified / not verified / residual risk.
-4. Check GitHub issue links after PR-body edits: a close keyword fires even when quoted or
-   negated. Never delete a stacked base branch; merge stacks oldest-first.
-5. Surface the declared human-action file in every summary. Only Chris clears its items. For a
-   cumulative queue, use `ns-human-action-guide` and stable `AI-N` IDs.
-6. Batch true blockers into one question. Otherwise proceed with a named, reversible assumption.
-7. Make the worktree guard preamble the first repository action. Use project-directory paths;
-   create worktrees with `--detach origin/main`, never branch refs; leave `main` clean after waves.
-8. Add structure only after the second recurrence. Promote recurring lessons to the cheapest
-   effective layer (memory → contract → skill/doc → hook → CI → structure), then remove the old copy.
-9. Before unfamiliar-repo work, check `~/.claude/ESTATE.md` and `.claude/tier.json`; authority is
-   declared, not negotiated.
-10. If not the top routed model, do not merge, edit canonical docs, the deny floor, or gates.
+The twelve global laws live in `~/.claude/CLAUDE.md`, with the tier ladder and the review /
+merge gate table in the sibling agent-harness checkout's `BLUEPRINT.md` §1. Read them there —
+this file previously carried a mirror, which drifted and is deleted (agent-harness #101). Codex
+sessions: open both files at session start; they are plain Markdown on disk.
+
+NavSentinel's tier row: **T2 daily driver — push free, merge free.** Merge on green checks at
+the reviewed head plus one triage pass over every comment (bots included). One review round,
+one bounded fix round, then ship or park; no independent review round is owed at T2, and
+review rounds do not expire with PR age.
 
 Commit small, logical increments as work proceeds. Start inline; use a small number of agents
 only when the prompt or an applicable skill requests delegation, the work is disjoint, or an
@@ -135,20 +125,15 @@ See `docs/agentic/TOOLING_PARITY.md`.
 
 ## Reviews, Merge Gates, And Handoff
 
-For a PR review, first inspect all existing PR comments and unresolved threads. Post structured
-findings, fix every finding regardless of severity, and seed a concrete GitHub issue, roadmap
-entry, or failure-ledger record only when a finding is genuinely out of scope. For local-only
-work, record each independent review round, its lens, findings, and resolutions in a handoff or
-small review artifact.
+The review pipeline is not restated here — see "Global Laws (one home)" above. Only the two
+NavSentinel-specific gates are repo truth:
 
-Do not merge unless the exact reviewed head has:
-
-1. Two independent adversarial review rounds, with all findings fixed between and after them.
-2. Green relevant CI and tests: typecheck, lint, build, unit, E2E, and seam-specific checks.
-3. Human Gate-3 manual Chrome verification for browser-surface work when the sandbox cannot do it;
-   track that need in `ACTION_ITEMS.md`.
-4. No untracked tech debt, skipped tests, or undocumented workaround.
-5. Docs/status synchronization only where truth changed.
+- **Proving checks:** typecheck, lint, build, unit, and the seam-specific E2E lane must be green
+  on the exact head being merged.
+- **Gate-3 manual Chrome verification** is human-owned and holds **browser-surface** PRs only
+  (runtime blast radius: MAIN-world / submit path / service-worker nav / MutationObserver /
+  visible UI — not file type). Track the need in `ACTION_ITEMS.md`; non-browser PRs do not wait
+  for it.
 
 Use `docs/agentic/QUESTION_PROTOCOL.md`, `FAILURE_LEDGER.md`, and
 `GUIDE_UPDATE_PROTOCOL.md` for their respective workflows. Before handoff, re-read the requested

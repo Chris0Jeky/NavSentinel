@@ -1,6 +1,6 @@
 # Claude Operating Contract — NavSentinel
 
-Tier: daily driver (T2) — authority: push free / merge gated.
+Tier: daily driver (T2) — authority: push free / merge free.
 *(Derived from `.claude/tier.json`; do not hand-edit the tier line.)*
 
 Compact session contract for Claude Code in `NavSentinel/`. The global laws in
@@ -84,11 +84,15 @@ service-worker lifecycle state, and credential/data-privacy behavior.
 
 ## Shared Protocols (one home)
 
-Review, PR-merge gates, question, failure, and verification protocols live in `AGENTS.md`;
-universal laws (never merge red CI, zero-skip reviews, verify-before-done, close-keyword
-hygiene, HUMAN_TODO surfacing, question batching, worktree guard, tier check) live in
-`~/.claude/CLAUDE.md`. NavSentinel-specific gate: **Gate-3 manual Chrome testing** is
-human-owned and tracked in `ACTION_ITEMS.md` (the agent sandbox cannot drive a real browser).
+The review pipeline and merge gates are **not** restated in this repo. One home: the twelve
+global laws in `~/.claude/CLAUDE.md` (laws 2 and 11) plus the tier table in agent-harness
+`BLUEPRINT.md` §1, executed by the `review-and-ship` skill — one review round, one bounded fix
+round, then ship or park. NavSentinel's tier row (T2, daily driver): merge on green checks at
+the reviewed head plus one triage pass over every comment, bots included; no independent
+review round is owed. Question, failure, and verification protocols live in `AGENTS.md`.
+NavSentinel-specific gate: **Gate-3 manual Chrome testing** is human-owned and tracked in
+`ACTION_ITEMS.md` (the agent sandbox cannot drive a real browser) — it holds browser-surface
+PRs only.
 
 ## Local Settings
 
