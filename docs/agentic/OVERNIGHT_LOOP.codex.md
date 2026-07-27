@@ -6,24 +6,24 @@ Use this as the starting prompt for a bounded, autonomous NavSentinel session. I
 
 Take only a small, release-path NavSentinel slice from verified current state to a cold-readable handoff. Favor shipping, measurement, and unblocking over speculative hardening or backlog manufacture.
 
-Respect the current authority order:
+Respect the current authority and evidence order:
 
 1. The current user request.
 2. \`AGENTS.md\`, \`CLAUDE.md\`, and the declared tier.
-3. \`docs/agentic/DECISIONS.md\` and \`docs/Project_Roadmap.md\`.
-4. \`autodoc/AGENT_INDEX.md\` and the relevant skill.
-5. Live Git, GitHub, CI, and review state.
+3. Live Git, executable checks, GitHub issue/PR state, CI, and unresolved review threads.
+4. \`docs/agentic/DECISIONS.md\`, \`docs/Project_Roadmap.md\`, and \`autodoc/AGENT_INDEX.md\`.
+5. The relevant skill, deeper documentation, archives, and historical material.
 
-If a lower document conflicts with a higher one, follow the higher source and record the drift rather than copying a stale rule forward.
+Live state outranks handoffs, test counts, and stale status prose. If a lower document conflicts with a higher source, follow the higher source and record the drift rather than copying it forward.
 
 ## Required preflight
 
 Before choosing work:
 
-1. Read \`ACTION_ITEMS.md\`, \`docs/agentic/HANDOFF.md\`, \`docs/agentic/DECISIONS.md\`, \`docs/Project_Roadmap.md\`, \`autodoc/AGENT_INDEX.md\`, the applicable tier declaration, and the exact current hook definition.
-2. Run the repository guard preamble first. Inspect the current Git state without discarding, stashing, restoring, cleaning, or switching unrelated work.
+1. Make the repository guard preamble the first repository action. Use only project-directory paths; do not discard, stash, restore, clean, or switch unrelated work.
+2. Read \`AGENTS.md\`, \`CLAUDE.md\`, \`~/.claude/ESTATE.md\` when the checkout is unfamiliar, \`ACTION_ITEMS.md\`, \`docs/agentic/HANDOFF.md\`, \`docs/agentic/ORCHESTRATOR.md\`, \`docs/agentic/DECISIONS.md\`, \`docs/Project_Roadmap.md\`, \`autodoc/AGENT_INDEX.md\`, the applicable tier declaration, and the exact current hook definition.
 3. Re-derive live GitHub state: branch/base/head SHA, relevant issue and PR state, checks, mergeability, existing comments/review threads, and the current browser/Gate-3 WIP count.
-4. In a fresh session for this exact repository, inspect and trust the active \`/hooks\` definitions. Then run the prescribed ordinary allow canary and denied non-writing canary for the exact adapter only when trust is current.
+4. In a fresh session for this exact repository, inspect the active \`/hooks\` definitions and determine whether trust is current. Honor any current human-held trust action in \`ACTION_ITEMS.md\`; do not trigger it until its named prerequisite is proved. Once it is authorized and current, run the prescribed ordinary allow canary and denied non-writing canary for the exact adapter.
 5. If the adapter reports a shared-dispatcher identity mismatch, or a benign allow canary is denied, stop normal implementation. Do not use wrapper shells, copied dispatchers, alternate mutation channels, or an untrusted definition to work around it. Record the failure as a hook-preflight blocker and hand off the repair path.
 
 A trusted hook definition is not runtime proof. An allow canary and a denied canary are required separately.
@@ -75,7 +75,7 @@ Never promote an unmerged/local-only producer or a known failing floor into the 
 
 ## Implementation and review
 
-Use one writer per checkout and a guarded detached worktree only for genuinely disjoint work. Keep diffs narrow, make small present-tense commits, preserve unrelated changes, and never edit generated \`extension/dist/\`.
+Use one writer per checkout and a guarded detached worktree only for genuinely disjoint work. The guard preamble comes first; keep every path within that worktree's project directory and create it with \`git worktree add --detach origin/main\`, never a branch ref. After a wave, verify the primary checkout remains clean. Keep diffs narrow, make small present-tense commits, preserve unrelated changes, and never edit generated \`extension/dist/\`.
 
 Select one primary NavSentinel skill and at most one supporting skill. Use the seam map to pick the narrowest relevant checks. Keep navigation-guard, credential-guard, service-worker, and UI work separate unless the seam demonstrably requires them.
 
