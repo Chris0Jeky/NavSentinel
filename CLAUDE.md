@@ -41,10 +41,11 @@ Do not bulk-read `node_modules/`, `extension/dist/`, `dist/`, `test-results/`, `
 | packaging / release | `npm run package:ext` |
 | skills, hooks, agentic docs | `npm run agent:hooks:smoke` and `npm run agent:skills:validate` |
 
-`.github/workflows/ci.yml` is three jobs: **harness** (Ubuntu + Windows: hooks smoke, skill
-parity), **build-and-unit** (verify:versions → lint → typecheck → unit → topsites → bloom
-build/size → build → perf-budget → package), **e2e** (xvfb + `npm run test:e2e`). Reproduce that
-order locally. E2E requires a build first; `npm run gym:serve` hosts the fixture pages on :5173.
+`.github/workflows/ci.yml` runs three jobs per PR — **harness** (Ubuntu + Windows: hooks smoke,
+skill parity), **build-and-unit** (verify:versions → lint → typecheck → unit → topsites → bloom
+build/size → build → perf-budget → package), **e2e** (xvfb + `npm run test:e2e`) — plus a
+tag-only **release** job. Reproduce that order locally. E2E needs a build first; `npm run
+gym:serve` hosts the fixture pages on :5173.
 
 ## Repo pitfalls
 
