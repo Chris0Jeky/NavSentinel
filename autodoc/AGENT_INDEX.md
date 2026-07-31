@@ -70,7 +70,7 @@ All paths above are relative to repo root. Content scripts live under `extension
   `docs/Project_Roadmap.md` owns execution; GitHub issues own implementation;
   `ACTION_ITEMS.md` owns human-only work.
 - `docs/Comprehensive_Project_Analysis.md` is a historical snapshot from 2026-04-09 — do not treat it as current.
-- Codex has a matching `.agents/skills` layer and should use `AGENTS.md`, Codex-native planning, parallel reads, patching, and verification tools.
+- Codex has a matching `.agents/skills` layer and should use `AGENTS.md`, Codex-native planning, parallel reads, patching, and verification tools. For an unattended Codex session, start from `docs/agentic/OVERNIGHT_LOOP.codex.md`.
 - Build output and generated data are easy context traps. Agents should edit source under `extension/src/` and avoid `extension/dist/`.
 - The highest-risk seams are main-world patching, bridge messages, service-worker lifecycle state, and credential/data privacy behavior.
 - Current release blockers include page-controlled prompt decision authority
