@@ -9,12 +9,13 @@ Take only a small, release-path NavSentinel slice from verified current state to
 Respect the current authority and evidence order:
 
 1. The current user request.
-2. \`AGENTS.md\`, \`CLAUDE.md\`, and the declared tier.
-3. Live Git, executable checks, GitHub issue/PR state, CI, and unresolved review threads.
-4. \`docs/agentic/DECISIONS.md\`, \`docs/Project_Roadmap.md\`, and \`autodoc/AGENT_INDEX.md\`.
-5. The relevant skill, deeper documentation, archives, and historical material.
+2. \`CLAUDE.md\`, then \`AGENTS.md\` for Codex-specific rules, plus the declared tier.
+3. \`docs/Project_Roadmap.md\` — active phase, priorities, and gates.
+4. \`autodoc/AGENT_INDEX.md\` — code seams, invariants, and verification.
+5. The relevant skill.
+6. \`docs/agentic/DECISIONS.md\`, deeper documentation, archives, and historical material.
 
-Live state outranks handoffs, test counts, and stale status prose. If a lower document conflicts with a higher source, follow the higher source and record the drift rather than copying it forward.
+Live Git, executable checks, GitHub issue/PR state, CI, and unresolved review threads are current-state evidence. They outrank stale handoffs, test counts, and status prose, but do not replace the authority order. If a lower document conflicts with a higher source, follow the higher source and record the drift rather than copying it forward.
 
 ## Required preflight
 
@@ -23,7 +24,7 @@ Before choosing work:
 1. Make the repository guard preamble the first repository action. Use only project-directory paths; do not discard, stash, restore, clean, or switch unrelated work.
 2. Read \`AGENTS.md\`, \`CLAUDE.md\`, \`~/.claude/ESTATE.md\` when the checkout is unfamiliar, \`ACTION_ITEMS.md\`, \`docs/agentic/HANDOFF.md\`, \`docs/agentic/ORCHESTRATOR.md\`, \`docs/agentic/DECISIONS.md\`, \`docs/Project_Roadmap.md\`, \`autodoc/AGENT_INDEX.md\`, the applicable tier declaration, and the exact current hook definition.
 3. Re-derive live GitHub state: branch/base/head SHA, relevant issue and PR state, checks, mergeability, existing comments/review threads, and the current browser/Gate-3 WIP count.
-4. In a fresh session for this exact repository, inspect the active \`/hooks\` definitions and determine whether trust is current. Honor any current human-held trust action in \`ACTION_ITEMS.md\`; do not trigger it until its named prerequisite is proved. Once it is authorized and current, run the prescribed ordinary allow canary and denied non-writing canary for the exact adapter.
+4. In a fresh session for this exact repository, inspect the active \`/hooks\` definitions and determine whether trust is current. Honor any current human-held trust action in \`ACTION_ITEMS.md\`; do not trigger it until its named prerequisite is proved. Once it is authorized and current, run the ordinary allow canary \`git status --short --branch\`, then run the inert deny canary \`git push --dry-run --no-verify --force . HEAD:refs/heads/codex-h2-deny-canary\` and require the floor to block it before Git executes.
 5. If the adapter reports a shared-dispatcher identity mismatch, or a benign allow canary is denied, stop normal implementation. Do not use wrapper shells, copied dispatchers, alternate mutation channels, or an untrusted definition to work around it. Record the failure as a hook-preflight blocker and hand off the repair path.
 
 A trusted hook definition is not runtime proof. An allow canary and a denied canary are required separately.
@@ -57,8 +58,8 @@ Treat the shared irreversible floor as a cross-repository release, never as a Na
 \`\`\`text
 agent-harness producer
   → tracked claude-config source
+  → staged and landed NavSentinel adapter and fixtures
   → installed machine copy
-  → NavSentinel adapter and fixtures
   → fresh-session /hooks trust plus live canaries
 \`\`\`
 
@@ -67,8 +68,8 @@ For such a change:
 1. Freeze an exact reviewed producer commit, version, and normalized dispatcher digest.
 2. Use the harness-supported sync path to update \`claude-config\`; do not hand-copy templates.
 3. Complete the producer/config tests and required review at their exact heads.
-4. Apply the installer only from clean, verified checkouts; retain its generated backup paths.
-5. Update NavSentinel's adapter and any frozen fixtures in the same declared-release policy, then run its native hook smoke and skill validation.
+4. Before changing NavSentinel's pin, obtain explicit owner scope for the installation and write a resumable transition note in \`docs/agentic/HANDOFF.md\`: old/new digests, exact producer/config/consumer commits, clean non-Nav checkout paths, and the recovery command \`py -3 .\\harness.py sync-global --config-root <clean-claude-config-checkout> --apply\`. Preview that command from the recorded clean agent-harness checkout, then update and land NavSentinel's adapter and frozen fixtures against the exact future digest from the still-working trusted session; run its native hook smoke, skill validation, and static checks.
+5. Immediately run the recorded installer command from the clean non-Nav checkout and retain its generated backup paths. If the staged session is interrupted after the consumer pin lands, do not attempt a NavSentinel shell or alternate mutation channel; resume only in the recorded installer checkout, run that recovery command, and then continue with doctor/trust proof.
 6. Obtain fresh exact-repository runtime proof after the new definition is trusted. Static pins, source equality, and CI do not replace this proof.
 
 Never promote an unmerged/local-only producer or a known failing floor into the machine installation just to unblock a consumer.
