@@ -194,7 +194,7 @@ function createChromeMock() {
     },
     dispatchRuntimeMessage(message: RuntimeMessage, sender: RuntimeSender = {}) {
       let response: unknown;
-      runtimeOnMessage.emit(message, sender, (value) => {
+      runtimeOnMessage.emit(message, { frameId: 0, ...sender }, (value) => {
         response = value;
       });
       return response;
@@ -205,7 +205,7 @@ function createChromeMock() {
       const response = new Promise<unknown>((resolve) => {
         resolveResponse = resolve;
       });
-      const listenerReturns = runtimeOnMessage.emit(message, sender, (value) => {
+      const listenerReturns = runtimeOnMessage.emit(message, { frameId: 0, ...sender }, (value) => {
         responded = true;
         resolveResponse(value);
       });
@@ -914,6 +914,82 @@ describe("service worker handlers", () => {
       );
 
       expect(mock.sentMessages).toHaveLength(0);
+    });
+
+    it("rejects opener nav from a child subframe", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+      mock.emitTabCreated({ id: 20, openerTabId: 10 });
+
+      mock.dispatchRuntimeMessage(
+        { type: "ns-dblclick-opener-nav", url: "https://evil.test/phish", ts: Date.now() },
+        { tab: { id: 20 }, frameId: 3 },
+      );
+
+      expect(mock.sentMessages).toHaveLength(0);
+      expect(mock.chrome.storage.session._store["ns_sw:dblclickCorrelation"]).toBeUndefined();
+    });
+
+    it("claims the verified opener record once from the destination top frame", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+      mock.emitTabCreated({ id: 20, openerTabId: 10 });
+      mock.dispatchRuntimeMessage(
+        { type: "ns-dblclick-opener-nav", url: "https://evil.test/phish?secret=1", ts: Date.now() },
+        { tab: { id: 20 } },
+      );
+
+      const stored = mock.chrome.storage.session._store["ns_sw:dblclickCorrelation"] as Record<string, unknown>;
+      expect(stored["10"]).toEqual(expect.objectContaining({ expiresAt: expect.any(Number) }));
+      expect(JSON.stringify(stored)).not.toContain("evil.test");
+      expect(JSON.stringify(stored)).not.toContain("secret=1");
+
+      const first = mock.dispatchRuntimeMessage(
+        { type: "ns-dblclick-correlation-claim" },
+        { tab: { id: 10 }, frameId: 0 },
+      ) as { active: boolean; expiresAt?: number };
+      expect(first).toMatchObject({ active: true, expiresAt: expect.any(Number) });
+
+      const second = mock.dispatchRuntimeMessage(
+        { type: "ns-dblclick-correlation-claim" },
+        { tab: { id: 10 }, frameId: 0 },
+      );
+      expect(second).toEqual({ active: false });
+    });
+
+    it("rejects a subframe claim without consuming the opener record", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+      mock.emitTabCreated({ id: 20, openerTabId: 10 });
+      mock.dispatchRuntimeMessage(
+        { type: "ns-dblclick-opener-nav", url: "https://evil.test/phish", ts: Date.now() },
+        { tab: { id: 20 } },
+      );
+
+      expect(mock.dispatchRuntimeMessage(
+        { type: "ns-dblclick-correlation-claim" },
+        { tab: { id: 10 }, frameId: 2 },
+      )).toEqual({ active: false });
+      expect(mock.dispatchRuntimeMessage(
+        { type: "ns-dblclick-correlation-claim" },
+        { tab: { id: 10 }, frameId: 0 },
+      )).toMatchObject({ active: true });
+    });
+
+    it("expires an unclaimed correlation without producing evidence", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+      mock.emitTabCreated({ id: 20, openerTabId: 10 });
+      mock.dispatchRuntimeMessage(
+        { type: "ns-dblclick-opener-nav", url: "https://evil.test/phish", ts: Date.now() },
+        { tab: { id: 20 } },
+      );
+
+      vi.advanceTimersByTime(5001);
+      expect(mock.dispatchRuntimeMessage(
+        { type: "ns-dblclick-correlation-claim" },
+        { tab: { id: 10 }, frameId: 0 },
+      )).toEqual({ active: false });
     });
 
     it("sets openerNavObserved = true on the child entry", async () => {

@@ -8,9 +8,10 @@
  *
  * Detection relies on the COMBINATION of signals:
  *   1. A window.open was recently observed (bridge message from main_guard)
- *   2. An opener.location write was detected, OR
- *      the SW signaled a child window closed after an opener nav
- *   3. A second click was observed (bridge message from main_guard)
+ *   2. An opener.location write was detected (the child-close signal is
+ *      corroborating evidence only)
+ *   3. A second click was observed (bridge message from main_guard), OR a
+ *      verified SW record survived an opener document navigation
  *
  * The signal expires after DBLCLICK_HIJACK_STALE_MS to avoid stale FPs.
  */
@@ -25,9 +26,8 @@ let dblclickWindowOpenTs = 0;
 let dblclickOpenerNavTs = 0;
 let dblclickOpenerNavUrl = "";
 let dblclickSecondClickTs = 0;
-/** True when the SW reports a child-window close correlated with opener nav. */
-let dblclickChildClosed = false;
-let dblclickChildClosedTs = 0;
+/** Expiry from the SW's URL-free, one-shot cross-document correlation. */
+let dblclickCrossDocumentExpiresAt = 0;
 
 // --- Public API ---
 
@@ -48,13 +48,10 @@ export function handleDblclickBridgeMessage(
 ): { handled: boolean; forwardToSW?: { type: string; url: string; ts: number } } {
   if (type === "ns-dblclick-window-open") {
     dblclickWindowOpenTs = typeof data.ts === "number" ? data.ts : Date.now();
-    // Reset stale signals from a previous detection cycle to prevent
-    // a stale dblclickChildClosed flag from causing false positives.
+    // Reset stale signals from a previous detection cycle.
     dblclickOpenerNavTs = 0;
     dblclickOpenerNavUrl = "";
     dblclickSecondClickTs = 0;
-    dblclickChildClosed = false;
-    dblclickChildClosedTs = 0;
     return { handled: true };
   }
 
@@ -87,6 +84,7 @@ export function handleDblclickBridgeMessage(
  * Called by capture_isolated.ts when the runtime dispatches one of:
  *   - ns-dblclick-child-closed  (SW notifies us when a child window closes)
  *   - ns-dblclick-opener-nav-from-child  (SW forwards opener.location write from child tab)
+ *   - ns-dblclick-correlation-ready      (destination claimed a verified SW record)
  *
  * Returns true if the message was handled, false otherwise.
  */
@@ -94,8 +92,6 @@ export function handleDblclickRuntimeMessage(message: Record<string, unknown> | 
   if (!message) return false;
 
   if (message.type === "ns-dblclick-child-closed") {
-    dblclickChildClosed = true;
-    dblclickChildClosedTs = Date.now();
     return true;
   }
 
@@ -105,25 +101,56 @@ export function handleDblclickRuntimeMessage(message: Record<string, unknown> | 
     return true;
   }
 
+  if (message.type === "ns-dblclick-correlation-ready") {
+    const expiresAt = message.expiresAt;
+    const now = Date.now();
+    if (
+      typeof expiresAt !== "number" ||
+      !Number.isFinite(expiresAt) ||
+      expiresAt <= now ||
+      expiresAt - now > DBLCLICK_HIJACK_STALE_MS
+    ) {
+      return false;
+    }
+    dblclickCrossDocumentExpiresAt = expiresAt;
+    return true;
+  }
+
   return false;
 }
 
 /**
  * Returns true when the DoubleClickjacking attack pattern is active:
  * - A window.open was recently observed, AND
- * - Either an opener.location write was detected, OR
- *   the SW signaled that a child window closed after an opener nav.
+ * - An opener.location write was detected, AND
+ * - A second click was observed after that write.
  * The signal expires after DBLCLICK_HIJACK_STALE_MS to avoid stale FPs.
  */
 export function isDoubleClickHijackActive(): boolean {
   const now = Date.now();
   if (now - dblclickWindowOpenTs > DBLCLICK_HIJACK_STALE_MS) return false;
-  if (dblclickOpenerNavTs > 0 && now - dblclickOpenerNavTs <= DBLCLICK_HIJACK_STALE_MS) return true;
-  if (dblclickChildClosed && now - dblclickChildClosedTs <= DBLCLICK_HIJACK_STALE_MS
-      && dblclickOpenerNavTs > 0) return true;
-  if (dblclickSecondClickTs > 0 && now - dblclickSecondClickTs <= DBLCLICK_HIJACK_STALE_MS
-      && dblclickOpenerNavTs > 0) return true;
-  return false;
+  return (
+    dblclickOpenerNavTs > 0 &&
+    now - dblclickOpenerNavTs <= DBLCLICK_HIJACK_STALE_MS &&
+    dblclickSecondClickTs >= dblclickOpenerNavTs &&
+    now - dblclickSecondClickTs <= DBLCLICK_HIJACK_STALE_MS
+  );
+}
+
+/**
+ * Consume the destination document's one-shot SW correlation for a trusted
+ * click. Programmatic clicks must never turn page-controlled state into a
+ * detection or a user-facing warning.
+ */
+export function consumeDblclickCorrelationOnTrustedClick(isTrusted: boolean): boolean {
+  if (!isTrusted) return false;
+  const now = Date.now();
+  if (dblclickCrossDocumentExpiresAt <= now) {
+    dblclickCrossDocumentExpiresAt = 0;
+    return false;
+  }
+  dblclickCrossDocumentExpiresAt = 0;
+  return true;
 }
 
 /**
@@ -142,6 +169,5 @@ export function _resetDblclickState(): void {
   dblclickOpenerNavTs = 0;
   dblclickOpenerNavUrl = "";
   dblclickSecondClickTs = 0;
-  dblclickChildClosed = false;
-  dblclickChildClosedTs = 0;
+  dblclickCrossDocumentExpiresAt = 0;
 }

@@ -97,6 +97,39 @@ async function extractEventLog(context: import("@playwright/test").BrowserContex
   return log as Array<{ kind?: string; site?: string; score?: number; reasons?: string[] }>;
 }
 
+async function proveHttpOpenerNavigationCorrelation(params: {
+  fixture: string;
+  trigger: string;
+  targetUrl: RegExp;
+  targetAction: string;
+}) {
+  const { page, context, cleanup } = await setupFixtureTest(params.fixture);
+  try {
+    const popupPromise = context.waitForEvent("page", { timeout: 5000 });
+    await page.click(params.trigger);
+    const popup = await popupPromise;
+    expect(popup, "the initial trusted popup is intentionally permitted").toBeTruthy();
+    await waitForNavSentinelBridge(popup);
+
+    await popup.click("#hijackOpener");
+    await expect(page).toHaveURL(params.targetUrl);
+    await waitForNavSentinelBridge(page);
+    // The child bridge and destination content script race across a real tab
+    // navigation. The bounded claim retries in the extension; wait for that
+    // supported lifecycle boundary before issuing the next trusted click.
+    await page.waitForTimeout(900);
+
+    await page.click(params.targetAction);
+    await waitForToastMatch(page, /popup navigated this page before your next click/i, 8000);
+    await expect.poll(
+      async () => (await extractEventLog(context)).some((event) => event.kind === "dblclickjack_detected"),
+      { timeout: 8000 },
+    ).toBe(true);
+  } finally {
+    await cleanup();
+  }
+}
+
 const MUTATION_TRIGGER_EVENT = "navsentinel:gym:trigger-mutation";
 
 async function triggerMutationAfterMonitorArm(page: import("@playwright/test").Page) {
@@ -128,11 +161,14 @@ async function waitForMutationEvent(
 // ==========================================================================
 
 test.describe("DoubleClickjacking", () => {
-  test("doubleclick-01 opener-navigation correlation @phase2", () => {
-    test.fixme(
-      true,
-      "#496 must replace the data-URL child with a real-browser fixture and prove second-stage correlation"
-    );
+  test("doubleclick-01 HTTP child correlates the target-stage click @phase2", async () => {
+    test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
+    await proveHttpOpenerNavigationCorrelation({
+      fixture: "doubleclick-01-basic.html",
+      trigger: "#trigger",
+      targetUrl: /doubleclick-01-target\.html/,
+      targetAction: "#allowBtn",
+    });
   });
 
   test("doubleclick-02 OAuth consent variant: popup is blocked @phase2", async () => {
@@ -177,11 +213,14 @@ test.describe("DoubleClickjacking", () => {
     }
   });
 
-  test("doubleclick-04 payment opener-navigation correlation @phase2", () => {
-    test.fixme(
-      true,
-      "#496 must replace the about:blank child with a real-browser fixture and prove second-stage correlation"
-    );
+  test("doubleclick-04 HTTP payment child correlates the target-stage click @phase2", async () => {
+    test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
+    await proveHttpOpenerNavigationCorrelation({
+      fixture: "doubleclick-04-payment.html",
+      trigger: "#payBtn",
+      targetUrl: /doubleclick-04-payment-target\.html/,
+      targetAction: "#confirmBtn",
+    });
   });
 });
 

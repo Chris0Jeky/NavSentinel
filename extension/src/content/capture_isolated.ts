@@ -48,6 +48,7 @@ import {
   handleDblclickBridgeMessage,
   handleDblclickRuntimeMessage,
   isDoubleClickHijackActive,
+  consumeDblclickCorrelationOnTrustedClick,
   getDblclickOpenerNavUrl,
 } from "./dblclick_guard";
 import {
@@ -1564,6 +1565,27 @@ if (chrome?.runtime?.onMessage) {
 }
 
 if (chrome?.runtime?.sendMessage && isTopFrame()) {
+  // Claim a URL-free, one-shot correlation left by a browser-registered child
+  // after it navigated this opener. Retry briefly because the child bridge and
+  // destination content script can race during the same navigation.
+  const claimDblclickCorrelation = (retries = 4, errorBudget = 2) => {
+    chrome.runtime.sendMessage({ type: "ns-dblclick-correlation-claim" }, (resp) => {
+      if (chrome.runtime.lastError) {
+        if (errorBudget > 0) window.setTimeout(() => claimDblclickCorrelation(retries, errorBudget - 1), 150);
+        return;
+      }
+      if (resp?.active === true && typeof resp.expiresAt === "number") {
+        handleDblclickRuntimeMessage({
+          type: "ns-dblclick-correlation-ready",
+          expiresAt: resp.expiresAt,
+        });
+        return;
+      }
+      if (retries > 0) window.setTimeout(() => claimDblclickCorrelation(retries - 1, errorBudget), 150);
+    });
+  };
+  claimDblclickCorrelation();
+
   // -- Rollback polling --
   const run = (polls = 4, errorBudget = 3) => {
     chrome.runtime.sendMessage({ type: "ns-check-rollback" }, (resp) => {
@@ -1751,7 +1773,8 @@ window.addEventListener(
 
     const userActivationActive = !!navigator.userActivation?.isActive;
 
-    const dblClickHijack = isDoubleClickHijackActive();
+    const dblClickHijack =
+      consumeDblclickCorrelationOnTrustedClick(e.isTrusted) || isDoubleClickHijackActive();
 
     // Check both the registrable domain and the full hostname against the
     // bloom filter. Feeds may contain either form, and attackers may use
@@ -1828,6 +1851,13 @@ window.addEventListener(
         url: openerNavUrl || location.href,
         destHost: (() => { try { return new URL(openerNavUrl || location.href, location.href).hostname; } catch { return location.hostname; } })(),
       });
+      if (e.isTrusted && mode !== "off") {
+        sendIconUpdate("yellow");
+        showToast({
+          message: "NavSentinel warning: a popup navigated this page before your next click.",
+          timeoutMs: 8000,
+        });
+      }
     }
 
     const nrsResult = computeNRS(cdsResult, navCtx);

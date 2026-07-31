@@ -1,0 +1,13 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8" /><title>DoubleClickjacking HTTP child</title></head>
+<body>
+  <p>Verification window</p>
+  <button id="hijackOpener">Continue</button>
+  <script>
+    document.getElementById("hijackOpener").addEventListener("click", () => {
+      window.opener.location = "doubleclick-01-target.html";
+    });
+  </script>
+</body>
+</html>

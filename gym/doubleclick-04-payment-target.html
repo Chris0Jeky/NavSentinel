@@ -60,10 +60,11 @@
     In a real attack, the user's second click from the checkout page would land on
     the "Confirm Payment" button here, authorizing an inflated or redirected payment.
   </div>
+  <p id="payment-status" role="status"></p>
 
   <script>
     document.getElementById("confirmBtn").addEventListener("click", function() {
-      alert("Payment authorized! (This is a gym simulation - no real payment was made.)");
+      document.getElementById("payment-status").textContent = "Gym payment action invoked.";
     });
   </script>
 </body>

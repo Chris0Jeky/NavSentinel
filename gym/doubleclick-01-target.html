@@ -67,13 +67,14 @@
     "Allow" button would be positioned exactly where the user's second click
     lands, granting OAuth consent or MFA approval without awareness.
   </div>
+  <p id="action-status" role="status"></p>
 
   <script>
     document.getElementById("allowBtn").addEventListener("click", () => {
-      document.body.innerHTML = "<h1 style='color:red;text-align:center;margin-top:100px'>ATTACK SUCCEEDED: Consent was granted by the second click of the double-click.</h1>";
+      document.getElementById("action-status").textContent = "Gym action invoked.";
     });
     document.getElementById("denyBtn").addEventListener("click", () => {
-      document.body.innerHTML = "<h1 style='color:green;text-align:center;margin-top:100px'>Action denied.</h1>";
+      document.getElementById("action-status").textContent = "Gym action denied.";
     });
   </script>
 </body>

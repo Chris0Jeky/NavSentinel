@@ -35,6 +35,11 @@ export interface ChildWindowEntry {
   openerNavObserved: boolean;
 }
 
+/** A short-lived, URL-free opener-navigation correlation for the destination tab. */
+export interface DblclickCorrelationEntry {
+  expiresAt: number;
+}
+
 export interface AllowTargetEntry {
   url: string;
   expiresAt: number;
@@ -139,6 +144,8 @@ const isValidChildWindow = (v: unknown): boolean =>
   v.openerTabId > 0 &&
   isFiniteNumber(v.createdAt) &&
   typeof v.openerNavObserved === "boolean";
+const isValidDblclickCorrelation = (v: unknown): boolean =>
+  isRecord(v) && isFiniteNumber(v.expiresAt);
 const isValidTypedOrigin = (v: unknown): boolean =>
   isRecord(v) && isFiniteNumber(v.ts) && isFiniteNumber(v.deadline);
 // Restorable phases. A LIVE flow is only ever 'redirect' or 'consent' in storage:
@@ -179,6 +186,7 @@ const KEYS = {
   lastUrl: `${PREFIX}lastUrl`,
   lastCommitted: `${PREFIX}lastCommitted`,
   childWindow: `${PREFIX}childWindow`,
+  dblclickCorrelation: `${PREFIX}dblclickCorrelation`,
   oauthFlow: `${PREFIX}oauthFlow`,
   redirectChains: `${PREFIX}redirectChains`,
   captureTimestamps: `${PREFIX}captureTimestamps`,
@@ -246,6 +254,7 @@ export class SessionStateManager {
   readonly lastUrlByTab = new Map<number, string>();
   readonly lastCommittedByTab = new Map<number, LastCommittedEntry>();
   readonly childWindowByTab = new Map<number, ChildWindowEntry>();
+  readonly dblclickCorrelationByTab = new Map<number, DblclickCorrelationEntry>();
   readonly oauthFlowByTab = new Map<number, OAuthFlowState>();
 
   // Redirect chain data (separate because RedirectChainTracker has its own class)
@@ -326,6 +335,11 @@ export class SessionStateManager {
     this._restoreMap(this.lastUrlByTab, data[KEYS.lastUrl], isString);
     this._restoreMap(this.lastCommittedByTab, data[KEYS.lastCommitted], isValidLastCommitted);
     this._restoreMap(this.childWindowByTab, data[KEYS.childWindow], isValidChildWindow);
+    this._restoreMap(
+      this.dblclickCorrelationByTab,
+      data[KEYS.dblclickCorrelation],
+      isValidDblclickCorrelation,
+    );
     this._restoreMap(this.oauthFlowByTab, data[KEYS.oauthFlow], isValidOAuthFlow);
     this._restoreRedirectChains(data[KEYS.redirectChains]);
     this._restoreMap(
@@ -376,6 +390,7 @@ export class SessionStateManager {
       [KEYS.lastUrl]: mapToObj(this.lastUrlByTab),
       [KEYS.lastCommitted]: mapToObj(this.lastCommittedByTab),
       [KEYS.childWindow]: mapToObj(this.childWindowByTab),
+      [KEYS.dblclickCorrelation]: mapToObj(this.dblclickCorrelationByTab),
       [KEYS.oauthFlow]: mapToObj(this.oauthFlowByTab),
       [KEYS.redirectChains]: mapToObj(this.redirectChainData),
       [KEYS.captureTimestamps]: mapToObj(this.captureTimestampsByTab),
@@ -404,6 +419,7 @@ export class SessionStateManager {
     this.lastUrlByTab.delete(tabId);
     this.lastCommittedByTab.delete(tabId);
     this.childWindowByTab.delete(tabId);
+    this.dblclickCorrelationByTab.delete(tabId);
     this.oauthFlowByTab.delete(tabId);
     this.redirectChainData.delete(tabId);
     this.captureTimestampsByTab.delete(tabId);

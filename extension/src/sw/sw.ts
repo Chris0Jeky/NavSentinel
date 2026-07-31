@@ -81,6 +81,10 @@ const TYPED_ORIGIN_MAX_MS = 15_000;
 const USER_NAV_CONTEXT_TTL_MS = 10_000;
 const DBLCLICK_CHILD_MAX_AGE_MS = 5_000;
 const DBLCLICK_CHILD_PRUNE_LIMIT = 50;
+// Kept separately from the child relationship so the destination document can
+// claim exactly one verified opener-navigation signal after the opener reloads.
+const DBLCLICK_CORRELATION_TTL_MS = 5_000;
+const DBLCLICK_CORRELATION_PRUNE_LIMIT = 50;
 const OAUTH_FLOW_MAX_AGE_MS = 60_000;
 const OAUTH_FLOW_PRUNE_LIMIT = 50;
 
@@ -151,6 +155,7 @@ const pendingForwardByTab = swState.pendingForwardByTab;
 const rollbackReturnByTab = swState.rollbackReturnByTab;
 const lastUrlByTab = swState.lastUrlByTab;
 const lastCommittedByTab = swState.lastCommittedByTab;
+const dblclickCorrelationByTab = swState.dblclickCorrelationByTab;
 
 // --- Redirect chain correlation ---
 // Pass the session-backed Map so the tracker persists via swState.
@@ -423,6 +428,20 @@ function pruneStaleChildWindows(): void {
     }
   }
   swState.persistMap(childWindowByTab, "childWindow");
+}
+
+function pruneDblclickCorrelations(): void {
+  const now = Date.now();
+  for (const [tabId, entry] of dblclickCorrelationByTab) {
+    if (entry.expiresAt <= now) dblclickCorrelationByTab.delete(tabId);
+  }
+  if (dblclickCorrelationByTab.size > DBLCLICK_CORRELATION_PRUNE_LIMIT) {
+    const oldest = [...dblclickCorrelationByTab.entries()]
+      .sort((a, b) => a[1].expiresAt - b[1].expiresAt)
+      .slice(0, dblclickCorrelationByTab.size - DBLCLICK_CORRELATION_PRUNE_LIMIT);
+    for (const [tabId] of oldest) dblclickCorrelationByTab.delete(tabId);
+  }
+  swState.persistMap(dblclickCorrelationByTab, "dblclickCorrelation");
 }
 
 function clearPendingTabState(
@@ -1016,19 +1035,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     void updateTabIcon(tabId, state, blockCount);
   }
 
-  // DoubleClickjacking: forward opener.location write from child to opener tab.
-  // Only forward if the sender tab is a known child window to prevent
-  // malicious pages from injecting false opener-nav signals.
+  // DoubleClickjacking: accept an opener.location write only from the top
+  // frame of a browser-registered child tab. The persisted record is URL-free:
+  // it exists solely to bridge the opener document reload to its next click.
   if (message.type === "ns-dblclick-opener-nav") {
     return runWhenHydrated(() => {
       const childTabId = sender.tab?.id;
-      if (typeof childTabId !== "number") return;
+      if (typeof childTabId !== "number" || sender.frameId !== 0) return;
       const childEntry = childWindowByTab.get(childTabId);
       if (!childEntry) return;
       // Mark that this child performed an opener.location write so the
       // child-close signal is only sent for confirmed attack scenarios.
       childEntry.openerNavObserved = true;
       swState.persistMap(childWindowByTab, "childWindow");
+      pruneDblclickCorrelations();
+      dblclickCorrelationByTab.set(childEntry.openerTabId, {
+        expiresAt: Date.now() + DBLCLICK_CORRELATION_TTL_MS,
+      });
+      swState.persistMap(dblclickCorrelationByTab, "dblclickCorrelation");
 
       // --- OAuth: detect opener manipulation during an active OAuth flow ---
       // A completed flow is deleted from the map on completion (#366), so a LIVE
@@ -1057,6 +1081,31 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
       );
       sendResponse?.({ ok: true });
+    });
+  }
+
+  // A newly loaded opener top frame claims a one-shot correlation before it
+  // sees the user's next click. Claiming is sender-authenticated and consumes
+  // the SW record; the content script then consumes it only for a trusted click.
+  if (message.type === "ns-dblclick-correlation-claim") {
+    return runWhenHydrated(() => {
+      const openerTabId = sender.tab?.id;
+      if (typeof openerTabId !== "number" || sender.frameId !== 0) {
+        sendResponse?.({ active: false });
+        return;
+      }
+      const entry = dblclickCorrelationByTab.get(openerTabId);
+      if (!entry || entry.expiresAt <= Date.now()) {
+        if (entry) {
+          dblclickCorrelationByTab.delete(openerTabId);
+          swState.persistMap(dblclickCorrelationByTab, "dblclickCorrelation");
+        }
+        sendResponse?.({ active: false });
+        return;
+      }
+      dblclickCorrelationByTab.delete(openerTabId);
+      swState.persistMap(dblclickCorrelationByTab, "dblclickCorrelation");
+      sendResponse?.({ active: true, expiresAt: entry.expiresAt });
     });
   }
 });
@@ -1391,6 +1440,7 @@ function onRemovedHandler(tabId: number): void {
   redirectChainTracker.deleteTab(tabId);
   oauthFlowByTab.delete(tabId);
   captureTimestampsByTab.delete(tabId);
+  dblclickCorrelationByTab.delete(tabId);
   clearPendingTabState(tabId);
   lastUrlByTab.delete(tabId);
   // Batch persist all cleanup in one storage write
