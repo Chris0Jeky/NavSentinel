@@ -1,6 +1,8 @@
-# Guide Update Protocol
+# Optional Guide Update Notes
 
-Agents should improve the operating system without making the instruction layer noisy or unstable.
+This is advisory only. Owner decision #499 removed the repository-local agent
+harness; documentation does not need a parallel process update unless product
+truth or a repeatedly useful command actually changed.
 
 ## When To Update Instructions
 

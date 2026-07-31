@@ -1,6 +1,6 @@
 # NavSentinel Project Roadmap
 
-*Created 2026-04-09. Truth refresh 2026-07-10; live/status sync 2026-07-25 (PR queue cleared).*
+*Created 2026-04-09. Truth refresh 2026-07-10; live/status sync 2026-07-31.*
 
 This is the execution roadmap. [`Product_Strategy.md`](Product_Strategy.md) owns
 the product thesis, portfolio boundaries, and evidence gates; GitHub issues own
@@ -47,6 +47,10 @@ Re-derive the open-issue count live (`gh issue list --state open`) — it moved 
 tag, GitHub release, CWS release, or branch
 protection. The exact audit baseline is recorded only in dated
 `Product_Strategy.md`; verify live.
+Owner directive #499 retires the repository-local agent harness (tier, project
+hooks, lifecycle scripts, vendored floor, validation commands, and Harness CI).
+That infrastructure-only change does not alter extension runtime behavior or
+the product release gates below.
 The legacy browser-surface PR queue is **cleared** as of 2026-07-25; this table is retained for merge provenance:
 
 | PR | Current state |
@@ -57,7 +61,7 @@ The legacy browser-surface PR queue is **cleared** as of 2026-07-25; this table 
 | #464 | **MERGED 2026-07-25** as `c4f6183`. Merged head `d7c7090`; exact-head CI green, 6/6 threads resolved. RI-01 synthetic-navigation allowance rejection. Manual Gate-3 (AI-21) waived — ships 5 new regression specs covering the guide's attack cases, with trusted-activation compatibility covered by the existing Level 8 / RW-10 specs |
 | #466 | **MERGED 2026-07-25** as `4ff6341`. Merged head `ebde166`; exact-head CI green, 4/4 threads resolved. RI-01 pending-decision SW boundary — **dormant** (no production path sends `ns-pending-decision-*`). Manual Gate-3 (AI-22) waived; its `rolldownOptions` bundle-layout risk is covered by the `check:mv3-worker` gate the PR itself adds |
 | #468 | **MERGED 2026-07-25** as `ebeb922`. Merged head `5bac99b` (clean auto-merge, zero conflicts); exact-head CI green. RI-06 event-log URL minimization — advances RI-06 without closing it; remaining slices tracked in **#474** |
-| #457 | **MERGED 2026-07-25** — reworked from CONFLICTING. Its superseded floor payload (published head carried v1.5.1; an unpushed local commit had re-aligned it to v1.5.2) was dropped in favour of `main`'s canonical **v1.6.0** (byte-identical, sha256-verified) and the three stale hash pins re-pinned; all 4 review findings confirmed fixed upstream in 1.6.0. Delivers one-floor-per-runtime (repo-local `PreToolUse` removed), the SHA-pinned fail-closed Codex adapter, a `harness` CI matrix (ubuntu+windows), and the `120s→600s` floor-matrix timeout fix that finally makes `agent:hooks:smoke` exit 0 |
+| #457 | **MERGED 2026-07-25 (historical; retired by #499).** It delivered the then-current one-floor topology, pinned adapter, vendored fixtures, and Harness CI. Owner decision #499 removes that entire repository-local consumer/gate surface without changing extension runtime behavior. |
 
 **RI-01 local implementation note (verified 2026-07-13):** remotely backed-up
 checkpoint branch `fix/ri01-extension-origin-decisions` contains a context-bound,
@@ -70,9 +74,9 @@ ClickFix property fixture only in that worktree; AI-20 owns the human review.
 
 The North-Star and Horizon documents are frozen option portfolios. Their 15
 Horizon issues (#439–#453) do not authorize implementation and should be culled
-or moved to a post-beta milestone. Start each session with
-[`HANDOFF.md`](agentic/HANDOFF.md), live GitHub state, and
-[`ACTION_ITEMS.md`](../ACTION_ITEMS.md).
+or moved to a post-beta milestone. Use live GitHub state first;
+[`HANDOFF.md`](agentic/HANDOFF.md) is an optional short snapshot, and
+[`ACTION_ITEMS.md`](../ACTION_ITEMS.md) is needed only for human-owned actions.
 
 ### Corrective action register
 

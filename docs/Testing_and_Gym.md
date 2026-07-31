@@ -32,8 +32,6 @@ npm run test:e2e:corpus
 npm run measure:fp
 npm run demo:showcase
 npm run demo:showcase:record
-npm run agent:hooks:smoke
-npm run agent:skills:validate
 ```
 
 To run the Gym locally:
@@ -48,25 +46,6 @@ The older Python flow still works when needed:
 cd gym
 python -m http.server 5173
 ```
-
-## Agentic tooling smoke checks
-
-Run these from the repo root in PowerShell after changing `AGENTS.md`, `CLAUDE.md`, `.mcp.json`, `.agents/`, `.claude/`, `docs/agentic/`, `autodoc/AGENT_INDEX.md`, or `scripts/agent_hooks/`:
-
-```powershell
-npm run agent:hooks:smoke
-npm run agent:skills:validate
-python -m py_compile .claude\hooks\dispatch.py .claude\hooks\smoke_test.py scripts\agent_hooks\post_tool_use.py scripts\agent_hooks\post_tool_failure.py scripts\agent_hooks\session_start.py scripts\agent_hooks\render_failure_ledger.py scripts\agent_hooks\smoke_test.py scripts\agent_hooks\validate_skills.py
-python scripts\agent_hooks\render_failure_ledger.py
-git diff --exit-code -- docs\agentic\FAILURE_LEDGER.md
-rg -n "options_limits_backtest|series_tools_python|TODO|FIXME|PLACEHOLDER" AGENTS.md CLAUDE.md .agents .claude docs\agentic autodoc scripts\agent_hooks .mcp.json
-```
-
-`npm run agent:hooks:smoke` pins the exact local CI/audit floor artifacts,
-executes the canonical deny matrix, proves one floor per runtime, exercises the
-Codex global-dispatch adapter (including missing/tampered fail-closed paths),
-checks lifecycle-hook shape, tests redaction and human-action routing, and parses
-`.mcp.json`. CI runs it on Windows and Linux alongside skill-parity validation.
 
 ## Test layers
 
