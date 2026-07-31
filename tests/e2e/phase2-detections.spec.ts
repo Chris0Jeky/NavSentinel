@@ -97,36 +97,42 @@ async function extractEventLog(context: import("@playwright/test").BrowserContex
   return log as Array<{ kind?: string; site?: string; score?: number; reasons?: string[] }>;
 }
 
+const MUTATION_TRIGGER_EVENT = "navsentinel:gym:trigger-mutation";
+
+async function triggerMutationAfterMonitorArm(page: import("@playwright/test").Page) {
+  // capture_isolated may load after document.readyState becomes complete, in
+  // which case the monitor deliberately waits 3 seconds before arming.
+  await page.waitForTimeout(3500);
+  await page.evaluate((eventName) => {
+    window.dispatchEvent(new Event(eventName));
+  }, MUTATION_TRIGGER_EVENT);
+}
+
+async function waitForMutationEvent(
+  context: import("@playwright/test").BrowserContext,
+  reason: string
+) {
+  await expect.poll(
+    async () => {
+      const events = await extractEventLog(context);
+      return events.some(
+        (event) => event.kind === "mutation_alert" && event.reasons?.includes(reason)
+      );
+    },
+    { timeout: 5000 }
+  ).toBe(true);
+}
+
 // ==========================================================================
 // DoubleClickjacking Tests (P2-01)
 // ==========================================================================
 
 test.describe("DoubleClickjacking", () => {
-  test("doubleclick-01 basic attack: first click popup is blocked @phase2", async () => {
-    test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
-
-    const { page, context, cleanup } = await setupFixtureTest("doubleclick-01-basic.html");
-
-    try {
-      const trigger = page.locator("#trigger");
-      const box = await trigger.boundingBox();
-      expect(box, "#trigger button should be visible").toBeTruthy();
-
-      // First click opens a child window -- NavSentinel should block it
-      const popupPromise = context.waitForEvent("page", { timeout: 2000 }).catch(() => null);
-      await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
-
-      const popup = await popupPromise;
-      // The popup may be blocked entirely, or NavSentinel may show a toast
-      if (popup === null) {
-        // Popup was blocked -- check for toast
-        await waitForToastMatch(page, /Blocked|blocked/i, 4000);
-      }
-      // Either way, the page should remain on the fixture
-      await expect(page).toHaveURL(/doubleclick-01-basic\.html/);
-    } finally {
-      await cleanup();
-    }
+  test("doubleclick-01 opener-navigation correlation @phase2", () => {
+    test.fixme(
+      true,
+      "#496 must replace the data-URL child with a real-browser fixture and prove second-stage correlation"
+    );
   });
 
   test("doubleclick-02 OAuth consent variant: popup is blocked @phase2", async () => {
@@ -171,27 +177,11 @@ test.describe("DoubleClickjacking", () => {
     }
   });
 
-  test("doubleclick-04 payment variant: popup is blocked @phase2", async () => {
-    test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
-
-    const { page, context, cleanup } = await setupFixtureTest("doubleclick-04-payment.html");
-
-    try {
-      const payBtn = page.locator("#payBtn");
-      const box = await payBtn.boundingBox();
-      expect(box, "#payBtn should be visible").toBeTruthy();
-
-      const popupPromise = context.waitForEvent("page", { timeout: 2000 }).catch(() => null);
-      await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
-
-      const popup = await popupPromise;
-      if (popup === null) {
-        await waitForToastMatch(page, /Blocked|blocked/i, 4000);
-      }
-      await expect(page).toHaveURL(/doubleclick-04-payment\.html/);
-    } finally {
-      await cleanup();
-    }
+  test("doubleclick-04 payment opener-navigation correlation @phase2", () => {
+    test.fixme(
+      true,
+      "#496 must replace the about:blank child with a real-browser fixture and prove second-stage correlation"
+    );
   });
 });
 
@@ -423,9 +413,7 @@ test.describe("DOM Mutation Monitor", () => {
     const { page, context, cleanup } = await setupFixtureTest("mutation-01-delayed-overlay.html");
 
     try {
-      // The overlay injects 3 seconds after page load.
-      // The mutation monitor starts 2 seconds after load.
-      // Wait for the overlay to appear.
+      await triggerMutationAfterMonitorArm(page);
       await page.waitForSelector("#malicious-overlay", { timeout: 8000 });
 
       // Check that the status text confirms injection
@@ -442,10 +430,7 @@ test.describe("DOM Mutation Monitor", () => {
         8000
       );
 
-      // Verify event log contains mutation_alert
-      const events = await extractEventLog(context);
-      const mutationEvents = events.filter((e) => e.kind === "mutation_alert");
-      expect(mutationEvents.length, "Should have logged a mutation_alert event").toBeGreaterThan(0);
+      await waitForMutationEvent(context, "overlay_injected");
     } finally {
       await cleanup();
     }
@@ -457,7 +442,7 @@ test.describe("DOM Mutation Monitor", () => {
     const { page, context, cleanup } = await setupFixtureTest("mutation-02-form-action-change.html");
 
     try {
-      // The form action changes 3 seconds after page load
+      await triggerMutationAfterMonitorArm(page);
       await page.waitForFunction(
         () => document.getElementById("status")?.textContent?.includes("Form action changed"),
         null,
@@ -470,12 +455,7 @@ test.describe("DOM Mutation Monitor", () => {
       );
       expect(formAction).toContain("evil-phishing.example.com");
 
-      // Verify the event log captured the mutation
-      const events = await extractEventLog(context);
-      const mutationEvents = events.filter(
-        (e) => e.kind === "mutation_alert" && e.reasons?.includes("form_action_changed")
-      );
-      expect(mutationEvents.length, "Should have logged form_action_changed").toBeGreaterThan(0);
+      await waitForMutationEvent(context, "form_action_changed");
     } finally {
       await cleanup();
     }
@@ -487,7 +467,7 @@ test.describe("DOM Mutation Monitor", () => {
     const { page, context, cleanup } = await setupFixtureTest("mutation-03-password-inject.html");
 
     try {
-      // The password field injects 3 seconds after page load
+      await triggerMutationAfterMonitorArm(page);
       await page.waitForFunction(
         () => document.getElementById("status")?.textContent?.includes("Password field injected"),
         null,
@@ -500,12 +480,7 @@ test.describe("DOM Mutation Monitor", () => {
       );
       expect(hasPassword, "Password field should exist in the form").toBe(true);
 
-      // Verify the event log captured the mutation
-      const events = await extractEventLog(context);
-      const mutationEvents = events.filter(
-        (e) => e.kind === "mutation_alert" && e.reasons?.includes("password_injected")
-      );
-      expect(mutationEvents.length, "Should have logged password_injected").toBeGreaterThan(0);
+      await waitForMutationEvent(context, "password_injected");
     } finally {
       await cleanup();
     }
