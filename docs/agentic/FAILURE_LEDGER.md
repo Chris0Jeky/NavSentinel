@@ -1,10 +1,9 @@
 # Agent Failure Ledger
 
-This file is the human-readable view of recurring agent, tool, and workflow failures. The curated source is `docs/agentic/failure_ledger.jsonl` (git-tracked; deliberately-promoted entries only). Raw machine-captured failures go to the gitignored `docs/agentic/failure_autolog.jsonl` — promote genuinely recurring ones into the curated ledger per `GUIDE_UPDATE_PROTOCOL.md`. Render with:
-
-```bash
-python scripts/agent_hooks/render_failure_ledger.py
-```
+This file is retained as a static historical view of recurring agent, tool, and
+workflow failures. The repository-local auto-capture and renderer were retired
+by owner decision #499. Add a curated entry manually only when the history is
+still useful; this ledger is not a gate or required handoff artifact.
 
 ## Entries
 

@@ -1,16 +1,19 @@
 # NavSentinel Orchestrator
 
-**Purpose:** Single control file for the autonomous end-to-end work cycle. Reuse this file across sessions. It tracks the backlog, in-flight slices, PR/merge gates, and a running cycle log.
+**Purpose:** Historical cycle ledger retained for provenance.
 
-**Created:** 2026-05-30 | **Mode:** continuous, subagent/workflow-driven
+**Created:** 2026-05-30 | **Retired as an active control file:** 2026-07-31
 
-> Authority: this file sits *below* `AGENTS.md`, `docs/Project_Roadmap.md`, and `autodoc/AGENT_INDEX.md`. It is an operational ledger, not a source of product truth. When a slice changes roadmap/index truth, sync those per their protocols.
+> Owner decision #499 removed the repository-local agent harness. This file is
+> not required reading, an active backlog, or an executable workflow. Use live
+> GitHub state and `docs/Project_Roadmap.md`; the entries below describe earlier
+> sessions and may name removed hooks, gates, or scripts.
 
 > **Standing decisions & priority order:** `docs/agentic/DECISIONS.md`. Discovery is milestone-gated; LOW residue → `docs/agentic/ICEBOX.md` (D-2026-07-03-B).
 
 ---
 
-## Operating Loop (per task)
+## Historical operating loop
 
 1. **Select** the highest-value unblocked slice from the Backlog. Prefer narrow, reviewable diffs. Respect dependencies (use stacked branches).
 2. **Branch** off the correct base (`main`, or the parent slice's branch for stacked work). Use a worktree when slices run in parallel or must not collide.

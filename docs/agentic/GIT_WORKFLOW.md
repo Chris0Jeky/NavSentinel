@@ -1,50 +1,14 @@
-# Git Workflow for Agents
+# Git Workflow and Recovery
 
-This document explains NavSentinel's Git safety rules for Claude Code and
-Codex agents, including the plain-language explanation required before risky
-Git operations.
+This is recovery guidance, not an enforcement layer. Owner decision #499
+removed NavSentinel's repository-local command harness, tier, and hooks. Shared
+runtime settings outside the repository may still apply, but this project does
+not verify or depend on them.
 
-## Branch Safety Tiers
-
-The canonical deny floor is the global dispatcher `~/.claude/hooks/dispatch.py`.
-Claude receives it globally; Codex's sole project `PreToolUse` adapter in
-`.codex/hooks.json` pins the same dispatcher with `--runtime codex` after the
-project and exact hook definitions are trusted. Repo-local `.claude/hooks/*`
-files are exact CI/audit fixtures, not a second active hook. It blocks only
-irreversible operations: force-push patterns, `rm -rf` outside the project,
-pipe-to-shell, `sudo`, and secret-file mutation. It is a tripwire, not a
-complete safety boundary.
-
-**Syncing the vendored floor (added 2026-07-25, after #457).** A canonical floor
-sync PR must update **four** things together:
-`.claude/hooks/dispatch.py`, `.claude/hooks/smoke_test.py`, the two
-`EXPECTED_*_SHA256` constants plus `FLOOR_PROVENANCE` in
-`scripts/agent_hooks/smoke_test.py`, and **both** adapter pins in
-`.codex/hooks.json`. The `harness` CI job enforces the artifact hashes and
-adapter pins, but `FLOOR_PROVENANCE` is diagnostic text only; review and update
-it explicitly so a future drift error names the correct canonical release. The
-pins are normalised sha256 of the file read as text with LF newlines. Compute
-them with
-`hashlib.sha256(path.read_text(encoding="utf-8").encode("utf-8")).hexdigest()`.
-Copy the artifacts verbatim from canonical and verify byte-identity with `diff`
-against the installed `~/.claude/hooks/` copies — never hand-edit them, and never
-let a three-way merge resolve them, which can silently yield a hybrid matching no
-release.
-
-**The floor does not stop scriptblock-wrapped commands.** Measured against
-canonical v1.6.0 on 2026-07-25: 9 of 15 wrapped combinations return `allow` for
-commands it denies bare, including `rm -rf` outside the project and
-pipe-to-shell. Branch protection (AI-17) would only cover the force-push class.
-Treat any braced one-liner containing `iex` / `Invoke-Expression` as unguarded
-regardless of the verdict. Upstream: agent-harness #37. Also note the two runtimes
-fail differently — Codex refuses to run without a verified dispatcher, Claude
-simply has no hook if the global floor is absent (#475).
-
-At NavSentinel's T2 tier, `reset --hard`, `rebase`, and `checkout -- .` are
-recoverable from origin and may be technically permitted. They still require
-the explain-before-acting protocol below. Never force-push `main`, `master`,
-`develop`, or `release`; AI-17 tracks the missing server-side branch-protection
-wall.
+Classic branch protection is still absent (AI-17), so do not force-push
+`main`, `master`, `develop`, or `release`. Prefer additive commits and merge
+commits. Before discarding uncommitted work or rewriting shared history, explain
+the affected data and recovery path and obtain explicit approval.
 
 ## Default Workflow
 
