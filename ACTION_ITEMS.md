@@ -1,26 +1,16 @@
-<!-- AGENT CONTRACT: This file tracks tasks that only the human (Chris) can do.
-     - Read it at session start (it is in the CLAUDE.md / AGENTS.md First-5-Minutes list).
-     - Surface every OPEN / BLOCKED item near the top of any summary, status report, or handoff you give Chris. Never let an open item go unmentioned.
-     - Mark an item DONE *only* when Chris explicitly says so (e.g. "AI-1 is done"). Move it to the Completed log with the date and a one-line result. Do not self-clear.
-     - Keep the "Current state snapshot" accurate when verified truth changes. This file is the can't-lose-context store while status-doc PRs are in flight (see note). -->
+<!-- HUMAN QUEUE: Use stable AI-N identifiers when the current task involves a
+     human decision or manual check. Close an item only from an explicit owner
+     answer or directly verified removal of the action it requested. -->
 
 # ACTION ITEMS — Human-Owned Tasks (NavSentinel)
 
-**Purpose:** the running list of things only *you* (Chris) can do — and the context an agent needs to not lose the thread between sessions. Agents flag the open items in every summary; you clear them by saying so.
+**Purpose:** the running list of things only *you* (Chris) can do, with enough
+context to resume by stable ID.
 
-**Last updated:** 2026-07-31 — live review and final-head aging instructions were
-reconciled with the global risk-calibrated gate. Human-queue state was last
-rechecked 2026-07-25, when **the open-PR queue was cleared: all seven open PRs
-merged** (#472 floor v1.6.0, #471 docs, #356 main-guard de-hardening, #464 synthetic-nav
-rejection, #466 pending-decision SW boundary, #468 RI-06 event-log minimization, #457
-one-floor-per-runtime + harness CI gate, merged as `dc3d0da`). Chris waived the three
-per-PR manual Chrome gates in favour of automated equivalents, so AI-13/AI-21/AI-22 are
-resolved and replaced by the single optional **AI-24** confirmation pass; **AI-18's hold
-is lifted**. Two findings were filed rather than dropped: **#474** (remaining RI-06
-slices — path-token redaction, PromptOutcomeEntry minimization, unified clear-all) and
-**#475** (after the one-floor topology, Claude's floor is fail-**open** where Codex's is
-fail-closed). `npm run agent:hooks:smoke` now exits **0** — #457 raised the floor-matrix
-timeout that had been failing it. Product thesis:
+**Last updated:** 2026-07-31 — owner decision #499 retires the repository-local
+agent harness, making AI-18 obsolete. The three browser checks waived on
+2026-07-25 remain represented by the single optional **AI-24** confirmation.
+Product thesis:
 `docs/Product_Strategy.md`. Corrective
 program: `docs/Project_Roadmap.md`. Standing decisions:
 `docs/agentic/DECISIONS.md`.
@@ -97,35 +87,11 @@ changes do not change shipped product state.
   are 15 frozen Horizon proposals. No new feature/epic issue seeding until the queue is
   culled and milestone-categorized.
 - **Infrastructure:** classic branch protection remains absent (`404 Branch not
-  protected`) and the rulesets API returns `[]`. AI-17 remains open. Codex hook
-  trust remains AI-18. GitHub private vulnerability reporting is enabled and
-  linked from `SECURITY.md`. **Deny-floor bypass re-measured 2026-07-25 against
-  canonical v1.6.0** (now vendored, via #472): 1.6.0 fixed the flat `iex` wrapper and the
-  trailing-statement form, but **9 of 15 wrapped combinations still return `allow`** — the
-  braced-scriptblock shapes, across force-push, recursive delete outside the project, and
-  pipe-to-shell. Branch protection (AI-17) covers only the force-push class, so the other
-  two stay host-destructive: **treat any scriptblock-wrapped command as unguarded
-  regardless of the floor's verdict**, and do not run unreviewed one-liners containing
-  `iex` / `Invoke-Expression`. Root cause is upstream (agent-harness #37, where the 1.6.0
-  A/B is posted). Do not patch the vendored copy locally: it is synced verbatim from
-  canonical, and #457 now adds a CI drift check that a local edit would fail. Separately,
-  the four floor findings reported on #457 **are** fixed in 1.6.0 — verified by direct
-  `check()` reproduction at three tier/flag configs, with controls proving the harness
-  discriminates rather than denying everything.
-
-  **Scope this honestly.** AI-17 branch protection mitigates only the
-  `git push --force` class. It does **nothing** for the other two payload
-  classes — a wrapped `rm -rf` outside the project, or a wrapped download piped
-  to a shell — so 6 of the 9 demonstrated combinations stay host-destructive
-  even after AI-17 is done. Branch protection is therefore necessary but **not
-  sufficient**, and this bypass is not "just an AI-17 priority bump".
-  Until a fixed canonical floor lands, the only real host-side controls are
-  operator ones: do not run unreviewed PowerShell one-liners containing
-  `iex`/`Invoke-Expression`, treat a scriptblock-wrapped command as unguarded
-  regardless of the floor's verdict, and prefer plain non-wrapped commands so
-  the floor can actually see them. Agents must not rely on the floor to catch a
-  destructive command inside `if (...) { }`, `Where-Object { }`, or a compound
-  assignment.
+  protected`) and the rulesets API returns `[]`; AI-17 remains open. GitHub
+  private vulnerability reporting is enabled and linked from `SECURITY.md`.
+  Owner decision #499 removes all repository-local hook/floor enforcement. The
+  shared producer defects remain tracked in agent-harness, but NavSentinel is no
+  longer a consumer after #499 lands.
 - **Local verification blocker:** Defender quarantined only
   `C:\Users\Public\codex-shell-home\NavSentinel-ri01\tests\clickfix-detector.property.test.ts`
   as `Trojan:HTML/FakeCaptcha.HNA!MTB`; it reports `DidThreatExecute=False` and
@@ -139,10 +105,8 @@ changes do not change shipped product state.
 
 **Guided resolution cursor:** `AI-16` (`Resume at: AI-16`; the next
 conversational label is `q-1`). Current ready order is AI-16 -> AI-9 -> AI-20 ->
-AI-17 -> AI-19 -> AI-18 -> AI-24 -> AI-23 (low priority housekeeping, last).
-**AI-18 is now READY** (was HELD): PR #457 landed on 2026-07-25, so
-`.codex/hooks.json` is stable and its definition hash will not be invalidated
-immediately after trusting it. **AI-13, AI-21 and AI-22 are resolved** — their
+AI-17 -> AI-19 -> AI-24 -> AI-23 (low priority housekeeping, last).
+**AI-13, AI-21 and AI-22 are resolved** — their
 PRs (#356, #464, #466) merged on 2026-07-25 after Chris chose to clear the
 browser-surface gate by automated equivalent rather than a manual pass; their
 procedures are retained below and in `docs/agentic/GATE3_GUIDES.md` as the
@@ -178,38 +142,10 @@ trademark advice before a commercial/public launch; and (6) record **keep** or
 screenshots, docs, and repository metadata before invitations or submission.
 Then tell the agent `AI-19 done: <decision>`.
 
-**OPEN: AI-18 — Review and trust the new Codex project hooks.** The Codex parity
-setup adds `.codex/hooks.json` for session orientation, the shared irreversible
-command floor, agentic-change verification reminders, and sanitized failure
-capture. Codex deliberately skips new or changed non-managed hooks until their
-exact definitions are trusted. **Human-only guide (run after this agentic slice
-is final):** (1) start a fresh Codex session in the canonical repository; (2)
-run `/hooks`; (3) compare every project entry with `.codex/hooks.json` —
-SessionStart runs `session_start.py`, PreToolUse Bash uses the inline SHA-pinned
-adapter to invoke the global `~/.claude/hooks/dispatch.py --event pre --runtime
-codex`, and PostToolUse runs `post_tool_use.py` plus sanitized
-`post_tool_failure.py`; (4) confirm each repo-owned helper path is
-repository-root-relative, the one external path is that global dispatcher, and
-no unexpected command exists; (5) choose
-**Trust** for those exact project hooks; (6) run `/hooks` again and confirm they
-are trusted/enabled; and (7) restart once to exercise SessionStart. Then reply
-`AI-18 done`. Trust is definition-hash-based, so repeat after future hook
-definition changes.
-
-> **Hold LIFTED 2026-07-25 — AI-18 is now ready.** PR #457 merged, so
-> `.codex/hooks.json` now holds its final SHA-pinned, fail-closed adapter and the
-> definition hash you trust will not be invalidated the next moment. The
-> double-floor topology is also gone: #457 removed the repo-local `PreToolUse`
-> hook, so Claude runs only the canonical global dispatcher and Codex's adapter
-> invokes that same file with `--runtime codex`. Two things to know before you
-> run it. (1) Treat the exact same-head `.codex/hooks.json` definition as the
-> authority for both adapter pins; do not compare it with a version or digest
-> copied into this guide. A future floor sync must bump both pins plus
-> `EXPECTED_DISPATCH_SHA256` / `EXPECTED_SMOKE_SHA256` in
-> `scripts/agent_hooks/smoke_test.py`, or the `harness` CI job fails. (2) The
-> Claude side is fail-**open** where Codex is fail-closed — if the global floor is
-> ever absent, Claude simply has no hook and nothing says so. Tracked separately;
-> not a blocker for trusting the Codex definitions.
+**RESOLVED 2026-07-31 — AI-18 — Codex project-hook trust.** Chris reviewed and
+trusted the prior hook definition, then explicitly directed removal of the
+repository-local harness in #499. The hook file and trust action no longer
+exist after that change; no restart confirmation or future re-trust is needed.
 
 **OPEN: AI-24 — One post-merge real-Chrome confirmation pass over the three
 browser-surface slices now on `main`** (optional; closes the residual risk accepted
@@ -264,10 +200,11 @@ amendments.
 AI-9's release-profile choice and AI-19's name choice still require explicit
 answers; the reversible prioritization is already the working posture.
 
-**🆕 OPEN: AI-17 — Enable GitHub branch protection on `main` (the harness
-wall).** Live verification still returns `404 Branch not protected`. The local
-deny floor is a tripwire, not a server-side wall; non-hooked clients can bypass
-it. Until protection exists, never force-push `main`.
+**🆕 OPEN: AI-17 — Enable GitHub branch protection on `main`.** Live
+verification still returns `404 Branch not protected`. Owner decision #499
+removes the repository-local command floor, so server-side protection is the
+only repository-wide force-push control. Until it exists, never force-push
+`main`.
 
 **Recommended:** reply `AI-17 apply recommended protection` and an
 authenticated agent can apply and verify this reversible repository setting.
@@ -329,10 +266,9 @@ and [file submission](https://www.microsoft.com/wdsi/filesubmission).
 **BLOCKED: AI-8 — Neutral-chip Gate-3 after closed PR #273.** The presentation
 intent is still reasonable, but stale PR #273 was closed on 2026-07-13 with its
 commit and two unresolved review threads preserved. An agent must recreate or
-defer the tiny change from current `main`, resolve both findings, satisfy the
-current risk-calibrated global review gate, age the final pushed head for at
-least three minutes, pass current CI, then post a new visual-check guide. Do not
-reuse the old branch checkout guide.
+defer the tiny change from current `main`, resolve both findings, pass the
+focused product checks and hosted product CI, then post a new visual-check
+guide. Do not reuse the old branch checkout guide.
 
 **AI-10 — Gate-3 + merge the SPA-breakage fix (#352) · ✅ RESOLVED 2026-06-23.** Chris ran the manual Chrome check ("manual checks on chrome for #352 done, it seems to be working fine now") → **#352 merged into `main`** (`#347` pushState de-harden + `#348` reputation WAR). The claude.ai grey screen / infinite-load and the per-page `reputation_data.bin`/`pushState` console errors are fixed; top-frame reputation is re-enabled.
 
@@ -543,14 +479,13 @@ and `refs/pull/399/head`, so deleting the local copies loses nothing). Reply
 **🚨 BLOCKED: AI-14 — OAuth tradeoff measurement after closed PR #399.** The
 measurement-held draft was closed on 2026-07-13 rather than merged from a stale
 base. It is not a beta blocker. Keep #223 blocked until #417 supplies valid
-methodology and an agent creates a current slice, satisfies the current
-risk-calibrated global review gate and three-minute final-head floor, and posts
-a reproducible headed measurement plan. Do not use the closed branch as a
-current test or merge target.
+methodology and an agent creates a current slice, passes its focused product
+checks and hosted product CI, and posts a reproducible headed measurement plan.
+Do not use the closed branch as a current test or merge target.
 
 **AI-12 — Top-site FP relief + D1 (#350 → PR #354) · ✅ RESOLVED 2026-06-23 — MERGED.** Chris manually confirmed the relief works on LinkedIn ("tested it on linkedin and it seemed to work fine now") = his measure/Gate-3 in lieu of the full `measure:fp` run (which needs headed Chromium + live Tranco, sandbox-can't). **#354 merged into `main`** (`c4426cf`): `getTierAdjustedBlockThreshold` now relieves TOP_SITE + CDS-only (benign-structural whitelist) by `NRS_TOP_SITE_CDS_RELIEF`; trust list grew 24→42 with safe `includeSubdomains`. Green CI (Build/Unit + E2E) on the main-merged head. **Follow-up:** `+20` is an unvalidated starting value; do not tune it again without the valid #417/#416 FP/TP evidence required by D25.
 
-AI-1, AI-2 resolved 2026-06-05; AI-3, AI-4 resolved 2026-06-13; **AI-5 resolved 2026-06-19** (Phishpedia public logo set approved); **AI-6 resolved 2026-06-19** (#249 merged after Gate-3 waiver). See Completed log. Deferred manual checks remain on the regression watchlist `docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md` (run on next build + load; now also covers #249 enriched-capture, #263 credential-submit, and #265 SW-hydration behavior). Standing posture (confirmed 2026-06-19): the agent **may autonomously merge non-browser PRs** (logic/test/build/docs) when exact-head proving checks are green, the current risk-calibrated global review and comment-triage gate is met, and the final pushed head has aged at least three minutes; **browser-surface PRs still hold for Gate-3**.
+AI-1, AI-2 resolved 2026-06-05; AI-3, AI-4 resolved 2026-06-13; **AI-5 resolved 2026-06-19** (Phishpedia public logo set approved); **AI-6 resolved 2026-06-19** (#249 merged after Gate-3 waiver). See Completed log. Deferred manual checks remain on the regression watchlist `docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md` (run on next build + load; now also covers #249 enriched-capture, #263 credential-submit, and #265 SW-hydration behavior). Standing posture (updated by owner decision #499 on 2026-07-31): non-browser PRs use focused product checks plus hosted product CI, with no NavSentinel-local review or aging gate; **browser-surface PRs still hold for Gate-3**.
 
 > **Note (2026-06-13):** `main` has advanced to `da400fb` since the 2026-06-05 snapshot below (`#196`/FF/domain-impersonation work merged). The snapshot's PR-batch facts are historical; current open-item truth is in this section.
 
