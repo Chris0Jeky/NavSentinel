@@ -266,10 +266,9 @@ and [file submission](https://www.microsoft.com/wdsi/filesubmission).
 **BLOCKED: AI-8 — Neutral-chip Gate-3 after closed PR #273.** The presentation
 intent is still reasonable, but stale PR #273 was closed on 2026-07-13 with its
 commit and two unresolved review threads preserved. An agent must recreate or
-defer the tiny change from current `main`, resolve both findings, satisfy the
-current risk-calibrated global review gate, age the final pushed head for at
-least three minutes, pass current CI, then post a new visual-check guide. Do not
-reuse the old branch checkout guide.
+defer the tiny change from current `main`, resolve both findings, pass the
+focused product checks and hosted product CI, then post a new visual-check
+guide. Do not reuse the old branch checkout guide.
 
 **AI-10 — Gate-3 + merge the SPA-breakage fix (#352) · ✅ RESOLVED 2026-06-23.** Chris ran the manual Chrome check ("manual checks on chrome for #352 done, it seems to be working fine now") → **#352 merged into `main`** (`#347` pushState de-harden + `#348` reputation WAR). The claude.ai grey screen / infinite-load and the per-page `reputation_data.bin`/`pushState` console errors are fixed; top-frame reputation is re-enabled.
 
@@ -480,14 +479,13 @@ and `refs/pull/399/head`, so deleting the local copies loses nothing). Reply
 **🚨 BLOCKED: AI-14 — OAuth tradeoff measurement after closed PR #399.** The
 measurement-held draft was closed on 2026-07-13 rather than merged from a stale
 base. It is not a beta blocker. Keep #223 blocked until #417 supplies valid
-methodology and an agent creates a current slice, satisfies the current
-risk-calibrated global review gate and three-minute final-head floor, and posts
-a reproducible headed measurement plan. Do not use the closed branch as a
-current test or merge target.
+methodology and an agent creates a current slice, passes its focused product
+checks and hosted product CI, and posts a reproducible headed measurement plan.
+Do not use the closed branch as a current test or merge target.
 
 **AI-12 — Top-site FP relief + D1 (#350 → PR #354) · ✅ RESOLVED 2026-06-23 — MERGED.** Chris manually confirmed the relief works on LinkedIn ("tested it on linkedin and it seemed to work fine now") = his measure/Gate-3 in lieu of the full `measure:fp` run (which needs headed Chromium + live Tranco, sandbox-can't). **#354 merged into `main`** (`c4426cf`): `getTierAdjustedBlockThreshold` now relieves TOP_SITE + CDS-only (benign-structural whitelist) by `NRS_TOP_SITE_CDS_RELIEF`; trust list grew 24→42 with safe `includeSubdomains`. Green CI (Build/Unit + E2E) on the main-merged head. **Follow-up:** `+20` is an unvalidated starting value; do not tune it again without the valid #417/#416 FP/TP evidence required by D25.
 
-AI-1, AI-2 resolved 2026-06-05; AI-3, AI-4 resolved 2026-06-13; **AI-5 resolved 2026-06-19** (Phishpedia public logo set approved); **AI-6 resolved 2026-06-19** (#249 merged after Gate-3 waiver). See Completed log. Deferred manual checks remain on the regression watchlist `docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md` (run on next build + load; now also covers #249 enriched-capture, #263 credential-submit, and #265 SW-hydration behavior). Standing posture (confirmed 2026-06-19): the agent **may autonomously merge non-browser PRs** (logic/test/build/docs) when exact-head proving checks are green, the current risk-calibrated global review and comment-triage gate is met, and the final pushed head has aged at least three minutes; **browser-surface PRs still hold for Gate-3**.
+AI-1, AI-2 resolved 2026-06-05; AI-3, AI-4 resolved 2026-06-13; **AI-5 resolved 2026-06-19** (Phishpedia public logo set approved); **AI-6 resolved 2026-06-19** (#249 merged after Gate-3 waiver). See Completed log. Deferred manual checks remain on the regression watchlist `docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md` (run on next build + load; now also covers #249 enriched-capture, #263 credential-submit, and #265 SW-hydration behavior). Standing posture (updated by owner decision #499 on 2026-07-31): non-browser PRs use focused product checks plus hosted product CI, with no NavSentinel-local review or aging gate; **browser-surface PRs still hold for Gate-3**.
 
 > **Note (2026-06-13):** `main` has advanced to `da400fb` since the 2026-06-05 snapshot below (`#196`/FF/domain-impersonation work merged). The snapshot's PR-batch facts are historical; current open-item truth is in this section.
 

@@ -11,11 +11,13 @@ Historical cycle detail remains in `ORCHESTRATOR.md` and is not required reading
   and Harness CI without touching product code or product CI. A fresh Codex
   session will have no project `PreToolUse` floor. Shared machine configuration
   remains unchanged. This supersedes #497's unpushed pin-revert commit.
-- **#495 — Sharp advisory:** local commit `13a8a59` updates only
+- **#495 — Sharp advisory:** remote branch `fix/issue495-sharp` at `13a8a59`
+  updates only
   `package.json`/lockfile to Sharp 0.35.3. Install, audit, typecheck, lint, build,
   package, and native SVG-to-PNG proof passed; independent review found no HIGH
   issue. Refresh from `main`, then publish.
-- **#494 — dormant Phase 2 evidence:** local commit `9e5fb1d` repairs three
+- **#494 — dormant Phase 2 evidence:** remote branch
+  `fix/issue494-phase2-repair` at `9e5fb1d` repairs three
   mutation fixture races. The CI-shaped lane records 20 passed plus two explicit
   `test.fixme` cases owned by #496; independent review is clean. Unrelated local
   Windows popup failures are tracked in #498.
@@ -34,8 +36,10 @@ Resume at **AI-16** (`q-1`). Ready order:
 6. **AI-24:** optional real-Chrome confirmation of the three waived browser checks.
 7. **AI-23:** prune old worktrees/branches after preserving any unique outputs.
 
-Blocked: **AI-15**, **AI-8**, and **AI-14**. AI-18 is obsolete: #499 removes the
-project hooks, so no trust or restart confirmation remains.
+Blocked: **AI-15**, **AI-8**, and **AI-14**. Their replacement slices need
+focused product checks, hosted product CI, and current human guides. AI-18 is
+obsolete: #499 removes the project hooks, so no trust or restart confirmation
+remains.
 
 ## Product posture
 
