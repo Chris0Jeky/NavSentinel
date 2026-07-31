@@ -9,6 +9,33 @@
 
 # Human Gate-3 Guides — NavSentinel
 
+> ## ⚠️ SUPERSEDED 2026-07-25 — read before running anything here
+>
+> **All three PRs these guides gate have merged**, and Chris chose to clear their
+> gates by **automated equivalent** rather than by a manual pass:
+> #356 (`3bd9e02`), #464 (`c4f6183`), #466 (`4ff6341`).
+> **AI-13, AI-21 and AI-22 no longer exist as items.**
+>
+> Consequences for anyone reading below:
+> 1. **Every step-1 exact-head precheck will fail**, correctly — it compares a
+>    worktree against `gh pr view <n> --json headRefOid` and `git ls-remote` for
+>    branches whose PRs are merged. That is not a defect to work around; it is the
+>    precheck telling you the guide's premise is gone.
+> 2. **Do not use the `<AI-N> done; Gate-3 passed on PR #<n>` reply lines.** They
+>    would record a Gate-3 pass that `ACTION_ITEMS.md` states was never recorded.
+> 3. These procedures are retained as **reference material for `AI-24`**, the single
+>    optional post-merge real-Chrome confirmation pass over the merged result. To run
+>    that: build from current `main`, load `extension/dist` unpacked in a fresh
+>    temporary Chrome profile, execute the behavioural steps below (skipping every
+>    precheck and every per-PR reply line), and reply **`AI-24 done`** with Chrome's
+>    version — or `AI-24 failed: <step and observed result>`.
+>
+> Testing the merged result is deliberately better evidence than three per-branch
+> passes: the three changes interact (#356 de-hardened the location hook so delayed
+> redirects rely on rollback; #464 removed pointerdown-derived authority), and the
+> merged state is what users actually run. Only Chris can record AI-24 complete, and
+> nothing is blocked on it.
+
 Long-form procedures for the human-owned manual Chrome gates tracked in
 [`../../ACTION_ITEMS.md`](../../ACTION_ITEMS.md). The register there is the source of truth for
 **which** items are open; this file is the source of truth for **how** to run them.
@@ -34,7 +61,9 @@ precheck.
 | AI-21 | #464 synthetic navigation | [below](#ai-21--pr-464-synthetic-navigation-gate-3) |
 | AI-22 | #466 pending-decision service worker | [below](#ai-22--pr-466-pending-decision-service-worker-gate-3) |
 
-Run them oldest-PR-first: AI-13 (#356) -> AI-21 (#464) -> AI-22 (#466).
+~~Run them oldest-PR-first: AI-13 (#356) -> AI-21 (#464) -> AI-22 (#466).~~
+**Void 2026-07-25** — all three merged with their manual gates waived. There is no
+run order; there is one optional confirmation pass, AI-24.
 
 ---
 
@@ -310,7 +339,9 @@ exact head. Only Chris can record this item complete.
 8. Close all test tabs/popups, stop the Python server with Ctrl+C, close the
    temporary Chrome profile, and remove only that deliberately disposable
    profile. Do not alter an established profile or disable security software.
-9. Reply `AI-21 done; Gate-3 passed on PR #464 at <40-character SHA>` with
+9. **SUPERSEDED — see the banner at the top of this file.** Do not reply with a
+   per-PR Gate-3 pass; use `AI-24 done` instead. *Original step: Reply
+   `AI-21 done; Gate-3 passed on PR #464 at <40-character SHA>` with*
    Chrome's version and any console observations. On failure reply
    `AI-21 failed on PR #464 at <SHA>: <step and observed result>`. Do not merge
    on a partial pass; the agent must recheck the exact head, CI, comments, and
@@ -513,7 +544,9 @@ Gate-3. Only Chris can record this item complete.
    close the disposable Chrome profile, and remove only that deliberately
    disposable profile. Do not alter an established profile or disable security
    software.
-10. Reply `AI-22 done; Gate-3 passed on PR #466 at <40-character SHA>; Chrome
+10. **SUPERSEDED — see the banner at the top of this file.** Do not reply with a
+   per-PR Gate-3 pass; use `AI-24 done` instead. *Original step: Reply
+   `AI-22 done; Gate-3 passed on PR #466 at <40-character SHA>; Chrome*
    <version>` with any console observations. On failure reply `AI-22 failed on
    PR #466 at <SHA>: <step and observed result>`. Do not merge on a partial pass;
    the agent must recheck the exact head, CI, comments, and merge gate afterward.

@@ -8,9 +8,17 @@
 
 **Purpose:** the running list of things only *you* (Chris) can do — and the context an agent needs to not lose the thread between sessions. Agents flag the open items in every summary; you clear them by saying so.
 
-**Last updated:** 2026-07-24 — live-state reconciliation: corrected the AI-13
-guide head, the open-PR list, and the issue count, and registered the two
-Gate-3 lanes (AI-21/AI-22) that existed only on PR branches. Product thesis:
+**Last updated:** 2026-07-25 — **the open-PR queue was cleared: all seven open PRs
+merged** (#472 floor v1.6.0, #471 docs, #356 main-guard de-hardening, #464 synthetic-nav
+rejection, #466 pending-decision SW boundary, #468 RI-06 event-log minimization, #457
+one-floor-per-runtime + harness CI gate, merged as `dc3d0da`). Chris waived the three
+per-PR manual Chrome gates in favour of automated equivalents, so AI-13/AI-21/AI-22 are
+resolved and replaced by the single optional **AI-24** confirmation pass; **AI-18's hold
+is lifted**. Two findings were filed rather than dropped: **#474** (remaining RI-06
+slices — path-token redaction, PromptOutcomeEntry minimization, unified clear-all) and
+**#475** (after the one-floor topology, Claude's floor is fail-**open** where Codex's is
+fail-closed). `npm run agent:hooks:smoke` now exits **0** — #457 raised the floor-matrix
+timeout that had been failing it. Product thesis:
 `docs/Product_Strategy.md`. Corrective
 program: `docs/Project_Roadmap.md`. Standing decisions:
 `docs/agentic/DECISIONS.md`.
@@ -24,7 +32,7 @@ program: `docs/Project_Roadmap.md`. Standing decisions:
 
 ---
 
-## Current state snapshot (live state rechecked 2026-07-24)
+## Current state snapshot (live state rechecked 2026-07-25)
 
 The root `main` worktree is clean and matches `origin/main`; its exact-head CI
 is green. Run `git rev-parse main`, `git rev-parse origin/main`, and live `gh`
@@ -34,19 +42,23 @@ passed typecheck, lint, build, version/package checks, 2,875 unit tests (95
 files), perf 12/12, and all 65 one-worker E2E tests locally. v0.4.0 still has no
 tag, GitHub release, CWS release, or external-user evidence.
 
-Live recheck on 2026-07-24 found 81 open issues, no tags/releases/classic branch
-protection or repository rulesets, and no milestones or assignees. Verify the
-current `main` SHA live rather than pinning it here. Open PRs are #356, #457,
-#464, #466, draft #468, and docs PR #471; only #468 is a draft, and #457 is **CONFLICTING**
-against current `main` rather than the draft this file previously called it.
+Live recheck on 2026-07-25 found **no open PRs**, and no tags/releases/classic branch
+protection or repository rulesets, and no milestones or assignees. Verify the current
+`main` SHA and the issue count live rather than trusting either here. Every PR was merged
+with a merge commit (never squashed) after exact-head CI, with the CI run's `head_sha`
+verified equal to the PR head immediately before each merge. `main`'s tree was then
+confirmed byte-identical to the last verified branch tree, so `main` is the state that was
+actually tested (2954 unit tests across 98 files, 70 E2E at `workers=1`) rather than an
+untested combination of separately-green branches.
 Stale PRs #273 and #399 were closed with explicit re-entry paths; their heads
 remain fetchable server-side at `refs/pull/273/head` and `refs/pull/399/head`,
 so the matching local branches are redundant copies, not the only copies.
-#356's exact guide head is **`f8028c9`** (the previously published `ee0f9b7` is
-stale and would fail the AI-13 step-1 precheck); `f8028c9` has green Build/Unit
-and E2E on that exact head via run `29560572081`, all three review threads are
-resolved, and the PR is MERGEABLE. Its step-1 live precheck remains mandatory
-before Chris's AI-13 Gate-3. The product-posture and guided-workflow
+#356 **merged 2026-07-25** as `3bd9e02`, auto-closing #349. Its merged head was
+`631461e` (= `f8028c9` + `Merge origin/main`), green on that exact head with all
+three review threads resolved; the manual Gate-3 was waived rather than run, so
+AI-13 no longer exists as an item.  The historical `ee0f9b7`/`f8028c9` pin
+confusion is retained in AI-13's superseded entry only as a lesson about stale
+head pins. The product-posture and guided-workflow
 work merged through PR #454; verify live `main` rather than pinning its SHA
 here. The RI-01 checkpoint branch is remotely backed up without the unstaged
 Defender deletion; verify its SHA live. Its worktree is dirty only because
@@ -60,8 +72,8 @@ changes do not change shipped product state.
 - **Release-integrity blockers:** page-controlled injected UI currently owns
   allow/trust/resume authority and can be redressed under genuine input
   (RI-01); visual-sim can process the wrong active
-  tab and has no production value (RI-02/#424); current `main`'s frozen
-  MAIN-world prototypes remain site-breaking until #356 lands; fake DNR and
+  tab and has no production value (RI-02/#424); the frozen MAIN-world prototypes
+  were site-breaking until #356 landed on 2026-07-25 (`3bd9e02`); fake DNR and
   unmeasured JS behavior should be absent
   or off; stored URLs require minimization (RI-05/RI-06); #175/#186 bridge
   identity/recovery and #455 pre-collection disclosure/consent now block beta.
@@ -74,22 +86,30 @@ changes do not change shipped product state.
   CWS submission; this is a risk flag, not a legal conclusion.
 - **Legacy PR cleanup:** #273 and draft #399 were closed on 2026-07-13 rather
   than merged from stale bases; their commits, discussions, and open issue
-  anchors remain. #356 is refreshed, pushed, twice reviewed, thread-clean, and
-  exact-head CI-green. **The current AI-13 guide is actionable only when its
-  step-1 live head/CI check passes. The PR remains unmergeable without Chris's
-  Gate-3 evidence.**
-- **Portfolio:** 81 open issues, none assigned or milestoned; #439–#453 are 15
-  frozen Horizon proposals. No new feature/epic issue seeding until the queue is
+  anchors remain. **#356 merged 2026-07-25** (`3bd9e02`) — twice reviewed,
+  thread-clean, exact-head CI-green, with its manual Gate-3 waived in favour of the
+  automated equivalent. AI-13 is resolved; the optional AI-24 carries the residue.
+- **Portfolio:** re-derive the open-issue count with `gh issue list --state open`
+  — it moved on 2026-07-25 (#349 auto-closed with #356; #474 and #475 filed), so a
+  number written here is stale on arrival. None assigned or milestoned; #439–#453
+  are 15 frozen Horizon proposals. No new feature/epic issue seeding until the queue is
   culled and milestone-categorized.
 - **Infrastructure:** classic branch protection remains absent (`404 Branch not
   protected`) and the rulesets API returns `[]`. AI-17 remains open. Codex hook
   trust remains AI-18. GitHub private vulnerability reporting is enabled and
-  linked from `SECURITY.md`. **Deny-floor bypass verified 2026-07-24:** the
-  vendored floor (`.claude/hooks/dispatch.py` 1.5.2) allows a charter command it
-  denies bare, once wrapped in any of three PowerShell one-liner shapes — 9/9
-  wrapped combinations allowed across three charter payloads. Root cause is
-  upstream (agent-harness #37); see `docs/agentic/FAILURE_LEDGER.md`. Do not
-  patch the vendored copy locally: it is synced verbatim from canonical.
+  linked from `SECURITY.md`. **Deny-floor bypass re-measured 2026-07-25 against
+  canonical v1.6.0** (now vendored, via #472): 1.6.0 fixed the flat `iex` wrapper and the
+  trailing-statement form, but **9 of 15 wrapped combinations still return `allow`** — the
+  braced-scriptblock shapes, across force-push, recursive delete outside the project, and
+  pipe-to-shell. Branch protection (AI-17) covers only the force-push class, so the other
+  two stay host-destructive: **treat any scriptblock-wrapped command as unguarded
+  regardless of the floor's verdict**, and do not run unreviewed one-liners containing
+  `iex` / `Invoke-Expression`. Root cause is upstream (agent-harness #37, where the 1.6.0
+  A/B is posted). Do not patch the vendored copy locally: it is synced verbatim from
+  canonical, and #457 now adds a CI drift check that a local edit would fail. Separately,
+  the four floor findings reported on #457 **are** fixed in 1.6.0 — verified by direct
+  `check()` reproduction at three tier/flag configs, with controls proving the harness
+  discriminates rather than denying everything.
 
   **Scope this honestly.** AI-17 branch protection mitigates only the
   `git push --force` class. It does **nothing** for the other two payload
@@ -117,25 +137,24 @@ changes do not change shipped product state.
 
 **Guided resolution cursor:** `AI-16` (`Resume at: AI-16`; the next
 conversational label is `q-1`). Current ready order is AI-16 -> AI-9 -> AI-20 ->
-AI-17 -> AI-19 -> AI-23 (low priority housekeeping, last).
-**AI-18 is HELD, not ready** — see its entry; do not route to it
-until PR #457 reaches its final reviewed head, or the trust will be immediately
-invalidated. AI-13, AI-21, and AI-22 are separate conditional Gate-3
-lanes: use each guide only when its exact-head precheck passes; they do not
-replace the stable AI-16 resume cursor. Run them oldest-PR-first
-(AI-13/#356 -> AI-21/#464 -> AI-22/#466), per the merge-oldest-first law. The hook-editing slice is now committed; AI-18 remains
-human-owned until its exact definitions are reviewed and trusted. The `q-N`
-label may reset between conversations; the `AI-N` identifier is durable.
-AI-15/AI-8/AI-14 remain visible but are not actionable questions until agent
-preflight clears them. AI-13's current guide is prepared; its live precheck
-decides readiness.
+AI-17 -> AI-19 -> AI-18 -> AI-24 -> AI-23 (low priority housekeeping, last).
+**AI-18 is now READY** (was HELD): PR #457 landed on 2026-07-25, so
+`.codex/hooks.json` is stable and its definition hash will not be invalidated
+immediately after trusting it. **AI-13, AI-21 and AI-22 are resolved** — their
+PRs (#356, #464, #466) merged on 2026-07-25 after Chris chose to clear the
+browser-surface gate by automated equivalent rather than a manual pass; their
+procedures are retained below and in `docs/agentic/GATE3_GUIDES.md` as the
+reference for **AI-24**, a single post-merge real-Chrome confirmation over the
+merged result. The `q-N` label may reset between conversations; the `AI-N`
+identifier is durable. AI-15/AI-8/AI-14 remain visible but are not actionable
+questions until agent preflight clears them.
 
-> **Gate-queue hold (refreshed 2026-07-17):** do not run the old branch checkout
-> guides for AI-8, AI-13, or AI-14. AI-8 and AI-14 require new current-main
-> slices after their stale PRs were closed. AI-13's agent preflight is complete;
-> use only the current guide below and verify its live exact head/CI before
-> starting. AI-15 remains BLOCKED until the remaining release-integrity program
-> has a current preflight handoff.
+> **Gate-queue hold (refreshed 2026-07-25):** do not run the old branch checkout
+> guides for AI-8 or AI-14 — both require new current-main slices after their stale
+> PRs were closed. AI-13 is **resolved** (its PR merged with the manual gate
+> waived), so its retained procedure is reference material for AI-24, not a queue
+> item. AI-15 remains BLOCKED until the remaining release-integrity program has a
+> current preflight handoff.
 
 **🚨 OPEN: AI-19 — Clear or replace the working product name before CWS
 submission.** An active TruNav GNSS anti-spoofing product uses the exact name
@@ -173,24 +192,50 @@ are trusted/enabled; and (7) restart once to exercise SessionStart. Then reply
 `AI-18 done`. Trust is definition-hash-based, so repeat after future hook
 definition changes.
 
-> **Hold AI-18 for now (2026-07-24).** Trusting the *current* definitions is
-> largely wasted effort: PR #457 replaces `.codex/hooks.json` with a SHA-pinned,
-> fail-closed adapter, and because trust is definition-hash-based it would have
-> to be redone immediately after that lands. #457 is itself held (see its
-> 2026-07-24 state review) until the upstream floor release closing
-> agent-harness #37 arrives. Do this after #457's final reviewed head, not
-> before. Separately recorded in `docs/agentic/FAILURE_LEDGER.md`: this repo
-> currently wires **two** PreToolUse floors at once — the global 1.5.3 and the
-> vendored 1.5.2 — which is exactly the topology #457 removes.
+> **Hold LIFTED 2026-07-25 — AI-18 is now ready.** PR #457 merged, so
+> `.codex/hooks.json` now holds its final SHA-pinned, fail-closed adapter and the
+> definition hash you trust will not be invalidated the next moment. The
+> double-floor topology is also gone: #457 removed the repo-local `PreToolUse`
+> hook, so Claude runs only the canonical global dispatcher and Codex's adapter
+> invokes that same file with `--runtime codex`. Two things to know before you
+> run it. (1) The adapter pins the dispatcher's sha256, currently
+> `e76c358a…cb299` for canonical **v1.6.0**; a future floor sync must bump that
+> pin plus `EXPECTED_DISPATCH_SHA256` / `EXPECTED_SMOKE_SHA256` in
+> `scripts/agent_hooks/smoke_test.py`, or the new `harness` CI job fails. (2) The
+> Claude side is fail-**open** where Codex is fail-closed — if the global floor is
+> ever absent, Claude simply has no hook and nothing says so. Tracked separately;
+> not a blocker for trusting the Codex definitions.
+
+**OPEN: AI-24 — One post-merge real-Chrome confirmation pass over the three
+browser-surface slices now on `main`** (optional; closes the residual risk accepted
+by the 2026-07-25 Gate-3 waiver). #356, #464 and #466 all merged after their guides
+were satisfied by automated equivalents in real **Chromium** with the real unpacked
+extension. What no automation covered: branded **Chrome** rather than Chromium, the
+manual temporary-profile hygiene, human eyes on toast wording/placement, and telling
+a Chrome-blocked popup apart from a NavSentinel-blocked one.
+
+This replaces AI-13 + AI-21 + AI-22 with a **single** pass, which is both less work
+and better evidence: the three changes interact (#356 de-hardened the location hook
+so delayed redirects rely on rollback; #464 removed pointerdown-derived authority),
+and testing them merged is the state users will actually run. Their procedures are
+retained in this file and in `docs/agentic/GATE3_GUIDES.md`.
+
+Suggested scope, ~20 minutes: build from current `main`, load
+`extension/dist` unpacked in a fresh temporary Chrome profile, then walk the AI-13
+step-5 gates (Level 10 delayed redirect rolls back with its toast; programmatic form
+submit blocks then `Allow once` permits exactly the form action; Level 5 popunder
+blocks), the AI-21 trusted-compatibility cases (OAuth popup by physical click, by
+Tab+Enter, by submit input — exactly one popup, no prompt), and confirm the MV3
+service worker registers in `chrome://extensions` (the `rolldownOptions` change).
+Reply `AI-24 done` plus Chrome's version, or `AI-24 failed: <step and observed>`.
+Only Chris can record this complete; nothing is blocked on it.
 
 **🚨 BLOCKED: AI-15 — Run the headed release session only after agent
 preflight.** The prior 60–90 minute one-sitting guide is withdrawn: stale PRs
-#273 and #399 were closed, #356 has an isolated human Gate-3 guide whose live
-head and CI must pass the guide precheck before use, the reputation/package plan
-needs a product decision, and other release-integrity blockers precede a full
-manual release session. **Do not use the old #356 guide; use the current AI-13
-guide below.** Agent preflight must first: (1) fix RI-01; (2) finish #356
-exact-head CI/Gate-3 and keep #273 deferred or recreate it on current `main`;
+#273 and #399 were closed, **#356 merged 2026-07-25** (`3bd9e02`) with its manual
+Gate-3 waived, the reputation/package plan needs a product decision, and other
+release-integrity blockers precede a full manual release session. Agent preflight
+must first: (1) fix RI-01; (2) keep #273 deferred or recreate it on current `main`;
 (3) excise visual-sim and remove fake DNR; (4) complete
 RI-06's purpose-specific data minimization/reset; (5) complete RI-07's explicit
 JS-behavior beta-off profile; (6) complete #175/#186 bridge integrity and #455
@@ -287,8 +332,9 @@ branch checkout guide.
 
 **AI-11 — Toast count-pill (#351 → PR #353) · ✅ RESOLVED 2026-06-23 — MERGED.** Chris said "merge #353"; green CI (incl. the RW-19 e2e fix to accept the coalesced pill) → **#353 merged into `main`** (`d0e0412`). Repeated blocked-popup/redirect prompts now coalesce into one count pill after 3-in-8s (expandable to the latest prompt's Allow once / Always allow). The pill is live on the next `git checkout main && npm run build`.
 
-**🚨 OPEN: AI-13 — Run #356 MAIN-world compatibility Gate-3 (GUIDE PREPARED;
-LIVE CI PRECHECK REQUIRED).** PR #356 is refreshed from current `origin/main`
+**RESOLVED 2026-07-25 (manual gate waived) — AI-13 — #356 MAIN-world compatibility Gate-3.** PR #356 merged as `3bd9e02`; issue #349 auto-closed. Chris chose the automated-equivalent path on 2026-07-25 rather than a manual pass; the PR carries the mapping from each guide step to the spec that covers it, plus what automation cannot establish (real Chrome vs Chromium, manual profile hygiene, human eyes on toast wording). This was **never recorded as a Gate-3 pass** — only Chris can do that. Residual risk accepted under the waiver; **AI-24** is the single confirmation pass that closes it if he wants one. Procedure retained below for that purpose.
+
+*Original item: Run #356 MAIN-world compatibility Gate-3 (GUIDE PREPARED; LIVE CI PRECHECK REQUIRED).* PR #356 is refreshed from current `origin/main`
 and all three review threads are resolved. Exact guide head **`f8028c9`** passed
 GitHub Build/Unit plus E2E (run `29560572081`, `head_sha` verified equal to the
 PR head on 2026-07-24); the source-bearing runtime head passed 2,875 unit
@@ -300,6 +346,13 @@ item remains human-owned; only Chris can record Gate-3 as done.
 > which the branch has since moved past. Any run started against `ee0f9b7`
 > aborts at step 1 on a SHA mismatch. The live head is `f8028c9`; re-verify it
 > yourself with step 1 rather than trusting either SHA written here.
+
+**Retained procedure (steps 1 and 7 are SUPERSEDED).** Step 1's exact-head
+precheck cannot pass — it compares a worktree against `gh pr view 356
+--json headRefOid` and `git ls-remote` for a branch whose PR is merged. Step 7's
+reply line (`AI-13 done; Gate-3 passed on PR #356`) would record exactly the
+Gate-3 pass this file says was never recorded. For a confirmation run use **AI-24**
+instead: build from current `main` and execute steps 2–6 below against it.
 
 **Current guide:**
 
@@ -379,12 +432,14 @@ item remains human-owned; only Chris can record Gate-3 as done.
    temporary Chrome profile, and remove only that deliberately disposable local
    profile from Chrome's profile manager. Do not alter or delete an established
    profile; if you chose to disable an older copy instead, re-enable it now.
-7. Reply `AI-13 done; Gate-3 passed on PR #356` and include any console error,
-   unexpected prompt text, or differing outcome. Do not merge on a partial pass;
-   after a full pass the agent will recheck the exact head, CI, comments, and
-   merge gate before acting.
+7. **SUPERSEDED — do not use this reply line.** It would record a Gate-3 pass that
+   was never taken. For a confirmation run reply `AI-24 done` instead, with Chrome's
+   version and any console error, unexpected prompt text, or differing outcome.
+   *Original step: Reply `AI-13 done; Gate-3 passed on PR #356` …*
 
-**🚨 OPEN: AI-21 — Run PR #464 synthetic-navigation Gate-3 (GUIDE IN
+**RESOLVED 2026-07-25 (manual gate waived) — AI-21 — #464 synthetic-navigation Gate-3.** PR #464 merged as `c4f6183`. Chris chose the automated-equivalent path on 2026-07-25 rather than a manual pass; the PR carries the mapping from each guide step to the spec that covers it, plus what automation cannot establish (real Chrome vs Chromium, manual profile hygiene, human eyes on toast wording). This was **never recorded as a Gate-3 pass** — only Chris can do that. Residual risk accepted under the waiver; **AI-24** is the single confirmation pass that closes it if he wants one. Procedure retained below for that purpose.
+
+*Original item: Run PR #464 synthetic-navigation Gate-3 (GUIDE IN
 `docs/agentic/GATE3_GUIDES.md`; LIVE EXACT-HEAD PRECHECK REQUIRED).** This browser-surface slice
 stops page scripts from minting navigation authority with dispatched
 pointer/click events, keeping a preceding real pointerdown only as
@@ -396,7 +451,9 @@ pointerdown-only rollback attack, the synchronous MAIN-world popup attack, the
 existing synthetic attacks, and the trusted compatibility paths, but a real
 Chrome pass must confirm them before merge. Only Chris can record this complete.
 
-**🚨 OPEN: AI-22 — Run PR #466 pending-decision service-worker Gate-3 (GUIDE IN
+**RESOLVED 2026-07-25 (manual gate waived) — AI-22 — #466 pending-decision service-worker Gate-3.** PR #466 merged as `4ff6341`. Chris chose the automated-equivalent path on 2026-07-25 rather than a manual pass; the PR carries the mapping from each guide step to the spec that covers it, plus what automation cannot establish (real Chrome vs Chromium, manual profile hygiene, human eyes on toast wording). This was **never recorded as a Gate-3 pass** — only Chris can do that. Residual risk accepted under the waiver; **AI-24** is the single confirmation pass that closes it if he wants one. Procedure retained below for that purpose. The `rolldownOptions` bundle-layout risk this guide singled out is covered by the `check:mv3-worker` gate #466 itself adds (`PASS: 5 statically linked worker modules`), now wired into `npm run build` and `npm run package:ext`.
+
+*Original item: Run PR #466 pending-decision service-worker Gate-3 (GUIDE IN
 `docs/agentic/GATE3_GUIDES.md`; LIVE EXACT-HEAD PRECHECK REQUIRED).** Adds the
 URL-minimized, session-backed pending-decision boundary so prompt authority is
 derived from Chrome rather than page messages. Live state on 2026-07-24: head
@@ -407,19 +464,27 @@ Chrome, and confirm the MV3 service worker actually registers, because that
 change alters the shipped bundle layout. Only Chris can record this complete.
 
 > **Full AI-21/AI-22 guides:** [`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md)
-> — verbatim from their PR branches, tracked here rather than branch-only. Both remain queued
-> behind AI-13/#356 under the merge-oldest-first law. These entries exist so the
-> durable register never silently omits a human-gated item while its PR is in
-> flight, which is this file's whole purpose; the guides live in a separate
-> tracked file only so landing those PRs does not collide with a large
+> — verbatim from their PR branches, tracked here rather than branch-only. **Both are
+> now reference material for AI-24, not a queue** (their PRs merged 2026-07-25 with the
+> manual gates waived), and that file carries a superseding banner saying so. These
+> entries exist so the durable register never silently omits a human-gated item while
+> its PR is in flight, which is this file's whole purpose; the guides live in a separate
+> tracked file only so landing those PRs did not collide with a large
 > `ACTION_ITEMS.md` rewrite. Do **not** move them back onto a branch-only path.
 
-**OPEN: AI-23 — Prune two finished worktrees and their merged branches**
+**OPEN: AI-23 — Prune the finished worktrees and their merged branches**
 (low priority housekeeping). Agents cannot do this: `git worktree remove` is floor-blocked
-(`[floor 1.5.2] Git worktree removal is floor-blocked.`), verified 2026-07-24,
-and the branches cannot be deleted while a worktree still holds them. Both
-targets are clean and fully merged into `main`, so this is pure housekeeping
-with nothing to lose.
+(`[floor 1.6.0 (2026-07-24)] Git worktree removal is floor-blocked.`), re-verified 2026-07-25,
+and the branches cannot be deleted while a worktree still holds them.
+
+**Updated 2026-07-25 — the list grew.** All seven PRs merged, so six of the eight
+registered worktrees now hold fully-merged branches and are pure housekeeping:
+`nav-floor-sync` (`chore/deny-floor-v1.6.0`, #472), `.worktrees/pr356-refresh`
+(#356), `.worktrees/ri01-synthetic-nav` (#464), `.worktrees/ri01-pending-sw`
+(#466), `.worktrees/ri06-eventlog-min` (#468), `.worktrees/harness-v141` (#457).
+`.worktrees/deps-audit` (`fix/release-dependency-advisories`) backs no open PR.
+**Do NOT remove `C:/Users/Public/codex-shell-home/NavSentinel-ri01`** — it holds
+the AI-20 Defender-quarantine evidence.
 
 **Re-derive the branch names before running this** — `nav-floor-sync` was
 observed switching from `chore/deny-floor-v1.5.2` to `chore/deny-floor-v1.6.0`
@@ -427,23 +492,38 @@ mid-session, so a pinned name here goes stale quickly. Check
 `git worktree list` first, then:
 
 ```sh
-git worktree list
+git worktree list          # re-derive names first; they move between sessions
+
+# all six PR worktrees now hold branches merged into main (2026-07-25)
 git worktree remove "C:/Users/jekyt/Desktop/Printer Config/Others/Git/nav-floor-sync"
-git worktree remove .worktrees/deps-audit
-git branch -d <branch nav-floor-sync held> fix/release-dependency-advisories
+git worktree remove .worktrees/pr356-refresh
+git worktree remove .worktrees/ri01-synthetic-nav
+git worktree remove .worktrees/ri01-pending-sw
+git worktree remove .worktrees/ri06-eventlog-min
+git worktree remove .worktrees/harness-v141
+git worktree remove .worktrees/deps-audit   # backs no PR
+
+# only then can the branches they held be deleted
+git branch -d chore/deny-floor-v1.6.0 feat/dehard-enforcement-protos \
+  fix/ri01-reject-synthetic-nav-allowances fix/ri01-pending-decision-sw \
+  fix/ri06-event-log-url-minimization infra/harness-deny-floor-v141 \
+  fix/release-dependency-advisories
 ```
 
 `git branch -d` (not `-D`) is deliberate: it refuses anything not merged, so it
-cannot silently drop work.
+cannot silently drop work. If it refuses one of the seven, stop and report which —
+that would mean the branch is not actually merged and the premise here is wrong.
 
-**Leave the other SIX worktrees.** Five back open PRs — `.worktrees/pr356-refresh`
-(#356), `.worktrees/harness-v141` (#457), `.worktrees/ri01-synthetic-nav` (#464),
-`.worktrees/ri01-pending-sw` (#466), `.worktrees/ri06-eventlog-min` (#468) — and
-the sixth is **not** cruft despite backing no PR:
+**Leave exactly ONE worktree.**
 `C:/Users/Public/codex-shell-home/NavSentinel-ri01` on
-`fix/ri01-extension-origin-decisions` is the RI-01 checkpoint worktree that holds
-the AI-20 Defender-quarantine evidence referenced above. **Do not delete it**
-while AI-20 is open.
+`fix/ri01-extension-origin-decisions` backs no PR but is **not** cruft: it is the
+RI-01 checkpoint worktree holding the Defender-quarantine evidence referenced two
+sections above. **Do not delete it** while that item is open.
+
+*(Corrected 2026-07-25: this paragraph previously said "leave the other SIX ...
+five back open PRs". That was true before the queue cleared and is now false —
+there are no open PRs, so those five worktrees are prunable, and the command block
+above was only removing two of the seven.)*
 
 Three local branches are also prunable but are **not** included above, because
 deleting an unmerged local branch is the one irreversible step here and is your
