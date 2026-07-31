@@ -43,8 +43,8 @@ comment. The two repo-specific facts an orchestrator still needs:
   (`ACTION_ITEMS.md`). Non-browser PRs merge without it.
 - **Stacked PRs merge oldest/bottom first** (global law 4), never the newest first.
 
-There is no PR-aging rule and no round-per-push rule: a PR is merged when its gate is met, not
-when it is old enough.
+Every pushed head must age at least three minutes before merge. This is a merge-eligibility
+floor, not a polling cadence, and it does not create a review round per push.
 
 ### Stacked branch policy
 
