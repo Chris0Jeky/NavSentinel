@@ -1,6 +1,6 @@
 # Session Handoff — NavSentinel
 
-**Last updated:** 2026-07-25. Always refresh git/GitHub truth before acting.
+**Last updated:** 2026-07-31. Always refresh git/GitHub truth before acting.
 `ACTION_ITEMS.md` holds the live human-facing snapshot without pinning a SHA;
 the posture review's dated exact baseline is in `docs/Product_Strategy.md`.
 
@@ -46,8 +46,9 @@ rotation under #437.
   `codex-shell-home/NavSentinel-ri01` worktree — it holds the Defender-quarantine
   evidence referenced elsewhere in this list.
 - **AI-15: BLOCKED** until agent preflight is complete.
-- **AI-8 / AI-14: BLOCKED** pending current branches, two fresh reviews, green
-  CI, and replacement human guides.
+- **AI-8 / AI-14: BLOCKED** pending current branches, the current
+  risk-calibrated global review and comment-triage gate, the three-minute
+  final-head floor, green CI, and replacement human guides.
 
 ## Verified state
 
