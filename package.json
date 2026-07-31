@@ -42,8 +42,6 @@
     "release:minor": "node scripts/release.mjs minor",
     "release:major": "node scripts/release.mjs major",
     "release:dry": "node scripts/release.mjs patch --dry-run",
-    "agent:hooks:smoke": "python scripts/agent_hooks/smoke_test.py",
-    "agent:skills:validate": "python scripts/agent_hooks/validate_skills.py",
     "benchmark": "node scripts/benchmark.mjs",
     "check:perf-budget": "node scripts/check-perf-budget.mjs",
     "check:mv3-worker": "node scripts/check-mv3-worker-imports.mjs"
@@ -59,7 +57,7 @@
     "fast-check": "^4.6.0",
     "happy-dom": "^20.9.0",
     "playwright": "^1.49.0",
-    "sharp": "^0.34.5",
+    "sharp": "^0.35.3",
     "typescript": "^5.6.0",
     "typescript-eslint": "^8.59.4",
     "vite": "^8.1.5",

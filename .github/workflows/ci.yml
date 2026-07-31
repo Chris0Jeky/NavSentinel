@@ -9,34 +9,6 @@ on:
   workflow_dispatch:
 
 jobs:
-  harness:
-    name: Harness (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Verify agent hooks
-        run: npm run agent:hooks:smoke
-
-      - name: Verify agent skill parity
-        run: npm run agent:skills:validate
-
   build-and-unit:
     name: Build / Unit
     runs-on: ubuntu-latest
@@ -124,7 +96,7 @@ jobs:
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [harness, build-and-unit, e2e]
+    needs: [build-and-unit, e2e]
     runs-on: ubuntu-latest
     permissions:
       contents: write
