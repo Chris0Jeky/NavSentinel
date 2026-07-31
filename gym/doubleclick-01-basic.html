@@ -7,8 +7,10 @@
 </head>
 <body>
   <h1>DoubleClickjacking 01 - HTTP opener navigation</h1>
-  <p>This Gym fixture opens a real HTTP child page. The child navigates this opener;
-    the next trusted click on the target is the detection boundary.</p>
+  <p>This Gym fixture opens a real HTTP child page. A trusted child click followed by
+    a browser-committed opener navigation arms a short warning for the next trusted
+    target click. The extension warns and scores that click; it does not claim to
+    prevent the opener navigation or target action.</p>
   <button id="trigger">Open verification window</button>
   <p id="status">Waiting for the first click.</p>
   <script>

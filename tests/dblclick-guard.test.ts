@@ -95,31 +95,35 @@ describe("dblclick_guard", () => {
     expect(handleDblclickRuntimeMessage({
       type: "ns-dblclick-correlation-ready",
       expiresAt,
+      token: "a".repeat(32),
     })).toBe(true);
 
-    expect(consumeDblclickCorrelationOnTrustedClick(false)).toBe(false);
-    expect(consumeDblclickCorrelationOnTrustedClick(true)).toBe(true);
-    expect(consumeDblclickCorrelationOnTrustedClick(true)).toBe(false);
+    expect(consumeDblclickCorrelationOnTrustedClick(false)).toBeNull();
+    expect(consumeDblclickCorrelationOnTrustedClick(true)).toBe("a".repeat(32));
+    expect(consumeDblclickCorrelationOnTrustedClick(true)).toBeNull();
   });
 
   it("rejects expired or oversized cross-document correlation records", () => {
     expect(handleDblclickRuntimeMessage({
       type: "ns-dblclick-correlation-ready",
       expiresAt: Date.now(),
+      token: "a".repeat(32),
     })).toBe(false);
     expect(handleDblclickRuntimeMessage({
       type: "ns-dblclick-correlation-ready",
       expiresAt: Date.now() + 5001,
+      token: "a".repeat(32),
     })).toBe(false);
-    expect(consumeDblclickCorrelationOnTrustedClick(true)).toBe(false);
+    expect(consumeDblclickCorrelationOnTrustedClick(true)).toBeNull();
   });
 
   it("does not retain the opener URL when using cross-document evidence", () => {
     handleDblclickRuntimeMessage({
       type: "ns-dblclick-correlation-ready",
       expiresAt: Date.now() + 5000,
+      token: "a".repeat(32),
     });
-    expect(consumeDblclickCorrelationOnTrustedClick(true)).toBe(true);
+    expect(consumeDblclickCorrelationOnTrustedClick(true)).toBe("a".repeat(32));
     expect(getDblclickOpenerNavUrl()).toBe("");
   });
 
@@ -127,9 +131,10 @@ describe("dblclick_guard", () => {
     handleDblclickRuntimeMessage({
       type: "ns-dblclick-correlation-ready",
       expiresAt: Date.now() + 5000,
+      token: "a".repeat(32),
     });
     _resetDblclickState();
-    expect(consumeDblclickCorrelationOnTrustedClick(true)).toBe(false);
+    expect(consumeDblclickCorrelationOnTrustedClick(true)).toBeNull();
     expect(getDblclickOpenerNavUrl()).toBe("");
   });
 });

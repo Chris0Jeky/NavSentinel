@@ -930,14 +930,22 @@ describe("service worker handlers", () => {
       expect(mock.chrome.storage.session._store["ns_sw:dblclickCorrelation"]).toBeUndefined();
     });
 
-    it("claims the verified opener record once from the destination top frame", async () => {
+    it("peeks across reloads, then consumes the verified opener record once", async () => {
       const mock = createChromeMock();
       await loadSw(mock);
       mock.emitTabCreated({ id: 20, openerTabId: 10 });
+      mock.chrome.tabs.get.mockResolvedValue({ id: 20, openerTabId: 10 });
       mock.dispatchRuntimeMessage(
-        { type: "ns-dblclick-opener-nav", url: "https://evil.test/phish?secret=1", ts: Date.now() },
-        { tab: { id: 20 } },
+        { type: "ns-dblclick-child-trusted-click" },
+        { tab: { id: 20 }, frameId: undefined },
       );
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        url: "https://evil.test/phish?secret=1",
+        transitionType: "link",
+      });
 
       const stored = mock.chrome.storage.session._store["ns_sw:dblclickCorrelation"] as Record<string, unknown>;
       expect(stored["10"]).toEqual(expect.objectContaining({ expiresAt: expect.any(Number) }));
@@ -945,33 +953,66 @@ describe("service worker handlers", () => {
       expect(JSON.stringify(stored)).not.toContain("secret=1");
 
       const first = mock.dispatchRuntimeMessage(
-        { type: "ns-dblclick-correlation-claim" },
+        { type: "ns-dblclick-correlation-peek" },
         { tab: { id: 10 }, frameId: 0 },
-      ) as { active: boolean; expiresAt?: number };
-      expect(first).toMatchObject({ active: true, expiresAt: expect.any(Number) });
+      ) as { active: boolean; expiresAt?: number; token?: string };
+      expect(first).toMatchObject({ active: true, expiresAt: expect.any(Number), token: expect.any(String) });
 
+      // A redirect/reload re-peeks the same capability; it must not lose the
+      // evidence before the next trusted click consumes it.
       const second = mock.dispatchRuntimeMessage(
-        { type: "ns-dblclick-correlation-claim" },
+        { type: "ns-dblclick-correlation-peek" },
+        { tab: { id: 10 }, frameId: 0 },
+      ) as { active: boolean; token?: string };
+      expect(second).toMatchObject({ active: true, token: first.token });
+
+      expect(mock.dispatchRuntimeMessage(
+        { type: "ns-dblclick-correlation-consume", token: "wrong" },
+        { tab: { id: 10 }, frameId: 0 },
+      )).toEqual({ active: false });
+      expect(mock.dispatchRuntimeMessage(
+        { type: "ns-dblclick-correlation-consume", token: first.token },
+        { tab: { id: 11 }, frameId: 0 },
+      )).toEqual({ active: false });
+      expect(mock.dispatchRuntimeMessage(
+        { type: "ns-dblclick-correlation-consume" },
+        { tab: { id: 10 }, frameId: 0 },
+      )).toEqual({ active: false });
+      expect(mock.dispatchRuntimeMessage(
+        { type: "ns-dblclick-correlation-consume", token: first.token },
+        { tab: { id: 10 }, frameId: 0 },
+      )).toEqual({ active: true });
+
+      const afterConsume = mock.dispatchRuntimeMessage(
+        { type: "ns-dblclick-correlation-peek" },
         { tab: { id: 10 }, frameId: 0 },
       );
-      expect(second).toEqual({ active: false });
+      expect(afterConsume).toEqual({ active: false });
     });
 
     it("rejects a subframe claim without consuming the opener record", async () => {
       const mock = createChromeMock();
       await loadSw(mock);
       mock.emitTabCreated({ id: 20, openerTabId: 10 });
+      mock.chrome.tabs.get.mockResolvedValue({ id: 20, openerTabId: 10 });
       mock.dispatchRuntimeMessage(
-        { type: "ns-dblclick-opener-nav", url: "https://evil.test/phish", ts: Date.now() },
+        { type: "ns-dblclick-child-trusted-click" },
         { tab: { id: 20 } },
       );
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        url: "https://evil.test/phish",
+        transitionType: "link",
+      });
 
       expect(mock.dispatchRuntimeMessage(
-        { type: "ns-dblclick-correlation-claim" },
+        { type: "ns-dblclick-correlation-peek" },
         { tab: { id: 10 }, frameId: 2 },
       )).toEqual({ active: false });
       expect(mock.dispatchRuntimeMessage(
-        { type: "ns-dblclick-correlation-claim" },
+        { type: "ns-dblclick-correlation-peek" },
         { tab: { id: 10 }, frameId: 0 },
       )).toMatchObject({ active: true });
     });
@@ -980,16 +1021,155 @@ describe("service worker handlers", () => {
       const mock = createChromeMock();
       await loadSw(mock);
       mock.emitTabCreated({ id: 20, openerTabId: 10 });
+      mock.chrome.tabs.get.mockResolvedValue({ id: 20, openerTabId: 10 });
       mock.dispatchRuntimeMessage(
-        { type: "ns-dblclick-opener-nav", url: "https://evil.test/phish", ts: Date.now() },
+        { type: "ns-dblclick-child-trusted-click" },
         { tab: { id: 20 } },
       );
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        url: "https://evil.test/phish",
+        transitionType: "link",
+      });
 
-      vi.advanceTimersByTime(5001);
+      vi.advanceTimersByTime(3001);
       expect(mock.dispatchRuntimeMessage(
-        { type: "ns-dblclick-correlation-claim" },
+        { type: "ns-dblclick-correlation-peek" },
         { tab: { id: 10 }, frameId: 0 },
       )).toEqual({ active: false });
+    });
+
+    it("requires a browser-confirmed opener and rejects child subframes", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+      mock.chrome.tabs.get.mockResolvedValue({ id: 20 });
+
+      mock.dispatchRuntimeMessage(
+        { type: "ns-dblclick-child-trusted-click" },
+        { tab: { id: 20 }, frameId: 3 },
+      );
+      mock.dispatchRuntimeMessage(
+        { type: "ns-dblclick-child-trusted-click" },
+        { tab: { id: 20 } },
+      );
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        url: "https://target.test/action",
+        transitionType: "link",
+      });
+
+      expect(mock.chrome.tabs.get).toHaveBeenCalledTimes(1);
+      expect(mock.dispatchRuntimeMessage(
+        { type: "ns-dblclick-correlation-peek" },
+        { tab: { id: 10 } },
+      )).toEqual({ active: false });
+    });
+
+    it("completes a bounded commit-first delivery inversion", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+      mock.chrome.tabs.get.mockResolvedValue({ id: 20, openerTabId: 10 });
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        url: "https://target.test/action",
+        transitionType: "link",
+      });
+      vi.advanceTimersByTime(400);
+
+      mock.dispatchRuntimeMessage(
+        { type: "ns-dblclick-child-trusted-click" },
+        { tab: { id: 20 }, frameId: undefined },
+      );
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+
+      expect(mock.dispatchRuntimeMessage(
+        { type: "ns-dblclick-correlation-peek" },
+        { tab: { id: 10 } },
+      )).toMatchObject({ active: true, token: expect.any(String) });
+    });
+
+    it("rejects a stale commit-first delivery inversion", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+      mock.chrome.tabs.get.mockResolvedValue({ id: 20, openerTabId: 10 });
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        url: "https://target.test/action",
+        transitionType: "link",
+      });
+      vi.advanceTimersByTime(501);
+
+      mock.dispatchRuntimeMessage(
+        { type: "ns-dblclick-child-trusted-click" },
+        { tab: { id: 20 } },
+      );
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+
+      expect(mock.dispatchRuntimeMessage(
+        { type: "ns-dblclick-correlation-peek" },
+        { tab: { id: 10 } },
+      )).toEqual({ active: false });
+    });
+
+    it("does not correlate an extension-allowed opener commit", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+      mock.emitTabCreated({ id: 20, openerTabId: 10 });
+      mock.chrome.tabs.get.mockResolvedValue({ id: 20, openerTabId: 10 });
+      mock.dispatchRuntimeMessage(
+        { type: "ns-dblclick-child-trusted-click" },
+        { tab: { id: 20 } },
+      );
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+      mock.dispatchRuntimeMessage(
+        { type: "ns-allow-nav", ttlMs: 1500 },
+        { tab: { id: 10 } },
+      );
+      mock.emitBeforeNavigate({ tabId: 10, frameId: 0, url: "https://target.test/action" });
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        url: "https://target.test/action",
+        transitionType: "link",
+      });
+
+      expect(mock.dispatchRuntimeMessage(
+        { type: "ns-dblclick-correlation-peek" },
+        { tab: { id: 10 } },
+      )).toEqual({ active: false });
+    });
+
+    it("finishes a session-restored child click after worker restart", async () => {
+      const mock = createChromeMock();
+      const now = Date.now();
+      mock.chrome.storage.session._store["ns_sw:childWindow"] = {
+        "20": {
+          openerTabId: 10,
+          createdAt: now,
+          openerNavObserved: false,
+          trustedClickAt: now,
+        },
+      };
+      await loadSw(mock);
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        url: "https://target.test/action",
+        transitionType: "link",
+      });
+
+      expect(mock.dispatchRuntimeMessage(
+        { type: "ns-dblclick-correlation-peek" },
+        { tab: { id: 10 } },
+      )).toMatchObject({ active: true, token: expect.any(String) });
     });
 
     it("sets openerNavObserved = true on the child entry", async () => {

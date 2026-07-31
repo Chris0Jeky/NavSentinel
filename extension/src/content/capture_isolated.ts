@@ -1565,26 +1565,27 @@ if (chrome?.runtime?.onMessage) {
 }
 
 if (chrome?.runtime?.sendMessage && isTopFrame()) {
-  // Claim a URL-free, one-shot correlation left by a browser-registered child
-  // after it navigated this opener. Retry briefly because the child bridge and
-  // destination content script can race during the same navigation.
-  const claimDblclickCorrelation = (retries = 4, errorBudget = 2) => {
-    chrome.runtime.sendMessage({ type: "ns-dblclick-correlation-claim" }, (resp) => {
+  // Peek at the URL-free correlation left by a browser-registered child after
+  // it navigates this opener. Peeks survive a destination redirect/reload; only
+  // a later trusted click consumes the opaque capability.
+  const peekDblclickCorrelation = (retries = 20, errorBudget = 2) => {
+    chrome.runtime.sendMessage({ type: "ns-dblclick-correlation-peek" }, (resp) => {
       if (chrome.runtime.lastError) {
-        if (errorBudget > 0) window.setTimeout(() => claimDblclickCorrelation(retries, errorBudget - 1), 150);
+        if (errorBudget > 0) window.setTimeout(() => peekDblclickCorrelation(retries, errorBudget - 1), 150);
         return;
       }
-      if (resp?.active === true && typeof resp.expiresAt === "number") {
+      if (resp?.active === true && typeof resp.expiresAt === "number" && typeof resp.token === "string") {
         handleDblclickRuntimeMessage({
           type: "ns-dblclick-correlation-ready",
           expiresAt: resp.expiresAt,
+          token: resp.token,
         });
         return;
       }
-      if (retries > 0) window.setTimeout(() => claimDblclickCorrelation(retries - 1, errorBudget), 150);
+      if (retries > 0) window.setTimeout(() => peekDblclickCorrelation(retries - 1, errorBudget), 150);
     });
   };
-  claimDblclickCorrelation();
+  peekDblclickCorrelation();
 
   // -- Rollback polling --
   const run = (polls = 4, errorBudget = 3) => {
@@ -1696,6 +1697,18 @@ window.addEventListener(
   (e) => {
     if (!(e instanceof MouseEvent)) return;
 
+    // This message originates in the isolated world and carries no page data.
+    // The worker accepts it only from a top-frame tab whose opener relationship
+    // Chrome itself confirms. Sending from the capture phase puts the evidence
+    // ahead of a page's bubble listener that may synchronously navigate opener.
+    if (e.isTrusted && isTopFrame() && settings.defaultMode !== "off") {
+      try {
+        chrome.runtime.sendMessage({ type: "ns-dblclick-child-trusted-click" });
+      } catch {
+        // A missing worker loses only this bounded correlation attempt.
+      }
+    }
+
     const isKeyboardActivation = e.isTrusted && e.detail === 0;
     // A recent trusted down remains risk-correlation evidence even when page
     // code synchronously dispatches the click: target/timing mismatches should
@@ -1773,8 +1786,23 @@ window.addEventListener(
 
     const userActivationActive = !!navigator.userActivation?.isActive;
 
-    const dblClickHijack =
-      consumeDblclickCorrelationOnTrustedClick(e.isTrusted) || isDoubleClickHijackActive();
+    const dblclickCorrelationToken = mode !== "off"
+      ? consumeDblclickCorrelationOnTrustedClick(e.isTrusted)
+      : null;
+    const crossDocumentDblclick = !!dblclickCorrelationToken;
+    const dblClickHijack = mode !== "off" &&
+      (crossDocumentDblclick || isDoubleClickHijackActive());
+    if (dblclickCorrelationToken) {
+      try {
+        chrome.runtime.sendMessage({
+          type: "ns-dblclick-correlation-consume",
+          token: dblclickCorrelationToken,
+        });
+      } catch {
+        // Detection already consumed the local capability; a later document can
+        // safely retry its non-consuming peek until the bounded SW record expires.
+      }
+    }
 
     // Check both the registrable domain and the full hostname against the
     // bloom filter. Feeds may contain either form, and attackers may use
@@ -1848,10 +1876,18 @@ window.addEventListener(
       appendEventSafely({
         kind: "dblclickjack_detected",
         site: siteKeyFromLocation(),
-        url: openerNavUrl || location.href,
-        destHost: (() => { try { return new URL(openerNavUrl || location.href, location.href).hostname; } catch { return location.hostname; } })(),
+        // The browser-native cross-document path deliberately stores no URL or
+        // query. The legacy same-document bridge retains its existing local URL
+        // fields until the broader event-log minimization work in #474.
+        ...(!crossDocumentDblclick ? {
+          url: openerNavUrl || location.href,
+          destHost: (() => { try { return new URL(openerNavUrl || location.href, location.href).hostname; } catch { return location.hostname; } })(),
+        } : {}),
+        reasons: [crossDocumentDblclick
+          ? "trusted_child_click_then_opener_commit"
+          : "main_world_doubleclick_sequence"],
       });
-      if (e.isTrusted && mode !== "off") {
+      if (e.isTrusted) {
         sendIconUpdate("yellow");
         showToast({
           message: "NavSentinel warning: a popup navigated this page before your next click.",

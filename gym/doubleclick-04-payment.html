@@ -8,8 +8,9 @@
 <body>
   <h1>DoubleClickjacking 04 - HTTP payment opener navigation</h1>
   <p>A real HTTP child page simulates the payment-window opener navigation.
-    NavSentinel deliberately permits this initial trusted popup; only the target-stage
-    trusted click is evidence-bearing.</p>
+    NavSentinel deliberately permits this initial trusted popup. A trusted child click
+    plus the browser-committed opener navigation arms a warning and score for the next
+    trusted target click; this fixture does not claim prevention or rollback.</p>
   <button id="payBtn">Pay now</button>
   <p id="status">Waiting for the first click.</p>
   <script>

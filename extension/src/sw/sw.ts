@@ -22,7 +22,7 @@ import {
   isUnexpectedCallback,
   type OAuthFlowState,
 } from "../content/oauth_monitor";
-import { swState } from "../shared/session_state";
+import { swState, type ChildWindowEntry } from "../shared/session_state";
 import { updateTabIcon, updateTabIconWhen, clearTabIcon, setAllTabsGray } from "./icon_manager";
 import {
   createDefaultPendingDecisionRuntimeBroker,
@@ -81,10 +81,14 @@ const TYPED_ORIGIN_MAX_MS = 15_000;
 const USER_NAV_CONTEXT_TTL_MS = 10_000;
 const DBLCLICK_CHILD_MAX_AGE_MS = 5_000;
 const DBLCLICK_CHILD_PRUNE_LIMIT = 50;
-// Kept separately from the child relationship so the destination document can
-// claim exactly one verified opener-navigation signal after the opener reloads.
-const DBLCLICK_CORRELATION_TTL_MS = 5_000;
+// A real DoubleClickjacking sequence is deliberately tight: a trusted click in
+// the child must be followed by a committed opener navigation, then by the
+// target click. Keep each boundary materially below the old broad 5s window.
+const DBLCLICK_CHILD_CLICK_TO_COMMIT_MS = 1_500;
+const DBLCLICK_DELIVERY_INVERSION_MS = 500;
+const DBLCLICK_CORRELATION_TTL_MS = 3_000;
 const DBLCLICK_CORRELATION_PRUNE_LIMIT = 50;
+const DBLCLICK_PENDING_NAV_PRUNE_LIMIT = 50;
 const OAUTH_FLOW_MAX_AGE_MS = 60_000;
 const OAUTH_FLOW_PRUNE_LIMIT = 50;
 
@@ -156,6 +160,7 @@ const rollbackReturnByTab = swState.rollbackReturnByTab;
 const lastUrlByTab = swState.lastUrlByTab;
 const lastCommittedByTab = swState.lastCommittedByTab;
 const dblclickCorrelationByTab = swState.dblclickCorrelationByTab;
+const dblclickPendingNavigationByTab = swState.dblclickPendingNavigationByTab;
 
 // --- Redirect chain correlation ---
 // Pass the session-backed Map so the tracker persists via swState.
@@ -410,7 +415,7 @@ function processOAuthNavigation(
 // confirming it wrote to opener.location.
 const childWindowByTab = swState.childWindowByTab;
 
-function pruneStaleChildWindows(): void {
+function pruneStaleChildWindows(persist = true): void {
   const now = Date.now();
   // Always prune entries older than 2x the max age to prevent stale
   // correlations from tab ID reuse, regardless of map size.
@@ -427,7 +432,127 @@ function pruneStaleChildWindows(): void {
       childWindowByTab.delete(sorted[i]![0]);
     }
   }
-  swState.persistMap(childWindowByTab, "childWindow");
+  if (persist) swState.persistMap(childWindowByTab, "childWindow");
+}
+
+function makeDblclickCorrelationToken(): string {
+  const words = new Uint32Array(4);
+  crypto.getRandomValues(words);
+  return Array.from(words, (word) => word.toString(16).padStart(8, "0")).join("");
+}
+
+function pruneDblclickPendingNavigations(now = Date.now()): void {
+  for (const [tabId, entry] of dblclickPendingNavigationByTab) {
+    if (now - entry.committedAt > DBLCLICK_DELIVERY_INVERSION_MS) {
+      dblclickPendingNavigationByTab.delete(tabId);
+    }
+  }
+  if (dblclickPendingNavigationByTab.size > DBLCLICK_PENDING_NAV_PRUNE_LIMIT) {
+    const oldest = [...dblclickPendingNavigationByTab.entries()]
+      .sort((a, b) => a[1].committedAt - b[1].committedAt)
+      .slice(0, dblclickPendingNavigationByTab.size - DBLCLICK_PENDING_NAV_PRUNE_LIMIT);
+    for (const [tabId] of oldest) dblclickPendingNavigationByTab.delete(tabId);
+  }
+}
+
+function createDblclickCorrelation(
+  openerTabId: number,
+  childEntry: { openerNavObserved: boolean; trustedClickAt?: number },
+  now: number,
+): void {
+  childEntry.openerNavObserved = true;
+  delete childEntry.trustedClickAt;
+  dblclickPendingNavigationByTab.delete(openerTabId);
+  pruneDblclickCorrelations();
+  dblclickCorrelationByTab.set(openerTabId, {
+    expiresAt: now + DBLCLICK_CORRELATION_TTL_MS,
+    token: makeDblclickCorrelationToken(),
+  });
+  // One batch records the consumed child activation, cleared pending commit,
+  // and destination capability for worker-restart continuity.
+  swState.persistAll();
+}
+
+async function recordTrustedChildClick(childTabId: number): Promise<void> {
+  try {
+    // Re-read the relationship for every signal. A restored/onCreated entry is
+    // useful continuity state, but Chrome's current tab is the authority and
+    // prevents tab-ID reuse or page data from selecting an opener.
+    const tab = await chrome.tabs.get(childTabId);
+    if (typeof tab.openerTabId !== "number" || tab.openerTabId <= 0) return;
+
+    const now = Date.now();
+    pruneStaleChildWindows(false);
+    pruneDblclickPendingNavigations(now);
+    const existing = childWindowByTab.get(childTabId);
+    const entry: ChildWindowEntry = existing?.openerTabId === tab.openerTabId
+      ? existing
+      : {
+          openerTabId: tab.openerTabId,
+          createdAt: now,
+          openerNavObserved: false,
+        };
+    entry.trustedClickAt = now;
+    childWindowByTab.set(childTabId, entry);
+
+    const pending = dblclickPendingNavigationByTab.get(tab.openerTabId);
+    if (
+      pending &&
+      pending.committedAt <= now &&
+      now - pending.committedAt <= DBLCLICK_DELIVERY_INVERSION_MS
+    ) {
+      createDblclickCorrelation(tab.openerTabId, entry, now);
+      return;
+    }
+    swState.persistAll();
+  } catch {
+    // The child can close or navigate while tabs.get is in flight. No verified
+    // browser relationship means no correlation capability.
+  }
+}
+
+function recordCommittedOpenerNavigation(
+  openerTabId: number,
+  now: number,
+  extensionDirected: boolean,
+): void {
+  pruneStaleChildWindows(false);
+  pruneDblclickPendingNavigations(now);
+  if (extensionDirected) {
+    dblclickPendingNavigationByTab.delete(openerTabId);
+    swState.persistAll();
+    return;
+  }
+
+  let candidate: ChildWindowEntry | null = null;
+  let newestClickAt = 0;
+  for (const entry of childWindowByTab.values()) {
+    const clickAt = entry.trustedClickAt;
+    if (
+      entry.openerTabId !== openerTabId ||
+      typeof clickAt !== "number" ||
+      clickAt > now ||
+      now - clickAt > DBLCLICK_CHILD_CLICK_TO_COMMIT_MS ||
+      now - entry.createdAt > DBLCLICK_CHILD_MAX_AGE_MS ||
+      clickAt <= newestClickAt
+    ) {
+      continue;
+    }
+    candidate = entry;
+    newestClickAt = clickAt;
+  }
+
+  if (candidate) {
+    createDblclickCorrelation(openerTabId, candidate, now);
+    return;
+  }
+
+  // Retain a URL-free commit only long enough to tolerate the runtime message
+  // arriving just after webNavigation. A later child signal must still prove
+  // its browser-owned opener relationship before it can complete the pair.
+  dblclickPendingNavigationByTab.set(openerTabId, { committedAt: now });
+  pruneDblclickPendingNavigations(now);
+  swState.persistAll();
 }
 
 function pruneDblclickCorrelations(): void {
@@ -441,7 +566,6 @@ function pruneDblclickCorrelations(): void {
       .slice(0, dblclickCorrelationByTab.size - DBLCLICK_CORRELATION_PRUNE_LIMIT);
     for (const [tabId] of oldest) dblclickCorrelationByTab.delete(tabId);
   }
-  swState.persistMap(dblclickCorrelationByTab, "dblclickCorrelation");
 }
 
 function clearPendingTabState(
@@ -1035,62 +1159,36 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     void updateTabIcon(tabId, state, blockCount);
   }
 
-  // DoubleClickjacking: accept an opener.location write only from the top
-  // frame of a browser-registered child tab. The persisted record is URL-free:
-  // it exists solely to bridge the opener document reload to its next click.
+  if (message.type === "ns-dblclick-child-trusted-click") {
+    return runWhenHydrated(() => {
+      const childTabId = sender.tab?.id;
+      if (
+        typeof childTabId !== "number" ||
+        (sender.frameId !== undefined && sender.frameId !== 0)
+      ) return;
+      void recordTrustedChildClick(childTabId);
+    }, false);
+  }
+
+  // Legacy MAIN-world observation used by same-document/OAuth correlation.
+  // It cannot mint the cross-document capability: that requires the isolated
+  // trusted-click signal plus Chrome's tab relationship and committed nav.
   if (message.type === "ns-dblclick-opener-nav") {
     return runWhenHydrated(() => {
       const childTabId = sender.tab?.id;
-      if (typeof childTabId !== "number" || sender.frameId !== 0) return;
-      const childEntry = childWindowByTab.get(childTabId);
-      if (!childEntry) return;
-      // Mark that this child performed an opener.location write so the
-      // child-close signal is only sent for confirmed attack scenarios.
-      childEntry.openerNavObserved = true;
-      swState.persistMap(childWindowByTab, "childWindow");
-      pruneDblclickCorrelations();
-      dblclickCorrelationByTab.set(childEntry.openerTabId, {
-        expiresAt: Date.now() + DBLCLICK_CORRELATION_TTL_MS,
-      });
-      swState.persistMap(dblclickCorrelationByTab, "dblclickCorrelation");
-
-      // --- OAuth: detect opener manipulation during an active OAuth flow ---
-      // A completed flow is deleted from the map on completion (#366), so a LIVE
-      // openerOAuthFlow is never 'complete'. The `!== "complete"` guard only matters for a
-      // corrupt/tampered restored 'complete' entry, which OAUTH_PHASES still admits as
-      // defence-in-depth (see session_state.ts) — treat that as a finished flow, not an
-      // active manipulation target. Do not remove the guard without also tightening OAUTH_PHASES.
-      const openerOAuthFlow = oauthFlowByTab.get(childEntry.openerTabId);
-      if (openerOAuthFlow && openerOAuthFlow.phase !== "complete") {
-        chrome.tabs.sendMessage(
-          childEntry.openerTabId,
-          { type: "ns-oauth-opener-manipulation", flow: openerOAuthFlow },
-          () => { if (chrome.runtime.lastError) { /* ignore */ } },
-        );
-      }
-
-      chrome.tabs.sendMessage(
-        childEntry.openerTabId,
-        {
-          type: "ns-dblclick-opener-nav-from-child",
-          url: typeof message.url === "string" ? message.url : "",
-          ts: typeof message.ts === "number" ? message.ts : Date.now(),
-        },
-        () => {
-          if (chrome.runtime.lastError) { /* opener may have navigated away */ }
-        }
-      );
-      sendResponse?.({ ok: true });
+      if (typeof childTabId !== "number" || (sender.frameId !== undefined && sender.frameId !== 0)) return;
+      const knownChild = childWindowByTab.get(childTabId);
+      if (!knownChild) return;
+      recordVerifiedDblclickOpenerNav(knownChild, message as Record<string, unknown>, sendResponse);
     });
   }
 
-  // A newly loaded opener top frame claims a one-shot correlation before it
-  // sees the user's next click. Claiming is sender-authenticated and consumes
-  // the SW record; the content script then consumes it only for a trusted click.
-  if (message.type === "ns-dblclick-correlation-claim") {
+  // A destination top frame may peek repeatedly across redirects/reloads. The
+  // opaque token is consumed only by its isolated-world trusted-click path.
+  if (message.type === "ns-dblclick-correlation-peek") {
     return runWhenHydrated(() => {
       const openerTabId = sender.tab?.id;
-      if (typeof openerTabId !== "number" || sender.frameId !== 0) {
+      if (typeof openerTabId !== "number" || (sender.frameId !== undefined && sender.frameId !== 0)) {
         sendResponse?.({ active: false });
         return;
       }
@@ -1103,12 +1201,64 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse?.({ active: false });
         return;
       }
+      sendResponse?.({ active: true, expiresAt: entry.expiresAt, token: entry.token });
+    });
+  }
+
+  if (message.type === "ns-dblclick-correlation-consume") {
+    return runWhenHydrated(() => {
+      const openerTabId = sender.tab?.id;
+      const token = message.token;
+      if (typeof openerTabId !== "number" || (sender.frameId !== undefined && sender.frameId !== 0) || typeof token !== "string") {
+        sendResponse?.({ active: false });
+        return;
+      }
+      const entry = dblclickCorrelationByTab.get(openerTabId);
+      if (!entry || entry.expiresAt <= Date.now() || entry.token !== token) {
+        if (entry && entry.expiresAt <= Date.now()) {
+          dblclickCorrelationByTab.delete(openerTabId);
+          swState.persistMap(dblclickCorrelationByTab, "dblclickCorrelation");
+        }
+        sendResponse?.({ active: false });
+        return;
+      }
       dblclickCorrelationByTab.delete(openerTabId);
       swState.persistMap(dblclickCorrelationByTab, "dblclickCorrelation");
-      sendResponse?.({ active: true, expiresAt: entry.expiresAt });
+      sendResponse?.({ active: true });
     });
   }
 });
+
+function recordVerifiedDblclickOpenerNav(
+  childEntry: { openerTabId: number; createdAt: number; openerNavObserved: boolean },
+  message: Record<string, unknown>,
+  sendResponse?: (response?: unknown) => void,
+): void {
+  childEntry.openerNavObserved = true;
+  swState.persistMap(childWindowByTab, "childWindow");
+
+  const openerOAuthFlow = oauthFlowByTab.get(childEntry.openerTabId);
+  if (openerOAuthFlow && openerOAuthFlow.phase !== "complete") {
+    chrome.tabs.sendMessage(
+      childEntry.openerTabId,
+      { type: "ns-oauth-opener-manipulation", flow: openerOAuthFlow },
+      () => { if (chrome.runtime.lastError) { /* ignore */ } },
+    );
+  }
+
+  chrome.tabs.sendMessage(
+    childEntry.openerTabId,
+    {
+      type: "ns-dblclick-opener-nav-from-child",
+      url: typeof message.url === "string" ? message.url : "",
+      ts: typeof message.ts === "number" ? message.ts : Date.now(),
+    },
+    () => {
+      if (chrome.runtime.lastError) { /* opener may have navigated away */ }
+    },
+  );
+  sendResponse?.({ ok: true });
+}
 
 chrome.webNavigation.onBeforeNavigate.addListener((details) => {
   if (details.frameId !== 0) return;
@@ -1165,6 +1315,8 @@ chrome.webNavigation.onCommitted.addListener((details) => {
   onCommittedHandler(details);
 });
 function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitionCallbackDetails): void {
+  const hadRollbackReturn = rollbackReturnByTab.has(details.tabId);
+  const hadPendingForward = pendingForwardByTab.has(details.tabId);
   rollbackReturnByTab.delete(details.tabId);
   const now = Date.now();
   const targetAllowance = allowTargetByTab.get(details.tabId);
@@ -1178,6 +1330,18 @@ function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitio
   if (targetAllowed && targetAllowance?.silentEvent) {
     void appendEvent(targetAllowance.silentEvent);
   }
+  const extensionDirectedDblclickNavigation =
+    cachedDefaultMode === "off" ||
+    hadRollbackReturn ||
+    hadPendingForward ||
+    targetAllowed ||
+    now <= (allowUntilByTab.get(details.tabId) ?? 0) ||
+    allowStartedByTab.get(details.tabId) === details.url;
+  recordCommittedOpenerNavigation(
+    details.tabId,
+    now,
+    extensionDirectedDblclickNavigation,
+  );
   const prevUrl = lastUrlByTab.get(details.tabId);
   lastUrlByTab.set(details.tabId, details.url);
 
@@ -1428,6 +1592,9 @@ function onRemovedHandler(tabId: number): void {
       );
     }
   }
+  for (const [childTabId, entry] of childWindowByTab) {
+    if (entry.openerTabId === tabId) childWindowByTab.delete(childTabId);
+  }
 
   allowUntilByTab.delete(tabId);
   gestureUntilByTab.delete(tabId);
@@ -1441,6 +1608,7 @@ function onRemovedHandler(tabId: number): void {
   oauthFlowByTab.delete(tabId);
   captureTimestampsByTab.delete(tabId);
   dblclickCorrelationByTab.delete(tabId);
+  dblclickPendingNavigationByTab.delete(tabId);
   clearPendingTabState(tabId);
   lastUrlByTab.delete(tabId);
   // Batch persist all cleanup in one storage write

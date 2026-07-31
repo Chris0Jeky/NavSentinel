@@ -102,6 +102,8 @@ async function proveHttpOpenerNavigationCorrelation(params: {
   trigger: string;
   targetUrl: RegExp;
   targetAction: string;
+  targetStatus: string;
+  proveNoNavigationFirst?: boolean;
 }) {
   const { page, context, cleanup } = await setupFixtureTest(params.fixture);
   try {
@@ -111,20 +113,46 @@ async function proveHttpOpenerNavigationCorrelation(params: {
     expect(popup, "the initial trusted popup is intentionally permitted").toBeTruthy();
     await waitForNavSentinelBridge(popup);
 
+    if (params.proveNoNavigationFirst) {
+      await popup.click("#stayPut");
+      await expect(popup.locator("#status")).toHaveText("Child stayed on this page.");
+      const sw = await getServiceWorker(context);
+      await expect.poll(async () => {
+        const stored = await sw.evaluate(async () =>
+          chrome.storage.session.get(["ns_sw:childWindow", "ns_sw:dblclickCorrelation"]));
+        return {
+          childClickRecorded: JSON.stringify(stored["ns_sw:childWindow"] ?? {}).includes("trustedClickAt"),
+          correlationCount: Object.keys(stored["ns_sw:dblclickCorrelation"] ?? {}).length,
+        };
+      }).toEqual({ childClickRecorded: true, correlationCount: 0 });
+    }
+
     await popup.click("#hijackOpener");
     await expect(page).toHaveURL(params.targetUrl);
     await waitForNavSentinelBridge(page);
-    // The child bridge and destination content script race across a real tab
-    // navigation. The bounded claim retries in the extension; wait for that
-    // supported lifecycle boundary before issuing the next trusted click.
-    await page.waitForTimeout(900);
+    const sw = await getServiceWorker(context);
+    await expect.poll(async () => {
+      const stored = await sw.evaluate(async () =>
+        chrome.storage.session.get(["ns_sw:dblclickCorrelation"]));
+      const serialized = JSON.stringify(stored["ns_sw:dblclickCorrelation"] ?? {});
+      return {
+        active: serialized.includes("token"),
+        retainedUrl: serialized.includes("http") || serialized.includes("?") || serialized.includes("#"),
+      };
+    }, { timeout: 2500 }).toEqual({ active: true, retainedUrl: false });
 
     await page.click(params.targetAction);
-    await waitForToastMatch(page, /popup navigated this page before your next click/i, 8000);
+    await expect(page.locator(params.targetStatus)).toContainText(/invoked/i);
     await expect.poll(
       async () => (await extractEventLog(context)).some((event) => event.kind === "dblclickjack_detected"),
       { timeout: 8000 },
     ).toBe(true);
+    await waitForToastMatch(page, /popup navigated this page before your next click/i, 8000);
+    await expect.poll(async () => {
+      const stored = await sw.evaluate(async () =>
+        chrome.storage.session.get(["ns_sw:dblclickCorrelation"]));
+      return Object.keys(stored["ns_sw:dblclickCorrelation"] ?? {}).length;
+    }).toBe(0);
   } finally {
     await cleanup();
   }
@@ -168,6 +196,8 @@ test.describe("DoubleClickjacking", () => {
       trigger: "#trigger",
       targetUrl: /doubleclick-01-target\.html/,
       targetAction: "#allowBtn",
+      targetStatus: "#action-status",
+      proveNoNavigationFirst: true,
     });
   });
 
@@ -220,6 +250,7 @@ test.describe("DoubleClickjacking", () => {
       trigger: "#payBtn",
       targetUrl: /doubleclick-04-payment-target\.html/,
       targetAction: "#confirmBtn",
+      targetStatus: "#payment-status",
     });
   });
 });

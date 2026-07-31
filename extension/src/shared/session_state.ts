@@ -33,11 +33,19 @@ export interface ChildWindowEntry {
   openerTabId: number;
   createdAt: number;
   openerNavObserved: boolean;
+  /** Receipt time of a trusted top-frame click observed by the isolated script. */
+  trustedClickAt?: number;
 }
 
 /** A short-lived, URL-free opener-navigation correlation for the destination tab. */
 export interface DblclickCorrelationEntry {
   expiresAt: number;
+  token: string;
+}
+
+/** Browser commit retained briefly to tolerate runtime/webNavigation delivery inversion. */
+export interface DblclickPendingNavigationEntry {
+  committedAt: number;
 }
 
 export interface AllowTargetEntry {
@@ -143,9 +151,12 @@ const isValidChildWindow = (v: unknown): boolean =>
   // suppressing the DoubleClickjacking child-closed notification. (#339)
   v.openerTabId > 0 &&
   isFiniteNumber(v.createdAt) &&
-  typeof v.openerNavObserved === "boolean";
+  typeof v.openerNavObserved === "boolean" &&
+  (v.trustedClickAt === undefined || isFiniteNumber(v.trustedClickAt));
 const isValidDblclickCorrelation = (v: unknown): boolean =>
-  isRecord(v) && isFiniteNumber(v.expiresAt);
+  isRecord(v) && isFiniteNumber(v.expiresAt) && isString(v.token) && v.token.length > 0 && v.token.length <= 128;
+const isValidDblclickPendingNavigation = (v: unknown): boolean =>
+  isRecord(v) && isFiniteNumber(v.committedAt);
 const isValidTypedOrigin = (v: unknown): boolean =>
   isRecord(v) && isFiniteNumber(v.ts) && isFiniteNumber(v.deadline);
 // Restorable phases. A LIVE flow is only ever 'redirect' or 'consent' in storage:
@@ -187,6 +198,7 @@ const KEYS = {
   lastCommitted: `${PREFIX}lastCommitted`,
   childWindow: `${PREFIX}childWindow`,
   dblclickCorrelation: `${PREFIX}dblclickCorrelation`,
+  dblclickPendingNavigation: `${PREFIX}dblclickPendingNavigation`,
   oauthFlow: `${PREFIX}oauthFlow`,
   redirectChains: `${PREFIX}redirectChains`,
   captureTimestamps: `${PREFIX}captureTimestamps`,
@@ -255,6 +267,7 @@ export class SessionStateManager {
   readonly lastCommittedByTab = new Map<number, LastCommittedEntry>();
   readonly childWindowByTab = new Map<number, ChildWindowEntry>();
   readonly dblclickCorrelationByTab = new Map<number, DblclickCorrelationEntry>();
+  readonly dblclickPendingNavigationByTab = new Map<number, DblclickPendingNavigationEntry>();
   readonly oauthFlowByTab = new Map<number, OAuthFlowState>();
 
   // Redirect chain data (separate because RedirectChainTracker has its own class)
@@ -340,6 +353,11 @@ export class SessionStateManager {
       data[KEYS.dblclickCorrelation],
       isValidDblclickCorrelation,
     );
+    this._restoreMap(
+      this.dblclickPendingNavigationByTab,
+      data[KEYS.dblclickPendingNavigation],
+      isValidDblclickPendingNavigation,
+    );
     this._restoreMap(this.oauthFlowByTab, data[KEYS.oauthFlow], isValidOAuthFlow);
     this._restoreRedirectChains(data[KEYS.redirectChains]);
     this._restoreMap(
@@ -391,6 +409,7 @@ export class SessionStateManager {
       [KEYS.lastCommitted]: mapToObj(this.lastCommittedByTab),
       [KEYS.childWindow]: mapToObj(this.childWindowByTab),
       [KEYS.dblclickCorrelation]: mapToObj(this.dblclickCorrelationByTab),
+      [KEYS.dblclickPendingNavigation]: mapToObj(this.dblclickPendingNavigationByTab),
       [KEYS.oauthFlow]: mapToObj(this.oauthFlowByTab),
       [KEYS.redirectChains]: mapToObj(this.redirectChainData),
       [KEYS.captureTimestamps]: mapToObj(this.captureTimestampsByTab),
@@ -420,6 +439,7 @@ export class SessionStateManager {
     this.lastCommittedByTab.delete(tabId);
     this.childWindowByTab.delete(tabId);
     this.dblclickCorrelationByTab.delete(tabId);
+    this.dblclickPendingNavigationByTab.delete(tabId);
     this.oauthFlowByTab.delete(tabId);
     this.redirectChainData.delete(tabId);
     this.captureTimestampsByTab.delete(tabId);

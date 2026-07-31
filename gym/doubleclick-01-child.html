@@ -3,8 +3,13 @@
 <head><meta charset="utf-8" /><title>DoubleClickjacking HTTP child</title></head>
 <body>
   <p>Verification window</p>
+  <button id="stayPut">Benign child action</button>
   <button id="hijackOpener">Continue</button>
+  <p id="status" role="status"></p>
   <script>
+    document.getElementById("stayPut").addEventListener("click", () => {
+      document.getElementById("status").textContent = "Child stayed on this page.";
+    });
     document.getElementById("hijackOpener").addEventListener("click", () => {
       window.opener.location = "doubleclick-01-target.html";
     });
