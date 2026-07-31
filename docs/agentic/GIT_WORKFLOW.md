@@ -16,12 +16,15 @@ pipe-to-shell, `sudo`, and secret-file mutation. It is a tripwire, not a
 complete safety boundary.
 
 **Syncing the vendored floor (added 2026-07-25, after #457).** A canonical floor
-sync PR must update **four** things together, or the `harness` CI job fails:
+sync PR must update **four** things together:
 `.claude/hooks/dispatch.py`, `.claude/hooks/smoke_test.py`, the two
 `EXPECTED_*_SHA256` constants plus `FLOOR_PROVENANCE` in
 `scripts/agent_hooks/smoke_test.py`, and **both** adapter pins in
-`.codex/hooks.json`. The pins are normalised sha256 of the file read as text with
-LF newlines. Compute them with
+`.codex/hooks.json`. The `harness` CI job enforces the artifact hashes and
+adapter pins, but `FLOOR_PROVENANCE` is diagnostic text only; review and update
+it explicitly so a future drift error names the correct canonical release. The
+pins are normalised sha256 of the file read as text with LF newlines. Compute
+them with
 `hashlib.sha256(path.read_text(encoding="utf-8").encode("utf-8")).hexdigest()`.
 Copy the artifacts verbatim from canonical and verify byte-identity with `diff`
 against the installed `~/.claude/hooks/` copies — never hand-edit them, and never

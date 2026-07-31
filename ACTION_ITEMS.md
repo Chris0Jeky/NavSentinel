@@ -185,10 +185,12 @@ capture. Codex deliberately skips new or changed non-managed hooks until their
 exact definitions are trusted. **Human-only guide (run after this agentic slice
 is final):** (1) start a fresh Codex session in the canonical repository; (2)
 run `/hooks`; (3) compare every project entry with `.codex/hooks.json` —
-SessionStart runs `session_start.py`, PreToolUse Bash runs
-`.claude/hooks/dispatch.py --event pre`, and PostToolUse runs
-`post_tool_use.py` plus sanitized `post_tool_failure.py`; (4) confirm each path
-is repository-root-relative and no unexpected command exists; (5) choose
+SessionStart runs `session_start.py`, PreToolUse Bash uses the inline SHA-pinned
+adapter to invoke the global `~/.claude/hooks/dispatch.py --event pre --runtime
+codex`, and PostToolUse runs `post_tool_use.py` plus sanitized
+`post_tool_failure.py`; (4) confirm each repo-owned helper path is
+repository-root-relative, the one external path is that global dispatcher, and
+no unexpected command exists; (5) choose
 **Trust** for those exact project hooks; (6) run `/hooks` again and confirm they
 are trusted/enabled; and (7) restart once to exercise SessionStart. Then reply
 `AI-18 done`. Trust is definition-hash-based, so repeat after future hook
