@@ -14,12 +14,6 @@ Call out manifest/permission changes, injection/world changes, storage migration
 
 ## PR Review Follow-Through
 
-When the work includes a review of a PR:
+Not restated here — the pipeline lives in global law 2 (`~/.claude/CLAUDE.md`) and `AGENTS.md`. This skill closes out verification and handoff only.
 
-1. Read existing PR comments and address any unresolved feedback before adding new findings.
-2. Post a structured comment on the PR with all findings using `gh pr comment` (unless the user says otherwise).
-3. Fix every finding — both from your review and from existing unaddressed PR comments. "Non-blocking" means "fix it now."
-4. If a finding is genuinely out of scope, seed a follow-up: GitHub issue, roadmap entry, or failure ledger entry with a concrete fix path.
-5. Do not close the review until every finding is resolved or has a seeded follow-up.
-
-Handoff must include `Review findings: <all addressed | N seeded as issues>`.
+Handoff must include `Review findings: <triage outcome>`.

@@ -39,13 +39,8 @@ Mention these explicitly when they apply:
 
 ## PR Review Follow-Through
 
-When the work includes a review of a PR:
-
-1. Read existing PR comments and address any unresolved feedback before adding new findings.
-2. Post a structured comment on the PR with all findings using `gh pr comment` (unless the user says otherwise).
-3. Fix every finding — both from your review and from existing unaddressed PR comments. "Non-blocking" means "fix it now."
-4. If a finding is genuinely out of scope (different seam, pre-existing debt), seed a follow-up: GitHub issue, roadmap entry, or failure ledger entry with a concrete fix path.
-5. Do not close the review until every finding is resolved or has a seeded follow-up.
+Not restated here — run the `review-and-ship` skill (global laws 2 and 11). This skill closes
+out verification and handoff only.
 
 ## Handoff Shape
 
