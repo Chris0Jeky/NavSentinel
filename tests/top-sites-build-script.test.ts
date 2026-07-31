@@ -33,10 +33,16 @@ function runScript(dir: string): void {
   });
 }
 
+function runCheck(dir: string): void {
+  execFileSync(process.execPath, [resolve("scripts/build-topsites-tier.mjs"), "--check", "input.csv", "out.ts"], {
+    cwd: dir,
+    stdio: "pipe",
+  });
+}
+
 describe("top-sites build script", () => {
   it("resolves explicit paths from cwd and parses quoted CSV fields", () => {
     const dir = makeTempDir();
-    const scriptPath = resolve("scripts/build-topsites-tier.mjs");
     writeInput(dir, [
       "domain,tier,source,category,include_subdomains",
       "Example.COM.,2,\"seed, quoted\",reference,true",
@@ -44,19 +50,32 @@ describe("top-sites build script", () => {
       "ignored.example,3,seed,reference,false",
     ]);
 
-    execFileSync(process.execPath, [scriptPath, "input.csv", "out.ts"], {
-      cwd: dir,
-      stdio: "pipe",
-    });
-    execFileSync(process.execPath, [scriptPath, "--check", "input.csv", "out.ts"], {
-      cwd: dir,
-      stdio: "pipe",
-    });
+    runScript(dir);
+    runCheck(dir);
 
     const generated = readFileSync(join(dir, "out.ts"), "utf8");
     expect(generated).toContain("{ domain: \"example.com\", includeSubdomains: true }");
     expect(generated).not.toContain("tenant.example");
     expect(generated).not.toContain("ignored.example");
+  });
+
+  it("accepts current generated content with LF or CRLF, but rejects stale output", () => {
+    const dir = makeTempDir();
+    writeInput(dir, [
+      "domain,tier,source,category",
+      "example.com,2,seed,reference",
+    ]);
+
+    runScript(dir);
+    runCheck(dir); // Current LF output.
+
+    const outputPath = join(dir, "out.ts");
+    const generated = readFileSync(outputPath, "utf8");
+    writeFileSync(outputPath, generated.replace(/\n/g, "\r\n"), "utf8");
+    runCheck(dir); // Equivalent Windows CRLF checkout.
+
+    writeFileSync(outputPath, `${generated}// stale\n`, "utf8");
+    expect(() => runCheck(dir)).toThrow(/out\.ts is stale/);
   });
 
   it("rejects missing row fields and unsupported categories", () => {

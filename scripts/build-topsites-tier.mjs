@@ -184,6 +184,15 @@ function render(entries) {
     `export const TOP_SITE_TIER_ENTRIES = [\n${values}\n] as const;\n`;
 }
 
+/**
+ * Generated TypeScript has LF line endings, but a Windows checkout may present
+ * the same tracked content as CRLF. The freshness check is about generated
+ * content, not the worktree newline representation.
+ */
+function normalizeGeneratedLineEndings(value) {
+  return String(value).replace(/\r\n/g, "\n");
+}
+
 function main() {
   const checkOnly = process.argv.includes("--check");
   const args = process.argv.slice(2).filter((arg) => arg !== "--check");
@@ -194,7 +203,7 @@ function main() {
   const rendered = render(entries);
   if (checkOnly) {
     const current = fs.existsSync(outputPath) ? fs.readFileSync(outputPath, "utf8") : "";
-    if (current !== rendered) {
+    if (normalizeGeneratedLineEndings(current) !== rendered) {
       console.error(`${path.relative(repoRoot, outputPath)} is stale. Run npm run build:topsites.`);
       process.exit(1);
     }
