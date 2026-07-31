@@ -6,23 +6,15 @@ This is a fast orientation layer for coding agents. It should point to interface
 
 ## Start Here
 
-0. **Resuming the autonomous work loop?** Read `ACTION_ITEMS.md`,
-   `docs/Product_Strategy.md`, `docs/Project_Roadmap.md`, and
-   `docs/agentic/HANDOFF.md`, then verify live git/GitHub state. The oversized
-   ORCHESTRATOR/detail tables are historical pending #437. **#356, #464 and #466
-   merged on 2026-07-25** (`3bd9e02`, `c4f6183`, `4ff6341`), with their manual
-   Chrome gates waived in favour of automated equivalents — so the
-   synthetic-allowance rejection and the (dormant) pending-decision service-worker
-   boundary are now on `main`. Neither supplies a production extension-origin
-   prompt/action flow, so **RI-01 remains unfinished**. AI-15 is blocked pending the
-   remaining agent preflight.
-1. `AGENTS.md` - repo operating rules.
-2. `CLAUDE.md` - Claude-specific compact contract.
-3. `docs/Project_Roadmap.md` - active phase status, gates, decisions, and next tasks.
+0. Verify live Git/GitHub state for the issue or PR in scope. The optional short
+   snapshot is `docs/agentic/HANDOFF.md`; `ORCHESTRATOR.md` is history.
+1. `CLAUDE.md` - product invariants and focused checks.
+2. `AGENTS.md` - compact Codex-specific facts.
+3. `docs/Project_Roadmap.md` - product execution and release gates.
 4. `CONTRIBUTING.md` - change-surface guidance and style expectations.
-5. `docs/README.md` - documentation map.
-6. This file - code-grounded agent map.
-7. Relevant runtime skill under `.claude/skills/*/SKILL.md` or `.agents/skills/*/SKILL.md`.
+5. This file - code-grounded seam map.
+6. `ACTION_ITEMS.md` only when the task involves a human decision/manual check.
+7. An optional runtime skill only when it materially helps the current task.
 
 ## Do Not Read By Default
 
@@ -56,7 +48,7 @@ This is a fast orientation layer for coding agents. It should point to interface
 | Gym and E2E harness | `gym/index.html`, `tests/e2e/extension_test_utils.ts` | Gym HTML fixtures and E2E specs under `tests/e2e/` | Playwright spec, `npm run gym:serve`; verify volatile counts live. |
 | Build/release | `package.json`, `vite.config.ts`, `extension/manifest.json` | `scripts/package.mjs`, `scripts/release.mjs`, `scripts/check_versions.mjs`, `scripts/check-perf-budget.mjs` | `npm run verify:versions`, `npm run build`, `npm run package:ext`. |
 | Data pipeline | `scripts/build-bloom-filter.mjs`, `scripts/fetch-phishing-corpus.mjs` | `scripts/build-test-bloom-filter.mjs`, `scripts/measure-fp.mjs`, `scripts/check-bloom-size.mjs`, `scripts/update-psl.mjs` | `npm run build:bloom`, `npm run check:bloom-size`. |
-| Agentic workflow | `CLAUDE.md`, `AGENTS.md`, `docs/agentic/*`, `autodoc/AGENT_INDEX.md` | `.claude/skills/*`, `.agents/skills/*`, `scripts/agent_hooks/*` | `npm run agent:hooks:smoke`, `npm run agent:skills:validate`. |
+| Contributor guidance | `CLAUDE.md`, `AGENTS.md`, `autodoc/AGENT_INDEX.md` | Optional `.claude/skills/*` and `.agents/skills/*` | No repo-local harness; use the product check for the changed seam. |
 
 All paths above are relative to repo root. Content scripts live under `extension/src/content/`, shared modules under `extension/src/shared/`, SW under `extension/src/sw/`.
 
@@ -70,7 +62,7 @@ All paths above are relative to repo root. Content scripts live under `extension
   `docs/Project_Roadmap.md` owns execution; GitHub issues own implementation;
   `ACTION_ITEMS.md` owns human-only work.
 - `docs/Comprehensive_Project_Analysis.md` is a historical snapshot from 2026-04-09 — do not treat it as current.
-- Codex has a matching `.agents/skills` layer and should use `AGENTS.md`, Codex-native planning, parallel reads, patching, and verification tools. For an unattended Codex session, start from `docs/agentic/OVERNIGHT_LOOP.codex.md`.
+- Runtime skill files are optional aids with no parity contract or validation gate.
 - Build output and generated data are easy context traps. Agents should edit source under `extension/src/` and avoid `extension/dist/`.
 - The highest-risk seams are main-world patching, bridge messages, service-worker lifecycle state, and credential/data privacy behavior.
 - Current release blockers include page-controlled prompt decision authority
