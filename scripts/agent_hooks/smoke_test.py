@@ -36,6 +36,7 @@ QUESTION_PROTOCOL = ROOT / "docs" / "agentic" / "QUESTION_PROTOCOL.md"
 FLOOR_SMOKE = ROOT / ".claude" / "hooks" / "smoke_test.py"
 FLOOR_DISPATCH = ROOT / ".claude" / "hooks" / "dispatch.py"
 FLOOR_PROVENANCE = "agent-harness canonical deny floor v1.6.21"
+CODEX_HOOK_TEST_TIMEOUT_SECONDS = 60
 EXPECTED_DISPATCH_SHA256 = (
     "ea4fb45dc71a44e80392e7ea423bc70dcb604538e956cb13cf34b750118974b5"
 )
@@ -186,6 +187,9 @@ def run_codex_hook(
     else:
         command = hook.get("command")
         args = ["/bin/sh", "-c", command]
+    # A cold windows-latest probe starts Windows PowerShell, hashes the vendored
+    # floor, then starts CPython. That test path can exceed the hook's warm
+    # runtime budget without indicating a wiring failure (see #480).
     return subprocess.run(
         args,
         input=json.dumps(payload),
@@ -193,7 +197,7 @@ def run_codex_hook(
         capture_output=True,
         cwd=cwd,
         env=env,
-        timeout=int(hook.get("timeout", 10)) + 5,
+        timeout=CODEX_HOOK_TEST_TIMEOUT_SECONDS,
         check=False,
     )
 
