@@ -35,12 +35,12 @@ HANDOFF = ROOT / "docs" / "agentic" / "HANDOFF.md"
 QUESTION_PROTOCOL = ROOT / "docs" / "agentic" / "QUESTION_PROTOCOL.md"
 FLOOR_SMOKE = ROOT / ".claude" / "hooks" / "smoke_test.py"
 FLOOR_DISPATCH = ROOT / ".claude" / "hooks" / "dispatch.py"
-FLOOR_PROVENANCE = "agent-harness canonical deny floor v1.6.20"
+FLOOR_PROVENANCE = "agent-harness canonical deny floor v1.6.21"
 EXPECTED_DISPATCH_SHA256 = (
-    "167a61b15175ea35609ffffda8a4b9592c25ed3b7cf1b621182aba6e5e5deed4"
+    "ea4fb45dc71a44e80392e7ea423bc70dcb604538e956cb13cf34b750118974b5"
 )
 EXPECTED_SMOKE_SHA256 = (
-    "33b7d6cdcba68856eceaae3bdf5bc0520faeb61343928f96d56f55d2c24d3a01"
+    "64f9caf0851cdc345cf40929ecc8f1fc21ea0f086212f87053290c3b5754706f"
 )
 VALID_EVENTS = {
     "PreToolUse",
@@ -239,7 +239,7 @@ def test_floor_matrix() -> None:
         capture_output=True,
         text=True,
         cwd=ROOT,
-        # The canonical v1.6.0 floor matrix is large; on Windows (slow per-case
+        # The canonical floor matrix is large; on Windows (slow per-case
         # subprocess spawning) the whole smoke run measured ~294s on 2026-07-25,
         # well over the old 120s cap that used to fail this check outright.
         # The floor smoke exits fast on a real failure, so this bound only guards a
