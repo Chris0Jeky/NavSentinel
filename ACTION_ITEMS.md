@@ -202,10 +202,11 @@ definition changes.
 > double-floor topology is also gone: #457 removed the repo-local `PreToolUse`
 > hook, so Claude runs only the canonical global dispatcher and Codex's adapter
 > invokes that same file with `--runtime codex`. Two things to know before you
-> run it. (1) The adapter pins the dispatcher's sha256, currently
-> `e76c358a…cb299` for canonical **v1.6.0**; a future floor sync must bump that
-> pin plus `EXPECTED_DISPATCH_SHA256` / `EXPECTED_SMOKE_SHA256` in
-> `scripts/agent_hooks/smoke_test.py`, or the new `harness` CI job fails. (2) The
+> run it. (1) Treat the exact same-head `.codex/hooks.json` definition as the
+> authority for both adapter pins; do not compare it with a version or digest
+> copied into this guide. A future floor sync must bump both pins plus
+> `EXPECTED_DISPATCH_SHA256` / `EXPECTED_SMOKE_SHA256` in
+> `scripts/agent_hooks/smoke_test.py`, or the `harness` CI job fails. (2) The
 > Claude side is fail-**open** where Codex is fail-closed — if the global floor is
 > ever absent, Claude simply has no hook and nothing says so. Tracked separately;
 > not a blocker for trusting the Codex definitions.
