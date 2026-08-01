@@ -6,24 +6,25 @@ Historical cycle detail remains in `ORCHESTRATOR.md` and is not required reading
 
 ## Current development lanes
 
-- **PR #509** implements AI-9's interaction-only release profile. It is ready
-  for review and intentionally unmerged until the latest-head **AI-25** headed
-  Chrome Gate-3 passes. A step-2 attempt on superseded head `001c15c` proved
-  Chrome registration but exposed stale reputation and Safe Browsing claims in
-  onboarding. The follow-up removes those claims and adds a built-artifact
-  guard. The default artifact has no reputation runtime, asset, manifest
-  exposure, or static HTML claim; the deterministic reputation fixture is
-  available only through a non-release unpacked research profile.
+- **PR #509** implements AI-9's interaction-only release profile. **AI-25
+  passed** on executable/artifact head `f6815be` in headed Chrome
+  150.0.7871.187: extension and service-worker registration, corrected
+  onboarding, delayed-redirect rollback, credential interception, and both
+  consoles passed without reputation-load or new runtime errors. The default
+  artifact has no reputation runtime, asset, manifest exposure, or static HTML
+  claim; the deterministic reputation fixture is available only through a
+  non-release unpacked research profile. Read live GitHub state for whether the
+  PR is still open or merged; a later status-only head needs exact-head hosted
+  checks but does not invalidate the scoped browser evidence.
 
 ## Human queue
 
-Resume at **AI-25** (`q-3`). Ready order:
+Resume at **AI-20** (`q-4`). Ready order:
 
-1. **AI-25:** run PR #509's headed-Chrome Gate-3.
-2. **AI-20:** decide the exact Defender-quarantined fixture disposition.
-3. **AI-19:** clear or replace the product name before CWS submission.
-4. **AI-24:** optional real-Chrome confirmation of the three waived browser checks.
-5. **AI-23:** prune old worktrees/branches after preserving any unique outputs.
+1. **AI-20:** decide the exact Defender-quarantined fixture disposition.
+2. **AI-19:** clear or replace the product name before CWS submission.
+3. **AI-24:** optional real-Chrome confirmation of the three waived browser checks.
+4. **AI-23:** prune old worktrees/branches after preserving any unique outputs.
 
 Blocked: **AI-15**, **AI-8**, and **AI-14**. Their replacement slices need
 focused product checks, hosted product CI, and current human guides. AI-9 is
@@ -51,13 +52,13 @@ an action or warning. AI-18 is obsolete because #499 removed project hooks.
 - On this Windows host, RW-06 failed at two different timing points across the
   full run and an isolated rerun; the other #498 popup case passed. #498 owns
   the broader platform discrepancy. Read hosted PR checks live: every #509 head
-  must be green before Gate-3 resumes or the PR merges.
-- Real Chrome, CWS submission, real-feed building, external audit, and legal
-  name clearance have not been performed in this session.
+  must be green before the PR merges.
+- Real Chrome Gate-3 was performed for PR #509. CWS submission, real-feed
+  building, external audit, and legal name clearance have not been performed.
 
 ## Next sequence
 
-Continue the guided human queue at AI-25 by reloading the freshly built latest
-head, then resume at step 3. Do not merge PR #509 until that current-head Gate-3
-passes or Chris explicitly waives it. After #509 resolves, continue at AI-20
-and refresh other issue state before choosing an agent slice.
+If PR #509 is still open, merge it only after the current status-only head has
+green exact-head hosted checks and clean review state. Then continue the guided
+human queue at AI-20 and refresh other issue state before choosing an agent
+slice.
