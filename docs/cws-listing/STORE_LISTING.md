@@ -2,7 +2,7 @@
 
 > **Submission blocked:** `NavSentinel` is a working name pending AI-19
 > clearance. Re-run the claims/package review after the final name and beta
-> release profile are selected.
+> package are selected; the beta release profile is already interaction-only.
 
 ## Short Name
 NavSentinel

@@ -34,7 +34,11 @@ The attacker displays a fake CAPTCHA overlay that writes malicious commands to t
 
 ### 5. Known-bad domain navigation
 
-The attacker uses a domain already present in public threat feeds (URLhaus, OpenPhish). A build-time compiled bloom filter catches these without runtime network calls.
+The attacker uses a domain already present in a curated threat feed. The
+selected interaction-only beta profile does not claim or perform this check.
+The separate non-release `research-reputation` profile exercises the local,
+build-time Bloom-filter mechanism with reserved test domains and no runtime
+network calls; a real-feed release profile would require a new owner decision.
 
 ## Defensive Strategy
 
@@ -78,7 +82,9 @@ NavSentinel applies local heuristics before or around the browser primitives tha
 
 ### Case: navigation to a known-bad domain
 
-- expected outcome: bloom filter hit adds `nrs_known_bad_domain` (+50) and the navigation is blocked or prompted
+- interaction-only beta: no reputation lookup or reputation-derived score
+- non-release research profile: a reserved-domain Bloom-filter hit adds
+  `nrs_known_bad_domain` (+50), so the navigation is blocked or prompted
 
 ### Case: legitimate double-click interaction
 
@@ -102,7 +108,8 @@ NavSentinel applies local heuristics before or around the browser primitives tha
 
 - `chrome.storage.local` writes are not transactional, so event logging is best-effort
 - registrable-domain logic uses a build-time PSL snapshot; new TLDs require a PSL data rebuild
-- bloom filter of known-bad domains is a build-time snapshot; new threats require a filter rebuild
+- the research Bloom filter is a build-time fixture, not live threat coverage;
+  any future real feed would become stale between rebuilds
 - legitimate but unusual enterprise SSO flows can still prompt until trusted domains are configured
 - live-web behavior can still vary in ways the Gym does not model
 

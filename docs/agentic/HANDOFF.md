@@ -6,33 +6,35 @@ Historical cycle detail remains in `ORCHESTRATOR.md` and is not required reading
 
 ## Current development lanes
 
-- Live GitHub recheck on 2026-08-01 found no open PRs. The previous #499,
-  #495, #494, and #488 sequence landed through PRs #501–#504; follow-up fixes
-  #505 and #506 also landed. Issues #496 and #498 remain open, and a local
-  worktree exists for #496; verify its branch and checks before acting.
+- **PR #509** implements AI-9's interaction-only release profile. It is ready
+  for review and intentionally unmerged until the current-head **AI-25** headed
+  Chrome Gate-3 passes. The default artifact has no reputation runtime, asset,
+  or manifest exposure; the deterministic reputation fixture is available only
+  through a non-release unpacked research profile.
 
 ## Human queue
 
-Resume at **AI-9** (`q-2`). Ready order:
+Resume at **AI-25** (`q-3`). Ready order:
 
-1. **AI-9:** choose interaction-only or real-filter beta profile.
+1. **AI-25:** run PR #509's headed-Chrome Gate-3.
 2. **AI-20:** decide the exact Defender-quarantined fixture disposition.
-3. **AI-17:** enable `main` branch protection.
-4. **AI-19:** clear or replace the product name before CWS submission.
-5. **AI-24:** optional real-Chrome confirmation of the three waived browser checks.
-6. **AI-23:** prune old worktrees/branches after preserving any unique outputs.
+3. **AI-19:** clear or replace the product name before CWS submission.
+4. **AI-24:** optional real-Chrome confirmation of the three waived browser checks.
+5. **AI-23:** prune old worktrees/branches after preserving any unique outputs.
 
 Blocked: **AI-15**, **AI-8**, and **AI-14**. Their replacement slices need
-focused product checks, hosted product CI, and current human guides. AI-18 is
-obsolete: #499 removes the project hooks, so no trust or restart confirmation
-remains.
+focused product checks, hosted product CI, and current human guides. AI-9 is
+decided; AI-17 records Chris's accepted no-branch-protection posture and is not
+an action or warning. AI-18 is obsolete because #499 removed project hooks.
 
 ## Product posture
 
 - v0.4.0 remains a private pre-release alpha with no tag, GitHub release, CWS
-  release, external-user evidence, or branch protection.
-- The extension is local-first; the bundled reputation asset is a test fixture,
-  not real protection or evidence for a reputation claim.
+  release, or external-user evidence. Chris accepts the current GitHub posture
+  without branch protection under AI-17; do not re-flag it.
+- The extension is local-first. PR #509 makes interaction-only the release
+  default. Its deterministic reputation fixture is research-only and cannot be
+  packaged or released.
 - Release integrity still requires extension-origin decision authority, removal
   of visual-sim and fake DNR surfaces, purpose-specific data minimization,
   beta-off broad JS behavior, and bridge identity/recovery work.
@@ -50,5 +52,6 @@ remains.
 
 ## Next sequence
 
-Continue the guided human queue at AI-9. For agent-owned work, refresh #496 and
-#498 live before choosing a slice; no open PR currently needs pickup.
+Continue the guided human queue at AI-25. Do not merge PR #509 until that
+current-head Gate-3 passes or Chris explicitly waives it. After #509 resolves,
+continue at AI-20 and refresh other issue state before choosing an agent slice.

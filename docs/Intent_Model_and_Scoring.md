@@ -166,7 +166,7 @@ Start with NRS = CDS and add:
 | DoubleClickjacking pattern active | +40 | `nrs_double_click_hijack` | Child window + opener.location write + rapid close detected. |
 | Destination matches allowlist | -100 | `nrs_allowlisted` | Hard allow. |
 | Explicit new-tab intent (middle click or ctrl/cmd click) | -30 | `nrs_explicit_new_tab_intent` | Respect user intent. |
-| Destination in bloom filter of known-bad domains | +50 | `nrs_known_bad_domain` | Strong signal from public threat feeds. |
+| Destination in Bloom filter (non-release research profile only) | +50 | `nrs_known_bad_domain` | Reserved-domain fixture signal; inactive in the interaction-only beta. |
 | Redirect chain depth (per hop over 2, cap 25) | +5/hop | `nrs_redirect_chain_depth` | Multi-hop redirects are common in malvertising. |
 | Redirect via known redirector (per hop, cap 30) | +15/hop | `nrs_redirect_via_known_redirector` | Known URL shorteners/redirectors in the chain. |
 | OAuth redirect mismatch | +30 | `nrs_oauth_redirect_mismatch` | OAuth callback redirected to unexpected domain. |

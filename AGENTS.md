@@ -26,5 +26,5 @@ and generated or user-owned outputs.
 
 `ACTION_ITEMS.md` is the durable queue for human decisions and manual browser
 checks. Resume guided queue work by stable `AI-N` identifier; the current cursor
-is AI-9. `.mcp.json` is optional credential-free tooling—claim a server only
+is AI-25. `.mcp.json` is optional credential-free tooling—claim a server only
 when it is actually exposed and verified in the current runtime.
