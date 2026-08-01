@@ -61,7 +61,7 @@ state without data loss.
 variant checks the remote ref first, but it still rewrites history.
 
 **Risk:** A bad resolution or dropped commit can become the remote source of
-truth. Do not rely on the local deny floor as the complete protection.
+truth. Do not rely on any runtime deny floor as complete protection.
 
 **Rule:** Treat every force-push as a history rewrite requiring prior user
 approval; never use one on a protected branch.

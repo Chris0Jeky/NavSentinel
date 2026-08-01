@@ -1,11 +1,15 @@
 # NavSentinel handoff
 
-Updated 2026-08-01. This is an optional short snapshot; live Git/GitHub state,
+Updated 2026-08-02. This is an optional short snapshot; live Git/GitHub state,
 product tests, `docs/Project_Roadmap.md`, and `ACTION_ITEMS.md` are authoritative.
 Historical cycle detail remains in `ORCHESTRATOR.md` and is not required reading.
 
 ## Current development lanes
 
+- **Remote `main` is current through PR #510** (`56e3aa6` before this
+  reconciliation), with exact-main product CI green and no open PRs at the
+  2026-08-02 refresh. Re-fetch and re-query before acting; do not use the older
+  primary checkout or cached refs as authority.
 - **PR #509 merged** as `3faeb1e`, closing #321 and implementing AI-9's
   interaction-only release profile. **AI-25 passed** on executable/artifact
   head `f6815be` in headed Chrome
@@ -18,7 +22,8 @@ Historical cycle detail remains in `ORCHESTRATOR.md` and is not required reading
 - **RI-01 checkpoint** is remotely backed at `184be55`. AI-20 is resolved:
   Chris chose to leave the original fixture quarantined, and a runtime-equivalent
   representation passed an exact-file Defender scan plus the full old-branch
-  gates. The branch is still 217 commits behind current `main`, RI-01 remains
+  gates. The branch has unique work on an old base; re-derive its divergence
+  from current `origin/main` rather than copying a volatile count. RI-01 remains
   incomplete, and this is not a merge-ready PR.
 
 ## Human queue
@@ -27,7 +32,8 @@ Resume at **AI-19** (`q-5`). Ready order:
 
 1. **AI-19:** clear or replace the product name before CWS submission.
 2. **AI-24:** optional real-Chrome confirmation of the three waived browser checks.
-3. **AI-23:** prune old worktrees/branches after preserving any unique outputs.
+3. **AI-23:** decide the fate of ambiguous unmerged worktree branches after an
+   agent re-derives live state; never run the retired blanket-removal block.
 
 Blocked: **AI-15**, **AI-8**, and **AI-14**. Their replacement slices need
 focused product checks, hosted product CI, and current human guides. AI-9 is
@@ -36,7 +42,7 @@ an action or warning. AI-18 is obsolete because #499 removed project hooks.
 
 ## Product posture
 
-- v0.4.0 remains a private pre-release alpha with no tag, GitHub release, CWS
+- v0.4.0 remains an undistributed pre-release alpha with no tag, GitHub release, CWS
   release, or external-user evidence. Chris accepts the current GitHub posture
   without branch protection under AI-17; do not re-flag it.
 - The extension is local-first. Merged PR #509 makes interaction-only the release
@@ -65,5 +71,6 @@ an action or warning. AI-18 is obsolete because #499 removed project hooks.
 
 Continue the guided human queue at AI-19. Separately, refresh the RI-01 branch
 from current `main`, finish the remaining authority path, and rerun scoped
-checks plus real-Chrome Gate-3 before opening a merge-ready PR; do not delete its
-worktree as AI-23 housekeeping.
+checks plus real-Chrome Gate-3 before opening a merge-ready PR. Retain the RI-01
+and issue-#496 worktrees; treat `nav-floor-sync` as unmerged unique work until
+its exact three-commit delta is deliberately retained, landed, or retired.

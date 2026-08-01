@@ -43,6 +43,12 @@ currently make the product more valuable. Trustworthy behavior and evidence do.
 | Human queue | Three old PRs (#273, #356, #399); #356 is red and all are far behind `main` | Human Gate-3 work is not ready to run |
 | Release size | Interaction-only build is about 493 KB of a 500 KB aggregate budget and contains no reputation asset | Reputation remains a separately budgeted research path, not beta coverage |
 
+**Current amendment (2026-08-02):** the table above remains the dated
+2026-07-10 audit baseline. Since then #356 merged and closed #349, while PR
+#509 implemented the interaction-only release profile, closed #321, and passed
+AI-25 in real Chrome. Those completed prerequisites are not current blockers;
+live execution state belongs in `Project_Roadmap.md` and GitHub.
+
 The old `43/47 complete` score counted artifacts. It did not mean the product
 was validated, released, distributed, audited, or useful to a market. Product
 readiness must not be represented by an implementation percentage again.
@@ -139,9 +145,10 @@ product/service boundary, not a reason to expand the extension now.
 - Deterministic Gym fixtures, property tests, E2E lanes, release guards, and
   adversarial review.
 
-### Release-integrity findings
+### Release-integrity findings and dispositions
 
-These are active blockers, not future hardening:
+These findings define the release boundary. Completed dispositions stay here
+to preserve the reasoning but must not be presented as open blockers:
 
 1. **Prompt decision authority.** The toast and credential modal expose open
    shadow roots and accept scripted `.click()` activation. Checking
@@ -164,9 +171,10 @@ These are active blockers, not future hardening:
    retained only by an explicit unpacked research profile that package/release
    checks reject. Any future real filter remains a new data-budget,
    cardinality/cadence, licensing, provenance, and release decision.
-4. **MAIN-world compatibility.** Current frozen prototype replacements are
-   known to break legitimate wrappers. PR #356 is a beta prerequisite, but it
-   must first be refreshed from `main`, fixed, re-reviewed, and made green.
+4. **MAIN-world compatibility (completed).** PR #356 de-hardened the relevant
+   prototype replacements, merged as `3bd9e02` on 2026-07-25, and closed #349.
+   Keep its wrapper/regression coverage; do not reopen this blocker without a
+   current reproduced compatibility failure.
 5. **Fake DNR surface.** The checked-in ruleset contains localhost test rules while
    the manifest requests two DNR permissions and options expose an experimental
    blocklist. Remove the toggle, rules, and permissions from the beta. Re-add an
@@ -235,7 +243,8 @@ All must be true:
 - page-injected UI cannot proceed, allow, trust, or resume; those actions work
   only through tab/destination-bound extension-origin UI, and host redressing or
   removal can cause denial only—not protection loss;
-- #356 is current, green, independently reviewed twice, and passes real Chrome;
+- the merged #356 MAIN-world compatibility repair retains its regression
+  coverage; a new compatibility blocker requires current reproduction;
 - visual-sim capture and fake DNR surfaces are absent;
 - the explicit beta capability profile leaves broad JS behavior instrumentation
   off: fetch/XHR/beacon/password-value prototypes are not wrapped while core
@@ -265,9 +274,9 @@ All must be true:
   the verified private advisory route; and
 - every remaining known limitation has an owner and a dated decision.
 
-The exact name `NavSentinel` is already used for a
-[TruNav GNSS anti-spoofing product](https://trunav.net/) publicized by the
-[US Department of Transportation](https://www.transportation.gov/arpa-i/ideas-challenge/finalists/trunav-narrative).
+The exact name `NavSentinel` is already used for a publicly announced,
+coming-soon [TruNav GNSS anti-spoofing receiver](https://trunav.net/),
+publicized by the [US Department of Transportation](https://www.transportation.gov/arpa-i/ideas-challenge/finalists/trunav-narrative).
 This is not a legal conclusion, but it makes clearance or an early rename a
 release gate; rebranding is cheapest before a store listing exists.
 
@@ -350,8 +359,9 @@ Horizon-specific rejection gates:
 ### Now: release integrity and first users
 
 - Fix prompt action authenticity.
-- Refresh/fix #356; recreate or defer closed #273's intent; keep closed #399
-  out of the beta blocker set until measurement justifies it.
+- Recreate or defer closed #273's intent; keep closed #399 out of the beta
+  blocker set until measurement justifies it. #356 is complete and remains
+  regression coverage, not an open work item.
 - Excise visual-sim; remove fake DNR; minimize full URLs; preserve the selected
   interaction-only beta profile.
 - Complete #175/#186 bridge identity/recovery and #455 pre-collection

@@ -14,7 +14,9 @@
 - [ ] PM-03/#455 keeps fresh installs passive until prominent disclosure and
   affirmative activation, with revocation/reset and no early data handling
 - [x] AI-9 selected interaction-only; package, claims, privacy text, and profile receipt agree
-- [ ] Open PR branches refreshed; #356 green/reviewed before human Gate-3
+- [x] MAIN-world compatibility repair #356 merged and issue #349 closed
+- [ ] Decide whether to recreate or defer closed #273 from current `main`;
+  require a new Gate-3 guide only if the browser-surface change is recreated
 - [ ] Persistent data is fully inventoried; URLs are minimized by purpose;
   exact session URLs have tab binding/TTL/tests; one complete reset exists
 

@@ -1,6 +1,10 @@
 # NavSentinel — Standing Decisions
 
-Durable register of resolved cross-cutting decisions (process, posture, and product-sequencing). One place so the operating docs (`CLAUDE.md`, `AGENTS.md`, `ORCHESTRATOR.md`, `Project_Roadmap.md`) can point here instead of duplicating rationale. When a decision changes, edit it in place and date the change.
+Durable register of resolved cross-cutting decisions (process, posture, and
+product-sequencing). One place so the current operating docs (`CLAUDE.md`,
+`AGENTS.md`, `Project_Roadmap.md`, and `HANDOFF.md`) can point here instead of
+duplicating rationale. `ORCHESTRATOR.md` is a retired historical cycle ledger.
+When a decision changes, edit it in place and date the change.
 
 > **Authority:** Chris explicitly ratified the July 3, July 10, and July 13
 > decisions on 2026-08-01, including headed Chrome as the primary Gate-3 once
@@ -31,9 +35,13 @@ Chris delegated: *"take a stance yourself and call the shots in the best way pos
 **Why:** the marginal discovery finding is now `slice(-0)`-class trivia; each drain seeded more LOWs than it closed (self-feeding). The loop is a superb fix-machine pointed at an exhausted seam.
 
 ### D-2026-07-03-C — Collapse the status-doc system (#421)
+**Amended 2026-07-31 by owner decision #499.**
+
 **Decision:** One **live** snapshot + one **append-only** log; fold docs-sync into the code PR that changed the truth (no standalone docs-sync PRs by default).
 - `ACTION_ITEMS.md` = contract + AI-N human items + **one** current snapshot. Historical snapshots archived to `docs/archive/ACTION_ITEMS_snapshots.md`.
-- `docs/agentic/ORCHESTRATOR.md` = operating loop + current-state block + the append-only cycle log (this is the permitted append-only history).
+- `docs/agentic/ORCHESTRATOR.md` = retired append-only cycle history after
+  owner decision #499 removed the repository-local harness; it is not an
+  operating loop or current-state authority.
 - `docs/agentic/HANDOFF.md` = a short, always-current next-loop entry point.
 **Why:** the append-only-snapshot pattern made every session pay ~30k tokens of mandatory reading and ~27% of throughput on bookkeeping, and the docs still conflicted.
 
@@ -85,16 +93,18 @@ them on 2026-08-01; they remain reversible through an explicit amendment.
 ### D-2026-07-10-I — Release integrity precedes the old human batch
 
 **Decision:** AI-15 is blocked until agent preflight moves prompt decision
-authority to extension-origin UI, refreshes/reviews the stale PRs, makes #356 green, excises
-visual-sim, removes fake DNR, completes #175/#186 bridge integrity and #455
-pre-collection consent, and prepares the chosen release profile. Do not spend
-human Gate-3 time on old branches.
+authority to extension-origin UI, recreates or explicitly defers #273 from
+current `main`, excises visual-sim, removes fake DNR, completes #175/#186
+bridge integrity and #455 pre-collection consent, and prepares the chosen
+release profile. #356 is complete and PR #509 implemented the chosen profile;
+do not spend human Gate-3 time on closed or stale branches.
 
 **Why:** page script can currently activate protection-lowering prompt actions,
 and even trusted events can be induced through page-controlled host redressing;
-visual-sim can process the wrong active tab; #356 is red; stale #273/#399 were
-closed rather than merged. Manual verification before those repairs would be
-wasted and could create false confidence.
+visual-sim can process the wrong active tab; stale #273/#399 were closed rather
+than merged. Manual verification before the remaining repairs would be wasted
+and could create false confidence. PR #356 removed its compatibility block on
+2026-07-25 and is retained only as regression coverage.
 
 ### D-2026-07-10-J — Interaction-only is the default unlisted-beta profile
 
@@ -143,8 +153,8 @@ protections. Named detectors and local execution are features, not a moat.
 decision after appropriate search/domain/CWS/legal review. No CWS submission or
 external beta branding precedes that decision.
 
-**Why:** an active GNSS anti-spoofing security product uses the exact name;
-rebranding is cheapest before distribution.
+**Why:** a publicly announced, coming-soon GNSS anti-spoofing receiver uses
+the exact name; rebranding is cheapest before distribution.
 
 ---
 

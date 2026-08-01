@@ -181,9 +181,13 @@ Current lane intent:
 - `npm run test:e2e:smoke`
   - shortest deterministic browser checks
 - `npm run test:e2e`
-  - default deterministic local browser coverage across smoke and regression
+  - default deterministic local browser coverage across smoke, regression,
+    and Phase-2 projects
 - `npm run test:e2e:regression`
   - focused regression-only lane without the smoke project
+- `npx playwright test --project=phase2`
+  - focused Phase-2 detection lane; this project is also included in the
+    default `npm run test:e2e` command
 - `npm run test:e2e:rollback`
   - rollback/recovery behavior that is deterministic enough to run regularly but still separate from the default lane
 - `npm run test:e2e:live`

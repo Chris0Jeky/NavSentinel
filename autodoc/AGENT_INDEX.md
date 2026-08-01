@@ -1,6 +1,6 @@
 # Agent Index - NavSentinel
 
-Last reviewed: 2026-08-01.
+Last reviewed: 2026-08-02.
 
 This is a fast orientation layer for coding agents. It should point to interfaces and seams, not duplicate implementation details.
 
@@ -66,11 +66,12 @@ All paths above are relative to repo root. Content scripts live under `extension
 - Build output and generated data are easy context traps. Agents should edit source under `extension/src/` and avoid `extension/dist/`.
 - The highest-risk seams are main-world patching, bridge messages, service-worker lifecycle state, and credential/data privacy behavior.
 - Current release blockers include page-controlled prompt decision authority
-  and trusted-click redressing, wrong-tab visual capture, #356 compatibility,
-  test-only DNR/reputation surfaces, purpose-specific URL minimization,
+  and trusted-click redressing, wrong-tab visual capture, the fake DNR surface,
+  purpose-specific URL minimization, beta-off broad JS instrumentation,
   #175/#186 bridge identity/recovery, #455 pre-collection disclosure/consent,
-  and product-name clearance. See the handoff; do not start
-  North-Star/Horizon feature work.
+  and product-name clearance. #356 compatibility is merged; reputation is
+  intentionally absent from the release-eligible interaction-only profile.
+  See the handoff; do not start North-Star/Horizon feature work.
 - **`PromptOutcomeEntry` (`storage.ts`) is replay-grade enriched (P5-C1 / #238):** beyond `{domain, destDomain?, type, score, outcome, reasons?}` it now carries optional `cds`, `nrsFactors`, `navAnomalyScore`, `adaptiveAdj`, `thresholdUsed`, and a serialized `elementContext` (`ClickContext`). Populated at every `appendPromptOutcome` site — nav (`capture_isolated.ts`, snapshotted from local decision scope, not `lastDebug`) and cred (`credential_guard.ts`, now also sets `destDomain`); sanitized/bounded in `appendPromptOutcome`. All fields optional (back-compat). Foundation for the advisor journal (P5-B) and tuning corpus (P5-C5).
 - Historical merge context: the D-series discovery program merged 2026-06-05: #180 (D-PROF domain_profile reader serialization), #182 (D-STORE prompt-outcome SW-delegated writes), #183 (D-FOCUS credential-modal focus trap), #185 (D-BRIDGE outbound buffer + handshake timeout; also fixed the form-submit patch-order bug), #187 (D-SWRATE capture rate-limit persistence), #189 (D-ANOM sync-lag), #190 (D-IFRAME injected data:/blob:/srcdoc iframes), #191 (D-ONCREATE pre-hydration child-window tracking), #193 (D-REDOS content-analyzer regex bounding), #194 (D-OPTRACE options Save reentrancy guard), #195 (D-SRIHIDE inline-hidden password skip). #114-#174 merged across Cycles 6-7 (2026-05-29): toolchain migration (vite 8 / vitest 4), ESLint flat-config + CI lint gate, perf-budget CI, test-coverage + property tests, accessibility (#132-#135), prototype-pollution guards, P4-01a/b visual-sim (#172/#174), FF-01 Firefox `browser.*` shim (#173).
 - All icon SVGs from `icon()` and `logoSentinel()` include `aria-hidden="true"` (#135 merged).

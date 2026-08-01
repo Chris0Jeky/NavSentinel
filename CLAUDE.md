@@ -58,8 +58,9 @@ Avoid bulk-reading `node_modules/`, generated output, `test-results/`,
 
 `.github/workflows/ci.yml` runs product `build-and-unit` and `e2e` jobs, plus a
 tag-only release job. Every Playwright lane needs a build first; tests skip when
-`extension/dist/` is absent. The default Playwright projects currently select
-smoke and regression coverage; issue #488 owns the dormant `@phase2` selector.
+`extension/dist/` is absent. The default Playwright run selects smoke,
+regression, and Phase-2 coverage; PR #504 repaired the `@phase2` project that
+had previously been unreachable under issue #488.
 
 ## Browser-surface release check
 
