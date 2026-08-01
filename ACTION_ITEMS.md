@@ -9,13 +9,15 @@ context to resume by stable ID.
 
 **Last updated:** 2026-08-01 — Chris selected the interaction-only beta under
 AI-9, retained an opt-in non-release research profile, and accepted `main`
-without branch protection under AI-17. PR #509 implements the profile decision.
-AI-25 passed on executable/artifact head `f6815be` in headed Chrome
-150.0.7871.187; the guided cursor is now **AI-20** (`q-4`). AI-16 ratified the
-July 3, July 10, and July 13 standing decisions, including headed Chrome as the
-primary Gate-3 once operational with manual spot-checks retained. Owner decision
-#499 made AI-18 obsolete. The three browser checks waived on 2026-07-25 remain
-represented by the single optional **AI-24** confirmation.
+without branch protection under AI-17. PR #509 merged the profile decision as
+`3faeb1e`; AI-25 passed on executable/artifact head `f6815be` in headed Chrome
+150.0.7871.187. AI-16 ratified the July 3, July 10, and July 13 standing
+decisions, including headed Chrome as the primary Gate-3 once operational with
+manual spot-checks retained. Under AI-20, Chris chose to leave the original
+fixture quarantined; equivalent scan-clean coverage is remotely backed up on
+the RI-01 branch at `184be55`. The guided cursor is now **AI-19** (`q-5`). Owner
+decision #499 made AI-18 obsolete. The three browser checks waived on 2026-07-25
+remain represented by the single optional **AI-24** confirmation.
 Product thesis:
 `docs/Product_Strategy.md`. Corrective
 program: `docs/Project_Roadmap.md`. Standing decisions:
@@ -30,15 +32,13 @@ program: `docs/Project_Roadmap.md`. Standing decisions:
 
 ---
 
-## Current state snapshot (live state rechecked 2026-07-25)
+## Current state snapshot (live state rechecked 2026-08-01)
 
-The root `main` worktree is clean and matches `origin/main`; its exact-head CI
-is green. Run `git rev-parse main`, `git rev-parse origin/main`, and live `gh`
-checks before acting; the exact audit baseline lives in
-`docs/Product_Strategy.md`, not this live snapshot. PR #356's runtime candidate
-passed typecheck, lint, build, version/package checks, 2,875 unit tests (95
-files), perf 12/12, and all 65 one-worker E2E tests locally. v0.4.0 still has no
-tag, GitHub release, CWS release, or external-user evidence.
+The dedicated closeout worktree matched `origin/main` at `3faeb1e` after PR
+#509 merged; live GitHub showed no open PRs. Run `git rev-parse origin/main` and
+live `gh` checks before acting; the exact audit baseline lives in
+`docs/Product_Strategy.md`, not this live snapshot. v0.4.0 still has no tag,
+GitHub release, CWS release, or external-user evidence.
 
 Live recheck on 2026-07-25 found **no open PRs**, and no tags/releases/classic branch
 protection or repository rulesets, and no milestones or assignees. Verify the current
@@ -58,10 +58,11 @@ AI-13 no longer exists as an item.  The historical `ee0f9b7`/`f8028c9` pin
 confusion is retained in AI-13's superseded entry only as a lesson about stale
 head pins. The product-posture and guided-workflow
 work merged through PR #454; verify live `main` rather than pinning its SHA
-here. The RI-01 checkpoint branch is remotely backed up without the unstaged
-Defender deletion; verify its SHA live. Its worktree is dirty only because
-Windows Defender quarantined one tracked adversarial test fixture. These
-changes do not change shipped product state.
+here. The RI-01 checkpoint branch is remotely backed up at `184be55`. Its
+normal Git status is clean after replacing the quarantined test representation
+with a runtime-equivalent, Defender-scan-clean form. The branch remains an
+unmerged, old-base integration checkpoint; these changes do not change shipped
+product state.
 
 - **Product posture:** strong pre-release alpha, not a market-ready or
   efficacy-validated security product. `docs/Product_Strategy.md` owns the
@@ -79,8 +80,8 @@ changes do not change shipped product state.
   the release-eligible default with no reputation runtime, asset, or claim. A
   deterministic 52-byte reserved-domain fixture remains available only in the
   unpacked, explicitly non-release `research-reputation` profile. AI-25 passed
-  on current executable/artifact head `f6815be` in Chrome 150.0.7871.187; live
-  GitHub state remains authoritative for PR #509's final merge state.
+  on executable/artifact head `f6815be` in Chrome 150.0.7871.187. PR #509
+  merged as `3faeb1e`, and issue #321 closed.
 - **Brand blocker:** the exact name `NavSentinel` is already used by an active
   GNSS security product. AI-19 requires clearance or an early rename before
   CWS submission; this is a risk flag, not a legal conclusion.
@@ -99,20 +100,22 @@ changes do not change shipped product state.
   GitHub private vulnerability reporting is enabled and linked from
   `SECURITY.md`. Owner decision #499 removed repository-local hook/floor
   enforcement; NavSentinel is no longer an agent-harness consumer.
-- **Local verification blocker:** Defender quarantined only
-  `C:\Users\Public\codex-shell-home\NavSentinel-ri01\tests\clickfix-detector.property.test.ts`
-  as `Trojan:HTML/FakeCaptcha.HNA!MTB`; it reports `DidThreatExecute=False` and
-  `IsActive=False`. AI-20 owns the human review. Do not disable Defender or add
-  a broad exclusion.
+- **Local verification resolved:** Chris chose to leave the original exact
+  fixture quarantined under AI-20. No Defender exclusion, setting change, or
+  allow rule was added. The replacement preserves the exact runtime corpus,
+  has SHA-256 `7507B26EABA96947CF5C75BCAAC872442B4CE14DBB91C193A6CDFC3990639F46`,
+  and an exact-file `MpCmdRun.exe` scan found no threats. The branch passed
+  2,887 unit tests and all 65 E2E tests after the related trusted-click scoring
+  regression was fixed.
 - **Historical snapshots** (pre-2026-07-03, ~28 session bullets) archived to [`docs/archive/ACTION_ITEMS_snapshots.md`](docs/archive/ACTION_ITEMS_snapshots.md).
 
 ---
 
 ## Action items
 
-**Guided resolution cursor:** `AI-20` (`Resume at: AI-20`; the next
-conversational label is `q-4`). Current ready order is AI-20 -> AI-19 -> AI-24
--> AI-23 (low priority housekeeping, last).
+**Guided resolution cursor:** `AI-19` (`Resume at: AI-19`; the next
+conversational label is `q-5`). Current ready order is AI-19 -> AI-24 -> AI-23
+(low priority housekeeping, last).
 **AI-13, AI-21 and AI-22 are resolved** — their
 PRs (#356, #464, #466) merged on 2026-07-25 after Chris chose to clear the
 browser-surface gate by automated equivalent rather than a manual pass; their
@@ -181,44 +184,18 @@ Only Chris can record this complete; nothing is blocked on it.
 **🚨 BLOCKED: AI-15 — Run the headed release session only after agent
 preflight.** The prior 60–90 minute one-sitting guide is withdrawn: stale PRs
 #273 and #399 were closed, **#356 merged 2026-07-25** (`3bd9e02`) with its manual
-Gate-3 waived, the selected interaction-only profile passed AI-25 and still
-needs PR #509 to land, and other release-integrity blockers precede a full manual
-release session. Agent preflight
+Gate-3 waived, and the selected interaction-only profile passed AI-25 and landed
+through PR #509. Other release-integrity blockers precede a full manual release
+session. Agent preflight
 must first: (1) fix RI-01; (2) keep #273 deferred or recreate it on current `main`;
 (3) excise visual-sim and remove fake DNR; (4) complete
 RI-06's purpose-specific data minimization/reset; (5) complete RI-07's explicit
 JS-behavior beta-off profile; (6) complete #175/#186 bridge integrity and #455
-pre-collection consent; (7) land the selected AI-9 release profile through PR
-#509 now that AI-25 has passed; and (8)
-provide one current headed checklist. Then split human work into a browser
+pre-collection consent; and (7) provide one current headed checklist. Then
+split human work into a browser
 session, any network/feed session, an overnight measurement run, and a short
 result review. Read `docs/Product_Strategy.md` first. This item becomes
 actionable only when the preflight handoff explicitly says so.
-
-**🚨 OPEN: AI-20 — Review the Defender quarantine and decide the exact
-fixture's fate.** The 2026-07-12 alert is
-`Trojan:HTML/FakeCaptcha.HNA!MTB`; Defender reports successful remediation,
-`DidThreatExecute=False`, and `IsActive=False`. The affected path is exactly
-`C:\Users\Public\codex-shell-home\NavSentinel-ri01\tests\clickfix-detector.property.test.ts`.
-The intact canonical copy matches tracked Git blob
-`434bbe10e17f754f62db913f28015bb327fe23f4` and SHA-256
-`BC317AB1D1B74AE9D8F9D80328818FED2FC304FFA0FEDDC4DBCB9991653AA769`.
-The file is a property-test keyword corpus for fake-CAPTCHA/ClickFix command
-detection; that strongly suggests a signature collision, but it is not a legal
-or malware-vendor determination.
-
-**Human-only guide:** (1) open **Windows Security -> Virus & threat protection
--> Protection history**; (2) expand the 12 July 2026 alert and verify the exact
-name and path above; (3) if you accept it as the expected tracked test content,
-choose **Restore**; (4) if Defender immediately detects it again, re-verify the
-same exact name/path and choose **Allow on device** for that detection only; (5)
-do not disable Defender and do not add a repository/folder exclusion; (6) tell
-the agent `AI-20 restore exact fixture`. The agent will then verify both hashes
-and rerun full branch gates. If you prefer not to restore it, reply
-`AI-20 leave quarantined`; the agent will replace the signature-triggering test
-representation while preserving coverage, then rescan and rerun the gates.
-Microsoft references: [Protection History](https://support.microsoft.com/en-us/windows/protection-history-f1e5fd95-09b4-46d1-b8c7-1059a1e09708)
-and [file submission](https://www.microsoft.com/wdsi/filesubmission).
 
 **BLOCKED: AI-8 — Neutral-chip Gate-3 after closed PR #273.** The presentation
 intent is still reasonable, but stale PR #273 was closed on 2026-07-13 with its
@@ -382,8 +359,9 @@ registered worktrees now hold fully-merged branches and are pure housekeeping:
 (#356), `.worktrees/ri01-synthetic-nav` (#464), `.worktrees/ri01-pending-sw`
 (#466), `.worktrees/ri06-eventlog-min` (#468), `.worktrees/harness-v141` (#457).
 `.worktrees/deps-audit` (`fix/release-dependency-advisories`) backs no open PR.
-**Do NOT remove `C:/Users/Public/codex-shell-home/NavSentinel-ri01`** — it holds
-the AI-20 Defender-quarantine evidence.
+**Do NOT remove `C:/Users/Public/codex-shell-home/NavSentinel-ri01`** — AI-20 is
+resolved, but this worktree still holds the unmerged RI-01 integration
+checkpoint, remotely backed at `184be55`.
 
 **Re-derive the branch names before running this** — `nav-floor-sync` was
 observed switching from `chore/deny-floor-v1.5.2` to `chore/deny-floor-v1.6.0`
@@ -413,11 +391,12 @@ git branch -d chore/deny-floor-v1.6.0 feat/dehard-enforcement-protos \
 cannot silently drop work. If it refuses one of the seven, stop and report which —
 that would mean the branch is not actually merged and the premise here is wrong.
 
-**Leave exactly ONE worktree.**
+**Retain the RI-01 worktree.**
 `C:/Users/Public/codex-shell-home/NavSentinel-ri01` on
 `fix/ri01-extension-origin-decisions` backs no PR but is **not** cruft: it is the
-RI-01 checkpoint worktree holding the Defender-quarantine evidence referenced two
-sections above. **Do not delete it** while that item is open.
+RI-01 integration checkpoint. **Do not delete it** until its remotely backed
+work is deliberately reconciled with current `main` and either landed or
+retired.
 
 *(Corrected 2026-07-25: this paragraph previously said "leave the other SIX ...
 five back open PRs". That was true before the queue cleared and is now false —
@@ -550,6 +529,15 @@ opens, implement FF-02 against web-ext, then reassess FF-03/FF-04.
 
 ## Completed log
 
+- **AI-20 — Defender fixture disposition · DONE · 2026-08-01.** Chris chose to
+  leave the original exact fixture quarantined after reviewing the limited
+  benefit of restoring it. No Defender exclusion, setting change, or allow rule
+  was made. The property corpus was reconstructed byte-equivalently at runtime
+  in a signature-resistant representation; an exact-file Defender scan found
+  no threats. The RI-01 branch is remotely backed at `184be55` and passed
+  typecheck, lint, build, version/package and perf checks, 2,887 unit tests, and
+  all 65 E2E tests. RI-01 itself remains open and the old-base branch is not
+  ready to merge.
 - **AI-25 — PR #509 interaction-only Gate-3 · DONE · 2026-08-01.** Chris
   explicitly recorded completion on Chrome 150.0.7871.187 after reloading the
   corrected current executable/artifact head `f6815be`: NavSentinel 0.4.0 and
@@ -558,13 +546,12 @@ opens, implement FF-02 against web-ext, then reassess FF-03/FF-04.
   submit produced the expected blocking modal and remained on the fixture; and
   both the page and service-worker consoles showed no reputation-load,
   registration, or other new errors. The disposable profile was removed and
-  the Gym listener was stopped. A later status-only head does not change that
-  browser evidence, but still needs its own exact-head hosted checks before
-  merge.
+  the Gym listener was stopped. PR #509 subsequently passed its exact-head
+  hosted checks and merged as `3faeb1e`.
 - **AI-9 — Beta reputation profile · DECIDED · 2026-08-01.** Chris selected
   interaction-only, while authorizing extra reproducibility, configuration, and
-  opt-in experiments at agent discretion. PR #509 implements the release default
-  with no reputation runtime/asset/claim and retains a deterministic
+  opt-in experiments at agent discretion. Merged PR #509 implements the release
+  default with no reputation runtime/asset/claim and retains a deterministic
   `research-reputation` fixture that is unpacked-only and rejected by packaging
   and release gates. AI-25 passed its browser-surface gate.
 - **AI-17 — GitHub `main` posture · ACCEPTED · 2026-08-01.** Chris explicitly
@@ -574,7 +561,8 @@ opens, implement FF-02 against web-ext, then reassess FF-03/FF-04.
   Chris ratified the July 3, July 10, and July 13 decisions, including headed
   Chrome as the primary Gate-3 once operational with manual spot-checks
   retained. AI-9 was subsequently decided as interaction-only; AI-19 remains the
-  separate name decision. The guided cursor is now AI-20 (`q-4`).
+  separate name decision. The guided cursor later advanced through AI-20 to
+  AI-19 (`q-5`).
 - **AI-12 — Top-site FP relief + D1 (#354) · DONE · 2026-06-23.** Chris manually confirmed the relief works on LinkedIn ("seemed to work fine now") = his measure/Gate-3 (the full `measure:fp` needs headed Chromium + live Tranco, which the sandbox can't run). **#354 merged into `main`** (`c4426cf`) on green CI (Build/Unit + E2E, including the main-merge head): `nrs.ts getTierAdjustedBlockThreshold` now relieves TOP_SITE + CDS-only (benign-structural whitelist) by `NRS_TOP_SITE_CDS_RELIEF` (+20, tunable); top-site trust list grew 24→42 with safe `includeSubdomains`. This is the lever #234/P5-A3 promised but never shipped.
 - **AI-11 — Toast count-pill (#353) · DONE · 2026-06-23.** Chris approved the merge; **#353 merged into `main`** (`d0e0412`). Repeated blocked-popup/redirect prompts coalesce into one count pill after 3-in-8s (expandable to the latest prompt's Allow once / Always allow). Included an e2e fix (RW-19 now accepts the coalesced pill while keeping the no-popup-opened security assertion). Green CI (Build/Unit + E2E).
 - **AI-10 — Gate-3 + merge the SPA-breakage fix · DONE · 2026-06-23.** Chris manually verified #352 in Chrome ("working fine now"); **#352 merged into `main`** (`#347` History.pushState/replaceState de-hardened to writable via `softPatchProto` — fixes the claude.ai grey screen; `#348` `reputation_data.bin` added to `web_accessible_resources` — fixes the per-page console error + re-enables top-frame reputation). Green CI (Build/Unit + E2E). Remaining session PRs: **#353** (toast pill, AI-11) and **#354** (top-site FP relief + D1, AI-12, gated on `measure:fp`).
