@@ -31,8 +31,9 @@ design are substantial, but several current development paths are not production
   process a different active tab's pixels when the requester is in the
   background. Standing decision D-2026-07-03-F and RI-02 require complete
   removal before beta.
-- The bundled reputation binary is a 52-byte reserved-domain test fixture, not a
-  production threat feed. The beta release profile is unresolved under AI-9.
+- The default interaction-only profile has no reputation runtime or bundled
+  reputation binary. The 52-byte reserved-domain fixture is available only in
+  the explicit non-release research profile.
 - The DNR ruleset contains localhost test rules only; it is not a product
   backstop and its permissions/toggle should not ship in the beta.
 - Broad JS-behavior API wrappers have not completed compatibility or runtime
@@ -118,10 +119,12 @@ describe the bridge as unspoofable before they are resolved.
 
 ## Domain reputation (bloom filter)
 
-`extension/src/shared/reputation.ts` can read a build-time compiled bloom filter
-of known-bad domains without runtime network calls. The **current bundled asset
-is a 52-byte test fixture** containing reserved example domains. It provides no
-production reputation coverage.
+`extension/src/shared/reputation.ts` implements a build-time bloom mechanism
+without runtime network calls. The release-eligible `interaction-only` profile
+aliases runtime use to an inert adapter and omits `reputation_data.bin` from the
+manifest and artifact. The explicit `research-reputation` profile aliases the
+same seam to the enabled adapter and bundles the 52-byte reserved-domain test
+fixture; its build receipt is non-release and packaging rejects it.
 
 Key characteristics:
 - MurmurHash3-based bloom filter with double hashing
@@ -137,11 +140,11 @@ the filter. A deterministic test filter can be built with
 must decide feed licensing/provenance, update cadence, cardinality, FP target,
 safe sentinel checks, and a separate immutable-data/package budget.
 
-At runtime, `capture_isolated.ts` loads the bundled asset via
-`chrome.runtime.getURL` and checks destination domains during navigation
-decisions. A hit adds `nrs_known_bad_domain` (+50) to the Navigation Risk Score.
-Store copy must not call this real threat-intelligence coverage while the test
-fixture is bundled.
+Only the research profile loads the bundled asset via `chrome.runtime.getURL`
+and can add `nrs_known_bad_domain` (+50) to the Navigation Risk Score. Default
+build verification proves the asset, manifest entry, and compiled loader string
+are absent. Research builds are for local unpacked experiments, not user
+protection or store claims.
 
 ## DoubleClickjacking detection
 

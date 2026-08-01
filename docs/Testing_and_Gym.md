@@ -359,6 +359,8 @@ CI currently runs on every PR:
 - `npm run typecheck`
 - `npm test`
 - `npm run build`
+- `npm run check:release-profile -- --release`
+- `npm run build:research-reputation`
 - `npm run package:ext`
 - `xvfb-run -a npm run test:e2e`
 
@@ -380,7 +382,7 @@ verify them live. Regression coverage does not establish efficacy.
 
 The next evidence steps are:
 
-- fix RI-01 and the release profile before exposing users to the beta;
+- fix RI-01 and the remaining release-integrity blockers before exposing users to the beta;
 - finish the corpus-v2 methodology under #417, then rerun through #416/#426;
 - run the pre-registered benign journeys and descriptive top-1000 lane; and
 - build #418 against current browser-native and extension protections.

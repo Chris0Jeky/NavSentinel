@@ -1,11 +1,50 @@
+import { rmSync } from "node:fs";
 import { resolve } from "node:path";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import { crx } from "@crxjs/vite-plugin";
 import manifest from "./extension/manifest.json";
+import {
+  configureManifestForProfile,
+  resolveReleaseProfile,
+  serializeReleaseProfileReceipt,
+  type ReleaseProfile,
+} from "./scripts/release-profile.mjs";
+
+const profile = resolveReleaseProfile();
+const profiledManifest = configureManifestForProfile(manifest, profile);
+
+function profileAssets(selectedProfile: ReleaseProfile): Plugin {
+  return {
+    name: "navsentinel-release-profile-assets",
+    apply: "build",
+    generateBundle() {
+      this.emitFile({
+        type: "asset",
+        fileName: "navsentinel-profile.json",
+        source: serializeReleaseProfileReceipt(selectedProfile),
+      });
+    },
+    writeBundle() {
+      if (!selectedProfile.capabilities.reputation) {
+        rmSync(resolve(__dirname, "extension/dist/reputation_data.bin"), { force: true });
+      }
+    },
+  };
+}
 
 export default defineConfig({
   root: "extension",
-  plugins: [crx({ manifest })],
+  resolve: {
+    alias: {
+      "@navsentinel/reputation-runtime": resolve(
+        __dirname,
+        profile.capabilities.reputation
+          ? "extension/src/shared/reputation_runtime.enabled.ts"
+          : "extension/src/shared/reputation_runtime.disabled.ts",
+      ),
+    },
+  },
+  plugins: [profileAssets(profile), crx({ manifest: profiledManifest })],
   build: {
     outDir: "dist",
     emptyOutDir: true,

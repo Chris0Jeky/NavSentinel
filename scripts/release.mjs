@@ -18,6 +18,7 @@ import path from "node:path";
 import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { inspectBloomFilter, MIN_REAL_FILTER_BITS } from "./check-bloom-real.mjs";
+import { resolveReleaseProfile } from "./release-profile.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -94,27 +95,34 @@ if (branch !== "main") {
   console.log("[dry-run] WARNING: not on main branch -- real release would abort.");
 }
 
-// 1c. Refuse to release the placeholder/test reputation filter (#321 companion).
+// 1c. Research profiles are unpacked-only and may never create release tags.
+const releaseProfile = resolveReleaseProfile();
+if (!releaseProfile.releaseEligible) {
+  console.error(`Refusing to release non-release profile '${releaseProfile.id}'.`);
+  if (!dryRun) process.exit(1);
+  console.log("[dry-run] WARNING: real release would abort on the research profile.");
+}
+console.log(`Release profile: ${releaseProfile.id}`);
+
+// A future release-eligible reputation profile must still carry a real filter.
 //     The production feed (npm run build:bloom) has m in the millions; the
 //     committed placeholder is ~300 bits. Shipping it would contradict the
 //     threat-feed protection claimed in README/PRIVACY/SECURITY/the store listing.
-const bloomPath = path.join(root, "extension", "public", "reputation_data.bin");
-try {
-  const info = inspectBloomFilter(fs.readFileSync(bloomPath));
-  if (!info.real) {
-    const detail = `reputation_data.bin is not a production threat-feed filter (m=${info.m} bits < ${MIN_REAL_FILTER_BITS} floor). Build/rebuild the real feed with 'npm run build:bloom' first — the committed default is a placeholder, and a below-floor filter can also mean a threat feed failed at build time (issue #321 / AI-9).`;
-    if (process.env.NAVSENTINEL_ALLOW_TEST_BLOOM === "1") {
-      console.log(`WARNING (NAVSENTINEL_ALLOW_TEST_BLOOM=1): releasing with ${detail}`);
-    } else {
+if (releaseProfile.capabilities.reputation) {
+  const bloomPath = path.join(root, "extension", "public", "reputation_data.bin");
+  try {
+    const info = inspectBloomFilter(fs.readFileSync(bloomPath));
+    if (!info.real) {
+      const detail = `reputation_data.bin is not a production threat-feed filter (m=${info.m} bits < ${MIN_REAL_FILTER_BITS} floor). Build/rebuild the real feed with 'npm run build:bloom' first — the committed default is a placeholder, and a below-floor filter can also mean a threat feed failed at build time (issue #321 / AI-9).`;
       console.error(`Refusing to release: ${detail}`);
       if (!dryRun) process.exit(1);
       console.log("[dry-run] WARNING: real release would abort on the placeholder bloom filter.");
     }
+  } catch (err) {
+    console.error(`Refusing to release: cannot validate reputation_data.bin (${err instanceof Error ? err.message : String(err)}).`);
+    if (!dryRun) process.exit(1);
+    console.log("[dry-run] WARNING: real release would abort -- bloom filter unreadable/invalid.");
   }
-} catch (err) {
-  console.error(`Refusing to release: cannot validate reputation_data.bin (${err instanceof Error ? err.message : String(err)}).`);
-  if (!dryRun) process.exit(1);
-  console.log("[dry-run] WARNING: real release would abort -- bloom filter unreadable/invalid.");
 }
 
 // 2. Read current version

@@ -13,7 +13,7 @@
   hostile page code cannot become or suppress the trusted peer
 - [ ] PM-03/#455 keeps fresh installs passive until prominent disclosure and
   affirmative activation, with revocation/reset and no early data handling
-- [ ] AI-9 release profile selected; package, claims, and privacy text agree
+- [x] AI-9 selected interaction-only; package, claims, privacy text, and profile receipt agree
 - [ ] Open PR branches refreshed; #356 green/reviewed before human Gate-3
 - [ ] Persistent data is fully inventoried; URLs are minimized by purpose;
   exact session URLs have tab binding/TTL/tests; one complete reset exists
@@ -90,7 +90,7 @@
 ### Known Limitations to Document
 - Oldest supported Chrome version remains unverified until the compatibility
   derivation/test above is complete
-- Reputation coverage is absent unless AI-9 selects and validates a real-filter profile
+- Reputation coverage is absent from the release-eligible interaction-only profile
 - Public Suffix List is build-time snapshot
 - Some CSP-restricted pages may prevent main-world patches
 - The extension is complementary to built-in browser protection and does not

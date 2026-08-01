@@ -15,6 +15,9 @@ npm run build
 ```
 
 Load `extension/dist` in `chrome://extensions` with Developer Mode enabled.
+This is the release-eligible `interaction-only` profile. Use
+`npm run build:research-reputation` only for an unpacked local experiment; it
+cannot be packaged or released.
 
 ## Core workflows
 
@@ -67,7 +70,9 @@ review discipline as code.
   - `extension/src/content/capture_isolated.ts`
   - `extension/src/shared/scoring.ts`
   - `extension/src/shared/nrs.ts`
-- domain reputation (bloom filter)
+- release-profile and reputation research
+  - `config/release-profiles.json`
+  - `scripts/check-release-profile.mjs`
   - `extension/src/shared/reputation.ts`
   - `scripts/build-bloom-filter.mjs`
 - ClickFix / fake CAPTCHA detection

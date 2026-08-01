@@ -7,11 +7,14 @@
 **Purpose:** the running list of things only *you* (Chris) can do, with enough
 context to resume by stable ID.
 
-**Last updated:** 2026-08-01 — Chris ratified the July 3, July 10, and July 13
-standing decisions under AI-16, including headed Chrome as the primary Gate-3
-once operational with manual spot-checks retained. The guided cursor advances
-to AI-9. Owner decision #499 retired the repository-local agent harness, making
-AI-18 obsolete. The three browser checks waived on 2026-07-25 remain
+**Last updated:** 2026-08-01 — Chris selected the interaction-only beta under
+AI-9, retained an opt-in non-release research profile, and accepted `main`
+without branch protection under AI-17. PR #509 implements the profile decision.
+AI-25 passed on executable/artifact head `f6815be` in headed Chrome
+150.0.7871.187; the guided cursor is now **AI-20** (`q-4`). AI-16 ratified the
+July 3, July 10, and July 13 standing decisions, including headed Chrome as the
+primary Gate-3 once operational with manual spot-checks retained. Owner decision
+#499 made AI-18 obsolete. The three browser checks waived on 2026-07-25 remain
 represented by the single optional **AI-24** confirmation.
 Product thesis:
 `docs/Product_Strategy.md`. Corrective
@@ -72,11 +75,12 @@ changes do not change shipped product state.
   unmeasured JS behavior should be absent
   or off; stored URLs require minimization (RI-05/RI-06); #175/#186 bridge
   identity/recovery and #455 pre-collection disclosure/consent now block beta.
-- **Release/profile blockers:** the 52-byte reputation test filter plus the
-  current ~474/500KB package makes the old "150KB/100K domains" plan
-  impossible as written. AI-16 ratified interaction-only as the standing
-  default; AI-9 still must choose the explicit interaction-only or fully
-  specified real-filter release profile.
+- **Release/profile status:** AI-9 selected interaction-only. PR #509 makes it
+  the release-eligible default with no reputation runtime, asset, or claim. A
+  deterministic 52-byte reserved-domain fixture remains available only in the
+  unpacked, explicitly non-release `research-reputation` profile. AI-25 passed
+  on current executable/artifact head `f6815be` in Chrome 150.0.7871.187; live
+  GitHub state remains authoritative for PR #509's final merge state.
 - **Brand blocker:** the exact name `NavSentinel` is already used by an active
   GNSS security product. AI-19 requires clearance or an early rename before
   CWS submission; this is a risk flag, not a legal conclusion.
@@ -90,12 +94,11 @@ changes do not change shipped product state.
   number written here is stale on arrival. None assigned or milestoned; #439–#453
   are 15 frozen Horizon proposals. No new feature/epic issue seeding until the queue is
   culled and milestone-categorized.
-- **Infrastructure:** classic branch protection remains absent (`404 Branch not
-  protected`) and the rulesets API returns `[]`; AI-17 remains open. GitHub
-  private vulnerability reporting is enabled and linked from `SECURITY.md`.
-  Owner decision #499 removes all repository-local hook/floor enforcement. The
-  shared producer defects remain tracked in agent-harness, but NavSentinel is no
-  longer a consumer after #499 lands.
+- **GitHub posture:** Chris accepts `main` without branch protection under
+  AI-17. This is not an open action or risk flag and should not be re-surfaced.
+  GitHub private vulnerability reporting is enabled and linked from
+  `SECURITY.md`. Owner decision #499 removed repository-local hook/floor
+  enforcement; NavSentinel is no longer an agent-harness consumer.
 - **Local verification blocker:** Defender quarantined only
   `C:\Users\Public\codex-shell-home\NavSentinel-ri01\tests\clickfix-detector.property.test.ts`
   as `Trojan:HTML/FakeCaptcha.HNA!MTB`; it reports `DidThreatExecute=False` and
@@ -107,9 +110,9 @@ changes do not change shipped product state.
 
 ## Action items
 
-**Guided resolution cursor:** `AI-9` (`Resume at: AI-9`; the next
-conversational label is `q-2`). Current ready order is AI-9 -> AI-20 -> AI-17 ->
-AI-19 -> AI-24 -> AI-23 (low priority housekeeping, last).
+**Guided resolution cursor:** `AI-20` (`Resume at: AI-20`; the next
+conversational label is `q-4`). Current ready order is AI-20 -> AI-19 -> AI-24
+-> AI-23 (low priority housekeeping, last).
 **AI-13, AI-21 and AI-22 are resolved** — their
 PRs (#356, #464, #466) merged on 2026-07-25 after Chris chose to clear the
 browser-surface gate by automated equivalent rather than a manual pass; their
@@ -178,55 +181,19 @@ Only Chris can record this complete; nothing is blocked on it.
 **🚨 BLOCKED: AI-15 — Run the headed release session only after agent
 preflight.** The prior 60–90 minute one-sitting guide is withdrawn: stale PRs
 #273 and #399 were closed, **#356 merged 2026-07-25** (`3bd9e02`) with its manual
-Gate-3 waived, the reputation/package plan needs a product decision, and other
-release-integrity blockers precede a full manual release session. Agent preflight
+Gate-3 waived, the selected interaction-only profile passed AI-25 and still
+needs PR #509 to land, and other release-integrity blockers precede a full manual
+release session. Agent preflight
 must first: (1) fix RI-01; (2) keep #273 deferred or recreate it on current `main`;
 (3) excise visual-sim and remove fake DNR; (4) complete
 RI-06's purpose-specific data minimization/reset; (5) complete RI-07's explicit
 JS-behavior beta-off profile; (6) complete #175/#186 bridge integrity and #455
-pre-collection consent; (7) prepare the chosen AI-9 release profile; and (8)
+pre-collection consent; (7) land the selected AI-9 release profile through PR
+#509 now that AI-25 has passed; and (8)
 provide one current headed checklist. Then split human work into a browser
 session, any network/feed session, an overnight measurement run, and a short
 result review. Read `docs/Product_Strategy.md` first. This item becomes
 actionable only when the preflight handoff explicitly says so.
-
-**🆕 OPEN: AI-17 — Enable GitHub branch protection on `main`.** Live
-verification still returns `404 Branch not protected`. Owner decision #499
-removes the repository-local command floor, so server-side protection is the
-only repository-wide force-push control. Until it exists, never force-push
-`main`.
-
-**Recommended:** reply `AI-17 apply recommended protection` and an
-authenticated agent can apply and verify this reversible repository setting.
-If doing it yourself:
-
-1. Open GitHub → **Settings** → **Branches** → **Add branch protection rule**.
-2. Target `main` and require pull requests.
-3. Require the branch to be current; select only `Build / Unit` and `E2E`.
-4. Require conversation resolution and apply the rule to administrators.
-5. Leave force pushes and branch deletion disabled.
-6. Do not require an approval count that deadlocks a solo maintainer, the
-   scheduled Stress job, or the normally skipped release job.
-7. Save, then run
-   `gh api repos/Chris0Jeky/NavSentinel/branches/main/protection`. Confirm strict
-   checks, admin enforcement, conversation resolution,
-   `allow_force_pushes=false`, and `allow_deletions=false`.
-
-Official reference: [GitHub protected branches](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches).
-Then tell the agent `AI-17 done`.
-
-**🚨 OPEN: AI-9 — Choose the beta reputation profile (#321).** The current
-asset is a 52-byte test fixture. The old instruction to simply run
-`npm run build:bloom` is unsafe: the package is already ~474/500KB, a 150KB
-filter cannot meet the stated 0.01%/100K-domain combination, and feed licensing,
-provenance, cadence, cardinality, and rollback are unresolved. **Recommended
-choice:** ship the unlisted beta interaction-only, disable/omit reputation, and
-remove every reputation claim; test the actual differentiator without delay.
-**Alternative:** authorize a real-filter profile only after an agent proposes a
-separate data/package budget, feed/cadence/licensing plan, provenance manifest,
-sentinel checks, and reproducible build. Reply "AI-9 interaction-only" or
-"AI-9 real-filter" (plus constraints). Do not build/commit a feed artifact until
-that decision is recorded.
 
 **🚨 OPEN: AI-20 — Review the Defender quarantine and decide the exact
 fixture's fate.** The 2026-07-12 alert is
@@ -583,11 +550,31 @@ opens, implement FF-02 against web-ext, then reassess FF-03/FF-04.
 
 ## Completed log
 
+- **AI-25 — PR #509 interaction-only Gate-3 · DONE · 2026-08-01.** Chris
+  explicitly recorded completion on Chrome 150.0.7871.187 after reloading the
+  corrected current executable/artifact head `f6815be`: NavSentinel 0.4.0 and
+  its MV3 service worker registered; the interaction-only onboarding copy was
+  correct; the Level 10 delayed redirect rolled back; the Level 11 credential
+  submit produced the expected blocking modal and remained on the fixture; and
+  both the page and service-worker consoles showed no reputation-load,
+  registration, or other new errors. The disposable profile was removed and
+  the Gym listener was stopped. A later status-only head does not change that
+  browser evidence, but still needs its own exact-head hosted checks before
+  merge.
+- **AI-9 — Beta reputation profile · DECIDED · 2026-08-01.** Chris selected
+  interaction-only, while authorizing extra reproducibility, configuration, and
+  opt-in experiments at agent discretion. PR #509 implements the release default
+  with no reputation runtime/asset/claim and retains a deterministic
+  `research-reputation` fixture that is unpacked-only and rejected by packaging
+  and release gates. AI-25 passed its browser-surface gate.
+- **AI-17 — GitHub `main` posture · ACCEPTED · 2026-08-01.** Chris explicitly
+  accepts `main` without branch protection. This is not an outstanding action or
+  active risk flag and must not be re-surfaced unless Chris changes the decision.
 - **AI-16 — July standing product/process decisions · RATIFIED · 2026-08-01.**
   Chris ratified the July 3, July 10, and July 13 decisions, including headed
   Chrome as the primary Gate-3 once operational with manual spot-checks
-  retained. AI-9 remains the separate release-profile choice and AI-19 remains
-  the separate name decision. The guided cursor advanced to AI-9 (`q-2`).
+  retained. AI-9 was subsequently decided as interaction-only; AI-19 remains the
+  separate name decision. The guided cursor is now AI-20 (`q-4`).
 - **AI-12 — Top-site FP relief + D1 (#354) · DONE · 2026-06-23.** Chris manually confirmed the relief works on LinkedIn ("seemed to work fine now") = his measure/Gate-3 (the full `measure:fp` needs headed Chromium + live Tranco, which the sandbox can't run). **#354 merged into `main`** (`c4426cf`) on green CI (Build/Unit + E2E, including the main-merge head): `nrs.ts getTierAdjustedBlockThreshold` now relieves TOP_SITE + CDS-only (benign-structural whitelist) by `NRS_TOP_SITE_CDS_RELIEF` (+20, tunable); top-site trust list grew 24→42 with safe `includeSubdomains`. This is the lever #234/P5-A3 promised but never shipped.
 - **AI-11 — Toast count-pill (#353) · DONE · 2026-06-23.** Chris approved the merge; **#353 merged into `main`** (`d0e0412`). Repeated blocked-popup/redirect prompts coalesce into one count pill after 3-in-8s (expandable to the latest prompt's Allow once / Always allow). Included an e2e fix (RW-19 now accepts the coalesced pill while keeping the no-popup-opened security assertion). Green CI (Build/Unit + E2E).
 - **AI-10 — Gate-3 + merge the SPA-breakage fix · DONE · 2026-06-23.** Chris manually verified #352 in Chrome ("working fine now"); **#352 merged into `main`** (`#347` History.pushState/replaceState de-hardened to writable via `softPatchProto` — fixes the claude.ai grey screen; `#348` `reputation_data.bin` added to `web_accessible_resources` — fixes the per-page console error + re-enables top-frame reputation). Green CI (Build/Unit + E2E). Remaining session PRs: **#353** (toast pill, AI-11) and **#354** (top-site FP relief + D1, AI-12, gated on `measure:fp`).

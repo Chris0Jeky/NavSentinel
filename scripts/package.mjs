@@ -8,6 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { inspectBuiltReleaseProfile } from "./check-release-profile.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -28,6 +29,17 @@ if (!fs.existsSync(manifestPath)) {
   console.error("[package:ext] Run `npm run build` first.");
   process.exit(1);
 }
+
+let builtProfile;
+try {
+  builtProfile = inspectBuiltReleaseProfile(distDir, { requireReleaseEligible: true }).profile;
+} catch (error) {
+  console.error(
+    `[package:ext] Refusing to package: ${error instanceof Error ? error.message : String(error)}`,
+  );
+  process.exit(1);
+}
+console.log(`[package:ext] Verified release profile: ${builtProfile.id}`);
 
 fs.mkdirSync(artifactsDir, { recursive: true });
 

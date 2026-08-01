@@ -1,6 +1,15 @@
 import { defineConfig } from "vitest/config";
+import { resolve } from "node:path";
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      "@navsentinel/reputation-runtime": resolve(
+        __dirname,
+        "extension/src/shared/reputation_runtime.disabled.ts",
+      ),
+    },
+  },
   test: {
     root: ".",
     include: ["extension/src/**/*.test.ts", "tests/**/*.test.ts"],

@@ -71,8 +71,9 @@ It is not yet a released or validated product. Immediate blockers include:
 
 - scripted page input can activate protection-lowering prompt/modal actions;
 - the dead visual-sim path can process a different active tab's pixels;
-- MAIN-world compatibility work in #356 is stale/red;
-- DNR and reputation surfaces are test/placeholder implementations;
+- extension-origin prompt authority and other release-integrity work remain;
+- DNR remains a test/placeholder surface; the selected interaction-only profile
+  excludes reputation runtime and assets;
 - FP/TP and comparative efficacy evidence is incomplete;
 - no external audit, tag, release, CWS listing, or external-user cohort exists;
   and

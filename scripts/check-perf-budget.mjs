@@ -123,14 +123,15 @@ const budgets = [
     glob: "assets/ui_toast-*.js",
     maxKB: 8,
   },
-  // C-02: Separate budget for the reputation bloom filter (150 KB).
-  // check-bloom-size.mjs enforces a coarse 2 MB absolute max on the source
-  // file; this budget gates the copy in dist/ at a tighter per-build limit.
-  {
-    label: "reputation_data.bin",
-    glob: "reputation_data.bin",
-    maxKB: 150,
-  },
+  ...(fs.existsSync(path.join(distDir, "reputation_data.bin"))
+    ? [{
+        // Research-profile data budget. The release-eligible interaction-only
+        // profile intentionally has no reputation asset to measure.
+        label: "reputation_data.bin",
+        glob: "reputation_data.bin",
+        maxKB: 150,
+      }]
+    : []),
   {
     label: "total dist",
     path: ".",

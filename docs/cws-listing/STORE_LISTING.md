@@ -2,7 +2,7 @@
 
 > **Submission blocked:** `NavSentinel` is a working name pending AI-19
 > clearance. Re-run the claims/package review after the final name and beta
-> release profile are selected.
+> package are selected; the beta release profile is already interaction-only.
 
 ## Short Name
 NavSentinel
@@ -18,8 +18,7 @@ browser's built-in security.**
 It checks consequential browser actions—clicks, popups, redirects, clipboard
 writes, OAuth callbacks, and password submissions—at the moment they happen.
 Scoring and event history stay in your browser; there is no account, telemetry,
-cloud scoring, or remote reputation lookup. The current development profile can
-perform a local runtime lookup against a bundled test asset.
+cloud scoring, or reputation lookup in the beta release profile.
 
 ### What It Detects
 
