@@ -6,25 +6,28 @@ Historical cycle detail remains in `ORCHESTRATOR.md` and is not required reading
 
 ## Current development lanes
 
-- **PR #509** implements AI-9's interaction-only release profile. **AI-25
-  passed** on executable/artifact head `f6815be` in headed Chrome
+- **PR #509 merged** as `3faeb1e`, closing #321 and implementing AI-9's
+  interaction-only release profile. **AI-25 passed** on executable/artifact
+  head `f6815be` in headed Chrome
   150.0.7871.187: extension and service-worker registration, corrected
   onboarding, delayed-redirect rollback, credential interception, and both
   consoles passed without reputation-load or new runtime errors. The default
   artifact has no reputation runtime, asset, manifest exposure, or static HTML
   claim; the deterministic reputation fixture is available only through a
-  non-release unpacked research profile. Read live GitHub state for whether the
-  PR is still open or merged; a later status-only head needs exact-head hosted
-  checks but does not invalidate the scoped browser evidence.
+  non-release unpacked research profile.
+- **RI-01 checkpoint** is remotely backed at `184be55`. AI-20 is resolved:
+  Chris chose to leave the original fixture quarantined, and a runtime-equivalent
+  representation passed an exact-file Defender scan plus the full old-branch
+  gates. The branch is still 217 commits behind current `main`, RI-01 remains
+  incomplete, and this is not a merge-ready PR.
 
 ## Human queue
 
-Resume at **AI-20** (`q-4`). Ready order:
+Resume at **AI-19** (`q-5`). Ready order:
 
-1. **AI-20:** decide the exact Defender-quarantined fixture disposition.
-2. **AI-19:** clear or replace the product name before CWS submission.
-3. **AI-24:** optional real-Chrome confirmation of the three waived browser checks.
-4. **AI-23:** prune old worktrees/branches after preserving any unique outputs.
+1. **AI-19:** clear or replace the product name before CWS submission.
+2. **AI-24:** optional real-Chrome confirmation of the three waived browser checks.
+3. **AI-23:** prune old worktrees/branches after preserving any unique outputs.
 
 Blocked: **AI-15**, **AI-8**, and **AI-14**. Their replacement slices need
 focused product checks, hosted product CI, and current human guides. AI-9 is
@@ -36,7 +39,7 @@ an action or warning. AI-18 is obsolete because #499 removed project hooks.
 - v0.4.0 remains a private pre-release alpha with no tag, GitHub release, CWS
   release, or external-user evidence. Chris accepts the current GitHub posture
   without branch protection under AI-17; do not re-flag it.
-- The extension is local-first. PR #509 makes interaction-only the release
+- The extension is local-first. Merged PR #509 makes interaction-only the release
   default. Its deterministic reputation fixture is research-only and cannot be
   packaged or released.
 - Release integrity still requires extension-origin decision authority, removal
@@ -49,16 +52,18 @@ an action or warning. AI-18 is obsolete because #499 removed project hooks.
 
 - Successful CI is regression evidence, not open-web efficacy, compatibility,
   competitor superiority, or an external security audit.
-- On this Windows host, RW-06 failed at two different timing points across the
-  full run and an isolated rerun; the other #498 popup case passed. #498 owns
-  the broader platform discrepancy. Read hosted PR checks live: every #509 head
-  must be green before the PR merges.
+- The RI-01 checkpoint passed typecheck, lint, build, version/package, perf,
+  2,887 unit tests, and 65 E2E tests after fixing a trusted-click scoring
+  regression found by the full E2E run. Its rewritten fixture passed an
+  exact-file Defender scan. Those old-base results do not replace reconciliation
+  with current `main`, exact-head checks, review, or real-Chrome Gate-3 before a
+  future RI-01 merge.
 - Real Chrome Gate-3 was performed for PR #509. CWS submission, real-feed
   building, external audit, and legal name clearance have not been performed.
 
 ## Next sequence
 
-If PR #509 is still open, merge it only after the current status-only head has
-green exact-head hosted checks and clean review state. Then continue the guided
-human queue at AI-20 and refresh other issue state before choosing an agent
-slice.
+Continue the guided human queue at AI-19. Separately, refresh the RI-01 branch
+from current `main`, finish the remaining authority path, and rerun scoped
+checks plus real-Chrome Gate-3 before opening a merge-ready PR; do not delete its
+worktree as AI-23 housekeeping.

@@ -31,7 +31,7 @@ readiness is tracked only by the outcome gates below.
 | Gate | State | Required next move |
 |---|---|---|
 | Release integrity | **Blocked** | RI-01 extension-origin decision authority (#356/#464/#466 merged 2026-07-25 — the browser-held sub-slices are done, but no production extension-origin prompt/action flow ships yet); excise visual-sim (#424); remove fake DNR; purpose-specific data minimization (RI-06 slice 1 merged as #468; residue in #474); beta-off JS behavior; #175/#186 bridge identity/recovery |
-| Release profile | **Implemented on PR #509; Gate-3 passed** | AI-9 selected interaction-only. Chrome 150.0.7871.187 passed on executable/artifact head `f6815be`; default runtime/manifest/package omit reputation; deterministic `research-reputation` is unpacked-only and non-release. Read live GitHub state for final merge status |
+| Release profile | **Implemented; Gate-3 passed** | AI-9 selected interaction-only. PR #509 merged as `3faeb1e`, closing #321. Chrome 150.0.7871.187 passed on executable/artifact head `f6815be`; default runtime/manifest/package omit reputation; deterministic `research-reputation` is unpacked-only and non-release |
 | Brand/store | **Blocked** | AI-19 name clearance; #455 pre-collection disclosure/consent; one canonical claims-verified listing; assets and fresh-install checks |
 | Detection validation | **Open** | #417 methodology, #416/#426 rerun, confidence-aware reporting |
 | Comparative value | **Open** | #418 against current Chrome and relevant Chrome extensions; Edge/Opera remain contextual until supported |
@@ -62,14 +62,16 @@ The legacy browser-surface PR queue is **cleared** as of 2026-07-25; this table 
 | #468 | **MERGED 2026-07-25** as `ebeb922`. Merged head `5bac99b` (clean auto-merge, zero conflicts); exact-head CI green. RI-06 event-log URL minimization — advances RI-06 without closing it; remaining slices tracked in **#474** |
 | #457 | **MERGED 2026-07-25 (historical; retired by #499).** It delivered the then-current one-floor topology, pinned adapter, vendored fixtures, and Harness CI. Owner decision #499 removes that entire repository-local consumer/gate surface without changing extension runtime behavior. |
 
-**RI-01 local implementation note (verified 2026-07-13):** remotely backed-up
-checkpoint branch `fix/ri01-extension-origin-decisions` contains a context-bound,
+**RI-01 local implementation note (verified 2026-08-01):** remotely backed-up
+checkpoint branch `fix/ri01-extension-origin-decisions` at `184be55` contains a context-bound,
 hash-minimizing pending-decision broker plus a synthetic-navigation-allowance
 fix. Focused broker tests pass, but the broker is not wired into production:
 service-worker handlers, active-tab/sender validation, exact-context delivery,
-popup actions, warn/cancel-only injected prompts, full branch gates, and real
-Chrome remain open. Windows Defender quarantined one tracked adversarial
-ClickFix property fixture only in that worktree; AI-20 owns the human review.
+popup actions, warn/cancel-only injected prompts, reconciliation with current
+`main`, and real Chrome remain open. AI-20 is resolved: Chris left the original
+Defender-quarantined ClickFix property fixture quarantined, while an exact
+runtime-equivalent representation passed Defender scanning and the full
+old-branch gates. The branch is not merge-ready.
 
 The North-Star and Horizon documents are frozen option portfolios. Their 15
 Horizon issues (#439–#453) do not authorize implementation and should be culled
@@ -89,7 +91,7 @@ maintainer chooses disclosure/ownership.
 | RI-02 | P0 beta blocker | Excise visual-sim capture, templates, scoring hook, WAR, tests, and state | Agent + Gate-3 | #424 | No viewport capture path or placeholder asset remains; #374 is optional coordination, not a prerequisite |
 | RI-03 | P0 beta blocker | ~~Refresh/fix #356~~ **done: #356 is refreshed, reviewed, thread-clean and green on `f8028c9`**; **still open: recreate or defer #273** | One step remains: the agent step to recreate-or-defer #273 (#356 merged on
 2026-07-25 with its manual gate waived, so the AI-13 Gate-3 step no longer exists) (AI-8, still BLOCKED). RI-03 is **not** complete when AI-13 passes | #273/#356; #399 stays deferred | Replacement human guides point only to current green branches; #399 remains outside beta blockers until its measurement methodology is ready |
-| RI-04 | P0 product decision | **Implemented on PR #509; AI-25 Gate-3 passed:** interaction-only selected and implemented; retain research reputation as unpacked-only | Chris + agent + Gate-3 | #321 / AI-9 / AI-25 | Default release receipt, manifest/WAR, runtime, package checks, tests, and claims agree; research profile is deterministic, visibly non-release, and package/release rejected |
+| RI-04 | P0 product decision | **Implemented via merged PR #509; AI-25 Gate-3 passed:** interaction-only selected and implemented; retain research reputation as unpacked-only | Chris + agent + Gate-3 | #321 / AI-9 / AI-25 | Default release receipt, manifest/WAR, runtime, package checks, tests, and claims agree; research profile is deterministic, visibly non-release, and package/release rejected |
 | RI-05 | P0 beta blocker | Remove fake DNR feature surface and unused permissions | Agent + Gate-3 | CWS checklist; redesign #242/#243 later | No test rules/toggle/DNR permission in beta manifest |
 | RI-06 | P0 privacy blocker | Inventory every store; minimize by purpose; add complete reset | Agent + privacy review | Extend #176 or seed one scoped follow-up | Persistent records use least-identifying data; exact session URLs remain only for correctness with tab binding/TTL; rollback/OAuth/allow tests pass; all behavioral stores have one clear control and accurate export/disclosure |
 | RI-07 | P0 beta blocker | Add an explicit beta capability flag that leaves JS behavior instrumentation off | Agent + Gate-3 | #127 or a scoped release-profile issue | Fresh beta defaults/migration/UI/runtime agree; fetch/XHR/beacon/password-value prototypes are not wrapped; core navigation remains active; compatibility/perf evidence required to enable |
@@ -107,7 +109,7 @@ maintainer chooses disclosure/ownership.
 ### Existing issue dispositions
 
 - #415: create one `v0.5.0-unlisted-beta` milestone containing only real blockers.
-- #321: PR #509 closes it after the interaction-only profile passes AI-25 Gate-3 and merges.
+- #321: DONE — PR #509 merged as `3faeb1e` after AI-25 Gate-3, closing the issue.
 - #356: DONE — merged 2026-07-25 (`3bd9e02`); #273 recreate/defer; #399 is closed and
   remains measurement-deferred under #223/#417.
 - #419/#421/#422: close enacted scope; retain only concrete unfinished work.
