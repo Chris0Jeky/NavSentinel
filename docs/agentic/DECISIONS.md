@@ -2,7 +2,11 @@
 
 Durable register of resolved cross-cutting decisions (process, posture, and product-sequencing). One place so the operating docs (`CLAUDE.md`, `AGENTS.md`, `ORCHESTRATOR.md`, `Project_Roadmap.md`) can point here instead of duplicating rationale. When a decision changes, edit it in place and date the change.
 
-> **Authority:** these are enacted under Chris's general delegation ("take a stance, call the shots"), NOT a point-by-point confirmation — they **await his explicit ratify/amend** (see `ACTION_ITEMS.md` **AI-16**), and until then are the working posture the loop follows. Reversible; flag any you'd change. Where they refine the autonomous-loop prompt or older rules, they win.
+> **Authority:** Chris explicitly ratified the July 3, July 10, and July 13
+> decisions on 2026-08-01, including headed Chrome as the primary Gate-3 once
+> operational with manual spot-checks retained. The decisions remain
+> reversible through a later explicit amendment. Where they refine the
+> autonomous-loop prompt or older rules, they win.
 
 ---
 
@@ -46,8 +50,8 @@ Chris delegated: *"take a stance yourself and call the shots in the best way pos
 **Dependency (stated plainly):** the stricter tier only works if Gate-3 has a cadence — either a committed periodic maintainer sitting *or* the headed lane (D-2026-07-03-E). Until then, **the stricter tier is still enforced** — browser-surface work simply queues for Gate-3, and we accept that the North-Star spine (much of which is browser-surface) throttles through this gate as the known cost. This is **not** a licence to keep auto-merging MAIN-world changes.
 **Why:** the old classification keyed on surface *visibility* (a chip color waited 13 days while MAIN-world global patches auto-merged) — backwards vs. actual risk.
 
-### D-2026-07-03-E — Headed verification lane is the target Gate-3 mechanism (#420); PROPOSES a Q5 revision (awaits Chris)
-**Decision:** Adopt a scheduled headed-Chrome lane on the maintainer's machine as the **primary** Gate-3 mechanism once operational (agent builds the runner/checklist; Chris schedules it — the sandbox cannot run headed Chrome). Until it exists, manual Chrome Gate-3 stands. Making the lane the primary gate **would revise the standing Q5** ("Gate-3 = manual Chrome") to "headed lane + manual spot-checks" — but both strategic docs reserve this as **Chris's explicit call** (it *reduces* manual oversight), so this is a **recommendation only**, flagged as AI-16. Until Chris ratifies, manual Chrome Gate-3 stands and the lane only *augments* it.
+### D-2026-07-03-E — Headed verification is the primary Gate-3 mechanism once operational (#420); RATIFIED 2026-08-01
+**Decision:** Adopt a scheduled headed-Chrome lane on the maintainer's machine as the **primary** Gate-3 mechanism once operational (agent builds the runner/checklist; Chris schedules it — the sandbox cannot run headed Chrome), with manual spot-checks retained. Until the lane is operational, manual Chrome Gate-3 remains the primary mechanism.
 **Why:** human activation-energy, not human time, is the bottleneck (13 days for a 10-minute check). Automating the class is the structural fix.
 
 ### D-2026-07-03-F — Excise the dead visual-sim capture path (#424); the logo-embedding pivot is a fresh future feature
@@ -75,8 +79,8 @@ this integrity-gated, manual D14/D30 sequence before use.
 ## 2026-07-10 — Product-posture review amendments
 
 These working decisions come from the full product, architecture, release,
-roadmap, and current-market review in `docs/Product_Strategy.md`. They remain
-reversible and are included in AI-16's maintainer ratification gate.
+roadmap, and current-market review in `docs/Product_Strategy.md`. Chris ratified
+them on 2026-08-01; they remain reversible through an explicit amendment.
 
 ### D-2026-07-10-I — Release integrity precedes the old human batch
 
@@ -158,6 +162,6 @@ activation exists.
 
 ## Earlier resolved (carried forward)
 
-- **Q1–Q6 (answered 2026-06-26):** Q1 OAuth FP cluster = implement + HOLD for `measure:fp`; **Q2** capture_isolated = split (#374) **and** bump 66→70KB; Q3 = prefer unit-testable extraction over CI-only e2e (CI-verified e2e acceptable when unavoidable); Q4 merge cadence confirmed; **Q5** Gate-3 = manual Chrome (**D-2026-07-03-E *proposes* revising this — awaits Chris's explicit sign-off**); Q6 = extract-to-testable + e2e for `main_guard`.
+- **Q1–Q6 (answered 2026-06-26):** Q1 OAuth FP cluster = implement + HOLD for `measure:fp`; **Q2** capture_isolated = split (#374) **and** bump 66→70KB; Q3 = prefer unit-testable extraction over CI-only e2e (CI-verified e2e acceptable when unavoidable); Q4 merge cadence confirmed; **Q5** Gate-3 = manual Chrome, revised by the 2026-08-01 ratification of D-2026-07-03-E to headed Chrome as primary once operational with manual spot-checks retained; Q6 = extract-to-testable + e2e for `main_guard`.
 - **Decision log D01–D20:** see `docs/Project_Roadmap.md`. **D21–D26** (North-Star): see `docs/NORTHSTAR_ROADMAP.md`. D26 is a historical concept approval only; the 2026-07-10 beta boundary defers any runtime refresh until a renewed explicit product/privacy/release decision.
 - **Gate-3 waiver (2026-06-05) + non-browser auto-merge authority (2026-06-19):** standing; superseded/formalized by D-2026-07-03-D/H.
