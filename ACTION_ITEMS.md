@@ -191,9 +191,8 @@ must first: (1) fix RI-01; (2) keep #273 deferred or recreate it on current `mai
 (3) excise visual-sim and remove fake DNR; (4) complete
 RI-06's purpose-specific data minimization/reset; (5) complete RI-07's explicit
 JS-behavior beta-off profile; (6) complete #175/#186 bridge integrity and #455
-pre-collection consent; (7) land the selected AI-9 release profile through PR
-#509 now that AI-25 has passed; and (8)
-provide one current headed checklist. Then split human work into a browser
+pre-collection consent; and (7) provide one current headed checklist. Then
+split human work into a browser
 session, any network/feed session, an overnight measurement run, and a short
 result review. Read `docs/Product_Strategy.md` first. This item becomes
 actionable only when the preflight handoff explicitly says so.
