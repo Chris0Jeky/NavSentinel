@@ -11,9 +11,9 @@ NavSentinel is a local-first Chrome MV3 extension that hardens several abuse-hea
 - risky credential submissions such as HTTP password posts, lookalike domains, untrusted domains, and suspicious cross-site form actions
 - DoubleClickjacking attacks that hijack a double-click gesture to land on sensitive buttons (OAuth consent, MFA, payment)
 - ClickFix / fake CAPTCHA overlays that write malicious commands to the clipboard and instruct users to paste them
-- an optional build-time bloom-filter mechanism; the current binary is a
-  reserved-domain test fixture with no real threat coverage, and AI-9 decides
-  whether the beta omits reputation or uses a separately reviewed real profile
+- an interaction-only default profile with no reputation runtime, asset, or
+  claim; a separate unpacked-only research profile retains the deterministic
+  reserved-domain bloom fixture for local experiments
 
 The current `main` branch contains the merged suite baseline: navigation and
 credential guards, popup/options surfaces, trusted-domain management, and a
@@ -30,9 +30,9 @@ externally audited, or released.
 - Intercepts password-form submission and computes local credential risk before allowing the submit.
 - Detects DoubleClickjacking attack patterns across main-world, isolated-world, and service-worker layers.
 - Detects ClickFix / fake CAPTCHA overlays that combine clipboard writes with deceptive instruction text.
-- Can check destination domains via a local runtime lookup against a build-time
-  bloom asset, with no runtime network request. The bundled 52-byte fixture
-  matches reserved test domains only and is not a user protection.
+- Emits a deterministic build-profile receipt. Release packages are accepted
+  only from the interaction-only profile; the reputation research build is
+  explicitly non-release and cannot be packaged by `package:ext`.
 - Stores bounded local configuration, decision history, prompt outcomes, and
   behavioral profiles in `chrome.storage.local`; see `PRIVACY.md` for the full
   inventory, export gaps, and deletion controls.
@@ -79,7 +79,7 @@ non-functional viewport-capture path.
 - `gym/`: deterministic HTML fixtures for navigation and credential scenarios
 - `tests/`: Vitest unit tests and Playwright E2E specs
 - `docs/`: architecture, threat model, testing, release, roadmap, and redesign docs
-- `scripts/`: release, bloom filter build, benchmark, PSL update, and agent hook scripts
+- `scripts/`: release/profile checks, research bloom builds, benchmarks, and data updates
 - `autodoc/`: agent-facing code orientation index
 
 ## Build and run
@@ -90,6 +90,9 @@ npm run build
 ```
 
 Load `extension/dist` in `chrome://extensions` with Developer Mode enabled.
+`npm run build` always selects the release-eligible `interaction-only` profile.
+For a local unpacked experiment only, `npm run build:research-reputation`
+enables the reserved-domain fixture and marks the artifact non-release.
 
 Useful commands:
 
@@ -172,7 +175,8 @@ The Playwright config intentionally limits discovery to E2E specs so Vitest file
 ## Privacy and security posture
 
 - No remote telemetry
-- No remote reputation lookups (bloom filter is compiled at build time)
+- No reputation lookup in the default interaction-only build
+- No runtime network lookup in the opt-in reputation research build
 - No password-value storage
 - Clipboard content is inspected transiently in the page's MAIN world to derive
   metadata for ClickFix detection; the content is not bridged, stored, or

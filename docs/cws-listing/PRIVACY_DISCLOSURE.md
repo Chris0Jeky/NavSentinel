@@ -81,10 +81,9 @@ be reviewed again.
 
 ### Remote Code
 This extension does not use remote code. All JavaScript is bundled at build
-time. The Public Suffix List is a static generated asset. The current bloom
-binary is a reserved-domain test fixture, not production threat intelligence;
-AI-9 decides whether the beta omits reputation or ships a separately reviewed,
-reproducible real-filter profile.
+time. The Public Suffix List is a static generated asset. The release-eligible
+interaction-only profile contains no reputation runtime or asset; the separate
+reserved-domain research fixture is non-release and cannot be packaged.
 
 ### Content Security Policy
 The extension uses the default Manifest V3 CSP. No `unsafe-eval` or remote script loading.

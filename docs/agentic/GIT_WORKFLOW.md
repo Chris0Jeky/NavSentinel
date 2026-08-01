@@ -5,10 +5,11 @@ removed NavSentinel's repository-local command harness, tier, and hooks. Shared
 runtime settings outside the repository may still apply, but this project does
 not verify or depend on them.
 
-Classic branch protection is still absent (AI-17), so do not force-push
-`main`, `master`, `develop`, or `release`. Prefer additive commits and merge
-commits. Before discarding uncommitted work or rewriting shared history, explain
-the affected data and recovery path and obtain explicit approval.
+Chris explicitly accepts `main` without branch protection (AI-17, 2026-08-01);
+do not flag or re-open that posture. Independently, do not force-push `main`,
+`master`, `develop`, or `release`. Prefer additive commits and merge commits.
+Before discarding uncommitted work or rewriting shared history, explain the
+affected data and recovery path and obtain explicit approval.
 
 ## Default Workflow
 

@@ -36,8 +36,9 @@ Avoid bulk-reading `node_modules/`, generated output, `test-results/`,
 - Do not edit `extension/dist/` or generated reputation/top-site artifacts.
 - Keep navigation, credential, service-worker, and UI changes separate unless
   the behavior crosses those seams.
-- The bundled `reputation_data.bin` is a reserved-domain test fixture, not user
-  protection. Do not make reputation claims from it.
+- The default interaction-only profile has no reputation runtime or bundled
+  asset. `research-reputation` uses a reserved-domain fixture, is unpacked-only,
+  and must never be packaged or described as user protection.
 
 ## Focused verification
 
@@ -49,7 +50,8 @@ Avoid bulk-reading `node_modules/`, generated output, `test-results/`,
 | Manifest, worker imports, bundling | `npm run build` |
 | MAIN-world guard, bridge, detections | `npm run build` then `npm run test:e2e` |
 | Service-worker lifecycle/rollback | `npm run build` then `npm run test:e2e:rollback` |
-| Reputation/corpus data | `npm run check:topsites`, `npm run build:bloom:test`, `npm run check:bloom-size` |
+| Release profiles | `npm run build`, `npm run check:release-profile -- --release`, then `npm run build:research-reputation` |
+| Reputation/corpus research data | `npm run check:topsites`, `npm run build:bloom:test`, `npm run check:bloom-size` |
 | Performance-sensitive code | `npm run build` then `npm run check:perf-budget` |
 | Version or manifest bump | `npm run verify:versions` |
 | Package/release code | `npm run package:ext` |

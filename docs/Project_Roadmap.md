@@ -16,7 +16,7 @@ phase labels and artifact counts must not be read as product readiness.
 |---|---|---|---|---|
 | 0 | Stabilize | 6 | 6 | Engineering baseline complete |
 | 1 | Validate Foundation | 8 | 8 | **Validation gate open** (stale FP result; invalid corpus result) |
-| 2 | Target interaction threats | 13 | 13 | **Efficacy/competitive gate open**; reputation asset is a test fixture |
+| 2 | Target interaction threats | 13 | 13 | **Efficacy/competitive gate open**; reputation is excluded from the selected beta profile |
 | 3 | Productize | 12 | 12 | **Release/distribution gate open**: drafts/scope are not CWS distribution or an audit |
 | 4 | Differentiate | 8 | 4 | **Frozen** until beta evidence; visual-sim is queued for removal and JS behavior is unmeasured |
 
@@ -31,7 +31,7 @@ readiness is tracked only by the outcome gates below.
 | Gate | State | Required next move |
 |---|---|---|
 | Release integrity | **Blocked** | RI-01 extension-origin decision authority (#356/#464/#466 merged 2026-07-25 — the browser-held sub-slices are done, but no production extension-origin prompt/action flow ships yet); excise visual-sim (#424); remove fake DNR; purpose-specific data minimization (RI-06 slice 1 merged as #468; residue in #474); beta-off JS behavior; #175/#186 bridge identity/recovery |
-| Release profile | **Decision required** | AI-16 ratified interaction-only as the standing default; AI-9 still chooses that explicit profile or a reproducible, budgeted real reputation build |
+| Release profile | **Implemented; Gate-3 pending** | AI-9 selected interaction-only. Default runtime/manifest/package omit reputation; deterministic `research-reputation` is unpacked-only and non-release |
 | Brand/store | **Blocked** | AI-19 name clearance; #455 pre-collection disclosure/consent; one canonical claims-verified listing; assets and fresh-install checks |
 | Detection validation | **Open** | #417 methodology, #416/#426 rerun, confidence-aware reporting |
 | Comparative value | **Open** | #418 against current Chrome and relevant Chrome extensions; Edge/Opera remain contextual until supported |
@@ -44,8 +44,7 @@ Verified 2026-07-24: `main` matched `origin/main` at `d7528f9`; v0.4.0; main CI
 green; 2,874 unit tests across 95 files, plus typecheck and lint clean locally;
 Re-derive the open-issue count live (`gh issue list --state open`) — it moved on
 2026-07-25 when #349 auto-closed with #356 and #474/#475 were filed. No milestone,
-tag, GitHub release, CWS release, or branch
-protection. The exact audit baseline is recorded only in dated
+tag, GitHub release, or CWS release. The exact audit baseline is recorded only in dated
 `Product_Strategy.md`; verify live.
 Owner directive #499 retires the repository-local agent harness (tier, project
 hooks, lifecycle scripts, vendored floor, validation commands, and Harness CI).
@@ -90,7 +89,7 @@ maintainer chooses disclosure/ownership.
 | RI-02 | P0 beta blocker | Excise visual-sim capture, templates, scoring hook, WAR, tests, and state | Agent + Gate-3 | #424 | No viewport capture path or placeholder asset remains; #374 is optional coordination, not a prerequisite |
 | RI-03 | P0 beta blocker | ~~Refresh/fix #356~~ **done: #356 is refreshed, reviewed, thread-clean and green on `f8028c9`**; **still open: recreate or defer #273** | One step remains: the agent step to recreate-or-defer #273 (#356 merged on
 2026-07-25 with its manual gate waived, so the AI-13 Gate-3 step no longer exists) (AI-8, still BLOCKED). RI-03 is **not** complete when AI-13 passes | #273/#356; #399 stays deferred | Replacement human guides point only to current green branches; #399 remains outside beta blockers until its measurement methodology is ready |
-| RI-04 | P0 product decision | Implement the selected interaction-only or real-reputation profile | Chris + agent | #321 / AI-9 | Release script, tag CI, manifest/WAR, runtime initialization, package checks/budgets, tests, provenance/cadence (if real), and every claim agree for the selected profile; verify both only if both are intentionally retained |
+| RI-04 | P0 product decision | **Done:** interaction-only selected and implemented; retain research reputation as unpacked-only | Chris + agent + Gate-3 | #321 / AI-9 | Default release receipt, manifest/WAR, runtime, package checks, tests, and claims agree; research profile is deterministic, visibly non-release, and package/release rejected |
 | RI-05 | P0 beta blocker | Remove fake DNR feature surface and unused permissions | Agent + Gate-3 | CWS checklist; redesign #242/#243 later | No test rules/toggle/DNR permission in beta manifest |
 | RI-06 | P0 privacy blocker | Inventory every store; minimize by purpose; add complete reset | Agent + privacy review | Extend #176 or seed one scoped follow-up | Persistent records use least-identifying data; exact session URLs remain only for correctness with tab binding/TTL; rollback/OAuth/allow tests pass; all behavioral stores have one clear control and accurate export/disclosure |
 | RI-07 | P0 beta blocker | Add an explicit beta capability flag that leaves JS behavior instrumentation off | Agent + Gate-3 | #127 or a scoped release-profile issue | Fresh beta defaults/migration/UI/runtime agree; fetch/XHR/beacon/password-value prototypes are not wrapped; core navigation remains active; compatibility/perf evidence required to enable |
@@ -108,7 +107,7 @@ maintainer chooses disclosure/ownership.
 ### Existing issue dispositions
 
 - #415: create one `v0.5.0-unlisted-beta` milestone containing only real blockers.
-- #321: replace "build the filter" with RI-04 and the AI-9 decision.
+- #321: close with RI-04 after the interaction-only profile PR passes Gate-3 and merges.
 - #356: DONE — merged 2026-07-25 (`3bd9e02`); #273 recreate/defer; #399 is closed and
   remains measurement-deferred under #223/#417.
 - #419/#421/#422: close enacted scope; retain only concrete unfinished work.
@@ -144,8 +143,8 @@ Last updated: 2026-08-01
 ## Decision Log
 
 Historical D01–D20 decisions are retained below. Chris ratified the July 3,
-July 10, and July 13 standing decisions on 2026-08-01; the explicit release
-profile remains AI-9. `docs/agentic/DECISIONS.md` has higher authority when
+July 10, and July 13 standing decisions on 2026-08-01 and explicitly selected
+interaction-only under AI-9. `docs/agentic/DECISIONS.md` has higher authority when
 wording conflicts.
 
 > **Cross-cutting process/posture decisions (2026-07-03, D-2026-07-03-A..H)** live in [`docs/agentic/DECISIONS.md`](agentic/DECISIONS.md) — ship/measure direction, priority ladder, browser-surface re-tiering + WIP cap, visual-sim excision, distribution sequence. D21-D26 (North-Star) are in [`NORTHSTAR_ROADMAP.md`](NORTHSTAR_ROADMAP.md).
@@ -577,7 +576,7 @@ Phase 1 is complete when:
 |---|---|---|---|---|---|
 | P2-01 | DoubleClickjacking detection | XL | **done** | P1 gate | `feat/double-clickjacking` (PR #36) |
 | P2-02 | ClickFix / fake CAPTCHA detection | L | **done** | P1 gate | `feat/clickfix-detection` (PR #37) |
-| P2-03 | Local bloom filter URL reputation | L | **mechanism merged; production profile open (AI-9/RI-04)** | P1-01 | `feat/bloom-reputation` (PR #35); current asset is a test stub, not a production reputation layer |
+| P2-03 | Local bloom filter URL reputation | L | **research-only mechanism retained; interaction-only release complete** | P1-01 | `feat/bloom-reputation` (PR #35); `research-reputation` is deterministic, unpacked-only, and non-release |
 | P2-04 | Page content fingerprinting | L | **done** | P1 gate | `feat/content-fingerprint` (PR #53) |
 | P2-05 | OAuth consent flow monitoring | L | **done** | P2-01 | `feat/oauth-monitoring` (PR #47) |
 | P2-06 | Redirect chain correlation | L | **done** | P1-04 | `feat/redirect-chains` (PR #51) |
@@ -681,15 +680,16 @@ used as a product claim.
 **Budget correction (2026-07-10):** at a 0.01% target, 150KB supports about
 64,000 entries, not 100,000, and the current package has only about 26KB of
 aggregate headroom. Separate data/package budgets and release provenance are
-required if AI-9 selects a real-filter profile.
+required before any future owner decision creates a real-filter release profile.
 
 **Files**: new `scripts/build-bloom-filter.mjs`, new `extension/src/shared/reputation.ts`,
 new `extension/public/reputation_data.bin`, `extension/src/shared/scoring.ts` or `nrs.ts`
 
-**Done when**: the selected release profile is honest. For interaction-only,
-reputation is absent/disabled and unclaimed. For real-filter, feed licensing,
-provenance, cadence, cardinality, bit density, sentinel membership, package
-budget, and measured bloom FP all pass reproducibly. No runtime network calls.
+**Done for the selected profile:** interaction-only is the release default;
+reputation is absent, disabled, and unclaimed. The deterministic fixture remains
+only in a non-release research build. Any future real-filter profile still
+requires feed licensing, provenance, cadence, cardinality, bit density,
+sentinel membership, package budget, and measured bloom FP. No runtime network calls.
 
 #### P2-04: Page content fingerprinting
 
@@ -889,9 +889,9 @@ measurable on iframe-heavy pages.
 Phase 2 is complete when:
 - [x] DoubleClickjacking detection works and has gym coverage (PR #36 merged)
 - [x] ClickFix / fake CAPTCHA detection works and has gym coverage (PR #37 merged)
-- [ ] Production reputation outcome is proven for the selected release profile.
-  PR #35 proves only reserved test-fixture membership; the current filter is a
-  stub and AI-9/RI-04 remain open.
+- [x] Selected interaction-only release profile is proven reputation-free.
+  PR #35's mechanism and reserved fixture remain available only through the
+  deterministic non-release research profile.
 - [x] Page content fingerprinting detects brand/domain mismatches (PR #53 merged: 20 brands, 30 phishing kit fingerprints, tiered BrandSignal scoring)
 - [x] Redirect chains are correlated and scored as a unit (PR #51 merged: per-hop scoring with caps, known redirector detection, 15s stale pruning)
 - [x] DOM mutations are monitored for post-load injection (PR #45 merged: MutationObserver with cookie/chat/ARIA exclusions, 100ms debounce, 50-alert cap)
@@ -919,7 +919,7 @@ Phase 2 is complete when:
 | P3-09 | Prepare and obtain independent external security review | XL / external | **blocked** | RI-01–RI-08, PM-03 | Scope preparation exists; immutable release target, outreach, review, and remediation remain |
 | P3-10 | Migrate SW ephemeral state to chrome.storage.session | M | **done** | P2-01 | `feat/sw-session-storage` (PR #63) |
 | P3-11 | jsdom/happy-dom test environment for ClickFix DOM tests | S | **done** | P2-02 | `test/jsdom-clickfix-tests` (PR #49) |
-| P3-12 | Bloom filter size monitoring in CI | S | **monitor merged; release-profile check open** | P2-03 | `infra/bloom-ci-check` (PR #48); current test-stub check does not prove a real-filter package |
+| P3-12 | Profile-aware reputation/release monitoring | S | **done for interaction-only + research fixture** | P2-03 | default build/package proves absence; research build proves fixture structure/budget and non-release status |
 
 ### Task Details
 
@@ -1046,7 +1046,7 @@ shifted (Chrome now ships local Gemini Nano scam detection — NORTHSTAR D21). T
 **Done when**: Extension is listed and installable from CWS. **NOT MET
 (2026-07-13)** — no submission, tag, or GitHub release exists. Name clearance
 (AI-19), release-integrity tasks RI-01–RI-08, pre-collection disclosure and
-consent (#455/PM-03), the release profile (AI-9), assets, fresh-install checks,
+consent (#455/PM-03), assets, fresh-install checks,
 and submission remain.
 
 #### P3-07: Release infrastructure
@@ -1142,14 +1142,15 @@ budgets, nor that the release package contains the intended filter.
 - Check the packaged asset and aggregate/chunk budgets, not an obsolete 2 MB
   standalone cap.
 - For interaction-only beta, prove reputation is absent or disabled and no
-  reputation claim leaks into copy or runtime state.
+  reputation claim leaks into copy or runtime state. The default build receipt,
+  artifact verifier, package guard, and research-profile canary now enforce this.
 
 **Files**: `.github/workflows/ci.yml`, `scripts/build-bloom-filter.mjs`,
 `scripts/check-bloom-size.mjs`, release/package scripts
 
-**Done when**: the selected release profile fails closed when its declared
-asset, provenance, cardinality, package, or runtime expectations are violated.
-If both variants are intentionally supported, verify each independently.
+**Done for current scope:** the release-eligible interaction profile fails if a
+reputation asset, manifest entry, or loader leaks in; the research profile fails
+if its declared fixture is absent/invalid and is rejected by package/release.
 
 ### Phase 3 Gate
 
@@ -1347,7 +1348,7 @@ Extension bundle size budget (12 budgets enforced by `npm run check:perf-budget`
 | oauth_monitor (shared) | < 8KB | OAuth flow monitoring shared chunk |
 | domain_profile (shared) | < 6KB | Domain profiling shared chunk |
 | ui_toast (shared) | < 5KB | Toast notification shared chunk |
-| Bloom filter (reputation_data.bin) | < 150KB legacy CI ceiling | Current artifact is a test fixture, not a threat-feed product or approved allocation. Interaction-only omits it; a real-filter profile requires a new AI-9/RI-04 data + aggregate budget. |
+| Bloom filter (reputation_data.bin) | < 150KB research ceiling | Absent from interaction-only. The research fixture is non-release; a future real-filter profile requires a new owner decision and data + aggregate budget. |
 | Total dist (all files) | < 500KB | Aggregate cap on entire dist/ directory |
 
 See `scripts/check-perf-budget.mjs` for current per-chunk enforcement. These are

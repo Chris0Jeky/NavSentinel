@@ -41,7 +41,7 @@ currently make the product more valuable. Trustworthy behavior and evidence do.
 | Distribution | 0 repository stars, forks, and watchers; no external-user evidence | Market validation has not started |
 | Work portfolio | 74 open issues, no milestones or assignees; 15 are new Horizon epics | Planning exceeds delivery capacity |
 | Human queue | Three old PRs (#273, #356, #399); #356 is red and all are far behind `main` | Human Gate-3 work is not ready to run |
-| Release size | About 474 KB of a 500 KB aggregate budget with a 52-byte reputation stub | The planned real filter cannot simply be dropped into the package |
+| Release size | Interaction-only build is about 493 KB of a 500 KB aggregate budget and contains no reputation asset | Reputation remains a separately budgeted research path, not beta coverage |
 
 The old `43/47 complete` score counted artifacts. It did not mean the product
 was validated, released, distributed, audited, or useful to a market. Product
@@ -158,11 +158,12 @@ These are active blockers, not future hardening:
    can therefore cause pixels from another active tab to be processed. The path
    has no production detection value and was not disclosed before this review.
    Excise it before beta, as standing decision D-2026-07-03-F already requires.
-3. **Reputation/package contradiction.** The current filter is a 52-byte test
-   stub. At a 0.01% bloom FP target, 150 KB supports only about 64,000 domains,
-   not the roadmap's claimed 100,000, and the current package has only about 26
-   KB of aggregate headroom. A real filter requires a deliberate data budget,
-   cardinality/cadence decision, and provenance checks.
+3. **Reputation/package boundary.** AI-9 selected interaction-only. The default
+   build now uses an inert reputation adapter, omits the asset and WAR entry,
+   and emits a deterministic release-eligible receipt. The 52-byte fixture is
+   retained only by an explicit unpacked research profile that package/release
+   checks reject. Any future real filter remains a new data-budget,
+   cardinality/cadence, licensing, provenance, and release decision.
 4. **MAIN-world compatibility.** Current frozen prototype replacements are
    known to break legitimate wrappers. PR #356 is a beta prerequisite, but it
    must first be refreshed from `main`, fixed, re-reviewed, and made green.
@@ -208,7 +209,7 @@ These are active blockers, not future hardening:
 
 ## Beta product profile
 
-The recommended unlisted beta is **interaction-only by default**:
+The selected unlisted beta is **interaction-only by default**:
 
 - include navigation intent, credential-submit protection, rollback, core
   interaction detections, explanations, and the local decision log;
@@ -216,15 +217,16 @@ The recommended unlisted beta is **interaction-only by default**:
 - default-disable unmeasured JS behavior instrumentation;
 - keep fresh installs passive until the user has seen the complete local-data
   disclosure and affirmatively enabled protection;
-- do not advertise reputation protection while the test stub is present; and
-- enable real reputation only if a reproducible feed build, provenance record,
-  update cadence, package budget, and licensing review all pass without delaying
-  the interaction beta.
+- ship no reputation runtime, asset, or claim; and
+- keep the deterministic reserved-domain fixture only in the explicit
+  unpacked-only research profile. A future real profile requires a new owner
+  decision after reproducible feed, provenance, cadence, package, and licensing
+  gates are specified.
 
-This recommendation amends the earlier assumption that a real bloom filter must
-block any beta. Reputation is commodity coverage; it should not prevent testing
-the interaction-level product. AI-16 ratified this standing default on
-2026-08-01; AI-9 retains the explicit release-profile choice.
+This amends the earlier assumption that a real bloom filter must block any beta.
+Reputation is commodity coverage; it should not prevent testing the
+interaction-level product. AI-16 ratified the standing default and Chris chose
+it explicitly under AI-9 on 2026-08-01.
 
 ### Unlisted-beta gates
 
@@ -251,7 +253,8 @@ All must be true:
   values); #455 owns implementation and verification;
 - the public privacy page contains the affirmative Chrome Web Store User Data
   Policy Limited Use declaration;
-- the release profile and all store/privacy claims match the packaged artifact;
+- the deterministic build receipt is `interaction-only`, package/release checks
+  reject every non-release profile, and all store/privacy claims match that artifact;
 - full-URL retention is minimized or explicitly justified and disclosed;
 - the product name has search, domain, CWS, and professional legal/trademark
   clearance appropriate to the intended launch;
@@ -349,8 +352,8 @@ Horizon-specific rejection gates:
 - Fix prompt action authenticity.
 - Refresh/fix #356; recreate or defer closed #273's intent; keep closed #399
   out of the beta blocker set until measurement justifies it.
-- Excise visual-sim; remove fake DNR; minimize full URLs; choose the beta
-  reputation profile.
+- Excise visual-sim; remove fake DNR; minimize full URLs; preserve the selected
+  interaction-only beta profile.
 - Complete #175/#186 bridge identity/recovery and #455 pre-collection
   disclosure/consent.
 - Clear the name, claims, privacy, assets, fresh-install, and real-Chrome gates.

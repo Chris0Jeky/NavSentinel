@@ -61,14 +61,16 @@ not be stripped with a blanket sanitizer because doing so can widen an
 allowance or break recovery; RI-06 requires field-by-field purpose and TTL
 tests that preserve security-critical host/target binding.
 
-## Build-Time Bundled Assets
+## Build-Time Assets And Profiles
 
-The current development build bundles two static data assets compiled at build time:
+The release-eligible `interaction-only` build bundles the static Public Suffix
+List snapshot used for registrable-domain extraction. It does not contain or
+load a reputation asset.
 
-- a Public Suffix List (PSL) snapshot for accurate registrable-domain extraction
-- a bloom filter mechanism whose current binary is a small reserved-domain test
-  fixture, not production threat intelligence. AI-9 decides whether beta omits
-  reputation or uses a separately reviewed real-filter release profile.
+The explicit `research-reputation` build can additionally bundle the small
+reserved-domain bloom fixture. That profile is for local unpacked experiments,
+is marked non-release in its deterministic build receipt, and is rejected by
+the package and release paths. It is not production threat intelligence.
 
 These are read-only. They are never updated at runtime and require no network calls.
 

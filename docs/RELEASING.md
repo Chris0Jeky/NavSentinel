@@ -6,6 +6,8 @@
 - Clean working tree on the `main` branch
 - `package.json`, `extension/manifest.json`, and `package-lock.json` versions aligned
 - Unreleased entries present in `CHANGELOG.md`
+- `npm run build` emits an `interaction-only` release receipt and
+  `npm run check:release-profile -- --release` passes
 
 ## Automated Release Flow
 
@@ -22,7 +24,8 @@ npm run release:dry -- patch
 npm run release -- patch   # or minor / major
 ```
 
-The script:
+The script selects the committed default profile and refuses any profile marked
+non-release. It then:
 1. Validates a clean working tree on `main`.
 2. Checks that no tag already exists for the computed version.
 3. Bumps the version in `package.json`, `extension/manifest.json`, and
@@ -43,8 +46,10 @@ git push origin main --tags
 When a `v*` tag lands on `main`, CI:
 1. Runs the full build / unit / E2E pipeline.
 2. Verifies the tag commit is an ancestor of `main`.
-3. Packages the extension zip.
-4. Creates a GitHub Release with auto-generated release notes and the zip
+3. Verifies the deterministic `interaction-only` receipt, absence of the
+   reputation asset/loader, and release eligibility.
+4. Packages the extension zip.
+5. Creates a GitHub Release with auto-generated release notes and the zip
    artifact attached.
 
 ## Convenience npm scripts
@@ -72,6 +77,10 @@ all report the same version string.
 npm run package:ext
 ```
 
+`package:ext` refuses missing, unknown, or non-release profile receipts. In
+particular, an unpacked `npm run build:research-reputation` artifact cannot be
+zipped by this command; rebuild with `npm run build` first.
+
 Expected artifact:
 
 ```text
@@ -86,3 +95,5 @@ artifacts/navsentinel-v<version>.zip
 - Unreviewed changes to `main_guard.ts`, `credential_guard.ts`, `storage.ts`,
   or `sw.ts`
 - Empty `[Unreleased]` section in `CHANGELOG.md`
+- A missing/non-release build receipt or any reputation asset in the selected
+  interaction-only package

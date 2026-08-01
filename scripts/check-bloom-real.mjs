@@ -16,13 +16,9 @@
  *
  * Usage:
  *   node scripts/check-bloom-real.mjs [path]
- * Env:
- *   NAVSENTINEL_ALLOW_TEST_BLOOM=1   downgrade the hard failure to a warning
- *                                    (documented escape hatch; do not use for a
- *                                    real public release).
- *
- * Exits 0 if the shipped filter looks like a production feed (or the override is
- * set); exits 1 if it is the placeholder, missing, or structurally invalid.
+ * Exits 0 if the inspected filter looks like a production feed; exits 1 if it
+ * is the placeholder, missing, or structurally invalid. Release eligibility is
+ * independently enforced by the selected release profile.
  */
 
 import { readFileSync } from "node:fs";
@@ -53,8 +49,6 @@ function main() {
   const filePath = process.argv[2]
     ? resolve(process.argv[2])
     : resolve(__dirname, "..", "extension", "public", "reputation_data.bin");
-  const allowTest = process.env.NAVSENTINEL_ALLOW_TEST_BLOOM === "1";
-
   let buf;
   try {
     buf = readFileSync(filePath);
@@ -83,10 +77,6 @@ function main() {
     `shipped reputation_data.bin is not a production threat-feed filter (m=${info.m} bits < ${MIN_REAL_FILTER_BITS} floor). ` +
     `Build/rebuild the real feed with 'npm run build:bloom' before releasing — the committed default is a placeholder, ` +
     `and a below-floor filter can also mean a threat feed failed at build time (issue #321 / AI-9).`;
-  if (allowTest) {
-    console.warn(`WARNING (NAVSENTINEL_ALLOW_TEST_BLOOM=1): ${msg}`);
-    return;
-  }
   console.error(`\nFAIL: ${msg}`);
   process.exit(1);
 }

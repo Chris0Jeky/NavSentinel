@@ -210,8 +210,8 @@ both source and destination belong to the same group. The list is:
 - Cloudflare, Mozilla, Yahoo, Adobe, Atlassian, JetBrains, GitHub, Reddit
 
 The exemption only applies to the `isCrossSite` flag in navigation scoring.
-It does not affect credential-risk scoring, reputation lookups, or any other
-detection layer.
+It does not affect credential-risk scoring, the optional research-profile
+reputation lookup, or any other detection layer.
 
 **Abuse resistance**: The list is explicit and auditable. An attacker
 registering `unity-phishing.com` would not match because only exact
@@ -220,7 +220,11 @@ matching is used.
 
 Note:
 - NRS is implemented as of P1-04. Navigation decisions use NRS as the primary score. CDS remains available in the debug overlay.
-- The `nrs_known_bad_domain` factor (P2-03) uses a build-time compiled bloom filter of known-bad domains. The filter is loaded at startup from a static binary asset. See `extension/src/shared/reputation.ts`.
+- The `nrs_known_bad_domain` factor (P2-03) is inactive in the selected
+  interaction-only release profile. The explicit non-release
+  `research-reputation` profile loads a static reserved-domain bloom fixture at
+  startup through the enabled runtime adapter. See
+  `extension/src/shared/reputation.ts` and `config/release-profiles.json`.
 
 ## ClickFix / Fake CAPTCHA detection
 

@@ -40,10 +40,10 @@ jobs:
       - name: Check top-sites generated data
         run: npm run check:topsites
 
-      - name: Build bloom filter (test data)
+      - name: Rebuild deterministic research reputation fixture
         run: npm run build:bloom:test
 
-      - name: Check bloom filter size (2 MB cap)
+      - name: Check research reputation fixture
         run: npm run check:bloom-size
 
       - name: Build extension
@@ -61,6 +61,12 @@ jobs:
           name: navsentinel-extension
           path: artifacts/*.zip
           if-no-files-found: error
+
+      - name: Build non-release reputation research profile
+        run: npm run build:research-reputation
+
+      - name: Check research profile performance budget
+        run: npm run check:perf-budget
 
   e2e:
     name: E2E
@@ -124,12 +130,8 @@ jobs:
 
       - run: npm run verify:versions
       - run: npm run build
+      - run: npm run check:release-profile -- --release
       - run: npm run check:perf-budget
-
-      # Fail-closed: never publish a release that bundles the placeholder bloom
-      # filter (real feed = issue #321 / AI-9). Release-only, not per-PR CI.
-      # Check the PACKAGED artifact (dist) so a build transform can't desync it.
-      - run: npm run check:bloom-real -- extension/dist/reputation_data.bin
 
       - name: Package extension
         run: npm run package:ext

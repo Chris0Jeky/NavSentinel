@@ -8,7 +8,8 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "vite build && npm run check:mv3-worker",
+    "build": "node scripts/build-extension.mjs",
+    "build:research-reputation": "node scripts/build-extension.mjs research-reputation",
     "watch": "vite build --watch",
     "verify:versions": "node scripts/check_versions.mjs",
     "lint": "eslint extension/src/ tests/",
@@ -37,6 +38,7 @@
     "build:templates": "node scripts/build-brand-templates.mjs",
     "check:bloom-size": "node scripts/check-bloom-size.mjs",
     "check:bloom-real": "node scripts/check-bloom-real.mjs",
+    "check:release-profile": "node scripts/check-release-profile.mjs",
     "release": "node scripts/release.mjs",
     "release:patch": "node scripts/release.mjs patch",
     "release:minor": "node scripts/release.mjs minor",

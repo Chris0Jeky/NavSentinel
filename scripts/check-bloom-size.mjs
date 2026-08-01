@@ -12,7 +12,7 @@
  * Exits 1 if the file is missing, structurally invalid, or exceeds the limit.
  *
  * The size limit here is the runtime SAFETY cap (MAX_REPUTATION_FILE_BYTES in
- * sw.ts); the tighter ~150 KB design budget is enforced at build time by
+ * reputation_runtime.enabled.ts); the tighter ~150 KB research budget is enforced at build time by
  * build-bloom-filter.mjs (assertWithinBudget). (#10 — whether to also gate the
  * design budget here is coupled to the real-filter sizing in #321.)
  */

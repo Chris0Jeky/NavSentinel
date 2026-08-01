@@ -55,11 +55,9 @@ The most security-sensitive code lives in:
   lowering actions to page-controlled placement and scripted activation. RI-01
   blocks beta until injected UI is warn/cancel only and extension-origin UI owns
   every proceed/allow/trust/resume decision with tab/destination binding and TTL
-- the current development build contains only a placeholder 15-domain `.example` reputation
-  fixture. The recommended interaction-only beta omits reputation and its
-  claims; if AI-9 selects a real-filter profile, feed provenance, licensing,
-  cadence, cardinality, false-positive target, and package budget must first be
-  specified and verified
+- the release-eligible interaction-only profile has no reputation runtime,
+  asset, or claim. A deterministic 15-domain `.example` fixture remains only in
+  the explicit unpacked research profile, which package and release checks reject
 - a browser extension cannot defend against a fully compromised browser or OS
 
 ## Reporting

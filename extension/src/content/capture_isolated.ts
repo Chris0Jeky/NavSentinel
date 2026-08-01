@@ -28,7 +28,12 @@ import {
   type JsBehaviorState,
 } from "../shared/js_behavior_state";
 import type { RedirectChainInfo } from "../shared/redirect_chain";
-import { initReputation, isKnownBadDomain, checkReputationViaMessage } from "../shared/reputation";
+import {
+  checkReputationViaMessage,
+  isKnownBadDestination,
+  loadReputationFilter,
+  reputationEnabled,
+} from "@navsentinel/reputation-runtime";
 import { loadBrandTemplates } from "../shared/visual_sim_loader";
 import { triggerVisualSimCheck, waitForStability, resetVisualSimState } from "./visual_sim_capture";
 import { isCurrentPageCrossOriginFromBrand } from "../shared/visual_sim_brand_domains";
@@ -223,48 +228,9 @@ function refreshDebug(): void {
   });
 }
 
-/** Maximum .bin file size we will read (2 MB + 16-byte header, matching MAX_FILTER_BITS). */
-const MAX_REPUTATION_FILE_BYTES = 2 * 1024 * 1024 + 16;
-
 /** Safe top-frame check that won't throw in sandboxed iframes without allow-same-origin. */
 function isTopFrame(): boolean {
   try { return window === window.top; } catch { return false; }
-}
-
-async function loadReputationFilter(): Promise<void> {
-  // Only the top frame loads the bloom filter locally.
-  // Child frames delegate reputation checks to the service worker via
-  // checkReputationViaMessage(), avoiding duplicate ~117KB fetches.
-  if (!isTopFrame()) return;
-
-  try {
-    const url = chrome.runtime.getURL("reputation_data.bin");
-    const response = await fetch(url);
-    if (!response.ok) {
-      console.warn("[NavSentinel] Reputation filter not found (HTTP", response.status, ")");
-      return;
-    }
-    // Pre-read size guard: reject obviously oversized responses before buffering.
-    const cl = response.headers.get("content-length");
-    if (cl && Number(cl) > MAX_REPUTATION_FILE_BYTES) {
-      console.warn("[NavSentinel] Reputation file too large (Content-Length:", cl, ")");
-      return;
-    }
-    const data = await response.arrayBuffer();
-    // Post-read size guard: Content-Length can be absent or spoofed.
-    if (data.byteLength > MAX_REPUTATION_FILE_BYTES) {
-      console.warn("[NavSentinel] Reputation file too large:", data.byteLength, "bytes");
-      return;
-    }
-    if (initReputation(data)) {
-      if (settings.debug) {
-        console.debug("[NavSentinel] Reputation bloom filter loaded:", data.byteLength, "bytes");
-      }
-    }
-  } catch (err) {
-    // Graceful degradation: reputation checks will return false
-    console.warn("[NavSentinel] Failed to load reputation filter:", err);
-  }
 }
 
 async function initSettings() {
@@ -284,8 +250,10 @@ async function initSettings() {
   setDebugEnabled(settings.debug);
   postToMain("ns-config", { mode: settings.defaultMode, debug: settings.debug });
   postToMain("ns-ping");
-  // Load reputation bloom filter in the background (non-blocking)
-  void loadReputationFilter();
+  // The default interaction-only profile resolves this import to a no-op.
+  if (isTopFrame()) {
+    void loadReputationFilter({ debug: settings.debug, warnOnFailure: true });
+  }
   // Load visual-similarity brand templates in the background (non-blocking)
   // and schedule the brand-match capture once the page settles.
   if (isTopFrame() && settings.defaultMode !== "off") {
@@ -1764,10 +1732,7 @@ window.addEventListener(
     // factor is therefore absent. The async SW check below provides a
     // best-effort late warning but cannot retroactively block.
     const destHost = parsed?.host ?? null;
-    const destDomainBad = destRegDomain
-      ? isKnownBadDomain(destRegDomain) ||
-        (destHost !== null && destHost !== destRegDomain && isKnownBadDomain(destHost))
-      : false;
+    const destDomainBad = isKnownBadDestination(destRegDomain, destHost);
     const topFrame = isTopFrame();
     const trustTier = resolveFrameNavigationTrustTier({
       isTopFrame: topFrame,
@@ -2045,7 +2010,7 @@ window.addEventListener(
     // Child frames don't load the bloom filter locally to save memory.
     // If the synchronous path allowed the navigation and we have a
     // cross-site destination, ask the SW for a deferred reputation check.
-    if (!isTopFrame() && decision === "allow" && destRegDomain && isCrossSite && mode !== "off") {
+    if (reputationEnabled && !isTopFrame() && decision === "allow" && destRegDomain && isCrossSite && mode !== "off") {
       void (async () => {
         try {
           const checks = [checkReputationViaMessage(destRegDomain)];

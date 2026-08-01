@@ -4,15 +4,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
- * Guards the web_accessible_resources list. Both runtime data files are fetched
- * from content scripts via chrome.runtime.getURL(); Chrome denies the load
+ * Guards the default interaction-only web_accessible_resources list. Chrome denies the load
  * ("Resources must be listed in the web_accessible_resources manifest key")
  * unless they are declared here.
  *
  * - brand_templates.json: visual_sim_loader.ts (content-script fetch)
- * - reputation_data.bin:  capture_isolated.ts loadReputationFilter() (top-frame
- *   content-script fetch). Omitting it silently disabled top-frame reputation
- *   checks and printed a "Failed to fetch" error on every page load.
+ * - reputation_data.bin is deliberately absent. The explicit non-release
+ *   research profile adds it during the build and verifies that artifact.
  */
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const manifestPath = path.resolve(__dirname, "..", "extension", "manifest.json");
@@ -31,7 +29,7 @@ describe("manifest web_accessible_resources", () => {
     expect(manifest.web_accessible_resources!.length).toBeGreaterThan(0);
   });
 
-  it.each(["brand_templates.json", "reputation_data.bin"])(
+  it.each(["brand_templates.json"])(
     "exposes %s to content scripts under <all_urls>",
     (resource) => {
       const manifest = loadManifest();
@@ -42,4 +40,10 @@ describe("manifest web_accessible_resources", () => {
       expect(entry!.matches).toContain("<all_urls>");
     }
   );
+
+  it("does not expose the reputation fixture in the default manifest", () => {
+    const manifest = loadManifest();
+    const resources = manifest.web_accessible_resources!.flatMap((war) => war.resources ?? []);
+    expect(resources).not.toContain("reputation_data.bin");
+  });
 });

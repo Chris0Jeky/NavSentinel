@@ -104,6 +104,12 @@ Remove visual-sim and fake DNR; default-disable unmeasured JS behavior; omit or
 disable reputation and all reputation claims unless AI-9 authorizes a fully
 specified real-filter profile.
 
+**Explicit selection 2026-08-01 (AI-9):** Chris chose interaction-only. The
+release-eligible default now omits the reputation runtime, asset, and claim.
+The reserved-domain fixture is available only through an explicit deterministic
+research profile that is marked non-release and rejected by package/release
+checks. A real-filter release profile requires a new explicit decision.
+
 **Amends D-2026-07-03-G:** a real bloom filter is no longer an unconditional
 unlisted-beta gate. Its current package/cardinality/provenance model is
 contradictory, and commodity reputation should not block testing the intended

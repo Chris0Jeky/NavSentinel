@@ -51,6 +51,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dead exports removed, public API surface reduced (#93)
 
 ### Changed
+- The default beta build is now the release-eligible interaction-only profile:
+  no reputation runtime or asset ships. An explicit deterministic
+  `research-reputation` build remains unpacked-only and cannot be packaged.
 - Options page mode controls: `<select>` elements replaced with segmented button controls
 - E2E tests updated to use aria-pressed attribute verification for segmented controls
 - All UI surfaces now use shared design tokens (CSS custom properties)
