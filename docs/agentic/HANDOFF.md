@@ -45,8 +45,9 @@ an action or warning. AI-18 is obsolete because #499 removed project hooks.
 
 - Successful CI is regression evidence, not open-web efficacy, compatibility,
   competitor superiority, or an external security audit.
-- On this Windows host, two unchanged default E2E popup cases fail while the
-  exact current-main Ubuntu run is green; #498 owns the platform discrepancy.
+- On this Windows host, RW-06 failed at two different timing points across the
+  full run and an isolated rerun; the other #498 popup case passed. Exact-head
+  PR #509 Ubuntu E2E is green, and #498 owns the broader platform discrepancy.
 - Real Chrome, CWS submission, real-feed building, external audit, and legal
   name clearance have not been performed in this session.
 
