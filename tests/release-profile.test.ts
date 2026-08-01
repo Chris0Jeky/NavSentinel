@@ -86,6 +86,22 @@ describe("release profiles", () => {
     expect(() => inspectBuiltReleaseProfile(dist)).toThrow(/reputation asset loader/i);
   });
 
+  it.each([
+    ["Safe Browsing comparison", "<p>Claims Safe\nBrowsing coverage.</p>"],
+    ["known-bad domain protection", "<p>Blocks known-\nbad domains.</p>"],
+    ["known malicious domain protection", "<p>Blocks known malicious\ndomains.</p>"],
+    ["reputation protection", "<p>Includes reputation protection.</p>"],
+    ["browser-visibility superiority", "<p>Browsers can’t see this.</p>"],
+    ["extension superiority", "<p>Catches what other extensions\nmiss.</p>"],
+    ["exclusive extension capability", "<p>The only browser\nextension that protects you.</p>"],
+  ])("rejects %s claims from interaction-only UI", (label, claim) => {
+    const dist = makeDist("interaction-only");
+    const onboardingDir = path.join(dist, "src", "onboarding");
+    fs.mkdirSync(onboardingDir, { recursive: true });
+    fs.writeFileSync(path.join(onboardingDir, "onboarding.html"), `${claim}\n`);
+    expect(() => inspectBuiltReleaseProfile(dist)).toThrow(`prohibited ${label} claim`);
+  });
+
   it("accepts the explicit research artifact but rejects it for release packaging", () => {
     const dist = makeDist("research-reputation");
     fs.writeFileSync(path.join(dist, "reputation_data.bin"), makeValidTestBloom());

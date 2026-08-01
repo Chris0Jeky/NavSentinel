@@ -202,6 +202,14 @@ guards did not regress. Only Chris can record this complete.
 
 **Human-only guide:**
 
+> **2026-08-01 checkpoint:** step 2 on superseded head `001c15c` proved that
+> Chrome loaded NavSentinel 0.4.0 and registered its service worker, but the
+> onboarding page exposed reputation and Safe Browsing claims that conflict
+> with the interaction-only profile. The follow-up removes those claims and
+> makes the built-artifact profile check reject their return. Reload the latest
+> current-head artifact before continuing; the earlier screenshots do not clear
+> the final current-head Gate-3.
+
 1. Ask the agent to confirm PR #509's exact current head, green `Build / Unit`
    and `E2E` checks, clean review state, and a freshly built default
    `extension/dist`. Stop if any of those facts are not current.

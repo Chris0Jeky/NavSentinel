@@ -27,12 +27,22 @@ function manifestResources(manifest) {
   );
 }
 
-function listJavaScriptFiles(dir) {
+const PROHIBITED_INTERACTION_ONLY_UI_CLAIMS = [
+  { pattern: /\bSafe\s+Browsing\b/i, label: "Safe Browsing comparison" },
+  { pattern: /\bknown[-\s]+bad\s+domains?\b/i, label: "known-bad domain protection" },
+  { pattern: /\bknown\s+malicious\s+domains?\b/i, label: "known malicious domain protection" },
+  { pattern: /\breputation\b/i, label: "reputation protection" },
+  { pattern: /browsers?\s+(?:cannot|can['’]t)\s+see/i, label: "browser-visibility superiority" },
+  { pattern: /other\s+extensions\s+miss/i, label: "extension superiority" },
+  { pattern: /only\s+browser\s+extension/i, label: "exclusive extension capability" },
+];
+
+function listFilesWithExtension(dir, extension) {
   const files = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const fullPath = path.join(dir, entry.name);
-    if (entry.isDirectory()) files.push(...listJavaScriptFiles(fullPath));
-    else if (entry.isFile() && entry.name.endsWith(".js")) files.push(fullPath);
+    if (entry.isDirectory()) files.push(...listFilesWithExtension(fullPath, extension));
+    else if (entry.isFile() && entry.name.endsWith(extension)) files.push(fullPath);
   }
   return files;
 }
@@ -69,11 +79,21 @@ export function inspectBuiltReleaseProfile(
     if (hasReputationAsset || exposesReputation) {
       throw new Error("interaction-only profile must omit reputation_data.bin from dist and manifest");
     }
-    for (const filePath of listJavaScriptFiles(distDir)) {
+    for (const filePath of listFilesWithExtension(distDir, ".js")) {
       if (fs.readFileSync(filePath, "utf8").includes("reputation_data.bin")) {
         throw new Error(
           `interaction-only bundle still contains a reputation asset loader: ${path.relative(distDir, filePath)}`,
         );
+      }
+    }
+    for (const filePath of listFilesWithExtension(distDir, ".html")) {
+      const html = fs.readFileSync(filePath, "utf8");
+      for (const claim of PROHIBITED_INTERACTION_ONLY_UI_CLAIMS) {
+        if (claim.pattern.test(html)) {
+          throw new Error(
+            `interaction-only UI contains a prohibited ${claim.label} claim: ${path.relative(distDir, filePath)}`,
+          );
+        }
       }
     }
   }

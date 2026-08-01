@@ -7,10 +7,13 @@ Historical cycle detail remains in `ORCHESTRATOR.md` and is not required reading
 ## Current development lanes
 
 - **PR #509** implements AI-9's interaction-only release profile. It is ready
-  for review and intentionally unmerged until the current-head **AI-25** headed
-  Chrome Gate-3 passes. The default artifact has no reputation runtime, asset,
-  or manifest exposure; the deterministic reputation fixture is available only
-  through a non-release unpacked research profile.
+  for review and intentionally unmerged until the latest-head **AI-25** headed
+  Chrome Gate-3 passes. A step-2 attempt on superseded head `001c15c` proved
+  Chrome registration but exposed stale reputation and Safe Browsing claims in
+  onboarding. The follow-up removes those claims and adds a built-artifact
+  guard. The default artifact has no reputation runtime, asset, manifest
+  exposure, or static HTML claim; the deterministic reputation fixture is
+  available only through a non-release unpacked research profile.
 
 ## Human queue
 
@@ -46,13 +49,15 @@ an action or warning. AI-18 is obsolete because #499 removed project hooks.
 - Successful CI is regression evidence, not open-web efficacy, compatibility,
   competitor superiority, or an external security audit.
 - On this Windows host, RW-06 failed at two different timing points across the
-  full run and an isolated rerun; the other #498 popup case passed. Exact-head
-  PR #509 Ubuntu E2E is green, and #498 owns the broader platform discrepancy.
+  full run and an isolated rerun; the other #498 popup case passed. #498 owns
+  the broader platform discrepancy. Read hosted PR checks live: every #509 head
+  must be green before Gate-3 resumes or the PR merges.
 - Real Chrome, CWS submission, real-feed building, external audit, and legal
   name clearance have not been performed in this session.
 
 ## Next sequence
 
-Continue the guided human queue at AI-25. Do not merge PR #509 until that
-current-head Gate-3 passes or Chris explicitly waives it. After #509 resolves,
-continue at AI-20 and refresh other issue state before choosing an agent slice.
+Continue the guided human queue at AI-25 by reloading the freshly built latest
+head, then resume at step 3. Do not merge PR #509 until that current-head Gate-3
+passes or Chris explicitly waives it. After #509 resolves, continue at AI-20
+and refresh other issue state before choosing an agent slice.

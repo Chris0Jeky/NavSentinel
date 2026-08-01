@@ -15,8 +15,19 @@ describe("onboarding page", () => {
 
   it("contains the welcome hero section", () => {
     expect(html).toContain("NavSentinel");
-    expect(html).toContain("Safe Browsing");
+    expect(html).toContain("local interaction guard");
+    expect(html).toContain("complementing built-in browser protection");
     expect(html).toContain("hero");
+  });
+
+  it("describes the interaction-only profile without reputation or superiority claims", () => {
+    expect(html).toMatch(/suspicious\s+interaction context/);
+    expect(html).toContain("Suspicious redirect behavior detected");
+    expect(html).not.toMatch(/Safe\s+Browsing/i);
+    expect(html).not.toMatch(/known[-\s]+bad\s+domains?/i);
+    expect(html).not.toMatch(/known\s+malicious\s+domains?/i);
+    expect(html).not.toMatch(/\breputation\b/i);
+    expect(html).not.toMatch(/browsers?\s+(?:cannot|can['’]t)\s+see/i);
   });
 
   it("contains the how-it-works section with three feature cards", () => {
