@@ -1,6 +1,6 @@
 # NavSentinel Project Roadmap
 
-*Created 2026-04-09. Truth refresh 2026-07-10; live/status sync 2026-07-31.*
+*Created 2026-04-09. Truth refresh 2026-07-10; live/status sync 2026-08-01.*
 
 This is the execution roadmap. [`Product_Strategy.md`](Product_Strategy.md) owns
 the product thesis, portfolio boundaries, and evidence gates; GitHub issues own
@@ -31,7 +31,7 @@ readiness is tracked only by the outcome gates below.
 | Gate | State | Required next move |
 |---|---|---|
 | Release integrity | **Blocked** | RI-01 extension-origin decision authority (#356/#464/#466 merged 2026-07-25 — the browser-held sub-slices are done, but no production extension-origin prompt/action flow ships yet); excise visual-sim (#424); remove fake DNR; purpose-specific data minimization (RI-06 slice 1 merged as #468; residue in #474); beta-off JS behavior; #175/#186 bridge identity/recovery |
-| Release profile | **Decision required** | AI-9/AI-16 choose the recommended interaction-only beta or a reproducible, budgeted real reputation build |
+| Release profile | **Decision required** | AI-16 ratified interaction-only as the standing default; AI-9 still chooses that explicit profile or a reproducible, budgeted real reputation build |
 | Brand/store | **Blocked** | AI-19 name clearance; #455 pre-collection disclosure/consent; one canonical claims-verified listing; assets and fresh-install checks |
 | Detection validation | **Open** | #417 methodology, #416/#426 rerun, confidence-aware reporting |
 | Comparative value | **Open** | #418 against current Chrome and relevant Chrome extensions; Edge/Opera remain contextual until supported |
@@ -90,7 +90,7 @@ maintainer chooses disclosure/ownership.
 | RI-02 | P0 beta blocker | Excise visual-sim capture, templates, scoring hook, WAR, tests, and state | Agent + Gate-3 | #424 | No viewport capture path or placeholder asset remains; #374 is optional coordination, not a prerequisite |
 | RI-03 | P0 beta blocker | ~~Refresh/fix #356~~ **done: #356 is refreshed, reviewed, thread-clean and green on `f8028c9`**; **still open: recreate or defer #273** | One step remains: the agent step to recreate-or-defer #273 (#356 merged on
 2026-07-25 with its manual gate waived, so the AI-13 Gate-3 step no longer exists) (AI-8, still BLOCKED). RI-03 is **not** complete when AI-13 passes | #273/#356; #399 stays deferred | Replacement human guides point only to current green branches; #399 remains outside beta blockers until its measurement methodology is ready |
-| RI-04 | P0 product decision | Implement the selected interaction-only or real-reputation profile | Chris + agent | #321 / AI-9 / AI-16 | Release script, tag CI, manifest/WAR, runtime initialization, package checks/budgets, tests, provenance/cadence (if real), and every claim agree for the selected profile; verify both only if both are intentionally retained |
+| RI-04 | P0 product decision | Implement the selected interaction-only or real-reputation profile | Chris + agent | #321 / AI-9 | Release script, tag CI, manifest/WAR, runtime initialization, package checks/budgets, tests, provenance/cadence (if real), and every claim agree for the selected profile; verify both only if both are intentionally retained |
 | RI-05 | P0 beta blocker | Remove fake DNR feature surface and unused permissions | Agent + Gate-3 | CWS checklist; redesign #242/#243 later | No test rules/toggle/DNR permission in beta manifest |
 | RI-06 | P0 privacy blocker | Inventory every store; minimize by purpose; add complete reset | Agent + privacy review | Extend #176 or seed one scoped follow-up | Persistent records use least-identifying data; exact session URLs remain only for correctness with tab binding/TTL; rollback/OAuth/allow tests pass; all behavioral stores have one clear control and accurate export/disclosure |
 | RI-07 | P0 beta blocker | Add an explicit beta capability flag that leaves JS behavior instrumentation off | Agent + Gate-3 | #127 or a scoped release-profile issue | Fresh beta defaults/migration/UI/runtime agree; fetch/XHR/beacon/password-value prototypes are not wrapped; core navigation remains active; compatibility/perf evidence required to enable |
@@ -137,15 +137,16 @@ maintainer chooses disclosure/ownership.
    fund only Decision Journal + recovery guidance; otherwise change segment/
    position or stop before advanced architecture.
 
-Last updated: 2026-07-13
+Last updated: 2026-08-01
 
 ---
 
 ## Decision Log
 
-Historical D01–D20 decisions are retained below. July-10 amendments are the
-working posture pending AI-16 ratification; `docs/agentic/DECISIONS.md` has
-higher authority when wording conflicts.
+Historical D01–D20 decisions are retained below. Chris ratified the July 3,
+July 10, and July 13 standing decisions on 2026-08-01; the explicit release
+profile remains AI-9. `docs/agentic/DECISIONS.md` has higher authority when
+wording conflicts.
 
 > **Cross-cutting process/posture decisions (2026-07-03, D-2026-07-03-A..H)** live in [`docs/agentic/DECISIONS.md`](agentic/DECISIONS.md) — ship/measure direction, priority ladder, browser-surface re-tiering + WIP cap, visual-sim excision, distribution sequence. D21-D26 (North-Star) are in [`NORTHSTAR_ROADMAP.md`](NORTHSTAR_ROADMAP.md).
 

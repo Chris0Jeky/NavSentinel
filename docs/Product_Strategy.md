@@ -223,7 +223,8 @@ The recommended unlisted beta is **interaction-only by default**:
 
 This recommendation amends the earlier assumption that a real bloom filter must
 block any beta. Reputation is commodity coverage; it should not prevent testing
-the interaction-level product. AI-9/AI-16 retain the human product decision.
+the interaction-level product. AI-16 ratified this standing default on
+2026-08-01; AI-9 retains the explicit release-profile choice.
 
 ### Unlisted-beta gates
 

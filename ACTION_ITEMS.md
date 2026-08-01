@@ -7,9 +7,12 @@
 **Purpose:** the running list of things only *you* (Chris) can do, with enough
 context to resume by stable ID.
 
-**Last updated:** 2026-07-31 — owner decision #499 retires the repository-local
-agent harness, making AI-18 obsolete. The three browser checks waived on
-2026-07-25 remain represented by the single optional **AI-24** confirmation.
+**Last updated:** 2026-08-01 — Chris ratified the July 3, July 10, and July 13
+standing decisions under AI-16, including headed Chrome as the primary Gate-3
+once operational with manual spot-checks retained. The guided cursor advances
+to AI-9. Owner decision #499 retired the repository-local agent harness, making
+AI-18 obsolete. The three browser checks waived on 2026-07-25 remain
+represented by the single optional **AI-24** confirmation.
 Product thesis:
 `docs/Product_Strategy.md`. Corrective
 program: `docs/Project_Roadmap.md`. Standing decisions:
@@ -71,8 +74,9 @@ changes do not change shipped product state.
   identity/recovery and #455 pre-collection disclosure/consent now block beta.
 - **Release/profile blockers:** the 52-byte reputation test filter plus the
   current ~474/500KB package makes the old "150KB/100K domains" plan
-  impossible as written. AI-9/AI-16 must choose the recommended interaction-
-  only beta or a fully specified real-filter profile.
+  impossible as written. AI-16 ratified interaction-only as the standing
+  default; AI-9 still must choose the explicit interaction-only or fully
+  specified real-filter release profile.
 - **Brand blocker:** the exact name `NavSentinel` is already used by an active
   GNSS security product. AI-19 requires clearance or an early rename before
   CWS submission; this is a risk flag, not a legal conclusion.
@@ -103,9 +107,9 @@ changes do not change shipped product state.
 
 ## Action items
 
-**Guided resolution cursor:** `AI-16` (`Resume at: AI-16`; the next
-conversational label is `q-1`). Current ready order is AI-16 -> AI-9 -> AI-20 ->
-AI-17 -> AI-19 -> AI-24 -> AI-23 (low priority housekeeping, last).
+**Guided resolution cursor:** `AI-9` (`Resume at: AI-9`; the next
+conversational label is `q-2`). Current ready order is AI-9 -> AI-20 -> AI-17 ->
+AI-19 -> AI-24 -> AI-23 (low priority housekeeping, last).
 **AI-13, AI-21 and AI-22 are resolved** — their
 PRs (#356, #464, #466) merged on 2026-07-25 after Chris chose to clear the
 browser-surface gate by automated equivalent rather than a manual pass; their
@@ -185,20 +189,6 @@ provide one current headed checklist. Then split human work into a browser
 session, any network/feed session, an overnight measurement run, and a short
 result review. Read `docs/Product_Strategy.md` first. This item becomes
 actionable only when the preflight handoff explicitly says so.
-
-**🆕 OPEN: AI-16 — Ratify or amend the standing product/process decisions.**
-The July 10 posture review and July 13 merge-gate corrections extend the July 3
-direction: narrow unlisted beta,
-interaction-only by default unless real reputation is fully specified, release
-integrity before human Gate-3, frozen Horizon/North-Star work, evidence before
-claims, and one post-beta visible bet. **Guide:** read the verdict, Beta Product
-Profile, and Portfolio sections of `docs/Product_Strategy.md`, then skim
-`docs/agentic/DECISIONS.md`. **Recommended reply:** `AI-16 ratify the July 3,
-July 10, and July 13 decisions, including headed Chrome as the primary Gate-3
-once operational, with manual spot-checks retained.` Otherwise name only the
-amendments.
-AI-9's release-profile choice and AI-19's name choice still require explicit
-answers; the reversible prioritization is already the working posture.
 
 **🆕 OPEN: AI-17 — Enable GitHub branch protection on `main`.** Live
 verification still returns `404 Branch not protected`. Owner decision #499
@@ -593,6 +583,11 @@ opens, implement FF-02 against web-ext, then reassess FF-03/FF-04.
 
 ## Completed log
 
+- **AI-16 — July standing product/process decisions · RATIFIED · 2026-08-01.**
+  Chris ratified the July 3, July 10, and July 13 decisions, including headed
+  Chrome as the primary Gate-3 once operational with manual spot-checks
+  retained. AI-9 remains the separate release-profile choice and AI-19 remains
+  the separate name decision. The guided cursor advanced to AI-9 (`q-2`).
 - **AI-12 — Top-site FP relief + D1 (#354) · DONE · 2026-06-23.** Chris manually confirmed the relief works on LinkedIn ("seemed to work fine now") = his measure/Gate-3 (the full `measure:fp` needs headed Chromium + live Tranco, which the sandbox can't run). **#354 merged into `main`** (`c4426cf`) on green CI (Build/Unit + E2E, including the main-merge head): `nrs.ts getTierAdjustedBlockThreshold` now relieves TOP_SITE + CDS-only (benign-structural whitelist) by `NRS_TOP_SITE_CDS_RELIEF` (+20, tunable); top-site trust list grew 24→42 with safe `includeSubdomains`. This is the lever #234/P5-A3 promised but never shipped.
 - **AI-11 — Toast count-pill (#353) · DONE · 2026-06-23.** Chris approved the merge; **#353 merged into `main`** (`d0e0412`). Repeated blocked-popup/redirect prompts coalesce into one count pill after 3-in-8s (expandable to the latest prompt's Allow once / Always allow). Included an e2e fix (RW-19 now accepts the coalesced pill while keeping the no-popup-opened security assertion). Green CI (Build/Unit + E2E).
 - **AI-10 — Gate-3 + merge the SPA-breakage fix · DONE · 2026-06-23.** Chris manually verified #352 in Chrome ("working fine now"); **#352 merged into `main`** (`#347` History.pushState/replaceState de-hardened to writable via `softPatchProto` — fixes the claude.ai grey screen; `#348` `reputation_data.bin` added to `web_accessible_resources` — fixes the per-page console error + re-enables top-frame reputation). Green CI (Build/Unit + E2E). Remaining session PRs: **#353** (toast pill, AI-11) and **#354** (top-site FP relief + D1, AI-12, gated on `measure:fp`).
