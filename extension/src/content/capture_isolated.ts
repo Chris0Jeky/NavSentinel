@@ -1664,7 +1664,7 @@ window.addEventListener(
 
     const isKeyboardActivation = e.isTrusted && e.detail === 0;
     const downForClick =
-      e.isTrusted && !isKeyboardActivation && lastDown && performance.now() - lastDown.ts < 1500
+      !isKeyboardActivation && lastDown?.trusted === true && performance.now() - lastDown.ts < 1500
         ? lastDown
         : null;
 
@@ -1703,7 +1703,7 @@ window.addEventListener(
             meta: e.metaKey
           };
 
-    const explicitNewTab = !!ctx.explicitNewTabIntent;
+    const explicitNewTab = e.isTrusted && !!ctx.explicitNewTabIntent;
     const anchor = findAnchorFromEvent(e);
     const anchorTarget = (anchor?.target ?? "").toLowerCase();
     const isBlankAnchor = !!(anchor && anchorTarget === "_blank");

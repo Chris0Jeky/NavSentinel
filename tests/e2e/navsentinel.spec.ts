@@ -1055,14 +1055,23 @@ test("Level 6 blocks programmatic click new tab @regression", async () => {
 
     try {
       const page = await context.newPage();
-      await page.goto(`${baseUrl}/level6-programmatic-click.html`, {
-        waitUntil: "domcontentloaded",
-        timeout: 20_000
-      });
+      const clickCases = [
+        { label: "plain trusted click", modifiers: [] },
+        { label: "Ctrl-modified trusted click", modifiers: ["Control"] },
+      ] as const;
 
-      await waitForNavSentinelBridge(page);
-      await page.click("#real");
-      await waitForToastText(page, "Blocked new tab", 3000);
+      for (const clickCase of clickCases) {
+        await page.goto(`${baseUrl}/level6-programmatic-click.html`, {
+          waitUntil: "domcontentloaded",
+          timeout: 20_000
+        });
+
+        await waitForNavSentinelBridge(page);
+        const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
+        await page.click("#real", { modifiers: [...clickCase.modifiers] });
+        expect(await popupPromise, `${clickCase.label} must not open the hidden link`).toBeNull();
+        await waitForToastText(page, "Blocked new tab", 3000);
+      }
     } finally {
       await context.close();
     }
