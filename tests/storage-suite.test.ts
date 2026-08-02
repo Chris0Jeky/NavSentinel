@@ -111,13 +111,13 @@ describe("suite storage and allowlist migration", () => {
     const { chrome } = createChromeMock({
       "sentinelsuite:event_log_v1": [
         // Legacy entry persisted BEFORE the append-path change: a full URL with a
-        // reset token in the query and an OAuth code in the fragment.
+        // reset token in the pathname, query, and an OAuth code in the fragment.
         {
           id: "legacy-1",
           ts: 100,
           kind: "cred_submit_prompt",
           site: "accounts.example.com",
-          url: "https://accounts.example.com/reset?token=super-secret#code=abc123",
+          url: "https://accounts.example.com/reset-password/short-lived-code?token=super-secret#code=abc123",
         },
         // Entry with no url must be exported untouched.
         { id: "no-url-1", ts: 101, kind: "nav_click_block", site: "x.com" },
@@ -135,8 +135,8 @@ describe("suite storage and allowlist migration", () => {
     const exported = await exportAll();
 
     const byId = Object.fromEntries(exported.eventLog.map((e) => [e.id, e]));
-    // Legacy full URL reduced to origin+path on the way out.
-    expect(byId["legacy-1"]!.url).toBe("https://accounts.example.com/reset");
+    // Legacy full URL reduced to an origin plus sanitized path on the way out.
+    expect(byId["legacy-1"]!.url).toBe("https://accounts.example.com/reset-password/[redacted]");
     // Host-level field untouched; the no-url entry still carries no url.
     expect(byId["legacy-1"]!.site).toBe("accounts.example.com");
     expect("url" in byId["no-url-1"]!).toBe(false);
@@ -155,13 +155,19 @@ describe("suite storage and allowlist migration", () => {
           ts: 102,
           kind: "cred_submit_prompt",
           site: "accounts.example.com",
-          url: "https://accounts.example.com/reset?token=super-secret#code=abc123",
+          url: "https://accounts.example.com/reset-password/short-lived-code?token=super-secret#code=abc123",
         },
         {
           id: "opaque-import-1",
           ts: 103,
           kind: "nav_click_block",
           url: "mailto:alice+private@example.com",
+        },
+        {
+          id: "relative-import-1",
+          ts: 104,
+          kind: "nav_click_block",
+          url: "/oauth/callback/short-auth-code?state=ignored#fragment",
         },
       ],
     });
@@ -172,13 +178,19 @@ describe("suite storage and allowlist migration", () => {
         ts: 102,
         kind: "cred_submit_prompt",
         site: "accounts.example.com",
-        url: "https://accounts.example.com/reset",
+        url: "https://accounts.example.com/reset-password/[redacted]",
       },
       {
         id: "opaque-import-1",
         ts: 103,
         kind: "nav_click_block",
         url: "mailto:",
+      },
+      {
+        id: "relative-import-1",
+        ts: 104,
+        kind: "nav_click_block",
+        url: "/oauth/callback/[redacted]",
       },
     ]);
   });
@@ -654,8 +666,10 @@ describe("suite storage and allowlist migration", () => {
       eventLog: [{ id: "e-1", ts: 1, kind: "nav_click_block" }],
     });
 
-    // One write for all core sections (no promptOutcomes -> no separate delegate).
-    expect(setSpy).toHaveBeenCalledTimes(1);
+    // One atomic write for all core sections, followed by the serialized
+    // adaptive-reset barrier. The latter makes a concurrent startup migration
+    // finish before an import without prompt outcomes declares the cache empty.
+    expect(setSpy).toHaveBeenCalledTimes(2);
     const written = setSpy.mock.calls[0]![0] as Record<string, unknown>;
     expect(Object.keys(written).sort()).toEqual(
       [
@@ -666,7 +680,9 @@ describe("suite storage and allowlist migration", () => {
         "sentinelsuite:trusted_domains_v1",
       ].sort()
     );
-    // Adaptive scores reset folded into the same atomic write (no promptOutcomes).
+    expect(setSpy.mock.calls[1]![0]).toEqual({ "sentinelsuite:adaptive_scores_v1": {} });
+    // Adaptive scores reset is in the core write and repeated as the queued
+    // ordering barrier (no promptOutcomes).
     expect(store["sentinelsuite:adaptive_scores_v1"]).toEqual({});
     expect(store["sentinelsuite:trusted_domains_v1"]).toEqual(["example.com"]);
   });

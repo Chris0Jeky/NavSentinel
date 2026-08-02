@@ -4,6 +4,7 @@ import {
   PROMPT_OUTCOMES_KEY,
   minimizeEventUrl,
 } from "../extension/src/shared/storage";
+import { ADAPTIVE_SCORES_KEY } from "../extension/src/shared/adaptive_scoring";
 
 type Store = Record<string, unknown>;
 
@@ -84,8 +85,8 @@ const CONTENT_SCRIPT_SENDER = {
 
 // RI-06: event-log URLs are a review/tuning corpus, not a correctness store, and
 // the pages most likely logged (credential/submit) carry reset/magic-link/session/
-// OAuth tokens in the query or fragment. minimizeEventUrl reduces a URL to
-// origin+path so those tokens are never persisted or exported.
+// OAuth tokens in the query, fragment, or path. minimizeEventUrl reduces a URL
+// to origin+sanitized-path so those tokens are never persisted or exported.
 describe("minimizeEventUrl (RI-06)", () => {
   it("drops both query and fragment, keeping origin+path", () => {
     expect(minimizeEventUrl("https://x.com/a/b?token=secret#frag")).toBe("https://x.com/a/b");
@@ -103,6 +104,66 @@ describe("minimizeEventUrl (RI-06)", () => {
     expect(
       minimizeEventUrl("https://mail.example.com/verify#access_token=eyJhbGciOi&expires=3600")
     ).toBe("https://mail.example.com/verify");
+  });
+
+  it("redacts token-shaped HTTP(S) pathname segments", () => {
+    const jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature";
+
+    expect(minimizeEventUrl(`https://x.com/session/${jwt}`)).toBe(
+      "https://x.com/session/[redacted]"
+    );
+    expect(minimizeEventUrl("https://x.com/objects/550e8400-e29b-41d4-a716-446655440000")).toBe(
+      "https://x.com/objects/[redacted]"
+    );
+    expect(minimizeEventUrl("https://x.com/blob/Aa1Bb2Cc3Dd4Ee5Ff6Gg7Hh8Ii9Jj0Kk")).toBe(
+      "https://x.com/blob/[redacted]"
+    );
+  });
+
+  it("redacts every value after sensitive pathname markers", () => {
+    expect(minimizeEventUrl("https://accounts.example/reset-password/short-lived-code")).toBe(
+      "https://accounts.example/reset-password/[redacted]"
+    );
+    expect(minimizeEventUrl("https://accounts.example/session/short-session-code")).toBe(
+      "https://accounts.example/session/[redacted]"
+    );
+    expect(minimizeEventUrl("https://accounts.example/magic/short-magic-code")).toBe(
+      "https://accounts.example/magic/[redacted]"
+    );
+    expect(minimizeEventUrl("https://accounts.example/auth/short-auth-code")).toBe(
+      "https://accounts.example/auth/[redacted]"
+    );
+    expect(minimizeEventUrl("https://accounts.example/confirm/short-confirmation-code")).toBe(
+      "https://accounts.example/confirm/[redacted]"
+    );
+    expect(minimizeEventUrl("https://accounts.example/oauth/callback/short-auth-code")).toBe(
+      "https://accounts.example/oauth/callback/[redacted]"
+    );
+    expect(minimizeEventUrl("https://accounts.example/reset/verify/short-code")).toBe(
+      "https://accounts.example/reset/verify/[redacted]"
+    );
+    expect(
+      minimizeEventUrl("https://accounts.example/reset/m5g6z3a/generic-token-abc123")
+    ).toBe("https://accounts.example/reset/[redacted]/[redacted]");
+    expect(
+      minimizeEventUrl(
+        "https://x.com/objects/550e8400%2De29b%2D41d4%2Da716%2D446655440000"
+      )
+    ).toBe("https://x.com/objects/[redacted]");
+  });
+
+  it("applies the same path policy to non-parseable relative legacy values", () => {
+    expect(minimizeEventUrl("/oauth/callback/short-auth-code?state=ignored#fragment")).toBe(
+      "/oauth/callback/[redacted]"
+    );
+  });
+
+  it("keeps ordinary numeric IDs and readable slugs and is idempotent", () => {
+    const url = "https://x.com/articles/2026/release-notes-v2";
+    const minimized = minimizeEventUrl(url);
+
+    expect(minimized).toBe(url);
+    expect(minimizeEventUrl(minimized)).toBe(minimized);
   });
 
   it("strips userinfo (credentials) from the authority as a side benefit", () => {
@@ -188,7 +249,7 @@ describe("appendEvent", () => {
           id: "legacy-1",
           ts: 1,
           kind: "cred_submit_prompt",
-          url: "https://accounts.example/reset?token=secret#code=abc",
+          url: "https://accounts.example/reset-password/short-lived-code?token=secret#code=abc",
         },
       ],
     });
@@ -212,7 +273,7 @@ describe("appendEvent", () => {
         id: "legacy-1",
         ts: 1,
         kind: "cred_submit_prompt",
-        url: "https://accounts.example/reset",
+        url: "https://accounts.example/reset-password/[redacted]",
       },
       { id: "new-1", ts: 2, kind: "nav_click_block", url: "data:" },
     ]);
@@ -626,7 +687,7 @@ describe("appendEvent", () => {
     expect(log[0]!.extra).toEqual({ tabId: 42 });
   });
 
-  it("persists only origin+path, dropping query+fragment tokens at the persist path (RI-06)", async () => {
+  it("persists a sanitized path, dropping path/query/fragment tokens (RI-06)", async () => {
     const { chrome, store } = createChromeMock();
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
@@ -634,13 +695,13 @@ describe("appendEvent", () => {
     await appendEvent({
       kind: "cred_submit_prompt",
       site: "accounts.example.com",
-      // A reset/magic-link page: the sensitive token rides in the query + fragment.
-      url: "https://accounts.example.com/reset?token=super-secret#code=abc123",
+      // A reset/magic-link page: the sensitive token can ride in the path, query, or fragment.
+      url: "https://accounts.example.com/reset-password/short-lived-code?token=super-secret#code=abc123",
     });
 
     const log = store[EVENT_LOG_KEY] as Array<Record<string, unknown>>;
     expect(log).toHaveLength(1);
-    expect(log[0]!.url).toBe("https://accounts.example.com/reset");
+    expect(log[0]!.url).toBe("https://accounts.example.com/reset-password/[redacted]");
     // Host-level fields are untouched.
     expect(log[0]!.site).toBe("accounts.example.com");
   });
@@ -917,6 +978,24 @@ describe("appendPromptOutcome", () => {
     const log = store[PROMPT_OUTCOMES_KEY] as Array<Record<string, unknown>>;
     expect(log[0]!.destDomain).toBe("evil.com");
     expect(log[0]!.reasons).toEqual(["nrs_known_bad_domain"]);
+  });
+
+  it("keeps subdomains and IP literals while removing ports", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { appendPromptOutcome } = await import("../extension/src/shared/storage");
+    await appendPromptOutcome({
+      domain: "Login.Example.com:8443",
+      destDomain: "[2001:db8::1]:443",
+      type: "nav",
+      score: 85,
+      outcome: "block",
+    });
+
+    const log = store[PROMPT_OUTCOMES_KEY] as Array<Record<string, unknown>>;
+    expect(log[0]!.domain).toBe("login.example.com");
+    expect(log[0]!.destDomain).toBe("2001:db8::1");
   });
 
   it("omits optional fields when not provided", async () => {
@@ -1705,6 +1784,7 @@ describe("event-log control messages — sender authorization", () => {
           "sentinelsuite:adaptive_scores_v1": {},
         },
       },
+      { type: "ns-prompt-outcome-reset-adaptive" },
     ]);
   });
 });
@@ -1740,6 +1820,75 @@ describe("getPromptOutcomes and clearPromptOutcomes", () => {
     expect(await getPromptOutcomes()).toEqual([
       { id: "valid", ts: 2, domain: "valid.example", type: "nav", score: 80, outcome: "block" },
     ]);
+  });
+
+  it("returns and exports only host-only declared fields from legacy outcomes", async () => {
+    const legacy = {
+      id: "legacy-url",
+      ts: 2,
+      domain: "https://user:pass@source.example/reset/short-lived-code?token=secret#fragment",
+      destDomain: "https://dest.example/invite/another-secret",
+      type: "nav" as const,
+      score: 80,
+      outcome: "block" as const,
+      reasons: ["nrs_known_bad_domain"],
+      leakedValue: "must-not-survive",
+    };
+    const { chrome } = createChromeMock({ [PROMPT_OUTCOMES_KEY]: [legacy] });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { exportAll, getPromptOutcomes } = await import("../extension/src/shared/storage");
+    const expected = {
+      id: "legacy-url",
+      ts: 2,
+      domain: "source.example",
+      destDomain: "dest.example",
+      type: "nav" as const,
+      score: 80,
+      outcome: "block" as const,
+      reasons: ["nrs_known_bad_domain"],
+    };
+
+    expect(await getPromptOutcomes()).toEqual([expected]);
+    expect((await exportAll()).promptOutcomes).toEqual([expected]);
+  });
+
+  it("drops authority-less URL paths from legacy reads, exports, and migration", async () => {
+    const pathTokens = [
+      "/bare-route-token",
+      "\\bare-backslash-token",
+      "host\tbare-token",
+      "https:///eyJhbGciOiJIUzI1NiJ9.sig",
+      "///short-lived-route-token",
+      "https:////another-route-token",
+      "https://\\route-token",
+      "https:\\route-token",
+      "https://\tTOKEN",
+      "https://\nTOKEN",
+      "https://\rTOKEN",
+      "//\tTOKEN",
+      "mailto://opaque-recipient-token",
+      "javascript://opaque-route-token",
+      "data://opaque-token",
+      "custom://opaque-token",
+    ];
+    const outcomes = pathTokens.map((domain, index) => ({
+      id: `path-token-${index}`,
+      ts: index + 1,
+      domain,
+      type: "nav" as const,
+      score: 20,
+      outcome: "allow" as const,
+    }));
+    const { chrome, store } = createChromeMock({ [PROMPT_OUTCOMES_KEY]: outcomes });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { exportAll, getPromptOutcomes, migrateStoredPromptOutcomes } = await import("../extension/src/shared/storage");
+    expect(await getPromptOutcomes()).toEqual([]);
+    expect((await exportAll()).promptOutcomes).toEqual([]);
+
+    await migrateStoredPromptOutcomes();
+    expect(store[PROMPT_OUTCOMES_KEY]).toEqual([]);
   });
 
   it("clears outcomes", async () => {
@@ -1813,6 +1962,21 @@ describe("prompt outcome storage — sender authorization", () => {
     expect(store[PROMPT_OUTCOMES_KEY]).toEqual([seedOutcome]);
   });
 
+  it("rejects an adaptive reset from a content-script sender", async () => {
+    const { chrome, store } = createChromeMock({
+      [ADAPTIVE_SCORES_KEY]: { "seed.example": { domain: "seed.example", adjustment: 5 } },
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const { handlePromptOutcomeStorageMessage } = await import("../extension/src/shared/storage");
+
+    const res = await handlePromptOutcomeStorageMessage(
+      { type: "ns-prompt-outcome-reset-adaptive" },
+      CONTENT_SCRIPT_SENDER,
+    );
+    expect(res).toMatchObject({ ok: false, code: "unauthorized" });
+    expect(store[ADAPTIVE_SCORES_KEY]).toHaveProperty("seed.example");
+  });
+
   it("allows a clear from a trusted options-page sender", async () => {
     const { chrome, store } = createChromeMock({ [PROMPT_OUTCOMES_KEY]: [seedOutcome] });
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
@@ -1824,6 +1988,20 @@ describe("prompt outcome storage — sender authorization", () => {
     );
     expect(res.ok).toBe(true);
     expect(store[PROMPT_OUTCOMES_KEY]).toEqual([]);
+  });
+
+  it("allows an adaptive reset from a trusted options-page sender", async () => {
+    const { chrome, store } = createChromeMock({
+      [ADAPTIVE_SCORES_KEY]: { "seed.example": { domain: "seed.example", adjustment: 5 } },
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const { handlePromptOutcomeStorageMessage } = await import("../extension/src/shared/storage");
+
+    await expect(handlePromptOutcomeStorageMessage(
+      { type: "ns-prompt-outcome-reset-adaptive" },
+      OPTIONS_SENDER,
+    )).resolves.toEqual({ ok: true });
+    expect(store[ADAPTIVE_SCORES_KEY]).toEqual({});
   });
 
   it("allows an append from a content-script sender", async () => {
@@ -1841,6 +2019,228 @@ describe("prompt outcome storage — sender authorization", () => {
     expect(res.ok).toBe(true);
     const ids = (store[PROMPT_OUTCOMES_KEY] as Array<{ id: string }>).map((e) => e.id);
     expect(ids).toContain("cs-1");
+  });
+
+  it("canonicalizes a content-script append before persistence", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const { handlePromptOutcomeStorageMessage } = await import("../extension/src/shared/storage");
+    const crafted = {
+      type: "ns-prompt-outcome-append",
+      entry: {
+        id: "cs-url",
+        ts: 5,
+        domain: "https://user:pass@source.example/reset/short-lived-code?token=secret",
+        destDomain: "https://dest.example/invite/another-secret",
+        type: "nav",
+        score: 20,
+        outcome: "allow",
+        reasons: ["nrs_known_bad_domain"],
+        leakedValue: "must-not-survive",
+      },
+    } as unknown as Parameters<typeof handlePromptOutcomeStorageMessage>[0];
+
+    await expect(handlePromptOutcomeStorageMessage(crafted, CONTENT_SCRIPT_SENDER)).resolves.toEqual({ ok: true });
+    expect(store[PROMPT_OUTCOMES_KEY]).toEqual([{
+      id: "cs-url",
+      ts: 5,
+      domain: "source.example",
+      destDomain: "dest.example",
+      type: "nav",
+      score: 20,
+      outcome: "allow",
+      reasons: ["nrs_known_bad_domain"],
+    }]);
+  });
+
+  it.each([
+    "https://",
+    "/bare-route-token",
+    "\\bare-backslash-token",
+    "host\tbare-token",
+    "https:///eyJhbGciOiJIUzI1NiJ9.sig",
+    "///short-lived-route-token",
+    "https:////another-route-token",
+    "https://\\route-token",
+    "https:\\route-token",
+    "https://\tTOKEN",
+    "https://\nTOKEN",
+    "https://\rTOKEN",
+    "//\tTOKEN",
+    "mailto://opaque-recipient-token",
+    "javascript://opaque-route-token",
+    "data://opaque-token",
+    "custom://opaque-token",
+  ])("rejects malformed required append domain %s without writing", async (domain) => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const { handlePromptOutcomeStorageMessage } = await import("../extension/src/shared/storage");
+
+    await expect(handlePromptOutcomeStorageMessage({
+      type: "ns-prompt-outcome-append",
+      entry: { id: "bad-domain", ts: 5, domain, type: "nav", score: 20, outcome: "allow" },
+    }, CONTENT_SCRIPT_SENDER)).resolves.toEqual({ ok: false, error: "Invalid prompt-outcome domain" });
+    expect(store[PROMPT_OUTCOMES_KEY]).toBeUndefined();
+  });
+});
+
+describe("prompt outcome migration (RI-06)", () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("migrates legacy rows and derived scores without losing a queued append", async () => {
+    const legacyUrl = "https://user:pass@source.example/reset/short-lived-code?token=secret";
+    const legacy = [0, 1, 2].map((i) => ({
+      id: `legacy-${i}`,
+      ts: i + 1,
+      domain: legacyUrl,
+      destDomain: "https://dest.example/invite/another-secret",
+      type: "nav" as const,
+      score: 20,
+      outcome: "allow" as const,
+      reasons: ["nrs_known_bad_domain"],
+      leakedValue: `must-not-survive-${i}`,
+    }));
+    const { chrome, store } = createChromeMock({
+      [PROMPT_OUTCOMES_KEY]: [
+        ...legacy,
+        { id: "bad-domain", ts: 4, domain: "https://", type: "nav", score: 20, outcome: "allow" },
+      ],
+      [ADAPTIVE_SCORES_KEY]: {
+        [legacyUrl]: { domain: legacyUrl, adjustment: 15, allowCount: 3, blockCount: 0, lastUpdated: 1 },
+      },
+    });
+    let setCount = 0;
+    const writeBatches: string[][] = [];
+    const originalSet = chrome.storage.local.set;
+    chrome.storage.local.set = async (next) => {
+      setCount++;
+      const keys: string[] = [];
+      if (ADAPTIVE_SCORES_KEY in next) keys.push("adaptive scores");
+      if (PROMPT_OUTCOMES_KEY in next) keys.push("prompt outcomes");
+      writeBatches.push(keys);
+      await originalSet(next);
+    };
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const storage = await import("../extension/src/shared/storage");
+    await Promise.all([
+      storage.migrateStoredPromptOutcomes(),
+      storage.handlePromptOutcomeStorageMessage({
+        type: "ns-prompt-outcome-append",
+        entry: { id: "queued-new", ts: 5, domain: "new.example", type: "cred", score: 30, outcome: "trust" },
+      }, CONTENT_SCRIPT_SENDER),
+    ]);
+
+    expect(store[PROMPT_OUTCOMES_KEY]).toEqual([
+      ...legacy.map(({ leakedValue: _leakedValue, ...entry }) => ({
+        ...entry,
+        domain: "source.example",
+        destDomain: "dest.example",
+      })),
+      { id: "queued-new", ts: 5, domain: "new.example", type: "cred", score: 30, outcome: "trust" },
+    ]);
+    expect(store[ADAPTIVE_SCORES_KEY]).toMatchObject({
+      "source.example": { domain: "source.example", adjustment: 15, allowCount: 3, blockCount: 0 },
+    });
+    expect(store[ADAPTIVE_SCORES_KEY]).not.toHaveProperty(legacyUrl);
+    // Source rows and their direct derivative land in one storage mutation.
+    expect(writeBatches).toEqual([
+      ["adaptive scores", "prompt outcomes"],
+      ["adaptive scores", "prompt outcomes"],
+    ]);
+
+    const writesAfterMigration = setCount;
+    await storage.migrateStoredPromptOutcomes();
+    expect(setCount).toBe(writesAfterMigration);
+  });
+
+  it("keeps an import's adaptive reset after a paused legacy migration", async () => {
+    const legacyUrl = "https://user:pass@source.example/reset/short-lived-code?token=secret";
+    const legacy = [0, 1, 2].map((i) => ({
+      id: `legacy-${i}`,
+      ts: i + 1,
+      domain: legacyUrl,
+      type: "nav" as const,
+      score: 20,
+      outcome: "allow" as const,
+    }));
+    const { chrome, store } = createChromeMock({ [PROMPT_OUTCOMES_KEY]: legacy });
+    const originalGet = chrome.storage.local.get;
+    const originalSet = chrome.storage.local.set;
+    let releaseSettings!: () => void;
+    let enteredMigration!: () => void;
+    let wroteCoreReset!: () => void;
+    const settingsGate = new Promise<void>((resolve) => { releaseSettings = resolve; });
+    const migrationEntered = new Promise<void>((resolve) => { enteredMigration = resolve; });
+    const coreResetWritten = new Promise<void>((resolve) => { wroteCoreReset = resolve; });
+    chrome.storage.local.get = async (keys) => {
+      const wantsSettings = keys === SETTINGS_KEY || (Array.isArray(keys) && keys.includes(SETTINGS_KEY));
+      if (wantsSettings) {
+        enteredMigration();
+        await settingsGate;
+      }
+      return originalGet(keys);
+    };
+    chrome.storage.local.set = async (next) => {
+      if (SETTINGS_KEY in next && ADAPTIVE_SCORES_KEY in next) wroteCoreReset();
+      await originalSet(next);
+    };
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const storage = await import("../extension/src/shared/storage");
+    const migration = storage.migrateStoredPromptOutcomes();
+    await migrationEntered;
+    const imported = storage.importAll({ settings: { logLimit: 300 } });
+    await coreResetWritten;
+    releaseSettings();
+    await Promise.all([migration, imported]);
+
+    expect((store[PROMPT_OUTCOMES_KEY] as Array<{ domain: string }>).map((entry) => entry.domain)).toEqual([
+      "source.example",
+      "source.example",
+      "source.example",
+    ]);
+    expect(store[ADAPTIVE_SCORES_KEY]).toEqual({});
+  });
+
+  it("recomputes export-only adaptive scores from canonical outcomes", async () => {
+    const legacyUrl = "https://user:pass@source.example/reset/short-lived-code?token=secret";
+    const legacy = [0, 1, 2].map((i) => ({
+      id: `legacy-${i}`,
+      ts: i + 1,
+      domain: legacyUrl,
+      type: "nav" as const,
+      score: 20,
+      outcome: "allow" as const,
+    }));
+    const { chrome, store } = createChromeMock({
+      [PROMPT_OUTCOMES_KEY]: legacy,
+      [ADAPTIVE_SCORES_KEY]: {
+        [legacyUrl]: { domain: legacyUrl, adjustment: 15, allowCount: 3, blockCount: 0, lastUpdated: 1 },
+      },
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { exportAll } = await import("../extension/src/shared/storage");
+    const exported = await exportAll();
+
+    expect(exported.promptOutcomes.map((entry) => entry.domain)).toEqual([
+      "source.example",
+      "source.example",
+      "source.example",
+    ]);
+    expect(exported.adaptiveScores).toMatchObject({
+      "source.example": { domain: "source.example", adjustment: 15, allowCount: 3, blockCount: 0 },
+    });
+    expect(exported.adaptiveScores).not.toHaveProperty(legacyUrl);
+    // Export is a read-only protection layer; it need not race or mutate a
+    // worker-owned legacy value to avoid exposing it.
+    expect(store[ADAPTIVE_SCORES_KEY]).toHaveProperty(legacyUrl);
   });
 });
 

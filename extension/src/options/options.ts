@@ -8,6 +8,7 @@ import {
   addTrustedDomainWithResult,
   appendEvent,
   clearEventLog,
+  clearAdaptiveScores,
   clearPromptOutcomes,
   clearTrustedDomains,
   exportAll,
@@ -21,7 +22,6 @@ import {
   updateSuiteSettings,
   type PromptOutcomeEntry
 } from "../shared/storage";
-import { clearAdaptiveScores } from "../shared/adaptive_scoring";
 import {
   clearAllowlist,
   getAllowlist,

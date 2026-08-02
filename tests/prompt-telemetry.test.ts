@@ -149,6 +149,43 @@ describe("prompt telemetry storage", () => {
     expect(outcomes[0]!.domain).toBe("bar.com");
   });
 
+  it("importAll canonicalizes outcome hosts and removes undeclared backup fields", async () => {
+    const { chrome } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { exportAll, importAll } = await import("../extension/src/shared/storage");
+    await importAll({
+      promptOutcomes: [{
+        id: "backup-url",
+        ts: 200,
+        domain: "https://user:pass@source.example/reset/short-lived-code?token=secret",
+        destDomain: "https://dest.example/invite/another-secret",
+        type: "nav",
+        score: 60,
+        outcome: "trust",
+        reasons: ["nrs_known_bad_domain"],
+        nrsFactors: ["dest_mismatch"],
+        thresholdUsed: 70,
+        elementContext: { viewport: { w: 800, h: 600 }, input: "pointer", top: { tag: "FORM" } },
+        leakedValue: "must-not-survive",
+      }],
+    });
+
+    expect((await exportAll()).promptOutcomes).toEqual([{
+      id: "backup-url",
+      ts: 200,
+      domain: "source.example",
+      destDomain: "dest.example",
+      type: "nav",
+      score: 60,
+      outcome: "trust",
+      reasons: ["nrs_known_bad_domain"],
+      nrsFactors: ["dest_mismatch"],
+      thresholdUsed: 70,
+      elementContext: { viewport: { w: 800, h: 600 }, input: "pointer", top: { tag: "FORM" } },
+    }]);
+  });
+
   it("importAll without promptOutcomes does not clear existing data", async () => {
     const key = "sentinelsuite:prompt_outcomes_v1";
     const { chrome } = createChromeMock({

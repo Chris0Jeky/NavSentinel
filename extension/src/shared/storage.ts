@@ -3,8 +3,8 @@ import { ALLOWLIST_KEY, getAllowlist, normalizeAllowlist, type Allowlist } from 
 import { getRegistrableDomain, hostForUrl, normalizeHost, safeUrlParse } from "./domain";
 import {
   ADAPTIVE_SCORES_KEY,
-  getAdaptiveScores,
-  updateAdaptiveScores,
+  clearAdaptiveScoresDirect,
+  computeAdaptiveScoreMap,
   type DomainAdjustment,
 } from "./adaptive_scoring";
 import { NRS_BLOCK_THRESHOLD, NRS_STRICT_BLOCK_THRESHOLD } from "./nrs";
@@ -591,20 +591,100 @@ async function setEventLogResetCutoff(ts = Date.now()): Promise<void> {
   }
 }
 
+const REDACTED_PATH_SEGMENT = "[redacted]";
+const SENSITIVE_PATH_MARKERS = new Set([
+  "reset",
+  "reset-password",
+  "password-reset",
+  "invite",
+  "invitation",
+  "share",
+  "verify",
+  "verification",
+  "confirm",
+  "confirmation",
+  "magic",
+  "magic-link",
+  "auth",
+  "session",
+  "sessions",
+  "oauth",
+  "oauth2",
+  "authorize",
+  "authorization",
+  "callback",
+  "code",
+  "token",
+  "access-token",
+  "id-token",
+]);
+const UUID_PATH_SEGMENT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const JWT_PATH_SEGMENT = /^eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+const HEX_TOKEN_PATH_SEGMENT = /^[0-9a-f]{32,}$/i;
+const BASE64URL_TOKEN_PATH_SEGMENT = /^[A-Za-z0-9_-]{32,}={0,2}$/;
+
+function decodePathSegment(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
+function isLikelyOpaquePathSegment(segment: string): boolean {
+  const decoded = decodePathSegment(segment);
+  if (!decoded || decoded === REDACTED_PATH_SEGMENT) return false;
+  if (
+    UUID_PATH_SEGMENT.test(decoded) ||
+    JWT_PATH_SEGMENT.test(decoded) ||
+    HEX_TOKEN_PATH_SEGMENT.test(decoded)
+  ) {
+    return true;
+  }
+  if (!BASE64URL_TOKEN_PATH_SEGMENT.test(decoded)) return false;
+
+  // Require upper, lower, and numeric characters for generic base64url-like
+  // values. This keeps readable long slugs and numeric resource IDs useful in
+  // the review corpus while still catching common opaque capability tokens.
+  return /[A-Z]/.test(decoded) && /[a-z]/.test(decoded) && /\d/.test(decoded);
+}
+
+function redactSensitivePathSegments(pathname: string): string {
+  const segments = pathname.split("/");
+  let redactSensitiveRouteTail = false;
+
+  return segments
+    .map((segment) => {
+      if (!segment) return segment;
+      const marker = decodePathSegment(segment).toLowerCase().replace(/_/g, "-");
+      if (SENSITIVE_PATH_MARKERS.has(marker)) {
+        // Sensitive routes can carry more than one capability component (for
+        // example, /reset/<uid>/<token>). Keep route labels useful, but redact
+        // every value segment that follows the first sensitive route marker.
+        redactSensitiveRouteTail = true;
+        return segment;
+      }
+      if (redactSensitiveRouteTail) return REDACTED_PATH_SEGMENT;
+      return isLikelyOpaquePathSegment(segment) ? REDACTED_PATH_SEGMENT : segment;
+    })
+    .join("/");
+}
+
 /**
- * Reduce an event-log URL to `origin + pathname`, dropping the query string and
- * fragment (RI-06). The event log is a REVIEW/tuning corpus, not a correctness
- * store, and the pages most likely logged (credential/submit) are exactly those
+ * Reduce an event-log URL to `origin + sanitized pathname`, dropping the query
+ * string and fragment and redacting path-borne tokens (RI-06). The event log is
+ * a REVIEW/tuning corpus, not a correctness store, and the pages most likely logged
+ * (credential/submit) are exactly those
  * that carry reset/magic-link/session/OAuth tokens in the query or fragment — so
  * exact URLs are both unnecessary and a privacy liability here. No consumer reads
  * the query/fragment of an event-log url (options/popup render site/destHost/
- * score/reasons only; the gauge matches on registrable domain), so origin+path
- * suffices everywhere. Host-level fields (site/destHost) are already minimal and
- * left untouched.
+ * score/reasons only; the gauge matches on registrable domain), so origin plus
+ * a sanitized path suffices everywhere. Host-level fields (site/destHost) are
+ * already minimal and left untouched.
  *
  * Robust by contract: undefined/empty pass through unchanged; a parseable URL is
  * reduced via the URL API (which also strips any userinfo in the authority); a
- * non-parseable value (or an opaque/unknown origin) falls back to a pure string
+ * non-parseable value (or an opaque/unknown origin) falls back to a sanitized
  * strip from the first `?` or `#` so this NEVER throws and never emits a "null…"
  * origin.
  */
@@ -615,7 +695,7 @@ export function minimizeEventUrl(rawUrl: string | undefined): string | undefined
   const parsed = safeUrlParse(rawUrl);
   if (parsed) {
     if (parsed.protocol === "http:" || parsed.protocol === "https:") {
-      return parsed.origin + parsed.pathname;
+      return parsed.origin + redactSensitivePathSegments(parsed.pathname);
     }
     // Opaque and local schemes can carry a document, address, local path, or
     // script before any ?/# delimiter. The event log only needs to identify
@@ -624,9 +704,10 @@ export function minimizeEventUrl(rawUrl: string | undefined): string | undefined
   }
   const scheme = /^([A-Za-z][A-Za-z0-9+.-]*):/.exec(rawUrl);
   if (scheme) return `${scheme[1]!.toLowerCase()}:`;
-  // Non-parseable input: strip from the first query/fragment delimiter without
-  // reformatting the rest, so a display-only string stays intact and never throws.
-  return stripUrlQueryAndFragment(rawUrl);
+  // Non-parseable input can be a relative URL supplied by an imported legacy
+  // backup. Strip the query/fragment and apply the same path-boundary policy
+  // without reformatting the rest, so this remains safe and never throws.
+  return redactSensitivePathSegments(stripUrlQueryAndFragment(rawUrl));
 }
 
 /** Rewrite pre-RI-06 event URLs through the service worker's serialized write lane. */
@@ -911,9 +992,77 @@ export async function getPromptOutcomes(): Promise<PromptOutcomeEntry[]> {
   return boundPromptOutcomeLog(log);
 }
 
+/**
+ * Reduce a prompt-outcome domain value to the hostname needed by scoring and
+ * smart defaults. A stored outcome must never retain a route, query, fragment,
+ * or URL userinfo from a caller or imported backup.
+ */
+function normalizePromptOutcomeHost(value: unknown): string {
+  if (typeof value !== "string") return "";
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  // Domains and URLs with embedded control whitespace are malformed. Reject
+  // rather than relying on URL's normalization, which can join surrounding
+  // text into a hostname.
+  if (/\s/.test(trimmed) || hasPromptOutcomeControlCharacter(trimmed)) return "";
+
+  // A bare route or query/fragment is not an authority. Do this before the
+  // fallback parser because WHATWG URL can reinterpret `/token` as the host
+  // in `https:///token`.
+  if (/^[\\/?#]/.test(trimmed) && !trimmed.startsWith("//")) return "";
+
+  if (trimmed.startsWith("//")) {
+    if (!hasValidPromptOutcomeUrlAuthority(trimmed.slice(2))) return "";
+    const parsed = safeUrlParse(`https:${trimmed}`);
+    return parsed?.protocol === "https:" && parsed.hostname ? normalizeHost(parsed.hostname) : "";
+  }
+  if (trimmed.includes("://")) {
+    const schemeSeparator = trimmed.indexOf("://");
+    if (!hasValidPromptOutcomeUrlAuthority(trimmed.slice(schemeSeparator + 3))) return "";
+    const parsed = safeUrlParse(trimmed);
+    return parsed?.hostname && (parsed.protocol === "http:" || parsed.protocol === "https:")
+      ? normalizeHost(parsed.hostname)
+      : "";
+  }
+
+  // A parsed non-authority URI (for example mailto:) is not a host value. Do
+  // not reinterpret its opaque payload as a URL authority. The host:port form
+  // is the one accepted bare-authority exception.
+  const isBareHostPort = /^[^/:?#\s]+:\d+(?:[/?#].*)?$/.test(trimmed);
+  if ((trimmed.includes("@") || /^[A-Za-z][A-Za-z0-9+.-]*:/.test(trimmed)) && !isBareHostPort) {
+    return "";
+  }
+
+  // Bare hostnames, host:port values, and IPv6 literals are accepted for
+  // backward compatibility with existing producers and backups. A value with
+  // an explicit URI scheme but no authority is intentionally rejected above.
+  const authority = safeUrlParse(`https://${hostForUrl(trimmed)}`);
+  return authority?.hostname ? normalizeHost(authority.hostname) : "";
+}
+
+/**
+ * Validate raw text that is meant to be a URL authority before allowing
+ * WHATWG URL to parse it. URL's special-scheme parser treats slash/backslash
+ * and ASCII control whitespace as delimiters, which can otherwise turn a
+ * malformed route token into the parsed hostname.
+ */
+function hasValidPromptOutcomeUrlAuthority(value: string): boolean {
+  const authorityEnd = value.search(/[/?#]/);
+  const authority = authorityEnd === -1 ? value : value.slice(0, authorityEnd);
+  return authority.length > 0 && !/[\\\s]/.test(authority) && !hasPromptOutcomeControlCharacter(authority);
+}
+
+function hasPromptOutcomeControlCharacter(value: string): boolean {
+  return Array.from(value).some((character) => {
+    const code = character.charCodeAt(0);
+    return code < 0x20 || code === 0x7f;
+  });
+}
+
 export type PromptOutcomeStorageMessage =
   | { type: "ns-prompt-outcome-append"; entry: PromptOutcomeEntry }
   | { type: "ns-prompt-outcome-clear" }
+  | { type: "ns-prompt-outcome-reset-adaptive" }
   | { type: "ns-prompt-outcome-replace"; outcomes: PromptOutcomeEntry[] };
 
 type PromptOutcomeStorageResponse =
@@ -1072,7 +1221,14 @@ function isPromptOutcomeEntry(value: unknown): value is PromptOutcomeEntry {
 }
 
 function normalizePromptOutcomeLog(value: unknown): PromptOutcomeEntry[] {
-  return Array.isArray(value) ? value.filter(isPromptOutcomeEntry) : [];
+  if (!Array.isArray(value)) return [];
+  const normalized: PromptOutcomeEntry[] = [];
+  for (const entry of value) {
+    if (!isPromptOutcomeEntry(entry)) continue;
+    const record = buildPromptOutcomeRecord(entry);
+    if (record) normalized.push(record);
+  }
+  return normalized;
 }
 
 function boundPromptOutcomeLog(value: unknown): PromptOutcomeEntry[] {
@@ -1083,6 +1239,7 @@ export function isPromptOutcomeStorageMessage(message: unknown): message is Prom
   if (!message || typeof message !== "object") return false;
   const candidate = message as Record<string, unknown>;
   if (candidate.type === "ns-prompt-outcome-clear") return true;
+  if (candidate.type === "ns-prompt-outcome-reset-adaptive") return true;
   if (candidate.type === "ns-prompt-outcome-append") return isPromptOutcomeEntry(candidate.entry);
   if (candidate.type === "ns-prompt-outcome-replace") return Array.isArray(candidate.outcomes);
   return false;
@@ -1282,11 +1439,19 @@ async function persistPromptOutcome(entry: PromptOutcomeEntry): Promise<void> {
     }
     mergedEntries.delete(entry.id);
     const next = [...mergedEntries.values(), entry].slice(-PROMPT_OUTCOMES_LIMIT);
+    const settings = await getNavSettings();
+    const threshold = settings.defaultMode === "strict" ? NRS_STRICT_BLOCK_THRESHOLD : NRS_BLOCK_THRESHOLD;
     requiredEntries.clear();
     for (const item of next) requiredEntries.set(item.id, item);
     const expectedLength = next.length;
     const expectedIds = new Set(next.map((item) => item.id));
-    await chrome.storage.local.set({ [PROMPT_OUTCOMES_KEY]: next });
+    // A prompt outcome and the adaptive cache derived from the exact same
+    // snapshot must land together. Content scripts never write the cache
+    // directly, so the worker queue makes a later clear/import reset win.
+    await chrome.storage.local.set({
+      [PROMPT_OUTCOMES_KEY]: next,
+      [ADAPTIVE_SCORES_KEY]: computeAdaptiveScoreMap(next, threshold),
+    });
 
     const verify = await chrome.storage.local.get(PROMPT_OUTCOMES_KEY);
     const verifyLog = normalizePromptOutcomeLog(verify[PROMPT_OUTCOMES_KEY]);
@@ -1324,15 +1489,18 @@ function appendPromptOutcomeDirect(entry: PromptOutcomeEntry): Promise<void> {
 // written, filtered out on verify, then silently dropped after burning retries.
 function buildPromptOutcomeRecord(
   partial: Omit<PromptOutcomeEntry, "id" | "ts"> & { id?: string; ts?: number }
-): PromptOutcomeEntry {
+): PromptOutcomeEntry | undefined {
+  const domain = normalizePromptOutcomeHost(partial.domain);
+  if (!domain) return undefined;
+  const destDomain = normalizePromptOutcomeHost(partial.destDomain);
   const reasons = sanitizeCodeList(partial.reasons);
   const nrsFactors = sanitizeCodeList(partial.nrsFactors);
   const elementContext = sanitizeClickContext(partial.elementContext);
   return {
     id: partial.id ?? makeId(),
     ts: Number.isFinite(partial.ts) ? (partial.ts as number) : Date.now(),
-    domain: partial.domain,
-    ...(partial.destDomain !== undefined ? { destDomain: partial.destDomain } : {}),
+    domain,
+    ...(destDomain ? { destDomain } : {}),
     type: partial.type,
     score: Number.isFinite(partial.score) ? partial.score : 0,
     outcome: partial.outcome,
@@ -1350,6 +1518,10 @@ export function appendPromptOutcome(
   partial: Omit<PromptOutcomeEntry, "id" | "ts"> & { id?: string; ts?: number }
 ): Promise<void> {
   const entry = buildPromptOutcomeRecord(partial);
+  // Prompt outcomes are best-effort adaptive-scoring input. A malformed
+  // caller-supplied domain is dropped rather than stored verbatim or allowed to
+  // surface in exports.
+  if (!entry) return Promise.resolve();
   if (shouldDelegatePromptOutcomeWrite()) {
     return delegatePromptOutcomeWrite({ type: "ns-prompt-outcome-append", entry });
   }
@@ -1375,21 +1547,38 @@ export function clearPromptOutcomes(): Promise<void> {
   return clearPromptOutcomesDirect();
 }
 
+function clearPromptOutcomeAdaptiveScoresDirect(): Promise<void> {
+  return queuePromptOutcomeWrite(async () => {
+    await clearAdaptiveScoresDirect();
+  });
+}
+
+/**
+ * Clear the direct derivative of prompt outcomes through the same worker lane
+ * as outcome migrations and replacements. This intentionally leaves every
+ * other data store alone; it is not a unified clear-all control.
+ */
+export function clearAdaptiveScores(): Promise<void> {
+  if (shouldDelegatePromptOutcomeWrite()) {
+    return delegatePromptOutcomeWrite({ type: "ns-prompt-outcome-reset-adaptive" }, { throwOnExhaustion: true });
+  }
+  return clearPromptOutcomeAdaptiveScoresDirect();
+}
+
 async function replacePromptOutcomesDirect(outcomes: PromptOutcomeEntry[]): Promise<void> {
-  // Re-sanitize enriched replay fields on import: validation (isPromptOutcomeEntry)
-  // is intentionally permissive on optional fields, so an imported backup could
-  // otherwise carry an unbounded/malformed elementContext or oversized
-  // nrsFactors that never passed through appendPromptOutcome. Routing through
-  // buildPromptOutcomeRecord enforces the same privacy + size guarantees.
-  const importedOutcomes = boundPromptOutcomeLog(outcomes).map(buildPromptOutcomeRecord);
+  // Rebuild every imported row so backups retain only declared bounded replay
+  // fields and host-only source/destination identifiers.
+  const importedOutcomes = boundPromptOutcomeLog(outcomes);
   await queuePromptOutcomeWrite(async () => {
     await hydratePromptOutcomeResetCutoff();
     const resetTs = Date.now();
     await setPromptOutcomeResetCutoff(resetTs);
-    await chrome.storage.local.set({ [PROMPT_OUTCOMES_KEY]: importedOutcomes });
     const settings = await getNavSettings();
     const threshold = settings.defaultMode === "strict" ? NRS_STRICT_BLOCK_THRESHOLD : NRS_BLOCK_THRESHOLD;
-    await updateAdaptiveScores(importedOutcomes, threshold);
+    await chrome.storage.local.set({
+      [PROMPT_OUTCOMES_KEY]: importedOutcomes,
+      [ADAPTIVE_SCORES_KEY]: computeAdaptiveScoreMap(importedOutcomes, threshold),
+    });
   });
 }
 
@@ -1411,6 +1600,40 @@ async function replacePromptOutcomes(outcomes: PromptOutcomeEntry[]): Promise<vo
     );
   }
   return replacePromptOutcomesDirect(boundedOutcomes);
+}
+
+function promptOutcomeLogMatchesStored(value: unknown[], normalized: PromptOutcomeEntry[]): boolean {
+  try {
+    return JSON.stringify(value) === JSON.stringify(normalized);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Rewrite legacy prompt outcomes through the serialized worker lane. This
+ * removes obsolete URL-shaped domain values and undeclared fields from both
+ * on-disk storage and the adaptive-score derivative.
+ */
+export function migrateStoredPromptOutcomes(): Promise<void> {
+  return queuePromptOutcomeWrite(async () => {
+    const res = await chrome.storage.local.get(PROMPT_OUTCOMES_KEY);
+    const stored = res[PROMPT_OUTCOMES_KEY];
+    if (!Array.isArray(stored)) return;
+
+    const normalized = boundPromptOutcomeLog(stored);
+    if (promptOutcomeLogMatchesStored(stored, normalized)) return;
+
+    // One write keeps the canonical source rows and their direct derivative in
+    // sync. The queued reset-adaptive control runs after migration, so a user
+    // clear/import cannot have stale scores resurrected by this startup task.
+    const settings = await getNavSettings();
+    const threshold = settings.defaultMode === "strict" ? NRS_STRICT_BLOCK_THRESHOLD : NRS_BLOCK_THRESHOLD;
+    await chrome.storage.local.set({
+      [PROMPT_OUTCOMES_KEY]: normalized,
+      [ADAPTIVE_SCORES_KEY]: computeAdaptiveScoreMap(normalized, threshold),
+    });
+  });
 }
 
 /**
@@ -1439,7 +1662,11 @@ export async function handlePromptOutcomeStorageMessage(
   sender?: chrome.runtime.MessageSender
 ): Promise<PromptOutcomeStorageResponse> {
   if (
-    (message.type === "ns-prompt-outcome-clear" || message.type === "ns-prompt-outcome-replace") &&
+    (
+      message.type === "ns-prompt-outcome-clear" ||
+      message.type === "ns-prompt-outcome-reset-adaptive" ||
+      message.type === "ns-prompt-outcome-replace"
+    ) &&
     !isTrustedExtensionPageSender(sender)
   ) {
     return {
@@ -1450,9 +1677,13 @@ export async function handlePromptOutcomeStorageMessage(
   }
   try {
     if (message.type === "ns-prompt-outcome-append") {
-      await appendPromptOutcomeDirect(message.entry);
+      const entry = buildPromptOutcomeRecord(message.entry);
+      if (!entry) return { ok: false, error: "Invalid prompt-outcome domain" };
+      await appendPromptOutcomeDirect(entry);
     } else if (message.type === "ns-prompt-outcome-clear") {
       await clearPromptOutcomesDirect();
+    } else if (message.type === "ns-prompt-outcome-reset-adaptive") {
+      await clearPromptOutcomeAdaptiveScoresDirect();
     } else {
       await replacePromptOutcomesDirect(message.outcomes);
     }
@@ -1472,6 +1703,7 @@ export async function exportAll(): Promise<{
   adaptiveScores: Record<string, DomainAdjustment>;
 }> {
   const settings = await getSuiteSettings();
+  const exportedAt = Date.now();
   const allowlist = await getAllowlist();
   const trustedDomains = await getTrustedDomains();
   // RI-06: minimize every event-log URL on the way out (drop query+fragment) so
@@ -1483,9 +1715,13 @@ export async function exportAll(): Promise<{
     return minimized === entry.url ? entry : { ...entry, url: minimized };
   });
   const promptOutcomes = await getPromptOutcomes();
-  const adaptiveScores = await getAdaptiveScores();
+  // A dormant or newly-started worker may not have completed legacy migration
+  // yet. Export derives this cache from host-canonical outcomes instead of
+  // emitting an old URL-shaped storage key.
+  const threshold = settings.nav.defaultMode === "strict" ? NRS_STRICT_BLOCK_THRESHOLD : NRS_BLOCK_THRESHOLD;
+  const adaptiveScores = computeAdaptiveScoreMap(promptOutcomes, threshold, () => exportedAt);
   return {
-    exportedAt: new Date().toISOString(),
+    exportedAt: new Date(exportedAt).toISOString(),
     settings,
     allowlist,
     trustedDomains,
@@ -1579,5 +1815,9 @@ export async function importAll(payload: unknown): Promise<void> {
   // import by the options UI). The core sections above are already consistent. ---
   if (hasPromptOutcomes) {
     await replacePromptOutcomes(p.promptOutcomes as PromptOutcomeEntry[]);
+  } else {
+    // Keep the phase-2 atomic clear above, then queue an idempotent barrier so
+    // an already-running startup migration cannot restore a stale derivative.
+    await clearAdaptiveScores();
   }
 }

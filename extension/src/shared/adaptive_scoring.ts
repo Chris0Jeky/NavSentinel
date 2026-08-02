@@ -126,10 +126,12 @@ export async function getAdaptiveScores(): Promise<Record<string, DomainAdjustme
   return stored as Record<string, DomainAdjustment>;
 }
 
-export async function updateAdaptiveScores(
+/** Build the derived adaptive-score cache without mutating chrome.storage. */
+export function computeAdaptiveScoreMap(
   outcomes: PromptOutcomeEntry[],
-  baseThreshold = 70
-): Promise<void> {
+  baseThreshold = 70,
+  now: () => number = Date.now,
+): Record<string, DomainAdjustment> {
   const grouped = new Map<string, PromptOutcomeEntry[]>();
   for (const o of outcomes) {
     const list = grouped.get(o.domain);
@@ -141,19 +143,24 @@ export async function updateAdaptiveScores(
   for (const [domain, domainOutcomes] of grouped) {
     const { adjustment, allowCount, blockCount } = computeAdjustment(domainOutcomes, baseThreshold);
     if (adjustment !== 0) {
-      scores[domain] = { domain, adjustment, allowCount, blockCount, lastUpdated: Date.now() };
+      scores[domain] = { domain, adjustment, allowCount, blockCount, lastUpdated: now() };
     }
   }
 
   const entries = Object.entries(scores);
   if (entries.length > MAX_ENTRIES) {
     entries.sort((a, b) => b[1].lastUpdated - a[1].lastUpdated);
-    const pruned = Object.fromEntries(entries.slice(0, MAX_ENTRIES));
-    await chrome.storage.local.set({ [ADAPTIVE_SCORES_KEY]: pruned });
-    return;
+    return Object.fromEntries(entries.slice(0, MAX_ENTRIES));
   }
 
-  await chrome.storage.local.set({ [ADAPTIVE_SCORES_KEY]: scores });
+  return scores;
+}
+
+export async function updateAdaptiveScores(
+  outcomes: PromptOutcomeEntry[],
+  baseThreshold = 70
+): Promise<void> {
+  await chrome.storage.local.set({ [ADAPTIVE_SCORES_KEY]: computeAdaptiveScoreMap(outcomes, baseThreshold) });
 }
 
 export async function getEffectiveThresholdAdjustment(domain: string): Promise<number> {
@@ -161,6 +168,10 @@ export async function getEffectiveThresholdAdjustment(domain: string): Promise<n
   return scores[domain]?.adjustment ?? 0;
 }
 
-export async function clearAdaptiveScores(): Promise<void> {
+/**
+ * Low-level storage primitive. Production callers use storage.ts' queued
+ * clearAdaptiveScores wrapper so this derivative cannot race prompt migration.
+ */
+export async function clearAdaptiveScoresDirect(): Promise<void> {
   await chrome.storage.local.set({ [ADAPTIVE_SCORES_KEY]: {} });
 }

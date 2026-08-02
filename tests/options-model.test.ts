@@ -228,7 +228,7 @@ describe("classifyImportError (#188)", () => {
   it("words a delivery failure as a partial result", () => {
     const outcome = classifyImportError(true);
     expect(outcome.tone).toBe("error");
-    expect(outcome.message).toMatch(/prompt history/i);
+    expect(outcome.message).toMatch(/prompt-related/i);
     expect(outcome.message).not.toBe("Import failed.");
   });
 
@@ -270,6 +270,19 @@ describe("runClearStats (#188)", () => {
     expect(refresh).toHaveBeenCalled();
     expect(flash).toHaveBeenCalledWith("Couldn't clear stats — try again.", "error");
   });
+
+  it("on a failed adaptive clear: refreshes and flashes error", async () => {
+    const refresh = vi.fn(async () => {});
+    const flash = vi.fn();
+    await runClearStats({
+      clearOutcomes: vi.fn(async () => {}),
+      clearAdaptive: vi.fn(async () => { throw new Error("SW unreachable"); }),
+      refresh,
+      flash,
+    });
+    expect(refresh).toHaveBeenCalled();
+    expect(flash).toHaveBeenCalledWith("Couldn't clear stats — try again.", "error");
+  });
 });
 
 describe("runImportFlow (#188)", () => {
@@ -303,7 +316,7 @@ describe("runImportFlow (#188)", () => {
       isDeliveryFailure: isDelivery,
     });
     expect(refresh).toHaveBeenCalled();
-    expect(flash).toHaveBeenCalledWith(expect.stringMatching(/prompt history/i), "error");
+    expect(flash).toHaveBeenCalledWith(expect.stringMatching(/prompt-related/i), "error");
   });
 
   it("on any other failure: still refreshes (import is non-atomic) and reports total failure", async () => {

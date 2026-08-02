@@ -14,6 +14,7 @@ import {
   isEventLogMigrationMessage,
   isPromptOutcomeStorageMessage,
   migrateStoredEventLogUrls,
+  migrateStoredPromptOutcomes,
   SUITE_SETTINGS_KEY,
 } from "../shared/storage";
 import { RedirectChainTracker } from "../shared/redirect_chain";
@@ -47,6 +48,9 @@ void loadReputationFilter();
 // minimized without racing a concurrent event.
 void migrateStoredEventLogUrls().catch((err) => {
   console.warn("[NavSentinel] event-log URL migration failed; will retry on worker restart:", err);
+});
+void migrateStoredPromptOutcomes().catch((err) => {
+  console.warn("[NavSentinel] prompt-outcome migration failed; will retry on worker restart:", err);
 });
 const NAV_ALLOW_TTL_MS = 1500;
 const NAV_GESTURE_TTL_MS = 1500;

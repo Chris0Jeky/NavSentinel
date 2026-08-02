@@ -1,6 +1,6 @@
 import { computeCDS } from "../shared/scoring";
 import { appendEvent, appendPromptOutcome, getPromptOutcomes, getNavSettings, onNavSettingsChange, buildNavOutcomeFeatures, type EventLogEntry, type NavSettings, type NavOutcomeFeatures } from "../shared/storage";
-import { ADAPTIVE_SCORES_KEY, getEffectiveThresholdAdjustment, updateAdaptiveScores } from "../shared/adaptive_scoring";
+import { ADAPTIVE_SCORES_KEY, getEffectiveThresholdAdjustment } from "../shared/adaptive_scoring";
 import {
   analyzeOutcomesForPair,
   isPairOnCooldown,
@@ -643,23 +643,10 @@ function appendEventSafely(
   });
 }
 
-async function refreshAdaptiveScores(baseThreshold?: number): Promise<void> {
-  try {
-    const threshold = baseThreshold ?? (settings.defaultMode === "strict" ? NRS_STRICT_BLOCK_THRESHOLD : NRS_BLOCK_THRESHOLD);
-    const outcomes = await getPromptOutcomes();
-    await updateAdaptiveScores(outcomes, threshold);
-    adaptiveAdjustment = await getEffectiveThresholdAdjustment(siteKeyFromLocation());
-  } catch (err) {
-    console.warn("[NavSentinel] Failed to refresh adaptive scores, using stale values", err);
-  }
-}
-
 function appendOutcomeSafely(
   partial: Parameters<typeof appendPromptOutcome>[0]
 ): void {
-  void appendPromptOutcome(partial).then(() => {
-    refreshAdaptiveScores();
-  }).catch(() => {
+  void appendPromptOutcome(partial).catch(() => {
     // ignore
   });
 }
@@ -1260,7 +1247,6 @@ function showAllowPrompt(params: {
           outcome: "allow_once",
           ...outcomeFeatures
         }).then(() => {
-          refreshAdaptiveScores();
           if (destDomain) {
             checkSmartDefaultSuggestion(sourceDomain, destDomain);
           }
