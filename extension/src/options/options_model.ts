@@ -106,7 +106,7 @@ export interface ImportErrorOutcome {
  */
 export function classifyImportError(isDeliveryFailure: boolean): ImportErrorOutcome {
   return isDeliveryFailure
-    ? { message: "Imported, but prompt history wasn't updated — try again.", tone: "error" }
+    ? { message: "Imported, but prompt-related data wasn't fully updated — try again.", tone: "error" }
     : { message: "Import failed.", tone: "error" };
 }
 
@@ -117,11 +117,9 @@ export interface StatsUiDeps {
 }
 
 /**
- * Orchestrate "Clear stats". Only `clearOutcomes` is delegated to the service
- * worker and can reject when it is persistently unreachable (#188); scope the
- * failure to it so the message is accurate and `clearAdaptive` runs only after a
- * successful prompt-outcome clear (on failure nothing changed — a consistent
- * no-op the user can retry).
+ * Orchestrate "Clear stats". Scope a delivery failure to either mutation so the
+ * UI refreshes and reports a truthful partial result. `clearAdaptive` still runs
+ * only after a successful prompt-outcome clear.
  */
 export async function runClearStats(
   deps: StatsUiDeps & {
@@ -131,13 +129,13 @@ export async function runClearStats(
 ): Promise<void> {
   try {
     await deps.clearOutcomes();
+    await deps.clearAdaptive();
   } catch (e) {
     console.warn("[NavSentinel] clear stats failed:", e);
     await deps.refresh();
     deps.flash("Couldn't clear stats — try again.", "error");
     return;
   }
-  await deps.clearAdaptive();
   await deps.refresh();
   deps.flash("Stats cleared.");
 }

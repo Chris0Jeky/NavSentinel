@@ -542,9 +542,8 @@ describe("adaptive scoring", () => {
         [key]: { "example.com": { domain: "example.com", adjustment: 5, allowCount: 10, blockCount: 0, lastUpdated: 1 } }
       });
       vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
-      const { clearAdaptiveScores, getAdaptiveScores } = await import(
-        "../extension/src/shared/adaptive_scoring"
-      );
+      const { getAdaptiveScores } = await import("../extension/src/shared/adaptive_scoring");
+      const { clearAdaptiveScores } = await import("../extension/src/shared/storage");
 
       await clearAdaptiveScores();
       const scores = await getAdaptiveScores();
