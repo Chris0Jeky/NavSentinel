@@ -1358,6 +1358,127 @@ describe("appendPromptOutcome", () => {
     expect(ids).toEqual(["imported-outcome"]);
   });
 
+  it("hydrates the clear cutoff after a service-worker restart before accepting a retried append", async () => {
+    const { chrome, store, sessionStore } = createChromeMock({
+      [PROMPT_OUTCOMES_KEY]: [{ id: "old-1", ts: 1, domain: "old.example", type: "nav", score: 1, outcome: "allow" }],
+    });
+    const writes: string[] = [];
+    const originalSessionSet = chrome.storage.session.set;
+    const originalLocalSet = chrome.storage.local.set;
+    chrome.storage.session.set = async (next) => {
+      writes.push("session");
+      await originalSessionSet(next);
+    };
+    chrome.storage.local.set = async (next) => {
+      writes.push("local");
+      await originalLocalSet(next);
+    };
+    vi.stubGlobal("chrome", { ...chrome, clients: {}, registration: {} } as unknown as typeof globalThis.chrome);
+    vi.spyOn(Date, "now").mockReturnValue(1000);
+
+    const firstWorker = await import("../extension/src/shared/storage");
+    expect(await firstWorker.handlePromptOutcomeStorageMessage(
+      { type: "ns-prompt-outcome-clear" }, OPTIONS_SENDER,
+    )).toEqual({ ok: true });
+    expect(writes).toEqual(["session", "local"]);
+    expect(sessionStore).toMatchObject({ "ns_sw:promptOutcomeResetTs": 1000 });
+
+    // A fresh module models a reclaimed/restarted MV3 service worker while
+    // retaining chrome.storage.session, which is browser-owned.
+    vi.resetModules();
+    const restartedWorker = await import("../extension/src/shared/storage");
+    await restartedWorker.handlePromptOutcomeStorageMessage({
+      type: "ns-prompt-outcome-append",
+      entry: { id: "retried-pre-clear", ts: 1000, domain: "late.example", type: "nav", score: 70, outcome: "allow" },
+    });
+
+    expect(store[PROMPT_OUTCOMES_KEY]).toEqual([]);
+  });
+
+  it("hydrates the replacement cutoff after a service-worker restart before accepting a retried append", async () => {
+    const { chrome, store, sessionStore } = createChromeMock();
+    vi.stubGlobal("chrome", { ...chrome, clients: {}, registration: {} } as unknown as typeof globalThis.chrome);
+    vi.spyOn(Date, "now").mockReturnValue(2000);
+
+    const firstWorker = await import("../extension/src/shared/storage");
+    expect(await firstWorker.handlePromptOutcomeStorageMessage({
+      type: "ns-prompt-outcome-replace",
+      outcomes: [{ id: "imported-outcome", ts: 1, domain: "imported.example", type: "cred", score: 45, outcome: "trust" }],
+    }, OPTIONS_SENDER)).toEqual({ ok: true });
+    expect(sessionStore).toMatchObject({ "ns_sw:promptOutcomeResetTs": 2000 });
+
+    vi.resetModules();
+    const restartedWorker = await import("../extension/src/shared/storage");
+    await restartedWorker.handlePromptOutcomeStorageMessage({
+      type: "ns-prompt-outcome-append",
+      entry: { id: "retried-pre-import", ts: 2000, domain: "late.example", type: "nav", score: 70, outcome: "allow" },
+    });
+
+    expect((store[PROMPT_OUTCOMES_KEY] as Array<{ id: string }>).map((entry) => entry.id)).toEqual(["imported-outcome"]);
+  });
+
+  it("reports barrier persistence failures before either destructive control write", async () => {
+    const seed = { id: "keep-1", ts: 1, domain: "keep.example", type: "nav" as const, score: 1, outcome: "allow" as const };
+    const controls = [
+      { type: "ns-prompt-outcome-clear" as const },
+      { type: "ns-prompt-outcome-replace" as const, outcomes: [{ id: "replacement-1", ts: 2, domain: "replacement.example", type: "cred" as const, score: 2, outcome: "trust" as const }] },
+    ];
+
+    for (const control of controls) {
+      vi.resetModules();
+      const { chrome, store } = createChromeMock({ [PROMPT_OUTCOMES_KEY]: [seed] });
+      chrome.storage.session.set = async () => {
+        throw new Error("session barrier unavailable");
+      };
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+      const { handlePromptOutcomeStorageMessage } = await import("../extension/src/shared/storage");
+      expect(await handlePromptOutcomeStorageMessage(control, OPTIONS_SENDER))
+        .toMatchObject({ ok: false, error: "session barrier unavailable" });
+      expect(store[PROMPT_OUTCOMES_KEY]).toEqual([seed]);
+    }
+  });
+
+  it("allows a trusted control retry after reset-barrier hydration fails", async () => {
+    const seed = { id: "keep-1", ts: 1, domain: "keep.example", type: "nav" as const, score: 1, outcome: "allow" as const };
+    const { chrome, store } = createChromeMock({ [PROMPT_OUTCOMES_KEY]: [seed] });
+    const originalSessionGet = chrome.storage.session.get;
+    let getAttempts = 0;
+    chrome.storage.session.get = async (keys) => {
+      getAttempts++;
+      if (getAttempts === 1) throw new Error("session hydration unavailable");
+      return originalSessionGet(keys);
+    };
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { handlePromptOutcomeStorageMessage } = await import("../extension/src/shared/storage");
+    expect(await handlePromptOutcomeStorageMessage(
+      { type: "ns-prompt-outcome-clear" }, OPTIONS_SENDER,
+    )).toMatchObject({ ok: false, error: "session hydration unavailable" });
+    expect(store[PROMPT_OUTCOMES_KEY]).toEqual([seed]);
+
+    expect(await handlePromptOutcomeStorageMessage(
+      { type: "ns-prompt-outcome-clear" }, OPTIONS_SENDER,
+    )).toEqual({ ok: true });
+    expect(getAttempts).toBe(2);
+    expect(store[PROMPT_OUTCOMES_KEY]).toEqual([]);
+  });
+
+  it("keeps the documented Firefox no-session fallback for a trusted clear", async () => {
+    const seed = { id: "keep-1", ts: 1, domain: "keep.example", type: "nav" as const, score: 1, outcome: "allow" as const };
+    const { chrome, store } = createChromeMock({ [PROMPT_OUTCOMES_KEY]: [seed] });
+    vi.stubGlobal("chrome", {
+      ...chrome,
+      storage: { ...chrome.storage, session: undefined },
+    } as unknown as typeof globalThis.chrome);
+
+    const { handlePromptOutcomeStorageMessage } = await import("../extension/src/shared/storage");
+    expect(await handlePromptOutcomeStorageMessage(
+      { type: "ns-prompt-outcome-clear" }, OPTIONS_SENDER,
+    )).toEqual({ ok: true });
+    expect(store[PROMPT_OUTCOMES_KEY]).toEqual([]);
+  });
+
   it("bounds and filters import outcomes before runtime delegation", async () => {
     const { chrome } = createChromeMock();
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
