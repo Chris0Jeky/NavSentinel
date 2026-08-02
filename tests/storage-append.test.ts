@@ -84,8 +84,8 @@ const CONTENT_SCRIPT_SENDER = {
 
 // RI-06: event-log URLs are a review/tuning corpus, not a correctness store, and
 // the pages most likely logged (credential/submit) carry reset/magic-link/session/
-// OAuth tokens in the query or fragment. minimizeEventUrl reduces a URL to
-// origin+path so those tokens are never persisted or exported.
+// OAuth tokens in the query, fragment, or path. minimizeEventUrl reduces a URL
+// to origin+sanitized-path so those tokens are never persisted or exported.
 describe("minimizeEventUrl (RI-06)", () => {
   it("drops both query and fragment, keeping origin+path", () => {
     expect(minimizeEventUrl("https://x.com/a/b?token=secret#frag")).toBe("https://x.com/a/b");
@@ -103,6 +103,63 @@ describe("minimizeEventUrl (RI-06)", () => {
     expect(
       minimizeEventUrl("https://mail.example.com/verify#access_token=eyJhbGciOi&expires=3600")
     ).toBe("https://mail.example.com/verify");
+  });
+
+  it("redacts token-shaped HTTP(S) pathname segments", () => {
+    const jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature";
+
+    expect(minimizeEventUrl(`https://x.com/session/${jwt}`)).toBe(
+      "https://x.com/session/[redacted]"
+    );
+    expect(minimizeEventUrl("https://x.com/objects/550e8400-e29b-41d4-a716-446655440000")).toBe(
+      "https://x.com/objects/[redacted]"
+    );
+    expect(minimizeEventUrl("https://x.com/blob/Aa1Bb2Cc3Dd4Ee5Ff6Gg7Hh8Ii9Jj0Kk")).toBe(
+      "https://x.com/blob/[redacted]"
+    );
+  });
+
+  it("redacts the immediate value after sensitive pathname markers", () => {
+    expect(minimizeEventUrl("https://accounts.example/reset-password/short-lived-code")).toBe(
+      "https://accounts.example/reset-password/[redacted]"
+    );
+    expect(minimizeEventUrl("https://accounts.example/session/short-session-code")).toBe(
+      "https://accounts.example/session/[redacted]"
+    );
+    expect(minimizeEventUrl("https://accounts.example/magic/short-magic-code")).toBe(
+      "https://accounts.example/magic/[redacted]"
+    );
+    expect(minimizeEventUrl("https://accounts.example/auth/short-auth-code")).toBe(
+      "https://accounts.example/auth/[redacted]"
+    );
+    expect(minimizeEventUrl("https://accounts.example/confirm/short-confirmation-code")).toBe(
+      "https://accounts.example/confirm/[redacted]"
+    );
+    expect(minimizeEventUrl("https://accounts.example/oauth/callback/short-auth-code")).toBe(
+      "https://accounts.example/oauth/callback/[redacted]"
+    );
+    expect(minimizeEventUrl("https://accounts.example/reset/verify/short-code")).toBe(
+      "https://accounts.example/reset/verify/[redacted]"
+    );
+    expect(
+      minimizeEventUrl(
+        "https://x.com/objects/550e8400%2De29b%2D41d4%2Da716%2D446655440000"
+      )
+    ).toBe("https://x.com/objects/[redacted]");
+  });
+
+  it("applies the same path policy to non-parseable relative legacy values", () => {
+    expect(minimizeEventUrl("/oauth/callback/short-auth-code?state=ignored#fragment")).toBe(
+      "/oauth/callback/[redacted]"
+    );
+  });
+
+  it("keeps ordinary numeric IDs and readable slugs and is idempotent", () => {
+    const url = "https://x.com/articles/2026/release-notes-v2";
+    const minimized = minimizeEventUrl(url);
+
+    expect(minimized).toBe(url);
+    expect(minimizeEventUrl(minimized)).toBe(minimized);
   });
 
   it("strips userinfo (credentials) from the authority as a side benefit", () => {
@@ -188,7 +245,7 @@ describe("appendEvent", () => {
           id: "legacy-1",
           ts: 1,
           kind: "cred_submit_prompt",
-          url: "https://accounts.example/reset?token=secret#code=abc",
+          url: "https://accounts.example/reset-password/short-lived-code?token=secret#code=abc",
         },
       ],
     });
@@ -212,7 +269,7 @@ describe("appendEvent", () => {
         id: "legacy-1",
         ts: 1,
         kind: "cred_submit_prompt",
-        url: "https://accounts.example/reset",
+        url: "https://accounts.example/reset-password/[redacted]",
       },
       { id: "new-1", ts: 2, kind: "nav_click_block", url: "data:" },
     ]);
@@ -626,7 +683,7 @@ describe("appendEvent", () => {
     expect(log[0]!.extra).toEqual({ tabId: 42 });
   });
 
-  it("persists only origin+path, dropping query+fragment tokens at the persist path (RI-06)", async () => {
+  it("persists a sanitized path, dropping path/query/fragment tokens (RI-06)", async () => {
     const { chrome, store } = createChromeMock();
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
@@ -634,13 +691,13 @@ describe("appendEvent", () => {
     await appendEvent({
       kind: "cred_submit_prompt",
       site: "accounts.example.com",
-      // A reset/magic-link page: the sensitive token rides in the query + fragment.
-      url: "https://accounts.example.com/reset?token=super-secret#code=abc123",
+      // A reset/magic-link page: the sensitive token can ride in the path, query, or fragment.
+      url: "https://accounts.example.com/reset-password/short-lived-code?token=super-secret#code=abc123",
     });
 
     const log = store[EVENT_LOG_KEY] as Array<Record<string, unknown>>;
     expect(log).toHaveLength(1);
-    expect(log[0]!.url).toBe("https://accounts.example.com/reset");
+    expect(log[0]!.url).toBe("https://accounts.example.com/reset-password/[redacted]");
     // Host-level fields are untouched.
     expect(log[0]!.site).toBe("accounts.example.com");
   });

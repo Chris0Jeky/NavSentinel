@@ -591,20 +591,100 @@ async function setEventLogResetCutoff(ts = Date.now()): Promise<void> {
   }
 }
 
+const REDACTED_PATH_SEGMENT = "[redacted]";
+const SENSITIVE_PATH_MARKERS = new Set([
+  "reset",
+  "reset-password",
+  "password-reset",
+  "invite",
+  "invitation",
+  "share",
+  "verify",
+  "verification",
+  "confirm",
+  "confirmation",
+  "magic",
+  "magic-link",
+  "auth",
+  "session",
+  "sessions",
+  "oauth",
+  "oauth2",
+  "authorize",
+  "authorization",
+  "callback",
+  "code",
+  "token",
+  "access-token",
+  "id-token",
+]);
+const UUID_PATH_SEGMENT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const JWT_PATH_SEGMENT = /^eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+const HEX_TOKEN_PATH_SEGMENT = /^[0-9a-f]{32,}$/i;
+const BASE64URL_TOKEN_PATH_SEGMENT = /^[A-Za-z0-9_-]{32,}={0,2}$/;
+
+function decodePathSegment(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
+function isLikelyOpaquePathSegment(segment: string): boolean {
+  const decoded = decodePathSegment(segment);
+  if (!decoded || decoded === REDACTED_PATH_SEGMENT) return false;
+  if (
+    UUID_PATH_SEGMENT.test(decoded) ||
+    JWT_PATH_SEGMENT.test(decoded) ||
+    HEX_TOKEN_PATH_SEGMENT.test(decoded)
+  ) {
+    return true;
+  }
+  if (!BASE64URL_TOKEN_PATH_SEGMENT.test(decoded)) return false;
+
+  // Require upper, lower, and numeric characters for generic base64url-like
+  // values. This keeps readable long slugs and numeric resource IDs useful in
+  // the review corpus while still catching common opaque capability tokens.
+  return /[A-Z]/.test(decoded) && /[a-z]/.test(decoded) && /\d/.test(decoded);
+}
+
+function redactSensitivePathSegments(pathname: string): string {
+  const segments = pathname.split("/");
+  let redactNextNonEmptySegment = false;
+
+  return segments
+    .map((segment) => {
+      if (!segment) return segment;
+      const marker = decodePathSegment(segment).toLowerCase().replace(/_/g, "-");
+      if (SENSITIVE_PATH_MARKERS.has(marker)) {
+        redactNextNonEmptySegment = true;
+        return segment;
+      }
+      if (redactNextNonEmptySegment) {
+        redactNextNonEmptySegment = false;
+        return REDACTED_PATH_SEGMENT;
+      }
+      return isLikelyOpaquePathSegment(segment) ? REDACTED_PATH_SEGMENT : segment;
+    })
+    .join("/");
+}
+
 /**
- * Reduce an event-log URL to `origin + pathname`, dropping the query string and
- * fragment (RI-06). The event log is a REVIEW/tuning corpus, not a correctness
- * store, and the pages most likely logged (credential/submit) are exactly those
+ * Reduce an event-log URL to `origin + sanitized pathname`, dropping the query
+ * string and fragment and redacting path-borne tokens (RI-06). The event log is
+ * a REVIEW/tuning corpus, not a correctness store, and the pages most likely logged
+ * (credential/submit) are exactly those
  * that carry reset/magic-link/session/OAuth tokens in the query or fragment — so
  * exact URLs are both unnecessary and a privacy liability here. No consumer reads
  * the query/fragment of an event-log url (options/popup render site/destHost/
- * score/reasons only; the gauge matches on registrable domain), so origin+path
- * suffices everywhere. Host-level fields (site/destHost) are already minimal and
- * left untouched.
+ * score/reasons only; the gauge matches on registrable domain), so origin plus
+ * a sanitized path suffices everywhere. Host-level fields (site/destHost) are
+ * already minimal and left untouched.
  *
  * Robust by contract: undefined/empty pass through unchanged; a parseable URL is
  * reduced via the URL API (which also strips any userinfo in the authority); a
- * non-parseable value (or an opaque/unknown origin) falls back to a pure string
+ * non-parseable value (or an opaque/unknown origin) falls back to a sanitized
  * strip from the first `?` or `#` so this NEVER throws and never emits a "null…"
  * origin.
  */
@@ -615,7 +695,7 @@ export function minimizeEventUrl(rawUrl: string | undefined): string | undefined
   const parsed = safeUrlParse(rawUrl);
   if (parsed) {
     if (parsed.protocol === "http:" || parsed.protocol === "https:") {
-      return parsed.origin + parsed.pathname;
+      return parsed.origin + redactSensitivePathSegments(parsed.pathname);
     }
     // Opaque and local schemes can carry a document, address, local path, or
     // script before any ?/# delimiter. The event log only needs to identify
@@ -624,9 +704,10 @@ export function minimizeEventUrl(rawUrl: string | undefined): string | undefined
   }
   const scheme = /^([A-Za-z][A-Za-z0-9+.-]*):/.exec(rawUrl);
   if (scheme) return `${scheme[1]!.toLowerCase()}:`;
-  // Non-parseable input: strip from the first query/fragment delimiter without
-  // reformatting the rest, so a display-only string stays intact and never throws.
-  return stripUrlQueryAndFragment(rawUrl);
+  // Non-parseable input can be a relative URL supplied by an imported legacy
+  // backup. Strip the query/fragment and apply the same path-boundary policy
+  // without reformatting the rest, so this remains safe and never throws.
+  return redactSensitivePathSegments(stripUrlQueryAndFragment(rawUrl));
 }
 
 /** Rewrite pre-RI-06 event URLs through the service worker's serialized write lane. */
