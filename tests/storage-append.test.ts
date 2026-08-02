@@ -119,7 +119,7 @@ describe("minimizeEventUrl (RI-06)", () => {
     );
   });
 
-  it("redacts the immediate value after sensitive pathname markers", () => {
+  it("redacts every value after sensitive pathname markers", () => {
     expect(minimizeEventUrl("https://accounts.example/reset-password/short-lived-code")).toBe(
       "https://accounts.example/reset-password/[redacted]"
     );
@@ -141,6 +141,9 @@ describe("minimizeEventUrl (RI-06)", () => {
     expect(minimizeEventUrl("https://accounts.example/reset/verify/short-code")).toBe(
       "https://accounts.example/reset/verify/[redacted]"
     );
+    expect(
+      minimizeEventUrl("https://accounts.example/reset/m5g6z3a/generic-token-abc123")
+    ).toBe("https://accounts.example/reset/[redacted]/[redacted]");
     expect(
       minimizeEventUrl(
         "https://x.com/objects/550e8400%2De29b%2D41d4%2Da716%2D446655440000"

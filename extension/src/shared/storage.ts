@@ -651,20 +651,20 @@ function isLikelyOpaquePathSegment(segment: string): boolean {
 
 function redactSensitivePathSegments(pathname: string): string {
   const segments = pathname.split("/");
-  let redactNextNonEmptySegment = false;
+  let redactSensitiveRouteTail = false;
 
   return segments
     .map((segment) => {
       if (!segment) return segment;
       const marker = decodePathSegment(segment).toLowerCase().replace(/_/g, "-");
       if (SENSITIVE_PATH_MARKERS.has(marker)) {
-        redactNextNonEmptySegment = true;
+        // Sensitive routes can carry more than one capability component (for
+        // example, /reset/<uid>/<token>). Keep route labels useful, but redact
+        // every value segment that follows the first sensitive route marker.
+        redactSensitiveRouteTail = true;
         return segment;
       }
-      if (redactNextNonEmptySegment) {
-        redactNextNonEmptySegment = false;
-        return REDACTED_PATH_SEGMENT;
-      }
+      if (redactSensitiveRouteTail) return REDACTED_PATH_SEGMENT;
       return isLikelyOpaquePathSegment(segment) ? REDACTED_PATH_SEGMENT : segment;
     })
     .join("/");
