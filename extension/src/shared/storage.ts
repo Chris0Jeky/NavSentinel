@@ -1121,7 +1121,7 @@ function normalizeResetCutoff(value: unknown): number {
 
 function hydratePromptOutcomeResetCutoff(): Promise<void> {
   if (promptOutcomeResetHydrate) return promptOutcomeResetHydrate;
-  promptOutcomeResetHydrate = (async () => {
+  const hydrate = (async () => {
     const session = getPromptOutcomeBarrierStorage();
     if (!session) return;
     try {
@@ -1132,9 +1132,17 @@ function hydratePromptOutcomeResetCutoff(): Promise<void> {
       );
     } catch (err) {
       console.warn("[NavSentinel] prompt outcome reset barrier hydration failed:", err);
+      throw err;
     }
   })();
-  return promptOutcomeResetHydrate;
+  promptOutcomeResetHydrate = hydrate;
+  // A rejected hydration must not poison the next trusted control retry. The
+  // browser-owned session store may become available again after a transient
+  // storage failure, and proceeding without its cutoff could resurrect data.
+  void hydrate.catch(() => {
+    if (promptOutcomeResetHydrate === hydrate) promptOutcomeResetHydrate = null;
+  });
+  return hydrate;
 }
 
 async function setPromptOutcomeResetCutoff(ts = Date.now()): Promise<void> {
@@ -1145,6 +1153,7 @@ async function setPromptOutcomeResetCutoff(ts = Date.now()): Promise<void> {
     await session.set({ [PROMPT_OUTCOME_RESET_TS_KEY]: promptOutcomeResetCutoffTs });
   } catch (err) {
     console.warn("[NavSentinel] prompt outcome reset barrier persist failed:", err);
+    throw err;
   }
 }
 
@@ -1349,14 +1358,13 @@ export function appendPromptOutcome(
 
 function clearPromptOutcomesDirect(): Promise<void> {
   return queuePromptOutcomeWrite(async () => {
+    await hydratePromptOutcomeResetCutoff();
     const resetTs = Date.now();
-    // Non-transactional: the log is emptied, then the reset cutoff is persisted.
-    // A crash between the two leaves the log cleared but the barrier
-    // unpersisted — the safe direction (no stale resurrection; a subsequent
-    // clear re-establishes the barrier). chrome.storage has no multi-key
-    // transaction, so this window is inherent.
-    await chrome.storage.local.set({ [PROMPT_OUTCOMES_KEY]: [] });
     await setPromptOutcomeResetCutoff(resetTs);
+    // Persist the restart-surviving barrier before the destructive local write.
+    // chrome.storage has no cross-area transaction, so a barrier failure leaves
+    // the log intact and is surfaced to the trusted control caller.
+    await chrome.storage.local.set({ [PROMPT_OUTCOMES_KEY]: [] });
   });
 }
 
@@ -1375,9 +1383,10 @@ async function replacePromptOutcomesDirect(outcomes: PromptOutcomeEntry[]): Prom
   // buildPromptOutcomeRecord enforces the same privacy + size guarantees.
   const importedOutcomes = boundPromptOutcomeLog(outcomes).map(buildPromptOutcomeRecord);
   await queuePromptOutcomeWrite(async () => {
+    await hydratePromptOutcomeResetCutoff();
     const resetTs = Date.now();
-    await chrome.storage.local.set({ [PROMPT_OUTCOMES_KEY]: importedOutcomes });
     await setPromptOutcomeResetCutoff(resetTs);
+    await chrome.storage.local.set({ [PROMPT_OUTCOMES_KEY]: importedOutcomes });
     const settings = await getNavSettings();
     const threshold = settings.defaultMode === "strict" ? NRS_STRICT_BLOCK_THRESHOLD : NRS_BLOCK_THRESHOLD;
     await updateAdaptiveScores(importedOutcomes, threshold);
