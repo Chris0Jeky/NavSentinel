@@ -8,9 +8,9 @@
 context to resume by stable ID.
 
 **Last updated:** 2026-08-02 — orientation found `origin/main` at `71e534e`,
-including merged PRs #512 and #513 with exact-main product CI green. The pending
-RI-02 branch is locally verified but has not passed its required pre-merge
-Gate-3. Chris
+including merged PRs #512 and #513 with exact-main product CI green. RI-02 is
+now PR #514 at `cabfc82`; it is locally verified but has not passed its required
+pre-merge Gate-3. Chris
 selected the interaction-only beta under AI-9, retained an opt-in non-release
 research profile, and accepted `main`
 without branch protection under AI-17. PR #509 merged the profile decision as
@@ -39,8 +39,8 @@ program: `docs/Project_Roadmap.md`. Standing decisions:
 ## Current state snapshot (live state rechecked 2026-08-02)
 
 The dedicated reconciliation worktree matched `origin/main` at `71e534e` after
-PRs #512 and #513 merged; their exact-main product CI was green. The pending
-RI-02 branch is a separate browser-surface slice and cannot merge until AI-26
+PRs #512 and #513 merged; their exact-main product CI was green. RI-02 PR #514
+at `cabfc82` is a separate browser-surface slice and cannot merge until AI-26
 records a Gate-3 result. Run `git fetch origin`, `git rev-parse origin/main`, and
 live `gh` checks before acting; the exact audit baseline lives in
 `docs/Product_Strategy.md`, not this live snapshot. v0.4.0 still has no tag,
