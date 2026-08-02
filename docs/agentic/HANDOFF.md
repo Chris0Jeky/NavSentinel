@@ -6,10 +6,13 @@ Historical cycle detail remains in `ORCHESTRATOR.md` and is not required reading
 
 ## Current development lanes
 
-- **Remote `main` is current through PR #510** (`56e3aa6` before this
-  reconciliation), with exact-main product CI green and no open PRs at the
-  2026-08-02 refresh. Re-fetch and re-query before acting; do not use the older
-  primary checkout or cached refs as authority.
+- **Remote `main` was reverified at `332c48d`** after PR #518 merged. Re-fetch
+  and re-query before acting; the older primary checkout and prior “no open
+  PRs” snapshot are not authority.
+- **PR #514 / #424 (RI-02)** removes the retired visual-sim runtime, asset,
+  message path, score, and release exposure. Its branch has been refreshed from
+  that `main`; before a merge decision, reverify the exact head's Build/Unit +
+  E2E, one scoped review, and Chris's **AI-26** real-Chrome Gate-3.
 - **PR #509 merged** as `3faeb1e`, closing #321 and implementing AI-9's
   interaction-only release profile. **AI-25 passed** on executable/artifact
   head `f6815be` in headed Chrome
@@ -48,9 +51,10 @@ an action or warning. AI-18 is obsolete because #499 removed project hooks.
 - The extension is local-first. Merged PR #509 makes interaction-only the release
   default. Its deterministic reputation fixture is research-only and cannot be
   packaged or released.
-- Release integrity still requires extension-origin decision authority, removal
-  of visual-sim and fake DNR surfaces, purpose-specific data minimization,
-  beta-off broad JS behavior, and bridge identity/recovery work.
+- Release integrity still requires extension-origin decision authority, the
+  Gate-3-verified RI-02 visual-sim removal, fake-DNR removal, purpose-specific
+  data minimization, beta-off broad JS behavior, and bridge identity/recovery
+  work.
 - Browser-surface changes still require the human Gate-3 decision or an explicit
   waiver. Test/Gym-only, dependency-only, and documentation changes do not.
 
@@ -69,8 +73,10 @@ an action or warning. AI-18 is obsolete because #499 removed project hooks.
 
 ## Next sequence
 
-Continue the guided human queue at AI-19. Separately, refresh the RI-01 branch
-from current `main`, finish the remaining authority path, and rerun scoped
-checks plus real-Chrome Gate-3 before opening a merge-ready PR. Retain the RI-01
-and issue-#496 worktrees; treat `nav-floor-sync` as unmerged unique work until
-its exact three-commit delta is deliberately retained, landed, or retired.
+Re-prove the refreshed #514 head, then Chris can run AI-26 before it is
+merge-eligible. Continue the guided human queue at AI-19. Separately, refresh
+the RI-01 branch from current `main`, finish the remaining authority path, and
+rerun scoped checks plus real-Chrome Gate-3 before opening a merge-ready PR.
+Retain the RI-01 and issue-#496 worktrees; treat `nav-floor-sync` as unmerged
+unique work until its exact three-commit delta is deliberately retained, landed,
+or retired.

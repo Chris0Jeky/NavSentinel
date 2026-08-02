@@ -7,10 +7,10 @@
 **Purpose:** the running list of things only *you* (Chris) can do, with enough
 context to resume by stable ID.
 
-**Last updated:** 2026-08-02 — orientation found `origin/main` at `71e534e`,
-including merged PRs #512 and #513 with exact-main product CI green. RI-02 is
-now PR #514; its source-removal commit is `cabfc82`, and its current head must
-be read live before action. It has not passed its required pre-merge Gate-3. Chris
+**Last updated:** 2026-08-02 — reconciliation verified `origin/main` at
+`332c48d` after PR #518. RI-02 is PR #514; its source-removal commit is
+`cabfc82`, its branch was refreshed from that base, and its current head must be
+read live before action. It has not passed its required pre-merge Gate-3. Chris
 selected the interaction-only beta under AI-9, retained an opt-in non-release
 research profile, and accepted `main`
 without branch protection under AI-17. PR #509 merged the profile decision as
@@ -38,17 +38,19 @@ program: `docs/Project_Roadmap.md`. Standing decisions:
 
 ## Current state snapshot (live state rechecked 2026-08-02)
 
-The dedicated reconciliation worktree matched `origin/main` at `71e534e` after
-PRs #512 and #513 merged; their exact-main product CI was green. RI-02 PR #514
-contains source-removal commit `cabfc82`; it is a separate browser-surface slice
-and cannot merge until AI-26 records a Gate-3 result. Run `git fetch origin`,
-`git rev-parse origin/main`, and live `gh` checks before acting; the exact audit baseline lives in
+The dedicated reconciliation worktree matched `origin/main` at `332c48d` after
+PR #518 merged. RI-02 PR #514 contains source-removal commit `cabfc82` and has
+been refreshed from that base; it is a separate browser-surface slice and cannot
+merge until its updated exact head has current CI and review evidence and AI-26
+records a Gate-3 result. Run `git fetch origin`, `git rev-parse origin/main`,
+and live `gh` checks before acting; the exact audit baseline lives in
 `docs/Product_Strategy.md`, not this live snapshot. v0.4.0 still has no tag,
 GitHub release, CWS release, or external-user evidence.
 
-Live recheck before the RI-02 branch on 2026-08-02 found **0 open PRs, 79 open
-issues, and no open milestones, tags, or GitHub releases**. Verify all volatile counts live rather
-than treating this paragraph as a gate. Chris accepts the current `main`
+The pre-RI-02 recheck on 2026-08-02 found **0 open PRs, 79 open issues, and no
+open milestones, tags, or GitHub releases**; follow-up found **PR #514 open**.
+Verify all volatile counts live rather than treating this paragraph as a gate.
+Chris accepts the current `main`
 protection posture under AI-17; do not reopen or re-flag it.
 Stale PRs #273 and #399 were closed with explicit re-entry paths; their heads
 remain fetchable server-side at `refs/pull/273/head` and `refs/pull/399/head`,
@@ -185,8 +187,9 @@ Only Chris can record this complete; nothing is blocked on it.
 
 **OPEN: AI-26 — Pre-merge Gate-3 for RI-02 visual-sim excision (#424).** This
 is a merge blocker for the current browser-surface PR, separate from optional
-AI-24. Agent prerequisites are complete: source removal, artifact/package
-checks, and CI-mode E2E are green. Run it only on the exact current PR head.
+AI-24. The pre-refresh source removal passed artifact/package checks and
+CI-mode E2E; confirm current exact-head Build/Unit, E2E, and scoped review
+evidence before running this. Run it only on that exact current PR head.
 
 1. Build the exact PR head with `npm run build`, then load `extension/dist`
    unpacked in a fresh temporary **Chrome** profile; do not alter an established

@@ -40,13 +40,14 @@ readiness is tracked only by the outcome gates below.
 
 ### Live execution truth
 
-Refreshed 2026-08-02 from remote GitHub and `origin/main`: v0.4.0; the latest
-exact-main product CI was green; there were 0 open PRs, 79 open issues, and no
-open milestone, git tag, GitHub release, or CWS release. These values are a
-dated snapshot, not an instruction to trust cached refs. Re-derive them with
-`git fetch origin`, `gh pr list --state open`, `gh issue list --state open`,
-and the GitHub Actions view before acting. The exact 2026-07-10 audit baseline
-remains in `Product_Strategy.md` as provenance rather than current status.
+Refreshed 2026-08-02 from remote GitHub and `origin/main`: the pre-RI-02
+snapshot had 0 open PRs and 79 open issues; **PR #514 is now open** for RI-02,
+while `origin/main` was reverified at `332c48d` after PR #518. There is no open
+milestone, git tag, GitHub release, or CWS release. These values are dated
+snapshots, not an instruction to trust cached refs. Re-derive them with `git
+fetch origin`, `gh pr list --state open`, `gh issue list --state open`, and the
+GitHub Actions view before acting. The exact 2026-07-10 audit baseline remains
+in `Product_Strategy.md` as provenance rather than current status.
 Owner directive #499 retires the repository-local agent harness (tier, project
 hooks, lifecycle scripts, vendored floor, validation commands, and Harness CI).
 That infrastructure-only change does not alter extension runtime behavior or
