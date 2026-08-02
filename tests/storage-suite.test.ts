@@ -666,8 +666,10 @@ describe("suite storage and allowlist migration", () => {
       eventLog: [{ id: "e-1", ts: 1, kind: "nav_click_block" }],
     });
 
-    // One write for all core sections (no promptOutcomes -> no separate delegate).
-    expect(setSpy).toHaveBeenCalledTimes(1);
+    // One atomic write for all core sections, followed by the serialized
+    // adaptive-reset barrier. The latter makes a concurrent startup migration
+    // finish before an import without prompt outcomes declares the cache empty.
+    expect(setSpy).toHaveBeenCalledTimes(2);
     const written = setSpy.mock.calls[0]![0] as Record<string, unknown>;
     expect(Object.keys(written).sort()).toEqual(
       [
@@ -678,7 +680,9 @@ describe("suite storage and allowlist migration", () => {
         "sentinelsuite:trusted_domains_v1",
       ].sort()
     );
-    // Adaptive scores reset folded into the same atomic write (no promptOutcomes).
+    expect(setSpy.mock.calls[1]![0]).toEqual({ "sentinelsuite:adaptive_scores_v1": {} });
+    // Adaptive scores reset is in the core write and repeated as the queued
+    // ordering barrier (no promptOutcomes).
     expect(store["sentinelsuite:adaptive_scores_v1"]).toEqual({});
     expect(store["sentinelsuite:trusted_domains_v1"]).toEqual(["example.com"]);
   });
