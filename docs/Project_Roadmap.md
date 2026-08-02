@@ -1,6 +1,6 @@
 # NavSentinel Project Roadmap
 
-*Created 2026-04-09. Truth refresh 2026-07-10; live/status sync 2026-08-01.*
+*Created 2026-04-09. Truth refresh 2026-07-10; live/status sync 2026-08-02.*
 
 This is the execution roadmap. [`Product_Strategy.md`](Product_Strategy.md) owns
 the product thesis, portfolio boundaries, and evidence gates; GitHub issues own
@@ -40,12 +40,13 @@ readiness is tracked only by the outcome gates below.
 
 ### Live execution truth
 
-Verified 2026-07-24: `main` matched `origin/main` at `d7528f9`; v0.4.0; main CI
-green; 2,874 unit tests across 95 files, plus typecheck and lint clean locally;
-Re-derive the open-issue count live (`gh issue list --state open`) — it moved on
-2026-07-25 when #349 auto-closed with #356 and #474/#475 were filed. No milestone,
-tag, GitHub release, or CWS release. The exact audit baseline is recorded only in dated
-`Product_Strategy.md`; verify live.
+Refreshed 2026-08-02 from remote GitHub and `origin/main`: v0.4.0; the latest
+exact-main product CI was green; there were 0 open PRs, 79 open issues, and no
+open milestone, git tag, GitHub release, or CWS release. These values are a
+dated snapshot, not an instruction to trust cached refs. Re-derive them with
+`git fetch origin`, `gh pr list --state open`, `gh issue list --state open`,
+and the GitHub Actions view before acting. The exact 2026-07-10 audit baseline
+remains in `Product_Strategy.md` as provenance rather than current status.
 Owner directive #499 retires the repository-local agent harness (tier, project
 hooks, lifecycle scripts, vendored floor, validation commands, and Harness CI).
 That infrastructure-only change does not alter extension runtime behavior or
@@ -89,8 +90,7 @@ maintainer chooses disclosure/ownership.
 |---|---|---|---|---|---|
 | RI-01 | P0 beta blocker | Move all proceed/allow/trust/resume authority out of page-injected UI | Agent + Gate-3 | Private release task | Injected UI is warn/cancel only; extension-origin action is tab/destination-bound with TTL; synthetic input, trusted-click redressing, host tamper/removal, tab switch, and stale state cannot lower protection |
 | RI-02 | P0 beta blocker | Excise visual-sim capture, templates, scoring hook, WAR, tests, and state | Agent + Gate-3 | #424 | No viewport capture path or placeholder asset remains; #374 is optional coordination, not a prerequisite |
-| RI-03 | P0 beta blocker | ~~Refresh/fix #356~~ **done: #356 is refreshed, reviewed, thread-clean and green on `f8028c9`**; **still open: recreate or defer #273** | One step remains: the agent step to recreate-or-defer #273 (#356 merged on
-2026-07-25 with its manual gate waived, so the AI-13 Gate-3 step no longer exists) (AI-8, still BLOCKED). RI-03 is **not** complete when AI-13 passes | #273/#356; #399 stays deferred | Replacement human guides point only to current green branches; #399 remains outside beta blockers until its measurement methodology is ready |
+| RI-03 | P0 beta blocker | #356 is complete; recreate or explicitly defer #273 from current `main` | Agent first; Gate-3 only if #273 is recreated (AI-8 remains blocked until then) | #273/#356; #399 stays deferred | #356 remains regression coverage, replacement guides point only to current green branches, and #399 remains outside beta blockers until its measurement methodology is ready |
 | RI-04 | P0 product decision | **Implemented via merged PR #509; AI-25 Gate-3 passed:** interaction-only selected and implemented; retain research reputation as unpacked-only | Chris + agent + Gate-3 | #321 / AI-9 / AI-25 | Default release receipt, manifest/WAR, runtime, package checks, tests, and claims agree; research profile is deterministic, visibly non-release, and package/release rejected |
 | RI-05 | P0 beta blocker | Remove fake DNR feature surface and unused permissions | Agent + Gate-3 | CWS checklist; redesign #242/#243 later | No test rules/toggle/DNR permission in beta manifest |
 | RI-06 | P0 privacy blocker | Inventory every store; minimize by purpose; add complete reset | Agent + privacy review | Extend #176 or seed one scoped follow-up | Persistent records use least-identifying data; exact session URLs remain only for correctness with tab binding/TTL; rollback/OAuth/allow tests pass; all behavioral stores have one clear control and accurate export/disclosure |
@@ -162,7 +162,7 @@ wording conflicts.
 | D07 | **Reputation is an optional build-time release profile** | The old 150KB/100K-domain assumption is mathematically incompatible with the 0.01% FP target and current 500KB package cap. The recommended beta omits reputation unless feed provenance, licensing, cadence, cardinality, FP target, and package budget are explicitly solved. |
 | D08 | **No ML at this stage** | ML adds model size, inference complexity, and update mechanism overhead. Heuristic/pattern detection keeps the extension light and auditable. Revisit in Phase 4 if heuristics plateau. |
 | D09 | **Interaction correlation is the differentiator to test** | DoubleClickjacking remains useful coverage, but competitor-absence and superiority claims are unverified. The product must demonstrate additive wins against current browser protections. |
-| D10 | **Use a release-quality name only after clearance** | "NavSentinel" is a working name that collides with an active GNSS security product. AI-19 is required before CWS submission. |
+| D10 | **Use a release-quality name only after clearance** | "NavSentinel" is a working name already used for a publicly announced, coming-soon GNSS anti-spoofing receiver. AI-19 is required before CWS submission. |
 | D11 | **Local prompt telemetry** | Track allow/dismiss/trust/block outcomes in `chrome.storage.local`. Display in options page. No data leaves the machine. Enables evidence-based threshold tuning. |
 | D12 | **Position as an auditable local interaction guard** | Complement built-in browser protection; do not claim browsers structurally cannot see the same threats. #418 must establish any comparative claim. |
 | D13 | **Content analysis = pattern matching, not ML** | Match against 20-30 known phishing kit HTML fingerprints. Check brand logo/domain mismatches. Simple, auditable, effective against commodity phishing. |

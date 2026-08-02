@@ -7,8 +7,10 @@
 **Purpose:** the running list of things only *you* (Chris) can do, with enough
 context to resume by stable ID.
 
-**Last updated:** 2026-08-01 — Chris selected the interaction-only beta under
-AI-9, retained an opt-in non-release research profile, and accepted `main`
+**Last updated:** 2026-08-02 — remote `main` included PR #510 at `56e3aa6`,
+its exact-main product CI was green, and live GitHub had no open PRs. Chris
+selected the interaction-only beta under AI-9, retained an opt-in non-release
+research profile, and accepted `main`
 without branch protection under AI-17. PR #509 merged the profile decision as
 `3faeb1e`; AI-25 passed on executable/artifact head `f6815be` in headed Chrome
 150.0.7871.187. AI-16 ratified the July 3, July 10, and July 13 standing
@@ -32,22 +34,19 @@ program: `docs/Project_Roadmap.md`. Standing decisions:
 
 ---
 
-## Current state snapshot (live state rechecked 2026-08-01)
+## Current state snapshot (live state rechecked 2026-08-02)
 
-The dedicated closeout worktree matched `origin/main` at `3faeb1e` after PR
-#509 merged; live GitHub showed no open PRs. Run `git rev-parse origin/main` and
+The dedicated reconciliation worktree matched `origin/main` at `56e3aa6` after
+PR #510 merged; live GitHub showed no open PRs. Run `git fetch origin`,
+`git rev-parse origin/main`, and
 live `gh` checks before acting; the exact audit baseline lives in
 `docs/Product_Strategy.md`, not this live snapshot. v0.4.0 still has no tag,
 GitHub release, CWS release, or external-user evidence.
 
-Live recheck on 2026-07-25 found **no open PRs**, and no tags/releases/classic branch
-protection or repository rulesets, and no milestones or assignees. Verify the current
-`main` SHA and the issue count live rather than trusting either here. Every PR was merged
-with a merge commit (never squashed) after exact-head CI, with the CI run's `head_sha`
-verified equal to the PR head immediately before each merge. `main`'s tree was then
-confirmed byte-identical to the last verified branch tree, so `main` is the state that was
-actually tested (2954 unit tests across 98 files, 70 E2E at `workers=1`) rather than an
-untested combination of separately-green branches.
+Live recheck on 2026-08-02 found **0 open PRs, 79 open issues, and no open
+milestones, tags, or GitHub releases**. Verify all volatile counts live rather
+than treating this paragraph as a gate. Chris accepts the current `main`
+protection posture under AI-17; do not reopen or re-flag it.
 Stale PRs #273 and #399 were closed with explicit re-entry paths; their heads
 remain fetchable server-side at `refs/pull/273/head` and `refs/pull/399/head`,
 so the matching local branches are redundant copies, not the only copies.
@@ -82,17 +81,17 @@ product state.
   unpacked, explicitly non-release `research-reputation` profile. AI-25 passed
   on executable/artifact head `f6815be` in Chrome 150.0.7871.187. PR #509
   merged as `3faeb1e`, and issue #321 closed.
-- **Brand blocker:** the exact name `NavSentinel` is already used by an active
-  GNSS security product. AI-19 requires clearance or an early rename before
-  CWS submission; this is a risk flag, not a legal conclusion.
+- **Brand blocker:** TruNav publicly uses the exact name `NavSentinel` for a
+  coming-soon GNSS anti-spoofing receiver. AI-19 requires clearance or an
+  early rename before CWS submission; this is a risk flag, not a legal conclusion.
 - **Legacy PR cleanup:** #273 and draft #399 were closed on 2026-07-13 rather
   than merged from stale bases; their commits, discussions, and open issue
   anchors remain. **#356 merged 2026-07-25** (`3bd9e02`) — twice reviewed,
   thread-clean, exact-head CI-green, with its manual Gate-3 waived in favour of the
   automated equivalent. AI-13 is resolved; the optional AI-24 carries the residue.
 - **Portfolio:** re-derive the open-issue count with `gh issue list --state open`
-  — it moved on 2026-07-25 (#349 auto-closed with #356; #474 and #475 filed), so a
-  number written here is stale on arrival. None assigned or milestoned; #439–#453
+  — the 2026-08-02 snapshot was 79, but a number written here ages quickly.
+  None assigned or milestoned; #439–#453
   are 15 frozen Horizon proposals. No new feature/epic issue seeding until the queue is
   culled and milestone-categorized.
 - **GitHub posture:** Chris accepts `main` without branch protection under
@@ -133,16 +132,16 @@ questions until agent preflight clears them.
 > current preflight handoff.
 
 **🚨 OPEN: AI-19 — Clear or replace the working product name before CWS
-submission.** An active TruNav GNSS anti-spoofing product uses the exact name
-`NavSentinel` and was publicized by the US Department of Transportation in May
-2026. This is not a legal conclusion, but shipping under the name without a
+submission.** TruNav publicly uses the exact name `NavSentinel` for a
+coming-soon GNSS anti-spoofing receiver, publicized by the US Department of
+Transportation in May 2026. This is not a legal conclusion, but shipping under the name without a
 search/domain/CWS/trademark review creates avoidable brand and discovery risk.
 **Recommendation:** rename early. Reply `AI-19 rename; generate shortlist` and
 the agent can generate and preliminarily screen replacements, or reply
 `AI-19 keep; begin formal clearance`. For either path: (1) define intended
 territories and browser-security goods/services; (2) search exact, similar,
 phonetic, joined, and spaced variants in the [UK IPO](https://www.gov.uk/search-for-trademark),
-[USPTO](https://www.uspto.gov/trademarks/search), [WIPO Global Brand
+[USPTO comprehensive clearance guide](https://www.uspto.gov/trademarks/search/comprehensive-clearance-search-similar-trademarks), [WIPO Global Brand
 Database](https://www.wipo.int/en/web/global-brand-database), and EUIPO if EU
 distribution matters; (3) search general product/company usage, Companies
 House, GitHub, Chrome Web Store, domains, and relevant handles; (4) save dated
@@ -204,7 +203,7 @@ defer the tiny change from current `main`, resolve both findings, pass the
 focused product checks and hosted product CI, then post a new visual-check
 guide. Do not reuse the old branch checkout guide.
 
-**AI-10 — Gate-3 + merge the SPA-breakage fix (#352) · ✅ RESOLVED 2026-06-23.** Chris ran the manual Chrome check ("manual checks on chrome for #352 done, it seems to be working fine now") → **#352 merged into `main`** (`#347` pushState de-harden + `#348` reputation WAR). The claude.ai grey screen / infinite-load and the per-page `reputation_data.bin`/`pushState` console errors are fixed; top-frame reputation is re-enabled.
+**AI-10 — Gate-3 + merge the SPA-breakage fix (#352) · ✅ RESOLVED 2026-06-23.** Chris ran the manual Chrome check ("manual checks on chrome for #352 done, it seems to be working fine now") → **#352 merged into `main`** (`#347` pushState de-harden + `#348` reputation WAR). The claude.ai grey screen / infinite-load and the per-page `reputation_data.bin`/`pushState` console errors were fixed. This is historical: PR #509 later made interaction-only the release default and removed reputation from that profile.
 
 **AI-11 — Toast count-pill (#351 → PR #353) · ✅ RESOLVED 2026-06-23 — MERGED.** Chris said "merge #353"; green CI (incl. the RW-19 e2e fix to accept the coalesced pill) → **#353 merged into `main`** (`d0e0412`). Repeated blocked-popup/redirect prompts now coalesce into one count pill after 3-in-8s (expandable to the latest prompt's Allow once / Always allow). The pill is live on the next `git checkout main && npm run build`.
 
@@ -348,69 +347,47 @@ change alters the shipped bundle layout. Only Chris can record this complete.
 > tracked file only so landing those PRs did not collide with a large
 > `ACTION_ITEMS.md` rewrite. Do **not** move them back onto a branch-only path.
 
-**OPEN: AI-23 — Prune the finished worktrees and their merged branches**
-(low priority housekeeping). Agents cannot do this: `git worktree remove` is floor-blocked
-(`[floor 1.6.0 (2026-07-24)] Git worktree removal is floor-blocked.`), re-verified 2026-07-25,
-and the branches cannot be deleted while a worktree still holds them.
+**OPEN: AI-23 — Resolve remaining worktree and branch housekeeping safely**
+(low priority; do not reuse a pinned removal inventory). Owner decision #499
+removed NavSentinel's repository-local floor; it did **not** authorize cleanup
+of user-owned worktrees or branches. An agent may audit, inventory, preserve,
+and recommend, but Chris must explicitly approve each exact worktree removal
+and each branch deletion. A blanket prune is unsafe because removal also
+deletes ignored files, and several current branches contain work absent from
+`main`.
 
-**Updated 2026-07-25 — the list grew.** All seven PRs merged, so six of the eight
-registered worktrees now hold fully-merged branches and are pure housekeeping:
-`nav-floor-sync` (`chore/deny-floor-v1.6.0`, #472), `.worktrees/pr356-refresh`
-(#356), `.worktrees/ri01-synthetic-nav` (#464), `.worktrees/ri01-pending-sw`
-(#466), `.worktrees/ri06-eventlog-min` (#468), `.worktrees/harness-v141` (#457).
-`.worktrees/deps-audit` (`fix/release-dependency-advisories`) backs no open PR.
-**Do NOT remove `C:/Users/Public/codex-shell-home/NavSentinel-ri01`** — AI-20 is
-resolved, but this worktree still holds the unmerged RI-01 integration
-checkpoint, remotely backed at `184be55`.
+The 2026-08-02 live audit established these boundaries:
 
-**Re-derive the branch names before running this** — `nav-floor-sync` was
-observed switching from `chore/deny-floor-v1.5.2` to `chore/deny-floor-v1.6.0`
-mid-session, so a pinned name here goes stale quickly. Check
-`git worktree list` first, then:
+- retain `C:/Users/Public/codex-shell-home/NavSentinel-ri01`; it has nine commits
+  absent from `main` and holds the remotely backed RI-01 checkpoint at `184be55`;
+- retain `.worktrees/issue496-doubleclick`; it has three commits absent from
+  `main` and issue #496 remains open;
+- retain `nav-floor-sync` for now; branch `chore/deny-floor-v1.6.3` has three
+  commits absent from `main`, PR #477 closed without merging, and the worktree
+  contains an ignored cache entry;
+- `.worktrees/ai16-ratification` has no commits absent from `main` after PR #509,
+  but it contains ignored build/test output, so it is only a candidate for
+  owner-approved pruning after a fresh inspection identifies what must be
+  preserved; and
+- do not switch or remove the user's primary checkout merely to make the list
+  shorter.
 
-```sh
-git worktree list          # re-derive names first; they move between sessions
+Before requesting approval for any candidate, re-run
+`git worktree list --porcelain`, inspect both
+`git status --porcelain` and `git status --porcelain --ignored`, prove the
+branch is merged or otherwise preserved, and identify any ignored artifact
+that must survive. Present the exact path, branch, commit delta, and preservation
+plan to Chris. Only after Chris approves that named target may an agent copy out
+the retained artifacts and use plain `git worktree remove` without `--force`.
+Branch deletion needs its own explicit approval; use `git branch -d`, never
+`-D`, after approval so Git still refuses an unmerged branch.
 
-# all six PR worktrees now hold branches merged into main (2026-07-25)
-git worktree remove "C:/Users/jekyt/Desktop/Printer Config/Others/Git/nav-floor-sync"
-git worktree remove .worktrees/pr356-refresh
-git worktree remove .worktrees/ri01-synthetic-nav
-git worktree remove .worktrees/ri01-pending-sw
-git worktree remove .worktrees/ri06-eventlog-min
-git worktree remove .worktrees/harness-v141
-git worktree remove .worktrees/deps-audit   # backs no PR
-
-# only then can the branches they held be deleted
-git branch -d chore/deny-floor-v1.6.0 feat/dehard-enforcement-protos \
-  fix/ri01-reject-synthetic-nav-allowances fix/ri01-pending-decision-sw \
-  fix/ri06-event-log-url-minimization infra/harness-deny-floor-v141 \
-  fix/release-dependency-advisories
-```
-
-`git branch -d` (not `-D`) is deliberate: it refuses anything not merged, so it
-cannot silently drop work. If it refuses one of the seven, stop and report which —
-that would mean the branch is not actually merged and the premise here is wrong.
-
-**Retain the RI-01 worktree.**
-`C:/Users/Public/codex-shell-home/NavSentinel-ri01` on
-`fix/ri01-extension-origin-decisions` backs no PR but is **not** cruft: it is the
-RI-01 integration checkpoint. **Do not delete it** until its remotely backed
-work is deliberately reconciled with current `main` and either landed or
-retired.
-
-*(Corrected 2026-07-25: this paragraph previously said "leave the other SIX ...
-five back open PRs". That was true before the queue cleared and is now false —
-there are no open PRs, so those five worktrees are prunable, and the command block
-above was only removing two of the seven.)*
-
-Three local branches are also prunable but are **not** included above, because
-deleting an unmerged local branch is the one irreversible step here and is your
-call: `fix/cooldown-map-cap` (superseded — its fix landed on `main` as
-`capCooldowns` via PR #381, and it is the only copy of commit `d682f14`),
-`fix/user-activation-neutral-chip` and `fix/oauth-require-state-corroboration-223`
-(both redundant — their heads are preserved server-side at `refs/pull/273/head`
-and `refs/pull/399/head`, so deleting the local copies loses nothing). Reply
-`AI-23 done` when pruned.
+The only unresolved owner decision in this item is the fate of
+`chore/deny-floor-v1.6.3`. Reply `AI-23 inspect nav-floor-sync` and the agent will
+present its exact three-commit delta and recommend retain, archive, land, or
+retire. Do not delete it before that review. Reply `AI-23 done` only after the
+ambiguous branch has a deliberate disposition and the agent re-verifies the
+remaining inventory.
 
 **🚨 BLOCKED: AI-14 — OAuth tradeoff measurement after closed PR #399.** The
 measurement-held draft was closed on 2026-07-13 rather than merged from a stale

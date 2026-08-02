@@ -5,6 +5,14 @@ workflow failures. The repository-local auto-capture and renderer were retired
 by owner decision #499. Add a curated entry manually only when the history is
 still useful; this ledger is not a gate or required handoff artifact.
 
+> **Scope correction (2026-08-02):** rows about PR #457, AI-18, a vendored
+> floor, or a "next canonical floor sync" describe the retired repository-local
+> harness. PR #457 later merged, AI-18 became obsolete, and #499 removed that
+> entire NavSentinel surface. Their historical `open` labels do not create a
+> current NavSentinel action. Any still-relevant upstream floor issue must be
+> re-verified in the agent-harness repository; it will not arrive here through
+> another local sync.
+
 ## Entries
 
 | Date | Class | Surface | Failure | Workaround | Future fix | Status |

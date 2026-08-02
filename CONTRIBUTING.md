@@ -4,7 +4,7 @@ This repo is best worked on as a browser-extension project with deterministic lo
 
 ## Environment
 
-- Node.js 20.18.1+ recommended
+- Node.js `^20.19.0 || ^22.13.0 || >=24` (the `package.json` engine range)
 - Chrome or Chromium for MV3 testing
 
 ## Install and build
