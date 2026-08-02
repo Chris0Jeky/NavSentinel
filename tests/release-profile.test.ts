@@ -27,7 +27,6 @@ function makeDist(profileName: string): string {
   );
   const manifest = configureManifestForProfile({
     manifest_version: 3,
-    web_accessible_resources: [{ resources: ["brand_templates.json"], matches: ["<all_urls>"] }],
   }, profile);
   fs.writeFileSync(path.join(dir, "manifest.json"), `${JSON.stringify(manifest)}\n`);
   fs.writeFileSync(path.join(dir, "runtime.js"), "console.log('profile test');\n");
@@ -56,7 +55,7 @@ describe("release profiles", () => {
     expect(() => resolveReleaseProfile("typo-profile")).toThrow(/unknown release profile/i);
   });
 
-  it("adds reputation to the manifest only for the research profile", () => {
+  it("adds only reputation to the manifest for the research profile", () => {
     const base = {
       manifest_version: 3,
       web_accessible_resources: [
@@ -65,9 +64,8 @@ describe("release profiles", () => {
     };
     const interaction = configureManifestForProfile(base, resolveReleaseProfile("interaction-only"));
     const research = configureManifestForProfile(base, resolveReleaseProfile("research-reputation"));
-    expect(interaction.web_accessible_resources[0]?.resources).toEqual(["brand_templates.json"]);
+    expect(interaction.web_accessible_resources).toBeUndefined();
     expect(research.web_accessible_resources[0]?.resources).toEqual([
-      "brand_templates.json",
       "reputation_data.bin",
     ]);
     expect(base.web_accessible_resources[0]?.resources).toContain("reputation_data.bin");
@@ -78,12 +76,34 @@ describe("release profiles", () => {
     const result = inspectBuiltReleaseProfile(dist, { requireReleaseEligible: true });
     expect(result.profile.id).toBe("interaction-only");
     expect(result.hasReputationAsset).toBe(false);
+    expect(result.hasBrandTemplatesAsset).toBe(false);
   });
 
   it("rejects reputation loaders from an interaction-only bundle", () => {
     const dist = makeDist("interaction-only");
     fs.writeFileSync(path.join(dist, "runtime.js"), "fetch('reputation_data.bin');\n");
     expect(() => inspectBuiltReleaseProfile(dist)).toThrow(/reputation asset loader/i);
+  });
+
+  it("rejects a retired visual-simulation asset or manifest exposure", () => {
+    const dist = makeDist("interaction-only");
+    fs.writeFileSync(path.join(dist, "brand_templates.json"), "{}\n");
+    expect(() => inspectBuiltReleaseProfile(dist)).toThrow(/retired visual-simulation/i);
+
+    fs.rmSync(path.join(dist, "brand_templates.json"));
+    const manifestPath = path.join(dist, "manifest.json");
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+    manifest.web_accessible_resources = [
+      { resources: ["brand_templates.json"], matches: ["<all_urls>"] },
+    ];
+    fs.writeFileSync(manifestPath, `${JSON.stringify(manifest)}\n`);
+    expect(() => inspectBuiltReleaseProfile(dist)).toThrow(/retired visual-simulation/i);
+  });
+
+  it("rejects retired visual-simulation bundle code", () => {
+    const dist = makeDist("interaction-only");
+    fs.writeFileSync(path.join(dist, "runtime.js"), "chrome.runtime.sendMessage({ type: 'ns-capture-viewport' });\n");
+    expect(() => inspectBuiltReleaseProfile(dist)).toThrow(/retired visual-simulation code/i);
   });
 
   it.each([

@@ -125,7 +125,6 @@ describe("shouldSuppressSmartBlankPrompt", () => {
       "nrs_clickfix_active",
       "nrs_known_bad_domain",
       "nrs_js_behavior_suspicious",
-      "nrs_visual_brand_match",
       "nrs_pushstate_abuse",
       "nrs_redirect_chain_depth",
       "nrs_redirect_via_known_redirector",

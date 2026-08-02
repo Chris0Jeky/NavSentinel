@@ -56,13 +56,6 @@ exported. Options can clear the log, prompt/adaptive stats, and domain profiles;
 RI-06 must add a complete behavioral reset and purpose-specific URL
 minimization before beta.
 
-**Development-build viewport processing:** the current non-functional
-visual-sim experiment can capture the visible tab locally for comparison when a
-password page requests analysis. It does not store or transmit the image, but it
-can select the wrong active tab. RI-02 requires complete removal before beta; if
-any visual processing remains, this disclosure and the CWS data-use answers must
-be reviewed again.
-
 **Data not transmitted or retained as raw content**:
 - No browsing history sent anywhere
 - No personal information is requested as a product field; current full-URL

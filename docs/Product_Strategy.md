@@ -159,12 +159,11 @@ to preserve the reasoning but must not be presented as open blockers:
    tab/destination-bound pending decision with a short TTL and complete every
    protection-lowering action in extension-origin popup/options UI. Closed roots,
    trusted-event checks, and host-tamper tests remain defense in depth.
-2. **Wrong-tab viewport capture.** The non-functional visual-sim path can ask
-   the service worker to call `captureVisibleTab` for the requesting window
-   without confirming that the sender tab is active. A background password page
-   can therefore cause pixels from another active tab to be processed. The path
-   has no production detection value and was not disclosed before this review.
-   Excise it before beta, as standing decision D-2026-07-03-F already requires.
+2. **Retired wrong-tab viewport capture.** RI-02 removes the non-functional
+   visual-sim path, including the service-worker viewport capture, public asset,
+   scoring hook, and persisted state. It has no production detection value and
+   must not be revived without a new opt-in, disclosed, measured design. The
+   required Gate-3 still precedes merge and release-blocker closure.
 3. **Reputation/package boundary.** AI-9 selected interaction-only. The default
    build now uses an inert reputation adapter, omits the asset and WAR entry,
    and emits a deterministic release-eligible receipt. The 52-byte fixture is
@@ -221,7 +220,7 @@ The selected unlisted beta is **interaction-only by default**:
 
 - include navigation intent, credential-submit protection, rollback, core
   interaction detections, explanations, and the local decision log;
-- remove visual-sim and fake DNR completely;
+- retain RI-02 visual-sim excision through Gate-3, and remove fake DNR completely;
 - default-disable unmeasured JS behavior instrumentation;
 - keep fresh installs passive until the user has seen the complete local-data
   disclosure and affirmatively enabled protection;
@@ -245,7 +244,7 @@ All must be true:
   removal can cause denial only—not protection loss;
 - the merged #356 MAIN-world compatibility repair retains its regression
   coverage; a new compatibility blocker requires current reproduction;
-- visual-sim capture and fake DNR surfaces are absent;
+- visual-sim capture remains absent after RI-02's Gate-3; fake DNR is absent;
 - the explicit beta capability profile leaves broad JS behavior instrumentation
   off: fetch/XHR/beacon/password-value prototypes are not wrapped while core
   navigation protection remains active;
@@ -332,7 +331,7 @@ not statistically generalizable validation.
 | Current-browser proving ground | **Next** | Can establish additive value and become a credibility/distribution asset; must publish misses and data flow |
 | Real bloom reputation | **Redesign/optional** | Commodity coverage; current cardinality, provenance, cadence, licensing, and package budgets conflict |
 | Dynamic DNR from the bloom set | **Reject as designed** | A bloom filter is probabilistic and non-enumerable; DNR needs a separate exact, prioritized list within [Chrome rule limits](https://developer.chrome.com/docs/extensions/reference/api/declarativeNetRequest) |
-| Visual similarity / logo embeddings | **Remove current path; defer new design** | Current path never matches and creates privacy/correctness risk; revisit only with opt-in, demand, model/update budget, and measured gain |
+| Visual similarity / logo embeddings | **Current path removed; defer new design** | The retired path never matched and created privacy/correctness risk; revisit only with opt-in, demand, model/update budget, and measured gain |
 | JS behavior instrumentation | **Beta-off** | Broad global API wrapping has unfinished runtime/compatibility evidence and repeats known site-breakage risk |
 | Signal Fabric / calibrated judgment | **Defer** | First log typed signal contributions, measure marginal value, and delete weak signals; abstraction before evidence ossifies noise |
 | Guardian/caregiver circle | **Discovery only; separate product boundary** | Potentially valuable, but signed bundles/account graphs create sensitive relationship data and setup/support burden; require 10–12 paired interviews and an unaided setup test |
@@ -362,8 +361,8 @@ Horizon-specific rejection gates:
 - Recreate or defer closed #273's intent; keep closed #399 out of the beta
   blocker set until measurement justifies it. #356 is complete and remains
   regression coverage, not an open work item.
-- Excise visual-sim; remove fake DNR; minimize full URLs; preserve the selected
-  interaction-only beta profile.
+- Complete RI-02's Gate-3; remove fake DNR; minimize full URLs; preserve the
+  selected interaction-only beta profile.
 - Complete #175/#186 bridge identity/recovery and #455 pre-collection
   disclosure/consent.
 - Clear the name, claims, privacy, assets, fresh-install, and real-Chrome gates.

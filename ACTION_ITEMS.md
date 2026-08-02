@@ -7,8 +7,10 @@
 **Purpose:** the running list of things only *you* (Chris) can do, with enough
 context to resume by stable ID.
 
-**Last updated:** 2026-08-02 — remote `main` included PR #510 at `56e3aa6`,
-its exact-main product CI was green, and live GitHub had no open PRs. Chris
+**Last updated:** 2026-08-02 — orientation found `origin/main` at `71e534e`,
+including merged PRs #512 and #513 with exact-main product CI green. The pending
+RI-02 branch is locally verified but has not passed its required pre-merge
+Gate-3. Chris
 selected the interaction-only beta under AI-9, retained an opt-in non-release
 research profile, and accepted `main`
 without branch protection under AI-17. PR #509 merged the profile decision as
@@ -36,15 +38,16 @@ program: `docs/Project_Roadmap.md`. Standing decisions:
 
 ## Current state snapshot (live state rechecked 2026-08-02)
 
-The dedicated reconciliation worktree matched `origin/main` at `56e3aa6` after
-PR #510 merged; live GitHub showed no open PRs. Run `git fetch origin`,
-`git rev-parse origin/main`, and
+The dedicated reconciliation worktree matched `origin/main` at `71e534e` after
+PRs #512 and #513 merged; their exact-main product CI was green. The pending
+RI-02 branch is a separate browser-surface slice and cannot merge until AI-26
+records a Gate-3 result. Run `git fetch origin`, `git rev-parse origin/main`, and
 live `gh` checks before acting; the exact audit baseline lives in
 `docs/Product_Strategy.md`, not this live snapshot. v0.4.0 still has no tag,
 GitHub release, CWS release, or external-user evidence.
 
-Live recheck on 2026-08-02 found **0 open PRs, 79 open issues, and no open
-milestones, tags, or GitHub releases**. Verify all volatile counts live rather
+Live recheck before the RI-02 branch on 2026-08-02 found **0 open PRs, 79 open
+issues, and no open milestones, tags, or GitHub releases**. Verify all volatile counts live rather
 than treating this paragraph as a gate. Chris accepts the current `main`
 protection posture under AI-17; do not reopen or re-flag it.
 Stale PRs #273 and #399 were closed with explicit re-entry paths; their heads
@@ -69,8 +72,8 @@ product state.
   owns the corrective action register.
 - **Release-integrity blockers:** page-controlled injected UI currently owns
   allow/trust/resume authority and can be redressed under genuine input
-  (RI-01); visual-sim can process the wrong active
-  tab and has no production value (RI-02/#424); the frozen MAIN-world prototypes
+  (RI-01); RI-02 visual-sim excision is locally verified but needs AI-26
+  Gate-3 before merge; the frozen MAIN-world prototypes
   were site-breaking until #356 landed on 2026-07-25 (`3bd9e02`); fake DNR and
   unmeasured JS behavior should be absent
   or off; stored URLs require minimization (RI-05/RI-06); #175/#186 bridge
@@ -180,6 +183,31 @@ service worker registers in `chrome://extensions` (the `rolldownOptions` change)
 Reply `AI-24 done` plus Chrome's version, or `AI-24 failed: <step and observed>`.
 Only Chris can record this complete; nothing is blocked on it.
 
+**OPEN: AI-26 — Pre-merge Gate-3 for RI-02 visual-sim excision (#424).** This
+is a merge blocker for the current browser-surface PR, separate from optional
+AI-24. Agent prerequisites are complete: source removal, artifact/package
+checks, and CI-mode E2E are green. Run it only on the exact current PR head.
+
+1. Build the exact PR head with `npm run build`, then load `extension/dist`
+   unpacked in a fresh temporary **Chrome** profile; do not alter an established
+   profile.
+2. In `chrome://extensions`, confirm NavSentinel's MV3 service worker registers.
+   Inspect its console and the affected test pages for no errors.
+3. Serve the Gym (`npm run gym:serve`) and verify the surrounding protection
+   paths still work: Level 10 delayed redirect rolls back with its toast, and
+   Level 11 risky credential submission is blocked. Exercise one SPA navigation
+   fixture as well; no visual-template or viewport-capture error may appear.
+4. In the service-worker console, inspect
+   `chrome.runtime.getManifest().web_accessible_resources ?? []`; no entry may
+   expose `brand_templates.json`. Confirm the extension directory contains no
+   such asset.
+5. Close test tabs, stop the Gym server, and remove only the temporary profile.
+
+Reply `AI-26 done: Chrome <version>; clean consoles; no brand template asset`,
+or `AI-26 failed: <step and observed result>`. Only Chris can clear this item.
+Resume at: **AI-19**; AI-26 becomes the immediate pre-merge action only after
+the RI-02 PR is ready and exact-head CI is green.
+
 **🚨 BLOCKED: AI-15 — Run the headed release session only after agent
 preflight.** The prior 60–90 minute one-sitting guide is withdrawn: stale PRs
 #273 and #399 were closed, **#356 merged 2026-07-25** (`3bd9e02`) with its manual
@@ -187,7 +215,7 @@ Gate-3 waived, and the selected interaction-only profile passed AI-25 and landed
 through PR #509. Other release-integrity blockers precede a full manual release
 session. Agent preflight
 must first: (1) fix RI-01; (2) keep #273 deferred or recreate it on current `main`;
-(3) excise visual-sim and remove fake DNR; (4) complete
+(3) merge the Gate-3-verified RI-02 excision and remove fake DNR; (4) complete
 RI-06's purpose-specific data minimization/reset; (5) complete RI-07's explicit
 JS-behavior beta-off profile; (6) complete #175/#186 bridge integrity and #455
 pre-collection consent; and (7) provide one current headed checklist. Then

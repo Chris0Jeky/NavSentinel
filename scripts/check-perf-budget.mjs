@@ -61,16 +61,10 @@ const budgets = [
     // capture growth should land before a split/trim slice.
     // #238 / P5-C1 then adds replay-grade outcome wiring at the call sites while
     // keeping the pure feature-selection builder in the storage chunk.
-    // Bumped 66 -> 70 (Q2 decision 2026-06-26: "split + bump"). The chunk had been
-    // pinned AT the 66KB cap, which blocked a cluster of pure-correctness fixes
-    // (#373 nonfinite-totalNavigations gate bypass [this PR], #315/#288/#289/#200/
-    // #216/#226/#308). This is the *bump* half — a deliberate, owner-authorized
-    // stopgap, NOT death-by-a-thousand-cuts. The *split* half (lazy-load the
-    // dev-only debug_overlay + the conditionally-used visual_sim modules out of the
-    // always-on chunk, with a debug-mode e2e so the lazy path is CI-verified) is
-    // tracked in #374; once it lands, lower this cap back toward 66 to reclaim the
-    // headroom. Do not treat the +4KB as free space for unrelated growth.
-    maxKB: 70,
+    // RI-02 removes the visual-simulation runtime from the always-on chunk, so the
+    // temporary 70KB stopgap can return to the previous 66KB ceiling. #374 remains
+    // limited to any future non-visual lazy-chunk work.
+    maxKB: 66,
   },
   {
     label: "main_guard (MAIN world)",

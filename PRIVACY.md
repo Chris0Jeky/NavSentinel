@@ -74,15 +74,6 @@ the package and release paths. It is not production threat intelligence.
 
 These are read-only. They are never updated at runtime and require no network calls.
 
-## Development-Build Viewport Processing
-
-The current visual-sim experiment can request a local screenshot of the visible
-tab for in-memory comparison when a password page requests analysis. The image
-is not stored or transmitted. The experiment has no production detection value
-and can select a different active tab when the requester is in the background;
-RI-02 requires complete removal before beta. If visual processing is ever
-reintroduced, it requires an opt-in design and a fresh privacy disclosure.
-
 ## What The Extension Does Not Do
 
 - no telemetry upload

@@ -18,7 +18,7 @@ phase labels and artifact counts must not be read as product readiness.
 | 1 | Validate Foundation | 8 | 8 | **Validation gate open** (stale FP result; invalid corpus result) |
 | 2 | Target interaction threats | 13 | 13 | **Efficacy/competitive gate open**; reputation is excluded from the selected beta profile |
 | 3 | Productize | 12 | 12 | **Release/distribution gate open**: drafts/scope are not CWS distribution or an audit |
-| 4 | Differentiate | 8 | 4 | **Frozen** until beta evidence; visual-sim is queued for removal and JS behavior is unmeasured |
+| 4 | Differentiate | 8 | 4 | **Frozen** until beta evidence; legacy visual-sim code is excised with Gate-3 pending, and JS behavior is unmeasured |
 
 The historical registry contains 47 implementation tasks; 43 have merged
 artifacts. Do not publish that ratio as a product-completion score. Product
@@ -30,7 +30,7 @@ readiness is tracked only by the outcome gates below.
 
 | Gate | State | Required next move |
 |---|---|---|
-| Release integrity | **Blocked** | RI-01 extension-origin decision authority (#356/#464/#466 merged 2026-07-25 — the browser-held sub-slices are done, but no production extension-origin prompt/action flow ships yet); excise visual-sim (#424); remove fake DNR; purpose-specific data minimization (RI-06 slice 1 merged as #468; residue in #474); beta-off JS behavior; #175/#186 bridge identity/recovery |
+| Release integrity | **Blocked** | RI-01 extension-origin decision authority (#356/#464/#466 merged 2026-07-25 — the browser-held sub-slices are done, but no production extension-origin prompt/action flow ships yet); RI-02 visual-sim excision (#424, Gate-3 pending); remove fake DNR; purpose-specific data minimization (RI-06 slice 1 merged as #468; residue in #474); beta-off JS behavior; #175/#186 bridge identity/recovery |
 | Release profile | **Implemented; Gate-3 passed** | AI-9 selected interaction-only. PR #509 merged as `3faeb1e`, closing #321. Chrome 150.0.7871.187 passed on executable/artifact head `f6815be`; default runtime/manifest/package omit reputation; deterministic `research-reputation` is unpacked-only and non-release |
 | Brand/store | **Blocked** | AI-19 name clearance; #455 pre-collection disclosure/consent; one canonical claims-verified listing; assets and fresh-install checks |
 | Detection validation | **Open** | #417 methodology, #416/#426 rerun, confidence-aware reporting |
@@ -89,7 +89,7 @@ maintainer chooses disclosure/ownership.
 | ID | Priority | Action | Owner/gate | Existing home | Done when |
 |---|---|---|---|---|---|
 | RI-01 | P0 beta blocker | Move all proceed/allow/trust/resume authority out of page-injected UI | Agent + Gate-3 | Private release task | Injected UI is warn/cancel only; extension-origin action is tab/destination-bound with TTL; synthetic input, trusted-click redressing, host tamper/removal, tab switch, and stale state cannot lower protection |
-| RI-02 | P0 beta blocker | Excise visual-sim capture, templates, scoring hook, WAR, tests, and state | Agent + Gate-3 | #424 | No viewport capture path or placeholder asset remains; #374 is optional coordination, not a prerequisite |
+| RI-02 | P0 beta blocker | **Implementation locally verified; Gate-3 pending:** excise visual-sim capture, templates, scoring hook, WAR, tests, and state | Agent + Gate-3 | #424 | No viewport capture path or placeholder asset remains; #374 is optional coordination, not a prerequisite |
 | RI-03 | P0 beta blocker | #356 is complete; recreate or explicitly defer #273 from current `main` | Agent first; Gate-3 only if #273 is recreated (AI-8 remains blocked until then) | #273/#356; #399 stays deferred | #356 remains regression coverage, replacement guides point only to current green branches, and #399 remains outside beta blockers until its measurement methodology is ready |
 | RI-04 | P0 product decision | **Implemented via merged PR #509; AI-25 Gate-3 passed:** interaction-only selected and implemented; retain research reputation as unpacked-only | Chris + agent + Gate-3 | #321 / AI-9 / AI-25 | Default release receipt, manifest/WAR, runtime, package checks, tests, and claims agree; research profile is deterministic, visibly non-release, and package/release rejected |
 | RI-05 | P0 beta blocker | Remove fake DNR feature surface and unused permissions | Agent + Gate-3 | CWS checklist; redesign #242/#243 later | No test rules/toggle/DNR permission in beta manifest |
@@ -209,7 +209,7 @@ of this space; the task is to prove additive value, not claim first-mover status
 **Timeline**: 6-12 weeks.
 
 ### Phase 4: Differentiate
-**Goal**: Advanced capabilities that establish long-term competitive advantage. Visual similarity, JS behavior analysis, cross-browser, community intelligence.
+**Goal**: Advanced capabilities that establish long-term competitive advantage: future opt-in visual analysis, JS behavior analysis, cross-browser, and community intelligence.
 
 **Why last**: These are high-effort, high-reward capabilities that depend on a validated, shipped product as foundation. They are the long game.
 
@@ -1180,7 +1180,7 @@ release/evidence sequence in `Product_Strategy.md`.
 
 | ID | Title | Effort | Status | Depends On |
 |---|---|---|---|---|
-| P4-01 | Visual similarity detection | XL | **remove before beta** | #424 / RI-02 | Placeholder path never matches and can process the wrong active tab; a future opt-in design starts fresh only after evidence |
+| P4-01 | Visual similarity detection | XL | **implementation verified; Gate-3 pending** | #424 / RI-02 | Legacy path is removed; a future opt-in design starts fresh only after evidence |
 | P4-02 | JavaScript behavior analysis | XL | **beta-off pending measurement** | #127 | Broad global wrappers require compatibility and runtime-overhead evidence |
 | P4-03 | Cross-browser port (Firefox MV3) | XL | **frozen** | Desktop-Chrome retention evidence |
 | P4-04 | Community threat intelligence | XL | **frozen** | User scale, privacy, governance, and infrastructure evidence |
@@ -1194,24 +1194,20 @@ release/evidence sequence in `Product_Strategy.md`.
 #### P4-01: Visual similarity detection
 
 **Current decision (D-2026-07-03-F, reinforced 2026-07-10): excise this path
-before beta.** It ships placeholder templates that cannot match, consumes scarce
-package/chunk budget, and can process the visible pixels of a different active
-tab when a background password page requests analysis. #424/RI-02 removes it.
-Any future visual analysis is a new opt-in, disclosed, measured design—not a
-continuation of this plumbing.
+before beta.** RI-02 has locally verified removal of the placeholder templates,
+viewport capture, scoring, public asset, and state; its required human Gate-3 is
+still pending before the beta blocker can close. Any future visual analysis is a
+new opt-in, disclosed, measured design—not a continuation of this plumbing.
 
 **Historical implementation below is retained for removal scope, not as an
 active plan.** #245/#246 should be closed, deduplicated, or moved to a clearly
 post-beta hypothesis milestone.
 
 **Sub-slices:**
-- **W3 (merged):** capture pipeline (`visual_sim_capture.ts`), hashing (`visual_sim_hash.ts`),
-  template DB + loader, brand-canonical-domain map. NRS integration via #172
-  (cross-origin brand match feeds `visualSimilarityScore`, capped at +30).
-- **P4-01b (merged):** gym fixtures (`gym/visual-sim-01-brand-login.html`,
-  `gym/visual-sim-02-delayed-password.html`) + E2E (`tests/e2e/visual-sim.spec.ts`)
-  proving the capture→SW pipeline fires end-to-end (immediate and delayed-password
-  paths) with no error or false positive on benign login pages.
+- **W3 / P4-01b (historical; removed by RI-02):** the capture pipeline, hashing,
+  template DB/loader, brand-domain map, NRS hook, gym fixtures, and visual-sim
+  E2E were all retired together. They are history, not a future implementation
+  base.
 - **P4-01c (historical, cancelled):** the true-positive fixture was never built
   and `scripts/build-brand-templates.mjs` emits placeholders. D-2026-07-10-J
   chooses removal, not a logo-embedding continuation; #245/#246 are post-beta

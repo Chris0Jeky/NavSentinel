@@ -1,3 +1,5 @@
+> **Historical design record — retired by RI-02 (#424).** The viewport-capture, template, scoring, and asset implementation described below has been removed. It is retained only to preserve the research evidence that cites it; it is not an active implementation plan. Any future visual analysis requires a new opt-in, disclosed, measured design and a fresh privacy/release review.
+
 # P4-01: Visual Similarity Detection — Architecture Design
 
 ## Problem Statement

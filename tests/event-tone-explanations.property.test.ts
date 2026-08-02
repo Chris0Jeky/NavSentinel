@@ -45,7 +45,6 @@ const ALL_KNOWN_CODES = [
   "nrs_csp_weakness",
   "nrs_domain_repeat_offender",
   "nrs_js_behavior_suspicious",
-  "nrs_visual_brand_match",
   "clipboard_command_with_overlay",
   "clipboard_write_with_overlay",
   "clickfix_instruction_pattern",

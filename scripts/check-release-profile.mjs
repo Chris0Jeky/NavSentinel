@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -37,6 +35,15 @@ const PROHIBITED_INTERACTION_ONLY_UI_CLAIMS = [
   { pattern: /only\s+browser\s+extension/i, label: "exclusive extension capability" },
 ];
 
+const VISUAL_SIM_BUNDLE_TOKENS = [
+  "brand_templates.json",
+  "ns-capture-viewport",
+  "captureVisibleTab",
+  "captureTimestamps",
+  "visualSimilarityScore",
+  "nrs_visual_brand_match",
+];
+
 function listFilesWithExtension(dir, extension) {
   const files = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -69,6 +76,22 @@ export function inspectBuiltReleaseProfile(
   const reputationPath = path.join(distDir, "reputation_data.bin");
   const hasReputationAsset = fs.existsSync(reputationPath);
   const exposesReputation = resources.includes("reputation_data.bin");
+  const brandTemplatesPath = path.join(distDir, "brand_templates.json");
+  const hasBrandTemplatesAsset = fs.existsSync(brandTemplatesPath);
+  const exposesBrandTemplates = resources.includes("brand_templates.json");
+
+  if (hasBrandTemplatesAsset || exposesBrandTemplates) {
+    throw new Error("built profile must omit the retired visual-simulation brand template asset");
+  }
+  for (const filePath of listFilesWithExtension(distDir, ".js")) {
+    const bundle = fs.readFileSync(filePath, "utf8");
+    const retiredToken = VISUAL_SIM_BUNDLE_TOKENS.find((token) => bundle.includes(token));
+    if (retiredToken) {
+      throw new Error(
+        `built bundle still contains retired visual-simulation code (${retiredToken}): ${path.relative(distDir, filePath)}`,
+      );
+    }
+  }
 
   if (profile.capabilities.reputation) {
     if (!hasReputationAsset || !exposesReputation) {
@@ -98,7 +121,14 @@ export function inspectBuiltReleaseProfile(
     }
   }
 
-  return { profile, manifest, hasReputationAsset, exposesReputation };
+  return {
+    profile,
+    manifest,
+    hasReputationAsset,
+    exposesReputation,
+    hasBrandTemplatesAsset,
+    exposesBrandTemplates,
+  };
 }
 
 function main() {

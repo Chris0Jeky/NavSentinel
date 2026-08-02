@@ -44,8 +44,9 @@ Use this repository build only for controlled development and dogfooding until
 the beta gates pass. Do not rely on it as a sole security control. In particular,
 RI-01 must move every protection-lowering decision into extension-origin UI
 bound to the intended tab/destination; page-injected UI cannot safely authorize
-proceed/allow/trust/resume even with trusted-event checks. RI-02 must remove the
-non-functional viewport-capture path.
+proceed/allow/trust/resume even with trusted-event checks. RI-02 has removed the
+non-functional viewport-capture path; its required Gate-3 closeout remains before
+the release-integrity blocker can close.
 
 ### Navigation protection modes
 
@@ -182,9 +183,6 @@ The Playwright config intentionally limits discovery to E2E specs so Vitest file
   metadata for ClickFix detection; the content is not bridged, stored, or
   transmitted
 - Local-only settings and logs
-- The current development-only visual-sim experiment can process a local
-  visible-tab screenshot and is scheduled for removal before beta; see
-  `PRIVACY.md`
 
 See:
 

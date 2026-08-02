@@ -88,7 +88,9 @@ export function configureManifestForProfile(baseManifest, profile) {
 
   for (const entry of entries) {
     if (!Array.isArray(entry.resources)) continue;
-    entry.resources = entry.resources.filter((resource) => resource !== "reputation_data.bin");
+    entry.resources = entry.resources.filter(
+      (resource) => resource !== "reputation_data.bin" && resource !== "brand_templates.json",
+    );
   }
 
   if (profile.capabilities.reputation) {
@@ -105,9 +107,14 @@ export function configureManifestForProfile(baseManifest, profile) {
     }
   }
 
-  manifest.web_accessible_resources = entries.filter((entry) =>
+  const retainedEntries = entries.filter((entry) =>
     !Array.isArray(entry.resources) || entry.resources.length > 0,
   );
+  if (retainedEntries.length > 0) {
+    manifest.web_accessible_resources = retainedEntries;
+  } else {
+    delete manifest.web_accessible_resources;
+  }
   return manifest;
 }
 

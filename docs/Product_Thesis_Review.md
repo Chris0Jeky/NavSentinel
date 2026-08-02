@@ -441,11 +441,12 @@ learns the user's browsing pattern. This doesn't require telemetry -- it's local
 
 ### Tier 3: Transformative, major effort
 
-**10. Visual similarity detection**
+**10. Future opt-in visual analysis (not a current capability)**
 
-Screenshot the page and compare against known brand login page templates using perceptual
-hashing. This catches phishing pages that perfectly mimic a login form's appearance regardless
-of domain or URL. Libraries like `blockhash` work entirely client-side.
+RI-02 removed the legacy screenshot/template path because it had no production
+detection value and could process the wrong active tab. Any future design must
+start with opt-in privacy disclosure, measured efficacy, and a new model/data
+boundary rather than revive perceptual-hash templates.
 
 **11. JavaScript behavior analysis**
 
@@ -610,7 +611,8 @@ additive value on top of what users already have.
 
 ### Phase 4: Differentiate (ongoing)
 
-- Visual similarity detection for brand impersonation
+- Future opt-in visual analysis for brand impersonation, only after evidence and
+  a new privacy/release design
 - JavaScript behavior analysis for exfiltration detection
 - Adaptive local learning from user decisions
 - Community threat intelligence (opt-in, privacy-preserving)

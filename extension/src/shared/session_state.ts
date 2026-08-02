@@ -81,7 +81,6 @@ export interface LastCommittedEntry {
 // `now - x` comparison NaN, which silently disables a prune, makes a size-cap sort
 // non-deterministic, or (for lastCommitted) flips a same-site nav into a FALSE rollback
 // after a worker restart; a corrupt oauthFlow.phase can evade redirect-mismatch detection.
-// Mirrors the captureTimestamps gate added in #345.
 // ---------------------------------------------------------------------------
 const isFiniteNumber = (v: unknown): v is number =>
   typeof v === "number" && Number.isFinite(v);
@@ -181,7 +180,6 @@ const KEYS = {
   childWindow: `${PREFIX}childWindow`,
   oauthFlow: `${PREFIX}oauthFlow`,
   redirectChains: `${PREFIX}redirectChains`,
-  captureTimestamps: `${PREFIX}captureTimestamps`,
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -251,11 +249,6 @@ export class SessionStateManager {
   // Redirect chain data (separate because RedirectChainTracker has its own class)
   readonly redirectChainData = new Map<number, RedirectChain>();
 
-  // Per-tab viewport-capture timestamps (visual-sim rate limit). Session-backed
-  // so the rate limit survives SW restart and cannot be bypassed by forcing a
-  // worker recycle between bursts.
-  readonly captureTimestampsByTab = new Map<number, number[]>();
-
   private _hydrated = false;
   private _canPersist = false;
   private _hydratePromise: Promise<void> | null = null;
@@ -305,8 +298,8 @@ export class SessionStateManager {
       // cannot overwrite the still-present session storage with empty maps
       // (#228.2). Persistence resumes after a successful hydrate on the next SW
       // startup. TRADEOFF (R1 finding 2): for the rest of THIS worker's lifetime
-      // the SW-recycle-resistant protections that depend on persistence (the
-      // capture-rate limit, pending rollback/forward) are degraded; they recover
+      // the SW-recycle-resistant protections that depend on persistence (such as
+      // pending rollback/forward state) are degraded; they recover
       // on the next worker startup's fresh hydrate.
       this._hydrated = true;
       return;
@@ -328,11 +321,6 @@ export class SessionStateManager {
     this._restoreMap(this.childWindowByTab, data[KEYS.childWindow], isValidChildWindow);
     this._restoreMap(this.oauthFlowByTab, data[KEYS.oauthFlow], isValidOAuthFlow);
     this._restoreRedirectChains(data[KEYS.redirectChains]);
-    this._restoreMap(
-      this.captureTimestampsByTab,
-      data[KEYS.captureTimestamps],
-      (v) => Array.isArray(v) && v.every((n) => typeof n === "number" && Number.isFinite(n)),
-    );
     this._hydrated = true;
     this._canPersist = true;
   }
@@ -378,7 +366,6 @@ export class SessionStateManager {
       [KEYS.childWindow]: mapToObj(this.childWindowByTab),
       [KEYS.oauthFlow]: mapToObj(this.oauthFlowByTab),
       [KEYS.redirectChains]: mapToObj(this.redirectChainData),
-      [KEYS.captureTimestamps]: mapToObj(this.captureTimestampsByTab),
     };
     void chrome.storage.session.set(data).catch((err) => {
       console.warn("[NavSentinel] session persistAll failed:", err);
@@ -406,7 +393,6 @@ export class SessionStateManager {
     this.childWindowByTab.delete(tabId);
     this.oauthFlowByTab.delete(tabId);
     this.redirectChainData.delete(tabId);
-    this.captureTimestampsByTab.delete(tabId);
     // Batch persist after bulk delete
     this.persistAll();
   }
@@ -424,9 +410,7 @@ export class SessionStateManager {
     let skipped = 0;
     for (const [k, v] of restored) {
       // Optional per-value shape gate for maps whose value type would break callers if
-      // corrupt (e.g. captureTimestampsByTab expects number[], and sw.ts calls .filter on
-      // it — a non-array from a corrupt session restore would throw). Mirrors the inline
-      // validation _restoreRedirectChains already does. (#339)
+      // corrupt. Mirrors the inline validation _restoreRedirectChains already does. (#339)
       if (isValidValue && !isValidValue(v)) {
         skipped++;
         continue;

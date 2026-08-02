@@ -341,19 +341,17 @@ describe("computeNRS", () => {
       expect(result.nrs).toBeGreaterThanOrEqual(NRS_STRICT_BLOCK_THRESHOLD);
     });
 
-    it("keeps attack-grade top-site signals at their normal NRS", () => {
+    it("keeps combined non-visual attack signals at their normal NRS", () => {
       const result = computeNRS(baseCds(0), baseNav({
         trustTier: TRUST_TIER_TOP_SITE,
         doubleClickHijackActive: true,
         clickfixScore: 40,
         oauthOpenerManipulation: true,
-        visualSimilarityScore: 30,
       }));
-      expect(result.nrs).toBeGreaterThanOrEqual(100);
+      expect(result.nrs).toBe(85);
       expect(result.nrsFactors).toContain("nrs_double_click_hijack");
       expect(result.nrsFactors).toContain("nrs_clickfix_active");
       expect(result.nrsFactors).toContain("nrs_oauth_opener_manipulation");
-      expect(result.nrsFactors).toContain("nrs_visual_brand_match");
       expect(result.nrsFactors).not.toContain("nrs_top_site_prior");
     });
   });
@@ -380,7 +378,6 @@ describe("computeNRS", () => {
         "nrs_double_click_hijack",
         "nrs_oauth_redirect_mismatch",
         "nrs_pushstate_abuse",
-        "nrs_visual_brand_match",
         "nrs_multiple_attempts",
         "nrs_redirect_via_known_redirector",
         "nrs_js_behavior_suspicious",
