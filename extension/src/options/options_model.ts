@@ -1,4 +1,5 @@
-import type { BehaviouralDataLane, BehaviouralResetResult, PromptOutcome } from "../shared/storage";
+import type { BehaviouralDataLane, BehaviouralResetResult } from "../shared/behavioural_reset";
+import type { PromptOutcome } from "../shared/storage";
 
 export function pct(n: number, total: number): string {
   if (total === 0) return "--";

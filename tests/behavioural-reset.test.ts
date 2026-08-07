@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   BEHAVIOURAL_DATA_LANES,
   BEHAVIOURAL_RESET_STATE_KEY,
+} from "../extension/src/shared/behavioural_reset";
+import {
   EVENT_LOG_KEY,
   PROMPT_OUTCOMES_KEY,
   SUITE_SETTINGS_KEY,
@@ -140,7 +142,7 @@ describe("unified behavioural-data reset (RI-06 / #474)", () => {
     const { chrome, store } = createChromeMock(seededBehaviouralStore());
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
-    const { clearBehaviouralData } = await import("../extension/src/shared/storage");
+    const { clearBehaviouralData } = await import("../extension/src/shared/behavioural_reset");
     const result = await clearBehaviouralData();
 
     expect(result.ok).toBe(true);
@@ -164,7 +166,7 @@ describe("unified behavioural-data reset (RI-06 / #474)", () => {
     });
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
-    const { clearBehaviouralData } = await import("../extension/src/shared/storage");
+    const { clearBehaviouralData } = await import("../extension/src/shared/behavioural_reset");
     const result = await clearBehaviouralData();
 
     expect(result.ok).toBe(false);
@@ -189,7 +191,7 @@ describe("unified behavioural-data reset (RI-06 / #474)", () => {
     });
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
-    const { clearBehaviouralData } = await import("../extension/src/shared/storage");
+    const { clearBehaviouralData } = await import("../extension/src/shared/behavioural_reset");
     const result = await clearBehaviouralData();
 
     expect(result.ok).toBe(false);
@@ -217,7 +219,7 @@ describe("unified behavioural-data reset (RI-06 / #474)", () => {
     const { chrome, store } = createChromeMock(seeded);
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
-    const { resumeInterruptedBehaviouralReset } = await import("../extension/src/shared/storage");
+    const { resumeInterruptedBehaviouralReset } = await import("../extension/src/shared/behavioural_reset");
     const result = await resumeInterruptedBehaviouralReset();
 
     expect(result.ok).toBe(true);
@@ -233,7 +235,7 @@ describe("unified behavioural-data reset (RI-06 / #474)", () => {
     const { chrome, store } = createChromeMock(seededBehaviouralStore());
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
-    const { resumeInterruptedBehaviouralReset } = await import("../extension/src/shared/storage");
+    const { resumeInterruptedBehaviouralReset } = await import("../extension/src/shared/behavioural_reset");
     const result = await resumeInterruptedBehaviouralReset();
 
     expect(result).toEqual({ ok: true, cleared: [], failed: [] });
@@ -246,6 +248,7 @@ describe("unified behavioural-data reset (RI-06 / #474)", () => {
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const storage = await import("../extension/src/shared/storage");
+    const behaviouralReset = await import("../extension/src/shared/behavioural_reset");
     // Both appends are queued before the reset is issued, so the serialized
     // lanes must order them ahead of the clear and the barrier must reject any
     // that lands after it.
@@ -257,7 +260,7 @@ describe("unified behavioural-data reset (RI-06 / #474)", () => {
       score: 80,
       outcome: "block",
     });
-    const reset = storage.clearBehaviouralData();
+    const reset = behaviouralReset.clearBehaviouralData();
     const [, , result] = await Promise.all([appendEvent, appendOutcome, reset]);
 
     expect(result.ok).toBe(true);
@@ -271,8 +274,9 @@ describe("unified behavioural-data reset (RI-06 / #474)", () => {
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
     const storage = await import("../extension/src/shared/storage");
+    const { clearBehaviouralData } = await import("../extension/src/shared/behavioural_reset");
     const before = Date.now();
-    await storage.clearBehaviouralData();
+    await clearBehaviouralData();
 
     // A retried message built BEFORE the reset arrives afterwards.
     await storage.appendEvent({ kind: "nav_click_block", site: "late.example", ts: before - 1 });
@@ -303,7 +307,7 @@ describe("behavioural reset message handling", () => {
   });
 
   it("recognizes only the reset message shape", async () => {
-    const { isBehaviouralResetMessage } = await import("../extension/src/shared/storage");
+    const { isBehaviouralResetMessage } = await import("../extension/src/shared/behavioural_reset");
     expect(isBehaviouralResetMessage({ type: "ns-behavioural-reset" })).toBe(true);
     expect(isBehaviouralResetMessage({ type: "ns-event-log-clear" })).toBe(false);
     expect(isBehaviouralResetMessage(null)).toBe(false);
@@ -314,7 +318,7 @@ describe("behavioural reset message handling", () => {
     const { chrome, store } = createChromeMock(seededBehaviouralStore());
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
-    const { handleBehaviouralResetMessage } = await import("../extension/src/shared/storage");
+    const { handleBehaviouralResetMessage } = await import("../extension/src/shared/behavioural_reset");
     const response = await handleBehaviouralResetMessage(OPTIONS_SENDER);
 
     expect(response).toMatchObject({ ok: true, result: { ok: true } });
@@ -326,7 +330,7 @@ describe("behavioural reset message handling", () => {
     const { chrome, store } = createChromeMock(seededBehaviouralStore());
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
-    const { handleBehaviouralResetMessage } = await import("../extension/src/shared/storage");
+    const { handleBehaviouralResetMessage } = await import("../extension/src/shared/behavioural_reset");
     const response = await handleBehaviouralResetMessage(CONTENT_SCRIPT_SENDER);
 
     expect(response).toMatchObject({ ok: false, code: "unauthorized" });
@@ -363,7 +367,7 @@ describe("behavioural reset delegation from a page context", () => {
     };
     vi.stubGlobal("chrome", withRuntime as unknown as typeof globalThis.chrome);
 
-    const { clearBehaviouralData } = await import("../extension/src/shared/storage");
+    const { clearBehaviouralData } = await import("../extension/src/shared/behavioural_reset");
     const result = await clearBehaviouralData();
 
     expect(sent).toEqual({ type: "ns-behavioural-reset" });
@@ -386,7 +390,7 @@ describe("behavioural reset delegation from a page context", () => {
     };
     vi.stubGlobal("chrome", withRuntime as unknown as typeof globalThis.chrome);
 
-    const { clearBehaviouralData } = await import("../extension/src/shared/storage");
+    const { clearBehaviouralData } = await import("../extension/src/shared/behavioural_reset");
     const result = await clearBehaviouralData();
 
     expect(result.ok).toBe(false);

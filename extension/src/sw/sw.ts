@@ -6,20 +6,25 @@ import {
 import {
   getNavSettings,
   appendEvent,
-  handleBehaviouralResetMessage,
   handleEventLogAppendMessage,
   handleEventLogControlMessage,
   handlePromptOutcomeStorageMessage,
-  isBehaviouralResetMessage,
   isEventLogAppendMessage,
   isEventLogControlMessage,
   isEventLogMigrationMessage,
   isPromptOutcomeStorageMessage,
   migrateStoredEventLogUrls,
   migrateStoredPromptOutcomes,
-  resumeInterruptedBehaviouralReset,
   SUITE_SETTINGS_KEY,
 } from "../shared/storage";
+// RI-06 (#474): the clear-all lives in its own module so the domain-profile
+// chunk boundary survives bundling. Static import — MV3 module workers cannot
+// resolve a runtime `import()`.
+import {
+  handleBehaviouralResetMessage,
+  isBehaviouralResetMessage,
+  resumeInterruptedBehaviouralReset,
+} from "../shared/behavioural_reset";
 import { RedirectChainTracker } from "../shared/redirect_chain";
 import type { PendingDecisionRuntimeMessage } from "../shared/pending_decision";
 import {

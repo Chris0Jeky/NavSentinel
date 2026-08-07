@@ -11,7 +11,6 @@ import { jsBehaviorInstrumentationEnabled } from "@navsentinel/js-behavior-monit
 import {
   addTrustedDomainWithResult,
   appendEvent,
-  clearBehaviouralData,
   clearEventLog,
   clearAdaptiveScores,
   clearPromptOutcomes,
@@ -38,6 +37,7 @@ import {
   getTopSuspiciousDomains,
   type DomainProfile,
 } from "../shared/domain_profile";
+import { clearBehaviouralData } from "../shared/behavioural_reset";
 
 // Icons
 document.getElementById("logoSlot")!.innerHTML = logoSentinel(30, true);
