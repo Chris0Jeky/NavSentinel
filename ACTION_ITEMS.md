@@ -130,10 +130,13 @@ AI-24 -> AI-23 (low priority housekeeping, last).
 
 > **2026-08-08 — a browser-surface batch is now waiting on you (AI-27), and one
 > scope decision is owed before its last slice can be finished (AI-28).** AI-27
-> supersedes AI-24 in practice: the optional confirmation AI-24 describes is a
-> subset of the batch pass AI-27 asks for, so running AI-27 closes both. AI-24 is
-> retained rather than merged into it because Chris may still want the smaller
-> pass on its own.
+> does **not** automatically close AI-24. AI-24 requires two things beyond the
+> AI-13 step-5 gates — the AI-21 trusted-compatibility cases (OAuth popup by
+> physical click, by Tab+Enter, by submit input; exactly one popup, no prompt) and
+> confirming the MV3 service worker registers in `chrome://extensions`. Those are
+> now folded into AI-27's procedure below, so an `AI-27 pass` that includes them
+> closes AI-24 as well; an `AI-27 pass` that skips them does not, and AI-24 stays
+> open. Say which you ran.
 **AI-13, AI-21 and AI-22 are resolved** — their
 PRs (#356, #464, #466) merged on 2026-07-25 after Chris chose to clear the
 browser-surface gate by automated equivalent rather than a manual pass; their
@@ -248,13 +251,33 @@ retargeted to `main` before merging it. Slots 4-10 are independent branches off
 | 1 | **#528** | RI-05: removes the fake `declarativeNetRequest` surface, its two localhost-scoped stub rules, the options toggle, and **two manifest permissions** | Permission surface shrinks 5→3. Confirm the extension still loads and behaves normally after the manifest change |
 | 2 | **#532** | RI-07: JS-behaviour instrumentation is a build-time capability, off in every profile; the monitor module is not linked at all | Confirm navigation, credential and DoubleClickjacking protection still work — those are deliberately unaffected, but that is the thing to verify by hand |
 | 3 | **#535** | RI-06 last slice: one service-worker-owned **clear-all behavioural-data** reset (prompt outcomes → adaptive scores → event log → domain profiles), with partial-failure reporting and crash-resume | Ships under the **AI-28** assumption below. Use the new options → Analytics *Clear behavioural data* control and confirm it erases history but leaves your settings, allowlist and trusted domains intact |
-| 4 | **#514** | RI-02: removes visual-sim capture, templates, scoring hook and WAR (this is the pre-existing **AI-26**) | Already reviewed on its exact head; only the manual pass is outstanding |
+| 4 | **#514** | RI-02: removes visual-sim capture, templates, the scoring hook, the `brand_templates.json` web-accessible resource, and the stored state | Already reviewed on its exact head, exact-head CI green. Manual pass: see the **#514 note** directly below this table — the "AI-26" its review thread cites was never actually written into this file, so there was no recorded procedure until now |
 | 5 | **#534** | #458: removes the `Location.prototype` patch that never intercepted anything, and corrects README / architecture / design-brief claims | Confirm delayed-redirect rollback still works. Note the Gate-3 guide text itself changed — a step that said "normal Location calls bypass the prototype hook" now says there is no pre-navigation hook at all |
 | 6 | **#520** | #389: primes redirect chain-info at content-script init so first-click NRS is not under-scored | Decision path is unchanged and still synchronous; worth a normal browse to confirm no latency |
 | 7 | **#521** | #382: forward-offer no longer re-sent after delivery | Do a rollback and confirm you get exactly one forward prompt, and that resuming still works |
 | 8 | **#522** | #410: bounds the action-attribute scan on the credential submit path | Submit a real login form and confirm the prompt still names the correct destination host |
 | 9 | **#526** | #413: reserves the last 5 of the 50 mutation-alert slots for scarce security detections (injected password field, suspicious iframe, cross-domain form-action change), so a benign-alert flood can no longer switch detection off | Review caught that the originally-prescribed fix registered shadow roots but still emitted nothing past the cap; the reserve is the real fix. Worth browsing a few mutation-heavy sites (cookie banners, chat widgets) to confirm no new prompts |
 | 10 | **#533** | #219: distinct gauge state when a page has only scoreless threat alerts | Purely visual — confirm the dashed-ring "!" state reads as a warning and not as an error |
+
+**#514 note — the missing "AI-26".** PR #514's review thread says *"`ACTION_ITEMS.md`
+AI-26 still requires Chris's fresh-profile real-Chrome Gate-3 evidence"*, but a
+repo-wide search finds no AI-26 item: it was referenced on the PR and never
+recorded here, so the stable ID was not resumable and #514 had **no written pass
+criteria anywhere**. Rather than mint a second ID, its criteria are folded into
+AI-27. For #514 specifically, confirm on a fresh profile:
+
+- No viewport capture occurs on any page (the removed path could previously
+  process the *wrong* active tab — that is the defect RI-02 exists to remove).
+- No console error about `brand_templates.json` or a missing web-accessible
+  resource, on a normal page and on a credential page.
+- A credential/login page still produces a sensible risk read-out with the
+  visual-similarity factor gone — the gauge and chips should look unremarkable,
+  not empty or broken.
+- The popup and options surfaces show no leftover visual-similarity control,
+  label, or explanation string.
+
+If you would rather keep `AI-26` as a distinct ID, say so and it will be written up
+properly as its own item instead.
 
 **Budget note, measured 2026-08-08:** the stack in slots 1-2 *reclaims* bundle
 space rather than spending it. `main_guard` drops 18.5KB → 14.2KB (92% → 71% of
@@ -264,12 +287,28 @@ sitting at **99%** of its 500KB budget, and CI gates on it — so merging slots 
 early is what buys room for the rest. #514 should give back more again.
 
 **Suggested approach:** one session, build from a branch, load `extension/dist`
-unpacked in a fresh temporary Chrome profile, and walk the existing AI-13 step-5
-gates in `docs/agentic/GATE3_GUIDES.md` once per merged group rather than once per
-PR — several of these interact and testing them merged is the state users run.
+unpacked in a fresh temporary Chrome profile, and walk the gates once per merged
+group rather than once per PR — several of these interact and testing them merged
+is the state users run. The gate set is:
+
+1. The **AI-13 step-5 gates** in `docs/agentic/GATE3_GUIDES.md` (delayed-redirect
+   rollback with its toast, programmatic form submit blocked before navigation,
+   `Allow once` scoping, popup blocks).
+2. The **AI-21 trusted-compatibility cases** — OAuth popup opened by physical
+   click, by Tab+Enter, and by submit input: exactly one popup each, no prompt.
+3. **MV3 service-worker registration** in `chrome://extensions` (no errors, worker
+   active).
+
+Items 2 and 3 are carried over from AI-24 deliberately: without them an `AI-27
+pass` would silently drop AI-24's residual checks. They also matter more than
+usual this time, because #528 changes the manifest's permission set and #532
+changes what is linked into the bundle — both are exactly the kind of change that
+can break worker registration.
+
 Reply `AI-27 pass: <PR list>` or `AI-27 waive: <PR list>` (a waiver is a legitimate
 outcome and is what you chose on 2026-07-25; it is recorded as a waiver, never as a
-Gate-3 pass). Anything you fail, say so and it becomes a fix slice.
+Gate-3 pass), and say whether you ran items 2-3 so AI-24 can be closed or left
+open accordingly. Anything you fail, say so and it becomes a fix slice.
 
 **Not in this batch:** PR #531 (OAuth state corroboration) is titled
 `[HELD on AI-14/#417]` and must **not** enter the Gate-3 queue — see AI-14. It is
