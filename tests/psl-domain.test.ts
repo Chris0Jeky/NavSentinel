@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { getRegistrableDomain, BRAND_KNOWN_ALIASES } from "../extension/src/shared/domain";
+import {
+  getRegistrableDomain,
+  BRAND_KNOWN_ALIASES,
+  detectBrandInDomain,
+  detectSubdomainStuffing,
+} from "../extension/src/shared/domain";
 
 describe("BRAND_KNOWN_ALIASES registrable-domain invariant (#309)", () => {
   it("every alias is its own registrable domain (no dead subdomain/full-host entries)", () => {
@@ -24,6 +29,38 @@ describe("BRAND_KNOWN_ALIASES registrable-domain invariant (#309)", () => {
         expect(getRegistrableDomain(alias), `${brand} alias "${alias}"`).toBe(alias);
       }
     }
+  });
+});
+
+describe("BRAND_KNOWN_ALIASES brand-ownership invariant (#320)", () => {
+  // The #309 invariant above is structural only -- it proves an alias is its own
+  // registrable domain, not that the named brand controls it. An alias the brand
+  // does NOT control (worst case: one that is not registered at all) hands a free
+  // exemption from BRAND_KEYWORD_DOMAIN and SUBDOMAIN_STUFFING to whoever buys it.
+
+  it("no longer allowlists instagramstatic.com (unregistered as of 2026-08-07)", () => {
+    for (const [brand, aliases] of BRAND_KNOWN_ALIASES) {
+      expect([...aliases], `${brand} aliases`).not.toContain("instagramstatic.com");
+    }
+  });
+
+  it("flags instagramstatic.com through the public detectors", () => {
+    // Both assertions returned null while the alias was present.
+    expect(detectBrandInDomain("instagramstatic.com")).toMatchObject({
+      brand: "instagram",
+      canonicalDomain: "instagram.com",
+    });
+    expect(detectSubdomainStuffing("login.instagram.instagramstatic.com")).toMatchObject({
+      brand: "instagram",
+      canonicalDomain: "instagram.com",
+    });
+  });
+
+  it("keeps amazonws.com, which RDAP shows is Amazon's own registration", () => {
+    // Registrar MarkMonitor, NS *.AMZNDNS.*, A record in ARIN net AMAZON-01.
+    // Removing it would false-positive an Amazon-controlled domain.
+    expect(BRAND_KNOWN_ALIASES.get("amazon")?.has("amazonws.com")).toBe(true);
+    expect(detectBrandInDomain("amazonws.com")).toBeNull();
   });
 });
 

@@ -17,6 +17,19 @@ const arbPath = fc.string({ maxLength: 30 })
 
 const OPEN_REDIRECT_SEGMENTS = ["/redirect", "/go", "/redir", "/out", "/link"];
 
+/**
+ * Mirror of TRACKING_PREFIX_ALLOWLIST in extension/src/shared/redirect_chain.ts.
+ * Declared once so an audit of that table (e.g. #295, which dropped the NXDOMAIN
+ * entries go.google.com and go.googleprod.com) cannot leave one copy stale.
+ */
+const ALLOWLISTED_HOSTS = [
+  "go.microsoft.com",
+  "go.dev",
+  "click.mailchimp.com",
+  "click.convertkit.com",
+  "click.pstmrk.it",
+] as const;
+
 const arbSafePath = arbPath.filter((p) => {
   const lower = p.toLowerCase();
   return !OPEN_REDIRECT_SEGMENTS.some(
@@ -100,10 +113,7 @@ describe("isKnownRedirector property tests", () => {
     // Post-#285, allowlisted hosts are fully exempt from the heuristics, so a redirect param on
     // them returns false. arbDomain can generate an exact allowlisted host (e.g. "go.dev"), so
     // exclude them to keep this universal invariant sound (mirrors the open-redirect-path test).
-    const allowlisted = new Set([
-      "go.microsoft.com", "go.dev", "go.googleprod.com",
-      "go.google.com", "click.mailchimp.com", "click.convertkit.com", "click.pstmrk.it",
-    ]);
+    const allowlisted = new Set<string>(ALLOWLISTED_HOSTS);
     fc.assert(
       fc.property(
         arbDomain.filter((d) => !allowlisted.has(d)),
@@ -120,14 +130,9 @@ describe("isKnownRedirector property tests", () => {
   });
 
   it("never flags allowlisted tracking-prefix domains (non-redirect paths)", () => {
-    const allowlisted = [
-      "go.microsoft.com", "go.dev", "go.googleprod.com",
-      "go.google.com", "click.mailchimp.com", "click.convertkit.com",
-      "click.pstmrk.it"
-    ];
     fc.assert(
       fc.property(
-        fc.constantFrom(...allowlisted),
+        fc.constantFrom(...ALLOWLISTED_HOSTS),
         arbSafePath,
         (domain, path) => {
           const url = `https://${domain}${path}`;
@@ -140,11 +145,7 @@ describe("isKnownRedirector property tests", () => {
 
   it("detects tracking-prefix subdomains for non-allowlisted domains", () => {
     const prefixes = ["click.", "track.", "redirect.", "go.", "redir."];
-    const allowlisted = new Set([
-      "go.microsoft.com", "go.dev", "go.googleprod.com",
-      "go.google.com", "click.mailchimp.com", "click.convertkit.com",
-      "click.pstmrk.it"
-    ]);
+    const allowlisted = new Set<string>(ALLOWLISTED_HOSTS);
     fc.assert(
       fc.property(
         fc.constantFrom(...prefixes),
