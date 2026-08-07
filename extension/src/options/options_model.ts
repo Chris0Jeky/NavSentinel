@@ -1,4 +1,4 @@
-import type { PromptOutcome } from "../shared/storage";
+import type { BehaviouralDataLane, BehaviouralResetResult, PromptOutcome } from "../shared/storage";
 
 export function pct(n: number, total: number): string {
   if (total === 0) return "--";
@@ -138,6 +138,67 @@ export async function runClearStats(
   }
   await deps.refresh();
   deps.flash("Stats cleared.");
+}
+
+/** User-facing names for the declared behavioural-data lanes (RI-06 / #474). */
+export const BEHAVIOURAL_LANE_LABELS: Record<BehaviouralDataLane, string> = {
+  promptOutcomes: "prompt outcomes",
+  adaptiveScores: "adaptive scores",
+  eventLog: "event log",
+  domainProfiles: "domain profiles",
+};
+
+/** What the clear-all control keeps. Kept next to the lane labels so the copy
+ *  and the declared boundary are edited together. */
+export const BEHAVIOURAL_RESET_KEPT_COPY =
+  "Settings, allowlist, and trusted domains were kept.";
+
+/**
+ * Turn a clear-all result into the status line shown in the options page.
+ * Success is reported ONLY when every lane cleared; a partial result names the
+ * lanes that did not, so a half-applied reset is never displayed as done.
+ */
+export function describeBehaviouralReset(result: BehaviouralResetResult): {
+  message: string;
+  tone?: "error";
+} {
+  if (result.ok) {
+    return { message: `Behavioural data cleared. ${BEHAVIOURAL_RESET_KEPT_COPY}` };
+  }
+  const names = result.failed
+    .map((failure) => BEHAVIOURAL_LANE_LABELS[failure.lane] ?? failure.lane)
+    .join(", ");
+  if (result.cleared.length === 0) {
+    return { message: `Couldn't clear behavioural data (${names}) — try again.`, tone: "error" };
+  }
+  return { message: `Partly cleared — still stored: ${names}. Try again.`, tone: "error" };
+}
+
+/**
+ * Orchestrate the unified clear-all. `reset` is the single service-worker-owned
+ * entry point; this never clears individual lanes itself. The UI always
+ * refreshes first so the displayed state matches whatever actually persisted,
+ * and a thrown error is treated as a total failure.
+ */
+export async function runClearBehaviouralData(
+  deps: StatsUiDeps & {
+    confirm: () => boolean;
+    reset: () => Promise<BehaviouralResetResult>;
+  },
+): Promise<void> {
+  if (!deps.confirm()) return;
+  let result: BehaviouralResetResult;
+  try {
+    result = await deps.reset();
+  } catch (e) {
+    console.warn("[NavSentinel] clear behavioural data failed:", e);
+    await deps.refresh();
+    deps.flash("Couldn't clear behavioural data — try again.", "error");
+    return;
+  }
+  await deps.refresh();
+  const outcome = describeBehaviouralReset(result);
+  deps.flash(outcome.message, outcome.tone);
 }
 
 /**

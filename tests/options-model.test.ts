@@ -7,6 +7,8 @@ import {
   computePromptOutcomeStats,
   withReentrancyGuard,
   classifyImportError,
+  describeBehaviouralReset,
+  runClearBehaviouralData,
   runClearStats,
   runImportFlow,
 } from "../extension/src/options/options_model";
@@ -282,6 +284,88 @@ describe("runClearStats (#188)", () => {
     });
     expect(refresh).toHaveBeenCalled();
     expect(flash).toHaveBeenCalledWith("Couldn't clear stats — try again.", "error");
+  });
+});
+
+describe("runClearBehaviouralData (RI-06 / #474)", () => {
+  beforeEach(() => { vi.spyOn(console, "warn").mockImplementation(() => {}); });
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it("names what was erased and what was kept on a complete reset", () => {
+    const outcome = describeBehaviouralReset({
+      ok: true,
+      cleared: ["promptOutcomes", "adaptiveScores", "eventLog", "domainProfiles"],
+      failed: [],
+    });
+    expect(outcome.tone).toBeUndefined();
+    expect(outcome.message).toBe(
+      "Behavioural data cleared. Settings, allowlist, and trusted domains were kept.",
+    );
+  });
+
+  it("never reports success on a partial reset — it names the lanes that survived", () => {
+    const outcome = describeBehaviouralReset({
+      ok: false,
+      cleared: ["promptOutcomes", "adaptiveScores"],
+      failed: [
+        { lane: "eventLog", error: "quota" },
+        { lane: "domainProfiles", error: "quota" },
+      ],
+    });
+    expect(outcome.tone).toBe("error");
+    expect(outcome.message).toBe("Partly cleared — still stored: event log, domain profiles. Try again.");
+  });
+
+  it("words a total failure as nothing cleared", () => {
+    const outcome = describeBehaviouralReset({
+      ok: false,
+      cleared: [],
+      failed: [{ lane: "eventLog", error: "quota" }],
+    });
+    expect(outcome.tone).toBe("error");
+    expect(outcome.message).toBe("Couldn't clear behavioural data (event log) — try again.");
+  });
+
+  it("does nothing when the user cancels the confirmation", async () => {
+    const reset = vi.fn(async () => ({ ok: true, cleared: [], failed: [] }));
+    const refresh = vi.fn(async () => {});
+    const flash = vi.fn();
+    await runClearBehaviouralData({ confirm: () => false, reset, refresh, flash });
+    expect(reset).not.toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled();
+    expect(flash).not.toHaveBeenCalled();
+  });
+
+  it("resets through the single entry point, refreshes, then flashes the outcome", async () => {
+    const order: string[] = [];
+    const flash = vi.fn();
+    await runClearBehaviouralData({
+      confirm: () => true,
+      reset: vi.fn(async () => {
+        order.push("reset");
+        return { ok: true as const, cleared: ["eventLog" as const], failed: [] };
+      }),
+      refresh: vi.fn(async () => { order.push("refresh"); }),
+      flash,
+    });
+    expect(order).toEqual(["reset", "refresh"]);
+    expect(flash).toHaveBeenCalledWith(
+      "Behavioural data cleared. Settings, allowlist, and trusted domains were kept.",
+      undefined,
+    );
+  });
+
+  it("refreshes and reports an error when the reset throws", async () => {
+    const refresh = vi.fn(async () => {});
+    const flash = vi.fn();
+    await runClearBehaviouralData({
+      confirm: () => true,
+      reset: vi.fn(async () => { throw new Error("SW unreachable"); }),
+      refresh,
+      flash,
+    });
+    expect(refresh).toHaveBeenCalled();
+    expect(flash).toHaveBeenCalledWith("Couldn't clear behavioural data — try again.", "error");
   });
 });
 

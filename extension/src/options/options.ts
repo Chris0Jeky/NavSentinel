@@ -3,7 +3,7 @@ import type { CredMode, EventLogEntry, SuiteSettings } from "../shared/storage";
 import { classifyEventTone } from "../shared/event_tone";
 import { icon, logoSentinel } from "../shared/icons";
 import { getSegValue, initSegKeyboard, setSegValue } from "../shared/seg_control";
-import { computePromptOutcomeStats, describeJsBehaviorCapability, fmtTime, parseIntSafe, withReentrancyGuard, runClearStats, runImportFlow } from "./options_model";
+import { computePromptOutcomeStats, describeJsBehaviorCapability, fmtTime, parseIntSafe, withReentrancyGuard, runClearBehaviouralData, runClearStats, runImportFlow } from "./options_model";
 // RI-07: the bundler resolves this to the no-op monitor whenever the active
 // release profile leaves `capabilities.jsBehaviorInstrumentation` false, so the
 // options page reads the same capability value the content script runs with.
@@ -11,6 +11,7 @@ import { jsBehaviorInstrumentationEnabled } from "@navsentinel/js-behavior-monit
 import {
   addTrustedDomainWithResult,
   appendEvent,
+  clearBehaviouralData,
   clearEventLog,
   clearAdaptiveScores,
   clearPromptOutcomes,
@@ -101,6 +102,7 @@ const topDomainsEl = document.getElementById("topDomains") as HTMLDivElement;
 const domainProfilesEl = document.getElementById("domainProfiles") as HTMLDivElement;
 const refreshProfilesBtn = document.getElementById("refreshProfiles") as HTMLButtonElement;
 const clearProfilesBtn = document.getElementById("clearProfiles") as HTMLButtonElement;
+const clearBehaviouralBtn = document.getElementById("clearBehavioural") as HTMLButtonElement;
 const sidebarNav = document.getElementById("sidebarNav") as HTMLElement;
 
 // Sidebar navigation
@@ -600,5 +602,28 @@ clearProfilesBtn.addEventListener("click", async () => {
   await refreshDomainProfiles();
   flashStatus(statusEl, "Domain profiles cleared.");
 });
+
+// RI-06 (#474): the unified clear-all goes through the single service-worker-owned
+// entry point rather than firing each per-lane clear from this page, so ordering,
+// the restart marker, and partial-failure reporting stay in one place.
+clearBehaviouralBtn.addEventListener(
+  "click",
+  withReentrancyGuard(
+    () => clearBehaviouralBtn.disabled,
+    (busy) => { clearBehaviouralBtn.disabled = busy; },
+    () =>
+      runClearBehaviouralData({
+        confirm: () =>
+          window.confirm(
+            "Clear all behavioural data?\n\nThis erases the event log, prompt outcomes, " +
+            "adaptive scores, and domain risk profiles.\n\nYour settings, allowlist, and " +
+            "trusted domains are kept."
+          ),
+        reset: clearBehaviouralData,
+        refresh: init,
+        flash: (msg, tone) => flashStatus(statusEl, msg, tone),
+      }),
+  ),
+);
 
 void init();
