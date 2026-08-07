@@ -871,9 +871,6 @@ describe("SW integration: state persistence through session storage", () => {
           },
           onChanged: storageOnChanged,
         },
-        declarativeNetRequest: {
-          updateEnabledRulesets: vi.fn().mockResolvedValue(undefined),
-        },
         webNavigation: {
           onBeforeNavigate: beforeNavigate,
           onCommitted: committed,

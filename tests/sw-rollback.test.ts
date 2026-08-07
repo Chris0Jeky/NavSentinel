@@ -116,9 +116,6 @@ function createChromeMock(options: { deferSends?: boolean } = {}) {
         setBadgeText: vi.fn().mockResolvedValue(undefined),
         setBadgeBackgroundColor: vi.fn().mockResolvedValue(undefined),
       },
-      declarativeNetRequest: {
-        updateEnabledRulesets: vi.fn().mockResolvedValue(undefined)
-      },
       webNavigation: {
         onBeforeNavigate: beforeNavigate,
         onCommitted: committed,
