@@ -6,15 +6,18 @@ import {
 import {
   getNavSettings,
   appendEvent,
+  handleBehaviouralResetMessage,
   handleEventLogAppendMessage,
   handleEventLogControlMessage,
   handlePromptOutcomeStorageMessage,
+  isBehaviouralResetMessage,
   isEventLogAppendMessage,
   isEventLogControlMessage,
   isEventLogMigrationMessage,
   isPromptOutcomeStorageMessage,
   migrateStoredEventLogUrls,
   migrateStoredPromptOutcomes,
+  resumeInterruptedBehaviouralReset,
   SUITE_SETTINGS_KEY,
 } from "../shared/storage";
 import { RedirectChainTracker } from "../shared/redirect_chain";
@@ -49,6 +52,12 @@ void migrateStoredEventLogUrls().catch((err) => {
 });
 void migrateStoredPromptOutcomes().catch((err) => {
   console.warn("[NavSentinel] prompt-outcome migration failed; will retry on worker restart:", err);
+});
+// RI-06 (#474): a clear-all behavioural reset records its remaining lanes in
+// storage.local before the first destructive write, so a worker termination or
+// browser restart mid-reset resumes here instead of leaving residue behind.
+void resumeInterruptedBehaviouralReset().catch((err) => {
+  console.warn("[NavSentinel] behavioural reset resume failed; will retry on worker restart:", err);
 });
 const NAV_ALLOW_TTL_MS = 1500;
 const NAV_GESTURE_TTL_MS = 1500;
@@ -666,6 +675,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (isPromptOutcomeStorageMessage(message)) {
     void handlePromptOutcomeStorageMessage(message, sender)
+      .then((response) => sendResponse?.(response))
+      .catch((err) => {
+        sendResponse?.({ ok: false, error: err instanceof Error ? err.message : String(err) });
+      });
+    return true;
+  }
+
+  if (isBehaviouralResetMessage(message)) {
+    void handleBehaviouralResetMessage(sender)
       .then((response) => sendResponse?.(response))
       .catch((err) => {
         sendResponse?.({ ok: false, error: err instanceof Error ? err.message : String(err) });

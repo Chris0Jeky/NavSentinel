@@ -1,0 +1,396 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  BEHAVIOURAL_DATA_LANES,
+  BEHAVIOURAL_RESET_STATE_KEY,
+  EVENT_LOG_KEY,
+  PROMPT_OUTCOMES_KEY,
+  SUITE_SETTINGS_KEY,
+  TRUSTED_DOMAINS_KEY,
+} from "../extension/src/shared/storage";
+import { ADAPTIVE_SCORES_KEY } from "../extension/src/shared/adaptive_scoring";
+import { ALLOWLIST_KEY } from "../extension/src/shared/allowlist";
+import { DOMAIN_PROFILES_KEY } from "../extension/src/shared/domain_profile";
+
+type Store = Record<string, unknown>;
+
+/** Reject a write that touches this key, simulating one lane failing to clear. */
+interface MockOptions {
+  failLocalWriteForKey?: string;
+  failLocalWriteMessage?: string;
+}
+
+function createChromeMock(initial: Store = {}, options: MockOptions = {}) {
+  const store: Store = { ...initial };
+  const sessionStore: Store = {};
+
+  return {
+    store,
+    sessionStore,
+    chrome: {
+      storage: {
+        local: {
+          async get(keys?: string | string[] | Record<string, unknown>) {
+            if (keys === undefined) return { ...store };
+            if (typeof keys === "string") {
+              return keys in store ? { [keys]: store[keys] } : {};
+            }
+            if (Array.isArray(keys)) {
+              return Object.fromEntries(
+                keys.filter((key) => key in store).map((key) => [key, store[key]]),
+              );
+            }
+            return Object.fromEntries(
+              Object.entries(keys).map(([key, fallback]) => [key, key in store ? store[key] : fallback]),
+            );
+          },
+          async set(next: Record<string, unknown>) {
+            if (options.failLocalWriteForKey && options.failLocalWriteForKey in next) {
+              throw new Error(options.failLocalWriteMessage ?? "quota exceeded");
+            }
+            for (const [key, value] of Object.entries(next)) {
+              store[key] = value;
+            }
+          },
+          async remove(keys: string | string[]) {
+            for (const key of Array.isArray(keys) ? keys : [keys]) delete store[key];
+          },
+        },
+        session: {
+          async get(keys?: string | string[]) {
+            if (keys === undefined) return { ...sessionStore };
+            if (typeof keys === "string") {
+              return keys in sessionStore ? { [keys]: sessionStore[keys] } : {};
+            }
+            return Object.fromEntries(
+              (keys ?? []).filter((key) => key in sessionStore).map((key) => [key, sessionStore[key]]),
+            );
+          },
+          async set(next: Record<string, unknown>) {
+            for (const [key, value] of Object.entries(next)) sessionStore[key] = value;
+          },
+        },
+        onChanged: { addListener() {} },
+      },
+    },
+  };
+}
+
+/** A trusted extension-page sender (options/popup) carries no `tab`. */
+const OPTIONS_SENDER = {
+  url: "chrome-extension://navsentinel-test/options.html",
+} as chrome.runtime.MessageSender;
+
+const CONTENT_SCRIPT_SENDER = {
+  tab: { id: 3 },
+  url: "https://evil.example/page",
+} as chrome.runtime.MessageSender;
+
+function seededBehaviouralStore(): Store {
+  return {
+    // In-scope behavioural lanes.
+    [EVENT_LOG_KEY]: [{ id: "e1", ts: 1, kind: "nav_click_block" }],
+    [PROMPT_OUTCOMES_KEY]: [
+      { id: "p1", ts: 1, domain: "example.com", type: "nav", score: 70, outcome: "block" },
+    ],
+    [ADAPTIVE_SCORES_KEY]: { "example.com": { adjustment: -5, lastUpdated: 1 } },
+    [DOMAIN_PROFILES_KEY]: {
+      "example.com": {
+        domain: "example.com",
+        visits: 4,
+        totalNRS: 120,
+        maxNRS: 40,
+        triggerCount: 2,
+        lastSeen: 1,
+        factors: {},
+        nrsHistory: [30, 40],
+      },
+    },
+    // Deliberately EXCLUDED user configuration.
+    [SUITE_SETTINGS_KEY]: { nav: { defaultMode: "strict", debug: true }, logLimit: 300 },
+    [ALLOWLIST_KEY]: ["kept.example"],
+    [TRUSTED_DOMAINS_KEY]: ["bank.example"],
+  };
+}
+
+function expectConfigurationPreserved(store: Store): void {
+  expect(store[SUITE_SETTINGS_KEY]).toMatchObject({ nav: { defaultMode: "strict" } });
+  expect(store[ALLOWLIST_KEY]).toEqual(["kept.example"]);
+  expect(store[TRUSTED_DOMAINS_KEY]).toEqual(["bank.example"]);
+}
+
+describe("unified behavioural-data reset (RI-06 / #474)", () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("declares the lane boundary in one place", () => {
+    expect([...BEHAVIOURAL_DATA_LANES]).toEqual([
+      "promptOutcomes",
+      "adaptiveScores",
+      "eventLog",
+      "domainProfiles",
+    ]);
+  });
+
+  it("clears every in-scope lane and leaves user configuration untouched", async () => {
+    const { chrome, store } = createChromeMock(seededBehaviouralStore());
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { clearBehaviouralData } = await import("../extension/src/shared/storage");
+    const result = await clearBehaviouralData();
+
+    expect(result.ok).toBe(true);
+    expect(result.failed).toEqual([]);
+    expect([...result.cleared].sort()).toEqual([...BEHAVIOURAL_DATA_LANES].sort());
+
+    expect(store[EVENT_LOG_KEY]).toEqual([]);
+    expect(store[PROMPT_OUTCOMES_KEY]).toEqual([]);
+    expect(store[ADAPTIVE_SCORES_KEY]).toEqual({});
+    expect(store[DOMAIN_PROFILES_KEY]).toEqual({});
+
+    expectConfigurationPreserved(store);
+    // A completed reset leaves no crash-window marker behind.
+    expect(BEHAVIOURAL_RESET_STATE_KEY in store).toBe(false);
+  });
+
+  it("reports honestly when one lane fails and keeps it in the restart marker", async () => {
+    const { chrome, store } = createChromeMock(seededBehaviouralStore(), {
+      failLocalWriteForKey: DOMAIN_PROFILES_KEY,
+      failLocalWriteMessage: "profile store unavailable",
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { clearBehaviouralData } = await import("../extension/src/shared/storage");
+    const result = await clearBehaviouralData();
+
+    expect(result.ok).toBe(false);
+    expect(result.cleared).toEqual(["promptOutcomes", "adaptiveScores", "eventLog"]);
+    expect(result.failed).toEqual([
+      { lane: "domainProfiles", error: "profile store unavailable" },
+    ]);
+
+    // The lanes that did clear stayed cleared; the failed one still holds data.
+    expect(store[EVENT_LOG_KEY]).toEqual([]);
+    expect(store[PROMPT_OUTCOMES_KEY]).toEqual([]);
+    expect(store[DOMAIN_PROFILES_KEY]).toHaveProperty("example.com");
+
+    // The operation is not left half-applied without a record.
+    expect(store[BEHAVIOURAL_RESET_STATE_KEY]).toMatchObject({ pending: ["domainProfiles"] });
+  });
+
+  it("does not erase anything when the crash-window marker cannot be persisted", async () => {
+    const { chrome, store } = createChromeMock(seededBehaviouralStore(), {
+      failLocalWriteForKey: BEHAVIOURAL_RESET_STATE_KEY,
+      failLocalWriteMessage: "storage full",
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { clearBehaviouralData } = await import("../extension/src/shared/storage");
+    const result = await clearBehaviouralData();
+
+    expect(result.ok).toBe(false);
+    expect(result.cleared).toEqual([]);
+    expect(result.failed.map((entry) => entry.lane)).toEqual([...BEHAVIOURAL_DATA_LANES]);
+    for (const failure of result.failed) {
+      expect(failure.error).toContain("storage full");
+    }
+
+    expect(store[EVENT_LOG_KEY]).toHaveLength(1);
+    expect(store[PROMPT_OUTCOMES_KEY]).toHaveLength(1);
+    expect(store[ADAPTIVE_SCORES_KEY]).toHaveProperty("example.com");
+    expect(store[DOMAIN_PROFILES_KEY]).toHaveProperty("example.com");
+  });
+
+  it("finishes an interrupted reset on the next service-worker start", async () => {
+    const seeded = seededBehaviouralStore();
+    // Simulate a worker termination after the prompt lanes cleared.
+    seeded[PROMPT_OUTCOMES_KEY] = [];
+    seeded[ADAPTIVE_SCORES_KEY] = {};
+    seeded[BEHAVIOURAL_RESET_STATE_KEY] = {
+      startedAt: 10,
+      pending: ["domainProfiles", "eventLog"],
+    };
+    const { chrome, store } = createChromeMock(seeded);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { resumeInterruptedBehaviouralReset } = await import("../extension/src/shared/storage");
+    const result = await resumeInterruptedBehaviouralReset();
+
+    expect(result.ok).toBe(true);
+    // Resume replays in the declared source-before-derivative order.
+    expect(result.cleared).toEqual(["eventLog", "domainProfiles"]);
+    expect(store[EVENT_LOG_KEY]).toEqual([]);
+    expect(store[DOMAIN_PROFILES_KEY]).toEqual({});
+    expect(BEHAVIOURAL_RESET_STATE_KEY in store).toBe(false);
+    expectConfigurationPreserved(store);
+  });
+
+  it("is a no-op when no interrupted reset is recorded", async () => {
+    const { chrome, store } = createChromeMock(seededBehaviouralStore());
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { resumeInterruptedBehaviouralReset } = await import("../extension/src/shared/storage");
+    const result = await resumeInterruptedBehaviouralReset();
+
+    expect(result).toEqual({ ok: true, cleared: [], failed: [] });
+    expect(store[EVENT_LOG_KEY]).toHaveLength(1);
+    expect(store[PROMPT_OUTCOMES_KEY]).toHaveLength(1);
+  });
+
+  it("does not resurrect data appended concurrently with the reset", async () => {
+    const { chrome, store } = createChromeMock(seededBehaviouralStore());
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const storage = await import("../extension/src/shared/storage");
+    // Both appends are queued before the reset is issued, so the serialized
+    // lanes must order them ahead of the clear and the barrier must reject any
+    // that lands after it.
+    const appendEvent = storage.appendEvent({ kind: "nav_click_block", site: "race.example" });
+    const appendOutcome = storage.appendPromptOutcome({
+      id: "race-1",
+      domain: "race.example",
+      type: "nav",
+      score: 80,
+      outcome: "block",
+    });
+    const reset = storage.clearBehaviouralData();
+    const [, , result] = await Promise.all([appendEvent, appendOutcome, reset]);
+
+    expect(result.ok).toBe(true);
+    expect(store[EVENT_LOG_KEY]).toEqual([]);
+    expect(store[PROMPT_OUTCOMES_KEY]).toEqual([]);
+    expect(store[ADAPTIVE_SCORES_KEY]).toEqual({});
+  });
+
+  it("keeps the barrier so a delayed pre-clear append cannot resurrect a lane", async () => {
+    const { chrome, store, sessionStore } = createChromeMock(seededBehaviouralStore());
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const storage = await import("../extension/src/shared/storage");
+    const before = Date.now();
+    await storage.clearBehaviouralData();
+
+    // A retried message built BEFORE the reset arrives afterwards.
+    await storage.appendEvent({ kind: "nav_click_block", site: "late.example", ts: before - 1 });
+    await storage.appendPromptOutcome({
+      id: "late-1",
+      ts: before - 1,
+      domain: "late.example",
+      type: "nav",
+      score: 80,
+      outcome: "block",
+    });
+
+    expect(store[EVENT_LOG_KEY]).toEqual([]);
+    expect(store[PROMPT_OUTCOMES_KEY]).toEqual([]);
+    // Both restart-surviving cutoffs were persisted by the unified reset.
+    expect(sessionStore["ns_sw:eventLogResetTs"]).toBeTypeOf("number");
+    expect(sessionStore["ns_sw:promptOutcomeResetTs"]).toBeTypeOf("number");
+  });
+});
+
+describe("behavioural reset message handling", () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("recognizes only the reset message shape", async () => {
+    const { isBehaviouralResetMessage } = await import("../extension/src/shared/storage");
+    expect(isBehaviouralResetMessage({ type: "ns-behavioural-reset" })).toBe(true);
+    expect(isBehaviouralResetMessage({ type: "ns-event-log-clear" })).toBe(false);
+    expect(isBehaviouralResetMessage(null)).toBe(false);
+    expect(isBehaviouralResetMessage("ns-behavioural-reset")).toBe(false);
+  });
+
+  it("clears for a trusted extension page sender", async () => {
+    const { chrome, store } = createChromeMock(seededBehaviouralStore());
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { handleBehaviouralResetMessage } = await import("../extension/src/shared/storage");
+    const response = await handleBehaviouralResetMessage(OPTIONS_SENDER);
+
+    expect(response).toMatchObject({ ok: true, result: { ok: true } });
+    expect(store[EVENT_LOG_KEY]).toEqual([]);
+    expect(store[DOMAIN_PROFILES_KEY]).toEqual({});
+  });
+
+  it("refuses a content-script sender without mutating any lane", async () => {
+    const { chrome, store } = createChromeMock(seededBehaviouralStore());
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { handleBehaviouralResetMessage } = await import("../extension/src/shared/storage");
+    const response = await handleBehaviouralResetMessage(CONTENT_SCRIPT_SENDER);
+
+    expect(response).toMatchObject({ ok: false, code: "unauthorized" });
+    expect(store[EVENT_LOG_KEY]).toHaveLength(1);
+    expect(store[PROMPT_OUTCOMES_KEY]).toHaveLength(1);
+    expect(store[DOMAIN_PROFILES_KEY]).toHaveProperty("example.com");
+  });
+});
+
+describe("behavioural reset delegation from a page context", () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("delegates to the service worker instead of clearing lanes locally", async () => {
+    const { chrome, store } = createChromeMock(seededBehaviouralStore());
+    let sent: unknown;
+    const withRuntime = {
+      ...chrome,
+      runtime: {
+        lastError: undefined,
+        sendMessage(message: unknown, cb: (response: unknown) => void) {
+          sent = message;
+          cb({
+            ok: true,
+            result: { ok: true, cleared: [...BEHAVIOURAL_DATA_LANES], failed: [] },
+          });
+        },
+      },
+    };
+    vi.stubGlobal("chrome", withRuntime as unknown as typeof globalThis.chrome);
+
+    const { clearBehaviouralData } = await import("../extension/src/shared/storage");
+    const result = await clearBehaviouralData();
+
+    expect(sent).toEqual({ type: "ns-behavioural-reset" });
+    expect(result.ok).toBe(true);
+    // The page context must not have written to any lane itself.
+    expect(store[EVENT_LOG_KEY]).toHaveLength(1);
+    expect(store[DOMAIN_PROFILES_KEY]).toHaveProperty("example.com");
+  });
+
+  it("reports every lane as not cleared when the worker refuses", async () => {
+    const { chrome } = createChromeMock(seededBehaviouralStore());
+    const withRuntime = {
+      ...chrome,
+      runtime: {
+        lastError: undefined,
+        sendMessage(_message: unknown, cb: (response: unknown) => void) {
+          cb({ ok: false, error: "Unauthorized behavioural reset", code: "unauthorized" });
+        },
+      },
+    };
+    vi.stubGlobal("chrome", withRuntime as unknown as typeof globalThis.chrome);
+
+    const { clearBehaviouralData } = await import("../extension/src/shared/storage");
+    const result = await clearBehaviouralData();
+
+    expect(result.ok).toBe(false);
+    expect(result.cleared).toEqual([]);
+    expect(result.failed.map((entry) => entry.lane)).toEqual([...BEHAVIOURAL_DATA_LANES]);
+  });
+});

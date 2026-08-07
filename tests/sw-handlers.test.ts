@@ -450,6 +450,42 @@ describe("service worker handlers", () => {
     });
   });
 
+  // RI-06 (#474): the clear-all reset is service-worker-owned, so the router
+  // must accept it from an extension page and refuse it from a content script.
+  describe("ns-behavioural-reset", () => {
+    it("keeps the port open and reports every declared lane cleared for an extension page", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+
+      const { listenerReturns, response } = mock.dispatchRuntimeMessageAsync(
+        { type: "ns-behavioural-reset" },
+        { url: "chrome-extension://mock-id/options.html" },
+      );
+
+      expect(listenerReturns).toContain(true);
+      await expect(response).resolves.toMatchObject({
+        ok: true,
+        result: {
+          ok: true,
+          cleared: ["promptOutcomes", "adaptiveScores", "eventLog", "domainProfiles"],
+          failed: [],
+        },
+      });
+    });
+
+    it("refuses the reset from a content-script sender", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+
+      const { response } = mock.dispatchRuntimeMessageAsync(
+        { type: "ns-behavioural-reset" },
+        { tab: { id: 12 }, url: "https://evil.example/page" },
+      );
+
+      await expect(response).resolves.toMatchObject({ ok: false, code: "unauthorized" });
+    });
+  });
+
   describe("hydration gating of session-backed handlers (#228.1)", () => {
     it("defers ns-check-rollback until hydration so it reflects restored state", async () => {
       const mock = createChromeMock();
