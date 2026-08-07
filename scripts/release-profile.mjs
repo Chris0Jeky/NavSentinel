@@ -37,6 +37,16 @@ export function loadReleaseProfileConfig(filePath = CONFIG_PATH) {
     if (typeof rawProfile.capabilities.reputation !== "boolean") {
       throw new Error(`release profile ${id}.capabilities.reputation must be boolean`);
     }
+    // RI-07: broad JavaScript-behaviour instrumentation (fetch / XHR / sendBeacon /
+    // password-value prototype wrapping) is an explicit, declared capability. It stays
+    // false in every committed profile until representative-site compatibility and
+    // runtime-overhead evidence exists (roadmap EV-04); the capability must be declared
+    // explicitly so a profile can never inherit it by omission.
+    if (typeof rawProfile.capabilities.jsBehaviorInstrumentation !== "boolean") {
+      throw new Error(
+        `release profile ${id}.capabilities.jsBehaviorInstrumentation must be boolean`,
+      );
+    }
   }
 
   if (!Object.hasOwn(config.profiles, config.defaultProfile)) {
@@ -61,6 +71,7 @@ export function resolveReleaseProfile(requested = process.env[RELEASE_PROFILE_EN
     releaseEligible: configured.releaseEligible,
     capabilities: {
       reputation: configured.capabilities.reputation,
+      jsBehaviorInstrumentation: configured.capabilities.jsBehaviorInstrumentation,
     },
   };
 }
@@ -72,6 +83,7 @@ export function createReleaseProfileReceipt(profile) {
     releaseEligible: profile.releaseEligible,
     capabilities: {
       reputation: profile.capabilities.reputation,
+      jsBehaviorInstrumentation: profile.capabilities.jsBehaviorInstrumentation,
     },
   };
 }
