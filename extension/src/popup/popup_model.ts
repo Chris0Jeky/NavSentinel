@@ -128,20 +128,43 @@ export function pickSiteRiskEvent(
   log: EventLogEntry[],
   registrableDomain: string
 ): EventLogEntry | null {
+  return pickNewestSiteEvent(log, registrableDomain, isGaugeScoredEvent);
+}
+
+/**
+ * Newest-first scan for the most recent same-domain entry satisfying `match`.
+ *
+ * Both gauge pickers share this loop rather than each carrying a copy: they must
+ * agree exactly on log order and on how `event.site` (a full hostname) is reduced
+ * for comparison, so the domain semantics cannot drift apart, and the popup chunk
+ * (10KB budget) does not ship the loop twice. Only the predicate differs.
+ */
+function pickNewestSiteEvent<T extends EventLogEntry>(
+  log: EventLogEntry[],
+  registrableDomain: string,
+  match: (event: EventLogEntry) => event is T
+): T | null {
   if (!registrableDomain) return null;
   const entries = log ?? [];
   for (let i = entries.length - 1; i >= 0; i--) {
     const ev = entries[i];
-    if (!ev?.kind) continue;
-    if (typeof ev.score !== "number") continue;
-    // Silent-decision events (nav_silent_allow / cred_form_evaluated, #236) are
-    // scored but must never drive the gauge: a routine silent allow would
-    // otherwise mask an earlier scored block on the same domain (#205 / #214).
-    if (SILENT_DECISION_KINDS.has(ev.kind)) continue;
+    if (!ev || !match(ev)) continue;
     const site = ev.site ? getRegistrableDomain(normalizeHost(ev.site)) : "";
     if (site && site === registrableDomain) return ev;
   }
   return null;
+}
+
+/**
+ * A scored event eligible to drive the gauge. Silent-decision events
+ * (nav_silent_allow / cred_form_evaluated, #236) are scored but must never drive
+ * it: a routine silent allow would otherwise mask an earlier scored block on the
+ * same domain (#205 / #214).
+ */
+function isGaugeScoredEvent(event: EventLogEntry): event is EventLogEntry {
+  if (!event.kind) return false;
+  if (typeof event.score !== "number") return false;
+  return !SILENT_DECISION_KINDS.has(event.kind);
 }
 
 /** An event-log entry narrowed to a known unscored threat kind. (#219) */
@@ -157,11 +180,16 @@ export interface UnscoredThreatEvent extends EventLogEntry {
  *    never a loose string match and never "any event without a score";
  *  - an entry that DOES carry a score is not this state — the scored path owns it;
  *  - `mutation_alert` additionally requires `extra.severity === "high"`. The
- *    mutation monitor downgrades known-benign DOM churn (cookie banners, chat
- *    widgets, ARIA dialogs) to low severity and only high-severity overlay
- *    injection raises a user-visible warning, so warning on every mutation_alert
- *    would be the over-warning failure mode. A malformed/legacy entry with no
- *    severity is treated as non-threatening for the same reason.
+ *    mutation monitor emits `low` for known-benign DOM churn (cookie banners,
+ *    chat widgets, ARIA dialogs) and `high` for overlay injection, so gating on
+ *    `high` keeps routine churn out of the gauge — warning on every
+ *    `mutation_alert` would be the over-warning failure mode #219 cautions about.
+ *    Note this is a deliberate UNDER-warn at the boundary, not a claim that
+ *    everything below `high` is benign: the monitor also emits `medium` for real
+ *    detections (a same-origin `form_action_changed`, a `suspicious_iframe`),
+ *    which therefore do not raise this gauge state. They still appear in the
+ *    event list. A malformed/legacy entry with no severity is likewise treated as
+ *    non-threatening rather than guessed at.
  */
 export function isUnscoredThreatEvent(event: EventLogEntry): event is UnscoredThreatEvent {
   if (!event?.kind || !isUnscoredThreatKind(event.kind)) return false;
@@ -179,15 +207,7 @@ export function pickSiteUnscoredThreatEvent(
   log: EventLogEntry[],
   registrableDomain: string
 ): UnscoredThreatEvent | null {
-  if (!registrableDomain) return null;
-  const entries = log ?? [];
-  for (let i = entries.length - 1; i >= 0; i--) {
-    const ev = entries[i];
-    if (!ev || !isUnscoredThreatEvent(ev)) continue;
-    const site = ev.site ? getRegistrableDomain(normalizeHost(ev.site)) : "";
-    if (site && site === registrableDomain) return ev;
-  }
-  return null;
+  return pickNewestSiteEvent(log, registrableDomain, isUnscoredThreatEvent);
 }
 
 /**
@@ -198,12 +218,17 @@ export function pickSiteUnscoredThreatEvent(
  * Typed as an exhaustive Record over UnscoredThreatKind, so adding a kind to the
  * shared set without a description is a build error rather than a raw event kind
  * leaking into the UI.
+ *
+ * Kept terse on purpose. Each string is prefixed at the call site with "Threat
+ * alert recorded, no risk score — " and rendered on the current page's own card,
+ * so "from this page" / "on this page" only repeats context the reader already
+ * has, and every literal here ships in the 10KB-budgeted popup chunk.
  */
 const UNSCORED_THREAT_TEXT: Readonly<Record<UnscoredThreatKind, string>> = {
-  mutation_alert: "suspicious content was injected after this page loaded",
-  nav_blank_prompt: "a blank-target navigation from this page was held for confirmation",
-  nav_reputation_late_warn: "a frame on this page navigated to a known-malicious domain",
-  nav_rollback: "a navigation from this page was rolled back",
+  mutation_alert: "suspicious content was injected after page load",
+  nav_blank_prompt: "a blank-target navigation was held for confirmation",
+  nav_reputation_late_warn: "a frame navigated to a known-malicious domain",
+  nav_rollback: "a navigation was rolled back",
 };
 
 export function describeUnscoredThreat(kind: UnscoredThreatKind): string {

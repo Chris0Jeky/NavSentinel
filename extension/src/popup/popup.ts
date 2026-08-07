@@ -52,36 +52,40 @@ document.getElementById("credIcon")!.innerHTML = icon("key", 11, "var(--ns-green
 document.getElementById("lockIcon")!.innerHTML = icon("lock", 11, "var(--ns-green)");
 document.getElementById("chevronIcon")!.innerHTML = icon("chevron", 10, "var(--ns-cyan)");
 
-function renderShieldArc(value: number, size = 42): string {
-  const r = size / 2 - 4;
-  const c = 2 * Math.PI * r;
-  const col = value >= 70 ? "var(--ns-red)" : value >= 40 ? "var(--ns-orange)" : "var(--ns-green)";
-  return `<svg aria-hidden="true" width="${size}" height="${size}" style="transform:rotate(-90deg)">
-    <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="3"/>
-    <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${col}" stroke-width="3"
-            stroke-dasharray="${(value / 100) * c} ${c}" stroke-linecap="round"
-            style="transition:stroke-dasharray 0.4s ease-out"/>
-  </svg>
-  <span aria-hidden="true" class="ns-mono" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:${col};transform:rotate(90deg)">${value}</span>`;
+/**
+ * The gauge ring, shared by both gauge states: a dim full-circle track plus one
+ * stroked circle over it. Every state draws the identical two-circle geometry and
+ * differs only in stroke colour, dash pattern and cap, so this is one template
+ * rather than a near-copy per state — the popup chunk is budgeted at 10KB
+ * (scripts/check-perf-budget.mjs) and a duplicated ring template costs ~0.5KB of it.
+ *
+ * Emitted without inter-tag whitespace. The previous multi-line template left a
+ * literal newline+indent text node between `</svg>` and the centre `<span>`, which
+ * rendered as a stray space next to the inline SVG; the drawn ring is unchanged.
+ */
+function ringSvg(size: number, stroke: string, dasharray: string, cap: string): string {
+  const mid = size / 2;
+  const circle = `cx="${mid}" cy="${mid}" r="${mid - 4}" fill="none" stroke-width="3"`;
+  return `<svg aria-hidden="true" width="${size}" height="${size}" style="transform:rotate(-90deg)"><circle ${circle} stroke="rgba(255,255,255,0.06)"/><circle ${circle} stroke="${stroke}" stroke-dasharray="${dasharray}" stroke-linecap="${cap}" style="transition:stroke-dasharray 0.4s ease-out"/></svg>`;
 }
 
+function renderShieldArc(value: number, size = 42): string {
+  const c = 2 * Math.PI * (size / 2 - 4);
+  const col = value >= 70 ? "var(--ns-red)" : value >= 40 ? "var(--ns-orange)" : "var(--ns-green)";
+  return `${ringSvg(size, col, `${(value / 100) * c} ${c}`, "round")}<span aria-hidden="true" class="ns-mono" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:${col};transform:rotate(90deg)">${value}</span>`;
+}
 
 /**
- * Gauge for the unscored-threat state (#219): a broken full ring plus "!" rather
- * than a filled arc plus a numeral, because there is no score to draw. Never
- * renders a number — inventing one would put an unmeasured value into a surface
- * whose numbers are measurements.
+ * Gauge for the unscored-threat state (#219): the same ring drawn as a broken
+ * (evenly dashed) full circle plus "!", rather than a filled arc plus a numeral,
+ * because there is no score to draw. Never renders a number — inventing one would
+ * put an unmeasured value into a surface whose numbers are measurements. The centre
+ * mark is styled by a CSS class rather than an inline style, so unlike the scored
+ * numeral it costs almost nothing in the JS chunk.
  */
 function renderUnscoredArc(size = 42): string {
-  const r = size / 2 - 4;
-  const c = 2 * Math.PI * r;
-  const dash = c / 24;
-  return `<svg aria-hidden="true" width="${size}" height="${size}" style="transform:rotate(-90deg)">
-    <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="3"/>
-    <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="var(--ns-purple)" stroke-width="3"
-            stroke-dasharray="${dash} ${dash}" stroke-linecap="butt"/>
-  </svg>
-  <span aria-hidden="true" class="shield-arc-mark--unscored">!</span>`;
+  const dash = (2 * Math.PI * (size / 2 - 4)) / 24;
+  return `${ringSvg(size, "var(--ns-purple)", `${dash} ${dash}`, "butt")}<span aria-hidden="true" class="shield-arc-mark--unscored">!</span>`;
 }
 
 function severityClass(score: number): string {
@@ -226,10 +230,12 @@ async function refreshUi(): Promise<void> {
   if (state === "unscored-threat" && threatKind) {
     // No score exists for this site, so the gauge must not read as a measured 0
     // (safe) nor as a scored high. Say exactly what happened instead. (#219)
-    const detail = describeUnscoredThreat(threatKind);
+    // One sentence drives both surfaces: the aria-label then cannot drift from the
+    // visible note, and the string is built (and shipped) once rather than twice.
+    const note = `Threat alert recorded, no risk score — ${describeUnscoredThreat(threatKind)}.`;
     shieldArcEl.innerHTML = renderUnscoredArc();
-    shieldArcEl.setAttribute("aria-label", `No risk score for this page. Threat alert recorded: ${detail}.`);
-    gaugeNoteEl.textContent = `Threat alert recorded, no risk score — ${detail}.`;
+    shieldArcEl.setAttribute("aria-label", note);
+    gaugeNoteEl.textContent = note;
     gaugeNoteEl.hidden = false;
   } else {
     shieldArcEl.innerHTML = renderShieldArc(tabRisk);
