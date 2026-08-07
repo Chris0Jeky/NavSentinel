@@ -235,6 +235,12 @@ separate things went wrong here and both are worth knowing:
   `gh workflow run ci.yml --ref <branch>` (the workflow already declares
   `workflow_dispatch`); confirm those runs are green on the exact head before
   merging, and re-prove after each retarget, since retargeting moves the merge base.
+  **Beware where you look:** a `workflow_dispatch` run attaches to the *branch*,
+  not the PR, so the PR page and `gh pr checks` keep saying "no checks reported"
+  even after a green run exists. Check it with
+  `gh run list --branch <branch> --limit 1` and match the run's head SHA to the PR
+  head yourself. This is the same trap the PR page sets in the first place, so do
+  not take a clean-looking PR page as evidence for these two.
 - **#533 was red** — its new popup code pushed `popup JS` to 10.1KB against a 10KB
   budget, which failed `build-and-unit` and therefore **skipped `E2E` entirely**. A
   skipped job is not a passed job. Fix in progress; re-check before passing it.
