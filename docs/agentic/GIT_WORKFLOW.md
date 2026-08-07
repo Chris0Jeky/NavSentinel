@@ -26,8 +26,7 @@ preserving both histories and avoids a force-push.
 
 When slice B depends on unmerged slice A, branch B off A and target B's pull
 request at A's branch. Merge the stack **oldest-first** — merging the newest first
-strands its parents — and never `--delete-branch` a base while a child is still
-open, which cascade-closes the children unreopenably.
+strands its parents.
 
 CI runs on stacked pull requests. That was not always true: `ci.yml`'s
 `pull_request` trigger used to be filtered to `branches: [main]`, and that filter
@@ -37,16 +36,67 @@ while `mergeStateStatus` still said `CLEAN`, so the pull request looked mergeabl
 while being entirely unverified. It hid a genuinely broken build in PR #535. The
 filter is now `branches: ["**"]` (issue #537); do not re-add one.
 
-Two things still need doing by hand on a stack:
+#### Deleting a base branch — the two cases are opposite
 
-- **Re-prove after a retarget.** Landing a base moves the child's merge base even
-  though its head SHA does not change, so the child needs a fresh run against its
-  new base before merging.
-- **A `workflow_dispatch` run attaches to the branch, not the pull request.** If
-  you trigger one with `gh workflow run ci.yml --ref <branch>`, the pull request
-  page and `gh pr checks` will keep showing no checks. Verify it with
-  `gh run list --branch <branch> --limit 1` and match the run's head SHA to the
-  pull request head yourself.
+- **Deleting an unmerged branch that other pull requests are based on closes
+  those pull requests.** Do not do this.
+- **Deleting the head branch as part of merging it is different**: GitHub then
+  automatically retargets any open pull request that was based on it onto the
+  merged pull request's own base. That is the *desired* outcome for a stack.
+
+So "never delete a base branch" is wrong as a blanket rule, and following it
+literally causes a worse bug: leave A's branch alive after merging A, and B still
+targets A, so merging B updates **A** rather than `main` and the slice silently
+never reaches the release branch.
+
+The rule that is actually safe: **after A lands, make sure B targets `main`
+before merging B, and confirm it rather than assume it.**
+
+```bash
+gh pr view <B> --json baseRefName -q '.baseRefName'   # must be main
+```
+
+Either let GitHub do it (delete A's head branch when merging A) or retarget
+explicitly (`gh pr edit <B> --base main`). Confirm with the command above either
+way.
+
+#### Re-proving a retargeted child — retargeting alone runs nothing
+
+Retargeting fires a `pull_request` **`edited`** activity. A `pull_request`
+workflow that declares no `types` runs only on `opened`, `synchronize` and
+`reopened`, so a retarget produces **no new run**: the child keeps the checks
+attached to its pre-retarget merge ref, against the old base. The widened branch
+filter does not help here.
+
+The child's head SHA does not change on a retarget either, so nothing about the
+check list looks stale. To get a real run against the new base, change the head:
+
+```bash
+git switch <B> && git merge main && git push    # -> synchronize -> real run
+```
+
+That is preferable to closing and reopening the pull request, because it also
+makes the tree you test the tree you merge.
+
+#### `workflow_dispatch` is weaker evidence than a pull-request run
+
+A dispatch is the escape hatch when a pull-request run is unavailable, but know
+what it does and does not prove:
+
+- It attaches to the **branch, not the pull request**, so the pull request page
+  and `gh pr checks` keep reporting no checks even once a green run exists.
+- It builds the branch **tip**, whereas a `pull_request` run builds the synthetic
+  base-plus-head **merge commit**. If the base has moved since the child was cut,
+  a green dispatch can bless a tree that omits newer base changes.
+
+So merge the current base into the child *before* dispatching, and read the run's
+SHA explicitly — the default `gh run list` table does not show it:
+
+```bash
+gh run list --branch <branch> --limit 1 --json headSha,status,conclusion \
+  -q '.[] | "\(.headSha) \(.status)/\(.conclusion)"'
+gh pr view <B> --json headRefOid -q '.headRefOid'     # the two must match
+```
 
 ### Reconciling local/remote divergence
 

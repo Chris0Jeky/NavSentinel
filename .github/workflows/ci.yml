@@ -12,6 +12,13 @@ on:
     # branches (ORCHESTRATOR.md "Stacked branch policy"), so the gap applied
     # exactly to the larger dependent changes that need CI most. It hid a real
     # broken build in PR #535. See #537. Do not re-add a branches filter here.
+    #
+    # Deliberately no `types:` either. Retargeting a stacked child fires `edited`,
+    # not `synchronize`, so a retarget produces no run -- but adding `edited` would
+    # also rebuild on every title/body edit. The cheaper answer is to merge the new
+    # base into the child after retargeting, which changes the head SHA, fires
+    # `synchronize`, and tests the tree that will actually merge. See the
+    # "Stacked branches and CI" section of docs/agentic/GIT_WORKFLOW.md.
     branches: ["**"]
   workflow_dispatch:
 
