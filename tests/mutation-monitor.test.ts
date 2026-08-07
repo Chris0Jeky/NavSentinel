@@ -1062,8 +1062,11 @@ describe("mutation_monitor flood-then-inject reserve past the alert cap (#413)",
    * that flood IS the security signal -- so the suppression scenario has to be
    * driven with alerts the defender learns nothing from.
    *
-   * Returns with FLOODABLE_ALERT_CAP (MAX_ALERTS 50 - RESERVED_SCARCE_ALERT_SLOTS 5
-   * = 45) alerts recorded and the 5 reserved slots untouched.
+   * Returns with at least FLOODABLE_ALERT_CAP (MAX_ALERTS 50 -
+   * RESERVED_SCARCE_ALERT_SLOTS 5 = 45) alerts recorded. The helper deliberately
+   * asserts only the weak lower bound that holds BOTH pre- and post-fix, so each
+   * test fails on its own security-relevant assertion rather than being masked
+   * here; the exact 45 is pinned by the reserve-bound test below.
    */
   async function floodWithBenignAlerts(): Promise<HTMLFormElement[]> {
     const forms: HTMLFormElement[] = [];
@@ -1084,9 +1087,8 @@ describe("mutation_monitor flood-then-inject reserve past the alert cap (#413)",
     }
     await vi.advanceTimersByTimeAsync(200);
 
-    // 60 floodable alerts offered, 45 admitted: the reservation stops the flood
-    // short of MAX_ALERTS instead of letting it switch detection off.
-    expect(getMutationAlertCount()).toBe(45);
+    // 60 floodable alerts offered; the flood is now the only alert source.
+    expect(getMutationAlertCount()).toBeGreaterThanOrEqual(45);
     expect(getMutationAlerts().every((a) => a.type === "form_action_changed")).toBe(true);
     return forms;
   }
@@ -1159,6 +1161,11 @@ describe("mutation_monitor flood-then-inject reserve past the alert cap (#413)",
     await vi.advanceTimersByTimeAsync(200);
 
     const forms = await floodWithBenignAlerts();
+
+    // 60 floodable alerts were offered and exactly FLOODABLE_ALERT_CAP admitted:
+    // the reservation stops the flood short of MAX_ALERTS instead of letting it
+    // switch detection off for the rest of the monitor's lifetime.
+    expect(getMutationAlertCount()).toBe(45);
 
     // More benign churn cannot reach into the reserved tail, however long it runs.
     for (let i = 0; i < forms.length; i++) {
