@@ -473,6 +473,38 @@ function checkSuspiciousIframe(el: Element): void {
 // Mutation processing
 // ---------------------------------------------------------------------------
 
+/**
+ * Register (and recursively observe) any shadow roots on a newly added node or
+ * its descendants.
+ *
+ * Split out of `processAddedNode` and run UNCONDITIONALLY — outside the alert
+ * cap — because this is the only path that attaches an observer to a shadow root
+ * that appears after start. While it sat behind the cap, a page could flood 50
+ * cheap benign alerts and then inject a credential form into a freshly attached
+ * shadow root, which mutation_monitor would never see again for the rest of its
+ * lifetime (until AUTO_DISCONNECT_MS / stopMutationMonitor). Mirrors what #412
+ * did for removed-node cleanup. (#413)
+ *
+ * Cost profile: registration itself is cheap WeakSet/Map work, and this walk is
+ * the same `querySelectorAll("*")` over the added subtree that already ran for
+ * every added node below the cap — no layout-forcing `getComputedStyle` /
+ * `getBoundingClientRect` calls happen here. Those stay in `processAddedNode`,
+ * which remains cap-gated. Traversal breadth is unchanged (the existing walk had
+ * no depth/breadth cap of its own); the only recursion is via
+ * `observeShadowRoot` → `scanForShadowRoots`, which is bounded by the
+ * `observedShadowRoots` WeakSet guard.
+ */
+function discoverShadowRootsInAddedNode(node: Node): void {
+  if (!(node instanceof Element)) return;
+
+  checkAndObserveShadowRoot(node);
+
+  const descendants = node.querySelectorAll("*");
+  for (let i = 0; i < descendants.length; i++) {
+    checkAndObserveShadowRoot(descendants[i]!);
+  }
+}
+
 function processAddedNode(node: Node): void {
   if (!(node instanceof Element)) return;
 
@@ -480,7 +512,6 @@ function processAddedNode(node: Node): void {
   checkOverlay(node);
   checkPasswordInjection(node);
   checkSuspiciousIframe(node);
-  checkAndObserveShadowRoot(node);
 
   // Check descendants (e.g., a wrapper div containing a password field)
   const passwords = node.querySelectorAll('input[type="password"]');
@@ -491,12 +522,6 @@ function processAddedNode(node: Node): void {
   const iframes = node.querySelectorAll("iframe");
   for (let i = 0; i < iframes.length; i++) {
     checkSuspiciousIframe(iframes[i]!);
-  }
-
-  // Check descendants for shadow roots
-  const descendants = node.querySelectorAll("*");
-  for (let i = 0; i < descendants.length; i++) {
-    checkAndObserveShadowRoot(descendants[i]!);
   }
 }
 
@@ -595,27 +620,31 @@ function processBatch(): void {
   // Always drain the queue, even once the alert cap is reached: the old early
   // `return` here left pendingMutations growing unbounded (onMutations keeps
   // pushing) and, worse, skipped removed-node CLEANUP so shadow-observer
-  // disconnects stopped until AUTO_DISCONNECT_MS. Only the DETECTION work
-  // (added-node scan + attribute-change alerts) is gated on the cap; removed-node
-  // cleanup runs unconditionally. pushAlert also self-caps, so `detect` is a perf
-  // skip, not the alert bound. (#409)
+  // disconnects stopped until AUTO_DISCONNECT_MS. Only the alert-emitting
+  // DETECTION work (overlay/password/iframe scans + attribute-change alerts) is
+  // gated on the cap; removed-node cleanup (#409/#412) and shadow-root
+  // discovery/registration for added nodes (#413) run unconditionally, so a
+  // capped page cannot be blinded to shadow roots attached after the flood.
+  // pushAlert also self-caps, so the cap check is a perf skip, not the alert
+  // bound. (#409)
   const batch = pendingMutations;
   pendingMutations = [];
 
   for (const record of batch) {
-    const detect = alerts.length < MAX_ALERTS;
-
     if (record.type === "childList") {
-      if (detect) {
-        for (let i = 0; i < record.addedNodes.length; i++) {
-          if (alerts.length >= MAX_ALERTS) break;
-          processAddedNode(record.addedNodes[i]!);
-        }
+      for (let i = 0; i < record.addedNodes.length; i++) {
+        const node = record.addedNodes[i]!;
+        // Re-read alerts.length per node (not once per record): scanning one
+        // node can itself reach the cap, and the pre-#413 code broke out of this
+        // loop at that point. Discovery must not break — it runs for every added
+        // node regardless.
+        if (alerts.length < MAX_ALERTS) processAddedNode(node);
+        discoverShadowRootsInAddedNode(node);
       }
       for (let i = 0; i < record.removedNodes.length; i++) {
         processRemovedNode(record.removedNodes[i]!);
       }
-    } else if (record.type === "attributes" && detect) {
+    } else if (record.type === "attributes" && alerts.length < MAX_ALERTS) {
       processAttributeChange(record);
     }
   }

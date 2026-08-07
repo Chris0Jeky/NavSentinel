@@ -1043,3 +1043,112 @@ describe("mutation_monitor alert-cap cleanup (#409)", () => {
     stopMutationMonitor();
   });
 });
+
+describe("mutation_monitor shadow-root discovery after alert cap (#413)", () => {
+  beforeEach(() => {
+    _resetMutationState();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    _resetMutationState();
+    vi.useRealTimers();
+  });
+
+  /** Flood the page with password fields until the 50-alert cap is reached. */
+  async function reachAlertCap(): Promise<HTMLInputElement[]> {
+    const filler: HTMLInputElement[] = [];
+    for (let i = 0; i < 60; i++) {
+      const input = document.createElement("input");
+      input.type = "password";
+      document.body.appendChild(input);
+      filler.push(input);
+    }
+    await vi.advanceTimersByTimeAsync(200);
+    expect(getMutationAlertCount()).toBe(50);
+    return filler;
+  }
+
+  it("registers + keeps observing a shadow root attached to a node added AFTER the cap (#413)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+    await vi.advanceTimersByTimeAsync(200);
+    // happy-dom's document is shared across the file, so measure a baseline
+    // rather than assuming no pre-existing shadow hosts survived earlier tests.
+    const baseline = _getShadowObserverCountForTesting();
+
+    const filler = await reachAlertCap();
+
+    // An attacker floods 50 cheap benign alerts, THEN injects a credential form
+    // inside a freshly attached shadow root. Pre-fix, checkAndObserveShadowRoot
+    // lived inside the cap-gated processAddedNode, so this root was never
+    // registered (count stayed 0) and mutation_monitor was blind to it for the
+    // rest of the page's life.
+    const wrapper = document.createElement("div");
+    const host = document.createElement("div");
+    const sr = host.attachShadow({ mode: "open" });
+    const password = document.createElement("input");
+    password.type = "password";
+    sr.appendChild(password);
+    wrapper.appendChild(host);
+    document.body.appendChild(wrapper);
+
+    await vi.advanceTimersByTimeAsync(200);
+
+    // The shadow root is discovered even though the node arrived past the cap,
+    // and it is found through a light-DOM descendant walk (host is nested in
+    // wrapper, so the node itself is not the shadow host).
+    expect(_getShadowObserverCountForTesting()).toBe(baseline + 1);
+
+    // ...and the observer attached to it is live: a nested shadow host added
+    // inside that root is itself discovered, which can only happen if the new
+    // observer fired and its records flowed through processBatch.
+    const nestedHost = document.createElement("div");
+    nestedHost.attachShadow({ mode: "open" });
+    sr.appendChild(nestedHost);
+
+    await vi.advanceTimersByTimeAsync(200);
+    expect(_getShadowObserverCountForTesting()).toBe(baseline + 2);
+
+    // The alert cap itself is untouched — discovery is free, alert emission is not.
+    expect(getMutationAlertCount()).toBe(50);
+    expect(alerts.length).toBe(50);
+
+    // Cleanup still tears the newly registered observers down.
+    wrapper.remove();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(_getShadowObserverCountForTesting()).toBe(baseline);
+
+    for (const input of filler) input.remove();
+    stopMutationMonitor();
+  });
+
+  it("keeps the expensive alert-emitting scans gated on the cap (#413)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+    await vi.advanceTimersByTimeAsync(200);
+    const baseline = _getShadowObserverCountForTesting();
+
+    const filler = await reachAlertCap();
+
+    // Nothing added after the cap may emit an alert, in the light DOM or inside a
+    // shadow root that discovery has just registered.
+    const host = document.createElement("div");
+    const sr = host.attachShadow({ mode: "open" });
+    document.body.appendChild(host);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(_getShadowObserverCountForTesting()).toBe(baseline + 1);
+
+    const shadowPassword = document.createElement("input");
+    shadowPassword.type = "password";
+    sr.appendChild(shadowPassword);
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(getMutationAlertCount()).toBe(50);
+    expect(alerts.length).toBe(50);
+
+    host.remove();
+    for (const input of filler) input.remove();
+    stopMutationMonitor();
+  });
+});
