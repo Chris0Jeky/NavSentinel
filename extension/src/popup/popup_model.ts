@@ -223,9 +223,18 @@ export function pickSiteUnscoredThreatEvent(
  * alert recorded, no risk score — " and rendered on the current page's own card,
  * so "from this page" / "on this page" only repeats context the reader already
  * has, and every literal here ships in the 10KB-budgeted popup chunk.
+ *
+ * One description per KIND, so `mutation_alert` must be truthful for every
+ * high-severity alert the monitor raises — not just overlay injection. It also
+ * covers a cross-domain `form_action_changed` (a form's destination rewritten,
+ * nothing injected) and `password_injected`, so the wording is deliberately about
+ * the page being modified rather than about content being added. Describing each
+ * subtype precisely would mean keying off `event.reasons[0]` (the alert type is
+ * stored there) and carrying a second table in a chunk already at 96% of budget;
+ * tracked rather than done here.
  */
 const UNSCORED_THREAT_TEXT: Readonly<Record<UnscoredThreatKind, string>> = {
-  mutation_alert: "suspicious content was injected after page load",
+  mutation_alert: "the page was modified suspiciously after load",
   nav_blank_prompt: "a blank-target navigation was held for confirmation",
   nav_reputation_late_warn: "a frame navigated to a known-malicious domain",
   nav_rollback: "a navigation was rolled back",
