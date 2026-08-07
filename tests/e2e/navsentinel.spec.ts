@@ -740,7 +740,7 @@ test("Synthetic pointer and click events cannot mint navigation allowances @regr
 
       // A plain synthetic click previously minted the MAIN-world redirect
       // window even without opening a popup. Give a vulnerable bridge message
-      // time to arrive, then prove Location.assign remains blocked.
+      // time to arrive, then prove a script redirect after it does not land.
       await page.evaluate(() => {
         const button = document.createElement("button");
         button.textContent = "Synthetic redirect trigger";
@@ -753,9 +753,21 @@ test("Synthetic pointer and click events cannot mint navigation allowances @regr
         .waitForURL(redirectTarget, { timeout: 1000 })
         .then(() => true)
         .catch(() => false);
-      // Exercise the hardened prototype path directly. Normal Location
-      // instance-method coverage is the separate, tracked #458 seam.
-      await page.evaluate((url) => Location.prototype.assign.call(location, url), redirectTarget);
+      // #458: `Location.prototype.assign` does not exist in Chromium and
+      // NavSentinel no longer creates it, so an explicit prototype call is a
+      // plain TypeError — the browser's own refusal, which we assert rather
+      // than dress up as an interception. The synthetic click must not have
+      // minted a redirect allowance either way.
+      const protoCallError = await page.evaluate((url) => {
+        try {
+          (Location.prototype as unknown as { assign: (u: string) => void })
+            .assign.call(location, url);
+          return "no-error";
+        } catch (error) {
+          return error instanceof Error ? error.name : String(error);
+        }
+      }, redirectTarget);
+      expect(protoCallError, "Location.prototype.assign must stay absent").toBe("TypeError");
       expect(await redirectObserved).toBe(false);
       await expect(page).toHaveURL(originalUrl);
 
