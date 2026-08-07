@@ -380,9 +380,13 @@ If E2E fails in CI, check these first:
 
 ## Current evidence work
 
-As verified on 2026-07-10, the local regression baseline is 2,874 passing unit
-tests in 95 files and 14 E2E spec files are present. These counts are volatile;
-verify them live. Regression coverage does not establish efficacy.
+As measured on 2026-08-07 at `main` (`332c48d`) with
+`npx vitest run --reporter=dot`, the local regression baseline is 3,010 passing
+unit tests in 100 files, and 14 Playwright spec files are present under
+`tests/e2e/`. The previous figure in this paragraph (2,874 tests in 95 files,
+2026-07-10) was stale. These counts are volatile engineering snapshots: verify
+them live before reuse and keep them out of user-facing copy. Regression
+coverage does not establish efficacy.
 
 The next evidence steps are:
 
