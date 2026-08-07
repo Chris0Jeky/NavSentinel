@@ -176,6 +176,32 @@
                   </div>
                 </div>
               </div>
+
+              <!-- Advanced instrumentation: read-only capability disclosure (RI-07).
+                   Deliberately not a toggle — the capability is a build-time release
+                   profile decision, so the UI can only report it, never turn it on. -->
+              <div class="card card--wide">
+                <div class="card-head">
+                  <span class="card-accent card-accent--amber"></span>
+                  <div class="card-title">Advanced instrumentation</div>
+                  <div class="card-sub">Beta capability status</div>
+                </div>
+                <div class="card-body">
+                  <div class="field">
+                    <div class="field-label" id="lbl-jsBehaviorCapability">JavaScript behavior monitoring</div>
+                    <div class="input-row">
+                      <span
+                        id="jsBehaviorCapabilityState"
+                        class="ns-mono"
+                        role="status"
+                        aria-labelledby="lbl-jsBehaviorCapability"
+                        aria-describedby="desc-jsBehaviorCapability"
+                      >--</span>
+                    </div>
+                    <div class="input-hint" id="desc-jsBehaviorCapability"></div>
+                  </div>
+                </div>
+              </div>
             </div>
           </section>
 

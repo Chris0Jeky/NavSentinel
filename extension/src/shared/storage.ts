@@ -164,6 +164,12 @@ function clampInt(v: unknown, min: number, max: number, fallback: number): numbe
 // `dnrEnabled` flag inside the stored nav settings. Rebuild nav from known fields
 // only so the retired flag is dropped instead of being spread forward and
 // re-persisted by the next settings write. No runtime code reads it.
+//
+// RI-07 relies on the same allow-list rebuild: an upgrading profile that carries an
+// unrecognised nav flag (e.g. a `jsBehavior*` capability flag from a local or future
+// build) cannot survive a settings read and cannot re-enable JavaScript-behaviour
+// instrumentation. That capability is a build-time release-profile decision, so no
+// stored value participates in it at all.
 function mergeNavSettings(cur: NavSettings, partial: Partial<NavSettings> | undefined): NavSettings {
   const merged = { ...cur, ...(partial ?? {}) };
   return { defaultMode: merged.defaultMode, debug: merged.debug };

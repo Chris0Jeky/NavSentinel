@@ -3,7 +3,11 @@ import type { CredMode, EventLogEntry, SuiteSettings } from "../shared/storage";
 import { classifyEventTone } from "../shared/event_tone";
 import { icon, logoSentinel } from "../shared/icons";
 import { getSegValue, initSegKeyboard, setSegValue } from "../shared/seg_control";
-import { computePromptOutcomeStats, fmtTime, parseIntSafe, withReentrancyGuard, runClearStats, runImportFlow } from "./options_model";
+import { computePromptOutcomeStats, describeJsBehaviorCapability, fmtTime, parseIntSafe, withReentrancyGuard, runClearStats, runImportFlow } from "./options_model";
+// RI-07: the bundler resolves this to the no-op monitor whenever the active
+// release profile leaves `capabilities.jsBehaviorInstrumentation` false, so the
+// options page reads the same capability value the content script runs with.
+import { jsBehaviorInstrumentationEnabled } from "@navsentinel/js-behavior-monitor";
 import {
   addTrustedDomainWithResult,
   appendEvent,
@@ -47,6 +51,15 @@ document.getElementById("sidebarLockIcon")!.innerHTML = icon("lock", 12, "var(--
 // Version
 const versionEl = document.getElementById("version") as HTMLSpanElement;
 versionEl.textContent = `v${chrome.runtime.getManifest().version}`;
+
+// Advanced instrumentation capability (RI-07) — read-only disclosure, no control.
+{
+  const capability = describeJsBehaviorCapability(jsBehaviorInstrumentationEnabled);
+  const stateEl = document.getElementById("jsBehaviorCapabilityState") as HTMLSpanElement;
+  const detailEl = document.getElementById("desc-jsBehaviorCapability") as HTMLDivElement;
+  stateEl.textContent = capability.state;
+  detailEl.textContent = capability.detail;
+}
 
 // DOM references
 const navModeSeg = document.getElementById("navModeSeg") as HTMLDivElement;
