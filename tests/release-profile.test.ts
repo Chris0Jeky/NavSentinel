@@ -8,6 +8,7 @@ import {
   resolveReleaseProfile,
 } from "../scripts/release-profile.mjs";
 import { inspectBuiltReleaseProfile } from "../scripts/check-release-profile.mjs";
+import { JS_BEHAVIOR_INSTRUMENTATION_SENTINEL } from "../extension/src/content/js_behavior_monitor";
 
 const tempDirs: string[] = [];
 
@@ -50,6 +51,26 @@ describe("release profiles", () => {
     expect(profile.id).toBe("interaction-only");
     expect(profile.releaseEligible).toBe(true);
     expect(profile.capabilities.reputation).toBe(false);
+    expect(profile.capabilities.jsBehaviorInstrumentation).toBe(false);
+  });
+
+  it("leaves js-behavior instrumentation off in every committed profile", () => {
+    for (const id of ["interaction-only", "research-reputation"]) {
+      expect(resolveReleaseProfile(id).capabilities.jsBehaviorInstrumentation).toBe(false);
+    }
+  });
+
+  it("rejects a built bundle that still links js-behavior instrumentation", () => {
+    // The literal is duplicated in scripts/check-release-profile.mjs (a plain .mjs
+    // build script that cannot import TypeScript); this asserts the two agree, so a
+    // rename in the monitor cannot silently turn the dist check into a no-op.
+    expect(JS_BEHAVIOR_INSTRUMENTATION_SENTINEL).toBe("ns-js-behavior-instrumentation-v1");
+    const dist = makeDist("interaction-only");
+    fs.writeFileSync(
+      path.join(dist, "runtime.js"),
+      `console.debug('${JS_BEHAVIOR_INSTRUMENTATION_SENTINEL} installing');\n`,
+    );
+    expect(() => inspectBuiltReleaseProfile(dist)).toThrow(/still links it/i);
   });
 
   it("rejects unknown profiles instead of falling back", () => {
