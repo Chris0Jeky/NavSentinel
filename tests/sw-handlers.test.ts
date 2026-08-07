@@ -2859,9 +2859,88 @@ describe("service worker handlers", () => {
       // in-flight key still matches the rewritten same-URL offer. With the earlier
       // object-identity keying the fresh rewrite object looked not-in-flight and produced a
       // concurrent duplicate -> [13, 13]. (The separate *post-delivery* serialized re-send
-      // of the rewritten offer is a pre-existing edge tracked in #382, out of scope here.)
+      // of the rewritten offer is covered by the #382 test below.)
       mock.emitTabUpdated(13, { status: "complete" }, { url: "https://current.com/" });
       expect(forwardSends).toEqual([13]);
+    });
+
+    it("does not re-send the rewritten same-URL offer after the first offer delivers (#382)", async () => {
+      const mock = createChromeMock();
+      const { forwardSends, captured } = deferSends(mock);
+      mock.chrome.storage.session._store["ns_sw:pendingForward"] = {
+        "31": { url: "https://evil.com/", ts: Date.now() },
+      };
+      mock.chrome.storage.session._store["ns_sw:readyTabs"] = [31];
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+
+      // Offer A (no returnUrl) is dispatched; its send callback is deferred (in flight).
+      mock.emitTabUpdated(31, { status: "complete" }, { url: "https://current.com/" });
+      expect(forwardSends).toEqual([31]);
+
+      // ns-store-forward rewrites the slot with a FRESH object for the SAME url (adds a
+      // returnUrl) during the send gap -> the slot no longer holds A by reference.
+      (mock.chrome.runtime.onMessage as unknown as {
+        emit: (m: unknown, s: unknown, r: (v?: unknown) => void) => void;
+      }).emit(
+        { type: "ns-store-forward", url: "https://evil.com/", returnUrl: "https://origin.com/" },
+        { tab: { id: 31 } },
+        () => {}
+      );
+      await vi.runAllTimersAsync();
+
+      // A now DELIVERS successfully (the user has been prompted for evil.com).
+      captured.forEach((cb) => cb());
+      await vi.runAllTimersAsync();
+
+      const stored = (mock.chrome.storage.session._store["ns_sw:pendingForward"] ?? {}) as Record<
+        string,
+        unknown
+      >;
+      // Pre-fix (object identity): get(tabId) !== A, so the rewritten same-URL offer B was
+      // left in the map. Post-fix (url-aware delete): the slot is cleared.
+      expect(stored["31"]).toBeUndefined();
+
+      // A later onUpdated (e.g. an SPA nav on the return page changing tab.url) must not
+      // dispatch a second ns-forward-offer for the URL already offered.
+      mock.emitTabUpdated(31, { url: "https://current.com/next" }, { url: "https://current.com/next" });
+      await vi.runAllTimersAsync();
+      expect(forwardSends).toEqual([31]);
+    });
+
+    it("still delivers a newer DIFFERENT-url offer after the stale offer delivers (#382 keeps disc#6)", async () => {
+      const mock = createChromeMock();
+      const { forwardSends, captured } = deferSends(mock);
+      mock.chrome.storage.session._store["ns_sw:pendingForward"] = {
+        "32": { url: "https://offer-1.com/", ts: Date.now() },
+      };
+      mock.chrome.storage.session._store["ns_sw:readyTabs"] = [32];
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+
+      mock.emitTabUpdated(32, { status: "complete" }, { url: "https://current.com/" });
+      expect(forwardSends).toEqual([32]);
+
+      // A newer offer for a DIFFERENT url replaces the slot during the send gap.
+      (mock.chrome.runtime.onMessage as unknown as {
+        emit: (m: unknown, s: unknown, r: (v?: unknown) => void) => void;
+      }).emit({ type: "ns-store-forward", url: "https://offer-2.com/" }, { tab: { id: 32 } }, () => {});
+      await vi.runAllTimersAsync();
+
+      // The stale offer-1 send SUCCEEDS. The url-aware delete must NOT clear offer-2.
+      captured.forEach((cb) => cb());
+      await vi.runAllTimersAsync();
+
+      const stored = (mock.chrome.storage.session._store["ns_sw:pendingForward"] ?? {}) as Record<
+        string,
+        { url: string }
+      >;
+      expect(stored["32"]?.url).toBe("https://offer-2.com/");
+
+      // ...and it is still deliverable: a later onUpdated dispatches offer-2 (disc#5/#6).
+      mock.emitTabUpdated(32, { url: "https://current.com/next" }, { url: "https://current.com/next" });
+      await vi.runAllTimersAsync();
+      expect(forwardSends).toEqual([32, 32]);
     });
 
     it("does not double-send when onCommitted send is in flight and onUpdated fires (disc#3 cross-path)", async () => {

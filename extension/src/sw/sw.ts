@@ -503,9 +503,18 @@ function trySendForwardOffer(
       // re-insert the stale closure value over a newer ns-store-forward write or a slot
       // that onBeforeNavigate / onRemoved cleared during the gap. (#323/disc#6/#7)
       readyTabs.delete(tabId);
-    } else if (pendingForwardByTab.get(tabId) === forward) {
-      // Delivered. Remove ONLY the exact offer we sent — a newer ns-store-forward offer
-      // written during the async gap must survive. (#323/disc#6)
+    } else if (pendingForwardByTab.get(tabId)?.url === forward.url) {
+      // Delivered. Remove the slot only when it still points at the SAME destination URL
+      // we just offered — a newer ns-store-forward offer for a DIFFERENT url written
+      // during the async gap must survive. (#323/disc#6)
+      //
+      // The comparison is on `url`, not object identity (#382): ns-store-forward rewrites
+      // the slot with a *fresh* object for the same tab+URL to add a returnUrl, so an
+      // identity check left that rewrite behind after delivery and a later onUpdated
+      // dispatched it as a duplicate ns-forward-offer for the already-offered URL. Exact
+      // string equality matches how the rest of the forward path compares urls
+      // (onUpdatedHandler's `currentUrl === forward.url`, ns-check-forward, and the
+      // tab+URL in-flight key) — no normalization anywhere on this path.
       pendingForwardByTab.delete(tabId);
     }
     swState.persistMap(pendingForwardByTab, "pendingForward");
