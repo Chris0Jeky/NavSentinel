@@ -7,7 +7,19 @@
 **Purpose:** the running list of things only *you* (Chris) can do, with enough
 context to resume by stable ID.
 
-**Last updated:** 2026-08-02 — remote `main` included PR #510 at `56e3aa6`,
+**Last updated:** 2026-08-08 — an agent session landed five non-browser PRs to
+`main` (#519, #524, #525, #527, #529; head `076bb7a`, exact-main CI green on both
+jobs) and left **ten browser-surface PRs** open awaiting your Gate-3 call, tracked
+as the single new item **AI-27**. One scope decision is owed (**AI-28**, the
+behavioural-data boundary for #474). PR **#531** is open but explicitly
+`[HELD on AI-14/#417]` and is not part of the batch. Two milestones now exist:
+`v0.5.0-unlisted-beta` (7 real blockers) and `post-beta-horizon` (the 15 frozen
+Horizon epics #439–#453, moved out of the active queue). AI-23 now carries a
+completed inspection and a *retire* recommendation for `chore/deny-floor-v1.6.3`,
+plus two local-only branches the earlier audit missed. Everything below this
+paragraph predates that session unless dated otherwise.
+
+**Previously updated:** 2026-08-02 — remote `main` included PR #510 at `56e3aa6`,
 its exact-main product CI was green, and live GitHub had no open PRs. Chris
 selected the interaction-only beta under AI-9, retained an opt-in non-release
 research profile, and accepted `main`
@@ -113,8 +125,15 @@ product state.
 ## Action items
 
 **Guided resolution cursor:** `AI-19` (`Resume at: AI-19`; the next
-conversational label is `q-5`). Current ready order is AI-19 -> AI-24 -> AI-23
-(low priority housekeeping, last).
+conversational label is `q-5`). Current ready order is AI-19 -> AI-27 -> AI-28 ->
+AI-24 -> AI-23 (low priority housekeeping, last).
+
+> **2026-08-08 — a browser-surface batch is now waiting on you (AI-27), and one
+> scope decision is owed before its last slice can be finished (AI-28).** AI-27
+> supersedes AI-24 in practice: the optional confirmation AI-24 describes is a
+> subset of the batch pass AI-27 asks for, so running AI-27 closes both. AI-24 is
+> retained rather than merged into it because Chris may still want the smaller
+> pass on its own.
 **AI-13, AI-21 and AI-22 are resolved** — their
 PRs (#356, #464, #466) merged on 2026-07-25 after Chris chose to clear the
 browser-surface gate by automated equivalent rather than a manual pass; their
@@ -195,6 +214,69 @@ split human work into a browser
 session, any network/feed session, an overnight measurement run, and a short
 result review. Read `docs/Product_Strategy.md` first. This item becomes
 actionable only when the preflight handoff explicitly says so.
+
+**🚨 OPEN: AI-27 — One Gate-3 batch pass over the browser-surface queue from the
+2026-08-08 session.** Ten browser-surface PRs are open, reviewed, and green, and
+none can merge without your call. They are listed in the order they should be
+merged, not the order they were opened.
+
+**Slots 1-3 are a three-deep stack: #528 ← #532 ← #535.** Merge them oldest-first
+in exactly that order; merging the newest first would strand its parents (global
+law 4). Never `--delete-branch` #528 or #532 while a child is still open — that
+cascade-closes children unreopenably. After each base lands, confirm the child
+retargeted to `main` before merging it. Slots 4-10 are independent branches off
+`main` and can go in any order.
+
+| Order | PR | What it changes | Why it needs your eyes |
+| --- | --- | --- | --- |
+| 1 | **#528** | RI-05: removes the fake `declarativeNetRequest` surface, its two localhost-scoped stub rules, the options toggle, and **two manifest permissions** | Permission surface shrinks 5→3. Confirm the extension still loads and behaves normally after the manifest change |
+| 2 | **#532** | RI-07: JS-behaviour instrumentation is a build-time capability, off in every profile; the monitor module is not linked at all | Confirm navigation, credential and DoubleClickjacking protection still work — those are deliberately unaffected, but that is the thing to verify by hand |
+| 3 | **#535** | RI-06 last slice: one service-worker-owned **clear-all behavioural-data** reset (prompt outcomes → adaptive scores → event log → domain profiles), with partial-failure reporting and crash-resume | Ships under the **AI-28** assumption below. Use the new options → Analytics *Clear behavioural data* control and confirm it erases history but leaves your settings, allowlist and trusted domains intact |
+| 4 | **#514** | RI-02: removes visual-sim capture, templates, scoring hook and WAR (this is the pre-existing **AI-26**) | Already reviewed on its exact head; only the manual pass is outstanding |
+| 5 | **#534** | #458: removes the `Location.prototype` patch that never intercepted anything, and corrects README / architecture / design-brief claims | Confirm delayed-redirect rollback still works. Note the Gate-3 guide text itself changed — a step that said "normal Location calls bypass the prototype hook" now says there is no pre-navigation hook at all |
+| 6 | **#520** | #389: primes redirect chain-info at content-script init so first-click NRS is not under-scored | Decision path is unchanged and still synchronous; worth a normal browse to confirm no latency |
+| 7 | **#521** | #382: forward-offer no longer re-sent after delivery | Do a rollback and confirm you get exactly one forward prompt, and that resuming still works |
+| 8 | **#522** | #410: bounds the action-attribute scan on the credential submit path | Submit a real login form and confirm the prompt still names the correct destination host |
+| 9 | **#526** | #413: reserves the last 5 of the 50 mutation-alert slots for scarce security detections (injected password field, suspicious iframe, cross-domain form-action change), so a benign-alert flood can no longer switch detection off | Review caught that the originally-prescribed fix registered shadow roots but still emitted nothing past the cap; the reserve is the real fix. Worth browsing a few mutation-heavy sites (cookie banners, chat widgets) to confirm no new prompts |
+| 10 | **#533** | #219: distinct gauge state when a page has only scoreless threat alerts | Purely visual — confirm the dashed-ring "!" state reads as a warning and not as an error |
+
+**Budget note, measured 2026-08-08:** the stack in slots 1-2 *reclaims* bundle
+space rather than spending it. `main_guard` drops 18.5KB → 14.2KB (92% → 71% of
+budget) because the JS-behaviour monitor is no longer linked, and total dist goes
+495.0KB → 491.3KB. Total headroom nearly doubles, 5.0KB → 8.7KB. `total dist` was
+sitting at **99%** of its 500KB budget, and CI gates on it — so merging slots 1-2
+early is what buys room for the rest. #514 should give back more again.
+
+**Suggested approach:** one session, build from a branch, load `extension/dist`
+unpacked in a fresh temporary Chrome profile, and walk the existing AI-13 step-5
+gates in `docs/agentic/GATE3_GUIDES.md` once per merged group rather than once per
+PR — several of these interact and testing them merged is the state users run.
+Reply `AI-27 pass: <PR list>` or `AI-27 waive: <PR list>` (a waiver is a legitimate
+outcome and is what you chose on 2026-07-25; it is recorded as a waiver, never as a
+Gate-3 pass). Anything you fail, say so and it becomes a fix slice.
+
+**Not in this batch:** PR #531 (OAuth state corroboration) is titled
+`[HELD on AI-14/#417]` and must **not** enter the Gate-3 queue — see AI-14. It is
+open only as a durable backup of work that previously existed on one machine.
+
+**🚨 OPEN: AI-28 — Define the behavioural-data boundary for the RI-06 clear-all
+reset.** Issue #474 (the last RI-06 slice) cannot be finished correctly without an
+owner ruling, and the agent implementing it was told to proceed on a **named
+assumption** rather than block:
+
+> Assumption: the behavioural-data boundary covers the event log, prompt outcomes,
+> and caches derived from them (adaptive scores / domain profiles built from
+> observed behaviour). It EXCLUDES user configuration: suite settings, the user's
+> allowlist and trusted domains. Reason: erasing configuration the user
+> deliberately set would be data loss, whereas leaving behavioural residue is the
+> privacy defect this slice exists to fix.
+
+Event log and prompt outcomes are unequivocally in scope; the open question is
+whether **domain profiles, adaptive scores, allowlist/trusted domains and suite
+settings** belong inside the boundary. Reply `AI-28: <lanes to include>` — the
+lane set is a single declared list in the implementation, so widening it is a
+one-line change rather than a redesign. Until you rule, the reset ships with the
+conservative boundary above, which can only under-clear, never destroy config.
 
 **BLOCKED: AI-8 — Neutral-chip Gate-3 after closed PR #273.** The presentation
 intent is still reasonable, but stale PR #273 was closed on 2026-07-13 with its
@@ -388,6 +470,39 @@ present its exact three-commit delta and recommend retain, archive, land, or
 retire. Do not delete it before that review. Reply `AI-23 done` only after the
 ambiguous branch has a deliberate disposition and the agent re-verifies the
 remaining inventory.
+
+**Inspection performed 2026-08-08 — recommendation ready, still your call.**
+
+`chore/deny-floor-v1.6.3` (worktree `../nav-floor-sync`, three commits):
+
+| Commit | Content | Status on current `main` |
+| --- | --- | --- |
+| `207ee79` | advance vendored deny floor to v1.6.3, re-pin the Codex adapter | Targets `.claude/hooks/dispatch.py`, `.claude/tier.json`, `.codex/hooks.json` — **none of these are tracked on `main`**; owner decision #499 removed the whole repository-local harness |
+| `61e3a2b` | unblock AI-18 and correct its Codex hook guide | AI-18 is recorded in this file as **obsolete**, because #499 deleted the hook it describes |
+| `f438b53` | correct two stale v1.6.0 provenance strings to v1.6.3 | Fixes strings inside files that no longer exist on `main` |
+
+Verified: the only thing under `.claude/hooks/` on `main` today is an ignored
+`__pycache__` directory; no `dispatch.py` is tracked. **Recommendation: retire**
+(delete branch and worktree). All three commits maintain a surface owner decision
+#499 deliberately removed, so landing them would partially reinstate the retired
+harness. Nothing else in the branch is unique. Reply `AI-23 retire nav-floor-sync`
+to authorize, and the agent will copy out the ignored cache entry first, use plain
+`git worktree remove`, then `git branch -d`.
+
+**Two local-only branches the 2026-08-02 audit did not list** (found 2026-08-08;
+neither exists on `origin`, so this machine is the only copy):
+
+- `fix/user-activation-neutral-chip` (`c19f96a`, 3 files) — this is the **closed
+  PR #273 work**, which RI-03 and **AI-8** both ask to recreate from current
+  `main`. Genuinely unmerged and wanted. Do not delete. It collides with PR #533,
+  so recreation is queued behind it rather than done now.
+- `fix/cooldown-map-cap` (`d682f14`, #308) — **superseded**. `main` already has an
+  equivalent `capCooldownMap` + `SMART_DEFAULT_COOLDOWNS_LIMIT` implemented
+  differently (`Object.keys` sort rather than `Object.entries`), so the guarantee
+  is present and this branch adds nothing. Safe to retire on your word.
+
+A third, `fix/oauth-require-state-corroboration-223`, was local-only and is now
+published as PR #531, so it is no longer at risk of loss.
 
 **🚨 BLOCKED: AI-14 — OAuth tradeoff measurement after closed PR #399.** The
 measurement-held draft was closed on 2026-07-13 rather than merged from a stale
