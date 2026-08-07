@@ -609,6 +609,56 @@ describe("credential_guard", () => {
       );
     });
 
+    // #410: resolveActionUrl runs synchronously on the submit path (once here,
+    // again per blockIfActionMutated re-check). The raw action attribute is
+    // unbounded and attacker-controlled, so no JS-level scan of it may be O(len).
+    it("does not scan the whole attacker-controlled action with trim() (#410)", async () => {
+      stubLocation("https://bank.example/login");
+      const form = createPasswordForm(" ".repeat(500_000) + "https://evil.example/collect");
+
+      const realTrim = String.prototype.trim;
+      let longestTrimmed = 0;
+      String.prototype.trim = function (this: string): string {
+        if (this.length > longestTrimmed) longestTrimmed = this.length;
+        return realTrim.call(this);
+      };
+      try {
+        await dispatchSubmit(form);
+      } finally {
+        String.prototype.trim = realTrim;
+      }
+
+      // MAX_ACTION_SCAN_LEN is 2048; nothing on this path may trim more.
+      expect(longestTrimmed).toBeLessThanOrEqual(2048);
+    });
+
+    // The cap must bound the SCAN, never the value handed to `new URL`. Resolving
+    // a head-sliced action would report the current document here and silently
+    // drop the cross-site prompt, because the browser still POSTs to the padded
+    // destination (the URL parser strips leading/trailing whitespace).
+    it("resolves a whitespace-padded cross-site action to the real destination (#410)", async () => {
+      stubLocation("https://bank.example/login");
+      const form = createPasswordForm(" ".repeat(500_000) + "https://evil.example/collect");
+
+      await dispatchSubmit(form);
+
+      expect(mockComputeRisk).toHaveBeenCalledWith(
+        expect.objectContaining({ actionUrl: "https://evil.example/collect" }),
+      );
+    });
+
+    it("preserves a legitimate action URL longer than the scan cap (#410)", async () => {
+      stubLocation("https://bank.example/login");
+      // Real query-bearing action URLs exist well past 2048 chars; the resolved
+      // href must come back byte-identical, tail included.
+      const action = "https://bank.example/login?state=" + "a".repeat(4000);
+      const form = createPasswordForm(action);
+
+      await dispatchSubmit(form);
+
+      expect(mockComputeRisk).toHaveBeenCalledWith(expect.objectContaining({ actionUrl: action }));
+    });
+
     it("passes submitter through to requestSubmit", async () => {
       mockShowModal.mockResolvedValue("proceed_once");
       const form = createPasswordForm();
@@ -926,6 +976,65 @@ describe("credential_guard", () => {
       expect(mockShowToast).toHaveBeenCalledWith(
         expect.objectContaining({ message: expect.stringContaining("destination changed") }),
       );
+    });
+
+    // #410: the TOCTOU re-check compares resolveActionUrl output. If the scan cap
+    // truncated that value, two actions differing only past the cap would compare
+    // equal and the block would be suppressed. Both of these exceed the cap.
+    it("still blocks a cross-site action mutation when both actions exceed the scan cap (#410)", async () => {
+      mockGetRegDomain.mockImplementation((h: string) =>
+        h.includes("evil") ? "evil.example" : "bank.example",
+      );
+      stubLocation("https://bank.example/login");
+      const tail = "a".repeat(4000);
+      const form = createPasswordForm("https://bank.example/login?state=" + tail);
+      const requestSubmitSpy = vi.fn();
+      stubRequestSubmit(form, requestSubmitSpy);
+      mockShowModal.mockImplementation(async () => {
+        form.setAttribute("action", "https://evil.example/collect?state=" + tail);
+        return "proceed_once";
+      });
+
+      await dispatchSubmit(form);
+
+      expect(requestSubmitSpy).not.toHaveBeenCalled();
+      expect(mockShowToast).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining("destination changed") }),
+      );
+    });
+
+    it("still blocks an https->http downgrade when both actions exceed the scan cap (#410)", async () => {
+      mockGetRegDomain.mockReturnValue("bank.example");
+      stubLocation("https://bank.example/login");
+      const tail = "a".repeat(4000);
+      const form = createPasswordForm("https://bank.example/login?state=" + tail);
+      const requestSubmitSpy = vi.fn();
+      stubRequestSubmit(form, requestSubmitSpy);
+      mockShowModal.mockImplementation(async () => {
+        form.setAttribute("action", "http://bank.example/login?state=" + tail);
+        return "proceed_once";
+      });
+
+      await dispatchSubmit(form);
+
+      expect(requestSubmitSpy).not.toHaveBeenCalled();
+      expect(mockShowToast).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining("destination changed") }),
+      );
+    });
+
+    it("does not block when a long action is unchanged across the prompt (#410)", async () => {
+      mockGetRegDomain.mockReturnValue("bank.example");
+      stubLocation("https://bank.example/login");
+      const form = createPasswordForm("https://bank.example/login?state=" + "a".repeat(4000));
+      const requestSubmitSpy = vi.fn();
+      stubRequestSubmit(form, requestSubmitSpy);
+      mockShowModal.mockResolvedValue("proceed_once");
+
+      await dispatchSubmit(form);
+
+      expect(requestSubmitSpy).toHaveBeenCalled();
+      expect(mockShowToast).not.toHaveBeenCalled();
     });
 
     it("does not fall back to form.submit() when requestSubmit throws and a formaction was assessed (R1-1)", async () => {
