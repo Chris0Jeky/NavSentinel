@@ -337,7 +337,7 @@ test("NavSentinel leaves Chromium's own Location methods native (#458) @regressi
     });
     await waitForNavSentinelBridge(page);
 
-    const boundary = await page.evaluate(() => {
+    const boundary = await page.evaluate(async () => {
       // Measured BEFORE anything in this probe touches Location.prototype, so
       // any prototype slot found here was installed by NavSentinel.
       const protoAssign = Object.getOwnPropertyDescriptor(Location.prototype, "assign");
@@ -349,13 +349,22 @@ test("NavSentinel leaves Chromium's own Location methods native (#458) @regressi
       // (the #349/#356 compatibility property), and must still not capture an
       // ordinary call.
       let protoWrapAccepted: boolean;
+      let protoWrapperInvoked = false;
       try {
         (Location.prototype as unknown as Record<string, unknown>).assign =
-          function pageWrapper(): void { /* never reached by an ordinary call */ };
+          function pageWrapper(): void { protoWrapperInvoked = true; };
         protoWrapAccepted = true;
       } catch {
         protoWrapAccepted = false;
       }
+
+      // Behavioural, not identity: actually make an ordinary call with a
+      // prototype wrapper installed. A same-document fragment target keeps this
+      // to a hash change (no commit, no rollback layer). If ordinary dispatch
+      // consulted Location.prototype, `pageWrapper` would run and swallow the
+      // call; instead the unforgeable own method runs and the hash changes.
+      window.location.assign("#ns458-ordinary-call");
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       return {
         navSentinelAddedProtoAssign: protoAssign !== undefined,
@@ -366,12 +375,9 @@ test("NavSentinel leaves Chromium's own Location methods native (#458) @regressi
         ownReplacePresent: ownReplace !== undefined,
         ownReplaceWritable: ownReplace?.writable,
         ownReplaceConfigurable: ownReplace?.configurable,
-        // Identity, not navigation: because `assign` is an own property of this
-        // Location, `location.assign(...)` provably resolves this function and
-        // never the (now page-installed) prototype one.
-        ordinaryCallResolvesOwnMethod:
-          window.location.assign !== Location.prototype.assign,
         protoWrapAccepted,
+        ordinaryCallSkippedProtoWrapper: protoWrapperInvoked === false,
+        ordinaryCallReachedOwnMethod: window.location.hash === "#ns458-ordinary-call",
       };
     });
 
@@ -387,8 +393,9 @@ test("NavSentinel leaves Chromium's own Location methods native (#458) @regressi
       ownReplacePresent: true,
       ownReplaceWritable: false,
       ownReplaceConfigurable: false,
-      ordinaryCallResolvesOwnMethod: true,
       protoWrapAccepted: true,
+      ordinaryCallSkippedProtoWrapper: true,
+      ordinaryCallReachedOwnMethod: true,
     });
   } finally {
     await context.close();

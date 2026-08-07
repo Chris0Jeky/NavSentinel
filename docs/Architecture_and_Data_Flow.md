@@ -93,13 +93,85 @@ primitives; those wrappers caught nothing a real page can produce (an explicit
 adding two prototype properties the browser does not ship — a deterministic way
 for a hostile page to detect the extension. They were removed.
 
-What covers these navigations instead is the service worker: its
-`chrome.webNavigation.onCommitted` handler observes the commit and, when no
-user-gesture allowance covers it, rolls the tab back to the previous URL and
-hands a recovery prompt to the isolated world. That is **post-commit recovery**,
-not pre-navigation interception — the destination page does begin to load. The
-`@rollback` Playwright lane exercises exactly this path with gym fixtures that
-navigate using a plain `location.assign(...)`.
+What partly covers these navigations instead is the service worker: its
+`chrome.webNavigation.onCommitted` handler observes the commit and may roll the
+tab back to the previous URL, handing a recovery prompt to the isolated world.
+That is **post-commit recovery**, not pre-navigation interception — the
+destination page does begin to load — and it is conditional, not blanket. The
+`@rollback` Playwright lane exercises this path with gym fixtures that navigate
+using a plain `location.assign(...)`.
+
+##### Exactly when the rollback layer fires
+
+`onCommittedHandler` (`extension/src/sw/sw.ts`) queues a rollback only when
+**all** of the following hold:
+
+1. **Top frame only** — `details.frameId === 0`. Sub-frame navigations are
+   never rolled back.
+2. **Redirect or link transition** — `transitionQualifiers` contains
+   `client_redirect` or `server_redirect`, or `transitionType` is `link`.
+   Anything else returns early (`if (!isRedirect && !isLinkish) return`).
+   Chromium tags a script-driven `location` navigation `client_redirect`.
+3. **Not user address entry** — `transitionType` is neither `typed` nor
+   `auto_bookmark`, and the qualifiers do not include `from_address_bar`.
+4. **Not inside the typed-origin window** — no user-typed commit in the tab
+   within the last `TYPED_ORIGIN_TTL_MS` (5 s) that is also still inside its
+   `TYPED_ORIGIN_MAX_MS` (15 s) deadline.
+5. **No allowance covers the commit** — the tab's `ns-allow-nav` window has
+   expired, `onBeforeNavigate` did not record this exact URL as started under an
+   allowance, and no matching `ns-allow-target-nav` target allowance applies.
+6. **A previous top-frame URL is known** — `lastUrlByTab` has a `prevUrl` for
+   the tab. Without one there is no rollback destination, so nothing is queued
+   (this covers a tab's first commit and state lost before the commit).
+7. **Not a same-registrable-domain hop without recent user-navigation context**
+   — see the subsection below.
+8. **Not inside the rollback-suppress window** — `ROLLBACK_SUPPRESS_MS` (6 s)
+   after the previous rollback queued for that tab.
+
+Delivery adds two more requirements: the isolated-world content script must be
+running on the destination page (otherwise the entry stays queued in
+`pendingRollbackByTab` and is retried on the next `onUpdated` / `ns-ready`), and
+`defaultMode` must not be `off`.
+
+The accurate summary is therefore: **a top-frame script redirect is rolled back
+after it commits when it crosses to a different registrable domain, or when it
+stays on the same registrable domain but follows recent user-navigation context
+— and in both cases only if no allowance covers it and none of the suppression
+windows above is open.** A same-registrable-domain redirect with no recent user
+navigation is not rolled back at all.
+
+The second half of that is the `@rollback` lane's own case: gym Level 10's
+delayed redirect is same-origin (`localhost`), but the user clicked ~2 s
+earlier, so the 1.5 s gesture allowance has expired (no longer allowed at
+commit) while the 10 s user-navigation context is still open (so the same-domain
+exclusion does not apply) and the rollback fires.
+
+##### The same-registrable-domain exclusion is deliberate
+
+Condition 7 is
+`if (!recentUserNavigationContext && isSameRegistrableNavigation(prevUrl, details.url)) return;`.
+Concretely, on `example.com` with no user interaction:
+
+```js
+setTimeout(() => location.assign("https://example.com/phish"), 5000);
+```
+
+commits and is **not** rolled back: the destination shares `example.com`'s
+registrable domain (eTLD+1, PSL-derived, so `a.example.com` -> `b.example.com`
+counts as same-domain too) and the tab has had no user-navigation context — a
+gesture or an allowed commit — within `USER_NAV_CONTEXT_TTL_MS` (10 s).
+
+This is a deliberate false-positive trade, not an oversight. In-site script
+navigation is what ordinary sites do constantly: SPA bootstraps, auth handoffs,
+consent and paywall interstitials, `?redirect=` bounces. Rolling those back
+would fight the user on legitimate pages, and it would buy little, because a
+page that can run this script already controls that registrable domain and could
+serve the same content in place instead of navigating. The security-relevant hop
+is the **cross-site** one, where the user's origin, TLS identity, cookie jar,
+password-manager match, and address bar all change. NavSentinel accepts the
+same-site blind spot — which does include subdomain-to-subdomain movement within
+one registrable domain — to keep the cross-site rollback usable enough to leave
+enabled.
 
 The opener's `Location` is a different object, reached through NavSentinel's own
 `window.opener` accessor, so `patchOpenerLocation()` can and does proxy its

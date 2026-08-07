@@ -648,13 +648,19 @@ function resolveFormAction(form: HTMLFormElement): string | undefined {
  * allowance where the browser would have thrown. Removing them removes a
  * fingerprint and an attacker-reachable path; it removes no working defense.
  *
- * What IS guaranteed for script-driven location navigation: the service
+ * What PARTLY covers script-driven location navigation instead: the service
  * worker's `chrome.webNavigation.onCommitted` handler (`extension/src/sw/sw.ts`)
- * observes the commit and, when no user-gesture allowance covers it, rolls the
- * tab back to the previous URL and hands the recovery prompt to the isolated
- * world. That is POST-COMMIT recovery, not pre-navigation interception, and it
- * is what the @rollback lane exercises via gym fixtures that navigate with a
- * plain `location.assign(...)`.
+ * observes the commit and may roll the tab back to the previous URL, handing
+ * the recovery prompt to the isolated world. That is POST-COMMIT recovery, not
+ * pre-navigation interception, and it is conditional — top frame only, only for
+ * `client_redirect`/`server_redirect`/`link` commits, not for user-typed ones,
+ * only when no allowance covers the commit, only when a previous URL is known,
+ * not inside the 6s rollback-suppress window, and NOT for a same-registrable-
+ * domain hop that follows no recent user-navigation context (a deliberate
+ * false-positive trade — see the "Exactly when the rollback layer fires"
+ * section of `docs/Architecture_and_Data_Flow.md` for the full list). The
+ * @rollback lane exercises this via gym fixtures that navigate with a plain
+ * `location.assign(...)`.
  *
  * `window.open`, `HTMLFormElement.prototype.submit`/`requestSubmit` and
  * `History.prototype.pushState`/`replaceState` DO live on real prototypes and
