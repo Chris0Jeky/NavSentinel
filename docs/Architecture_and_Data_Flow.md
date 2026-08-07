@@ -62,16 +62,49 @@ This is the main user-facing navigation decision surface.
 
 `extension/src/content/main_guard.ts` runs in the page's main world so it can patch browser-facing primitives that isolated-world code cannot safely override:
 
-- `window.open`
-- `Location.prototype.assign`
-- `Location.prototype.replace`
+- `window.open` and `Window.prototype.open`
 - `HTMLFormElement.prototype.submit`
 - `HTMLFormElement.prototype.requestSubmit`
+- `History.prototype.pushState` / `History.prototype.replaceState` (observational only)
 - `navigator.clipboard.writeText` (for ClickFix detection)
 - `document.execCommand("copy")` (for ClickFix detection)
 - `window.opener.location` writes (for DoubleClickjacking detection)
 
 It captures blocked or replayable navigation attempts, clipboard write metadata, and opener-location-write signals, handing control back to the isolated-world logic.
+
+#### `location.assign` / `location.replace` are deliberately NOT patched (#458)
+
+Chromium implements `Location.assign` and `Location.replace` as
+`[LegacyUnforgeable]` Web IDL members. Every `Location` instance carries them as
+**own** properties with `writable: false, configurable: false`, and the matching
+`Location.prototype` slots do not exist. Two things follow, both measured in this
+repo's Playwright Chromium lane:
+
+- the own methods cannot be replaced or redefined from the main world; and
+- an ordinary `location.assign(url)` resolves the own method by ordinary property
+  lookup and never consults `Location.prototype`, so a prototype wrapper is
+  unreachable however it is installed.
+
+NavSentinel therefore has **no pre-navigation interception** for same-window
+`location.assign` / `location.replace`. Until #458 this document and
+`main_guard.ts` listed `Location.prototype.assign`/`replace` as patched
+primitives; those wrappers caught nothing a real page can produce (an explicit
+`Location.prototype.assign.call(...)` throws `TypeError` in stock Chromium) while
+adding two prototype properties the browser does not ship — a deterministic way
+for a hostile page to detect the extension. They were removed.
+
+What covers these navigations instead is the service worker: its
+`chrome.webNavigation.onCommitted` handler observes the commit and, when no
+user-gesture allowance covers it, rolls the tab back to the previous URL and
+hands a recovery prompt to the isolated world. That is **post-commit recovery**,
+not pre-navigation interception — the destination page does begin to load. The
+`@rollback` Playwright lane exercises exactly this path with gym fixtures that
+navigate using a plain `location.assign(...)`.
+
+The opener's `Location` is a different object, reached through NavSentinel's own
+`window.opener` accessor, so `patchOpenerLocation()` can and does proxy its
+`href` setter, `assign`, and `replace` for DoubleClickjacking detection. That
+proxy is observational; it does not block.
 
 ### ClickFix detector
 

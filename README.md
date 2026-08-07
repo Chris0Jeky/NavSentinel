@@ -23,7 +23,13 @@ externally audited, or released.
 ## What it does
 
 - Scores clicks with a Click Deception Score (CDS) before allowing navigation side effects.
-- Patches `window.open`, `location.assign`, `location.replace`, and form submission in the main world to catch script-driven navigation.
+- Patches `window.open` and form submission in the main world to catch
+  script-driven navigation before it commits. `location.assign` /
+  `location.replace` are *not* patched and cannot be: Chromium exposes them as
+  non-writable, non-configurable own methods of each `Location`, so a page
+  script can neither replace them nor interpose on an ordinary call. Those
+  navigations are caught after the fact by the service worker's rollback layer;
+  see [`docs/Architecture_and_Data_Flow.md`](docs/Architecture_and_Data_Flow.md).
 - Uses a MessagePort bridge for steady-state isolated/main-world control
   traffic. Its challenge verifies port possession/liveness, not a hard
   authenticated identity boundary; #175/#186 remain unlisted-beta gates.

@@ -295,8 +295,9 @@ instead: build from current `main` and execute steps 2–6 below against it.
    immediate redirect should reach Level 4. Reopen Level 10, click delayed
    redirect, and after two seconds confirm Chromium first reaches Level 4 and
    NavSentinel automatically rolls back to Level 10 with the rollback toast;
-   normal Location calls bypass the prototype hook (#458), so this is not a
-   pre-navigation `Blocked redirect`. Click `Proceed` and confirm Level 4 opens.
+   NavSentinel has no pre-navigation hook on `location.assign` at all (#458), so
+   this is a post-commit rollback, not a `Blocked redirect` card. Click
+   `Proceed` and confirm Level 4 opens.
    Reopen Level 10, click programmatic form submit, and confirm `Blocked form
    submit` appears before navigation. Choose `Allow once`, confirm only the exact
    form action reaches Level 1 with `from=level10`, then reopen Level 10 and

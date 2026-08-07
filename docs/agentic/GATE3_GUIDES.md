@@ -276,8 +276,11 @@ exact head. Only Chris can record this item complete.
    Expect `stayedOnLevel1: true`, no new tab, and NavSentinel's own new-tab
    block/prompt. Record the exact title if it differs.
 
-   - Reload a fresh Level 1 page, then synthetic click -> hardened Location
-     prototype:
+   - Reload a fresh Level 1 page, then synthetic click -> script redirect.
+     NavSentinel does **not** intercept `location.assign` (#458): Chromium's
+     own unforgeable methods cannot be wrapped from a page script, so this
+     probe checks the two things that are actually true — the browser refuses
+     the prototype call, and a synthetic click mints no redirect allowance:
 
    ```js
    await (async () => {
@@ -288,19 +291,37 @@ exact head. Only Chris can record this item complete.
      });
      b.dispatchEvent(c);
      await new Promise((resolve) => setTimeout(resolve, 250));
-     Location.prototype.assign.call(
-       location,
-       `${location.origin}/level2-moving-target.html?ai21=location`
-     );
+     let protoCall;
+     try {
+       Location.prototype.assign.call(
+         location,
+         `${location.origin}/level2-moving-target.html?ai21=location`
+       );
+       protoCall = "no-error";
+     } catch (error) {
+       protoCall = error.name;
+     }
      await new Promise((resolve) => setTimeout(resolve, 400));
-     return { clickTrusted: c.isTrusted, stayedOnStartUrl: location.href === startUrl };
+     return {
+       clickTrusted: c.isTrusted,
+       protoCall,
+       protoAssignPresent:
+         Object.getOwnPropertyDescriptor(Location.prototype, "assign") !== undefined,
+       ownAssignConfigurable:
+         Object.getOwnPropertyDescriptor(location, "assign")?.configurable,
+       stayedOnStartUrl: location.href === startUrl
+     };
    })();
    ```
 
-   Expect `clickTrusted: false`, `stayedOnStartUrl: true`, and `Blocked
-   redirect`. Test the prototype call exactly; normal `location.assign()`
-   instance coverage remains separate issue #458. After all three probes, run
-   this in the service-worker inspector:
+   Expect `clickTrusted: false`, `protoCall: "TypeError"`,
+   `protoAssignPresent: false`, `ownAssignConfigurable: false`, and
+   `stayedOnStartUrl: true`. A `protoAssignPresent: true` means an
+   extension-installed prototype slot came back and is a failure. Do **not**
+   expect a `Blocked redirect` card here — there is no pre-navigation hook on
+   this path; the guarantee for script redirects is the service worker's
+   post-commit rollback, exercised separately in step 5 with Level 10. After
+   all three probes, run this in the service-worker inspector:
 
    ```js
    const allowanceState = await chrome.storage.session.get(allowanceKeys);
