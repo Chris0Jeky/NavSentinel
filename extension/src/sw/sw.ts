@@ -291,13 +291,17 @@ function processOAuthNavigation(
   //   (d) Only fires the +30 mismatch when the registrable domain differs from the
   //       redirect_uri host recorded at flow start (isUnexpectedCallback).
   //
-  //   (e) Fires the mismatch ONLY when the response is CORROBORATED — a query code/error
-  //       co-occurs with a `state` echo, or a fragment carries access_token/id_token
-  //       (hasCorroboratedOAuthResponse). A benign cross-domain page carrying just a
-  //       generic ?code=/?error= (a coupon/tracking code) has no `state`, so it no longer
-  //       trips a false mismatch. A real callback — benign or malicious-to-an-unexpected-
-  //       domain — echoes the `state` the request sent. Residual FN: a flow whose callback
-  //       omits `state` loses coverage (state is recommended-but-optional). (#223)
+  //   (e) Fires the mismatch ONLY when the response is CORROBORATED — a code/error
+  //       co-occurs with a `state` echo in the same location, or an access_token/id_token
+  //       is present at all (hasCorroboratedOAuthResponse). A benign cross-domain page
+  //       carrying just a generic ?code=/?error= (a coupon/tracking code) has no `state`,
+  //       so it no longer trips a false mismatch. A real callback — benign or malicious-
+  //       to-an-unexpected-domain — echoes the `state` the request sent, because the
+  //       relying party validates it. Residual FN: a code/error callback that omits
+  //       `state` loses mismatch coverage (state is recommended-but-optional); this
+  //       tradeoff is NOT quantified by measure:fp. Flow COMPLETION is unaffected — it
+  //       still gates on hasOAuthResponseParams, so such a callback still ends the
+  //       flow, it just does not score +30. (#223)
   //
   // An abandoned flow lingers in redirect/consent until the 60s age-prune rather than
   // being force-completed (bounded by OAUTH_FLOW_MAX_AGE_MS).

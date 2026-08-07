@@ -606,6 +606,29 @@ describe("hasCorroboratedOAuthResponse (#223)", () => {
     expect(hasCorroboratedOAuthResponse("https://app.com/cb#id_token=jwt")).toBe(true);
   });
 
+  it("accepts an access_token / id_token in the QUERY on its own (no FN vs hasOAuthResponseParams)", () => {
+    // hasOAuthResponseParams accepts a token in the query, so the corroborated variant must
+    // too — otherwise a token leaked onto an unexpected domain silently loses its mismatch.
+    expect(hasCorroboratedOAuthResponse("https://evil.example/cb?access_token=stolen")).toBe(true);
+    expect(hasCorroboratedOAuthResponse("https://evil.example/cb?id_token=jwt")).toBe(true);
+    // Parity check: everything hasOAuthResponseParams calls a token response stays covered.
+    for (const u of [
+      "https://evil.example/cb?access_token=t",
+      "https://evil.example/cb?id_token=t",
+      "https://evil.example/cb#access_token=t",
+      "https://evil.example/cb#id_token=t",
+    ]) {
+      expect(hasOAuthResponseParams(u)).toBe(true);
+      expect(hasCorroboratedOAuthResponse(u)).toBe(true);
+    }
+  });
+
+  it("does NOT corroborate a code and state split across query and fragment (not a real response_mode)", () => {
+    // Documented non-shape: response_mode picks ONE location for the whole response.
+    expect(hasCorroboratedOAuthResponse("https://app.com/cb?state=x#code=abc")).toBe(false);
+    expect(hasCorroboratedOAuthResponse("https://app.com/cb?code=abc#state=x")).toBe(false);
+  });
+
   it("accepts an OIDC response_mode=fragment authorization-code callback (#code=&state= in the fragment)", () => {
     // Azure AD / Okta put the code AND state echo in the fragment, not the query.
     expect(hasCorroboratedOAuthResponse("https://app.com/cb#code=abc&state=xyz")).toBe(true);

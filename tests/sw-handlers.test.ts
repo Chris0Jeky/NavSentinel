@@ -2066,6 +2066,71 @@ describe("service worker handlers", () => {
       expect(mismatch).toBeDefined();
     });
 
+    it("DOES fire a mismatch for an unexpected-domain token callback with NO state, in query or fragment (#223)", async () => {
+      // A leaked access_token/id_token is a strong standalone response indicator: the #223
+      // state requirement applies ONLY to the generic code/error params, so a stateless
+      // token callback to an unexpected domain must keep its +30 mismatch.
+      const mock = createChromeMock();
+      await loadSw(mock);
+
+      // Each tab carries its own independent flow, so one SW load covers all three shapes.
+      const consentUrl =
+        "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&redirect_uri=https%3A%2F%2Fapp.example.com%2Fcb&response_type=token&scope=openid";
+      for (const [tabId, callbackUrl] of [
+        [13, "https://evil.example/cb?access_token=stolen"],
+        [14, "https://evil.example/cb#access_token=stolen&token_type=bearer"],
+        [15, "https://evil.example/cb?id_token=jwt"],
+      ] as const) {
+        mock.emitCommitted({ tabId, frameId: 0, url: consentUrl, transitionType: "link" });
+
+        mock.sentMessages.length = 0;
+        mock.emitCommitted({
+          tabId,
+          frameId: 0,
+          url: callbackUrl,
+          transitionType: "link",
+          transitionQualifiers: ["server_redirect"],
+        });
+
+        const mismatch = mock.sentMessages.find(
+          (m) => (m.message as { type: string }).type === "ns-oauth-redirect-mismatch",
+        );
+        expect(mismatch, `expected a mismatch for ${callbackUrl}`).toBeDefined();
+      }
+    });
+
+    it("still COMPLETES the flow for an uncorroborated stateless ?code= callback, it just does not score it (#223)", async () => {
+      // The #223 change narrows only the MISMATCH decision. Flow completion still gates on
+      // hasOAuthResponseParams, so an uncorroborated callback must not leave the flow
+      // lingering in redirect/consent where a later navigation could re-trip on it.
+      const mock = createChromeMock();
+      await loadSw(mock);
+
+      const consentUrl =
+        "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&redirect_uri=https%3A%2F%2Fapp.example.com%2Fcb&response_type=code&scope=openid";
+      mock.emitCommitted({ tabId: 16, frameId: 0, url: consentUrl, transitionType: "link" });
+
+      mock.sentMessages.length = 0;
+      mock.emitCommitted({
+        tabId: 16,
+        frameId: 0,
+        url: "https://shop.example/sale?code=SUMMER",
+        transitionType: "link",
+        transitionQualifiers: ["server_redirect"],
+      });
+
+      const mismatch = mock.sentMessages.find(
+        (m) => (m.message as { type: string }).type === "ns-oauth-redirect-mismatch",
+      );
+      expect(mismatch).toBeUndefined();
+
+      const flowUpdate = mock.sentMessages.find(
+        (m) => (m.message as { type: string }).type === "ns-oauth-flow-update" && m.tabId === 16,
+      );
+      expect(flowUpdate).toBeDefined();
+      expect((flowUpdate!.message as { flow: { phase: string } }).flow.phase).toBe("complete");
+    });
+
     it("does NOT fire a redirect-mismatch for a legit callback to the EXPECTED domain (#207 R2)", async () => {
       const mock = createChromeMock();
       await loadSw(mock);
