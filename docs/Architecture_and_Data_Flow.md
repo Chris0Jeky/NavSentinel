@@ -118,6 +118,29 @@ a security boundary. Issues #175/#186 are unlisted-beta gates; a fresh external
 review of the exact package remains a separate public-launch gate. Do not
 describe the bridge as unspoofable before they are resolved.
 
+## JavaScript behavior instrumentation (beta capability, off)
+
+`capabilities.jsBehaviorInstrumentation` in `config/release-profiles.json` is
+`false` in every committed profile, including the release-eligible
+`interaction-only` default. The build aliases `@navsentinel/js-behavior-monitor`
+to `extension/src/content/js_behavior_monitor.disabled.ts`, a no-op, so
+`window.fetch`, `XMLHttpRequest.prototype.open`/`.send`, `navigator.sendBeacon`
+and the `HTMLInputElement.prototype.value` getter are never wrapped — they are
+not wrapped and left inert. `npm run check:release-profile` fails the build if a
+capability-off artifact still links the instrumentation.
+
+Core navigation, credential and DoubleClickjacking protection are unaffected:
+they live in `main_guard.ts` and `capture_isolated.ts` and do not route through
+this capability. The isolated-world signal handlers and the
+`nrs_js_behavior_suspicious` scoring factor remain in place but receive no
+signals.
+
+The capability is a build-time decision, not a stored setting: the options page
+shows a read-only status row and offers no control, and stored settings cannot
+turn it on (`mergeNavSettings` rebuilds nav settings from known fields only).
+Turning it on requires representative-site compatibility and runtime-overhead
+evidence that does not exist yet (roadmap RI-07 / EV-04).
+
 ## Domain reputation (bloom filter)
 
 `extension/src/shared/reputation.ts` implements a build-time bloom mechanism
