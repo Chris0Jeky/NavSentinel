@@ -216,9 +216,25 @@ result review. Read `docs/Product_Strategy.md` first. This item becomes
 actionable only when the preflight handoff explicitly says so.
 
 **🚨 OPEN: AI-27 — One Gate-3 batch pass over the browser-surface queue from the
-2026-08-08 session.** Ten browser-surface PRs are open, reviewed, and green, and
-none can merge without your call. They are listed in the order they should be
-merged, not the order they were opened.
+2026-08-08 session.** Ten browser-surface PRs are open and reviewed, and none can
+merge without your call. They are listed in the order they should be merged, not
+the order they were opened.
+
+**Check CI yourself before passing any of them — do not assume green.** Two
+separate things went wrong here and both are worth knowing:
+
+- **Stacked PRs run no CI at all** (issue **#537**, found during this session).
+  `.github/workflows/ci.yml` filters `pull_request` on `branches: [main]`, and that
+  filter matches the *base* branch — so #532 and #535, whose bases are other
+  branches, reported `no checks reported on the branch`: not red, not pending,
+  never ran. `mergeStateStatus` still says `CLEAN`, so a stacked PR *looks*
+  mergeable while being entirely unverified. Both were given a real run via
+  `gh workflow run ci.yml --ref <branch>` (the workflow already declares
+  `workflow_dispatch`); confirm those runs are green on the exact head before
+  merging, and re-prove after each retarget, since retargeting moves the merge base.
+- **#533 was red** — its new popup code pushed `popup JS` to 10.1KB against a 10KB
+  budget, which failed `build-and-unit` and therefore **skipped `E2E` entirely**. A
+  skipped job is not a passed job. Fix in progress; re-check before passing it.
 
 **Slots 1-3 are a three-deep stack: #528 ← #532 ← #535.** Merge them oldest-first
 in exactly that order; merging the newest first would strand its parents (global
