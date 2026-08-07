@@ -11,7 +11,7 @@
  * the number of entries evicted.
  *
  * Used to bound `blockedActions` (#301): a page can call window.open /
- * location.assign / form.submit in a tight synchronous loop, and every blocked
+ * form.submit / form.requestSubmit in a tight synchronous loop, and every blocked
  * call inserts a live closure-bearing entry that the TTL-only prune cannot
  * remove within the 5s window — without a cap the Map grows unbounded. Called
  * after every insert, so the Map is at most one over the cap and the loop runs

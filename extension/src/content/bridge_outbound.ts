@@ -133,8 +133,7 @@ const MAIN_GUARD_ALERT_TYPES = new Set<string>([
  *  - `ns-allow*`      control relays (e.g. `ns-allow-target-nav`) that
  *                     pre-authorize a user-approved navigation in the SW;
  *                     dropping one makes the SW re-block an allowed action.
- * Routine (config-ack, pong, bridge-ready/overflow, debug, location-patch-info)
- * is droppable.
+ * Routine (config-ack, pong, bridge-ready/overflow, debug) is droppable.
  */
 export function isMainGuardAlertType(type: string): boolean {
   return (
@@ -146,8 +145,8 @@ export function isMainGuardAlertType(type: string): boolean {
 }
 
 // Priority messages emitted once per navigation decision. A page can drive these in a
-// synchronous loop (many blocked/allowed window.open / location.assign / form.submit
-// calls), so under the pre-bridge buffer they are the flood source. They are tagged
+// synchronous loop (many blocked/allowed window.open / form.submit calls), so
+// under the pre-bridge buffer they are the flood source. They are tagged
 // `floodable` so the OutboundQueue caps them and reserves room for the scarce
 // once-per-event correlation signals (dblclick / js / pushstate). (#377/F2)
 //
