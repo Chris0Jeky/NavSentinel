@@ -10,7 +10,9 @@
  * Design:
  * - Starts observation >2 seconds after page load (avoids flagging SPA UI builds)
  * - Batches mutations with a 100ms debounce window
- * - Caps at 50 alerts per page to prevent memory bloat
+ * - Caps at 50 alerts per page to prevent memory bloat, of which the last 5 are
+ *   RESERVED for scarce security-relevant signals so a flood of cheap alerts
+ *   cannot be used to switch detection off (#413)
  * - Auto-disconnects after 5 minutes to save resources
  * - Recursively observes open shadow DOM roots as they appear (#97)
  *
@@ -44,6 +46,29 @@ export interface MutationAlert {
 // ---------------------------------------------------------------------------
 
 const MAX_ALERTS = 50;
+
+/**
+ * Slots inside MAX_ALERTS that floodable alerts may never occupy, mirroring
+ * `OutboundQueue`'s `reservedForScarce` (bridge_outbound.ts, #377/F2).
+ *
+ * Without a reservation the alert cap doubles as a SUPPRESSION ORACLE: a page
+ * emits 50 cheap, benign-looking alerts (same-origin form-action churn, SPA
+ * overlays), `alerts.length` sticks at MAX_ALERTS for the rest of the monitor's
+ * lifetime — `alerts` only ever grows, and is reset solely by
+ * `_resetMutationState` / `startMutationMonitor` — and every later detection is
+ * skipped. The attacker then injects a credential form or a hostile iframe with
+ * no signal at all. Registering post-cap shadow roots (#413) does not help on
+ * its own, because the records those observers deliver hit the same gate.
+ *
+ * Reserving the tail means the FLOODABLE lane stops at
+ * `FLOODABLE_ALERT_CAP` while the scarce lane keeps `RESERVED_SCARCE_ALERT_SLOTS`
+ * of capacity for the signals an attacker actually wants hidden. (#413)
+ */
+const RESERVED_SCARCE_ALERT_SLOTS = 5;
+
+/** Alert count past which only scarce (security-relevant) alerts are admitted. */
+const FLOODABLE_ALERT_CAP = MAX_ALERTS - RESERVED_SCARCE_ALERT_SLOTS;
+
 const DEBOUNCE_MS = 100;
 const AUTO_DISCONNECT_MS = 5 * 60 * 1000; // 5 minutes
 const MIN_OVERLAY_COVERAGE = 0.25;
@@ -132,6 +157,15 @@ const observedShadowRoots = new WeakSet<ShadowRoot>();
 const shadowObserversByHost = new Map<Element, MutationObserver>();
 
 /**
+ * Elements that have already consumed one of the RESERVED_SCARCE_ALERT_SLOTS.
+ * Dedup applies to the reserved tail ONLY (behaviour below FLOODABLE_ALERT_CAP is
+ * unchanged), so re-adding or re-mutating the SAME element cannot burn the whole
+ * reserve and re-open the suppression oracle one level up. Reassigned — not
+ * cleared — on reset, because a WeakSet has no clear(). (#413)
+ */
+let reservedSlotElements = new WeakSet<Element>();
+
+/**
  * Tracks original `action` attribute values for forms observed at startup.
  * Key: the form Element, Value: the original action string (or "" if absent).
  */
@@ -187,8 +221,39 @@ function suspiciousIframeScheme(src: string): string | null {
   return m ? m[1]!.toLowerCase() : null;
 }
 
+/**
+ * Whether an alert may occupy one of the RESERVED_SCARCE_ALERT_SLOTS.
+ *
+ * Scarce = the once-per-attack signals a flood-then-inject page wants hidden,
+ * AND cheap enough to detect without forcing layout (so the reserved lane costs
+ * no `getComputedStyle` / `getBoundingClientRect`):
+ *  - `password_injected`  credential capture appearing after load.
+ *  - `suspicious_iframe`  hostile frame injected after load.
+ *  - `form_action_changed` at HIGH severity only — a cross-domain action rewrite
+ *    is the credential-redirect signal; same-origin rewrites are ordinary SPA
+ *    churn and stay floodable.
+ *
+ * `overlay_injected` is deliberately NOT scarce: it is the layout-bound check
+ * (`getComputedStyle` per element) the cap exists to bound, and it cannot be
+ * classified without paying that cost. See the residual-risk note on
+ * `processAddedNode`.
+ *
+ * Classification never changes WHAT counts as suspicious — no threshold moves,
+ * every predicate is the pre-existing one — only WHEN an alert may still fire.
+ */
+function isScarceAlert(alert: MutationAlert): boolean {
+  if (alert.type === "password_injected" || alert.type === "suspicious_iframe") return true;
+  return alert.type === "form_action_changed" && alert.severity === "high";
+}
+
 function pushAlert(alert: MutationAlert): void {
   if (alerts.length >= MAX_ALERTS) return;
+  if (alerts.length >= FLOODABLE_ALERT_CAP) {
+    // Reserved tail: scarce types only, at most one slot per element.
+    if (!isScarceAlert(alert)) return;
+    if (reservedSlotElements.has(alert.element)) return;
+    reservedSlotElements.add(alert.element);
+  }
   alerts.push(alert);
   alertCallback?.(alert);
 }
@@ -405,7 +470,16 @@ function checkPasswordInjection(el: Element): void {
 // Detection: suspicious iframes
 // ---------------------------------------------------------------------------
 
-function checkSuspiciousIframe(el: Element): void {
+/**
+ * @param includeLayoutChecks  When false, the two layout-forcing reason checks
+ *   (`getComputedStyle` for display/visibility and `getBoundingClientRect` for
+ *   the tiny-iframe test) are skipped, leaving only the attribute-derived
+ *   reasons (opaque/script scheme, cross-domain src, srcdoc). Used by the
+ *   reserved scarce lane, which must stay free of layout work. The resulting
+ *   reasons are a strict SUBSET of the full check's — no threshold is lowered
+ *   and no new alert class is introduced. (#413)
+ */
+function checkSuspiciousIframe(el: Element, includeLayoutChecks = true): void {
   if (el.tagName !== "IFRAME") return;
   const iframe = el as HTMLIFrameElement;
   const src = iframe.getAttribute("src") ?? "";
@@ -426,13 +500,15 @@ function checkSuspiciousIframe(el: Element): void {
   const reasons: string[] = [];
 
   // Rendering checks apply regardless of src legitimacy.
-  const cs = getComputedStyle(iframe);
-  if (cs.display === "none") reasons.push("display:none");
-  if (cs.visibility === "hidden") reasons.push("visibility:hidden");
+  if (includeLayoutChecks) {
+    const cs = getComputedStyle(iframe);
+    if (cs.display === "none") reasons.push("display:none");
+    if (cs.visibility === "hidden") reasons.push("visibility:hidden");
 
-  const rect = iframe.getBoundingClientRect();
-  if (rect && rect.width < TINY_IFRAME_PX && rect.height < TINY_IFRAME_PX && rect.width >= 0 && rect.height >= 0) {
-    reasons.push(`tiny (${Math.round(rect.width)}x${Math.round(rect.height)})`);
+    const rect = iframe.getBoundingClientRect();
+    if (rect && rect.width < TINY_IFRAME_PX && rect.height < TINY_IFRAME_PX && rect.width >= 0 && rect.height >= 0) {
+      reasons.push(`tiny (${Math.round(rect.width)}x${Math.round(rect.height)})`);
+    }
   }
 
   // Opaque/script-scheme src (data:/blob:/javascript:) has no hostname so
@@ -479,11 +555,17 @@ function checkSuspiciousIframe(el: Element): void {
  *
  * Split out of `processAddedNode` and run UNCONDITIONALLY — outside the alert
  * cap — because this is the only path that attaches an observer to a shadow root
- * that appears after start. While it sat behind the cap, a page could flood 50
- * cheap benign alerts and then inject a credential form into a freshly attached
- * shadow root, which mutation_monitor would never see again for the rest of its
- * lifetime (until AUTO_DISCONNECT_MS / stopMutationMonitor). Mirrors what #412
- * did for removed-node cleanup. (#413)
+ * that appears after start. While it sat behind the cap, a page could flood
+ * MAX_ALERTS cheap benign alerts and then inject a credential form into a
+ * freshly attached shadow root, which mutation_monitor would never see again for
+ * the rest of its lifetime (until AUTO_DISCONNECT_MS / stopMutationMonitor).
+ * Mirrors what #412 did for removed-node cleanup.
+ *
+ * Registration is only HALF the fix: records delivered by an observer registered
+ * here still have to pass the alert-cap gate in `processBatch`. The other half is
+ * RESERVED_SCARCE_ALERT_SLOTS — see `pushAlert` — which keeps detection capacity
+ * available for the injected credential form itself. Neither half closes the
+ * flood-then-inject bypass alone. (#413)
  *
  * Cost profile: registration itself is cheap WeakSet/Map work, and this walk is
  * the same `querySelectorAll("*")` over the added subtree that already ran for
@@ -505,13 +587,38 @@ function discoverShadowRootsInAddedNode(node: Node): void {
   }
 }
 
-function processAddedNode(node: Node): void {
+/**
+ * Scan a newly added node (and its descendants) for alert-worthy content.
+ *
+ * @param scarceOnly  Run the RESERVED scarce lane instead of the full pass. The
+ *   scarce lane makes ZERO layout-forcing calls: `checkOverlay` (a
+ *   `getComputedStyle` on every added element, plus `getBoundingClientRect`) is
+ *   skipped entirely, and `checkSuspiciousIframe` drops to its attribute-only
+ *   reasons. What remains — `checkPasswordInjection` (tagName + `type` +
+ *   `closest("form")`) and two selector walks — is the same traversal class as
+ *   the unconditional `discoverShadowRootsInAddedNode` walk this node already
+ *   pays, and strictly cheaper than it. So the reserve cannot be used to drive
+ *   expensive scans: past FLOODABLE_ALERT_CAP the per-node cost DROPS, and past
+ *   MAX_ALERTS all scanning stops as before.
+ *
+ *   Cost of the reserve, stated plainly: reaching MAX_ALERTS now requires
+ *   RESERVED_SCARCE_ALERT_SLOTS genuine security-relevant alerts on distinct
+ *   elements, which is itself the signal. A page that stops at
+ *   FLOODABLE_ALERT_CAP keeps paying only the cheap lane.
+ *
+ *   Residual gap: `overlay_injected` is unavailable in the scarce lane, so a
+ *   page that floods FLOODABLE_ALERT_CAP alerts and then injects a full-screen
+ *   phishing overlay is still unseen by THIS module. Classifying that overlay
+ *   requires exactly the layout work the cap exists to bound, so it is an
+ *   accepted trade, not an oversight. (#413)
+ */
+function processAddedNode(node: Node, scarceOnly = false): void {
   if (!(node instanceof Element)) return;
 
   // Check the node itself
-  checkOverlay(node);
+  if (!scarceOnly) checkOverlay(node);
   checkPasswordInjection(node);
-  checkSuspiciousIframe(node);
+  checkSuspiciousIframe(node, !scarceOnly);
 
   // Check descendants (e.g., a wrapper div containing a password field)
   const passwords = node.querySelectorAll('input[type="password"]');
@@ -521,7 +628,7 @@ function processAddedNode(node: Node): void {
 
   const iframes = node.querySelectorAll("iframe");
   for (let i = 0; i < iframes.length; i++) {
-    checkSuspiciousIframe(iframes[i]!);
+    checkSuspiciousIframe(iframes[i]!, !scarceOnly);
   }
 }
 
@@ -577,7 +684,16 @@ function processRemovedNode(node: Node): void {
   }
 }
 
-function processAttributeChange(record: MutationRecord): void {
+/**
+ * @param scarceOnly  Run the RESERVED scarce lane (see `processAddedNode`). The
+ *   `style`/`class` → `checkOverlay` branch — the only layout-forcing one here —
+ *   is skipped, and the iframe re-check drops to its attribute-only reasons.
+ *   `checkFormActionChange` still runs: it is layout-free, it keeps the
+ *   `originalFormActions` baselines accurate (dropping it would corrupt later
+ *   comparisons), and `pushAlert` admits only its HIGH/cross-domain result into
+ *   the reserve. (#413)
+ */
+function processAttributeChange(record: MutationRecord, scarceOnly = false): void {
   const target = record.target;
   if (!(target instanceof Element)) return;
 
@@ -603,13 +719,13 @@ function processAttributeChange(record: MutationRecord): void {
     target.tagName === "IFRAME"
   ) {
     // Re-check on srcdoc too, so a two-step inject-then-set-srcdoc can't evade.
-    checkSuspiciousIframe(target);
+    checkSuspiciousIframe(target, !scarceOnly);
   }
 
   // Style or class attribute changes on existing elements could create overlays.
   // An attacker can inject a benign element then toggle a class to reveal it
   // as a phishing overlay (e.g., el.classList.add("active")).
-  if (record.attributeName === "style" || record.attributeName === "class") {
+  if (!scarceOnly && (record.attributeName === "style" || record.attributeName === "class")) {
     checkOverlay(target);
   }
 }
@@ -620,13 +736,18 @@ function processBatch(): void {
   // Always drain the queue, even once the alert cap is reached: the old early
   // `return` here left pendingMutations growing unbounded (onMutations keeps
   // pushing) and, worse, skipped removed-node CLEANUP so shadow-observer
-  // disconnects stopped until AUTO_DISCONNECT_MS. Only the alert-emitting
-  // DETECTION work (overlay/password/iframe scans + attribute-change alerts) is
-  // gated on the cap; removed-node cleanup (#409/#412) and shadow-root
-  // discovery/registration for added nodes (#413) run unconditionally, so a
-  // capped page cannot be blinded to shadow roots attached after the flood.
-  // pushAlert also self-caps, so the cap check is a perf skip, not the alert
-  // bound. (#409)
+  // disconnects stopped until AUTO_DISCONNECT_MS. Removed-node cleanup
+  // (#409/#412) and shadow-root discovery/registration for added nodes (#413)
+  // run unconditionally, so a capped page cannot be blinded to shadow roots
+  // attached after a flood. (#409)
+  //
+  // Detection runs in two lanes so the cap bounds cost without becoming a
+  // suppression oracle (#413):
+  //   alerts.length <  FLOODABLE_ALERT_CAP  full pass (incl. layout-forcing overlay scans)
+  //   ... < MAX_ALERTS                      scarce lane: layout-free, reserved-slot alerts only
+  //   >= MAX_ALERTS                         no detection, as before
+  // pushAlert enforces the same boundary on admission, so a lane can never
+  // emit an alert the reservation does not allow.
   const batch = pendingMutations;
   pendingMutations = [];
 
@@ -635,17 +756,19 @@ function processBatch(): void {
       for (let i = 0; i < record.addedNodes.length; i++) {
         const node = record.addedNodes[i]!;
         // Re-read alerts.length per node (not once per record): scanning one
-        // node can itself reach the cap, and the pre-#413 code broke out of this
-        // loop at that point. Discovery must not break — it runs for every added
-        // node regardless.
-        if (alerts.length < MAX_ALERTS) processAddedNode(node);
+        // node can itself reach a lane boundary, and the pre-#413 code broke out
+        // of this loop at that point. Discovery must not break — it runs for
+        // every added node regardless.
+        if (alerts.length < MAX_ALERTS) {
+          processAddedNode(node, alerts.length >= FLOODABLE_ALERT_CAP);
+        }
         discoverShadowRootsInAddedNode(node);
       }
       for (let i = 0; i < record.removedNodes.length; i++) {
         processRemovedNode(record.removedNodes[i]!);
       }
     } else if (record.type === "attributes" && alerts.length < MAX_ALERTS) {
-      processAttributeChange(record);
+      processAttributeChange(record, alerts.length >= FLOODABLE_ALERT_CAP);
     }
   }
 }
@@ -681,6 +804,7 @@ export function startMutationMonitor(
   pageHost = location.hostname.toLowerCase();
   alertCallback = onAlert;
   alerts.length = 0;
+  reservedSlotElements = new WeakSet();
 
   // Snapshot current form actions so we can detect changes later
   snapshotFormActions(doc);
@@ -739,6 +863,7 @@ export function getMutationAlertCount(): number {
 export function _resetMutationState(): void {
   stopMutationMonitor();
   alerts.length = 0;
+  reservedSlotElements = new WeakSet();
 }
 
 /** Exposed for testing only: number of live per-shadow-root observers. */

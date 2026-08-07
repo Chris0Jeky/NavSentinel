@@ -1044,7 +1044,7 @@ describe("mutation_monitor alert-cap cleanup (#409)", () => {
   });
 });
 
-describe("mutation_monitor shadow-root discovery after alert cap (#413)", () => {
+describe("mutation_monitor flood-then-inject reserve past the alert cap (#413)", () => {
   beforeEach(() => {
     _resetMutationState();
     vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -1055,8 +1055,44 @@ describe("mutation_monitor shadow-root discovery after alert cap (#413)", () => 
     vi.useRealTimers();
   });
 
-  /** Flood the page with password fields until the 50-alert cap is reached. */
-  async function reachAlertCap(): Promise<HTMLInputElement[]> {
+  /**
+   * The attacker's opening move: flood cheap, benign-looking FLOODABLE alerts
+   * (same-origin form-action rewrites, severity "medium") until the floodable
+   * lane is full. Flooding with a scarce type instead would not be a bypass --
+   * that flood IS the security signal -- so the suppression scenario has to be
+   * driven with alerts the defender learns nothing from.
+   *
+   * Returns with FLOODABLE_ALERT_CAP (MAX_ALERTS 50 - RESERVED_SCARCE_ALERT_SLOTS 5
+   * = 45) alerts recorded and the 5 reserved slots untouched.
+   */
+  async function floodWithBenignAlerts(): Promise<HTMLFormElement[]> {
+    const forms: HTMLFormElement[] = [];
+    for (let i = 0; i < 60; i++) {
+      const form = document.createElement("form");
+      document.body.appendChild(form);
+      // The first "action" mutation only registers the form's baseline (no
+      // alert), matching how the other form-action tests in this file prime
+      // happy-dom.
+      form.setAttribute("action", "/benign-" + i + "-a");
+      forms.push(form);
+    }
+    await vi.advanceTimersByTimeAsync(200);
+    expect(getMutationAlertCount()).toBe(0);
+
+    for (let i = 0; i < forms.length; i++) {
+      forms[i]!.setAttribute("action", "/benign-" + i + "-b");
+    }
+    await vi.advanceTimersByTimeAsync(200);
+
+    // 60 floodable alerts offered, 45 admitted: the reservation stops the flood
+    // short of MAX_ALERTS instead of letting it switch detection off.
+    expect(getMutationAlertCount()).toBe(45);
+    expect(getMutationAlerts().every((a) => a.type === "form_action_changed")).toBe(true);
+    return forms;
+  }
+
+  /** Spend ALL alert capacity, reserve included, with password injections. */
+  async function exhaustAllAlertCapacity(): Promise<HTMLInputElement[]> {
     const filler: HTMLInputElement[] = [];
     for (let i = 0; i < 60; i++) {
       const input = document.createElement("input");
@@ -1069,7 +1105,7 @@ describe("mutation_monitor shadow-root discovery after alert cap (#413)", () => 
     return filler;
   }
 
-  it("registers + keeps observing a shadow root attached to a node added AFTER the cap (#413)", async () => {
+  it("emits the credential signal for a shadow root registered after a benign flood (#413)", async () => {
     const alerts: MutationAlert[] = [];
     startMutationMonitor(document, (a) => alerts.push(a));
     await vi.advanceTimersByTimeAsync(200);
@@ -1077,13 +1113,126 @@ describe("mutation_monitor shadow-root discovery after alert cap (#413)", () => 
     // rather than assuming no pre-existing shadow hosts survived earlier tests.
     const baseline = _getShadowObserverCountForTesting();
 
-    const filler = await reachAlertCap();
+    const forms = await floodWithBenignAlerts();
 
-    // An attacker floods 50 cheap benign alerts, THEN injects a credential form
-    // inside a freshly attached shadow root. Pre-fix, checkAndObserveShadowRoot
-    // lived inside the cap-gated processAddedNode, so this root was never
-    // registered (count stayed 0) and mutation_monitor was blind to it for the
-    // rest of the page's life.
+    // The attacker attaches a shadow root on a node added AFTER the flood.
+    const wrapper = document.createElement("div");
+    const host = document.createElement("div");
+    const sr = host.attachShadow({ mode: "open" });
+    wrapper.appendChild(host);
+    document.body.appendChild(wrapper);
+    await vi.advanceTimersByTimeAsync(200);
+
+    // Half one: the root is discovered even though the flood already ran, and
+    // found through the light-DOM descendant walk (wrapper is the added node, so
+    // the node itself is not the shadow host).
+    expect(_getShadowObserverCountForTesting()).toBe(baseline + 1);
+
+    // Half two, and the point of this test: the credential form injected into
+    // that freshly registered root produces a REAL alert. Registration alone left
+    // this silent, because the record it delivers hit the same permanent
+    // `alerts.length < MAX_ALERTS` gate -- the reserved slots are what make the
+    // signal reachable.
+    const password = document.createElement("input");
+    password.type = "password";
+    sr.appendChild(password);
+    await vi.advanceTimersByTimeAsync(200);
+
+    const credentialAlerts = alerts.filter((a) => a.type === "password_injected");
+    expect(credentialAlerts.length).toBe(1);
+    expect(credentialAlerts[0]!.severity).toBe("high");
+    expect(credentialAlerts[0]!.details).toContain("Password field injected");
+    expect(getMutationAlertCount()).toBe(46);
+
+    // Cleanup still tears the newly registered observer down.
+    wrapper.remove();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(_getShadowObserverCountForTesting()).toBe(baseline);
+
+    for (const form of forms) form.remove();
+    stopMutationMonitor();
+  });
+
+  it("keeps the reserve bounded and never hands a slot to a floodable alert (#413)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+    await vi.advanceTimersByTimeAsync(200);
+
+    const forms = await floodWithBenignAlerts();
+
+    // More benign churn cannot reach into the reserved tail, however long it runs.
+    for (let i = 0; i < forms.length; i++) {
+      forms[i]!.setAttribute("action", "/benign-" + i + "-c");
+    }
+    await vi.advanceTimersByTimeAsync(200);
+    expect(getMutationAlertCount()).toBe(45);
+
+    // Scarce signals get exactly RESERVED_SCARCE_ALERT_SLOTS and no more, so the
+    // reserve is a bounded allowance rather than an unbounded scan budget: 12
+    // post-flood credential injections yield 5 alerts, then MAX_ALERTS holds and
+    // all detection stops as before.
+    const inputs: HTMLInputElement[] = [];
+    for (let i = 0; i < 12; i++) {
+      const input = document.createElement("input");
+      input.type = "password";
+      document.body.appendChild(input);
+      inputs.push(input);
+    }
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(alerts.filter((a) => a.type === "password_injected").length).toBe(5);
+    expect(getMutationAlertCount()).toBe(50);
+
+    for (const input of inputs) input.remove();
+    for (const form of forms) form.remove();
+    stopMutationMonitor();
+  });
+
+  it("charges one reserved slot per element, so re-adding one node cannot burn the reserve (#413)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+    await vi.advanceTimersByTimeAsync(200);
+
+    const forms = await floodWithBenignAlerts();
+
+    // Re-adding the SAME password field 8 times must not consume 5 reserved
+    // slots; otherwise the reserve could be emptied with one element and the
+    // suppression oracle would simply move up by RESERVED_SCARCE_ALERT_SLOTS.
+    const input = document.createElement("input");
+    input.type = "password";
+    for (let i = 0; i < 8; i++) {
+      document.body.appendChild(input);
+      await vi.advanceTimersByTimeAsync(200);
+      input.remove();
+      await vi.advanceTimersByTimeAsync(200);
+    }
+
+    expect(alerts.filter((a) => a.type === "password_injected").length).toBe(1);
+    expect(getMutationAlertCount()).toBe(46);
+
+    // A DIFFERENT element still gets its own reserved slot.
+    const other = document.createElement("input");
+    other.type = "password";
+    document.body.appendChild(other);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(alerts.filter((a) => a.type === "password_injected").length).toBe(2);
+
+    other.remove();
+    for (const form of forms) form.remove();
+    stopMutationMonitor();
+  });
+
+  it("registers + keeps observing a shadow root attached to a node added after ALL capacity is spent (#413)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+    await vi.advanceTimersByTimeAsync(200);
+    const baseline = _getShadowObserverCountForTesting();
+
+    // Here the page spends every slot, reserve included. Detection is legitimately
+    // over -- but shadow-root DISCOVERY must still run, or the monitor would be
+    // blind to the subtree for the rest of AUTO_DISCONNECT_MS.
+    const filler = await exhaustAllAlertCapacity();
+
     const wrapper = document.createElement("div");
     const host = document.createElement("div");
     const sr = host.attachShadow({ mode: "open" });
@@ -1095,9 +1244,10 @@ describe("mutation_monitor shadow-root discovery after alert cap (#413)", () => 
 
     await vi.advanceTimersByTimeAsync(200);
 
-    // The shadow root is discovered even though the node arrived past the cap,
-    // and it is found through a light-DOM descendant walk (host is nested in
-    // wrapper, so the node itself is not the shadow host).
+    // Pre-#413, checkAndObserveShadowRoot lived inside the cap-gated
+    // processAddedNode, so this root was never registered (count stayed at
+    // baseline) and mutation_monitor was blind to it for the rest of the page's
+    // life.
     expect(_getShadowObserverCountForTesting()).toBe(baseline + 1);
 
     // ...and the observer attached to it is live: a nested shadow host added
@@ -1110,7 +1260,9 @@ describe("mutation_monitor shadow-root discovery after alert cap (#413)", () => 
     await vi.advanceTimersByTimeAsync(200);
     expect(_getShadowObserverCountForTesting()).toBe(baseline + 2);
 
-    // The alert cap itself is untouched — discovery is free, alert emission is not.
+    // MAX_ALERTS still holds: with the reserve already spent there is no capacity
+    // left, and that is the intended end state -- not a bypass, because reaching
+    // it required 5 genuine scarce alerts the defender already received.
     expect(getMutationAlertCount()).toBe(50);
     expect(alerts.length).toBe(50);
 
@@ -1119,35 +1271,6 @@ describe("mutation_monitor shadow-root discovery after alert cap (#413)", () => 
     await vi.advanceTimersByTimeAsync(200);
     expect(_getShadowObserverCountForTesting()).toBe(baseline);
 
-    for (const input of filler) input.remove();
-    stopMutationMonitor();
-  });
-
-  it("keeps the expensive alert-emitting scans gated on the cap (#413)", async () => {
-    const alerts: MutationAlert[] = [];
-    startMutationMonitor(document, (a) => alerts.push(a));
-    await vi.advanceTimersByTimeAsync(200);
-    const baseline = _getShadowObserverCountForTesting();
-
-    const filler = await reachAlertCap();
-
-    // Nothing added after the cap may emit an alert, in the light DOM or inside a
-    // shadow root that discovery has just registered.
-    const host = document.createElement("div");
-    const sr = host.attachShadow({ mode: "open" });
-    document.body.appendChild(host);
-    await vi.advanceTimersByTimeAsync(200);
-    expect(_getShadowObserverCountForTesting()).toBe(baseline + 1);
-
-    const shadowPassword = document.createElement("input");
-    shadowPassword.type = "password";
-    sr.appendChild(shadowPassword);
-    await vi.advanceTimersByTimeAsync(200);
-
-    expect(getMutationAlertCount()).toBe(50);
-    expect(alerts.length).toBe(50);
-
-    host.remove();
     for (const input of filler) input.remove();
     stopMutationMonitor();
   });
