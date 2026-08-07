@@ -50,9 +50,14 @@ by monitoring click context and navigation patterns locally.
 
 The current export includes settings, allow/trust lists, event log, prompt
 outcomes, and adaptive scores. Domain/category profiles and cooldowns are not
-exported. Options can clear the log, prompt/adaptive stats, and domain profiles;
-RI-06 must add a complete behavioral reset and purpose-specific URL
-minimization before beta.
+exported. Options can clear the log, prompt/adaptive stats, and domain profiles
+individually, and **Clear behavioural data** (Analytics pane) resets all four of
+those stores in one service-worker-owned pass while keeping settings, the
+allowlist, and trusted domains. Navigation-category counts and smart-default
+cooldowns are NOT covered by that reset and still have no user-facing clear
+control. The behavioural-data boundary is a stated implementation assumption
+until the owner rules on #474; RI-06 also still requires purpose-specific URL
+minimization sign-off before beta.
 
 **Development-build viewport processing:** the current non-functional
 visual-sim experiment can capture the visible tab locally for comparison when a
