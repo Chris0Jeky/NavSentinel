@@ -7,7 +7,7 @@ NavSentinel is a Manifest V3 extension with four main runtime surfaces:
 1. isolated-world navigation control
 2. main-world navigation patching
 3. isolated-world credential protection
-4. service-worker state for rollback and DNR synchronization
+4. service-worker state for rollback and navigation correlation
 
 The manifest wires these together from:
 
@@ -34,8 +34,9 @@ design are substantial, but several current development paths are not production
 - The default interaction-only profile has no reputation runtime or bundled
   reputation binary. The 52-byte reserved-domain fixture is available only in
   the explicit non-release research profile.
-- The DNR ruleset contains localhost test rules only; it is not a product
-  backstop and its permissions/toggle should not ship in the beta.
+- RI-05 removed the test-only DNR ruleset, its options toggle, and both
+  `declarativeNetRequest` permissions. The extension has no network-rule
+  backstop; a real hard-block design is future work (#242/#243).
 - Broad JS-behavior API wrappers have not completed compatibility or runtime
   overhead measurement and should be beta-off until they do.
 
@@ -204,7 +205,7 @@ complete behavioral reset yet (RI-06).
 
 `extension/src/options/options.ts` is the durable operator surface:
 
-- saves nav mode, debug overlay, and DNR backstop state
+- saves nav mode and debug overlay state
 - saves credential thresholds and similarity settings
 - inspects and clears the navigation allowlist
 - manages trusted domains
@@ -219,7 +220,6 @@ complete behavioral reset yet (RI-06).
 - one-shot target allowances
 - rollback suppression windows
 - pending rollback and forward-offer state
-- DNR ruleset enable/disable synchronization
 - DoubleClickjacking child-window tracking
 - OAuth flow state per tab
 - redirect chain correlation
