@@ -126,7 +126,7 @@ function makeBridgeSession(): string {
 }
 
 let lastDown: DownCapture | null = null;
-let settings: NavSettings = { defaultMode: "smart", debug: false, dnrEnabled: false };
+let settings: NavSettings = { defaultMode: "smart", debug: false };
 let allowlist: Allowlist = {};
 let adaptiveAdjustment = 0;
 
