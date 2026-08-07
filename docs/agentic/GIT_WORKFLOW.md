@@ -22,6 +22,32 @@ git merge main
 Do not rebase a shared branch. A merge creates a reconciliation commit while
 preserving both histories and avoids a force-push.
 
+### Stacked branches and CI
+
+When slice B depends on unmerged slice A, branch B off A and target B's pull
+request at A's branch. Merge the stack **oldest-first** — merging the newest first
+strands its parents — and never `--delete-branch` a base while a child is still
+open, which cascade-closes the children unreopenably.
+
+CI runs on stacked pull requests. That was not always true: `ci.yml`'s
+`pull_request` trigger used to be filtered to `branches: [main]`, and that filter
+matches the **base** branch, so a stacked pull request ran no CI at all. It did not
+show as red or pending — `gh pr checks` said "no checks reported on the branch"
+while `mergeStateStatus` still said `CLEAN`, so the pull request looked mergeable
+while being entirely unverified. It hid a genuinely broken build in PR #535. The
+filter is now `branches: ["**"]` (issue #537); do not re-add one.
+
+Two things still need doing by hand on a stack:
+
+- **Re-prove after a retarget.** Landing a base moves the child's merge base even
+  though its head SHA does not change, so the child needs a fresh run against its
+  new base before merging.
+- **A `workflow_dispatch` run attaches to the branch, not the pull request.** If
+  you trigger one with `gh workflow run ci.yml --ref <branch>`, the pull request
+  page and `gh pr checks` will keep showing no checks. Verify it with
+  `gh run list --branch <branch> --limit 1` and match the run's head SHA to the
+  pull request head yourself.
+
 ### Reconciling local/remote divergence
 
 ```bash
