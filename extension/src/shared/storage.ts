@@ -402,6 +402,41 @@ export const SILENT_DECISION_KINDS: ReadonlySet<EventKind> = new Set<EventKind>(
   "cred_form_evaluated",
 ]);
 
+/**
+ * Threat event kinds that are recorded WITHOUT a risk score (#219).
+ *
+ * These are real protective actions/alerts, but nothing on their path produces a
+ * number: `nav_reputation_late_warn` comes from the late async child-frame
+ * reputation check (the synchronous NRS could not include the known-bad factor),
+ * `mutation_alert` comes from the DOM monitor, and `nav_rollback` /
+ * `nav_blank_prompt` record a navigation that was undone or held rather than
+ * scored. The popup gauge is deliberately driven by scored events only
+ * (pickSiteRiskEvent), so a site whose ONLY events are these used to read
+ * 0/green. The popup renders a distinct unscored-threat gauge state for them
+ * instead of inventing a score — see popup_model.derivePopupTabRisk.
+ *
+ * Deliberately narrow: this is the enumerated set of threat kinds, NOT "every
+ * event that happens to lack a score". Routine/benign scoreless kinds
+ * (allowlist edits, config updates, trust changes) must never warn.
+ * `Extract<EventKind, ...>` ties the union to the EventKind source of truth, so
+ * renaming a kind breaks the build here rather than silently emptying the set.
+ */
+export type UnscoredThreatKind = Extract<
+  EventKind,
+  "nav_blank_prompt" | "nav_reputation_late_warn" | "nav_rollback" | "mutation_alert"
+>;
+
+export const UNSCORED_THREAT_KINDS: ReadonlySet<EventKind> = new Set<UnscoredThreatKind>([
+  "nav_blank_prompt",
+  "nav_reputation_late_warn",
+  "nav_rollback",
+  "mutation_alert",
+]);
+
+export function isUnscoredThreatKind(kind: EventKind): kind is UnscoredThreatKind {
+  return UNSCORED_THREAT_KINDS.has(kind);
+}
+
 export interface EventLogEntry {
   id: string;
   ts: number;

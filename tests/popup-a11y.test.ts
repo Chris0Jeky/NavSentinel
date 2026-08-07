@@ -72,6 +72,15 @@ describe("popup.html accessibility — HTML validation", () => {
     expect(arc!.getAttribute("role")).toBe("img");
     expect(arc!.getAttribute("aria-label")).toBe("Tab risk score");
   });
+
+  it("gaugeNote exists and starts hidden (#219)", () => {
+    // The unscored-threat note is real text (not colour-only), so the state is
+    // perceivable without colour; it must not announce on a clean page.
+    const note = document.getElementById("gaugeNote");
+    expect(note).toBeTruthy();
+    expect(note!.hasAttribute("hidden")).toBe(true);
+    expect(note!.textContent?.trim()).toBe("");
+  });
 });
 
 describe("popup trust button aria-label — dynamic update", () => {

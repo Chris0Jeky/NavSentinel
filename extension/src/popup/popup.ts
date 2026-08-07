@@ -22,6 +22,7 @@ import {
 import {
   derivePopupSiteState,
   derivePopupTabRisk,
+  describeUnscoredThreat,
   eventIconName,
   getRecentPopupEvents,
   signalChipClass
@@ -40,6 +41,7 @@ const eventsEl = document.getElementById("events") as HTMLDivElement;
 const eventCountEl = document.getElementById("eventCount") as HTMLSpanElement;
 const signalsEl = document.getElementById("signals") as HTMLDivElement;
 const shieldArcEl = document.getElementById("shieldArc") as HTMLDivElement;
+const gaugeNoteEl = document.getElementById("gaugeNote") as HTMLDivElement;
 const refreshBtn = document.getElementById("refreshBtn") as HTMLButtonElement;
 const openOptions = document.getElementById("openOptions") as HTMLButtonElement;
 
@@ -63,6 +65,24 @@ function renderShieldArc(value: number, size = 42): string {
   <span aria-hidden="true" class="ns-mono" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:${col};transform:rotate(90deg)">${value}</span>`;
 }
 
+
+/**
+ * Gauge for the unscored-threat state (#219): a broken full ring plus "!" rather
+ * than a filled arc plus a numeral, because there is no score to draw. Never
+ * renders a number — inventing one would put an unmeasured value into a surface
+ * whose numbers are measurements.
+ */
+function renderUnscoredArc(size = 42): string {
+  const r = size / 2 - 4;
+  const c = 2 * Math.PI * r;
+  const dash = c / 24;
+  return `<svg aria-hidden="true" width="${size}" height="${size}" style="transform:rotate(-90deg)">
+    <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="3"/>
+    <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="var(--ns-purple)" stroke-width="3"
+            stroke-dasharray="${dash} ${dash}" stroke-linecap="butt"/>
+  </svg>
+  <span aria-hidden="true" class="shield-arc-mark--unscored">!</span>`;
+}
 
 function severityClass(score: number): string {
   if (score >= 70) return "high";
@@ -201,10 +221,22 @@ async function refreshUi(): Promise<void> {
 
   // Scope the "Current page" gauge/signals to the ACTIVE site's most recent scored
   // event (not log[last], which is global). See derivePopupTabRisk. (#205)
-  const { tabRisk, reasons } = derivePopupTabRisk(log, siteState.registrableDomain);
+  const { tabRisk, reasons, state, threatKind } = derivePopupTabRisk(log, siteState.registrableDomain);
   shieldArcEl.style.position = "relative";
-  shieldArcEl.innerHTML = renderShieldArc(tabRisk);
-  shieldArcEl.setAttribute("aria-label", `Tab risk score: ${tabRisk}`);
+  if (state === "unscored-threat" && threatKind) {
+    // No score exists for this site, so the gauge must not read as a measured 0
+    // (safe) nor as a scored high. Say exactly what happened instead. (#219)
+    const detail = describeUnscoredThreat(threatKind);
+    shieldArcEl.innerHTML = renderUnscoredArc();
+    shieldArcEl.setAttribute("aria-label", `No risk score for this page. Threat alert recorded: ${detail}.`);
+    gaugeNoteEl.textContent = `Threat alert recorded, no risk score — ${detail}.`;
+    gaugeNoteEl.hidden = false;
+  } else {
+    shieldArcEl.innerHTML = renderShieldArc(tabRisk);
+    shieldArcEl.setAttribute("aria-label", `Tab risk score: ${tabRisk}`);
+    gaugeNoteEl.textContent = "";
+    gaugeNoteEl.hidden = true;
+  }
   renderSignals(reasons);
 }
 

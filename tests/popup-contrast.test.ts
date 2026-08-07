@@ -274,3 +274,49 @@ describe("popup signal chips meet WCAG AA 1.4.3 (#274)", () => {
     });
   }
 });
+
+/**
+ * The unscored-threat gauge state (#219) introduces one new colour usage in the
+ * popup: gold (--ns-purple) for the "!" gauge mark and for the note that explains
+ * a threat was recorded with no risk score. Both sit inside `.site-card`, so they
+ * reuse the same reconstructed backdrops as the chips.
+ */
+describe("popup unscored-threat gauge (#219) meets WCAG AA 1.4.3", () => {
+  const backdrops = popupBackdrops();
+
+  it(".gauge-note text clears 4.5:1 over its own tint on every popup backdrop", () => {
+    const body = ruleBody(".gauge-note");
+    const text = parseColor(declaration(body, "color"));
+    const tint = parseColor(declaration(body, "background"));
+    for (const backdrop of backdrops) {
+      const surface = over(tint, backdrop.color);
+      const ratio = contrastRatio(text, surface);
+      expect(
+        ratio,
+        `.gauge-note on ${backdrop.name} => ${ratio.toFixed(2)}:1`,
+      ).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    }
+  });
+
+  it(".shield-arc-mark--unscored clears 4.5:1 on every popup backdrop", () => {
+    // The mark has no background of its own; it paints straight onto the card.
+    const text = parseColor(declaration(ruleBody(".shield-arc-mark--unscored"), "color"));
+    for (const backdrop of backdrops) {
+      const ratio = contrastRatio(text, backdrop.color);
+      expect(
+        ratio,
+        `.shield-arc-mark--unscored on ${backdrop.name} => ${ratio.toFixed(2)}:1`,
+      ).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    }
+  });
+
+  it("is a distinct colour from every scored-gauge colour", () => {
+    // WCAG 1.4.1 is satisfied by the note text and the "!" mark, but the state
+    // must also not be mistakable for safe-green or a scored red at a glance.
+    const unscored = parseColor(declaration(ruleBody(".gauge-note"), "color"));
+    for (const token of ["--ns-green", "--ns-orange", "--ns-red"]) {
+      const scored = parseColor(`var(${token})`);
+      expect(unscored.slice(0, 3), `must differ from ${token}`).not.toEqual(scored.slice(0, 3));
+    }
+  });
+});
