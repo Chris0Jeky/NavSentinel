@@ -2844,8 +2844,8 @@ describe("service worker handlers", () => {
       mock.emitTabUpdated(13, { status: "complete" }, { url: "https://current.com/" });
       expect(forwardSends).toEqual([13]);
 
-      // ns-store-forward rewrites pendingForward with a FRESH object for the SAME url
-      // (to add a returnUrl) while the first send is still in flight.
+      // ns-store-forward enriches the SAME-url pendingForward entry (adds a returnUrl)
+      // while the first send is still in flight.
       (mock.chrome.runtime.onMessage as unknown as {
         emit: (m: unknown, s: unknown, r: (v?: unknown) => void) => void;
       }).emit(
@@ -2855,16 +2855,25 @@ describe("service worker handlers", () => {
       );
       await vi.runAllTimersAsync();
 
+      // The enrichment must still land on (and persist) the entry: same url, plus the returnUrl
+      // that ns-check-forward's pull path matches on.
+      const enriched = (mock.chrome.storage.session._store["ns_sw:pendingForward"] ?? {}) as Record<
+        string,
+        { url: string; returnUrl?: string }
+      >;
+      expect(enriched["13"]?.url).toBe("https://evil.com/");
+      expect(enriched["13"]?.returnUrl).toBe("https://origin.com/");
+
       // A later onUpdated must NOT fire a second offer WHILE A is in flight: the tab+URL
-      // in-flight key still matches the rewritten same-URL offer. With the earlier
-      // object-identity keying the fresh rewrite object looked not-in-flight and produced a
+      // in-flight key still matches the enriched same-URL offer. With the earlier
+      // object-identity keying a fresh same-URL object looked not-in-flight and produced a
       // concurrent duplicate -> [13, 13]. (The separate *post-delivery* serialized re-send
       // of the rewritten offer is covered by the #382 test below.)
       mock.emitTabUpdated(13, { status: "complete" }, { url: "https://current.com/" });
       expect(forwardSends).toEqual([13]);
     });
 
-    it("does not re-send the rewritten same-URL offer after the first offer delivers (#382)", async () => {
+    it("does not re-send the enriched same-URL offer after the first offer delivers (#382)", async () => {
       const mock = createChromeMock();
       const { forwardSends, captured } = deferSends(mock);
       mock.chrome.storage.session._store["ns_sw:pendingForward"] = {
@@ -2878,8 +2887,9 @@ describe("service worker handlers", () => {
       mock.emitTabUpdated(31, { status: "complete" }, { url: "https://current.com/" });
       expect(forwardSends).toEqual([31]);
 
-      // ns-store-forward rewrites the slot with a FRESH object for the SAME url (adds a
-      // returnUrl) during the send gap -> the slot no longer holds A by reference.
+      // ns-store-forward attaches a returnUrl for the SAME url during the send gap. Pre-fix
+      // this replaced the slot with a fresh object, so it no longer held A by reference;
+      // post-fix it enriches A in place, so the slot still IS A.
       (mock.chrome.runtime.onMessage as unknown as {
         emit: (m: unknown, s: unknown, r: (v?: unknown) => void) => void;
       }).emit(
@@ -2897,8 +2907,9 @@ describe("service worker handlers", () => {
         string,
         unknown
       >;
-      // Pre-fix (object identity): get(tabId) !== A, so the rewritten same-URL offer B was
-      // left in the map. Post-fix (url-aware delete): the slot is cleared.
+      // Pre-fix (replacement + object identity): get(tabId) !== A, so the rewritten same-URL
+      // offer was left in the map. Post-fix (in-place enrichment): the slot still holds A, the
+      // identity match succeeds, and the slot is cleared.
       expect(stored["31"]).toBeUndefined();
 
       // A later onUpdated (e.g. an SPA nav on the return page changing tab.url) must not
@@ -2927,7 +2938,7 @@ describe("service worker handlers", () => {
       }).emit({ type: "ns-store-forward", url: "https://offer-2.com/" }, { tab: { id: 32 } }, () => {});
       await vi.runAllTimersAsync();
 
-      // The stale offer-1 send SUCCEEDS. The url-aware delete must NOT clear offer-2.
+      // The stale offer-1 send SUCCEEDS. The identity-guarded delete must NOT clear offer-2.
       captured.forEach((cb) => cb());
       await vi.runAllTimersAsync();
 
@@ -2941,6 +2952,77 @@ describe("service worker handlers", () => {
       mock.emitTabUpdated(32, { url: "https://current.com/next" }, { url: "https://current.com/next" });
       await vi.runAllTimersAsync();
       expect(forwardSends).toEqual([32, 32]);
+    });
+
+    it("keeps a genuinely NEW same-URL offer from a fresh navigation after the stale offer delivers (#382 review)", async () => {
+      // The regression the url-equality delete introduced: `onBeforeNavigate` clears both the
+      // forward slot and the rollback-suppress window (disc#1), so `onCommitted` can install a
+      // *genuinely new* offer for the same destination while the previous offer's sendMessage
+      // callback is still in flight. Url equality cannot tell that new offer apart from the
+      // ns-store-forward returnUrl enrichment (both stamp a fresh ts), so the stale callback
+      // deleted it and the user lost the forward destination for the second navigation.
+      //
+      // Every step below goes through the real handlers — no hand-placed map entry.
+      const mock = createChromeMock();
+      const { forwardSends, captured } = deferSends(mock);
+      mock.chrome.storage.session._store["ns_sw:readyTabs"] = [33];
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+
+      // 1. Baseline commit so the next commit has a prevUrl, then a suspicious cross-site
+      //    commit: onCommitted installs offer A for evil.com and arms suppressUntil (+6s).
+      mock.emitCommitted({ tabId: 33, frameId: 0, url: "https://start.com/", transitionType: "link" });
+      mock.emitCommitted({ tabId: 33, frameId: 0, url: "https://evil.com/", transitionType: "link" });
+      await vi.runAllTimersAsync();
+      const afterFirstCommit = (mock.chrome.storage.session._store["ns_sw:pendingForward"] ??
+        {}) as Record<string, { url: string }>;
+      expect(afterFirstCommit["33"]?.url, "onCommitted must install offer A").toBe(
+        "https://evil.com/"
+      );
+
+      // 2. onUpdated on a different current url dispatches A; its callback is deferred (in flight).
+      mock.emitTabUpdated(33, { status: "complete" }, { url: "https://current.com/" });
+      expect(forwardSends).toEqual([33]);
+
+      // 3. A genuine new navigation back to start.com. onBeforeNavigate drops the slot AND the
+      //    suppress window (disc#1); onCommitted then stores an offer for start.com.
+      mock.emitBeforeNavigate({ tabId: 33, frameId: 0, url: "https://start.com/" });
+      mock.emitCommitted({ tabId: 33, frameId: 0, url: "https://start.com/", transitionType: "link" });
+      // 4. The same deceptive redirect fires again. The slot and the suppress window are cleared
+      //    once more, so onCommitted installs a GENUINELY NEW offer B for the SAME evil.com url —
+      //    a different object than A, with a fresh ts.
+      mock.emitBeforeNavigate({ tabId: 33, frameId: 0, url: "https://evil.com/" });
+      mock.emitCommitted({ tabId: 33, frameId: 0, url: "https://evil.com/", transitionType: "link" });
+      await vi.runAllTimersAsync();
+      const beforeStaleCallback = (mock.chrome.storage.session._store["ns_sw:pendingForward"] ??
+        {}) as Record<string, { url: string }>;
+      expect(
+        beforeStaleCallback["33"]?.url,
+        "the second onCommitted must install a new same-URL offer B"
+      ).toBe("https://evil.com/");
+
+      // 5. A's stale SUCCESS callback finally runs.
+      captured.forEach((cb) => cb());
+      await vi.runAllTimersAsync();
+
+      const stored = (mock.chrome.storage.session._store["ns_sw:pendingForward"] ?? {}) as Record<
+        string,
+        { url: string }
+      >;
+      // Pre-fix (url equality): A's callback matched B by url and deleted it — the user could no
+      // longer resume the intended navigation. Post-fix (identity): B is a different object and
+      // survives.
+      expect(stored["33"]?.url, "offer B must survive A's stale success callback").toBe(
+        "https://evil.com/"
+      );
+
+      // ...and B is still DELIVERABLE: the reloaded page reports ready and the next onUpdated
+      // dispatches it (A's in-flight key was released by its callback above).
+      mock.dispatchRuntimeMessage({ type: "ns-ready" }, { tab: { id: 33 } });
+      await vi.runAllTimersAsync();
+      mock.emitTabUpdated(33, { status: "complete" }, { url: "https://start.com/" });
+      await vi.runAllTimersAsync();
+      expect(forwardSends).toEqual([33, 33]);
     });
 
     it("does not double-send when onCommitted send is in flight and onUpdated fires (disc#3 cross-path)", async () => {
