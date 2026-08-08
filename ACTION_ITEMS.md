@@ -233,37 +233,74 @@ separate things went wrong here and both are worth knowing:
   never ran. `mergeStateStatus` still says `CLEAN`, so a stacked PR *looks*
   mergeable while being entirely unverified. Both were given a real run via
   `gh workflow run ci.yml --ref <branch>` (the workflow already declares
-  `workflow_dispatch`); confirm those runs are green on the exact head before
-  merging, and re-prove after each retarget, since retargeting moves the merge base.
+  `workflow_dispatch`), and **both are now green** — #532 at head `c12de37a`
+  (run `31227640239`) and #535 at head `51df51ea` (run `31229947040`), each with
+  `Build / Unit` and `E2E` passing, and each run's `headSha` checked against the PR
+  head rather than assumed. PR **#538** widens the trigger so future
+  stacked PRs are covered; it does **not** retroactively fix these two, because a
+  `pull_request` run resolves its workflow file from the base-plus-head merge
+  commit, and their branches still carry the old filter until `main` is merged in.
   **Beware where you look:** a `workflow_dispatch` run attaches to the *branch*,
   not the PR, so the PR page and `gh pr checks` keep saying "no checks reported"
   even after a green run exists. Check it with
-  `gh run list --branch <branch> --limit 1` and match the run's head SHA to the PR
-  head yourself. This is the same trap the PR page sets in the first place, so do
-  not take a clean-looking PR page as evidence for these two.
+  `gh run list --branch <branch> --workflow ci.yml --event workflow_dispatch --limit 1 --json headSha,status,conclusion`
+  — the `--workflow`/`--event` filters matter, because `stress.yml` also accepts a
+  dispatch, so an unfiltered lookup can show a green `stress` run at the same SHA
+  and let you conclude `Build / Unit` and `E2E` passed when they never ran
+  (the default table has no SHA column) and match it to
+  `gh pr view <N> --json headRefOid`.
+  **And know what that evidence is worth:** a dispatch builds the branch *tip*,
+  while a `pull_request` run builds the base-plus-head *merge commit*. So a green
+  dispatch can bless a tree that omits newer base changes. Both runs above predate
+  any further movement on their bases; if `#528` or `#532` gains commits before you
+  merge, merge the new base into the child and re-dispatch rather than trusting the
+  run recorded here.
 - **#533 was red** — its new popup code pushed `popup JS` to 10.1KB against a 10KB
   budget, which failed `build-and-unit` and therefore **skipped `E2E` entirely**. A
-  skipped job is not a passed job. Fix in progress; re-check before passing it.
+  skipped job is not a passed job. **Now fixed and green** at head `147d4a07`
+  (run `31228467376`, `Build / Unit` and `E2E` both passing). It was fixed by
+  removing ~1.6KB of duplicated popup code rather than by raising the budget, so
+  the 10KB line still means what it meant. Note the popup chunk now sits at 96%
+  with roughly 400 bytes of headroom — the next popup slice has to trim or make an
+  explicit budget decision.
 
 **Slots 1-3 are a three-deep stack: #528 ← #532 ← #535.** Merge them oldest-first
 in exactly that order; merging the newest first would strand its parents (global
-law 4). Never `--delete-branch` #528 or #532 while a child is still open — that
-cascade-closes children unreopenably. After each base lands, confirm the child
-retargeted to `main` before merging it. Slots 4-10 are independent branches off
+law 4).
+
+On deleting the base branches, note the two cases are **opposite**, and the safe-
+sounding one is the dangerous one. Deleting an *unmerged* branch that other PRs are
+based on closes those PRs — never do that. But deleting the head branch *as part of
+merging it* makes GitHub automatically retarget the children onto the merged PR's
+own base, which is what you want. So refusing to delete #528's branch after merging
+it leaves #532 still targeting #528, and merging #532 then updates **#528's branch
+rather than `main`** — the slice silently never lands. The rule that is actually
+safe is: after each base merges, **confirm the child now targets `main` before
+merging it**, whether that happened automatically or via `gh pr edit <N> --base main`:
+
+```
+gh pr view 532 --json baseRefName -q '.baseRefName'   # must print: main
+```
+
+Retargeting on its own also runs **no CI** — it fires an `edited` activity, which a
+`pull_request` workflow with no `types` filter ignores, and the child's head SHA
+does not change so nothing looks stale. Merge `main` into the child after
+retargeting; that changes the head, triggers a real run, and tests the tree that
+will actually merge. Slots 4-10 are independent branches off
 `main` and can go in any order.
 
 | Order | PR | What it changes | Why it needs your eyes |
 | --- | --- | --- | --- |
 | 1 | **#528** | RI-05: removes the fake `declarativeNetRequest` surface, its two localhost-scoped stub rules, the options toggle, and **two manifest permissions** | Permission surface shrinks 5→3. Confirm the extension still loads and behaves normally after the manifest change |
 | 2 | **#532** | RI-07: JS-behaviour instrumentation is a build-time capability, off in every profile; the monitor module is not linked at all | Confirm navigation, credential and DoubleClickjacking protection still work — those are deliberately unaffected, but that is the thing to verify by hand |
-| 3 | **#535** | RI-06 last slice: one service-worker-owned **clear-all behavioural-data** reset (prompt outcomes → adaptive scores → event log → domain profiles), with partial-failure reporting and crash-resume | Ships under the **AI-28** assumption below. Use the new options → Analytics *Clear behavioural data* control and confirm it erases history but leaves your settings, allowlist and trusted domains intact |
+| 3 | **#535** | RI-06 last slice: one service-worker-owned **clear-all behavioural-data** reset (prompt outcomes → adaptive scores → event log → domain profiles), with partial-failure reporting and crash-resume | Ships under the **AI-28** assumption below. Use the new options → Analytics *Clear behavioural data* control and confirm it erases history but leaves your settings, allowlist and trusted domains intact. Review round 2 fixed four failure-semantics defects here, the worst being a swallowed marker-finalization error that reported success and would later replay the reset over data created *after* it. Two things are visually unverified and are what your pass is for: the new "wasn't finalized" status line and the confirm dialog |
 | 4 | **#514** | RI-02: removes visual-sim capture, templates, the scoring hook, the `brand_templates.json` web-accessible resource, and the stored state | Already reviewed on its exact head, exact-head CI green. Manual pass: see the **#514 note** directly below this table — the "AI-26" its review thread cites was never actually written into this file, so there was no recorded procedure until now |
 | 5 | **#534** | #458: removes the `Location.prototype` patch that never intercepted anything, and corrects README / architecture / design-brief claims | Confirm delayed-redirect rollback still works. Note the Gate-3 guide text itself changed — a step that said "normal Location calls bypass the prototype hook" now says there is no pre-navigation hook at all |
 | 6 | **#520** | #389: primes redirect chain-info at content-script init so first-click NRS is not under-scored | Decision path is unchanged and still synchronous; worth a normal browse to confirm no latency |
 | 7 | **#521** | #382: forward-offer no longer re-sent after delivery | Do a rollback and confirm you get exactly one forward prompt, and that resuming still works |
 | 8 | **#522** | #410: bounds the action-attribute scan on the credential submit path | Submit a real login form and confirm the prompt still names the correct destination host |
 | 9 | **#526** | #413: reserves the last 5 of the 50 mutation-alert slots for scarce security detections (injected password field, suspicious iframe, cross-domain form-action change), so a benign-alert flood can no longer switch detection off | Review caught that the originally-prescribed fix registered shadow roots but still emitted nothing past the cap; the reserve is the real fix. Worth browsing a few mutation-heavy sites (cookie banners, chat widgets) to confirm no new prompts |
-| 10 | **#533** | #219: distinct gauge state when a page has only scoreless threat alerts | Purely visual — confirm the dashed-ring "!" state reads as a warning and not as an error |
+| 10 | **#533** | #219: distinct gauge state when a page has only scoreless threat alerts | Purely visual — confirm the dashed-ring "!" state reads as a warning and not as an error. Its scope is narrower than #219 asked for: review found `nav_reputation_late_warn` stamps the *child frame's* hostname while the popup matches the top-level domain, so the state cannot fire for third-party iframes — #219's headline case. Tracked as **#539**; the PR's claim was narrowed rather than the fix widened |
 
 **#514 note — the missing "AI-26".** PR #514's review thread says *"`ACTION_ITEMS.md`
 AI-26 still requires Chris's fresh-profile real-Chrome Gate-3 evidence"*, but a
