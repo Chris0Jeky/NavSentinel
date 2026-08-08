@@ -1571,8 +1571,13 @@ export function clearPromptOutcomes(): Promise<void> {
   return clearPromptOutcomesDirect();
 }
 
-/** @internal Serialized adaptive-score clear lane. Exported for `behavioural_reset.ts`. */
-export function clearPromptOutcomeAdaptiveScoresDirect(): Promise<void> {
+/**
+ * Serialized adaptive-score clear lane, backing the standalone "Clear stats"
+ * control. Module-private: the unified reset uses
+ * `resyncPromptOutcomeAdaptiveScoresDirect` below, which cannot strand an
+ * outcome row without its derived score.
+ */
+function clearPromptOutcomeAdaptiveScoresDirect(): Promise<void> {
   return queuePromptOutcomeWrite(async () => {
     await clearAdaptiveScoresDirect();
   });
