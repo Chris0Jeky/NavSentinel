@@ -233,23 +233,56 @@ separate things went wrong here and both are worth knowing:
   never ran. `mergeStateStatus` still says `CLEAN`, so a stacked PR *looks*
   mergeable while being entirely unverified. Both were given a real run via
   `gh workflow run ci.yml --ref <branch>` (the workflow already declares
-  `workflow_dispatch`); confirm those runs are green on the exact head before
-  merging, and re-prove after each retarget, since retargeting moves the merge base.
+  `workflow_dispatch`), and **both are now green** — #532 at head `c12de37a`
+  (run `31227640239`) and #535 at head `7a0938fd` (run `31228264385`), each with
+  `Build / Unit` and `E2E` passing. PR **#538** widens the trigger so future
+  stacked PRs are covered; it does **not** retroactively fix these two, because a
+  `pull_request` run resolves its workflow file from the base-plus-head merge
+  commit, and their branches still carry the old filter until `main` is merged in.
   **Beware where you look:** a `workflow_dispatch` run attaches to the *branch*,
   not the PR, so the PR page and `gh pr checks` keep saying "no checks reported"
   even after a green run exists. Check it with
-  `gh run list --branch <branch> --limit 1` and match the run's head SHA to the PR
-  head yourself. This is the same trap the PR page sets in the first place, so do
-  not take a clean-looking PR page as evidence for these two.
+  `gh run list --branch <branch> --limit 1 --json headSha,status,conclusion`
+  (the default table has no SHA column) and match it to
+  `gh pr view <N> --json headRefOid`.
+  **And know what that evidence is worth:** a dispatch builds the branch *tip*,
+  while a `pull_request` run builds the base-plus-head *merge commit*. So a green
+  dispatch can bless a tree that omits newer base changes. Both runs above predate
+  any further movement on their bases; if `#528` or `#532` gains commits before you
+  merge, merge the new base into the child and re-dispatch rather than trusting the
+  run recorded here.
 - **#533 was red** — its new popup code pushed `popup JS` to 10.1KB against a 10KB
   budget, which failed `build-and-unit` and therefore **skipped `E2E` entirely**. A
-  skipped job is not a passed job. Fix in progress; re-check before passing it.
+  skipped job is not a passed job. **Now fixed and green** at head `147d4a07`
+  (run `31228467376`, `Build / Unit` and `E2E` both passing). It was fixed by
+  removing ~1.6KB of duplicated popup code rather than by raising the budget, so
+  the 10KB line still means what it meant. Note the popup chunk now sits at 96%
+  with roughly 400 bytes of headroom — the next popup slice has to trim or make an
+  explicit budget decision.
 
 **Slots 1-3 are a three-deep stack: #528 ← #532 ← #535.** Merge them oldest-first
 in exactly that order; merging the newest first would strand its parents (global
-law 4). Never `--delete-branch` #528 or #532 while a child is still open — that
-cascade-closes children unreopenably. After each base lands, confirm the child
-retargeted to `main` before merging it. Slots 4-10 are independent branches off
+law 4).
+
+On deleting the base branches, note the two cases are **opposite**, and the safe-
+sounding one is the dangerous one. Deleting an *unmerged* branch that other PRs are
+based on closes those PRs — never do that. But deleting the head branch *as part of
+merging it* makes GitHub automatically retarget the children onto the merged PR's
+own base, which is what you want. So refusing to delete #528's branch after merging
+it leaves #532 still targeting #528, and merging #532 then updates **#528's branch
+rather than `main`** — the slice silently never lands. The rule that is actually
+safe is: after each base merges, **confirm the child now targets `main` before
+merging it**, whether that happened automatically or via `gh pr edit <N> --base main`:
+
+```
+gh pr view 532 --json baseRefName -q '.baseRefName'   # must print: main
+```
+
+Retargeting on its own also runs **no CI** — it fires an `edited` activity, which a
+`pull_request` workflow with no `types` filter ignores, and the child's head SHA
+does not change so nothing looks stale. Merge `main` into the child after
+retargeting; that changes the head, triggers a real run, and tests the tree that
+will actually merge. Slots 4-10 are independent branches off
 `main` and can go in any order.
 
 | Order | PR | What it changes | Why it needs your eyes |
@@ -263,7 +296,7 @@ retargeted to `main` before merging it. Slots 4-10 are independent branches off
 | 7 | **#521** | #382: forward-offer no longer re-sent after delivery | Do a rollback and confirm you get exactly one forward prompt, and that resuming still works |
 | 8 | **#522** | #410: bounds the action-attribute scan on the credential submit path | Submit a real login form and confirm the prompt still names the correct destination host |
 | 9 | **#526** | #413: reserves the last 5 of the 50 mutation-alert slots for scarce security detections (injected password field, suspicious iframe, cross-domain form-action change), so a benign-alert flood can no longer switch detection off | Review caught that the originally-prescribed fix registered shadow roots but still emitted nothing past the cap; the reserve is the real fix. Worth browsing a few mutation-heavy sites (cookie banners, chat widgets) to confirm no new prompts |
-| 10 | **#533** | #219: distinct gauge state when a page has only scoreless threat alerts | Purely visual — confirm the dashed-ring "!" state reads as a warning and not as an error |
+| 10 | **#533** | #219: distinct gauge state when a page has only scoreless threat alerts | Purely visual — confirm the dashed-ring "!" state reads as a warning and not as an error. Its scope is narrower than #219 asked for: review found `nav_reputation_late_warn` stamps the *child frame's* hostname while the popup matches the top-level domain, so the state cannot fire for third-party iframes — #219's headline case. Tracked as **#539**; the PR's claim was narrowed rather than the fix widened |
 
 **#514 note — the missing "AI-26".** PR #514's review thread says *"`ACTION_ITEMS.md`
 AI-26 still requires Chris's fresh-profile real-Chrome Gate-3 evidence"*, but a
