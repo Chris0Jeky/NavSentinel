@@ -46,7 +46,10 @@ The reset records its remaining lanes in `chrome.storage.local` before the first
 destructive write, so a service-worker termination or browser restart part-way
 through finishes the remaining lanes on the next start rather than leaving
 residue. If a lane cannot be cleared, the control says which store still holds
-data instead of reporting success. One residual remains: domain profiles are
+data instead of reporting success; and if every store cleared but that record
+could not be retired, the control says the reset was not finalized and may run
+again at the next browser start, rather than reporting a success that could
+later erase records you create afterwards. One residual remains: domain profiles are
 written directly by content scripts (see issue #181), so a profile write already
 in flight when the reset runs can survive it; re-running the control clears it.
 

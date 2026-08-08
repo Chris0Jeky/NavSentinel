@@ -19,11 +19,22 @@ type Store = Record<string, unknown>;
 interface MockOptions {
   failLocalWriteForKey?: string;
   failLocalWriteMessage?: string;
+  /**
+   * Let this many writes touching `failLocalWriteForKey` through before failing.
+   * Used to let the pre-flight reset marker persist and then fail only its
+   * finalization, which is the window review finding (2) is about.
+   */
+  allowLocalWritesForKey?: number;
+  /** Make `chrome.storage.local.remove` reject with this message. */
+  failLocalRemove?: string;
+  /** Observe every committed local write, so a test can interleave a writer. */
+  onLocalSet?: (next: Record<string, unknown>) => void;
 }
 
 function createChromeMock(initial: Store = {}, options: MockOptions = {}) {
   const store: Store = { ...initial };
   const sessionStore: Store = {};
+  let allowedWrites = options.allowLocalWritesForKey ?? 0;
 
   return {
     store,
@@ -47,13 +58,16 @@ function createChromeMock(initial: Store = {}, options: MockOptions = {}) {
           },
           async set(next: Record<string, unknown>) {
             if (options.failLocalWriteForKey && options.failLocalWriteForKey in next) {
-              throw new Error(options.failLocalWriteMessage ?? "quota exceeded");
+              if (allowedWrites > 0) allowedWrites--;
+              else throw new Error(options.failLocalWriteMessage ?? "quota exceeded");
             }
             for (const [key, value] of Object.entries(next)) {
               store[key] = value;
             }
+            options.onLocalSet?.(next);
           },
           async remove(keys: string | string[]) {
+            if (options.failLocalRemove) throw new Error(options.failLocalRemove);
             for (const key of Array.isArray(keys) ? keys : [keys]) delete store[key];
           },
         },
@@ -267,6 +281,145 @@ describe("unified behavioural-data reset (RI-06 / #474)", () => {
     expect(store[EVENT_LOG_KEY]).toEqual([]);
     expect(store[PROMPT_OUTCOMES_KEY]).toEqual([]);
     expect(store[ADAPTIVE_SCORES_KEY]).toEqual({});
+  });
+
+  // --- Review round 2, finding (2): a suppressed marker-finalization failure was
+  // reported as success, and the surviving marker was replayed destructively later.
+  it("does not report success while an un-finalized reset marker survives", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { chrome, store } = createChromeMock(seededBehaviouralStore(), {
+      failLocalWriteForKey: BEHAVIOURAL_RESET_STATE_KEY,
+      failLocalWriteMessage: "marker store full",
+      // The pre-flight marker write succeeds; only its finalization fails.
+      allowLocalWritesForKey: 1,
+      failLocalRemove: "remove unavailable",
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { clearBehaviouralData } = await import("../extension/src/shared/behavioural_reset");
+    const result = await clearBehaviouralData();
+
+    // Every lane genuinely cleared, so `failed` stays empty and honest...
+    expect(result.cleared).toEqual([...BEHAVIOURAL_DATA_LANES]);
+    expect(result.failed).toEqual([]);
+    // ...but an ACTIVE marker still names every lane, so a later worker start
+    // would replay the reset over data created afterwards. That is not success.
+    expect(result.ok).toBe(false);
+    expect(result.markerError).toContain("marker store full");
+    expect(store[BEHAVIOURAL_RESET_STATE_KEY]).toMatchObject({
+      pending: [...BEHAVIOURAL_DATA_LANES],
+    });
+  });
+
+  it("tombstones the marker when removal fails so a later start replays nothing", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { chrome, store } = createChromeMock(seededBehaviouralStore(), {
+      failLocalRemove: "remove unavailable",
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const storage = await import("../extension/src/shared/storage");
+    const behaviouralReset = await import("../extension/src/shared/behavioural_reset");
+    const result = await behaviouralReset.clearBehaviouralData();
+
+    // `remove` is unavailable, but the non-replayable tombstone stands in for it,
+    // so the reset really is finished and may be reported as such.
+    expect(result.ok).toBe(true);
+    expect(result.markerError).toBeUndefined();
+
+    // Behavioural data the user creates AFTER the visible reset completed.
+    await storage.appendEvent({
+      kind: "nav_click_block",
+      site: "after-reset.example",
+      ts: Date.now() + 1000,
+    });
+    expect(store[EVENT_LOG_KEY]).toHaveLength(1);
+
+    const resumed = await behaviouralReset.resumeInterruptedBehaviouralReset();
+    expect(resumed).toEqual({ ok: true, cleared: [], failed: [] });
+    // The finished reset must NOT be replayed over the new record.
+    expect(store[EVENT_LOG_KEY]).toHaveLength(1);
+  });
+
+  // --- Review round 2, finding (1): an outcome appended between the two prompt
+  // lanes kept its source row while the later adaptive-only clear dropped its score.
+  it("keeps the adaptive cache consistent with an outcome appended between lanes", async () => {
+    // Armed after the module import; fires exactly once, on the prompt-outcome
+    // clear itself, so the appends queue behind the clear and land BEFORE the
+    // adaptive lane is queued.
+    const injector: { run?: () => void } = {};
+    const { chrome, store } = createChromeMock(seededBehaviouralStore(), {
+      onLocalSet(next) {
+        const written = next[PROMPT_OUTCOMES_KEY];
+        if (!injector.run || !Array.isArray(written) || written.length !== 0) return;
+        const run = injector.run;
+        injector.run = undefined;
+        run();
+      },
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const storage = await import("../extension/src/shared/storage");
+    const { clearBehaviouralData } = await import("../extension/src/shared/behavioural_reset");
+    injector.run = () => {
+      // computeAdjustment needs >= 3 decisive outcomes to produce a score.
+      for (let i = 0; i < 3; i++) {
+        void storage.appendPromptOutcome({
+          id: `between-${i}`,
+          ts: Date.now() + 1000 + i,
+          domain: "between.example",
+          type: "nav",
+          score: 80,
+          outcome: "block",
+        });
+      }
+    };
+    const result = await clearBehaviouralData();
+
+    expect(result.ok).toBe(true);
+    // Proves the injection actually fired at the reset's prompt-outcome clear.
+    expect(injector.run).toBeUndefined();
+    // The appends landed after the clear, so their rows survive by design.
+    expect(store[PROMPT_OUTCOMES_KEY]).toHaveLength(3);
+    // The derived cache must remain the derivative of what is actually stored —
+    // a blind adaptive-only clear would strand these rows with no score.
+    expect(store[ADAPTIVE_SCORES_KEY]).toHaveProperty("between.example");
+  });
+
+  // --- Review round 2, finding (4): the reset serialized only against other
+  // resets, so a suite import could restore lanes it had just reported cleared.
+  it("serializes against a suite import so the final state matches the report", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { chrome, store } = createChromeMock(seededBehaviouralStore());
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const storage = await import("../extension/src/shared/storage");
+    const behaviouralReset = await import("../extension/src/shared/behavioural_reset");
+
+    const payload = {
+      eventLog: [{ id: "imported-e1", ts: 5, kind: "nav_click_block", site: "imported.example" }],
+      promptOutcomes: [0, 1, 2].map((i) => ({
+        id: `imported-p${i}`,
+        ts: 5 + i,
+        domain: "imported.example",
+        type: "nav",
+        score: 80,
+        outcome: "block",
+      })),
+    };
+
+    // The user starts an import and clicks the clear-all before it finishes.
+    const importing = storage.importAll(payload);
+    const resetting = behaviouralReset.clearBehaviouralData();
+    const [, result] = await Promise.all([importing, resetting]);
+
+    expect(result.ok).toBe(true);
+    expect([...result.cleared].sort()).toEqual([...BEHAVIOURAL_DATA_LANES].sort());
+    // "Every lane cleared" must be true of the FINAL state: the import's separate
+    // prompt-outcome phase must not land behind the completed reset.
+    expect(store[PROMPT_OUTCOMES_KEY]).toEqual([]);
+    expect(store[ADAPTIVE_SCORES_KEY]).toEqual({});
+    expect(store[EVENT_LOG_KEY]).toEqual([]);
   });
 
   it("keeps the barrier so a delayed pre-clear append cannot resurrect a lane", async () => {

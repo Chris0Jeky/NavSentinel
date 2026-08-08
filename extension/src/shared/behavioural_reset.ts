@@ -17,10 +17,11 @@
 import { clearDomainProfiles } from "./domain_profile";
 import {
   clearEventLogDirect,
-  clearPromptOutcomeAdaptiveScoresDirect,
   clearPromptOutcomesDirect,
   delayMs,
   isTrustedExtensionPageSender,
+  queueBulkDataOperation,
+  resyncPromptOutcomeAdaptiveScoresDirect,
   shouldDelegatePromptOutcomeWrite,
   STORAGE_DELEGATE_RETRY_DELAYS_MS,
 } from "./storage";
@@ -58,10 +59,21 @@ export interface BehaviouralResetLaneFailure {
 }
 
 export interface BehaviouralResetResult {
-  /** True ONLY when every requested lane was confirmed cleared. */
+  /**
+   * True ONLY when every requested lane was confirmed cleared AND the crash
+   * marker was finalized. An un-finalized marker is replayed at the next worker
+   * start, so reporting success while one survives would mean a later, silent
+   * re-clear of data the user created after their reset visibly completed.
+   */
   ok: boolean;
   cleared: BehaviouralDataLane[];
   failed: BehaviouralResetLaneFailure[];
+  /**
+   * Set when the marker could not be finalized. Distinct from `failed`: the
+   * lanes listed in `cleared` really were cleared, but the reset is not
+   * finished, because it can still replay.
+   */
+  markerError?: string;
 }
 
 /**
@@ -83,7 +95,10 @@ const BEHAVIOURAL_LANE_CLEARERS: Record<BehaviouralDataLane, () => Promise<void>
   // then the destructive write) rather than introducing a second concurrency
   // scheme — the get-modify-write races fixed in #180/#182 live in those chains.
   promptOutcomes: () => clearPromptOutcomesDirect(),
-  adaptiveScores: () => clearPromptOutcomeAdaptiveScoresDirect(),
+  // Recomputes rather than blind-clears, so an outcome appended between these
+  // two lanes cannot be left holding a source row with no derived score. With
+  // no outcomes stored — the normal case — this writes exactly `{}`.
+  adaptiveScores: () => resyncPromptOutcomeAdaptiveScoresDirect(),
   eventLog: () => clearEventLogDirect(),
   // Domain profiles are written directly by content scripts (accepted residual
   // #181), so this clear is serialized only within the calling context. A
@@ -108,20 +123,15 @@ function normalizeBehaviouralResetState(value: unknown): BehaviouralResetState |
   };
 }
 
-let behaviouralResetPending: Promise<unknown> = Promise.resolve();
-
 /**
  * Serialize whole resets against each other (a user-initiated reset and the
- * startup resume must not interleave their marker writes). Individual lanes
- * remain serialized by their own established chains.
+ * startup resume must not interleave their marker writes) AND against a suite
+ * import, which is the other multi-lane bulk operation. Individual lanes remain
+ * serialized by their own established chains; this is the shared bulk queue in
+ * `storage.ts`, so an import can no longer restore a lane the reset has already
+ * reported cleared. See `queueBulkDataOperation` for the per-context scope.
  */
-function queueBehaviouralReset<T>(operation: () => Promise<T>): Promise<T> {
-  const next = behaviouralResetPending.then(operation);
-  behaviouralResetPending = next.catch((err) => {
-    console.warn("[NavSentinel] behavioural reset serialization error:", err);
-  });
-  return next;
-}
+const queueBehaviouralReset = queueBulkDataOperation;
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -131,27 +141,50 @@ async function writeBehaviouralResetState(state: BehaviouralResetState): Promise
   await chrome.storage.local.set({ [BEHAVIOURAL_RESET_STATE_KEY]: state });
 }
 
+/**
+ * Narrow the marker to the lanes that still need work, or retire it entirely.
+ *
+ * Returns null on success, or the reason the marker is still ACTIVE. A stale
+ * marker is not free: it is replayed at the next worker start and re-clears
+ * lanes the user has since refilled, so a failure here is never swallowed — it
+ * is reported and makes the whole reset `ok: false`.
+ */
 async function finalizeBehaviouralResetState(
   startedAt: number,
   pending: BehaviouralDataLane[]
-): Promise<void> {
-  try {
-    if (pending.length > 0) {
+): Promise<string | null> {
+  if (pending.length > 0) {
+    // Genuinely unfinished lanes MUST stay replayable; only narrow the list.
+    try {
       await writeBehaviouralResetState({ startedAt, pending });
-      return;
+      return null;
+    } catch (err) {
+      return `marker still lists every lane and may re-clear on restart: ${errorText(err)}`;
     }
-    // `remove` is guarded because several stubbed storage areas (and the unit
-    // test doubles) implement only get/set.
-    const area = chrome.storage.local as { remove?: (keys: string | string[]) => Promise<void> };
-    if (typeof area.remove === "function") {
+  }
+  // `remove` is guarded because several stubbed storage areas (and the unit
+  // test doubles) implement only get/set.
+  const area = chrome.storage.local as { remove?: (keys: string | string[]) => Promise<void> };
+  let removeError: unknown;
+  if (typeof area.remove === "function") {
+    try {
       await area.remove(BEHAVIOURAL_RESET_STATE_KEY);
-    } else {
-      await writeBehaviouralResetState({ startedAt, pending: [] });
+      return null;
+    } catch (err) {
+      removeError = err;
     }
+  }
+  // Fall back to a non-replayable tombstone: an empty `pending` normalizes to
+  // "no interrupted reset", so a later worker start reads it and does nothing.
+  try {
+    await writeBehaviouralResetState({ startedAt, pending: [] });
+    return null;
   } catch (err) {
-    // A stale marker only costs a redundant re-clear on the next worker start,
-    // and every lane clear is idempotent, so this is logged rather than fatal.
-    console.warn("[NavSentinel] behavioural reset marker update failed:", err);
+    // Both retirement paths failed, so the marker still names every lane. We
+    // cannot stop the replay from here — but we can refuse to call this a
+    // success, which is what makes the later re-clear non-silent.
+    console.warn("[NavSentinel] behavioural reset marker update failed:", removeError ?? err);
+    return `reset completed but not finalized; it may re-run at the next start: ${errorText(err)}`;
   }
 }
 
@@ -181,8 +214,16 @@ async function runBehaviouralResetLanes(
       failed.push({ lane, error: errorText(err) });
     }
   }
-  await finalizeBehaviouralResetState(startedAt, failed.map((entry) => entry.lane));
-  return { ok: failed.length === 0, cleared, failed };
+  const markerError = await finalizeBehaviouralResetState(
+    startedAt,
+    failed.map((entry) => entry.lane)
+  );
+  return {
+    ok: failed.length === 0 && markerError === null,
+    cleared,
+    failed,
+    ...(markerError ? { markerError } : {}),
+  };
 }
 
 /**
@@ -283,30 +324,36 @@ function sendBehaviouralResetMessage(): Promise<BehaviouralResetResult> {
  * marker guarantees any genuinely unfinished lane is retried on the next
  * service-worker start.
  */
-export async function clearBehaviouralData(): Promise<BehaviouralResetResult> {
+export function clearBehaviouralData(): Promise<BehaviouralResetResult> {
+  // `clearBehaviouralDataDirect` takes the bulk queue itself, so the two
+  // branches acquire it exactly once each — never nested, which would deadlock.
   if (!shouldDelegatePromptOutcomeWrite()) return clearBehaviouralDataDirect();
-
-  let lastErr: unknown;
-  for (let attempt = 0; attempt <= STORAGE_DELEGATE_RETRY_DELAYS_MS.length; attempt++) {
-    try {
-      return await sendBehaviouralResetMessage();
-    } catch (err) {
-      if (err instanceof BehaviouralResetUnauthorizedError) {
-        return {
-          ok: false,
-          cleared: [],
-          failed: BEHAVIOURAL_DATA_LANES.map((lane) => ({ lane, error: err.message })),
-        };
+  // The delegated round trip is held INSIDE the bulk queue so a suite import
+  // running in this same page context cannot interleave with the worker-side
+  // reset it triggers.
+  return queueBulkDataOperation(async () => {
+    let lastErr: unknown;
+    for (let attempt = 0; attempt <= STORAGE_DELEGATE_RETRY_DELAYS_MS.length; attempt++) {
+      try {
+        return await sendBehaviouralResetMessage();
+      } catch (err) {
+        if (err instanceof BehaviouralResetUnauthorizedError) {
+          return {
+            ok: false,
+            cleared: [],
+            failed: BEHAVIOURAL_DATA_LANES.map((lane) => ({ lane, error: err.message })),
+          };
+        }
+        lastErr = err;
+        const delay = STORAGE_DELEGATE_RETRY_DELAYS_MS[attempt];
+        if (delay !== undefined) await delayMs(delay);
       }
-      lastErr = err;
-      const delay = STORAGE_DELEGATE_RETRY_DELAYS_MS[attempt];
-      if (delay !== undefined) await delayMs(delay);
     }
-  }
-  const error = `not confirmed — service worker unreachable after retries: ${errorText(lastErr)}`;
-  return {
-    ok: false,
-    cleared: [],
-    failed: BEHAVIOURAL_DATA_LANES.map((lane) => ({ lane, error })),
-  };
+    const error = `not confirmed — service worker unreachable after retries: ${errorText(lastErr)}`;
+    return {
+      ok: false,
+      cleared: [],
+      failed: BEHAVIOURAL_DATA_LANES.map((lane) => ({ lane, error })),
+    };
+  });
 }

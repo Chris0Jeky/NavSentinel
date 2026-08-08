@@ -367,6 +367,52 @@ describe("runClearBehaviouralData (RI-06 / #474)", () => {
     expect(refresh).toHaveBeenCalled();
     expect(flash).toHaveBeenCalledWith("Couldn't clear behavioural data — try again.", "error");
   });
+
+  // --- Review round 2, finding (2): an un-finalized marker is not success, and the
+  // status line has to say so rather than fall through the partial-reset wording.
+  it("warns about a replayable reset when the marker could not be finalized", () => {
+    const outcome = describeBehaviouralReset({
+      ok: false,
+      cleared: ["promptOutcomes", "adaptiveScores", "eventLog", "domainProfiles"],
+      failed: [],
+      markerError: "marker store full",
+    });
+    expect(outcome.tone).toBe("error");
+    expect(outcome.message).toBe(
+      "Cleared, but the reset wasn't finalized — it may run again at the next browser start.",
+    );
+  });
+
+  // --- Review round 2, finding (3): the refresh ran after storage had already been
+  // mutated, and its rejection escaped the un-awaited click listener unreported.
+  it("still reports the reset outcome when the post-reset refresh fails", async () => {
+    const flash = vi.fn();
+    await expect(runClearBehaviouralData({
+      confirm: () => true,
+      reset: vi.fn(async () => ({
+        ok: true as const,
+        cleared: ["eventLog" as const],
+        failed: [],
+      })),
+      refresh: vi.fn(async () => { throw new Error("refresh boom"); }),
+      flash,
+    })).resolves.toBeUndefined();
+    expect(flash).toHaveBeenCalledWith(
+      "Behavioural data cleared. Settings, allowlist, and trusted domains were kept.",
+      undefined,
+    );
+  });
+
+  it("still reports the failure when the reset throws and the refresh also fails", async () => {
+    const flash = vi.fn();
+    await expect(runClearBehaviouralData({
+      confirm: () => true,
+      reset: vi.fn(async () => { throw new Error("SW unreachable"); }),
+      refresh: vi.fn(async () => { throw new Error("refresh boom"); }),
+      flash,
+    })).resolves.toBeUndefined();
+    expect(flash).toHaveBeenCalledWith("Couldn't clear behavioural data — try again.", "error");
+  });
 });
 
 describe("runImportFlow (#188)", () => {

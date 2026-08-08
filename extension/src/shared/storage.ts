@@ -1579,6 +1579,36 @@ export function clearPromptOutcomeAdaptiveScoresDirect(): Promise<void> {
 }
 
 /**
+ * @internal The unified reset's adaptive lane. Rewrites the cache as the
+ * derivative of whatever outcomes are stored RIGHT NOW, inside one queued op.
+ *
+ * The reset clears outcomes and their cache as two lanes, so an append can land
+ * between them: it writes the row and its score atomically, and a blind
+ * adaptive-only clear would then drop the score while keeping the row, leaving
+ * threshold adjustment inconsistent until something recomputed it. Recomputing
+ * instead of blind-clearing keeps the invariant "cache == derivative of the
+ * stored outcomes" in both cases — with no outcomes this is exactly `{}`, the
+ * previous behaviour. Deliberately NOT re-clearing the outcomes here: on a
+ * resumed reset this lane can run alone, and wiping rows written after the
+ * outcomes lane already completed would be the data loss finding (2) is about.
+ */
+export function resyncPromptOutcomeAdaptiveScoresDirect(): Promise<void> {
+  return queuePromptOutcomeWrite(async () => {
+    const res = await chrome.storage.local.get(PROMPT_OUTCOMES_KEY);
+    const outcomes = boundPromptOutcomeLog(res[PROMPT_OUTCOMES_KEY]);
+    if (outcomes.length === 0) {
+      await clearAdaptiveScoresDirect();
+      return;
+    }
+    const settings = await getNavSettings();
+    const threshold = settings.defaultMode === "strict" ? NRS_STRICT_BLOCK_THRESHOLD : NRS_BLOCK_THRESHOLD;
+    await chrome.storage.local.set({
+      [ADAPTIVE_SCORES_KEY]: computeAdaptiveScoreMap(outcomes, threshold),
+    });
+  });
+}
+
+/**
  * Clear the direct derivative of prompt outcomes through the same worker lane
  * as outcome migrations and replacements. This intentionally leaves every
  * other data store alone; it is not a unified clear-all control.
@@ -1759,7 +1789,40 @@ export async function exportAll(): Promise<{
   };
 }
 
-export async function importAll(payload: unknown): Promise<void> {
+let bulkDataPending: Promise<unknown> = Promise.resolve();
+
+/**
+ * Serialize whole-store bulk operations against each other: a suite import and
+ * the unified behavioural reset (`behavioural_reset.ts`).
+ *
+ * Neither operation is a single write. `importAll` commits its core sections
+ * through the event-log lane and REPLACES prompt outcomes through a second lane
+ * afterwards; the reset walks four lanes. Each lane is individually serialized,
+ * but nothing stopped a reset from slotting between an import's two phases —
+ * the reset could clear outcomes, clear the imported event log, and then have
+ * the import's final prompt phase restore outcomes and adaptive scores while
+ * every lane still reported cleared. This is one more queue over the WHOLE
+ * operations, not a new per-write concurrency scheme: the existing per-lane
+ * chains (and the #180/#182 fixes in them) are untouched.
+ *
+ * Scope: per JS context. Both controls live on the options page, so its module
+ * instance serializes them end to end, including across the worker delegation
+ * each awaits inside the queue. Two extension pages driving one bulk operation
+ * each are still not ordered against one another — documented residual.
+ */
+export function queueBulkDataOperation<T>(operation: () => Promise<T>): Promise<T> {
+  const next = bulkDataPending.then(operation);
+  bulkDataPending = next.catch((err) => {
+    console.warn("[NavSentinel] bulk data serialization error:", err);
+  });
+  return next;
+}
+
+export function importAll(payload: unknown): Promise<void> {
+  return queueBulkDataOperation(() => importAllDirect(payload));
+}
+
+async function importAllDirect(payload: unknown): Promise<void> {
   if (!payload || typeof payload !== "object") throw new Error("Invalid import payload");
   const p = payload as Record<string, unknown>;
   let importLogLimit = DEFAULT_SUITE_SETTINGS.logLimit;

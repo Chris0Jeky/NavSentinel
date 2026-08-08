@@ -118,6 +118,22 @@ export interface StatsUiDeps {
 }
 
 /**
+ * Re-render after storage has already been mutated. `refresh` is `init()`, a
+ * sequence of independent storage reads, so a transient failure must not decide
+ * whether the user is told what happened: these handlers run un-awaited off a
+ * DOM listener, where a rejection escapes as an unhandled rejection and the
+ * status line is simply never written. Always refresh, never let it throw, and
+ * report the outcome regardless.
+ */
+async function safeRefresh(refresh: () => Promise<void>): Promise<void> {
+  try {
+    await refresh();
+  } catch (err) {
+    console.warn("[NavSentinel] post-operation refresh failed:", err);
+  }
+}
+
+/**
  * Orchestrate "Clear stats". Scope a delivery failure to either mutation so the
  * UI refreshes and reports a truthful partial result. `clearAdaptive` still runs
  * only after a successful prompt-outcome clear.
@@ -133,11 +149,11 @@ export async function runClearStats(
     await deps.clearAdaptive();
   } catch (e) {
     console.warn("[NavSentinel] clear stats failed:", e);
-    await deps.refresh();
+    await safeRefresh(deps.refresh);
     deps.flash("Couldn't clear stats — try again.", "error");
     return;
   }
-  await deps.refresh();
+  await safeRefresh(deps.refresh);
   deps.flash("Stats cleared.");
 }
 
@@ -163,6 +179,14 @@ export function describeBehaviouralReset(result: BehaviouralResetResult): {
   message: string;
   tone?: "error";
 } {
+  if (result.markerError) {
+    // The lanes cleared, but an active marker means the reset can replay and
+    // erase what the user records next. Say so instead of claiming success.
+    return {
+      message: "Cleared, but the reset wasn't finalized — it may run again at the next browser start.",
+      tone: "error",
+    };
+  }
   if (result.ok) {
     return { message: `Behavioural data cleared. ${BEHAVIOURAL_RESET_KEPT_COPY}` };
   }
@@ -193,11 +217,11 @@ export async function runClearBehaviouralData(
     result = await deps.reset();
   } catch (e) {
     console.warn("[NavSentinel] clear behavioural data failed:", e);
-    await deps.refresh();
+    await safeRefresh(deps.refresh);
     deps.flash("Couldn't clear behavioural data — try again.", "error");
     return;
   }
-  await deps.refresh();
+  await safeRefresh(deps.refresh);
   const outcome = describeBehaviouralReset(result);
   deps.flash(outcome.message, outcome.tone);
 }
@@ -220,13 +244,7 @@ export async function runImportFlow(
     deps.flash("Imported.");
   } catch (e) {
     console.warn("[NavSentinel] import failed:", e);
-    // Guard the refresh so a failed re-render can neither mask the status nor
-    // escape the (un-awaited) event handler as an unhandled rejection.
-    try {
-      await deps.refresh();
-    } catch (refreshErr) {
-      console.warn("[NavSentinel] post-import refresh failed:", refreshErr);
-    }
+    await safeRefresh(deps.refresh);
     const outcome = classifyImportError(deps.isDeliveryFailure(e));
     deps.flash(outcome.message, outcome.tone);
   }
