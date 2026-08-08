@@ -347,13 +347,13 @@ describe("unified behavioural-data reset (RI-06 / #474)", () => {
     // Armed after the module import; fires exactly once, on the prompt-outcome
     // clear itself, so the appends queue behind the clear and land BEFORE the
     // adaptive lane is queued.
-    const injector: { run?: () => void } = {};
+    const injector: { run: (() => void) | null } = { run: null };
     const { chrome, store } = createChromeMock(seededBehaviouralStore(), {
       onLocalSet(next) {
         const written = next[PROMPT_OUTCOMES_KEY];
         if (!injector.run || !Array.isArray(written) || written.length !== 0) return;
         const run = injector.run;
-        injector.run = undefined;
+        injector.run = null;
         run();
       },
     });
@@ -378,7 +378,7 @@ describe("unified behavioural-data reset (RI-06 / #474)", () => {
 
     expect(result.ok).toBe(true);
     // Proves the injection actually fired at the reset's prompt-outcome clear.
-    expect(injector.run).toBeUndefined();
+    expect(injector.run).toBeNull();
     // The appends landed after the clear, so their rows survive by design.
     expect(store[PROMPT_OUTCOMES_KEY]).toHaveLength(3);
     // The derived cache must remain the derivative of what is actually stored —
