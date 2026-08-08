@@ -234,8 +234,9 @@ separate things went wrong here and both are worth knowing:
   mergeable while being entirely unverified. Both were given a real run via
   `gh workflow run ci.yml --ref <branch>` (the workflow already declares
   `workflow_dispatch`), and **both are now green** — #532 at head `c12de37a`
-  (run `31227640239`) and #535 at head `7a0938fd` (run `31228264385`), each with
-  `Build / Unit` and `E2E` passing. PR **#538** widens the trigger so future
+  (run `31227640239`) and #535 at head `51df51ea` (run `31229947040`), each with
+  `Build / Unit` and `E2E` passing, and each run's `headSha` checked against the PR
+  head rather than assumed. PR **#538** widens the trigger so future
   stacked PRs are covered; it does **not** retroactively fix these two, because a
   `pull_request` run resolves its workflow file from the base-plus-head merge
   commit, and their branches still carry the old filter until `main` is merged in.
@@ -289,7 +290,7 @@ will actually merge. Slots 4-10 are independent branches off
 | --- | --- | --- | --- |
 | 1 | **#528** | RI-05: removes the fake `declarativeNetRequest` surface, its two localhost-scoped stub rules, the options toggle, and **two manifest permissions** | Permission surface shrinks 5→3. Confirm the extension still loads and behaves normally after the manifest change |
 | 2 | **#532** | RI-07: JS-behaviour instrumentation is a build-time capability, off in every profile; the monitor module is not linked at all | Confirm navigation, credential and DoubleClickjacking protection still work — those are deliberately unaffected, but that is the thing to verify by hand |
-| 3 | **#535** | RI-06 last slice: one service-worker-owned **clear-all behavioural-data** reset (prompt outcomes → adaptive scores → event log → domain profiles), with partial-failure reporting and crash-resume | Ships under the **AI-28** assumption below. Use the new options → Analytics *Clear behavioural data* control and confirm it erases history but leaves your settings, allowlist and trusted domains intact |
+| 3 | **#535** | RI-06 last slice: one service-worker-owned **clear-all behavioural-data** reset (prompt outcomes → adaptive scores → event log → domain profiles), with partial-failure reporting and crash-resume | Ships under the **AI-28** assumption below. Use the new options → Analytics *Clear behavioural data* control and confirm it erases history but leaves your settings, allowlist and trusted domains intact. Review round 2 fixed four failure-semantics defects here, the worst being a swallowed marker-finalization error that reported success and would later replay the reset over data created *after* it. Two things are visually unverified and are what your pass is for: the new "wasn't finalized" status line and the confirm dialog |
 | 4 | **#514** | RI-02: removes visual-sim capture, templates, the scoring hook, the `brand_templates.json` web-accessible resource, and the stored state | Already reviewed on its exact head, exact-head CI green. Manual pass: see the **#514 note** directly below this table — the "AI-26" its review thread cites was never actually written into this file, so there was no recorded procedure until now |
 | 5 | **#534** | #458: removes the `Location.prototype` patch that never intercepted anything, and corrects README / architecture / design-brief claims | Confirm delayed-redirect rollback still works. Note the Gate-3 guide text itself changed — a step that said "normal Location calls bypass the prototype hook" now says there is no pre-navigation hook at all |
 | 6 | **#520** | #389: primes redirect chain-info at content-script init so first-click NRS is not under-scored | Decision path is unchanged and still synchronous; worth a normal browse to confirm no latency |
