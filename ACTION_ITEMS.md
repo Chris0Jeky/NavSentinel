@@ -243,7 +243,10 @@ separate things went wrong here and both are worth knowing:
   **Beware where you look:** a `workflow_dispatch` run attaches to the *branch*,
   not the PR, so the PR page and `gh pr checks` keep saying "no checks reported"
   even after a green run exists. Check it with
-  `gh run list --branch <branch> --limit 1 --json headSha,status,conclusion`
+  `gh run list --branch <branch> --workflow ci.yml --event workflow_dispatch --limit 1 --json headSha,status,conclusion`
+  — the `--workflow`/`--event` filters matter, because `stress.yml` also accepts a
+  dispatch, so an unfiltered lookup can show a green `stress` run at the same SHA
+  and let you conclude `Build / Unit` and `E2E` passed when they never ran
   (the default table has no SHA column) and match it to
   `gh pr view <N> --json headRefOid`.
   **And know what that evidence is worth:** a dispatch builds the branch *tip*,

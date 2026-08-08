@@ -93,7 +93,8 @@ So merge the current base into the child *before* dispatching, and read the run'
 SHA explicitly — the default `gh run list` table does not show it:
 
 ```bash
-gh run list --branch <branch> --limit 1 --json headSha,status,conclusion \
+gh run list --branch <branch> --workflow ci.yml --event workflow_dispatch \
+  --limit 1 --json headSha,status,conclusion \
   -q '.[] | "\(.headSha) \(.status)/\(.conclusion)"'
 gh pr view <B> --json headRefOid -q '.headRefOid'     # the two must match
 ```
