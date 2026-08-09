@@ -1540,13 +1540,14 @@ async function assertClickBlocked(
   selector: string,
   expectedToast: string,
   urlPattern: RegExp,
-  options: { diagnoseSyntheticClick?: boolean } = {}
+  options: { diagnosticLabel?: string } = {}
 ) {
   const btn = page.locator(selector);
   const box = await btn.boundingBox();
   expect(box, `${selector} should be visible`).toBeTruthy();
 
-  const diagnoseSyntheticClick = options.diagnoseSyntheticClick === true;
+  const diagnosticLabel = options.diagnosticLabel;
+  const diagnoseSyntheticClick = diagnosticLabel !== undefined;
   const beforePageCount = context.pages().length;
   const sourceUrl = page.url();
   if (diagnoseSyntheticClick) {
@@ -1632,7 +1633,7 @@ async function assertClickBlocked(
             hasBeenActive: navigator.userActivation.hasBeenActive
           }
         : null;
-      (window as Window & { __navsentinelRw18Diagnostics?: unknown }).__navsentinelRw18Diagnostics = {
+      (window as Window & { __navsentinelClickDiagnostics?: unknown }).__navsentinelClickDiagnostics = {
         sourceUrl: location.href,
         point: { x: Math.round(x), y: Math.round(y) },
         hitStack: document.elementsFromPoint(x, y).slice(0, 6).map(describeElement),
@@ -1657,7 +1658,7 @@ async function assertClickBlocked(
   if (diagnoseSyntheticClick) {
     const afterClick = await page.evaluate((expectedToast) => {
       const state = (window as Window & {
-        __navsentinelRw18Diagnostics?: {
+        __navsentinelClickDiagnostics?: {
           sourceUrl: string;
           point: { x: number; y: number };
           hitStack: unknown[];
@@ -1673,7 +1674,7 @@ async function assertClickBlocked(
             listener: (event: Event) => void;
           }>;
         };
-      }).__navsentinelRw18Diagnostics;
+      }).__navsentinelClickDiagnostics;
       for (const registration of state?.registrations ?? []) {
         registration.eventTarget.removeEventListener(registration.type, registration.listener, registration.capture);
       }
@@ -1688,11 +1689,12 @@ async function assertClickBlocked(
         toastMatched: toastText.includes(expectedToast),
         events: state?.events ?? []
       };
-      delete (window as Window & { __navsentinelRw18Diagnostics?: unknown }).__navsentinelRw18Diagnostics;
+      delete (window as Window & { __navsentinelClickDiagnostics?: unknown }).__navsentinelClickDiagnostics;
       return result;
     }, expectedToast);
     const popupUrls = context.pages().map((contextPage) => contextPage.url());
     const diagnostic = JSON.stringify({
+      label: diagnosticLabel,
       sourceUrl,
       point: afterClick.before?.point ?? null,
       hitStack: afterClick.before?.hitStack ?? null,
@@ -1709,7 +1711,7 @@ async function assertClickBlocked(
         toastMatched: afterClick.toastMatched
       }
     });
-    diagnosticMessage = `RW-18 diagnostic=${diagnostic}`;
+    diagnosticMessage = `${diagnosticLabel} diagnostic=${diagnostic}`;
     expect(popup, `Expected the trap new tab to be blocked; ${diagnosticMessage}`).toBeNull();
   } else {
     expect(popup, "Expected the trap new tab to be blocked").toBeNull();
@@ -2000,7 +2002,14 @@ test("RW-14 checkout express-pay overlay blocks the hidden trap @regression", as
       });
 
       await waitForNavSentinelBridge(page);
-      await assertClickBlocked(page, context, "#rw14Pay", "Blocked new tab", /rw14-checkout-express-pay-overlay\.html/);
+      await assertClickBlocked(
+        page,
+        context,
+        "#rw14Pay",
+        "Blocked new tab",
+        /rw14-checkout-express-pay-overlay\.html/,
+        { diagnosticLabel: "RW-14" }
+      );
     } finally {
       await context.close();
     }
@@ -2155,7 +2164,7 @@ test("RW-18 fake codec warning blocks the hidden installer trap @regression", as
         "#rw18Install",
         "Blocked new tab",
         /rw18-browser-update-warning\.html/,
-        { diagnoseSyntheticClick: true }
+        { diagnosticLabel: "RW-18" }
       );
     } finally {
       await context.close();
