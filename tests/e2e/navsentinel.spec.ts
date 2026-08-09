@@ -740,7 +740,8 @@ test("Synthetic pointer and click events cannot mint navigation allowances @regr
 
       // A plain synthetic click previously minted the MAIN-world redirect
       // window even without opening a popup. Give a vulnerable bridge message
-      // time to arrive, then prove Location.assign remains blocked.
+      // time to arrive, then drive a navigation down a path that is STILL gated
+      // by that allowance and prove it does not land.
       await page.evaluate(() => {
         const button = document.createElement("button");
         button.textContent = "Synthetic redirect trigger";
@@ -749,14 +750,56 @@ test("Synthetic pointer and click events cannot mint navigation allowances @regr
       });
       await page.waitForTimeout(100);
       const redirectTarget = `${baseUrl}/level2-moving-target.html?synthetic=1`;
+      // #458: `Location.prototype.assign` does not exist in Chromium and
+      // NavSentinel no longer creates it, so an explicit prototype call is a
+      // plain TypeError — the browser's own refusal, which we assert rather
+      // than dress up as an interception. This pins the removal; it is NOT the
+      // allowance check (it throws before any navigation is attempted).
+      const protoCallError = await page.evaluate((url) => {
+        try {
+          (Location.prototype as unknown as { assign: (u: string) => void })
+            .assign.call(location, url);
+          return "no-error";
+        } catch (error) {
+          return error instanceof Error ? error.name : String(error);
+        }
+      }, redirectTarget);
+      expect(protoCallError, "Location.prototype.assign must stay absent").toBe("TypeError");
+
+      // The live half of this regression. Since #458 there is no MAIN-world gate
+      // on `location.assign` at all, so a bare location call would commit on a
+      // healthy build and assert nothing about allowances. A programmatic
+      // `form.submit()` is still gated: `HTMLFormElement.prototype.submit` is
+      // wrapped in `main_guard.ts` and calls `consumeRedirectAllowance()`, and
+      // `submit()` fires no `submit` event, so the MAIN-world redirect allowance
+      // is the ONLY thing that decides whether this navigation happens. With no
+      // allowance the wrapper blocks and registers the action. If the synthetic
+      // click above had minted a redirect allowance, the wrapper would consume it
+      // and this navigation WOULD commit — which is the bug this test exists to
+      // catch, and is what makes both assertions below falsifiable.
       const redirectObserved = page
-        .waitForURL(redirectTarget, { timeout: 1000 })
+        .waitForURL(redirectTarget, { timeout: 1500 })
         .then(() => true)
         .catch(() => false);
-      // Exercise the hardened prototype path directly. Normal Location
-      // instance-method coverage is the separate, tracked #458 seam.
-      await page.evaluate((url) => Location.prototype.assign.call(location, url), redirectTarget);
-      expect(await redirectObserved).toBe(false);
+      await page.evaluate((url) => {
+        const target = new URL(url);
+        const form = document.createElement("form");
+        form.method = "get";
+        form.action = `${target.origin}${target.pathname}`;
+        for (const [name, value] of target.searchParams) {
+          const field = document.createElement("input");
+          field.type = "hidden";
+          field.name = name;
+          field.value = value;
+          form.appendChild(field);
+        }
+        document.body.appendChild(form);
+        form.submit();
+      }, redirectTarget);
+      expect(
+        await redirectObserved,
+        "a synthetic click must not mint the redirect allowance that lets form.submit() navigate"
+      ).toBe(false);
       await expect(page).toHaveURL(originalUrl);
 
       // A durable user allowlist may permit a destination, but a page-script

@@ -139,8 +139,10 @@ test("a page can wrap and invoke guarded form / location / open methods @regress
     const parsed = JSON.parse(wrapped ?? "{}") as Record<string, string>;
     expect(parsed.formSubmit).toBe("ok");
     expect(parsed.formRequestSubmit).toBe("ok");
-    // Compatibility only: Chromium's own window.location methods bypass the
-    // prototype wrapper during ordinary calls; the interception gap is #458.
+    // Compatibility only: Chromium's own window.location methods bypass any
+    // Location.prototype wrapper, so NavSentinel installs none (#458). What
+    // must still hold is that a strict-mode page can create/assign the slot
+    // without throwing.
     expect(parsed.locationAssign).toBe("ok");
     expect(parsed.locationReplace).toBe("ok");
     expect(parsed.windowOpen).toBe("ok");
@@ -158,13 +160,19 @@ test("a page can wrap and invoke guarded form / location / open methods @regress
       locationReplace:
         Object.getOwnPropertyDescriptor(Location.prototype, "replace")?.enumerable,
     }));
+    // The four real prototype slots keep the enumerability Chromium shipped.
+    // The Location entries are `true` because NOTHING but the page's own plain
+    // assignment created them (#458): NavSentinel no longer defines a
+    // Location.prototype slot, so the fixture's `Location.prototype.assign = fn`
+    // creates a fresh enumerable data property. A `false` here would mean an
+    // extension-installed slot came back.
     expect(descriptors, "wrappers must preserve existing native descriptor visibility").toEqual({
       windowOpen: true,
       windowProtoOpen: false,
       formSubmit: true,
       formRequestSubmit: true,
-      locationAssign: false,
-      locationReplace: false,
+      locationAssign: true,
+      locationReplace: true,
     });
 
     // The module finished (no uncaught throw aborted the app render).
@@ -204,8 +212,9 @@ test("a page can wrap and invoke guarded form / location / open methods @regress
       { timeout: 2_000 }
     ).toBe("1");
 
-    // Chromium has no Location.prototype.assign native. The compatibility
-    // wrapper must delegate to the captured own window.location method.
+    // Chromium has no Location.prototype.assign native, so the fixture's own
+    // wrapper is the only thing in that slot and it must be able to reach the
+    // browser's own window.location method (#458).
     await page.click("#testLocation");
     await expect.poll(
       () => page.evaluate(() => document.body.dataset.locationCall),
@@ -267,6 +276,127 @@ test("a page can wrap and invoke guarded form / location / open methods @regress
       (m) => /read only/i.test(m) && /(submit|assign|open)/i.test(m)
     );
     expect(frozenError, `unexpected freeze error: ${frozenError ?? ""}`).toBeUndefined();
+  } finally {
+    await context.close();
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+/**
+ * #458 boundary regression.
+ *
+ * Chromium implements `Location.assign` / `Location.replace` as
+ * `[LegacyUnforgeable]` members: they are OWN properties of every `Location`
+ * instance (`writable: false`, `configurable: false`) and the corresponding
+ * `Location.prototype` slots do not exist. A MAIN-world script therefore cannot
+ * interpose on an ordinary `location.assign(...)` call — ordinary property
+ * lookup finds the own method and never consults the prototype — and it cannot
+ * replace the own method either.
+ *
+ * NavSentinel used to install wrappers on `Location.prototype` anyway. That
+ * intercepted nothing a real page can produce (an explicit
+ * `Location.prototype.assign.call(...)` throws `TypeError` in stock Chromium)
+ * while ADDING two prototype properties Chromium does not have — a
+ * deterministic extension fingerprint. This test pins the post-#458 state:
+ * NavSentinel leaves the Location surface exactly as the browser shipped it.
+ *
+ * The positive guarantee for script-driven `location` navigation lives in the
+ * service worker and is covered by the existing @rollback lane
+ * ("Level 10 delayed redirect rolls back to the prior page"), whose gym fixture
+ * navigates with a plain `location.assign(...)`.
+ */
+test("NavSentinel leaves Chromium's own Location methods native (#458) @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-locbound-"));
+
+  let context;
+  try {
+    context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [
+        `--disable-extensions-except=${extensionPath}`,
+        `--load-extension=${extensionPath}`
+      ]
+    });
+  } catch (err) {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+    throw err;
+  }
+
+  const page = await context.newPage();
+
+  try {
+    await page.goto(`${baseUrl}/level1-basic-opacity.html`, {
+      waitUntil: "domcontentloaded",
+      timeout: 20_000
+    });
+    await waitForNavSentinelBridge(page);
+
+    const boundary = await page.evaluate(async () => {
+      // Measured BEFORE anything in this probe touches Location.prototype, so
+      // any prototype slot found here was installed by NavSentinel.
+      const protoAssign = Object.getOwnPropertyDescriptor(Location.prototype, "assign");
+      const protoReplace = Object.getOwnPropertyDescriptor(Location.prototype, "replace");
+      const ownAssign = Object.getOwnPropertyDescriptor(window.location, "assign");
+      const ownReplace = Object.getOwnPropertyDescriptor(window.location, "replace");
+
+      // A library-style prototype wrap must still be possible without throwing
+      // (the #349/#356 compatibility property), and must still not capture an
+      // ordinary call.
+      let protoWrapAccepted: boolean;
+      let protoWrapperInvoked = false;
+      try {
+        (Location.prototype as unknown as Record<string, unknown>).assign =
+          function pageWrapper(): void { protoWrapperInvoked = true; };
+        protoWrapAccepted = true;
+      } catch {
+        protoWrapAccepted = false;
+      }
+
+      // Behavioural, not identity: actually make an ordinary call with a
+      // prototype wrapper installed. A same-document fragment target keeps this
+      // to a hash change (no commit, no rollback layer). If ordinary dispatch
+      // consulted Location.prototype, `pageWrapper` would run and swallow the
+      // call; instead the unforgeable own method runs and the hash changes.
+      window.location.assign("#ns458-ordinary-call");
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      return {
+        navSentinelAddedProtoAssign: protoAssign !== undefined,
+        navSentinelAddedProtoReplace: protoReplace !== undefined,
+        ownAssignPresent: ownAssign !== undefined,
+        ownAssignWritable: ownAssign?.writable,
+        ownAssignConfigurable: ownAssign?.configurable,
+        ownReplacePresent: ownReplace !== undefined,
+        ownReplaceWritable: ownReplace?.writable,
+        ownReplaceConfigurable: ownReplace?.configurable,
+        protoWrapAccepted,
+        ordinaryCallSkippedProtoWrapper: protoWrapperInvoked === false,
+        ordinaryCallReachedOwnMethod: window.location.hash === "#ns458-ordinary-call",
+      };
+    });
+
+    expect(
+      boundary,
+      "MAIN world must not add Location.prototype slots Chromium does not ship (#458)"
+    ).toEqual({
+      navSentinelAddedProtoAssign: false,
+      navSentinelAddedProtoReplace: false,
+      ownAssignPresent: true,
+      ownAssignWritable: false,
+      ownAssignConfigurable: false,
+      ownReplacePresent: true,
+      ownReplaceWritable: false,
+      ownReplaceConfigurable: false,
+      protoWrapAccepted: true,
+      ordinaryCallSkippedProtoWrapper: true,
+      ordinaryCallReachedOwnMethod: true,
+    });
   } finally {
     await context.close();
     if (gym) await gym.close();

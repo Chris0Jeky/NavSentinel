@@ -453,11 +453,6 @@ function registerBlockedAction(params: {
 
 const nativeProtoOpen = Window.prototype.open;
 const nativeOpen = window.open;
-// Chromium exposes assign/replace as LegacyUnforgeable own methods on each
-// Location instance; the prototype slots are absent. Capture the real instance
-// methods so our compatibility prototype wrappers remain callable.
-const nativeAssign = window.location.assign;
-const nativeReplace = window.location.replace;
 const nativeFormSubmit = HTMLFormElement.prototype.submit;
 const nativeFormRequestSubmit = HTMLFormElement.prototype.requestSubmit;
 
@@ -478,13 +473,12 @@ const nativeFormRequestSubmit = HTMLFormElement.prototype.requestSubmit;
  *
  * History, form, and open wrappers keep working when a page wraps them because
  * each wrapper delegates to the module-captured native (not to `proto[prop]`),
- * so a capture-then-wrap chains safely without re-entrancy. Location is a
- * compatibility-only exception here: Chromium exposes assign/replace as
- * non-configurable own properties on window.location, so making the prototype
- * reassignable avoids a strict-mode initialization throw but does not prove that
- * ordinary location calls traverse our wrapper. #458 tracks that pre-navigation
- * interception boundary. The real gate for supported enforcement hooks is the
- * click/gesture allowance inside each wrapper, not the descriptor.
+ * so a capture-then-wrap chains safely without re-entrancy. The real gate for
+ * supported enforcement hooks is the click/gesture allowance inside each
+ * wrapper, not the descriptor.
+ *
+ * Only prototypes that actually own the slot are patched here. See
+ * LOCATION_INTERCEPTION_BOUNDARY below for why `Location` is not one of them.
  */
 function softPatchProto(
   proto: object,
@@ -640,71 +634,55 @@ function resolveFormAction(form: HTMLFormElement): string | undefined {
   }
 }
 
-function patchLocation(): void {
-  const patchedAssign = function (this: Location, url: string | URL): void {
-    if (isOff() || (isSubframe() && this === window.location)) {
-      postAllowed({ kind: "location_assign", url: String(url) });
-      notifyAllowedTarget(url);
-      nativeAssign.call(this, url);
-      return;
-    }
-
-    const allowance = consumeRedirectAllowance();
-    if (allowance !== "none") {
-      postAllowed({ kind: "location_assign", url: String(url) });
-      notifyAllowedTarget(url);
-      nativeAssign.call(this, url);
-      return;
-    }
-
-    registerBlockedAction({
-      kind: "location_assign",
-      url: String(url),
-      action: () => nativeAssign.call(this, url)
-    });
-  };
-
-  const patchedReplace = function (this: Location, url: string | URL): void {
-    if (isOff() || (isSubframe() && this === window.location)) {
-      postAllowed({ kind: "location_replace", url: String(url) });
-      notifyAllowedTarget(url);
-      nativeReplace.call(this, url);
-      return;
-    }
-
-    const allowance = consumeRedirectAllowance();
-    if (allowance !== "none") {
-      postAllowed({ kind: "location_replace", url: String(url) });
-      notifyAllowedTarget(url);
-      nativeReplace.call(this, url);
-      return;
-    }
-
-    registerBlockedAction({
-      kind: "location_replace",
-      url: String(url),
-      action: () => nativeReplace.call(this, url)
-    });
-  };
-
-  // Keep the prototype slots writable+configurable so strict-mode libraries can
-  // reassign them without aborting. Chromium's LegacyUnforgeable instance methods
-  // still bypass these prototype wrappers for ordinary window.location calls;
-  // #458 owns the real interception design. Do not attempt an instance patch:
-  // those own methods are non-writable/non-configurable, and the failed fallback
-  // previously produced misleading debug output.
-  softPatchProto(Location.prototype, "assign", patchedAssign, "Location.prototype.assign");
-  softPatchProto(Location.prototype, "replace", patchedReplace, "Location.prototype.replace");
-
-  if (debug) {
-    postToIsolated("ns-location-patch-info", {
-      protoAssign: Location.prototype.assign === patchedAssign,
-      protoReplace: Location.prototype.replace === patchedReplace,
-      locAssign: window.location.assign === patchedAssign,
-      locReplace: window.location.replace === patchedReplace,
-    });
-  }
-}
+/**
+ * LOCATION_INTERCEPTION_BOUNDARY (#458)
+ *
+ * NavSentinel does NOT intercept `location.assign()` / `location.replace()` on
+ * this window, and cannot. Chromium implements them as `[LegacyUnforgeable]`
+ * Web IDL members, which means each `Location` instance carries them as OWN
+ * properties with `writable: false, configurable: false`, and the matching
+ * `Location.prototype` slots do not exist at all. Consequences, all measured in
+ * this repo's Playwright Chromium lane (see the #458 @regression test in
+ * `tests/e2e/spa-router-pushstate.spec.ts`):
+ *
+ *   - The own methods cannot be replaced or redefined from the MAIN world.
+ *   - An ordinary `location.assign(url)` resolves the own method by ordinary
+ *     property lookup and never consults `Location.prototype`, so a prototype
+ *     wrapper is unreachable no matter how it is installed.
+ *
+ * Until #458, this module installed wrappers on `Location.prototype` anyway.
+ * They caught nothing a real page can produce — an explicit
+ * `Location.prototype.assign.call(...)` throws `TypeError` in stock Chromium,
+ * so no shipping page writes it — while ADDING two prototype properties the
+ * browser does not have, a deterministic way for a hostile page to detect
+ * NavSentinel. They also made such an explicit call *succeed* under a redirect
+ * allowance where the browser would have thrown. Removing them removes a
+ * fingerprint and an attacker-reachable path; it removes no working defense.
+ *
+ * What PARTLY covers script-driven location navigation instead: the service
+ * worker's `chrome.webNavigation.onCommitted` handler (`extension/src/sw/sw.ts`)
+ * observes the commit and may roll the tab back to the previous URL, handing
+ * the recovery prompt to the isolated world. That is POST-COMMIT recovery, not
+ * pre-navigation interception, and it is conditional — top frame only, only for
+ * `client_redirect`/`server_redirect`/`link` commits, not for user-typed ones,
+ * only when no allowance covers the commit, only when a previous URL is known,
+ * not inside the 6s rollback-suppress window, and NOT for a same-registrable-
+ * domain hop that follows no recent user-navigation context (a deliberate
+ * false-positive trade — see the "Exactly when the rollback layer fires"
+ * section of `docs/Architecture_and_Data_Flow.md` for the full list). The
+ * @rollback lane exercises this via gym fixtures that navigate with a plain
+ * `location.assign(...)`.
+ *
+ * `window.open`, `HTMLFormElement.prototype.submit`/`requestSubmit` and
+ * `History.prototype.pushState`/`replaceState` DO live on real prototypes and
+ * are genuinely patched above/below. The opener's `Location` is a different
+ * object reached through our own `window.opener` accessor, so
+ * `patchOpenerLocation()` can and does proxy it (observationally — it records
+ * the write for DoubleClickjacking correlation, it does not block).
+ *
+ * Do not reintroduce a `Location.prototype` patch without a measurement showing
+ * Chromium moved these members off the instance.
+ */
 
 function patchForms(): void {
   const patchedFormSubmit = function (this: HTMLFormElement): void {
@@ -1431,7 +1409,7 @@ window.addEventListener(
 // other script can save a reference to the real opener object.
 patchOpenerLocation();
 patchOpen();
-patchLocation();
+// No patchLocation(): see LOCATION_INTERCEPTION_BOUNDARY (#458).
 patchForms();
 patchClipboard();
 patchHistory();

@@ -20,9 +20,10 @@
     <code>TypeError: Cannot assign to read only property</code> and abort init.
     Expected: all wraps succeed and the app renders.
     Chromium's browser-owned <code>window.location.assign</code> method bypasses
-    prototype dispatch; #458 tracks that normal-call interception boundary. The
-    compatibility wrapper is still invoked explicitly below to prove it delegates
-    to Chromium's real own method instead of calling an absent prototype native.
+    prototype dispatch entirely, so NavSentinel no longer patches
+    <code>Location.prototype</code> (#458). The page's own prototype wrapper is
+    still invoked explicitly below to prove the slot stays freely assignable and
+    that a wrapper can reach the browser's real own method.
   </p>
 
   <!-- Realistic library pattern: an UNGUARDED strict-mode module. If any wrap
@@ -58,17 +59,27 @@
     };
     results.formRequestSubmit = "ok";
 
+    // #458: Chromium ships assign/replace as [LegacyUnforgeable] OWN methods of
+    // each Location; Location.prototype has no such slot, and NavSentinel no
+    // longer creates one. So `origAssign` is undefined here in stock Chromium
+    // and the wrapper must delegate to the browser's own method. The point this
+    // still proves is the #349/#356 compatibility property: the assignment
+    // itself must not throw in a strict-mode module.
     const origAssign = Location.prototype.assign;
     Location.prototype.assign = function (...args) {
       recordWrapperCall("locationAssign");
-      return origAssign.apply(this, args);
+      return typeof origAssign === "function"
+        ? origAssign.apply(this, args)
+        : window.location.assign(...args);
     };
     results.locationAssign = "ok";
 
     const origReplace = Location.prototype.replace;
     Location.prototype.replace = function (...args) {
       recordWrapperCall("locationReplace");
-      return origReplace.apply(this, args);
+      return typeof origReplace === "function"
+        ? origReplace.apply(this, args)
+        : window.location.replace(...args);
     };
     results.locationReplace = "ok";
 
