@@ -387,6 +387,29 @@ describe("suite storage and allowlist migration", () => {
     expect(persisted.nav).toEqual({ defaultMode: "smart", debug: true });
   });
 
+  it("drops a stored js-behavior capability flag instead of honouring it (RI-07)", async () => {
+    // JS-behaviour instrumentation is a build-time release-profile capability, not a
+    // stored setting. An upgrading profile that carries such a flag (a local build, a
+    // hand-edited store, or a future setting) must not survive a read or a write and
+    // must never be treated as a runtime opt-in.
+    const { chrome, store } = createChromeMock({
+      "sentinelsuite:settings_v1": {
+        nav: { defaultMode: "smart", debug: false, jsBehaviorEnabled: true }
+      }
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { getSuiteSettings, updateSuiteSettings } = await import("../extension/src/shared/storage");
+
+    const loaded = await getSuiteSettings();
+    expect(loaded.nav).toEqual({ defaultMode: "smart", debug: false });
+    expect(Object.keys(loaded.nav)).not.toContain("jsBehaviorEnabled");
+
+    await updateSuiteSettings({ nav: { debug: true } });
+    const persisted = store["sentinelsuite:settings_v1"] as { nav: Record<string, unknown> };
+    expect(persisted.nav).toEqual({ defaultMode: "smart", debug: true });
+  });
+
   it("serializes concurrent updateSuiteSettings so neither update is lost (#305)", async () => {
     const { chrome } = createChromeMock();
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);

@@ -8,6 +8,9 @@
     "paths": {
       "@navsentinel/reputation-runtime": [
         "extension/src/shared/reputation_runtime.disabled.ts"
+      ],
+      "@navsentinel/js-behavior-monitor": [
+        "extension/src/content/js_behavior_monitor.disabled.ts"
       ]
     },
     "strict": true,

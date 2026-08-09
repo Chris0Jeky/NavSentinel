@@ -6,14 +6,16 @@
       "description": "Release-eligible beta with interaction protection and no reputation runtime or asset.",
       "releaseEligible": true,
       "capabilities": {
-        "reputation": false
+        "reputation": false,
+        "jsBehaviorInstrumentation": false
       }
     },
     "research-reputation": {
       "description": "Unpacked local research build using the deterministic reserved-domain reputation fixture.",
       "releaseEligible": false,
       "capabilities": {
-        "reputation": true
+        "reputation": true,
+        "jsBehaviorInstrumentation": false
       }
     }
   }

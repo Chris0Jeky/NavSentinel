@@ -197,3 +197,35 @@ export function withReentrancyGuard(
     }
   };
 }
+
+/** Read-only options display for the RI-07 JS-behavior instrumentation capability. */
+export interface JsBehaviorCapabilityDisplay {
+  state: string;
+  detail: string;
+}
+
+/**
+ * Describe the JS-behavior instrumentation capability for the options page.
+ *
+ * The capability is a build-time release-profile decision, not a stored setting,
+ * so the options page can only report it. Passing the runtime flag in keeps the
+ * UI from ever claiming the capability is on while the runtime has it off.
+ */
+export function describeJsBehaviorCapability(enabled: boolean): JsBehaviorCapabilityDisplay {
+  if (!enabled) {
+    return {
+      state: "Off",
+      detail:
+        "This build does not install fetch, XHR, sendBeacon or password-field " +
+        "instrumentation. Navigation, credential and double-click protection are " +
+        "unaffected. Enabling it requires compatibility and performance evidence " +
+        "that is not available yet.",
+    };
+  }
+  return {
+    state: "On",
+    detail:
+      "This build installs broad JavaScript behavior instrumentation. It is not " +
+      "part of the standard beta build.",
+  };
+}

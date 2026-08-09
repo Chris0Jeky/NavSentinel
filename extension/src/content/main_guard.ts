@@ -1,4 +1,11 @@
-import { initJsBehaviorMonitor } from "./js_behavior_monitor";
+// RI-07: resolved by the bundler to `js_behavior_monitor.disabled.ts` (a no-op)
+// unless the active release profile declares `capabilities.jsBehaviorInstrumentation`.
+// Every committed profile leaves it false, so no release build links the fetch /
+// XHR / sendBeacon / password-value prototype wrapping at all.
+import {
+  initJsBehaviorMonitor,
+  jsBehaviorInstrumentationEnabled,
+} from "@navsentinel/js-behavior-monitor";
 import { OutboundQueue, isMainGuardAlertType, isFloodableAlertType } from "./bridge_outbound";
 import { enforceMapSizeCap, pruneTimestampWindow, shouldEmitRapidPushState } from "./main_guard_helpers";
 import {
@@ -123,6 +130,10 @@ let mode: "off" | "smart" | "strict" = "off";
 let debug = false;
 
 function syncJsBehaviorMonitor(): void {
+  // Second, explicit gate on the same declared capability. The aliased module is
+  // already a no-op when the capability is off; this keeps the "off" decision
+  // readable at the call site and lets dead-code elimination drop the call.
+  if (!jsBehaviorInstrumentationEnabled) return;
   initJsBehaviorMonitor({
     mode,
     debug,
