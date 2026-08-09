@@ -1570,7 +1570,7 @@ describe("appendPromptOutcome", () => {
     runtimeChrome.runtime = {
       sendMessage(message, callback) {
         sentMessage = message;
-        callback?.({ ok: true });
+        callback?.({ ok: true, result: { eventLogDropped: 1 } });
       },
     };
 
@@ -1589,7 +1589,7 @@ describe("appendPromptOutcome", () => {
       })),
     ];
 
-    await importAll({ promptOutcomes: outcomes });
+    await expect(importAll({ promptOutcomes: outcomes })).resolves.toEqual({ eventLogDropped: 1 });
 
     expect(sentMessage).toMatchObject({ type: "ns-suite-import", payload: { promptOutcomes: outcomes } });
     expect((sentMessage as { payload: { promptOutcomes: unknown[] } }).payload.promptOutcomes).toBe(outcomes);
@@ -1761,7 +1761,7 @@ describe("event-log control messages — sender authorization", () => {
     (chrome as unknown as { runtime: unknown }).runtime = {
       sendMessage(message: unknown, callback?: (response: unknown) => void) {
         sent.push(message);
-        callback?.({ ok: true });
+        callback?.({ ok: true, result: { eventLogDropped: 0 } });
       },
     };
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
@@ -1771,7 +1771,7 @@ describe("event-log control messages — sender authorization", () => {
       settings: { logLimit: 300 },
       eventLog: [{ id: "import-1", ts: 2, kind: "cred_submit_prompt" }],
     };
-    await importAll(payload);
+    await expect(importAll(payload)).resolves.toEqual({ eventLogDropped: 0 });
 
     expect(store[EVENT_LOG_KEY]).toBeUndefined();
     expect(sent).toEqual([{ type: "ns-suite-import", payload }]);

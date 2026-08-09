@@ -436,6 +436,34 @@ describe("runImportFlow (#188)", () => {
     expect(flash).toHaveBeenCalledWith("Imported.");
   });
 
+  it("reports a singular event-log truncation on success (#391)", async () => {
+    const refresh = vi.fn(async () => {});
+    const flash = vi.fn();
+    await runImportFlow({
+      importPayload: vi.fn(async () => ({ eventLogDropped: 1 })),
+      refresh,
+      flash,
+      isDeliveryFailure: isDelivery,
+    });
+    expect(flash).toHaveBeenCalledWith(
+      "Imported. Event log truncated: 1 older event was not imported."
+    );
+  });
+
+  it("reports plural event-log truncation on success (#391)", async () => {
+    const refresh = vi.fn(async () => {});
+    const flash = vi.fn();
+    await runImportFlow({
+      importPayload: vi.fn(async () => ({ eventLogDropped: 2 })),
+      refresh,
+      flash,
+      isDeliveryFailure: isDelivery,
+    });
+    expect(flash).toHaveBeenCalledWith(
+      "Imported. Event log truncated: 2 older events were not imported."
+    );
+  });
+
   it("on a delivery failure: refreshes and reports a partial result", async () => {
     const refresh = vi.fn(async () => {});
     const flash = vi.fn();

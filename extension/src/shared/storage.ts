@@ -470,8 +470,12 @@ export type EventLogControlMessage =
 
 export type SuiteImportMessage = { type: "ns-suite-import"; payload: unknown };
 
+export interface ImportAllResult {
+  eventLogDropped: number;
+}
+
 type SuiteImportResponse =
-  | { ok: true }
+  | { ok: true; result: ImportAllResult }
   | { ok: false; error: string; code?: "unauthorized" | "partial" };
 
 type EventLogStorageResponse =
@@ -551,8 +555,22 @@ export function isSuiteImportMessage(message: unknown): message is SuiteImportMe
   );
 }
 
+const MAX_NORMALIZED_EVENT_LOG_ENTRIES = 5000;
+
+function normalizeEventLogWithMetadata(value: unknown): {
+  entries: EventLogEntry[];
+  eventLogDropped: number;
+} {
+  if (!Array.isArray(value)) return { entries: [], eventLogDropped: 0 };
+  const validEntries = value.filter(isEventLogEntry);
+  return {
+    entries: validEntries.slice(-MAX_NORMALIZED_EVENT_LOG_ENTRIES),
+    eventLogDropped: Math.max(0, validEntries.length - MAX_NORMALIZED_EVENT_LOG_ENTRIES),
+  };
+}
+
 function normalizeEventLog(value: unknown): EventLogEntry[] {
-  return Array.isArray(value) ? value.filter(isEventLogEntry).slice(-5000) : [];
+  return normalizeEventLogWithMetadata(value).entries;
 }
 
 function makeId(): string {
@@ -1404,7 +1422,7 @@ class PromptOutcomeUnauthorizedError extends Error {}
 // rest of a non-atomic import did apply) from a total failure.
 export class PromptOutcomeDeliveryError extends Error {}
 
-function sendSuiteImportMessage(payload: unknown): Promise<void> {
+function sendSuiteImportMessage(payload: unknown): Promise<ImportAllResult> {
   return new Promise((resolve, reject) => {
     try {
       chrome.runtime.sendMessage(
@@ -1418,7 +1436,7 @@ function sendSuiteImportMessage(payload: unknown): Promise<void> {
             return;
           }
           if (response?.ok) {
-            resolve();
+            resolve(response.result);
             return;
           }
           if (response?.code === "partial") {
@@ -1909,7 +1927,7 @@ export function queueBulkDataOperation<T>(operation: () => Promise<T>): Promise<
   return next;
 }
 
-export function importAll(payload: unknown): Promise<void> {
+export function importAll(payload: unknown): Promise<ImportAllResult> {
   const runtime = (globalThis as { chrome?: typeof chrome }).chrome?.runtime;
   if (!isExtensionServiceWorkerContext() && typeof runtime?.sendMessage === "function") {
     // The whole import must cross the worker boundary as one operation. Sending
@@ -1934,8 +1952,8 @@ export async function handleSuiteImportMessage(
   try {
     // Do not call public importAll here: that would enqueue a second operation
     // on the same queue and deadlock. The worker owns this queue entry directly.
-    await queueBulkDataOperation(() => importAllDirect(message.payload));
-    return { ok: true };
+    const result = await queueBulkDataOperation(() => importAllDirect(message.payload));
+    return { ok: true, result };
   } catch (err) {
     if (err instanceof PromptOutcomeDeliveryError) {
       return { ok: false, error: err.message, code: "partial" };
@@ -1944,10 +1962,11 @@ export async function handleSuiteImportMessage(
   }
 }
 
-async function importAllDirect(payload: unknown): Promise<void> {
+async function importAllDirect(payload: unknown): Promise<ImportAllResult> {
   if (!payload || typeof payload !== "object") throw new Error("Invalid import payload");
   const p = payload as Record<string, unknown>;
   let importLogLimit = DEFAULT_SUITE_SETTINGS.logLimit;
+  let eventLogDropped = 0;
 
   // --- Phase 1: validate & build EVERY storage.local section payload before any
   // write. This was previously a sequence of independent awaited set() calls, so a
@@ -1990,8 +2009,10 @@ async function importAllDirect(payload: unknown): Promise<void> {
     // the silent-eviction cap without re-normalizing (#299 R1). The total-quota residual (N entries
     // each at the per-entry cap) is fail-closed by importAll's single atomic set (#270), which
     // rejects on quota-exceeded and leaves storage unchanged.
+    const normalized = normalizeEventLogWithMetadata(p.eventLog);
+    eventLogDropped = normalized.eventLogDropped;
     writes[EVENT_LOG_KEY] = trimValidEventLog(
-      normalizeEventLog(p.eventLog).map(sanitizeImportedEventLogEntry),
+      normalized.entries.map(sanitizeImportedEventLogEntry),
       boundedLogLimit
     );
   }
@@ -2045,4 +2066,5 @@ async function importAllDirect(payload: unknown): Promise<void> {
     }
     throw err;
   }
+  return { eventLogDropped };
 }
