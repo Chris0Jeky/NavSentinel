@@ -14,6 +14,13 @@ import {
   MAX_PENDING_OUTBOUND,
   RESERVED_SCARCE_OUTBOUND_SLOTS,
 } from "../extension/src/content/main_guard_constants";
+// The real pre-bridge buffer + its real priority/floodable classifiers, so the #302
+// composed regression below exercises the production queue policy, not a mirror of it.
+import {
+  OutboundQueue,
+  isMainGuardAlertType,
+  isFloodableAlertType,
+} from "../extension/src/content/bridge_outbound";
 
 describe("enforceMapSizeCap (#301)", () => {
   const mapOf = (n: number) => {
@@ -173,5 +180,84 @@ describe("gestureBranchEmissionBound (#377/F1)", () => {
     // either assertion fails, a PUSHSTATE_* constant grew unsafely — re-tune it or raise
     // RESERVED_SCARCE_OUTBOUND_SLOTS. (#377/F1, F2)
     expect(bound).toBeLessThanOrEqual(RESERVED_SCARCE_OUTBOUND_SLOTS);
+  });
+});
+
+describe("#302 composed: a rapid-pushState flood cannot drop a later ns-nav-blocked", () => {
+  /**
+   * Replays the production pre-bridge path end-to-end for the #302 attack: the rapid
+   * branch of checkPushStateSuspicious (buffer cap + cooldown gate) feeding
+   * postToIsolated, which enqueues into the SAME OutboundQueue shape main_guard builds
+   * (real cap + reservation + real priority/floodable classifiers). The pieces are unit
+   * tested individually above; this pins the composition, which is where the bug lived.
+   *
+   * `dedupe: false` reproduces the PRE-FIX emit-on-every-call behaviour, so the control
+   * case below shows these assertions genuinely fail without the cooldown.
+   */
+  const replayFlood = (opts: { calls: number; stepMs: number; dedupe: boolean }) => {
+    const queue = new OutboundQueue(MAX_PENDING_OUTBOUND, RESERVED_SCARCE_OUTBOUND_SLOTS);
+    const post = (type: string) =>
+      queue.enqueue({ type }, isMainGuardAlertType(type), isFloodableAlertType(type));
+    const start = 5000;
+    let timestamps: number[] = [];
+    let lastEmitAt = 0;
+    let alerts = 0;
+
+    for (let i = 0; i < opts.calls; i++) {
+      const now = start + i * opts.stepMs;
+      timestamps = pruneTimestampWindow(
+        [...timestamps, now],
+        now,
+        PUSHSTATE_RAPID_WINDOW_MS,
+        PUSHSTATE_RAPID_THRESHOLD * 2,
+      );
+      if (timestamps.length < PUSHSTATE_RAPID_THRESHOLD) continue;
+      let emit = true;
+      if (opts.dedupe) {
+        const decision = shouldEmitRapidPushState(now, lastEmitAt, PUSHSTATE_RAPID_WINDOW_MS);
+        lastEmitAt = decision.lastEmitAt;
+        emit = decision.emit;
+      }
+      if (!emit) continue;
+      alerts++;
+      post("ns-pushstate-suspicious");
+    }
+
+    // The blocked navigation the page triggers during the same pre-verification window.
+    post("ns-nav-blocked");
+    const { items, dropped } = queue.drain();
+    return { alerts, items, dropped };
+  };
+
+  it("bounds the alerts for a 100-call synchronous flood to one per window", () => {
+    // All 100 calls share one instant, so the whole burst is a single rapid window.
+    expect(replayFlood({ calls: 100, stepMs: 0, dedupe: true }).alerts).toBe(1);
+  });
+
+  it("delivers the later ns-nav-blocked once the bridge opens, with nothing dropped", () => {
+    const { items, dropped } = replayFlood({ calls: 100, stepMs: 0, dedupe: true });
+    expect(items.filter((m) => m.type === "ns-nav-blocked")).toHaveLength(1);
+    expect(dropped).toBe(0);
+  });
+
+  it("still reports a genuine sustained flood (re-alerting per window), block still delivered", () => {
+    // 300 calls 10ms apart = 3s of sustained rapid pushState, the full pre-bridge window.
+    const { alerts, items } = replayFlood({ calls: 300, stepMs: 10, dedupe: true });
+    // The signal is collapsed per window, NOT suppressed: one alert per elapsed cooldown.
+    expect(alerts).toBeGreaterThanOrEqual(3);
+    expect(alerts).toBeLessThanOrEqual(4);
+    expect(items.some((m) => m.type === "ns-nav-blocked")).toBe(true);
+  });
+
+  it("control: without the cooldown the flood saturates the queue and the block is lost", () => {
+    const { alerts, items, dropped } = replayFlood({ calls: 100, stepMs: 0, dedupe: false });
+    // One alert per call past the 4-call threshold — the pre-fix behaviour.
+    expect(alerts).toBe(100 - (PUSHSTATE_RAPID_THRESHOLD - 1));
+    // ns-pushstate-suspicious is priority-but-scarce, so it is not floodable-capped: it
+    // fills every slot, and the later (also priority) ns-nav-blocked finds no routine
+    // message to displace and is dropped — exactly the #302 detection loss.
+    expect(items).toHaveLength(MAX_PENDING_OUTBOUND);
+    expect(items.some((m) => m.type === "ns-nav-blocked")).toBe(false);
+    expect(dropped).toBeGreaterThan(0);
   });
 });

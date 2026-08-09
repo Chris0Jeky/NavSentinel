@@ -176,6 +176,43 @@ It currently covers:
 
 `playwright.config.ts` intentionally scopes Playwright discovery to `tests/e2e/**/*.spec.ts`. This keeps Vitest files out of the Playwright runner.
 
+#### Worker topology (serial by default)
+
+The extension lanes launch **headed persistent** Chromium contexts. On Windows,
+running several of those at once makes blank-anchor interception
+nondeterministic: the contexts compete for OS focus and user-activation state,
+so a test can receive a new page even after it has awaited both
+`data-navsentinel-capture-ready=1` and `data-navsentinel-bridge-ready=1`.
+
+Measured on 2026-07-17 against untouched `origin/main@cfa6f3c` (#460), five
+blank-anchor cases under `--repeat-each=5 --workers=4` gave **4 failed / 21
+passed**; the same cases under `--workers=1` gave **15/15 passed**.
+
+Because of that, `playwright.config.ts` and `playwright.live.config.ts` now
+resolve their topology through `tests/e2e/playwright-topology.ts`:
+
+- **default (local and CI): `workers: 1`, `fullyParallel: false`.** CI already
+  hardcoded this, so CI behaviour is unchanged; what changed is that the local
+  default no longer differs from it.
+- **opt back into parallel deliberately** with `NAVSENTINEL_E2E_WORKERS`:
+
+  ```bash
+  NAVSENTINEL_E2E_WORKERS=4 npm run test:e2e             # bash
+  $env:NAVSENTINEL_E2E_WORKERS = "4"; npm run test:e2e   # PowerShell
+  ```
+
+  A value greater than `1` also re-enables `fullyParallel`. The variable is
+  ignored when `CI` is set, so CI topology cannot drift; a value that is not a
+  positive integer fails the run instead of silently picking a topology.
+
+Before this change the local default was `workers: 4` for the default lane and
+Playwright's CPU-derived default for the live lane; both were `fullyParallel`.
+
+Treat a parallel local failure as unproven until it reproduces serially. The
+underlying focus/user-activation race is **not fixed** — #460 stays open for it.
+The already-serial lanes (`rollback`, `stress`, `corpus`, `demo`) were already
+`workers: 1` and are unchanged.
+
 Current lane intent:
 
 - `npm run test:e2e:smoke`
@@ -368,6 +405,9 @@ CI currently runs on every PR:
 - `npm run package:ext`
 - `xvfb-run -a npm run test:e2e`
 
+The CI E2E job runs serially (`workers: 1`, `fullyParallel: false`); see
+"Worker topology" above for why local runs now match it.
+
 The stress lane (`npm run test:e2e:stress`) runs on a nightly schedule.
 The corpus and FP measurement lanes run manually (they require local data).
 
@@ -380,9 +420,13 @@ If E2E fails in CI, check these first:
 
 ## Current evidence work
 
-As verified on 2026-07-10, the local regression baseline is 2,874 passing unit
-tests in 95 files and 14 E2E spec files are present. These counts are volatile;
-verify them live. Regression coverage does not establish efficacy.
+As measured on 2026-08-07 at `main` (`332c48d`) with
+`npx vitest run --reporter=dot`, the local regression baseline is 3,010 passing
+unit tests in 100 files, and 14 Playwright spec files are present under
+`tests/e2e/`. The previous figure in this paragraph (2,874 tests in 95 files,
+2026-07-10) was stale. These counts are volatile engineering snapshots: verify
+them live before reuse and keep them out of user-facing copy. Regression
+coverage does not establish efficacy.
 
 The next evidence steps are:
 
