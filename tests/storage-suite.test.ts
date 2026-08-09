@@ -763,6 +763,40 @@ describe("suite storage and allowlist migration", () => {
     expect(storedLog[0]?.id).toBe("evt-100");
   });
 
+  it("reports valid event-log records dropped by the fixed normalization cap (#391)", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { importAll } = await import("../extension/src/shared/storage");
+    const result = await importAll({
+      settings: { logLimit: 5000 },
+      eventLog: Array.from({ length: 5001 }, (_, i) => ({
+        id: `evt-${i}`, ts: i, kind: "suite_config_update",
+      })),
+    });
+
+    expect(result).toEqual({ eventLogDropped: 1 });
+    const storedLog = store["sentinelsuite:event_log_v1"] as Array<{ id: string }>;
+    expect(storedLog).toHaveLength(5000);
+    expect(storedLog[0]?.id).toBe("evt-1");
+  });
+
+  it("reports no event-log truncation when the fixed normalization cap is not exceeded (#391)", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { importAll } = await import("../extension/src/shared/storage");
+    const result = await importAll({
+      settings: { logLimit: 5000 },
+      eventLog: Array.from({ length: 5000 }, (_, i) => ({
+        id: `evt-${i}`, ts: i, kind: "suite_config_update",
+      })),
+    });
+
+    expect(result).toEqual({ eventLogDropped: 0 });
+    expect(store["sentinelsuite:event_log_v1"]).toHaveLength(5000);
+  });
+
   it("clears adaptive scores when promptOutcomes is present but not an array", async () => {
     const { chrome, store } = createChromeMock({
       "sentinelsuite:adaptive_scores_v1": { "evil.com": { adjustment: 5, sampleCount: 3, lastUpdated: 1000 } },
