@@ -482,8 +482,22 @@ export function isEventLogControlMessage(message: unknown): message is EventLogC
   return candidate.type === "ns-event-log-import-core" && isEventLogImportCoreWrites(candidate.writes);
 }
 
+const MAX_NORMALIZED_EVENT_LOG_ENTRIES = 5000;
+
+function normalizeEventLogWithMetadata(value: unknown): {
+  entries: EventLogEntry[];
+  eventLogDropped: number;
+} {
+  if (!Array.isArray(value)) return { entries: [], eventLogDropped: 0 };
+  const validEntries = value.filter(isEventLogEntry);
+  return {
+    entries: validEntries.slice(-MAX_NORMALIZED_EVENT_LOG_ENTRIES),
+    eventLogDropped: Math.max(0, validEntries.length - MAX_NORMALIZED_EVENT_LOG_ENTRIES),
+  };
+}
+
 function normalizeEventLog(value: unknown): EventLogEntry[] {
-  return Array.isArray(value) ? value.filter(isEventLogEntry).slice(-5000) : [];
+  return normalizeEventLogWithMetadata(value).entries;
 }
 
 function makeId(): string {
@@ -1731,10 +1745,15 @@ export async function exportAll(): Promise<{
   };
 }
 
-export async function importAll(payload: unknown): Promise<void> {
+export interface ImportAllResult {
+  eventLogDropped: number;
+}
+
+export async function importAll(payload: unknown): Promise<ImportAllResult> {
   if (!payload || typeof payload !== "object") throw new Error("Invalid import payload");
   const p = payload as Record<string, unknown>;
   let importLogLimit = DEFAULT_SUITE_SETTINGS.logLimit;
+  let eventLogDropped = 0;
 
   // --- Phase 1: validate & build EVERY storage.local section payload before any
   // write. This was previously a sequence of independent awaited set() calls, so a
@@ -1777,8 +1796,10 @@ export async function importAll(payload: unknown): Promise<void> {
     // the silent-eviction cap without re-normalizing (#299 R1). The total-quota residual (N entries
     // each at the per-entry cap) is fail-closed by importAll's single atomic set (#270), which
     // rejects on quota-exceeded and leaves storage unchanged.
+    const normalized = normalizeEventLogWithMetadata(p.eventLog);
+    eventLogDropped = normalized.eventLogDropped;
     writes[EVENT_LOG_KEY] = trimValidEventLog(
-      normalizeEventLog(p.eventLog).map(sanitizeImportedEventLogEntry),
+      normalized.entries.map(sanitizeImportedEventLogEntry),
       boundedLogLimit
     );
   }
@@ -1820,4 +1841,5 @@ export async function importAll(payload: unknown): Promise<void> {
     // an already-running startup migration cannot restore a stale derivative.
     await clearAdaptiveScores();
   }
+  return { eventLogDropped };
 }

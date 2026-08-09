@@ -1,4 +1,4 @@
-import type { PromptOutcome } from "../shared/storage";
+import type { ImportAllResult, PromptOutcome } from "../shared/storage";
 
 export function pct(n: number, total: number): string {
   if (total === 0) return "--";
@@ -110,6 +110,13 @@ export function classifyImportError(isDeliveryFailure: boolean): ImportErrorOutc
     : { message: "Import failed.", tone: "error" };
 }
 
+export function formatImportSuccess(eventLogDropped = 0): string {
+  if (eventLogDropped <= 0) return "Imported.";
+  const noun = eventLogDropped === 1 ? "event" : "events";
+  const verb = eventLogDropped === 1 ? "was" : "were";
+  return `Imported. Event log truncated: ${eventLogDropped} older ${noun} ${verb} not imported.`;
+}
+
 /** Shared UI hooks for the stats/import orchestrations (injected for testing). */
 export interface StatsUiDeps {
   flash: (message: string, tone?: "error") => void;
@@ -148,14 +155,14 @@ export async function runClearStats(
  */
 export async function runImportFlow(
   deps: StatsUiDeps & {
-    importPayload: () => Promise<void>;
+    importPayload: () => Promise<ImportAllResult | void>;
     isDeliveryFailure: (error: unknown) => boolean;
   },
 ): Promise<void> {
   try {
-    await deps.importPayload();
+    const result = await deps.importPayload();
     await deps.refresh();
-    deps.flash("Imported.");
+    deps.flash(formatImportSuccess(result?.eventLogDropped));
   } catch (e) {
     console.warn("[NavSentinel] import failed:", e);
     // Guard the refresh so a failed re-render can neither mask the status nor
