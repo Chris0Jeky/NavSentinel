@@ -45,6 +45,16 @@ npm run gym:serve
 Security-product claims are part of the implementation and receive the same
 review discipline as code.
 
+**Verified-claims policy.** No user-facing protection claim ships without a
+committed measurement artifact or a CI-verified fixture behind it. Design
+intent, a merged PR, an issue title, or a green local run that leaves nothing
+committed are not evidence; if no artifact or CI-verified fixture exists, narrow
+the claim to what is actually proven or drop it until the evidence lands. The
+same rule governs `docs/Project_Roadmap.md`: a gate checkbox is checked only
+when that task's own **Done when** text is literally true today. A partially met
+gate stays unchecked and carries a dated note recording what is still missing,
+rather than being checked with a caveat.
+
 - Describe a capability as shipped only when its production path and production
   asset are enabled in the packaged release. A placeholder, test fixture,
   never-firing path, or experimental toggle is not a shipped protection.
