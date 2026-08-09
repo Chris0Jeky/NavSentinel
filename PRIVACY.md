@@ -26,12 +26,32 @@ The current development build stores:
 |---|---|---|
 | Suite settings | Until changed or extension removal | Export/import; settings can be changed in Options |
 | Navigation allowlist and trusted credential domains | Until user removal or extension removal | Export/import; each has Options controls |
-| Event log | User-configured 50–5,000 entries (default 300), oldest evicted | Export/import; **Clear log** |
-| Prompt outcomes | Latest 500 entries | Export/import; **Clear stats** |
-| Adaptive per-domain scores | Up to 200 domains | Exported; ignored on import and recomputed from imported prompt outcomes; **Clear stats** |
-| Domain behavior profiles | Up to 500 domains; per-domain NRS history capped at 50; old counts decay | Not in export; **Clear domain profiles** |
+| Event log | User-configured 50–5,000 entries (default 300), oldest evicted | Export/import; **Clear log**; **Clear behavioural data** |
+| Prompt outcomes | Latest 500 entries | Export/import; **Clear stats**; **Clear behavioural data** |
+| Adaptive per-domain scores | Up to 200 domains | Exported; ignored on import and recomputed from imported prompt outcomes; **Clear stats**; **Clear behavioural data** |
+| Domain behavior profiles | Up to 500 domains; per-domain NRS history capped at 50; old counts decay | Not in export; **Clear domain profiles**; **Clear behavioural data** |
 | Navigation-category profile | Category counts normalized after 10,000 observations; recent burst list capped at 20 and pruned after 24 hours | Not in export; no current user-facing clear control |
 | Smart-default cooldown pairs | Up to 200 source/destination pairs; each expires after 24 hours | Not in export; no current user-facing clear control |
+
+**Clear behavioural data** (Options → Analytics) is the single reset control. It
+erases the event log, prompt outcomes, adaptive per-domain scores, and domain
+behaviour profiles in one service-worker-owned pass, and deliberately KEEPS
+suite settings, the navigation allowlist, and trusted credential domains —
+erasing configuration you set on purpose would be data loss. Navigation-category
+counts and smart-default cooldowns are not in that boundary and still have no
+clear control. The boundary is a stated assumption pending an owner decision on
+issue #474.
+
+The reset records its remaining lanes in `chrome.storage.local` before the first
+destructive write, so a service-worker termination or browser restart part-way
+through finishes the remaining lanes on the next start rather than leaving
+residue. If a lane cannot be cleared, the control says which store still holds
+data instead of reporting success; and if every store cleared but that record
+could not be retired, the control says the reset was not finalized and may run
+again at the next browser start, rather than reporting a success that could
+later erase records you create afterwards. One residual remains: domain profiles are
+written directly by content scripts (see issue #181), so a profile write already
+in flight when the reset runs can survive it; re-running the control clears it.
 
 The event and prompt-outcome records can include timestamps, source/destination
 domains, outcomes, risk scores, reason codes, bounded structural click context,
@@ -50,6 +70,9 @@ before beta: minimize persistent logs/profiles to the least identifying form;
 retain exact URLs in `chrome.storage.session` only where target authorization,
 rollback, redirect, or OAuth correctness requires them; bind them to a tab and
 short TTL; and add one user-facing reset that clears every behavioral store.
+The unified reset now exists as **Clear behavioural data**, scoped to the four
+stores listed in the table; the remaining RI-06 work is the owner's boundary
+ruling (#474) plus the URL-minimization sign-off.
 
 `chrome.storage.session` holds ephemeral per-tab security state such as allow
 windows, gesture tokens, exact rollback/forward/OAuth URLs, redirect chains,
@@ -114,16 +137,20 @@ This is for operator convenience and reproducibility. Treat exported files as lo
 ## Effective Privacy Practice
 
 - clear the event log before recording demos if you do not want earlier decisions preserved
-- use **Clear stats** and **Clear domain profiles** for those separate stores;
-  note that navigation-category and cooldown reset controls are still missing
+- use **Clear behavioural data** to reset the event log, prompt outcomes,
+  adaptive scores, and domain profiles together; the per-store **Clear log**,
+  **Clear stats**, and **Clear domain profiles** controls remain for narrower
+  resets. Navigation-category and cooldown reset controls are still missing
 - export state only when you actually need to reproduce or share a configuration
 - avoid trusting domains casually; trusted-domain state affects credential prompts
 
 ## Data Retention
 
 Bounds and controls are listed in the table above. Extension removal clears its
-local/session storage. RI-06 adds a complete in-product behavioral reset before
-beta.
+local/session storage. The in-product **Clear behavioural data** reset covers the
+four behavioural stores named above; the navigation-category profile and
+smart-default cooldowns are still outside it, and the boundary itself awaits the
+owner decision on issue #474.
 
 ## Scope
 

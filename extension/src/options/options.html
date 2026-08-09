@@ -267,6 +267,24 @@
                 <div class="card-body" id="domainProfiles"></div>
               </div>
             </div>
+
+            <div class="card">
+              <div class="card-head">
+                <div class="card-title">Clear all behavioural data</div>
+              </div>
+              <div class="card-body">
+                <p class="input-hint" id="desc-clearBehavioural">
+                  Erases every locally recorded behavioural store in one pass: the event log,
+                  prompt outcomes, adaptive per-domain scores, and domain risk profiles.
+                  Keeps your settings, navigation allowlist, and trusted credential domains.
+                </p>
+                <button
+                  id="clearBehavioural"
+                  class="btn btn--ghost btn--danger"
+                  aria-describedby="desc-clearBehavioural"
+                >Clear behavioural data</button>
+              </div>
+            </div>
           </section>
 
           <!-- Event log section -->

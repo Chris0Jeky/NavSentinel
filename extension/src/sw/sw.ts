@@ -8,15 +8,25 @@ import {
   appendEvent,
   handleEventLogAppendMessage,
   handleEventLogControlMessage,
+  handleSuiteImportMessage,
   handlePromptOutcomeStorageMessage,
   isEventLogAppendMessage,
   isEventLogControlMessage,
   isEventLogMigrationMessage,
   isPromptOutcomeStorageMessage,
+  isSuiteImportMessage,
   migrateStoredEventLogUrls,
   migrateStoredPromptOutcomes,
   SUITE_SETTINGS_KEY,
 } from "../shared/storage";
+// RI-06 (#474): the clear-all lives in its own module so the domain-profile
+// chunk boundary survives bundling. Static import — MV3 module workers cannot
+// resolve a runtime `import()`.
+import {
+  handleBehaviouralResetMessage,
+  isBehaviouralResetMessage,
+  resumeInterruptedBehaviouralReset,
+} from "../shared/behavioural_reset";
 import { RedirectChainTracker } from "../shared/redirect_chain";
 import type { PendingDecisionRuntimeMessage } from "../shared/pending_decision";
 import {
@@ -49,6 +59,12 @@ void migrateStoredEventLogUrls().catch((err) => {
 });
 void migrateStoredPromptOutcomes().catch((err) => {
   console.warn("[NavSentinel] prompt-outcome migration failed; will retry on worker restart:", err);
+});
+// RI-06 (#474): a clear-all behavioural reset records its remaining lanes in
+// storage.local before the first destructive write, so a worker termination or
+// browser restart mid-reset resumes here instead of leaving residue behind.
+void resumeInterruptedBehaviouralReset().catch((err) => {
+  console.warn("[NavSentinel] behavioural reset resume failed; will retry on worker restart:", err);
 });
 const NAV_ALLOW_TTL_MS = 1500;
 const NAV_GESTURE_TTL_MS = 1500;
@@ -666,6 +682,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (isPromptOutcomeStorageMessage(message)) {
     void handlePromptOutcomeStorageMessage(message, sender)
+      .then((response) => sendResponse?.(response))
+      .catch((err) => {
+        sendResponse?.({ ok: false, error: err instanceof Error ? err.message : String(err) });
+      });
+    return true;
+  }
+
+  if (isSuiteImportMessage(message)) {
+    void handleSuiteImportMessage(message, sender)
+      .then((response) => sendResponse?.(response))
+      .catch((err) => {
+        sendResponse?.({ ok: false, error: err instanceof Error ? err.message : String(err) });
+      });
+    return true;
+  }
+
+  if (isBehaviouralResetMessage(message)) {
+    void handleBehaviouralResetMessage(sender)
       .then((response) => sendResponse?.(response))
       .catch((err) => {
         sendResponse?.({ ok: false, error: err instanceof Error ? err.message : String(err) });

@@ -114,6 +114,17 @@ const budgets = [
     maxKB: 6,
   },
   {
+    // RI-06 (#474): the clear-all lives in its own module so that its
+    // `domain_profile` dependency does not give that module the storage chunk's
+    // entry reachability — which folded domain_profile into `storage` and made
+    // the budget above MISS. This entry is the boundary's regression guard: if
+    // the reset is ever pulled back into `storage.ts`, this line goes MISS
+    // before the merged bytes can hide inside the 200KB storage budget.
+    label: "behavioural_reset (shared)",
+    glob: "assets/behavioural_reset-*.js",
+    maxKB: 6,
+  },
+  {
     // Bumped 5 -> 8 KB for the burst-coalescing count pill (#351): when many
     // block notices fire in quick succession they collapse into one small pill
     // (count + expand) instead of a full card each, which added the pill render
