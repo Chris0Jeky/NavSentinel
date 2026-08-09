@@ -84,6 +84,18 @@ function isPasswordForm(form: HTMLFormElement): boolean {
   }
 }
 
+/**
+ * Max chars of a raw `action`/`formaction` attribute that resolveActionUrl will
+ * scan in JS. The attribute has no length limit and is attacker-controlled, and
+ * resolveActionUrl runs synchronously on the submit path (once in handleSubmit
+ * plus once per blockIfActionMutated re-check, ~3x per submission), so a
+ * multi-MB value made the old `.trim()` + `.toLowerCase()` an O(MB) main-thread
+ * scan exactly when the security prompt should appear. Sibling of
+ * content_analyzer's MAX_FORM_ACTION_LEN; 2048 comfortably covers real
+ * query-bearing action URLs. (#410)
+ */
+const MAX_ACTION_SCAN_LEN = 2048;
+
 function resolveActionUrl(form: HTMLFormElement, submitter: HTMLElement | null): string {
   try {
     // requestSubmit(submitter) honors the submitter's formaction per the HTML
@@ -91,13 +103,37 @@ function resolveActionUrl(form: HTMLFormElement, submitter: HTMLElement | null):
     // destination, not just the form's action. A submitter carrying the
     // formaction attribute (even empty, which the browser resolves to the current
     // document) overrides the form action; otherwise fall back to it (#227.1).
-    const raw = (
-      submitter?.hasAttribute("formaction")
-        ? submitter.getAttribute("formaction") || ""
-        : form.getAttribute("action") || ""
-    ).trim();
-    if (!raw || raw.toLowerCase().startsWith("javascript:")) return location.href;
-    return new URL(raw, location.href).href;
+    const rawAttr = submitter?.hasAttribute("formaction")
+      ? submitter.getAttribute("formaction") || ""
+      : form.getAttribute("action") || "";
+
+    // #410: bound the JS-level scan only -- head-slice a probe before trim().
+    // Deliberately NOT the content_analyzer pattern of resolving the *sliced*
+    // value: this function is the credential path's source of truth for the
+    // destination host, so truncating it would be a bypass, not a hardening. An
+    // action padded with >MAX_ACTION_SCAN_LEN of leading whitespace followed by
+    // "https://evil.example/collect" still POSTs there (the URL parser strips
+    // leading/trailing C0-and-space), so resolving a whitespace-only slice would
+    // report the current document and silently drop the cross-site prompt. It
+    // would also make two differing actions compare byte-equal in
+    // blockIfActionMutated and suppress the TOCTOU block. So the full attribute
+    // is handed to `new URL` (native, and whitespace-stripping) and only the
+    // emptiness probe is capped.
+    const probe = rawAttr.length > MAX_ACTION_SCAN_LEN
+      ? rawAttr.slice(0, MAX_ACTION_SCAN_LEN)
+      : rawAttr;
+    // Whitespace-only within the cap means a genuinely empty action -> current
+    // document. Past the cap we cannot say that cheaply, so fall through and let
+    // `new URL` decide (a wholly-whitespace value resolves to this document too).
+    if (!probe.trim() && rawAttr.length <= MAX_ACTION_SCAN_LEN) return location.href;
+
+    const resolved = new URL(rawAttr, location.href);
+    // Scheme test on the parsed protocol rather than a lowercased prefix of the
+    // raw string: same result without an O(len) toLowerCase allocation, and it
+    // also catches schemes the URL parser normalizes (mixed case, embedded tabs
+    // or newlines) that the old string prefix check missed.
+    if (resolved.protocol === "javascript:") return location.href;
+    return resolved.href;
   } catch {
     return location.href;
   }
