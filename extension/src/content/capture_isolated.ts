@@ -27,7 +27,7 @@ import {
   computeJsBehaviorScore,
   type JsBehaviorState,
 } from "../shared/js_behavior_state";
-import type { RedirectChainInfo } from "../shared/redirect_chain";
+import { getFreshChainInfo, primeChainInfoCache } from "./chain_info_cache";
 import {
   checkReputationViaMessage,
   isKnownBadDestination,
@@ -169,10 +169,7 @@ let forwardCheckTimer = 0;
 let previousMode = "";
 let gestureNavAttempts = 0;
 let gestureDownId: number | null = null;
-const CHAIN_INFO_TTL_MS = 30_000;
 const FORWARD_CHECK_INFLIGHT_TIMEOUT_MS = 2_000;
-let cachedChainInfo: RedirectChainInfo | null = null;
-let cachedChainInfoAt = 0;
 /** Cached CSP analysis for the current page (computed once after DOM ready). */
 let cachedCSPAnalysis: CSPAnalysis | null = null;
 let cachedDomainRepeatOffender = false;
@@ -265,19 +262,19 @@ async function initSettings() {
     } catch {
       // ignore
     }
-    // Fetch redirect chain info for this tab's navigation
-    try {
-      chrome.runtime.sendMessage({ type: "ns-get-chain-info" }, (resp) => {
-        if (chrome.runtime.lastError) return;
-        if (resp && typeof resp.depth === "number") {
-          cachedChainInfo = resp;
-          cachedChainInfoAt = Date.now();
-        }
-      });
-    } catch {
-      // ignore
-    }
   }
+}
+
+// Prime the redirect chain-info fetch at module init rather than inside
+// initSettings(). initSettings() awaits three storage round-trips (settings,
+// allowlist, adaptive threshold) before its body resumes, and every one of
+// them widened the window in which a click could compute NRS with no chain
+// info cached (#389). Priming here issues the request at document_start, while
+// the decision path stays fully synchronous — see chain_info_cache.ts for the
+// residual first-eval staleness this does NOT remove, and why gating the first
+// decision on the reply was rejected.
+if (isTopFrame()) {
+  primeChainInfoCache();
 }
 
 void initSettings();
@@ -1567,8 +1564,11 @@ window.addEventListener(
       doubleClickHijackActive: dblClickHijack,
       knownBadDomain: destDomainBad,
       ...(() => {
-        const chain = cachedChainInfo;
-        if (chain && chain.depth >= 2 && Date.now() - cachedChainInfoAt <= CHAIN_INFO_TTL_MS) {
+        // Synchronous read only — never awaits the ns-get-chain-info reply.
+        // Null here means the reply has not landed yet, so this evaluation
+        // scores without the chain factors (accepted staleness, #389).
+        const chain = getFreshChainInfo();
+        if (chain && chain.depth >= 2) {
           return {
             redirectChainDepth: chain.depth,
             redirectViaKnownRedirector: chain.viaKnownRedirector,
