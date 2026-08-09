@@ -548,6 +548,14 @@ const BRAND_LIST: ReadonlyArray<readonly [brand: string, domain: string]> = [
  * This list is intentionally conservative -- only high-traffic domains
  * that users encounter daily are included.
  *
+ * AUTHENTICITY BAR (#320): an entry that is a syntactically valid registrable
+ * domain but is NOT actually controlled by the named brand is a free pass
+ * through lookalike detection -- and an entry that is not registered at all can
+ * be bought by anyone. Add an entry only with concrete evidence of brand
+ * control (registry RDAP + authoritative nameservers, or vendor documentation),
+ * and record that evidence inline. Every entry below was DNS/RDAP-swept on
+ * 2026-08-07; all resolve with brand-consistent nameservers.
+ *
  * @internal Exported only so tests can assert the registrable-domain invariant
  * (see tests/psl-domain.test.ts). This is the live singleton consulted by
  * `isBrandAlias`; the `ReadonlyMap`/`ReadonlySet` types are compile-time only,
@@ -566,6 +574,14 @@ export const BRAND_KNOWN_ALIASES: ReadonlyMap<string, ReadonlySet<string>> = new
     "microsoftedge.com",
   ])],
   ["amazon", new Set([
+    // "amazonws.com" (no 'a') is NOT a typosquat of amazonaws.com -- it is
+    // Amazon's own defensive registration, so it stays. Evidence 2026-08-07
+    // (#320): rdap.verisign.com/com/v1/domain/amazonws.com -> registrar
+    // "MarkMonitor Inc.", nameservers NS1/NS2.AMZNDNS.{COM,NET,ORG,CO.UK}
+    // (Amazon's corporate DNS, same set that serves amazonpay.com), registered
+    // 2004-01-07; its A record 207.171.166.22 falls in ARIN network AMAZON-01
+    // (rdap.arin.net/registry/ip/207.171.166.22, registrant "Amazon.com, Inc.").
+    // It serves no HTTP content, so it is inert rather than user-visible.
     "amazonaws.com", "amazonws.com", "amazontrust.com",
     "amazonpay.com", "amazoncognito.com",
   ])],
@@ -576,7 +592,15 @@ export const BRAND_KNOWN_ALIASES: ReadonlyMap<string, ReadonlySet<string>> = new
   ["gitlab", new Set(["gitlab.io"])],
   ["apple", new Set(["apple-dns.net"])],
   ["facebook", new Set(["facebookcorewwwi.onion", "facebookmail.com"])],
-  ["instagram", new Set(["instagramstatic.com"])],
+  // No "instagram" entry. The former "instagramstatic.com" alias was removed in
+  // #320: the domain is UNREGISTERED (2026-08-07 --
+  // rdap.verisign.com/com/v1/domain/instagramstatic.com returns HTTP 404, and it
+  // is NXDOMAIN at 8.8.8.8), so anyone could register it and inherit exemption
+  // from BRAND_KEYWORD_DOMAIN and SUBDOMAIN_STUFFING on a domain containing
+  // "instagram". Meta's documented Instagram CDN is cdninstagram.com (RDAP:
+  // registrar "RegistrarSafe, LLC", nameservers A-D.NS.INSTAGRAM.COM) -- it is
+  // deliberately NOT added here, because adding an allowlist entry loosens
+  // detection and should follow an observed false positive, not an audit.
   ["netflix", new Set(["nflxext.com", "nflxvideo.net"])],
   ["stripe", new Set(["stripecdn.com"])],
   ["yahoo", new Set(["yahooapis.com", "yahoodns.net"])],

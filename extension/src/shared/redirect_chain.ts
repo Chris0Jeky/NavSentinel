@@ -52,17 +52,47 @@ const TRACKING_PREFIXES = [
 ];
 
 /**
- * Known-legitimate domains that happen to match tracking prefixes
+ * Known-legitimate hosts that happen to match a TRACKING_PREFIXES entry
  * (e.g. go.microsoft.com, go.dev, click.mailchimp.com).
  * These are NOT attacker-operated redirectors.
+ *
+ * A matched host is fully exempt from isKnownRedirector (#285), so every entry
+ * must be a real, brand-controlled, publicly resolving host: an entry that does
+ * not resolve is dead config, and one a third party could register would be a
+ * free pass through redirector detection. Each entry records the evidence that
+ * keeps it -- do not add one without equivalent evidence.
+ *
+ * Audited 2026-08-07 (#295). Removed as NXDOMAIN at 8.8.8.8: "go.google.com"
+ * (no such host) and "go.googleprod.com" (googleprod.com is Google-owned --
+ * MarkMonitor, NS1-4.GOOGLE.COM, registry-locked -- but has no "go" host and no
+ * A record, and the real internal go-link host go.corp.google.com is never
+ * reachable from a user browser). Neither was attacker-registerable, so this is
+ * dead-config hygiene, not a closed bypass.
  */
 const TRACKING_PREFIX_ALLOWLIST = new Set([
+  // Microsoft's FWLink forwarding service, documented at
+  // learn.microsoft.com/en-us/product-style-guide-msft-internal/link-guidelines/fwlink-guidelines/create-an-fwlink
+  // Verified 2026-08-07: /fwlink/?linkid=2109783 -> HTTP 302 to www.bing.com.
   "go.microsoft.com",
+  // The official Go language site. It is not a redirector at all -- it only
+  // matches because the "go." prefix check is a string prefix on the whole
+  // hostname, so without this entry every go.dev doc page scores as one.
+  // Verified 2026-08-07: HTTP 200; A records 216.239.32/34/36/38.21 (Google).
   "go.dev",
-  "go.googleprod.com",
-  "go.google.com",
+  // Mailchimp's click-tracking host. Verified 2026-08-07: CNAME ->
+  // mandrillapp.com (Mailchimp's Mandrill infrastructure); mailchimp.com RDAP
+  // shows registrar "MarkMonitor Inc." with Akamai (*.AKAM.NET) nameservers.
   "click.mailchimp.com",
+  // Kit's (formerly ConvertKit) link-handling host. Verified 2026-08-07: CNAME
+  // -> link-handling-1410854111.us-east-2.elb.amazonaws.com, and an HTTPS GET
+  // returns HTTP 301 to app.kit.com; convertkit.com itself 301s to kit.com.
+  // Note: Kit's currently documented tracking domain is click.convertkit-mail.com,
+  // which is deliberately NOT added here -- adding an allowlist entry loosens
+  // detection and should follow an observed false positive.
   "click.convertkit.com",
+  // Postmark's link-tracking host. postmarkapp.com/support/article/1059-what-is-pstmrk-it
+  // states "we use the pstmrk.it domain for link tracking"; the user-visible
+  // host is click.pstmrk.it. Verified 2026-08-07: resolves, HTTP 302 to pstmrk.it.
   "click.pstmrk.it",
 ]);
 
