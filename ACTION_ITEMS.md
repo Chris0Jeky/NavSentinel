@@ -14,9 +14,10 @@ context to resume by stable ID.
 jobs) and recorded the owner waiver for the browser-surface queue. Gate-3 is
 waived for exactly **#528, #532, #535, #514, #534, #520, #521, #522, #526,
 #533, and #542**; this is not a real-Chrome pass and those PRs remain open until
-they merge. The AI-28 boundary for #535 and the AI-14/#417 hold for #531 are
-also explicitly recorded below; no merge, `measure:fp`, or headed-measurement
-claim is made. Two milestones now exist:
+they merge. A separate **#531-only** owner waiver covers its remaining human
+Gate-3 blocker and AI-14/#417 measurement hold; #531 stays out of the AI-27
+batch. Technical CI/review gates still apply, and no real-Chrome, `measure:fp`,
+or headed-measurement claim is made. Two milestones now exist:
 `v0.5.0-unlisted-beta` (7 real blockers) and `post-beta-horizon` (the 15 frozen
 Horizon epics #439–#453, moved out of the active queue). AI-23 now carries a
 completed inspection and a *retire* recommendation for `chore/deny-floor-v1.6.3`,
@@ -145,7 +146,10 @@ they remain pending their dependent PR merge state rather than being complete.
 
 > **Owner waiver recorded 2026-08-09:** Gate-3 is waived for exactly #528, #532,
 > #535, #514, #534, #520, #521, #522, #526, #533, and #542. This is not a
-> real-Chrome pass, and AI-27 remains pending until every listed PR merges.
+> real-Chrome pass, and AI-27 remains pending until every listed PR merges. A
+> separate #531-only waiver covers its remaining human Gate-3 and AI-14/#417
+> measurement holds; #531 is not part of this eleven-PR batch, and technical
+> CI/review gates still apply.
 **AI-13, AI-21 and AI-22 are resolved** — their
 PRs (#356, #464, #466) merged on 2026-07-25 after Chris chose to clear the
 browser-surface gate by automated equivalent rather than a manual pass; their
@@ -368,9 +372,12 @@ outcome and is what you chose on 2026-07-25; it is recorded as a waiver, never a
 Gate-3 pass), and say whether you ran items 2-3 so AI-24 can be closed or left
 open accordingly. Anything you fail, say so and it becomes a fix slice.
 
-**Not in this batch:** PR #531 (OAuth state corroboration) is titled
-`[HELD on AI-14/#417]` and must **not** enter the Gate-3 queue — see AI-14. It is
-open only as a durable backup of work that previously existed on one machine.
+**Not in this batch:** PR #531 (OAuth state corroboration) has a separate
+**#531-only owner waiver** for its remaining human Gate-3 blocker and AI-14/#417
+measurement hold, but must **not** enter the eleven-PR AI-27 queue. The waiver is
+not a real-Chrome, `measure:fp`, or headed-measurement claim; technical CI/review
+gates still apply. It remains an open durable backup of work that previously
+existed on one machine — see AI-14.
 
 **🚨 OPEN: AI-28 — Define the behavioural-data boundary for the RI-06 clear-all
 reset.** Issue #474 (the last RI-06 slice) cannot be finished correctly without an
@@ -637,9 +644,11 @@ checks and hosted product CI, and posts a reproducible headed measurement plan.
 Do not use the closed branch as a current test or merge target.
 
 **Status update (2026-08-09): WAIVED FOR #531 ONLY.** The owner waived the
-AI-14/#417 measurement hold for **PR #531 specifically**. This does not claim
-`measure:fp` or a headed measurement ran, and it does not waive the methodology
-requirement for other work. AI-14 remains blocked for unrelated or future
+AI-14/#417 measurement hold for **PR #531 specifically**, along with its
+remaining human Gate-3 blocker. This separate waiver does not put #531 in the
+AI-27 batch, does not claim real-Chrome, `measure:fp`, or headed measurement ran,
+and does not waive the methodology requirement for other work. Technical
+CI/review gates still apply; AI-14 remains blocked for unrelated or future
 measurement work.
 
 **AI-12 — Top-site FP relief + D1 (#350 → PR #354) · ✅ RESOLVED 2026-06-23 — MERGED.** Chris manually confirmed the relief works on LinkedIn ("tested it on linkedin and it seemed to work fine now") = his measure/Gate-3 in lieu of the full `measure:fp` run (which needs headed Chromium + live Tranco, sandbox-can't). **#354 merged into `main`** (`c4426cf`): `getTierAdjustedBlockThreshold` now relieves TOP_SITE + CDS-only (benign-structural whitelist) by `NRS_TOP_SITE_CDS_RELIEF`; trust list grew 24→42 with safe `includeSubdomains`. Green CI (Build/Unit + E2E) on the main-merged head. **Follow-up:** `+20` is an unvalidated starting value; do not tune it again without the valid #417/#416 FP/TP evidence required by D25.
