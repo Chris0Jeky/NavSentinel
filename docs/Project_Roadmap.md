@@ -18,7 +18,7 @@ phase labels and artifact counts must not be read as product readiness.
 | 1 | Validate Foundation | 8 | 8 | **Validation gate open** (stale FP result; invalid corpus result) |
 | 2 | Target interaction threats | 13 | 13 | **Efficacy/competitive gate open**; reputation is excluded from the selected beta profile |
 | 3 | Productize | 12 | 12 | **Release/distribution gate open**: drafts/scope are not CWS distribution or an audit |
-| 4 | Differentiate | 8 | 4 | **Frozen** until beta evidence; legacy visual-sim code is excised with Gate-3 pending, and JS behavior is unmeasured |
+| 4 | Differentiate | 8 | 4 | **Frozen** until beta evidence; legacy visual-sim code is excised under a recorded Gate-3 waiver (not a real-Chrome pass), and JS behavior is unmeasured |
 
 The historical registry contains 47 implementation tasks; 43 have merged
 artifacts. Do not publish that ratio as a product-completion score. Product
@@ -1182,7 +1182,7 @@ release/evidence sequence in `Product_Strategy.md`.
 
 | ID | Title | Effort | Status | Depends On |
 |---|---|---|---|---|
-| P4-01 | Visual similarity detection | XL | **implementation verified; Gate-3 pending** | #424 / RI-02 | Legacy path is removed; a future opt-in design starts fresh only after evidence |
+| P4-01 | Visual similarity detection | XL | **removed by #514 under a recorded Gate-3 waiver; no real-Chrome pass** | #424 / RI-02 | Legacy path is removed; a future opt-in design starts fresh only after evidence |
 | P4-02 | JavaScript behavior analysis | XL | **beta-off pending measurement** | #127 | Broad global wrappers require compatibility and runtime-overhead evidence |
 | P4-03 | Cross-browser port (Firefox MV3) | XL | **frozen** | Desktop-Chrome retention evidence |
 | P4-04 | Community threat intelligence | XL | **frozen** | User scale, privacy, governance, and infrastructure evidence |
