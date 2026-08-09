@@ -433,6 +433,12 @@ export type EventLogControlMessage =
   | { type: "ns-event-log-clear" }
   | { type: "ns-event-log-import-core"; writes: Record<string, unknown> };
 
+export type SuiteImportMessage = { type: "ns-suite-import"; payload: unknown };
+
+type SuiteImportResponse =
+  | { ok: true }
+  | { ok: false; error: string; code?: "unauthorized" | "partial" };
+
 type EventLogStorageResponse =
   | { ok: true }
   | { ok: false; error: string; code?: "unauthorized" };
@@ -500,6 +506,14 @@ export function isEventLogControlMessage(message: unknown): message is EventLogC
   const candidate = message as Record<string, unknown>;
   if (candidate.type === "ns-event-log-clear") return true;
   return candidate.type === "ns-event-log-import-core" && isEventLogImportCoreWrites(candidate.writes);
+}
+
+export function isSuiteImportMessage(message: unknown): message is SuiteImportMessage {
+  return Boolean(
+    message &&
+      typeof message === "object" &&
+      (message as Record<string, unknown>).type === "ns-suite-import"
+  );
 }
 
 function normalizeEventLog(value: unknown): EventLogEntry[] {
@@ -1355,6 +1369,37 @@ class PromptOutcomeUnauthorizedError extends Error {}
 // rest of a non-atomic import did apply) from a total failure.
 export class PromptOutcomeDeliveryError extends Error {}
 
+function sendSuiteImportMessage(payload: unknown): Promise<void> {
+  return new Promise((resolve, reject) => {
+    try {
+      chrome.runtime.sendMessage(
+        { type: "ns-suite-import", payload } satisfies SuiteImportMessage,
+        (response?: SuiteImportResponse) => {
+          const lastError = chrome.runtime.lastError;
+          if (lastError) {
+            // A lost whole-import response is ambiguous: the worker may have
+            // committed the import already. Never retry or replay it here.
+            reject(new Error("Suite import not confirmed: " + (lastError.message ?? "runtime.sendMessage failed")));
+            return;
+          }
+          if (response?.ok) {
+            resolve();
+            return;
+          }
+          if (response?.code === "partial") {
+            reject(new PromptOutcomeDeliveryError(response.error));
+            return;
+          }
+          reject(new Error(response?.error ?? "Suite import failed"));
+        }
+      );
+    } catch (err) {
+      // A synchronous channel failure is just as ambiguous as a lost callback.
+      reject(new Error("Suite import not confirmed: " + (err instanceof Error ? err.message : String(err))));
+    }
+  });
+}
+
 function sendPromptOutcomeStorageMessage(message: PromptOutcomeStorageMessage): Promise<void> {
   return new Promise((resolve, reject) => {
     try {
@@ -1830,7 +1875,38 @@ export function queueBulkDataOperation<T>(operation: () => Promise<T>): Promise<
 }
 
 export function importAll(payload: unknown): Promise<void> {
+  const runtime = (globalThis as { chrome?: typeof chrome }).chrome?.runtime;
+  if (!isExtensionServiceWorkerContext() && typeof runtime?.sendMessage === "function") {
+    // The whole import must cross the worker boundary as one operation. Sending
+    // core and prompt phases separately lets another Options context reset
+    // between them; the worker owns ordering across all callers.
+    return queueBulkDataOperation(() => sendSuiteImportMessage(payload));
+  }
   return queueBulkDataOperation(() => importAllDirect(payload));
+}
+
+export async function handleSuiteImportMessage(
+  message: SuiteImportMessage,
+  sender?: chrome.runtime.MessageSender
+): Promise<SuiteImportResponse> {
+  if (!isTrustedExtensionPageSender(sender)) {
+    return {
+      ok: false,
+      error: "Unauthorized suite import from untrusted sender",
+      code: "unauthorized",
+    };
+  }
+  try {
+    // Do not call public importAll here: that would enqueue a second operation
+    // on the same queue and deadlock. The worker owns this queue entry directly.
+    await queueBulkDataOperation(() => importAllDirect(message.payload));
+    return { ok: true };
+  } catch (err) {
+    if (err instanceof PromptOutcomeDeliveryError) {
+      return { ok: false, error: err.message, code: "partial" };
+    }
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 async function importAllDirect(payload: unknown): Promise<void> {
@@ -1896,6 +1972,7 @@ async function importAllDirect(payload: unknown): Promise<void> {
   }
 
   // --- Phase 2: commit the core sections in a single atomic set ---
+  let coreCommitted = false;
   if (Object.keys(writes).length > 0) {
     if (EVENT_LOG_KEY in writes) {
       // The append/migration lane is authoritative for every event-log mutation.
@@ -1910,16 +1987,27 @@ async function importAllDirect(payload: unknown): Promise<void> {
     } else {
       await chrome.storage.local.set(writes);
     }
+    coreCommitted = true;
   }
 
   // --- Phase 3: prompt outcomes LAST (separate by design; recomputes adaptive
   // scores; may be SW-delegated and reject on exhaustion → surfaced as a partial
   // import by the options UI). The core sections above are already consistent. ---
-  if (hasPromptOutcomes) {
-    await replacePromptOutcomes(p.promptOutcomes as PromptOutcomeEntry[]);
-  } else {
-    // Keep the phase-2 atomic clear above, then queue an idempotent barrier so
-    // an already-running startup migration cannot restore a stale derivative.
-    await clearAdaptiveScores();
+  try {
+    if (hasPromptOutcomes) {
+      await replacePromptOutcomes(p.promptOutcomes as PromptOutcomeEntry[]);
+    } else {
+      // Keep the phase-2 atomic clear above, then queue an idempotent barrier so
+      // an already-running startup migration cannot restore a stale derivative.
+      await clearAdaptiveScores();
+    }
+  } catch (err) {
+    if (coreCommitted && !(err instanceof PromptOutcomeDeliveryError)) {
+      throw new PromptOutcomeDeliveryError(
+        "Prompt-related import data was not fully updated after the core import committed",
+        { cause: err }
+      );
+    }
+    throw err;
   }
 }

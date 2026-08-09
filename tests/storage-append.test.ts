@@ -1558,8 +1558,8 @@ describe("appendPromptOutcome", () => {
     expect(store[PROMPT_OUTCOMES_KEY]).toEqual([]);
   });
 
-  it("bounds and filters import outcomes before runtime delegation", async () => {
-    const { chrome } = createChromeMock();
+  it("delegates one whole import request without writing locally", async () => {
+    const { chrome, store } = createChromeMock();
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
     let sentMessage: unknown;
     const runtimeChrome = chrome as unknown as {
@@ -1591,11 +1591,9 @@ describe("appendPromptOutcome", () => {
 
     await importAll({ promptOutcomes: outcomes });
 
-    expect(sentMessage).toMatchObject({ type: "ns-prompt-outcome-replace" });
-    const sentOutcomes = (sentMessage as { outcomes: Array<{ id: string }> }).outcomes;
-    expect(sentOutcomes).toHaveLength(500);
-    expect(sentOutcomes[0]!.id).toBe("valid-20");
-    expect(sentOutcomes[sentOutcomes.length - 1]!.id).toBe("valid-519");
+    expect(sentMessage).toMatchObject({ type: "ns-suite-import", payload: { promptOutcomes: outcomes } });
+    expect((sentMessage as { payload: { promptOutcomes: unknown[] } }).payload.promptOutcomes).toBe(outcomes);
+    expect(store[PROMPT_OUTCOMES_KEY]).toBeUndefined();
   });
 
   it("serializes clear after a queued append so the clear wins", async () => {
@@ -1757,7 +1755,7 @@ describe("event-log control messages — sender authorization", () => {
     expect(store[EVENT_LOG_KEY]).toEqual([]);
   });
 
-  it("delegates the complete atomic core import rather than directly writing an event log", async () => {
+  it("delegates the complete suite import rather than directly writing any core data", async () => {
     const { chrome, store } = createChromeMock();
     const sent: unknown[] = [];
     (chrome as unknown as { runtime: unknown }).runtime = {
@@ -1769,23 +1767,14 @@ describe("event-log control messages — sender authorization", () => {
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
     const { importAll } = await import("../extension/src/shared/storage");
 
-    await importAll({
+    const payload = {
       settings: { logLimit: 300 },
       eventLog: [{ id: "import-1", ts: 2, kind: "cred_submit_prompt" }],
-    });
+    };
+    await importAll(payload);
 
     expect(store[EVENT_LOG_KEY]).toBeUndefined();
-    expect(sent).toEqual([
-      {
-        type: "ns-event-log-import-core",
-        writes: {
-          [SETTINGS_KEY]: expect.objectContaining({ logLimit: 300 }),
-          [EVENT_LOG_KEY]: [{ id: "import-1", ts: 2, kind: "cred_submit_prompt" }],
-          "sentinelsuite:adaptive_scores_v1": {},
-        },
-      },
-      { type: "ns-prompt-outcome-reset-adaptive" },
-    ]);
+    expect(sent).toEqual([{ type: "ns-suite-import", payload }]);
   });
 });
 
@@ -2374,7 +2363,7 @@ describe("prompt outcome delegation — retry, drop, and refusal", () => {
     );
   });
 
-  it("importAll REJECTS (delivery error) on SW exhaustion but is non-atomic — earlier sections persist (#188 R1)", async () => {
+  it("does not retry an ambiguous whole-import transport failure", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const seed = { id: "keep-1", ts: 10, domain: "keep.example", type: "nav" as const, score: 30, outcome: "allow" as const };
     const { chrome, store } = createChromeMock({ [PROMPT_OUTCOMES_KEY]: [seed] });
@@ -2383,15 +2372,7 @@ describe("prompt outcome delegation — retry, drop, and refusal", () => {
       lastError?: { message?: string };
       sendMessage: (message: unknown, callback?: (response: unknown) => void) => void;
     } = {
-      sendMessage(message, callback) {
-        if (message && typeof message === "object" && (message as { type?: unknown }).type === "ns-event-log-import-core") {
-          // The core import is now delegated into the same SW queue as appends.
-          // Model the worker's one-set commit, then make only the subsequent
-          // prompt-outcome message unavailable.
-          Object.assign(store, (message as { writes: Record<string, unknown> }).writes);
-          callback?.({ ok: true });
-          return;
-        }
+      sendMessage(_message, callback) {
         calls++;
         runtime.lastError = { message: "Could not establish connection. Receiving end does not exist." };
         callback?.(undefined);
@@ -2401,22 +2382,32 @@ describe("prompt outcome delegation — retry, drop, and refusal", () => {
     (chrome as unknown as { runtime: unknown }).runtime = runtime;
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
-    const { importAll, PromptOutcomeDeliveryError } = await import("../extension/src/shared/storage");
+    const { importAll } = await import("../extension/src/shared/storage");
     await expect(
       importAll({
-        // Valid entry (id+ts+known kind): importAll now normalizes the eventLog via
-        // trimEventLog (#252), which drops malformed rows, so a placeholder lacking
-        // id/ts would be filtered to [] and obscure the atomicity assertion below.
         eventLog: [{ id: "e-1", ts: 5, kind: "nav_click_block" }],
         promptOutcomes: [{ id: "imp-1", ts: 5, domain: "d.example", type: "nav", score: 10, outcome: "allow" }],
       })
-    ).rejects.toBeInstanceOf(PromptOutcomeDeliveryError);
-    expect(calls).toBe(4);
-    // Non-atomic: eventLog (written before the prompt-outcome step) IS committed,
-    // which is why the options handler must report a *partial* failure (#188 R1)...
-    expect(store[EVENT_LOG_KEY]).toEqual([{ id: "e-1", ts: 5, kind: "nav_click_block" }]);
-    // ...but the delegated prompt-outcome write never reached storage (seed intact).
+    ).rejects.toThrow(/Suite import not confirmed/);
+    expect(calls).toBe(1);
+    expect(store[EVENT_LOG_KEY]).toBeUndefined();
     expect(store[PROMPT_OUTCOMES_KEY]).toEqual([seed]);
+  });
+
+  it("maps an explicit partial whole-import response to PromptOutcomeDeliveryError", async () => {
+    const { chrome } = createChromeMock();
+    (chrome as unknown as { runtime: unknown }).runtime = {
+      sendMessage(_message: unknown, callback?: (response: unknown) => void) {
+        callback?.({ ok: false, code: "partial", error: "prompt phase failed after core commit" });
+      },
+    };
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { importAll, PromptOutcomeDeliveryError } = await import("../extension/src/shared/storage");
+    const err = await importAll({ settings: { logLimit: 300 } }).catch((value: unknown) => value);
+
+    expect(err).toBeInstanceOf(PromptOutcomeDeliveryError);
+    expect((err as Error).message).toContain("prompt phase failed");
   });
 });
 
