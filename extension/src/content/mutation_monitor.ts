@@ -157,13 +157,16 @@ const observedShadowRoots = new WeakSet<ShadowRoot>();
 const shadowObserversByHost = new Map<Element, MutationObserver>();
 
 /**
- * Elements that have already consumed one of the RESERVED_SCARCE_ALERT_SLOTS.
- * Dedup applies to the reserved tail ONLY (behaviour below FLOODABLE_ALERT_CAP is
- * unchanged), so re-adding or re-mutating the SAME element cannot burn the whole
- * reserve and re-open the suppression oracle one level up. Reassigned — not
- * cleared — on reset, because a WeakSet has no clear(). (#413)
+ * Elements that have already emitted a scarce alert during this monitor lifetime.
+ *
+ * Below FLOODABLE_ALERT_CAP alerts are still emitted exactly as before, including
+ * repeats. Remembering those elements nevertheless matters once the reserved tail
+ * begins: a page must not be able to alert on the same five password inputs before
+ * the boundary, flood to it, then remove/re-add those inputs to spend every reserved
+ * slot and hide a genuinely new credential field. Reassigned — not cleared — on
+ * reset, because a WeakSet has no clear(). (#413)
  */
-let reservedSlotElements = new WeakSet<Element>();
+let scarceAlertedElements = new WeakSet<Element>();
 
 /**
  * Tracks original `action` attribute values for forms observed at startup.
@@ -248,12 +251,17 @@ function isScarceAlert(alert: MutationAlert): boolean {
 
 function pushAlert(alert: MutationAlert): void {
   if (alerts.length >= MAX_ALERTS) return;
+  const scarce = isScarceAlert(alert);
   if (alerts.length >= FLOODABLE_ALERT_CAP) {
-    // Reserved tail: scarce types only, at most one slot per element.
-    if (!isScarceAlert(alert)) return;
-    if (reservedSlotElements.has(alert.element)) return;
-    reservedSlotElements.add(alert.element);
+    // Reserved tail: scarce types only. An element that was already scarce-alerted
+    // before the boundary has already supplied its security signal, so it cannot
+    // later consume a tail slot by being re-added or re-mutated.
+    if (!scarce) return;
+    if (scarceAlertedElements.has(alert.element)) return;
   }
+  // Track scarce elements even before the boundary. This does not suppress any
+  // pre-boundary alert; it only protects future reserved capacity from reuse.
+  if (scarce) scarceAlertedElements.add(alert.element);
   alerts.push(alert);
   alertCallback?.(alert);
 }
@@ -804,7 +812,7 @@ export function startMutationMonitor(
   pageHost = location.hostname.toLowerCase();
   alertCallback = onAlert;
   alerts.length = 0;
-  reservedSlotElements = new WeakSet();
+  scarceAlertedElements = new WeakSet();
 
   // Snapshot current form actions so we can detect changes later
   snapshotFormActions(doc);
@@ -863,7 +871,7 @@ export function getMutationAlertCount(): number {
 export function _resetMutationState(): void {
   stopMutationMonitor();
   alerts.length = 0;
-  reservedSlotElements = new WeakSet();
+  scarceAlertedElements = new WeakSet();
 }
 
 /** Exposed for testing only: number of live per-shadow-root observers. */

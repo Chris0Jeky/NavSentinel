@@ -1069,6 +1069,7 @@ describe("mutation_monitor flood-then-inject reserve past the alert cap (#413)",
    * here; the exact 45 is pinned by the reserve-bound test below.
    */
   async function floodWithBenignAlerts(): Promise<HTMLFormElement[]> {
+    const alertCountBeforeFlood = getMutationAlertCount();
     const forms: HTMLFormElement[] = [];
     for (let i = 0; i < 60; i++) {
       const form = document.createElement("form");
@@ -1080,7 +1081,9 @@ describe("mutation_monitor flood-then-inject reserve past the alert cap (#413)",
       forms.push(form);
     }
     await vi.advanceTimersByTimeAsync(200);
-    expect(getMutationAlertCount()).toBe(0);
+    // The helper can also run after a deliberately seeded scarce alert; baseline
+    // registration itself must never add an alert in either case.
+    expect(getMutationAlertCount()).toBe(alertCountBeforeFlood);
 
     for (let i = 0; i < forms.length; i++) {
       forms[i]!.setAttribute("action", "/benign-" + i + "-b");
@@ -1089,7 +1092,7 @@ describe("mutation_monitor flood-then-inject reserve past the alert cap (#413)",
 
     // 60 floodable alerts offered; the flood is now the only alert source.
     expect(getMutationAlertCount()).toBeGreaterThanOrEqual(45);
-    expect(getMutationAlerts().every((a) => a.type === "form_action_changed")).toBe(true);
+    expect(getMutationAlerts().slice(alertCountBeforeFlood).every((a) => a.type === "form_action_changed")).toBe(true);
     return forms;
   }
 
@@ -1225,6 +1228,49 @@ describe("mutation_monitor flood-then-inject reserve past the alert cap (#413)",
     expect(alerts.filter((a) => a.type === "password_injected").length).toBe(2);
 
     other.remove();
+    for (const form of forms) form.remove();
+    stopMutationMonitor();
+  });
+
+  it("does not let pre-flood scarce elements spend the reserved tail when re-added (#413 review)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+    await vi.advanceTimersByTimeAsync(200);
+
+    // These are real scarce signals, but they arrive before the floodable boundary.
+    // Their original alerts are retained; the regression is only that reusing the
+    // same elements later must not turn them into five new reserved-tail charges.
+    const seeded: HTMLInputElement[] = [];
+    for (let i = 0; i < 5; i++) {
+      const input = document.createElement("input");
+      input.type = "password";
+      seeded.push(input);
+      document.body.appendChild(input);
+    }
+    await vi.advanceTimersByTimeAsync(200);
+    expect(alerts.filter((a) => a.type === "password_injected").length).toBe(5);
+
+    const forms = await floodWithBenignAlerts();
+    expect(getMutationAlertCount()).toBe(45);
+
+    // An attacker cannot remove/re-add the already-alerted inputs to exhaust the
+    // reserve before injecting the actual fresh credential field.
+    for (const input of seeded) {
+      input.remove();
+      document.body.appendChild(input);
+    }
+    await vi.advanceTimersByTimeAsync(200);
+    expect(getMutationAlertCount()).toBe(45);
+
+    const fresh = document.createElement("input");
+    fresh.type = "password";
+    document.body.appendChild(fresh);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(getMutationAlertCount()).toBe(46);
+    expect(alerts.filter((a) => a.type === "password_injected").length).toBe(6);
+
+    fresh.remove();
+    for (const input of seeded) input.remove();
     for (const form of forms) form.remove();
     stopMutationMonitor();
   });
