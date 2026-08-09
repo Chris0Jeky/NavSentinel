@@ -1,6 +1,9 @@
 import type { EventLogEntry } from "../shared/storage";
 import { SILENT_DECISION_KINDS } from "../shared/storage";
 import { getRegistrableDomain, normalizeHost } from "../shared/domain";
+import { isRiskReducingReason } from "../shared/reason_codes";
+
+export { isRiskReducingReason } from "../shared/reason_codes";
 
 export interface PopupSiteState {
   siteLabel: string;
@@ -57,28 +60,6 @@ export function formatPopupEventLine(
   const site = event.site ? ` | ${event.site}` : "";
   const score = typeof event.score === "number" ? ` | score=${event.score}` : "";
   return `${formatTime(event.ts)} | ${event.kind}${site}${score}`;
-}
-
-/**
- * Whether a reason code REDUCES risk (vs. signals a threat). This is the exact
- * negation of the threat-filter in capture_isolated.buildPlainMessage (the source
- * of truth): startsWith for `keyboard_`/`legit_`, an exact match for
- * `nrs_user_activation_active`, and substring for the rest — so the popup chips and
- * the warning toast agree. Using startsWith/exact (not a broad substring) prevents
- * a future risk-INCREASING code that merely contains one of these tokens (e.g. a
- * "spoofed_user_activation") from being mis-coloured green. Extracting one shared
- * helper used by both call sites is the durable fix (seeded as a follow-up). (#205 R1)
- */
-export function isRiskReducingReason(reasonCode: string): boolean {
-  const r = reasonCode ?? "";
-  return (
-    r.startsWith("keyboard_") ||
-    r.startsWith("legit_") ||
-    r.includes("allowlisted") ||
-    r.includes("previously_allowed") ||
-    r.includes("explicit_new_tab") ||
-    r === "nrs_user_activation_active"
-  );
 }
 
 /**
