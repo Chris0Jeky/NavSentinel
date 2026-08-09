@@ -76,10 +76,17 @@ describe("isKnownRedirector", () => {
     // Use paths that don't also match open-redirect path patterns.
     expect(isKnownRedirector("https://go.microsoft.com/fwlink/123")).toBe(false);
     expect(isKnownRedirector("https://go.dev/doc/tutorial")).toBe(false);
-    expect(isKnownRedirector("https://go.google.com/something")).toBe(false);
-    expect(isKnownRedirector("https://go.googleprod.com/foo")).toBe(false);
     expect(isKnownRedirector("https://click.mailchimp.com/track/click/abc")).toBe(false);
     expect(isKnownRedirector("https://click.convertkit.com/campaigns/xyz")).toBe(false);
+    expect(isKnownRedirector("https://click.pstmrk.it/3s/example.com/abc")).toBe(false);
+  });
+
+  it("no longer exempts the NXDOMAIN Google entries (#295)", () => {
+    // go.google.com and go.googleprod.com do not resolve (checked 2026-08-07),
+    // so they were never reachable tracked-link hosts -- dead allowlist config.
+    // With them removed the plain "go." prefix rule applies again.
+    expect(isKnownRedirector("https://go.google.com/something")).toBe(true);
+    expect(isKnownRedirector("https://go.googleprod.com/foo")).toBe(true);
   });
 
   it("does not flag allowlisted domains even with redirect params or open-redirect paths (#285)", () => {
