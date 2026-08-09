@@ -310,9 +310,12 @@ It also provides:
 
 `exportAll()` includes settings, allowlist, trusted domains, event log, prompt
 outcomes, and adaptive scores. It does not include domain/category profiles,
-smart-default cooldowns, or session state. Current Options controls clear the
-event log, prompt/adaptive stats, and domain profiles separately; there is no
-complete behavioral reset yet (RI-06).
+smart-default cooldowns, or session state. The Options → Analytics **Clear
+behavioural data** control resets the event log, prompt outcomes, adaptive
+scores, and domain profiles in one service-worker-owned pass. Navigation-
+category profiles and smart-default cooldowns remain outside that reset
+boundary, so RI-06/#474 remains open rather than claiming a complete reset of
+every behavioural store.
 
 `extension/src/shared/allowlist.ts` manages the per-site navigation allowlist, including legacy key migration and normalization.
 

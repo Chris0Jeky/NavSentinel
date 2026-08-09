@@ -39,8 +39,9 @@ behaviour profiles in one service-worker-owned pass, and deliberately KEEPS
 suite settings, the navigation allowlist, and trusted credential domains —
 erasing configuration you set on purpose would be data loss. Navigation-category
 counts and smart-default cooldowns are not in that boundary and still have no
-clear control. The boundary is a stated assumption pending an owner decision on
-issue #474.
+clear control. The recorded #535 / AI-28 waiver accepts this limited reset for
+the current merge wave; it does not close RI-06/#474 or claim a full
+behavioural-data reset.
 
 The reset records its remaining lanes in `chrome.storage.local` before the first
 destructive write, so a service-worker termination or browser restart part-way
@@ -71,8 +72,10 @@ retain exact URLs in `chrome.storage.session` only where target authorization,
 rollback, redirect, or OAuth correctness requires them; bind them to a tab and
 short TTL; and add one user-facing reset that clears every behavioral store.
 The unified reset now exists as **Clear behavioural data**, scoped to the four
-stores listed in the table; the remaining RI-06 work is the owner's boundary
-ruling (#474) plus the URL-minimization sign-off.
+stores listed in the table. The recorded #535 / AI-28 waiver accepts that
+limited boundary for the current merge wave; RI-06/#474 remains open until the
+excluded navigation-category and cooldown stores are resolved without calling
+the reset complete.
 
 `chrome.storage.session` holds ephemeral per-tab security state such as allow
 windows, gesture tokens, exact rollback/forward/OAuth URLs, redirect chains,
@@ -140,8 +143,8 @@ This is for operator convenience and reproducibility. Treat exported files as lo
 Bounds and controls are listed in the table above. Extension removal clears its
 local/session storage. The in-product **Clear behavioural data** reset covers the
 four behavioural stores named above; the navigation-category profile and
-smart-default cooldowns are still outside it, and the boundary itself awaits the
-owner decision on issue #474.
+smart-default cooldowns are still outside it. The recorded #535 / AI-28 waiver
+accepts the limited boundary for this merge wave, while RI-06/#474 remains open.
 
 ## Scope
 

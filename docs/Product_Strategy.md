@@ -220,7 +220,8 @@ The selected unlisted beta is **interaction-only by default**:
 
 - include navigation intent, credential-submit protection, rollback, core
   interaction detections, explanations, and the local decision log;
-- retain RI-02 visual-sim excision through Gate-3, and remove fake DNR completely;
+- retain the merged RI-02 visual-sim excision and absent fake DNR surface; the
+  recorded Gate-3 waiver is not a real-Chrome claim;
 - default-disable unmeasured JS behavior instrumentation;
 - keep fresh installs passive until the user has seen the complete local-data
   disclosure and affirmatively enabled protection;
@@ -244,7 +245,8 @@ All must be true:
   removal can cause denial only—not protection loss;
 - the merged #356 MAIN-world compatibility repair retains its regression
   coverage; a new compatibility blocker requires current reproduction;
-- visual-sim capture remains absent after RI-02's Gate-3; fake DNR is absent;
+- visual-sim capture remains absent after #514's recorded Gate-3 waiver (not a
+  real-Chrome pass); fake DNR is absent;
 - the explicit beta capability profile leaves broad JS behavior instrumentation
   off: fetch/XHR/beacon/password-value prototypes are not wrapped while core
   navigation protection remains active;
@@ -361,8 +363,8 @@ Horizon-specific rejection gates:
 - Recreate or defer closed #273's intent; keep closed #399 out of the beta
   blocker set until measurement justifies it. #356 is complete and remains
   regression coverage, not an open work item.
-- Complete RI-02's Gate-3; remove fake DNR; minimize full URLs; preserve the
-  selected interaction-only beta profile.
+- Keep the merged RI-02 excision, fake-DNR removal, and data minimization/reset
+  boundaries accurate; preserve the selected interaction-only beta profile.
 - Complete #175/#186 bridge identity/recovery and #455 pre-collection
   disclosure/consent.
 - Clear the name, claims, privacy, assets, fresh-install, and real-Chrome gates.
