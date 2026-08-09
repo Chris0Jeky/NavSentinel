@@ -256,6 +256,64 @@ export function hasOAuthResponseParams(url: string): boolean {
   return false;
 }
 
+/**
+ * Stronger, corroborated variant of {@link hasOAuthResponseParams} for the
+ * redirect-MISMATCH decision (#223). An authorization `code`/`error` is only treated as a
+ * real callback when it co-occurs with a `state` echo in the same location; an
+ * `access_token`/`id_token` is accepted on its own, in the fragment OR the query
+ * (implicit/hybrid callbacks carry the token directly and have no separate "weak" form,
+ * and a bearer token is never a generic page param the way `code` is).
+ *
+ * Rationale: a benign cross-domain page reached via a redirect/link during an active flow
+ * can carry a generic `?code=` (a coupon, country, or tracking code) or `?error=` and trip
+ * a false redirect-mismatch. A genuine OAuth callback — benign OR a malicious one to an
+ * UNEXPECTED domain (the case the mismatch exists to catch) — echoes the `state` the
+ * authorization request sent, because the relying party validates it. Requiring `state`
+ * therefore suppresses the coupon false positive while still catching real attack
+ * callbacks.
+ *
+ * Residual false negative: a `code`/`error` flow whose callback omits `state` ENTIRELY loses
+ * redirect-mismatch coverage. `state` is RECOMMENDED but technically optional, so this is a
+ * deliberate FP/FN tradeoff that has NOT been quantified by `measure:fp`. (Query-form
+ * `?code=&state=`, implicit `#access_token=`, token-in-query `?access_token=`, and OIDC
+ * `response_mode=fragment` `#code=&state=` callbacks are all covered.)
+ *
+ * Known non-shape: a `code` and its `state` split ACROSS locations (`?state=x#code=y`) is not
+ * corroborated. `response_mode` selects a single location for the whole response, so no real
+ * provider emits that form. (#223)
+ */
+export function hasCorroboratedOAuthResponse(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+
+  // Fragment indicators. Tokens (access_token/id_token) are strong standalone indicators
+  // (implicit/hybrid flows). A code/error in the fragment is the OIDC `response_mode=fragment`
+  // authorization-code callback (Azure AD / Okta), where the code AND its `state` echo land in
+  // the fragment instead of the query — corroborated the same way as the query form.
+  const fragment = parsed.hash.startsWith("#") ? parsed.hash.slice(1) : parsed.hash;
+  if (fragment) {
+    const fragParams = new URLSearchParams(fragment);
+    if (fragParams.has("access_token") || fragParams.has("id_token")) return true;
+    if ((fragParams.has("code") || fragParams.has("error")) && fragParams.has("state")) return true;
+  }
+
+  // Query indicators. A token in the query is as strong a standalone indicator as one in
+  // the fragment — hasOAuthResponseParams already accepts it there, and #223 is about the
+  // GENERIC `code`/`error` params only, so requiring corroboration for a query token would
+  // silently drop mismatch coverage for a token leaked onto an unexpected domain.
+  const q = parsed.searchParams;
+  if (q.has("access_token") || q.has("id_token")) return true;
+
+  // A query code/error must be corroborated by a `state` echo to count as a callback.
+  if ((q.has("code") || q.has("error")) && q.has("state")) return true;
+
+  return false;
+}
+
 // --- Content-script-side state ---
 
 /** Current OAuth flow state for this tab, forwarded from the SW. */
