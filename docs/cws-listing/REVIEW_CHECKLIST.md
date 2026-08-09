@@ -58,8 +58,9 @@
 - [ ] OAuth callback `code`, `access_token`, and `id_token` values are redacted
   before storage/export/logging while host/target binding still works
 - [x] PRIVACY.md re-verified against the exact local release package after
-  visual-sim excision (DNR remains separately open)
-- [x] Privacy disclosure re-verified against the exact local release package
+  visual-sim excision
+- [ ] Re-verify PRIVACY.md and the privacy disclosure against the final local
+  release package after #528's fake-DNR removal
 - [x] Single-purpose description prepared
 
 ### Store Listing
