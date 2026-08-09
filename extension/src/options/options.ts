@@ -565,7 +565,7 @@ importFileEl.addEventListener("change", async () => {
     // partial-vs-total failure handling) lives in the unit-tested runImportFlow.
     await runImportFlow({
       importPayload: async () => {
-        await importAll(JSON.parse(await f.text()));
+        return importAll(JSON.parse(await f.text()));
       },
       refresh: init,
       flash: (msg, tone) => flashStatus(statusEl, msg, tone),

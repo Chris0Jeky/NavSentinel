@@ -540,7 +540,7 @@ describe("service worker handlers", () => {
       expect(resetSettled).toBe(false);
 
       releaseImportCore();
-      await expect(importing).resolves.toMatchObject({ ok: true });
+      await expect(importing).resolves.toMatchObject({ ok: true, result: { eventLogDropped: 0 } });
       await expect(resetting).resolves.toMatchObject({
         ok: true,
         result: { ok: true, failed: [] },
