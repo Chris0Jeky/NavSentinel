@@ -219,7 +219,7 @@ result review. Read `docs/Product_Strategy.md` first. This item becomes
 actionable only when the preflight handoff explicitly says so.
 
 **🚨 OPEN: AI-27 — One Gate-3 batch pass over the browser-surface queue from the
-2026-08-08 session.** Ten browser-surface PRs are open and reviewed, and none can
+2026-08-08 session.** Eleven browser-surface PRs are open and reviewed, and none can
 merge without your call. They are listed in the order they should be merged, not
 the order they were opened.
 
@@ -286,7 +286,7 @@ Retargeting on its own also runs **no CI** — it fires an `edited` activity, wh
 `pull_request` workflow with no `types` filter ignores, and the child's head SHA
 does not change so nothing looks stale. Merge `main` into the child after
 retargeting; that changes the head, triggers a real run, and tests the tree that
-will actually merge. Slots 4-10 are independent branches off
+will actually merge. Slots 4-11 are independent branches off
 `main` and can go in any order.
 
 | Order | PR | What it changes | Why it needs your eyes |
@@ -301,6 +301,7 @@ will actually merge. Slots 4-10 are independent branches off
 | 8 | **#522** | #410: bounds the action-attribute scan on the credential submit path | Submit a real login form and confirm the prompt still names the correct destination host |
 | 9 | **#526** | #413: reserves the last 5 of the 50 mutation-alert slots for scarce security detections (injected password field, suspicious iframe, cross-domain form-action change), so a benign-alert flood can no longer switch detection off | Review caught that the originally-prescribed fix registered shadow roots but still emitted nothing past the cap; the reserve is the real fix. Worth browsing a few mutation-heavy sites (cookie banners, chat widgets) to confirm no new prompts |
 | 10 | **#533** | #219: distinct gauge state when a page has only scoreless threat alerts | Purely visual — confirm the dashed-ring "!" state reads as a warning and not as an error. Its scope is narrower than #219 asked for: review found `nav_reputation_late_warn` stamps the *child frame's* hostname while the popup matches the top-level domain, so the state cannot fire for third-party iframes — #219's headline case. Tracked as **#539**; the PR's claim was narrowed rather than the fix widened |
+| 11 | **#542** | #391: reports fixed-cap event-log truncation during suite import | In Options, import a synthetic JSON suite with `settings: { "logLimit": 5000 }` and 5,001 valid `eventLog` records (`id: "evt-0"` … `"evt-5000"`, increasing numeric `ts`, `kind: "suite_config_update"`). Confirm the import succeeds, the status says `Imported. Event log truncated: 1 older event was not imported.`, and the Options view refreshes. Repeat with the same setting and 5,000 records; confirm the status remains `Imported.` |
 
 **#514 note — the missing "AI-26".** PR #514's review thread says *"`ACTION_ITEMS.md`
 AI-26 still requires Chris's fresh-profile real-Chrome Gate-3 evidence"*, but a
