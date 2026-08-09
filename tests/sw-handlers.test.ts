@@ -1957,14 +1957,15 @@ describe("service worker handlers", () => {
       mock.emitCommitted({ tabId: 10, frameId: 0, url: consentUrl, transitionType: "link" });
 
       // The malicious callback is delivered via a victim-clicked link (transitionType
-      // "link", NO client_redirect/server_redirect qualifier). It still carries code
-      // and lands on an unexpected domain, so it must still be flagged — the gate
-      // excludes only user-typed/bookmarked navigations, not link clicks.
+      // "link", NO client_redirect/server_redirect qualifier). It carries code AND the
+      // `state` echo (a real callback the provider issues always returns the state the
+      // request sent, #223), and lands on an unexpected domain, so it must still be
+      // flagged — the gate excludes only user-typed/bookmarked navigations, not link clicks.
       mock.sentMessages.length = 0;
       mock.emitCommitted({
         tabId: 10,
         frameId: 0,
-        url: "https://evil.example/cb?code=authcode",
+        url: "https://evil.example/cb?code=authcode&state=xyz",
         transitionType: "link",
       });
 
@@ -1972,6 +1973,123 @@ describe("service worker handlers", () => {
         (m) => (m.message as { type: string }).type === "ns-oauth-redirect-mismatch",
       );
       expect(mismatch).toBeDefined();
+    });
+
+    it("does NOT fire a mismatch for a benign cross-domain page carrying only a generic ?code= (no state) during a flow (#223)", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+
+      const consentUrl =
+        "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&redirect_uri=https%3A%2F%2Fapp.example.com%2Fcb&response_type=code&scope=openid";
+      mock.emitCommitted({ tabId: 11, frameId: 0, url: consentUrl, transitionType: "link" });
+
+      // User abandons the flow and, within the 60s window, follows a shortlink that 302s to
+      // an unrelated shop carrying a generic ?code= coupon. It has NO `state` echo, so it is
+      // not corroborated as an OAuth callback and must NOT trip a redirect-mismatch.
+      mock.sentMessages.length = 0;
+      mock.emitCommitted({
+        tabId: 11,
+        frameId: 0,
+        url: "https://shop.example/sale?code=SUMMER",
+        transitionType: "link",
+        transitionQualifiers: ["server_redirect"],
+      });
+
+      const mismatch = mock.sentMessages.find(
+        (m) => (m.message as { type: string }).type === "ns-oauth-redirect-mismatch",
+      );
+      expect(mismatch).toBeUndefined();
+    });
+
+    it("DOES fire a mismatch for an unexpected-domain OIDC response_mode=fragment callback (#code=&state= in the fragment) (#223)", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+
+      const consentUrl =
+        "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=x&redirect_uri=https%3A%2F%2Fapp.example.com%2Fcb&response_type=code&scope=openid&response_mode=fragment";
+      mock.emitCommitted({ tabId: 12, frameId: 0, url: consentUrl, transitionType: "link" });
+
+      // A malicious response_mode=fragment callback lands on an unexpected domain with the
+      // code AND state echo in the FRAGMENT (Azure AD / Okta shape). It is corroborated, so
+      // the mismatch must still fire — the #223 state requirement must not regress this.
+      mock.sentMessages.length = 0;
+      mock.emitCommitted({
+        tabId: 12,
+        frameId: 0,
+        url: "https://evil.example/cb#code=stolen&state=s2",
+        transitionType: "link",
+        transitionQualifiers: ["server_redirect"],
+      });
+
+      const mismatch = mock.sentMessages.find(
+        (m) => (m.message as { type: string }).type === "ns-oauth-redirect-mismatch",
+      );
+      expect(mismatch).toBeDefined();
+    });
+
+    it("DOES fire a mismatch for an unexpected-domain token callback with NO state, in query or fragment (#223)", async () => {
+      // A leaked access_token/id_token is a strong standalone response indicator: the #223
+      // state requirement applies ONLY to the generic code/error params, so a stateless
+      // token callback to an unexpected domain must keep its +30 mismatch.
+      const mock = createChromeMock();
+      await loadSw(mock);
+
+      // Each tab carries its own independent flow, so one SW load covers all three shapes.
+      const consentUrl =
+        "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&redirect_uri=https%3A%2F%2Fapp.example.com%2Fcb&response_type=token&scope=openid";
+      for (const [tabId, callbackUrl] of [
+        [13, "https://evil.example/cb?access_token=stolen"],
+        [14, "https://evil.example/cb#access_token=stolen&token_type=bearer"],
+        [15, "https://evil.example/cb?id_token=jwt"],
+      ] as const) {
+        mock.emitCommitted({ tabId, frameId: 0, url: consentUrl, transitionType: "link" });
+
+        mock.sentMessages.length = 0;
+        mock.emitCommitted({
+          tabId,
+          frameId: 0,
+          url: callbackUrl,
+          transitionType: "link",
+          transitionQualifiers: ["server_redirect"],
+        });
+
+        const mismatch = mock.sentMessages.find(
+          (m) => (m.message as { type: string }).type === "ns-oauth-redirect-mismatch",
+        );
+        expect(mismatch, `expected a mismatch for ${callbackUrl}`).toBeDefined();
+      }
+    });
+
+    it("still COMPLETES the flow for an uncorroborated stateless ?code= callback, it just does not score it (#223)", async () => {
+      // The #223 change narrows only the MISMATCH decision. Flow completion still gates on
+      // hasOAuthResponseParams, so an uncorroborated callback must not leave the flow
+      // lingering in redirect/consent where a later navigation could re-trip on it.
+      const mock = createChromeMock();
+      await loadSw(mock);
+
+      const consentUrl =
+        "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&redirect_uri=https%3A%2F%2Fapp.example.com%2Fcb&response_type=code&scope=openid";
+      mock.emitCommitted({ tabId: 16, frameId: 0, url: consentUrl, transitionType: "link" });
+
+      mock.sentMessages.length = 0;
+      mock.emitCommitted({
+        tabId: 16,
+        frameId: 0,
+        url: "https://shop.example/sale?code=SUMMER",
+        transitionType: "link",
+        transitionQualifiers: ["server_redirect"],
+      });
+
+      const mismatch = mock.sentMessages.find(
+        (m) => (m.message as { type: string }).type === "ns-oauth-redirect-mismatch",
+      );
+      expect(mismatch).toBeUndefined();
+
+      const flowUpdate = mock.sentMessages.find(
+        (m) => (m.message as { type: string }).type === "ns-oauth-flow-update" && m.tabId === 16,
+      );
+      expect(flowUpdate).toBeDefined();
+      expect((flowUpdate!.message as { flow: { phase: string } }).flow.phase).toBe("complete");
     });
 
     it("does NOT fire a redirect-mismatch for a legit callback to the EXPECTED domain (#207 R2)", async () => {
@@ -2058,17 +2176,18 @@ describe("service worker handlers", () => {
         transitionType: "link",
       });
 
-      // Navigate to evil.com instead of myapp.com (domain mismatch)
+      // Navigate to evil.com instead of myapp.com (domain mismatch). The stolen-code
+      // callback carries the `state` echo the provider returns (#223 corroboration).
       mock.sentMessages.length = 0;
       mock.emitBeforeNavigate({
         tabId: 10,
         frameId: 0,
-        url: "https://evil.com/steal?code=authcode123",
+        url: "https://evil.com/steal?code=authcode123&state=s1",
       });
       mock.emitCommitted({
         tabId: 10,
         frameId: 0,
-        url: "https://evil.com/steal?code=authcode123",
+        url: "https://evil.com/steal?code=authcode123&state=s1",
         transitionType: "link",
         transitionQualifiers: ["client_redirect"],
       });
@@ -2079,7 +2198,7 @@ describe("service worker handlers", () => {
       expect(mismatchMsg).toBeDefined();
       expect(mismatchMsg!.tabId).toBe(10);
       expect((mismatchMsg!.message as { callbackUrl: string }).callbackUrl).toBe(
-        "https://evil.com/steal?code=authcode123",
+        "https://evil.com/steal?code=authcode123&state=s1",
       );
     });
 
