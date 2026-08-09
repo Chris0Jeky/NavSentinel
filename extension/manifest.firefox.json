@@ -17,7 +17,6 @@
   },
   "permissions": [
     "storage",
-    "declarativeNetRequest",
     "webNavigation",
     "tabs"
   ],
@@ -53,14 +52,5 @@
     },
     "default_popup": "src/popup/popup.html",
     "default_title": "NavSentinel"
-  },
-  "declarative_net_request": {
-    "rule_resources": [
-      {
-        "id": "baseline",
-        "enabled": false,
-        "path": "rules/dnr_static.json"
-      }
-    ]
   }
 }

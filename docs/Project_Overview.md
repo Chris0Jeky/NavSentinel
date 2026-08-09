@@ -73,8 +73,8 @@ It is not yet a released or validated product. Immediate blockers include:
 - RI-02 visual-sim excision is locally and artifact verified, but its required
   browser Gate-3 still precedes release-blocker closure;
 - extension-origin prompt authority and other release-integrity work remain;
-- DNR remains a test/placeholder surface; the selected interaction-only profile
-  excludes reputation runtime and assets;
+- the selected interaction-only profile excludes reputation runtime and assets,
+  and RI-05 removed the placeholder DNR surface and its permissions;
 - FP/TP and comparative efficacy evidence is incomplete;
 - no external audit, tag, release, CWS listing, or external-user cohort exists;
   and

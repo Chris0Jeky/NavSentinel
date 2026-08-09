@@ -60,15 +60,26 @@ export interface JsCredentialReadSignal {
   fieldCount: number;
 }
 
-/** Configuration for the behavior monitor. */
-export interface JsBehaviorMonitorConfig {
-  /** Whether debug logging is enabled */
-  debug: boolean;
-  /** Current extension mode */
-  mode: "off" | "smart" | "strict";
-  /** Function to post signals to the isolated world via the bridge */
-  postSignal: (type: string, payload?: Record<string, unknown>) => void;
-}
+import type { JsBehaviorMonitorConfig } from "./js_behavior_monitor.types";
+
+export type { JsBehaviorMonitorConfig };
+
+/**
+ * Capability marker for the enabled variant (RI-07). The build aliases
+ * `@navsentinel/js-behavior-monitor` to `js_behavior_monitor.disabled.ts`
+ * (which exports `false`) whenever `capabilities.jsBehaviorInstrumentation`
+ * is false in `config/release-profiles.json`.
+ */
+export const jsBehaviorInstrumentationEnabled = true;
+
+/**
+ * Build-check sentinel. `scripts/check-release-profile.mjs` asserts no built
+ * bundle contains this literal when the capability is off, which proves this
+ * module was not linked into the build at all rather than merely left inert.
+ * It is referenced from a live (debug-only) code path in
+ * `initJsBehaviorMonitor` so it cannot be dropped by dead-code elimination.
+ */
+export const JS_BEHAVIOR_INSTRUMENTATION_SENTINEL = "ns-js-behavior-instrumentation-v1";
 
 // ============================================================================
 // Constants
@@ -549,6 +560,10 @@ export function initJsBehaviorMonitor(config: JsBehaviorMonitorConfig): void {
   _config = config;
 
   if (config.mode === "off") return;
+
+  if (config.debug) {
+    console.debug(`[NavSentinel] ${JS_BEHAVIOR_INSTRUMENTATION_SENTINEL} installing`);
+  }
 
   patchFormSubmitMonitoring();
   patchFetchMonitoring(config);

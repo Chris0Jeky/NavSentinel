@@ -15,7 +15,6 @@ export type CredMode = "off" | "smart" | "strict";
 export interface NavSettings {
   defaultMode: Mode;
   debug: boolean;
-  dnrEnabled: boolean;
 }
 
 export interface CredentialSettings {
@@ -139,8 +138,7 @@ export function buildNavOutcomeFeatures(input: {
 const DEFAULT_SUITE_SETTINGS: SuiteSettings = {
   nav: {
     defaultMode: "smart",
-    debug: false,
-    dnrEnabled: false
+    debug: false
   },
   credential: {
     mode: "smart",
@@ -162,11 +160,26 @@ function clampInt(v: unknown, min: number, max: number, fallback: number): numbe
   return Math.max(min, Math.min(max, n));
 }
 
+// RI-05 retired the test-only DNR backstop, but installed profiles still hold its
+// `dnrEnabled` flag inside the stored nav settings. Rebuild nav from known fields
+// only so the retired flag is dropped instead of being spread forward and
+// re-persisted by the next settings write. No runtime code reads it.
+//
+// RI-07 relies on the same allow-list rebuild: an upgrading profile that carries an
+// unrecognised nav flag (e.g. a `jsBehavior*` capability flag from a local or future
+// build) cannot survive a settings read and cannot re-enable JavaScript-behaviour
+// instrumentation. That capability is a build-time release-profile decision, so no
+// stored value participates in it at all.
+function mergeNavSettings(cur: NavSettings, partial: Partial<NavSettings> | undefined): NavSettings {
+  const merged = { ...cur, ...(partial ?? {}) };
+  return { defaultMode: merged.defaultMode, debug: merged.debug };
+}
+
 function mergeSuiteSettings(cur: SuiteSettings, partial: SuiteSettingsPatch): SuiteSettings {
   const next: SuiteSettings = {
     ...cur,
     ...partial,
-    nav: { ...cur.nav, ...(partial.nav ?? {}) },
+    nav: mergeNavSettings(cur.nav, partial.nav),
     credential: {
       ...cur.credential,
       ...(partial.credential ?? {}),
@@ -420,11 +433,24 @@ export type EventLogControlMessage =
   | { type: "ns-event-log-clear" }
   | { type: "ns-event-log-import-core"; writes: Record<string, unknown> };
 
+export type SuiteImportMessage = { type: "ns-suite-import"; payload: unknown };
+
+type SuiteImportResponse =
+  | { ok: true }
+  | { ok: false; error: string; code?: "unauthorized" | "partial" };
+
 type EventLogStorageResponse =
   | { ok: true }
   | { ok: false; error: string; code?: "unauthorized" };
 
-const STORAGE_DELEGATE_RETRY_DELAYS_MS = [50, 150, 400];
+/**
+ * Retry schedule for page-context writes delegated to the service worker.
+ *
+ * @internal Exported only for `behavioural_reset.ts`, which lives in its own
+ * module so that the clear-all does not drag `domain_profile` into this chunk.
+ * Not part of the storage API; do not use from UI or content code.
+ */
+export const STORAGE_DELEGATE_RETRY_DELAYS_MS = [50, 150, 400];
 
 function isEventKind(value: unknown): value is EventKind {
   return typeof value === "string" && EVENT_KINDS.has(value as EventKind);
@@ -480,6 +506,14 @@ export function isEventLogControlMessage(message: unknown): message is EventLogC
   const candidate = message as Record<string, unknown>;
   if (candidate.type === "ns-event-log-clear") return true;
   return candidate.type === "ns-event-log-import-core" && isEventLogImportCoreWrites(candidate.writes);
+}
+
+export function isSuiteImportMessage(message: unknown): message is SuiteImportMessage {
+  return Boolean(
+    message &&
+      typeof message === "object" &&
+      (message as Record<string, unknown>).type === "ns-suite-import"
+  );
 }
 
 function normalizeEventLog(value: unknown): EventLogEntry[] {
@@ -804,7 +838,8 @@ function appendEventDirect(entry: EventLogEntry): Promise<void> {
   });
 }
 
-function clearEventLogDirect(): Promise<void> {
+/** @internal Serialized event-log clear lane. Exported for `behavioural_reset.ts`. */
+export function clearEventLogDirect(progressMarker?: Record<string, unknown>): Promise<void> {
   return queueEventLogWrite(async () => {
     await hydrateEventLogResetCutoff();
     const resetTs = Date.now();
@@ -813,7 +848,10 @@ function clearEventLogDirect(): Promise<void> {
     // the conservative cutoff is safe and the surfaced control error is
     // retryable.
     await setEventLogResetCutoff(resetTs);
-    await chrome.storage.local.set({ [EVENT_LOG_KEY]: [] });
+    // The reset caller supplies its narrowed crash marker in this SAME local
+    // storage commit. A worker therefore cannot observe a cleared lane beside
+    // an older marker that would replay it after restart.
+    await chrome.storage.local.set({ ...progressMarker, [EVENT_LOG_KEY]: [] });
   });
 }
 
@@ -1252,7 +1290,8 @@ function isExtensionServiceWorkerContext(): boolean {
     typeof scope.registration !== "undefined";
 }
 
-function shouldDelegatePromptOutcomeWrite(): boolean {
+/** @internal True when this context must delegate writes to the worker. Exported for `behavioural_reset.ts`. */
+export function shouldDelegatePromptOutcomeWrite(): boolean {
   const runtime = (globalThis as { chrome?: typeof chrome }).chrome?.runtime;
   return !isExtensionServiceWorkerContext() && typeof runtime?.sendMessage === "function";
 }
@@ -1330,6 +1369,37 @@ class PromptOutcomeUnauthorizedError extends Error {}
 // rest of a non-atomic import did apply) from a total failure.
 export class PromptOutcomeDeliveryError extends Error {}
 
+function sendSuiteImportMessage(payload: unknown): Promise<void> {
+  return new Promise((resolve, reject) => {
+    try {
+      chrome.runtime.sendMessage(
+        { type: "ns-suite-import", payload } satisfies SuiteImportMessage,
+        (response?: SuiteImportResponse) => {
+          const lastError = chrome.runtime.lastError;
+          if (lastError) {
+            // A lost whole-import response is ambiguous: the worker may have
+            // committed the import already. Never retry or replay it here.
+            reject(new Error("Suite import not confirmed: " + (lastError.message ?? "runtime.sendMessage failed")));
+            return;
+          }
+          if (response?.ok) {
+            resolve();
+            return;
+          }
+          if (response?.code === "partial") {
+            reject(new PromptOutcomeDeliveryError(response.error));
+            return;
+          }
+          reject(new Error(response?.error ?? "Suite import failed"));
+        }
+      );
+    } catch (err) {
+      // A synchronous channel failure is just as ambiguous as a lost callback.
+      reject(new Error("Suite import not confirmed: " + (err instanceof Error ? err.message : String(err))));
+    }
+  });
+}
+
 function sendPromptOutcomeStorageMessage(message: PromptOutcomeStorageMessage): Promise<void> {
   return new Promise((resolve, reject) => {
     try {
@@ -1358,7 +1428,8 @@ function sendPromptOutcomeStorageMessage(message: PromptOutcomeStorageMessage): 
   });
 }
 
-function delayMs(ms: number): Promise<void> {
+/** @internal Exported for `behavioural_reset.ts` so both share one retry schedule. */
+export function delayMs(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
@@ -1528,7 +1599,8 @@ export function appendPromptOutcome(
   return appendPromptOutcomeDirect(entry);
 }
 
-function clearPromptOutcomesDirect(): Promise<void> {
+/** @internal Serialized prompt-outcome clear lane. Exported for `behavioural_reset.ts`. */
+export function clearPromptOutcomesDirect(progressMarker?: Record<string, unknown>): Promise<void> {
   return queuePromptOutcomeWrite(async () => {
     await hydratePromptOutcomeResetCutoff();
     const resetTs = Date.now();
@@ -1536,7 +1608,9 @@ function clearPromptOutcomesDirect(): Promise<void> {
     // Persist the restart-surviving barrier before the destructive local write.
     // chrome.storage has no cross-area transaction, so a barrier failure leaves
     // the log intact and is surfaced to the trusted control caller.
-    await chrome.storage.local.set({ [PROMPT_OUTCOMES_KEY]: [] });
+    // Commit the narrowed crash marker with the destructive lane write. The
+    // session barrier stays before this commit, as it protects delayed appends.
+    await chrome.storage.local.set({ ...progressMarker, [PROMPT_OUTCOMES_KEY]: [] });
   });
 }
 
@@ -1547,9 +1621,46 @@ export function clearPromptOutcomes(): Promise<void> {
   return clearPromptOutcomesDirect();
 }
 
+/**
+ * Serialized adaptive-score clear lane, backing the standalone "Clear stats"
+ * control. Module-private: the unified reset uses
+ * `resyncPromptOutcomeAdaptiveScoresDirect` below, which cannot strand an
+ * outcome row without its derived score.
+ */
 function clearPromptOutcomeAdaptiveScoresDirect(): Promise<void> {
   return queuePromptOutcomeWrite(async () => {
     await clearAdaptiveScoresDirect();
+  });
+}
+
+/**
+ * @internal The unified reset's adaptive lane. Rewrites the cache as the
+ * derivative of whatever outcomes are stored RIGHT NOW, inside one queued op.
+ *
+ * The reset clears outcomes and their cache as two lanes, so an append can land
+ * between them: it writes the row and its score atomically, and a blind
+ * adaptive-only clear would then drop the score while keeping the row, leaving
+ * threshold adjustment inconsistent until something recomputed it. Recomputing
+ * instead of blind-clearing keeps the invariant "cache == derivative of the
+ * stored outcomes" in both cases — with no outcomes this is exactly `{}`, the
+ * previous behaviour. Deliberately NOT re-clearing the outcomes here: on a
+ * resumed reset this lane can run alone, and wiping rows written after the
+ * outcomes lane already completed would be the data loss finding (2) is about.
+ */
+export function resyncPromptOutcomeAdaptiveScoresDirect(progressMarker?: Record<string, unknown>): Promise<void> {
+  return queuePromptOutcomeWrite(async () => {
+    const res = await chrome.storage.local.get(PROMPT_OUTCOMES_KEY);
+    const outcomes = boundPromptOutcomeLog(res[PROMPT_OUTCOMES_KEY]);
+    if (outcomes.length === 0) {
+      await chrome.storage.local.set({ ...progressMarker, [ADAPTIVE_SCORES_KEY]: {} });
+      return;
+    }
+    const settings = await getNavSettings();
+    const threshold = settings.defaultMode === "strict" ? NRS_STRICT_BLOCK_THRESHOLD : NRS_BLOCK_THRESHOLD;
+    await chrome.storage.local.set({
+      ...progressMarker,
+      [ADAPTIVE_SCORES_KEY]: computeAdaptiveScoreMap(outcomes, threshold),
+    });
   });
 }
 
@@ -1642,8 +1753,11 @@ export function migrateStoredPromptOutcomes(): Promise<void> {
  * to trusted extension-page senders — the options/popup pages. Content scripts
  * are injected on <all_urls> and always carry `sender.tab`; they may only
  * append. We additionally require the sender to be this extension's own origin.
+ *
+ * @internal Also exported for `behavioural_reset.ts`, which applies the same
+ * trusted-sender rule to the clear-all message.
  */
-function isTrustedExtensionPageSender(sender?: chrome.runtime.MessageSender): boolean {
+export function isTrustedExtensionPageSender(sender?: chrome.runtime.MessageSender): boolean {
   if (!sender) return false;
   // Options pages opened in a normal Chrome tab also carry sender.tab, so the
   // tab field alone cannot distinguish them from content scripts. Require a
@@ -1731,7 +1845,71 @@ export async function exportAll(): Promise<{
   };
 }
 
-export async function importAll(payload: unknown): Promise<void> {
+let bulkDataPending: Promise<unknown> = Promise.resolve();
+
+/**
+ * Serialize whole-store bulk operations against each other: a suite import and
+ * the unified behavioural reset (`behavioural_reset.ts`).
+ *
+ * Neither operation is a single write. `importAll` commits its core sections
+ * through the event-log lane and REPLACES prompt outcomes through a second lane
+ * afterwards; the reset walks four lanes. Each lane is individually serialized,
+ * but nothing stopped a reset from slotting between an import's two phases —
+ * the reset could clear outcomes, clear the imported event log, and then have
+ * the import's final prompt phase restore outcomes and adaptive scores while
+ * every lane still reported cleared. This is one more queue over the WHOLE
+ * operations, not a new per-write concurrency scheme: the existing per-lane
+ * chains (and the #180/#182 fixes in them) are untouched.
+ *
+ * Scope: per JS context. Both controls live on the options page, so its module
+ * instance serializes them end to end, including across the worker delegation
+ * each awaits inside the queue. Two extension pages driving one bulk operation
+ * each are still not ordered against one another — documented residual.
+ */
+export function queueBulkDataOperation<T>(operation: () => Promise<T>): Promise<T> {
+  const next = bulkDataPending.then(operation);
+  bulkDataPending = next.catch((err) => {
+    console.warn("[NavSentinel] bulk data serialization error:", err);
+  });
+  return next;
+}
+
+export function importAll(payload: unknown): Promise<void> {
+  const runtime = (globalThis as { chrome?: typeof chrome }).chrome?.runtime;
+  if (!isExtensionServiceWorkerContext() && typeof runtime?.sendMessage === "function") {
+    // The whole import must cross the worker boundary as one operation. Sending
+    // core and prompt phases separately lets another Options context reset
+    // between them; the worker owns ordering across all callers.
+    return queueBulkDataOperation(() => sendSuiteImportMessage(payload));
+  }
+  return queueBulkDataOperation(() => importAllDirect(payload));
+}
+
+export async function handleSuiteImportMessage(
+  message: SuiteImportMessage,
+  sender?: chrome.runtime.MessageSender
+): Promise<SuiteImportResponse> {
+  if (!isTrustedExtensionPageSender(sender)) {
+    return {
+      ok: false,
+      error: "Unauthorized suite import from untrusted sender",
+      code: "unauthorized",
+    };
+  }
+  try {
+    // Do not call public importAll here: that would enqueue a second operation
+    // on the same queue and deadlock. The worker owns this queue entry directly.
+    await queueBulkDataOperation(() => importAllDirect(message.payload));
+    return { ok: true };
+  } catch (err) {
+    if (err instanceof PromptOutcomeDeliveryError) {
+      return { ok: false, error: err.message, code: "partial" };
+    }
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+async function importAllDirect(payload: unknown): Promise<void> {
   if (!payload || typeof payload !== "object") throw new Error("Invalid import payload");
   const p = payload as Record<string, unknown>;
   let importLogLimit = DEFAULT_SUITE_SETTINGS.logLimit;
@@ -1794,6 +1972,7 @@ export async function importAll(payload: unknown): Promise<void> {
   }
 
   // --- Phase 2: commit the core sections in a single atomic set ---
+  let coreCommitted = false;
   if (Object.keys(writes).length > 0) {
     if (EVENT_LOG_KEY in writes) {
       // The append/migration lane is authoritative for every event-log mutation.
@@ -1808,16 +1987,27 @@ export async function importAll(payload: unknown): Promise<void> {
     } else {
       await chrome.storage.local.set(writes);
     }
+    coreCommitted = true;
   }
 
   // --- Phase 3: prompt outcomes LAST (separate by design; recomputes adaptive
   // scores; may be SW-delegated and reject on exhaustion → surfaced as a partial
   // import by the options UI). The core sections above are already consistent. ---
-  if (hasPromptOutcomes) {
-    await replacePromptOutcomes(p.promptOutcomes as PromptOutcomeEntry[]);
-  } else {
-    // Keep the phase-2 atomic clear above, then queue an idempotent barrier so
-    // an already-running startup migration cannot restore a stale derivative.
-    await clearAdaptiveScores();
+  try {
+    if (hasPromptOutcomes) {
+      await replacePromptOutcomes(p.promptOutcomes as PromptOutcomeEntry[]);
+    } else {
+      // Keep the phase-2 atomic clear above, then queue an idempotent barrier so
+      // an already-running startup migration cannot restore a stale derivative.
+      await clearAdaptiveScores();
+    }
+  } catch (err) {
+    if (coreCommitted && !(err instanceof PromptOutcomeDeliveryError)) {
+      throw new PromptOutcomeDeliveryError(
+        "Prompt-related import data was not fully updated after the core import committed",
+        { cause: err }
+      );
+    }
+    throw err;
   }
 }

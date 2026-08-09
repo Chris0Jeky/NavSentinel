@@ -8,15 +8,25 @@ import {
   appendEvent,
   handleEventLogAppendMessage,
   handleEventLogControlMessage,
+  handleSuiteImportMessage,
   handlePromptOutcomeStorageMessage,
   isEventLogAppendMessage,
   isEventLogControlMessage,
   isEventLogMigrationMessage,
   isPromptOutcomeStorageMessage,
+  isSuiteImportMessage,
   migrateStoredEventLogUrls,
   migrateStoredPromptOutcomes,
   SUITE_SETTINGS_KEY,
 } from "../shared/storage";
+// RI-06 (#474): the clear-all lives in its own module so the domain-profile
+// chunk boundary survives bundling. Static import — MV3 module workers cannot
+// resolve a runtime `import()`.
+import {
+  handleBehaviouralResetMessage,
+  isBehaviouralResetMessage,
+  resumeInterruptedBehaviouralReset,
+} from "../shared/behavioural_reset";
 import { RedirectChainTracker } from "../shared/redirect_chain";
 import type { PendingDecisionRuntimeMessage } from "../shared/pending_decision";
 import {
@@ -32,8 +42,6 @@ import {
   createDefaultPendingDecisionRuntimeBroker,
   type PendingDecisionRuntimeBroker,
 } from "./pending_decision_handlers";
-
-const BASELINE_RULESET_ID = "baseline";
 
 /** Cached defaultMode for synchronous access in navigation handlers. */
 let cachedDefaultMode = "smart";
@@ -51,6 +59,12 @@ void migrateStoredEventLogUrls().catch((err) => {
 });
 void migrateStoredPromptOutcomes().catch((err) => {
   console.warn("[NavSentinel] prompt-outcome migration failed; will retry on worker restart:", err);
+});
+// RI-06 (#474): a clear-all behavioural reset records its remaining lanes in
+// storage.local before the first destructive write, so a worker termination or
+// browser restart mid-reset resumes here instead of leaving residue behind.
+void resumeInterruptedBehaviouralReset().catch((err) => {
+  console.warn("[NavSentinel] behavioural reset resume failed; will retry on worker restart:", err);
 });
 const NAV_ALLOW_TTL_MS = 1500;
 const NAV_GESTURE_TTL_MS = 1500;
@@ -517,22 +531,7 @@ function isSameRegistrableNavigation(prevUrl: string | undefined, nextUrl: strin
   }
 }
 
-async function syncDnrRulesets(): Promise<void> {
-  try {
-    const settings = await getNavSettings();
-    const enable = settings.dnrEnabled ? [BASELINE_RULESET_ID] : [];
-    const disable = settings.dnrEnabled ? [] : [BASELINE_RULESET_ID];
-    await chrome.declarativeNetRequest.updateEnabledRulesets({
-      enableRulesetIds: enable,
-      disableRulesetIds: disable
-    });
-  } catch (err) {
-    console.warn("[NavSentinel] Failed to sync DNR rulesets", err);
-  }
-}
-
 chrome.runtime.onInstalled.addListener((details) => {
-  void syncDnrRulesets();
   chrome.action.setBadgeText({ text: "" }).catch(() => {});
   // cachedDefaultMode is refreshed by the worker-start cachedModeReady above,
   // which also runs on install/update, so no separate read is needed here. (#303)
@@ -545,7 +544,6 @@ chrome.runtime.onInstalled.addListener((details) => {
 });
 
 chrome.runtime.onStartup.addListener(() => {
-  void syncDnrRulesets();
   // cachedDefaultMode is refreshed by the worker-start cachedModeReady above
   // (which runs on browser start too), so no separate read is needed here. (#303)
 });
@@ -553,7 +551,6 @@ chrome.runtime.onStartup.addListener(() => {
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== "local") return;
   if (!changes[SUITE_SETTINGS_KEY]) return;
-  void syncDnrRulesets();
 
   const newVal = changes[SUITE_SETTINGS_KEY]!.newValue as
     | { nav?: { defaultMode?: string } }
@@ -635,6 +632,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (isPromptOutcomeStorageMessage(message)) {
     void handlePromptOutcomeStorageMessage(message, sender)
+      .then((response) => sendResponse?.(response))
+      .catch((err) => {
+        sendResponse?.({ ok: false, error: err instanceof Error ? err.message : String(err) });
+      });
+    return true;
+  }
+
+  if (isSuiteImportMessage(message)) {
+    void handleSuiteImportMessage(message, sender)
+      .then((response) => sendResponse?.(response))
+      .catch((err) => {
+        sendResponse?.({ ok: false, error: err instanceof Error ? err.message : String(err) });
+      });
+    return true;
+  }
+
+  if (isBehaviouralResetMessage(message)) {
+    void handleBehaviouralResetMessage(sender)
       .then((response) => sendResponse?.(response))
       .catch((err) => {
         sendResponse?.({ ok: false, error: err instanceof Error ? err.message : String(err) });

@@ -126,8 +126,7 @@ The popup is the fastest control surface for the current tab. It lets you:
 
 The options page is the durable operator view. It lets you:
 
-- configure navigation mode and debug overlay (the test-only DNR control is
-  scheduled for removal before beta)
+- configure navigation mode and debug overlay
 - configure credential prompts, paste warnings, medium-risk threshold, and lookalike sensitivity
 - tune the event log ring-buffer size
 - inspect and clear the navigation allowlist

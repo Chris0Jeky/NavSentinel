@@ -93,13 +93,6 @@
                     </div>
                     <button class="toggle" id="navDebug" role="switch" aria-checked="false" aria-labelledby="lbl-navDebug" aria-describedby="desc-navDebug"><span class="toggle-thumb"></span></button>
                   </div>
-                  <div class="toggle-row">
-                    <div class="toggle-info">
-                      <div class="toggle-label" id="lbl-navDnrEnabled">DNR backstop</div>
-                      <div class="toggle-sub" id="desc-navDnrEnabled">Experimental hard blocklist</div>
-                    </div>
-                    <button class="toggle" id="navDnrEnabled" role="switch" aria-checked="false" aria-labelledby="lbl-navDnrEnabled" aria-describedby="desc-navDnrEnabled"><span class="toggle-thumb"></span></button>
-                  </div>
                 </div>
               </div>
 
@@ -183,6 +176,32 @@
                   </div>
                 </div>
               </div>
+
+              <!-- Advanced instrumentation: read-only capability disclosure (RI-07).
+                   Deliberately not a toggle — the capability is a build-time release
+                   profile decision, so the UI can only report it, never turn it on. -->
+              <div class="card card--wide">
+                <div class="card-head">
+                  <span class="card-accent card-accent--amber"></span>
+                  <div class="card-title">Advanced instrumentation</div>
+                  <div class="card-sub">Beta capability status</div>
+                </div>
+                <div class="card-body">
+                  <div class="field">
+                    <div class="field-label" id="lbl-jsBehaviorCapability">JavaScript behavior monitoring</div>
+                    <div class="input-row">
+                      <span
+                        id="jsBehaviorCapabilityState"
+                        class="ns-mono"
+                        role="status"
+                        aria-labelledby="lbl-jsBehaviorCapability"
+                        aria-describedby="desc-jsBehaviorCapability"
+                      >--</span>
+                    </div>
+                    <div class="input-hint" id="desc-jsBehaviorCapability"></div>
+                  </div>
+                </div>
+              </div>
             </div>
           </section>
 
@@ -246,6 +265,24 @@
                   </div>
                 </div>
                 <div class="card-body" id="domainProfiles"></div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head">
+                <div class="card-title">Clear all behavioural data</div>
+              </div>
+              <div class="card-body">
+                <p class="input-hint" id="desc-clearBehavioural">
+                  Erases every locally recorded behavioural store in one pass: the event log,
+                  prompt outcomes, adaptive per-domain scores, and domain risk profiles.
+                  Keeps your settings, navigation allowlist, and trusted credential domains.
+                </p>
+                <button
+                  id="clearBehavioural"
+                  class="btn btn--ghost btn--danger"
+                  aria-describedby="desc-clearBehavioural"
+                >Clear behavioural data</button>
               </div>
             </div>
           </section>

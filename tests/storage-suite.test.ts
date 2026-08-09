@@ -350,6 +350,66 @@ describe("suite storage and allowlist migration", () => {
     expect(store["sentinelsuite:trusted_domains_v1"]).toEqual(["example.com"]);
   });
 
+  it("loads settings stored by a pre-RI-05 build without the retired dnrEnabled flag", async () => {
+    // An installed profile still holds the retired DNR backstop flag. Loading must
+    // keep working and must not surface the retired field to callers.
+    const { chrome } = createChromeMock({
+      "sentinelsuite:settings_v1": {
+        nav: { defaultMode: "strict", debug: true, dnrEnabled: true },
+        credential: { mode: "strict" },
+        logLimit: 120
+      }
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { getSuiteSettings } = await import("../extension/src/shared/storage");
+    const settings = await getSuiteSettings();
+
+    expect(settings.nav).toEqual({ defaultMode: "strict", debug: true });
+    expect(Object.keys(settings.nav)).not.toContain("dnrEnabled");
+    expect(settings.credential.mode).toBe("strict");
+    expect(settings.logLimit).toBe(120);
+  });
+
+  it("drops a stored dnrEnabled flag on the next settings write (RI-05)", async () => {
+    const { chrome, store } = createChromeMock({
+      "sentinelsuite:settings_v1": {
+        nav: { defaultMode: "smart", debug: false, dnrEnabled: true }
+      }
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { updateSuiteSettings } = await import("../extension/src/shared/storage");
+    await updateSuiteSettings({ nav: { debug: true } });
+
+    const persisted = store["sentinelsuite:settings_v1"] as { nav: Record<string, unknown> };
+    // Pre-fix the retired flag was spread forward and re-persisted forever.
+    expect(persisted.nav).toEqual({ defaultMode: "smart", debug: true });
+  });
+
+  it("drops a stored js-behavior capability flag instead of honouring it (RI-07)", async () => {
+    // JS-behaviour instrumentation is a build-time release-profile capability, not a
+    // stored setting. An upgrading profile that carries such a flag (a local build, a
+    // hand-edited store, or a future setting) must not survive a read or a write and
+    // must never be treated as a runtime opt-in.
+    const { chrome, store } = createChromeMock({
+      "sentinelsuite:settings_v1": {
+        nav: { defaultMode: "smart", debug: false, jsBehaviorEnabled: true }
+      }
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { getSuiteSettings, updateSuiteSettings } = await import("../extension/src/shared/storage");
+
+    const loaded = await getSuiteSettings();
+    expect(loaded.nav).toEqual({ defaultMode: "smart", debug: false });
+    expect(Object.keys(loaded.nav)).not.toContain("jsBehaviorEnabled");
+
+    await updateSuiteSettings({ nav: { debug: true } });
+    const persisted = store["sentinelsuite:settings_v1"] as { nav: Record<string, unknown> };
+    expect(persisted.nav).toEqual({ defaultMode: "smart", debug: true });
+  });
+
   it("serializes concurrent updateSuiteSettings so neither update is lost (#305)", async () => {
     const { chrome } = createChromeMock();
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);

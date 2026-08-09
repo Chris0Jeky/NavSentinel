@@ -1,5 +1,14 @@
 # JS Behavior Analysis - Architecture Design (P4-02)
 
+> **Status (RI-07): this capability ships OFF.**
+> `capabilities.jsBehaviorInstrumentation` is `false` in every committed release
+> profile, so the build aliases the monitor to a no-op and none of the prototype
+> wrapping described below is installed. This document describes the design of
+> the capability, not shipped beta behaviour. Enabling it requires
+> representative-site compatibility and runtime-overhead evidence that does not
+> exist yet (roadmap RI-07 / EV-04). See
+> `docs/Architecture_and_Data_Flow.md` for the capability wiring.
+
 ## Overview
 
 JavaScript Behavior Analysis adds runtime monitoring of page scripts to detect credential exfiltration and suspicious form manipulation patterns. This targets attacks that:

@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { SUITE_SETTINGS_KEY } from "../extension/src/shared/storage";
+import {
+  EVENT_LOG_KEY,
+  PROMPT_OUTCOMES_KEY,
+  SUITE_SETTINGS_KEY,
+} from "../extension/src/shared/storage";
+import { ADAPTIVE_SCORES_KEY } from "../extension/src/shared/adaptive_scoring";
+import { DOMAIN_PROFILES_KEY } from "../extension/src/shared/domain_profile";
 
 type RuntimeMessage = Record<string, unknown>;
 type RuntimeSender = {
@@ -31,7 +37,8 @@ function createEvent<T extends (...args: never[]) => unknown>() {
   };
 }
 
-function createChromeMock() {
+function createChromeMock(initialLocalStore: Record<string, unknown> = {}) {
+  const localStore = { ...initialLocalStore };
   const runtimeOnMessage = createEvent<
     (message: RuntimeMessage, sender: RuntimeSender, sendResponse: SendResponse) => boolean | void
   >();
@@ -84,12 +91,16 @@ function createChromeMock() {
       storage: {
         local: {
           async get(keys?: string | string[]) {
-            if (keys === undefined) return {};
-            if (typeof keys === "string") return {};
-            return Object.fromEntries(keys.map((key) => [key, undefined]));
+            if (keys === undefined) return { ...localStore };
+            if (typeof keys === "string") return keys in localStore ? { [keys]: localStore[keys] } : {};
+            return Object.fromEntries(keys.filter((key) => key in localStore).map((key) => [key, localStore[key]]));
           },
-          async set() {},
-          async remove() {},
+          async set(next: Record<string, unknown>) {
+            Object.assign(localStore, next);
+          },
+          async remove(keys: string | string[]) {
+            for (const key of typeof keys === "string" ? [keys] : keys) delete localStore[key];
+          },
         },
         session: {
           _store: {} as Record<string, unknown>,
@@ -113,9 +124,6 @@ function createChromeMock() {
       action: {
         setBadgeText: vi.fn().mockResolvedValue(undefined),
         setBadgeBackgroundColor: vi.fn().mockResolvedValue(undefined),
-      },
-      declarativeNetRequest: {
-        updateEnabledRulesets: vi.fn().mockResolvedValue(undefined),
       },
       webNavigation: {
         onBeforeNavigate: beforeNavigate,
@@ -211,6 +219,7 @@ function createChromeMock() {
       lastErrorValue = err;
     },
     sentMessages,
+    localStore,
   };
 }
 
@@ -445,6 +454,118 @@ describe("service worker handlers", () => {
       ) as { knownBad: boolean; filterReady: boolean };
 
       expect(res.knownBad).toBe(false);
+    });
+  });
+
+  // RI-06 (#474): the clear-all reset is service-worker-owned, so the router
+  // must accept it from an extension page and refuse it from a content script.
+  describe("ns-behavioural-reset", () => {
+    it("keeps the port open and reports every declared lane cleared for an extension page", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+
+      const { listenerReturns, response } = mock.dispatchRuntimeMessageAsync(
+        { type: "ns-behavioural-reset" },
+        { url: "chrome-extension://mock-id/options.html" },
+      );
+
+      expect(listenerReturns).toContain(true);
+      await expect(response).resolves.toMatchObject({
+        ok: true,
+        result: {
+          ok: true,
+          cleared: ["promptOutcomes", "adaptiveScores", "eventLog", "domainProfiles"],
+          failed: [],
+        },
+      });
+    });
+
+    it("refuses the reset from a content-script sender", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+
+      const { response } = mock.dispatchRuntimeMessageAsync(
+        { type: "ns-behavioural-reset" },
+        { tab: { id: 12 }, url: "https://evil.example/page" },
+      );
+
+      await expect(response).resolves.toMatchObject({ ok: false, code: "unauthorized" });
+    });
+  });
+
+  describe("ns-suite-import", () => {
+    it("serializes an import and reset from separate trusted extension pages", async () => {
+      const mock = createChromeMock({
+        [EVENT_LOG_KEY]: [{ id: "old-e", ts: 1, kind: "nav_click_block" }],
+        [PROMPT_OUTCOMES_KEY]: [{ id: "old-p", ts: 1, domain: "old.example", type: "nav", score: 20, outcome: "block" }],
+        [ADAPTIVE_SCORES_KEY]: { "old.example": { adjustment: 5 } },
+        [DOMAIN_PROFILES_KEY]: { "old.example": { domain: "old.example", visits: 1 } },
+      });
+      await loadSw(mock);
+
+      let releaseImportCore!: () => void;
+      let enteredImportCore!: () => void;
+      const importCoreEntered = new Promise<void>((resolve) => { enteredImportCore = resolve; });
+      const importCoreGate = new Promise<void>((resolve) => { releaseImportCore = resolve; });
+      const originalSet = mock.chrome.storage.local.set;
+      let gated = false;
+      mock.chrome.storage.local.set = async (next) => {
+        if (!gated && EVENT_LOG_KEY in next) {
+          gated = true;
+          enteredImportCore();
+          await importCoreGate;
+        }
+        await originalSet(next);
+      };
+
+      const importing = mock.dispatchRuntimeMessageAsync(
+        {
+          type: "ns-suite-import",
+          payload: {
+            eventLog: [{ id: "import-e", ts: 2, kind: "nav_click_block" }],
+            promptOutcomes: [{ id: "import-p", ts: 2, domain: "import.example", type: "nav", score: 50, outcome: "allow" }],
+          },
+        },
+        { id: "mock-id", url: "chrome-extension://mock-id/options-a.html" },
+      ).response;
+      await importCoreEntered;
+
+      const resetting = mock.dispatchRuntimeMessageAsync(
+        { type: "ns-behavioural-reset" },
+        { id: "mock-id", url: "chrome-extension://mock-id/options-b.html" },
+      ).response;
+      let resetSettled = false;
+      void resetting.then(() => { resetSettled = true; });
+      await Promise.resolve();
+      expect(resetSettled).toBe(false);
+
+      releaseImportCore();
+      await expect(importing).resolves.toMatchObject({ ok: true });
+      await expect(resetting).resolves.toMatchObject({
+        ok: true,
+        result: { ok: true, failed: [] },
+      });
+      expect(mock.localStore[EVENT_LOG_KEY]).toEqual([]);
+      expect(mock.localStore[PROMPT_OUTCOMES_KEY]).toEqual([]);
+      expect(mock.localStore[ADAPTIVE_SCORES_KEY]).toEqual({});
+      expect(mock.localStore[DOMAIN_PROFILES_KEY]).toEqual({});
+    });
+
+    it("refuses an untrusted import without writing", async () => {
+      const initial = {
+        [EVENT_LOG_KEY]: [{ id: "keep-e", ts: 1, kind: "nav_click_block" }],
+        [PROMPT_OUTCOMES_KEY]: [{ id: "keep-p", ts: 1, domain: "keep.example", type: "nav", score: 20, outcome: "block" }],
+      };
+      const mock = createChromeMock(initial);
+      await loadSw(mock);
+
+      await expect(
+        mock.dispatchRuntimeMessageAsync(
+          { type: "ns-suite-import", payload: { eventLog: [] } },
+          { id: "mock-id", url: "https://evil.example/page", tab: { id: 7 } },
+        ).response,
+      ).resolves.toMatchObject({ ok: false, code: "unauthorized" });
+      expect(mock.localStore).toEqual(initial);
     });
   });
 
@@ -2043,31 +2164,14 @@ describe("service worker handlers", () => {
       expect(mock.chrome.tabs.create).not.toHaveBeenCalled();
     });
 
-    it("onInstalled syncs DNR rulesets", async () => {
-      const mock = createChromeMock();
-      await loadSw(mock);
-
-      mock.emitInstalled("install");
-      await vi.runAllTimersAsync();
-
-      expect(mock.chrome.declarativeNetRequest.updateEnabledRulesets).toHaveBeenCalled();
-    });
-
-    it("onStartup syncs DNR rulesets", async () => {
-      const mock = createChromeMock();
-      await loadSw(mock);
-
-      mock.emitStartup();
-      await vi.runAllTimersAsync();
-
-      expect(mock.chrome.declarativeNetRequest.updateEnabledRulesets).toHaveBeenCalled();
-    });
-
+    // The settings-change handler is observed through setAllTabsGray's tabs.query,
+    // which it runs only for a local change to the suite settings key that turns
+    // navigation protection off.
     it("storage.onChanged ignores non-local area changes", async () => {
       const mock = createChromeMock();
       await loadSw(mock);
 
-      mock.chrome.declarativeNetRequest.updateEnabledRulesets.mockClear();
+      mock.chrome.tabs.query.mockClear();
 
       mock.emitStorageChanged(
         { ["sentinelsuite:settings_v1"]: { oldValue: {}, newValue: { nav: { defaultMode: "off" } } } },
@@ -2075,29 +2179,29 @@ describe("service worker handlers", () => {
       );
 
       await vi.runAllTimersAsync();
-      expect(mock.chrome.declarativeNetRequest.updateEnabledRulesets).not.toHaveBeenCalled();
+      expect(mock.chrome.tabs.query).not.toHaveBeenCalled();
     });
 
-    it("storage.onChanged syncs DNR on local settings change", async () => {
+    it("storage.onChanged applies a local settings change", async () => {
       const mock = createChromeMock();
       await loadSw(mock);
 
-      mock.chrome.declarativeNetRequest.updateEnabledRulesets.mockClear();
+      mock.chrome.tabs.query.mockClear();
 
       mock.emitStorageChanged(
-        { ["sentinelsuite:settings_v1"]: { oldValue: {}, newValue: { nav: { defaultMode: "smart" } } } },
+        { ["sentinelsuite:settings_v1"]: { oldValue: {}, newValue: { nav: { defaultMode: "off" } } } },
         "local",
       );
 
       await vi.runAllTimersAsync();
-      expect(mock.chrome.declarativeNetRequest.updateEnabledRulesets).toHaveBeenCalled();
+      expect(mock.chrome.tabs.query).toHaveBeenCalled();
     });
 
     it("storage.onChanged ignores local changes to unrelated keys", async () => {
       const mock = createChromeMock();
       await loadSw(mock);
 
-      mock.chrome.declarativeNetRequest.updateEnabledRulesets.mockClear();
+      mock.chrome.tabs.query.mockClear();
 
       mock.emitStorageChanged(
         { someOtherKey: { oldValue: null, newValue: "something" } },
@@ -2105,7 +2209,7 @@ describe("service worker handlers", () => {
       );
 
       await vi.runAllTimersAsync();
-      expect(mock.chrome.declarativeNetRequest.updateEnabledRulesets).not.toHaveBeenCalled();
+      expect(mock.chrome.tabs.query).not.toHaveBeenCalled();
     });
   });
 

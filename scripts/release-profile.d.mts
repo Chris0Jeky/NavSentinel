@@ -5,6 +5,7 @@ export interface ReleaseProfile {
   releaseEligible: boolean;
   capabilities: {
     reputation: boolean;
+    jsBehaviorInstrumentation: boolean;
   };
 }
 

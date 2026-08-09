@@ -7,7 +7,7 @@ NavSentinel is a Manifest V3 extension with four main runtime surfaces:
 1. isolated-world navigation control
 2. main-world navigation patching
 3. isolated-world credential protection
-4. service-worker state for rollback and DNR synchronization
+4. service-worker state for rollback and navigation correlation
 
 The manifest wires these together from:
 
@@ -33,8 +33,9 @@ design are substantial, but several current development paths are not production
 - The default interaction-only profile has no reputation runtime or bundled
   reputation binary. The 52-byte reserved-domain fixture is available only in
   the explicit non-release research profile.
-- The DNR ruleset contains localhost test rules only; it is not a product
-  backstop and its permissions/toggle should not ship in the beta.
+- RI-05 removed the test-only DNR ruleset, its options toggle, and both
+  `declarativeNetRequest` permissions. The extension has no network-rule
+  backstop; a real hard-block design is future work (#242/#243).
 - Broad JS-behavior API wrappers have not completed compatibility or runtime
   overhead measurement and should be beta-off until they do.
 
@@ -115,6 +116,29 @@ against hostile same-page code. `document_start` ordering is a mitigation, not
 a security boundary. Issues #175/#186 are unlisted-beta gates; a fresh external
 review of the exact package remains a separate public-launch gate. Do not
 describe the bridge as unspoofable before they are resolved.
+
+## JavaScript behavior instrumentation (beta capability, off)
+
+`capabilities.jsBehaviorInstrumentation` in `config/release-profiles.json` is
+`false` in every committed profile, including the release-eligible
+`interaction-only` default. The build aliases `@navsentinel/js-behavior-monitor`
+to `extension/src/content/js_behavior_monitor.disabled.ts`, a no-op, so
+`window.fetch`, `XMLHttpRequest.prototype.open`/`.send`, `navigator.sendBeacon`
+and the `HTMLInputElement.prototype.value` getter are never wrapped — they are
+not wrapped and left inert. `npm run check:release-profile` fails the build if a
+capability-off artifact still links the instrumentation.
+
+Core navigation, credential and DoubleClickjacking protection are unaffected:
+they live in `main_guard.ts` and `capture_isolated.ts` and do not route through
+this capability. The isolated-world signal handlers and the
+`nrs_js_behavior_suspicious` scoring factor remain in place but receive no
+signals.
+
+The capability is a build-time decision, not a stored setting: the options page
+shows a read-only status row and offers no control, and stored settings cannot
+turn it on (`mergeNavSettings` rebuilds nav settings from known fields only).
+Turning it on requires representative-site compatibility and runtime-overhead
+evidence that does not exist yet (roadmap RI-07 / EV-04).
 
 ## Domain reputation (bloom filter)
 
@@ -203,7 +227,7 @@ complete behavioral reset yet (RI-06).
 
 `extension/src/options/options.ts` is the durable operator surface:
 
-- saves nav mode, debug overlay, and DNR backstop state
+- saves nav mode and debug overlay state
 - saves credential thresholds and similarity settings
 - inspects and clears the navigation allowlist
 - manages trusted domains
@@ -218,7 +242,6 @@ complete behavioral reset yet (RI-06).
 - one-shot target allowances
 - rollback suppression windows
 - pending rollback and forward-offer state
-- DNR ruleset enable/disable synchronization
 - DoubleClickjacking child-window tracking
 - OAuth flow state per tab
 - redirect chain correlation

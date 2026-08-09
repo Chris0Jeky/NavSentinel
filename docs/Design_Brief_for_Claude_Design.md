@@ -347,7 +347,7 @@ Light theme, full-width layout (max 1100px). Has sections for Navigation Protect
 
 3. **Protection Settings Panel**
    - Two cards side by side:
-     - **Navigation Firewall** card: Mode selector, debug toggle, DNR toggle, threshold visualization
+     - **Navigation Firewall** card: Mode selector, debug toggle, threshold visualization
      - **Credential Guard** card: Mode selector, HTTP block, paste warning, similarity settings, threshold slider with visual indicator
    - Save button with status feedback
 
@@ -547,7 +547,7 @@ The MV3 service worker manages tab-scoped state: gesture allowances, rollback ta
 | Gesture token TTL | 800ms (open) / 1500ms (redirect) |
 | Event log capacity | 50-5000 entries (configurable ring buffer) |
 | Event types tracked | 11 |
-| Chrome permissions | 5 (storage, declarativeNetRequest, declarativeNetRequestWithHostAccess, webNavigation, tabs) |
+| Chrome permissions | 3 (storage, webNavigation, tabs) |
 | Source files | 21 TypeScript + 2 HTML + 2 CSS |
 | Build tool | Vite 5.4 + @crxjs/vite-plugin |
 | Test frameworks | Vitest + Playwright + fast-check |

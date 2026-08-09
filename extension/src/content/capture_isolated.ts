@@ -70,6 +70,7 @@ import {
 import { analyzeCSP, type CSPAnalysis } from "./csp_analyzer";
 import { getDomainRisk, recordNavigation } from "../shared/domain_profile";
 import { recordNavigationAnomaly, getAnomalyScoreSync, primeAnomalySession } from "../shared/nav_anomaly";
+import { isRiskReducingReason } from "../shared/reason_codes";
 import {
   isDocumentNavigationHref,
   shouldLogImmediateSilentNav,
@@ -107,11 +108,7 @@ const RISKY_BLANK_REASONS = new Set([
 ]);
 
 function buildPlainMessage(prefix: string, reasonCodes: string[]): string {
-  const positive = reasonCodes.filter(r =>
-    !r.startsWith("keyboard_") && !r.startsWith("legit_") &&
-    !r.includes("allowlisted") && !r.includes("previously_allowed") &&
-    !r.includes("explicit_new_tab") && r !== "nrs_user_activation_active"
-  );
+  const positive = reasonCodes.filter((r) => !isRiskReducingReason(r));
   const topReason = positive[positive.length - 1];
   const explanation = topReason ? explainReasonCode(topReason) : "";
   return (explanation && explanation !== topReason) ? `${prefix} — ${explanation}` : prefix;
@@ -123,7 +120,7 @@ function makeBridgeSession(): string {
 }
 
 let lastDown: DownCapture | null = null;
-let settings: NavSettings = { defaultMode: "smart", debug: false, dnrEnabled: false };
+let settings: NavSettings = { defaultMode: "smart", debug: false };
 let allowlist: Allowlist = {};
 let adaptiveAdjustment = 0;
 

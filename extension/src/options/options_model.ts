@@ -1,3 +1,4 @@
+import type { BehaviouralDataLane, BehaviouralResetResult } from "../shared/behavioural_reset";
 import type { PromptOutcome } from "../shared/storage";
 
 export function pct(n: number, total: number): string {
@@ -117,6 +118,22 @@ export interface StatsUiDeps {
 }
 
 /**
+ * Re-render after storage has already been mutated. `refresh` is `init()`, a
+ * sequence of independent storage reads, so a transient failure must not decide
+ * whether the user is told what happened: these handlers run un-awaited off a
+ * DOM listener, where a rejection escapes as an unhandled rejection and the
+ * status line is simply never written. Always refresh, never let it throw, and
+ * report the outcome regardless.
+ */
+async function safeRefresh(refresh: () => Promise<void>): Promise<void> {
+  try {
+    await refresh();
+  } catch (err) {
+    console.warn("[NavSentinel] post-operation refresh failed:", err);
+  }
+}
+
+/**
  * Orchestrate "Clear stats". Scope a delivery failure to either mutation so the
  * UI refreshes and reports a truthful partial result. `clearAdaptive` still runs
  * only after a successful prompt-outcome clear.
@@ -132,12 +149,81 @@ export async function runClearStats(
     await deps.clearAdaptive();
   } catch (e) {
     console.warn("[NavSentinel] clear stats failed:", e);
-    await deps.refresh();
+    await safeRefresh(deps.refresh);
     deps.flash("Couldn't clear stats — try again.", "error");
     return;
   }
-  await deps.refresh();
+  await safeRefresh(deps.refresh);
   deps.flash("Stats cleared.");
+}
+
+/** User-facing names for the declared behavioural-data lanes (RI-06 / #474). */
+export const BEHAVIOURAL_LANE_LABELS: Record<BehaviouralDataLane, string> = {
+  promptOutcomes: "prompt outcomes",
+  adaptiveScores: "adaptive scores",
+  eventLog: "event log",
+  domainProfiles: "domain profiles",
+};
+
+/** What the clear-all control keeps. Kept next to the lane labels so the copy
+ *  and the declared boundary are edited together. */
+export const BEHAVIOURAL_RESET_KEPT_COPY =
+  "Settings, allowlist, and trusted domains were kept.";
+
+/**
+ * Turn a clear-all result into the status line shown in the options page.
+ * Success is reported ONLY when every lane cleared; a partial result names the
+ * lanes that did not, so a half-applied reset is never displayed as done.
+ */
+export function describeBehaviouralReset(result: BehaviouralResetResult): {
+  message: string;
+  tone?: "error";
+} {
+  if (result.markerError) {
+    // The lanes cleared, but an active marker means the reset can replay and
+    // erase what the user records next. Say so instead of claiming success.
+    return {
+      message: "Cleared, but the reset wasn't finalized — it may run again at the next browser start.",
+      tone: "error",
+    };
+  }
+  if (result.ok) {
+    return { message: `Behavioural data cleared. ${BEHAVIOURAL_RESET_KEPT_COPY}` };
+  }
+  const names = result.failed
+    .map((failure) => BEHAVIOURAL_LANE_LABELS[failure.lane] ?? failure.lane)
+    .join(", ");
+  if (result.cleared.length === 0) {
+    return { message: `Couldn't clear behavioural data (${names}) — try again.`, tone: "error" };
+  }
+  return { message: `Partly cleared — still stored: ${names}. Try again.`, tone: "error" };
+}
+
+/**
+ * Orchestrate the unified clear-all. `reset` is the single service-worker-owned
+ * entry point; this never clears individual lanes itself. The UI always
+ * refreshes first so the displayed state matches whatever actually persisted,
+ * and a thrown error is treated as a total failure.
+ */
+export async function runClearBehaviouralData(
+  deps: StatsUiDeps & {
+    confirm: () => boolean;
+    reset: () => Promise<BehaviouralResetResult>;
+  },
+): Promise<void> {
+  if (!deps.confirm()) return;
+  let result: BehaviouralResetResult;
+  try {
+    result = await deps.reset();
+  } catch (e) {
+    console.warn("[NavSentinel] clear behavioural data failed:", e);
+    await safeRefresh(deps.refresh);
+    deps.flash("Couldn't clear behavioural data — try again.", "error");
+    return;
+  }
+  await safeRefresh(deps.refresh);
+  const outcome = describeBehaviouralReset(result);
+  deps.flash(outcome.message, outcome.tone);
 }
 
 /**
@@ -158,13 +244,7 @@ export async function runImportFlow(
     deps.flash("Imported.");
   } catch (e) {
     console.warn("[NavSentinel] import failed:", e);
-    // Guard the refresh so a failed re-render can neither mask the status nor
-    // escape the (un-awaited) event handler as an unhandled rejection.
-    try {
-      await deps.refresh();
-    } catch (refreshErr) {
-      console.warn("[NavSentinel] post-import refresh failed:", refreshErr);
-    }
+    await safeRefresh(deps.refresh);
     const outcome = classifyImportError(deps.isDeliveryFailure(e));
     deps.flash(outcome.message, outcome.tone);
   }
@@ -195,5 +275,37 @@ export function withReentrancyGuard(
     } finally {
       setBusy(false);
     }
+  };
+}
+
+/** Read-only options display for the RI-07 JS-behavior instrumentation capability. */
+export interface JsBehaviorCapabilityDisplay {
+  state: string;
+  detail: string;
+}
+
+/**
+ * Describe the JS-behavior instrumentation capability for the options page.
+ *
+ * The capability is a build-time release-profile decision, not a stored setting,
+ * so the options page can only report it. Passing the runtime flag in keeps the
+ * UI from ever claiming the capability is on while the runtime has it off.
+ */
+export function describeJsBehaviorCapability(enabled: boolean): JsBehaviorCapabilityDisplay {
+  if (!enabled) {
+    return {
+      state: "Off",
+      detail:
+        "This build does not install fetch, XHR, sendBeacon or password-field " +
+        "instrumentation. Navigation, credential and double-click protection are " +
+        "unaffected. Enabling it requires compatibility and performance evidence " +
+        "that is not available yet.",
+    };
+  }
+  return {
+    state: "On",
+    detail:
+      "This build installs broad JavaScript behavior instrumentation. It is not " +
+      "part of the standard beta build.",
   };
 }

@@ -42,6 +42,15 @@ export default defineConfig({
           ? "extension/src/shared/reputation_runtime.enabled.ts"
           : "extension/src/shared/reputation_runtime.disabled.ts",
       ),
+      // RI-07: with the capability off (every committed profile) the patch-bearing
+      // monitor is never linked, so fetch / XHR / sendBeacon / password-value
+      // prototypes are not wrapped at all rather than wrapped and left inert.
+      "@navsentinel/js-behavior-monitor": resolve(
+        __dirname,
+        profile.capabilities.jsBehaviorInstrumentation
+          ? "extension/src/content/js_behavior_monitor.ts"
+          : "extension/src/content/js_behavior_monitor.disabled.ts",
+      ),
     },
   },
   plugins: [profileAssets(profile), crx({ manifest: profiledManifest })],

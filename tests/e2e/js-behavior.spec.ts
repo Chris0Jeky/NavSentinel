@@ -1,16 +1,25 @@
 /**
- * JS Behavior Analysis E2E Tests (P4-02)
+ * JS Behavior Analysis E2E Tests (P4-02, re-scoped by RI-07)
  *
- * Verifies the full signal pipeline:
- * main-world monitor -> bridge -> isolated-world state -> NRS scoring
+ * RI-07 made broad JavaScript-behaviour instrumentation an explicit release
+ * capability (`capabilities.jsBehaviorInstrumentation` in
+ * config/release-profiles.json) that every committed profile leaves OFF. The
+ * build therefore aliases the monitor to a no-op module and the wrapping is
+ * never installed at all.
  *
- * Verification strategy: since JS behavior signals accumulate in-memory
- * (no event_log entry until navigation), we verify:
- * 1. The bridge is active (data-navsentinel-bridge-ready)
- * 2. The monitor is loaded (prototype patches exist in main world)
- * 3. After signals fire, NavSentinel's debug output includes the JS behavior NRS factor
- * 4. Page APIs still work correctly (try-catch safety)
- * 5. For the legit form, no toast appears (false-positive check)
+ * These tests are the browser-level proof of that, against the same fixtures
+ * that used to prove the signal pipeline:
+ * 1. The bridge is still active (data-navsentinel-bridge-ready)
+ * 2. window.fetch / XMLHttpRequest.open+send / navigator.sendBeacon / the
+ *    HTMLInputElement password-value getter are still NATIVE
+ * 3. Core navigation protection is unaffected — main_guard still wraps
+ *    HTMLFormElement.prototype.submit
+ * 4. No JS-behaviour NRS factor is produced on the multi-signal fixture
+ * 5. Page APIs work and the legit form raises no toast
+ *
+ * When the capability is turned on (which RI-07 gates on compatibility and
+ * performance evidence that does not exist yet) these expectations have to be
+ * re-inverted along with it.
  */
 import { test, expect, chromium, type BrowserContext, type Page } from "@playwright/test";
 import fs from "fs";
@@ -44,7 +53,7 @@ async function enableDebugSettings(context: BrowserContext): Promise<void> {
   await sw.evaluate(async (settingsKey: string) => {
     await chrome.storage.local.set({
       [settingsKey]: {
-        nav: { defaultMode: "smart", debug: true, dnrEnabled: false }
+        nav: { defaultMode: "smart", debug: true }
       }
     });
   }, SUITE_SETTINGS_KEY);
@@ -101,20 +110,29 @@ async function setupFixtureTest(fixtureName: string, options: { debug?: boolean 
 }
 
 /**
- * Verify the JS behavior monitor is loaded by checking for patched prototypes.
- * Returns an object indicating which patches are active.
+ * Read which main-world globals carry a wrapper, from inside the page.
+ *
+ * `Function.prototype.toString` on a native function yields "[native code]"; a
+ * JS wrapper yields its own source. That distinction is what proves the RI-07
+ * capability-off build installs nothing rather than installing an inert wrapper.
  */
-async function verifyMonitorLoaded(page: Page) {
+async function readInstrumentationState(page: Page) {
   return page.evaluate(() => {
-    const origSubmit = HTMLFormElement.prototype.submit.toString();
-    const formPatched = !origSubmit.includes("[native code]");
+    const isNative = (fn: unknown): boolean =>
+      typeof fn === "function" && Function.prototype.toString.call(fn).includes("[native code]");
 
-    const desc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
-    const getterPatched = desc?.get?.toString().includes("password") === false
-      && desc?.get?.toString() !== undefined
-      && !desc?.get?.toString().includes("[native code]");
+    const valueDesc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
 
-    return { formPatched, getterPatched };
+    return {
+      fetchNative: isNative(window.fetch),
+      xhrOpenNative: isNative(XMLHttpRequest.prototype.open),
+      xhrSendNative: isNative(XMLHttpRequest.prototype.send),
+      beaconNative: isNative(navigator.sendBeacon),
+      passwordValueGetterNative: isNative(valueDesc?.get),
+      // main_guard's navigation firewall wraps form submit independently of the
+      // JS-behaviour capability; it must STAY wrapped.
+      formSubmitPatched: !isNative(HTMLFormElement.prototype.submit),
+    };
   });
 }
 
@@ -203,28 +221,36 @@ async function runInPageMainWorld(page: Page, source: string): Promise<void> {
 }
 
 // ==========================================================================
-// JS Behavior - Monitor Loading Verification
+// RI-07 - Capability-off verification
 // ==========================================================================
 
 test.describe("JS Behavior Analysis", () => {
-  test("monitor prototype patches are active on pages with forms @p4 @regression", async () => {
+  test("no JS-behaviour instrumentation is installed, navigation guard still is @p4 @regression", async () => {
     test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
 
     const { page, cleanup } = await setupFixtureTest("js-behavior-01-credential-exfil.html");
 
     try {
-      const patches = await verifyMonitorLoaded(page);
-      expect(patches.formPatched).toBe(true);
+      const state = await readInstrumentationState(page);
+      // RI-07: the capability is off in every committed profile, so these must be
+      // untouched natives — not wrappers that merely decline to act.
+      expect(state.fetchNative).toBe(true);
+      expect(state.xhrOpenNative).toBe(true);
+      expect(state.xhrSendNative).toBe(true);
+      expect(state.beaconNative).toBe(true);
+      expect(state.passwordValueGetterNative).toBe(true);
+      // Core navigation protection is unaffected by the capability.
+      expect(state.formSubmitPatched).toBe(true);
     } finally {
       await cleanup();
     }
   });
 
   // ==========================================================================
-  // True Positive Tests - verify signals fire without breaking page
+  // Non-interference on the former true-positive fixtures
   // ==========================================================================
 
-  test("js-behavior-01 cross-origin credential form: signal fires, page intact @p4 @regression", async () => {
+  test("js-behavior-01 cross-origin credential form: page intact @p4 @regression", async () => {
     test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
 
     const { page, cleanup } = await setupFixtureTest("js-behavior-01-credential-exfil.html");
@@ -242,7 +268,7 @@ test.describe("JS Behavior Analysis", () => {
     }
   });
 
-  test("js-behavior-02 dynamic action change: signal fires, page intact @p4 @regression", async () => {
+  test("js-behavior-02 dynamic action change: page intact @p4 @regression", async () => {
     test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
 
     const { page, cleanup } = await setupFixtureTest("js-behavior-02-dynamic-action.html");
@@ -265,7 +291,7 @@ test.describe("JS Behavior Analysis", () => {
     }
   });
 
-  test("js-behavior-03 fetch exfil: monitor intercepts without breaking fetch @p4 @regression", async () => {
+  test("js-behavior-03 fetch exfil: page fetch is untouched @p4 @regression", async () => {
     test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
 
     const { page, cleanup } = await setupFixtureTest("js-behavior-03-fetch-exfil.html");
@@ -275,7 +301,7 @@ test.describe("JS Behavior Analysis", () => {
       await dispatchFormSubmit(page);
       await page.waitForTimeout(1000);
 
-      // Verify the page's fetch wasn't broken by the monitor
+      // The monitor is not installed, so page fetch must be the native one and work.
       const fetchWorks = await page.evaluate(async () => {
         try {
           await fetch("data:text/plain,test");
@@ -290,7 +316,7 @@ test.describe("JS Behavior Analysis", () => {
     }
   });
 
-  test("js-behavior-04 beacon exfil: sendBeacon fires, monitor detects @p4 @regression", async () => {
+  test("js-behavior-04 beacon exfil: sendBeacon is untouched @p4 @regression", async () => {
     test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
 
     const { page, cleanup } = await setupFixtureTest("js-behavior-04-beacon-exfil.html");
@@ -302,7 +328,7 @@ test.describe("JS Behavior Analysis", () => {
         { timeout: 6000 }
       );
 
-      // Verify sendBeacon still works after monitor patch
+      // sendBeacon is not wrapped, so it must work exactly as the native API.
       const beaconWorks = await page.evaluate(() => {
         try {
           return navigator.sendBeacon("/beacon-probe", "ok");
@@ -316,7 +342,7 @@ test.describe("JS Behavior Analysis", () => {
     }
   });
 
-  test("js-behavior-05 credential value read: getter patched, page intact @p4 @regression", async () => {
+  test("js-behavior-05 credential value read: getter is untouched, page intact @p4 @regression", async () => {
     test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
 
     const { page, cleanup } = await setupFixtureTest("js-behavior-05-credential-read.html");
@@ -370,7 +396,7 @@ test.describe("JS Behavior Analysis", () => {
   // Multi-signal / Pipeline Integration
   // ==========================================================================
 
-  test("js-behavior-07 multi-signal attack: all APIs survive combined signals @p4 @regression", async () => {
+  test("js-behavior-07 multi-signal attack: no JS-behaviour NRS factor is produced @p4 @regression", async () => {
     test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
 
     const { page, cleanup } = await setupFixtureTest("js-behavior-07-multi-signal.html", {
@@ -411,8 +437,10 @@ test.describe("JS Behavior Analysis", () => {
       });
       expect(fetchWorks).toBe(true);
 
+      // RI-07: with the capability off no ns-js-* signal ever reaches the
+      // isolated world, so the NRS breakdown must carry no JS-behaviour factor.
       const debugText = await clickDebugProbeAndRead(page);
-      expect(debugText).toContain("nrs_js_behavior_suspicious");
+      expect(debugText).not.toContain("nrs_js_behavior");
     } finally {
       await cleanup();
     }

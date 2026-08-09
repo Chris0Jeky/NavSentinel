@@ -43,6 +43,11 @@ const VISUAL_SIM_BUNDLE_TOKENS = [
   "visualSimilarityScore",
   "nrs_visual_brand_match",
 ];
+// Literal declared by extension/src/content/js_behavior_monitor.ts (the enabled
+// variant) from a live debug-only code path, so it survives bundling/minification
+// and cannot be dropped by dead-code elimination. Its absence from every built
+// script proves the instrumentation module was not linked into the build at all.
+const JS_BEHAVIOR_INSTRUMENTATION_SENTINEL = "ns-js-behavior-instrumentation-v1";
 
 function listFilesWithExtension(dir, extension) {
   const files = [];
@@ -121,6 +126,21 @@ export function inspectBuiltReleaseProfile(
     }
   }
 
+  // RI-07: with `capabilities.jsBehaviorInstrumentation` off, the fetch / XHR /
+  // sendBeacon / password-value prototype wrapping must not exist in the build —
+  // not merely be inert at runtime. The bundler aliases the monitor to a no-op
+  // module; this asserts the enabled module really was left out.
+  if (!profile.capabilities.jsBehaviorInstrumentation) {
+    for (const filePath of listFilesWithExtension(distDir, ".js")) {
+      if (fs.readFileSync(filePath, "utf8").includes(JS_BEHAVIOR_INSTRUMENTATION_SENTINEL)) {
+        throw new Error(
+          "js-behavior instrumentation is disabled but the built bundle still links it: " +
+          path.relative(distDir, filePath),
+        );
+      }
+    }
+  }
+
   return {
     profile,
     manifest,
@@ -150,7 +170,8 @@ function main() {
     });
     console.log(
       `PASS: profile=${result.profile.id}; releaseEligible=${result.profile.releaseEligible}; ` +
-      `reputation=${result.profile.capabilities.reputation}`,
+      `reputation=${result.profile.capabilities.reputation}; ` +
+      `jsBehaviorInstrumentation=${result.profile.capabilities.jsBehaviorInstrumentation}`,
     );
   } catch (error) {
     console.error(`FAIL: ${error instanceof Error ? error.message : String(error)}`);

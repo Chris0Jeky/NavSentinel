@@ -88,8 +88,9 @@
 ### Manifest Pre-Submission
 - [ ] Derive the oldest supported Chrome version from the exact APIs/features
   used, test that version, then set `minimum_chrome_version` in the manifest
-- [ ] Remove the test-only DNR ruleset, options toggle, and both DNR permissions
-  from the beta; redesign #242/#243 only when an exact bounded rule product exists
+- [x] Remove the test-only DNR ruleset, options toggle, and both DNR permissions
+  from the beta (RI-05); redesign #242/#243 only when an exact bounded rule
+  product exists
 
 ### Known Limitations to Document
 - Oldest supported Chrome version remains unverified until the compatibility

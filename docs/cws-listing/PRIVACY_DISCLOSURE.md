@@ -12,8 +12,6 @@ by monitoring click context and navigation patterns locally.
 | Permission | Justification |
 |-----------|---------------|
 | `storage` | Stores settings, allow/trust lists, event and prompt-outcome history, adaptive/domain/category behavior profiles, smart-default cooldowns, and ephemeral security state. Nothing is transmitted. |
-| `declarativeNetRequest` | **Remove before beta.** The current ruleset contains localhost test stubs only and is not a user feature. |
-| `declarativeNetRequestWithHostAccess` | **Remove before beta with `declarativeNetRequest`.** It currently supports only the same disabled localhost test ruleset and is not a user feature. |
 | `webNavigation` | Monitors navigation commits to detect redirect chains, rollback suspicious navigations, and correlate gesture tokens with navigation events. |
 | `tabs` | Tracks tab creation/closure for DoubleClickjacking detection (child window monitoring) and rollback affordances. |
 | `host_permissions: <all_urls>` | Content scripts must run on all pages to detect click deception, credential risks, and overlay attacks. Interaction data is processed locally and configured security history may be stored locally; nothing is transmitted. |
@@ -52,9 +50,14 @@ by monitoring click context and navigation patterns locally.
 
 The current export includes settings, allow/trust lists, event log, prompt
 outcomes, and adaptive scores. Domain/category profiles and cooldowns are not
-exported. Options can clear the log, prompt/adaptive stats, and domain profiles;
-RI-06 must add a complete behavioral reset and purpose-specific URL
-minimization before beta.
+exported. Options can clear the log, prompt/adaptive stats, and domain profiles
+individually, and **Clear behavioural data** (Analytics pane) resets all four of
+those stores in one service-worker-owned pass while keeping settings, the
+allowlist, and trusted domains. Navigation-category counts and smart-default
+cooldowns are NOT covered by that reset and still have no user-facing clear
+control. The behavioural-data boundary is a stated implementation assumption
+until the owner rules on #474; RI-06 also still requires purpose-specific URL
+minimization sign-off before beta.
 
 **Data not transmitted or retained as raw content**:
 - No browsing history sent anywhere
