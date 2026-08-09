@@ -403,10 +403,12 @@ function clearPendingTabState(
 // B was still in flight, so a later onUpdated re-dispatched B a *third* time. A+B carry
 // *different* URLs, so tab+URL keys scope each marker to its own destination — A's
 // callback clears only A's key and never frees B. The composite key (vs a per-entry
-// object reference) is deliberate so a same-URL rewrite stays guarded: ns-store-forward
-// replaces pendingForwardByTab with a *fresh* object for the same tab+URL (to add a
-// returnUrl) while a send is in flight; an object-identity key would treat the rewrite
-// as not-in-flight and fire a duplicate forward offer — the tab+URL key still matches it.
+// object reference) is deliberate so a same-URL replacement stays guarded while a send is in
+// flight: an object-identity key would treat any freshly constructed same-URL entry as
+// not-in-flight and fire a duplicate forward offer, whereas the tab+URL key still matches it.
+// (ns-store-forward now enriches a same-URL offer in place, so that particular rewrite keeps
+// its identity — but onCommitted can still install a genuinely new same-URL offer object after
+// onBeforeNavigate clears the slot, and the composite key covers that too.)
 const rollbackSendInFlight = new Set<string>();
 const forwardSendInFlight = new Set<string>();
 
@@ -468,8 +470,19 @@ function trySendForwardOffer(
       // that onBeforeNavigate / onRemoved cleared during the gap. (#323/disc#6/#7)
       readyTabs.delete(tabId);
     } else if (pendingForwardByTab.get(tabId) === forward) {
-      // Delivered. Remove ONLY the exact offer we sent — a newer ns-store-forward offer
-      // written during the async gap must survive. (#323/disc#6)
+      // Delivered. Remove ONLY the exact offer object we sent — any newer offer written
+      // during the async gap must survive, whether it is an ns-store-forward write for a
+      // DIFFERENT url (#323/disc#6) or a genuinely new SAME-url offer that onCommitted
+      // installed after onBeforeNavigate cleared the slot and its suppress window (#382
+      // review). Those two cases are indistinguishable by url, and by `ts` too (both stamp
+      // a fresh Date.now()), so a url-equality check here would delete the new offer and
+      // lose the user's forward destination.
+      //
+      // Object identity is nevertheless enough to fix #382, because ns-store-forward now
+      // ENRICHES a same-url offer in place (see its handler) instead of swapping in a fresh
+      // object: the returnUrl enrichment of the offer we just delivered is still *this*
+      // object, so it is cleared here and cannot be re-dispatched later as a duplicate
+      // ns-forward-offer for a URL the user was already prompted about.
       pendingForwardByTab.delete(tabId);
     }
     swState.persistMap(pendingForwardByTab, "pendingForward");
@@ -842,13 +855,38 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return runWhenHydrated(() => {
       const tabId = sender.tab?.id;
       if (typeof tabId === "number" && typeof message.url === "string") {
-        pendingForwardByTab.set(tabId, {
-          url: message.url,
-          ts: Date.now(),
-          ...(typeof message.returnUrl === "string" && message.returnUrl
-            ? { returnUrl: message.returnUrl }
-            : {})
-        });
+        const returnUrl =
+          typeof message.returnUrl === "string" && message.returnUrl ? message.returnUrl : undefined;
+        const existing = pendingForwardByTab.get(tabId);
+        if (existing && existing.url === message.url) {
+          // Same destination as the offer already in the slot (the normal case: handleRollback
+          // sends this to attach a returnUrl to the offer onCommitted just stored). ENRICH THAT
+          // ENTRY IN PLACE rather than replacing it with a fresh object.
+          //
+          // Preserving object identity is what lets trySendForwardOffer's success callback keep
+          // an identity check (#382 review): an enrichment of an offer that is already in flight
+          // stays the SAME offer and is therefore cleared on delivery (no duplicate prompt),
+          // while a genuinely new same-url offer installed by onCommitted after onBeforeNavigate
+          // cleared the slot is a DIFFERENT object and survives the stale callback. A url check
+          // in that callback cannot separate the two.
+          //
+          // The resulting field values are exactly what the old replacement object carried — ts
+          // is still refreshed, returnUrl still mirrors the message — so ns-check-forward's
+          // returnUrl match and its `Date.now() - forward.ts > ROLLBACK_SUPPRESS_MS` expiry are
+          // unchanged.
+          existing.ts = Date.now();
+          if (returnUrl !== undefined) {
+            existing.returnUrl = returnUrl;
+          } else {
+            delete existing.returnUrl;
+          }
+        } else {
+          pendingForwardByTab.set(tabId, {
+            url: message.url,
+            ts: Date.now(),
+            ...(returnUrl !== undefined ? { returnUrl } : {})
+          });
+        }
         swState.persistMap(pendingForwardByTab, "pendingForward");
       }
     }, false);
@@ -1343,9 +1381,9 @@ function onUpdatedHandler(
   if (!currentUrl) return;
   if (currentUrl === forward.url) return;
   if (!readyTabs.has(tabId)) return;
-  // tab+URL key (#360): a same-URL rewrite via ns-store-forward (which swaps in a fresh
-  // offer object to add a returnUrl while a send is in flight) stays guarded here, so the
-  // rewrite cannot fire a duplicate forward offer.
+  // tab+URL key (#360): any same-URL entry written while a send is in flight stays guarded
+  // here — the ns-store-forward returnUrl enrichment (now applied in place) and a genuinely
+  // new onCommitted offer object alike — so neither can fire a duplicate forward offer.
   if (forwardSendInFlight.has(sendInFlightKey(tabId, forward.url))) return;
   trySendForwardOffer(tabId, forward);
 }
