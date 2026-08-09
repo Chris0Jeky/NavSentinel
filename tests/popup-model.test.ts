@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { EventLogEntry, UnscoredThreatKind } from "../extension/src/shared/storage";
 import { UNSCORED_THREAT_KINDS } from "../extension/src/shared/storage";
+import { isRiskReducingReason as sharedIsRiskReducingReason } from "../extension/src/shared/reason_codes";
 import {
   derivePopupSiteState,
   derivePopupTabRisk,
@@ -305,6 +306,10 @@ describe("signalChipClass (#205)", () => {
 });
 
 describe("isRiskReducingReason (#205 R1: exact predicate, mirrors buildPlainMessage)", () => {
+  it("re-exports the shared predicate used by content-script toasts (#216)", () => {
+    expect(isRiskReducingReason).toBe(sharedIsRiskReducingReason);
+  });
+
   it("matches the risk-reducing reason codes the toast filters out", () => {
     for (const r of [
       "nrs_allowlisted",
