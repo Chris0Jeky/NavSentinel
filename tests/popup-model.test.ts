@@ -1,14 +1,18 @@
 import { describe, expect, it } from "vitest";
-import type { EventLogEntry } from "../extension/src/shared/storage";
+import type { EventLogEntry, UnscoredThreatKind } from "../extension/src/shared/storage";
+import { UNSCORED_THREAT_KINDS } from "../extension/src/shared/storage";
 import { isRiskReducingReason as sharedIsRiskReducingReason } from "../extension/src/shared/reason_codes";
 import {
   derivePopupSiteState,
   derivePopupTabRisk,
+  describeUnscoredThreat,
   eventIconName,
   formatPopupEventLine,
   getRecentPopupEvents,
   isRiskReducingReason,
+  isUnscoredThreatEvent,
   pickSiteRiskEvent,
+  pickSiteUnscoredThreatEvent,
   signalChipClass
 } from "../extension/src/popup/popup_model";
 
@@ -448,20 +452,34 @@ describe("derivePopupTabRisk (#205 R1)", () => {
 
   it("returns the scored same-domain event's risk + reasons", () => {
     const log = [ev("1", "other.com", 90), ev("2", "example.com", 55)];
-    expect(derivePopupTabRisk(log, "example.com")).toEqual({ tabRisk: 55, reasons: ["x"] });
+    expect(derivePopupTabRisk(log, "example.com")).toEqual({
+      tabRisk: 55,
+      reasons: ["x"],
+      state: "scored",
+      threatKind: undefined,
+    });
   });
 
-  it("returns 0 / no reasons when the active site has only a scoreless alert (no green-gauge-with-orange-chips contradiction)", () => {
+  it("stays clear for a low/unknown-severity mutation_alert — only high severity is a threat (#219)", () => {
+    // The mutation monitor downgrades known-benign DOM churn to low severity, so
+    // this must NOT warn (the over-warning failure mode).
     const log: EventLogEntry[] = [
       { id: "1", ts: 1, kind: "mutation_alert", site: "example.com", reasons: ["dom_mutation"] } as EventLogEntry,
     ];
-    expect(derivePopupTabRisk(log, "example.com")).toEqual({ tabRisk: 0, reasons: undefined });
+    expect(derivePopupTabRisk(log, "example.com")).toEqual({
+      tabRisk: 0,
+      reasons: undefined,
+      state: "clear",
+      threatKind: undefined,
+    });
   });
 
   it("returns 0 / no reasons when no event matches the active site", () => {
     expect(derivePopupTabRisk([ev("1", "other.com", 90)], "example.com")).toEqual({
       tabRisk: 0,
       reasons: undefined,
+      state: "clear",
+      threatKind: undefined,
     });
   });
 
@@ -471,6 +489,158 @@ describe("derivePopupTabRisk (#205 R1)", () => {
     const log: EventLogEntry[] = [
       { id: "1", ts: 1, kind: "nav_click_block", site: "example.com", score: 0, reasons: ["x"] } as EventLogEntry,
     ];
-    expect(derivePopupTabRisk(log, "example.com")).toEqual({ tabRisk: 0, reasons: ["x"] });
+    expect(derivePopupTabRisk(log, "example.com")).toEqual({
+      tabRisk: 0,
+      reasons: ["x"],
+      state: "scored",
+      threatKind: undefined,
+    });
+  });
+});
+
+describe("unscored-threat gauge state (#219)", () => {
+  const scored = (id: string, site: string, score: number): EventLogEntry =>
+    ({ id, ts: Number(id), kind: "nav_click_block", site, score, reasons: ["x"] }) as EventLogEntry;
+
+  const lateWarn = (id: string, site: string): EventLogEntry =>
+    ({
+      id,
+      ts: Number(id),
+      kind: "nav_reputation_late_warn",
+      site,
+      destHost: "evil.example",
+      reasons: ["late_async_child_frame"],
+    }) as EventLogEntry;
+
+  const highMutation = (id: string, site: string): EventLogEntry =>
+    ({
+      id,
+      ts: Number(id),
+      kind: "mutation_alert",
+      site,
+      reasons: ["overlay_injected"],
+      extra: { severity: "high", details: "x" },
+    }) as EventLogEntry;
+
+  describe("isUnscoredThreatEvent", () => {
+    it("accepts the enumerated scoreless threat kinds", () => {
+      expect(isUnscoredThreatEvent(lateWarn("1", "example.com"))).toBe(true);
+      expect(isUnscoredThreatEvent(highMutation("1", "example.com"))).toBe(true);
+      expect(
+        isUnscoredThreatEvent({ id: "1", ts: 1, kind: "nav_rollback", site: "example.com" } as EventLogEntry),
+      ).toBe(true);
+      expect(
+        isUnscoredThreatEvent({ id: "1", ts: 1, kind: "nav_blank_prompt", site: "example.com" } as EventLogEntry),
+      ).toBe(true);
+    });
+
+    it("rejects scoreless events that are not threats (the over-warning guard)", () => {
+      for (const kind of ["nav_allowlist_add", "nav_allowlist_remove", "suite_config_update", "cred_trust_domain"]) {
+        expect(
+          isUnscoredThreatEvent({ id: "1", ts: 1, kind, site: "example.com" } as unknown as EventLogEntry),
+          `${kind} must not warn`,
+        ).toBe(false);
+      }
+    });
+
+    it("rejects a mutation_alert that is not high severity", () => {
+      for (const severity of ["low", "medium", undefined]) {
+        expect(
+          isUnscoredThreatEvent({
+            id: "1",
+            ts: 1,
+            kind: "mutation_alert",
+            site: "example.com",
+            extra: severity === undefined ? {} : { severity },
+          } as unknown as EventLogEntry),
+          `severity=${String(severity)} must not warn`,
+        ).toBe(false);
+      }
+    });
+
+    it("rejects a threat kind that carries a score — the scored path owns it", () => {
+      expect(
+        isUnscoredThreatEvent({
+          id: "1",
+          ts: 1,
+          kind: "nav_blank_prompt",
+          site: "example.com",
+          score: 42,
+        } as EventLogEntry),
+      ).toBe(false);
+    });
+
+    it("tolerates corrupted entries", () => {
+      expect(isUnscoredThreatEvent(null as unknown as EventLogEntry)).toBe(false);
+      expect(isUnscoredThreatEvent({} as EventLogEntry)).toBe(false);
+    });
+  });
+
+  describe("pickSiteUnscoredThreatEvent", () => {
+    it("matches by registrable domain, newest first", () => {
+      const log = [lateWarn("1", "www.example.com"), highMutation("2", "app.example.com")];
+      expect(pickSiteUnscoredThreatEvent(log, "example.com")?.id).toBe("2");
+    });
+
+    it("ignores other domains and an empty domain", () => {
+      expect(pickSiteUnscoredThreatEvent([lateWarn("1", "other.com")], "example.com")).toBeNull();
+      expect(pickSiteUnscoredThreatEvent([lateWarn("1", "example.com")], "")).toBeNull();
+    });
+  });
+
+  describe("derivePopupTabRisk", () => {
+    it("does NOT present a clear/green gauge when the only same-domain event is a scoreless threat alert", () => {
+      // The acceptance criterion of #219, one case per enumerated threat kind.
+      const kinds = [
+        lateWarn("1", "example.com"),
+        highMutation("1", "example.com"),
+        { id: "1", ts: 1, kind: "nav_rollback", site: "example.com" } as EventLogEntry,
+        { id: "1", ts: 1, kind: "nav_blank_prompt", site: "example.com" } as EventLogEntry,
+      ];
+      for (const entry of kinds) {
+        const risk = derivePopupTabRisk([entry], "example.com");
+        expect(risk.state, `${entry.kind} should drive the unscored-threat gauge`).toBe("unscored-threat");
+        expect(risk.threatKind).toBe(entry.kind);
+        // No synthetic score is invented — the gauge state carries the meaning.
+        expect(risk.tabRisk).toBe(0);
+      }
+    });
+
+    it("surfaces the threat's own reason codes as signals", () => {
+      expect(derivePopupTabRisk([lateWarn("1", "example.com")], "example.com").reasons).toEqual([
+        "late_async_child_frame",
+      ]);
+    });
+
+    it("keeps a SCORED event winning even when a scoreless alert is newer", () => {
+      const log = [scored("1", "example.com", 80), lateWarn("2", "example.com")];
+      expect(derivePopupTabRisk(log, "example.com")).toEqual({
+        tabRisk: 80,
+        reasons: ["x"],
+        state: "scored",
+        threatKind: undefined,
+      });
+    });
+
+    it("keeps a SCORED event winning when the scoreless alert is older", () => {
+      const log = [highMutation("1", "example.com"), scored("2", "example.com", 80)];
+      expect(derivePopupTabRisk(log, "example.com").state).toBe("scored");
+      expect(derivePopupTabRisk(log, "example.com").tabRisk).toBe(80);
+    });
+
+    it("does not let another domain's scoreless threat leak onto this site", () => {
+      expect(derivePopupTabRisk([lateWarn("1", "other.com")], "example.com").state).toBe("clear");
+    });
+  });
+
+  describe("describeUnscoredThreat", () => {
+    it("describes every enumerated threat kind honestly (recorded, not scored)", () => {
+      for (const kind of UNSCORED_THREAT_KINDS) {
+        const text = describeUnscoredThreat(kind as UnscoredThreatKind);
+        expect(text, `${kind} needs a description`).toBeTruthy();
+        // No description may claim a score/rating exists for this state.
+        expect(text.toLowerCase()).not.toMatch(/(score|rating|risk level)/);
+      }
+    });
   });
 });
