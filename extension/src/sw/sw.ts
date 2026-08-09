@@ -33,8 +33,6 @@ import {
   type PendingDecisionRuntimeBroker,
 } from "./pending_decision_handlers";
 
-const BASELINE_RULESET_ID = "baseline";
-
 /** Cached defaultMode for synchronous access in navigation handlers. */
 let cachedDefaultMode = "smart";
 // Set once storage.onChanged delivers a mode, so the slower async startup read
@@ -567,22 +565,7 @@ function isSameRegistrableNavigation(prevUrl: string | undefined, nextUrl: strin
   }
 }
 
-async function syncDnrRulesets(): Promise<void> {
-  try {
-    const settings = await getNavSettings();
-    const enable = settings.dnrEnabled ? [BASELINE_RULESET_ID] : [];
-    const disable = settings.dnrEnabled ? [] : [BASELINE_RULESET_ID];
-    await chrome.declarativeNetRequest.updateEnabledRulesets({
-      enableRulesetIds: enable,
-      disableRulesetIds: disable
-    });
-  } catch (err) {
-    console.warn("[NavSentinel] Failed to sync DNR rulesets", err);
-  }
-}
-
 chrome.runtime.onInstalled.addListener((details) => {
-  void syncDnrRulesets();
   chrome.action.setBadgeText({ text: "" }).catch(() => {});
   // cachedDefaultMode is refreshed by the worker-start cachedModeReady above,
   // which also runs on install/update, so no separate read is needed here. (#303)
@@ -595,7 +578,6 @@ chrome.runtime.onInstalled.addListener((details) => {
 });
 
 chrome.runtime.onStartup.addListener(() => {
-  void syncDnrRulesets();
   // cachedDefaultMode is refreshed by the worker-start cachedModeReady above
   // (which runs on browser start too), so no separate read is needed here. (#303)
 });
@@ -603,7 +585,6 @@ chrome.runtime.onStartup.addListener(() => {
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== "local") return;
   if (!changes[SUITE_SETTINGS_KEY]) return;
-  void syncDnrRulesets();
 
   const newVal = changes[SUITE_SETTINGS_KEY]!.newValue as
     | { nav?: { defaultMode?: string } }

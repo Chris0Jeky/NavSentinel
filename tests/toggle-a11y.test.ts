@@ -9,7 +9,6 @@ const __dirname = path.dirname(__filename);
 
 const TOGGLE_IDS = [
   { id: "navDebug", labelId: "lbl-navDebug", descId: "desc-navDebug" },
-  { id: "navDnrEnabled", labelId: "lbl-navDnrEnabled", descId: "desc-navDnrEnabled" },
   { id: "blockHttpPasswordSubmit", labelId: "lbl-blockHttp", descId: "desc-blockHttp" },
   { id: "warnOnPaste", labelId: "lbl-warnPaste", descId: "desc-warnPaste" },
   { id: "promptOnUntrustedDomain", labelId: "lbl-promptUntrusted", descId: "desc-promptUntrusted" },

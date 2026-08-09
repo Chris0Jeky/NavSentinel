@@ -114,9 +114,6 @@ function createChromeMock() {
         setBadgeText: vi.fn().mockResolvedValue(undefined),
         setBadgeBackgroundColor: vi.fn().mockResolvedValue(undefined),
       },
-      declarativeNetRequest: {
-        updateEnabledRulesets: vi.fn().mockResolvedValue(undefined),
-      },
       webNavigation: {
         onBeforeNavigate: beforeNavigate,
         onCommitted: committed,
@@ -2203,31 +2200,14 @@ describe("service worker handlers", () => {
       expect(mock.chrome.tabs.create).not.toHaveBeenCalled();
     });
 
-    it("onInstalled syncs DNR rulesets", async () => {
-      const mock = createChromeMock();
-      await loadSw(mock);
-
-      mock.emitInstalled("install");
-      await vi.runAllTimersAsync();
-
-      expect(mock.chrome.declarativeNetRequest.updateEnabledRulesets).toHaveBeenCalled();
-    });
-
-    it("onStartup syncs DNR rulesets", async () => {
-      const mock = createChromeMock();
-      await loadSw(mock);
-
-      mock.emitStartup();
-      await vi.runAllTimersAsync();
-
-      expect(mock.chrome.declarativeNetRequest.updateEnabledRulesets).toHaveBeenCalled();
-    });
-
+    // The settings-change handler is observed through setAllTabsGray's tabs.query,
+    // which it runs only for a local change to the suite settings key that turns
+    // navigation protection off.
     it("storage.onChanged ignores non-local area changes", async () => {
       const mock = createChromeMock();
       await loadSw(mock);
 
-      mock.chrome.declarativeNetRequest.updateEnabledRulesets.mockClear();
+      mock.chrome.tabs.query.mockClear();
 
       mock.emitStorageChanged(
         { ["sentinelsuite:settings_v1"]: { oldValue: {}, newValue: { nav: { defaultMode: "off" } } } },
@@ -2235,29 +2215,29 @@ describe("service worker handlers", () => {
       );
 
       await vi.runAllTimersAsync();
-      expect(mock.chrome.declarativeNetRequest.updateEnabledRulesets).not.toHaveBeenCalled();
+      expect(mock.chrome.tabs.query).not.toHaveBeenCalled();
     });
 
-    it("storage.onChanged syncs DNR on local settings change", async () => {
+    it("storage.onChanged applies a local settings change", async () => {
       const mock = createChromeMock();
       await loadSw(mock);
 
-      mock.chrome.declarativeNetRequest.updateEnabledRulesets.mockClear();
+      mock.chrome.tabs.query.mockClear();
 
       mock.emitStorageChanged(
-        { ["sentinelsuite:settings_v1"]: { oldValue: {}, newValue: { nav: { defaultMode: "smart" } } } },
+        { ["sentinelsuite:settings_v1"]: { oldValue: {}, newValue: { nav: { defaultMode: "off" } } } },
         "local",
       );
 
       await vi.runAllTimersAsync();
-      expect(mock.chrome.declarativeNetRequest.updateEnabledRulesets).toHaveBeenCalled();
+      expect(mock.chrome.tabs.query).toHaveBeenCalled();
     });
 
     it("storage.onChanged ignores local changes to unrelated keys", async () => {
       const mock = createChromeMock();
       await loadSw(mock);
 
-      mock.chrome.declarativeNetRequest.updateEnabledRulesets.mockClear();
+      mock.chrome.tabs.query.mockClear();
 
       mock.emitStorageChanged(
         { someOtherKey: { oldValue: null, newValue: "something" } },
@@ -2265,7 +2245,7 @@ describe("service worker handlers", () => {
       );
 
       await vi.runAllTimersAsync();
-      expect(mock.chrome.declarativeNetRequest.updateEnabledRulesets).not.toHaveBeenCalled();
+      expect(mock.chrome.tabs.query).not.toHaveBeenCalled();
     });
   });
 

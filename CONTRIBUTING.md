@@ -103,7 +103,7 @@ rather than being checked with a caveat.
 - design system (shared tokens, icons, typography)
   - `extension/src/shared/design_tokens.css`
   - `extension/src/shared/icons.ts`
-- rollback and DNR sync
+- rollback and service-worker navigation state
   - `extension/src/sw/sw.ts`
 
 ## Adding a Gym case

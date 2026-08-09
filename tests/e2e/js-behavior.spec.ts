@@ -44,7 +44,7 @@ async function enableDebugSettings(context: BrowserContext): Promise<void> {
   await sw.evaluate(async (settingsKey: string) => {
     await chrome.storage.local.set({
       [settingsKey]: {
-        nav: { defaultMode: "smart", debug: true, dnrEnabled: false }
+        nav: { defaultMode: "smart", debug: true }
       }
     });
   }, SUITE_SETTINGS_KEY);

@@ -17,7 +17,7 @@ From `CONTRIBUTING.md` and `autodoc/AGENT_INDEX.md`:
 - credential risk and prompts: `extension/src/content/credential_guard.ts`, `extension/src/content/credential_modal.ts`, `extension/src/shared/domain.ts`
 - storage and persistence: `extension/src/shared/storage.ts`, `extension/src/shared/allowlist.ts`, `extension/src/shared/session_state.ts`
 - popup and options UI: `extension/src/popup/*`, `extension/src/options/*`
-- rollback, OAuth, DNR, redirect chains, and session-backed SW state: `extension/src/sw/sw.ts`
+- rollback, OAuth, redirect chains, and session-backed SW state: `extension/src/sw/sw.ts`
 
 ## Build And Verify Cycle
 

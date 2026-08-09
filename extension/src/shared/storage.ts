@@ -15,7 +15,6 @@ export type CredMode = "off" | "smart" | "strict";
 export interface NavSettings {
   defaultMode: Mode;
   debug: boolean;
-  dnrEnabled: boolean;
 }
 
 export interface CredentialSettings {
@@ -139,8 +138,7 @@ export function buildNavOutcomeFeatures(input: {
 const DEFAULT_SUITE_SETTINGS: SuiteSettings = {
   nav: {
     defaultMode: "smart",
-    debug: false,
-    dnrEnabled: false
+    debug: false
   },
   credential: {
     mode: "smart",
@@ -162,11 +160,20 @@ function clampInt(v: unknown, min: number, max: number, fallback: number): numbe
   return Math.max(min, Math.min(max, n));
 }
 
+// RI-05 retired the test-only DNR backstop, but installed profiles still hold its
+// `dnrEnabled` flag inside the stored nav settings. Rebuild nav from known fields
+// only so the retired flag is dropped instead of being spread forward and
+// re-persisted by the next settings write. No runtime code reads it.
+function mergeNavSettings(cur: NavSettings, partial: Partial<NavSettings> | undefined): NavSettings {
+  const merged = { ...cur, ...(partial ?? {}) };
+  return { defaultMode: merged.defaultMode, debug: merged.debug };
+}
+
 function mergeSuiteSettings(cur: SuiteSettings, partial: SuiteSettingsPatch): SuiteSettings {
   const next: SuiteSettings = {
     ...cur,
     ...partial,
-    nav: { ...cur.nav, ...(partial.nav ?? {}) },
+    nav: mergeNavSettings(cur.nav, partial.nav),
     credential: {
       ...cur.credential,
       ...(partial.credential ?? {}),

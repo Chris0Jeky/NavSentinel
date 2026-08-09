@@ -82,7 +82,7 @@ test("options import and export preserve normalized trusted-domain and allowlist
     JSON.stringify(
       {
         settings: {
-          nav: { defaultMode: "off", debug: true, dnrEnabled: true },
+          nav: { defaultMode: "off", debug: true },
           credential: { mode: "strict", mediumRiskThreshold: 55 },
           logLimit: 120
         },
