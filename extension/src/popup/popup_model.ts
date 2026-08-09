@@ -1,5 +1,5 @@
-import type { EventLogEntry } from "../shared/storage";
-import { SILENT_DECISION_KINDS } from "../shared/storage";
+import type { EventLogEntry, UnscoredThreatKind } from "../shared/storage";
+import { isUnscoredThreatKind, SILENT_DECISION_KINDS } from "../shared/storage";
 import { getRegistrableDomain, normalizeHost } from "../shared/domain";
 import { isRiskReducingReason } from "../shared/reason_codes";
 
@@ -95,7 +95,9 @@ export function eventIconName(kind: string): string {
  * without a score (nav_rollback, mutation_alert, nav_reputation_late_warn,
  * nav_blank_prompt) and, being the most recent, would otherwise mask an earlier
  * scored block — dropping the gauge to 0/green — and produce orange chips beside a
- * green gauge. Scoreless alerts still appear in the event list, just not the gauge.
+ * green gauge. Scoreless alerts still appear in the event list; when a site has NO
+ * scored event at all they now drive a distinct unscored-threat gauge state rather
+ * than leaving it green (#219) — see derivePopupTabRisk.
  *
  * Semantics: matching is by registrable domain over the persisted log, so the
  * gauge reflects the most recent scored risk for the DOMAIN (it can surface a score
@@ -107,25 +109,136 @@ export function pickSiteRiskEvent(
   log: EventLogEntry[],
   registrableDomain: string
 ): EventLogEntry | null {
+  return pickNewestSiteEvent(log, registrableDomain, isGaugeScoredEvent);
+}
+
+/**
+ * Newest-first scan for the most recent same-domain entry satisfying `match`.
+ *
+ * Both gauge pickers share this loop rather than each carrying a copy: they must
+ * agree exactly on log order and on how `event.site` (a full hostname) is reduced
+ * for comparison, so the domain semantics cannot drift apart, and the popup chunk
+ * (10KB budget) does not ship the loop twice. Only the predicate differs.
+ */
+function pickNewestSiteEvent<T extends EventLogEntry>(
+  log: EventLogEntry[],
+  registrableDomain: string,
+  match: (event: EventLogEntry) => event is T
+): T | null {
   if (!registrableDomain) return null;
   const entries = log ?? [];
   for (let i = entries.length - 1; i >= 0; i--) {
     const ev = entries[i];
-    if (!ev?.kind) continue;
-    if (typeof ev.score !== "number") continue;
-    // Silent-decision events (nav_silent_allow / cred_form_evaluated, #236) are
-    // scored but must never drive the gauge: a routine silent allow would
-    // otherwise mask an earlier scored block on the same domain (#205 / #214).
-    if (SILENT_DECISION_KINDS.has(ev.kind)) continue;
+    if (!ev || !match(ev)) continue;
     const site = ev.site ? getRegistrableDomain(normalizeHost(ev.site)) : "";
     if (site && site === registrableDomain) return ev;
   }
   return null;
 }
 
+/**
+ * A scored event eligible to drive the gauge. Silent-decision events
+ * (nav_silent_allow / cred_form_evaluated, #236) are scored but must never drive
+ * it: a routine silent allow would otherwise mask an earlier scored block on the
+ * same domain (#205 / #214).
+ */
+function isGaugeScoredEvent(event: EventLogEntry): event is EventLogEntry {
+  if (!event.kind) return false;
+  if (typeof event.score !== "number") return false;
+  return !SILENT_DECISION_KINDS.has(event.kind);
+}
+
+/** An event-log entry narrowed to a known unscored threat kind. (#219) */
+export interface UnscoredThreatEvent extends EventLogEntry {
+  kind: UnscoredThreatKind;
+}
+
+/**
+ * Whether an entry is a threat alert that carries no risk score (#219).
+ *
+ * Narrow by construction:
+ *  - the kind must be in the enumerated UNSCORED_THREAT_KINDS set (shared types),
+ *    never a loose string match and never "any event without a score";
+ *  - an entry that DOES carry a score is not this state — the scored path owns it;
+ *  - `mutation_alert` additionally requires `extra.severity === "high"`. The
+ *    mutation monitor emits `low` for known-benign DOM churn (cookie banners,
+ *    chat widgets, ARIA dialogs) and `high` for overlay injection, so gating on
+ *    `high` keeps routine churn out of the gauge — warning on every
+ *    `mutation_alert` would be the over-warning failure mode #219 cautions about.
+ *    Note this is a deliberate UNDER-warn at the boundary, not a claim that
+ *    everything below `high` is benign: the monitor also emits `medium` for real
+ *    detections (a same-origin `form_action_changed`, a `suspicious_iframe`),
+ *    which therefore do not raise this gauge state. They still appear in the
+ *    event list. A malformed/legacy entry with no severity is likewise treated as
+ *    non-threatening rather than guessed at.
+ */
+export function isUnscoredThreatEvent(event: EventLogEntry): event is UnscoredThreatEvent {
+  if (!event?.kind || !isUnscoredThreatKind(event.kind)) return false;
+  if (typeof event.score === "number") return false;
+  if (event.kind !== "mutation_alert") return true;
+  const severity = event.extra?.["severity"];
+  return typeof severity === "string" && severity === "high";
+}
+
+/**
+ * The most recent same-domain unscored threat alert, or null. Same domain
+ * matching and same log-order semantics as pickSiteRiskEvent. (#219)
+ */
+export function pickSiteUnscoredThreatEvent(
+  log: EventLogEntry[],
+  registrableDomain: string
+): UnscoredThreatEvent | null {
+  return pickNewestSiteEvent(log, registrableDomain, isUnscoredThreatEvent);
+}
+
+/**
+ * Honest one-line description of an unscored threat alert, for the gauge note
+ * and its aria-label. The wording must say a threat was RECORDED here, never
+ * imply the page scored badly — there is no score to report. (#219)
+ *
+ * Typed as an exhaustive Record over UnscoredThreatKind, so adding a kind to the
+ * shared set without a description is a build error rather than a raw event kind
+ * leaking into the UI.
+ *
+ * Kept terse on purpose. Each string is prefixed at the call site with "Threat
+ * alert recorded, no risk score — " and rendered on the current page's own card,
+ * so "from this page" / "on this page" only repeats context the reader already
+ * has, and every literal here ships in the 10KB-budgeted popup chunk.
+ *
+ * One description per KIND, so `mutation_alert` must be truthful for every
+ * high-severity alert the monitor raises — not just overlay injection. It also
+ * covers a cross-domain `form_action_changed` (a form's destination rewritten,
+ * nothing injected) and `password_injected`, so the wording is deliberately about
+ * the page being modified rather than about content being added. Describing each
+ * subtype precisely would mean keying off `event.reasons[0]` (the alert type is
+ * stored there) and carrying a second table in a chunk already at 96% of budget;
+ * tracked rather than done here.
+ */
+const UNSCORED_THREAT_TEXT: Readonly<Record<UnscoredThreatKind, string>> = {
+  mutation_alert: "the page was modified suspiciously after load",
+  nav_blank_prompt: "a blank-target navigation was held for confirmation",
+  nav_reputation_late_warn: "a frame navigated to a known-malicious domain",
+  nav_rollback: "a navigation was rolled back",
+};
+
+export function describeUnscoredThreat(kind: UnscoredThreatKind): string {
+  return UNSCORED_THREAT_TEXT[kind];
+}
+
+/**
+ * Gauge presentation state (#219):
+ *  - "scored"          — a scored same-domain event drives the numeric gauge;
+ *  - "unscored-threat" — no scored event, but a threat alert with no score was
+ *                        recorded here (distinct gauge; NOT a score of any value);
+ *  - "clear"           — nothing recorded for this site.
+ */
+export type PopupGaugeState = "scored" | "unscored-threat" | "clear";
+
 export interface PopupTabRisk {
   tabRisk: number;
   reasons: string[] | undefined;
+  state: PopupGaugeState;
+  threatKind: UnscoredThreatKind | undefined;
 }
 
 /**
@@ -133,11 +246,31 @@ export interface PopupTabRisk {
  * from the most recent scored same-domain event (or 0 / none). Consolidates the
  * gauge/signals decision into one tested function so the popup wiring is a thin
  * pass-through. (#205 R1)
+ *
+ * A SCORED event always wins (#219): the scored lookup runs first and returns
+ * unchanged, so a scored block on the domain is never masked or softened by a
+ * later scoreless alert. Only when there is no scored event at all does a
+ * recorded unscored threat take over the gauge, and it does so as a distinct
+ * presentation state — `tabRisk` stays 0 and no synthetic score is invented, so
+ * nothing downstream can mistake this for a measurement.
  */
 export function derivePopupTabRisk(log: EventLogEntry[], registrableDomain: string): PopupTabRisk {
   const ev = pickSiteRiskEvent(log, registrableDomain);
-  return {
-    tabRisk: ev && typeof ev.score === "number" ? ev.score : 0,
-    reasons: ev?.reasons,
-  };
+  if (ev) {
+    return {
+      tabRisk: typeof ev.score === "number" ? ev.score : 0,
+      reasons: ev.reasons,
+      state: "scored",
+      threatKind: undefined,
+    };
+  }
+
+  const threat = pickSiteUnscoredThreatEvent(log, registrableDomain);
+  if (threat) {
+    // The threat's own reason codes are safe to surface here: the gauge is no
+    // longer green, so orange chips beside it no longer contradict it (#205 R1).
+    return { tabRisk: 0, reasons: threat.reasons, state: "unscored-threat", threatKind: threat.kind };
+  }
+
+  return { tabRisk: 0, reasons: undefined, state: "clear", threatKind: undefined };
 }

@@ -43,6 +43,10 @@
             <button id="untrustBtn" class="trust-btn trust-btn--untrust" hidden aria-label="Untrust this site">Untrust</button>
           </div>
 
+          <!-- Unscored-threat note (#219): shown only when a threat alert with no
+               risk score is the only thing recorded for this site. -->
+          <div id="gaugeNote" class="gauge-note" hidden></div>
+
           <!-- Active signals -->
           <div id="signals" class="signals-row"></div>
         </div>
