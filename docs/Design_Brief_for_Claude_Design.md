@@ -237,7 +237,6 @@ Tease future capabilities to build excitement:
 - **OAuth consent flow monitoring** — Post-flow redirect flagging
 - **DOM mutation monitoring** — Post-load overlay injection detection
 - **Redirect chain correlation** — Multi-hop scoring as a unit
-- **Visual similarity detection** — Perceptual hashing against brand templates
 - **Cross-browser support** — Firefox MV3 port
 
 #### Installation & Quick Start
@@ -406,7 +405,7 @@ NavSentinel protects two high-risk browser surfaces that other extensions miss:
 Detects invisible overlays, click retargeting, popup abuse, delayed redirects, and window.open manipulation. Scores every suspicious click with a multi-factor Click Deception Score before allowing navigation side effects.
 
 🔑 CREDENTIAL PHISHING
-Warns before password submission to lookalike domains, HTTP endpoints, IP addresses, mixed-script hostnames, and untrusted cross-site form actions. Monitors 42 major brands for homoglyph and visual-similarity attacks.
+Warns before password submission to lookalike domains, HTTP endpoints, IP addresses, mixed-script hostnames, and untrusted cross-site form actions.
 
 ⚡ HOW IT'S DIFFERENT
 • Analyzes interactions, not URLs — catches novel attacks that blocklists miss

@@ -27,10 +27,9 @@ design are substantial, but several current development paths are not production
   not solve page-controlled host redressing. RI-01 moves proceed/allow/trust/
   resume authority to tab-bound extension-origin UI; injected UI becomes
   warn/cancel only.
-- The visual-sim path is non-functional and can ask `captureVisibleTab` to
-  process a different active tab's pixels when the requester is in the
-  background. Standing decision D-2026-07-03-F and RI-02 require complete
-  removal before beta.
+- RI-02 removes the non-functional visual-sim viewport-capture path, its
+  public asset, scoring hook, and persisted state. Local artifact proof is
+  green; the required human Gate-3 remains before this beta blocker can close.
 - The default interaction-only profile has no reputation runtime or bundled
   reputation binary. The 52-byte reserved-domain fixture is available only in
   the explicit non-release research profile.

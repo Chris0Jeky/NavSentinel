@@ -5,6 +5,8 @@ export interface BuiltReleaseProfileResult {
   manifest: Record<string, unknown>;
   hasReputationAsset: boolean;
   exposesReputation: boolean;
+  hasBrandTemplatesAsset: boolean;
+  exposesBrandTemplates: boolean;
 }
 
 export function inspectBuiltReleaseProfile(

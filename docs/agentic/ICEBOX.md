@@ -39,7 +39,9 @@ LOW-severity findings that live *inside* an umbrella issue's body (no GitHub num
 
 These are valuable but blocked on a specific input, not parked as residue:
 - **OAuth FP cluster** #269 / #223 (PR #399) / #397 — implemented/holding for `measure:fp` (AI-14). Ship-relevant.
-- **#374** capture chunk split — a scheduled structural cycle (ladder rung 5), and the prerequisite for the visual-sim excision (D-2026-07-03-F) and any capture-growing slice.
+- **#374** capture chunk split — a scheduled structural cycle (ladder rung 5)
+  for future capture-growing work. It is not a prerequisite for RI-02's
+  visual-sim excision.
 - **#175 / #186** bridge init-auth pair — scheduled structural cycle + a gate for public launch.
 - **#339** (re-bodied 2026-07-03) — the 7 gated discovery-pass-4 residuals: 6 budget-gated on **#374** (grow the capture_isolated bundle; #20 explanations / #22+#24 allowlist / #25+#27 scoring [also D25 measure-before-tune] / #28 nrs simplification) + 1 Gate-3 (#23 credential_modal focus-trap). Unblock when #374 lands or Gate-3 runs.
 - **#418** (re-bodied 2026-07-03) — the Safe-Browsing / competitor comparison arm for `benchmark.mjs`. The honest re-scope (option b: name + roadmap now say "gym regression, competitor arm unbuilt") shipped; building the actual comparison arm needs **branded Google Chrome** (`channel: 'chrome'` — Playwright's default open-source Chromium ships **no** Safe-Browsing verdicts, so a Chromium run would silently measure a browser without SB and recreate the invalid benchmark) or an explicit Safe-Browsing API harness, plus network → gated with the measurement-reset session **#416** (which owns the benchmark-baseline re-run).

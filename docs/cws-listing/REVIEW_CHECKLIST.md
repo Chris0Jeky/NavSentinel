@@ -6,7 +6,8 @@
 - [ ] AI-19 product-name search/domain/CWS/legal clearance recorded
 - [ ] RI-01 injected UI is warn/cancel only; tab-bound extension-origin UI owns
   every proceed/allow/trust/resume action and resists redressing/tampering
-- [ ] RI-02 visual-sim viewport capture and placeholder assets removed
+- [x] RI-02 visual-sim viewport capture and placeholder assets removed (local
+  source, artifact, package, and E2E proof; pre-merge Gate-3 remains)
 - [ ] RI-07 beta capability profile proves fetch/XHR/beacon/password-value
   wrappers are off while core navigation protection remains active
 - [ ] RI-08/#175/#186 authenticates and recovers the MAIN/isolated bridge;
@@ -56,8 +57,9 @@
   Store User Data Policy Limited Use declaration
 - [ ] OAuth callback `code`, `access_token`, and `id_token` values are redacted
   before storage/export/logging while host/target binding still works
-- [ ] PRIVACY.md re-verified after visual-sim/DNR/release-profile changes
-- [ ] Privacy disclosure re-verified against the exact package
+- [x] PRIVACY.md re-verified against the exact local release package after
+  visual-sim excision (DNR remains separately open)
+- [x] Privacy disclosure re-verified against the exact local release package
 - [x] Single-purpose description prepared
 
 ### Store Listing

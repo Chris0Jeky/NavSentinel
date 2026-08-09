@@ -70,7 +70,8 @@ The merged `main` branch includes a substantial engineering baseline:
 It is not yet a released or validated product. Immediate blockers include:
 
 - scripted page input can activate protection-lowering prompt/modal actions;
-- the dead visual-sim path can process a different active tab's pixels;
+- RI-02 visual-sim excision is locally and artifact verified, but its required
+  browser Gate-3 still precedes release-blocker closure;
 - extension-origin prompt authority and other release-integrity work remain;
 - the selected interaction-only profile excludes reputation runtime and assets,
   and RI-05 removed the placeholder DNR surface and its permissions;

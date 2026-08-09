@@ -5,7 +5,6 @@ import {
   TRUST_TIER_KNOWN_BAD,
   TRUST_TIER_TOP_SITE,
 } from "./top_sites";
-import { NRS_WEIGHT_VISUAL_SIM_CAP } from "./visual_sim_types";
 
 export interface NavigationContext {
   isNewTabOrWindow: boolean;
@@ -42,8 +41,6 @@ export interface NavigationContext {
   navAnomalyScore?: number | undefined;
   /** JS behavior analysis score (0-35 range) - credential exfil/form manipulation signals */
   jsBehaviorScore?: number | undefined;
-  /** Visual brand-match score (0-30 range) - page resembles a known brand login surface */
-  visualSimilarityScore?: number | undefined;
   /** Local trust tier for the destination; known-bad always overrides benign priors */
   trustTier?: NavigationTrustTier | undefined;
 }
@@ -270,11 +267,6 @@ export function computeNRS(cdsResult: ScoreResult, navCtx: NavigationContext): N
   if (navCtx.jsBehaviorScore && navCtx.jsBehaviorScore > 0) {
     nrs += Math.min(navCtx.jsBehaviorScore, NRS_WEIGHT_JS_BEHAVIOR_CAP);
     nrsFactors.push("nrs_js_behavior_suspicious");
-  }
-
-  if (navCtx.visualSimilarityScore && navCtx.visualSimilarityScore > 0) {
-    nrs += Math.min(navCtx.visualSimilarityScore, NRS_WEIGHT_VISUAL_SIM_CAP);
-    nrsFactors.push("nrs_visual_brand_match");
   }
 
   // Diminishing returns: points above the threshold get reduced weight

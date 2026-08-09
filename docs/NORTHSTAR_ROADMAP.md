@@ -56,7 +56,7 @@ spot-checked against `main @ da400fb`; treat them as drift-prone anchors, not co
 | **D21** | **Revisit D08 "No ML at this stage" → conditional on-device ML is now in-thesis.** | D08 deferred ML to "Phase 4 if heuristics plateau." Research confirms on-device inference is viable in an MV3 **offscreen document** (ONNX-runtime-web / TF.js, WebGPU default-on since Chrome 113). Chrome's current on-device Gemini Nano signals feed Safe Browsing's final verdict for users opted into Enhanced Protection; reverify before implementation. ML remains only a conditional enhancement with a heuristic fallback. |
 | **D22** | **Top-sites prior must use a FILTERED list, never raw Tranco/Alexa.** | Tranco NDSS'19: raw top-lists are manipulable (rank 28798 reachable with one HTTP request; 4 phishing domains in the Alexa top-10k). Use Tranco's hardened list, *further filtered*, as a benign **prior** that lowers (never zeroes) intervention — combined with bad-signal overrides. |
 | **D23** | **The advisor channel is a non-interruptive Decision Journal (Chrome Side Panel), not more prompts.** | Warning-fatigue literature (Akhawe/Felt 2013, 25.4M impressions; Porter-Felt 2016): interruptive warnings habituate and lose efficacy. The friend-advisor goal is met by an on-demand journal/Side Panel (Chrome 114+, no host permissions), keeping prompts rare. |
-| **D24** | **Visual-sim pivots from perceptual-hash to logo-embedding (Siamese/CNN); pHash stays only as a cheap pre-filter.** ✅ **Confirmed by maintainer 2026-06-13.** | USENIX'21 Phishpedia (logo + Siamese): 98.2% precision / 87.1% recall / 0.19s/page, far above pHash/EMD/PhishZoo/LogoSENSE. On-device pHash (PhishSnap) is feasible but low-accuracy. This re-scopes **P4-01c** and **moots the original AI-5** (screenshot-derived pHash templates) → AI-5 re-scopes to reference brand *logos*. |
+| **D24** | **Any future visual analysis uses a new logo-embedding (Siamese/CNN) design, not the retired perceptual-hash path.** ✅ **Confirmed by maintainer 2026-06-13.** | RI-02 removed the legacy pHash/template implementation. USENIX'21 Phishpedia (logo + Siamese): 98.2% precision / 87.1% recall / 0.19s/page, far above pHash/EMD/PhishZoo/LogoSENSE. A future design remains opt-in, measured, and independently reviewed; AI-5 concerns only reference brand *logos*. |
 | **D25** | **Instrument before tuning. No scoring/threshold change ships without a corpus-replay FP/TP delta and a Smart-Mode-Silence gate.** | The audit found all tuning today is guesswork because the capture payload can't be replayed. Rich capture (P5-C1) + a replay harness (P5-C5) + a CI silence gate (P5-A1) are prerequisites to every FP change. |
 | **D26** | **Historical concept approval: one signed, integrity-checked bloom-list fetch. Deferred 2026-07-10.** | This is not active implementation authorization. The beta has no runtime network calls. Any future inbound update channel requires a renewed explicit product/privacy/release decision under D16/AI-16, with no browsing state sent outbound. |
 
@@ -266,8 +266,9 @@ new `scripts/tune-weights.mjs`, `adaptive_scoring.ts`. *Design grounded by* [`NO
 > `nrsFactors` *names*, the final NRS (`score`), `navAnomalyScore`, `adaptiveAdj`, `thresholdUsed`, and
 > the full CDS-replay `elementContext` — enough to reproduce the **decision** and replay **CDS** exactly.
 > Exact **NRS re-computation** additionally needs the **variable-weight signal magnitudes** (clickfix
-> score, redirect-chain hops, CSP weakness, JS-behavior, visual-sim; `navAnomalyScore` is already
-> captured). Persist these alongside the factor names as part of this harness — deferred from P5-C1 to
+> score, redirect-chain hops, CSP weakness, and JS-behavior; `navAnomalyScore` is already
+> captured). A future separately approved visual-analysis design would define its
+> own replay inputs. Persist these alongside the factor names as part of this harness — deferred from P5-C1 to
 > keep the all-frames `capture_isolated` content script within its perf budget. (Raised in #249 review.)
 
 ### Program C gate
@@ -294,7 +295,7 @@ Chromium-rebase treadmill is a full-time team's job; extension + companion + Fir
 | P5-D3 | Firefox build FF-02→FF-04 (blocking `webRequest` + header CSP) | L | AI-4 ✅ decided (`web-ext`) | P4-03; **prereq below** |
 | P5-D4 | Native-messaging companion — design spike + scoping | M (design) / XL (build) | product decision | — |
 | P5-D5 | On-device ML offscreen-doc spike (revisits D08/D21) | M (spike) | — | — |
-| P5-D6 | Visual-sim pivot to logo-embedding (re-scopes P4-01c) | L | AI-5 (deferred → pivot decision) | P4-01c, D24 |
+| P5-D6 | Future opt-in visual analysis via logo embeddings | L | AI-5 (deferred → pivot decision) | D24 |
 | P5-D7 | Bridge + cross-frame hardening | M | — | #186, #175, #181 (existing) |
 
 ### Details
@@ -337,13 +338,15 @@ Chrome's **Prompt API (Gemini Nano)** as a *conditional* page/scam classifier be
 caveat:** peak inference memory can far exceed model-on-disk size — measure against the perf budget;
 respect the single-offscreen-document cap. *Files:* new `extension/src/offscreen/*`, design notes.
 
-**P5-D6 — Visual-sim pivot (re-scopes P4-01c; per D24).** Pivot the confirmation stage from
-perceptual-hash to **logo CNN/Siamese embeddings** (Phishpedia-class: 98.2% precision / 87.1% recall)
-or an on-device VLM; keep pHash only as a cheap pre-filter. This **likely moots AI-5** (screenshot-derived
-pHash templates become unnecessary). Honesty caveat: Phishpedia is an *identification* system assuming
-a candidate is already flagged, with limited in-the-wild brand coverage — pair it with the existing
-brand/domain-mismatch signal as the flag. *Files:* `visual_sim_*`, `scripts/build-brand-templates.mjs`
-(replace pHash templates with an embedding model), offscreen host (P5-D5).
+**P5-D6 — Future opt-in visual analysis (per D24).** RI-02 removed the legacy
+perceptual-hash/template implementation; this work must start as a new,
+opt-in and disclosed design, not reuse its modules or build script. If evidence
+justifies it, evaluate **logo CNN/Siamese embeddings** (Phishpedia-class: 98.2%
+precision / 87.1% recall) or an on-device VLM. Honesty caveat: Phishpedia is an
+*identification* system assuming a candidate is already flagged, with limited
+in-the-wild brand coverage — pair it with an independently measured flag.
+*Files:* a new offscreen host (P5-D5), new model/data boundaries, and a new
+privacy/release review.
 
 **P5-D7 — Bridge + cross-frame hardening.** Mostly existing issues, grouped: SW-vouched init auth
 (**#186** — bridge authenticates port possession, not isolated-world identity); add a **periodic**
@@ -355,7 +358,8 @@ swallows all signals); route `recordNavigation` through the single-threaded SW t
 ### Program D gate
 - [ ] DNR hard-block live on the bloom set; bloom staleness tracked + refreshable.
 - [ ] Firefox build (web-ext) runs with the `session_state` shim prereq fixed; blocking `webRequest` exercised.
-- [ ] Native-companion design doc + on-device-ML spike landed; visual-sim pivot decision recorded.
+- [ ] Native-companion design doc + on-device-ML spike landed; any future
+  opt-in visual-analysis decision recorded.
 
 ---
 

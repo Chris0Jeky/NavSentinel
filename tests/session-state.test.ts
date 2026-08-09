@@ -108,27 +108,6 @@ describe("SessionStateManager", () => {
     expect(mgr.readyTabs.size).toBe(0);
   });
 
-  it("skips malformed captureTimestamps entries (non-array / non-number) on restore (#339)", async () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    await sessionStorage.mock.set({
-      "ns_sw:captureTimestamps": {
-        "5": "not-an-array", // would break sw.ts list.filter(...) if restored
-        "6": [100, 200], // valid
-        "7": [1, "x", 3], // mixed-type array -> invalid
-      },
-    });
-
-    const mgr = new SessionStateManager();
-    await mgr.hydrate();
-
-    // Only the valid number[] survives; the non-array and mixed array are dropped.
-    expect(mgr.captureTimestampsByTab.get(6)).toEqual([100, 200]);
-    expect(mgr.captureTimestampsByTab.has(5)).toBe(false);
-    expect(mgr.captureTimestampsByTab.has(7)).toBe(false);
-    expect(warnSpy).toHaveBeenCalled(); // corrupt restore is surfaced, not silent
-    warnSpy.mockRestore();
-  });
-
   it("drops malformed structured-map entries (corrupt numeric / shape fields) on restore (#339)", async () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     await sessionStorage.mock.set({
@@ -618,8 +597,6 @@ describe("SessionStateManager", () => {
     });
     mgr.redirectChainData.set(7, { hops: [], startedAt: 0 });
     mgr.redirectChainData.set(8, { hops: [], startedAt: 0 });
-    mgr.captureTimestampsByTab.set(7, [1, 2, 3]);
-    mgr.captureTimestampsByTab.set(8, [4, 5, 6]);
 
     // Delete tab 7
     mgr.deleteTab(7);
@@ -633,7 +610,6 @@ describe("SessionStateManager", () => {
     expect(mgr.childWindowByTab.has(7)).toBe(false);
     expect(mgr.oauthFlowByTab.has(7)).toBe(false);
     expect(mgr.redirectChainData.has(7)).toBe(false);
-    expect(mgr.captureTimestampsByTab.has(7)).toBe(false);
 
     // Tab 8 state should be untouched
     expect(mgr.allowUntilByTab.get(8)).toBe(200);
@@ -641,7 +617,6 @@ describe("SessionStateManager", () => {
     expect(mgr.readyTabs.has(8)).toBe(true);
     expect(mgr.lastUrlByTab.get(8)).toBe("https://b.test/");
     expect(mgr.redirectChainData.has(8)).toBe(true);
-    expect(mgr.captureTimestampsByTab.get(8)).toEqual([4, 5, 6]);
 
     // Verify session storage also persisted the cleanup
     const stored = await sessionStorage.mock.get("ns_sw:allowUntil");
@@ -742,22 +717,6 @@ describe("SessionStateManager", () => {
     expect(restored!.qualifiers).toEqual(["server_redirect"]);
   });
 
-  it("round-trips captureTimestampsByTab so the capture rate limit survives a SW restart (D-SWRATE)", async () => {
-    const mgr = new SessionStateManager();
-    await mgr.hydrate();
-
-    // Three captures already used in the window for tab 7.
-    mgr.captureTimestampsByTab.set(7, [100, 200, 300]);
-    mgr.persistMap(mgr.captureTimestampsByTab, "captureTimestamps");
-    await new Promise((r) => setTimeout(r, 0));
-
-    // Simulated restart: a fresh manager must see the prior counts, so the
-    // rate limit cannot be reset by forcing the worker to recycle.
-    const mgr2 = new SessionStateManager();
-    expect(mgr2.captureTimestampsByTab.size).toBe(0); // empty before hydration
-    await mgr2.hydrate();
-    expect(mgr2.captureTimestampsByTab.get(7)).toEqual([100, 200, 300]);
-  });
 });
 
 describe("SW integration: state persistence through session storage", () => {

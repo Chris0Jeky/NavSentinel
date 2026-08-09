@@ -35,7 +35,6 @@
     "build:bloom:test": "node scripts/build-test-bloom-filter.mjs",
     "build:topsites": "node scripts/build-topsites-tier.mjs",
     "check:topsites": "node scripts/build-topsites-tier.mjs --check",
-    "build:templates": "node scripts/build-brand-templates.mjs",
     "check:bloom-size": "node scripts/check-bloom-size.mjs",
     "check:bloom-real": "node scripts/check-bloom-real.mjs",
     "check:release-profile": "node scripts/check-release-profile.mjs",
