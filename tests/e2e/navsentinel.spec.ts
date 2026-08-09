@@ -1539,19 +1539,195 @@ async function assertClickBlocked(
   context: import("@playwright/test").BrowserContext,
   selector: string,
   expectedToast: string,
-  urlPattern: RegExp
+  urlPattern: RegExp,
+  options: { diagnoseSyntheticClick?: boolean } = {}
 ) {
   const btn = page.locator(selector);
   const box = await btn.boundingBox();
   expect(box, `${selector} should be visible`).toBeTruthy();
 
+  const diagnoseSyntheticClick = options.diagnoseSyntheticClick === true;
+  const beforePageCount = context.pages().length;
+  const sourceUrl = page.url();
+  if (diagnoseSyntheticClick) {
+    await page.evaluate(({ x, y }) => {
+      const describeElement = (element: Element | null) => {
+        if (!element) return null;
+        const style = getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        const anchor = element instanceof HTMLAnchorElement ? element : null;
+        return {
+          tag: element.tagName.toLowerCase(),
+          id: (element as HTMLElement).id || null,
+          role: element.getAttribute("role"),
+          href: anchor?.href ?? null,
+          target: anchor?.target ?? null,
+          rel: anchor?.rel ?? null,
+          pointerEvents: style.pointerEvents,
+          opacity: style.opacity,
+          zIndex: style.zIndex,
+          rect: {
+            x: Math.round(rect.x),
+            y: Math.round(rect.y),
+            width: Math.round(rect.width),
+            height: Math.round(rect.height)
+          }
+        };
+      };
+
+      const target = document.elementFromPoint(x, y);
+      const anchor = target?.closest("a") ?? null;
+      const events: Array<{
+        type: string;
+        listener: string;
+        phase: "capture" | "target" | "bubble";
+        defaultPrevented: boolean;
+        target: { tag: string; id: string | null } | null;
+      }> = [];
+      const registrations: Array<{
+        eventTarget: EventTarget;
+        type: string;
+        capture: boolean;
+        listener: (event: Event) => void;
+      }> = [];
+      const listenerTargets: Array<[string, EventTarget]> = [
+        ["window", window],
+        ["document", document]
+      ];
+      if (target) listenerTargets.push(["point-target", target]);
+      if (anchor && anchor !== target) listenerTargets.push(["point-anchor", anchor]);
+
+      const listener = (label: string) => (event: Event) => {
+        if (events.length >= 24) return;
+        const eventTarget = event.target instanceof Element ? event.target : null;
+        events.push({
+          type: event.type,
+          listener: label,
+          phase:
+            event.eventPhase === Event.CAPTURING_PHASE
+              ? "capture"
+              : event.eventPhase === Event.BUBBLING_PHASE
+                ? "bubble"
+                : "target",
+          defaultPrevented: event.defaultPrevented,
+          target: eventTarget
+            ? { tag: eventTarget.tagName.toLowerCase(), id: (eventTarget as HTMLElement).id || null }
+            : null
+        });
+      };
+      for (const [label, eventTarget] of listenerTargets) {
+        for (const capture of [true, false]) {
+          for (const type of ["pointerdown", "pointerup", "click"]) {
+            const eventListener = listener(`${label}:${capture ? "capture" : "bubble"}`);
+            eventTarget.addEventListener(type, eventListener, capture);
+            registrations.push({ eventTarget, type, capture, listener: eventListener });
+          }
+        }
+      }
+
+      const root = document.documentElement;
+      const userActivation = navigator.userActivation
+        ? {
+            isActive: navigator.userActivation.isActive,
+            hasBeenActive: navigator.userActivation.hasBeenActive
+          }
+        : null;
+      (window as Window & { __navsentinelRw18Diagnostics?: unknown }).__navsentinelRw18Diagnostics = {
+        sourceUrl: location.href,
+        point: { x: Math.round(x), y: Math.round(y) },
+        hitStack: document.elementsFromPoint(x, y).slice(0, 6).map(describeElement),
+        target: describeElement(target),
+        anchor: describeElement(anchor),
+        ready: {
+          capture: root?.getAttribute("data-navsentinel-capture-ready") ?? null,
+          bridge: root?.getAttribute("data-navsentinel-bridge-ready") ?? null
+        },
+        userActivation,
+        events,
+        registrations
+      };
+    }, { x: box!.x + box!.width / 2, y: box!.y + box!.height / 2 });
+  }
+
   const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
   await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
 
   const popup = await popupPromise;
-  expect(popup, "Expected the trap new tab to be blocked").toBeNull();
-  await waitForToastText(page, expectedToast, 3000);
-  await expect(page).toHaveURL(urlPattern);
+  let diagnosticMessage: string | null = null;
+  if (diagnoseSyntheticClick) {
+    const afterClick = await page.evaluate((expectedToast) => {
+      const state = (window as Window & {
+        __navsentinelRw18Diagnostics?: {
+          sourceUrl: string;
+          point: { x: number; y: number };
+          hitStack: unknown[];
+          target: unknown;
+          anchor: unknown;
+          ready: unknown;
+          userActivation: unknown;
+          events: unknown[];
+          registrations: Array<{
+            eventTarget: EventTarget;
+            type: string;
+            capture: boolean;
+            listener: (event: Event) => void;
+          }>;
+        };
+      }).__navsentinelRw18Diagnostics;
+      for (const registration of state?.registrations ?? []) {
+        registration.eventTarget.removeEventListener(registration.type, registration.listener, registration.capture);
+      }
+      if (state) state.registrations = [];
+      const toastHost = document.querySelector("#__navsentinel_toast_host");
+      const toastText = toastHost?.shadowRoot?.querySelector(".body")?.textContent?.trim() ?? "";
+      const result = {
+        before: state ?? null,
+        currentUrl: location.href,
+        urlUnchanged: state ? location.href === state.sourceUrl : null,
+        toastText,
+        toastMatched: toastText.includes(expectedToast),
+        events: state?.events ?? []
+      };
+      delete (window as Window & { __navsentinelRw18Diagnostics?: unknown }).__navsentinelRw18Diagnostics;
+      return result;
+    }, expectedToast);
+    const popupUrls = context.pages().map((contextPage) => contextPage.url());
+    const diagnostic = JSON.stringify({
+      sourceUrl,
+      point: afterClick.before?.point ?? null,
+      hitStack: afterClick.before?.hitStack ?? null,
+      target: afterClick.before?.target ?? null,
+      anchor: afterClick.before?.anchor ?? null,
+      ready: afterClick.before?.ready ?? null,
+      userActivation: afterClick.before?.userActivation ?? null,
+      events: afterClick.events,
+      popup: { url: popup?.url() ?? null, count: context.pages().length - beforePageCount, urls: popupUrls },
+      after: {
+        currentUrl: afterClick.currentUrl,
+        urlUnchanged: afterClick.urlUnchanged,
+        toastText: afterClick.toastText,
+        toastMatched: afterClick.toastMatched
+      }
+    });
+    diagnosticMessage = `RW-18 diagnostic=${diagnostic}`;
+    expect(popup, `Expected the trap new tab to be blocked; ${diagnosticMessage}`).toBeNull();
+  } else {
+    expect(popup, "Expected the trap new tab to be blocked").toBeNull();
+  }
+  try {
+    await waitForToastText(page, expectedToast, 3000);
+  } catch (error) {
+    if (!diagnosticMessage) throw error;
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`${message}; ${diagnosticMessage}`, { cause: error });
+  }
+  try {
+    await expect(page).toHaveURL(urlPattern);
+  } catch (error) {
+    if (!diagnosticMessage) throw error;
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`${message}; ${diagnosticMessage}`, { cause: error });
+  }
 }
 
 test("RW-08 popup window reuse laundering keeps the original consent popup @regression", async () => {
@@ -1973,7 +2149,14 @@ test("RW-18 fake codec warning blocks the hidden installer trap @regression", as
       });
 
       await waitForNavSentinelBridge(page);
-      await assertClickBlocked(page, context, "#rw18Install", "Blocked new tab", /rw18-browser-update-warning\.html/);
+      await assertClickBlocked(
+        page,
+        context,
+        "#rw18Install",
+        "Blocked new tab",
+        /rw18-browser-update-warning\.html/,
+        { diagnoseSyntheticClick: true }
+      );
     } finally {
       await context.close();
     }
