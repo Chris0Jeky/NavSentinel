@@ -1,13 +1,13 @@
 # NavSentinel handoff
 
-Updated 2026-08-08. This is an optional short snapshot; live Git/GitHub state,
+Updated 2026-08-09. This is an optional short snapshot; live Git/GitHub state,
 product tests, `docs/Project_Roadmap.md`, and `ACTION_ITEMS.md` are authoritative.
 Historical cycle detail remains in `ORCHESTRATOR.md` and is not required reading.
 
 ## Where `main` is
 
-`main` is at **`5377495`** with exact-main product CI green. Seven PRs merged on
-2026-08-08, each with a merge commit (never squashed):
+`main` is at **`7198ee4`**. The 2026-08-08 batch below merged with merge commits
+(never squashed); two test-only #460 diagnostic follow-ups merged afterwards:
 
 | PR | What landed |
 | --- | --- |
@@ -18,17 +18,25 @@ Historical cycle detail remains in `ORCHESTRATOR.md` and is not required reading
 | #529 | removed unverifiable brand-alias / tracking-prefix trust entries (#320, #295) |
 | #536 | recorded the AI-27 Gate-3 batch and the AI-28 boundary decision |
 | #538 | **CI now runs on stacked PRs** (#537) |
+| #543 | test-only blocked-click diagnostics for RW-18 (#460) |
+| #544 | labels the blocked-click diagnostics by scenario and covers RW-14 (#460) |
 
 Re-derive live state (`git fetch`, `gh pr list`, `gh issue list`) before acting;
 the values here age quickly.
 
 ## The human queue is the bottleneck
 
-**Ten browser-surface PRs are open, reviewed, and verified green, and none can
-merge without Chris.** They are tracked as a single item, **AI-27**, in
-`ACTION_ITEMS.md`, listed in merge order with per-PR notes on what is worth a
-human's eyes. **AI-28** records the one scope decision the session had to assume
-rather than ask (the behavioural-data boundary for #474).
+**Eleven browser-surface PRs are open, and none can merge without Chris.** They
+are tracked as a single item, **AI-27**, in `ACTION_ITEMS.md`; the live queue is
+`#528, #532, #535, #514, #534, #520, #521, #522, #526, #533, #542`. Existing CI
+and review evidence was green at each recorded head, but every open PR's GitHub
+base predates `7198ee4`; it must be refreshed and re-proven against the current
+base before any merge. **AI-28** remains the outstanding behavioural-data-boundary
+decision for #474, so #535 has that additional hold.
+
+`ACTION_ITEMS.md` on `main` still says ten because its #542 row is carried by
+the unmerged #542 branch. Treat live PR state as authoritative until that row
+lands; do not infer a Gate-3 pass from the documentation discrepancy.
 
 Slots 1-3 are a three-deep stack — **#528 ← #532 ← #535** — and must merge
 oldest-first. Read AI-27's stack rule before touching them: the safe-sounding
@@ -48,6 +56,13 @@ machine; the owner queue explicitly blocks #223 until #417 supplies methodology.
   #538; the rules now live in `docs/agentic/GIT_WORKFLOW.md`.
 - **#523** — `ns-clipboard-write` is priority-but-not-floodable and unrate-limited
   at its emission site, so it can starve `ns-nav-blocked` the same way #302 did.
+  The proposed two-class emission coalescing is awaiting an owner semantic choice;
+  no implementation has been inferred.
+- **#460** — test-only diagnostics landed in #543/#544 after serial 25-case
+  re-measures each produced one native-popup failure in different fixtures. RW-14
+  and RW-18 now label their failure payloads, but the direct-anchor Evasion 02
+  path is architecturally distinct. #460 remains open pending an owner-authorized
+  discriminating experiment; no runtime fix or further retry is justified yet.
 - **#539** — `nav_reputation_late_warn` stamps the child frame's hostname while the
   popup matches the top-level domain, so #533's new gauge state cannot fire for
   third-party iframes, which is #219's headline case.
@@ -80,9 +95,11 @@ active queue).
 
 - Successful CI is regression evidence, not open-web efficacy, compatibility,
   competitor superiority, or an external security audit.
-- **No real-Chrome pass was performed for any of the ten queued PRs.** That is
+- **No real-Chrome pass was performed for any of the eleven queued PRs.** That is
   exactly what AI-27 asks for.
-- #532 and #535 were verified by `workflow_dispatch`, which builds the branch
+- All open PRs need a fresh base/head proof before merge because their recorded
+  bases predate `7198ee4`. #532 and #535 were additionally verified by
+  `workflow_dispatch`, which builds the branch
   **tip** rather than the base-plus-head merge commit a `pull_request` run builds.
   If either base moves before merge, that evidence goes stale — merge the new base
   in and re-dispatch. AI-27 records this.
@@ -93,6 +110,8 @@ active queue).
 
 ## Next sequence
 
-Chris runs AI-27 (one Gate-3 batch session) and answers AI-28. Agent-side, the
-unblocked work after that is RI-01 extension-origin authority and #175/#186; both
-are large and neither was touched here.
+Chris resolves AI-19, runs or waives AI-27 (including #542), and answers AI-28.
+Agent-side, no standalone implementation slice is currently unblocked: #523 needs
+the clipboard-telemetry semantic choice, and #460 needs an owner-authorized
+experiment before attribution. On a gate decision or a fresh exact-head failure,
+refresh Git/GitHub before selecting the next slice.
