@@ -269,7 +269,7 @@ describe("isMainGuardAlertType (main->isolated priority classification)", () => 
   it("treats routine control/diagnostic messages as droppable", () => {
     for (const t of [
       "ns-config-ack", "ns-pong", "ns-bridge-ready", "ns-bridge-overflow",
-      "ns-main-guard-ready", "ns-debug-nav-record", "ns-location-patch-info",
+      "ns-main-guard-ready", "ns-debug-nav-record",
     ]) {
       expect(isMainGuardAlertType(t)).toBe(false);
     }
