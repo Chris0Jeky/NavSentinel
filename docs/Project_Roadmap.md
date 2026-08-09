@@ -30,7 +30,7 @@ readiness is tracked only by the outcome gates below.
 
 | Gate | State | Required next move |
 |---|---|---|
-| Release integrity | **Blocked** | RI-01 extension-origin decision authority (#356/#464/#466 merged 2026-07-25 — the browser-held sub-slices are done, but no production extension-origin prompt/action flow ships yet); RI-02 visual-sim excision (#424, Gate-3 pending); remove fake DNR; purpose-specific data minimization (RI-06 slice 1 merged as #468; residue in #474); beta-off JS behavior; #175/#186 bridge identity/recovery |
+| Release integrity | **Blocked** | RI-01 extension-origin decision authority (#356/#464/#466 merged 2026-07-25 — the browser-held sub-slices are done, but no production extension-origin prompt/action flow ships yet); RI-02 visual-sim excision (#514 merged under a recorded Gate-3 waiver, not a real-Chrome pass); fake DNR removed (#528); purpose-specific data minimization and reset (#468/#535); beta-off JS behavior (#532); #175/#186 bridge identity/recovery |
 | Release profile | **Implemented; Gate-3 passed** | AI-9 selected interaction-only. PR #509 merged as `3faeb1e`, closing #321. Chrome 150.0.7871.187 passed on executable/artifact head `f6815be`; default runtime/manifest/package omit reputation; deterministic `research-reputation` is unpacked-only and non-release |
 | Brand/store | **Blocked** | AI-19 name clearance; #455 pre-collection disclosure/consent; one canonical claims-verified listing; assets and fresh-install checks |
 | Detection validation | **Open** | #417 methodology, #416/#426 rerun, confidence-aware reporting |
@@ -40,14 +40,15 @@ readiness is tracked only by the outcome gates below.
 
 ### Live execution truth
 
-Refreshed 2026-08-02 from remote GitHub and `origin/main`: the pre-RI-02
-snapshot had 0 open PRs and 79 open issues; **PR #514 is now open** for RI-02,
-while `origin/main` was reverified at `332c48d` after PR #518. There is no open
-milestone, git tag, GitHub release, or CWS release. These values are dated
-snapshots, not an instruction to trust cached refs. Re-derive them with `git
-fetch origin`, `gh pr list --state open`, `gh issue list --state open`, and the
-GitHub Actions view before acting. The exact 2026-07-10 audit baseline remains
-in `Product_Strategy.md` as provenance rather than current status.
+Refreshed 2026-08-10 from remote GitHub and `origin/main`: the browser-surface
+queue (#528, #532, #535, #514, #534, #520, #521, #522, #526, #533, #542) and the
+separate #531 OAuth slice had merged by `origin/main` `5896756`. Their explicit
+waivers are not real-Chrome or measurement evidence. #223 remains open for its
+future measurement work. There is no tag, GitHub release, or CWS release. These
+values are dated snapshots, not an instruction to trust cached refs. Re-derive
+them with `git fetch origin`, `gh pr list --state open`, `gh issue list --state
+open`, and the GitHub Actions view before acting. The exact 2026-07-10 audit
+baseline remains in `Product_Strategy.md` as provenance rather than current status.
 Owner directive #499 retires the repository-local agent harness (tier, project
 hooks, lifecycle scripts, vendored floor, validation commands, and Harness CI).
 That infrastructure-only change does not alter extension runtime behavior or
@@ -90,12 +91,12 @@ maintainer chooses disclosure/ownership.
 | ID | Priority | Action | Owner/gate | Existing home | Done when |
 |---|---|---|---|---|---|
 | RI-01 | P0 beta blocker | Move all proceed/allow/trust/resume authority out of page-injected UI | Agent + Gate-3 | Private release task | Injected UI is warn/cancel only; extension-origin action is tab/destination-bound with TTL; synthetic input, trusted-click redressing, host tamper/removal, tab switch, and stale state cannot lower protection |
-| RI-02 | P0 beta blocker | **Implementation locally verified; Gate-3 pending:** excise visual-sim capture, templates, scoring hook, WAR, tests, and state | Agent + Gate-3 | #424 | No viewport capture path or placeholder asset remains; #374 is optional coordination, not a prerequisite |
+| RI-02 | P0 beta blocker | **Merged via #514 under a recorded Gate-3 waiver (not a real-Chrome pass):** excise visual-sim capture, templates, scoring hook, WAR, tests, and state | Agent + recorded waiver | #424 | No viewport capture path or placeholder asset remains; #374 is optional coordination, not a prerequisite |
 | RI-03 | P0 beta blocker | #356 is complete; recreate or explicitly defer #273 from current `main` | Agent first; Gate-3 only if #273 is recreated (AI-8 remains blocked until then) | #273/#356; #399 stays deferred | #356 remains regression coverage, replacement guides point only to current green branches, and #399 remains outside beta blockers until its measurement methodology is ready |
 | RI-04 | P0 product decision | **Implemented via merged PR #509; AI-25 Gate-3 passed:** interaction-only selected and implemented; retain research reputation as unpacked-only | Chris + agent + Gate-3 | #321 / AI-9 / AI-25 | Default release receipt, manifest/WAR, runtime, package checks, tests, and claims agree; research profile is deterministic, visibly non-release, and package/release rejected |
-| RI-05 | P0 beta blocker | Remove fake DNR feature surface and unused permissions | Agent + Gate-3 | CWS checklist; redesign #242/#243 later | No test rules/toggle/DNR permission in beta manifest |
-| RI-06 | P0 privacy blocker | Inventory every store; minimize by purpose; add complete reset | Agent + privacy review | Extend #176 or seed one scoped follow-up | Persistent records use least-identifying data; exact session URLs remain only for correctness with tab binding/TTL; rollback/OAuth/allow tests pass; all behavioral stores have one clear control and accurate export/disclosure |
-| RI-07 | P0 beta blocker | Add an explicit beta capability flag that leaves JS behavior instrumentation off | Agent + Gate-3 | #127 or a scoped release-profile issue | Fresh beta defaults/migration/UI/runtime agree; fetch/XHR/beacon/password-value prototypes are not wrapped; core navigation remains active; compatibility/perf evidence required to enable. **Implemented as `capabilities.jsBehaviorInstrumentation` (false in every committed profile); awaiting Gate-3.** |
+| RI-05 | P0 beta blocker | **Merged via #528 under a recorded Gate-3 waiver (not a real-Chrome pass):** remove fake DNR feature surface and unused permissions | Agent + recorded waiver | CWS checklist; redesign #242/#243 later | No test rules/toggle/DNR permission in beta manifest |
+| RI-06 | P0 privacy blocker | **Merged via #468/#535:** inventory every store; minimize by purpose; reset the event log, prompt outcomes, adaptive scores, and domain profiles while preserving user configuration | Agent + privacy review | #474 | Persistent records use least-identifying data; exact session URLs remain only for correctness with tab binding/TTL; rollback/OAuth/allow tests pass; all behavioral stores have one clear control and accurate export/disclosure |
+| RI-07 | P0 beta blocker | **Merged via #532 under a recorded Gate-3 waiver (not a real-Chrome pass):** explicit beta capability flag leaves JS behavior instrumentation off | Agent + recorded waiver | #127 or a scoped release-profile issue | Fresh beta defaults/migration/UI/runtime agree; fetch/XHR/beacon/password-value prototypes are not wrapped; core navigation remains active; compatibility/perf evidence required to enable. **Implemented as `capabilities.jsBehaviorInstrumentation` (false in every committed profile).** |
 | RI-08 | P0 beta blocker | Authenticate/recover the MAIN-world bridge and fail closed when unavailable | Agent + Gate-3 | #175/#186 | Hostile page code cannot become the trusted peer or suppress protection; reload/death recovery is bounded and tested |
 | RI-09 | Public-launch blocker | Obtain an independent external security review | Agent + external reviewer | P3-09 | Exact release commit/package reviewed; findings resolved or explicitly accepted |
 | PM-01 | P0 release blocker | Clear or replace the working product name | Chris | AI-19 | Search/domain/CWS/legal decision recorded before submission |
@@ -1195,10 +1196,10 @@ release/evidence sequence in `Product_Strategy.md`.
 #### P4-01: Visual similarity detection
 
 **Current decision (D-2026-07-03-F, reinforced 2026-07-10): excise this path
-before beta.** RI-02 has locally verified removal of the placeholder templates,
-viewport capture, scoring, public asset, and state; its required human Gate-3 is
-still pending before the beta blocker can close. Any future visual analysis is a
-new opt-in, disclosed, measured design—not a continuation of this plumbing.
+before beta.** RI-02's removal of the placeholder templates, viewport capture,
+scoring, public asset, and state merged through #514 under a recorded Gate-3
+waiver; no real-Chrome pass is claimed. Any future visual analysis is a new
+opt-in, disclosed, measured design—not a continuation of this plumbing.
 
 **Historical implementation below is retained for removal scope, not as an
 active plan.** #245/#246 should be closed, deduplicated, or moved to a clearly

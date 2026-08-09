@@ -7,17 +7,16 @@
 **Purpose:** the running list of things only *you* (Chris) can do, with enough
 context to resume by stable ID.
 
-**Waiver state refreshed:** 2026-08-09.
+**Waiver state refreshed:** 2026-08-10.
 
-**Last updated:** 2026-08-08 — an agent session landed five non-browser PRs to
-`main` (#519, #524, #525, #527, #529; head `076bb7a`, exact-main CI green on both
-jobs) and recorded the owner waiver for the browser-surface queue. Gate-3 is
-waived for exactly **#528, #532, #535, #514, #534, #520, #521, #522, #526,
-#533, and #542**; this is not a real-Chrome pass and those PRs remain open until
-they merge. A separate **#531-only** owner waiver covers its remaining human
-Gate-3 blocker and AI-14/#417 measurement hold; #531 stays out of the AI-27
-batch. Technical CI/review gates still apply, and no real-Chrome, `measure:fp`,
-or headed-measurement claim is made. Two milestones now exist:
+**Last updated:** 2026-08-10 — all eleven explicitly waived browser-surface PRs
+(#528, #532, #535, #514, #534, #520, #521, #522, #526, #533, and #542) merged to
+`main` after refreshed exact-head CI and bounded review. The waiver remains a
+waiver, never a real-Chrome pass. Separate PR #531 merged under its #531-only
+waiver for the remaining human Gate-3 and AI-14/#417 measurement holds; #223
+remains open and no `measure:fp` or headed-measurement claim is made. AI-27 and
+AI-28 are consequently resolved; AI-14 remains blocked for future measurement
+work. Two milestones now exist:
 `v0.5.0-unlisted-beta` (7 real blockers) and `post-beta-horizon` (the 15 frozen
 Horizon epics #439–#453, moved out of the active queue). AI-23 now carries a
 completed inspection and a *retire* recommendation for `chore/deny-floor-v1.6.3`,
@@ -131,25 +130,21 @@ product state.
 
 **Guided resolution cursor:** `AI-19` (`Resume at: AI-19`; the next
 conversational label is `q-5`). Current ready order is AI-19 -> AI-24 -> AI-23
-(low priority housekeeping, last). AI-27 and AI-28 have recorded owner waivers;
-they remain pending their dependent PR merge state rather than being complete.
+(low priority housekeeping, last). AI-27 and AI-28 are resolved by the recorded
+waivers plus verified merges; AI-24 remains an optional real-Chrome confirmation.
 
-> **2026-08-08 — a browser-surface batch is now waiting on you (AI-27), and one
-> scope decision is owed before its last slice can be finished (AI-28).** AI-27
-> does **not** automatically close AI-24. AI-24 requires two things beyond the
-> AI-13 step-5 gates — the AI-21 trusted-compatibility cases (OAuth popup by
-> physical click, by Tab+Enter, by submit input; exactly one popup, no prompt) and
-> confirming the MV3 service worker registers in `chrome://extensions`. Those are
-> now folded into AI-27's procedure below, so an `AI-27 pass` that includes them
-> closes AI-24 as well; an `AI-27 pass` that skips them does not, and AI-24 stays
-> open. Say which you ran.
+> **Historical 2026-08-08 context:** AI-27 did **not** automatically close AI-24.
+> AI-24 requires the AI-21 trusted-compatibility cases (OAuth popup by physical
+> click, by Tab+Enter, by submit input; exactly one popup, no prompt) and confirming
+> the MV3 service worker registers in `chrome://extensions`. Those checks were
+> folded into AI-27's old procedure; because the batch closed by waiver rather than
+> a Chrome pass, AI-24 remains open.
 
-> **Owner waiver recorded 2026-08-09:** Gate-3 is waived for exactly #528, #532,
-> #535, #514, #534, #520, #521, #522, #526, #533, and #542. This is not a
-> real-Chrome pass, and AI-27 remains pending until every listed PR merges. A
-> separate #531-only waiver covers its remaining human Gate-3 and AI-14/#417
-> measurement holds; #531 is not part of this eleven-PR batch, and technical
-> CI/review gates still apply.
+> **Closeout recorded 2026-08-10:** Gate-3 was waived for exactly #528, #532,
+> #535, #514, #534, #520, #521, #522, #526, #533, and #542; all eleven have now
+> merged. This is not a real-Chrome pass. The separate #531-only waiver also
+> merged without making a real-Chrome, `measure:fp`, or headed-measurement claim.
+> Technical CI/review gates applied to every merged head.
 **AI-13, AI-21 and AI-22 are resolved** — their
 PRs (#356, #464, #466) merged on 2026-07-25 after Chris chose to clear the
 browser-surface gate by automated equivalent rather than a manual pass; their
@@ -231,17 +226,12 @@ session, any network/feed session, an overnight measurement run, and a short
 result review. Read `docs/Product_Strategy.md` first. This item becomes
 actionable only when the preflight handoff explicitly says so.
 
-**🚨 OPEN: AI-27 — One Gate-3 batch pass over the browser-surface queue from the
-2026-08-08 session.** Eleven browser-surface PRs are open and reviewed, and none can
-merge without your call. They are listed in the order they should be merged, not
-the order they were opened.
+**✅ RESOLVED 2026-08-10: AI-27 — Gate-3 batch over the browser-surface queue.**
+All eleven listed browser-surface PRs merged under the explicit waiver after
+refreshed exact-head CI and bounded review. This remains a waiver, not a
+real-Chrome pass; AI-24 carries the optional post-merge Chrome confirmation.
 
-**Status update (2026-08-09): WAIVED, PENDING MERGE.** The owner waived Gate-3
-for exactly **#528, #532, #535, #514, #534, #520, #521, #522, #526, #533, and
-#542**. This is never a real-Chrome pass; no Chrome test is claimed or implied,
-and AI-27 is not complete until every listed PR has merged.
-
-**Check CI yourself before passing any of them — do not assume green.** Two
+**Historical pre-merge procedure.** Two
 separate things went wrong here and both are worth knowing:
 
 - **Stacked PRs run no CI at all** (issue **#537**, found during this session).
@@ -367,22 +357,17 @@ usual this time, because #528 changes the manifest's permission set and #532
 changes what is linked into the bundle — both are exactly the kind of change that
 can break worker registration.
 
-Reply `AI-27 pass: <PR list>` or `AI-27 waive: <PR list>` (a waiver is a legitimate
-outcome and is what you chose on 2026-07-25; it is recorded as a waiver, never as a
-Gate-3 pass), and say whether you ran items 2-3 so AI-24 can be closed or left
-open accordingly. Anything you fail, say so and it becomes a fix slice.
+The `AI-27 pass` / `AI-27 waive` reply syntax below is retained only as historical
+context. The recorded outcome for this batch is a waiver, never a Gate-3 pass;
+AI-24 remains open because its optional Chrome checks were not run.
 
-**Not in this batch:** PR #531 (OAuth state corroboration) has a separate
-**#531-only owner waiver** for its remaining human Gate-3 blocker and AI-14/#417
-measurement hold, but must **not** enter the eleven-PR AI-27 queue. The waiver is
-not a real-Chrome, `measure:fp`, or headed-measurement claim; technical CI/review
-gates still apply. It remains an open durable backup of work that previously
-existed on one machine — see AI-14.
+**Not in this batch:** PR #531 (OAuth state corroboration) merged under its
+separate **#531-only owner waiver**. It did not enter the eleven-PR AI-27 queue,
+does not claim real-Chrome, `measure:fp`, or headed measurement, and leaves #223
+open. See AI-14 for the still-blocked future measurement work.
 
-**🚨 OPEN: AI-28 — Define the behavioural-data boundary for the RI-06 clear-all
-reset.** Issue #474 (the last RI-06 slice) cannot be finished correctly without an
-owner ruling, and the agent implementing it was told to proceed on a **named
-assumption** rather than block:
+**✅ RESOLVED 2026-08-10: AI-28 — behavioural-data boundary for the RI-06
+clear-all reset.** The owner accepted the named boundary and #535 merged with it:
 
 > Assumption: the behavioural-data boundary covers the event log, prompt outcomes,
 > and caches derived from them (adaptive scores / domain profiles built from
@@ -391,24 +376,19 @@ assumption** rather than block:
 > deliberately set would be data loss, whereas leaving behavioural residue is the
 > privacy defect this slice exists to fix.
 
-**Status update (2026-08-09): DECISION RECORDED, PENDING #535 MERGE.** The owner
-delegated/waived the AI-28 choice by accepting #535's existing boundary: clear
+**Recorded boundary:** the owner delegated/waived the AI-28 choice by accepting
+#535's existing boundary: clear
 prompt outcomes, adaptive scores, the event log, and domain profiles; preserve
 suite settings, the allowlist, and trusted domains. The navigation-category
-profile and smart-default cooldowns are explicitly outside this boundary. This
-records the decision only; #535 remains unmerged and this item is not complete
-until its implementation merges. No claim of a full behavioural-data reset is
-made.
+profile and smart-default cooldowns are explicitly outside this boundary. No claim
+of a full behavioural-data reset is made.
 
 The boundary question below is historical and superseded by the recorded owner
 decision above; it is retained only to preserve the original rationale.
 
-Event log and prompt outcomes are unequivocally in scope; the open question is
-whether **domain profiles, adaptive scores, allowlist/trusted domains and suite
-settings** belong inside the boundary. Reply `AI-28: <lanes to include>` — the
-lane set is a single declared list in the implementation, so widening it is a
-one-line change rather than a redesign. Until you rule, the reset ships with the
-conservative boundary above, which can only under-clear, never destroy config.
+Event log and prompt outcomes are unequivocally in scope. The merged reset uses the
+recorded boundary above; any widening is a new owner decision because it changes
+the reset's privacy/configuration scope.
 
 **BLOCKED: AI-8 — Neutral-chip Gate-3 after closed PR #273.** The presentation
 intent is still reasonable, but stale PR #273 was closed on 2026-07-13 with its
@@ -634,8 +614,8 @@ neither exists on `origin`, so this machine is the only copy):
   differently (`Object.keys` sort rather than `Object.entries`), so the guarantee
   is present and this branch adds nothing. Safe to retire on your word.
 
-A third, `fix/oauth-require-state-corroboration-223`, was local-only and is now
-published as PR #531, so it is no longer at risk of loss.
+A third, `fix/oauth-require-state-corroboration-223`, was local-only and merged
+through PR #531, so it is no longer at risk of loss.
 
 **🚨 BLOCKED: AI-14 — OAuth tradeoff measurement after closed PR #399.** The
 measurement-held draft was closed on 2026-07-13 rather than merged from a stale
@@ -644,17 +624,16 @@ methodology and an agent creates a current slice, passes its focused product
 checks and hosted product CI, and posts a reproducible headed measurement plan.
 Do not use the closed branch as a current test or merge target.
 
-**Status update (2026-08-09): WAIVED FOR #531 ONLY.** The owner waived the
-AI-14/#417 measurement hold for **PR #531 specifically**, along with its
-remaining human Gate-3 blocker. This separate waiver does not put #531 in the
-AI-27 batch, does not claim real-Chrome, `measure:fp`, or headed measurement ran,
-and does not waive the methodology requirement for other work. Technical
-CI/review gates still apply; AI-14 remains blocked for unrelated or future
-measurement work.
+**Status update (2026-08-10): WAIVED FOR #531 ONLY, THEN MERGED.** The owner
+waived the AI-14/#417 measurement hold for **PR #531 specifically**, along with
+its remaining human Gate-3 blocker. This separate waiver did not put #531 in the
+AI-27 batch, did not claim real-Chrome, `measure:fp`, or headed measurement ran,
+and does not waive the methodology requirement for other work. Technical CI/review
+gates passed; AI-14 remains blocked for unrelated or future measurement work.
 
 **AI-12 — Top-site FP relief + D1 (#350 → PR #354) · ✅ RESOLVED 2026-06-23 — MERGED.** Chris manually confirmed the relief works on LinkedIn ("tested it on linkedin and it seemed to work fine now") = his measure/Gate-3 in lieu of the full `measure:fp` run (which needs headed Chromium + live Tranco, sandbox-can't). **#354 merged into `main`** (`c4426cf`): `getTierAdjustedBlockThreshold` now relieves TOP_SITE + CDS-only (benign-structural whitelist) by `NRS_TOP_SITE_CDS_RELIEF`; trust list grew 24→42 with safe `includeSubdomains`. Green CI (Build/Unit + E2E) on the main-merged head. **Follow-up:** `+20` is an unvalidated starting value; do not tune it again without the valid #417/#416 FP/TP evidence required by D25.
 
-AI-1, AI-2 resolved 2026-06-05; AI-3, AI-4 resolved 2026-06-13; **AI-5 resolved 2026-06-19** (Phishpedia public logo set approved); **AI-6 resolved 2026-06-19** (#249 merged after Gate-3 waiver). See Completed log. Deferred manual checks remain on the regression watchlist `docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md` (run on next build + load; now also covers #249 enriched-capture, #263 credential-submit, and #265 SW-hydration behavior). Standing posture (updated by owner decision #499 on 2026-07-31): non-browser PRs use focused product checks plus hosted product CI, with no NavSentinel-local review or aging gate; **browser-surface PRs still hold for Gate-3**.
+AI-1, AI-2 resolved 2026-06-05; AI-3, AI-4 resolved 2026-06-13; **AI-5 resolved 2026-06-19** (Phishpedia public logo set approved); **AI-6 resolved 2026-06-19** (#249 merged after Gate-3 waiver). See Completed log. Deferred manual checks remain on the regression watchlist `docs/agentic/POST_MERGE_MANUAL_VERIFICATION.md` (run on next build + load; now also covers #249 enriched-capture, #263 credential-submit, and #265 SW-hydration behavior). Standing posture (updated by owner decision #499 on 2026-07-31): non-browser PRs use focused product checks plus hosted product CI, with no NavSentinel-local review or aging gate; **browser-surface PRs normally hold for Gate-3 unless an explicit owner waiver records an exception**.
 
 > **Note (2026-06-13):** `main` has advanced to `da400fb` since the 2026-06-05 snapshot below (`#196`/FF/domain-impersonation work merged). The snapshot's PR-batch facts are historical; current open-item truth is in this section.
 
