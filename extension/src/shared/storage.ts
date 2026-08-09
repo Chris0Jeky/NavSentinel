@@ -825,7 +825,7 @@ function appendEventDirect(entry: EventLogEntry): Promise<void> {
 }
 
 /** @internal Serialized event-log clear lane. Exported for `behavioural_reset.ts`. */
-export function clearEventLogDirect(): Promise<void> {
+export function clearEventLogDirect(progressMarker?: Record<string, unknown>): Promise<void> {
   return queueEventLogWrite(async () => {
     await hydrateEventLogResetCutoff();
     const resetTs = Date.now();
@@ -834,7 +834,10 @@ export function clearEventLogDirect(): Promise<void> {
     // the conservative cutoff is safe and the surfaced control error is
     // retryable.
     await setEventLogResetCutoff(resetTs);
-    await chrome.storage.local.set({ [EVENT_LOG_KEY]: [] });
+    // The reset caller supplies its narrowed crash marker in this SAME local
+    // storage commit. A worker therefore cannot observe a cleared lane beside
+    // an older marker that would replay it after restart.
+    await chrome.storage.local.set({ ...progressMarker, [EVENT_LOG_KEY]: [] });
   });
 }
 
@@ -1552,7 +1555,7 @@ export function appendPromptOutcome(
 }
 
 /** @internal Serialized prompt-outcome clear lane. Exported for `behavioural_reset.ts`. */
-export function clearPromptOutcomesDirect(): Promise<void> {
+export function clearPromptOutcomesDirect(progressMarker?: Record<string, unknown>): Promise<void> {
   return queuePromptOutcomeWrite(async () => {
     await hydratePromptOutcomeResetCutoff();
     const resetTs = Date.now();
@@ -1560,7 +1563,9 @@ export function clearPromptOutcomesDirect(): Promise<void> {
     // Persist the restart-surviving barrier before the destructive local write.
     // chrome.storage has no cross-area transaction, so a barrier failure leaves
     // the log intact and is surfaced to the trusted control caller.
-    await chrome.storage.local.set({ [PROMPT_OUTCOMES_KEY]: [] });
+    // Commit the narrowed crash marker with the destructive lane write. The
+    // session barrier stays before this commit, as it protects delayed appends.
+    await chrome.storage.local.set({ ...progressMarker, [PROMPT_OUTCOMES_KEY]: [] });
   });
 }
 
@@ -1597,17 +1602,18 @@ function clearPromptOutcomeAdaptiveScoresDirect(): Promise<void> {
  * resumed reset this lane can run alone, and wiping rows written after the
  * outcomes lane already completed would be the data loss finding (2) is about.
  */
-export function resyncPromptOutcomeAdaptiveScoresDirect(): Promise<void> {
+export function resyncPromptOutcomeAdaptiveScoresDirect(progressMarker?: Record<string, unknown>): Promise<void> {
   return queuePromptOutcomeWrite(async () => {
     const res = await chrome.storage.local.get(PROMPT_OUTCOMES_KEY);
     const outcomes = boundPromptOutcomeLog(res[PROMPT_OUTCOMES_KEY]);
     if (outcomes.length === 0) {
-      await clearAdaptiveScoresDirect();
+      await chrome.storage.local.set({ ...progressMarker, [ADAPTIVE_SCORES_KEY]: {} });
       return;
     }
     const settings = await getNavSettings();
     const threshold = settings.defaultMode === "strict" ? NRS_STRICT_BLOCK_THRESHOLD : NRS_BLOCK_THRESHOLD;
     await chrome.storage.local.set({
+      ...progressMarker,
       [ADAPTIVE_SCORES_KEY]: computeAdaptiveScoreMap(outcomes, threshold),
     });
   });

@@ -143,12 +143,12 @@ async function loadProfiles(): Promise<Map<string, DomainProfile>> {
   return map;
 }
 
-async function saveProfiles(profiles: Map<string, DomainProfile>): Promise<void> {
+async function saveProfiles(profiles: Map<string, DomainProfile>, extra?: Record<string, unknown>): Promise<void> {
   const obj: Record<string, DomainProfile> = {};
   for (const [key, val] of profiles) {
     obj[key] = val;
   }
-  await chrome.storage.local.set({ [DOMAIN_PROFILES_KEY]: obj });
+  await chrome.storage.local.set({ ...extra, [DOMAIN_PROFILES_KEY]: obj });
 }
 
 // ---------------------------------------------------------------------------
@@ -309,9 +309,9 @@ export function getTopSuspiciousDomains(limit: number): Promise<DomainProfile[]>
  * navigation's load and save would be silently resurrected, or a navigation's
  * update would survive a clear the user just requested).
  */
-export function clearDomainProfiles(): Promise<void> {
+export function clearDomainProfiles(progressMarker?: Record<string, unknown>): Promise<void> {
   const next = pending.then(async (): Promise<void> => {
-    await chrome.storage.local.set({ [DOMAIN_PROFILES_KEY]: {} });
+    await chrome.storage.local.set({ ...progressMarker, [DOMAIN_PROFILES_KEY]: {} });
   });
   pending = next.catch((err) => { console.warn("[NavSentinel] profile serialization error:", err); });
   return next;

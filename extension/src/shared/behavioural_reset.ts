@@ -78,7 +78,7 @@ export interface BehaviouralResetResult {
 
 /**
  * Crash-window marker. Written to `chrome.storage.local` (not `session`) BEFORE
- * the first destructive write and narrowed as lanes succeed, so an interrupted
+ * the first destructive write and narrowed after each lane succeeds, so an interrupted
  * reset is never left half-applied without a record — the per-lane session
  * cutoffs only need to outlive a worker restart, but unfinished destructive
  * work must outlive a browser restart too.
@@ -90,21 +90,21 @@ interface BehaviouralResetState {
   pending: BehaviouralDataLane[];
 }
 
-const BEHAVIOURAL_LANE_CLEARERS: Record<BehaviouralDataLane, () => Promise<void>> = {
+const BEHAVIOURAL_LANE_CLEARERS: Record<BehaviouralDataLane, (progressMarker?: Record<string, unknown>) => Promise<void>> = {
   // Each entry reuses the lane's EXISTING serialized clear path (barrier first,
   // then the destructive write) rather than introducing a second concurrency
   // scheme — the get-modify-write races fixed in #180/#182 live in those chains.
-  promptOutcomes: () => clearPromptOutcomesDirect(),
+  promptOutcomes: (progressMarker) => clearPromptOutcomesDirect(progressMarker),
   // Recomputes rather than blind-clears, so an outcome appended between these
   // two lanes cannot be left holding a source row with no derived score. With
   // no outcomes stored — the normal case — this writes exactly `{}`.
-  adaptiveScores: () => resyncPromptOutcomeAdaptiveScoresDirect(),
-  eventLog: () => clearEventLogDirect(),
+  adaptiveScores: (progressMarker) => resyncPromptOutcomeAdaptiveScoresDirect(progressMarker),
+  eventLog: (progressMarker) => clearEventLogDirect(progressMarker),
   // Domain profiles are written directly by content scripts (accepted residual
   // #181), so this clear is serialized only within the calling context. A
   // content-script write already in flight can still land after it; that residual
   // is unchanged by this slice and is called out in PRIVACY.md.
-  domainProfiles: () => clearDomainProfiles(),
+  domainProfiles: (progressMarker) => clearDomainProfiles(progressMarker),
 };
 
 function isBehaviouralDataLane(value: unknown): value is BehaviouralDataLane {
@@ -172,6 +172,7 @@ async function finalizeBehaviouralResetState(
       return null;
     } catch (err) {
       removeError = err;
+      console.warn("[NavSentinel] behavioural reset marker cleanup failed:", err);
     }
   }
   // Fall back to a non-replayable tombstone: an empty `pending` normalizes to
@@ -180,11 +181,10 @@ async function finalizeBehaviouralResetState(
     await writeBehaviouralResetState({ startedAt, pending: [] });
     return null;
   } catch (err) {
-    // Both retirement paths failed, so the marker still names every lane. We
-    // cannot stop the replay from here — but we can refuse to call this a
-    // success, which is what makes the later re-clear non-silent.
+    // The final lane already committed an empty-pending tombstone, so this
+    // subsequent cleanup-write failure cannot reactivate replay.
     console.warn("[NavSentinel] behavioural reset marker update failed:", removeError ?? err);
-    return `reset completed but not finalized; it may re-run at the next start: ${errorText(err)}`;
+    return null;
   }
 }
 
@@ -207,8 +207,15 @@ async function runBehaviouralResetLanes(
   const cleared: BehaviouralDataLane[] = [];
   const failed: BehaviouralResetLaneFailure[] = [];
   for (const lane of lanes) {
+    const pending = lanes.filter((candidate) => candidate !== lane && !cleared.includes(candidate));
     try {
-      await BEHAVIOURAL_LANE_CLEARERS[lane]();
+      // A lane's destructive write and this narrowed marker are one
+      // chrome.storage.local.set operation. A crash can therefore leave
+      // either the old lane+old marker or the cleared lane+narrowed marker,
+      // never the destructive replay gap between them.
+      await BEHAVIOURAL_LANE_CLEARERS[lane]({
+        [BEHAVIOURAL_RESET_STATE_KEY]: { startedAt, pending },
+      });
       cleared.push(lane);
     } catch (err) {
       failed.push({ lane, error: errorText(err) });

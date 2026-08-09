@@ -245,6 +245,52 @@ describe("unified behavioural-data reset (RI-06 / #474)", () => {
     expectConfigurationPreserved(store);
   });
 
+  it("commits each destructive lane with its narrowed crash marker", async () => {
+    let promptProgress: unknown;
+    const { chrome, store } = createChromeMock(seededBehaviouralStore(), {
+      onLocalSet(next) {
+        if (Array.isArray(next[PROMPT_OUTCOMES_KEY]) && next[PROMPT_OUTCOMES_KEY].length === 0) {
+          promptProgress = next[BEHAVIOURAL_RESET_STATE_KEY];
+        }
+      },
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { clearBehaviouralData } = await import("../extension/src/shared/behavioural_reset");
+    const result = await clearBehaviouralData();
+    expect(result.ok).toBe(true);
+    // One chrome.storage.local.set contains both values. A termination after
+    // this committed write resumes only the remaining lanes.
+    expect(promptProgress).toMatchObject({
+      pending: ["adaptiveScores", "eventLog", "domainProfiles"],
+    });
+    expect(store[PROMPT_OUTCOMES_KEY]).toEqual([]);
+  });
+
+  it("does not replay a committed prompt-outcome lane after worker interruption", async () => {
+    const seeded = seededBehaviouralStore();
+    // This is the durable state of an interruption after the atomic prompt
+    // clear/progress commit. The new record arrived while the worker was down.
+    seeded[PROMPT_OUTCOMES_KEY] = [
+      { id: "after-crash", ts: 20, domain: "after-crash.example", type: "nav", score: 80, outcome: "block" },
+    ];
+    seeded[BEHAVIOURAL_RESET_STATE_KEY] = {
+      startedAt: 10,
+      pending: ["adaptiveScores", "eventLog", "domainProfiles"],
+    };
+    const { chrome, store } = createChromeMock(seeded);
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { resumeInterruptedBehaviouralReset } = await import("../extension/src/shared/behavioural_reset");
+    const result = await resumeInterruptedBehaviouralReset();
+
+    expect(result.ok).toBe(true);
+    expect(store[PROMPT_OUTCOMES_KEY]).toEqual([
+      expect.objectContaining({ id: "after-crash", domain: "after-crash.example" }),
+    ]);
+    expect(BEHAVIOURAL_RESET_STATE_KEY in store).toBe(false);
+  });
+
   it("is a no-op when no interrupted reset is recorded", async () => {
     const { chrome, store } = createChromeMock(seededBehaviouralStore());
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
@@ -283,9 +329,7 @@ describe("unified behavioural-data reset (RI-06 / #474)", () => {
     expect(store[ADAPTIVE_SCORES_KEY]).toEqual({});
   });
 
-  // --- Review round 2, finding (2): a suppressed marker-finalization failure was
-  // reported as success, and the surviving marker was replayed destructively later.
-  it("does not report success while an un-finalized reset marker survives", async () => {
+  it("does not clear any lane when its atomic marker checkpoint cannot persist", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const { chrome, store } = createChromeMock(seededBehaviouralStore(), {
       failLocalWriteForKey: BEHAVIOURAL_RESET_STATE_KEY,
@@ -296,19 +340,36 @@ describe("unified behavioural-data reset (RI-06 / #474)", () => {
     });
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
-    const { clearBehaviouralData } = await import("../extension/src/shared/behavioural_reset");
-    const result = await clearBehaviouralData();
+    const storage = await import("../extension/src/shared/storage");
+    const behaviouralReset = await import("../extension/src/shared/behavioural_reset");
+    const result = await behaviouralReset.clearBehaviouralData();
 
-    // Every lane genuinely cleared, so `failed` stays empty and honest...
-    expect(result.cleared).toEqual([...BEHAVIOURAL_DATA_LANES]);
-    expect(result.failed).toEqual([]);
-    // ...but an ACTIVE marker still names every lane, so a later worker start
-    // would replay the reset over data created afterwards. That is not success.
+    // Each lane write includes the marker. A marker-write failure therefore
+    // prevents the destructive lane write rather than creating a replay gap.
+    expect(result.cleared).toEqual([]);
+    expect(result.failed.map((entry) => entry.lane)).toEqual([...BEHAVIOURAL_DATA_LANES]);
     expect(result.ok).toBe(false);
     expect(result.markerError).toContain("marker store full");
     expect(store[BEHAVIOURAL_RESET_STATE_KEY]).toMatchObject({
       pending: [...BEHAVIOURAL_DATA_LANES],
     });
+
+    const marker = store[BEHAVIOURAL_RESET_STATE_KEY] as { startedAt: number };
+    await storage.appendPromptOutcome({
+      id: "after-marker-failure",
+      ts: marker.startedAt + 1000,
+      domain: "after-marker-failure.example",
+      type: "nav",
+      score: 80,
+      outcome: "block",
+    });
+    const resumed = await behaviouralReset.resumeInterruptedBehaviouralReset();
+    expect(resumed.ok).toBe(false);
+    // Progress and finalization writes are still failing, so the stale marker
+    // remains active. Its replay nevertheless must preserve new records.
+    expect(store[PROMPT_OUTCOMES_KEY]).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "after-marker-failure" }),
+    ]));
   });
 
   it("tombstones the marker when removal fails so a later start replays nothing", async () => {
@@ -338,6 +399,38 @@ describe("unified behavioural-data reset (RI-06 / #474)", () => {
     const resumed = await behaviouralReset.resumeInterruptedBehaviouralReset();
     expect(resumed).toEqual({ ok: true, cleared: [], failed: [] });
     // The finished reset must NOT be replayed over the new record.
+    expect(store[EVENT_LOG_KEY]).toHaveLength(1);
+  });
+
+  it("keeps the final atomic tombstone non-replayable when cleanup persistence also fails", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { chrome, store } = createChromeMock(seededBehaviouralStore(), {
+      failLocalWriteForKey: BEHAVIOURAL_RESET_STATE_KEY,
+      failLocalWriteMessage: "marker cleanup store full",
+      // Preflight plus all four atomic lane checkpoints succeed. Only the
+      // post-tombstone cleanup fallback fails.
+      allowLocalWritesForKey: 5,
+      failLocalRemove: "remove unavailable",
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const storage = await import("../extension/src/shared/storage");
+    const behaviouralReset = await import("../extension/src/shared/behavioural_reset");
+    const result = await behaviouralReset.clearBehaviouralData();
+
+    expect(result.ok).toBe(true);
+    expect(store[BEHAVIOURAL_RESET_STATE_KEY]).toMatchObject({ pending: [] });
+    await storage.appendEvent({
+      kind: "nav_click_block",
+      site: "after-final-tombstone.example",
+      ts: Date.now() + 1000,
+    });
+
+    expect(await behaviouralReset.resumeInterruptedBehaviouralReset()).toEqual({
+      ok: true,
+      cleared: [],
+      failed: [],
+    });
     expect(store[EVENT_LOG_KEY]).toHaveLength(1);
   });
 
