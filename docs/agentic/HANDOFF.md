@@ -4,10 +4,13 @@ Updated 2026-08-09. This is an optional short snapshot; live Git/GitHub state,
 product tests, `docs/Project_Roadmap.md`, and `ACTION_ITEMS.md` are authoritative.
 Historical cycle detail remains in `ORCHESTRATOR.md` and is not required reading.
 
-## Where `main` is
+## Latest product baseline
 
-`main` is at **`7198ee4`**. The 2026-08-08 batch below merged with merge commits
-(never squashed); two test-only #460 diagnostic follow-ups merged afterwards:
+This handoff is itself a documentation-only `main` commit, so it deliberately
+does not pin the current ref to its pre-merge SHA. At the latest live product
+reconciliation before this update, the product baseline was **`7198ee4`**. The
+2026-08-08 batch below merged with merge commits (never squashed); two test-only
+#460 diagnostic follow-ups merged afterwards:
 
 | PR | What landed |
 | --- | --- |
@@ -29,9 +32,9 @@ the values here age quickly.
 **Eleven browser-surface PRs are open, and none can merge without Chris.** They
 are tracked as a single item, **AI-27**, in `ACTION_ITEMS.md`; the live queue is
 `#528, #532, #535, #514, #534, #520, #521, #522, #526, #533, #542`. Existing CI
-and review evidence was green at each recorded head, but every open PR's GitHub
-base predates `7198ee4`; it must be refreshed and re-proven against the current
-base before any merge. **AI-28** remains the outstanding behavioural-data-boundary
+and review evidence was green at each recorded head, but every open PR must be
+refreshed and re-proven against the live `origin/main` base before any merge.
+**AI-28** remains the outstanding behavioural-data-boundary
 decision for #474, so #535 has that additional hold.
 
 `ACTION_ITEMS.md` on `main` still says ten because its #542 row is carried by
@@ -97,8 +100,8 @@ active queue).
   competitor superiority, or an external security audit.
 - **No real-Chrome pass was performed for any of the eleven queued PRs.** That is
   exactly what AI-27 asks for.
-- All open PRs need a fresh base/head proof before merge because their recorded
-  bases predate `7198ee4`. #532 and #535 were additionally verified by
+- All open PRs need a fresh base/head proof before merge against the live
+  `origin/main` base. #532 and #535 were additionally verified by
   `workflow_dispatch`, which builds the branch
   **tip** rather than the base-plus-head merge commit a `pull_request` run builds.
   If either base moves before merge, that evidence goes stale — merge the new base
