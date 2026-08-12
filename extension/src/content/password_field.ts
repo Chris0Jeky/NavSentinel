@@ -33,8 +33,8 @@
  * comments, does not lowercase property names). The cases happy-dom matches
  * Chrome on are asserted in password-field.test.ts; the engine-distinguishing
  * cases it diverges on (embedded `;`-in-quotes, uppercase property, CSS
- * comments) are correct in the real runtime (Chrome) and are pinned by a
- * Chrome-backed E2E tracked in #201.
+ * comments) are correct in the real runtime (Chrome) and are pinned by
+ * `tests/e2e/password-field-css-engine.spec.ts` (#201).
  *
  * Scope note: hiding via the `hidden` attribute, a class/stylesheet, computed
  * style, `visibility:collapse`, `opacity:0`, or off-screen positioning is
