@@ -88,10 +88,11 @@ test("popup renders only active-site risk, signal classes, and ClickFix shield i
 
     try {
       const page = await context.newPage();
-      await page.goto(`${baseUrl}/clickfix-03-legit.html`, {
+      const response = await page.goto(`${baseUrl}/clickfix-03-legit-captcha.html`, {
         waitUntil: "domcontentloaded",
         timeout: 20_000
       });
+      expect(response?.ok(), "Expected the tracked ClickFix fixture to load successfully").toBe(true);
       await page.bringToFront();
 
       const worker = await getServiceWorker(context);
@@ -101,20 +102,20 @@ test("popup renders only active-site risk, signal classes, and ClickFix shield i
         eventLogKey: EVENT_LOG_KEY,
         events: [
           {
-            id: "other-site-high-risk",
-            ts: 1_710_000_000_000,
-            kind: "nav_click_block",
-            site: "other-site.example",
-            score: 95,
-            reasons: ["high_entropy_subdomain"]
-          },
-          {
             id: "active-site-risk",
-            ts: 1_710_000_000_001,
+            ts: 1_710_000_000_000,
             kind: "nav_click_block",
             site: "127.0.0.1",
             score: 55,
             reasons: ["legit_captcha_present", "high_entropy_subdomain"]
+          },
+          {
+            id: "other-site-high-risk",
+            ts: 1_710_000_000_001,
+            kind: "nav_click_block",
+            site: "other-site.example",
+            score: 95,
+            reasons: ["high_entropy_subdomain"]
           },
           {
             id: "active-site-clickfix",
@@ -132,8 +133,8 @@ test("popup renders only active-site risk, signal classes, and ClickFix shield i
       const snapshot = await getPopupSnapshot(context);
 
       expect(snapshot.site).toBe("127.0.0.1");
-      // The 95 score belongs to a different site, so the rendered active-site
-      // gauge must retain its own score rather than taking log[last] globally.
+      // The newer 95 score belongs to a different site, so the rendered active-site
+      // gauge must retain 55. Removing the domain filter would select that 95 score.
       expect(snapshot.tabRisk).toBe(55);
       expect(snapshot.signalChipClasses).toEqual([
         "signal-chip signal-chip--ok",
@@ -142,7 +143,9 @@ test("popup renders only active-site risk, signal classes, and ClickFix shield i
 
       const clickfixIndex = snapshot.events.findIndex((event) => event.includes("Clickfix Detected"));
       expect(clickfixIndex).toBeGreaterThanOrEqual(0);
-      expect(snapshot.eventIcons[clickfixIndex]).toBe("shield");
+      expect(snapshot.eventIconPaths[clickfixIndex]).toBe(
+        "M12 3 L20 5 V11 C20 16 16 19.5 12 21 C8 19.5 4 16 4 11 V5 Z"
+      );
     } finally {
       await context.close();
     }

@@ -146,11 +146,7 @@ function renderEvents(log: EventLogEntry[]): void {
     const iconBox = document.createElement("div");
     iconBox.className = `event-icon-box event-icon-box--${tone}`;
     const iconColor = tone === "navigation" ? "var(--ns-cyan)" : tone === "credential" ? "var(--ns-green)" : "var(--ns-orange)";
-    const iconName = eventIconName(eventKind);
-    // Retain the rendered glyph identity for the extension E2E snapshot. This
-    // verifies the DOM consumer instead of only the popup-model decision.
-    iconBox.dataset.icon = iconName;
-    iconBox.innerHTML = icon(iconName, 12, iconColor);
+    iconBox.innerHTML = icon(eventIconName(eventKind), 12, iconColor);
     row.appendChild(iconBox);
 
     const body = document.createElement("div");
@@ -259,7 +255,10 @@ function getPopupSnapshot(): PopupSnapshot {
   return {
     credMode: getSegValue(credSeg),
     events,
-    eventIcons: Array.from(eventsEl.querySelectorAll<HTMLDivElement>(".event-icon-box"), (node) => node.dataset.icon ?? ""),
+    eventIconPaths: Array.from(
+      eventsEl.querySelectorAll<HTMLDivElement>(".event-icon-box"),
+      (node) => node.querySelector("svg path")?.getAttribute("d") ?? ""
+    ),
     navMode: getSegValue(navSeg),
     signalChipClasses: Array.from(signalsEl.querySelectorAll(".signal-chip"), (node) => node.className),
     site: siteEl.textContent?.trim() ?? "",

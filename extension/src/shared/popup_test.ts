@@ -19,7 +19,7 @@ export type PopupTestMessage =
 export type PopupSnapshot = {
   credMode: string;
   events: string[];
-  eventIcons: string[];
+  eventIconPaths: string[];
   navMode: string;
   signalChipClasses: string[];
   site: string;
