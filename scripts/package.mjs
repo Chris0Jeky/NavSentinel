@@ -37,7 +37,7 @@ if (!fs.existsSync(licensePath)) {
 }
 
 const licenseText = fs.readFileSync(licensePath, "utf8");
-if (!licenseText.includes("GNU GENERAL PUBLIC LICENSE")) {
+if (!licenseText.includes("Version 3, 29 June 2007")) {
   console.error("[package:ext] Root LICENSE does not contain the expected GPL terms.");
   process.exit(1);
 }
