@@ -17,6 +17,7 @@ const root = path.resolve(__dirname, "..");
 const packagePath = path.join(root, "package.json");
 const distDir = path.join(root, "extension", "dist");
 const manifestPath = path.join(distDir, "manifest.json");
+const licensePath = path.join(root, "LICENSE");
 const artifactsDir = path.join(root, "artifacts");
 
 if (!fs.existsSync(packagePath)) {
@@ -30,6 +31,17 @@ if (!fs.existsSync(manifestPath)) {
   process.exit(1);
 }
 
+if (!fs.existsSync(licensePath)) {
+  console.error("[package:ext] Root LICENSE not found.");
+  process.exit(1);
+}
+
+const licenseText = fs.readFileSync(licensePath, "utf8");
+if (!licenseText.includes("Version 3, 29 June 2007")) {
+  console.error("[package:ext] Root LICENSE does not contain the expected GPL terms.");
+  process.exit(1);
+}
+
 let builtProfile;
 try {
   builtProfile = inspectBuiltReleaseProfile(distDir, { requireReleaseEligible: true }).profile;
@@ -40,6 +52,9 @@ try {
   process.exit(1);
 }
 console.log(`[package:ext] Verified release profile: ${builtProfile.id}`);
+
+// Binary distributions must carry the GPL terms alongside the extension files.
+fs.copyFileSync(licensePath, path.join(distDir, "LICENSE"));
 
 fs.mkdirSync(artifactsDir, { recursive: true });
 

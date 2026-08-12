@@ -19,6 +19,7 @@ import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distDir = path.resolve(__dirname, "..", "extension", "dist");
+const licensePath = path.resolve(__dirname, "..", "LICENSE");
 
 const KB = 1024;
 
@@ -211,7 +212,14 @@ for (const budget of budgets) {
   if (budget.recursive) {
     const target = path.join(distDir, budget.path);
     sizeBytes = dirSizeRecursive(target);
-    matchInfo = target;
+    // Packaging copies the GPL text into dist after this check. Account for it
+    // here so the aggregate budget measures the shipped ZIP rather than only
+    // the pre-package build output.
+    const packagedLicensePath = path.join(distDir, "LICENSE");
+    if (!fs.existsSync(packagedLicensePath)) {
+      sizeBytes += fs.statSync(licensePath).size;
+    }
+    matchInfo = `${target} (including packaged LICENSE)`;
   } else {
     const dir = path.dirname(path.join(distDir, budget.glob));
     const pattern = path.basename(budget.glob);
