@@ -146,7 +146,11 @@ function renderEvents(log: EventLogEntry[]): void {
     const iconBox = document.createElement("div");
     iconBox.className = `event-icon-box event-icon-box--${tone}`;
     const iconColor = tone === "navigation" ? "var(--ns-cyan)" : tone === "credential" ? "var(--ns-green)" : "var(--ns-orange)";
-    iconBox.innerHTML = icon(eventIconName(eventKind), 12, iconColor);
+    const iconName = eventIconName(eventKind);
+    // Retain the rendered glyph identity for the extension E2E snapshot. This
+    // verifies the DOM consumer instead of only the popup-model decision.
+    iconBox.dataset.icon = iconName;
+    iconBox.innerHTML = icon(iconName, 12, iconColor);
     row.appendChild(iconBox);
 
     const body = document.createElement("div");
@@ -250,12 +254,16 @@ function getPopupSnapshot(): PopupSnapshot {
   const events = Array.from(eventsEl.querySelectorAll(".event-row"))
     .map((node) => node.textContent?.replace(/\s+/g, " ").trim() ?? "")
     .filter(Boolean);
+  const tabRiskMatch = /^Tab risk score: (\d+)$/.exec(shieldArcEl.getAttribute("aria-label") ?? "");
 
   return {
     credMode: getSegValue(credSeg),
     events,
+    eventIcons: Array.from(eventsEl.querySelectorAll<HTMLDivElement>(".event-icon-box"), (node) => node.dataset.icon ?? ""),
     navMode: getSegValue(navSeg),
+    signalChipClasses: Array.from(signalsEl.querySelectorAll(".signal-chip"), (node) => node.className),
     site: siteEl.textContent?.trim() ?? "",
+    tabRisk: tabRiskMatch ? Number(tabRiskMatch[1]) : null,
     trustStatus: trustStatusEl.textContent?.trim() ?? ""
   };
 }
