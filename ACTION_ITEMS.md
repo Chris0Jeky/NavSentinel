@@ -47,7 +47,7 @@ programmatic-submit block then exactly one allow-once action, Level-5 popunder
 block, OAuth popup by physical click/Tab+Enter/submit input (exactly one popup and
 no prompt), plus MV3 service-worker registration in `chrome://extensions`. Record
 Chrome version and any unexpected result with `AI-24 done` or `AI-24 failed:
-<step and observed>`. This is not a release blocker. See
+<step and observed>`. Only Chris can record this complete. This is not a release blocker. See
 [`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md) and the archive for
 historical procedure provenance.
 
