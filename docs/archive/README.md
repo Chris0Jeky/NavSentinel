@@ -1,10 +1,7 @@
 # Archived Docs
 
 These files are preserved for historical context, not as current operator guidance.
-
-Use them when you need to understand how the SentinelSuite merge was approached or which
-resource inputs shaped the implementation. Do not treat them as the active source of truth
-for the current `main` branch.
+Do not treat them as the active source of truth for the current `main` branch.
 
 Archived here:
 
@@ -19,14 +16,21 @@ Archived here:
 - `docs/archive/Implementation_Roadmap.md`
   - post-merge follow-up themes, superseded by `docs/Project_Roadmap.md`
 - `docs/archive/ORCHESTRATOR.md`
-  - Cycle 1–7 work orchestrator (UI redesign + the #114–#174 systematic merge); archived 2026-06-05, superseded by the canonical living orchestrator `docs/agentic/ORCHESTRATOR.md`
+  - Cycle 1-7 work orchestrator (UI redesign + the #114-#174 systematic merge);
+    archived 2026-06-05
 - `docs/archive/ORCHESTRATION.md`
-  - redesign-era (2026-05-16) autonomous-orchestration doc; archived 2026-06-05, superseded by `docs/agentic/ORCHESTRATOR.md` + `docs/agentic/HANDOFF.md`
+  - redesign-era (2026-05-16) autonomous-orchestration document; archived 2026-06-05
+- `docs/archive/ACTION_ITEMS_HISTORY_2026-08-12.md`
+  - provenance for the 2026-08-12 ACTION_ITEMS queue trim; not current guidance
 
-For the current implementation, start with:
+`docs/agentic/ORCHESTRATOR.md` is also a retired historical cycle ledger, not a
+canonical living orchestrator. For current work, start with live Git/GitHub state,
+`docs/Project_Roadmap.md`, and `ACTION_ITEMS.md` when a human decision or manual
+check is involved.
+
+For current implementation orientation, also use:
 
 - `README.md`
 - `docs/README.md`
 - `docs/Project_Overview.md`
 - `docs/Architecture_and_Data_Flow.md`
-- `docs/Project_Roadmap.md`
