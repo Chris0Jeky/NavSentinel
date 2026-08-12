@@ -250,12 +250,19 @@ function getPopupSnapshot(): PopupSnapshot {
   const events = Array.from(eventsEl.querySelectorAll(".event-row"))
     .map((node) => node.textContent?.replace(/\s+/g, " ").trim() ?? "")
     .filter(Boolean);
+  const tabRiskMatch = /^Tab risk score: (\d+)$/.exec(shieldArcEl.getAttribute("aria-label") ?? "");
 
   return {
     credMode: getSegValue(credSeg),
     events,
+    eventIconPaths: Array.from(
+      eventsEl.querySelectorAll<HTMLDivElement>(".event-icon-box"),
+      (node) => node.querySelector("svg path")?.getAttribute("d") ?? ""
+    ),
     navMode: getSegValue(navSeg),
+    signalChipClasses: Array.from(signalsEl.querySelectorAll(".signal-chip"), (node) => node.className),
     site: siteEl.textContent?.trim() ?? "",
+    tabRisk: tabRiskMatch ? Number(tabRiskMatch[1]) : null,
     trustStatus: trustStatusEl.textContent?.trim() ?? ""
   };
 }

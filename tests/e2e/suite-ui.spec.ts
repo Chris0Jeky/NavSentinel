@@ -3,8 +3,9 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
-import { SUITE_SETTINGS_KEY, TRUSTED_DOMAINS_KEY } from "../../extension/src/shared/storage";
-import { getExtensionId } from "./extension_test_utils";
+import { EVENT_LOG_KEY, SUITE_SETTINGS_KEY, TRUSTED_DOMAINS_KEY } from "../../extension/src/shared/storage";
+import { getGymBaseUrl, getExtensionId, getServiceWorker } from "./extension_test_utils";
+import { getPopupSnapshot, openRealPopup } from "./demo-showcase-popup";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -12,6 +13,7 @@ const __dirname = path.dirname(__filename);
 const extensionPath = process.env.EXTENSION_PATH
   ? path.resolve(process.env.EXTENSION_PATH)
   : path.resolve(__dirname, "..", "..", "extension", "dist");
+const gymRoot = path.resolve(__dirname, "..", "..", "gym");
 
 test.setTimeout(120_000);
 
@@ -67,6 +69,88 @@ test("options normalizes trusted-domain input and persists mode changes @smoke",
       await context.close();
     }
   } finally {
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("popup renders only active-site risk, signal classes, and ClickFix shield icon @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-popup-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      const response = await page.goto(`${baseUrl}/clickfix-03-legit-captcha.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+      expect(response?.ok(), "Expected the tracked ClickFix fixture to load successfully").toBe(true);
+      await page.bringToFront();
+
+      const worker = await getServiceWorker(context);
+      await worker.evaluate(async ({ eventLogKey, events }) => {
+        await chrome.storage.local.set({ [eventLogKey]: events });
+      }, {
+        eventLogKey: EVENT_LOG_KEY,
+        events: [
+          {
+            id: "active-site-risk",
+            ts: 1_710_000_000_000,
+            kind: "nav_click_block",
+            site: "127.0.0.1",
+            score: 55,
+            reasons: ["legit_captcha_present", "high_entropy_subdomain"]
+          },
+          {
+            id: "other-site-high-risk",
+            ts: 1_710_000_000_001,
+            kind: "nav_click_block",
+            site: "other-site.example",
+            score: 95,
+            reasons: ["high_entropy_subdomain"]
+          },
+          {
+            id: "active-site-clickfix",
+            ts: 1_710_000_000_002,
+            kind: "clickfix_detected",
+            site: "127.0.0.1"
+          }
+        ]
+      });
+
+      await openRealPopup(context);
+      // `chrome.action.openPopup()` can focus the extension page in Chromium;
+      // restore the fixture tab so refreshUi reads the actual active browser tab.
+      await page.bringToFront();
+      const snapshot = await getPopupSnapshot(context);
+
+      expect(snapshot.site).toBe("127.0.0.1");
+      // The newer 95 score belongs to a different site, so the rendered active-site
+      // gauge must retain 55. Removing the domain filter would select that 95 score.
+      expect(snapshot.tabRisk).toBe(55);
+      expect(snapshot.signalChipClasses).toEqual([
+        "signal-chip signal-chip--ok",
+        "signal-chip signal-chip--warn"
+      ]);
+
+      const clickfixIndex = snapshot.events.findIndex((event) => event.includes("Clickfix Detected"));
+      expect(clickfixIndex).toBeGreaterThanOrEqual(0);
+      expect(snapshot.eventIconPaths[clickfixIndex]).toBe(
+        "M12 3 L20 5 V11 C20 16 16 19.5 12 21 C8 19.5 4 16 4 11 V5 Z"
+      );
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
     fs.rmSync(userDataDir, { recursive: true, force: true });
   }
 });

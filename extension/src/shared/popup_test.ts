@@ -19,8 +19,11 @@ export type PopupTestMessage =
 export type PopupSnapshot = {
   credMode: string;
   events: string[];
+  eventIconPaths: string[];
   navMode: string;
+  signalChipClasses: string[];
   site: string;
+  tabRisk: number | null;
   trustStatus: string;
 };
 
