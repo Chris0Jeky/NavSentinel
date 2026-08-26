@@ -1,6 +1,6 @@
 # NavSentinel Project Roadmap
 
-*Created 2026-04-09. Truth refresh 2026-07-10; live/status sync 2026-08-02.*
+*Created 2026-04-09. Truth refresh 2026-07-10; live/status sync 2026-08-26.*
 
 This is the execution roadmap. [`Product_Strategy.md`](Product_Strategy.md) owns
 the product thesis, portfolio boundaries, and evidence gates; GitHub issues own
@@ -82,6 +82,11 @@ or moved to a post-beta milestone. Use live GitHub state first;
 [`HANDOFF.md`](agentic/HANDOFF.md) is an optional short snapshot, and
 [`ACTION_ITEMS.md`](../ACTION_ITEMS.md) is needed only for human-owned actions.
 
+**Bounded owner exception (2026-08-26):** #555 authorizes one opt-in overlay
+cleanup slice under D-2026-08-26-O. It reuses existing high-severity interaction
+classification and does not unfreeze the Horizon portfolio or authorize general
+ad/tracker blocking. Shipped behavior remains Gate-3-held under AI-29.
+
 ### Corrective action register
 
 This is the single mutable action register. Reuse existing issues to avoid
@@ -107,6 +112,7 @@ maintainer chooses disclosure/ownership.
 | EV-03 | P1 | Compare additive value with current protections | Agent + headed lane | #418 | Pre-registered scenarios/configurations; wins, misses, interruption, performance, and data flow published |
 | EV-04 | P1 after integrity | Measure representative-site compatibility and runtime overhead | Agent + headed lane | Reuse #127/#420; no new issue before queue cull | Declared normal journeys have zero unexplained functional breakage/page errors; startup/action latency and CPU budgets are fixed, measured, and published before broad instrumentation is enabled |
 | OPS-01 | P1 | Rotate roadmap/orchestrator and cull duplicate epics | Agent + Chris dispositions | #437 and #439–#453 | Short current roadmap, archived history, one milestone-categorized queue |
+| UX-01 | Owner-directed bounded slice | Add opt-in cleanup for already-classified deceptive overlays without becoming a general ad blocker | Agent + Gate-3 | #555 / AI-29 | Setting defaults off and round-trips; high-severity injected or already-blocked-click overlays are hidden with Undo; disabled/Off and benign-overlay cases stay untouched; focused unit/E2E, build, and exact-head Gate-3 evidence pass |
 
 ### Existing issue dispositions
 
@@ -140,7 +146,7 @@ maintainer chooses disclosure/ownership.
    fund only Decision Journal + recovery guidance; otherwise change segment/
    position or stop before advanced architecture.
 
-Last updated: 2026-08-01
+Last updated: 2026-08-26
 
 ---
 

@@ -1,6 +1,6 @@
 # Agent Index - NavSentinel
 
-Last reviewed: 2026-08-02.
+Last reviewed: 2026-08-26.
 
 This is a fast orientation layer for coding agents. It should point to interfaces and seams, not duplicate implementation details.
 
@@ -37,6 +37,7 @@ This is a fast orientation layer for coding agents. It should point to interface
 | --- | --- | --- | --- |
 | Navigation capture and CDS/NRS | `capture_isolated.ts`, `scoring.ts`, `nrs.ts`, `nav_anomaly.ts`, `adaptive_scoring.ts` | `dom_builder.ts`, `debug_overlay.ts`, `domain_groups.ts` | scoring/NRS/nav-anomaly/adaptive tests, Gym E2E. |
 | Main-world guard and bridge | `main_guard.ts`, `pushstate_guard.ts`, `dblclick_guard.ts` | `clickfix_detector.ts`, `mutation_monitor.ts`, `oauth_monitor.ts` | `npm run build`, phase2-detections E2E, pushstate/dblclick/clickfix unit tests. |
+| Opt-in overlay cleanup (#555) | `storage.ts` (`nav.autoDismissOverlays`), `options.ts`/`options.html`, `overlay_cleanup.ts` | `mutation_monitor.ts` classification and `capture_isolated.ts` action wiring | `tests/overlay-cleanup.test.ts`, storage/toggle tests, suite-ui + mutation-01 Phase-2 E2E; Gate-3 for shipped page/UI behavior. No filter list, network call, permission, or click replay. |
 | Credential guard | `credential_guard.ts`, `credential_guard_model.ts` | `credential_modal.ts`, `domain.ts`, `allowlist.ts` | credential/domain/allowlist tests, credential-guard E2E. |
 | Service worker state and rollback | `sw.ts`, `session_state.ts`, `pending_decision.ts` | `pending_decision_handlers.ts`, `pending_decision_store.ts`, `redirect_chain.ts`, `icon_manager.ts` | pending-decision handler/SW lifecycle tests, emitted static-worker import inspection, sw-rollback, session-state, redirect-chain tests, build/perf, rollback/stress E2E. |
 | JS behavior analysis (capability OFF, RI-07) | `js_behavior_monitor.ts` (enabled variant), `js_behavior_monitor.disabled.ts` (what every committed profile builds) | Selected by `capabilities.jsBehaviorInstrumentation` in `release-profiles.json` via the `@navsentinel/js-behavior-monitor` alias; `main_guard.ts` (gated init), `capture_isolated.ts` (bridge + state), `nrs.ts` (scoring), `js_behavior_state.ts` (shared state), options read-only disclosure | js-behavior-capability-off, js-behavior-monitor, js-behavior-state, js-behavior-integration, release-profile tests; `npm run build` + `npm run check:release-profile`; js-behavior E2E asserts the globals stay native. Design: `docs/design/js_behavior_analysis.md`. |

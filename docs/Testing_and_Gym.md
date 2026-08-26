@@ -169,7 +169,10 @@ It currently covers:
 - RW-07 fake re-auth interstitial prompt
 - password-paste warning and trusted-domain persistence
 - options-page trusted-domain normalization
+- options-page opt-in overlay-cleanup persistence
 - options import/export round-trip behavior
+- delayed high-severity overlay auto-dismissal with an Undo restore path; the
+  default-disabled case remains visible and warning-only
 - a dedicated rollback lane for redirect recovery affordances
 - RW-15 bank/security alert redirect recovery
 - a dedicated live-web sanity lane

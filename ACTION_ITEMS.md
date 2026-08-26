@@ -17,7 +17,8 @@ provenance only. Detailed retired procedures moved to
 after refreshed exact-head CI and bounded review. That waiver is not a real-Chrome
 pass. #531 separately merged under its own waiver; it does not establish a
 `measure:fp` or headed-measurement result, and #223 remains open. AI-27 and AI-28
-are resolved; AI-14 remains blocked for future measurement work.
+are resolved; AI-14 remains blocked for future measurement work. AI-29 now holds
+issue #555's opt-in overlay-cleanup browser behavior for an exact-head Gate-3.
 
 **Guided resolution cursor:** `AI-19` (`Resume at: AI-19`; conversational label
 `q-5`). Current ready order: AI-19 → optional AI-24 → AI-23 (low priority).
@@ -29,6 +30,19 @@ reintroduce parser, status-enum, hook, tier, or harness machinery through this
 register.
 
 ## Open and blocked items
+
+**OPEN: AI-29 - Issue #555 opt-in overlay-cleanup Gate-3.** After the
+implementation PR is ready, exact-head local checks and hosted CI are green,
+build that same head, load `extension/dist` unpacked in a fresh temporary Chrome
+profile, and follow the active AI-29 procedure in
+[`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md). Verify the setting
+defaults off, persists when enabled, hides only the attack fixtures, exposes a
+working Undo, leaves the disabled/Navigation Off cases and benign overlays
+usable, and adds no unexpected console errors. Only Chris can record this
+complete. Reply `AI-29 done; Gate-3 passed on PR #<n> at <40-character SHA>;
+Chrome <version>` or `AI-29 failed on PR #<n> at <SHA>: <step and observed>`.
+This PR-specific gate does not move the general guided-resolution cursor from
+AI-19.
 
 **OPEN: AI-19 — Clear or replace the working product name before CWS submission.**
 TruNav publicly uses the exact name `NavSentinel` for a coming-soon GNSS

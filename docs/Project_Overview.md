@@ -105,3 +105,8 @@ frozen until that sequence produces a credible signal.
 - password capture or storage
 - general ad blocking or tracker blocking
 - broad browser-porting work before Chrome behavior is fully stabilized
+
+Issue #555's interaction-correlated overlay cleanup is deliberately narrower
+than general ad blocking: it can act only after the existing local classifier
+has already produced high-severity evidence, and it adds no filter list, remote
+lookup, cosmetic selector engine, or browser permission.

@@ -176,6 +176,28 @@ activation exists.
 
 ---
 
+## 2026-08-26 - Bounded overlay-cleanup exception
+
+### D-2026-08-26-O - Opt-in cleanup may reuse existing interaction evidence
+
+**Decision:** Owner direction authorizes issue #555 as one bounded exception to
+D-2026-07-10-K. Add an off-by-default setting that may hide a page overlay only
+after NavSentinel's existing classifier marks it high severity, either on
+post-load injection or on an already-blocked click. The cleanup stays local,
+offers Undo, replays no click, adds no permission or runtime call, and requires
+Gate-3 because it changes shipped page/UI behavior.
+
+This does not authorize general ad/tracker blocking, filter lists, cosmetic
+selectors, closing already-created tabs, or broad content-removal heuristics.
+D-2026-07-10-K remains the default for every other feature proposal.
+
+**Why:** current popup/redirect defenses can stop a dangerous navigation while
+leaving the obstructing element in place, forcing repeated user interaction on
+abusive pages. Reusing already-computed evidence adds a reversible relief path
+without creating a second ad-classification engine or widening permissions.
+
+---
+
 ## Earlier resolved (carried forward)
 
 - **Q1–Q6 (answered 2026-06-26):** Q1 OAuth FP cluster = implement + HOLD for `measure:fp`; **Q2** capture_isolated = split (#374) **and** bump 66→70KB; Q3 = prefer unit-testable extraction over CI-only e2e (CI-verified e2e acceptable when unavoidable); Q4 merge cadence confirmed; **Q5** Gate-3 = manual Chrome, revised by the 2026-08-01 ratification of D-2026-07-03-E to headed Chrome as primary once operational with manual spot-checks retained; Q6 = extract-to-testable + e2e for `main_guard`.

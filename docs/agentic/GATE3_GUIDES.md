@@ -9,6 +9,49 @@
 
 # Human Gate-3 Guides — NavSentinel
 
+## Active guide: AI-29 - issue #555 opt-in overlay cleanup
+
+Run this only after the #555 implementation PR is ready and every automated
+check for its current head is green.
+
+1. Resolve the open PR whose head is `feat/issue555-overlay-cleanup`. Record its
+   PR number and 40-character `headRefOid`. In the implementation worktree,
+   require `git rev-parse HEAD` to equal that value and require `git status
+   --short` to contain no uncommitted product changes. Stop on any mismatch.
+2. On that exact head, run `npm ci` and `npm run build`. In Chrome, create a fresh
+   temporary profile, enable Developer mode at `chrome://extensions`, and load
+   `extension/dist` unpacked. Record the Chrome version and confirm the extension
+   service worker registers without an error.
+3. Open the options page. Confirm **Auto-dismiss overlays** is off by default,
+   its description says it acts only on high-risk detected overlays, and the
+   switch works by mouse and keyboard. Turn it on, save, close/reopen Options,
+   and confirm it remains on.
+4. Start the tracked local Gym (`npm run gym:serve`) and open
+   `mutation-01-delayed-overlay.html`. Trigger the delayed overlay after the
+   monitor arms. Confirm the fake session overlay is hidden automatically, the
+   toast says NavSentinel hid it, the underlying page is usable, and no popup or
+   navigation occurs. Click **Undo** and confirm the same overlay is visible
+   again.
+5. With cleanup still enabled, open `evasion-02-size-34pct.html` and perform
+   its deceptive click. Confirm the new tab stays blocked, the high-severity
+   overlay is hidden, and Undo restores it without replaying the click.
+6. Turn cleanup off and repeat the mutation fixture: the overlay must remain
+   visible and the warning must remain available. Then set Navigation mode Off,
+   enable cleanup, repeat once more, and confirm NavSentinel neither hides nor
+   blocks page content in Off mode.
+7. Restore Smart mode and enable cleanup. Exercise
+   `level7-legit-modal-backdrop.html` and `level9-legit-video-overlay.html`.
+   Confirm the dialog/backdrop and video controls remain visible and usable.
+8. Inspect the page and extension service-worker consoles for new errors. On a
+   pass, reply `AI-29 done; Gate-3 passed on PR #<n> at <40-character SHA>;
+   Chrome <version>`. On any mismatch, reply `AI-29 failed on PR #<n> at <SHA>:
+   <step and observed>` and leave the item open.
+
+Only Chris can record AI-29 complete. Automated Playwright evidence supports but
+does not replace this exact-head manual browser gate.
+
+---
+
 > ## ⚠️ SUPERSEDED 2026-07-25 — read before running anything here
 >
 > **All three PRs these guides gate have merged**, and Chris chose to clear their
