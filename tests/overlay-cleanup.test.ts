@@ -119,13 +119,22 @@ describe("overlay cleanup", () => {
     expect(dialog.hidden).toBe(false);
   });
 
-  it("will never suppress the page root or NavSentinel's own UI host", () => {
-    const host = document.createElement("div");
-    host.id = "__navsentinel_toast_host";
-    document.body.appendChild(host);
+  it("preserves a high-z-index wrapper around an accessible dialog", () => {
+    const wrapper = makeOverlay();
+    const dialog = document.createElement("div");
+    dialog.setAttribute("role", "dialog");
+    wrapper.appendChild(dialog);
+
+    expect(suppressDetectedOverlay(mutationAlert(wrapper), true)).toBeNull();
+    expect(wrapper.style.display).toBe("flex");
+  });
+
+  it("will never suppress the page root but does not trust a page-controlled ID", () => {
+    const impostor = makeOverlay();
+    impostor.id = "__navsentinel_attack";
 
     expect(suppressOverlayElement(document.documentElement)).toBeNull();
     expect(suppressOverlayElement(document.body)).toBeNull();
-    expect(suppressOverlayElement(host)).toBeNull();
+    expect(suppressOverlayElement(impostor)).not.toBeNull();
   });
 });

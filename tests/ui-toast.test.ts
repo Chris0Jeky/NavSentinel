@@ -169,6 +169,19 @@ describe("ui_toast", () => {
       expect(getWraps().length).toBe(1);
       expect(getWrap()!.querySelector(".body")!.textContent).toBe("Second");
     });
+
+    it("calls onReplace once when another toast supersedes the card", () => {
+      const onReplace = vi.fn();
+      const onDismiss = vi.fn();
+      showToast({ message: "Overlay hidden", onReplace, onDismiss, timeoutMs: 0 });
+
+      showToast({ message: "New warning" });
+
+      expect(onReplace).toHaveBeenCalledTimes(1);
+      expect(onDismiss).not.toHaveBeenCalled();
+      showToast({ message: "Third warning" });
+      expect(onReplace).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe("action buttons", () => {

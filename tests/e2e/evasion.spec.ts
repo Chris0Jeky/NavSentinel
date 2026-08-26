@@ -507,3 +507,54 @@ test("Evasion 11: shadow DOM overlay is caught via composedPath @regression", as
     await cleanup();
   }
 });
+
+test("Evasion 11: opt-in cleanup handles a shadow-path overlay across realms @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { page, context, cleanup } = await setupEvasionTest("evasion-11-shadow-dom.html");
+
+  try {
+    await updateNavigationSettings(context, { autoDismissOverlays: true });
+    await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
+    await waitForNavSentinelBridge(page);
+    await page.waitForFunction(
+      () => document.getElementById("shadow-host")?.getAttribute("data-shadow-ready") === "1",
+      null,
+      { timeout: 5000 },
+    );
+
+    // Make only the shadow-internal anchor overlay-shaped. Its plain host no
+    // longer qualifies, so cleanup must accept the cross-world path element.
+    await page.evaluate(() => {
+      const host = document.getElementById("shadow-host");
+      const trap = host?.shadowRoot?.getElementById("trap");
+      if (!(host instanceof HTMLElement) || !(trap instanceof HTMLElement)) return;
+      host.style.cssText = "";
+      trap.style.cssText = [
+        "position: fixed",
+        "top: 10%",
+        "left: 10%",
+        "width: 54.8vw",
+        "height: 54.8vh",
+        "z-index: 10000",
+        "opacity: 0.09",
+      ].join(";");
+    });
+
+    const trap = page.locator("#shadow-host").locator("#trap");
+    const box = await trap.boundingBox();
+    expect(box, "shadow-internal overlay should be visible before the click").toBeTruthy();
+
+    const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
+    await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+
+    expect(await popupPromise, "Expected the shadow overlay new tab to be blocked").toBeNull();
+    await waitForToastMatch(page, /Blocked new tab \(overlay hidden\)/i, 3000);
+    await expect(trap).toBeHidden();
+
+    await clickToastButton(page, "Undo");
+    await expect(trap).toBeVisible();
+  } finally {
+    await cleanup();
+  }
+});

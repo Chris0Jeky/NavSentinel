@@ -46,6 +46,22 @@ export interface OverlayClassification {
   details: string;
 }
 
+/** Chromium may expose shadow-path elements through a different JS realm. */
+export function isHtmlElementLike(value: unknown): value is HTMLElement {
+  if (value instanceof HTMLElement) return true;
+  const candidate = value as {
+    nodeType?: unknown;
+    tagName?: unknown;
+    style?: unknown;
+    getBoundingClientRect?: unknown;
+  } | null;
+  return candidate?.nodeType === 1 &&
+    typeof candidate.tagName === "string" &&
+    candidate.style !== null &&
+    typeof candidate.style === "object" &&
+    typeof candidate.getBoundingClientRect === "function";
+}
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -386,7 +402,7 @@ function getBenignOverlayReason(el: Element): string | null {
  */
 export function classifyOverlayElement(el: Element): OverlayClassification | null {
   // Only check elements that could plausibly be overlays
-  if (!(el instanceof HTMLElement)) return null;
+  if (!isHtmlElementLike(el)) return null;
 
   const cs = getComputedStyle(el);
   const pos = cs.position;

@@ -8,6 +8,8 @@ type ToastOptions = {
   actions?: ToastAction[];
   timeoutMs?: number;
   onDismiss?: () => void;
+  /** Called only when another toast replaces this card before the user acts. */
+  onReplace?: () => void;
   /**
    * Opt in to burst coalescing. When several coalescible toasts fire in quick
    * succession on the same page, they collapse into a single small count pill
@@ -27,6 +29,7 @@ const PILL_IDLE_DISMISS_MS = 12000;
 
 let host: HTMLElement | null = null;
 let root: ShadowRoot | null = null;
+const replacementHandlers = new WeakMap<HTMLElement, () => void>();
 
 // --- Burst coalescing state (per page, ephemeral, never persisted) ---
 let burstCount = 0;
@@ -165,7 +168,18 @@ function ensureHost() {
 }
 
 function removeFullCards(): void {
-  root?.querySelectorAll(".wrap").forEach((n) => n.remove());
+  root?.querySelectorAll(".wrap").forEach((node) => {
+    const card = node as HTMLElement;
+    const onReplace = replacementHandlers.get(card);
+    replacementHandlers.delete(card);
+    try {
+      onReplace?.();
+    } catch {
+      // Replacement must still render if best-effort page-state restoration fails.
+    } finally {
+      card.remove();
+    }
+  });
 }
 
 /** Render a standard full toast card (the default, non-coalescing behavior). */
@@ -178,6 +192,7 @@ function renderFullCard(opts: ToastOptions): void {
   const wrap = document.createElement("div");
   wrap.className = "wrap";
   wrap.setAttribute("role", "alert");
+  if (opts.onReplace) replacementHandlers.set(wrap, opts.onReplace);
 
   const head = document.createElement("div");
   head.className = "head";
@@ -205,6 +220,7 @@ function renderFullCard(opts: ToastOptions): void {
   dismiss.addEventListener("click", () => {
     if (dismissed) return;
     dismissed = true;
+    replacementHandlers.delete(wrap);
     wrap.remove();
     if (!actionClicked && opts.onDismiss) {
       opts.onDismiss();
@@ -218,7 +234,10 @@ function renderFullCard(opts: ToastOptions): void {
     btn.textContent = a.label;
     btn.addEventListener("click", () => {
       actionClicked = true;
-      try { a.onClick(); } finally { wrap.remove(); }
+      try { a.onClick(); } finally {
+        replacementHandlers.delete(wrap);
+        wrap.remove();
+      }
     });
     row.appendChild(btn);
   }
@@ -234,6 +253,7 @@ function renderFullCard(opts: ToastOptions): void {
   if (t > 0) {
     window.setTimeout(() => {
       if (wrap.parentNode) {
+        replacementHandlers.delete(wrap);
         wrap.remove();
         if (!actionClicked && opts.onDismiss) {
           opts.onDismiss();

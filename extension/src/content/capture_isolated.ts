@@ -908,6 +908,9 @@ function handleMutationAlert(alert: MutationAlert): void {
       ...(overlaySuppression
         ? { actions: [{ label: "Undo", onClick: () => overlaySuppression.restore() }] }
         : {}),
+      ...(overlaySuppression
+        ? { onReplace: () => overlaySuppression.restore() }
+        : {}),
       timeoutMs: 0,
     });
   }
@@ -1319,7 +1322,10 @@ function showAllowPrompt(params: {
     // into the count pill so the user is not forced to act on each. The blocked
     // navigation stays blocked; the pill expands to the latest prompt's actions
     // if a popup was actually wanted.
-    coalesce: true,
+    coalesce: !params.overlaySuppression,
+    ...(params.overlaySuppression
+      ? { onReplace: () => params.overlaySuppression?.restore() }
+      : {}),
     onDismiss: () => {
       appendOutcomeSafely({
         domain: sourceDomain,
@@ -1729,7 +1735,10 @@ window.addEventListener(
             ...(overlaySuppression
               ? { actions: [{ label: "Undo", onClick: () => overlaySuppression.restore() }] }
               : {}),
-            coalesce: !hasClickfix,
+            ...(overlaySuppression
+              ? { onReplace: () => overlaySuppression.restore() }
+              : {}),
+            coalesce: !hasClickfix && !overlaySuppression,
           });
           if (hasClickfix) clickFixAlertedAt = Date.now();
         }
@@ -1768,7 +1777,10 @@ window.addEventListener(
           ...(overlaySuppression
             ? { actions: [{ label: "Undo", onClick: () => overlaySuppression.restore() }] }
             : {}),
-          coalesce: !hasClickfix,
+          ...(overlaySuppression
+            ? { onReplace: () => overlaySuppression.restore() }
+            : {}),
+          coalesce: !hasClickfix && !overlaySuppression,
         });
         if (hasClickfix) clickFixAlertedAt = Date.now();
       }
