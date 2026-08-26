@@ -19,8 +19,9 @@ The manifest wires these together from:
 
 ## Maturity and release boundaries
 
-This is the architecture of a pre-release alpha. The separation and local-first
-design are substantial, but several current development paths are not production-capable:
+This is the architecture of a pre-alpha development project with no established
+adoption. The separation and local-first design are substantial, but several
+current development paths are not production-capable:
 
 - `ui_toast.ts` and `credential_modal.ts` currently let page-injected UI
   authorize protection-lowering actions. Script rejection/closed roots alone do

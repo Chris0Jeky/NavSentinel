@@ -14,10 +14,10 @@ queues.
 
 ## Verdict
 
-NavSentinel is a strong, unusually well-tested **pre-release alpha**, not a
-market-ready security product. Its local-first architecture, deterministic Gym,
-explainable scoring, and cross-event browser state are real assets. It has not,
-however, established release integrity, efficacy, quietness, distribution,
+NavSentinel is a **pre-alpha development project**, not a market-ready security
+product. Its local-first architecture, deterministic Gym, explainable scoring,
+and cross-event browser state are real assets. It has no established adoption
+and has not established release integrity, efficacy, quietness, distribution,
 retention, or willingness to pay.
 
 The correct path is deliberately narrow:

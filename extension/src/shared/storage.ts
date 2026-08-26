@@ -17,7 +17,7 @@ export interface NavSettings {
   debug: boolean;
   /**
    * Opt-in cleanup for high-severity overlays that the existing interaction
-   * classifier has already identified. This is not a filter-list ad blocker.
+   * classifier has already identified, with reversible in-page suppression.
    */
   autoDismissOverlays: boolean;
 }

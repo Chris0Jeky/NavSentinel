@@ -1,6 +1,6 @@
 # Agent Index - NavSentinel
 
-Last reviewed: 2026-08-26.
+Last reviewed: 2026-08-27.
 
 This is a fast orientation layer for coding agents. It should point to interfaces and seams, not duplicate implementation details.
 
@@ -37,7 +37,7 @@ This is a fast orientation layer for coding agents. It should point to interface
 | --- | --- | --- | --- |
 | Navigation capture and CDS/NRS | `capture_isolated.ts`, `scoring.ts`, `nrs.ts`, `nav_anomaly.ts`, `adaptive_scoring.ts` | `dom_builder.ts`, `debug_overlay.ts`, `domain_groups.ts` | scoring/NRS/nav-anomaly/adaptive tests, Gym E2E. |
 | Main-world guard and bridge | `main_guard.ts`, `pushstate_guard.ts`, `dblclick_guard.ts` | `clickfix_detector.ts`, `mutation_monitor.ts`, `oauth_monitor.ts` | `npm run build`, phase2-detections E2E, pushstate/dblclick/clickfix unit tests. |
-| Opt-in overlay cleanup (#555) | `storage.ts` (`nav.autoDismissOverlays`), `options.ts`/`options.html`, `overlay_cleanup.ts` | `mutation_monitor.ts` classification and `capture_isolated.ts` action wiring | `tests/overlay-cleanup.test.ts`, storage/toggle/toast tests, suite-ui + mutation-01 Phase-2 + evasion-02/evasion-11 regression E2E; Gate-3 for shipped page/UI behavior. No filter list, network call, permission, or click replay. |
+| Opt-in overlay cleanup (#555) | `storage.ts` (`nav.autoDismissOverlays`), `options.ts`/`options.html`, `overlay_cleanup.ts` | `mutation_monitor.ts` classification and `capture_isolated.ts` action wiring | `tests/overlay-cleanup.test.ts`, storage/toggle/toast tests, suite-ui + mutation-01 Phase-2 + evasion-02/evasion-11 regression E2E; local high-severity classification, reversible suppression, no click replay; Gate-3 for shipped page/UI behavior. |
 | Credential guard | `credential_guard.ts`, `credential_guard_model.ts` | `credential_modal.ts`, `domain.ts`, `allowlist.ts` | credential/domain/allowlist tests, credential-guard E2E. |
 | Service worker state and rollback | `sw.ts`, `session_state.ts`, `pending_decision.ts` | `pending_decision_handlers.ts`, `pending_decision_store.ts`, `redirect_chain.ts`, `icon_manager.ts` | pending-decision handler/SW lifecycle tests, emitted static-worker import inspection, sw-rollback, session-state, redirect-chain tests, build/perf, rollback/stress E2E. |
 | JS behavior analysis (capability OFF, RI-07) | `js_behavior_monitor.ts` (enabled variant), `js_behavior_monitor.disabled.ts` (what every committed profile builds) | Selected by `capabilities.jsBehaviorInstrumentation` in `release-profiles.json` via the `@navsentinel/js-behavior-monitor` alias; `main_guard.ts` (gated init), `capture_isolated.ts` (bridge + state), `nrs.ts` (scoring), `js_behavior_state.ts` (shared state), options read-only disclosure | js-behavior-capability-off, js-behavior-monitor, js-behavior-state, js-behavior-integration, release-profile tests; `npm run build` + `npm run check:release-profile`; js-behavior E2E asserts the globals stay native. Design: `docs/design/js_behavior_analysis.md`. |
@@ -55,9 +55,10 @@ All paths above are relative to repo root. Content scripts live under `extension
 
 ## Current Agent-Readiness Observations
 
-- NavSentinel v0.4.0 is a pre-release alpha: engineering implementation is
-  substantial, but release integrity, validation, distribution, and market
-  evidence are open. Do not repeat the old "Phases 0-3 complete" framing.
+- NavSentinel v0.4.0 is pre-alpha with no established adoption: engineering
+  implementation is substantial, but release integrity, validation,
+  distribution, and market evidence are open. Do not repeat the old "Phases
+  0-3 complete" framing.
 - **UI redesign complete** (2026-05-16): brass/jade design system, design tokens, 26-icon SVG system, segmented controls replacing selects, sidebar nav options page, ShieldArc popup gauge. See `docs/REDESIGN_ORCHESTRATION.md`.
 - `docs/Product_Strategy.md` owns product direction;
   `docs/Project_Roadmap.md` owns execution; GitHub issues own implementation;

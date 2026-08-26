@@ -1,6 +1,6 @@
 # NavSentinel
 
-> **Pre-release alpha; not yet validated or distributed.** `NavSentinel` is a
+> **Pre-alpha; not yet validated, distributed, or adopted.** `NavSentinel` is a
 > working name pending clearance. See
 > [`docs/Product_Strategy.md`](docs/Product_Strategy.md) for the current product
 > thesis, release blockers, and evidence gates.
@@ -23,6 +23,9 @@ externally audited, or released.
 ## What it does
 
 - Scores clicks with a Click Deception Score (CDS) before allowing navigation side effects.
+- Optionally suppresses classifier-identified high-severity foreground overlays
+  after injection or an already-blocked click, shows an Undo action, and never
+  replays the intercepted click.
 - Patches `window.open` and form submission in the main world to catch
   script-driven navigation before it commits. `location.assign` /
   `location.replace` are *not* patched and cannot be: Chromium exposes them as

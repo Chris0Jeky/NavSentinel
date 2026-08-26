@@ -176,25 +176,31 @@ activation exists.
 
 ---
 
-## 2026-08-26 - Bounded overlay-cleanup exception
+## 2026-08-27 - Overlay-cleanup capability and future boundary triage
 
 ### D-2026-08-26-O - Opt-in cleanup may reuse existing interaction evidence
 
-**Decision:** Owner direction authorizes issue #555 as one bounded exception to
-D-2026-07-10-K. Add an off-by-default setting that may hide a page overlay only
-after NavSentinel's existing classifier marks it high severity, either on
-post-load injection or on an already-blocked click. The cleanup stays local,
-offers Undo, replays no click, adds no permission or runtime call, and requires
-Gate-3 because it changes shipped page/UI behavior.
+**Decision:** Owner direction authorizes issue #555 as the first overlay-cleanup
+vertical under D-2026-07-10-K. Add an off-by-default setting that may hide a
+page overlay after NavSentinel's existing classifier marks it high severity,
+either on post-load injection or on an already-blocked click. The cleanup stays
+local, offers Undo, replays no click, adds no permission or runtime call, and
+requires Gate-3 because it changes extension page/UI behavior.
 
-This does not authorize general ad/tracker blocking, filter lists, cosmetic
-selectors, closing already-created tabs, or broad content-removal heuristics.
-D-2026-07-10-K remains the default for every other feature proposal.
+Product direction is capability-first: preventing or removing unwanted
+foreground overlays is in scope even when the result or implementation overlaps
+with conventional ad-blocking behavior. NavSentinel is pre-alpha and has no
+established adoption, so that overlap is not a design constraint. Filter lists,
+cosmetic rules, proactive nuisance heuristics, per-site exceptions, and tab
+cleanup are possible future mechanisms to triage by safety, efficacy, user
+control, and compatibility evidence. This decision records their eligibility;
+it does not add them to the current #555 vertical or bypass normal prioritization
+under D-2026-07-10-K.
 
 **Why:** current popup/redirect defenses can stop a dangerous navigation while
 leaving the obstructing element in place, forcing repeated user interaction on
-abusive pages. Reusing already-computed evidence adds a reversible relief path
-without creating a second ad-classification engine or widening permissions.
+abusive pages. The product should state and validate the relief it provides
+instead of defining the capability by a category it must avoid.
 
 ---
 

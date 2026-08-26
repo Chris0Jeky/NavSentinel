@@ -73,9 +73,10 @@ already pass AA; pinned with a test instead of a restyle).
 
 ## Product posture
 
-Unchanged by this session. v0.4.0 remains an undistributed pre-release alpha with
-no tag, GitHub release, CWS release, or external-user evidence. The extension is
-local-first; interaction-only is the release default (#509). Release integrity
+Owner direction on 2026-08-27 clarifies that v0.4.0 is pre-alpha, undistributed,
+and has no established adoption, tag, GitHub release, CWS release, or
+external-user evidence. The extension is local-first; interaction-only is the
+release default (#509). Release integrity
 still requires RI-01 extension-origin authority and #175/#186 bridge
 identity/recovery. RI-02, RI-05, RI-06, and RI-07 are merged; their waived browser
 checks are not evidence of a real-Chrome release pass.

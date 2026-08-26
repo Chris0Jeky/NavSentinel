@@ -1,7 +1,7 @@
 # Project Overview
 
-> **Maturity:** pre-release alpha. This file describes implemented behavior, not
-> validated efficacy or release readiness. Product direction and current gates
+> **Maturity:** pre-alpha development project. This file describes implemented
+> behavior, not validated efficacy or release readiness. Product direction and current gates
 > live in [`Product_Strategy.md`](Product_Strategy.md).
 
 ## Summary
@@ -103,10 +103,11 @@ frozen until that sequence produces a credible signal.
 - cloud telemetry
 - remote reputation lookups
 - password capture or storage
-- general ad blocking or tracker blocking
 - broad browser-porting work before Chrome behavior is fully stabilized
 
-Issue #555's interaction-correlated overlay cleanup is deliberately narrower
-than general ad blocking: it can act only after the existing local classifier
-has already produced high-severity evidence, and it adds no filter list, remote
-lookup, cosmetic selector engine, or browser permission.
+Issue #555's first overlay-cleanup vertical adds an off-by-default control. It
+hides a high-severity overlay identified after injection or an already-blocked
+click, shows an Undo action, never replays the click, remains inert when the
+setting or Navigation is off, and leaves the covered benign dialogs and widgets
+usable. Future mechanisms will be selected from observed efficacy, safety,
+user-control, and compatibility evidence.
