@@ -157,6 +157,7 @@ let disconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingMutations: MutationRecord[] = [];
 const alerts: MutationAlert[] = [];
 let pageHost: string = "";
+let restoredOverlayAttributeBypass = new WeakSet<Element>();
 
 const observedShadowRoots = new WeakSet<ShadowRoot>();
 const shadowObserversByHost = new Map<Element, MutationObserver>();
@@ -414,6 +415,16 @@ export function classifyOverlayElement(el: Element): OverlayClassification | nul
     severity,
     details: `Overlay injected: position=${pos}, z-index=${z}, coverage=${(coverage * 100).toFixed(1)}%${suffix}`,
   };
+}
+
+/**
+ * Skip the next processed style/class batch for an overlay that the user has
+ * explicitly restored. The cleanup's own inline-style restoration would
+ * otherwise look like a fresh hostile reveal and immediately undo Undo. The
+ * exemption is consumed by one observer batch and is never a lasting allow.
+ */
+export function bypassNextRestoredOverlayAttributeBatch(el: Element): void {
+  restoredOverlayAttributeBypass.add(el);
 }
 
 function checkOverlay(el: Element): void {
@@ -778,6 +789,7 @@ function processBatch(): void {
   // emit an alert the reservation does not allow.
   const batch = pendingMutations;
   pendingMutations = [];
+  const bypassedOverlayTargets = new Set<Element>();
 
   for (const record of batch) {
     if (record.type === "childList") {
@@ -795,9 +807,22 @@ function processBatch(): void {
       for (let i = 0; i < record.removedNodes.length; i++) {
         processRemovedNode(record.removedNodes[i]!);
       }
+    } else if (
+      record.type === "attributes" &&
+      (record.attributeName === "style" || record.attributeName === "class") &&
+      record.target instanceof Element &&
+      restoredOverlayAttributeBypass.has(record.target)
+    ) {
+      // Consume after the batch so suppression and restoration records that
+      // coalesce into the same batch are both ignored for this exact element.
+      bypassedOverlayTargets.add(record.target);
     } else if (record.type === "attributes" && alerts.length < MAX_ALERTS) {
       processAttributeChange(record, alerts.length >= FLOODABLE_ALERT_CAP);
     }
+  }
+
+  for (const target of bypassedOverlayTargets) {
+    restoredOverlayAttributeBypass.delete(target);
   }
 }
 
@@ -833,6 +858,7 @@ export function startMutationMonitor(
   alertCallback = onAlert;
   alerts.length = 0;
   scarceAlertedElements = new WeakSet();
+  restoredOverlayAttributeBypass = new WeakSet();
 
   // Snapshot current form actions so we can detect changes later
   snapshotFormActions(doc);
@@ -892,6 +918,7 @@ export function _resetMutationState(): void {
   stopMutationMonitor();
   alerts.length = 0;
   scarceAlertedElements = new WeakSet();
+  restoredOverlayAttributeBypass = new WeakSet();
 }
 
 /** Exposed for testing only: number of live per-shadow-root observers. */

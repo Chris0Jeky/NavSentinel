@@ -471,6 +471,10 @@ test.describe("DOM Mutation Monitor", () => {
 
       await clickToastButton(page, "Undo");
       await expect(page.locator("#malicious-overlay")).toBeVisible();
+      // The monitor observes inline-style changes with a 100 ms debounce. Keep
+      // this assertion beyond that boundary so Undo cannot silently re-hide it.
+      await page.waitForTimeout(350);
+      await expect(page.locator("#malicious-overlay")).toBeVisible();
     } finally {
       await cleanup();
     }

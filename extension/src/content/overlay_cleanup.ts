@@ -1,4 +1,5 @@
 import {
+  bypassNextRestoredOverlayAttributeBatch,
   classifyOverlayElement,
   type MutationAlert,
 } from "./mutation_monitor";
@@ -11,7 +12,8 @@ export interface OverlaySuppression {
 /**
  * Temporarily hide one classified overlay while preserving a narrow Undo path.
  * The element stays in the document so page-owned listeners/state are not torn
- * down, and only the properties this function changes are restored.
+ * down. Display is the only page-owned property changed, and Undo restores it
+ * only while NavSentinel's exact suppression stamp is still present.
  */
 export function suppressOverlayElement(element: Element): OverlaySuppression | null {
   if (!(element instanceof HTMLElement) || !element.isConnected) return null;
@@ -20,14 +22,8 @@ export function suppressOverlayElement(element: Element): OverlaySuppression | n
 
   const priorDisplay = element.style.getPropertyValue("display");
   const priorDisplayPriority = element.style.getPropertyPriority("display");
-  const hadHidden = element.hasAttribute("hidden");
-  const priorHiddenValue = element.getAttribute("hidden");
-  const hadAriaHidden = element.hasAttribute("aria-hidden");
-  const priorAriaHidden = element.getAttribute("aria-hidden");
   let active = true;
 
-  element.hidden = true;
-  element.setAttribute("aria-hidden", "true");
   element.style.setProperty("display", "none", "important");
 
   return {
@@ -36,22 +32,20 @@ export function suppressOverlayElement(element: Element): OverlaySuppression | n
       if (!active) return false;
       active = false;
 
+      if (
+        !element.isConnected ||
+        element.style.getPropertyValue("display") !== "none" ||
+        element.style.getPropertyPriority("display") !== "important"
+      ) {
+        return false;
+      }
+
+      bypassNextRestoredOverlayAttributeBatch(element);
+
       if (priorDisplay) {
         element.style.setProperty("display", priorDisplay, priorDisplayPriority);
       } else {
         element.style.removeProperty("display");
-      }
-
-      if (hadHidden) {
-        element.setAttribute("hidden", priorHiddenValue ?? "");
-      } else {
-        element.removeAttribute("hidden");
-      }
-
-      if (hadAriaHidden) {
-        element.setAttribute("aria-hidden", priorAriaHidden ?? "");
-      } else {
-        element.removeAttribute("aria-hidden");
       }
 
       return true;

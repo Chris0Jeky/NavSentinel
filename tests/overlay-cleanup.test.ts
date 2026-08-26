@@ -45,8 +45,8 @@ describe("overlay cleanup", () => {
     const suppression = suppressDetectedOverlay(mutationAlert(overlay), true);
 
     expect(suppression).not.toBeNull();
-    expect(overlay.hidden).toBe(true);
-    expect(overlay.getAttribute("aria-hidden")).toBe("true");
+    expect(overlay.hidden).toBe(false);
+    expect(overlay.hasAttribute("aria-hidden")).toBe(false);
     expect(overlay.style.getPropertyValue("display")).toBe("none");
     expect(overlay.style.getPropertyPriority("display")).toBe("important");
     expect(overlay.style.color).toBe("red");
@@ -57,6 +57,38 @@ describe("overlay cleanup", () => {
     expect(overlay.style.display).toBe("flex");
     expect(overlay.style.color).toBe("red");
     expect(suppression?.restore()).toBe(false);
+  });
+
+  it("does not overwrite a page-owned display change made before Undo", () => {
+    const overlay = makeOverlay();
+    const suppression = suppressDetectedOverlay(mutationAlert(overlay), true);
+
+    // Simulate the page closing its own overlay while NavSentinel has it hidden.
+    overlay.style.setProperty("display", "none");
+
+    expect(suppression?.restore()).toBe(false);
+    expect(overlay.style.getPropertyValue("display")).toBe("none");
+    expect(overlay.style.getPropertyPriority("display")).toBe("");
+  });
+
+  it("preserves a page-owned hidden state made while cleanup is active", () => {
+    const overlay = makeOverlay();
+    const suppression = suppressDetectedOverlay(mutationAlert(overlay), true);
+    overlay.hidden = true;
+
+    expect(suppression?.restore()).toBe(true);
+    expect(overlay.hidden).toBe(true);
+    expect(overlay.style.getPropertyValue("display")).toBe("flex");
+  });
+
+  it("does not mutate a detached overlay during Undo", () => {
+    const overlay = makeOverlay();
+    const suppression = suppressDetectedOverlay(mutationAlert(overlay), true);
+    overlay.remove();
+
+    expect(suppression?.restore()).toBe(false);
+    expect(overlay.style.getPropertyValue("display")).toBe("none");
+    expect(overlay.style.getPropertyPriority("display")).toBe("important");
   });
 
   it("stays inert when disabled or when the existing classifier downgraded the alert", () => {
@@ -76,7 +108,8 @@ describe("overlay cleanup", () => {
     const suppression = suppressHighSeverityOverlayInPath([child, overlay], true);
 
     expect(suppression?.element).toBe(overlay);
-    expect(overlay.hidden).toBe(true);
+    expect(overlay.style.getPropertyValue("display")).toBe("none");
+    expect(overlay.style.getPropertyPriority("display")).toBe("important");
   });
 
   it("preserves an ARIA dialog that the existing classifier marks benign", () => {
