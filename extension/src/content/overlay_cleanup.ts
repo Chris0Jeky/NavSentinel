@@ -5,15 +5,7 @@ import {
   type MutationAlert,
 } from "./mutation_monitor";
 
-export interface OverlaySuppression {
-  element: HTMLElement;
-  restore: () => boolean;
-}
-
-function containsAccessibleDialog(element: HTMLElement): boolean {
-  return element.matches('[role="dialog"], [role="alertdialog"], [aria-modal="true"]') ||
-    element.querySelector('[role="dialog"], [role="alertdialog"], [aria-modal="true"]') !== null;
-}
+export type OverlaySuppression = () => boolean;
 
 /**
  * Temporarily hide one classified overlay while preserving a narrow Undo path.
@@ -24,9 +16,6 @@ function containsAccessibleDialog(element: HTMLElement): boolean {
 export function suppressOverlayElement(element: Element): OverlaySuppression | null {
   if (!isHtmlElementLike(element) || !element.isConnected) return null;
   if (element === document.body || element === document.documentElement) return null;
-  // A high-z-index wrapper around a properly marked dialog is a common benign
-  // modal shape. Prefer a cleanup miss to hiding an accessible dialog.
-  if (containsAccessibleDialog(element)) return null;
 
   const priorDisplay = element.style.getPropertyValue("display");
   const priorDisplayPriority = element.style.getPropertyPriority("display");
@@ -34,30 +23,27 @@ export function suppressOverlayElement(element: Element): OverlaySuppression | n
 
   element.style.setProperty("display", "none", "important");
 
-  return {
-    element,
-    restore: () => {
-      if (!active) return false;
-      active = false;
+  return () => {
+    if (!active) return false;
+    active = false;
 
-      if (
-        !element.isConnected ||
-        element.style.getPropertyValue("display") !== "none" ||
-        element.style.getPropertyPriority("display") !== "important"
-      ) {
-        return false;
-      }
+    if (
+      !element.isConnected ||
+      element.style.getPropertyValue("display") !== "none" ||
+      element.style.getPropertyPriority("display") !== "important"
+    ) {
+      return false;
+    }
 
-      bypassNextRestoredOverlayAttributeBatch(element);
+    bypassNextRestoredOverlayAttributeBatch(element);
 
-      if (priorDisplay) {
-        element.style.setProperty("display", priorDisplay, priorDisplayPriority);
-      } else {
-        element.style.removeProperty("display");
-      }
+    if (priorDisplay) {
+      element.style.setProperty("display", priorDisplay, priorDisplayPriority);
+    } else {
+      element.style.removeProperty("display");
+    }
 
-      return true;
-    },
+    return true;
   };
 }
 
@@ -71,16 +57,19 @@ export function suppressDetectedOverlay(
   return suppressOverlayElement(alert.element);
 }
 
+/**
+ * Suppress the first high-risk click candidate. `resolvedTarget` covers the
+ * anchor fallback used when an isolated-world composed path stops at a host.
+ */
 export function suppressHighSeverityOverlayInPath(
   path: EventTarget[],
   enabled: boolean,
+  resolvedTarget?: Element | null,
 ): OverlaySuppression | null {
   if (!enabled) return null;
 
-  const visited = new Set<EventTarget>();
-  for (const target of path) {
-    if (visited.has(target) || !isHtmlElementLike(target)) continue;
-    visited.add(target);
+  for (const target of resolvedTarget ? [resolvedTarget, ...path] : path) {
+    if (!isHtmlElementLike(target)) continue;
     const classification = classifyOverlayElement(target);
     if (classification?.severity === "high") {
       return suppressOverlayElement(target);

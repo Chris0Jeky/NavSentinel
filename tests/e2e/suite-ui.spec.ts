@@ -40,11 +40,11 @@ test("options normalizes trusted-domain input and persists protection changes @s
 
       await expect(options.locator('#navModeSeg .seg-btn[data-value="smart"]')).toHaveAttribute("aria-checked", "true");
       await expect(options.locator('#credModeSeg .seg-btn[data-value="smart"]')).toHaveAttribute("aria-checked", "true");
-      await expect(options.locator("#dismissOverlays")).toHaveAttribute("aria-checked", "false");
+      await expect(options.locator("#dismiss")).toHaveAttribute("aria-checked", "false");
 
       await options.locator('#navModeSeg .seg-btn[data-value="strict"]').click();
       await options.locator('#credModeSeg .seg-btn[data-value="strict"]').click();
-      await options.locator("#dismissOverlays").click();
+      await options.locator("#dismiss").click();
       await options.locator('.nav-btn[data-section="trust"]').click();
       await options.locator("#trustedInput").fill("https://login.example.com/account");
       await options.locator("#addTrusted").click();
@@ -66,7 +66,7 @@ test("options normalizes trusted-domain input and persists protection changes @s
       await options.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
       await expect(options.locator('#navModeSeg .seg-btn[data-value="strict"]')).toHaveAttribute("aria-checked", "true");
       await expect(options.locator('#credModeSeg .seg-btn[data-value="strict"]')).toHaveAttribute("aria-checked", "true");
-      await expect(options.locator("#dismissOverlays")).toHaveAttribute("aria-checked", "true");
+      await expect(options.locator("#dismiss")).toHaveAttribute("aria-checked", "true");
       await options.locator('.nav-btn[data-section="trust"]').click();
       await expect(options.locator("#trustedList")).toContainText("example.com");
     } finally {

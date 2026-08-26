@@ -65,7 +65,7 @@ versionEl.textContent = `v${chrome.runtime.getManifest().version}`;
 // DOM references
 const navModeSeg = document.getElementById("navModeSeg") as HTMLDivElement;
 const navDebugEl = document.getElementById("navDebug") as HTMLButtonElement;
-const autoDismissOverlaysEl = document.getElementById("dismissOverlays") as HTMLButtonElement;
+const autoDismissOverlaysEl = document.getElementById("dismiss") as HTMLButtonElement;
 const credModeSeg = document.getElementById("credModeSeg") as HTMLDivElement;
 const blockHttpEl = document.getElementById("blockHttpPasswordSubmit") as HTMLButtonElement;
 const warnPasteEl = document.getElementById("warnOnPaste") as HTMLButtonElement;

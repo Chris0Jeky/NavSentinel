@@ -51,12 +51,12 @@ describe("overlay cleanup", () => {
     expect(overlay.style.getPropertyPriority("display")).toBe("important");
     expect(overlay.style.color).toBe("red");
 
-    expect(suppression?.restore()).toBe(true);
+    expect(suppression?.()).toBe(true);
     expect(overlay.hidden).toBe(false);
     expect(overlay.hasAttribute("aria-hidden")).toBe(false);
     expect(overlay.style.display).toBe("flex");
     expect(overlay.style.color).toBe("red");
-    expect(suppression?.restore()).toBe(false);
+    expect(suppression?.()).toBe(false);
   });
 
   it("does not overwrite a page-owned display change made before Undo", () => {
@@ -66,7 +66,7 @@ describe("overlay cleanup", () => {
     // Simulate the page closing its own overlay while NavSentinel has it hidden.
     overlay.style.setProperty("display", "none");
 
-    expect(suppression?.restore()).toBe(false);
+    expect(suppression?.()).toBe(false);
     expect(overlay.style.getPropertyValue("display")).toBe("none");
     expect(overlay.style.getPropertyPriority("display")).toBe("");
   });
@@ -76,7 +76,7 @@ describe("overlay cleanup", () => {
     const suppression = suppressDetectedOverlay(mutationAlert(overlay), true);
     overlay.hidden = true;
 
-    expect(suppression?.restore()).toBe(true);
+    expect(suppression?.()).toBe(true);
     expect(overlay.hidden).toBe(true);
     expect(overlay.style.getPropertyValue("display")).toBe("flex");
   });
@@ -86,7 +86,7 @@ describe("overlay cleanup", () => {
     const suppression = suppressDetectedOverlay(mutationAlert(overlay), true);
     overlay.remove();
 
-    expect(suppression?.restore()).toBe(false);
+    expect(suppression?.()).toBe(false);
     expect(overlay.style.getPropertyValue("display")).toBe("none");
     expect(overlay.style.getPropertyPriority("display")).toBe("important");
   });
@@ -107,9 +107,18 @@ describe("overlay cleanup", () => {
 
     const suppression = suppressHighSeverityOverlayInPath([child, overlay], true);
 
-    expect(suppression?.element).toBe(overlay);
+    expect(suppression).not.toBeNull();
     expect(overlay.style.getPropertyValue("display")).toBe("none");
     expect(overlay.style.getPropertyPriority("display")).toBe("important");
+  });
+
+  it("uses a resolved shadow target when the isolated-world path omits it", () => {
+    const overlay = makeOverlay();
+
+    const suppression = suppressHighSeverityOverlayInPath([], true, overlay);
+
+    expect(suppression).not.toBeNull();
+    expect(overlay.style.getPropertyValue("display")).toBe("none");
   });
 
   it("preserves an ARIA dialog that the existing classifier marks benign", () => {
@@ -125,7 +134,7 @@ describe("overlay cleanup", () => {
     dialog.setAttribute("role", "dialog");
     wrapper.appendChild(dialog);
 
-    expect(suppressDetectedOverlay(mutationAlert(wrapper), true)).toBeNull();
+    expect(suppressHighSeverityOverlayInPath([wrapper], true)).toBeNull();
     expect(wrapper.style.display).toBe("flex");
   });
 

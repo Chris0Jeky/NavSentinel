@@ -380,7 +380,7 @@ function hasDialogRole(el: Element): boolean {
     if ((current.getAttribute("aria-modal") ?? "").toLowerCase() === "true") return true;
     current = current.parentElement;
   }
-  return false;
+  return el.querySelector('[role="dialog"],[role="alertdialog"],[aria-modal="true"]') !== null;
 }
 
 /**

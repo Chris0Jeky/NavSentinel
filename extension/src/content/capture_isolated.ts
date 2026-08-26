@@ -903,14 +903,12 @@ function handleMutationAlert(alert: MutationAlert): void {
     sendIconUpdate("yellow");
     showToast({
       message: overlaySuppression
-        ? "NavSentinel hid a suspicious overlay injected after page load."
+        ? "NavSentinel hid a suspicious overlay."
         : "NavSentinel detected a suspicious overlay injected after page load. The page may be attempting a phishing attack.",
-      ...(overlaySuppression
-        ? { actions: [{ label: "Undo", onClick: () => overlaySuppression.restore() }] }
-        : {}),
-      ...(overlaySuppression
-        ? { onReplace: () => overlaySuppression.restore() }
-        : {}),
+      actions: overlaySuppression
+        ? [{ label: "Undo", onClick: overlaySuppression }]
+        : undefined,
+      onReplace: overlaySuppression ?? undefined,
       timeoutMs: 0,
     });
   }
@@ -1301,9 +1299,7 @@ function showAllowPrompt(params: {
   if (params.overlaySuppression) {
     actions.push({
       label: "Undo",
-      onClick: () => {
-        params.overlaySuppression?.restore();
-      },
+      onClick: params.overlaySuppression,
     });
   }
 
@@ -1323,9 +1319,7 @@ function showAllowPrompt(params: {
     // navigation stays blocked; the pill expands to the latest prompt's actions
     // if a popup was actually wanted.
     coalesce: !params.overlaySuppression,
-    ...(params.overlaySuppression
-      ? { onReplace: () => params.overlaySuppression?.restore() }
-      : {}),
+    onReplace: params.overlaySuppression,
     onDismiss: () => {
       appendOutcomeSafely({
         domain: sourceDomain,
@@ -1704,6 +1698,7 @@ window.addEventListener(
           ? suppressHighSeverityOverlayInPath(
               e.composedPath?.() ?? [],
               settings.autoDismissOverlays,
+              anchor,
             )
           : null;
         if (parsed?.href) {
@@ -1732,12 +1727,10 @@ window.addEventListener(
               overlaySuppression ? `${prefix} and hid its overlay` : prefix,
               reasonCodes,
             ),
-            ...(overlaySuppression
-              ? { actions: [{ label: "Undo", onClick: () => overlaySuppression.restore() }] }
-              : {}),
-            ...(overlaySuppression
-              ? { onReplace: () => overlaySuppression.restore() }
-              : {}),
+            actions: overlaySuppression
+              ? [{ label: "Undo", onClick: overlaySuppression }]
+              : undefined,
+            onReplace: overlaySuppression ?? undefined,
             coalesce: !hasClickfix && !overlaySuppression,
           });
           if (hasClickfix) clickFixAlertedAt = Date.now();
@@ -1749,6 +1742,7 @@ window.addEventListener(
         const overlaySuppression = suppressHighSeverityOverlayInPath(
           e.composedPath?.() ?? [],
           settings.autoDismissOverlays,
+          anchor,
         );
         appendEventSafely({
           kind: "nav_click_block",
@@ -1774,12 +1768,10 @@ window.addEventListener(
             overlaySuppression ? `${blockPrefix} and hid the overlay` : blockPrefix,
             reasonCodes,
           ),
-          ...(overlaySuppression
-            ? { actions: [{ label: "Undo", onClick: () => overlaySuppression.restore() }] }
-            : {}),
-          ...(overlaySuppression
-            ? { onReplace: () => overlaySuppression.restore() }
-            : {}),
+          actions: overlaySuppression
+            ? [{ label: "Undo", onClick: overlaySuppression }]
+            : undefined,
+          onReplace: overlaySuppression ?? undefined,
           coalesce: !hasClickfix && !overlaySuppression,
         });
         if (hasClickfix) clickFixAlertedAt = Date.now();

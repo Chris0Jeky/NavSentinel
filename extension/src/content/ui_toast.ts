@@ -5,11 +5,11 @@ export type ToastAction = {
 
 type ToastOptions = {
   message: string;
-  actions?: ToastAction[];
+  actions?: ToastAction[] | undefined;
   timeoutMs?: number;
   onDismiss?: () => void;
   /** Called only when another toast replaces this card before the user acts. */
-  onReplace?: () => void;
+  onReplace?: (() => void) | undefined;
   /**
    * Opt in to burst coalescing. When several coalescible toasts fire in quick
    * succession on the same page, they collapse into a single small count pill
@@ -29,7 +29,7 @@ const PILL_IDLE_DISMISS_MS = 12000;
 
 let host: HTMLElement | null = null;
 let root: ShadowRoot | null = null;
-const replacementHandlers = new WeakMap<HTMLElement, () => void>();
+let activeCardReplace: (() => void) | null = null;
 
 // --- Burst coalescing state (per page, ephemeral, never persisted) ---
 let burstCount = 0;
@@ -62,105 +62,8 @@ function ensureHost() {
   root = host.attachShadow({ mode: "open" });
 
   const style = document.createElement("style");
-  style.textContent = `
-    .wrap {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
-      width: 360px;
-      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(245, 166, 35, 0.15);
-      border-radius: 12px;
-      background: linear-gradient(180deg, #110f13 0%, #08070a 100%);
-      color: #f6efe1;
-      overflow: hidden;
-      border: 1px solid #2a2530;
-      animation: ns-slide-up 0.2s ease-out;
-    }
-    @keyframes ns-slide-up {
-      from { opacity: 0; transform: translateY(8px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    .head {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 10px 12px 0;
-    }
-    .head-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: #f5a623;
-      box-shadow: 0 0 8px rgba(245, 166, 35, 0.5);
-      animation: pulse 1.6s infinite;
-    }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.4; }
-    }
-    .head-label {
-      font-size: 9px;
-      text-transform: uppercase;
-      letter-spacing: 0.14em;
-      color: #756a5a;
-      font-weight: 500;
-    }
-    .body {
-      padding: 8px 12px 10px;
-      font-size: 13px;
-      line-height: 1.4;
-      color: #c4b69c;
-    }
-    .row {
-      display: flex;
-      gap: 8px;
-      padding: 10px 12px 12px;
-      border-top: 1px solid #1c181f;
-      justify-content: flex-end;
-      flex-wrap: wrap;
-    }
-    button {
-      all: unset;
-      cursor: pointer;
-      padding: 6px 10px;
-      border-radius: 6px;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid #2a2530;
-      font-size: 11px;
-      font-weight: 500;
-      color: #c4b69c;
-      transition: background 0.12s;
-    }
-    button:hover { background: rgba(255, 255, 255, 0.1); }
-    button:focus-visible { outline: 2px solid #f5a623; outline-offset: 2px; }
-    .danger { background: rgba(208, 69, 49, 0.12); border-color: rgba(208, 69, 49, 0.3); color: #d04531; }
-    .danger:hover { background: rgba(208, 69, 49, 0.2); }
-    .action { background: rgba(245, 166, 35, 0.1); border-color: rgba(245, 166, 35, 0.25); color: #f5a623; }
-    .action:hover { background: rgba(245, 166, 35, 0.18); }
-    .pill {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
-      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(245, 166, 35, 0.15);
-      border-radius: 999px;
-      background: linear-gradient(180deg, #110f13 0%, #08070a 100%);
-      border: 1px solid #2a2530;
-      color: #c4b69c;
-      padding: 8px 14px;
-      font-size: 13px;
-      cursor: pointer;
-      animation: ns-slide-up 0.2s ease-out;
-      transition: opacity 0.4s ease;
-      opacity: 1;
-    }
-    .pill:hover { opacity: 1; }
-    .pill.idle { opacity: 0.45; }
-    .pill:focus-visible { outline: 2px solid #f5a623; outline-offset: 2px; }
-    .pill-count { color: #f5a623; font-weight: 600; }
-    @media (prefers-reduced-motion: reduce) {
-      .wrap, .pill { animation: none; transition: none; }
-      .head-dot { animation: none; }
-    }
-  `;
+  // This literal ships verbatim, so compact CSS avoids consuming the extension size budget.
+  style.textContent = `.wrap{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI Variable','Segoe UI',system-ui,sans-serif;width:360px;box-shadow:0 8px 28px rgba(0,0,0,0.4),0 0 0 1px rgba(245,166,35,0.15);border-radius:12px;background:linear-gradient(180deg,#110f13 0%,#08070a 100%);color:#f6efe1;overflow:hidden;border:1px solid #2a2530;animation:ns-slide-up 0.2s ease-out;}@keyframes ns-slide-up{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}.head{display:flex;align-items:center;gap:8px;padding:10px 12px 0;}.head-dot{width:6px;height:6px;border-radius:50%;background:#f5a623;box-shadow:0 0 8px rgba(245,166,35,0.5);animation:pulse 1.6s infinite;}@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}.head-label{font-size:9px;text-transform:uppercase;letter-spacing:0.14em;color:#756a5a;font-weight:500;}.body{padding:8px 12px 10px;font-size:13px;line-height:1.4;color:#c4b69c;}.row{display:flex;gap:8px;padding:10px 12px 12px;border-top:1px solid #1c181f;justify-content:flex-end;flex-wrap:wrap;}button{all:unset;cursor:pointer;padding:6px 10px;border-radius:6px;background:rgba(255,255,255,0.05);border:1px solid #2a2530;font-size:11px;font-weight:500;color:#c4b69c;transition:background 0.12s;}button:hover{background:rgba(255,255,255,0.1);}button:focus-visible{outline:2px solid #f5a623;outline-offset:2px;}.danger{background:rgba(208,69,49,0.12);border-color:rgba(208,69,49,0.3);color:#d04531;}.danger:hover{background:rgba(208,69,49,0.2);}.action{background:rgba(245,166,35,0.1);border-color:rgba(245,166,35,0.25);color:#f5a623;}.action:hover{background:rgba(245,166,35,0.18);}.pill{display:flex;align-items:center;gap:8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI Variable','Segoe UI',system-ui,sans-serif;box-shadow:0 8px 28px rgba(0,0,0,0.4),0 0 0 1px rgba(245,166,35,0.15);border-radius:999px;background:linear-gradient(180deg,#110f13 0%,#08070a 100%);border:1px solid #2a2530;color:#c4b69c;padding:8px 14px;font-size:13px;cursor:pointer;animation:ns-slide-up 0.2s ease-out;transition:opacity 0.4s ease;opacity:1;}.pill:hover{opacity:1;}.pill.idle{opacity:0.45;}.pill:focus-visible{outline:2px solid #f5a623;outline-offset:2px;}.pill-count{color:#f5a623;font-weight:600;}@media (prefers-reduced-motion:reduce){.wrap,.pill{animation:none;transition:none;}.head-dot{animation:none;}}`;
   root.appendChild(style);
 
   document.documentElement.appendChild(host);
@@ -168,18 +71,10 @@ function ensureHost() {
 }
 
 function removeFullCards(): void {
-  root?.querySelectorAll(".wrap").forEach((node) => {
-    const card = node as HTMLElement;
-    const onReplace = replacementHandlers.get(card);
-    replacementHandlers.delete(card);
-    try {
-      onReplace?.();
-    } catch {
-      // Replacement must still render if best-effort page-state restoration fails.
-    } finally {
-      card.remove();
-    }
-  });
+  const onReplace = activeCardReplace;
+  activeCardReplace = null;
+  try { onReplace?.(); } catch { /* best-effort page-state restoration */ }
+  root?.querySelector(".wrap")?.remove();
 }
 
 /** Render a standard full toast card (the default, non-coalescing behavior). */
@@ -192,7 +87,7 @@ function renderFullCard(opts: ToastOptions): void {
   const wrap = document.createElement("div");
   wrap.className = "wrap";
   wrap.setAttribute("role", "alert");
-  if (opts.onReplace) replacementHandlers.set(wrap, opts.onReplace);
+  activeCardReplace = opts.onReplace ?? null;
 
   const head = document.createElement("div");
   head.className = "head";
@@ -220,7 +115,7 @@ function renderFullCard(opts: ToastOptions): void {
   dismiss.addEventListener("click", () => {
     if (dismissed) return;
     dismissed = true;
-    replacementHandlers.delete(wrap);
+    activeCardReplace = null;
     wrap.remove();
     if (!actionClicked && opts.onDismiss) {
       opts.onDismiss();
@@ -235,7 +130,7 @@ function renderFullCard(opts: ToastOptions): void {
     btn.addEventListener("click", () => {
       actionClicked = true;
       try { a.onClick(); } finally {
-        replacementHandlers.delete(wrap);
+        activeCardReplace = null;
         wrap.remove();
       }
     });
@@ -253,7 +148,7 @@ function renderFullCard(opts: ToastOptions): void {
   if (t > 0) {
     window.setTimeout(() => {
       if (wrap.parentNode) {
-        replacementHandlers.delete(wrap);
+        activeCardReplace = null;
         wrap.remove();
         if (!actionClicked && opts.onDismiss) {
           opts.onDismiss();

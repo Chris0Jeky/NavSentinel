@@ -534,8 +534,10 @@ test("Evasion 11: opt-in cleanup handles a shadow-path overlay across realms @re
         "position: fixed",
         "top: 10%",
         "left: 10%",
-        "width: 54.8vw",
-        "height: 54.8vh",
+        // Stay clear of the 30% coverage boundary: this case exercises the
+        // isolated-world shadow-target handoff, not sub-pixel threshold rounding.
+        "width: 60vw",
+        "height: 60vh",
         "z-index: 10000",
         "opacity: 0.09",
       ].join(";");
