@@ -13,6 +13,41 @@ export async function getServiceWorker(context: BrowserContext): Promise<Worker>
   return context.waitForEvent("serviceworker");
 }
 
+type NavigationSettingsPatch = {
+  defaultMode?: "off" | "smart" | "strict";
+  debug?: boolean;
+  autoDismissOverlays?: boolean;
+};
+
+/** Apply a narrow navigation-settings patch without replacing sibling settings. */
+export async function updateNavigationSettings(
+  context: BrowserContext,
+  patch: NavigationSettingsPatch,
+): Promise<void> {
+  const worker = await getServiceWorker(context);
+  await worker.evaluate(async ({ key, navPatch }) => {
+    const result = await chrome.storage.local.get(key);
+    const stored = result[key] && typeof result[key] === "object"
+      ? result[key] as Record<string, unknown>
+      : {};
+    const storedNav = stored.nav && typeof stored.nav === "object"
+      ? stored.nav as Record<string, unknown>
+      : {};
+    await chrome.storage.local.set({
+      [key]: {
+        ...stored,
+        nav: {
+          defaultMode: "smart",
+          debug: false,
+          autoDismissOverlays: false,
+          ...storedNav,
+          ...navPatch,
+        },
+      },
+    });
+  }, { key: "sentinelsuite:settings_v1", navPatch: patch });
+}
+
 export async function getExtensionId(context: BrowserContext): Promise<string> {
   const worker = await getServiceWorker(context);
   return new URL(worker.url()).host;

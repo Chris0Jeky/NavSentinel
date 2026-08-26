@@ -355,7 +355,7 @@ describe("suite storage and allowlist migration", () => {
     // keep working and must not surface the retired field to callers.
     const { chrome } = createChromeMock({
       "sentinelsuite:settings_v1": {
-        nav: { defaultMode: "strict", debug: true, dnrEnabled: true },
+        nav: { defaultMode: "strict", debug: true, autoDismissOverlays: true, dnrEnabled: true },
         credential: { mode: "strict" },
         logLimit: 120
       }
@@ -365,7 +365,11 @@ describe("suite storage and allowlist migration", () => {
     const { getSuiteSettings } = await import("../extension/src/shared/storage");
     const settings = await getSuiteSettings();
 
-    expect(settings.nav).toEqual({ defaultMode: "strict", debug: true });
+    expect(settings.nav).toEqual({
+      defaultMode: "strict",
+      debug: true,
+      autoDismissOverlays: true,
+    });
     expect(Object.keys(settings.nav)).not.toContain("dnrEnabled");
     expect(settings.credential.mode).toBe("strict");
     expect(settings.logLimit).toBe(120);
@@ -384,7 +388,11 @@ describe("suite storage and allowlist migration", () => {
 
     const persisted = store["sentinelsuite:settings_v1"] as { nav: Record<string, unknown> };
     // Pre-fix the retired flag was spread forward and re-persisted forever.
-    expect(persisted.nav).toEqual({ defaultMode: "smart", debug: true });
+    expect(persisted.nav).toEqual({
+      defaultMode: "smart",
+      debug: true,
+      autoDismissOverlays: false,
+    });
   });
 
   it("drops a stored js-behavior capability flag instead of honouring it (RI-07)", async () => {
@@ -402,12 +410,20 @@ describe("suite storage and allowlist migration", () => {
     const { getSuiteSettings, updateSuiteSettings } = await import("../extension/src/shared/storage");
 
     const loaded = await getSuiteSettings();
-    expect(loaded.nav).toEqual({ defaultMode: "smart", debug: false });
+    expect(loaded.nav).toEqual({
+      defaultMode: "smart",
+      debug: false,
+      autoDismissOverlays: false,
+    });
     expect(Object.keys(loaded.nav)).not.toContain("jsBehaviorEnabled");
 
     await updateSuiteSettings({ nav: { debug: true } });
     const persisted = store["sentinelsuite:settings_v1"] as { nav: Record<string, unknown> };
-    expect(persisted.nav).toEqual({ defaultMode: "smart", debug: true });
+    expect(persisted.nav).toEqual({
+      defaultMode: "smart",
+      debug: true,
+      autoDismissOverlays: false,
+    });
   });
 
   it("serializes concurrent updateSuiteSettings so neither update is lost (#305)", async () => {

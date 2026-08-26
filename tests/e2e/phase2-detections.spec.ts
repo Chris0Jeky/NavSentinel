@@ -19,8 +19,10 @@ import path from "path";
 import { fileURLToPath } from "url";
 import {
   assertNoToastFor,
+  clickToastButton,
   getGymBaseUrl,
   getServiceWorker,
+  updateNavigationSettings,
   waitForNavSentinelBridge,
   waitForToastMatch,
 } from "./extension_test_utils";
@@ -94,7 +96,13 @@ async function extractEventLog(context: import("@playwright/test").BrowserContex
     const res = await chrome.storage.local.get(key);
     return Array.isArray(res[key]) ? res[key] : [];
   }, EVENT_LOG_KEY);
-  return log as Array<{ kind?: string; site?: string; score?: number; reasons?: string[] }>;
+  return log as Array<{
+    kind?: string;
+    site?: string;
+    score?: number;
+    reasons?: string[];
+    extra?: { overlayAutoDismissed?: boolean };
+  }>;
 }
 
 const MUTATION_TRIGGER_EVENT = "navsentinel:gym:trigger-mutation";
@@ -415,6 +423,7 @@ test.describe("DOM Mutation Monitor", () => {
     try {
       await triggerMutationAfterMonitorArm(page);
       await page.waitForSelector("#malicious-overlay", { timeout: 8000 });
+      await expect(page.locator("#malicious-overlay")).toBeVisible();
 
       // Check that the status text confirms injection
       await page.waitForFunction(
@@ -431,6 +440,37 @@ test.describe("DOM Mutation Monitor", () => {
       );
 
       await waitForMutationEvent(context, "overlay_injected");
+    } finally {
+      await cleanup();
+    }
+  });
+
+  test("mutation-01 opt-in cleanup hides the high-severity overlay and Undo restores it @phase2", async () => {
+    test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
+
+    const { page, context, cleanup } = await setupFixtureTest("mutation-01-delayed-overlay.html");
+
+    try {
+      await updateNavigationSettings(context, { autoDismissOverlays: true });
+      await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
+      await waitForNavSentinelBridge(page);
+
+      await triggerMutationAfterMonitorArm(page);
+      await page.waitForSelector("#malicious-overlay", { state: "attached", timeout: 8000 });
+      await expect(page.locator("#malicious-overlay")).toBeHidden();
+      await waitForToastMatch(page, /hid a suspicious overlay/i, 8000);
+
+      await expect.poll(async () => {
+        const events = await extractEventLog(context);
+        return events.some(
+          (event) => event.kind === "mutation_alert" &&
+            event.reasons?.includes("overlay_injected") &&
+            event.extra?.overlayAutoDismissed === true,
+        );
+      }).toBe(true);
+
+      await clickToastButton(page, "Undo");
+      await expect(page.locator("#malicious-overlay")).toBeVisible();
     } finally {
       await cleanup();
     }

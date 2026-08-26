@@ -34,8 +34,10 @@ import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 import {
+  clickToastButton,
   getGymBaseUrl,
   readToastText,
+  updateNavigationSettings,
   waitForNavSentinelBridge,
   waitForToastMatch,
   waitForToastText
@@ -142,6 +144,35 @@ test("Evasion 02: medium-size overlay is blocked @regression", async () => {
     const popup = await popupPromise;
     expect(popup, "Expected the overlay new tab to be blocked").toBeNull();
     await waitForToastText(page, "Blocked new tab", 3000);
+    await expect(page).toHaveURL(/evasion-02-size-34pct\.html/);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("Evasion 02: opt-in cleanup hides the blocked overlay and Undo restores it @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { page, context, cleanup } = await setupEvasionTest("evasion-02-size-34pct.html");
+
+  try {
+    await updateNavigationSettings(context, { autoDismissOverlays: true });
+    await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
+    await waitForNavSentinelBridge(page);
+
+    const trap = page.locator("#trap");
+    const box = await trap.boundingBox();
+    expect(box, "#trap overlay should be visible before the blocked click").toBeTruthy();
+
+    const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
+    await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+
+    expect(await popupPromise, "Expected the overlay new tab to be blocked").toBeNull();
+    await waitForToastMatch(page, /Blocked new tab \(overlay hidden\)/i, 3000);
+    await expect(trap).toBeHidden();
+
+    await clickToastButton(page, "Undo");
+    await expect(trap).toBeVisible();
     await expect(page).toHaveURL(/evasion-02-size-34pct\.html/);
   } finally {
     await cleanup();

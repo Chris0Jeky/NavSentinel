@@ -15,6 +15,11 @@ export type CredMode = "off" | "smart" | "strict";
 export interface NavSettings {
   defaultMode: Mode;
   debug: boolean;
+  /**
+   * Opt-in cleanup for high-severity overlays that the existing interaction
+   * classifier has already identified. This is not a filter-list ad blocker.
+   */
+  autoDismissOverlays: boolean;
 }
 
 export interface CredentialSettings {
@@ -138,7 +143,8 @@ export function buildNavOutcomeFeatures(input: {
 const DEFAULT_SUITE_SETTINGS: SuiteSettings = {
   nav: {
     defaultMode: "smart",
-    debug: false
+    debug: false,
+    autoDismissOverlays: false
   },
   credential: {
     mode: "smart",
@@ -172,7 +178,11 @@ function clampInt(v: unknown, min: number, max: number, fallback: number): numbe
 // stored value participates in it at all.
 function mergeNavSettings(cur: NavSettings, partial: Partial<NavSettings> | undefined): NavSettings {
   const merged = { ...cur, ...(partial ?? {}) };
-  return { defaultMode: merged.defaultMode, debug: merged.debug };
+  return {
+    defaultMode: merged.defaultMode,
+    debug: merged.debug,
+    autoDismissOverlays: merged.autoDismissOverlays === true,
+  };
 }
 
 function mergeSuiteSettings(cur: SuiteSettings, partial: SuiteSettingsPatch): SuiteSettings {

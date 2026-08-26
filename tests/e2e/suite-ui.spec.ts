@@ -17,7 +17,7 @@ const gymRoot = path.resolve(__dirname, "..", "..", "gym");
 
 test.setTimeout(120_000);
 
-test("options normalizes trusted-domain input and persists mode changes @smoke", async () => {
+test("options normalizes trusted-domain input and persists protection changes @smoke", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-ui-e2e-"));
@@ -40,9 +40,11 @@ test("options normalizes trusted-domain input and persists mode changes @smoke",
 
       await expect(options.locator('#navModeSeg .seg-btn[data-value="smart"]')).toHaveAttribute("aria-checked", "true");
       await expect(options.locator('#credModeSeg .seg-btn[data-value="smart"]')).toHaveAttribute("aria-checked", "true");
+      await expect(options.locator("#dismissOverlays")).toHaveAttribute("aria-checked", "false");
 
       await options.locator('#navModeSeg .seg-btn[data-value="strict"]').click();
       await options.locator('#credModeSeg .seg-btn[data-value="strict"]').click();
+      await options.locator("#dismissOverlays").click();
       await options.locator('.nav-btn[data-section="trust"]').click();
       await options.locator("#trustedInput").fill("https://login.example.com/account");
       await options.locator("#addTrusted").click();
@@ -55,6 +57,7 @@ test("options normalizes trusted-domain input and persists mode changes @smoke",
           : [];
         return (
           settings?.nav?.defaultMode === "strict" &&
+          settings?.nav?.autoDismissOverlays === true &&
           settings?.credential?.mode === "strict" &&
           trustedDomains.includes("example.com")
         );
@@ -63,6 +66,7 @@ test("options normalizes trusted-domain input and persists mode changes @smoke",
       await options.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
       await expect(options.locator('#navModeSeg .seg-btn[data-value="strict"]')).toHaveAttribute("aria-checked", "true");
       await expect(options.locator('#credModeSeg .seg-btn[data-value="strict"]')).toHaveAttribute("aria-checked", "true");
+      await expect(options.locator("#dismissOverlays")).toHaveAttribute("aria-checked", "true");
       await options.locator('.nav-btn[data-section="trust"]').click();
       await expect(options.locator("#trustedList")).toContainText("example.com");
     } finally {

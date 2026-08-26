@@ -41,6 +41,11 @@ export interface MutationAlert {
   timestamp: number;
 }
 
+export interface OverlayClassification {
+  severity: MutationAlertSeverity;
+  details: string;
+}
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -373,25 +378,30 @@ function getBenignOverlayReason(el: Element): string | null {
   return null;
 }
 
-function checkOverlay(el: Element): void {
+/**
+ * Classify one overlay-shaped element using the same policy for mutation alerts
+ * and interaction-correlated cleanup. Returning metadata rather than mutating
+ * the page keeps detection and the optional cleanup action separate.
+ */
+export function classifyOverlayElement(el: Element): OverlayClassification | null {
   // Only check elements that could plausibly be overlays
-  if (!(el instanceof HTMLElement)) return;
+  if (!(el instanceof HTMLElement)) return null;
 
   const cs = getComputedStyle(el);
   const pos = cs.position;
-  if (pos !== "fixed" && pos !== "absolute" && pos !== "sticky") return;
-  if (cs.display === "none" || cs.visibility === "hidden") return;
+  if (pos !== "fixed" && pos !== "absolute" && pos !== "sticky") return null;
+  if (cs.display === "none" || cs.visibility === "hidden") return null;
 
   const z = cs.zIndex === "auto" ? 0 : Number.parseInt(cs.zIndex, 10);
-  if (!Number.isFinite(z) || z < MIN_OVERLAY_ZINDEX) return;
+  if (!Number.isFinite(z) || z < MIN_OVERLAY_ZINDEX) return null;
 
   const rect = el.getBoundingClientRect();
-  if (!rect || rect.width <= 0 || rect.height <= 0) return;
+  if (!rect || rect.width <= 0 || rect.height <= 0) return null;
 
   const vw = Math.max(window.innerWidth, 1);
   const vh = Math.max(window.innerHeight, 1);
   const coverage = (rect.width * rect.height) / (vw * vh);
-  if (coverage < MIN_OVERLAY_COVERAGE) return;
+  if (coverage < MIN_OVERLAY_COVERAGE) return null;
 
   // Check for benign overlays (cookie banners, chat widgets, ARIA dialogs).
   // These are downgraded to 'low' severity instead of suppressed entirely,
@@ -400,11 +410,21 @@ function checkOverlay(el: Element): void {
   const severity: MutationAlertSeverity = benignReason ? "low" : "high";
   const suffix = benignReason ? ` (downgraded: ${benignReason})` : "";
 
+  return {
+    severity,
+    details: `Overlay injected: position=${pos}, z-index=${z}, coverage=${(coverage * 100).toFixed(1)}%${suffix}`,
+  };
+}
+
+function checkOverlay(el: Element): void {
+  const classification = classifyOverlayElement(el);
+  if (!classification) return;
+
   pushAlert({
     type: "overlay_injected",
-    severity,
+    severity: classification.severity,
     element: el,
-    details: `Overlay injected: position=${pos}, z-index=${z}, coverage=${(coverage * 100).toFixed(1)}%${suffix}`,
+    details: classification.details,
     timestamp: Date.now(),
   });
 }

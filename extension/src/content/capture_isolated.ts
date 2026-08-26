@@ -58,6 +58,11 @@ import {
   type MutationAlert,
 } from "./mutation_monitor";
 import {
+  suppressDetectedOverlay,
+  suppressHighSeverityOverlayInPath,
+  type OverlaySuppression,
+} from "./overlay_cleanup";
+import {
   handleOAuthRuntimeMessage,
   isOAuthRedirectMismatch,
   isOAuthOpenerManipulation,
@@ -120,7 +125,11 @@ function makeBridgeSession(): string {
 }
 
 let lastDown: DownCapture | null = null;
-let settings: NavSettings = { defaultMode: "smart", debug: false };
+let settings: NavSettings = {
+  defaultMode: "smart",
+  debug: false,
+  autoDismissOverlays: false,
+};
 let allowlist: Allowlist = {};
 let adaptiveAdjustment = 0;
 
@@ -870,12 +879,21 @@ const MUTATION_START_DELAY_MS = 2000;
 function handleMutationAlert(alert: MutationAlert): void {
   if (settings.defaultMode === "off") return;
 
+  const overlaySuppression = suppressDetectedOverlay(
+    alert,
+    settings.autoDismissOverlays,
+  );
+
   appendEventSafely({
     kind: "mutation_alert",
     site: siteKeyFromLocation(),
     url: location.href,
     reasons: [alert.type],
-    extra: { details: alert.details, severity: alert.severity },
+    extra: {
+      details: alert.details,
+      severity: alert.severity,
+      ...(overlaySuppression ? { overlayAutoDismissed: true } : {}),
+    },
   });
 
   // Only show a warning toast for high-severity overlay injections.
@@ -884,8 +902,12 @@ function handleMutationAlert(alert: MutationAlert): void {
   if (alert.type === "overlay_injected" && alert.severity === "high") {
     sendIconUpdate("yellow");
     showToast({
-      message: "NavSentinel detected a suspicious overlay injected after page load. The page may be attempting a phishing attack.",
-      actions: [{ label: "Dismiss", onClick: () => {} }],
+      message: overlaySuppression
+        ? "NavSentinel hid a suspicious overlay injected after page load."
+        : "NavSentinel detected a suspicious overlay injected after page load. The page may be attempting a phishing attack.",
+      ...(overlaySuppression
+        ? { actions: [{ label: "Undo", onClick: () => overlaySuppression.restore() }] }
+        : {}),
       timeoutMs: 0,
     });
   }
@@ -1223,6 +1245,8 @@ function showAllowPrompt(params: {
   /** Replay-grade enrichment captured at decision time (P5-C1). Absent for the
    *  main-world bridge prompt path, which has no CDS/NRS decision context. */
   outcomeFeatures?: NavOutcomeFeatures;
+  /** Optional, reversible cleanup of the high-severity overlay behind this prompt. */
+  overlaySuppression?: OverlaySuppression;
 }): void {
   const promptScore = params.promptScore ?? lastDebug?.cds ?? 0;
   const sourceDomain = siteKeyFromLocation();
@@ -1271,15 +1295,25 @@ function showAllowPrompt(params: {
     });
   }
 
+  if (params.overlaySuppression) {
+    actions.push({
+      label: "Undo",
+      onClick: () => {
+        params.overlaySuppression?.restore();
+      },
+    });
+  }
+
   appendEventSafely({
     kind: "nav_blank_prompt",
     site: sourceDomain,
     url: params.url,
-    ...(params.host ? { destHost: params.host } : {})
+    ...(params.host ? { destHost: params.host } : {}),
+    ...(params.overlaySuppression ? { extra: { overlayAutoDismissed: true } } : {}),
   });
 
   showToast({
-    message: `${params.title}: ${params.host ?? params.url}`,
+    message: `${params.title}${params.overlaySuppression ? " (overlay hidden)" : ""}: ${params.host ?? params.url}`,
     actions,
     // Coalesce a burst of blocked-nav prompts (ad-heavy / malicious-popup pages)
     // into the count pill so the user is not forced to act on each. The blocked
@@ -1660,6 +1694,12 @@ window.addEventListener(
         }
         e.preventDefault();
         e.stopImmediatePropagation();
+        const overlaySuppression = decision === "block"
+          ? suppressHighSeverityOverlayInPath(
+              e.composedPath?.() ?? [],
+              settings.autoDismissOverlays,
+            )
+          : null;
         if (parsed?.href) {
           const title = hasClickfix
             ? (decision === "block"
@@ -1672,7 +1712,8 @@ window.addEventListener(
             host: parsed.host,
             target: "_blank",
             promptScore: nrs,
-            outcomeFeatures: navFeatures
+            outcomeFeatures: navFeatures,
+            ...(overlaySuppression ? { overlaySuppression } : {}),
           });
           // Suppress standalone ClickFix toast — unified prompt covers it
           if (hasClickfix) clickFixAlertedAt = Date.now();
@@ -1680,19 +1721,33 @@ window.addEventListener(
           const prefix = hasClickfix
             ? "NavSentinel blocked a new tab with fake dialog detected"
             : "NavSentinel blocked a suspicious new tab";
-          showToast({ message: buildPlainMessage(prefix, reasonCodes), coalesce: !hasClickfix });
+          showToast({
+            message: buildPlainMessage(
+              overlaySuppression ? `${prefix} and hid its overlay` : prefix,
+              reasonCodes,
+            ),
+            ...(overlaySuppression
+              ? { actions: [{ label: "Undo", onClick: () => overlaySuppression.restore() }] }
+              : {}),
+            coalesce: !hasClickfix,
+          });
           if (hasClickfix) clickFixAlertedAt = Date.now();
         }
       } else if (!isBlankAnchor && nrs >= blockThreshold) {
         decision = "block";
         e.preventDefault();
         e.stopImmediatePropagation();
+        const overlaySuppression = suppressHighSeverityOverlayInPath(
+          e.composedPath?.() ?? [],
+          settings.autoDismissOverlays,
+        );
         appendEventSafely({
           kind: "nav_click_block",
           site: siteKeyFromLocation(),
           url: location.href,
           score: nrs,
-          reasons: reasonCodes
+          reasons: reasonCodes,
+          ...(overlaySuppression ? { extra: { overlayAutoDismissed: true } } : {}),
         });
         appendOutcomeSafely({
           domain: siteKeyFromLocation(),
@@ -1705,7 +1760,16 @@ window.addEventListener(
         const blockPrefix = hasClickfix
           ? "NavSentinel blocked a deceptive click with fake dialog"
           : "NavSentinel blocked a deceptive click";
-        showToast({ message: buildPlainMessage(blockPrefix, reasonCodes), coalesce: !hasClickfix });
+        showToast({
+          message: buildPlainMessage(
+            overlaySuppression ? `${blockPrefix} and hid the overlay` : blockPrefix,
+            reasonCodes,
+          ),
+          ...(overlaySuppression
+            ? { actions: [{ label: "Undo", onClick: () => overlaySuppression.restore() }] }
+            : {}),
+          coalesce: !hasClickfix,
+        });
         if (hasClickfix) clickFixAlertedAt = Date.now();
       }
     }

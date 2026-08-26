@@ -65,6 +65,7 @@ versionEl.textContent = `v${chrome.runtime.getManifest().version}`;
 // DOM references
 const navModeSeg = document.getElementById("navModeSeg") as HTMLDivElement;
 const navDebugEl = document.getElementById("navDebug") as HTMLButtonElement;
+const autoDismissOverlaysEl = document.getElementById("dismissOverlays") as HTMLButtonElement;
 const credModeSeg = document.getElementById("credModeSeg") as HTMLDivElement;
 const blockHttpEl = document.getElementById("blockHttpPasswordSubmit") as HTMLButtonElement;
 const warnPasteEl = document.getElementById("warnOnPaste") as HTMLButtonElement;
@@ -160,6 +161,7 @@ function initToggle(el: HTMLButtonElement): void {
 }
 
 initToggle(navDebugEl);
+initToggle(autoDismissOverlaysEl);
 initToggle(blockHttpEl);
 initToggle(warnPasteEl);
 initToggle(promptUntrustedEl);
@@ -445,6 +447,7 @@ async function init(): Promise<void> {
   const s = await getSuiteSettings();
   setSegValue(navModeSeg, s.nav.defaultMode);
   setToggle(navDebugEl, s.nav.debug);
+  setToggle(autoDismissOverlaysEl, s.nav.autoDismissOverlays);
   setSegValue(credModeSeg, s.credential.mode);
   setToggle(blockHttpEl, s.credential.blockHttpPasswordSubmit);
   setToggle(warnPasteEl, s.credential.warnOnPaste);
@@ -472,7 +475,8 @@ saveBtn.addEventListener("click", withReentrancyGuard(
   try {
     const nav = {
       defaultMode: getSegValue(navModeSeg) as Mode,
-      debug: getToggle(navDebugEl)
+      debug: getToggle(navDebugEl),
+      autoDismissOverlays: getToggle(autoDismissOverlaysEl)
     };
     const credential = {
       mode: getSegValue(credModeSeg) as CredMode,
