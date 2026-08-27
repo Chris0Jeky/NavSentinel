@@ -68,7 +68,7 @@ check for its current head is green.
    least 8 seconds. The nested advertisement must disappear and stay hidden
    while the fixture fills the ordinary alert lane, rewrites the original
    layer, replaces it, and settles. Click NavSentinel's **Dismiss** first and
-   confirm the fixture's window capture-phase **Page-level click listeners
+   confirm the fixture's window capture-phase **Page-level control events
    observed** counter remains `0` with no blocked popup or new tab. Then click
    **Trigger scroll-time reinsertion**; the new
    layer must also disappear without reopening the dismissed notice. In Options

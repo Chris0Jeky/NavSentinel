@@ -67,9 +67,10 @@ function installEarlyMainUiGuard() {
   // CRXJS loads the bundled MAIN entry through an async import. The page can
   // register capture listeners during that gap, before main_guard.ts executes.
   // Keep this synchronous fence in the generated document_start loader; its
-  // closure queues only trusted clicks and hands them to the verified bridge
-  // once the real guard module is ready. The queue is private and bounded.
-  const guardedLoader = `(function(){'use strict';let sink=null,q=[];window.addEventListener('click',e=>{if(!(e instanceof MouseEvent)||!e.isTrusted)return;let id='',owned=false;for(const t of e.composedPath())if(t instanceof HTMLElement){if(t.id==='__navsentinel_toast_host')owned=true;if(t.dataset.nsUiAction)id=t.dataset.nsUiAction}if(!owned)return;e.preventDefault();e.stopImmediatePropagation();if(id&&id.length<=16){if(sink)sink(id);else if(q.length<16)q.push(id)}},true);const injectTime=performance.now();(async()=>{const m=await import(${JSON.stringify(importPath)});sink=m.activateMainUiControl??null;if(sink)for(const id of q)sink(id);q=[];m.onExecute?.({perf:{injectTime,loadTime:performance.now()-injectTime}})})().catch(console.error)})();\n`;
+  // closure fences only trusted input inside the extension host, queues click
+  // or keyboard activation, and hands it to the verified bridge once the real
+  // guard module is ready. The queue is private and bounded.
+  const guardedLoader = `(function(){'use strict';let sink=null,q=[];const guard=e=>{if(!e.isTrusted)return;let id='',owned=false;for(const t of e.composedPath())if(t instanceof HTMLElement){if(t.id==='__navsentinel_toast_host')owned=true;if(t.dataset.nsUiAction)id=t.dataset.nsUiAction}if(!owned)return;const key=e instanceof KeyboardEvent&&(e.key==='Enter'||e.key===' '),run=e.type==='click'||e.type==='keyup'&&key;if(e.type==='click'||e.type==='auxclick'||e.type==='contextmenu'||key)e.preventDefault();e.stopImmediatePropagation();if(run&&id&&id.length<=16){if(sink)sink(id);else if(q.length<16)q.push(id)}};for(const type of ['pointerdown','pointerup','pointercancel','mousedown','mouseup','touchstart','touchend','touchcancel','click','dblclick','auxclick','contextmenu','keydown','keyup'])window.addEventListener(type,guard,{capture:true,passive:false});const injectTime=performance.now();(async()=>{const m=await import(${JSON.stringify(importPath)});sink=m.activateMainUiControl??null;if(sink)for(const id of q)sink(id);q=[];m.onExecute?.({perf:{injectTime,loadTime:performance.now()-injectTime}})})().catch(console.error)})();\n`;
   fs.writeFileSync(loaderPath, guardedLoader, "utf8");
 }
 

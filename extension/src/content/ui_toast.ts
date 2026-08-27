@@ -92,8 +92,8 @@ function ensureHost() {
   root = host.attachShadow({ mode: "open" });
 
   // UI events are composed across a shadow boundary by default. The MAIN-world
-  // guard consumes trusted clicks before hostile capture listeners; this root
-  // remains the fallback boundary for other events and non-browser unit DOMs.
+  // guard consumes trusted input before hostile capture listeners; this root
+  // remains the fallback boundary for non-browser unit DOMs.
   for (const type of [
     "pointerdown", "pointerup", "mousedown", "mouseup", "touchstart", "touchend",
     "click", "dblclick", "auxclick", "contextmenu", "keydown", "keyup",

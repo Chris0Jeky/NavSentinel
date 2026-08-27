@@ -110,11 +110,12 @@ unrelated warnings. It also adds sustained visibility timelines because the old
 first-hidden oracle missed a confirmed reappearance. The owner-loaded build at
 `661f97f` then passed sustained cleanup across the real multi-embed page, reload,
 and scroll, but its Dismiss click reached a hostile window capture listener and
-briefly triggered a second blocked-click notice. The follow-up regression makes
-that listener capture-phase and requires both Dismiss and Undo to act while its
-counter stays zero; the implementation installs a synchronous document-start
-fence before the MAIN bundle's asynchronous import and relays a bounded action
-token over the already-verified bridge. #577 retains the exact-stamp ownership
+briefly triggered a second blocked-click notice. The follow-up regression counts
+the complete pointer, mouse, touch, click, and keyboard sequence at window capture
+phase and requires mouse Dismiss plus keyboard Undo to act while its counter stays
+zero; the implementation installs a synchronous document-start fence before the
+MAIN bundle's asynchronous import and relays a bounded action token over the
+already-verified bridge. #577 retains the exact-stamp ownership
 edge; #580 retains latency measurement; #591 owns explicit redacted feedback
 export without automatic telemetry.
 The 2026-08-27 manual trial also seeded the next bounded UX slices: settings

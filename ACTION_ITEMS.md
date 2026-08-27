@@ -99,9 +99,10 @@ real multi-embed page worked flawlessly across the prior recurrence paths and
 accepted the suppression behavior. Clicking NavSentinel's **Dismiss**, however,
 still reached the hostile child frame and briefly produced another blocked-click
 notice. A stronger capture-phase fixture reproduces the escape against that head.
-The current local repair candidate installs the toast click fence synchronously
-before the MAIN bundle's asynchronous import and has red-to-green Dismiss and Undo
-coverage with the page counter held at zero. This is automated candidate evidence
+The current local repair candidate installs the toast input fence synchronously
+before the MAIN bundle's asynchronous import and has red-to-green mouse Dismiss
+and keyboard Undo coverage with every page input counter held at zero. This is
+automated candidate evidence
 only. Keep AI-29 open until the pushed exact head has green hosted CI and Chris
 repeats the exact-head guide.
 

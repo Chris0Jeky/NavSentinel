@@ -106,6 +106,12 @@ async function clickFrameToastButton(frame: Frame, label: string): Promise<void>
   await button.click();
 }
 
+async function pressFrameToastButton(frame: Frame, label: string): Promise<void> {
+  const button = frame.getByRole("button", { name: label, exact: true });
+  await expect(button).toBeVisible();
+  await button.press("Enter");
+}
+
 type AttackVisibilitySample = {
   elapsedMs: number;
   phase: string;
@@ -242,7 +248,7 @@ test("nested cleanup remains effective across alert floods, page rewrites, reins
   }
 });
 
-test("toast Dismiss and Undo do not leak capture-phase clicks into the protected page @regression", async () => {
+test("toast mouse and keyboard controls do not leak capture-phase input into the protected page @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
   const { page, context, cleanup } = await setupNestedTest("overlay-nesting-lab.html?case=hostile");
 
@@ -255,7 +261,7 @@ test("toast Dismiss and Undo do not leak capture-phase clicks into the protected
 
     await clickFrameToastButton(frame, "Dismiss");
     await expect.poll(() => frame.evaluate(() =>
-      Number(document.documentElement.dataset.pageClickCount ?? "0"),
+      Number(document.documentElement.dataset.pageControlEventCount ?? "0"),
     )).toBe(0);
     await expect.poll(() => frame.evaluate(() =>
       !document.querySelector("#__navsentinel_toast_host")?.shadowRoot
@@ -266,9 +272,9 @@ test("toast Dismiss and Undo do not leak capture-phase clicks into the protected
     await waitForNavSentinelBridge(page);
     frame = await childFrame(page, "hostile");
     await waitForFrameToast(frame, /hid suspicious overlays/i);
-    await clickFrameToastButton(frame, "Undo");
+    await pressFrameToastButton(frame, "Undo");
     await expect.poll(() => frame.evaluate(() =>
-      Number(document.documentElement.dataset.pageClickCount ?? "0"),
+      Number(document.documentElement.dataset.pageControlEventCount ?? "0"),
     )).toBe(0);
     await expect(frame.locator("#exact-overlay-frame")).toBeVisible();
   } finally {

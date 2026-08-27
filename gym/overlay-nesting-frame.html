@@ -81,21 +81,28 @@
       document.documentElement.dataset.fixtureReady = "true";
 
       if (fixtureCase === "hostile") {
-        document.documentElement.dataset.pageClickCount = "0";
+        document.documentElement.dataset.pageControlEventCount = "0";
         const status = document.createElement("p");
         status.id = "hostile-click-status";
-        status.textContent = "Page-level click listeners observed: 0";
+        status.textContent = "Page-level control events observed: 0";
         const churn = document.createElement("button");
         churn.id = "trigger-scroll-churn";
         churn.type = "button";
         churn.textContent = "Trigger scroll-time reinsertion";
         churn.addEventListener("click", () => window.dispatchEvent(new Event("scroll")));
         document.body.append(status, churn);
-        window.addEventListener("click", () => {
-          const current = Number(document.documentElement.dataset.pageClickCount ?? "0");
-          document.documentElement.dataset.pageClickCount = String(current + 1);
-          status.textContent = `Page-level click listeners observed: ${current + 1}`;
-        }, { capture: true });
+        const recordControlEvent = (event) => {
+          const current = Number(document.documentElement.dataset.pageControlEventCount ?? "0");
+          document.documentElement.dataset.pageControlEventCount = String(current + 1);
+          status.textContent = `Page-level control events observed: ${current + 1} (last: ${event.type})`;
+        };
+        for (const type of [
+          "pointerdown", "pointerup", "pointercancel", "mousedown", "mouseup",
+          "touchstart", "touchend", "touchcancel", "click", "dblclick",
+          "auxclick", "contextmenu", "keydown", "keyup",
+        ]) {
+          window.addEventListener(type, recordControlEvent, { capture: true });
+        }
 
         // These forms exist before NavSentinel's opt-in monitor snapshots the
         // document. Rewriting them later fills the ordinary alert lane without
