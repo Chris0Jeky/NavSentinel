@@ -18,9 +18,9 @@
 <body>
   <h1>Issue 566: modifier navigation diagnostic</h1>
   <p>
-    Page A contains ordinary same-tab anchors. Use a trusted Control-click or
-    middle-click on one control. The browser should open exactly one child tab
-    while this opener stays on Page A.
+    Page A contains ordinary same-tab anchors to the other loopback hostname.
+    Use a trusted Control-click or middle-click on one control. The browser
+    should open exactly one child tab while this opener stays on Page A.
   </p>
 
   <section class="card">
@@ -33,13 +33,23 @@
     <p class="note">
       The second and third controls deliberately retain their native default
       action. Their one-shot timers model page code that performs a same-tab
-      navigation immediately after the modified gesture.
+      navigation immediately after the modified gesture. The 127.0.0.1 and
+      localhost hostnames keep the cross-site case entirely local.
     </p>
   </section>
 
   <section class="card">
     <h2>Event log</h2>
     <ol id="event-log" aria-live="polite"></ol>
+  </section>
+
+  <section class="card">
+    <h2>Expected result</h2>
+    <ul>
+      <li><strong>Smart or Strict:</strong> one destination tab opens and this Page A stays here.</li>
+      <li><strong>Off:</strong> the diagnostic page handler is not isolated, so Page A also navigates.</li>
+      <li>The plain control proves native modifier behavior; the timer controls exercise page-handler isolation and stale opener authority.</li>
+    </ul>
   </section>
 
   <script>
@@ -62,19 +72,28 @@
       return `${event.type} target=${event.currentTarget.id} button=${event.button} modifiers=${modifiers} trusted=${event.isTrusted}`;
     }
 
+    function crossSiteDestination(testCase) {
+      const destination = new URL("issue566-destination.html", location.href);
+      destination.hostname = location.hostname === "127.0.0.1" ? "localhost" : "127.0.0.1";
+      destination.searchParams.set("case", testCase);
+      return destination.toString();
+    }
+
     ["native-control", "assign-control", "self-control"].forEach((id) => {
       const anchor = document.getElementById(id);
-      ["click", "auxclick"].forEach((eventType) => {
+      const testCase = id.replace("-control", "");
+      anchor.href = crossSiteDestination(testCase);
+      ["pointerdown", "click", "auxclick"].forEach((eventType) => {
         anchor.addEventListener(eventType, (event) => {
           record(describe(event));
         });
       });
     });
 
-    function installOneShot(anchorId, action, destination) {
+    function installOneShot(anchorId, action, destination, eventTypes = ["click", "auxclick"]) {
       const anchor = document.getElementById(anchorId);
       let scheduled = false;
-      ["click", "auxclick"].forEach((eventType) => {
+      eventTypes.forEach((eventType) => {
         anchor.addEventListener(eventType, (event) => {
           if (scheduled || !(event.ctrlKey || event.metaKey || event.button === 1)) return;
           scheduled = true;
@@ -94,12 +113,13 @@
     installOneShot(
       "assign-control",
       "location.assign",
-      "issue566-destination.html?case=assign-timer"
+      crossSiteDestination("assign-timer")
     );
     installOneShot(
       "self-control",
       "window.open",
-      "issue566-destination.html?case=self-timer"
+      crossSiteDestination("self-timer"),
+      ["pointerdown"]
     );
     record("Page A ready");
   </script>

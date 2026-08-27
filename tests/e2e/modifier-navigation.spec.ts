@@ -3,7 +3,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
-import { getGymBaseUrl, waitForNavSentinelBridge } from "./extension_test_utils";
+import { getGymBaseUrl, getServiceWorker, waitForNavSentinelBridge } from "./extension_test_utils";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -108,3 +108,34 @@ for (const scenario of scenarios) {
     });
   }
 }
+
+test("Navigation Off preserves the page's modified-click handler @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running modifier navigation E2E tests.");
+
+  const { context, opener, cleanup } = await openFreshScenario();
+  try {
+    const serviceWorker = await getServiceWorker(context);
+    await serviceWorker.evaluate(async () => {
+      const key = "sentinelsuite:settings_v1";
+      const stored = await chrome.storage.local.get(key);
+      const current = (stored[key] ?? {}) as Record<string, unknown>;
+      const nav = (current.nav ?? {}) as Record<string, unknown>;
+      await chrome.storage.local.set({
+        [key]: { ...current, nav: { ...nav, defaultMode: "off" } }
+      });
+    });
+
+    await opener.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
+    await waitForNavSentinelBridge(opener);
+
+    const childPromise = context.waitForEvent("page", { timeout: 6_000 });
+    await opener.locator("#assign-control").click({ modifiers: ["Control"], button: "left" });
+    const child = await childPromise;
+
+    await child.waitForLoadState("domcontentloaded", { timeout: 10_000 });
+    await opener.waitForURL(/issue566-destination\.html\?case=assign-timer/, { timeout: 10_000 });
+    await expect(child).toHaveURL(/issue566-destination\.html\?case=assign$/);
+  } finally {
+    await cleanup();
+  }
+});
