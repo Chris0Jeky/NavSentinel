@@ -9,7 +9,7 @@
 
 # Human Gate-3 Guides — NavSentinel
 
-> ## ⚠️ SUPERSEDED 2026-07-25 — read before running anything here
+> ## ⚠️ LEGACY AI-13/AI-21/AI-22 GUIDES SUPERSEDED 2026-07-25
 >
 > **All three PRs these guides gate have merged**, and Chris chose to clear their
 > gates by **automated equivalent** rather than by a manual pass:
@@ -17,11 +17,11 @@
 > **AI-13, AI-21 and AI-22 no longer exist as items.**
 >
 > Consequences for anyone reading below:
-> 1. **Every step-1 exact-head precheck will fail**, correctly — it compares a
+> 1. **Every legacy step-1 exact-head precheck will fail**, correctly — it compares a
 >    worktree against `gh pr view <n> --json headRefOid` and `git ls-remote` for
 >    branches whose PRs are merged. That is not a defect to work around; it is the
 >    precheck telling you the guide's premise is gone.
-> 2. **Do not use the `<AI-N> done; Gate-3 passed on PR #<n>` reply lines.** They
+> 2. **Do not use those legacy `<AI-N> done; Gate-3 passed on PR #<n>` reply lines.** They
 >    would record a Gate-3 pass that `ACTION_ITEMS.md` states was never recorded.
 > 3. These procedures are retained as **reference material for `AI-24`**, the single
 >    optional post-merge real-Chrome confirmation pass over the merged result. To run
@@ -53,6 +53,91 @@ which is the right pattern. The pins live in `ACTION_ITEMS.md`, `HANDOFF.md`,
 SHA written elsewhere: a stale pin is exactly what made the AI-13 guide abort on its own
 precheck.
 
+## AI-36 — #558 popup/Options patch-save synchronization Gate-3
+
+**🚨 OPEN: AI-36 — Run the #558 popup/Options patch-save synchronization
+Gate-3 (GUIDE PREPARED; LIVE EXACT-HEAD PRECHECK REQUIRED).** This bounded
+browser-surface slice makes an open Options page adopt clean settings changed in
+the popup, preserves unrelated dirty Options fields, and saves only dirty leaf
+patches through one service-worker-owned write queue. It does not yet add the
+auto-save preference, prominent manual dirty-state UX, or same-field conflict UX
+that remain in #558. Only Chris can record this item complete.
+
+**Current guide:**
+
+1. From the repository root, use the existing worktree for branch
+   `fix/issue558-patch-save-sync`; do not switch or reset root `main`. Refresh
+   the branch and prove the exact head before running a browser:
+
+   ```sh
+   BRANCH=fix/issue558-patch-save-sync
+   WORKTREE=<path-to-the-worktree-for-the-branch>
+   git -C "$WORKTREE" fetch origin "$BRANCH"
+   git -C "$WORKTREE" status --short --branch
+   git -C "$WORKTREE" rev-parse HEAD
+   git ls-remote origin "refs/heads/$BRANCH"
+   PR=$(gh pr list --state open --head "$BRANCH" --json number --jq '.[0].number')
+   test -n "$PR"
+   gh pr view "$PR" --json headRefName,headRefOid,state
+   gh pr checks "$PR"
+   ```
+
+   The worktree must be clean except for the one already-ledgered Windows
+   Defender quarantine line ` D tests/clickfix-detector.property.test.ts`.
+   If that exact deletion is present, record it and leave it untouched: do not
+   open, restore, stage, or allow the fixture. Stop for every other status line.
+   `headRefName` must be the named branch, and the local HEAD, remote branch SHA,
+   and PR head SHA must be identical. Build/Unit and E2E must be green on that
+   exact head, and no required review thread may remain unresolved. If the branch
+   has not been pushed or the PR lookup is empty, stop and report that
+   precondition; never test a stale build.
+2. In that exact worktree run `npm ci`, then `npm run build`. Create a
+   disposable, fresh Chrome profile without signing in or changing an
+   established profile. Load the exact `<worktree>/extension/dist` directory
+   unpacked from `chrome://extensions`. If the extension was already loaded,
+   use **Reload** there before opening either extension surface. Open the
+   service-worker inspector and keep it visible for errors.
+3. Open NavSentinel Options. Establish a visible baseline with Navigation
+   **Smart**, Credential **Smart**, and **Paste warnings**
+   checked, then click **Save**. Reload Options once and confirm that baseline.
+4. In Options, uncheck **Paste warnings**, but do **not** click
+   Save. This is the unrelated dirty field that must survive an external update.
+   Do not edit either protection-mode control in Options during this trial.
+5. Open the NavSentinel popup and set Navigation to **Strict**, then Credential
+   protection to **Strict**. Leave the popup open until both selected states are
+   visible. Do not press Save in Options yet.
+6. Return to the already-open Options page without reloading it. Navigation and
+   Credential protection must both now show **Strict**, while **Paste warnings**
+   must remain unchecked. In the service-worker inspector,
+   verify the persisted state still holds the popup modes and the old checkbox
+   value because the dirty checkbox has not been saved:
+
+   ```js
+   (await chrome.storage.local.get("sentinelsuite:settings_v1"))
+     ["sentinelsuite:settings_v1"]
+   ```
+
+   Expect `nav.defaultMode === "strict"`, `credential.mode === "strict"`, and
+   `credential.warnOnPaste === true`. A reloaded Options page, reverted dirty
+   checkbox, stale mode control, or console error is a failure.
+7. Click **Save** in Options. Poll the same storage key again. The two popup
+   modes must remain `"strict"`, and `credential.warnOnPaste` must now be
+   `false`. Reopen the popup and confirm both mode segments still show Strict.
+   Reload Options and confirm all three saved values remain. This proves the
+   Options save applied its dirty leaf without reconstructing a stale settings
+   object over the popup changes.
+8. Inspect the Options, popup, and service-worker consoles. Record any rejected
+   `ns-suite-settings-update` message, runtime messaging error, stale control,
+   lost setting, duplicate write symptom, or unrelated console error as a
+   failure. Close the disposable profile and remove only that profile; do not
+   alter an established profile or disable security software.
+9. Only Chris may record completion. Reply
+   `AI-36 done; Gate-3 passed on branch fix/issue558-patch-save-sync at
+   <40-character SHA>; Chrome <version>` with console observations, or
+   `AI-36 failed on branch fix/issue558-patch-save-sync at <SHA>: <step and
+   observed result>`. Do not merge on a partial pass; recheck exact head, CI,
+   comments, and the repository merge gate afterward.
+
 ## Index
 
 | Item | PR | Guide |
@@ -60,6 +145,7 @@ precheck.
 | AI-13 | #356 MAIN-world compatibility | in [`../../ACTION_ITEMS.md`](../../ACTION_ITEMS.md) |
 | AI-21 | #464 synthetic navigation | [below](#ai-21--pr-464-synthetic-navigation-gate-3) |
 | AI-22 | #466 pending-decision service worker | [below](#ai-22--pr-466-pending-decision-service-worker-gate-3) |
+| AI-36 | #558 popup/Options patch-save synchronization | [above](#ai-36--558-popupoptions-patch-save-synchronization-gate-3) |
 
 ~~Run them oldest-PR-first: AI-13 (#356) -> AI-21 (#464) -> AI-22 (#466).~~
 **Void 2026-07-25** — all three merged with their manual gates waived. There is no
