@@ -1694,13 +1694,15 @@ window.addEventListener(
         }
         e.preventDefault();
         e.stopImmediatePropagation();
-        const overlaySuppression = decision === "block"
-          ? suppressHighSeverityOverlayInPath(
-              e.composedPath?.() ?? [],
-              settings.autoDismissOverlays,
-              anchor,
-            )
-          : null;
+        // This branch has already prevented the navigation. Cleanup follows the
+        // overlay classification, not whether NRS labelled the interception a
+        // prompt or a block; real browser context can legitimately move the same
+        // deceptive click across that decision threshold.
+        const overlaySuppression = suppressHighSeverityOverlayInPath(
+          e.composedPath?.() ?? [],
+          settings.autoDismissOverlays,
+          anchor,
+        );
         if (parsed?.href) {
           const title = hasClickfix
             ? (decision === "block"

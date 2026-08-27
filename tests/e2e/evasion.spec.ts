@@ -179,6 +179,42 @@ test("Evasion 02: opt-in cleanup hides the blocked overlay and Undo restores it 
   }
 });
 
+test("Evasion 02: opt-in cleanup also hides a high-severity overlay on the prompt path @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { page, context, cleanup } = await setupEvasionTest("evasion-02-size-34pct.html");
+
+  try {
+    await updateNavigationSettings(context, { autoDismissOverlays: true });
+    await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
+    await waitForNavSentinelBridge(page);
+
+    // Keep the element above the cleanup classifier's 25%/z=100 boundary while
+    // removing enough NRS factors to exercise Smart's intercepted prompt path.
+    const trap = page.locator("#trap");
+    await trap.evaluate((element) => {
+      element.setAttribute("href", "index.html");
+      element.setAttribute("aria-label", "Open Gym index");
+    });
+    await page.addStyleTag({ content: ".overlay{width:51vw;height:51vh;z-index:100}" });
+    const box = await trap.boundingBox();
+    expect(box, "#trap prompt-path overlay should be visible before the click").toBeTruthy();
+
+    const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
+    await page.mouse.click(box!.x + 8, box!.y + 8);
+
+    expect(await popupPromise, "Expected the prompted overlay new tab to stay blocked").toBeNull();
+    await waitForToastMatch(page, /Suspicious new tab \(overlay hidden\)/i, 3000);
+    await expect(trap).toBeHidden();
+
+    await clickToastButton(page, "Undo");
+    await expect(trap).toBeVisible();
+    await expect(page).toHaveURL(/evasion-02-size-34pct\.html/);
+  } finally {
+    await cleanup();
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Evasion 03: Misleading aria-label (whitespace / single char)
 //
