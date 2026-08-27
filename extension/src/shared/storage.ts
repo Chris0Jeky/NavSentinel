@@ -45,9 +45,6 @@ export type SuiteSettingsPatch = Partial<Omit<SuiteSettings, "nav" | "credential
 
 /** Settings writes from popup/options to the service worker. */
 export type SuiteSettingsUpdateMessage = { type: "ns-suite-settings-update"; patch: unknown };
-export type SuiteSettingsUpdateResponse =
-  | { ok: true; settings: SuiteSettings }
-  | { ok: false; error: string; code?: "unauthorized" | "invalid" };
 
 export const SUITE_SETTINGS_KEY = "sentinelsuite:settings_v1";
 export const TRUSTED_DOMAINS_KEY = "sentinelsuite:trusted_domains_v1";
@@ -224,7 +221,7 @@ function reconcileSettings(
   draft: SettingsRecord,
   incoming?: SettingsRecord,
 ): SettingsRecord {
-  const result: SettingsRecord = incoming ? structuredClone(incoming) as SettingsRecord : {};
+  const result: SettingsRecord = incoming ? { ...incoming } : {};
   for (const key in draft) {
     const value = draft[key];
     if (value && typeof value === "object") {
@@ -262,9 +259,9 @@ export function rebaseOptionsSettingsDraft(
 export async function getSuiteSettings(): Promise<SuiteSettings> {
   const res = await chrome.storage.local.get([SUITE_SETTINGS_KEY, LEGACY_SETTINGS_KEY]);
   const stored = res[SUITE_SETTINGS_KEY] as SuiteSettings | undefined;
-  if (!stored || typeof stored !== "object") {
+  if (!isRecord(stored)) {
     const legacy = res[LEGACY_SETTINGS_KEY] as Partial<NavSettings> | undefined;
-    if (legacy && typeof legacy === "object") {
+    if (isRecord(legacy)) {
       const migrated = mergeSuiteSettings(structuredClone(DEFAULT_SUITE_SETTINGS), { nav: legacy });
       await chrome.storage.local.set({ [SUITE_SETTINGS_KEY]: migrated });
       await chrome.storage.local.remove(LEGACY_SETTINGS_KEY);
@@ -275,7 +272,16 @@ export async function getSuiteSettings(): Promise<SuiteSettings> {
   return mergeSuiteSettings(structuredClone(DEFAULT_SUITE_SETTINGS), stored);
 }
 
-let settingsPending: Promise<unknown> = Promise.resolve();
+function createStorageWriteQueue(reportError?: (error: unknown) => void) {
+  let pending: Promise<unknown> = Promise.resolve();
+  return <T>(operation: () => Promise<T>): Promise<T> => {
+    const next = pending.then(operation);
+    pending = next.catch((error) => reportError?.(error));
+    return next;
+  };
+}
+
+const queueSuiteSettingsWrite = createStorageWriteQueue();
 
 /**
  * The service worker's single read-modify-write lane for SuiteSettings.
@@ -284,153 +290,63 @@ let settingsPending: Promise<unknown> = Promise.resolve();
  * through runtime messaging. Keeping this direct lane worker-owned prevents two
  * independently loaded page modules from interleaving their own queues. (#558)
  */
-export function updateSuiteSettingsDirect(partial: SuiteSettingsPatch): Promise<SuiteSettings> {
-  const next = settingsPending.then(async (): Promise<SuiteSettings> => {
+function updateSuiteSettingsDirect(partial: SuiteSettingsPatch): Promise<SuiteSettings> {
+  return queueSuiteSettingsWrite(async (): Promise<SuiteSettings> => {
     const cur = await getSuiteSettings();
     const merged = mergeSuiteSettings(cur, partial);
     await chrome.storage.local.set({ [SUITE_SETTINGS_KEY]: merged });
     return merged;
   });
-  settingsPending = next.catch((err) => {
-    console.warn("[NavSentinel] suite settings serialization error:", err);
-  });
-  return next;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function hasOnlyKeys(value: Record<string, unknown>, allowed: readonly string[]): boolean {
-  return Object.keys(value).every((key) => allowed.includes(key));
-}
-
-/** Validate and bound untrusted page input before it crosses into storage. */
-export function sanitizeSuiteSettingsPatch(value: unknown): SuiteSettingsPatch | null {
-  if (!isRecord(value) || !hasOnlyKeys(value, ["nav", "credential", "logLimit"])) return null;
-
-  const patch: SuiteSettingsPatch = {};
-  if ("logLimit" in value) {
-    if (typeof value.logLimit !== "number" || !Number.isFinite(value.logLimit)) return null;
-    patch.logLimit = clampInt(value.logLimit, 50, 5000, DEFAULT_SUITE_SETTINGS.logLimit);
+function sanitizeSuiteSettingsFields(value: unknown, defaults: Record<string, unknown>): Record<string, unknown> | null {
+  if (!isRecord(value)) return null;
+  for (const [key, candidate] of Object.entries(value)) {
+    const defaultValue = defaults[key];
+    if (defaultValue === undefined) return null;
+    if (isRecord(defaultValue)) {
+      if (!sanitizeSuiteSettingsFields(candidate, defaultValue)) return null;
+    } else if (typeof candidate !== typeof defaultValue ||
+      (typeof candidate === "number" && !Number.isFinite(candidate)) ||
+      ((key === "defaultMode" || key === "mode") && !["off", "smart", "strict"].includes(candidate as string))) {
+      return null;
+    }
   }
-
-  if ("nav" in value) {
-    if (!isRecord(value.nav) || !hasOnlyKeys(value.nav, ["defaultMode", "debug"])) return null;
-    const nav: NonNullable<SuiteSettingsPatch["nav"]> = {};
-    if ("defaultMode" in value.nav) {
-      if (value.nav.defaultMode !== "off" && value.nav.defaultMode !== "smart" && value.nav.defaultMode !== "strict") return null;
-      nav.defaultMode = value.nav.defaultMode;
-    }
-    if ("debug" in value.nav) {
-      if (typeof value.nav.debug !== "boolean") return null;
-      nav.debug = value.nav.debug;
-    }
-    if (Object.keys(nav).length === 0) return null;
-    patch.nav = nav;
-  }
-
-  if ("credential" in value) {
-    if (!isRecord(value.credential) || !hasOnlyKeys(value.credential, [
-      "mode", "promptOnUntrustedDomain", "promptOnMediumRisk", "mediumRiskThreshold",
-      "blockHttpPasswordSubmit", "warnOnPaste", "similarity",
-    ])) return null;
-    const credential: NonNullable<SuiteSettingsPatch["credential"]> = {};
-    if ("mode" in value.credential) {
-      if (value.credential.mode !== "off" && value.credential.mode !== "smart" && value.credential.mode !== "strict") return null;
-      credential.mode = value.credential.mode;
-    }
-    for (const key of ["promptOnUntrustedDomain", "promptOnMediumRisk", "blockHttpPasswordSubmit", "warnOnPaste"] as const) {
-      if (key in value.credential) {
-        if (typeof value.credential[key] !== "boolean") return null;
-        credential[key] = value.credential[key];
-      }
-    }
-    if ("mediumRiskThreshold" in value.credential) {
-      if (typeof value.credential.mediumRiskThreshold !== "number" || !Number.isFinite(value.credential.mediumRiskThreshold)) return null;
-      credential.mediumRiskThreshold = clampInt(value.credential.mediumRiskThreshold, 0, 100, DEFAULT_SUITE_SETTINGS.credential.mediumRiskThreshold);
-    }
-    if ("similarity" in value.credential) {
-      if (!isRecord(value.credential.similarity) || !hasOnlyKeys(value.credential.similarity, ["enabled", "maxDistance"])) return null;
-      const similarity: NonNullable<NonNullable<SuiteSettingsPatch["credential"]>["similarity"]> = {};
-      if ("enabled" in value.credential.similarity) {
-        if (typeof value.credential.similarity.enabled !== "boolean") return null;
-        similarity.enabled = value.credential.similarity.enabled;
-      }
-      if ("maxDistance" in value.credential.similarity) {
-        if (typeof value.credential.similarity.maxDistance !== "number" || !Number.isFinite(value.credential.similarity.maxDistance)) return null;
-        similarity.maxDistance = clampInt(value.credential.similarity.maxDistance, 0, 8, DEFAULT_SUITE_SETTINGS.credential.similarity.maxDistance);
-      }
-      if (Object.keys(similarity).length === 0) return null;
-      credential.similarity = similarity;
-    }
-    if (Object.keys(credential).length === 0) return null;
-    patch.credential = credential;
-  }
-
-  return Object.keys(patch).length > 0 ? patch : null;
-}
-
-export function isSuiteSettingsUpdateMessage(message: unknown): message is SuiteSettingsUpdateMessage {
-  return isRecord(message) && message.type === "ns-suite-settings-update" && "patch" in message;
-}
-
-/** Only the shipped settings surfaces may ask the worker to mutate settings. */
-export function isSuiteSettingsPageSender(sender?: chrome.runtime.MessageSender): boolean {
-  const runtime = (globalThis as { chrome?: typeof chrome }).chrome?.runtime;
-  if (!sender || !runtime?.id || sender.id !== runtime.id || typeof sender.url !== "string") return false;
-  const senderUrl = sender.url;
-  const allowedPages = [
-    runtime.getURL("src/popup/popup.html"),
-    runtime.getURL("src/options/options.html"),
-  ];
-  return allowedPages.some((page) => senderUrl === page || senderUrl.startsWith(`${page}?`) || senderUrl.startsWith(`${page}#`));
+  return value;
 }
 
 /** Worker message entry point: authorize, sanitize, then use the worker queue. */
 export async function handleSuiteSettingsUpdateMessage(
   message: SuiteSettingsUpdateMessage,
   sender?: chrome.runtime.MessageSender,
-): Promise<SuiteSettingsUpdateResponse> {
-  if (!isSuiteSettingsPageSender(sender)) {
-    return { ok: false, error: "Unauthorized suite-settings mutation from untrusted sender", code: "unauthorized" };
+): Promise<SuiteSettings> {
+  if (!sender || sender.id !== chrome.runtime.id || (
+    sender.url !== chrome.runtime.getURL("src/popup/popup.html") &&
+    sender.url !== chrome.runtime.getURL("src/options/options.html")
+  )) {
+    throw new Error("unauthorized");
   }
-  const patch = sanitizeSuiteSettingsPatch(message.patch);
-  if (!patch) return { ok: false, error: "Invalid suite-settings patch", code: "invalid" };
-  try {
-    return { ok: true, settings: await updateSuiteSettingsDirect(patch) };
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
-  }
-}
-
-function sendSuiteSettingsUpdateMessage(message: SuiteSettingsUpdateMessage): Promise<SuiteSettings> {
-  return new Promise((resolve, reject) => {
-    try {
-      chrome.runtime.sendMessage(message, (response?: SuiteSettingsUpdateResponse) => {
-        const lastError = chrome.runtime.lastError;
-        if (lastError) {
-          reject(new Error(lastError.message ?? "suite-settings update delivery failed"));
-          return;
-        }
-        if (response?.ok) {
-          resolve(response.settings);
-          return;
-        }
-        reject(new Error(response?.error ?? "suite-settings update failed"));
-      });
-    } catch (err) {
-      reject(err instanceof Error ? err : new Error(String(err)));
-    }
-  });
+  const patch = sanitizeSuiteSettingsFields(
+    message.patch,
+    DEFAULT_SUITE_SETTINGS as unknown as Record<string, unknown>,
+  ) as SuiteSettingsPatch | null;
+  if (!patch) throw new Error("invalid");
+  return updateSuiteSettingsDirect(patch);
 }
 
 export function updateSuiteSettings(partial: SuiteSettingsPatch): Promise<SuiteSettings> {
-  const runtime = (globalThis as { chrome?: typeof chrome }).chrome?.runtime;
-  if (!isExtensionServiceWorkerContext() && typeof runtime?.sendMessage === "function") {
+  if (shouldDelegatePromptOutcomeWrite()) {
     // Do not fall back to a page-local write when delivery fails: it would revive
     // the lost-update race this worker boundary closes. (#558)
-    return sendSuiteSettingsUpdateMessage({ type: "ns-suite-settings-update", patch: partial });
+    return chrome.runtime.sendMessage({ type: "ns-suite-settings-update", patch: partial })
+      .then((settings: SuiteSettings | undefined) => {
+        if (settings) return settings;
+        throw new Error("suite-settings update failed");
+      });
   }
   // Non-extension test environments have no runtime messenger. Production page
   // contexts always do, and therefore always take the worker-owned path above.
@@ -504,20 +420,14 @@ export interface TrustedDomainAddResult {
   added: boolean;
 }
 
-let trustedDomainsPending: Promise<unknown> = Promise.resolve();
-
 // Serialize trusted-domain read-modify-write ops. Each mutator reads the current list
 // then writes a derived list; without a queue, two concurrent calls (e.g. the options
 // page removing one domain while credential_guard adds another, or a double-tap on the
 // "trust this site" control) both read the same base and the second write silently
 // clobbers the first -> a lost trust decision. Mirrors updateSuiteSettings (#305 / #339).
-function queueTrustedDomainsWrite<T>(operation: () => Promise<T>): Promise<T> {
-  const next = trustedDomainsPending.then(operation);
-  trustedDomainsPending = next.catch((err) => {
+const queueTrustedDomainsWrite = createStorageWriteQueue((err) => {
     console.warn("[NavSentinel] trusted domains serialization error:", err);
-  });
-  return next;
-}
+});
 
 export function addTrustedDomainWithResult(
   domain: string
@@ -695,7 +605,7 @@ function isEventKind(value: unknown): value is EventKind {
 }
 
 function isEventLogEntry(value: unknown): value is EventLogEntry {
-  if (!value || typeof value !== "object") return false;
+  if (!isRecord(value)) return false;
   const entry = value as Record<string, unknown>;
   return typeof entry.id === "string" &&
     typeof entry.ts === "number" &&
@@ -710,17 +620,13 @@ function isEventLogEntry(value: unknown): value is EventLogEntry {
 }
 
 export function isEventLogAppendMessage(message: unknown): message is EventLogAppendMessage {
-  if (!message || typeof message !== "object") return false;
+  if (!isRecord(message)) return false;
   const candidate = message as Record<string, unknown>;
   return candidate.type === "ns-event-log-append" && isEventLogEntry(candidate.entry);
 }
 
 export function isEventLogMigrationMessage(message: unknown): message is EventLogMigrationMessage {
-  return Boolean(
-    message &&
-      typeof message === "object" &&
-      (message as Record<string, unknown>).type === "ns-event-log-migrate"
-  );
+  return isRecord(message) && message.type === "ns-event-log-migrate";
 }
 
 const EVENT_LOG_IMPORT_CORE_KEYS = new Set([
@@ -732,7 +638,7 @@ const EVENT_LOG_IMPORT_CORE_KEYS = new Set([
 ]);
 
 function isEventLogImportCoreWrites(value: unknown): value is Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  if (!isRecord(value)) return false;
   const writes = value as Record<string, unknown>;
   return Array.isArray(writes[EVENT_LOG_KEY]) &&
     writes[EVENT_LOG_KEY].every(isEventLogEntry) &&
@@ -740,18 +646,14 @@ function isEventLogImportCoreWrites(value: unknown): value is Record<string, unk
 }
 
 export function isEventLogControlMessage(message: unknown): message is EventLogControlMessage {
-  if (!message || typeof message !== "object") return false;
+  if (!isRecord(message)) return false;
   const candidate = message as Record<string, unknown>;
   if (candidate.type === "ns-event-log-clear") return true;
   return candidate.type === "ns-event-log-import-core" && isEventLogImportCoreWrites(candidate.writes);
 }
 
 export function isSuiteImportMessage(message: unknown): message is SuiteImportMessage {
-  return Boolean(
-    message &&
-      typeof message === "object" &&
-      (message as Record<string, unknown>).type === "ns-suite-import"
-  );
+  return isRecord(message) && message.type === "ns-suite-import";
 }
 
 const MAX_NORMALIZED_EVENT_LOG_ENTRIES = 5000;
@@ -815,18 +717,13 @@ function trimValidEventLog(validEntries: EventLogEntry[], limit: number): EventL
 }
 
 type EventLogAppendPartial = Omit<EventLogEntry, "id" | "ts"> & { id?: string; ts?: number };
-let eventLogPending: Promise<unknown> = Promise.resolve();
 const EVENT_LOG_RESET_TS_KEY = "ns_sw:eventLogResetTs";
 let eventLogResetCutoffTs = Number.NEGATIVE_INFINITY;
 let eventLogResetHydrate: Promise<void> | null = null;
 
-function queueEventLogWrite<T>(operation: () => Promise<T>): Promise<T> {
-  const next = eventLogPending.then(operation);
-  eventLogPending = next.catch((err) => {
+const queueEventLogWrite = createStorageWriteQueue((err) => {
     console.warn("[NavSentinel] event log serialization error:", err);
-  });
-  return next;
-}
+});
 
 type EventLogBarrierStorage = Pick<chrome.storage.StorageArea, "get" | "set">;
 
@@ -1272,7 +1169,6 @@ export async function clearEventLog(): Promise<void> {
 
 const PROMPT_OUTCOMES_LIMIT = 500;
 const PROMPT_OUTCOME_RESET_TS_KEY = "ns_sw:promptOutcomeResetTs";
-let promptOutcomePending: Promise<unknown> = Promise.resolve();
 let promptOutcomeResetCutoffTs = Number.NEGATIVE_INFINITY;
 let promptOutcomeResetHydrate: Promise<void> | null = null;
 
@@ -1739,13 +1635,9 @@ async function delegatePromptOutcomeWrite(
   );
 }
 
-function queuePromptOutcomeWrite<T>(operation: () => Promise<T>): Promise<T> {
-  const next = promptOutcomePending.then(operation);
-  promptOutcomePending = next.catch((err) => {
+const queuePromptOutcomeWrite = createStorageWriteQueue((err) => {
     console.warn("[NavSentinel] prompt outcome serialization error:", err);
-  });
-  return next;
-}
+});
 
 async function persistPromptOutcome(entry: PromptOutcomeEntry): Promise<void> {
   // Keep the intended snapshot across retries so a clobbered verify does not
@@ -2097,8 +1989,6 @@ export async function exportAll(): Promise<{
   };
 }
 
-let bulkDataPending: Promise<unknown> = Promise.resolve();
-
 /**
  * Serialize whole-store bulk operations against each other: a suite import and
  * the unified behavioural reset (`behavioural_reset.ts`).
@@ -2118,13 +2008,9 @@ let bulkDataPending: Promise<unknown> = Promise.resolve();
  * each awaits inside the queue. Two extension pages driving one bulk operation
  * each are still not ordered against one another — documented residual.
  */
-export function queueBulkDataOperation<T>(operation: () => Promise<T>): Promise<T> {
-  const next = bulkDataPending.then(operation);
-  bulkDataPending = next.catch((err) => {
+export const queueBulkDataOperation = createStorageWriteQueue((err) => {
     console.warn("[NavSentinel] bulk data serialization error:", err);
-  });
-  return next;
-}
+});
 
 export function importAll(payload: unknown): Promise<ImportAllResult> {
   const runtime = (globalThis as { chrome?: typeof chrome }).chrome?.runtime;
@@ -2162,7 +2048,7 @@ export async function handleSuiteImportMessage(
 }
 
 async function importAllDirect(payload: unknown): Promise<ImportAllResult> {
-  if (!payload || typeof payload !== "object") throw new Error("Invalid import payload");
+  if (!isRecord(payload)) throw new Error("Invalid import payload");
   const p = payload as Record<string, unknown>;
   let importLogLimit = DEFAULT_SUITE_SETTINGS.logLimit;
   let eventLogDropped = 0;
@@ -2181,7 +2067,7 @@ async function importAllDirect(payload: unknown): Promise<ImportAllResult> {
   // that delivery failure to report a precise partial result (#188).
   const writes: Record<string, unknown> = {};
 
-  if (p.settings && typeof p.settings === "object") {
+  if (isRecord(p.settings)) {
     const merged = mergeSuiteSettings(
       structuredClone(DEFAULT_SUITE_SETTINGS),
       p.settings as SuiteSettingsPatch
@@ -2190,7 +2076,7 @@ async function importAllDirect(payload: unknown): Promise<ImportAllResult> {
     writes[SUITE_SETTINGS_KEY] = merged;
   }
 
-  if (p.allowlist && typeof p.allowlist === "object") {
+  if (isRecord(p.allowlist)) {
     writes[ALLOWLIST_KEY] = normalizeAllowlist(p.allowlist);
   }
 

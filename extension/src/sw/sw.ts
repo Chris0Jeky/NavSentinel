@@ -16,7 +16,6 @@ import {
   isEventLogMigrationMessage,
   isPromptOutcomeStorageMessage,
   isSuiteImportMessage,
-  isSuiteSettingsUpdateMessage,
   migrateStoredEventLogUrls,
   migrateStoredPromptOutcomes,
   SUITE_SETTINGS_KEY,
@@ -674,12 +673,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  if (isSuiteSettingsUpdateMessage(message)) {
-    void handleSuiteSettingsUpdateMessage(message, sender)
-      .then((response) => sendResponse?.(response))
-      .catch((err) => {
-        sendResponse?.({ ok: false, error: err instanceof Error ? err.message : String(err) });
-      });
+  if ((message as { type?: unknown }).type === "ns-suite-settings-update" && "patch" in message) {
+    void handleSuiteSettingsUpdateMessage(message as import("../shared/storage").SuiteSettingsUpdateMessage, sender)
+      .then(sendResponse)
+      .catch(() => sendResponse?.());
     return true;
   }
 

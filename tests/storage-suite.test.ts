@@ -438,17 +438,38 @@ describe("suite storage and allowlist migration", () => {
     });
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
+    const originalGet = chrome.storage.local.get.bind(chrome.storage.local);
+    let reads = 0;
+    let releaseFirstRead: (() => void) | undefined;
+    const firstReadStarted = new Promise<void>((resolve) => {
+      chrome.storage.local.get = async (...args) => {
+        reads += 1;
+        if (reads === 1) {
+          resolve();
+          await new Promise<void>((release) => { releaseFirstRead = release; });
+        }
+        return originalGet(...args);
+      };
+    });
+
     const { getSuiteSettings, handleSuiteSettingsUpdateMessage } = await import("../extension/src/shared/storage");
     const popup = { id: "suite-test", url: "chrome-extension://suite-test/src/popup/popup.html" } as chrome.runtime.MessageSender;
     const options = { id: "suite-test", url: "chrome-extension://suite-test/src/options/options.html" } as chrome.runtime.MessageSender;
 
-    const [popupResponse, optionsResponse] = await Promise.all([
-      handleSuiteSettingsUpdateMessage({ type: "ns-suite-settings-update", patch: { nav: { defaultMode: "off" } } }, popup),
-      handleSuiteSettingsUpdateMessage({ type: "ns-suite-settings-update", patch: { credential: { mode: "strict" } } }, options),
-    ]);
+    const popupRequest = handleSuiteSettingsUpdateMessage(
+      { type: "ns-suite-settings-update", patch: { nav: { defaultMode: "off" } } }, popup,
+    );
+    await firstReadStarted;
+    const optionsRequest = handleSuiteSettingsUpdateMessage(
+      { type: "ns-suite-settings-update", patch: { credential: { mode: "strict" } } }, options,
+    );
+    await Promise.resolve();
+    expect(reads).toBe(1); // The second request cannot reach its read before the first releases.
+    releaseFirstRead?.();
+    const [popupResponse, optionsResponse] = await Promise.all([popupRequest, optionsRequest]);
 
-    expect(popupResponse.ok).toBe(true);
-    expect(optionsResponse.ok).toBe(true);
+    expect(popupResponse.nav.defaultMode).toBe("off");
+    expect(optionsResponse.credential.mode).toBe("strict");
     const settings = await getSuiteSettings();
     expect(settings.nav.defaultMode).toBe("off");
     expect(settings.credential.mode).toBe("strict");
@@ -470,17 +491,23 @@ describe("suite storage and allowlist migration", () => {
 
     await expect(handleSuiteSettingsUpdateMessage(
       { type: "ns-suite-settings-update", patch: { nav: { defaultMode: "off" } } }, content,
-    )).resolves.toMatchObject({ ok: false, code: "unauthorized" });
+    )).rejects.toThrow("unauthorized");
     await expect(handleSuiteSettingsUpdateMessage(
       { type: "ns-suite-settings-update", patch: { nav: { defaultMode: "off", injected: true } } }, popup,
-    )).resolves.toMatchObject({ ok: false, code: "invalid" });
+    )).rejects.toThrow("invalid");
+    await expect(handleSuiteSettingsUpdateMessage(
+      { type: "ns-suite-settings-update", patch: [] }, popup,
+    )).rejects.toThrow("invalid");
+    await expect(handleSuiteSettingsUpdateMessage(
+      { type: "ns-suite-settings-update", patch: { logLimit: 999999 } }, popup,
+    )).resolves.toMatchObject({ logLimit: 5000 });
   });
 
   it("does not fall back to a page-local settings write after worker delivery failure (#558)", async () => {
     const { chrome, store } = createChromeMock();
     Object.assign(chrome, {
       runtime: {
-        sendMessage: (_message: unknown, callback: (response?: unknown) => void) => callback({ ok: false, error: "worker unavailable" }),
+        sendMessage: () => Promise.reject(new Error("worker unavailable")),
       },
     });
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
