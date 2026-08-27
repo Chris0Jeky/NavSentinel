@@ -81,6 +81,11 @@ function postToIsolated(type: string, payload?: Record<string, unknown>): void {
   });
 }
 
+/** Called only by the synchronous MAIN-world loader's private click queue. */
+export function activateMainUiControl(id: string): void {
+  if (id && id.length <= 16) postToIsolated("u", { id });
+}
+
 function flushPendingOutbound(): void {
   const { items, dropped } = pendingOutbound.drain();
   for (const msg of items) {

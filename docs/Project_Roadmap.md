@@ -107,13 +107,25 @@ into the parent: a separate immediate cleanup budget survives ordinary alert
 flooding and the five-minute detector cutoff, reasserts page-overwritten styles,
 tracks replacement layers under one Undo, and preserves the Undo card beside
 unrelated warnings. It also adds sustained visibility timelines because the old
-first-hidden oracle missed a confirmed reappearance. #577 retains the exact-stamp
-ownership edge; #580 retains latency measurement; #591 owns explicit redacted
-feedback export without automatic telemetry.
+first-hidden oracle missed a confirmed reappearance. The owner-loaded build at
+`661f97f` then passed sustained cleanup across the real multi-embed page, reload,
+and scroll, but its Dismiss click reached a hostile window capture listener and
+briefly triggered a second blocked-click notice. The follow-up regression makes
+that listener capture-phase and requires both Dismiss and Undo to act while its
+counter stays zero; the implementation installs a synchronous document-start
+fence before the MAIN bundle's asynchronous import and relays a bounded action
+token over the already-verified bridge. #577 retains the exact-stamp ownership
+edge; #580 retains latency measurement; #591 owns explicit redacted feedback
+export without automatic telemetry.
 The 2026-08-27 manual trial also seeded the next bounded UX slices: settings
 autosave and popup/Options synchronization (#558), clear manual Gym expectations
 (#559), compact actionable notices (#560) with advanced timing controls (#561),
 local cleanup analytics (#562), and scoped Protection reset/save actions (#563).
+The confirmed four-frame notification pile-up is now split deliberately: #579
+owns one compact tab-level recovery summary that preserves Undo, #591 owns the
+safe local inspection/redacted-feedback surface, and #592 owns a local-first,
+accessible Protection Center with satisfying category stats and no automatic
+telemetry or risky-browsing incentives.
 
 ### Corrective action register
 

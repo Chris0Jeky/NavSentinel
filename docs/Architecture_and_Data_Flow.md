@@ -447,8 +447,14 @@ It listens to `chrome.webNavigation` events to decide when a committed navigatio
 - Excludes cookie consent banners, chat widgets, and elements with proper ARIA markup
 - Excludes only isolated-world-owned NavSentinel UI nodes through WeakSet identity;
   page-created elements cannot gain an exemption by spoofing an extension-like ID
-- Keeps the cleanup Undo card beside unrelated warnings and stops toast control
-  events before they bubble into page-level click handlers.
+- Keeps the cleanup Undo card beside unrelated warnings. A synchronous
+  document-start fence in the generated MAIN-world loader consumes trusted
+  clicks on the extension-owned toast host before page capture listeners can
+  observe them, then relays only the bounded control token through the existing
+  verified MessagePort. The isolated world accepts the token only when it still
+  identifies a live control in the current owned shadow root and invokes its
+  WeakMap-held action; the shadow root remains the fallback boundary for other
+  interaction events and unit DOMs.
 - Records bounded cleanup outcomes in the existing local event log for review;
   no new permission, endpoint, or remote telemetry path is introduced.
 - Feeds mutation alert count into the debug overlay

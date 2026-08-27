@@ -91,11 +91,11 @@
         churn.textContent = "Trigger scroll-time reinsertion";
         churn.addEventListener("click", () => window.dispatchEvent(new Event("scroll")));
         document.body.append(status, churn);
-        document.addEventListener("click", () => {
+        window.addEventListener("click", () => {
           const current = Number(document.documentElement.dataset.pageClickCount ?? "0");
           document.documentElement.dataset.pageClickCount = String(current + 1);
           status.textContent = `Page-level click listeners observed: ${current + 1}`;
-        });
+        }, { capture: true });
 
         // These forms exist before NavSentinel's opt-in monitor snapshots the
         // document. Rewriting them later fills the ordinary alert lane without

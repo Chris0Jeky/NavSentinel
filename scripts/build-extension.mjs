@@ -54,9 +54,29 @@ function compactPackagedHtml() {
   }
 }
 
+function installEarlyMainUiGuard() {
+  const dist = path.join(root, "extension", "dist");
+  const manifest = JSON.parse(fs.readFileSync(path.join(dist, "manifest.json"), "utf8"));
+  const mainScript = manifest.content_scripts?.find((entry) => entry.world === "MAIN")?.js?.[0];
+  if (!mainScript) throw new Error("MAIN-world content-script loader is missing");
+  const loaderPath = path.join(dist, mainScript);
+  const generated = fs.readFileSync(loaderPath, "utf8");
+  const importPath = generated.match(/await import\([\s\S]*?["'](\.\/[^"']+)["']\s*\)/)?.[1];
+  if (!importPath) throw new Error("MAIN-world content-script chunk import is missing");
+
+  // CRXJS loads the bundled MAIN entry through an async import. The page can
+  // register capture listeners during that gap, before main_guard.ts executes.
+  // Keep this synchronous fence in the generated document_start loader; its
+  // closure queues only trusted clicks and hands them to the verified bridge
+  // once the real guard module is ready. The queue is private and bounded.
+  const guardedLoader = `(function(){'use strict';let sink=null,q=[];window.addEventListener('click',e=>{if(!(e instanceof MouseEvent)||!e.isTrusted)return;let id='',owned=false;for(const t of e.composedPath())if(t instanceof HTMLElement){if(t.id==='__navsentinel_toast_host')owned=true;if(t.dataset.nsUiAction)id=t.dataset.nsUiAction}if(!owned)return;e.preventDefault();e.stopImmediatePropagation();if(id&&id.length<=16){if(sink)sink(id);else if(q.length<16)q.push(id)}},true);const injectTime=performance.now();(async()=>{const m=await import(${JSON.stringify(importPath)});sink=m.activateMainUiControl??null;if(sink)for(const id of q)sink(id);q=[];m.onExecute?.({perf:{injectTime,loadTime:performance.now()-injectTime}})})().catch(console.error)})();\n`;
+  fs.writeFileSync(loaderPath, guardedLoader, "utf8");
+}
+
 console.log(`[build] profile=${profile.id}; releaseEligible=${profile.releaseEligible}`);
 const env = { [RELEASE_PROFILE_ENV]: profile.id };
 runNode(viteBin, ["build"], env);
+installEarlyMainUiGuard();
 compactPackagedHtml();
 runNode(path.join(root, "scripts", "check-mv3-worker-imports.mjs"));
 runNode(path.join(root, "scripts", "check-release-profile.mjs"), [`--expect=${profile.id}`]);

@@ -2,15 +2,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 type ShowToastType = typeof import("../extension/src/content/ui_toast").showToast;
-type DismissPersistentToastType = typeof import("../extension/src/content/ui_toast").dismissPersistentToast;
+type ControlToastType = typeof import("../extension/src/content/ui_toast").controlToast;
 
 let showToast: ShowToastType;
-let dismissPersistentToast: DismissPersistentToastType;
+let controlToast: ControlToastType;
 
 async function loadModule(): Promise<void> {
   const mod = await import("../extension/src/content/ui_toast");
   showToast = mod.showToast;
-  dismissPersistentToast = mod.dismissPersistentToast;
+  controlToast = mod.controlToast;
 }
 
 describe("ui_toast", () => {
@@ -137,6 +137,28 @@ describe("ui_toast", () => {
       expect(dismissBtn!.classList.contains("danger")).toBe(true);
     });
 
+    it("activates the owned Dismiss token relayed by the verified bridge", () => {
+      showToast({ message: "Test", timeoutMs: 0 });
+      const dismiss = getButtons().find((button) => button.textContent === "Dismiss")!;
+
+      controlToast(dismiss.dataset.nsUiAction!);
+
+      expect(getWraps()).toHaveLength(0);
+    });
+
+    it("ignores an unknown or stale relayed control token", () => {
+      showToast({ message: "First", timeoutMs: 0 });
+      const stale = getButtons().find((button) => button.textContent === "Dismiss")!
+        .dataset.nsUiAction!;
+      showToast({ message: "Current", timeoutMs: 0 });
+
+      controlToast("not-owned");
+      controlToast(stale);
+
+      expect(getWraps()).toHaveLength(1);
+      expect(getWrap()!.querySelector(".body")!.textContent).toBe("Current");
+    });
+
     it("sets message via textContent, not innerHTML (XSS-safe)", () => {
       showToast({ message: "<script>alert(1)</script>" });
       const body = getWrap()!.querySelector(".body");
@@ -209,7 +231,7 @@ describe("ui_toast", () => {
       showToast({ message: "Overlays hidden", timeoutMs: 0, persistent: true });
       showToast({ message: "Unrelated warning", timeoutMs: 0 });
 
-      dismissPersistentToast();
+      controlToast();
 
       expect(getWraps()).toHaveLength(1);
       expect(getWrap()!.querySelector(".body")!.textContent).toBe("Unrelated warning");

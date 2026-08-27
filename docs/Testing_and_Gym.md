@@ -356,10 +356,13 @@ Nested-frame overlay cleanup uses `overlay-nesting-lab.html`,
 and Phase-2 projects in `tests/e2e/overlay-cleanup-nesting.spec.ts` cover the
 exact real-world document shape and the mixed twelve-frame matrix. The hostile
 case also fills the ordinary alert lane, rewrites an already-hidden layer,
-replaces it, injects another layer on scroll, and exposes whether extension UI
-clicks reached page listeners. The `compact-hostile` case proves a 51% by 51%
-click-capturing layer is hidden, while the `benign` case visibly labels and
-preserves its small non-interactive, low-z, and accessible-dialog controls.
+replaces it, injects another layer on scroll, and counts clicks in a page-owned
+window capture listener. Dismiss and Undo must each perform their intended
+extension action while that count remains zero; this exercises the synchronous
+MAIN-world loader fence, not only the later shadow-root fallback. The
+`compact-hostile` case proves a 51% by 51% click-capturing layer is hidden, while
+the `benign` case visibly labels and preserves its small non-interactive, low-z,
+and accessible-dialog controls.
 Sustained checks sample at render-frame cadence with a 100 ms watchdog for
 off-screen frames that Chromium throttles, and attach the complete JSON timeline.
 `mutation-05-sequential-overlays.html` separately covers independently delayed

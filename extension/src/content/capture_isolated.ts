@@ -34,7 +34,7 @@ import {
   loadReputationFilter,
   reputationEnabled,
 } from "@navsentinel/reputation-runtime";
-import { dismissPersistentToast, showToast } from "./ui_toast";
+import { controlToast, showToast } from "./ui_toast";
 import { explainReasonCode } from "../shared/explanations";
 import {
   buildClickContextFromEvents,
@@ -317,7 +317,7 @@ onNavSettingsChange((s) => {
   if (cleanupWasActive && !cleanupIsActive) {
     const restored = restoreActiveOverlaySuppressions();
     clearRestoredOverlayCleanupExclusions();
-    dismissPersistentToast();
+    controlToast();
     if (restored) {
       appendEventSafely({
         kind: "mutation_alert",
@@ -448,6 +448,10 @@ function handleBridgeMessage(message: unknown): void {
   }
 
   if (data.session !== bridgeSession) return;
+
+  // Compact private type: a user-control relay must survive the 66 KB
+  // content-script ceiling but is accepted only on the verified bridge.
+  if (data.type === "u") controlToast(data.id);
 
   if (data.type === "ns-bridge-ready") {
     markMainGuardReady();

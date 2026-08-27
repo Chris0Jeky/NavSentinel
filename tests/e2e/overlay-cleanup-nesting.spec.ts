@@ -242,7 +242,7 @@ test("nested cleanup remains effective across alert floods, page rewrites, reins
   }
 });
 
-test("toast controls do not leak clicks into the protected page @regression", async () => {
+test("toast Dismiss and Undo do not leak capture-phase clicks into the protected page @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
   const { page, context, cleanup } = await setupNestedTest("overlay-nesting-lab.html?case=hostile");
 
@@ -250,13 +250,27 @@ test("toast controls do not leak clicks into the protected page @regression", as
     await updateNavigationSettings(context, { autoDismissOverlays: true });
     await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
     await waitForNavSentinelBridge(page);
-    const frame = await childFrame(page, "hostile");
+    let frame = await childFrame(page, "hostile");
     await waitForFrameToast(frame, /hid suspicious overlays/i);
 
     await clickFrameToastButton(frame, "Dismiss");
     await expect.poll(() => frame.evaluate(() =>
       Number(document.documentElement.dataset.pageClickCount ?? "0"),
     )).toBe(0);
+    await expect.poll(() => frame.evaluate(() =>
+      !document.querySelector("#__navsentinel_toast_host")?.shadowRoot
+        ?.querySelector(".wrap[data-persistent='true']"),
+    )).toBe(true);
+
+    await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
+    await waitForNavSentinelBridge(page);
+    frame = await childFrame(page, "hostile");
+    await waitForFrameToast(frame, /hid suspicious overlays/i);
+    await clickFrameToastButton(frame, "Undo");
+    await expect.poll(() => frame.evaluate(() =>
+      Number(document.documentElement.dataset.pageClickCount ?? "0"),
+    )).toBe(0);
+    await expect(frame.locator("#exact-overlay-frame")).toBeVisible();
   } finally {
     await cleanup();
   }

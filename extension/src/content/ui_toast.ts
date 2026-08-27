@@ -31,6 +31,8 @@ const PILL_IDLE_DISMISS_MS = 12000;
 
 let host: HTMLElement | null = null;
 let root: ShadowRoot | null = null;
+const controlActions = new WeakMap<EventTarget, () => void>();
+let nextControlAction = 0;
 
 // --- Burst coalescing state (per page, ephemeral, never persisted) ---
 let burstCount = 0;
@@ -43,6 +45,32 @@ let pillCountEl: HTMLElement | null = null;
 let pillIdleTimer = 0;
 let lastUrl = "";
 let navListenersBound = false;
+
+function isolateInteraction(event: Event): void {
+  event.stopPropagation();
+  event.stopImmediatePropagation();
+  if (event.type === "click" || event.type === "auxclick" || event.type === "contextmenu") {
+    event.preventDefault();
+  }
+}
+
+function bindControl(control: HTMLElement, action: () => void): void {
+  control.dataset.nsUiAction = String(++nextControlAction);
+  controlActions.set(control, action);
+  control.addEventListener("click", action);
+}
+
+/** Invoke only a control token delivered by the verified MAIN-world bridge. */
+function activateToastControl(id?: string): void {
+  if (!root || !id || id.length > 16) return;
+  const controls = root.querySelectorAll<HTMLElement>("[data-ns-ui-action]");
+  for (let index = 0; index < controls.length; index += 1) {
+    const control = controls.item(index);
+    if (control.dataset.nsUiAction !== id) continue;
+    controlActions.get(control)?.();
+    return;
+  }
+}
 
 function ensureHost() {
   if (host && root) return;
@@ -63,16 +91,9 @@ function ensureHost() {
 
   root = host.attachShadow({ mode: "open" });
 
-  // UI events are composed across a shadow boundary by default. Stop them at
-  // the extension-owned root so a page-level ad/click listener cannot treat a
-  // NavSentinel control as a trusted click on the protected page.
-  const isolateInteraction = (event: Event) => {
-    event.stopPropagation();
-    event.stopImmediatePropagation();
-    if (event.type === "click" || event.type === "auxclick" || event.type === "contextmenu") {
-      event.preventDefault();
-    }
-  };
+  // UI events are composed across a shadow boundary by default. The MAIN-world
+  // guard consumes trusted clicks before hostile capture listeners; this root
+  // remains the fallback boundary for other events and non-browser unit DOMs.
   for (const type of [
     "pointerdown", "pointerup", "mousedown", "mouseup", "touchstart", "touchend",
     "click", "dblclick", "auxclick", "contextmenu", "keydown", "keyup",
@@ -131,7 +152,7 @@ function renderFullCard(opts: ToastOptions): void {
   const dismiss = document.createElement("button");
   dismiss.className = "danger";
   dismiss.textContent = "Dismiss";
-  dismiss.addEventListener("click", () => {
+  bindControl(dismiss, () => {
     if (dismissed) return;
     dismissed = true;
     wrap.remove();
@@ -145,7 +166,7 @@ function renderFullCard(opts: ToastOptions): void {
     const btn = document.createElement("button");
     btn.className = "action";
     btn.textContent = a.label;
-    btn.addEventListener("click", () => {
+    bindControl(btn, () => {
       actionClicked = true;
       try { a.onClick(); } finally {
         wrap.remove();
@@ -276,7 +297,7 @@ function showOrUpdatePill(): void {
       dismissPill(); // swap the pill for the full card; acting/dismissing resets
       renderFullCard(expanded);
     };
-    pill.addEventListener("click", expand);
+    bindControl(pill, expand);
     pill.addEventListener("keydown", (e) => {
       if (e instanceof KeyboardEvent && (e.key === "Enter" || e.key === " ")) {
         e.preventDefault();
@@ -321,8 +342,12 @@ export function showToast(opts: ToastOptions) {
   renderFullCard(opts);
 }
 
-/** Remove the current persistent card when its owning feature is switched off. */
-export function dismissPersistentToast(): void {
+/** Dismiss the cleanup card, or activate one verified token when supplied. */
+export function controlToast(id?: string): void {
+  if (id) {
+    activateToastControl(id);
+    return;
+  }
   root?.querySelector(".wrap[data-persistent='true']")?.remove();
 }
 
