@@ -504,7 +504,7 @@ describe("runImportFlow (#188)", () => {
       flash,
       isDeliveryFailure: isDelivery,
     });
-    expect(refresh).toHaveBeenCalled();
+    expect(refresh).toHaveBeenCalledWith(true);
     expect(flash).toHaveBeenCalledWith("Imported.");
   });
 
@@ -545,7 +545,7 @@ describe("runImportFlow (#188)", () => {
       flash,
       isDeliveryFailure: isDelivery,
     });
-    expect(refresh).toHaveBeenCalled();
+    expect(refresh).toHaveBeenCalledWith(true);
     expect(flash).toHaveBeenCalledWith(expect.stringMatching(/prompt-related/i), "error");
   });
 
@@ -558,7 +558,7 @@ describe("runImportFlow (#188)", () => {
       flash,
       isDeliveryFailure: isDelivery,
     });
-    expect(refresh).toHaveBeenCalled();
+    expect(refresh).toHaveBeenCalledWith(false);
     expect(flash).toHaveBeenCalledWith("Import failed.", "error");
   });
 

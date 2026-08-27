@@ -97,10 +97,6 @@ test("Options keeps popup changes while saving an unrelated dirty setting @regre
         const initialReadGate = new Promise<void>((resolve) => {
           releaseInitialRead = resolve;
         });
-        let releaseSettingsUpdate = () => {};
-        const settingsUpdateGate = new Promise<void>((resolve) => {
-          releaseSettingsUpdate = resolve;
-        });
         const state = window as Window & {
           __nsInitialSettingsReadStarted?: boolean;
           __nsInitialSettingsReadReturned?: boolean;
@@ -108,9 +104,21 @@ test("Options keeps popup changes while saving an unrelated dirty setting @regre
           __nsSettingsUpdateReady?: boolean;
           __nsSettingsUpdateReleased?: boolean;
           __nsReleaseSettingsUpdate?: () => void;
+          __nsArmSettingsUpdate?: () => void;
+        };
+        let settingsUpdateArmed = false;
+        let settingsUpdateGate = Promise.resolve();
+        const armSettingsUpdate = () => {
+          state.__nsSettingsUpdateReady = false;
+          state.__nsSettingsUpdateReleased = false;
+          settingsUpdateArmed = true;
+          settingsUpdateGate = new Promise<void>((resolve) => {
+            state.__nsReleaseSettingsUpdate = resolve;
+          });
         };
         state.__nsReleaseInitialSettingsRead = releaseInitialRead;
-        state.__nsReleaseSettingsUpdate = releaseSettingsUpdate;
+        state.__nsArmSettingsUpdate = armSettingsUpdate;
+        armSettingsUpdate();
         chrome.storage.local.get = (async (
           keys?: string | string[] | Record<string, unknown> | null,
         ) => {
@@ -134,11 +142,12 @@ test("Options keeps popup changes while saving an unrelated dirty setting @regre
           ) as Promise<unknown>;
           if (
             rest.length === 0 &&
-            !state.__nsSettingsUpdateReady &&
+            settingsUpdateArmed &&
             typeof message === "object" &&
             message !== null &&
             (message as { type?: unknown }).type === "ns-suite-settings-update"
           ) {
+            settingsUpdateArmed = false;
             return result.then(async (response) => {
               state.__nsSettingsUpdateReady = true;
               await settingsUpdateGate;
@@ -188,6 +197,7 @@ test("Options keeps popup changes while saving an unrelated dirty setting @regre
       await expect(options.locator('#credModeSeg .seg-btn[data-value="off"]'))
         .toHaveAttribute("aria-checked", "true");
       await expect(options.locator("#warnOnPaste")).toHaveAttribute("aria-checked", "false");
+      await options.locator("#mediumRiskThreshold").fill("120");
 
       await options.locator("#save").click();
       await options.waitForFunction(() => {
@@ -195,10 +205,11 @@ test("Options keeps popup changes while saving an unrelated dirty setting @regre
         return state.__nsSettingsUpdateReady === true;
       });
 
-      // An edit made after the worker persists the submitted patch, but before
-      // the Save handler receives its response, must remain visible and dirty.
-      await options.locator("#navDebug").click();
-      await expect(options.locator("#navDebug")).toHaveAttribute("aria-checked", "true");
+      // A same-field edit made after the worker persists the submitted patch,
+      // but before Save receives its response, must remain visible and dirty.
+      // A submitted out-of-range value must still adopt the worker's clamp.
+      await options.locator("#warnOnPaste").click();
+      await expect(options.locator("#warnOnPaste")).toHaveAttribute("aria-checked", "true");
       await options.evaluate(() => {
         const state = window as Window & { __nsReleaseSettingsUpdate?: () => void };
         state.__nsReleaseSettingsUpdate?.();
@@ -207,26 +218,71 @@ test("Options keeps popup changes while saving an unrelated dirty setting @regre
         const state = window as Window & { __nsSettingsUpdateReleased?: boolean };
         return state.__nsSettingsUpdateReleased === true;
       });
-      await expect(options.locator("#navDebug")).toHaveAttribute("aria-checked", "true");
+      await expect(options.locator("#warnOnPaste")).toHaveAttribute("aria-checked", "true");
+      await expect(options.locator("#mediumRiskThreshold")).toHaveValue("100");
       await options.waitForFunction(async (settingsKey) => {
         const result = await chrome.storage.local.get(settingsKey);
         const settings = result[settingsKey];
         return settings?.nav?.defaultMode === "strict" &&
           settings?.credential?.mode === "off" &&
           settings?.credential?.warnOnPaste === false &&
-          settings?.nav?.debug === false;
+          settings?.credential?.mediumRiskThreshold === 100;
       }, SUITE_SETTINGS_KEY);
 
       await expect(options.locator("#save")).toBeEnabled();
       await options.locator("#save").click();
       await options.waitForFunction(async (settingsKey) => {
         const result = await chrome.storage.local.get(settingsKey);
-        return result[settingsKey]?.nav?.debug === true;
+        return result[settingsKey]?.credential?.warnOnPaste === true;
       }, SUITE_SETTINGS_KEY);
 
       expect(await getPopupSnapshot(context)).toMatchObject({
         navMode: "strict",
         credMode: "off",
+      });
+
+      // A completed import supersedes an older Save response that is still in
+      // flight; releasing that response must not repaint the imported settings.
+      await options.evaluate(() => {
+        const state = window as Window & { __nsArmSettingsUpdate?: () => void };
+        state.__nsArmSettingsUpdate?.();
+      });
+      await options.locator("#navDebug").click();
+      await options.locator("#save").click();
+      await options.waitForFunction(() => {
+        const state = window as Window & { __nsSettingsUpdateReady?: boolean };
+        return state.__nsSettingsUpdateReady === true;
+      });
+      await options.locator("#importFile").setInputFiles({
+        name: "authoritative-import.json",
+        mimeType: "application/json",
+        buffer: Buffer.from(JSON.stringify({
+          settings: {
+            nav: { defaultMode: "off", debug: false },
+            credential: { mode: "smart", warnOnPaste: false },
+            logLimit: 120,
+          },
+        })),
+      });
+      await expect(options.locator('#navModeSeg .seg-btn[data-value="off"]'))
+        .toHaveAttribute("aria-checked", "true");
+      await expect(options.locator("#navDebug")).toHaveAttribute("aria-checked", "false");
+      await options.evaluate(() => {
+        const state = window as Window & { __nsReleaseSettingsUpdate?: () => void };
+        state.__nsReleaseSettingsUpdate?.();
+      });
+      await expect(options.locator("#save")).toBeEnabled();
+      await expect(options.locator('#navModeSeg .seg-btn[data-value="off"]'))
+        .toHaveAttribute("aria-checked", "true");
+      await expect(options.locator("#navDebug")).toHaveAttribute("aria-checked", "false");
+      await options.waitForFunction(async (settingsKey) => {
+        const result = await chrome.storage.local.get(settingsKey);
+        return result[settingsKey]?.nav?.defaultMode === "off" &&
+          result[settingsKey]?.nav?.debug === false;
+      }, SUITE_SETTINGS_KEY);
+      expect(await getPopupSnapshot(context)).toMatchObject({
+        navMode: "off",
+        credMode: "smart",
       });
     } finally {
       await context.close();
@@ -323,6 +379,9 @@ test("options import and export preserve normalized trusted-domain and allowlist
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-ui-e2e-"));
   const importPath = path.join(userDataDir, "suite-import.json");
+  const invalidImportPath = path.join(userDataDir, "invalid-import.json");
+
+  fs.writeFileSync(invalidImportPath, "{not-json");
 
   fs.writeFileSync(
     importPath,
@@ -366,10 +425,15 @@ test("options import and export preserve normalized trusted-domain and allowlist
         waitUntil: "domcontentloaded",
         timeout: 20_000
       });
+      await expect(options.locator("#allowlist")).toContainText("No allowlist entries yet.");
 
       // Import is authoritative: it must replace, not silently retain, a dirty
-      // draft whose values differ from the imported backup.
+      // draft whose values differ from the imported backup. A malformed file,
+      // which persisted nothing, must leave that draft alone.
       await options.locator('#navModeSeg .seg-btn[data-value="strict"]').click();
+      await expect(options.locator('#navModeSeg .seg-btn[data-value="strict"]')).toHaveAttribute("aria-checked", "true");
+      await options.locator("#importFile").setInputFiles(invalidImportPath);
+      await expect(options.locator("#status")).toHaveText("Import failed.");
       await expect(options.locator('#navModeSeg .seg-btn[data-value="strict"]')).toHaveAttribute("aria-checked", "true");
       await options.locator("#importFile").setInputFiles(importPath);
       await expect(options.locator('#navModeSeg .seg-btn[data-value="off"]')).toHaveAttribute("aria-checked", "true");

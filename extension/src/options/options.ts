@@ -121,6 +121,8 @@ const sidebarNav = document.getElementById("sidebarNav") as HTMLElement;
 // settings object, so a popup write cannot be silently overwritten by a stale
 // Options page. (#558)
 let renderedSettings: SuiteSettings | null = null;
+let submittedSettings: SuiteSettings | null = null;
+let settingsGeneration = 0;
 
 // Sidebar navigation
 sidebarNav.addEventListener("click", (e) => {
@@ -204,16 +206,20 @@ function flashStatus(
 }
 
 // Rendering functions
+function appendEmpty(container: HTMLElement, message: string): void {
+  const empty = document.createElement("div");
+  empty.className = "list-empty";
+  empty.textContent = message;
+  container.appendChild(empty);
+}
+
 function renderAllowlist(list: Allowlist): void {
   allowlistEl.innerHTML = "";
   const sites = Object.keys(list).sort();
   clearAllowlistBtn.disabled = sites.length === 0;
 
   if (sites.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "list-empty";
-    empty.textContent = "No allowlist entries yet.";
-    allowlistEl.appendChild(empty);
+    appendEmpty(allowlistEl, "No allowlist entries yet.");
     return;
   }
 
@@ -270,10 +276,7 @@ function renderTrusted(domains: string[]): void {
   clearTrustedBtn.disabled = list.length === 0;
 
   if (list.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "list-empty";
-    empty.textContent = "No trusted domains yet.";
-    trustedListEl.appendChild(empty);
+    appendEmpty(trustedListEl, "No trusted domains yet.");
     return;
   }
 
@@ -318,10 +321,7 @@ function renderEventLog(log: EventLogEntry[]): void {
   logUsageEl.textContent = `${list.length}/${logLimitEl.value || "300"}`;
 
   if (list.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "list-empty";
-    empty.textContent = "No events yet.";
-    eventLogEl.appendChild(empty);
+    appendEmpty(eventLogEl, "No events yet.");
     return;
   }
 
@@ -380,10 +380,7 @@ function renderStats(outcomes: PromptOutcomeEntry[]): void {
 
   topDomainsEl.innerHTML = "";
   if (top5.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "list-empty";
-    empty.textContent = "No prompt outcomes recorded yet.";
-    topDomainsEl.appendChild(empty);
+    appendEmpty(topDomainsEl, "No prompt outcomes recorded yet.");
     return;
   }
 
@@ -413,10 +410,7 @@ function renderDomainProfiles(profiles: DomainProfile[]): void {
   domainProfilesEl.innerHTML = "";
 
   if (profiles.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "list-empty";
-    empty.textContent = "No domain profiles recorded yet.";
-    domainProfilesEl.appendChild(empty);
+    appendEmpty(domainProfilesEl, "No domain profiles recorded yet.");
     return;
   }
 
@@ -495,14 +489,19 @@ function readSettingsDraft(): SuiteSettings {
 }
 
 function rebaseIncomingSettings(incoming: SuiteSettings): void {
-  const rebasedDraft = renderedSettings
-    ? rebaseOptionsSettingsDraft(renderedSettings, readSettingsDraft(), incoming)
+  const baseline = submittedSettings ?? renderedSettings;
+  const rebasedDraft = baseline
+    ? rebaseOptionsSettingsDraft(baseline, readSettingsDraft(), incoming)
     : incoming;
   renderedSettings = incoming;
   renderSettings(rebasedDraft);
 }
 
-async function init(): Promise<void> {
+async function init(replaceDraft = false): Promise<void> {
+  if (replaceDraft) {
+    settingsGeneration++;
+    submittedSettings = renderedSettings = null;
+  }
   const s = await getSuiteSettings();
   // A storage change may have supplied fresher settings while this read was pending.
   if (!renderedSettings) renderSettings(renderedSettings = s);
@@ -523,13 +522,21 @@ saveBtn.addEventListener("click", withReentrancyGuard(
   // user-facing status; the guard owns the busy flag + reset.
   try {
     const baseline = renderedSettings ?? await getSuiteSettings();
-    const patch = deriveOptionsSettingsPatch(baseline, readSettingsDraft());
+    const draft = readSettingsDraft();
+    const patch = deriveOptionsSettingsPatch(baseline, draft);
     if (!Object.keys(patch).length) {
       flashStatus(saveStatusEl, "No changes.");
       return;
     }
 
-    rebaseIncomingSettings(await updateSuiteSettings(patch));
+    const generation = settingsGeneration;
+    submittedSettings = draft;
+    try {
+      const persisted = await updateSuiteSettings(patch);
+      if (generation === settingsGeneration) rebaseIncomingSettings(persisted);
+    } finally {
+      submittedSettings = null;
+    }
     try {
       await appendEvent({ kind: "suite_config_update", extra: { patch } });
     } catch (e) { console.warn("[NavSentinel] event log append failed (suite_config_update):", e); }
@@ -608,7 +615,7 @@ importFileEl.addEventListener("change", async () => {
       importPayload: async () => {
         return importAll(JSON.parse(await f.text()));
       },
-      refresh: () => (renderedSettings = null, init()),
+      refresh: init,
       flash: (msg, tone) => flashStatus(statusEl, msg, tone),
       isDeliveryFailure: (e) => e instanceof PromptOutcomeDeliveryError,
     });

@@ -100,9 +100,9 @@ export interface ImportErrorOutcome {
  * writes the prompt-outcome history LAST; a *delivery* failure of that step (the
  * SW was unreachable) means the earlier settings/allowlist/eventLog sections
  * already applied, so word it as a partial result. Any other error may be a clean
- * failure (e.g. invalid JSON, before any write) OR a mid-import storage failure
- * that already applied some sections — `runImportFlow` ALWAYS refreshes the UI
- * afterward so the displayed config matches actual state regardless (#188 R1/R2).
+ * failure (e.g. invalid JSON, before any write) OR a mid-import storage failure.
+ * `runImportFlow` always refreshes persisted views afterward, but only a success
+ * or known partial delivery replaces an unsaved settings draft (#188 R1/R2).
  */
 export function classifyImportError(isDeliveryFailure: boolean): ImportErrorOutcome {
   return isDeliveryFailure
@@ -120,7 +120,8 @@ export function formatImportSuccess(eventLogDropped = 0): string {
 /** Shared UI hooks for the stats/import orchestrations (injected for testing). */
 export interface StatsUiDeps {
   flash: (message: string, tone?: "error") => void;
-  refresh: () => Promise<void>;
+  /** `true` makes an imported settings snapshot authoritative over the draft. */
+  refresh: (replaceDraft?: boolean) => Promise<void>;
 }
 
 /**
@@ -233,10 +234,10 @@ export async function runClearBehaviouralData(
 }
 
 /**
- * Orchestrate a suite import. `importAll` is non-atomic, so on ANY failure refresh
- * the UI (best-effort, guarded) so it reflects whatever actually persisted, then
- * report a partial result for a prompt-outcome delivery failure or a total failure
- * otherwise (#188 R1/R2).
+ * Orchestrate a suite import. Always refresh persisted views after failure. A
+ * success or known prompt-outcome delivery failure has already applied the core
+ * import, so replace the settings draft; an ordinary failure preserves it
+ * because invalid input may have failed before any write (#188 R1/R2).
  */
 export async function runImportFlow(
   deps: StatsUiDeps & {
@@ -246,12 +247,13 @@ export async function runImportFlow(
 ): Promise<void> {
   try {
     const result = await deps.importPayload();
-    await deps.refresh();
+    await deps.refresh(true);
     deps.flash(formatImportSuccess(result?.eventLogDropped));
   } catch (e) {
     console.warn("[NavSentinel] import failed:", e);
-    await safeRefresh(deps.refresh);
-    const outcome = classifyImportError(deps.isDeliveryFailure(e));
+    const partial = deps.isDeliveryFailure(e);
+    await safeRefresh(() => deps.refresh(partial));
+    const outcome = classifyImportError(partial);
     deps.flash(outcome.message, outcome.tone);
   }
 }
