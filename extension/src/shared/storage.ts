@@ -204,6 +204,55 @@ function mergeSuiteSettings(cur: SuiteSettings, partial: SuiteSettingsPatch): Su
   return next;
 }
 
+type SettingsRecord = Record<string, unknown>;
+
+/** Parse an Options numeric control without converting an empty field to zero. */
+export function parseOptionsInt(value: string, fallback: number): number {
+  if (value.trim() === "") return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.trunc(parsed) : fallback;
+}
+
+function reconcileSettings(
+  baseline: SettingsRecord,
+  draft: SettingsRecord,
+  incoming?: SettingsRecord,
+): SettingsRecord {
+  const result: SettingsRecord = incoming ? structuredClone(incoming) as SettingsRecord : {};
+  for (const key in draft) {
+    const value = draft[key];
+    if (value && typeof value === "object") {
+      const nested = reconcileSettings(
+        baseline[key] as SettingsRecord,
+        value as SettingsRecord,
+        incoming && incoming[key] as SettingsRecord | undefined,
+      );
+      if (incoming || Object.keys(nested).length) result[key] = nested;
+    } else if (value !== baseline[key]) {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+/** Return the smallest explicit leaf patch that makes `baseline` match `draft`. */
+export function deriveOptionsSettingsPatch(baseline: SuiteSettings, draft: SuiteSettings): SuiteSettingsPatch {
+  return reconcileSettings(baseline as unknown as SettingsRecord, draft as unknown as SettingsRecord) as SuiteSettingsPatch;
+}
+
+/** Preserve dirty leaves while adopting an external normalized settings update. */
+export function rebaseOptionsSettingsDraft(
+  baseline: SuiteSettings,
+  draft: SuiteSettings,
+  incoming: SuiteSettings,
+): SuiteSettings {
+  return reconcileSettings(
+    baseline as unknown as SettingsRecord,
+    draft as unknown as SettingsRecord,
+    incoming as unknown as SettingsRecord,
+  ) as unknown as SuiteSettings;
+}
+
 export async function getSuiteSettings(): Promise<SuiteSettings> {
   const res = await chrome.storage.local.get([SUITE_SETTINGS_KEY, LEGACY_SETTINGS_KEY]);
   const stored = res[SUITE_SETTINGS_KEY] as SuiteSettings | undefined;

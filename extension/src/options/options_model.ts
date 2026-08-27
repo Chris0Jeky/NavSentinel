@@ -1,5 +1,12 @@
 import type { BehaviouralDataLane, BehaviouralResetResult } from "../shared/behavioural_reset";
-import type { ImportAllResult, PromptOutcome } from "../shared/storage";
+import type {
+  ImportAllResult,
+  PromptOutcome,
+} from "../shared/storage";
+export {
+  deriveOptionsSettingsPatch,
+  rebaseOptionsSettingsDraft,
+} from "../shared/storage";
 
 export function pct(n: number, total: number): string {
   if (total === 0) return "--";
@@ -20,15 +27,7 @@ export function fmtTime(ts: number): string {
   }
 }
 
-export function parseIntSafe(value: string, fallback: number): number {
-  // An empty / whitespace-only string must use the fallback. `Number("")` and
-  // `Number("   ")` are both `0` (finite), so without this guard clearing a
-  // numeric field and saving would silently store `0` (then clamp to the field
-  // minimum) instead of the documented default. (#367)
-  if (value.trim() === "") return fallback;
-  const n = Number(value);
-  return Number.isFinite(n) ? Math.trunc(n) : fallback;
-}
+export { parseOptionsInt as parseIntSafe } from "../shared/storage";
 
 /** Display strings for the options Prompt Statistics panel. */
 export interface PromptOutcomeStats {

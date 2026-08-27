@@ -5,7 +5,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { EVENT_LOG_KEY, SUITE_SETTINGS_KEY, TRUSTED_DOMAINS_KEY } from "../../extension/src/shared/storage";
 import { getGymBaseUrl, getExtensionId, getServiceWorker } from "./extension_test_utils";
-import { getPopupSnapshot, openRealPopup } from "./demo-showcase-popup";
+import { getPopupSnapshot, openRealPopup, selectPopupMode } from "./demo-showcase-popup";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -65,6 +65,63 @@ test("options normalizes trusted-domain input and persists mode changes @smoke",
       await expect(options.locator('#credModeSeg .seg-btn[data-value="strict"]')).toHaveAttribute("aria-checked", "true");
       await options.locator('.nav-btn[data-section="trust"]').click();
       await expect(options.locator("#trustedList")).toContainText("example.com");
+    } finally {
+      await context.close();
+    }
+  } finally {
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("Options keeps popup changes while saving an unrelated dirty setting @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-options-sync-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const extensionId = await getExtensionId(context);
+      const options = await context.newPage();
+      await options.goto(`chrome-extension://${extensionId}/src/options/options.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000,
+      });
+      await expect(options.locator("#warnOnPaste")).toHaveAttribute("aria-checked", "true");
+
+      // Leave one Options-only change unsaved, then make both protection-mode
+      // changes through the real popup test bridge. The live listener must adopt
+      // the clean popup fields without dropping the local dirty switch.
+      await options.locator("#warnOnPaste").click();
+      await expect(options.locator("#warnOnPaste")).toHaveAttribute("aria-checked", "false");
+      await openRealPopup(context);
+      await selectPopupMode(context, "navMode", "strict");
+      await selectPopupMode(context, "credMode", "off");
+
+      await expect(options.locator('#navModeSeg .seg-btn[data-value="strict"]'))
+        .toHaveAttribute("aria-checked", "true");
+      await expect(options.locator('#credModeSeg .seg-btn[data-value="off"]'))
+        .toHaveAttribute("aria-checked", "true");
+      await expect(options.locator("#warnOnPaste")).toHaveAttribute("aria-checked", "false");
+
+      await options.locator("#save").click();
+      await options.waitForFunction(async (settingsKey) => {
+        const result = await chrome.storage.local.get(settingsKey);
+        const settings = result[settingsKey];
+        return settings?.nav?.defaultMode === "strict" &&
+          settings?.credential?.mode === "off" &&
+          settings?.credential?.warnOnPaste === false;
+      }, SUITE_SETTINGS_KEY);
+
+      expect(await getPopupSnapshot(context)).toMatchObject({
+        navMode: "strict",
+        credMode: "off",
+      });
     } finally {
       await context.close();
     }

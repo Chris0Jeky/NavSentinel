@@ -1,9 +1,19 @@
-import type { Mode } from "../shared/types";
 import type { CredMode, EventLogEntry, SuiteSettings } from "../shared/storage";
 import { classifyEventTone } from "../shared/event_tone";
 import { icon, logoSentinel } from "../shared/icons";
 import { getSegValue, initSegKeyboard, setSegValue } from "../shared/seg_control";
-import { computePromptOutcomeStats, describeJsBehaviorCapability, fmtTime, parseIntSafe, withReentrancyGuard, runClearBehaviouralData, runClearStats, runImportFlow } from "./options_model";
+import {
+  computePromptOutcomeStats,
+  deriveOptionsSettingsPatch,
+  describeJsBehaviorCapability,
+  fmtTime,
+  parseIntSafe,
+  rebaseOptionsSettingsDraft,
+  runClearBehaviouralData,
+  runClearStats,
+  runImportFlow,
+  withReentrancyGuard,
+} from "./options_model";
 // RI-07: the bundler resolves this to the no-op monitor whenever the active
 // release profile leaves `capabilities.jsBehaviorInstrumentation` false, so the
 // options page reads the same capability value the content script runs with.
@@ -21,6 +31,7 @@ import {
   getSuiteSettings,
   getTrustedDomains,
   importAll,
+  onSuiteSettingsChange,
   PromptOutcomeDeliveryError,
   removeTrustedDomain,
   updateSuiteSettings,
@@ -104,6 +115,12 @@ const refreshProfilesBtn = document.getElementById("refreshProfiles") as HTMLBut
 const clearProfilesBtn = document.getElementById("clearProfiles") as HTMLButtonElement;
 const clearBehaviouralBtn = document.getElementById("clearBehavioural") as HTMLButtonElement;
 const sidebarNav = document.getElementById("sidebarNav") as HTMLElement;
+
+// The last canonical settings object rendered into the form. Save compares the
+// current controls to this baseline rather than reconstructing a complete
+// settings object, so a popup write cannot be silently overwritten by a stale
+// Options page. (#558)
+let renderedSettings: SuiteSettings | null = null;
 
 // Sidebar navigation
 sidebarNav.addEventListener("click", (e) => {
@@ -441,19 +458,54 @@ async function refreshDomainProfiles(): Promise<void> {
   renderDomainProfiles(await getTopSuspiciousDomains(10));
 }
 
+function renderSettings(settings: SuiteSettings): void {
+  setSegValue(navModeSeg, settings.nav.defaultMode);
+  setToggle(navDebugEl, settings.nav.debug);
+  setSegValue(credModeSeg, settings.credential.mode);
+  setToggle(blockHttpEl, settings.credential.blockHttpPasswordSubmit);
+  setToggle(warnPasteEl, settings.credential.warnOnPaste);
+  setToggle(promptUntrustedEl, settings.credential.promptOnUntrustedDomain);
+  setToggle(promptMediumEl, settings.credential.promptOnMediumRisk);
+  mediumThresholdEl.value = String(settings.credential.mediumRiskThreshold);
+  setToggle(similarityEnabledEl, settings.credential.similarity.enabled);
+  similarityMaxDistEl.value = String(settings.credential.similarity.maxDistance);
+  logLimitEl.value = String(settings.logLimit);
+}
+
+function readSettingsDraft(): SuiteSettings {
+  return {
+    nav: {
+      defaultMode: getSegValue(navModeSeg) as SuiteSettings["nav"]["defaultMode"],
+      debug: getToggle(navDebugEl),
+    },
+    credential: {
+      mode: getSegValue(credModeSeg) as CredMode,
+      promptOnUntrustedDomain: getToggle(promptUntrustedEl),
+      promptOnMediumRisk: getToggle(promptMediumEl),
+      mediumRiskThreshold: parseIntSafe(mediumThresholdEl.value, 40),
+      blockHttpPasswordSubmit: getToggle(blockHttpEl),
+      warnOnPaste: getToggle(warnPasteEl),
+      similarity: {
+        enabled: getToggle(similarityEnabledEl),
+        maxDistance: parseIntSafe(similarityMaxDistEl.value, 2),
+      },
+    },
+    logLimit: parseIntSafe(logLimitEl.value, 300),
+  };
+}
+
+function rebaseIncomingSettings(incoming: SuiteSettings): void {
+  const rebasedDraft = renderedSettings
+    ? rebaseOptionsSettingsDraft(renderedSettings, readSettingsDraft(), incoming)
+    : incoming;
+  renderedSettings = incoming;
+  renderSettings(rebasedDraft);
+}
+
 async function init(): Promise<void> {
   const s = await getSuiteSettings();
-  setSegValue(navModeSeg, s.nav.defaultMode);
-  setToggle(navDebugEl, s.nav.debug);
-  setSegValue(credModeSeg, s.credential.mode);
-  setToggle(blockHttpEl, s.credential.blockHttpPasswordSubmit);
-  setToggle(warnPasteEl, s.credential.warnOnPaste);
-  setToggle(promptUntrustedEl, s.credential.promptOnUntrustedDomain);
-  setToggle(promptMediumEl, s.credential.promptOnMediumRisk);
-  mediumThresholdEl.value = String(s.credential.mediumRiskThreshold);
-  setToggle(similarityEnabledEl, s.credential.similarity.enabled);
-  similarityMaxDistEl.value = String(s.credential.similarity.maxDistance);
-  logLimitEl.value = String(s.logLimit);
+  renderedSettings = s;
+  renderSettings(s);
   await refreshAllowlist();
   await refreshTrusted();
   await refreshEventLog();
@@ -470,27 +522,18 @@ saveBtn.addEventListener("click", withReentrancyGuard(
   // overlapping read-modify-write calls. The inner try/catch drives the
   // user-facing status; the guard owns the busy flag + reset.
   try {
-    const nav = {
-      defaultMode: getSegValue(navModeSeg) as Mode,
-      debug: getToggle(navDebugEl)
-    };
-    const credential = {
-      mode: getSegValue(credModeSeg) as CredMode,
-      promptOnUntrustedDomain: getToggle(promptUntrustedEl),
-      promptOnMediumRisk: getToggle(promptMediumEl),
-      mediumRiskThreshold: parseIntSafe(mediumThresholdEl.value, 40),
-      blockHttpPasswordSubmit: getToggle(blockHttpEl),
-      warnOnPaste: getToggle(warnPasteEl),
-      similarity: {
-        enabled: getToggle(similarityEnabledEl),
-        maxDistance: parseIntSafe(similarityMaxDistEl.value, 2)
-      }
-    };
-    const logLimit = parseIntSafe(logLimitEl.value, 300);
+    const baseline = renderedSettings ?? await getSuiteSettings();
+    const patch = deriveOptionsSettingsPatch(baseline, readSettingsDraft());
+    if (Object.keys(patch).length === 0) {
+      flashStatus(saveStatusEl, "No changes.");
+      return;
+    }
 
-    await updateSuiteSettings({ nav, credential, logLimit } satisfies Partial<SuiteSettings>);
+    const persisted = await updateSuiteSettings(patch);
+    renderedSettings = persisted;
+    renderSettings(persisted);
     try {
-      await appendEvent({ kind: "suite_config_update", extra: { nav, credential, logLimit } });
+      await appendEvent({ kind: "suite_config_update", extra: { patch } });
     } catch (e) { console.warn("[NavSentinel] event log append failed (suite_config_update):", e); }
     flashStatus(saveStatusEl, "Saved.");
   } catch (e) {
@@ -625,5 +668,10 @@ clearBehaviouralBtn.addEventListener(
       }),
   ),
 );
+
+// Changes from the popup and other extension contexts arrive through the same
+// canonical storage channel. Clean controls update immediately; dirty fields
+// remain visible for the user to save intentionally. (#558)
+onSuiteSettingsChange(rebaseIncomingSettings);
 
 void init();
