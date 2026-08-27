@@ -102,8 +102,9 @@ export function eventIconName(kind: string): string {
  * Semantics: matching is by registrable domain over the persisted log, so the
  * gauge reflects the most recent scored risk for the DOMAIN (it can surface a score
  * from a prior visit or a sibling subdomain), not strictly the live page. Tighter
- * per-navigation binding is a tracked follow-up. event.site is a full hostname, so
- * it is reduced to a registrable domain for the comparison.
+ * per-navigation binding is a tracked follow-up. The browser-derived pageSite
+ * (when present) and legacy event.site are full hostnames, so the selected
+ * association is reduced to a registrable domain for the comparison.
  */
 export function pickSiteRiskEvent(
   log: EventLogEntry[],
@@ -116,7 +117,7 @@ export function pickSiteRiskEvent(
  * Newest-first scan for the most recent same-domain entry satisfying `match`.
  *
  * Both gauge pickers share this loop rather than each carrying a copy: they must
- * agree exactly on log order and on how `event.site` (a full hostname) is reduced
+ * agree exactly on log order and on how the event's page association is reduced
  * for comparison, so the domain semantics cannot drift apart, and the popup chunk
  * (10KB budget) does not ship the loop twice. Only the predicate differs.
  */
@@ -130,7 +131,11 @@ function pickNewestSiteEvent<T extends EventLogEntry>(
   for (let i = entries.length - 1; i >= 0; i--) {
     const ev = entries[i];
     if (!ev || !match(ev)) continue;
-    const site = ev.site ? getRegistrableDomain(normalizeHost(ev.site)) : "";
+    // New entries carry the browser-derived top-level page hostname. Prefer it
+    // so child-frame events follow the page the popup is showing; legacy rows
+    // have no pageSite and continue matching by their emitting site.
+    const associatedSite = ev.pageSite ?? ev.site;
+    const site = associatedSite ? getRegistrableDomain(normalizeHost(associatedSite)) : "";
     if (site && site === registrableDomain) return ev;
   }
   return null;

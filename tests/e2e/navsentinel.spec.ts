@@ -91,6 +91,87 @@ test("Level 1 blocks new tabs @smoke", async () => {
   }
 });
 
+test("Cross-host child events retain the top-level page attribution #539 @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/index.html?ai539=top`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+      await waitForNavSentinelBridge(page);
+
+      const childUrl = new URL("/level1-basic-opacity.html?ai539=child", baseUrl);
+      childUrl.hostname = "localhost";
+      const childUrlString = childUrl.href;
+      await page.evaluate((src) => {
+        const frame = document.createElement("iframe");
+        frame.id = "ai539-child-frame";
+        frame.src = src;
+        frame.style.cssText =
+          "position:fixed;left:24px;top:160px;width:520px;height:360px;z-index:2147483647;border:1px solid #777";
+        document.body.appendChild(frame);
+      }, childUrlString);
+
+      const child = page.frames().find((frame) => frame.url() === childUrlString) ??
+        await page.waitForEvent("framenavigated", {
+          predicate: (frame) => frame.url() === childUrlString,
+          timeout: 10_000
+        });
+      await child.waitForFunction(
+        () =>
+          document.documentElement.getAttribute("data-navsentinel-capture-ready") === "1" &&
+          document.documentElement.getAttribute("data-navsentinel-bridge-ready") === "1",
+        null,
+        { timeout: 15_000 }
+      );
+
+      const serviceWorker = await getServiceWorker(context);
+      // Clear only after both top and child bridges are ready, so startup writes
+      // cannot race the event under test.
+      await serviceWorker.evaluate(async (eventLogKey) => {
+        await chrome.storage.local.set({ [eventLogKey]: [] });
+      }, EVENT_LOG_KEY);
+
+      // The fixture's transparent trap covers #play. A real mouse input at the
+      // trusted button coordinates therefore exercises the same intercepted
+      // click path as a user click while keeping the child sender frame alive.
+      const play = child.locator("#play");
+      const box = await play.boundingBox();
+      expect(box, "Expected the child-frame #play button to be visible").toBeTruthy();
+      await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+
+      await expect.poll(
+        () => serviceWorker.evaluate(async (eventLogKey) => {
+          const stored = await chrome.storage.local.get(eventLogKey);
+          const events = Array.isArray(stored[eventLogKey]) ? stored[eventLogKey] : [];
+          return events.find((entry: { kind?: unknown }) => entry?.kind === "nav_blank_prompt") ?? null;
+        }, EVENT_LOG_KEY),
+        { timeout: 5_000 }
+      ).toMatchObject({
+        site: "localhost",
+        pageSite: "127.0.0.1"
+      });
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
 test("Level 2 moving target overlay blocks the hidden new tab @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
