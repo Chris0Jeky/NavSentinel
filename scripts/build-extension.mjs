@@ -43,3 +43,10 @@ const env = { [RELEASE_PROFILE_ENV]: profile.id };
 runNode(viteBin, ["build"], env);
 runNode(path.join(root, "scripts", "check-mv3-worker-imports.mjs"));
 runNode(path.join(root, "scripts", "check-release-profile.mjs"), [`--expect=${profile.id}`]);
+
+console.log(
+  "[build] unpacked Chrome: reload NavSentinel at chrome://extensions before reloading Gym pages."
+);
+console.log(
+  "[build] A page reload alone can retain a stale hashed loader; both NavSentinel readiness markers must be 1."
+);

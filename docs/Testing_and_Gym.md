@@ -354,10 +354,42 @@ Tests: `tests/e2e/corpus-validation.spec.ts`.
 Visits Tranco top-1000 sites with NavSentinel loaded to measure false positive rate.
 Run with `npm run measure:fp`. Script: `scripts/measure-fp.mjs`.
 
+## Rebuilding an unpacked extension
+
+Chrome does not reload an unpacked extension when `extension/dist` changes. A
+Vite rebuild removes the previous hashed bundles, so a page that still uses the
+old content-script loader can fail with a console error such as `Failed to fetch
+dynamically imported module ... assets/<old-hash>.js`. Reloading that page alone
+does not refresh Chrome's extension runtime.
+
+Use this sequence after **every** rebuild:
+
+1. Let the build finish and pause any watcher while doing the manual trial.
+2. Open `chrome://extensions` and click **Reload** on NavSentinel.
+3. Reload the Gym or target page only after the extension reload completes.
+4. Confirm that the current document has both readiness markers:
+
+   ```js
+   ({
+     capture: document.documentElement.getAttribute("data-navsentinel-capture-ready"),
+     bridge: document.documentElement.getAttribute("data-navsentinel-bridge-ready")
+   })
+   ```
+
+   Both values must be `"1"`. A missing value means the current page is not
+   protected by a fully initialized NavSentinel content bridge. Reload the
+   extension first, then reload the page again.
+
+Popup activity is historical and can include events from earlier documents. It
+does not prove that NavSentinel initialized on the page currently under test.
+The readiness markers prove current-page initialization, but they do not identify
+which source revision produced the loaded artifact.
+
 ## Effective manual testing workflow
 
 1. Run `npm run build`.
-2. Load `extension/dist` into Chromium.
+2. Load `extension/dist` into Chromium, or click **Reload** for an existing
+   unpacked NavSentinel installation.
 3. Start `npm run gym:serve`.
 4. Open the Gym index page.
 5. Run the relevant level in `smart` mode first.
