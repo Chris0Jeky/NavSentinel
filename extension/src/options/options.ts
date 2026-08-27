@@ -205,12 +205,55 @@ function flashStatus(
   statusTimers.set(el, timer);
 }
 
+async function appendEventSafely(entry: Parameters<typeof appendEvent>[0]): Promise<void> {
+  try {
+    await appendEvent(entry);
+  } catch (error) {
+    console.warn("[NavSentinel] event log append failed:", error);
+  }
+}
+
 // Rendering functions
 function appendEmpty(container: HTMLElement, message: string): void {
   const empty = document.createElement("div");
   empty.className = "list-empty";
   empty.textContent = message;
   container.appendChild(empty);
+}
+
+function createRemovableHostRow(
+  host: string,
+  removeLabel: string,
+  onRemove: () => Promise<void>,
+): HTMLDivElement {
+  const row = document.createElement("div");
+  row.className = "list-host";
+  const label = document.createElement("span");
+  label.className = "list-host-label";
+  label.textContent = host;
+  const removeBtn = document.createElement("button");
+  removeBtn.className = "btn btn--xs btn--danger";
+  removeBtn.textContent = "Remove";
+  removeBtn.setAttribute("aria-label", removeLabel);
+  removeBtn.addEventListener("click", () => void onRemove());
+  row.append(label, removeBtn);
+  return row;
+}
+
+function createProfileRow(domain: string, details: string): HTMLDivElement {
+  const row = document.createElement("div");
+  row.className = "profile-row";
+  const head = document.createElement("div");
+  head.className = "profile-head";
+  const name = document.createElement("span");
+  name.className = "profile-domain";
+  name.textContent = domain;
+  const stats = document.createElement("span");
+  stats.className = "profile-stats";
+  stats.textContent = details;
+  head.append(name, stats);
+  row.appendChild(head);
+  return row;
 }
 
 function renderAllowlist(list: Allowlist): void {
@@ -235,29 +278,12 @@ function renderAllowlist(list: Allowlist): void {
     hostList.className = "list-hosts";
 
     for (const host of (list[site] ?? []).slice().sort()) {
-      const hostRow = document.createElement("div");
-      hostRow.className = "list-host";
-
-      const hostLabel = document.createElement("span");
-      hostLabel.className = "list-host-label";
-      hostLabel.textContent = host;
-
-      const removeBtn = document.createElement("button");
-      removeBtn.className = "btn btn--xs btn--danger";
-      removeBtn.textContent = "Remove";
-      removeBtn.setAttribute("aria-label", `Remove ${host} from allowlist`);
-      removeBtn.addEventListener("click", async () => {
+      hostList.appendChild(createRemovableHostRow(host, `Remove ${host} from allowlist`, async () => {
         await removeAllowlistEntry(site, host);
-        try {
-          await appendEvent({ kind: "nav_allowlist_remove", site, destHost: host });
-        } catch (e) { console.warn("[NavSentinel] event log append failed (nav_allowlist_remove):", e); }
+        await appendEventSafely({ kind: "nav_allowlist_remove", site, destHost: host });
         await refreshAllowlist();
         flashStatus(saveStatusEl, "Allowlist updated.");
-      });
-
-      hostRow.appendChild(hostLabel);
-      hostRow.appendChild(removeBtn);
-      hostList.appendChild(hostRow);
+      }));
     }
 
     siteRow.appendChild(title);
@@ -283,29 +309,12 @@ function renderTrusted(domains: string[]): void {
   const wrap = document.createElement("div");
   wrap.className = "list-hosts";
   for (const domain of list) {
-    const row = document.createElement("div");
-    row.className = "list-host";
-
-    const label = document.createElement("span");
-    label.className = "list-host-label";
-    label.textContent = domain;
-
-    const removeBtn = document.createElement("button");
-    removeBtn.className = "btn btn--xs btn--danger";
-    removeBtn.textContent = "Remove";
-    removeBtn.setAttribute("aria-label", `Remove ${domain} from trusted`);
-    removeBtn.addEventListener("click", async () => {
+    wrap.appendChild(createRemovableHostRow(domain, `Remove ${domain} from trusted`, async () => {
       await removeTrustedDomain(domain);
-      try {
-        await appendEvent({ kind: "cred_untrust_domain", site: domain });
-      } catch (e) { console.warn("[NavSentinel] event log append failed (cred_untrust_domain):", e); }
+      await appendEventSafely({ kind: "cred_untrust_domain", site: domain });
       await refreshTrusted();
       flashStatus(saveStatusEl, "Trusted list updated.");
-    });
-
-    row.appendChild(label);
-    row.appendChild(removeBtn);
-    wrap.appendChild(row);
+    }));
   }
 
   trustedListEl.appendChild(wrap);
@@ -385,20 +394,7 @@ function renderStats(outcomes: PromptOutcomeEntry[]): void {
   }
 
   for (const [domain, count] of top5) {
-    const row = document.createElement("div");
-    row.className = "profile-row";
-    const head = document.createElement("div");
-    head.className = "profile-head";
-    const name = document.createElement("span");
-    name.className = "profile-domain";
-    name.textContent = domain;
-    const stats = document.createElement("span");
-    stats.className = "profile-stats";
-    stats.textContent = `${count} prompt${count === 1 ? "" : "s"}`;
-    head.appendChild(name);
-    head.appendChild(stats);
-    row.appendChild(head);
-    topDomainsEl.appendChild(row);
+    topDomainsEl.appendChild(createProfileRow(domain, `${count} prompt${count === 1 ? "" : "s"}`));
   }
 }
 
@@ -416,21 +412,7 @@ function renderDomainProfiles(profiles: DomainProfile[]): void {
 
   for (const p of profiles) {
     const avgNRS = p.visits > 0 ? (p.totalNRS / p.visits).toFixed(1) : "0";
-    const row = document.createElement("div");
-    row.className = "profile-row";
-
-    const head = document.createElement("div");
-    head.className = "profile-head";
-    const name = document.createElement("span");
-    name.className = "profile-domain";
-    name.textContent = p.domain;
-    const stats = document.createElement("span");
-    stats.className = "profile-stats";
-    stats.textContent = `visits=${p.visits} avgNRS=${avgNRS} triggers=${p.triggerCount}`;
-    head.appendChild(name);
-    head.appendChild(stats);
-
-    row.appendChild(head);
+    const row = createProfileRow(p.domain, `visits=${p.visits} avgNRS=${avgNRS} triggers=${p.triggerCount}`);
 
     const topFactors = Object.entries(p.factors)
       .sort((a, b) => b[1] - a[1])
@@ -537,9 +519,7 @@ saveBtn.addEventListener("click", withReentrancyGuard(
     } finally {
       submittedSettings = null;
     }
-    try {
-      await appendEvent({ kind: "suite_config_update", extra: { patch } });
-    } catch (e) { console.warn("[NavSentinel] event log append failed (suite_config_update):", e); }
+    await appendEventSafely({ kind: "suite_config_update", extra: { patch } });
     flashStatus(saveStatusEl, "Saved.");
   } catch (e) {
     console.warn("[NavSentinel] settings save failed:", e);
@@ -549,9 +529,7 @@ saveBtn.addEventListener("click", withReentrancyGuard(
 
 clearAllowlistBtn.addEventListener("click", async () => {
   await clearAllowlist();
-  try {
-    await appendEvent({ kind: "nav_allowlist_remove", extra: { cleared: true } });
-  } catch (e) { console.warn("[NavSentinel] event log append failed (nav_allowlist_remove):", e); }
+  await appendEventSafely({ kind: "nav_allowlist_remove", extra: { cleared: true } });
   await refreshAllowlist();
   flashStatus(saveStatusEl, "Allowlist cleared.");
 });
@@ -564,18 +542,14 @@ addTrustedBtn.addEventListener("click", async () => {
   }
   const { normalized } = result;
   trustedInputEl.value = "";
-  try {
-    await appendEvent({ kind: "cred_trust_domain", site: normalized });
-  } catch (e) { console.warn("[NavSentinel] event log append failed (cred_trust_domain):", e); }
+  await appendEventSafely({ kind: "cred_trust_domain", site: normalized });
   await refreshTrusted();
   flashStatus(saveStatusEl, "Trusted domain added.");
 });
 
 clearTrustedBtn.addEventListener("click", async () => {
   await clearTrustedDomains();
-  try {
-    await appendEvent({ kind: "cred_untrust_domain", extra: { cleared: true } });
-  } catch (e) { console.warn("[NavSentinel] event log append failed (cred_untrust_domain):", e); }
+  await appendEventSafely({ kind: "cred_untrust_domain", extra: { cleared: true } });
   await refreshTrusted();
   flashStatus(saveStatusEl, "Trusted list cleared.");
 });
