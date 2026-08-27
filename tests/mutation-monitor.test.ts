@@ -1344,6 +1344,31 @@ describe("mutation_monitor flood-then-inject reserve past the alert cap (#413)",
     stopMutationMonitor();
   });
 
+  it("caps immediate cleanup classification at 64 candidates per observer delivery", async () => {
+    const cleanupCandidates: MutationAlert[] = [];
+    startMutationMonitor(document, () => {}, {
+      onOverlayCandidate: (alert) => cleanupCandidates.push(alert),
+      isOverlayCleanupActive: () => true,
+    });
+
+    const fragment = document.createDocumentFragment();
+    for (let index = 0; index < 100; index += 1) {
+      const overlay = document.createElement("div");
+      overlay.style.position = "fixed";
+      overlay.style.zIndex = String(10_000 + index);
+      vi.spyOn(overlay, "getBoundingClientRect").mockReturnValue(
+        new DOMRect(0, 0, 800, 600),
+      );
+      fragment.appendChild(overlay);
+    }
+    document.body.appendChild(fragment);
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(cleanupCandidates).toHaveLength(64);
+    document.body.replaceChildren();
+    stopMutationMonitor();
+  });
+
   it("keeps the observer alive past five minutes only while cleanup stays opted in", async () => {
     const cleanupCandidates: MutationAlert[] = [];
     startMutationMonitor(document, () => {}, {
