@@ -613,6 +613,132 @@ describe("service worker rollback gating", () => {
     expect(response.entry?.allowedAtCommit).toBe(false);
   });
 
+  it("does not roll back a cross-site browser Back or Forward traversal (#567)", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+
+    mock.emitCommitted({
+      tabId: 20,
+      frameId: 0,
+      url: "https://current.test/article",
+      transitionType: "typed",
+      transitionQualifiers: []
+    });
+
+    vi.setSystemTime(new Date("2026-03-17T12:00:11.000Z"));
+    mock.emitBeforeNavigate({
+      tabId: 20,
+      frameId: 0,
+      url: "https://previous.test/article"
+    });
+    mock.emitCommitted({
+      tabId: 20,
+      frameId: 0,
+      url: "https://previous.test/article",
+      transitionType: "link",
+      transitionQualifiers: ["forward_back"]
+    });
+
+    const rollback = mock.dispatchRuntimeMessage(
+      { type: "ns-check-rollback" },
+      { tab: { id: 20 } }
+    ) as { shouldRollback: boolean };
+    const forward = mock.dispatchRuntimeMessage(
+      { type: "ns-check-forward", currentUrl: "https://previous.test/article" },
+      { tab: { id: 20 } }
+    ) as { status?: string; url?: string };
+
+    expect(rollback.shouldRollback).toBe(false);
+    expect(forward).toEqual({ status: "none", url: "" });
+    expect(mock.sentMessages).toEqual([]);
+  });
+
+  it("keeps redirect qualifiers on the same Back/Forward commit inside the traversal boundary (#567)", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+
+    mock.emitCommitted({
+      tabId: 22,
+      frameId: 0,
+      url: "https://current.test/article",
+      transitionType: "typed",
+      transitionQualifiers: []
+    });
+
+    vi.setSystemTime(new Date("2026-03-17T12:00:11.000Z"));
+    mock.emitBeforeNavigate({
+      tabId: 22,
+      frameId: 0,
+      url: "https://previous.test/article"
+    });
+    mock.emitCommitted({
+      tabId: 22,
+      frameId: 0,
+      url: "https://previous.test/article",
+      transitionType: "link",
+      transitionQualifiers: ["forward_back", "server_redirect"]
+    });
+
+    const rollback = mock.dispatchRuntimeMessage(
+      { type: "ns-check-rollback" },
+      { tab: { id: 22 } }
+    ) as { shouldRollback: boolean };
+
+    expect(rollback.shouldRollback).toBe(false);
+  });
+
+  it("still rolls back a later page-initiated redirect after a browser history traversal (#567)", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+
+    mock.emitCommitted({
+      tabId: 21,
+      frameId: 0,
+      url: "https://current.test/article",
+      transitionType: "typed",
+      transitionQualifiers: []
+    });
+
+    vi.setSystemTime(new Date("2026-03-17T12:00:11.000Z"));
+    mock.emitBeforeNavigate({
+      tabId: 21,
+      frameId: 0,
+      url: "https://previous.test/article"
+    });
+    mock.emitCommitted({
+      tabId: 21,
+      frameId: 0,
+      url: "https://previous.test/article",
+      transitionType: "link",
+      transitionQualifiers: ["forward_back"]
+    });
+
+    vi.setSystemTime(new Date("2026-03-17T12:00:22.000Z"));
+    mock.emitBeforeNavigate({
+      tabId: 21,
+      frameId: 0,
+      url: "https://evil.test/redirected"
+    });
+    mock.emitCommitted({
+      tabId: 21,
+      frameId: 0,
+      url: "https://evil.test/redirected",
+      transitionType: "link",
+      transitionQualifiers: ["client_redirect"]
+    });
+
+    const response = mock.dispatchRuntimeMessage(
+      { type: "ns-check-rollback" },
+      { tab: { id: 21 } }
+    ) as { shouldRollback: boolean; prevUrl?: string };
+
+    expect(response.shouldRollback).toBe(true);
+    expect(response.prevUrl).toBe("https://previous.test/article");
+  });
+
   it("clears stale ready state on a new top-frame navigation and waits for the next ready signal", async () => {
     const mock = createChromeMock();
     vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
