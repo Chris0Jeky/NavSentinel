@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
@@ -38,8 +39,24 @@ function runNode(scriptPath, args = [], extraEnv = {}) {
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
 
+function compactPackagedHtml() {
+  const distSrc = path.join(root, "extension", "dist", "src");
+  for (const relative of fs.readdirSync(distSrc, { recursive: true })) {
+    if (!relative.endsWith(".html")) continue;
+    const file = path.join(distSrc, relative);
+    const html = fs.readFileSync(file, "utf8");
+    // Comments are source guidance, not extension payload. Keep conditional
+    // comments if one is ever added, and make artifact bytes platform-stable.
+    const compacted = html
+      .replace(/\r\n?/g, "\n")
+      .replace(/<!--(?!\[if\b)[\s\S]*?-->/gi, "");
+    if (compacted !== html) fs.writeFileSync(file, compacted, "utf8");
+  }
+}
+
 console.log(`[build] profile=${profile.id}; releaseEligible=${profile.releaseEligible}`);
 const env = { [RELEASE_PROFILE_ENV]: profile.id };
 runNode(viteBin, ["build"], env);
+compactPackagedHtml();
 runNode(path.join(root, "scripts", "check-mv3-worker-imports.mjs"));
 runNode(path.join(root, "scripts", "check-release-profile.mjs"), [`--expect=${profile.id}`]);

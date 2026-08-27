@@ -214,10 +214,12 @@ for (const budget of budgets) {
     sizeBytes = dirSizeRecursive(target);
     // Packaging copies the GPL text into dist after this check. Account for it
     // here so the aggregate budget measures the shipped ZIP rather than only
-    // the pre-package build output.
+    // the pre-package build output. package.mjs normalizes it to LF so the
+    // measured artifact is identical on Windows and hosted Linux.
     const packagedLicensePath = path.join(distDir, "LICENSE");
     if (!fs.existsSync(packagedLicensePath)) {
-      sizeBytes += fs.statSync(licensePath).size;
+      const license = fs.readFileSync(licensePath, "utf8").replace(/\r\n?/g, "\n");
+      sizeBytes += Buffer.byteLength(license);
     }
     matchInfo = `${target} (including packaged LICENSE)`;
   } else {
