@@ -172,9 +172,10 @@ It currently covers:
 - options-page opt-in overlay-cleanup persistence
 - popup auto-dismiss quick-control persistence
 - options import/export round-trip behavior
-- bounded page-settle scanning hides a pre-existing high-severity foreground
-  overlay before interaction, exposes the intended page target without replaying
-  a click, and leaves Navigation Off inert
+- the opt-in fast baseline hides a bounded batch of up to five pre-existing
+  high-severity foreground overlays before interaction, exposes the intended
+  page target without replaying a click, groups Undo, and leaves Navigation Off
+  inert (`evasion-02` and `evasion-12`)
 - delayed high-severity overlay auto-dismissal with an Undo restore path; the
   default-disabled case remains visible and warning-only
 - blocked and prompted high-severity click overlays both hide with Undo while
@@ -341,7 +342,7 @@ suppress ClickFix detection to avoid false positives.
 CDS evasion fixtures test gradient scoring and composite escalation against near-threshold signals:
 opacity just above threshold, viewport coverage just below, labeled overlays, z-index boundaries,
 composite multi-signal evasion, delayed injection, pointer-events bypass, clip-path hiding,
-filter opacity, transform scale, and shadow DOM hiding.
+filter opacity, transform scale, shadow DOM hiding, and stacked foreground overlays.
 Run with the default E2E lane. Tests: `tests/e2e/evasion.spec.ts`.
 
 ### Stress lane

@@ -106,10 +106,11 @@ frozen until that sequence produces a credible signal.
 - broad browser-porting work before Chrome behavior is fully stabilized
 
 Issue #555's first overlay-cleanup vertical adds an off-by-default control. It
-hides a high-severity foreground overlay found during a bounded scan after the
-page settles, identified after injection, or encountered by an already-blocked
-click. It shows an Undo action, never synthesizes or replays a click, remains
-inert when the setting or Navigation is off, and leaves covered benign dialogs
-and widgets usable. The control is available in Options and as a quick setting
-in the extension popup. Future mechanisms will be selected from observed
-efficacy, safety, user-control, and compatibility evidence.
+hides up to five high-severity foreground layers found by a fast bounded scan
+after DOM readiness, an overlay identified after injection, or one encountered
+by an already-blocked click. An initial batch has one grouped Undo. NavSentinel
+never synthesizes or replays a click, remains inert when the setting or
+Navigation is off, and leaves covered benign dialogs and widgets usable. The
+control is available in Options and as a quick setting in the extension popup.
+Future mechanisms will be selected from observed efficacy, safety, user-control,
+and compatibility evidence.

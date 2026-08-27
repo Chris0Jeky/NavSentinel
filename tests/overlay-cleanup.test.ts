@@ -108,6 +108,24 @@ describe("overlay cleanup", () => {
     expect(overlay.style.getPropertyValue("display")).toBe("none");
   });
 
+  it("suppresses and restores a bounded initial overlay batch with one Undo", () => {
+    const first = makeOverlay();
+    const second = makeOverlay();
+    const alert = {
+      ...mutationAlert(first),
+      type: "overlay_detected" as const,
+      elements: [first, second],
+    };
+
+    const undo = suppressDetectedOverlay(alert, true);
+    expect(first.style.getPropertyValue("display")).toBe("none");
+    expect(second.style.getPropertyValue("display")).toBe("none");
+    expect(undo?.()).toBe(true);
+    expect(first.style.getPropertyValue("display")).toBe("flex");
+    expect(second.style.getPropertyValue("display")).toBe("flex");
+    expect(undo?.()).toBe(false);
+  });
+
   it("finds the high-severity overlay ancestor behind an already-blocked click", () => {
     const overlay = makeOverlay();
     const child = document.createElement("button");

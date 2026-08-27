@@ -99,6 +99,33 @@ describe("mutation_monitor DOM integration", () => {
     stopMutationMonitor();
   });
 
+  it("reports a bounded batch of distinct foreground overlays already present", () => {
+    const alerts: MutationAlert[] = [];
+    const overlays = Array.from({ length: 6 }, () => {
+      const overlay = document.createElement("a");
+      overlay.style.position = "fixed";
+      overlay.style.zIndex = "10000";
+      overlay.style.display = "block";
+      vi.spyOn(overlay, "getBoundingClientRect").mockReturnValue(
+        new DOMRect(0, 0, 800, 600),
+      );
+      document.body.appendChild(overlay);
+      return overlay;
+    });
+
+    startMutationMonitor(document, (alert) => alerts.push(alert));
+
+    expect(scanExistingForegroundOverlay(document)).toBe(true);
+    expect(scanExistingForegroundOverlay(document)).toBe(false);
+    const detected = alerts.filter((alert) => alert.type === "overlay_detected");
+    expect(detected).toHaveLength(1);
+    expect(detected[0]?.elements).toHaveLength(5);
+    expect(new Set(detected[0]?.elements).size).toBe(5);
+
+    overlays.forEach((overlay) => overlay.remove());
+    stopMutationMonitor();
+  });
+
   it("does not report a pre-existing native dialog as a risky foreground overlay", () => {
     const alerts: MutationAlert[] = [];
     const dialog = document.createElement("dialog");
@@ -1204,6 +1231,50 @@ describe("mutation_monitor flood-then-inject reserve past the alert cap (#413)",
     rectSpy.mockRestore();
     overlay.remove();
     for (const form of forms) form.remove();
+    stopMutationMonitor();
+  });
+
+  it("does not let secondary elements in an initial batch burn the scarce reserve", async () => {
+    const alerts: MutationAlert[] = [];
+    const overlays = Array.from({ length: 5 }, (_, index) => {
+      const iframe = document.createElement("iframe");
+      iframe.src = `data:text/html,overlay-${index}`;
+      iframe.style.position = "fixed";
+      iframe.style.zIndex = "10000";
+      vi.spyOn(iframe, "getBoundingClientRect").mockReturnValue(
+        new DOMRect(0, 0, 800, 600),
+      );
+      document.body.appendChild(iframe);
+      return iframe;
+    });
+
+    startMutationMonitor(document, (alert) => alerts.push(alert));
+    expect(scanExistingForegroundOverlay(document)).toBe(true);
+    expect(getMutationAlertCount()).toBe(1);
+
+    const forms = await floodWithBenignAlerts();
+    expect(getMutationAlertCount()).toBe(45);
+
+    // Re-adding the four non-primary layers offers four scarce iframe alerts.
+    // The initial batch already represented them, so none may consume reserve.
+    for (const overlay of overlays.slice(1)) {
+      overlay.remove();
+      document.body.appendChild(overlay);
+    }
+    await vi.advanceTimersByTimeAsync(200);
+    expect(getMutationAlertCount()).toBe(45);
+
+    for (let i = 0; i < 2; i++) {
+      const input = document.createElement("input");
+      input.type = "password";
+      document.body.appendChild(input);
+    }
+    await vi.advanceTimersByTimeAsync(200);
+    expect(alerts.filter((alert) => alert.type === "password_injected")).toHaveLength(2);
+    expect(getMutationAlertCount()).toBe(47);
+
+    overlays.forEach((overlay) => overlay.remove());
+    forms.forEach((form) => form.remove());
     stopMutationMonitor();
   });
 

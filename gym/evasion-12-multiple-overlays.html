@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Evasion 12 - Multiple Foreground Overlays</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 24px;
+      max-width: 760px;
+    }
+    .description {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      border-radius: 6px;
+      padding: 14px;
+      line-height: 1.45;
+    }
+    #real-link {
+      position: fixed;
+      top: 46%;
+      left: 43%;
+      z-index: 1;
+      padding: 16px 32px;
+      border-radius: 8px;
+      background: #1a73e8;
+      color: white;
+      text-decoration: none;
+      font-size: 18px;
+    }
+    .overlay-trap {
+      position: fixed;
+      top: 20%;
+      left: 20%;
+      width: 60vw;
+      height: 60vh;
+      opacity: 0.09;
+      cursor: pointer;
+      background: transparent;
+    }
+    #trap-a { z-index: 10001; }
+    #trap-b { z-index: 10000; }
+  </style>
+</head>
+<body>
+  <p><a href="index.html">&larr; Back to Gym index</a></p>
+  <h1>Evasion 12 - Multiple Foreground Overlays</h1>
+  <div class="description">
+    <strong>Attack scenario:</strong> Two unnamed, near-transparent navigation
+    overlays are already stacked over the intended link when the page becomes
+    interactive. Hiding only the top layer exposes a second trap.
+    <br><br>
+    <strong>Expected with automatic cleanup enabled:</strong> NavSentinel hides
+    both bounded high-risk candidates without opening a tab, exposes the real
+    link, and offers one Undo action that restores both overlays.
+    <br><br>
+    <strong>Expected with cleanup disabled:</strong> The overlays remain present;
+    the normal click-time navigation guard is still the fallback.
+  </div>
+
+  <a id="real-link" href="https://example.com/safe">Real Link</a>
+  <a id="trap-a" class="overlay-trap" href="https://evil.example/multi-a" target="_blank" rel="noreferrer"></a>
+  <a id="trap-b" class="overlay-trap" href="https://evil.example/multi-b" target="_blank" rel="noreferrer"></a>
+</body>
+</html>

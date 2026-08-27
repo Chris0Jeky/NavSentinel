@@ -48,7 +48,7 @@ export function suppressOverlayElement(element: Element): OverlaySuppression | n
 }
 
 export function suppressDetectedOverlay(
-  alert: Pick<MutationAlert, "type" | "severity" | "element">,
+  alert: Pick<MutationAlert, "type" | "severity" | "element" | "elements">,
   enabled: boolean,
 ): OverlaySuppression | null {
   if (
@@ -58,7 +58,12 @@ export function suppressDetectedOverlay(
   ) {
     return null;
   }
-  return suppressOverlayElement(alert.element);
+  const suppressions = (alert.elements ?? [alert.element])
+    .map(suppressOverlayElement)
+    .filter((undo): undo is OverlaySuppression => undo !== null);
+  return suppressions.length
+    ? () => suppressions.map((undo) => undo()).some(Boolean)
+    : null;
 }
 
 /**

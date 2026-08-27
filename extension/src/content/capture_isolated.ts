@@ -882,8 +882,16 @@ function handleClickFixScan(): void {
 // --- Mutation monitor ---
 
 const MUTATION_START_DELAY_MS = 2000;
-// 0 = waiting for page settle, 1 = armed, 2 = observing.
+// -1 = early opt-in timer, 0 = normal settle, 1 = armed, 2 = observing.
 let mutationMonitorState = 0;
+
+function overlayToastControls(suppression: OverlaySuppression | null, coalesce = false) {
+  return {
+    actions: suppression ? [{ label: "Undo", onClick: suppression }] : undefined,
+    onReplace: suppression ?? undefined,
+    coalesce: coalesce && !suppression,
+  };
+}
 
 function handleMutationAlert(alert: MutationAlert): void {
   if (settings.defaultMode === "off") return;
@@ -914,12 +922,9 @@ function handleMutationAlert(alert: MutationAlert): void {
     sendIconUpdate("yellow");
     showToast({
       message: overlaySuppression
-        ? "NavSentinel hid a suspicious overlay on this page."
+        ? "NavSentinel hid suspicious overlays."
         : "NavSentinel detected a suspicious overlay.",
-      actions: overlaySuppression
-        ? [{ label: "Undo", onClick: overlaySuppression }]
-        : undefined,
-      onReplace: overlaySuppression ?? undefined,
+      ...overlayToastControls(overlaySuppression),
       timeoutMs: 0,
     });
   }
@@ -943,14 +948,32 @@ function scanExistingOverlayIfEnabled(): void {
     settings.defaultMode !== "off" &&
     settings.autoDismissOverlays
   ) {
+    if (mutationMonitorState <= 0) {
+      scheduleEarlyAutoDismissStart();
+      return;
+    }
     scanExistingForegroundOverlay(document);
   }
 }
 
 function armMutationMonitor(): void {
+  if (mutationMonitorState > 0) return;
   mutationMonitorState = 1;
   startMutationMonitorIfReady();
   scanExistingOverlayIfEnabled();
+}
+
+function scheduleEarlyAutoDismissStart(): void {
+  if (!isTopFrame() || mutationMonitorState !== 0) return;
+
+  mutationMonitorState = -1;
+  const schedule = () => setTimeout(armMutationMonitor, 500);
+
+  if (document.readyState === "loading") {
+    window.addEventListener("DOMContentLoaded", schedule, { once: true });
+  } else {
+    schedule();
+  }
 }
 
 function scheduleMutationMonitor(): void {
@@ -1718,97 +1741,87 @@ window.addEventListener(
 
     if (mode !== "off") {
       const hasClickfix = cfScore > 0;
-      if (isBlankAnchor && !isAllowed && !explicitNewTab && !smartAllowsBlank && !smartSuppressesBlankPrompt) {
-        if (nrs >= blockThreshold) {
-          decision = "block";
-        } else {
-          decision = "prompt";
-        }
+      const interceptBlank = isBlankAnchor && !isAllowed && !explicitNewTab &&
+        !smartAllowsBlank && !smartSuppressesBlankPrompt;
+      const blockSameTab = !isBlankAnchor && nrs >= blockThreshold;
+      if (interceptBlank || blockSameTab) {
         e.preventDefault();
         e.stopImmediatePropagation();
-        // This branch has already prevented the navigation. Cleanup follows the
-        // overlay classification, not whether NRS labelled the interception a
-        // prompt or a block; real browser context can legitimately move the same
-        // deceptive click across that decision threshold.
         const overlaySuppression = suppressHighSeverityOverlayInPath(
           e.composedPath?.() ?? [],
           settings.autoDismissOverlays,
           anchor,
         );
-        if (parsed?.href) {
-          const title = hasClickfix
-            ? (decision === "block"
-              ? "Blocked: navigation + fake dialog"
-              : "Suspicious navigation + fake dialog detected")
-            : decision === "block" ? "Blocked new tab" : "Suspicious new tab";
-          showAllowPrompt({
-            title,
-            url: parsed.href,
-            host: parsed.host,
-            target: "_blank",
-            promptScore: nrs,
-            outcomeFeatures: navFeatures,
-            ...(overlaySuppression ? { overlaySuppression } : {}),
-          });
-          // Suppress standalone ClickFix toast — unified prompt covers it
-          if (hasClickfix) clickFixAlertedAt = Date.now();
+        if (interceptBlank) {
+          if (nrs >= blockThreshold) {
+            decision = "block";
+          } else {
+            decision = "prompt";
+          }
+          // This branch has already prevented the navigation. Cleanup follows the
+          // overlay classification, not whether NRS labelled the interception a
+          // prompt or a block; real browser context can legitimately move the same
+          // deceptive click across that decision threshold.
+          if (parsed?.href) {
+            const title = hasClickfix
+              ? (decision === "block"
+                ? "Blocked: navigation + fake dialog"
+                : "Suspicious navigation + fake dialog detected")
+              : decision === "block" ? "Blocked new tab" : "Suspicious new tab";
+            showAllowPrompt({
+              title,
+              url: parsed.href,
+              host: parsed.host,
+              target: "_blank",
+              promptScore: nrs,
+              outcomeFeatures: navFeatures,
+              ...(overlaySuppression ? { overlaySuppression } : {}),
+            });
+            // Suppress standalone ClickFix toast — unified prompt covers it
+            if (hasClickfix) clickFixAlertedAt = Date.now();
+          } else {
+            const prefix = hasClickfix
+              ? "NavSentinel blocked a new tab with fake dialog detected"
+              : "NavSentinel blocked a suspicious new tab";
+            showToast({
+              message: buildPlainMessage(
+                overlaySuppression ? `${prefix} and hid its overlay` : prefix,
+                reasonCodes,
+              ),
+              ...overlayToastControls(overlaySuppression, !hasClickfix),
+            });
+            if (hasClickfix) clickFixAlertedAt = Date.now();
+          }
         } else {
-          const prefix = hasClickfix
-            ? "NavSentinel blocked a new tab with fake dialog detected"
-            : "NavSentinel blocked a suspicious new tab";
+          decision = "block";
+          appendEventSafely({
+            kind: "nav_click_block",
+            site: siteKeyFromLocation(),
+            url: location.href,
+            score: nrs,
+            reasons: reasonCodes,
+            ...(overlaySuppression ? { extra: { overlayAutoDismissed: true } } : {}),
+          });
+          appendOutcomeSafely({
+            domain: siteKeyFromLocation(),
+            ...(destHost ? { destDomain: destHost } : {}),
+            type: "nav",
+            score: nrs,
+            outcome: "block",
+            ...navFeatures
+          });
+          const blockPrefix = hasClickfix
+            ? "NavSentinel blocked a deceptive click with fake dialog"
+            : "NavSentinel blocked a deceptive click";
           showToast({
             message: buildPlainMessage(
-              overlaySuppression ? `${prefix} and hid its overlay` : prefix,
+              overlaySuppression ? `${blockPrefix} and hid the overlay` : blockPrefix,
               reasonCodes,
             ),
-            actions: overlaySuppression
-              ? [{ label: "Undo", onClick: overlaySuppression }]
-              : undefined,
-            onReplace: overlaySuppression ?? undefined,
-            coalesce: !hasClickfix && !overlaySuppression,
+            ...overlayToastControls(overlaySuppression, !hasClickfix),
           });
           if (hasClickfix) clickFixAlertedAt = Date.now();
         }
-      } else if (!isBlankAnchor && nrs >= blockThreshold) {
-        decision = "block";
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        const overlaySuppression = suppressHighSeverityOverlayInPath(
-          e.composedPath?.() ?? [],
-          settings.autoDismissOverlays,
-          anchor,
-        );
-        appendEventSafely({
-          kind: "nav_click_block",
-          site: siteKeyFromLocation(),
-          url: location.href,
-          score: nrs,
-          reasons: reasonCodes,
-          ...(overlaySuppression ? { extra: { overlayAutoDismissed: true } } : {}),
-        });
-        appendOutcomeSafely({
-          domain: siteKeyFromLocation(),
-          ...(destHost ? { destDomain: destHost } : {}),
-          type: "nav",
-          score: nrs,
-          outcome: "block",
-          ...navFeatures
-        });
-        const blockPrefix = hasClickfix
-          ? "NavSentinel blocked a deceptive click with fake dialog"
-          : "NavSentinel blocked a deceptive click";
-        showToast({
-          message: buildPlainMessage(
-            overlaySuppression ? `${blockPrefix} and hid the overlay` : blockPrefix,
-            reasonCodes,
-          ),
-          actions: overlaySuppression
-            ? [{ label: "Undo", onClick: overlaySuppression }]
-            : undefined,
-          onReplace: overlaySuppression ?? undefined,
-          coalesce: !hasClickfix && !overlaySuppression,
-        });
-        if (hasClickfix) clickFixAlertedAt = Date.now();
       }
     }
 

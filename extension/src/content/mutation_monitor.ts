@@ -2,14 +2,15 @@
  * DOM Mutation Monitoring module.
  *
  * Detects suspicious foreground overlays and post-load DOM manipulations:
- *   1. Opt-in bounded scan of a prominent overlay present at the delayed baseline
+ *   1. Opt-in bounded scan of foreground overlays present after DOM readiness
  *   2. Delayed overlay injection (position: fixed/absolute/sticky, large coverage, high z-index)
  *   3. Form action attribute changes (especially cross-domain)
  *   4. Password field injection into existing forms
  *   5. Suspicious iframe injection (hidden, tiny, or cross-domain)
  *
  * Design:
- * - Starts observation >2 seconds after page load (avoids flagging SPA UI builds)
+ * - Starts observation >2 seconds after load by default; opt-in automatic
+ *   cleanup starts after 500ms so obstructing overlays are removed promptly
  * - Batches mutations with a 100ms debounce window
  * - Caps at 50 alerts per page to prevent memory bloat, of which the last 5 are
  *   RESERVED for scarce security-relevant signals so a flood of cheap alerts
@@ -40,6 +41,8 @@ export interface MutationAlert {
   type: MutationAlertType;
   severity: MutationAlertSeverity;
   element: Element;
+  /** Bounded initial-scan batch; absent for ordinary mutation alerts. */
+  elements?: Element[];
   details: string;
   timestamp: number;
 }
@@ -286,16 +289,17 @@ function isScarceAlert(alert: MutationAlert): boolean {
 function pushAlert(alert: MutationAlert): boolean {
   if (alerts.length >= MAX_ALERTS) return false;
   const scarce = isScarceAlert(alert);
+  const alertElements = alert.elements ?? [alert.element];
   if (alerts.length >= FLOODABLE_ALERT_CAP) {
     // Reserved tail: scarce types only. An element that was already scarce-alerted
     // before the boundary has already supplied its security signal, so it cannot
     // later consume a tail slot by being re-added or re-mutated.
     if (!scarce) return false;
-    if (scarceAlertedElements.has(alert.element)) return false;
+    if (alertElements.some((element) => scarceAlertedElements.has(element))) return false;
   }
   // Track scarce elements even before the boundary. This does not suppress any
   // pre-boundary alert; it only protects future reserved capacity from reuse.
-  if (scarce) scarceAlertedElements.add(alert.element);
+  if (scarce) alertElements.forEach((element) => scarceAlertedElements.add(element));
   alerts.push(alert);
   alertCallback?.(alert);
   return true;
@@ -449,30 +453,37 @@ export function classifyOverlayElement(el: Element): OverlayClassification | nul
 
 /**
  * Classify one prominent foreground overlay that already exists when the
- * delayed monitor baseline arms. The candidate walk is shared with ClickFix:
+ * opt-in baseline arms. The candidate walk is shared with ClickFix:
  * open dialogs, direct body children, and one framework-wrapper level. This
  * keeps the opt-in scan bounded instead of forcing layout across the full DOM.
  */
 export function scanExistingForegroundOverlay(doc: Document): boolean {
   if (!observer || initialOverlayAlerted) return false;
 
+  const elements: Element[] = [];
   let details = "";
-  const element = findClickFixOverlay(doc, (candidate) => {
-    try {
-      const classification = classifyOverlayElement(candidate);
-      if (classification?.severity !== "high") return false;
-      details = classification.details;
-      return true;
-    } catch {
-      return false;
-    }
-  });
-  if (!element) return false;
+  while (elements.length < RESERVED_SCARCE_ALERT_SLOTS) {
+    const element = findClickFixOverlay(doc, (candidate) => {
+      if (elements.includes(candidate)) return false;
+      try {
+        const classification = classifyOverlayElement(candidate);
+        if (classification?.severity !== "high") return false;
+        if (!details) details = classification.details;
+        return true;
+      } catch {
+        return false;
+      }
+    });
+    if (!element) break;
+    elements.push(element);
+  }
+  if (!elements.length) return false;
 
   const emitted = pushAlert({
     type: "overlay_detected",
     severity: "high",
-    element,
+    element: elements[0]!,
+    elements,
     details,
     timestamp: Date.now(),
   });

@@ -94,6 +94,13 @@ that an initial high-risk overlay stayed present until it consumed a click. The
 acceptance boundary now requires bounded automatic cleanup after the page settles,
 before interaction; click interception remains a fallback and never replays the
 blocked click.
+The follow-up fresh-profile measurement passed the full interaction sequence but
+took about 3.11 seconds to expose the intended target. The owner judged that too
+slow for practical use and asked how layered or later-arriving traps behave. The
+current slice therefore adds a 500 ms opt-in start after DOM readiness, a maximum
+five-layer initial batch with one grouped Undo, and an explicit multi-overlay Gym
+case. Single overlays injected after monitor startup remain covered by Mutation 01;
+deeper wrapper and long sequential-burst semantics remain follow-up evidence work.
 The 2026-08-27 manual trial also seeded the next bounded UX slices: settings
 autosave and popup/Options synchronization (#558), clear manual Gym expectations
 (#559), compact actionable notices (#560) with advanced timing controls (#561),
@@ -124,7 +131,7 @@ maintainer chooses disclosure/ownership.
 | EV-03 | P1 | Compare additive value with current protections | Agent + headed lane | #418 | Pre-registered scenarios/configurations; wins, misses, interruption, performance, and data flow published |
 | EV-04 | P1 after integrity | Measure representative-site compatibility and runtime overhead | Agent + headed lane | Reuse #127/#420; no new issue before queue cull | Declared normal journeys have zero unexplained functional breakage/page errors; startup/action latency and CPU budgets are fixed, measured, and published before broad instrumentation is enabled |
 | OPS-01 | P1 | Rotate roadmap/orchestrator and cull duplicate epics | Agent + Chris dispositions | #437 and #439–#453 | Short current roadmap, archived history, one milestone-categorized queue |
-| UX-01 | Owner-directed first vertical | Add opt-in cleanup for high-severity deceptive overlays | Agent + Gate-3 | #555 / AI-29 | Options and popup expose the default-off setting and it round-trips; high-severity overlays already covering the settled page, injected later, or encountered by an intercepted click are hidden with Undo and no click replay; disabled/Off and benign-overlay cases stay untouched; focused unit/E2E, build, and exact-head Gate-3 evidence pass |
+| UX-01 | Owner-directed first vertical | Add opt-in cleanup for high-severity deceptive overlays | Agent + Gate-3 | #555 / AI-29 | Options and popup expose the default-off setting and it round-trips; a bounded initial batch, overlays injected later, and overlays encountered by an intercepted click are hidden with Undo and no click replay; disabled/Off and benign-overlay cases stay untouched; focused unit/E2E, build, and exact-head Gate-3 evidence pass |
 
 ### Existing issue dispositions
 

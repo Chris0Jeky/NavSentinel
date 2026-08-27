@@ -458,7 +458,7 @@ test.describe("DOM Mutation Monitor", () => {
       await triggerMutationAfterMonitorArm(page);
       await page.waitForSelector("#malicious-overlay", { state: "attached", timeout: 8000 });
       await expect(page.locator("#malicious-overlay")).toBeHidden();
-      await waitForToastMatch(page, /hid a suspicious overlay/i, 8000);
+      await waitForToastMatch(page, /hid suspicious overlays/i, 8000);
 
       await expect.poll(async () => {
         const events = await extractEventLog(context);
