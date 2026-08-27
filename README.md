@@ -102,6 +102,10 @@ npm run build
 ```
 
 Load `extension/dist` in `chrome://extensions` with Developer Mode enabled.
+After every rebuild, click **Reload** for NavSentinel there before reloading any
+open test page. A page reload alone can retain a stale hashed content-script
+loader. See [Rebuilding an unpacked extension](docs/Testing_and_Gym.md#rebuilding-an-unpacked-extension)
+for the readiness check and recovery sequence.
 `npm run build` always selects the release-eligible `interaction-only` profile.
 For a local unpacked experiment only, `npm run build:research-reputation`
 enables the reserved-domain fixture and marks the artifact non-release.
