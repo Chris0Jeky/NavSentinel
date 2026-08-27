@@ -9,6 +9,45 @@
 
 # Human Gate-3 Guides — NavSentinel
 
+## Active guide: AI-33 — issue #530 popup trust-pill contrast
+
+Run this only after the #530 implementation PR is ready and every automated
+check for its current head is green.
+
+1. Resolve the open PR whose head is `fix/issue530-trust-pill-contrast`. Record
+   its PR number and 40-character `headRefOid`. In the implementation worktree,
+   require `git rev-parse HEAD` to equal that value and confirm there are no
+   uncommitted product changes. If Defender quarantines
+   `tests/clickfix-detector.property.test.ts`, do not allow, inspect, restore, or
+   stage it; record that limitation. Stop on any other mismatch.
+2. Require the exact-head Build / Unit and E2E checks to be green and all review
+   findings to be triaged. Run `npm ci`,
+   `npx vitest run tests/popup-contrast.test.ts`, `npm run typecheck`,
+   `npm run build`, and `npm run check:perf-budget` in that worktree.
+3. In a second terminal in that worktree, run `npm run gym:serve` and require it
+   to start successfully on port 5173. Keep that process running for the trial;
+   stop rather than substitute another server if the strict port check fails.
+4. In a fresh temporary Chrome profile, load that worktree's `extension/dist`
+   unpacked. After any rebuild, click **Reload** for NavSentinel in
+   `chrome://extensions` before reloading a page. Record the Chrome version.
+5. Open `http://127.0.0.1:5173/` and then open the NavSentinel popup.
+   Confirm the gold observing trust pill is readable, fully visible, and not
+   confused with the orange or green signal chips. Its text label must remain
+   present so the state does not rely on colour alone.
+6. Reach the popup's **Trust** action with Tab and activate it with Enter. Reopen
+   the popup if Chrome closes it after activation. Confirm the trusted pill is
+   readable, fully visible, and distinguishable by its label and green treatment.
+   Use the keyboard to reverse the state and confirm the observing treatment
+   returns without clipping or stale text.
+7. Inspect the popup console for new errors, then stop the Gym server. On a pass,
+   reply `AI-33 done;
+   Gate-3 passed on PR #<n> at <40-character SHA>; Chrome <version>`. On any
+   mismatch, reply `AI-33 failed on PR #<n> at <SHA>: <step and observed>` and
+   leave the item open.
+
+Only Chris can record AI-33 complete. The computed WCAG test supports but does
+not replace this exact-head visual and keyboard gate.
+
 > ## ⚠️ SUPERSEDED 2026-07-25 — read before running anything here
 >
 > **All three PRs these guides gate have merged**, and Chris chose to clear their

@@ -17,7 +17,8 @@ provenance only. Detailed retired procedures moved to
 after refreshed exact-head CI and bounded review. That waiver is not a real-Chrome
 pass. #531 separately merged under its own waiver; it does not establish a
 `measure:fp` or headed-measurement result, and #223 remains open. AI-27 and AI-28
-are resolved; AI-14 remains blocked for future measurement work.
+are resolved; AI-14 remains blocked for future measurement work. AI-33 holds
+issue #530's popup trust-pill contrast change for an exact-head visual Gate-3.
 
 **Guided resolution cursor:** `AI-19` (`Resume at: AI-19`; conversational label
 `q-5`). Current ready order: AI-19 → optional AI-24 → AI-23 (low priority).
@@ -29,6 +30,17 @@ reintroduce parser, status-enum, hook, tier, or harness machinery through this
 register.
 
 ## Open and blocked items
+
+**OPEN: AI-33 — Issue #530 popup trust-pill contrast Gate-3.** After the
+implementation PR is ready and exact-head automated checks are green, build that
+same head and follow the active AI-33 procedure in
+[`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md). Verify the
+observing and trusted labels remain readable, visibly distinct from signal
+chips, unclipped, keyboard-operable, and free of new popup-console errors. Only
+Chris can record this complete. Reply `AI-33 done; Gate-3 passed on PR #<n> at
+<40-character SHA>; Chrome <version>` or `AI-33 failed on PR #<n> at <SHA>:
+<step and observed>`. This PR-specific gate does not move the general guided-
+resolution cursor from AI-19.
 
 **OPEN: AI-19 — Clear or replace the working product name before CWS submission.**
 TruNav publicly uses the exact name `NavSentinel` for a coming-soon GNSS
