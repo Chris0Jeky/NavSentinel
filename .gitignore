@@ -9,7 +9,7 @@ __pycache__/
 .DS_Store
 /.idea
 HistoryDump.txt
-test-results/.last-run.json
+test-results/
 playwright-report/
 /RESOURCES
 /.claude/worktrees/

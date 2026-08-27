@@ -354,7 +354,21 @@ Run with the default E2E lane. Tests: `tests/e2e/evasion.spec.ts`.
 Nested-frame overlay cleanup uses `overlay-nesting-lab.html`,
 `overlay-nesting-frame.html`, and `overlay-nesting-stress.html`. The regression
 and Phase-2 projects in `tests/e2e/overlay-cleanup-nesting.spec.ts` cover the
-exact real-world document shape and the mixed twelve-frame matrix.
+exact real-world document shape and the mixed twelve-frame matrix. The hostile
+case also fills the ordinary alert lane, rewrites an already-hidden layer,
+replaces it, injects another layer on scroll, and exposes whether extension UI
+clicks reached page listeners. The `compact-hostile` case proves a 51% by 51%
+click-capturing layer is hidden, while the `benign` case visibly labels and
+preserves its small non-interactive, low-z, and accessible-dialog controls.
+Sustained checks sample at render-frame cadence with a 100 ms watchdog for
+off-screen frames that Chromium throttles, and attach the complete JSON timeline.
+
+Overlay-cleanup E2E assertions use a visibility timeline after the first hidden
+state. A pass requires every sampled attack layer to remain hidden for the full
+dwell window; the complete JSON timeline is attached to the Playwright result.
+CI keeps one retry for diagnosis but uses `failOnFlakyTests`, so a retry-only
+pass is still red. JUnit, HTML, and `test-results` evidence upload on every E2E
+job, including failures; do not infer success by scraping the list reporter.
 
 ### Stress lane
 
