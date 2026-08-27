@@ -177,7 +177,7 @@ let pendingMutations: MutationRecord[] = [];
 const alerts: MutationAlert[] = [];
 let pageHost: string = "";
 let restoredOverlayAttributeBypass = new WeakSet<Element>();
-let initialOverlayAlertedElements = new WeakSet<Element>();
+let initialOverlayAlerted = false;
 
 const observedShadowRoots = new WeakSet<ShadowRoot>();
 const shadowObserversByHost = new Map<Element, MutationObserver>();
@@ -385,19 +385,16 @@ function matchesPatterns(el: Element, patterns: RegExp[]): boolean {
  * Check if an element or its ancestors have dialog/modal ARIA roles.
  * Mirrors the logic in `dom_builder.ts:detectLegitModalBackdrop`.
  */
+const DIALOG_SELECTOR =
+  'dialog[open],[role="dialog" i],[role="alertdialog" i],[aria-modal="true" i]';
+
 function hasDialogRole(el: Element): boolean {
   let current: Element | null = el;
   for (let depth = 0; current && depth < 5; depth++) {
-    if (current.tagName === "DIALOG") return true;
-    const role = (current.getAttribute("role") ?? "").toLowerCase();
-    if (role === "dialog" || role === "alertdialog") return true;
-    if ((current.getAttribute("aria-modal") ?? "").toLowerCase() === "true") return true;
+    if (current.matches(DIALOG_SELECTOR)) return true;
     current = current.parentElement;
   }
-  return (
-    el.querySelector('dialog[open],[role="dialog"],[role="alertdialog"],[aria-modal="true"]') !==
-    null
-  );
+  return el.querySelector(DIALOG_SELECTOR) !== null;
 }
 
 /**
@@ -457,34 +454,29 @@ export function classifyOverlayElement(el: Element): OverlayClassification | nul
  * keeps the opt-in scan bounded instead of forcing layout across the full DOM.
  */
 export function scanExistingForegroundOverlay(doc: Document): boolean {
-  if (!observer) return false;
+  if (!observer || initialOverlayAlerted) return false;
 
+  let details = "";
   const element = findClickFixOverlay(doc, (candidate) => {
-    if (initialOverlayAlertedElements.has(candidate)) return false;
     try {
-      return classifyOverlayElement(candidate)?.severity === "high";
+      const classification = classifyOverlayElement(candidate);
+      if (classification?.severity !== "high") return false;
+      details = classification.details;
+      return true;
     } catch {
       return false;
     }
   });
   if (!element) return false;
 
-  let classification: OverlayClassification | null;
-  try {
-    classification = classifyOverlayElement(element);
-  } catch {
-    return false;
-  }
-  if (!classification || classification.severity !== "high") return false;
-
   const emitted = pushAlert({
     type: "overlay_detected",
-    severity: classification.severity,
+    severity: "high",
     element,
-    details: classification.details,
+    details,
     timestamp: Date.now(),
   });
-  if (emitted) initialOverlayAlertedElements.add(element);
+  if (emitted) initialOverlayAlerted = true;
   return emitted;
 }
 
@@ -930,7 +922,7 @@ export function startMutationMonitor(
   alerts.length = 0;
   scarceAlertedElements = new WeakSet();
   restoredOverlayAttributeBypass = new WeakSet();
-  initialOverlayAlertedElements = new WeakSet();
+  initialOverlayAlerted = false;
 
   // Snapshot current form actions so we can detect changes later
   snapshotFormActions(doc);
@@ -991,7 +983,7 @@ export function _resetMutationState(): void {
   alerts.length = 0;
   scarceAlertedElements = new WeakSet();
   restoredOverlayAttributeBypass = new WeakSet();
-  initialOverlayAlertedElements = new WeakSet();
+  initialOverlayAlerted = false;
 }
 
 /** Exposed for testing only: number of live per-shadow-root observers. */

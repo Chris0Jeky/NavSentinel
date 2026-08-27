@@ -216,7 +216,7 @@ export function pickSiteUnscoredThreatEvent(
  * tracked rather than done here.
  */
 const UNSCORED_THREAT_TEXT: Readonly<Record<UnscoredThreatKind, string>> = {
-  mutation_alert: "the page showed suspicious foreground content or changed unexpectedly",
+  mutation_alert: "suspicious page activity was detected",
   nav_blank_prompt: "a blank-target navigation was held for confirmation",
   nav_reputation_late_warn: "a frame navigated to a known-malicious domain",
   nav_rollback: "a navigation was rolled back",

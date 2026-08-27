@@ -265,15 +265,8 @@ async function initSettings() {
     console.warn("[NavSentinel] nav anomaly prime failed:", err);
   });
   previousMode = settings.defaultMode;
-  const monitorStartedNow = startMutationMonitorIfReady();
-  if (
-    !monitorStartedNow &&
-    mutationMonitorStarted &&
-    settings.defaultMode !== "off" &&
-    settings.autoDismissOverlays
-  ) {
-    scanExistingForegroundOverlay(document);
-  }
+  startMutationMonitorIfReady();
+  scanExistingOverlayIfEnabled();
   if (isTopFrame()) {
     sendIconUpdate(settings.defaultMode === "off" ? "gray" : "green");
     try {
@@ -302,8 +295,6 @@ onNavSettingsChange((s) => {
   const cleanupWasActive =
     settings.defaultMode !== "off" && settings.autoDismissOverlays;
   settings = s;
-  const cleanupIsActive =
-    settings.defaultMode !== "off" && settings.autoDismissOverlays;
   setDebugEnabled(s.debug);
   postToMain("ns-config", { mode: s.defaultMode, debug: s.debug });
   if (s.defaultMode !== previousMode) {
@@ -319,10 +310,8 @@ onNavSettingsChange((s) => {
       }).catch(() => {});
     }
   }
-  const monitorStartedNow = startMutationMonitorIfReady();
-  if (!monitorStartedNow && mutationMonitorStarted && !cleanupWasActive && cleanupIsActive) {
-    scanExistingForegroundOverlay(document);
-  }
+  startMutationMonitorIfReady();
+  if (!cleanupWasActive) scanExistingOverlayIfEnabled();
   refreshDebug();
 });
 
@@ -893,8 +882,8 @@ function handleClickFixScan(): void {
 // --- Mutation monitor ---
 
 const MUTATION_START_DELAY_MS = 2000;
-let mutationMonitorCanStart = false;
-let mutationMonitorStarted = false;
+// 0 = waiting for page settle, 1 = armed, 2 = observing.
+let mutationMonitorState = 0;
 
 function handleMutationAlert(alert: MutationAlert): void {
   if (settings.defaultMode === "off") return;
@@ -916,8 +905,7 @@ function handleMutationAlert(alert: MutationAlert): void {
     },
   });
 
-  const isOverlayAlert =
-    alert.type === "overlay_detected" || alert.type === "overlay_injected";
+  const isOverlayAlert = alert.type.startsWith("overlay_");
 
   // Only show a warning toast for high-severity foreground overlays.
   // Low-severity alerts (cookie banners, chat widgets, ARIA dialogs) are
@@ -926,12 +914,8 @@ function handleMutationAlert(alert: MutationAlert): void {
     sendIconUpdate("yellow");
     showToast({
       message: overlaySuppression
-        ? alert.type === "overlay_detected"
-          ? "NavSentinel hid a suspicious overlay on this page."
-          : "NavSentinel hid a suspicious overlay."
-        : alert.type === "overlay_detected"
-          ? "NavSentinel detected a suspicious foreground overlay on this page."
-          : "NavSentinel detected a suspicious overlay injected after page load. The page may be attempting a phishing attack.",
+        ? "NavSentinel hid a suspicious overlay on this page."
+        : "NavSentinel detected a suspicious overlay.",
       actions: overlaySuppression
         ? [{ label: "Undo", onClick: overlaySuppression }]
         : undefined,
@@ -943,25 +927,30 @@ function handleMutationAlert(alert: MutationAlert): void {
   refreshDebug();
 }
 
-function startMutationMonitorIfReady(): boolean {
+function startMutationMonitorIfReady(): void {
   if (
-    !mutationMonitorCanStart ||
-    mutationMonitorStarted ||
+    mutationMonitorState !== 1 ||
     settings.defaultMode === "off"
   ) {
-    return false;
+    return;
   }
   startMutationMonitor(document, handleMutationAlert);
-  mutationMonitorStarted = true;
-  if (settings.autoDismissOverlays) {
+  mutationMonitorState = 2;
+}
+
+function scanExistingOverlayIfEnabled(): void {
+  if (
+    settings.defaultMode !== "off" &&
+    settings.autoDismissOverlays
+  ) {
     scanExistingForegroundOverlay(document);
   }
-  return true;
 }
 
 function armMutationMonitor(): void {
-  mutationMonitorCanStart = true;
+  mutationMonitorState = 1;
   startMutationMonitorIfReady();
+  scanExistingOverlayIfEnabled();
 }
 
 function scheduleMutationMonitor(): void {
