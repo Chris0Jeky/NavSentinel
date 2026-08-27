@@ -76,6 +76,24 @@ bounded opt-in child-frame monitoring, direct-`<html>` discovery, isolated-world
 self-UI exclusion, and an exact synthetic plus twelve-frame stress matrix. This is
 automated candidate evidence, not a human Gate-3 completion; keep AI-29 open.
 
+**Latest human result (2026-08-27, PR #557 at
+`f17dae0d9ad0573d73140784b76e377c2667c7eb`): FAILED on persistent real-world
+cleanup.** Across four visible media embeds, cleanup was inconsistent after
+reload and scroll. Direct inspection of one initialized child frame showed the
+first layer become hidden at about 0.3 seconds, then a page rewrite/replacement
+made both a full-player layer and a maximum-z-index child iframe visible again at
+about 2 seconds; they stayed visible for the remaining 15-second observation
+while the success card remained. Clicking NavSentinel's own **Dismiss** also
+reached a page-level click handler and produced a blocked-popup notice. This
+invalidates the prior E2E oracle, which stopped at the first hidden sample. The
+current repair candidate uses an independently bounded, persistent cleanup lane,
+isolates toast interaction bubbling, retains one grouped Undo across replacement
+layers, and records local cleanup outcomes. Its hostile fixture first failed on
+the old head and now stays hidden across alert flooding, style rewrite, node
+replacement, and scroll reinsertion; this is automated evidence only. Keep AI-29
+open until the eventual pushed exact head has green hosted CI and passes the
+expanded human guide.
+
 **OPEN: AI-36 — #558 popup/Options patch-save synchronization Gate-3.** Run the
 active manual Chrome guide in [`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md)
 against the eventual PR for branch `fix/issue558-patch-save-sync`. Verify the

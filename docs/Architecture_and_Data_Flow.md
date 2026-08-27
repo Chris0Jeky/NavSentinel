@@ -428,16 +428,29 @@ It listens to `chrome.webNavigation` events to decide when a committed navigatio
 `extension/src/content/mutation_monitor.ts` detects post-load injection attacks via MutationObserver:
 
 - Watches for new fixed-position elements covering >= 25% of viewport added after initial load
-- When auto-dismiss is enabled, runs the same bounded monitor inside ordinary
-  child frames and releases those child observers when the opt-in or Navigation
-  mode becomes inactive; the always-on top-frame monitor is unchanged
+- When auto-dismiss is enabled, runs an independently bounded immediate cleanup
+  lane inside the top document and ordinary child frames. It inspects at most 64
+  mutation candidates per observer delivery plus eight foreground candidates
+  per settle/scroll rescan, so the 50-entry security-alert cap cannot disable the
+  opt-in action or make its layout work unbounded.
+- The ordinary alert lane still debounces for 100 ms, caps at 50 records, and
+  stops after five minutes. An active cleanup opt-in keeps observation alive for
+  long-lived/lazy media pages; child observers release when cleanup or Navigation
+  mode becomes inactive.
 - The settled scan checks direct `<html>` children plus body/framework candidates,
   ordered from likely foreground nodes and capped at 128 candidates
 - Detects form action attribute changes and password field injection
-- Rate-limited: 100ms debounce, 50-alert hard cap, 5-minute auto-disconnect
+- Reasserts a page-overwritten suppression and groups replacement layers under
+  one 128-entry page-local Undo ledger. Explicit Undo exempts those exact nodes
+  from automatic rescan while later replacement nodes remain eligible; switching
+  cleanup off restores and resets the current group.
 - Excludes cookie consent banners, chat widgets, and elements with proper ARIA markup
 - Excludes only isolated-world-owned NavSentinel UI nodes through WeakSet identity;
   page-created elements cannot gain an exemption by spoofing an extension-like ID
+- Keeps the cleanup Undo card beside unrelated warnings and stops toast control
+  events before they bubble into page-level click handlers.
+- Records bounded cleanup outcomes in the existing local event log for review;
+  no new permission, endpoint, or remote telemetry path is introduced.
 - Feeds mutation alert count into the debug overlay
 
 ## CSP analysis

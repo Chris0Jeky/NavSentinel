@@ -44,7 +44,7 @@ check for its current head is green.
    page. Normally within about 500 ms after DOM readiness (allow up to 2 seconds
    for this manual check), confirm the pink high-severity trap disappears
    automatically, the visible **Real Link** is exposed, no popup/navigation
-   occurs, and the card says **NavSentinel hid suspicious overlays.** Click
+   occurs, and the card contains **NavSentinel hid suspicious overlays**. Click
    **Undo** and confirm the trap returns without any click being
    synthesized or replayed. Then click the restored trap once to exercise the
    fallback: the new tab must stay blocked, the trap must hide again, and the
@@ -53,22 +53,34 @@ check for its current head is green.
    succeeds.
 6. Open `evasion-12-multiple-overlays.html` without interacting. Confirm both
    stacked traps disappear within the same 2-second allowance, **Real Link** is
-   exposed, no tab/navigation occurs, and one card says **NavSentinel hid
-   suspicious overlays.** Click **Undo** once and confirm both trap
+   exposed, no tab/navigation occurs, and one card contains **NavSentinel hid
+   suspicious overlays**. Click **Undo** once and confirm both trap
    layers return and stay restored.
 7. Open `overlay-nesting-lab.html?case=exact` without interacting. Confirm the
    outer synthetic media frame remains present but its nested advertisement
    disappears, **Nested frame content exposed** becomes visible, and the Undo
    card appears inside that media frame. Click **Undo** and confirm the nested
    advertisement returns without opening a tab or replaying a click.
-8. Turn cleanup off and repeat the mutation fixture: the overlay must remain
+8. Open `overlay-nesting-lab.html?case=hostile` and leave it untouched for at
+   least 8 seconds. The nested advertisement must disappear and stay hidden
+   while the fixture fills the ordinary alert lane, rewrites the original
+   layer, replaces it, and settles. Click NavSentinel's **Dismiss** first and
+   confirm **Page-level click listeners observed** remains `0` with no blocked
+   popup or new tab. Then click **Trigger scroll-time reinsertion**; the new
+   layer must also disappear without reopening the dismissed notice. In Options
+   > Event Log, confirm the local row identifies the cleanup outcome; do not
+   export or share unrelated browsing rows. Then open
+   `overlay-nesting-lab.html?case=compact-hostile` and confirm its compact
+   interactive attack disappears. Open the `case=benign` variant and confirm
+   all three controls labelled **expected visible** remain visible.
+9. Turn cleanup off and repeat the mutation fixture: the overlay must remain
    visible and the warning must remain available. Then set Navigation mode Off,
    enable cleanup, repeat once more, and confirm NavSentinel neither hides nor
    blocks page content in Off mode.
-9. Restore Smart mode and enable cleanup. Exercise
+10. Restore Smart mode and enable cleanup. Exercise
    `level7-legit-modal-backdrop.html` and `level9-legit-video-overlay.html`.
    Confirm the dialog/backdrop and video controls remain visible and usable.
-10. Inspect the page and extension service-worker consoles for new errors. On a
+11. Inspect the page and extension service-worker consoles for new errors. On a
    pass, reply `AI-29 done; Gate-3 passed on PR #<n> at <40-character SHA>;
    Chrome <version>`. On any mismatch, reply `AI-29 failed on PR #<n> at <SHA>:
    <step and observed>` and leave the item open.
