@@ -320,6 +320,18 @@ every behavioural store.
 
 `extension/src/shared/allowlist.ts` manages the per-site navigation allowlist, including legacy key migration and normalization.
 
+### Event-log page attribution (#539)
+
+Each event keeps `site` as the hostname of the frame or page that emitted it,
+so diagnostics retain their source. The service worker may additionally persist
+the optional `pageSite` association, derived only from the browser-provided
+`sender.tab.url` for an HTTP(S) tab. It stores the normalized hostname only —
+never the URL path, query, or fragment — and ignores caller-supplied page
+associations. The popup prefers `pageSite` when matching an event to the active
+top-level page and falls back to `site` for legacy entries. This is a
+top-level-page association, not per-navigation identity; that larger redesign
+remains with #215.
+
 ## Popup and options page
 
 ### Popup

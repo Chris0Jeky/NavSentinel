@@ -444,6 +444,98 @@ describe("suite storage and allowlist migration", () => {
     expect(settings.credential.mode).toBe("strict");
   });
 
+  it("serializes popup and Options worker requests so non-overlapping patches survive (#558)", async () => {
+    const { chrome } = createChromeMock();
+    Object.assign(chrome, {
+      runtime: {
+        id: "suite-test",
+        getURL: (path: string) => `chrome-extension://suite-test/${path}`,
+      },
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const originalGet = chrome.storage.local.get.bind(chrome.storage.local);
+    let reads = 0;
+    let releaseFirstRead: (() => void) | undefined;
+    const firstReadStarted = new Promise<void>((resolve) => {
+      chrome.storage.local.get = async (...args) => {
+        reads += 1;
+        if (reads === 1) {
+          resolve();
+          await new Promise<void>((release) => { releaseFirstRead = release; });
+        }
+        return originalGet(...args);
+      };
+    });
+
+    const { getSuiteSettings, handleSuiteSettingsUpdateMessage } = await import("../extension/src/shared/storage");
+    const popup = { id: "suite-test", url: "chrome-extension://suite-test/src/popup/popup.html" } as chrome.runtime.MessageSender;
+    const options = { id: "suite-test", url: "chrome-extension://suite-test/src/options/options.html" } as chrome.runtime.MessageSender;
+
+    const popupRequest = handleSuiteSettingsUpdateMessage(
+      { type: "ns-suite-settings-update", patch: { nav: { defaultMode: "off" } } }, popup,
+    );
+    await firstReadStarted;
+    const optionsRequest = handleSuiteSettingsUpdateMessage(
+      { type: "ns-suite-settings-update", patch: { credential: { mode: "strict" } } }, options,
+    );
+    await Promise.resolve();
+    expect(reads).toBe(1); // The second request cannot reach its read before the first releases.
+    releaseFirstRead?.();
+    const [popupResponse, optionsResponse] = await Promise.all([popupRequest, optionsRequest]);
+
+    expect(popupResponse.nav.defaultMode).toBe("off");
+    expect(optionsResponse.credential.mode).toBe("strict");
+    const settings = await getSuiteSettings();
+    expect(settings.nav.defaultMode).toBe("off");
+    expect(settings.credential.mode).toBe("strict");
+  });
+
+  it("rejects untrusted and malformed suite-settings worker messages (#558)", async () => {
+    const { chrome } = createChromeMock();
+    Object.assign(chrome, {
+      runtime: {
+        id: "suite-test",
+        getURL: (path: string) => `chrome-extension://suite-test/${path}`,
+      },
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { handleSuiteSettingsUpdateMessage } = await import("../extension/src/shared/storage");
+    const popup = { id: "suite-test", url: "chrome-extension://suite-test/src/popup/popup.html" } as chrome.runtime.MessageSender;
+    const content = { id: "suite-test", url: "https://attacker.example/", tab: { id: 7 } } as chrome.runtime.MessageSender;
+
+    await expect(handleSuiteSettingsUpdateMessage(
+      { type: "ns-suite-settings-update", patch: { nav: { defaultMode: "off" } } }, content,
+    )).rejects.toThrow("unauthorized");
+    await expect(handleSuiteSettingsUpdateMessage(
+      { type: "ns-suite-settings-update", patch: { nav: { defaultMode: "off", injected: true } } }, popup,
+    )).rejects.toThrow("invalid");
+    await expect(handleSuiteSettingsUpdateMessage(
+      { type: "ns-suite-settings-update", patch: [] }, popup,
+    )).rejects.toThrow("invalid");
+    await expect(handleSuiteSettingsUpdateMessage(
+      { type: "ns-suite-settings-update", patch: JSON.parse('{"__proto__":{}}') }, popup,
+    )).rejects.toThrow("invalid");
+    await expect(handleSuiteSettingsUpdateMessage(
+      { type: "ns-suite-settings-update", patch: { logLimit: 999999 } }, popup,
+    )).resolves.toMatchObject({ logLimit: 5000 });
+  });
+
+  it("does not fall back to a page-local settings write after worker delivery failure (#558)", async () => {
+    const { chrome, store } = createChromeMock();
+    Object.assign(chrome, {
+      runtime: {
+        sendMessage: () => Promise.reject(new Error("worker unavailable")),
+      },
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { updateSuiteSettings } = await import("../extension/src/shared/storage");
+    await expect(updateSuiteSettings({ nav: { debug: true } })).rejects.toThrow("worker unavailable");
+    expect(store["sentinelsuite:settings_v1"]).toBeUndefined();
+  });
+
   it("clamps imported event logs to the configured log limit", async () => {
     const { chrome, store } = createChromeMock();
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);

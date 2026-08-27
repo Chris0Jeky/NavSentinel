@@ -92,6 +92,87 @@ test("Level 1 blocks new tabs @smoke", async () => {
   }
 });
 
+test("Cross-host child events retain the top-level page attribution #539 @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/index.html?ai539=top`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+      await waitForNavSentinelBridge(page);
+
+      const childUrl = new URL("/level1-basic-opacity.html?ai539=child", baseUrl);
+      childUrl.hostname = "localhost";
+      const childUrlString = childUrl.href;
+      await page.evaluate((src) => {
+        const frame = document.createElement("iframe");
+        frame.id = "ai539-child-frame";
+        frame.src = src;
+        frame.style.cssText =
+          "position:fixed;left:24px;top:160px;width:520px;height:360px;z-index:2147483647;border:1px solid #777";
+        document.body.appendChild(frame);
+      }, childUrlString);
+
+      const child = page.frames().find((frame) => frame.url() === childUrlString) ??
+        await page.waitForEvent("framenavigated", {
+          predicate: (frame) => frame.url() === childUrlString,
+          timeout: 10_000
+        });
+      await child.waitForFunction(
+        () =>
+          document.documentElement.getAttribute("data-navsentinel-capture-ready") === "1" &&
+          document.documentElement.getAttribute("data-navsentinel-bridge-ready") === "1",
+        null,
+        { timeout: 15_000 }
+      );
+
+      const serviceWorker = await getServiceWorker(context);
+      // Clear only after both top and child bridges are ready, so startup writes
+      // cannot race the event under test.
+      await serviceWorker.evaluate(async (eventLogKey) => {
+        await chrome.storage.local.set({ [eventLogKey]: [] });
+      }, EVENT_LOG_KEY);
+
+      // The fixture's transparent trap covers #play. A real mouse input at the
+      // trusted button coordinates therefore exercises the same intercepted
+      // click path as a user click while keeping the child sender frame alive.
+      const play = child.locator("#play");
+      const box = await play.boundingBox();
+      expect(box, "Expected the child-frame #play button to be visible").toBeTruthy();
+      await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+
+      await expect.poll(
+        () => serviceWorker.evaluate(async (eventLogKey) => {
+          const stored = await chrome.storage.local.get(eventLogKey);
+          const events = Array.isArray(stored[eventLogKey]) ? stored[eventLogKey] : [];
+          return events.find((entry: { kind?: unknown }) => entry?.kind === "nav_blank_prompt") ?? null;
+        }, EVENT_LOG_KEY),
+        { timeout: 5_000 }
+      ).toMatchObject({
+        site: "localhost",
+        pageSite: "127.0.0.1"
+      });
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
 test("Level 2 moving target overlay blocks the hidden new tab @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
@@ -311,6 +392,7 @@ test("Level 12 delayed same-tab navigation does not roll back a legitimate click
       await waitForNavSentinelBridge(page);
 
       const serviceWorker = await getServiceWorker(context);
+      const expectedHost = new URL(baseUrl).hostname;
       await serviceWorker.evaluate(async (eventLogKey) => {
         await chrome.storage.local.set({ [eventLogKey]: [] });
       }, EVENT_LOG_KEY);
@@ -367,8 +449,8 @@ test("Level 12 delayed same-tab navigation does not roll back a legitimate click
         id: expect.any(String),
         ts: expect.any(Number),
         kind: "nav_silent_allow",
-        site: "127.0.0.1",
-        destHost: "127.0.0.1",
+        site: expectedHost,
+        destHost: expectedHost,
         score: expect.any(Number),
         reasons: expect.any(Array),
         extra: expect.objectContaining({
@@ -1536,6 +1618,66 @@ test("Level 10 delayed redirect rolls back to the prior page @rollback", async (
       });
       await page.waitForTimeout(1000);
       await expect(page).toHaveURL(/level10-redirects-and-forms\.html/);
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("History 01 preserves cross-site Back and Forward entries @rollback", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [
+        `--disable-extensions-except=${extensionPath}`,
+        `--load-extension=${extensionPath}`,
+        "--host-resolver-rules=MAP localhost 127.0.0.1"
+      ]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/history-01-back-forward.html?step=p`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+      await waitForNavSentinelBridge(page);
+
+      await page.click("#next");
+      await page.waitForURL((url) => url.searchParams.get("step") === "a");
+      await waitForNavSentinelBridge(page);
+      await page.click("#next");
+      await page.waitForURL((url) => url.searchParams.get("step") === "b");
+      await waitForNavSentinelBridge(page);
+
+      // Let the visible-link gesture and user-navigation context expire. The traversal
+      // itself must remain authoritative without inheriting either allowance.
+      await page.waitForTimeout(11_000);
+
+      const expectStableHistoryStep = async (expected: "p" | "a" | "b") => {
+        await page.waitForURL((url) => url.searchParams.get("step") === expected);
+        await waitForNavSentinelBridge(page);
+        await page.waitForTimeout(1_200);
+        expect(new URL(page.url()).searchParams.get("step")).toBe(expected);
+      };
+
+      await page.goBack({ waitUntil: "commit" });
+      await expectStableHistoryStep("a");
+      await page.goForward({ waitUntil: "commit" });
+      await expectStableHistoryStep("b");
+      await page.goBack({ waitUntil: "commit" });
+      await expectStableHistoryStep("a");
+      await page.goBack({ waitUntil: "commit" });
+      await expectStableHistoryStep("p");
     } finally {
       await context.close();
     }

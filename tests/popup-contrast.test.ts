@@ -30,6 +30,7 @@ const TOKENS_CSS = readFileSync(
 );
 
 const AA_NORMAL_TEXT = 4.5;
+const TRUST_PILL_TARGET = 5;
 
 type Rgba = readonly [number, number, number, number];
 
@@ -71,6 +72,12 @@ function stack(top: Rgba, bottom: Rgba): Rgba {
   const mix = (t: number, b: number): number =>
     (t * top[3] + b * bottom[3] * (1 - top[3])) / outAlpha;
   return [mix(top[0], bottom[0]), mix(top[1], bottom[1]), mix(top[2], bottom[2]), outAlpha];
+}
+
+/** Composite CSS background layers, where the first-listed layer is painted on top. */
+function compositeCssBackgrounds(layers: readonly Rgba[]): Rgba {
+  if (layers.length === 0) return [0, 0, 0, 0];
+  return layers.reduceRight((bottom, top) => stack(top, bottom));
 }
 
 function withAlpha(color: Rgba, alpha: number): Rgba {
@@ -193,7 +200,7 @@ function popupBackdrops(): Array<{ name: string; color: Rgba }> {
   expect(Number.isFinite(heroOpacity)).toBe(true);
 
   // Multiple CSS backgrounds composite first-listed on top.
-  const merged = glowLayers.reduce((bottom, top) => stack(top, bottom));
+  const merged = compositeCssBackgrounds(glowLayers);
   const glow = withAlpha(merged, merged[3] * heroOpacity);
 
   const backdrops: Array<{ name: string; color: Rgba }> = [];
@@ -226,6 +233,17 @@ function signalChipVariants(): Array<{ selector: string; text: Rgba; tint: Rgba 
   return variants;
 }
 
+function trustPillVariants(): Array<{ selector: string; text: Rgba; tint: Rgba }> {
+  return [".trust-pill", '.trust-pill[data-state="trusted"]'].map((selector) => {
+    const body = ruleBody(selector);
+    return {
+      selector,
+      text: parseColor(declaration(body, "color")),
+      tint: parseColor(declaration(body, "background")),
+    };
+  });
+}
+
 // ------------------------------------------------------------------- the tests
 
 describe("contrast helpers", () => {
@@ -240,6 +258,18 @@ describe("contrast helpers", () => {
   it("composites a translucent layer onto an opaque backdrop", () => {
     expect(over([255, 255, 255, 0.5], [0, 0, 0, 1])).toEqual([127.5, 127.5, 127.5, 1]);
     expect(over([10, 20, 30, 0], [1, 2, 3, 1])).toEqual([1, 2, 3, 1]);
+  });
+
+  it("composites CSS background layers in source order", () => {
+    const firstListedTop: Rgba = [240, 30, 20, 0.35];
+    const secondListedBottom: Rgba = [20, 100, 240, 0.65];
+
+    expect(compositeCssBackgrounds([firstListedTop, secondListedBottom])).toEqual(
+      stack(firstListedTop, secondListedBottom),
+    );
+    expect(compositeCssBackgrounds([firstListedTop, secondListedBottom])).not.toEqual(
+      stack(secondListedBottom, firstListedTop),
+    );
   });
 });
 
@@ -271,6 +301,42 @@ describe("popup signal chips meet WCAG AA 1.4.3 (#274)", () => {
           `${variant.selector} on ${backdrop.name} => ${ratio.toFixed(2)}:1`,
         ).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
       }
+    });
+  }
+});
+
+describe("popup trust pills meet WCAG AA 1.4.3 (#530)", () => {
+  const variants = trustPillVariants();
+  const backdrops = popupBackdrops();
+
+  it("enumerates both trust states", () => {
+    expect(variants.map((v) => v.selector)).toEqual([
+      ".trust-pill",
+      '.trust-pill[data-state="trusted"]',
+    ]);
+  });
+
+  it("keeps trust-state text distinct from signal-chip text", () => {
+    const chipColors = new Set(signalChipVariants().map((v) => v.text.slice(0, 3).join(",")));
+    for (const variant of variants) {
+      expect(chipColors, `${variant.selector} must not reuse a signal-chip text colour`).not.toContain(
+        variant.text.slice(0, 3).join(","),
+      );
+    }
+  });
+
+  for (const variant of trustPillVariants()) {
+    it(`${variant.selector} clears ${TRUST_PILL_TARGET}:1 on every popup backdrop`, () => {
+      const ratios = backdrops.map((backdrop) => {
+        const pillSurface = over(variant.tint, backdrop.color);
+        return { backdrop: backdrop.name, ratio: contrastRatio(variant.text, pillSurface) };
+      });
+      const minimum = Math.min(...ratios.map(({ ratio }) => ratio));
+      const worst = ratios.find(({ ratio }) => ratio === minimum);
+      expect(
+        minimum,
+        `${variant.selector} worst case on ${worst?.backdrop} => ${minimum.toFixed(2)}:1`,
+      ).toBeGreaterThanOrEqual(TRUST_PILL_TARGET);
     });
   }
 });
