@@ -9,7 +9,88 @@
 
 # Human Gate-3 Guides — NavSentinel
 
-> ## ⚠️ LEGACY AI-13/AI-21/AI-22 GUIDES SUPERSEDED 2026-07-25
+## Active guide: AI-33 — issue #530 popup trust-pill contrast
+
+Run this only after the #530 implementation PR is ready and every automated
+check for its current head is green.
+
+1. Resolve the open PR whose head is `fix/issue530-trust-pill-contrast`. Record
+   its PR number and 40-character `headRefOid`. In the implementation worktree,
+   require `git rev-parse HEAD` to equal that value and confirm there are no
+   uncommitted product changes. If Defender quarantines
+   `tests/clickfix-detector.property.test.ts`, do not allow, inspect, restore, or
+   stage it; record that limitation. Stop on any other mismatch.
+2. Require the exact-head Build / Unit and E2E checks to be green and all review
+   findings to be triaged. Run `npm ci`,
+   `npx vitest run tests/popup-contrast.test.ts`, `npm run typecheck`,
+   `npm run build`, and `npm run check:perf-budget` in that worktree.
+3. In a second terminal in that worktree, run `npm run gym:serve` and require it
+   to start successfully on port 5173. Keep that process running for the trial;
+   stop rather than substitute another server if the strict port check fails.
+4. In a fresh temporary Chrome profile, load that worktree's `extension/dist`
+   unpacked. After any rebuild, click **Reload** for NavSentinel in
+   `chrome://extensions` before reloading a page. Record the Chrome version.
+5. Open `http://127.0.0.1:5173/` and then open the NavSentinel popup.
+   Confirm the gold observing trust pill is readable, fully visible, and not
+   confused with the orange or green signal chips. Its text label must remain
+   present so the state does not rely on colour alone.
+6. Reach the popup's **Trust** action with Tab and activate it with Enter. Reopen
+   the popup if Chrome closes it after activation. Confirm the trusted pill is
+   readable, fully visible, and distinguishable by its label and green treatment.
+   Use the keyboard to reverse the state and confirm the observing treatment
+   returns without clipping or stale text.
+7. Inspect the popup console for new errors, then stop the Gym server. On a pass,
+   reply `AI-33 done;
+   Gate-3 passed on PR #<n> at <40-character SHA>; Chrome <version>`. On any
+   mismatch, reply `AI-33 failed on PR #<n> at <SHA>: <step and observed>` and
+   leave the item open.
+
+Only Chris can record AI-33 complete. The computed WCAG test supports but does
+not replace this exact-head visual and keyboard gate.
+
+---
+
+## Active guide: AI-30 - PR #570 Back/Forward history integrity
+
+Run this only after PR #570 is ready and every automated check for its current
+head is green.
+
+1. Resolve PR #570 and record its 40-character `headRefOid`. In the implementation
+   worktree, require `git rev-parse HEAD` to equal that value. `git status --short`
+   must contain no uncommitted product changes. The known Defender quarantine may
+   appear only as ` D tests/clickfix-detector.property.test.ts`; do not restore,
+   allow, inspect, stage, or exclude that fixture. Stop for any other mismatch.
+2. On that exact head, run `npm ci` and `npm run build`. Create a fresh temporary
+   Chrome profile, leave it unsigned-in, enable Developer mode at
+   `chrome://extensions`, and load `extension/dist` unpacked. Record the Chrome
+   version and confirm the extension service worker registers without an error.
+   In NavSentinel Options, use Smart Navigation mode and confirm neither
+   `localhost` nor `127.0.0.1` is allowlisted or trusted.
+3. Start the tracked Gym with `npm run gym:serve`, then open
+   `http://127.0.0.1:5173/history-01-back-forward.html?step=p`. Follow the visible
+   link from P to A and from A to B. Confirm the host alternates between
+   `127.0.0.1:5173` and `localhost:5173`, proving the fixture crossed sites.
+4. On B, wait at least 11 seconds so the normal click and recent-navigation
+   allowances expire. Use Chrome's physical **Back** control. Confirm A loads and
+   remains on screen for at least two seconds with no rollback, prompt, or toast.
+   Use physical **Forward** and confirm B remains stable. Then use **Back** twice:
+   the first action must remain on A and the second must reach P. A jump from B
+   directly to P, or a return from A to B, is a failure. Repeat the first
+   B -> A action with the mouse history shortcut if the test mouse exposes one.
+5. Open `level10-redirects-and-forms.html`, click **Delayed redirect**, and confirm
+   the destination briefly commits before NavSentinel returns to the Level 10
+   page. This proves a later page-initiated redirect is still evaluated normally.
+6. Inspect the History fixture, Level 10, and extension service-worker consoles
+   for new errors. On a pass, reply `AI-30 done; Gate-3 passed on PR #570 at
+   <40-character SHA>; Chrome <version>`. On any mismatch, reply `AI-30 failed on
+   PR #570 at <SHA>: <step and observed>` and leave the item open.
+
+Only Chris can record AI-30 complete. Automated Playwright evidence supports but
+does not replace this exact-head manual browser gate.
+
+---
+
+> ## ⚠️ SUPERSEDED 2026-07-25 — read before running anything here
 >
 > **All three PRs these guides gate have merged**, and Chris chose to clear their
 > gates by **automated equivalent** rather than by a manual pass:
@@ -17,11 +98,11 @@
 > **AI-13, AI-21 and AI-22 no longer exist as items.**
 >
 > Consequences for anyone reading below:
-> 1. **Every legacy step-1 exact-head precheck will fail**, correctly — it compares a
+> 1. **Every step-1 exact-head precheck will fail**, correctly — it compares a
 >    worktree against `gh pr view <n> --json headRefOid` and `git ls-remote` for
 >    branches whose PRs are merged. That is not a defect to work around; it is the
 >    precheck telling you the guide's premise is gone.
-> 2. **Do not use those legacy `<AI-N> done; Gate-3 passed on PR #<n>` reply lines.** They
+> 2. **Do not use the `<AI-N> done; Gate-3 passed on PR #<n>` reply lines.** They
 >    would record a Gate-3 pass that `ACTION_ITEMS.md` states was never recorded.
 > 3. These procedures are retained as **reference material for `AI-24`**, the single
 >    optional post-merge real-Chrome confirmation pass over the merged result. To run
@@ -138,6 +219,126 @@ that remain in #558. Only Chris can record this item complete.
    observed result>`. Do not merge on a partial pass; recheck exact head, CI,
    comments, and the repository merge gate afterward.
 
+## AI-35 — #539 cross-host child-event attribution Gate-3
+
+**🚨 OPEN: AI-35 — Run the #539 cross-host child-event attribution Gate-3
+(GUIDE PREPARED; LIVE EXACT-HEAD PRECHECK REQUIRED).** This browser-surface
+slice keeps the emitting frame hostname in `site` while adding a minimized,
+service-worker-derived `pageSite` for the top-level HTTP(S) tab. The popup uses
+that association for its current-page threat state and falls back to `site` for
+legacy rows. It does not add tab or navigation identity; that remains #215.
+Only Chris can record this item complete.
+
+**Current guide:**
+
+1. From the repository root, use the existing worktree for branch
+   `fix/issue539-page-attribution`; do not switch or reset root `main`. Refresh
+   the branch and prove the exact head before running a browser:
+
+   ```sh
+   BRANCH=fix/issue539-page-attribution
+   WORKTREE=<path-to-the-worktree-for-the-branch>
+   git -C "$WORKTREE" fetch origin "$BRANCH"
+   git -C "$WORKTREE" status --short --branch
+   git -C "$WORKTREE" rev-parse HEAD
+   git ls-remote origin "refs/heads/$BRANCH"
+   PR=$(gh pr list --state open --head "$BRANCH" --json number --jq '.[0].number')
+   test -n "$PR"
+   gh pr view "$PR" --json headRefName,headRefOid,state
+   gh pr checks "$PR"
+   ```
+
+   The worktree must be clean except for the one already-ledgered Windows
+   Defender quarantine line ` D tests/clickfix-detector.property.test.ts`.
+   If that exact deletion is present, record it and leave it untouched: do not
+   open, restore, stage, or allow the fixture. Stop for every other status line.
+   `headRefName` must be the named branch, and the local HEAD, remote branch SHA,
+   and PR head SHA must be identical. All checks exercising the branch must be
+   green and no required review thread may remain unresolved. If the branch has
+   not yet been pushed or the PR lookup is empty, stop and report that
+   precondition; never test a stale build.
+2. In that exact worktree run `npm ci`, then `npm run build`. Start the Gym with
+   `python -m http.server 5173 --bind 127.0.0.1 --directory gym` in a second
+   terminal. Create a disposable, fresh Chrome profile without signing in or
+   changing an established profile. Load the exact
+   `<worktree>/extension/dist` directory unpacked from `chrome://extensions`.
+   Confirm Navigation is **Smart** and no localhost/127.0.0.1 allowlist entry is
+   present. If the extension was already loaded, use **Reload** in
+   `chrome://extensions` before opening the Gym page.
+3. Open `http://127.0.0.1:5173/index.html?ai35=top`. In page DevTools confirm
+   both readiness markers are `"1"`:
+
+   ```js
+   ["data-navsentinel-capture-ready", "data-navsentinel-bridge-ready"].map(
+     (name) => document.documentElement.getAttribute(name)
+   )
+   ```
+
+   In the top page's DevTools, inject a visible child frame served by the other
+   loopback hostname, then wait for its load and select that frame's DevTools
+   context to confirm the same two readiness markers:
+
+   ```js
+   await (async () => {
+     const frame = document.createElement("iframe");
+     frame.id = "ai35-child-frame";
+     frame.src = `http://localhost:${location.port}/level1-basic-opacity.html?ai35=child`;
+     frame.style.cssText =
+       "position:fixed;left:24px;top:160px;width:520px;height:360px;z-index:2147483647;border:1px solid #777";
+     const loaded = new Promise((resolve) => frame.addEventListener("load", resolve, { once: true }));
+     document.body.appendChild(frame);
+     await loaded;
+     return frame.src;
+   })();
+   ```
+
+   If Chrome shows its self-XSS paste warning, review the exact local-only
+   snippet before following the prompt manually; never disable the warning or
+   paste unrelated code.
+4. Open NavSentinel's service-worker inspector from `chrome://extensions` and,
+   after both page and child bridges are ready, clear only this disposable
+   profile's event log:
+
+   ```js
+   await chrome.storage.local.set({ "sentinelsuite:event_log_v1": [] });
+   ```
+
+   Return to the child frame, identify its visible **Play** button, and click
+   its coordinates physically once. The Level-1 transparent trap receives this
+   trusted click and should produce one `nav_blank_prompt`; no destination tab
+   should be opened. In the service-worker inspector, poll the event log and
+   verify the matching row has exactly the meaningful attribution fields:
+
+   ```js
+   (await chrome.storage.local.get("sentinelsuite:event_log_v1"))
+     ["sentinelsuite:event_log_v1"]
+     .filter((entry) => entry.kind === "nav_blank_prompt")
+     .at(-1)
+   // Expected: { site: "localhost", pageSite: "127.0.0.1", ... }
+   ```
+
+   `site` must remain `localhost`; `pageSite` must be `127.0.0.1`; neither may
+   contain a path, query, fragment, or full URL. Capture any different value,
+   missing event, opened destination, or page/service-worker console error.
+5. With the first tab's event retained, open a second top-level tab at
+   `http://localhost:5173/index.html?ai35=unrelated`, wait for its NavSentinel
+   readiness markers, and open the extension popup while that localhost tab is
+   active. The **Current page** card must not show the prior event's
+   `Threat alert recorded, no risk score` note or its threat signal; the current
+   gauge must remain clear. The activity feed may still list the global event,
+   which is expected and is not current-page attribution. Switch back to the
+   127.0.0.1 tab and reopen the popup to confirm the threat note is restored
+   there. Record any cross-tab leakage or popup console error as a failure.
+6. Close all test tabs and DevTools windows, stop the Python server with
+   Ctrl+C, close the disposable Chrome profile, and remove only that disposable
+   profile. Do not alter an established profile or disable security software.
+7. Only Chris may record completion. Reply
+   `AI-35 done; Gate-3 passed on branch fix/issue539-page-attribution at
+   <40-character SHA>; Chrome <version>` with console observations, or
+   `AI-35 failed on branch fix/issue539-page-attribution at <SHA>: <step and
+   observed result>`. Do not merge on a partial pass; recheck exact head, CI,
+   comments, and the repository merge gate afterward.
+
 ## Index
 
 | Item | PR | Guide |
@@ -146,6 +347,7 @@ that remain in #558. Only Chris can record this item complete.
 | AI-21 | #464 synthetic navigation | [below](#ai-21--pr-464-synthetic-navigation-gate-3) |
 | AI-22 | #466 pending-decision service worker | [below](#ai-22--pr-466-pending-decision-service-worker-gate-3) |
 | AI-36 | #558 popup/Options patch-save synchronization | [above](#ai-36--558-popupoptions-patch-save-synchronization-gate-3) |
+| AI-35 | #539 cross-host child-event attribution | [below](#ai-35--539-cross-host-child-event-attribution-gate-3) |
 
 ~~Run them oldest-PR-first: AI-13 (#356) -> AI-21 (#464) -> AI-22 (#466).~~
 **Void 2026-07-25** — all three merged with their manual gates waived. There is no
