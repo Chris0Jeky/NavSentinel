@@ -30,6 +30,7 @@ const TOKENS_CSS = readFileSync(
 );
 
 const AA_NORMAL_TEXT = 4.5;
+const TRUST_PILL_TARGET = 5;
 
 type Rgba = readonly [number, number, number, number];
 
@@ -226,6 +227,17 @@ function signalChipVariants(): Array<{ selector: string; text: Rgba; tint: Rgba 
   return variants;
 }
 
+function trustPillVariants(): Array<{ selector: string; text: Rgba; tint: Rgba }> {
+  return [".trust-pill", '.trust-pill[data-state="trusted"]'].map((selector) => {
+    const body = ruleBody(selector);
+    return {
+      selector,
+      text: parseColor(declaration(body, "color")),
+      tint: parseColor(declaration(body, "background")),
+    };
+  });
+}
+
 // ------------------------------------------------------------------- the tests
 
 describe("contrast helpers", () => {
@@ -271,6 +283,42 @@ describe("popup signal chips meet WCAG AA 1.4.3 (#274)", () => {
           `${variant.selector} on ${backdrop.name} => ${ratio.toFixed(2)}:1`,
         ).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
       }
+    });
+  }
+});
+
+describe("popup trust pills meet WCAG AA 1.4.3 (#530)", () => {
+  const variants = trustPillVariants();
+  const backdrops = popupBackdrops();
+
+  it("enumerates both trust states", () => {
+    expect(variants.map((v) => v.selector)).toEqual([
+      ".trust-pill",
+      '.trust-pill[data-state="trusted"]',
+    ]);
+  });
+
+  it("keeps trust-state text distinct from signal-chip text", () => {
+    const chipColors = new Set(signalChipVariants().map((v) => v.text.slice(0, 3).join(",")));
+    for (const variant of variants) {
+      expect(chipColors, `${variant.selector} must not reuse a signal-chip text colour`).not.toContain(
+        variant.text.slice(0, 3).join(","),
+      );
+    }
+  });
+
+  for (const variant of trustPillVariants()) {
+    it(`${variant.selector} clears ${TRUST_PILL_TARGET}:1 on every popup backdrop`, () => {
+      const ratios = backdrops.map((backdrop) => {
+        const pillSurface = over(variant.tint, backdrop.color);
+        return { backdrop: backdrop.name, ratio: contrastRatio(variant.text, pillSurface) };
+      });
+      const minimum = Math.min(...ratios.map(({ ratio }) => ratio));
+      const worst = ratios.find(({ ratio }) => ratio === minimum);
+      expect(
+        minimum,
+        `${variant.selector} worst case on ${worst?.backdrop} => ${minimum.toFixed(2)}:1`,
+      ).toBeGreaterThanOrEqual(TRUST_PILL_TARGET);
     });
   }
 });
