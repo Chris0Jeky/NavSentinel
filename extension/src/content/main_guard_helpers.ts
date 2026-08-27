@@ -56,18 +56,19 @@ export function pruneTimestampWindow(
   return pruned;
 }
 
-/** Decision returned by {@link shouldEmitRapidPushState}. */
-export interface RapidPushStateDecision {
-  /** Whether to emit a `rapid_pushstate` alert now. */
+/** Decision returned by a cooldown gate. */
+export interface CooldownDecision {
+  /** Whether the caller should emit its signal now. */
   emit: boolean;
   /** The new value of the caller's "last emitted at" timestamp. */
   lastEmitAt: number;
 }
 
 /**
- * Cooldown gate for `rapid_pushstate` alerts (#302). The caller invokes this only
- * once the windowed pushState count has reached the rapid threshold; this then
- * allows at most ONE alert per `cooldownMs`.
+ * Generic cooldown gate for high-frequency signals (#302, #523). It allows at
+ * most one emission per `cooldownMs` while retaining the last emission timestamp
+ * for the caller. Each signal family owns its timestamp, so a caller can choose
+ * whether the cooldown is local to a shape or shared across all shapes.
  *
  * The old code emitted on EVERY call past the threshold, so a tight pushState loop
  * produced one priority bridge message per call. Before the bridge handshake those
@@ -76,15 +77,24 @@ export interface RapidPushStateDecision {
  * blocked navigation. A per-window cooldown keeps a sustained flood to a few alerts
  * (re-alerting, unlike a one-shot flag) while leaving the queue room for `ns-nav-blocked`.
  */
-export function shouldEmitRapidPushState(
+export function shouldEmitWithCooldown(
   now: number,
   lastEmitAt: number,
   cooldownMs: number,
-): RapidPushStateDecision {
+): CooldownDecision {
   if (lastEmitAt === 0 || now - lastEmitAt >= cooldownMs) {
     return { emit: true, lastEmitAt: now };
   }
   return { emit: false, lastEmitAt };
+}
+
+/** Compatibility-named wrapper for the rapid-pushState caller (#302). */
+export function shouldEmitRapidPushState(
+  now: number,
+  lastEmitAt: number,
+  cooldownMs: number,
+): CooldownDecision {
+  return shouldEmitWithCooldown(now, lastEmitAt, cooldownMs);
 }
 
 /**

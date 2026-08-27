@@ -7,11 +7,17 @@ import {
   jsBehaviorInstrumentationEnabled,
 } from "@navsentinel/js-behavior-monitor";
 import { OutboundQueue, isMainGuardAlertType, isFloodableAlertType } from "./bridge_outbound";
-import { enforceMapSizeCap, pruneTimestampWindow, shouldEmitRapidPushState } from "./main_guard_helpers";
+import {
+  enforceMapSizeCap,
+  pruneTimestampWindow,
+  shouldEmitRapidPushState,
+  shouldEmitWithCooldown,
+} from "./main_guard_helpers";
 import {
   PUSHSTATE_GESTURE_WINDOW_MS,
   PUSHSTATE_RAPID_THRESHOLD,
   PUSHSTATE_RAPID_WINDOW_MS,
+  CLIPBOARD_WRITE_COOLDOWN_MS,
   MAX_PENDING_OUTBOUND,
   RESERVED_SCARCE_OUTBOUND_SLOTS,
 } from "./main_guard_constants";
@@ -519,6 +525,11 @@ const nativeClipboardWrite =
     ? navigator.clipboard.write?.bind(navigator.clipboard)
     : undefined;
 
+// One cooldown anchor is shared by every successful clipboard-write API path.
+// Keeping this global prevents a page from alternating writeText/write/execCommand
+// to bypass the rate limit and crowd the pre-bridge queue. (#523)
+let lastClipboardWriteEmitAt = 0;
+
 function callNativeOpen(
   thisArg: Window,
   url?: string | URL,
@@ -985,6 +996,26 @@ function textLooksLikeCommand(text: string): boolean {
 
 // --- Clipboard API patching ---
 
+function postClipboardWrite(params: { contentLength: number; looksLikeCommand: boolean }): void {
+  const ts = nowMs();
+  const decision = shouldEmitWithCooldown(
+    ts,
+    lastClipboardWriteEmitAt,
+    CLIPBOARD_WRITE_COOLDOWN_MS,
+  );
+  lastClipboardWriteEmitAt = decision.lastEmitAt;
+  if (!decision.emit) {
+    if (debug) {
+      console.debug("[NavSentinel] clipboard write alert suppressed during cooldown", {
+        contentLength: params.contentLength,
+        looksLikeCommand: params.looksLikeCommand,
+      });
+    }
+    return;
+  }
+  postToIsolated("ns-clipboard-write", { ts, ...params });
+}
+
 function patchClipboard(): void {
   if (typeof navigator === "undefined" || !navigator.clipboard) return;
 
@@ -998,8 +1029,7 @@ function patchClipboard(): void {
         const cmdLike = textLooksLikeCommand(data);
         const len = data.length;
         return nativeClipboardWriteText!(data).then((result) => {
-          postToIsolated("ns-clipboard-write", {
-            ts: nowMs(),
+          postClipboardWrite({
             contentLength: len,
             looksLikeCommand: cmdLike,
           });
@@ -1030,8 +1060,7 @@ function patchClipboard(): void {
               if (item.types.includes("text/plain")) {
                 item.getType("text/plain").then((blob) => {
                   blob.text().then((text) => {
-                    postToIsolated("ns-clipboard-write", {
-                      ts: nowMs(),
+                    postClipboardWrite({
                       contentLength: text.length,
                       looksLikeCommand: textLooksLikeCommand(text),
                     });
@@ -1045,8 +1074,7 @@ function patchClipboard(): void {
             // ClipboardItem API may not be fully available
           }
           if (!inspected) {
-            postToIsolated("ns-clipboard-write", {
-              ts: nowMs(),
+            postClipboardWrite({
               contentLength: -1,
               looksLikeCommand: false,
             });
@@ -1357,8 +1385,7 @@ try {
       } catch {
         // getSelection may throw in some contexts
       }
-      postToIsolated("ns-clipboard-write", {
-        ts: nowMs(),
+      postClipboardWrite({
         contentLength: selText.length || -1,
         looksLikeCommand: selText.length > 0 ? textLooksLikeCommand(selText) : false,
       });

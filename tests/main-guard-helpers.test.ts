@@ -3,6 +3,7 @@ import {
   enforceMapSizeCap,
   pruneTimestampWindow,
   shouldEmitRapidPushState,
+  shouldEmitWithCooldown,
   gestureBranchEmissionBound,
 } from "../extension/src/content/main_guard_helpers";
 // The REAL production constants (not a mirror), so the #377/F1 invariant below fails CI if a
@@ -11,6 +12,7 @@ import {
   PUSHSTATE_GESTURE_WINDOW_MS,
   PUSHSTATE_RAPID_WINDOW_MS,
   PUSHSTATE_RAPID_THRESHOLD,
+  CLIPBOARD_WRITE_COOLDOWN_MS,
   MAX_PENDING_OUTBOUND,
   RESERVED_SCARCE_OUTBOUND_SLOTS,
 } from "../extension/src/content/main_guard_constants";
@@ -145,6 +147,36 @@ describe("shouldEmitRapidPushState (#302)", () => {
   });
 });
 
+describe("shouldEmitWithCooldown (#523)", () => {
+  it("emits first, suppresses within the window, and re-emits after it", () => {
+    expect(shouldEmitWithCooldown(5000, 0, CLIPBOARD_WRITE_COOLDOWN_MS)).toEqual({
+      emit: true,
+      lastEmitAt: 5000,
+    });
+    expect(shouldEmitWithCooldown(5500, 5000, CLIPBOARD_WRITE_COOLDOWN_MS)).toEqual({
+      emit: false,
+      lastEmitAt: 5000,
+    });
+    expect(shouldEmitWithCooldown(6000, 5000, CLIPBOARD_WRITE_COOLDOWN_MS)).toEqual({
+      emit: true,
+      lastEmitAt: 6000,
+    });
+  });
+
+  it("uses one global anchor when clipboard API shapes alternate", () => {
+    let last = 0;
+    let emissions = 0;
+    for (const now of [5000, 5000, 5000, 5500]) {
+      const decision = shouldEmitWithCooldown(now, last, CLIPBOARD_WRITE_COOLDOWN_MS);
+      last = decision.lastEmitAt;
+      if (decision.emit) emissions++;
+    }
+    expect(emissions).toBe(1);
+    const reemit = shouldEmitWithCooldown(6000, last, CLIPBOARD_WRITE_COOLDOWN_MS);
+    expect(reemit.emit).toBe(true);
+  });
+});
+
 describe("gestureBranchEmissionBound (#377/F1)", () => {
   it("computes the ceil(window / spacing) bound for sample constants", () => {
     // 2000ms window, 3 events per 1000ms => 333.3ms spacing => ceil(2000/333.3) = 6.
@@ -256,6 +288,73 @@ describe("#302 composed: a rapid-pushState flood cannot drop a later ns-nav-bloc
     // ns-pushstate-suspicious is priority-but-scarce, so it is not floodable-capped: it
     // fills every slot, and the later (also priority) ns-nav-blocked finds no routine
     // message to displace and is dropped — exactly the #302 detection loss.
+    expect(items).toHaveLength(MAX_PENDING_OUTBOUND);
+    expect(items.some((m) => m.type === "ns-nav-blocked")).toBe(false);
+    expect(dropped).toBeGreaterThan(0);
+  });
+});
+
+describe("#523 composed: clipboard-write flood cannot drop a later ns-nav-blocked", () => {
+  const replayClipboardFlood = (opts: {
+    calls: number;
+    stepMs: number;
+    cooldown: boolean;
+  }) => {
+    const queue = new OutboundQueue(MAX_PENDING_OUTBOUND, RESERVED_SCARCE_OUTBOUND_SLOTS);
+    const post = (type: string) =>
+      queue.enqueue({ type }, isMainGuardAlertType(type), isFloodableAlertType(type));
+    const start = 5000;
+    let lastEmitAt = 0;
+    let alerts = 0;
+
+    for (let i = 0; i < opts.calls; i++) {
+      const now = start + i * opts.stepMs;
+      let emit = true;
+      if (opts.cooldown) {
+        const decision = shouldEmitWithCooldown(now, lastEmitAt, CLIPBOARD_WRITE_COOLDOWN_MS);
+        lastEmitAt = decision.lastEmitAt;
+        emit = decision.emit;
+      }
+      if (!emit) continue;
+      alerts++;
+      post("ns-clipboard-write");
+    }
+
+    // Model a blocked navigation arriving before bridge verification completes.
+    post("ns-nav-blocked");
+    const { items, dropped } = queue.drain();
+    return { alerts, items, dropped };
+  };
+
+  it("collapses a synchronous clipboard flood to one alert", () => {
+    expect(replayClipboardFlood({ calls: 100, stepMs: 0, cooldown: true }).alerts).toBe(1);
+  });
+
+  it("preserves a later ns-nav-blocked with zero drops", () => {
+    const { items, dropped } = replayClipboardFlood({ calls: 100, stepMs: 0, cooldown: true });
+    expect(items.filter((m) => m.type === "ns-nav-blocked")).toHaveLength(1);
+    expect(dropped).toBe(0);
+  });
+
+  it("re-alerts at a bounded rate during a sustained pre-bridge flood and preserves the block", () => {
+    const { alerts, items, dropped } = replayClipboardFlood({
+      calls: 300,
+      stepMs: 10,
+      cooldown: true,
+    });
+    expect(alerts).toBeGreaterThanOrEqual(3);
+    expect(alerts).toBeLessThanOrEqual(4);
+    expect(items.some((m) => m.type === "ns-nav-blocked")).toBe(true);
+    expect(dropped).toBe(0);
+  });
+
+  it("control: without cooldown fills the queue and loses the block", () => {
+    const { alerts, items, dropped } = replayClipboardFlood({
+      calls: 100,
+      stepMs: 0,
+      cooldown: false,
+    });
+    expect(alerts).toBe(100);
     expect(items).toHaveLength(MAX_PENDING_OUTBOUND);
     expect(items.some((m) => m.type === "ns-nav-blocked")).toBe(false);
     expect(dropped).toBeGreaterThan(0);

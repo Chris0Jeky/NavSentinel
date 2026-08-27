@@ -14,6 +14,11 @@ export const PUSHSTATE_RAPID_THRESHOLD = 4;
 /** Window for counting rapid pushState calls. */
 export const PUSHSTATE_RAPID_WINDOW_MS = 1000;
 
+// Clipboard writes can be triggered synchronously and through multiple API shapes
+// (`writeText`, `write`, and `execCommand('copy')`). Keep their bridge signal rate
+// bounded globally so alternating APIs cannot fill the pre-bridge queue. (#523)
+export const CLIPBOARD_WRITE_COOLDOWN_MS = 1000;
+
 // --- Pre-bridge outbound buffer constants ---
 /** Capacity of the pre-verification priority OutboundQueue. */
 export const MAX_PENDING_OUTBOUND = 32;
