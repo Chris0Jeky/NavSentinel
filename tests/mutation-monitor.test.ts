@@ -10,6 +10,7 @@ import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 // we reset between tests.
 import {
   startMutationMonitor,
+  scanExistingForegroundOverlay,
   stopMutationMonitor,
   getMutationAlerts,
   getMutationAlertCount,
@@ -35,6 +36,7 @@ describe("mutation_monitor module API", () => {
 
   it("exports the expected public API", () => {
     expect(typeof startMutationMonitor).toBe("function");
+    expect(typeof scanExistingForegroundOverlay).toBe("function");
     expect(typeof stopMutationMonitor).toBe("function");
     expect(typeof getMutationAlerts).toBe("function");
     expect(typeof getMutationAlertCount).toBe("function");
@@ -72,6 +74,74 @@ describe("mutation_monitor DOM integration", () => {
     const alerts: MutationAlert[] = [];
     startMutationMonitor(document, (a) => alerts.push(a));
     expect(getMutationAlertCount()).toBe(0);
+    stopMutationMonitor();
+  });
+
+  it("reports one high-severity foreground overlay already present at the baseline", () => {
+    const alerts: MutationAlert[] = [];
+    const overlay = document.createElement("a");
+    overlay.style.position = "fixed";
+    overlay.style.zIndex = "10000";
+    overlay.style.display = "block";
+    const rectSpy = vi.spyOn(overlay, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(0, 0, 800, 600),
+    );
+    document.body.appendChild(overlay);
+
+    startMutationMonitor(document, (alert) => alerts.push(alert));
+
+    expect(scanExistingForegroundOverlay(document)).toBe(true);
+    expect(scanExistingForegroundOverlay(document)).toBe(false);
+    expect(alerts.filter((alert) => alert.type === "overlay_detected")).toHaveLength(1);
+
+    rectSpy.mockRestore();
+    overlay.remove();
+    stopMutationMonitor();
+  });
+
+  it("does not report a pre-existing native dialog as a risky foreground overlay", () => {
+    const alerts: MutationAlert[] = [];
+    const dialog = document.createElement("dialog");
+    dialog.setAttribute("open", "");
+    dialog.style.position = "fixed";
+    dialog.style.zIndex = "10000";
+    dialog.style.display = "block";
+    const rectSpy = vi.spyOn(dialog, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(0, 0, 800, 600),
+    );
+    document.body.appendChild(dialog);
+
+    startMutationMonitor(document, (alert) => alerts.push(alert));
+
+    expect(scanExistingForegroundOverlay(document)).toBe(false);
+    expect(alerts.some((alert) => alert.type === "overlay_detected")).toBe(false);
+
+    rectSpy.mockRestore();
+    dialog.remove();
+    stopMutationMonitor();
+  });
+
+  it("does not report a pre-existing wrapper around an open native dialog", () => {
+    const alerts: MutationAlert[] = [];
+    const wrapper = document.createElement("div");
+    wrapper.style.position = "fixed";
+    wrapper.style.zIndex = "10000";
+    wrapper.style.display = "block";
+    const dialog = document.createElement("dialog");
+    dialog.setAttribute("open", "");
+    wrapper.appendChild(dialog);
+    const rectSpy = vi.spyOn(wrapper, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(0, 0, 800, 600),
+    );
+    document.body.appendChild(wrapper);
+
+    startMutationMonitor(document, (alert) => alerts.push(alert));
+
+    expect(scanExistingForegroundOverlay(document)).toBe(false);
+    expect(alerts.some((alert) => alert.type === "overlay_detected")).toBe(false);
+
+    rectSpy.mockRestore();
+    wrapper.remove();
     stopMutationMonitor();
   });
 
@@ -1109,6 +1179,33 @@ describe("mutation_monitor flood-then-inject reserve past the alert cap (#413)",
     expect(getMutationAlertCount()).toBe(50);
     return filler;
   }
+
+  it("keeps a bounded page-settle overlay signal reachable after a benign flood", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (alert) => alerts.push(alert));
+    await vi.advanceTimersByTimeAsync(200);
+
+    const forms = await floodWithBenignAlerts();
+    expect(getMutationAlertCount()).toBe(45);
+
+    const overlay = document.createElement("a");
+    overlay.style.position = "fixed";
+    overlay.style.zIndex = "10000";
+    overlay.style.display = "block";
+    const rectSpy = vi.spyOn(overlay, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(0, 0, 800, 600),
+    );
+    document.body.appendChild(overlay);
+
+    expect(scanExistingForegroundOverlay(document)).toBe(true);
+    expect(alerts.filter((alert) => alert.type === "overlay_detected")).toHaveLength(1);
+    expect(getMutationAlertCount()).toBe(46);
+
+    rectSpy.mockRestore();
+    overlay.remove();
+    for (const form of forms) form.remove();
+    stopMutationMonitor();
+  });
 
   it("emits the credential signal for a shadow root registered after a benign flood (#413)", async () => {
     const alerts: MutationAlert[] = [];

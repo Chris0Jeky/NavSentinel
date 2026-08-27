@@ -37,13 +37,16 @@ check for its current head is green.
    navigation occurs. Click **Undo** and confirm the same overlay is visible
    again.
 5. With cleanup still enabled, open the popup once and confirm its checkbox is
-   still on. Then open `evasion-02-size-34pct.html` and perform its deceptive
-   click. Confirm the new tab stays blocked, the high-severity overlay is hidden,
-   and Undo restores it without replaying the click. Record the exact card text:
-   it must contain **(overlay hidden)**. If it instead says **Suspicious new tab**
-   or **Blocked new tab** without that suffix, report that exact text; if the
-   suffix appears but the overlay reappears before Undo, report the timing and
-   any intervening notice.
+   still on. Then open `evasion-02-size-34pct.html` and do not interact with the
+   page. After the delayed page-settle baseline (normally about 2 seconds after
+   load), confirm the pink high-severity trap disappears automatically, the
+   visible **Real Link** is exposed, no popup/navigation occurs, and the card says
+   **NavSentinel hid a suspicious overlay on this page.** Click **Undo** and
+   confirm the trap returns without any click being synthesized or replayed.
+   Then click the restored trap once to exercise the fallback: the new tab must
+   stay blocked, the trap must hide again, and the card must contain **(overlay
+   hidden)** with Undo. A trap that stays until this first click is a failure of
+   automatic cleanup even if the click-time fallback succeeds.
 6. Turn cleanup off and repeat the mutation fixture: the overlay must remain
    visible and the warning must remain available. Then set Navigation mode Off,
    enable cleanup, repeat once more, and confirm NavSentinel neither hides nor

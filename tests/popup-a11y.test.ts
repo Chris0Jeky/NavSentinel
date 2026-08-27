@@ -60,7 +60,8 @@ describe("popup.html accessibility — HTML validation", () => {
     expect(input.type).toBe("checkbox");
     expect(input.getAttribute("role")).toBe("switch");
     expect(input.closest("label")?.textContent).toContain("Auto-dismiss risky overlays");
-    expect(input.closest("label")?.getAttribute("title")).toBe("Hide detected high-risk overlays");
+    expect(input.closest("label")?.getAttribute("title"))
+      .toBe("Automatically hide high-risk foreground overlays");
   });
 
   it("activity section has aria-label", () => {

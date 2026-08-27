@@ -172,6 +172,9 @@ It currently covers:
 - options-page opt-in overlay-cleanup persistence
 - popup auto-dismiss quick-control persistence
 - options import/export round-trip behavior
+- bounded page-settle scanning hides a pre-existing high-severity foreground
+  overlay before interaction, exposes the intended page target without replaying
+  a click, and leaves Navigation Off inert
 - delayed high-severity overlay auto-dismissal with an Undo restore path; the
   default-disabled case remains visible and warning-only
 - blocked and prompted high-severity click overlays both hide with Undo while

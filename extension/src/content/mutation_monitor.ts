@@ -1,11 +1,12 @@
 /**
  * DOM Mutation Monitoring module.
  *
- * Detects post-load DOM manipulations that indicate phishing or injection attacks:
- *   1. Delayed overlay injection (position: fixed/absolute/sticky, large coverage, high z-index)
- *   2. Form action attribute changes (especially cross-domain)
- *   3. Password field injection into existing forms
- *   4. Suspicious iframe injection (hidden, tiny, or cross-domain)
+ * Detects suspicious foreground overlays and post-load DOM manipulations:
+ *   1. Opt-in bounded scan of a prominent overlay present at the delayed baseline
+ *   2. Delayed overlay injection (position: fixed/absolute/sticky, large coverage, high z-index)
+ *   3. Form action attribute changes (especially cross-domain)
+ *   4. Password field injection into existing forms
+ *   5. Suspicious iframe injection (hidden, tiny, or cross-domain)
  *
  * Design:
  * - Starts observation >2 seconds after page load (avoids flagging SPA UI builds)
@@ -20,12 +21,14 @@
  */
 
 import { matchProviderHostSrc, type ProviderHostEntry } from "../shared/iframe_provider";
+import { findClickFixOverlay } from "./clickfix_detector";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 export type MutationAlertType =
+  | "overlay_detected"
   | "overlay_injected"
   | "form_action_changed"
   | "password_injected"
@@ -174,6 +177,7 @@ let pendingMutations: MutationRecord[] = [];
 const alerts: MutationAlert[] = [];
 let pageHost: string = "";
 let restoredOverlayAttributeBypass = new WeakSet<Element>();
+let initialOverlayAlertedElements = new WeakSet<Element>();
 
 const observedShadowRoots = new WeakSet<ShadowRoot>();
 const shadowObserversByHost = new Map<Element, MutationObserver>();
@@ -258,34 +262,43 @@ function suspiciousIframeScheme(src: string): string | null {
  *    is the credential-redirect signal; same-origin rewrites are ordinary SPA
  *    churn and stay floodable.
  *
- * `overlay_injected` is deliberately NOT scarce: it is the layout-bound check
- * (`getComputedStyle` per element) the cap exists to bound, and it cannot be
- * classified without paying that cost. See the residual-risk note on
- * `processAddedNode`.
+ * Dynamic overlay alerts are deliberately NOT scarce: they require layout-bound
+ * checks (`getComputedStyle` per element) the cap exists to bound, and they
+ * cannot be classified without paying that cost. `overlay_detected` is the one
+ * exception: it comes from an explicit, bounded page-settle/settings scan, so
+ * admitting one result to the reserved tail cannot turn mutation churn into an
+ * unbounded layout workload.
  *
  * Classification never changes WHAT counts as suspicious — no threshold moves,
  * every predicate is the pre-existing one — only WHEN an alert may still fire.
  */
 function isScarceAlert(alert: MutationAlert): boolean {
-  if (alert.type === "password_injected" || alert.type === "suspicious_iframe") return true;
+  if (
+    alert.type === "password_injected" ||
+    alert.type === "suspicious_iframe" ||
+    alert.type === "overlay_detected"
+  ) {
+    return true;
+  }
   return alert.type === "form_action_changed" && alert.severity === "high";
 }
 
-function pushAlert(alert: MutationAlert): void {
-  if (alerts.length >= MAX_ALERTS) return;
+function pushAlert(alert: MutationAlert): boolean {
+  if (alerts.length >= MAX_ALERTS) return false;
   const scarce = isScarceAlert(alert);
   if (alerts.length >= FLOODABLE_ALERT_CAP) {
     // Reserved tail: scarce types only. An element that was already scarce-alerted
     // before the boundary has already supplied its security signal, so it cannot
     // later consume a tail slot by being re-added or re-mutated.
-    if (!scarce) return;
-    if (scarceAlertedElements.has(alert.element)) return;
+    if (!scarce) return false;
+    if (scarceAlertedElements.has(alert.element)) return false;
   }
   // Track scarce elements even before the boundary. This does not suppress any
   // pre-boundary alert; it only protects future reserved capacity from reuse.
   if (scarce) scarceAlertedElements.add(alert.element);
   alerts.push(alert);
   alertCallback?.(alert);
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -375,12 +388,16 @@ function matchesPatterns(el: Element, patterns: RegExp[]): boolean {
 function hasDialogRole(el: Element): boolean {
   let current: Element | null = el;
   for (let depth = 0; current && depth < 5; depth++) {
+    if (current.tagName === "DIALOG") return true;
     const role = (current.getAttribute("role") ?? "").toLowerCase();
     if (role === "dialog" || role === "alertdialog") return true;
     if ((current.getAttribute("aria-modal") ?? "").toLowerCase() === "true") return true;
     current = current.parentElement;
   }
-  return el.querySelector('[role="dialog"],[role="alertdialog"],[aria-modal="true"]') !== null;
+  return (
+    el.querySelector('dialog[open],[role="dialog"],[role="alertdialog"],[aria-modal="true"]') !==
+    null
+  );
 }
 
 /**
@@ -429,8 +446,46 @@ export function classifyOverlayElement(el: Element): OverlayClassification | nul
 
   return {
     severity,
-    details: `Overlay injected: position=${pos}, z-index=${z}, coverage=${(coverage * 100).toFixed(1)}%${suffix}`,
+    details: `Overlay detected: position=${pos}, z-index=${z}, coverage=${(coverage * 100).toFixed(1)}%${suffix}`,
   };
+}
+
+/**
+ * Classify one prominent foreground overlay that already exists when the
+ * delayed monitor baseline arms. The candidate walk is shared with ClickFix:
+ * open dialogs, direct body children, and one framework-wrapper level. This
+ * keeps the opt-in scan bounded instead of forcing layout across the full DOM.
+ */
+export function scanExistingForegroundOverlay(doc: Document): boolean {
+  if (!observer) return false;
+
+  const element = findClickFixOverlay(doc, (candidate) => {
+    if (initialOverlayAlertedElements.has(candidate)) return false;
+    try {
+      return classifyOverlayElement(candidate)?.severity === "high";
+    } catch {
+      return false;
+    }
+  });
+  if (!element) return false;
+
+  let classification: OverlayClassification | null;
+  try {
+    classification = classifyOverlayElement(element);
+  } catch {
+    return false;
+  }
+  if (!classification || classification.severity !== "high") return false;
+
+  const emitted = pushAlert({
+    type: "overlay_detected",
+    severity: classification.severity,
+    element,
+    details: classification.details,
+    timestamp: Date.now(),
+  });
+  if (emitted) initialOverlayAlertedElements.add(element);
+  return emitted;
 }
 
 /**
@@ -875,6 +930,7 @@ export function startMutationMonitor(
   alerts.length = 0;
   scarceAlertedElements = new WeakSet();
   restoredOverlayAttributeBypass = new WeakSet();
+  initialOverlayAlertedElements = new WeakSet();
 
   // Snapshot current form actions so we can detect changes later
   snapshotFormActions(doc);
@@ -935,6 +991,7 @@ export function _resetMutationState(): void {
   alerts.length = 0;
   scarceAlertedElements = new WeakSet();
   restoredOverlayAttributeBypass = new WeakSet();
+  initialOverlayAlertedElements = new WeakSet();
 }
 
 /** Exposed for testing only: number of live per-shadow-root observers. */

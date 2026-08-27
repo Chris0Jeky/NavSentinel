@@ -162,7 +162,8 @@ export interface UnscoredThreatEvent extends EventLogEntry {
  *  - an entry that DOES carry a score is not this state — the scored path owns it;
  *  - `mutation_alert` additionally requires `extra.severity === "high"`. The
  *    mutation monitor emits `low` for known-benign DOM churn (cookie banners,
- *    chat widgets, ARIA dialogs) and `high` for overlay injection, so gating on
+ *    chat widgets, ARIA dialogs) and `high` for suspicious initial or injected
+ *    foreground overlays, so gating on
  *    `high` keeps routine churn out of the gauge — warning on every
  *    `mutation_alert` would be the over-warning failure mode #219 cautions about.
  *    Note this is a deliberate UNDER-warn at the boundary, not a claim that
@@ -207,15 +208,15 @@ export function pickSiteUnscoredThreatEvent(
  *
  * One description per KIND, so `mutation_alert` must be truthful for every
  * high-severity alert the monitor raises — not just overlay injection. It also
- * covers a cross-domain `form_action_changed` (a form's destination rewritten,
- * nothing injected) and `password_injected`, so the wording is deliberately about
- * the page being modified rather than about content being added. Describing each
+ * covers an initial foreground overlay, a cross-domain `form_action_changed`
+ * (a form's destination rewritten), and `password_injected`, so the wording names
+ * both suspicious content and unexpected change. Describing each
  * subtype precisely would mean keying off `event.reasons[0]` (the alert type is
  * stored there) and carrying a second table in a chunk already at 96% of budget;
  * tracked rather than done here.
  */
 const UNSCORED_THREAT_TEXT: Readonly<Record<UnscoredThreatKind, string>> = {
-  mutation_alert: "the page was modified suspiciously after load",
+  mutation_alert: "the page showed suspicious foreground content or changed unexpectedly",
   nav_blank_prompt: "a blank-target navigation was held for confirmation",
   nav_reputation_late_warn: "a frame navigated to a known-malicious domain",
   nav_rollback: "a navigation was rolled back",

@@ -24,8 +24,9 @@ externally audited, or released.
 
 - Scores clicks with a Click Deception Score (CDS) before allowing navigation side effects.
 - Optionally suppresses classifier-identified high-severity foreground overlays
-  after injection or an already-blocked click, shows an Undo action, and never
-  replays the intercepted click.
+  that are already covering the settled page, injected later, or encountered by
+  an already-blocked click. It shows an Undo action and never synthesizes or
+  replays a click onto the newly exposed page.
 - Patches `window.open` and form submission in the main world to catch
   script-driven navigation before it commits. `location.assign` /
   `location.replace` are *not* patched and cannot be: Chromium exposes them as

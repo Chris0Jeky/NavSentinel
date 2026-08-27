@@ -277,7 +277,10 @@ export function matchesInstructionPattern(text: string): boolean {
  * at least 25% of the viewport, with a z-index above 100. Also checks for
  * open <dialog> elements.
  */
-export function findClickFixOverlay(root: Document = document): Element | null {
+export function findClickFixOverlay(
+  root: Document = document,
+  accept?: (element: Element) => boolean,
+): Element | null {
   const vw = Math.max(window.innerWidth, 1);
   const vh = Math.max(window.innerHeight, 1);
   const viewportArea = vw * vh;
@@ -292,7 +295,7 @@ export function findClickFixOverlay(root: Document = document): Element | null {
       const rect = (dialog as HTMLElement).getBoundingClientRect();
       if (rect && rect.width > 0 && rect.height > 0) {
         const coverage = (rect.width * rect.height) / viewportArea;
-        if (coverage >= minCoverage) return dialog;
+        if (coverage >= minCoverage && (!accept || accept(dialog))) return dialog;
       }
     }
   } catch {
@@ -330,7 +333,7 @@ export function findClickFixOverlay(root: Document = document): Element | null {
     const coverage = (rect.width * rect.height) / viewportArea;
     if (coverage < minCoverage) continue;
 
-    return el;
+    if (!accept || accept(el)) return el;
   }
   return null;
 }

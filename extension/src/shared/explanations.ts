@@ -46,6 +46,7 @@ const EXPLANATIONS: Record<string, string> = {
   clickfix_captcha_text_with_overlay: "Fake CAPTCHA text detected alongside a dialog overlay",
 
   // Mutation monitor reason codes (mutation_monitor.ts)
+  overlay_detected: "A suspicious foreground overlay was present after the page loaded",
   overlay_injected: "A suspicious overlay was injected after the page loaded",
   form_action_changed: "A form's submission target was changed after page load",
   password_injected: "A password field was injected into an existing form",
@@ -54,7 +55,7 @@ const EXPLANATIONS: Record<string, string> = {
   // Other event-related codes used in toasts
   clickfix_detected: "Fake verification dialog with clipboard hijack detected",
   dblclickjack_detected: "Double-click hijack attempt detected",
-  mutation_alert: "Suspicious content injected after page load",
+  mutation_alert: "Suspicious page change or foreground overlay detected",
   pushstate_abuse: "Suspicious URL manipulation detected",
 };
 

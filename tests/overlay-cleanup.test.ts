@@ -100,6 +100,14 @@ describe("overlay cleanup", () => {
     expect(overlay.style.display).toBe("flex");
   });
 
+  it("suppresses a high-severity overlay found during the page-load baseline scan", () => {
+    const overlay = makeOverlay();
+    const alert = { ...mutationAlert(overlay), type: "overlay_detected" as const };
+
+    expect(suppressDetectedOverlay(alert, true)).not.toBeNull();
+    expect(overlay.style.getPropertyValue("display")).toBe("none");
+  });
+
   it("finds the high-severity overlay ancestor behind an already-blocked click", () => {
     const overlay = makeOverlay();
     const child = document.createElement("button");

@@ -51,7 +51,11 @@ export function suppressDetectedOverlay(
   alert: Pick<MutationAlert, "type" | "severity" | "element">,
   enabled: boolean,
 ): OverlaySuppression | null {
-  if (!enabled || alert.type !== "overlay_injected" || alert.severity !== "high") {
+  if (
+    !enabled ||
+    (alert.type !== "overlay_detected" && alert.type !== "overlay_injected") ||
+    alert.severity !== "high"
+  ) {
     return null;
   }
   return suppressOverlayElement(alert.element);

@@ -106,9 +106,10 @@ frozen until that sequence produces a credible signal.
 - broad browser-porting work before Chrome behavior is fully stabilized
 
 Issue #555's first overlay-cleanup vertical adds an off-by-default control. It
-hides a high-severity overlay identified after injection or an already-blocked
-click, shows an Undo action, never replays the click, remains inert when the
-setting or Navigation is off, and leaves the covered benign dialogs and widgets
-usable. The control is available in Options and as a quick setting in the
-extension popup. Future mechanisms will be selected from observed efficacy,
-safety, user-control, and compatibility evidence.
+hides a high-severity foreground overlay found during a bounded scan after the
+page settles, identified after injection, or encountered by an already-blocked
+click. It shows an Undo action, never synthesizes or replays a click, remains
+inert when the setting or Navigation is off, and leaves covered benign dialogs
+and widgets usable. The control is available in Options and as a quick setting
+in the extension popup. Future mechanisms will be selected from observed
+efficacy, safety, user-control, and compatibility evidence.

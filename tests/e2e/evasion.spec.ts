@@ -150,7 +150,7 @@ test("Evasion 02: medium-size overlay is blocked @regression", async () => {
   }
 });
 
-test("Evasion 02: opt-in cleanup hides the blocked overlay and Undo restores it @regression", async () => {
+test("Evasion 02: opt-in cleanup hides the initial overlay before interaction and Undo restores it @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const { page, context, cleanup } = await setupEvasionTest("evasion-02-size-34pct.html");
@@ -161,19 +161,47 @@ test("Evasion 02: opt-in cleanup hides the blocked overlay and Undo restores it 
     await waitForNavSentinelBridge(page);
 
     const trap = page.locator("#trap");
-    const box = await trap.boundingBox();
-    expect(box, "#trap overlay should be visible before the blocked click").toBeTruthy();
-
-    const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
-    await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
-
-    expect(await popupPromise, "Expected the overlay new tab to be blocked").toBeNull();
-    await waitForToastMatch(page, /Blocked new tab \(overlay hidden\)/i, 3000);
-    await expect(trap).toBeHidden();
+    const pageCountBeforeCleanup = context.pages().length;
+    await expect(trap).toBeHidden({ timeout: 8000 });
+    await waitForToastMatch(page, /hid a suspicious overlay on this page/i, 3000);
+    expect(context.pages(), "Initial cleanup must not open or replay a navigation")
+      .toHaveLength(pageCountBeforeCleanup);
+    expect(await page.locator(".real-link").evaluate((link) => {
+      const rect = link.getBoundingClientRect();
+      return document.elementFromPoint(
+        rect.left + rect.width / 2,
+        rect.top + rect.height / 2,
+      ) === link;
+    }), "The intended link should be exposed without a synthetic click").toBe(true);
 
     await clickToastButton(page, "Undo");
     await expect(trap).toBeVisible();
     await expect(page).toHaveURL(/evasion-02-size-34pct\.html/);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("Evasion 02: Navigation Off keeps initial cleanup inert until protection is enabled @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { page, context, cleanup } = await setupEvasionTest("evasion-02-size-34pct.html");
+
+  try {
+    await updateNavigationSettings(context, {
+      defaultMode: "off",
+      autoDismissOverlays: true,
+    });
+    await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
+    await waitForNavSentinelBridge(page);
+
+    const trap = page.locator("#trap");
+    await page.waitForTimeout(3500);
+    await expect(trap).toBeVisible();
+
+    await updateNavigationSettings(context, { defaultMode: "smart" });
+    await expect(trap).toBeHidden({ timeout: 3000 });
+    await waitForToastMatch(page, /hid a suspicious overlay on this page/i, 3000);
   } finally {
     await cleanup();
   }
