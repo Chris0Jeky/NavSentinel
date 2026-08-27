@@ -235,7 +235,7 @@ describe("sri_checker - partial SRI coverage", () => {
     expect(result.reasons).toHaveLength(0);
   });
 
-  it("returns +5 when exactly 50% have SRI (is not < 50%)", () => {
+  it("returns 0 when exactly 50% have SRI (neutral)", () => {
     const hash = "sha384-abc123";
     const doc = makeDoc(loginPage(
       scriptTag(`${EXTERNAL_ORIGIN}/a.js`, hash) +
@@ -351,6 +351,21 @@ describe("sri_checker - edge cases", () => {
     expect(result.withoutSRI).toBe(1);
     // 1/2 = 50%, neutral
     expect(result.score).toBe(0);
+  });
+
+  it("pools scripts and stylesheets instead of weighting each type separately", () => {
+    const hash = "sha256-xyz";
+    const doc = makeDoc(loginPage(
+      scriptTag(`${EXTERNAL_ORIGIN}/a.js`) +
+      scriptTag(`${EXTERNAL_ORIGIN}/b.js`) +
+      scriptTag(`${EXTERNAL_ORIGIN}/c.js`) +
+      linkTag(`${EXTERNAL_ORIGIN}/styles.css`, hash)
+    ));
+    const result = checkSRI(doc, PAGE_URL, PAGE_ORIGIN);
+    expect(result.totalExternal).toBe(4);
+    expect(result.withSRI).toBe(1);
+    expect(result.withoutSRI).toBe(3);
+    expect(result.score).toBe(5);
   });
 
   it("ignores link elements that are not stylesheets", () => {
