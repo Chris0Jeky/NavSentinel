@@ -359,8 +359,10 @@ case also fills the ordinary alert lane, rewrites an already-hidden layer,
 replaces it, injects another layer on scroll, and counts pointer, mouse, touch,
 click, and keyboard input in page-owned window capture listeners. Mouse Dismiss
 and keyboard Undo must each perform their intended extension action while that
-count remains zero; this exercises the synchronous
-MAIN-world loader fence, not only the later shadow-root fallback. The
+count remains zero. The hostile page also retargets its realm-visible event path
+to the extension host; the test therefore requires the synchronous MAIN-world
+loader to retain pristine host ownership and resolve the actual mouse control by
+owned shadow-root bounds or the keyboard control by shadow-root focus. The
 `compact-hostile` case proves a 51% by 51% click-capturing layer is hidden, while
 the `benign` case visibly labels and preserves its small non-interactive, low-z,
 and accessible-dialog controls.

@@ -81,6 +81,22 @@
       document.documentElement.dataset.fixtureReady = "true";
 
       if (fixtureCase === "hostile") {
+        // A page can replace the realm-visible composedPath method after the
+        // document-start fence has registered. Some cross-world/shadow paths
+        // are also retargeted to the host in real Chrome. Preserve the host in
+        // the path while hiding the extension-owned inner control so the
+        // regression proves Dismiss/Undo do not depend on page-visible shadow
+        // internals.
+        const pageComposedPath = Event.prototype.composedPath;
+        Event.prototype.composedPath = function retargetExtensionControlPath() {
+          const path = pageComposedPath.call(this);
+          const hostIndex = path.findIndex((node) =>
+            node instanceof HTMLElement && node.id === "__navsentinel_toast_host"
+          );
+          return hostIndex >= 0 ? path.slice(hostIndex) : path;
+        };
+        document.documentElement.dataset.controlPathRetargeted = "true";
+
         document.documentElement.dataset.pageControlEventCount = "0";
         const status = document.createElement("p");
         status.id = "hostile-click-status";

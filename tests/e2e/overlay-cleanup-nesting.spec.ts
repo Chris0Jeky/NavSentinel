@@ -258,8 +258,20 @@ test("toast mouse and keyboard controls do not leak capture-phase input into the
     await waitForNavSentinelBridge(page);
     let frame = await childFrame(page, "hostile");
     await waitForFrameToast(frame, /hid suspicious overlays/i);
+    await expect.poll(() => frame.evaluate(() =>
+      document.documentElement.dataset.controlPathRetargeted,
+    )).toBe("true");
 
-    await clickFrameToastButton(frame, "Dismiss");
+    const pageCount = context.pages().length;
+    await frame.evaluate(() => {
+      window.open("https://relay-target.example/blocked", "_blank");
+    });
+    const toastHost = frame.locator("#__navsentinel_toast_host");
+    await expect(toastHost.getByRole("button", { name: "Dismiss", exact: true }))
+      .toHaveCount(2);
+    await toastHost.locator(".wrap[data-persistent='true']")
+      .getByRole("button", { name: "Dismiss", exact: true })
+      .click();
     await expect.poll(() => frame.evaluate(() =>
       Number(document.documentElement.dataset.pageControlEventCount ?? "0"),
     )).toBe(0);
@@ -267,6 +279,7 @@ test("toast mouse and keyboard controls do not leak capture-phase input into the
       !document.querySelector("#__navsentinel_toast_host")?.shadowRoot
         ?.querySelector(".wrap[data-persistent='true']"),
     )).toBe(true);
+    expect(context.pages()).toHaveLength(pageCount);
 
     await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
     await waitForNavSentinelBridge(page);
