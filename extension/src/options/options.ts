@@ -504,8 +504,8 @@ function rebaseIncomingSettings(incoming: SuiteSettings): void {
 
 async function init(): Promise<void> {
   const s = await getSuiteSettings();
-  renderedSettings = s;
-  renderSettings(s);
+  // A storage change may have supplied fresher settings while this read was pending.
+  if (!renderedSettings) renderSettings(renderedSettings = s);
   await refreshAllowlist();
   await refreshTrusted();
   await refreshEventLog();

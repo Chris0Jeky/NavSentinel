@@ -88,21 +88,70 @@ test("Options keeps popup changes while saving an unrelated dirty setting @regre
     try {
       const extensionId = await getExtensionId(context);
       const options = await context.newPage();
+      await options.addInitScript((settingsKey) => {
+        const originalGet = chrome.storage.local.get.bind(chrome.storage.local) as (
+          keys?: string | string[] | Record<string, unknown> | null,
+        ) => Promise<Record<string, unknown>>;
+        let releaseInitialRead = () => {};
+        const initialReadGate = new Promise<void>((resolve) => {
+          releaseInitialRead = resolve;
+        });
+        const state = window as Window & {
+          __nsInitialSettingsReadStarted?: boolean;
+          __nsInitialSettingsReadReturned?: boolean;
+          __nsReleaseInitialSettingsRead?: () => void;
+        };
+        state.__nsReleaseInitialSettingsRead = releaseInitialRead;
+        chrome.storage.local.get = (async (
+          keys?: string | string[] | Record<string, unknown> | null,
+        ) => {
+          const result = await originalGet(keys);
+          if (
+            !state.__nsInitialSettingsReadStarted &&
+            Array.isArray(keys) &&
+            keys.includes(settingsKey)
+          ) {
+            state.__nsInitialSettingsReadStarted = true;
+            await initialReadGate;
+            state.__nsInitialSettingsReadReturned = true;
+          }
+          return result;
+        }) as typeof chrome.storage.local.get;
+      }, SUITE_SETTINGS_KEY);
       await options.goto(`chrome-extension://${extensionId}/src/options/options.html`, {
         waitUntil: "domcontentloaded",
         timeout: 20_000,
       });
-      await expect(options.locator("#warnOnPaste")).toHaveAttribute("aria-checked", "true");
+      await options.waitForFunction(() => {
+        const state = window as Window & { __nsInitialSettingsReadStarted?: boolean };
+        return state.__nsInitialSettingsReadStarted === true;
+      });
 
-      // Leave one Options-only change unsaved, then make both protection-mode
-      // changes through the real popup test bridge. The live listener must adopt
-      // the clean popup fields without dropping the local dirty switch.
-      await options.locator("#warnOnPaste").click();
-      await expect(options.locator("#warnOnPaste")).toHaveAttribute("aria-checked", "false");
+      // Change both modes while Options still holds its initial storage snapshot.
+      // The live listener must render the new values before that stale read returns.
       await openRealPopup(context);
       await selectPopupMode(context, "navMode", "strict");
       await selectPopupMode(context, "credMode", "off");
 
+      await expect(options.locator('#navModeSeg .seg-btn[data-value="strict"]'))
+        .toHaveAttribute("aria-checked", "true");
+      await expect(options.locator('#credModeSeg .seg-btn[data-value="off"]'))
+        .toHaveAttribute("aria-checked", "true");
+      await expect(options.locator("#warnOnPaste")).toHaveAttribute("aria-checked", "true");
+
+      // Keep an Options-only field dirty, then release the older snapshot. The
+      // initialization continuation must not repaint either the popup values or
+      // this unsaved switch.
+      await options.locator("#warnOnPaste").click();
+      await expect(options.locator("#warnOnPaste")).toHaveAttribute("aria-checked", "false");
+      await options.evaluate(() => {
+        const state = window as Window & { __nsReleaseInitialSettingsRead?: () => void };
+        state.__nsReleaseInitialSettingsRead?.();
+      });
+      await options.waitForFunction(() => {
+        const state = window as Window & { __nsInitialSettingsReadReturned?: boolean };
+        return state.__nsInitialSettingsReadReturned === true;
+      });
       await expect(options.locator('#navModeSeg .seg-btn[data-value="strict"]'))
         .toHaveAttribute("aria-checked", "true");
       await expect(options.locator('#credModeSeg .seg-btn[data-value="off"]'))
