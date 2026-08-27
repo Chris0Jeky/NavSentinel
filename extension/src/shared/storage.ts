@@ -43,6 +43,12 @@ export type SuiteSettingsPatch = Partial<Omit<SuiteSettings, "nav" | "credential
   };
 };
 
+/** Settings writes from popup/options to the service worker. */
+export type SuiteSettingsUpdateMessage = { type: "ns-suite-settings-update"; patch: unknown };
+export type SuiteSettingsUpdateResponse =
+  | { ok: true; settings: SuiteSettings }
+  | { ok: false; error: string; code?: "unauthorized" | "invalid" };
+
 export const SUITE_SETTINGS_KEY = "sentinelsuite:settings_v1";
 export const TRUSTED_DOMAINS_KEY = "sentinelsuite:trusted_domains_v1";
 export const EVENT_LOG_KEY = "sentinelsuite:event_log_v1";
@@ -271,10 +277,14 @@ export async function getSuiteSettings(): Promise<SuiteSettings> {
 
 let settingsPending: Promise<unknown> = Promise.resolve();
 
-export function updateSuiteSettings(partial: SuiteSettingsPatch): Promise<SuiteSettings> {
-  // Serialize the read-modify-write so rapid concurrent updates (e.g. the popup nav-mode and
-  // cred-mode toggles fired in quick succession, or a double-tap on one segment) don't both read
-  // the same state and have the second write silently clobber the first's change. (#305)
+/**
+ * The service worker's single read-modify-write lane for SuiteSettings.
+ *
+ * @internal Extension pages must use updateSuiteSettings(), which delegates here
+ * through runtime messaging. Keeping this direct lane worker-owned prevents two
+ * independently loaded page modules from interleaving their own queues. (#558)
+ */
+export function updateSuiteSettingsDirect(partial: SuiteSettingsPatch): Promise<SuiteSettings> {
   const next = settingsPending.then(async (): Promise<SuiteSettings> => {
     const cur = await getSuiteSettings();
     const merged = mergeSuiteSettings(cur, partial);
@@ -285,6 +295,146 @@ export function updateSuiteSettings(partial: SuiteSettingsPatch): Promise<SuiteS
     console.warn("[NavSentinel] suite settings serialization error:", err);
   });
   return next;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasOnlyKeys(value: Record<string, unknown>, allowed: readonly string[]): boolean {
+  return Object.keys(value).every((key) => allowed.includes(key));
+}
+
+/** Validate and bound untrusted page input before it crosses into storage. */
+export function sanitizeSuiteSettingsPatch(value: unknown): SuiteSettingsPatch | null {
+  if (!isRecord(value) || !hasOnlyKeys(value, ["nav", "credential", "logLimit"])) return null;
+
+  const patch: SuiteSettingsPatch = {};
+  if ("logLimit" in value) {
+    if (typeof value.logLimit !== "number" || !Number.isFinite(value.logLimit)) return null;
+    patch.logLimit = clampInt(value.logLimit, 50, 5000, DEFAULT_SUITE_SETTINGS.logLimit);
+  }
+
+  if ("nav" in value) {
+    if (!isRecord(value.nav) || !hasOnlyKeys(value.nav, ["defaultMode", "debug"])) return null;
+    const nav: NonNullable<SuiteSettingsPatch["nav"]> = {};
+    if ("defaultMode" in value.nav) {
+      if (value.nav.defaultMode !== "off" && value.nav.defaultMode !== "smart" && value.nav.defaultMode !== "strict") return null;
+      nav.defaultMode = value.nav.defaultMode;
+    }
+    if ("debug" in value.nav) {
+      if (typeof value.nav.debug !== "boolean") return null;
+      nav.debug = value.nav.debug;
+    }
+    if (Object.keys(nav).length === 0) return null;
+    patch.nav = nav;
+  }
+
+  if ("credential" in value) {
+    if (!isRecord(value.credential) || !hasOnlyKeys(value.credential, [
+      "mode", "promptOnUntrustedDomain", "promptOnMediumRisk", "mediumRiskThreshold",
+      "blockHttpPasswordSubmit", "warnOnPaste", "similarity",
+    ])) return null;
+    const credential: NonNullable<SuiteSettingsPatch["credential"]> = {};
+    if ("mode" in value.credential) {
+      if (value.credential.mode !== "off" && value.credential.mode !== "smart" && value.credential.mode !== "strict") return null;
+      credential.mode = value.credential.mode;
+    }
+    for (const key of ["promptOnUntrustedDomain", "promptOnMediumRisk", "blockHttpPasswordSubmit", "warnOnPaste"] as const) {
+      if (key in value.credential) {
+        if (typeof value.credential[key] !== "boolean") return null;
+        credential[key] = value.credential[key];
+      }
+    }
+    if ("mediumRiskThreshold" in value.credential) {
+      if (typeof value.credential.mediumRiskThreshold !== "number" || !Number.isFinite(value.credential.mediumRiskThreshold)) return null;
+      credential.mediumRiskThreshold = clampInt(value.credential.mediumRiskThreshold, 0, 100, DEFAULT_SUITE_SETTINGS.credential.mediumRiskThreshold);
+    }
+    if ("similarity" in value.credential) {
+      if (!isRecord(value.credential.similarity) || !hasOnlyKeys(value.credential.similarity, ["enabled", "maxDistance"])) return null;
+      const similarity: NonNullable<NonNullable<SuiteSettingsPatch["credential"]>["similarity"]> = {};
+      if ("enabled" in value.credential.similarity) {
+        if (typeof value.credential.similarity.enabled !== "boolean") return null;
+        similarity.enabled = value.credential.similarity.enabled;
+      }
+      if ("maxDistance" in value.credential.similarity) {
+        if (typeof value.credential.similarity.maxDistance !== "number" || !Number.isFinite(value.credential.similarity.maxDistance)) return null;
+        similarity.maxDistance = clampInt(value.credential.similarity.maxDistance, 0, 8, DEFAULT_SUITE_SETTINGS.credential.similarity.maxDistance);
+      }
+      if (Object.keys(similarity).length === 0) return null;
+      credential.similarity = similarity;
+    }
+    if (Object.keys(credential).length === 0) return null;
+    patch.credential = credential;
+  }
+
+  return Object.keys(patch).length > 0 ? patch : null;
+}
+
+export function isSuiteSettingsUpdateMessage(message: unknown): message is SuiteSettingsUpdateMessage {
+  return isRecord(message) && message.type === "ns-suite-settings-update" && "patch" in message;
+}
+
+/** Only the shipped settings surfaces may ask the worker to mutate settings. */
+export function isSuiteSettingsPageSender(sender?: chrome.runtime.MessageSender): boolean {
+  const runtime = (globalThis as { chrome?: typeof chrome }).chrome?.runtime;
+  if (!sender || !runtime?.id || sender.id !== runtime.id || typeof sender.url !== "string") return false;
+  const senderUrl = sender.url;
+  const allowedPages = [
+    runtime.getURL("src/popup/popup.html"),
+    runtime.getURL("src/options/options.html"),
+  ];
+  return allowedPages.some((page) => senderUrl === page || senderUrl.startsWith(`${page}?`) || senderUrl.startsWith(`${page}#`));
+}
+
+/** Worker message entry point: authorize, sanitize, then use the worker queue. */
+export async function handleSuiteSettingsUpdateMessage(
+  message: SuiteSettingsUpdateMessage,
+  sender?: chrome.runtime.MessageSender,
+): Promise<SuiteSettingsUpdateResponse> {
+  if (!isSuiteSettingsPageSender(sender)) {
+    return { ok: false, error: "Unauthorized suite-settings mutation from untrusted sender", code: "unauthorized" };
+  }
+  const patch = sanitizeSuiteSettingsPatch(message.patch);
+  if (!patch) return { ok: false, error: "Invalid suite-settings patch", code: "invalid" };
+  try {
+    return { ok: true, settings: await updateSuiteSettingsDirect(patch) };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+function sendSuiteSettingsUpdateMessage(message: SuiteSettingsUpdateMessage): Promise<SuiteSettings> {
+  return new Promise((resolve, reject) => {
+    try {
+      chrome.runtime.sendMessage(message, (response?: SuiteSettingsUpdateResponse) => {
+        const lastError = chrome.runtime.lastError;
+        if (lastError) {
+          reject(new Error(lastError.message ?? "suite-settings update delivery failed"));
+          return;
+        }
+        if (response?.ok) {
+          resolve(response.settings);
+          return;
+        }
+        reject(new Error(response?.error ?? "suite-settings update failed"));
+      });
+    } catch (err) {
+      reject(err instanceof Error ? err : new Error(String(err)));
+    }
+  });
+}
+
+export function updateSuiteSettings(partial: SuiteSettingsPatch): Promise<SuiteSettings> {
+  const runtime = (globalThis as { chrome?: typeof chrome }).chrome?.runtime;
+  if (!isExtensionServiceWorkerContext() && typeof runtime?.sendMessage === "function") {
+    // Do not fall back to a page-local write when delivery fails: it would revive
+    // the lost-update race this worker boundary closes. (#558)
+    return sendSuiteSettingsUpdateMessage({ type: "ns-suite-settings-update", patch: partial });
+  }
+  // Non-extension test environments have no runtime messenger. Production page
+  // contexts always do, and therefore always take the worker-owned path above.
+  return updateSuiteSettingsDirect(partial);
 }
 
 export function onSuiteSettingsChange(cb: (s: SuiteSettings) => void): void {

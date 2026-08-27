@@ -9,12 +9,14 @@ import {
   handleEventLogAppendMessage,
   handleEventLogControlMessage,
   handleSuiteImportMessage,
+  handleSuiteSettingsUpdateMessage,
   handlePromptOutcomeStorageMessage,
   isEventLogAppendMessage,
   isEventLogControlMessage,
   isEventLogMigrationMessage,
   isPromptOutcomeStorageMessage,
   isSuiteImportMessage,
+  isSuiteSettingsUpdateMessage,
   migrateStoredEventLogUrls,
   migrateStoredPromptOutcomes,
   SUITE_SETTINGS_KEY,
@@ -665,6 +667,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (isSuiteImportMessage(message)) {
     void handleSuiteImportMessage(message, sender)
+      .then((response) => sendResponse?.(response))
+      .catch((err) => {
+        sendResponse?.({ ok: false, error: err instanceof Error ? err.message : String(err) });
+      });
+    return true;
+  }
+
+  if (isSuiteSettingsUpdateMessage(message)) {
+    void handleSuiteSettingsUpdateMessage(message, sender)
       .then((response) => sendResponse?.(response))
       .catch((err) => {
         sendResponse?.({ ok: false, error: err instanceof Error ? err.message : String(err) });
