@@ -88,7 +88,8 @@ reached a page-level click handler and produced a blocked-popup notice. This
 invalidates the prior E2E oracle, which stopped at the first hidden sample. The
 current repair candidate uses an independently bounded, persistent cleanup lane,
 isolates toast interaction bubbling, retains one grouped Undo across replacement
-layers, and records local cleanup outcomes. Its hostile fixture first failed on
+and independently delayed layers, and records local cleanup outcomes. Its hostile
+fixture first failed on
 the old head and now stays hidden across alert flooding, style rewrite, node
 replacement, and scroll reinsertion; this is automated evidence only. Keep AI-29
 open until the eventual pushed exact head has green hosted CI and passes the

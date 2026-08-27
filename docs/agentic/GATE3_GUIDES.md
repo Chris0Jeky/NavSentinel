@@ -55,7 +55,10 @@ check for its current head is green.
    stacked traps disappear within the same 2-second allowance, **Real Link** is
    exposed, no tab/navigation occurs, and one card contains **NavSentinel hid
    suspicious overlays**. Click **Undo** once and confirm both trap
-   layers return and stay restored.
+   layers return and stay restored. Then open
+   `mutation-05-sequential-overlays.html`, wait for its 10-second human fallback
+   and the second delayed layer, and confirm both layers stay hidden under one
+   Undo card. Click **Undo** once and confirm both return and remain restored.
 7. Open `overlay-nesting-lab.html?case=exact` without interacting. Confirm the
    outer synthetic media frame remains present but its nested advertisement
    disappears, **Nested frame content exposed** becomes visible, and the Undo

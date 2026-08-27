@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mutation 05 - Sequential Overlay Injection</title>
+  <style>
+    body { margin: 0; padding: 24px; font: 16px/1.45 system-ui, sans-serif; background: #f5f5f5; color: #222; }
+    .description, #status, #timing, #timeline { max-width: 760px; margin-bottom: 12px; padding: 12px; border-radius: 6px; }
+    .description { background: #fff3cd; border: 1px solid #ffc107; }
+    #status, #timing { background: #eef3f8; }
+    #timeline { min-height: 5em; white-space: pre-wrap; background: #17151a; color: #eee; }
+    #real-target { position: fixed; left: 50%; top: 50%; z-index: 2; transform: translate(-50%, -50%); padding: 18px 36px; }
+    .sequential-trap { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(10, 8, 15, 0.84); color: #fff; cursor: pointer; }
+    .trap-card { width: min(420px, 78vw); padding: 28px; border-radius: 10px; background: #fff; color: #222; text-align: center; }
+  </style>
+</head>
+<body>
+  <p><a href="index.html">&larr; Back to Gym index</a></p>
+  <h1>Mutation 05 - Sequential Overlay Injection</h1>
+  <div class="description">
+    Independent full-viewport traps arrive after monitoring starts. With cleanup
+    enabled, every layer should stay hidden under one Undo group. Dismiss hides
+    only NavSentinel's card; it must not restore a trap or reach the page.
+  </div>
+  <div id="timing" aria-live="polite"></div>
+  <div id="status" aria-live="polite">Waiting to start.</div>
+  <pre id="timeline" aria-label="Mutation timeline">No activity yet.</pre>
+  <button id="real-target" type="button">Intended target</button>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const boundedInt = (name, fallback, min, max) => {
+      const value = Number(params.get(name));
+      return Number.isInteger(value) && value >= min && value <= max ? value : fallback;
+    };
+    const firstDelayMs = boundedInt("gymFirstDelayMs", 0, 0, 5000);
+    const layerGapMs = boundedInt("gymLayerGapMs", 1250, 250, 5000);
+    const pageOwnsFirst = params.get("gymPageOwnsFirst") === "1";
+    const layerNames = ["a", "b", "c", "d", "e"];
+    const timeline = [];
+    let started = false;
+    let nextLayer = 0;
+    let intendedClicks = 0;
+    let trapClicks = 0;
+
+    const record = (kind, id = "") => {
+      const entry = { sequence: timeline.length + 1, kind, id, atMs: Math.round(performance.now()) };
+      timeline.push(entry);
+      document.getElementById("timeline").textContent = timeline
+        .map((item) => `${item.sequence}. ${item.atMs}ms ${item.kind}${item.id ? ` ${item.id}` : ""}`)
+        .join("\n");
+    };
+
+    new MutationObserver((records) => {
+      for (const mutation of records) {
+        const target = mutation.target;
+        if (!(target instanceof HTMLElement) || !target.classList.contains("sequential-trap")) continue;
+        const display = target.style.getPropertyValue("display");
+        const priority = target.style.getPropertyPriority("display");
+        if (display === "none" && priority === "important" && target.dataset.cleaned !== "1") {
+          target.dataset.cleaned = "1";
+          target.dataset.cleanedAtMs = String(Math.round(performance.now()));
+          record("cleaned", target.id);
+        } else if (mutation.oldValue?.includes("display: none !important") && getComputedStyle(target).display !== "none") {
+          target.dataset.restoredAtMs = String(Math.round(performance.now()));
+          record("restored", target.id);
+        }
+      }
+    }).observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["style"],
+      attributeOldValue: true,
+      subtree: true
+    });
+
+    function injectNext(source = "scheduled") {
+      const name = layerNames[nextLayer++];
+      if (!name) return null;
+      const overlay = document.createElement("div");
+      overlay.id = `trap-${name}`;
+      overlay.className = "sequential-trap";
+      overlay.style.zIndex = String(20000 + nextLayer);
+      overlay.dataset.source = source;
+      overlay.innerHTML = `<div class="trap-card"><h2>Sponsored verification ${name.toUpperCase()}</h2><p>Re-enter account details to continue.</p></div>`;
+      overlay.addEventListener("click", () => {
+        document.body.dataset.trapClicks = String(++trapClicks);
+        window.open(`https://evil.example/sequential-${name}`, "_blank", "noopener");
+      });
+      document.body.appendChild(overlay);
+      overlay.dataset.injectedAtMs = String(Math.round(performance.now()));
+      document.body.dataset.injectedCount = String(nextLayer);
+      record("injected", overlay.id);
+      document.getElementById("status").textContent = `Injected ${overlay.id} (${nextLayer} total).`;
+      return overlay.id;
+    }
+
+    function start(source, delayMs) {
+      if (started) return;
+      started = true;
+      document.body.dataset.startedBy = source;
+      record("started", source);
+      document.getElementById("timing").textContent = `${source}: first layer in ${delayMs}ms; subsequent gap ${layerGapMs}ms.`;
+      window.setTimeout(() => injectNext(source), delayMs);
+      if (pageOwnsFirst) {
+        window.setTimeout(() => {
+          const first = document.getElementById("trap-a");
+          if (!(first instanceof HTMLElement)) return;
+          first.style.setProperty("display", "none");
+          first.dataset.pageOwnedDisplay = "none";
+          record("page-owned-display", first.id);
+        }, delayMs + Math.max(175, Math.floor(layerGapMs / 2)));
+      }
+      window.setTimeout(() => injectNext(source), delayMs + layerGapMs);
+    }
+
+    document.getElementById("real-target").addEventListener("click", () => {
+      document.body.dataset.intendedClicks = String(++intendedClicks);
+      record("intended-click", "real-target");
+    });
+    window.__navsentinelMutation05 = { injectNext, getTimeline: () => timeline.map((entry) => ({ ...entry })) };
+    window.addEventListener("navsentinel:gym:trigger-mutation", () => start("e2e", firstDelayMs), { once: true });
+    window.setTimeout(() => start("human", 0), 10000);
+  </script>
+</body>
+</html>

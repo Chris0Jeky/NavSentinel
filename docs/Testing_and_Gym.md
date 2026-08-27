@@ -362,6 +362,9 @@ click-capturing layer is hidden, while the `benign` case visibly labels and
 preserves its small non-interactive, low-z, and accessible-dialog controls.
 Sustained checks sample at render-frame cadence with a 100 ms watchdog for
 off-screen frames that Chromium throttles, and attach the complete JSON timeline.
+`mutation-05-sequential-overlays.html` separately covers independently delayed
+layers that remain connected: one grouped Undo, Dismiss-without-restoration,
+page-owned display changes, cleanup-disabled behavior, and Navigation Off.
 
 Overlay-cleanup E2E assertions use a visibility timeline after the first hidden
 state. A pass requires every sampled attack layer to remain hidden for the full
