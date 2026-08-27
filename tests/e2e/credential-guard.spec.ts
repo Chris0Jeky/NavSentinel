@@ -3,7 +3,12 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
-import { EVENT_LOG_KEY, TRUSTED_DOMAINS_KEY } from "../../extension/src/shared/storage";
+import {
+  EVENT_LOG_KEY,
+  SUITE_SETTINGS_KEY,
+  TRUSTED_DOMAINS_KEY,
+  type EventLogEntry
+} from "../../extension/src/shared/storage";
 import {
   assertNoToastFor,
   getExtensionId,
@@ -45,6 +50,113 @@ test("credential guard prompts before risky password submit @smoke", async () =>
 
       await expect(page.locator("text=Credential submit blocked")).toBeVisible({ timeout: 4000 });
       await expect(page).toHaveURL(/level11-credential-guard\.html/);
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("credential guard records a silently allowed submit before continuing @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-cred-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    });
+
+    try {
+      const serviceWorker = await getServiceWorker(context);
+      await serviceWorker.evaluate(
+        async ({ eventLogKey, settingsKey }) => {
+          await chrome.storage.local.set({
+            [eventLogKey]: [],
+            [settingsKey]: {
+              nav: { defaultMode: "smart", debug: false },
+              credential: {
+                mode: "smart",
+                promptOnUntrustedDomain: false,
+                promptOnMediumRisk: false,
+                mediumRiskThreshold: 100,
+                blockHttpPasswordSubmit: false,
+                warnOnPaste: true,
+                similarity: { enabled: true, maxDistance: 2 }
+              },
+              logLimit: 300
+            }
+          });
+        },
+        { eventLogKey: EVENT_LOG_KEY, settingsKey: SUITE_SETTINGS_KEY }
+      );
+
+      const page = await context.newPage();
+      const sourceUrl = `${baseUrl}/content-fp-03-legit-login.html?session=fixture-query-token#fixture-fragment-token`;
+      await page.goto(sourceUrl, { waitUntil: "domcontentloaded", timeout: 20_000 });
+      await waitForNavSentinelBridge(page);
+
+      const syntheticEmail = "synthetic@example.invalid";
+      const syntheticPassword = "fixture-password-not-private";
+      await page.locator("#email").fill(syntheticEmail);
+      await page.locator("#password").fill(syntheticPassword);
+
+      // Delegated event persistence retries for at most 600 ms. Allow browser
+      // and storage overhead, but fail if instrumentation turns a silent allow
+      // into a multi-second delay before the request starts (#252).
+      const submitRequest = page.waitForRequest(
+        (request) => request.method() === "POST" && new URL(request.url()).pathname === "/api/auth/login",
+        { timeout: 1500 }
+      );
+      await Promise.all([submitRequest, page.getByRole("button", { name: "Sign in" }).click()]);
+
+      await expect.poll(
+        () => serviceWorker.evaluate(async (eventLogKey) => {
+          const stored = await chrome.storage.local.get(eventLogKey);
+          const events = Array.isArray(stored[eventLogKey]) ? stored[eventLogKey] : [];
+          return events.filter((entry: { kind?: unknown }) => entry?.kind === "cred_form_evaluated").length;
+        }, EVENT_LOG_KEY),
+        { timeout: 5000 }
+      ).toBe(1);
+
+      const credentialEvents = await serviceWorker.evaluate(async (eventLogKey) => {
+        const stored = await chrome.storage.local.get(eventLogKey);
+        const events = Array.isArray(stored[eventLogKey]) ? stored[eventLogKey] : [];
+        return events.filter(
+          (entry: { kind?: unknown }) => entry?.kind === "cred_form_evaluated"
+        ) as EventLogEntry[];
+      }, EVENT_LOG_KEY);
+      const credentialEvent = credentialEvents[0];
+      expect(credentialEvent).toEqual(expect.objectContaining({
+        id: expect.any(String),
+        ts: expect.any(Number),
+        kind: "cred_form_evaluated",
+        site: "127.0.0.1",
+        destHost: "127.0.0.1",
+        score: expect.any(Number),
+        reasons: expect.any(Array),
+        extra: expect.objectContaining({
+          severity: expect.any(String),
+          crossSite: false,
+          threshold: 100
+        })
+      }));
+
+      const storedUrl = new URL(credentialEvent!.url!);
+      expect(storedUrl.pathname).toBe("/content-fp-03-legit-login.html");
+      expect(storedUrl.search).toBe("");
+      expect(storedUrl.hash).toBe("");
+      const serializedEvent = JSON.stringify(credentialEvent);
+      expect(serializedEvent).not.toContain(syntheticEmail);
+      expect(serializedEvent).not.toContain(syntheticPassword);
+      expect(serializedEvent).not.toContain("fixture-query-token");
+      expect(serializedEvent).not.toContain("fixture-fragment-token");
+      expect(serializedEvent).not.toContain("/api/auth/login");
     } finally {
       await context.close();
     }
