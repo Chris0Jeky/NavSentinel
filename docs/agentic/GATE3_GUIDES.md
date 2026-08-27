@@ -9,6 +9,46 @@
 
 # Human Gate-3 Guides — NavSentinel
 
+## Active guide: AI-30 - PR #570 Back/Forward history integrity
+
+Run this only after PR #570 is ready and every automated check for its current
+head is green.
+
+1. Resolve PR #570 and record its 40-character `headRefOid`. In the implementation
+   worktree, require `git rev-parse HEAD` to equal that value. `git status --short`
+   must contain no uncommitted product changes. The known Defender quarantine may
+   appear only as ` D tests/clickfix-detector.property.test.ts`; do not restore,
+   allow, inspect, stage, or exclude that fixture. Stop for any other mismatch.
+2. On that exact head, run `npm ci` and `npm run build`. Create a fresh temporary
+   Chrome profile, leave it unsigned-in, enable Developer mode at
+   `chrome://extensions`, and load `extension/dist` unpacked. Record the Chrome
+   version and confirm the extension service worker registers without an error.
+   In NavSentinel Options, use Smart Navigation mode and confirm neither
+   `localhost` nor `127.0.0.1` is allowlisted or trusted.
+3. Start the tracked Gym with `npm run gym:serve`, then open
+   `http://127.0.0.1:5173/history-01-back-forward.html?step=p`. Follow the visible
+   link from P to A and from A to B. Confirm the host alternates between
+   `127.0.0.1:5173` and `localhost:5173`, proving the fixture crossed sites.
+4. On B, wait at least 11 seconds so the normal click and recent-navigation
+   allowances expire. Use Chrome's physical **Back** control. Confirm A loads and
+   remains on screen for at least two seconds with no rollback, prompt, or toast.
+   Use physical **Forward** and confirm B remains stable. Then use **Back** twice:
+   the first action must remain on A and the second must reach P. A jump from B
+   directly to P, or a return from A to B, is a failure. Repeat the first
+   B -> A action with the mouse history shortcut if the test mouse exposes one.
+5. Open `level10-redirects-and-forms.html`, click **Delayed redirect**, and confirm
+   the destination briefly commits before NavSentinel returns to the Level 10
+   page. This proves a later page-initiated redirect is still evaluated normally.
+6. Inspect the History fixture, Level 10, and extension service-worker consoles
+   for new errors. On a pass, reply `AI-30 done; Gate-3 passed on PR #570 at
+   <40-character SHA>; Chrome <version>`. On any mismatch, reply `AI-30 failed on
+   PR #570 at <SHA>: <step and observed>` and leave the item open.
+
+Only Chris can record AI-30 complete. Automated Playwright evidence supports but
+does not replace this exact-head manual browser gate.
+
+---
+
 > ## ⚠️ SUPERSEDED 2026-07-25 — read before running anything here
 >
 > **All three PRs these guides gate have merged**, and Chris chose to clear their

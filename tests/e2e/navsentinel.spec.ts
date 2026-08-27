@@ -1543,6 +1543,66 @@ test("Level 10 delayed redirect rolls back to the prior page @rollback", async (
   }
 });
 
+test("History 01 preserves cross-site Back and Forward entries @rollback", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [
+        `--disable-extensions-except=${extensionPath}`,
+        `--load-extension=${extensionPath}`,
+        "--host-resolver-rules=MAP localhost 127.0.0.1"
+      ]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/history-01-back-forward.html?step=p`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+      await waitForNavSentinelBridge(page);
+
+      await page.click("#next");
+      await page.waitForURL((url) => url.searchParams.get("step") === "a");
+      await waitForNavSentinelBridge(page);
+      await page.click("#next");
+      await page.waitForURL((url) => url.searchParams.get("step") === "b");
+      await waitForNavSentinelBridge(page);
+
+      // Let the visible-link gesture and user-navigation context expire. The traversal
+      // itself must remain authoritative without inheriting either allowance.
+      await page.waitForTimeout(11_000);
+
+      const expectStableHistoryStep = async (expected: "p" | "a" | "b") => {
+        await page.waitForURL((url) => url.searchParams.get("step") === expected);
+        await waitForNavSentinelBridge(page);
+        await page.waitForTimeout(1_200);
+        expect(new URL(page.url()).searchParams.get("step")).toBe(expected);
+      };
+
+      await page.goBack({ waitUntil: "commit" });
+      await expectStableHistoryStep("a");
+      await page.goForward({ waitUntil: "commit" });
+      await expectStableHistoryStep("b");
+      await page.goBack({ waitUntil: "commit" });
+      await expectStableHistoryStep("a");
+      await page.goBack({ waitUntil: "commit" });
+      await expectStableHistoryStep("p");
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
 test("Live: Google first result opens with no prompt @live", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
