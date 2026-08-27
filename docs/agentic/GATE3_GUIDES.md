@@ -9,6 +9,54 @@
 
 # Human Gate-3 Guides — NavSentinel
 
+## Active guide: AI-31 - issue #566 modifier-click opener isolation
+
+Run this only after the issue #566 implementation PR is ready and every
+automated check for its current head is green.
+
+1. Resolve the open PR whose head is `fix/issue566-modifier-authority`. Record its
+   PR number and 40-character `headRefOid`. In the implementation worktree,
+   require `git rev-parse HEAD` to equal that value. `git status --short` must
+   contain no uncommitted product changes. The known Defender quarantine may
+   appear only as ` D tests/clickfix-detector.property.test.ts`; do not restore,
+   allow, inspect, stage, or exclude that fixture. Stop for any other mismatch.
+2. On that exact head, run `npm ci` and `npm run build`. Create a fresh temporary
+   Chrome profile, leave it unsigned-in, enable Developer mode at
+   `chrome://extensions`, and load `extension/dist` unpacked. Record the Chrome
+   version and confirm the extension service worker registers without an error.
+3. Start the tracked Gym with `npm run gym:serve`. Set Navigation to Smart and
+   open `http://127.0.0.1:5173/issue566-modifier-retry.html`. Confirm the page's
+   expected-result card is visible and each destination link uses
+   `localhost:5173`, proving the synthetic journey crosses sites while remaining
+   local.
+4. Ctrl-click **Plain native control** (Cmd-click on macOS). Exactly one child
+   tab must open on the destination, while Page A remains on the fixture with no
+   warning. Close only the child tab, reload Page A, and repeat with middle-click.
+5. Reload Page A before each action. Ctrl/Cmd-click **Timer location.assign
+   control**, close the child, then repeat with middle-click. Each action must
+   open exactly one child; Page A must remain on the fixture for at least two
+   seconds with no duplicate navigation or new opener history entry.
+6. Reload Page A before each action. Ctrl/Cmd-click **Timer window.open _self
+   control**, close the child, then repeat with middle-click. Each action must
+   open exactly one child and leave Page A stable. Page A must show `Blocked
+   popup: localhost`; that card is the rejected opener action, not a block of the
+   requested child. No second destination tab may appear.
+7. Set Navigation Off, reload Page A, and Ctrl/Cmd-click **Timer location.assign
+   control** once. The child should open and Page A should also navigate to the
+   timer destination, proving Off did not isolate the site's handler. Restore
+   Smart afterward.
+8. Inspect Page A, the child destinations, and the extension service-worker
+   console for new errors. On a pass, reply `AI-31 done; Gate-3 passed on PR #<n>
+   at <40-character SHA>; Chrome <version>`. On any mismatch, reply `AI-31 failed
+   on PR #<n> at <SHA>: <step and observed>` and leave the item open.
+
+Only Chris can record AI-31 complete. Automated trusted-input Playwright evidence
+supports but does not replace this exact-head manual browser gate. AI-31 does not
+cover the separate Back/Forward traversal behavior in #567/#570 or an unconfirmed
+modifier-click directly on a NavSentinel toast action.
+
+---
+
 > ## ⚠️ SUPERSEDED 2026-07-25 — read before running anything here
 >
 > **All three PRs these guides gate have merged**, and Chris chose to clear their
