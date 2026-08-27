@@ -96,6 +96,8 @@ const MAX_PENDING_BRIDGE_MESSAGES = 32;
 const BRIDGE_RETRY_MS = 100;
 const MAX_BRIDGE_RETRY_MS = 1000;
 const MAX_BRIDGE_INIT_MS = 10000;
+const SHADOW_GUARD_CORRELATION_MS = 500;
+const SHADOW_GUARD_ARRIVAL_MS = 1500;
 const RISKY_BLANK_REASONS = new Set([
   "intent_mismatch_under_interactive",
   "invisible_but_clickable",
@@ -131,6 +133,18 @@ let settings: NavSettings = {
   debug: false,
   autoDismissOverlays: false,
 };
+type AllowPromptParams = {
+  title: string;
+  url: string;
+  host: string | null;
+  target?: string;
+  features?: string;
+  actionId?: string | null;
+  promptScore?: number;
+  outcomeFeatures?: NavOutcomeFeatures;
+  overlaySuppression?: OverlaySuppression;
+};
+let recentLocalBlankPrompt: { params: AllowPromptParams; shownAt: number } | null = null;
 let allowlist: Allowlist = {};
 let adaptiveAdjustment = 0;
 
@@ -455,6 +469,21 @@ function handleBridgeMessage(message: unknown): void {
 
     if (parsed.host && isAllowlisted(allowlist, siteKeyFromLocation(), parsed.host)) {
       allowActionOnce(data.id, url, data.target || "_blank", data.features);
+      return;
+    }
+
+    const localPrompt = recentLocalBlankPrompt;
+    if (
+      data.kind === "shadow_anchor" &&
+      localPrompt &&
+      typeof data.ts === "number" &&
+      Date.now() - localPrompt.shownAt <= SHADOW_GUARD_ARRIVAL_MS &&
+      Math.abs(data.ts - localPrompt.shownAt) <= SHADOW_GUARD_CORRELATION_MS &&
+      localPrompt.params.url === url &&
+      (localPrompt.params.target ?? "_blank") === (data.target || "_blank")
+    ) {
+      if (data.id !== undefined) localPrompt.params.actionId = data.id;
+      recentLocalBlankPrompt = null;
       return;
     }
 
@@ -1290,20 +1319,10 @@ function checkSmartDefaultSuggestion(sourceDomain: string, destDomain: string): 
   })();
 }
 
-function showAllowPrompt(params: {
-  title: string;
-  url: string;
-  host: string | null;
-  target?: string;
-  features?: string;
-  actionId?: string | null;
-  promptScore?: number;
-  /** Replay-grade enrichment captured at decision time (P5-C1). Absent for the
-   *  main-world bridge prompt path, which has no CDS/NRS decision context. */
-  outcomeFeatures?: NavOutcomeFeatures;
-  /** Optional, reversible cleanup of the high-severity overlay behind this prompt. */
-  overlaySuppression?: OverlaySuppression;
-}): void {
+function showAllowPrompt(params: AllowPromptParams): void {
+  if (params.outcomeFeatures && (params.target ?? "_blank") === "_blank") {
+    recentLocalBlankPrompt = { params, shownAt: Date.now() };
+  }
   const promptScore = params.promptScore ?? lastDebug?.cds ?? 0;
   const sourceDomain = siteKeyFromLocation();
   const destDomain = params.host ?? undefined;

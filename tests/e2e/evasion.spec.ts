@@ -570,7 +570,9 @@ test("Evasion 11: shadow DOM overlay is caught via composedPath @regression", as
     // composedPath() should find the inner <a target="_blank"> inside the
     // shadow root, allowing the blank-anchor gate to catch it.
     expect(popup, "Expected composedPath to find shadow DOM anchor and block it").toBeNull();
-    await waitForToastText(page, "Blocked", 5000);
+    // The local score-specific prompt survives the matching MAIN-world report,
+    // so Smart may label this suspicious or blocked without rendering twice.
+    await waitForToastMatch(page, /(?:Blocked|Suspicious) new tab/i, 5000);
     await expect(page).toHaveURL(/evasion-11-shadow-dom\.html/);
   } finally {
     await cleanup();
@@ -583,7 +585,10 @@ test("Evasion 11: opt-in cleanup handles a shadow-path overlay across realms @re
   const { page, context, cleanup } = await setupEvasionTest("evasion-11-shadow-dom.html");
 
   try {
-    await updateNavigationSettings(context, { autoDismissOverlays: true });
+    // Reshape the existing shadow target while automatic monitoring is inert.
+    // Enabling it afterwards makes this a deterministic click-time cleanup
+    // case instead of racing the 100 ms mutation debounce.
+    await updateNavigationSettings(context, { autoDismissOverlays: false });
     await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
     await waitForNavSentinelBridge(page);
     await page.waitForFunction(
@@ -611,6 +616,11 @@ test("Evasion 11: opt-in cleanup handles a shadow-path overlay across realms @re
         "opacity: 0.09",
       ].join(";");
     });
+
+    await updateNavigationSettings(context, { autoDismissOverlays: true });
+    // Let the content setting propagate and the monitor arm. Existing shadow
+    // mutations are not replayed, so the target remains for the trusted click.
+    await page.waitForTimeout(750);
 
     const trap = page.locator("#shadow-host").locator("#trap");
     const box = await trap.boundingBox();
