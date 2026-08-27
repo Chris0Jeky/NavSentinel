@@ -33,6 +33,19 @@ register.
 
 ## Open and blocked items
 
+**OPEN: AI-36 — #558 popup/Options patch-save synchronization Gate-3.** Run the
+active manual Chrome guide in [`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md)
+against the eventual PR for branch `fix/issue558-patch-save-sync`. Verify the
+exact head and hosted checks first, then load that exact build in a fresh Chrome
+profile. Keep one valid Options field dirty, change both protection modes in the
+popup, and confirm the clean Options controls update live without discarding the
+dirty field. Save from Options and confirm the popup changes survive. Inspect
+Options, popup, and service-worker consoles. This gate covers the bounded
+patch-save/live-sync slice, not #558's remaining auto-save preference, dirty-state
+warning, or same-field conflict UX. Only Chris can complete this human Gate-3.
+The general guided resolution cursor remains AI-19; AI-36 is an additional
+branch-specific gate.
+
 **OPEN: AI-35 — #539 cross-host child-event attribution Gate-3.** Run the
 active manual Chrome guide in [`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md)
 against the eventual PR for branch `fix/issue539-page-attribution`. Verify the

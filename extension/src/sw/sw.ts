@@ -9,6 +9,7 @@ import {
   handleEventLogAppendMessage,
   handleEventLogControlMessage,
   handleSuiteImportMessage,
+  handleSuiteSettingsUpdateMessage,
   handlePromptOutcomeStorageMessage,
   isEventLogAppendMessage,
   isEventLogControlMessage,
@@ -669,6 +670,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch((err) => {
         sendResponse?.({ ok: false, error: err instanceof Error ? err.message : String(err) });
       });
+    return true;
+  }
+
+  if ((message as { type?: unknown }).type === "ns-suite-settings-update" && "patch" in message) {
+    void handleSuiteSettingsUpdateMessage(message as import("../shared/storage").SuiteSettingsUpdateMessage, sender)
+      .then(sendResponse)
+      .catch(() => sendResponse?.());
     return true;
   }
 
