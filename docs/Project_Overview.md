@@ -109,5 +109,6 @@ Issue #555's first overlay-cleanup vertical adds an off-by-default control. It
 hides a high-severity overlay identified after injection or an already-blocked
 click, shows an Undo action, never replays the click, remains inert when the
 setting or Navigation is off, and leaves the covered benign dialogs and widgets
-usable. Future mechanisms will be selected from observed efficacy, safety,
-user-control, and compatibility evidence.
+usable. The control is available in Options and as a quick setting in the
+extension popup. Future mechanisms will be selected from observed efficacy,
+safety, user-control, and compatibility evidence.

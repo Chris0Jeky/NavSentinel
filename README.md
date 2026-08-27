@@ -50,7 +50,9 @@ externally audited, or released.
 - Stores bounded local configuration, decision history, prompt outcomes, and
   behavioral profiles in `chrome.storage.local`; see `PRIVACY.md` for the full
   inventory, export gaps, and deletion controls.
-- Provides a popup for the current tab and an options page for persistent configuration, import/export, and log review.
+- Provides a popup for the current tab, including the Navigation mode and
+  auto-dismiss quick controls, and an options page for persistent configuration,
+  import/export, and log review.
 
 ## Effective usage
 

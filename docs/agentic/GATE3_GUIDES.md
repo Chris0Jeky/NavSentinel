@@ -24,17 +24,26 @@ check for its current head is green.
    service worker registers without an error.
 3. Open the options page. Confirm **Auto-dismiss overlays** is off by default,
    its description says it acts only on high-risk detected overlays, and the
-   switch works by mouse and keyboard. Turn it on, save, close/reopen Options,
-   and confirm it remains on.
+   switch works by mouse and keyboard. Confirm the extension popup exposes the
+   same default-off quick setting and that its checkbox works by mouse and
+   keyboard. Turn it on in the popup, close/reopen both surfaces, and confirm it
+   remains on. Reload an already-open Options page before using its current
+   manual Save; cross-surface live synchronization is tracked separately in
+   #558.
 4. Start the tracked local Gym (`npm run gym:serve`) and open
    `mutation-01-delayed-overlay.html`. Trigger the delayed overlay after the
    monitor arms. Confirm the fake session overlay is hidden automatically, the
    toast says NavSentinel hid it, the underlying page is usable, and no popup or
    navigation occurs. Click **Undo** and confirm the same overlay is visible
    again.
-5. With cleanup still enabled, open `evasion-02-size-34pct.html` and perform
-   its deceptive click. Confirm the new tab stays blocked, the high-severity
-   overlay is hidden, and Undo restores it without replaying the click.
+5. With cleanup still enabled, open the popup once and confirm its checkbox is
+   still on. Then open `evasion-02-size-34pct.html` and perform its deceptive
+   click. Confirm the new tab stays blocked, the high-severity overlay is hidden,
+   and Undo restores it without replaying the click. Record the exact card text:
+   it must contain **(overlay hidden)**. If it instead says **Suspicious new tab**
+   or **Blocked new tab** without that suffix, report that exact text; if the
+   suffix appears but the overlay reappears before Undo, report the timing and
+   any intervening notice.
 6. Turn cleanup off and repeat the mutation fixture: the overlay must remain
    visible and the warning must remain available. Then set Navigation mode Off,
    enable cleanup, repeat once more, and confirm NavSentinel neither hides nor

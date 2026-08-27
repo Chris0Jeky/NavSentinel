@@ -370,6 +370,21 @@ body {
   background: var(--ns-green);
 }
 
+.cleanup-check {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 7px;
+  color: var(--ns-text-2);
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.cleanup-check input {
+  margin: 0;
+  accent-color: var(--ns-cyan);
+}
+
 /* Activity section */
 .activity {
   border-top: 1px solid var(--ns-border-soft);

@@ -54,6 +54,15 @@ describe("popup.html accessibility — HTML validation", () => {
     expect(section!.getAttribute("aria-label")).toBe("Protection modes");
   });
 
+  it("auto-dismiss quick setting is a labelled keyboard-operable checkbox", () => {
+    const input = document.getElementById("autoDismiss") as HTMLInputElement;
+    expect(input).toBeTruthy();
+    expect(input.type).toBe("checkbox");
+    expect(input.getAttribute("role")).toBe("switch");
+    expect(input.closest("label")?.textContent).toContain("Auto-dismiss risky overlays");
+    expect(input.closest("label")?.getAttribute("title")).toBe("Hide detected high-risk overlays");
+  });
+
   it("activity section has aria-label", () => {
     const section = document.querySelector('section.activity');
     expect(section).toBeTruthy();

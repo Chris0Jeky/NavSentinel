@@ -5,7 +5,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { EVENT_LOG_KEY, SUITE_SETTINGS_KEY, TRUSTED_DOMAINS_KEY } from "../../extension/src/shared/storage";
 import { getGymBaseUrl, getExtensionId, getServiceWorker } from "./extension_test_utils";
-import { getPopupSnapshot, openRealPopup } from "./demo-showcase-popup";
+import { clickPopupTarget, getPopupSnapshot, openRealPopup } from "./demo-showcase-popup";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -150,6 +150,14 @@ test("popup renders only active-site risk, signal classes, and ClickFix shield i
       expect(snapshot.eventIconPaths[clickfixIndex]).toBe(
         "M12 3 L20 5 V11 C20 16 16 19.5 12 21 C8 19.5 4 16 4 11 V5 Z"
       );
+
+      expect(snapshot.autoDismissOverlays).toBe(false);
+      const updated = await clickPopupTarget(context, "autoDismiss");
+      expect(updated.autoDismissOverlays).toBe(true);
+      await expect.poll(() => worker.evaluate(async (key) => {
+        const result = await chrome.storage.local.get(key);
+        return result[key]?.nav?.autoDismissOverlays;
+      }, SUITE_SETTINGS_KEY)).toBe(true);
     } finally {
       await context.close();
     }

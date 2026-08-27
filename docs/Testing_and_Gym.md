@@ -170,9 +170,12 @@ It currently covers:
 - password-paste warning and trusted-domain persistence
 - options-page trusted-domain normalization
 - options-page opt-in overlay-cleanup persistence
+- popup auto-dismiss quick-control persistence
 - options import/export round-trip behavior
 - delayed high-severity overlay auto-dismissal with an Undo restore path; the
   default-disabled case remains visible and warning-only
+- blocked and prompted high-severity click overlays both hide with Undo while
+  the intercepted navigation remains blocked
 - a dedicated rollback lane for redirect recovery affordances
 - RW-15 bank/security alert redirect recovery
 - a dedicated live-web sanity lane
