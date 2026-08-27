@@ -682,7 +682,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (isEventLogAppendMessage(message)) {
-    void handleEventLogAppendMessage(message)
+    void handleEventLogAppendMessage(message, sender)
       .then((response) => sendResponse?.(response))
       .catch((err) => {
         sendResponse?.({ ok: false, error: err instanceof Error ? err.message : String(err) });

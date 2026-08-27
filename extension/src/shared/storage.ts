@@ -454,6 +454,12 @@ export interface EventLogEntry {
   id: string;
   ts: number;
   kind: EventKind;
+  /**
+   * Hostname of the authoritative top-level page for events emitted by a child
+   * frame. This is derived by the service worker from sender.tab.url; it is
+   * optional so legacy/imported entries remain valid.
+   */
+  pageSite?: string;
   site?: string;
   url?: string;
   destHost?: string;
@@ -502,6 +508,7 @@ function isEventLogEntry(value: unknown): value is EventLogEntry {
     typeof entry.ts === "number" &&
     Number.isFinite(entry.ts) &&
     isEventKind(entry.kind) &&
+    (entry.pageSite === undefined || typeof entry.pageSite === "string") &&
     (entry.site === undefined || typeof entry.site === "string") &&
     (entry.url === undefined || typeof entry.url === "string") &&
     (entry.destHost === undefined || typeof entry.destHost === "string") &&
@@ -830,6 +837,7 @@ function buildEventLogEntry(partial: EventLogAppendPartial): EventLogEntry {
     id: partial.id ?? makeId(),
     ts: Number.isFinite(partial.ts) ? (partial.ts as number) : Date.now(),
     kind: partial.kind,
+    ...(partial.pageSite !== undefined ? { pageSite: partial.pageSite.slice(0, MAX_EVENT_STRING_LEN) } : {}),
     ...(partial.site !== undefined ? { site: partial.site } : {}),
     // RI-06: persist only origin+path for new entries (drop query+fragment tokens).
     ...(partial.url !== undefined ? { url: minimizeEventUrl(partial.url) } : {}),
@@ -1023,14 +1031,45 @@ export async function appendEvent(partial: EventLogAppendPartial): Promise<void>
   return appendEventDirect(entry);
 }
 
-export async function handleEventLogAppendMessage(message: EventLogAppendMessage): Promise<EventLogStorageResponse> {
+/**
+ * Derive the top-level page hostname from the browser-owned sender tab URL.
+ * A content script's own location can be a child frame, so the caller-provided
+ * pageSite is deliberately ignored at this service-worker boundary. Only
+ * ordinary HTTP(S) pages contribute attribution; extension/internal pages and
+ * malformed sender URLs retain the legacy event shape.
+ */
+function deriveSenderPageSite(sender?: chrome.runtime.MessageSender): string | undefined {
+  const rawUrl = sender?.tab?.url;
+  if (typeof rawUrl !== "string" || !rawUrl) return undefined;
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return undefined;
+    const hostname = normalizeHost(parsed.hostname);
+    return hostname ? hostname.slice(0, MAX_EVENT_STRING_LEN) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function handleEventLogAppendMessage(
+  message: EventLogAppendMessage,
+  sender?: chrome.runtime.MessageSender,
+): Promise<EventLogStorageResponse> {
   try {
     // Re-build through buildEventLogEntry so the entry is sanitized at the SW trust
     // boundary too. The normal sender already calls buildEventLogEntry before delegating,
     // but isEventLogAppendMessage only validates shape (not per-element types), so a
     // crafted message could otherwise carry non-string reasons straight to storage. The
     // rebuild preserves the sender's id/ts. (#339)
-    await appendEventDirect(buildEventLogEntry(message.entry));
+    // The pageSite field is an association, not caller-owned event data. Always
+    // replace it with sender.tab.url-derived attribution (or omit it when the
+    // browser cannot provide a safe HTTP(S) hostname).
+    const pageSite = deriveSenderPageSite(sender);
+    const { pageSite: _ignoredPageSite, ...entryWithoutPageSite } = message.entry;
+    await appendEventDirect(buildEventLogEntry({
+      ...entryWithoutPageSite,
+      ...(pageSite === undefined ? {} : { pageSite }),
+    }));
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
@@ -1193,6 +1232,7 @@ function sanitizeImportedEventLogEntry(e: EventLogEntry): EventLogEntry {
   // a truncated tail is at worst cosmetic. (#299 R2)
   const cap = (s: string): string => (s.length > MAX_EVENT_STRING_LEN ? s.slice(0, MAX_EVENT_STRING_LEN) : s);
   const out: EventLogEntry = { id: cap(e.id), ts: e.ts, kind: e.kind };
+  if (e.pageSite !== undefined) out.pageSite = cap(e.pageSite);
   if (e.site !== undefined) out.site = cap(e.site);
   if (e.url !== undefined) out.url = cap(minimizeEventUrl(e.url));
   if (e.destHost !== undefined) out.destHost = cap(e.destHost);
