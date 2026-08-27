@@ -20,6 +20,7 @@ import {
   _feedMutationRecordsForTesting,
   type MutationAlert,
 } from "../extension/src/content/mutation_monitor";
+import { registerExtensionOwnedOverlayElement } from "../extension/src/content/extension_owned_overlay";
 
 // ---------------------------------------------------------------------------
 // Unit tests that work WITHOUT a full DOM
@@ -126,6 +127,81 @@ describe("mutation_monitor DOM integration", () => {
     stopMutationMonitor();
   });
 
+  it("finds a qualifying iframe attached directly beneath documentElement", () => {
+    const alerts: MutationAlert[] = [];
+    const overlayFrame = document.createElement("iframe");
+    overlayFrame.style.position = "fixed";
+    overlayFrame.style.zIndex = "2147483647";
+    overlayFrame.style.display = "block";
+    vi.spyOn(overlayFrame, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(0, 0, 1024, 768),
+    );
+    document.documentElement.appendChild(overlayFrame);
+
+    startMutationMonitor(document, (alert) => alerts.push(alert));
+
+    expect(scanExistingForegroundOverlay(document)).toBe(true);
+    expect(alerts).toEqual([
+      expect.objectContaining({
+        type: "overlay_detected",
+        severity: "high",
+        element: overlayFrame,
+        elements: [overlayFrame],
+      }),
+    ]);
+
+    overlayFrame.remove();
+    stopMutationMonitor();
+  });
+
+  it("prefers later foreground candidates", () => {
+    const alerts: MutationAlert[] = [];
+    const overlays = Array.from({ length: 160 }, (_, index) => {
+      const overlay = document.createElement("div");
+      overlay.id = `candidate-${index}`;
+      overlay.style.position = "fixed";
+      overlay.style.zIndex = "10000";
+      overlay.style.display = "block";
+      vi.spyOn(overlay, "getBoundingClientRect").mockReturnValue(
+        new DOMRect(0, 0, 800, 600),
+      );
+      document.body.appendChild(overlay);
+      return overlay;
+    });
+
+    startMutationMonitor(document, (alert) => alerts.push(alert));
+    expect(scanExistingForegroundOverlay(document)).toBe(true);
+
+    const detected = alerts.find((alert) => alert.type === "overlay_detected");
+    expect(detected?.elements?.map((element) => element.id)).toEqual([
+      "candidate-159",
+      "candidate-158",
+      "candidate-157",
+      "candidate-156",
+      "candidate-155",
+    ]);
+
+    overlays.forEach((overlay) => overlay.remove());
+    stopMutationMonitor();
+  });
+
+  it("caps a pathological initial candidate walk", () => {
+    const candidates = Array.from({ length: 160 }, (_, index) => {
+      const candidate = document.createElement("div");
+      candidate.id = `static-candidate-${index}`;
+      document.body.appendChild(candidate);
+      return candidate;
+    });
+    const styleSpy = vi.spyOn(window, "getComputedStyle");
+
+    startMutationMonitor(document, () => {});
+    expect(scanExistingForegroundOverlay(document)).toBe(false);
+    expect(styleSpy).toHaveBeenCalledTimes(128);
+
+    candidates.forEach((candidate) => candidate.remove());
+    stopMutationMonitor();
+  });
+
   it("does not report a pre-existing native dialog as a risky foreground overlay", () => {
     const alerts: MutationAlert[] = [];
     const dialog = document.createElement("dialog");
@@ -169,6 +245,34 @@ describe("mutation_monitor DOM integration", () => {
 
     rectSpy.mockRestore();
     wrapper.remove();
+    stopMutationMonitor();
+  });
+
+  it("ignores only registered extension-owned overlays, not spoofed IDs", () => {
+    const alerts: MutationAlert[] = [];
+    const registered = document.createElement("div");
+    const impostor = document.createElement("div");
+    for (const element of [registered, impostor]) {
+      element.style.position = "fixed";
+      element.style.zIndex = "2147483647";
+      element.style.display = "block";
+      vi.spyOn(element, "getBoundingClientRect").mockReturnValue(
+        new DOMRect(0, 0, 800, 600),
+      );
+      document.body.appendChild(element);
+    }
+    registered.id = "__navsentinel_real_host";
+    impostor.id = "__navsentinel_page_impostor";
+    registerExtensionOwnedOverlayElement(registered);
+
+    startMutationMonitor(document, (alert) => alerts.push(alert));
+    expect(scanExistingForegroundOverlay(document)).toBe(true);
+
+    const detected = alerts.find((alert) => alert.type === "overlay_detected");
+    expect(detected?.elements).toEqual([impostor]);
+
+    registered.remove();
+    impostor.remove();
     stopMutationMonitor();
   });
 

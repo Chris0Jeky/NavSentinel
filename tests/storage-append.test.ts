@@ -433,6 +433,92 @@ describe("appendEvent", () => {
     ]);
   });
 
+  it("derives pageSite from the sender tab URL while preserving the emitting site", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", {
+      ...chrome,
+      clients: {},
+      registration: {},
+    } as unknown as typeof globalThis.chrome);
+
+    const { handleEventLogAppendMessage } = await import("../extension/src/shared/storage");
+    await expect(handleEventLogAppendMessage(
+      {
+        type: "ns-event-log-append",
+        entry: {
+          id: "child-event",
+          ts: 10,
+          kind: "nav_blank_prompt",
+          site: "frame.other.test",
+          pageSite: "caller-controlled.test",
+        },
+      },
+      {
+        tab: { id: 7, url: "https://portal.example.test/account?token=secret" },
+        url: "https://frame.other.test/frame.html",
+      } as chrome.runtime.MessageSender,
+    )).resolves.toEqual({ ok: true });
+
+    expect(store[EVENT_LOG_KEY]).toEqual([{
+      id: "child-event",
+      ts: 10,
+      kind: "nav_blank_prompt",
+      site: "frame.other.test",
+      pageSite: "portal.example.test",
+    }]);
+  });
+
+  it.each([
+    undefined,
+    "about:blank",
+    "chrome-extension://extension-id/options.html",
+    "not a URL",
+  ])("omits caller-supplied pageSite when sender tab URL is not HTTP(S): %s", async (tabUrl) => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", {
+      ...chrome,
+      clients: {},
+      registration: {},
+    } as unknown as typeof globalThis.chrome);
+
+    const { handleEventLogAppendMessage } = await import("../extension/src/shared/storage");
+    await handleEventLogAppendMessage(
+      {
+        type: "ns-event-log-append",
+        entry: {
+          id: "legacy-shape",
+          ts: 10,
+          kind: "nav_click_block",
+          site: "frame.example.test",
+          pageSite: "caller-controlled.test",
+        },
+      },
+      { tab: tabUrl === undefined ? {} : { url: tabUrl } } as chrome.runtime.MessageSender,
+    );
+
+    expect(store[EVENT_LOG_KEY]).toEqual([{
+      id: "legacy-shape",
+      ts: 10,
+      kind: "nav_click_block",
+      site: "frame.example.test",
+    }]);
+  });
+
+  it("bounds pageSite on direct appends", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { appendEvent } = await import("../extension/src/shared/storage");
+    await appendEvent({
+      id: "bounded-page-site",
+      kind: "nav_click_block",
+      pageSite: "x".repeat(3000),
+    });
+
+    const entry = (store[EVENT_LOG_KEY] as Array<{ pageSite?: string }>)[0]!;
+    expect(entry.pageSite).toHaveLength(2048);
+  });
+
   it("retries delegated event-log appends when the service worker is initially unreachable", async () => {
     const { chrome, store } = createChromeMock();
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);

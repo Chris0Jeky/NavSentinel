@@ -181,6 +181,12 @@ It currently covers:
 - sequential late-arriving high-severity overlays stay hidden across notice
   replacement and dismissal, share one reverse-order Undo, preserve page-owned
   display changes, and remain inert with cleanup disabled or Navigation Off
+- a cross-origin media-frame reproduction with a maximum-z-index, no-src iframe
+  directly beneath the child `<html>` and a static `#container` inside it; the
+  parent-frame suppression and Undo path are exercised without new permissions
+- a twelve-child-frame matrix combining settled, delayed, body-direct, one-wrapper,
+  batched, disabled/Off, and benign cases; it also guards against the cleanup
+  toast recursively classifying itself in a small child viewport
 - blocked and prompted high-severity click overlays both hide with Undo while
   the intercepted navigation remains blocked
 - a dedicated rollback lane for redirect recovery affordances
@@ -348,6 +354,11 @@ opacity just above threshold, viewport coverage just below, labeled overlays, z-
 composite multi-signal evasion, delayed injection, pointer-events bypass, clip-path hiding,
 filter opacity, transform scale, shadow DOM hiding, and stacked foreground overlays.
 Run with the default E2E lane. Tests: `tests/e2e/evasion.spec.ts`.
+
+Nested-frame overlay cleanup uses `overlay-nesting-lab.html`,
+`overlay-nesting-frame.html`, and `overlay-nesting-stress.html`. The regression
+and Phase-2 projects in `tests/e2e/overlay-cleanup-nesting.spec.ts` cover the
+exact real-world document shape and the mixed twelve-frame matrix.
 
 ### Stress lane
 

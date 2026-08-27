@@ -1,7 +1,7 @@
 import type { CredentialSettings } from "./storage";
 import pslTrie from "./psl_data.json" with { type: "json" };
 
-type TrieNode = { [label: string]: TrieNode | number };
+type TrieNode = { [label: string]: TrieNode | 1 };
 const PSL_ROOT: TrieNode = pslTrie as TrieNode;
 
 export function normalizeHost(host: string): string {
@@ -85,6 +85,10 @@ function pslSuffixLength(labels: string[]): number {
 
     // Check for an exact match first
     const exactChild = node[label];
+    if (exactChild === 1) {
+      // Compact PSL leaf: this label is a public suffix and has no children.
+      return depth + 1;
+    }
     if (exactChild !== undefined && typeof exactChild === "object") {
       // Check exception marker on the matched child
       if ((exactChild as TrieNode)["!"] === 1) {
@@ -105,6 +109,10 @@ function pslSuffixLength(labels: string[]): number {
 
     // Check for wildcard
     const wildChild = node["*"];
+    if (wildChild === 1) {
+      // Compact wildcard leaf: any matching label is a public suffix.
+      return depth + 1;
+    }
     if (wildChild !== undefined && typeof wildChild === "object") {
       node = wildChild as TrieNode;
       depth++;

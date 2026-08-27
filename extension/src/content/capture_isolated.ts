@@ -55,6 +55,7 @@ import {
 import {
   startMutationMonitor,
   scanExistingForegroundOverlay,
+  stopMutationMonitor,
   getMutationAlertCount,
   type MutationAlert,
 } from "./mutation_monitor";
@@ -309,6 +310,7 @@ onNavSettingsChange((s) => {
   const cleanupWasActive =
     settings.defaultMode !== "off" && settings.autoDismissOverlays;
   settings = s;
+  stopChildOverlayMonitorIfInactive();
   setDebugEnabled(s.debug);
   postToMain("ns-config", { mode: s.defaultMode, debug: s.debug });
   if (s.defaultMode !== previousMode) {
@@ -963,12 +965,30 @@ function handleMutationAlert(alert: MutationAlert): void {
 function startMutationMonitorIfReady(): void {
   if (
     mutationMonitorState !== 1 ||
-    settings.defaultMode === "off"
+    settings.defaultMode === "off" ||
+    (!isTopFrame() && !settings.autoDismissOverlays)
   ) {
     return;
   }
   startMutationMonitor(document, handleMutationAlert);
   mutationMonitorState = 2;
+}
+
+/**
+ * The top frame keeps the normal security monitor active. Child frames add
+ * layout-bound observation only for the explicit overlay-cleanup opt-in, and
+ * release it again when either control becomes inactive.
+ */
+function stopChildOverlayMonitorIfInactive(): void {
+  if (
+    isTopFrame() ||
+    mutationMonitorState !== 2 ||
+    (settings.defaultMode !== "off" && settings.autoDismissOverlays)
+  ) {
+    return;
+  }
+  stopMutationMonitor();
+  mutationMonitorState = 0;
 }
 
 function scanExistingOverlayIfEnabled(): void {
@@ -992,7 +1012,7 @@ function armMutationMonitor(): void {
 }
 
 function scheduleEarlyAutoDismissStart(): void {
-  if (!isTopFrame() || mutationMonitorState !== 0) return;
+  if (mutationMonitorState !== 0) return;
 
   mutationMonitorState = -1;
   const schedule = () => setTimeout(armMutationMonitor, 500);

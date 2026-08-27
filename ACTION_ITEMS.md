@@ -17,9 +17,11 @@ provenance only. Detailed retired procedures moved to
 after refreshed exact-head CI and bounded review. That waiver is not a real-Chrome
 pass. #531 separately merged under its own waiver; it does not establish a
 `measure:fp` or headed-measurement result, and #223 remains open. AI-27 and AI-28
-are resolved; AI-14 remains blocked for future measurement work. AI-29 now holds
-issue #555's opt-in overlay-cleanup browser behavior for an exact-head Gate-3,
-and AI-32 separately holds #568's sequential late-layer lifecycle.
+are resolved; AI-14 remains blocked for future measurement work. AI-29 now
+holds issue #555's opt-in overlay-cleanup browser behavior for an exact-head
+Gate-3; AI-32 separately holds #568's sequential late-layer lifecycle; AI-30
+holds issue #567's Back/Forward history-integrity fix; and AI-33 holds issue
+#530's popup trust-pill contrast change for an exact-head visual Gate-3.
 
 **Guided resolution cursor:** `AI-19` (`Resume at: AI-19`; conversational label
 `q-5`). Current ready order: AI-19 → optional AI-24 → AI-23 (low priority).
@@ -77,6 +79,62 @@ complete. Reply `AI-32 done; Gate-3 passed on PR #<n> at <40-character SHA>;
 Chrome <version>` or `AI-32 failed on PR #<n> at <SHA>: <step and observed>`.
 This PR-specific gate does not move the general guided-resolution cursor from
 AI-19.
+
+**Subsequent exploratory real-world finding (2026-08-27):** a media embed used a
+non-qualifying outer iframe (`z-index:auto`) around a fixed maximum-z-index iframe
+attached directly below the child document's `<html>`; the innermost static
+`#container` disappeared when hidden manually. The prior top-frame-only automatic
+monitor could not reach the qualifying middle node. The current candidate adds
+bounded opt-in child-frame monitoring, direct-`<html>` discovery, isolated-world
+self-UI exclusion, and an exact synthetic plus twelve-frame stress matrix. This is
+automated candidate evidence, not a human Gate-3 completion; keep AI-29 open.
+
+**OPEN: AI-36 — #558 popup/Options patch-save synchronization Gate-3.** Run the
+active manual Chrome guide in [`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md)
+against the eventual PR for branch `fix/issue558-patch-save-sync`. Verify the
+exact head and hosted checks first, then load that exact build in a fresh Chrome
+profile. Keep one valid Options field dirty, change both protection modes in the
+popup, and confirm the clean Options controls update live without discarding the
+dirty field. Save from Options and confirm the popup changes survive. Inspect
+Options, popup, and service-worker consoles. This gate covers the bounded
+patch-save/live-sync slice, not #558's remaining auto-save preference, dirty-state
+warning, or same-field conflict UX. Only Chris can complete this human Gate-3.
+The general guided resolution cursor remains AI-19; AI-36 is an additional
+branch-specific gate.
+
+**OPEN: AI-35 — #539 cross-host child-event attribution Gate-3.** Run the
+active manual Chrome guide in [`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md)
+against the eventual PR for branch `fix/issue539-page-attribution`. Verify the
+exact head and hosted checks first, then load that exact build in a fresh Chrome
+profile and confirm a cross-host child-frame event keeps its emitting `site`
+while the popup associates it with the top-level page; also confirm an unrelated
+top-level page does not inherit the event. Inspect page, popup, and service-worker
+consoles. Only Chris can complete this human Gate-3. The general guided
+resolution cursor remains AI-19; AI-35 is an additional branch-specific gate.
+
+**OPEN: AI-33 — Issue #530 popup trust-pill contrast Gate-3.** After the
+implementation PR is ready and exact-head automated checks are green, build that
+same head and follow the active AI-33 procedure in
+[`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md). Verify the
+observing and trusted labels remain readable, visibly distinct from signal
+chips, unclipped, keyboard-operable, and free of new popup-console errors. Only
+Chris can record this complete. Reply `AI-33 done; Gate-3 passed on PR #<n> at
+<40-character SHA>; Chrome <version>` or `AI-33 failed on PR #<n> at <SHA>:
+<step and observed>`. This PR-specific gate does not move the general guided-
+resolution cursor from AI-19.
+
+**OPEN: AI-30 - PR #570 Back/Forward history-integrity Gate-3.** After every
+automated check for the current PR head is green, build that same head and follow
+the active AI-30 procedure in
+[`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md). Verify that a
+cross-site local P -> A -> B history remains intact after ordinary navigation
+allowances expire: Back stays on A, Forward returns to B, and two Back actions
+reach A then P without a NavSentinel rollback, skipped entry, or unexpected
+prompt. Also confirm the existing delayed page-initiated redirect still rolls
+back. Only Chris can record this complete. Reply `AI-30 done; Gate-3 passed on
+PR #570 at <40-character SHA>; Chrome <version>` or `AI-30 failed on PR #570 at
+<SHA>: <step and observed>`. This PR-specific gate does not move the general
+guided-resolution cursor from AI-19.
 
 **OPEN: AI-19 — Clear or replace the working product name before CWS submission.**
 TruNav publicly uses the exact name `NavSentinel` for a coming-soon GNSS

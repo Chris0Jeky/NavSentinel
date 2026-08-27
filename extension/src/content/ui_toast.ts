@@ -1,3 +1,5 @@
+import { registerExtensionOwnedOverlayElement } from "./extension_owned_overlay";
+
 export type ToastAction = {
   label: string;
   onClick: () => void;
@@ -44,6 +46,7 @@ function ensureHost() {
   if (host && root) return;
 
   host = document.createElement("div");
+  registerExtensionOwnedOverlayElement(host);
   host.id = "__navsentinel_toast_host";
   host.style.all = "initial";
   host.style.position = "fixed";

@@ -320,6 +320,18 @@ every behavioural store.
 
 `extension/src/shared/allowlist.ts` manages the per-site navigation allowlist, including legacy key migration and normalization.
 
+### Event-log page attribution (#539)
+
+Each event keeps `site` as the hostname of the frame or page that emitted it,
+so diagnostics retain their source. The service worker may additionally persist
+the optional `pageSite` association, derived only from the browser-provided
+`sender.tab.url` for an HTTP(S) tab. It stores the normalized hostname only —
+never the URL path, query, or fragment — and ignores caller-supplied page
+associations. The popup prefers `pageSite` when matching an event to the active
+top-level page and falls back to `site` for legacy entries. This is a
+top-level-page association, not per-navigation identity; that larger redesign
+remains with #215.
+
 ## Popup and options page
 
 ### Popup
@@ -416,9 +428,16 @@ It listens to `chrome.webNavigation` events to decide when a committed navigatio
 `extension/src/content/mutation_monitor.ts` detects post-load injection attacks via MutationObserver:
 
 - Watches for new fixed-position elements covering >= 25% of viewport added after initial load
+- When auto-dismiss is enabled, runs the same bounded monitor inside ordinary
+  child frames and releases those child observers when the opt-in or Navigation
+  mode becomes inactive; the always-on top-frame monitor is unchanged
+- The settled scan checks direct `<html>` children plus body/framework candidates,
+  ordered from likely foreground nodes and capped at 128 candidates
 - Detects form action attribute changes and password field injection
 - Rate-limited: 100ms debounce, 50-alert hard cap, 5-minute auto-disconnect
 - Excludes cookie consent banners, chat widgets, and elements with proper ARIA markup
+- Excludes only isolated-world-owned NavSentinel UI nodes through WeakSet identity;
+  page-created elements cannot gain an exemption by spoofing an extension-like ID
 - Feeds mutation alert count into the debug overlay
 
 ## CSP analysis

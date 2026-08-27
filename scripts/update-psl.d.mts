@@ -9,3 +9,4 @@ export interface PslRule {
 
 export function parsePSL(text: string): PslRule[];
 export function assertEnoughRules(rules: unknown): void;
+export function buildTrie(rules: PslRule[]): unknown;

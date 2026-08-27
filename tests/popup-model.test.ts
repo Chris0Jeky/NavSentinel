@@ -367,6 +367,58 @@ describe("pickSiteRiskEvent (#205)", () => {
     expect(picked?.score).toBe(40);
   });
 
+  it("matches a cross-domain child event to its browser-derived top page", () => {
+    const childEvent: EventLogEntry = {
+      id: "child",
+      ts: 1,
+      kind: "nav_click_block",
+      site: "frame.other.test",
+      pageSite: "portal.example.test",
+      score: 80,
+    };
+
+    expect(pickSiteRiskEvent([childEvent], "example.test")?.id).toBe("child");
+  });
+
+  it("matches the cross-domain late child-frame alert used by #539", () => {
+    const childAlert: EventLogEntry = {
+      id: "late-child-alert",
+      ts: 1,
+      kind: "nav_reputation_late_warn",
+      site: "ads.other.test",
+      pageSite: "portal.example.test",
+      reasons: ["late_async_child_frame"],
+    };
+
+    expect(pickSiteUnscoredThreatEvent([childAlert], "example.test")?.id).toBe("late-child-alert");
+  });
+
+  it("prefers pageSite over the emitting site, so unrelated pages do not match", () => {
+    const event: EventLogEntry = {
+      id: "unrelated-page",
+      ts: 1,
+      kind: "nav_click_block",
+      site: "portal.example.test",
+      pageSite: "other.test",
+      score: 90,
+    };
+
+    expect(pickSiteRiskEvent([event], "example.test")).toBeNull();
+    expect(pickSiteRiskEvent([event], "other.test")?.id).toBe("unrelated-page");
+  });
+
+  it("keeps matching legacy entries that have no pageSite", () => {
+    const legacy: EventLogEntry = {
+      id: "legacy",
+      ts: 1,
+      kind: "nav_click_block",
+      site: "portal.example.test",
+      score: 50,
+    };
+
+    expect(pickSiteRiskEvent([legacy], "example.test")?.id).toBe("legacy");
+  });
+
   it("returns null when no event matches the active site (no other-site risk shown)", () => {
     const log = [ev("1", "other.com", 90), ev("2", "evil.test", 95)];
     expect(pickSiteRiskEvent(log, "example.com")).toBeNull();

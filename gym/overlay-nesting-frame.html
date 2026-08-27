@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Overlay nesting child frame</title>
+  <style>
+    html, body { min-height: 100%; margin: 0; }
+    body { box-sizing: border-box; padding: 24px; font: 16px/1.45 system-ui, sans-serif; background: #e8f5e9; }
+    .attack {
+      position: fixed;
+      inset: 0;
+      z-index: 2147483647;
+      display: grid;
+      place-items: center;
+      background: rgba(40, 18, 52, 0.94);
+      color: white;
+    }
+    .wrapper { position: static; }
+    #benign-dialog { background: #fff; color: #222; }
+    #low-z-overlay { z-index: 99; background: rgba(30, 60, 90, 0.82); }
+    #small-overlay { inset: 12px auto auto 12px; width: 90px; height: 70px; }
+  </style>
+  <script>
+    const fixtureCase = new URLSearchParams(location.search).get("case") || "exact";
+
+    function writeStaticContainer(frame, label) {
+      const doc = frame.contentDocument;
+      if (!doc) return;
+      doc.open();
+      doc.write(`<!doctype html><html><head><style>
+        html,body{width:100%;height:100%;margin:0}
+        #container{display:block;width:100%;height:100%;cursor:pointer;padding:40px;box-sizing:border-box;background:rgba(255,255,255,.8)}
+        .card{display:grid;place-items:center;width:100%;height:100%;background:#d9d9d9;color:#111;font:700 18px system-ui}
+      </style></head><body><div id="container"><div class="card">${label}</div></div></body></html>`);
+      doc.close();
+    }
+
+    function addHtmlDirectFrame(id, label) {
+      const frame = document.createElement("iframe");
+      frame.id = id;
+      frame.dataset.attack = "true";
+      frame.setAttribute("aria-label", label);
+      frame.style.cssText = "width:100%!important;height:100%!important;position:fixed!important;left:0!important;right:0!important;top:0!important;bottom:0!important;z-index:2147483647!important;padding:0!important;margin:0!important;border:0!important";
+      document.documentElement.appendChild(frame);
+      writeStaticContainer(frame, label);
+      return frame;
+    }
+
+    if (fixtureCase === "exact" || fixtureCase === "multiple") {
+      addHtmlDirectFrame("exact-overlay-frame", "Synthetic nested advertisement");
+    }
+
+    window.addEventListener("DOMContentLoaded", () => {
+      document.documentElement.dataset.fixtureReady = "true";
+
+      if (fixtureCase === "body" || fixtureCase === "multiple") {
+        const overlay = document.createElement("div");
+        overlay.id = "body-overlay";
+        overlay.className = "attack";
+        overlay.dataset.attack = "true";
+        overlay.textContent = "Body-direct overlay";
+        document.body.appendChild(overlay);
+      }
+
+      if (fixtureCase === "wrapper" || fixtureCase === "multiple") {
+        const wrapper = document.createElement("div");
+        wrapper.className = "wrapper";
+        const overlay = document.createElement("div");
+        overlay.id = "wrapped-overlay";
+        overlay.className = "attack";
+        overlay.dataset.attack = "true";
+        overlay.textContent = "One-wrapper overlay";
+        wrapper.appendChild(overlay);
+        document.body.appendChild(wrapper);
+      }
+
+      if (fixtureCase === "delayed") {
+        setTimeout(() => addHtmlDirectFrame(
+          "delayed-overlay-frame",
+          "Delayed synthetic advertisement",
+        ), 1200);
+      }
+
+      if (fixtureCase === "benign") {
+        const dialog = document.createElement("div");
+        dialog.id = "benign-dialog";
+        dialog.className = "attack";
+        dialog.setAttribute("role", "dialog");
+        dialog.setAttribute("aria-modal", "true");
+        dialog.textContent = "Accessible application dialog";
+        document.body.appendChild(dialog);
+
+        const lowZ = document.createElement("div");
+        lowZ.id = "low-z-overlay";
+        lowZ.className = "attack";
+        lowZ.textContent = "Low stacking layer";
+        document.body.appendChild(lowZ);
+
+        const small = document.createElement("div");
+        small.id = "small-overlay";
+        small.className = "attack";
+        small.textContent = "Small";
+        document.body.appendChild(small);
+      }
+    }, { once: true });
+  </script>
+</head>
+<body>
+  <h1 id="underlay">Nested frame content exposed</h1>
+  <p>The outer media frame intentionally has no qualifying stacking level.</p>
+</body>
+</html>

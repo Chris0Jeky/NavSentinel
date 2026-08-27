@@ -9,6 +9,7 @@ import {
   handleEventLogAppendMessage,
   handleEventLogControlMessage,
   handleSuiteImportMessage,
+  handleSuiteSettingsUpdateMessage,
   handlePromptOutcomeStorageMessage,
   isEventLogAppendMessage,
   isEventLogControlMessage,
@@ -672,6 +673,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if ((message as { type?: unknown }).type === "ns-suite-settings-update" && "patch" in message) {
+    void handleSuiteSettingsUpdateMessage(message as import("../shared/storage").SuiteSettingsUpdateMessage, sender)
+      .then(sendResponse)
+      .catch(() => sendResponse?.());
+    return true;
+  }
+
   if (isBehaviouralResetMessage(message)) {
     void handleBehaviouralResetMessage(sender)
       .then((response) => sendResponse?.(response))
@@ -682,7 +690,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (isEventLogAppendMessage(message)) {
-    void handleEventLogAppendMessage(message)
+    void handleEventLogAppendMessage(message, sender)
       .then((response) => sendResponse?.(response))
       .catch((err) => {
         sendResponse?.({ ok: false, error: err instanceof Error ? err.message : String(err) });
@@ -1112,6 +1120,7 @@ function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitio
   const qualifiers = details.transitionQualifiers ?? [];
   const isRedirect =
     qualifiers.includes("client_redirect") || qualifiers.includes("server_redirect");
+  const isHistoryTraversal = qualifiers.includes("forward_back");
   const isUserTyped =
     details.transitionType === "typed" ||
     details.transitionType === "auto_bookmark" ||
@@ -1127,6 +1136,22 @@ function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitio
   // ?code= page from tripping a false redirect-mismatch, while still accepting
   // link-click and gesture-driven JS callbacks (which carry no redirect qualifier). (#207)
   processOAuthNavigation(details.tabId, details.url, prevUrl ?? "", isUserTyped);
+
+  // Back/Forward is explicit browser UI intent. The transitionType describes how the
+  // history entry was originally created (often "link"), so evaluating it as a fresh
+  // link can queue a rollback after Chrome has already moved the history index. The
+  // resulting location.replace() consumes the entry the user asked for and makes the
+  // next Back skip it. A redirect qualifier on this same commit is part of the
+  // user-initiated history navigation; a later page-initiated redirect arrives as its
+  // own commit and is still evaluated normally. Do not mint navigation allowance here.
+  if (isHistoryTraversal) {
+    allowStartedByTab.delete(details.tabId);
+    typedOriginByTab.delete(details.tabId);
+    userNavContextUntilByTab.delete(details.tabId);
+    lastCommittedByTab.delete(details.tabId);
+    swState.persistAll();
+    return;
+  }
 
   // Only record hops that are redirect-driven OR that extend an existing
   // chain (a non-redirect commit arriving within the chain window).

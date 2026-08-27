@@ -98,9 +98,11 @@ The follow-up fresh-profile measurement passed the full interaction sequence but
 took about 3.11 seconds to expose the intended target. The owner judged that too
 slow for practical use and asked how layered or later-arriving traps behave. The
 current slice therefore adds a 500 ms opt-in start after DOM readiness, a maximum
-five-layer initial batch with one grouped Undo, and an explicit multi-overlay Gym
-case. Single overlays injected after monitor startup remain covered by Mutation 01;
-deeper wrapper and long sequential-burst semantics remain follow-up evidence work.
+five-layer initial batch with one grouped Undo, and explicit multi-overlay Gym
+coverage. The real-world nested-media follow-up now also runs that opt-in monitor
+inside ordinary child frames, includes bounded direct-`<html>` candidates, and
+proves settled, delayed, body-direct, one-wrapper, mixed-benign, and twelve-frame
+combinations synthetically. Long sequential-burst semantics remain in #568/#578.
 The 2026-08-27 manual trial also seeded the next bounded UX slices: settings
 autosave and popup/Options synchronization (#558), clear manual Gym expectations
 (#559), compact actionable notices (#560) with advanced timing controls (#561),

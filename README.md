@@ -26,8 +26,10 @@ externally audited, or released.
 - Optionally suppresses classifier-identified high-severity foreground overlays
   already covering the DOM-ready page, injected later, or encountered by an
   already-blocked click. The bounded initial scan can hide up to five layers
-  with one grouped Undo; NavSentinel never synthesizes or replays a click onto
-  the newly exposed page.
+  with one grouped Undo. The opt-in monitor also runs inside ordinary child
+  frames, covering cross-origin media embeds whose actual blocker lives one
+  document boundary below a non-qualifying outer frame. NavSentinel never
+  synthesizes or replays a click onto the newly exposed page.
 - Patches `window.open` and form submission in the main world to catch
   script-driven navigation before it commits. `location.assign` /
   `location.replace` are *not* patched and cannot be: Chromium exposes them as

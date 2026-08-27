@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>History 01 - Back/Forward Traversal</title>
+  <style>
+    body { font: 18px/1.5 system-ui, sans-serif; max-width: 760px; margin: 48px auto; padding: 0 24px; }
+    .card { border: 2px solid #2b6cb0; border-radius: 12px; padding: 24px; }
+    a.button { display: inline-block; margin-top: 16px; padding: 12px 20px; color: white; background: #2b6cb0; border-radius: 8px; text-decoration: none; }
+    code { background: #edf2f7; padding: 2px 5px; }
+  </style>
+</head>
+<body>
+  <p><a href="index.html">&larr; Back to Gym index</a></p>
+  <h1>History 01 - Back/Forward Traversal</h1>
+  <div class="card">
+    <h2 id="step-heading"></h2>
+    <p id="instructions"></p>
+    <p>Host: <code id="host"></code></p>
+    <a class="button" id="next" href="#">Open next history entry</a>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const step = ["p", "a", "b"].includes(params.get("step")) ? params.get("step") : "p";
+    const labels = { p: "P - starting page", a: "A - intermediate page", b: "B - current page" };
+    const nextStep = { p: "a", a: "b" }[step];
+    const alternateHost = location.hostname === "localhost" ? "127.0.0.1" : "localhost";
+
+    document.title = `History 01 - ${labels[step]}`;
+    document.querySelector("#step-heading").textContent = labels[step];
+    document.querySelector("#host").textContent = location.host;
+
+    const next = document.querySelector("#next");
+    if (nextStep) {
+      const target = new URL(location.href);
+      target.hostname = alternateHost;
+      target.searchParams.set("step", nextStep);
+      next.href = target.href;
+      document.querySelector("#instructions").textContent =
+        "Follow the visible link. On B, wait 11 seconds, then use Back and Forward. NavSentinel should not undo either browser command.";
+    } else {
+      next.hidden = true;
+      document.querySelector("#instructions").textContent =
+        "Wait 11 seconds so ordinary click allowances expire. Back should reach A, Forward should return here, and two Back commands should reach A then P without skipping an entry.";
+    }
+  </script>
+</body>
+</html>

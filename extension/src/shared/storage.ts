@@ -48,6 +48,9 @@ export type SuiteSettingsPatch = Partial<Omit<SuiteSettings, "nav" | "credential
   };
 };
 
+/** Settings writes from popup/options to the service worker. */
+export type SuiteSettingsUpdateMessage = { type: "ns-suite-settings-update"; patch: unknown };
+
 export const SUITE_SETTINGS_KEY = "sentinelsuite:settings_v1";
 export const TRUSTED_DOMAINS_KEY = "sentinelsuite:trusted_domains_v1";
 export const EVENT_LOG_KEY = "sentinelsuite:event_log_v1";
@@ -214,12 +217,61 @@ function mergeSuiteSettings(cur: SuiteSettings, partial: SuiteSettingsPatch): Su
   return next;
 }
 
+type SettingsRecord = Record<string, unknown>;
+
+/** Parse an Options numeric control without converting an empty field to zero. */
+export function parseOptionsInt(value: string, fallback: number): number {
+  if (value.trim() === "") return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.trunc(parsed) : fallback;
+}
+
+function reconcileSettings(
+  baseline: SettingsRecord,
+  draft: SettingsRecord,
+  incoming?: SettingsRecord,
+): SettingsRecord {
+  const result: SettingsRecord = incoming ? { ...incoming } : {};
+  for (const key in draft) {
+    const value = draft[key];
+    if (value && typeof value === "object") {
+      const nested = reconcileSettings(
+        baseline[key] as SettingsRecord,
+        value as SettingsRecord,
+        incoming && incoming[key] as SettingsRecord | undefined,
+      );
+      if (incoming || Object.keys(nested).length) result[key] = nested;
+    } else if (value !== baseline[key]) {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+/** Return the smallest explicit leaf patch that makes `baseline` match `draft`. */
+export function deriveOptionsSettingsPatch(baseline: SuiteSettings, draft: SuiteSettings): SuiteSettingsPatch {
+  return reconcileSettings(baseline as unknown as SettingsRecord, draft as unknown as SettingsRecord) as SuiteSettingsPatch;
+}
+
+/** Preserve dirty leaves while adopting an external normalized settings update. */
+export function rebaseOptionsSettingsDraft(
+  baseline: SuiteSettings,
+  draft: SuiteSettings,
+  incoming: SuiteSettings,
+): SuiteSettings {
+  return reconcileSettings(
+    baseline as unknown as SettingsRecord,
+    draft as unknown as SettingsRecord,
+    incoming as unknown as SettingsRecord,
+  ) as unknown as SuiteSettings;
+}
+
 export async function getSuiteSettings(): Promise<SuiteSettings> {
   const res = await chrome.storage.local.get([SUITE_SETTINGS_KEY, LEGACY_SETTINGS_KEY]);
   const stored = res[SUITE_SETTINGS_KEY] as SuiteSettings | undefined;
-  if (!stored || typeof stored !== "object") {
+  if (!isRecord(stored)) {
     const legacy = res[LEGACY_SETTINGS_KEY] as Partial<NavSettings> | undefined;
-    if (legacy && typeof legacy === "object") {
+    if (isRecord(legacy)) {
       const migrated = mergeSuiteSettings(structuredClone(DEFAULT_SUITE_SETTINGS), { nav: legacy });
       await chrome.storage.local.set({ [SUITE_SETTINGS_KEY]: migrated });
       await chrome.storage.local.remove(LEGACY_SETTINGS_KEY);
@@ -230,22 +282,87 @@ export async function getSuiteSettings(): Promise<SuiteSettings> {
   return mergeSuiteSettings(structuredClone(DEFAULT_SUITE_SETTINGS), stored);
 }
 
-let settingsPending: Promise<unknown> = Promise.resolve();
+function createStorageWriteQueue(reportError?: (error: unknown) => void) {
+  let pending: Promise<unknown> = Promise.resolve();
+  return <T>(operation: () => Promise<T>): Promise<T> => {
+    const next = pending.then(operation);
+    pending = next.catch((error) => reportError?.(error));
+    return next;
+  };
+}
 
-export function updateSuiteSettings(partial: SuiteSettingsPatch): Promise<SuiteSettings> {
-  // Serialize the read-modify-write so rapid concurrent updates (e.g. the popup nav-mode and
-  // cred-mode toggles fired in quick succession, or a double-tap on one segment) don't both read
-  // the same state and have the second write silently clobber the first's change. (#305)
-  const next = settingsPending.then(async (): Promise<SuiteSettings> => {
+const queueSuiteSettingsWrite = createStorageWriteQueue((err) => {
+  console.warn("[NavSentinel] suite settings serialization error:", err);
+});
+
+/**
+ * The service worker's single read-modify-write lane for SuiteSettings.
+ *
+ * @internal Extension pages must use updateSuiteSettings(), which delegates here
+ * through runtime messaging. Keeping this direct lane worker-owned prevents two
+ * independently loaded page modules from interleaving their own queues. (#558)
+ */
+function updateSuiteSettingsDirect(partial: SuiteSettingsPatch): Promise<SuiteSettings> {
+  return queueSuiteSettingsWrite(async (): Promise<SuiteSettings> => {
     const cur = await getSuiteSettings();
     const merged = mergeSuiteSettings(cur, partial);
     await chrome.storage.local.set({ [SUITE_SETTINGS_KEY]: merged });
     return merged;
   });
-  settingsPending = next.catch((err) => {
-    console.warn("[NavSentinel] suite settings serialization error:", err);
-  });
-  return next;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function sanitizeSuiteSettingsFields(value: unknown, defaults: Record<string, unknown>): Record<string, unknown> | null {
+  if (!isRecord(value)) return null;
+  for (const [key, candidate] of Object.entries(value)) {
+    if (!Object.hasOwn(defaults, key)) return null;
+    const defaultValue = defaults[key];
+    if (isRecord(defaultValue)) {
+      if (!sanitizeSuiteSettingsFields(candidate, defaultValue)) return null;
+    } else if (typeof candidate !== typeof defaultValue ||
+      (typeof candidate === "number" && !Number.isFinite(candidate)) ||
+      ((key === "defaultMode" || key === "mode") && !["off", "smart", "strict"].includes(candidate as string))) {
+      return null;
+    }
+  }
+  return value;
+}
+
+/** Worker message entry point: authorize, sanitize, then use the worker queue. */
+export async function handleSuiteSettingsUpdateMessage(
+  message: SuiteSettingsUpdateMessage,
+  sender?: chrome.runtime.MessageSender,
+): Promise<SuiteSettings> {
+  if (!sender || sender.id !== chrome.runtime.id || (
+    sender.url !== chrome.runtime.getURL("src/popup/popup.html") &&
+    sender.url !== chrome.runtime.getURL("src/options/options.html")
+  )) {
+    throw new Error("unauthorized");
+  }
+  const patch = sanitizeSuiteSettingsFields(
+    message.patch,
+    DEFAULT_SUITE_SETTINGS as unknown as Record<string, unknown>,
+  ) as SuiteSettingsPatch | null;
+  if (!patch) throw new Error("invalid");
+  return updateSuiteSettingsDirect(patch);
+}
+
+export function updateSuiteSettings(partial: SuiteSettingsPatch): Promise<SuiteSettings> {
+  if (shouldDelegatePromptOutcomeWrite()) {
+    // Do not fall back to a page-local write when delivery fails: it would revive
+    // the lost-update race this worker boundary closes. (#558)
+    return chrome.runtime.sendMessage({ type: "ns-suite-settings-update", patch: partial })
+      .then((settings: SuiteSettings | undefined) => {
+        if (settings) return settings;
+        throw new Error("suite-settings update failed");
+      });
+  }
+  // Non-extension test environments have no runtime messenger. Production page
+  // contexts always do, and therefore always take the worker-owned path above.
+  return updateSuiteSettingsDirect(partial);
 }
 
 export function onSuiteSettingsChange(cb: (s: SuiteSettings) => void): void {
@@ -315,20 +432,14 @@ export interface TrustedDomainAddResult {
   added: boolean;
 }
 
-let trustedDomainsPending: Promise<unknown> = Promise.resolve();
-
 // Serialize trusted-domain read-modify-write ops. Each mutator reads the current list
 // then writes a derived list; without a queue, two concurrent calls (e.g. the options
 // page removing one domain while credential_guard adds another, or a double-tap on the
 // "trust this site" control) both read the same base and the second write silently
 // clobbers the first -> a lost trust decision. Mirrors updateSuiteSettings (#305 / #339).
-function queueTrustedDomainsWrite<T>(operation: () => Promise<T>): Promise<T> {
-  const next = trustedDomainsPending.then(operation);
-  trustedDomainsPending = next.catch((err) => {
+const queueTrustedDomainsWrite = createStorageWriteQueue((err) => {
     console.warn("[NavSentinel] trusted domains serialization error:", err);
-  });
-  return next;
-}
+});
 
 export function addTrustedDomainWithResult(
   domain: string
@@ -464,6 +575,12 @@ export interface EventLogEntry {
   id: string;
   ts: number;
   kind: EventKind;
+  /**
+   * Hostname of the authoritative top-level page for events emitted by a child
+   * frame. This is derived by the service worker from sender.tab.url; it is
+   * optional so legacy/imported entries remain valid.
+   */
+  pageSite?: string;
   site?: string;
   url?: string;
   destHost?: string;
@@ -506,12 +623,13 @@ function isEventKind(value: unknown): value is EventKind {
 }
 
 function isEventLogEntry(value: unknown): value is EventLogEntry {
-  if (!value || typeof value !== "object") return false;
+  if (!isRecord(value)) return false;
   const entry = value as Record<string, unknown>;
   return typeof entry.id === "string" &&
     typeof entry.ts === "number" &&
     Number.isFinite(entry.ts) &&
     isEventKind(entry.kind) &&
+    (entry.pageSite === undefined || typeof entry.pageSite === "string") &&
     (entry.site === undefined || typeof entry.site === "string") &&
     (entry.url === undefined || typeof entry.url === "string") &&
     (entry.destHost === undefined || typeof entry.destHost === "string") &&
@@ -521,17 +639,13 @@ function isEventLogEntry(value: unknown): value is EventLogEntry {
 }
 
 export function isEventLogAppendMessage(message: unknown): message is EventLogAppendMessage {
-  if (!message || typeof message !== "object") return false;
+  if (!isRecord(message)) return false;
   const candidate = message as Record<string, unknown>;
   return candidate.type === "ns-event-log-append" && isEventLogEntry(candidate.entry);
 }
 
 export function isEventLogMigrationMessage(message: unknown): message is EventLogMigrationMessage {
-  return Boolean(
-    message &&
-      typeof message === "object" &&
-      (message as Record<string, unknown>).type === "ns-event-log-migrate"
-  );
+  return isRecord(message) && message.type === "ns-event-log-migrate";
 }
 
 const EVENT_LOG_IMPORT_CORE_KEYS = new Set([
@@ -543,7 +657,7 @@ const EVENT_LOG_IMPORT_CORE_KEYS = new Set([
 ]);
 
 function isEventLogImportCoreWrites(value: unknown): value is Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  if (!isRecord(value)) return false;
   const writes = value as Record<string, unknown>;
   return Array.isArray(writes[EVENT_LOG_KEY]) &&
     writes[EVENT_LOG_KEY].every(isEventLogEntry) &&
@@ -551,18 +665,14 @@ function isEventLogImportCoreWrites(value: unknown): value is Record<string, unk
 }
 
 export function isEventLogControlMessage(message: unknown): message is EventLogControlMessage {
-  if (!message || typeof message !== "object") return false;
+  if (!isRecord(message)) return false;
   const candidate = message as Record<string, unknown>;
   if (candidate.type === "ns-event-log-clear") return true;
   return candidate.type === "ns-event-log-import-core" && isEventLogImportCoreWrites(candidate.writes);
 }
 
 export function isSuiteImportMessage(message: unknown): message is SuiteImportMessage {
-  return Boolean(
-    message &&
-      typeof message === "object" &&
-      (message as Record<string, unknown>).type === "ns-suite-import"
-  );
+  return isRecord(message) && message.type === "ns-suite-import";
 }
 
 const MAX_NORMALIZED_EVENT_LOG_ENTRIES = 5000;
@@ -626,18 +736,13 @@ function trimValidEventLog(validEntries: EventLogEntry[], limit: number): EventL
 }
 
 type EventLogAppendPartial = Omit<EventLogEntry, "id" | "ts"> & { id?: string; ts?: number };
-let eventLogPending: Promise<unknown> = Promise.resolve();
 const EVENT_LOG_RESET_TS_KEY = "ns_sw:eventLogResetTs";
 let eventLogResetCutoffTs = Number.NEGATIVE_INFINITY;
 let eventLogResetHydrate: Promise<void> | null = null;
 
-function queueEventLogWrite<T>(operation: () => Promise<T>): Promise<T> {
-  const next = eventLogPending.then(operation);
-  eventLogPending = next.catch((err) => {
+const queueEventLogWrite = createStorageWriteQueue((err) => {
     console.warn("[NavSentinel] event log serialization error:", err);
-  });
-  return next;
-}
+});
 
 type EventLogBarrierStorage = Pick<chrome.storage.StorageArea, "get" | "set">;
 
@@ -840,6 +945,7 @@ function buildEventLogEntry(partial: EventLogAppendPartial): EventLogEntry {
     id: partial.id ?? makeId(),
     ts: Number.isFinite(partial.ts) ? (partial.ts as number) : Date.now(),
     kind: partial.kind,
+    ...(partial.pageSite !== undefined ? { pageSite: partial.pageSite.slice(0, MAX_EVENT_STRING_LEN) } : {}),
     ...(partial.site !== undefined ? { site: partial.site } : {}),
     // RI-06: persist only origin+path for new entries (drop query+fragment tokens).
     ...(partial.url !== undefined ? { url: minimizeEventUrl(partial.url) } : {}),
@@ -1033,14 +1139,45 @@ export async function appendEvent(partial: EventLogAppendPartial): Promise<void>
   return appendEventDirect(entry);
 }
 
-export async function handleEventLogAppendMessage(message: EventLogAppendMessage): Promise<EventLogStorageResponse> {
+/**
+ * Derive the top-level page hostname from the browser-owned sender tab URL.
+ * A content script's own location can be a child frame, so the caller-provided
+ * pageSite is deliberately ignored at this service-worker boundary. Only
+ * ordinary HTTP(S) pages contribute attribution; extension/internal pages and
+ * malformed sender URLs retain the legacy event shape.
+ */
+function deriveSenderPageSite(sender?: chrome.runtime.MessageSender): string | undefined {
+  const rawUrl = sender?.tab?.url;
+  if (typeof rawUrl !== "string" || !rawUrl) return undefined;
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return undefined;
+    const hostname = normalizeHost(parsed.hostname);
+    return hostname ? hostname.slice(0, MAX_EVENT_STRING_LEN) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function handleEventLogAppendMessage(
+  message: EventLogAppendMessage,
+  sender?: chrome.runtime.MessageSender,
+): Promise<EventLogStorageResponse> {
   try {
     // Re-build through buildEventLogEntry so the entry is sanitized at the SW trust
     // boundary too. The normal sender already calls buildEventLogEntry before delegating,
     // but isEventLogAppendMessage only validates shape (not per-element types), so a
     // crafted message could otherwise carry non-string reasons straight to storage. The
     // rebuild preserves the sender's id/ts. (#339)
-    await appendEventDirect(buildEventLogEntry(message.entry));
+    // The pageSite field is an association, not caller-owned event data. Always
+    // replace it with sender.tab.url-derived attribution (or omit it when the
+    // browser cannot provide a safe HTTP(S) hostname).
+    const pageSite = deriveSenderPageSite(sender);
+    const { pageSite: _ignoredPageSite, ...entryWithoutPageSite } = message.entry;
+    await appendEventDirect(buildEventLogEntry({
+      ...entryWithoutPageSite,
+      ...(pageSite === undefined ? {} : { pageSite }),
+    }));
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
@@ -1083,7 +1220,6 @@ export async function clearEventLog(): Promise<void> {
 
 const PROMPT_OUTCOMES_LIMIT = 500;
 const PROMPT_OUTCOME_RESET_TS_KEY = "ns_sw:promptOutcomeResetTs";
-let promptOutcomePending: Promise<unknown> = Promise.resolve();
 let promptOutcomeResetCutoffTs = Number.NEGATIVE_INFINITY;
 let promptOutcomeResetHydrate: Promise<void> | null = null;
 
@@ -1203,6 +1339,7 @@ function sanitizeImportedEventLogEntry(e: EventLogEntry): EventLogEntry {
   // a truncated tail is at worst cosmetic. (#299 R2)
   const cap = (s: string): string => (s.length > MAX_EVENT_STRING_LEN ? s.slice(0, MAX_EVENT_STRING_LEN) : s);
   const out: EventLogEntry = { id: cap(e.id), ts: e.ts, kind: e.kind };
+  if (e.pageSite !== undefined) out.pageSite = cap(e.pageSite);
   if (e.site !== undefined) out.site = cap(e.site);
   if (e.url !== undefined) out.url = cap(minimizeEventUrl(e.url));
   if (e.destHost !== undefined) out.destHost = cap(e.destHost);
@@ -1550,13 +1687,9 @@ async function delegatePromptOutcomeWrite(
   );
 }
 
-function queuePromptOutcomeWrite<T>(operation: () => Promise<T>): Promise<T> {
-  const next = promptOutcomePending.then(operation);
-  promptOutcomePending = next.catch((err) => {
+const queuePromptOutcomeWrite = createStorageWriteQueue((err) => {
     console.warn("[NavSentinel] prompt outcome serialization error:", err);
-  });
-  return next;
-}
+});
 
 async function persistPromptOutcome(entry: PromptOutcomeEntry): Promise<void> {
   // Keep the intended snapshot across retries so a clobbered verify does not
@@ -1908,8 +2041,6 @@ export async function exportAll(): Promise<{
   };
 }
 
-let bulkDataPending: Promise<unknown> = Promise.resolve();
-
 /**
  * Serialize whole-store bulk operations against each other: a suite import and
  * the unified behavioural reset (`behavioural_reset.ts`).
@@ -1929,13 +2060,9 @@ let bulkDataPending: Promise<unknown> = Promise.resolve();
  * each awaits inside the queue. Two extension pages driving one bulk operation
  * each are still not ordered against one another — documented residual.
  */
-export function queueBulkDataOperation<T>(operation: () => Promise<T>): Promise<T> {
-  const next = bulkDataPending.then(operation);
-  bulkDataPending = next.catch((err) => {
+export const queueBulkDataOperation = createStorageWriteQueue((err) => {
     console.warn("[NavSentinel] bulk data serialization error:", err);
-  });
-  return next;
-}
+});
 
 export function importAll(payload: unknown): Promise<ImportAllResult> {
   const runtime = (globalThis as { chrome?: typeof chrome }).chrome?.runtime;
@@ -1973,7 +2100,7 @@ export async function handleSuiteImportMessage(
 }
 
 async function importAllDirect(payload: unknown): Promise<ImportAllResult> {
-  if (!payload || typeof payload !== "object") throw new Error("Invalid import payload");
+  if (!isRecord(payload)) throw new Error("Invalid import payload");
   const p = payload as Record<string, unknown>;
   let importLogLimit = DEFAULT_SUITE_SETTINGS.logLimit;
   let eventLogDropped = 0;
@@ -1992,7 +2119,7 @@ async function importAllDirect(payload: unknown): Promise<ImportAllResult> {
   // that delivery failure to report a precise partial result (#188).
   const writes: Record<string, unknown> = {};
 
-  if (p.settings && typeof p.settings === "object") {
+  if (isRecord(p.settings)) {
     const merged = mergeSuiteSettings(
       structuredClone(DEFAULT_SUITE_SETTINGS),
       p.settings as SuiteSettingsPatch
@@ -2001,7 +2128,7 @@ async function importAllDirect(payload: unknown): Promise<ImportAllResult> {
     writes[SUITE_SETTINGS_KEY] = merged;
   }
 
-  if (p.allowlist && typeof p.allowlist === "object") {
+  if (isRecord(p.allowlist)) {
     writes[ALLOWLIST_KEY] = normalizeAllowlist(p.allowlist);
   }
 

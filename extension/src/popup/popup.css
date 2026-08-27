@@ -201,13 +201,13 @@ body {
   border-radius: 4px;
   font-size: 9px;
   background: rgba(228, 197, 68, 0.12);
-  color: var(--ns-orange);
+  color: var(--ns-purple);
   border: 1px solid rgba(228, 197, 68, 0.25);
 }
 
 .trust-pill[data-state="trusted"] {
   background: rgba(122, 183, 135, 0.12);
-  color: var(--ns-green);
+  color: var(--ns-text-2);
   border-color: rgba(122, 183, 135, 0.25);
 }
 
