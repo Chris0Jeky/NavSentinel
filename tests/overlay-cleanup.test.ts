@@ -2,6 +2,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MutationAlert } from "../extension/src/content/mutation_monitor";
 import {
+  _resetOverlaySuppressionGroupForTest,
+  MAX_ACTIVE_OVERLAY_SUPPRESSIONS,
+  reconcileDetectedOverlay,
+  restoreActiveOverlaySuppressions,
   suppressDetectedOverlay,
   suppressHighSeverityOverlayInPath,
   suppressOverlayElement,
@@ -36,6 +40,7 @@ function mutationAlert(
 
 describe("overlay cleanup", () => {
   afterEach(() => {
+    _resetOverlaySuppressionGroupForTest();
     document.body.replaceChildren();
     vi.restoreAllMocks();
   });
@@ -124,6 +129,69 @@ describe("overlay cleanup", () => {
     expect(first.style.getPropertyValue("display")).toBe("flex");
     expect(second.style.getPropertyValue("display")).toBe("flex");
     expect(undo?.()).toBe(false);
+  });
+
+  it("reasserts a page-overwritten suppression without stacking stale Undo state", () => {
+    const overlay = makeOverlay();
+    const initial = reconcileDetectedOverlay(mutationAlert(overlay), true)!;
+
+    overlay.style.setProperty("display", "block", "important");
+    const reconciled = reconcileDetectedOverlay(mutationAlert(overlay), true)!;
+
+    expect(reconciled.action).toBe("reasserted");
+    expect(reconciled.undo).toBe(initial.undo);
+    expect(reconciled.activeCount).toBe(1);
+    expect(overlay.style.getPropertyValue("display")).toBe("none");
+    expect(reconciled.undo()).toBe(true);
+    expect(overlay.style.display).toBe("flex");
+  });
+
+  it("groups replacement layers under one reverse-order Undo", () => {
+    const first = makeOverlay();
+    const second = makeOverlay();
+    const firstCleanup = reconcileDetectedOverlay(mutationAlert(first), true)!;
+    const secondCleanup = reconcileDetectedOverlay(mutationAlert(second), true)!;
+
+    expect(secondCleanup.undo).toBe(firstCleanup.undo);
+    expect(secondCleanup.activeCount).toBe(2);
+    expect(secondCleanup.undo()).toBe(true);
+    expect(first.style.display).toBe("flex");
+    expect(second.style.display).toBe("flex");
+  });
+
+  it("restores the active group when the feature is switched off", () => {
+    const first = makeOverlay();
+    const second = makeOverlay();
+    reconcileDetectedOverlay(mutationAlert(first), true);
+    reconcileDetectedOverlay(mutationAlert(second), true);
+
+    expect(restoreActiveOverlaySuppressions()).toBe(true);
+    expect(first.style.display).toBe("flex");
+    expect(second.style.display).toBe("flex");
+    expect(restoreActiveOverlaySuppressions()).toBe(false);
+  });
+
+  it("honors Undo against stale automatic alerts but lets a later click hide the node again", () => {
+    const overlay = makeOverlay();
+    const cleanup = reconcileDetectedOverlay(mutationAlert(overlay), true)!;
+    expect(cleanup.undo()).toBe(true);
+
+    expect(reconcileDetectedOverlay(mutationAlert(overlay), true)).toBeNull();
+    expect(overlay.style.display).toBe("flex");
+
+    expect(suppressHighSeverityOverlayInPath([overlay], true)).not.toBeNull();
+    expect(overlay.style.getPropertyValue("display")).toBe("none");
+  });
+
+  it("fails visibly instead of growing the page-local Undo ledger without bound", () => {
+    let last: ReturnType<typeof reconcileDetectedOverlay> = null;
+    for (let index = 0; index <= MAX_ACTIVE_OVERLAY_SUPPRESSIONS; index += 1) {
+      last = reconcileDetectedOverlay(mutationAlert(makeOverlay()), true);
+    }
+
+    expect(last?.action).toBe("budget_exhausted");
+    expect(last?.activeCount).toBe(MAX_ACTIVE_OVERLAY_SUPPRESSIONS);
+    expect((document.body.lastElementChild as HTMLElement).style.display).toBe("flex");
   });
 
   it("finds the high-severity overlay ancestor behind an already-blocked click", () => {

@@ -178,7 +178,14 @@ test("Evasion 02: opt-in cleanup hides the initial overlay before interaction an
 
     await clickToastButton(page, "Undo");
     await expect(trap).toBeVisible();
+    await page.waitForTimeout(350);
+    await expect(trap).toBeVisible();
     await expect(page).toHaveURL(/evasion-02-size-34pct\.html/);
+
+    const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
+    await trap.click();
+    expect(await popupPromise, "The restored trap's later click must remain blocked").toBeNull();
+    await expect(trap).toBeHidden({ timeout: 3000 });
   } finally {
     await cleanup();
   }

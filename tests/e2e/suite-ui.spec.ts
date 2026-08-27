@@ -82,6 +82,60 @@ test("options normalizes trusted-domain input and persists protection changes @s
   }
 });
 
+test("Options Event Log exposes bounded local overlay cleanup outcomes @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-overlay-audit-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
+    });
+    try {
+      const worker = await getServiceWorker(context);
+      await worker.evaluate(async ({ key, event }) => {
+        await chrome.storage.local.set({ [key]: [event] });
+      }, {
+        key: EVENT_LOG_KEY,
+        event: {
+          id: "overlay-audit",
+          ts: 1_710_000_000_000,
+          kind: "mutation_alert",
+          pageSite: "page.example",
+          site: "child.example",
+          reasons: ["overlay_injected"],
+          extra: {
+            severity: "high",
+            overlayCleanupOutcome: "reasserted",
+            overlayCleanupActive: 3,
+          },
+        },
+      });
+
+      const extensionId = await getExtensionId(context);
+      const options = await context.newPage();
+      await options.goto(`chrome-extension://${extensionId}/src/options/options.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000,
+      });
+      await options.locator('.nav-btn[data-section="log"]').click();
+      const row = options.locator("#eventLog .event-row-opt");
+      await expect(row).toContainText("page=page.example");
+      await expect(row).toContainText("child.example");
+      await expect(row).toContainText("cleanup=reasserted");
+      await expect(row).toContainText("tracked=3");
+      await expect(options.locator("#pane-log .pane-sub")).toContainText(
+        "Nothing leaves your browser",
+      );
+    } finally {
+      await context.close();
+    }
+  } finally {
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
 test("Options keeps popup changes while saving an unrelated dirty setting @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 

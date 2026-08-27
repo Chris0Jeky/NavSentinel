@@ -348,11 +348,20 @@ function renderEventLog(log: EventLogEntry[]): void {
     const meta = document.createElement("span");
     meta.className = "event-meta";
     const parts: string[] = [];
+    if (event.pageSite && event.pageSite !== event.site) parts.push(`page=${event.pageSite}`);
     if (event.site) parts.push(event.site);
     if (event.destHost) parts.push(`→ ${event.destHost}`);
     if (typeof event.score === "number") parts.push(`score=${event.score}`);
     if (event.reasons?.length) {
       parts.push(event.reasons.slice(0, 4).join(", "));
+    }
+    const cleanupOutcome = event.extra?.overlayCleanupOutcome;
+    if (typeof cleanupOutcome === "string") {
+      parts.push(`cleanup=${cleanupOutcome}`);
+    }
+    const cleanupActive = event.extra?.overlayCleanupActive;
+    if (typeof cleanupActive === "number" && Number.isFinite(cleanupActive)) {
+      parts.push(`tracked=${cleanupActive}`);
     }
     meta.textContent = parts.join(" · ");
 

@@ -1311,6 +1311,64 @@ describe("mutation_monitor flood-then-inject reserve past the alert cap (#413)",
     return filler;
   }
 
+  it("keeps opt-in overlay cleanup reachable after the floodable alert lane is full", async () => {
+    const cleanupCandidates: MutationAlert[] = [];
+    startMutationMonitor(document, () => {}, {
+      onOverlayCandidate: (alert) => cleanupCandidates.push(alert),
+      isOverlayCleanupActive: () => true,
+    });
+    const forms = await floodWithBenignAlerts();
+    expect(getMutationAlertCount()).toBe(45);
+
+    const overlay = document.createElement("div");
+    overlay.style.position = "fixed";
+    overlay.style.zIndex = "10000";
+    overlay.style.display = "block";
+    vi.spyOn(overlay, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(0, 0, 800, 600),
+    );
+    document.body.appendChild(overlay);
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(cleanupCandidates).toEqual([
+      expect.objectContaining({
+        type: "overlay_injected",
+        severity: "high",
+        element: overlay,
+      }),
+    ]);
+    expect(getMutationAlertCount()).toBe(45);
+
+    overlay.remove();
+    forms.forEach((form) => form.remove());
+    stopMutationMonitor();
+  });
+
+  it("keeps the observer alive past five minutes only while cleanup stays opted in", async () => {
+    const cleanupCandidates: MutationAlert[] = [];
+    startMutationMonitor(document, () => {}, {
+      onOverlayCandidate: (alert) => cleanupCandidates.push(alert),
+      isOverlayCleanupActive: () => true,
+    });
+    await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 1);
+
+    const overlay = document.createElement("div");
+    overlay.style.position = "fixed";
+    overlay.style.zIndex = "10000";
+    overlay.style.display = "block";
+    vi.spyOn(overlay, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(0, 0, 800, 600),
+    );
+    document.body.appendChild(overlay);
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(cleanupCandidates).toEqual([
+      expect.objectContaining({ element: overlay, type: "overlay_injected" }),
+    ]);
+    overlay.remove();
+    stopMutationMonitor();
+  });
+
   it("keeps a bounded page-settle overlay signal reachable after a benign flood", async () => {
     const alerts: MutationAlert[] = [];
     startMutationMonitor(document, (alert) => alerts.push(alert));

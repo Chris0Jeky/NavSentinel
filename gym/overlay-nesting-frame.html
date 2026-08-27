@@ -19,7 +19,8 @@
     .wrapper { position: static; }
     #benign-dialog { background: #fff; color: #222; }
     #low-z-overlay { z-index: 99; background: rgba(30, 60, 90, 0.82); }
-    #small-overlay { inset: 12px auto auto 12px; width: 90px; height: 70px; }
+    #small-overlay { inset: 12px auto auto 12px; width: 120px; height: 72px; font-size: 11px; }
+    #compact-hostile { inset: 12px auto auto 12px; width: 51vw; height: 51vh; }
   </style>
   <script>
     const fixtureCase = new URLSearchParams(location.search).get("case") || "exact";
@@ -47,12 +48,78 @@
       return frame;
     }
 
-    if (fixtureCase === "exact" || fixtureCase === "multiple") {
+    function addAlertFloodForms(count) {
+      const fragment = document.createDocumentFragment();
+      for (let index = 0; index < count; index += 1) {
+        const form = document.createElement("form");
+        form.id = `alert-flood-${index}`;
+        form.action = `/baseline-${index}`;
+        form.hidden = true;
+        fragment.appendChild(form);
+      }
+      document.body.appendChild(fragment);
+    }
+
+    function rewriteAttackDisplay(id) {
+      const attack = document.getElementById(id);
+      if (!attack) return;
+      attack.style.setProperty("display", "block", "important");
+      document.documentElement.dataset.hostilePhase = "style-rewritten";
+    }
+
+    function replaceAttack(id, nextId) {
+      document.getElementById(id)?.remove();
+      addHtmlDirectFrame(nextId, "Reinserted synthetic advertisement");
+      document.documentElement.dataset.hostilePhase = "node-reinserted";
+    }
+
+    if (fixtureCase === "exact" || fixtureCase === "multiple" || fixtureCase === "hostile") {
       addHtmlDirectFrame("exact-overlay-frame", "Synthetic nested advertisement");
     }
 
     window.addEventListener("DOMContentLoaded", () => {
       document.documentElement.dataset.fixtureReady = "true";
+
+      if (fixtureCase === "hostile") {
+        document.documentElement.dataset.pageClickCount = "0";
+        const status = document.createElement("p");
+        status.id = "hostile-click-status";
+        status.textContent = "Page-level click listeners observed: 0";
+        const churn = document.createElement("button");
+        churn.id = "trigger-scroll-churn";
+        churn.type = "button";
+        churn.textContent = "Trigger scroll-time reinsertion";
+        churn.addEventListener("click", () => window.dispatchEvent(new Event("scroll")));
+        document.body.append(status, churn);
+        document.addEventListener("click", () => {
+          const current = Number(document.documentElement.dataset.pageClickCount ?? "0");
+          document.documentElement.dataset.pageClickCount = String(current + 1);
+          status.textContent = `Page-level click listeners observed: ${current + 1}`;
+        });
+
+        // These forms exist before NavSentinel's opt-in monitor snapshots the
+        // document. Rewriting them later fills the ordinary alert lane without
+        // touching the overlay itself, matching an ad-heavy page whose unrelated
+        // churn exhausted the old cleanup path.
+        addAlertFloodForms(50);
+        setTimeout(() => {
+          for (let index = 0; index < 50; index += 1) {
+            document.getElementById(`alert-flood-${index}`)
+              ?.setAttribute("action", `/changed-${index}`);
+          }
+          document.documentElement.dataset.hostilePhase = "alert-lane-filled";
+        }, 900);
+        setTimeout(() => rewriteAttackDisplay("exact-overlay-frame"), 1800);
+        setTimeout(() => replaceAttack(
+          "exact-overlay-frame",
+          "reinserted-overlay-frame",
+        ), 3200);
+        window.addEventListener("scroll", () => {
+          if (document.getElementById("scroll-overlay-frame")) return;
+          addHtmlDirectFrame("scroll-overlay-frame", "Scroll-triggered advertisement");
+          document.documentElement.dataset.hostilePhase = "scroll-reinserted";
+        }, { once: true });
+      }
 
       if (fixtureCase === "body" || fixtureCase === "multiple") {
         const overlay = document.createElement("div");
@@ -82,25 +149,36 @@
         ), 1200);
       }
 
+      if (fixtureCase === "compact-hostile") {
+        const overlay = document.createElement("a");
+        overlay.id = "compact-hostile";
+        overlay.className = "attack";
+        overlay.dataset.attack = "true";
+        overlay.href = "https://popup.invalid/";
+        overlay.target = "_blank";
+        overlay.textContent = "Compact interactive attack — expected hidden";
+        document.body.appendChild(overlay);
+      }
+
       if (fixtureCase === "benign") {
         const dialog = document.createElement("div");
         dialog.id = "benign-dialog";
         dialog.className = "attack";
         dialog.setAttribute("role", "dialog");
         dialog.setAttribute("aria-modal", "true");
-        dialog.textContent = "Accessible application dialog";
+        dialog.textContent = "Accessible dialog — expected visible";
         document.body.appendChild(dialog);
 
         const lowZ = document.createElement("div");
         lowZ.id = "low-z-overlay";
         lowZ.className = "attack";
-        lowZ.textContent = "Low stacking layer";
+        lowZ.textContent = "Low-z layer — expected visible";
         document.body.appendChild(lowZ);
 
         const small = document.createElement("div");
         small.id = "small-overlay";
         small.className = "attack";
-        small.textContent = "Small";
+        small.textContent = "Small benign control — expected visible";
         document.body.appendChild(small);
       }
     }, { once: true });

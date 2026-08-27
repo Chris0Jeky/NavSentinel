@@ -34,7 +34,7 @@ import {
   loadReputationFilter,
   reputationEnabled,
 } from "@navsentinel/reputation-runtime";
-import { showToast } from "./ui_toast";
+import { dismissPersistentToast, showToast } from "./ui_toast";
 import { explainReasonCode } from "../shared/explanations";
 import {
   buildClickContextFromEvents,
@@ -53,6 +53,7 @@ import {
   getDblclickOpenerNavUrl,
 } from "./dblclick_guard";
 import {
+  clearRestoredOverlayCleanupExclusions,
   startMutationMonitor,
   scanExistingForegroundOverlay,
   stopMutationMonitor,
@@ -60,7 +61,8 @@ import {
   type MutationAlert,
 } from "./mutation_monitor";
 import {
-  suppressDetectedOverlay,
+  reconcileDetectedOverlay,
+  restoreActiveOverlaySuppressions,
   suppressHighSeverityOverlayInPath,
   type OverlaySuppression,
 } from "./overlay_cleanup";
@@ -310,6 +312,26 @@ onNavSettingsChange((s) => {
   const cleanupWasActive =
     settings.defaultMode !== "off" && settings.autoDismissOverlays;
   settings = s;
+  const cleanupIsActive =
+    settings.defaultMode !== "off" && settings.autoDismissOverlays;
+  if (cleanupWasActive && !cleanupIsActive) {
+    const restored = restoreActiveOverlaySuppressions();
+    clearRestoredOverlayCleanupExclusions();
+    dismissPersistentToast();
+    if (restored) {
+      appendEventSafely({
+        kind: "mutation_alert",
+        site: siteKeyFromLocation(),
+        url: location.href,
+        reasons: ["overlay_cleanup_setting_off"],
+        extra: { overlayCleanupOutcome: "restored", restored: true },
+      });
+    }
+    lastOverlayCleanupToastUndo = null;
+    overlayCleanupBudgetWarned = false;
+  } else if (!cleanupWasActive && cleanupIsActive) {
+    overlayCleanupBudgetWarned = false;
+  }
   stopChildOverlayMonitorIfInactive();
   setDebugEnabled(s.debug);
   postToMain("ns-config", { mode: s.defaultMode, debug: s.debug });
@@ -915,22 +937,25 @@ function handleClickFixScan(): void {
 const MUTATION_START_DELAY_MS = 2000;
 // -1 = early opt-in timer, 0 = normal settle, 1 = armed, 2 = observing.
 let mutationMonitorState = 0;
+let lastOverlayCleanupToastUndo: OverlaySuppression | null = null;
+let overlayCleanupBudgetWarned = false;
 
 function overlayToastControls(suppression: OverlaySuppression | null, coalesce = false) {
   return {
     actions: suppression ? [{ label: "Undo", onClick: suppression }] : undefined,
-    onReplace: suppression ?? undefined,
     coalesce: coalesce && !suppression,
   };
 }
 
-function handleMutationAlert(alert: MutationAlert): void {
-  if (settings.defaultMode === "off") return;
+function isOverlayCleanupEnabled(): boolean {
+  return settings.defaultMode !== "off" && settings.autoDismissOverlays;
+}
 
-  const overlaySuppression = suppressDetectedOverlay(
-    alert,
-    settings.autoDismissOverlays,
-  );
+function handleOverlayCleanupCandidate(alert: MutationAlert): boolean {
+  const cleanup = reconcileDetectedOverlay(alert, isOverlayCleanupEnabled());
+  if (!cleanup) return false;
+
+  if (cleanup.action === "already_hidden") return true;
 
   appendEventSafely({
     kind: "mutation_alert",
@@ -940,11 +965,74 @@ function handleMutationAlert(alert: MutationAlert): void {
     extra: {
       details: alert.details,
       severity: alert.severity,
-      ...(overlaySuppression ? { overlayAutoDismissed: true } : {}),
+      overlayCleanupOutcome: cleanup.action,
+      overlayCleanupActive: cleanup.activeCount,
+      overlayAutoDismissed: cleanup.action !== "budget_exhausted",
     },
   });
 
+  if (cleanup.action === "budget_exhausted") {
+    if (!overlayCleanupBudgetWarned) {
+      overlayCleanupBudgetWarned = true;
+      sendIconUpdate("yellow");
+      showToast({
+        message: "Overlay cleanup reached its safety limit.",
+        timeoutMs: 0,
+      });
+    }
+    return true;
+  }
+
+  if (cleanup.undo !== lastOverlayCleanupToastUndo) {
+    lastOverlayCleanupToastUndo = cleanup.undo;
+    sendIconUpdate("yellow");
+    const undo = () => {
+      const restored = cleanup.undo();
+      if (lastOverlayCleanupToastUndo === cleanup.undo) {
+        lastOverlayCleanupToastUndo = null;
+      }
+      appendEventSafely({
+        kind: "mutation_alert",
+        site: siteKeyFromLocation(),
+        url: location.href,
+        reasons: ["overlay_cleanup_undo"],
+        extra: { overlayCleanupOutcome: "restored", restored },
+      });
+      return restored;
+    };
+    showToast({
+      message: "NavSentinel hid suspicious overlays; still watching.",
+      ...overlayToastControls(undo),
+      timeoutMs: 0,
+      persistent: true,
+    });
+  }
+  return true;
+}
+
+function handleMutationAlert(alert: MutationAlert): void {
+  if (settings.defaultMode === "off") return;
+
   const isOverlayAlert = alert.type.startsWith("overlay_");
+  if (
+    isOverlayAlert &&
+    isOverlayCleanupEnabled() &&
+    handleOverlayCleanupCandidate(alert)
+  ) {
+    refreshDebug();
+    return;
+  }
+
+  appendEventSafely({
+    kind: "mutation_alert",
+    site: siteKeyFromLocation(),
+    url: location.href,
+    reasons: [alert.type],
+    extra: {
+      details: alert.details,
+      severity: alert.severity,
+    },
+  });
 
   // Only show a warning toast for high-severity foreground overlays.
   // Low-severity alerts (cookie banners, chat widgets, ARIA dialogs) are
@@ -952,10 +1040,7 @@ function handleMutationAlert(alert: MutationAlert): void {
   if (isOverlayAlert && alert.severity === "high") {
     sendIconUpdate("yellow");
     showToast({
-      message: overlaySuppression
-        ? "NavSentinel hid suspicious overlays."
-        : "NavSentinel detected a suspicious overlay.",
-      ...overlayToastControls(overlaySuppression),
+      message: "NavSentinel detected a suspicious overlay.",
       timeoutMs: 0,
     });
   }
@@ -971,7 +1056,13 @@ function startMutationMonitorIfReady(): void {
   ) {
     return;
   }
-  startMutationMonitor(document, handleMutationAlert);
+  startMutationMonitor(document, handleMutationAlert, {
+    onOverlayCandidate: handleOverlayCleanupCandidate,
+    isOverlayCleanupActive: isOverlayCleanupEnabled,
+    onAutoDisconnect: () => {
+      mutationMonitorState = 0;
+    },
+  });
   mutationMonitorState = 2;
 }
 
@@ -1413,7 +1504,6 @@ function showAllowPrompt(params: AllowPromptParams): void {
     // navigation stays blocked; the pill expands to the latest prompt's actions
     // if a popup was actually wanted.
     coalesce: !params.overlaySuppression,
-    onReplace: params.overlaySuppression,
     onDismiss: () => {
       appendOutcomeSafely({
         domain: sourceDomain,

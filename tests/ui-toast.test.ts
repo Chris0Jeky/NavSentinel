@@ -2,12 +2,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 type ShowToastType = typeof import("../extension/src/content/ui_toast").showToast;
+type DismissPersistentToastType = typeof import("../extension/src/content/ui_toast").dismissPersistentToast;
 
 let showToast: ShowToastType;
+let dismissPersistentToast: DismissPersistentToastType;
 
 async function loadModule(): Promise<void> {
   const mod = await import("../extension/src/content/ui_toast");
   showToast = mod.showToast;
+  dismissPersistentToast = mod.dismissPersistentToast;
 }
 
 describe("ui_toast", () => {
@@ -170,17 +173,46 @@ describe("ui_toast", () => {
       expect(getWrap()!.querySelector(".body")!.textContent).toBe("Second");
     });
 
-    it("calls onReplace once when another toast supersedes the card", () => {
-      const onReplace = vi.fn();
+    it("replaces a card without treating replacement as user dismissal", () => {
       const onDismiss = vi.fn();
-      showToast({ message: "Overlay hidden", onReplace, onDismiss, timeoutMs: 0 });
+      showToast({ message: "Overlay hidden", onDismiss, timeoutMs: 0 });
 
       showToast({ message: "New warning" });
 
-      expect(onReplace).toHaveBeenCalledTimes(1);
       expect(onDismiss).not.toHaveBeenCalled();
-      showToast({ message: "Third warning" });
-      expect(onReplace).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps a persistent cleanup Undo card beside an unrelated warning", () => {
+      const undo = vi.fn();
+      showToast({
+        message: "Overlays hidden",
+        actions: [{ label: "Undo", onClick: undo }],
+        timeoutMs: 0,
+        persistent: true,
+      });
+
+      showToast({ message: "Unrelated warning", timeoutMs: 0 });
+
+      expect(getWraps()).toHaveLength(2);
+      const messages = Array.from(getWraps(), (wrap) =>
+        wrap.querySelector(".body")?.textContent,
+      );
+      expect(messages).toEqual(["Overlays hidden", "Unrelated warning"]);
+      const undoButton = Array.from(getRoot()!.querySelectorAll("button"))
+        .find((button) => button.textContent === "Undo") as HTMLButtonElement;
+      undoButton.click();
+      expect(undo).toHaveBeenCalledTimes(1);
+      expect(getWraps()).toHaveLength(1);
+    });
+
+    it("removes only the persistent card when its feature is switched off", () => {
+      showToast({ message: "Overlays hidden", timeoutMs: 0, persistent: true });
+      showToast({ message: "Unrelated warning", timeoutMs: 0 });
+
+      dismissPersistentToast();
+
+      expect(getWraps()).toHaveLength(1);
+      expect(getWrap()!.querySelector(".body")!.textContent).toBe("Unrelated warning");
     });
   });
 
@@ -323,6 +355,21 @@ describe("ui_toast", () => {
       const dismissBtn = getButtons().find((b) => b.textContent === "Dismiss")!;
       expect(() => dismissBtn.click()).not.toThrow();
       expect(getWraps().length).toBe(0);
+    });
+
+    it("does not bubble toast clicks into page document or window listeners", () => {
+      const documentClick = vi.fn();
+      const windowClick = vi.fn();
+      document.addEventListener("click", documentClick);
+      window.addEventListener("click", windowClick);
+      showToast({ message: "Test" });
+
+      getButtons().find((button) => button.textContent === "Dismiss")!.click();
+
+      expect(documentClick).not.toHaveBeenCalled();
+      expect(windowClick).not.toHaveBeenCalled();
+      document.removeEventListener("click", documentClick);
+      window.removeEventListener("click", windowClick);
     });
 
     it("does not call onDismiss if an action was clicked before dismiss", () => {
