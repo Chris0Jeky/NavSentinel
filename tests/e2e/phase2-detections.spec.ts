@@ -105,15 +105,15 @@ async function extractEventLog(context: import("@playwright/test").BrowserContex
   }>;
 }
 
-const MUTATION_TRIGGER_EVENT = "navsentinel:gym:trigger-mutation";
+const E2E_MUTATION_TRIGGER_EVENT = "navsentinel:gym:trigger-mutation";
 
-async function triggerMutationAfterMonitorArm(page: import("@playwright/test").Page) {
-  // capture_isolated may load after document.readyState becomes complete, in
-  // which case the monitor deliberately waits 3 seconds before arming.
+async function triggerMutationUsingE2EOnlyEvent(page: import("@playwright/test").Page) {
+  // Allow the extension's normal post-load monitor arm window to elapse before
+  // dispatching the fixture's E2E-only event. Human trials use the fixture timer.
   await page.waitForTimeout(3500);
   await page.evaluate((eventName) => {
     window.dispatchEvent(new Event(eventName));
-  }, MUTATION_TRIGGER_EVENT);
+  }, E2E_MUTATION_TRIGGER_EVENT);
 }
 
 async function waitForMutationEvent(
@@ -421,7 +421,7 @@ test.describe("DOM Mutation Monitor", () => {
     const { page, context, cleanup } = await setupFixtureTest("mutation-01-delayed-overlay.html");
 
     try {
-      await triggerMutationAfterMonitorArm(page);
+      await triggerMutationUsingE2EOnlyEvent(page);
       await page.waitForSelector("#malicious-overlay", { timeout: 8000 });
       await expect(page.locator("#malicious-overlay")).toBeVisible();
 
@@ -431,6 +431,7 @@ test.describe("DOM Mutation Monitor", () => {
         null,
         { timeout: 5000 }
       );
+      await expect(page.locator("#timing")).toHaveText(/E2E-only monitor-ready event/);
 
       // NavSentinel mutation monitor should detect the overlay and show a toast
       await waitForToastMatch(
@@ -455,7 +456,7 @@ test.describe("DOM Mutation Monitor", () => {
       await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
       await waitForNavSentinelBridge(page);
 
-      await triggerMutationAfterMonitorArm(page);
+      await triggerMutationUsingE2EOnlyEvent(page);
       await page.waitForSelector("#malicious-overlay", { state: "attached", timeout: 8000 });
       await expect(page.locator("#malicious-overlay")).toBeHidden();
       await waitForToastMatch(page, /hid suspicious overlays/i, 8000);
@@ -486,12 +487,13 @@ test.describe("DOM Mutation Monitor", () => {
     const { page, context, cleanup } = await setupFixtureTest("mutation-02-form-action-change.html");
 
     try {
-      await triggerMutationAfterMonitorArm(page);
+      await triggerMutationUsingE2EOnlyEvent(page);
       await page.waitForFunction(
         () => document.getElementById("status")?.textContent?.includes("Form action changed"),
         null,
         { timeout: 8000 }
       );
+      await expect(page.locator("#timing")).toHaveText(/E2E-only monitor-ready event/);
 
       // Check the form action was actually changed
       const formAction = await page.evaluate(
@@ -511,12 +513,13 @@ test.describe("DOM Mutation Monitor", () => {
     const { page, context, cleanup } = await setupFixtureTest("mutation-03-password-inject.html");
 
     try {
-      await triggerMutationAfterMonitorArm(page);
+      await triggerMutationUsingE2EOnlyEvent(page);
       await page.waitForFunction(
         () => document.getElementById("status")?.textContent?.includes("Password field injected"),
         null,
         { timeout: 8000 }
       );
+      await expect(page.locator("#timing")).toHaveText(/E2E-only monitor-ready event/);
 
       // Verify the password field was actually injected
       const hasPassword = await page.evaluate(
@@ -529,6 +532,48 @@ test.describe("DOM Mutation Monitor", () => {
       await cleanup();
     }
   });
+
+  const mutationFallbackCases = [
+    {
+      fixture: "mutation-01-delayed-overlay.html",
+      status: "Overlay injected",
+      reason: "overlay_injected",
+    },
+    {
+      fixture: "mutation-02-form-action-change.html",
+      status: "Form action changed",
+      reason: "form_action_changed",
+    },
+    {
+      fixture: "mutation-03-password-inject.html",
+      status: "Password field injected",
+      reason: "password_injected",
+    },
+  ] as const;
+
+  for (const scenario of mutationFallbackCases) {
+    test(`${scenario.fixture} proves the human fallback timer without the full delay @phase2`, async () => {
+      test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
+
+      // The fixture-only query override keeps this proof below the human
+      // 10-second fallback while leaving extension timing and behavior intact.
+      const { page, context, cleanup } = await setupFixtureTest(
+        `${scenario.fixture}?gymTestDelayMs=4000`
+      );
+
+      try {
+        await page.waitForFunction(
+          (expectedStatus) => document.getElementById("status")?.textContent?.includes(expectedStatus),
+          scenario.status,
+          { timeout: 8000 }
+        );
+        await expect(page.locator("#timing")).toHaveText(/human fallback timer/);
+        await waitForMutationEvent(context, scenario.reason);
+      } finally {
+        await cleanup();
+      }
+    });
+  }
 
   test("mutation-04 legit dynamic: no false positive @phase2", async () => {
     test.skip(!fs.existsSync(extensionPath), "Build the extension first.");

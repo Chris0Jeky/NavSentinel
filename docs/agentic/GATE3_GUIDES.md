@@ -31,11 +31,14 @@ check for its current head is green.
    manual Save; cross-surface live synchronization is tracked separately in
    #558.
 4. Start the tracked local Gym (`npm run gym:serve`) and open
-   `mutation-01-delayed-overlay.html`. Trigger the delayed overlay after the
-   monitor arms. Confirm the fake session overlay is hidden automatically, the
-   toast says NavSentinel hid it, the underlying page is usable, and no popup or
-   navigation occurs. Click **Undo** and confirm the same overlay is visible
-   again.
+   `mutation-01-delayed-overlay.html`. For this human trial, do not dispatch the
+   page's `navsentinel:gym:trigger-mutation` event; that is an E2E-only
+   monitor-ready trigger. Leave the page open and wait for the visible **Human
+   fallback countdown** to reach zero (the fixture's 10-second fallback; no
+   click is needed). Confirm the fake session overlay is hidden automatically,
+   the timing line identifies the human fallback timer, the toast says
+   NavSentinel hid it, the underlying page is usable, and no popup or navigation
+   occurs. Click **Undo** and confirm the same overlay is visible again.
 5. With cleanup still enabled, open the popup once and confirm its checkbox is
    still on. Then open `evasion-02-size-34pct.html` and do not interact with the
    page. Normally within about 500 ms after DOM readiness (allow up to 2 seconds
