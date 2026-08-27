@@ -9,6 +9,44 @@
 
 # Human Gate-3 Guides — NavSentinel
 
+## Active guide: AI-34 - issue #523 clipboard-alert cooldown
+
+Run this only after the issue #523 implementation PR is ready and every
+automated check for its current head is green.
+
+1. Resolve the open PR whose head is `fix/issue523-clipboard-flood`. Record its
+   PR number and 40-character `headRefOid`. In the implementation worktree,
+   require `git rev-parse HEAD` to equal that value. `git status --short` must
+   contain no uncommitted product changes. The known Defender quarantine may
+   appear only as ` D tests/clickfix-detector.property.test.ts`; do not restore,
+   allow, inspect, stage, or exclude that fixture. Stop for any other mismatch.
+2. On that exact head, run `npm ci` and `npm run build`. Create a fresh temporary
+   Chrome profile, leave it unsigned-in, enable Developer mode at
+   `chrome://extensions`, and load `extension/dist` unpacked. Record the Chrome
+   version and confirm the extension service worker registers without an error.
+3. Start the tracked Gym with `npm run gym:serve`. Open
+   `http://localhost:5173/clickfix-01-basic.html`, click the fake verification
+   control once, and confirm the fixture reports that its clipboard write ran.
+   NavSentinel must show its ClickFix/clipboard warning for that first write.
+4. Open `http://localhost:5173/clickfix-02-instructions.html`, click **Run
+   Security Check** once, and confirm the terminal-instruction ClickFix warning
+   still appears. A missing first warning on either suspicious fixture is a
+   failure; do not generate a rapid clipboard loop on a real website.
+5. Open `http://localhost:5173/clickfix-03-legit-captcha.html`, click **Copy
+   Code**, and confirm the page reports `OTP copied` while NavSentinel shows no
+   ClickFix warning for at least two seconds.
+6. Inspect all three fixture consoles and the extension service-worker console
+   for new errors. On a pass, reply `AI-34 done; Gate-3 passed on PR #<n> at
+   <40-character SHA>; Chrome <version>`. On any mismatch, reply `AI-34 failed
+   on PR #<n> at <SHA>: <step and observed>` and leave the item open.
+
+Only Chris can record AI-34 complete. The composed unit regression proves that
+a clipboard-write flood cannot evict a later navigation block before the bridge
+handshake; the manual browser gate checks the changed MAIN-world behavior at its
+first-detection and legitimate-use boundaries.
+
+---
+
 > ## ⚠️ SUPERSEDED 2026-07-25 — read before running anything here
 >
 > **All three PRs these guides gate have merged**, and Chris chose to clear their

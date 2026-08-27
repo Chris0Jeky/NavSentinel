@@ -17,7 +17,8 @@ provenance only. Detailed retired procedures moved to
 after refreshed exact-head CI and bounded review. That waiver is not a real-Chrome
 pass. #531 separately merged under its own waiver; it does not establish a
 `measure:fp` or headed-measurement result, and #223 remains open. AI-27 and AI-28
-are resolved; AI-14 remains blocked for future measurement work.
+are resolved; AI-14 remains blocked for future measurement work. AI-34 now holds
+issue #523's clipboard-alert cooldown for an exact-head Gate-3.
 
 **Guided resolution cursor:** `AI-19` (`Resume at: AI-19`; conversational label
 `q-5`). Current ready order: AI-19 → optional AI-24 → AI-23 (low priority).
@@ -29,6 +30,20 @@ reintroduce parser, status-enum, hook, tier, or harness machinery through this
 register.
 
 ## Open and blocked items
+
+**OPEN: AI-34 - Issue #523 clipboard-alert cooldown Gate-3.** After the
+implementation PR is ready and every automated check for its current head is
+green, build that same head and follow the active AI-34 procedure in
+[`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md). Confirm that the
+first suspicious clipboard write still produces the ClickFix warning, the
+terminal-instruction variant is still detected, and the legitimate OTP-copy
+fixture remains warning-free. The composed unit regression proves the
+pre-verification flood bound; this browser gate checks that the MAIN-world
+cooldown did not suppress ordinary first detections or create a false positive.
+Only Chris can record this complete. Reply `AI-34 done; Gate-3 passed on PR #<n>
+at <40-character SHA>; Chrome <version>` or `AI-34 failed on PR #<n> at <SHA>:
+<step and observed>`. This PR-specific gate does not move the general guided-
+resolution cursor from AI-19.
 
 **OPEN: AI-19 — Clear or replace the working product name before CWS submission.**
 TruNav publicly uses the exact name `NavSentinel` for a coming-soon GNSS
