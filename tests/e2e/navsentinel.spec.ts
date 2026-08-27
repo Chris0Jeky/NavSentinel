@@ -3,6 +3,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
+import { EVENT_LOG_KEY, type EventLogEntry } from "../../extension/src/shared/storage";
 import {
   assertNoToastFor,
   clickToastButton,
@@ -47,12 +48,40 @@ test("Level 1 blocks new tabs @smoke", async () => {
 
       await waitForNavSentinelBridge(page);
 
+      const serviceWorker = await getServiceWorker(context);
+      await serviceWorker.evaluate(async (eventLogKey) => {
+        await chrome.storage.local.set({ [eventLogKey]: [] });
+      }, EVENT_LOG_KEY);
+
       const play = page.locator("#play");
       const box = await play.boundingBox();
       expect(box, "#play button should be visible").toBeTruthy();
       await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
 
       await waitForToastText(page, "Blocked new tab", 3000);
+
+      await expect.poll(
+        () => serviceWorker.evaluate(async (eventLogKey) => {
+          const stored = await chrome.storage.local.get(eventLogKey);
+          const events = Array.isArray(stored[eventLogKey]) ? stored[eventLogKey] : [];
+          return events
+            .map((entry: { kind?: unknown }) => entry?.kind)
+            .filter((kind): kind is string => typeof kind === "string");
+        }, EVENT_LOG_KEY),
+        { timeout: 3000 }
+      ).toContain("nav_blank_prompt");
+
+      // The rejected click is a loud decision only. A later asynchronous write
+      // must not misclassify the same action as an allowed navigation (#252).
+      await page.waitForTimeout(1200);
+      const blockedKinds = await serviceWorker.evaluate(async (eventLogKey) => {
+        const stored = await chrome.storage.local.get(eventLogKey);
+        const events = Array.isArray(stored[eventLogKey]) ? stored[eventLogKey] : [];
+        return events
+          .map((entry: { kind?: unknown }) => entry?.kind)
+          .filter((kind): kind is string => typeof kind === "string");
+      }, EVENT_LOG_KEY);
+      expect(blockedKinds).not.toContain("nav_silent_allow");
     } finally {
       await context.close();
     }
@@ -280,10 +309,77 @@ test("Level 12 delayed same-tab navigation does not roll back a legitimate click
 
       await waitForNavSentinelBridge(page);
 
+      const serviceWorker = await getServiceWorker(context);
+      await serviceWorker.evaluate(async (eventLogKey) => {
+        await chrome.storage.local.set({ [eventLogKey]: [] });
+      }, EVENT_LOG_KEY);
+
+      await page.evaluate(() => {
+        const controls = document.createElement("div");
+        controls.innerHTML = `
+          <a id="silentFragment" href="#silent-section">Fragment only</a>
+          <button id="silentButton" type="button">Plain button</button>
+          <a id="silentMail" href="mailto:test@example.invalid">Email link</a>
+          <div id="silent-section">Fragment destination</div>
+        `;
+        document.body.appendChild(controls);
+        document.getElementById("silentMail")?.addEventListener("click", (event) => {
+          event.preventDefault();
+        });
+      });
+
+      await page.click("#silentFragment");
+      await page.click("#silentButton");
+      await page.click("#silentMail");
+      await page.waitForTimeout(1200);
+
+      const preNavigationSilentCount = await serviceWorker.evaluate(async (eventLogKey) => {
+        const stored = await chrome.storage.local.get(eventLogKey);
+        const events = Array.isArray(stored[eventLogKey]) ? stored[eventLogKey] : [];
+        return events.filter((entry: { kind?: unknown }) => entry?.kind === "nav_silent_allow").length;
+      }, EVENT_LOG_KEY);
+      expect(preNavigationSilentCount).toBe(0);
+
       await page.click("#slowLink");
       await page.waitForURL(/level4-visual-mimicry\.html\?delayMs=2500/, { timeout: 10_000 });
       await assertNoToastFor(page, 1200);
       await expect(page).toHaveURL(/level4-visual-mimicry\.html\?delayMs=2500/);
+
+      await expect.poll(
+        () => serviceWorker.evaluate(async (eventLogKey) => {
+          const stored = await chrome.storage.local.get(eventLogKey);
+          const events = Array.isArray(stored[eventLogKey]) ? stored[eventLogKey] : [];
+          return events.filter((entry: { kind?: unknown }) => entry?.kind === "nav_silent_allow").length;
+        }, EVENT_LOG_KEY),
+        { timeout: 5000 }
+      ).toBe(1);
+
+      const silentEvents = await serviceWorker.evaluate(async (eventLogKey) => {
+        const stored = await chrome.storage.local.get(eventLogKey);
+        const events = Array.isArray(stored[eventLogKey]) ? stored[eventLogKey] : [];
+        return events.filter(
+          (entry: { kind?: unknown }) => entry?.kind === "nav_silent_allow"
+        ) as EventLogEntry[];
+      }, EVENT_LOG_KEY);
+      const silentEvent = silentEvents[0];
+      expect(silentEvent).toEqual(expect.objectContaining({
+        id: expect.any(String),
+        ts: expect.any(Number),
+        kind: "nav_silent_allow",
+        site: "127.0.0.1",
+        destHost: "127.0.0.1",
+        score: expect.any(Number),
+        reasons: expect.any(Array),
+        extra: expect.objectContaining({
+          nrsFactors: expect.any(Array),
+          adaptiveAdj: expect.any(Number),
+          threshold: expect.any(Number)
+        })
+      }));
+      expect(Object.hasOwn(silentEvent as object, "url")).toBe(false);
+      expect(silentEvent?.reasons?.every((reason) => typeof reason === "string")).toBe(true);
+      const nrsFactors = (silentEvent?.extra as { nrsFactors?: unknown[] } | undefined)?.nrsFactors;
+      expect(nrsFactors?.every((factor) => typeof factor === "string")).toBe(true);
     } finally {
       await context.close();
     }
