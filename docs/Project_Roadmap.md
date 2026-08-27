@@ -1,6 +1,6 @@
 # NavSentinel Project Roadmap
 
-*Created 2026-04-09. Truth refresh 2026-07-10; live/status sync 2026-08-26.*
+*Created 2026-04-09. Truth refresh 2026-07-10; live/status sync 2026-08-27.*
 
 This is the execution roadmap. [`Product_Strategy.md`](Product_Strategy.md) owns
 the product thesis, portfolio boundaries, and evidence gates; GitHub issues own
@@ -89,6 +89,10 @@ actions. Overlap with conventional ad-blocking behavior is acceptable; the
 useful mechanism boundary will be triaged later from safety, efficacy, and
 compatibility evidence. NavSentinel is pre-alpha with no established adoption.
 The current browser-surface behavior remains Gate-3-held under AI-29.
+The 2026-08-27 manual trial also seeded the next bounded UX slices: settings
+autosave and popup/Options synchronization (#558), clear manual Gym expectations
+(#559), compact actionable notices (#560) with advanced timing controls (#561),
+local cleanup analytics (#562), and scoped Protection reset/save actions (#563).
 
 ### Corrective action register
 
@@ -115,7 +119,7 @@ maintainer chooses disclosure/ownership.
 | EV-03 | P1 | Compare additive value with current protections | Agent + headed lane | #418 | Pre-registered scenarios/configurations; wins, misses, interruption, performance, and data flow published |
 | EV-04 | P1 after integrity | Measure representative-site compatibility and runtime overhead | Agent + headed lane | Reuse #127/#420; no new issue before queue cull | Declared normal journeys have zero unexplained functional breakage/page errors; startup/action latency and CPU budgets are fixed, measured, and published before broad instrumentation is enabled |
 | OPS-01 | P1 | Rotate roadmap/orchestrator and cull duplicate epics | Agent + Chris dispositions | #437 and #439–#453 | Short current roadmap, archived history, one milestone-categorized queue |
-| UX-01 | Owner-directed first vertical | Add opt-in cleanup for high-severity deceptive overlays | Agent + Gate-3 | #555 / AI-29 | Setting defaults off and round-trips; high-severity injected or already-blocked-click overlays are hidden with Undo; disabled/Off and benign-overlay cases stay untouched; focused unit/E2E, build, and exact-head Gate-3 evidence pass |
+| UX-01 | Owner-directed first vertical | Add opt-in cleanup for high-severity deceptive overlays | Agent + Gate-3 | #555 / AI-29 | Options and popup expose the default-off setting and it round-trips; high-severity injected or intercepted-click overlays are hidden with Undo; disabled/Off and benign-overlay cases stay untouched; focused unit/E2E, build, and exact-head Gate-3 evidence pass |
 
 ### Existing issue dispositions
 
@@ -149,7 +153,7 @@ maintainer chooses disclosure/ownership.
    fund only Decision Journal + recovery guidance; otherwise change segment/
    position or stop before advanced architecture.
 
-Last updated: 2026-08-26
+Last updated: 2026-08-27
 
 ---
 

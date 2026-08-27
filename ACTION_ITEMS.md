@@ -44,6 +44,16 @@ Chrome <version>` or `AI-29 failed on PR #<n> at <SHA>: <step and observed>`.
 This PR-specific gate does not move the general guided-resolution cursor from
 AI-19.
 
+**Latest human result (2026-08-27, PR #557 at
+`14e397b154f50b5ea8e1e30ca211404e8cf34bca`): FAILED at step 5.** In a fresh
+Chrome profile, Chris confirmed the setting survives save/reopen and works by
+keyboard; mutation-01 is hidden when cleanup is enabled and Undo works;
+Navigation Off leaves cleanup inert; and the legitimate modal/video fixtures
+remain usable. On `evasion-02-size-34pct.html`, NavSentinel blocked the new tab
+but did not hide the deceptive overlay or expose the expected cleanup Undo.
+Console status was not reported. Keep AI-29 open until the real-Chrome mismatch
+is fixed and the new exact head passes the active procedure.
+
 **OPEN: AI-19 — Clear or replace the working product name before CWS submission.**
 TruNav publicly uses the exact name `NavSentinel` for a coming-soon GNSS
 anti-spoofing receiver. This is a risk flag, not legal advice. Choose either
