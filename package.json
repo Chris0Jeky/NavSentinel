@@ -54,14 +54,14 @@
     "@types/chrome": "^0.0.260",
     "@types/node": "^20.19.37",
     "es-module-lexer": "^2.1.0",
-    "eslint": "^10.4.0",
+    "eslint": "^10.9.1",
     "fast-check": "^4.6.0",
     "happy-dom": "^20.9.0",
     "playwright": "^1.49.0",
     "sharp": "^0.35.3",
     "typescript": "^5.6.0",
     "typescript-eslint": "^8.59.4",
-    "vite": "^8.1.5",
+    "vite": "^8.2.2",
     "vitest": "^4.1.7"
   }
 }
