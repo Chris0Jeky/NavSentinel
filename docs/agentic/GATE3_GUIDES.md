@@ -71,6 +71,47 @@ check for its current head is green.
 Only Chris can record AI-29 complete. Automated Playwright evidence supports but
 does not replace this exact-head manual browser gate.
 
+## Active guide: AI-32 - issue #568 sequential overlay cleanup
+
+Run this only after the stacked #568 implementation PR is ready and every
+automated check for its current head is green.
+
+1. Resolve the open PR whose head is `feat/issue568-sequential-overlays`. Record
+   its PR number and 40-character `headRefOid`. In the implementation worktree,
+   require `git rev-parse HEAD` to equal that value. Defender may show only
+   `tests/clickfix-detector.property.test.ts` as deleted because it quarantines
+   that synthetic test; do not allow, inspect, restore, or stage it. Stop if any
+   other uncommitted tracked path is present or the head differs.
+2. On that exact head, run `npm ci` and `npm run build`. In Chrome, create a fresh
+   temporary profile, enable Developer mode at `chrome://extensions`, and load
+   `extension/dist` unpacked. Record the Chrome version and confirm the extension
+   service worker registers without an error.
+3. Start `npm run gym:serve`, set Navigation to Smart, and enable **Auto-dismiss
+   overlays** in the popup. Open `mutation-05-sequential-overlays.html`. Do not
+   dispatch its E2E-only event. Wait for the visible ten-second human countdown,
+   then for the second layer at the displayed gap. Confirm timeline entries show
+   `trap-a` then `trap-b` injected and cleaned, both layers remain hidden, the
+   intended target is exposed, one current notice offers Undo, and no click,
+   popup, or navigation occurs.
+4. Click **Dismiss**, wait at least one second, and confirm neither layer returns.
+   Reload the fixture, wait for both layers to be cleaned again, and click
+   **Undo** once. Confirm both return and the visible timeline records restoration
+   in `trap-b`, then `trap-a` order. No click or navigation may be replayed.
+5. Open `mutation-05-sequential-overlays.html?gymPageOwnsFirst=1`, wait for both
+   layers and the `page-owned-display trap-a` timeline entry, then click **Undo**.
+   Confirm `trap-b` returns while `trap-a` retains the page-owned hidden state.
+6. Disable cleanup while leaving Smart on and reload the ordinary fixture. Both
+   layers must remain visible and warning-only. Then enable cleanup, set
+   Navigation Off, and reload again; both layers must remain visible with no
+   mutation warning or cleanup.
+7. Inspect the page and extension service-worker consoles for new errors. On a
+   pass, reply `AI-32 done; Gate-3 passed on PR #<n> at <40-character SHA>;
+   Chrome <version>`. On any mismatch, reply `AI-32 failed on PR #<n> at <SHA>:
+   <step and observed>` and leave the item open.
+
+Only Chris can record AI-32 complete. Automated Playwright evidence supports but
+does not replace this exact-head manual browser gate.
+
 ---
 
 > ## ⚠️ SUPERSEDED 2026-07-25 — read before running anything here
