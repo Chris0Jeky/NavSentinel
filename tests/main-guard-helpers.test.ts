@@ -175,6 +175,31 @@ describe("shouldEmitWithCooldown (#523)", () => {
     const reemit = shouldEmitWithCooldown(6000, last, CLIPBOARD_WRITE_COOLDOWN_MS);
     expect(reemit.emit).toBe(true);
   });
+
+  it("keeps benign and command-like writes in independent cooldown buckets", () => {
+    let commandLikeLast = 0;
+    let otherLast = 0;
+    const emit = (now: number, looksLikeCommand: boolean) => {
+      const decision = shouldEmitWithCooldown(
+        now,
+        looksLikeCommand ? commandLikeLast : otherLast,
+        CLIPBOARD_WRITE_COOLDOWN_MS,
+      );
+      if (looksLikeCommand) commandLikeLast = decision.lastEmitAt;
+      else otherLast = decision.lastEmitAt;
+      return decision.emit;
+    };
+
+    expect(emit(5000, false)).toBe(true);
+    expect(emit(5001, true)).toBe(true);
+    expect(emit(5002, false)).toBe(false);
+    expect(emit(5002, true)).toBe(false);
+
+    commandLikeLast = 0;
+    otherLast = 0;
+    expect(emit(7000, true)).toBe(true);
+    expect(emit(7001, false)).toBe(true);
+  });
 });
 
 describe("gestureBranchEmissionBound (#377/F1)", () => {
@@ -304,15 +329,22 @@ describe("#523 composed: clipboard-write flood cannot drop a later ns-nav-blocke
     const post = (type: string) =>
       queue.enqueue({ type }, isMainGuardAlertType(type), isFloodableAlertType(type));
     const start = 5000;
-    let lastEmitAt = 0;
+    let otherLastEmitAt = 0;
     let alerts = 0;
 
     for (let i = 0; i < opts.calls; i++) {
       const now = start + i * opts.stepMs;
       let emit = true;
       if (opts.cooldown) {
-        const decision = shouldEmitWithCooldown(now, lastEmitAt, CLIPBOARD_WRITE_COOLDOWN_MS);
-        lastEmitAt = decision.lastEmitAt;
+        // This replay uses the non-command bucket. Production owns a second,
+        // independent command-like bucket so a benign write cannot hide a
+        // higher-risk transition while either bucket stays bounded.
+        const decision = shouldEmitWithCooldown(
+          now,
+          otherLastEmitAt,
+          CLIPBOARD_WRITE_COOLDOWN_MS,
+        );
+        otherLastEmitAt = decision.lastEmitAt;
         emit = decision.emit;
       }
       if (!emit) continue;

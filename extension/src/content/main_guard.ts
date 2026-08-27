@@ -525,10 +525,12 @@ const nativeClipboardWrite =
     ? navigator.clipboard.write?.bind(navigator.clipboard)
     : undefined;
 
-// One cooldown anchor is shared by every successful clipboard-write API path.
-// Keeping this global prevents a page from alternating writeText/write/execCommand
-// to bypass the rate limit and crowd the pre-bridge queue. (#523)
-let lastClipboardWriteEmitAt = 0;
+// These anchors are shared by every successful clipboard-write API path, so a
+// page cannot bypass the rate limit by alternating writeText/write/execCommand.
+// Command-like writes have their own bucket so a preceding benign write cannot
+// hide a higher-risk transition from the ClickFix scanner. (#523)
+let lastCommandLikeClipboardWriteEmitAt = 0;
+let lastOtherClipboardWriteEmitAt = 0;
 
 function callNativeOpen(
   thisArg: Window,
@@ -998,12 +1000,19 @@ function textLooksLikeCommand(text: string): boolean {
 
 function postClipboardWrite(params: { contentLength: number; looksLikeCommand: boolean }): void {
   const ts = nowMs();
+  const lastEmitAt = params.looksLikeCommand
+    ? lastCommandLikeClipboardWriteEmitAt
+    : lastOtherClipboardWriteEmitAt;
   const decision = shouldEmitWithCooldown(
     ts,
-    lastClipboardWriteEmitAt,
+    lastEmitAt,
     CLIPBOARD_WRITE_COOLDOWN_MS,
   );
-  lastClipboardWriteEmitAt = decision.lastEmitAt;
+  if (params.looksLikeCommand) {
+    lastCommandLikeClipboardWriteEmitAt = decision.lastEmitAt;
+  } else {
+    lastOtherClipboardWriteEmitAt = decision.lastEmitAt;
+  }
   if (!decision.emit) {
     if (debug) {
       console.debug("[NavSentinel] clipboard write alert suppressed during cooldown", {
