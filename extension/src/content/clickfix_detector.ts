@@ -302,20 +302,38 @@ export function findClickFixOverlay(
     // dialog selector may not be supported
   }
 
-  // Check direct children of body and their immediate children (covers most
-  // real-world overlay patterns without scanning the entire DOM).
-  // Overlays are almost always direct children of <body> or at most one
-  // level deep for framework wrappers.
-  const body = root.body;
-  if (!body) return null;
-
+  // Keep the initial scan bounded even on pathological documents. Candidates
+  // are ordered from the most recently appended/frontmost-looking nodes first.
+  // Direct documentElement children cover malformed/ad-tech documents that put
+  // a full-frame iframe beside <head>/<body> (the structure observed in AI-29),
+  // while body children plus one wrapper level preserve the ordinary SPA path.
+  const maxCandidates = 128;
+  const seen = new Set<Element>();
   const candidates: Element[] = [];
-  for (let i = 0; i < body.children.length; i++) {
-    const child = body.children[i]!;
-    candidates.push(child);
-    // Also check one level of children for framework wrappers
-    for (let j = 0; j < child.children.length; j++) {
-      candidates.push(child.children[j]!);
+  const addCandidate = (candidate: Element): void => {
+    if (candidates.length >= maxCandidates || seen.has(candidate)) return;
+    seen.add(candidate);
+    candidates.push(candidate);
+  };
+
+  const documentElement = root.documentElement;
+  if (documentElement) {
+    for (let i = documentElement.children.length - 1; i >= 0; i--) {
+      const child = documentElement.children[i]!;
+      if (child === root.head || child === root.body) continue;
+      addCandidate(child);
+    }
+  }
+
+  const body = root.body;
+  if (body) {
+    for (let i = body.children.length - 1; i >= 0 && candidates.length < maxCandidates; i--) {
+      const child = body.children[i]!;
+      addCandidate(child);
+      // Also check one level of children for framework wrappers.
+      for (let j = child.children.length - 1; j >= 0 && candidates.length < maxCandidates; j--) {
+        addCandidate(child.children[j]!);
+      }
     }
   }
 

@@ -56,14 +56,19 @@ check for its current head is green.
    exposed, no tab/navigation occurs, and one card says **NavSentinel hid
    suspicious overlays.** Click **Undo** once and confirm both trap
    layers return and stay restored.
-7. Turn cleanup off and repeat the mutation fixture: the overlay must remain
+7. Open `overlay-nesting-lab.html?case=exact` without interacting. Confirm the
+   outer synthetic media frame remains present but its nested advertisement
+   disappears, **Nested frame content exposed** becomes visible, and the Undo
+   card appears inside that media frame. Click **Undo** and confirm the nested
+   advertisement returns without opening a tab or replaying a click.
+8. Turn cleanup off and repeat the mutation fixture: the overlay must remain
    visible and the warning must remain available. Then set Navigation mode Off,
    enable cleanup, repeat once more, and confirm NavSentinel neither hides nor
    blocks page content in Off mode.
-8. Restore Smart mode and enable cleanup. Exercise
+9. Restore Smart mode and enable cleanup. Exercise
    `level7-legit-modal-backdrop.html` and `level9-legit-video-overlay.html`.
    Confirm the dialog/backdrop and video controls remain visible and usable.
-9. Inspect the page and extension service-worker consoles for new errors. On a
+10. Inspect the page and extension service-worker consoles for new errors. On a
    pass, reply `AI-29 done; Gate-3 passed on PR #<n> at <40-character SHA>;
    Chrome <version>`. On any mismatch, reply `AI-29 failed on PR #<n> at <SHA>:
    <step and observed>` and leave the item open.

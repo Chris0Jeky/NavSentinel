@@ -23,6 +23,7 @@
 
 import { matchProviderHostSrc, type ProviderHostEntry } from "../shared/iframe_provider";
 import { findClickFixOverlay } from "./clickfix_detector";
+import { isExtensionOwnedOverlayElement } from "./extension_owned_overlay";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -420,7 +421,7 @@ function getBenignOverlayReason(el: Element): string | null {
  */
 export function classifyOverlayElement(el: Element): OverlayClassification | null {
   // Only check elements that could plausibly be overlays
-  if (!isHtmlElementLike(el)) return null;
+  if (!isHtmlElementLike(el) || isExtensionOwnedOverlayElement(el)) return null;
 
   const cs = getComputedStyle(el);
   const pos = cs.position;

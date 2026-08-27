@@ -67,6 +67,15 @@ reactive repair but not the requested pre-click behavior. Keep AI-29 open until 
 new exact head hides the settled initial trap before interaction and passes the
 revised active guide.
 
+**Subsequent exploratory real-world finding (2026-08-27):** a media embed used a
+non-qualifying outer iframe (`z-index:auto`) around a fixed maximum-z-index iframe
+attached directly below the child document's `<html>`; the innermost static
+`#container` disappeared when hidden manually. The prior top-frame-only automatic
+monitor could not reach the qualifying middle node. The current candidate adds
+bounded opt-in child-frame monitoring, direct-`<html>` discovery, isolated-world
+self-UI exclusion, and an exact synthetic plus twelve-frame stress matrix. This is
+automated candidate evidence, not a human Gate-3 completion; keep AI-29 open.
+
 **OPEN: AI-36 — #558 popup/Options patch-save synchronization Gate-3.** Run the
 active manual Chrome guide in [`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md)
 against the eventual PR for branch `fix/issue558-patch-save-sync`. Verify the

@@ -1,5 +1,6 @@
 import type { ClickContext, ElementHint } from "../shared/scoring";
 import type { Mode } from "../shared/types";
+import { registerExtensionOwnedOverlayElement } from "./extension_owned_overlay";
 
 export type DebugInfo = {
   mode: Mode;
@@ -27,6 +28,7 @@ function ensureHost(): void {
   if (host && root && pre) return;
 
   host = document.createElement("div");
+  registerExtensionOwnedOverlayElement(host);
   host.id = "__navsentinel_debug_host";
   host.style.all = "initial";
   host.style.position = "fixed";

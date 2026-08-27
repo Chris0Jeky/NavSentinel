@@ -428,9 +428,16 @@ It listens to `chrome.webNavigation` events to decide when a committed navigatio
 `extension/src/content/mutation_monitor.ts` detects post-load injection attacks via MutationObserver:
 
 - Watches for new fixed-position elements covering >= 25% of viewport added after initial load
+- When auto-dismiss is enabled, runs the same bounded monitor inside ordinary
+  child frames and releases those child observers when the opt-in or Navigation
+  mode becomes inactive; the always-on top-frame monitor is unchanged
+- The settled scan checks direct `<html>` children plus body/framework candidates,
+  ordered from likely foreground nodes and capped at 128 candidates
 - Detects form action attribute changes and password field injection
 - Rate-limited: 100ms debounce, 50-alert hard cap, 5-minute auto-disconnect
 - Excludes cookie consent banners, chat widgets, and elements with proper ARIA markup
+- Excludes only isolated-world-owned NavSentinel UI nodes through WeakSet identity;
+  page-created elements cannot gain an exemption by spoofing an extension-like ID
 - Feeds mutation alert count into the debug overlay
 
 ## CSP analysis
