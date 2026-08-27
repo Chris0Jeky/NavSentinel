@@ -8,8 +8,6 @@ type ToastOptions = {
   actions?: ToastAction[] | undefined;
   timeoutMs?: number;
   onDismiss?: () => void;
-  /** Called only when another toast replaces this card before the user acts. */
-  onReplace?: (() => void) | undefined;
   /**
    * Opt in to burst coalescing. When several coalescible toasts fire in quick
    * succession on the same page, they collapse into a single small count pill
@@ -29,7 +27,6 @@ const PILL_IDLE_DISMISS_MS = 12000;
 
 let host: HTMLElement | null = null;
 let root: ShadowRoot | null = null;
-let activeCardReplace: (() => void) | null = null;
 
 // --- Burst coalescing state (per page, ephemeral, never persisted) ---
 let burstCount = 0;
@@ -71,9 +68,6 @@ function ensureHost() {
 }
 
 function removeFullCards(): void {
-  const onReplace = activeCardReplace;
-  activeCardReplace = null;
-  try { onReplace?.(); } catch { /* best-effort page-state restoration */ }
   root?.querySelector(".wrap")?.remove();
 }
 
@@ -87,7 +81,6 @@ function renderFullCard(opts: ToastOptions): void {
   const wrap = document.createElement("div");
   wrap.className = "wrap";
   wrap.setAttribute("role", "alert");
-  activeCardReplace = opts.onReplace ?? null;
 
   const head = document.createElement("div");
   head.className = "head";
@@ -115,7 +108,6 @@ function renderFullCard(opts: ToastOptions): void {
   dismiss.addEventListener("click", () => {
     if (dismissed) return;
     dismissed = true;
-    activeCardReplace = null;
     wrap.remove();
     if (!actionClicked && opts.onDismiss) {
       opts.onDismiss();
@@ -130,7 +122,6 @@ function renderFullCard(opts: ToastOptions): void {
     btn.addEventListener("click", () => {
       actionClicked = true;
       try { a.onClick(); } finally {
-        activeCardReplace = null;
         wrap.remove();
       }
     });
@@ -148,7 +139,6 @@ function renderFullCard(opts: ToastOptions): void {
   if (t > 0) {
     window.setTimeout(() => {
       if (wrap.parentNode) {
-        activeCardReplace = null;
         wrap.remove();
         if (!actionClicked && opts.onDismiss) {
           opts.onDismiss();

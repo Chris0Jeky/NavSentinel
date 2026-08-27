@@ -7,6 +7,48 @@ import {
 
 export type OverlaySuppression = () => boolean;
 
+type OverlaySuppressionGroup = {
+  active: boolean;
+  suppressions: OverlaySuppression[];
+  undo: OverlaySuppression;
+};
+
+// A page-local ledger keeps independently arriving layers under one Undo. The
+// content-script module is recreated on navigation, so this state cannot leak
+// into another document.
+let activeSuppressionGroup: OverlaySuppressionGroup | null = null;
+
+function appendToSuppressionGroup(
+  suppressions: OverlaySuppression[],
+): OverlaySuppression | null {
+  if (suppressions.length === 0) return null;
+
+  let group = activeSuppressionGroup;
+  if (!group || !group.active) {
+    group = {
+      active: true,
+      suppressions: [],
+      undo: () => false,
+    };
+    group.undo = () => {
+      if (!group?.active) return false;
+      group.active = false;
+      if (activeSuppressionGroup === group) activeSuppressionGroup = null;
+
+      let restored = false;
+      for (let i = group.suppressions.length - 1; i >= 0; i--) {
+        restored = group.suppressions[i]!() || restored;
+      }
+      group.suppressions.length = 0;
+      return restored;
+    };
+    activeSuppressionGroup = group;
+  }
+
+  group.suppressions.push(...suppressions);
+  return group.undo;
+}
+
 /**
  * Temporarily hide one classified overlay while preserving a narrow Undo path.
  * The element stays in the document so page-owned listeners/state are not torn
@@ -61,9 +103,7 @@ export function suppressDetectedOverlay(
   const suppressions = (alert.elements ?? [alert.element])
     .map(suppressOverlayElement)
     .filter((undo): undo is OverlaySuppression => undo !== null);
-  return suppressions.length
-    ? () => suppressions.map((undo) => undo()).some(Boolean)
-    : null;
+  return appendToSuppressionGroup(suppressions);
 }
 
 /**
@@ -81,9 +121,15 @@ export function suppressHighSeverityOverlayInPath(
     if (!isHtmlElementLike(target)) continue;
     const classification = classifyOverlayElement(target);
     if (classification?.severity === "high") {
-      return suppressOverlayElement(target);
+      const suppression = suppressOverlayElement(target);
+      return suppression ? appendToSuppressionGroup([suppression]) : null;
     }
   }
 
   return null;
+}
+
+/** Test-only: discard module-local ownership without mutating page state. */
+export function _resetOverlaySuppressionGroupForTest(): void {
+  activeSuppressionGroup = null;
 }

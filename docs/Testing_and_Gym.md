@@ -178,6 +178,9 @@ It currently covers:
   inert (`evasion-02` and `evasion-12`)
 - delayed high-severity overlay auto-dismissal with an Undo restore path; the
   default-disabled case remains visible and warning-only
+- sequential late-arriving high-severity overlays stay hidden across notice
+  replacement and dismissal, share one reverse-order Undo, preserve page-owned
+  display changes, and remain inert with cleanup disabled or Navigation Off
 - blocked and prompted high-severity click overlays both hide with Undo while
   the intercepted navigation remains blocked
 - a dedicated rollback lane for redirect recovery affordances
@@ -320,6 +323,7 @@ Current pages:
 - `gym/rw24-idle-resume-popup.html` (+ `rw24-stale-popup.html`)
 - `gym/rw25-rapid-close-reopen.html` (+ `rw25-churn-popup.html`, `rw25-exfil-popup.html`)
 - `gym/evasion-01-opacity-009.html` through `gym/evasion-11-shadow-dom.html` (CDS evasion red-team fixtures)
+- `gym/mutation-05-sequential-overlays.html` (timed multi-layer cleanup, grouped Undo, and ownership telemetry)
 - `gym/clickfix-01-basic.html` (fake CAPTCHA overlay with clipboard write + Win+R instructions)
 - `gym/clickfix-02-instructions.html` (dark-themed terminal instructions variant)
 - `gym/clickfix-03-legit-captcha.html` (legitimate reCAPTCHA + OTP copy, false positive check)

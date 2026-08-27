@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MutationAlert } from "../extension/src/content/mutation_monitor";
 import {
+  _resetOverlaySuppressionGroupForTest,
   suppressDetectedOverlay,
   suppressHighSeverityOverlayInPath,
   suppressOverlayElement,
@@ -36,6 +37,7 @@ function mutationAlert(
 
 describe("overlay cleanup", () => {
   afterEach(() => {
+    _resetOverlaySuppressionGroupForTest();
     document.body.replaceChildren();
     vi.restoreAllMocks();
   });
@@ -124,6 +126,54 @@ describe("overlay cleanup", () => {
     expect(first.style.getPropertyValue("display")).toBe("flex");
     expect(second.style.getPropertyValue("display")).toBe("flex");
     expect(undo?.()).toBe(false);
+  });
+
+  it("groups sequential suppressions under one stable reverse-order Undo", () => {
+    const first = makeOverlay();
+    const second = makeOverlay();
+    const firstSet = vi.spyOn(first.style, "setProperty");
+    const secondSet = vi.spyOn(second.style, "setProperty");
+
+    const undoFirst = suppressDetectedOverlay(mutationAlert(first), true);
+    const undoSecond = suppressDetectedOverlay(mutationAlert(second), true);
+    firstSet.mockClear();
+    secondSet.mockClear();
+
+    expect(undoSecond).toBe(undoFirst);
+    expect(undoSecond?.()).toBe(true);
+    expect(secondSet.mock.invocationCallOrder[0]).toBeLessThan(
+      firstSet.mock.invocationCallOrder[0]!,
+    );
+    expect(first.style.display).toBe("flex");
+    expect(second.style.display).toBe("flex");
+    expect(undoFirst?.()).toBe(false);
+  });
+
+  it("preserves a page-owned display change between sequential suppressions", () => {
+    const first = makeOverlay();
+    const second = makeOverlay();
+    const undo = suppressDetectedOverlay(mutationAlert(first), true);
+
+    first.style.setProperty("display", "none");
+    expect(suppressDetectedOverlay(mutationAlert(second), true)).toBe(undo);
+
+    expect(undo?.()).toBe(true);
+    expect(first.style.getPropertyValue("display")).toBe("none");
+    expect(first.style.getPropertyPriority("display")).toBe("");
+    expect(second.style.display).toBe("flex");
+  });
+
+  it("skips detached layers while restoring the rest of a sequential group", () => {
+    const first = makeOverlay();
+    const second = makeOverlay();
+    const undo = suppressDetectedOverlay(mutationAlert(first), true);
+    suppressDetectedOverlay(mutationAlert(second), true);
+    second.remove();
+
+    expect(undo?.()).toBe(true);
+    expect(first.style.display).toBe("flex");
+    expect(second.style.getPropertyValue("display")).toBe("none");
+    expect(second.style.getPropertyPriority("display")).toBe("important");
   });
 
   it("finds the high-severity overlay ancestor behind an already-blocked click", () => {

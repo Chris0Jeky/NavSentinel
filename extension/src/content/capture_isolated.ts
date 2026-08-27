@@ -917,7 +917,6 @@ let mutationMonitorState = 0;
 function overlayToastControls(suppression: OverlaySuppression | null, coalesce = false) {
   return {
     actions: suppression ? [{ label: "Undo", onClick: suppression }] : undefined,
-    onReplace: suppression ?? undefined,
     coalesce: coalesce && !suppression,
   };
 }
@@ -1393,7 +1392,6 @@ function showAllowPrompt(params: AllowPromptParams): void {
     // navigation stays blocked; the pill expands to the latest prompt's actions
     // if a popup was actually wanted.
     coalesce: !params.overlaySuppression,
-    onReplace: params.overlaySuppression,
     onDismiss: () => {
       appendOutcomeSafely({
         domain: sourceDomain,
