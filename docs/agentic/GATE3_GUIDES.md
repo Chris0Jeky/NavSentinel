@@ -53,6 +53,122 @@ which is the right pattern. The pins live in `ACTION_ITEMS.md`, `HANDOFF.md`,
 SHA written elsewhere: a stale pin is exactly what made the AI-13 guide abort on its own
 precheck.
 
+## AI-35 — #539 cross-host child-event attribution Gate-3
+
+**🚨 OPEN: AI-35 — Run the #539 cross-host child-event attribution Gate-3
+(GUIDE PREPARED; LIVE EXACT-HEAD PRECHECK REQUIRED).** This browser-surface
+slice keeps the emitting frame hostname in `site` while adding a minimized,
+service-worker-derived `pageSite` for the top-level HTTP(S) tab. The popup uses
+that association for its current-page threat state and falls back to `site` for
+legacy rows. It does not add tab or navigation identity; that remains #215.
+Only Chris can record this item complete.
+
+**Current guide:**
+
+1. From the repository root, use the existing worktree for branch
+   `fix/issue539-page-attribution`; do not switch or reset root `main`. Refresh
+   the branch and prove the exact head before running a browser:
+
+   ```sh
+   BRANCH=fix/issue539-page-attribution
+   WORKTREE=<path-to-the-worktree-for-the-branch>
+   git -C "$WORKTREE" fetch origin "$BRANCH"
+   git -C "$WORKTREE" status --short --branch
+   git -C "$WORKTREE" rev-parse HEAD
+   git ls-remote origin "refs/heads/$BRANCH"
+   PR=$(gh pr list --state open --head "$BRANCH" --json number --jq '.[0].number')
+   test -n "$PR"
+   gh pr view "$PR" --json headRefName,headRefOid,state
+   gh pr checks "$PR"
+   ```
+
+   The worktree must be clean, `headRefName` must be the named branch, and the
+   local HEAD, remote branch SHA, and PR head SHA must be identical. All checks
+   exercising the branch must be green and no required review thread may remain
+   unresolved. If the branch has not yet been pushed or the PR lookup is empty,
+   stop and report that precondition; never test a stale build.
+2. In that exact worktree run `npm ci`, then `npm run build`. Start the Gym with
+   `python -m http.server 5173 --bind 127.0.0.1 --directory gym` in a second
+   terminal. Create a disposable, fresh Chrome profile without signing in or
+   changing an established profile. Load the exact
+   `<worktree>/extension/dist` directory unpacked from `chrome://extensions`.
+   Confirm Navigation is **Smart** and no localhost/127.0.0.1 allowlist entry is
+   present. If the extension was already loaded, use **Reload** in
+   `chrome://extensions` before opening the Gym page.
+3. Open `http://127.0.0.1:5173/index.html?ai35=top`. In page DevTools confirm
+   both readiness markers are `"1"`:
+
+   ```js
+   ["data-navsentinel-capture-ready", "data-navsentinel-bridge-ready"].map(
+     (name) => document.documentElement.getAttribute(name)
+   )
+   ```
+
+   In the top page's DevTools, inject a visible child frame served by the other
+   loopback hostname, then wait for its load and select that frame's DevTools
+   context to confirm the same two readiness markers:
+
+   ```js
+   await (async () => {
+     const frame = document.createElement("iframe");
+     frame.id = "ai35-child-frame";
+     frame.src = `http://localhost:${location.port}/level1-basic-opacity.html?ai35=child`;
+     frame.style.cssText =
+       "position:fixed;left:24px;top:160px;width:520px;height:360px;z-index:2147483647;border:1px solid #777";
+     const loaded = new Promise((resolve) => frame.addEventListener("load", resolve, { once: true }));
+     document.body.appendChild(frame);
+     await loaded;
+     return frame.src;
+   })();
+   ```
+
+   If Chrome shows its self-XSS paste warning, review the exact local-only
+   snippet before following the prompt manually; never disable the warning or
+   paste unrelated code.
+4. Open NavSentinel's service-worker inspector from `chrome://extensions` and,
+   after both page and child bridges are ready, clear only this disposable
+   profile's event log:
+
+   ```js
+   await chrome.storage.local.set({ "sentinelsuite:event_log_v1": [] });
+   ```
+
+   Return to the child frame, identify its visible **Play** button, and click
+   its coordinates physically once. The Level-1 transparent trap receives this
+   trusted click and should produce one `nav_blank_prompt`; no destination tab
+   should be opened. In the service-worker inspector, poll the event log and
+   verify the matching row has exactly the meaningful attribution fields:
+
+   ```js
+   (await chrome.storage.local.get("sentinelsuite:event_log_v1"))
+     ["sentinelsuite:event_log_v1"]
+     .filter((entry) => entry.kind === "nav_blank_prompt")
+     .at(-1)
+   // Expected: { site: "localhost", pageSite: "127.0.0.1", ... }
+   ```
+
+   `site` must remain `localhost`; `pageSite` must be `127.0.0.1`; neither may
+   contain a path, query, fragment, or full URL. Capture any different value,
+   missing event, opened destination, or page/service-worker console error.
+5. With the first tab's event retained, open a second top-level tab at
+   `http://localhost:5173/index.html?ai35=unrelated`, wait for its NavSentinel
+   readiness markers, and open the extension popup while that localhost tab is
+   active. The **Current page** card must not show the prior event's
+   `Threat alert recorded, no risk score` note or its threat signal; the current
+   gauge must remain clear. The activity feed may still list the global event,
+   which is expected and is not current-page attribution. Switch back to the
+   127.0.0.1 tab and reopen the popup to confirm the threat note is restored
+   there. Record any cross-tab leakage or popup console error as a failure.
+6. Close all test tabs and DevTools windows, stop the Python server with
+   Ctrl+C, close the disposable Chrome profile, and remove only that disposable
+   profile. Do not alter an established profile or disable security software.
+7. Only Chris may record completion. Reply
+   `AI-35 done; Gate-3 passed on branch fix/issue539-page-attribution at
+   <40-character SHA>; Chrome <version>` with console observations, or
+   `AI-35 failed on branch fix/issue539-page-attribution at <SHA>: <step and
+   observed result>`. Do not merge on a partial pass; recheck exact head, CI,
+   comments, and the repository merge gate afterward.
+
 ## Index
 
 | Item | PR | Guide |
@@ -60,6 +176,7 @@ precheck.
 | AI-13 | #356 MAIN-world compatibility | in [`../../ACTION_ITEMS.md`](../../ACTION_ITEMS.md) |
 | AI-21 | #464 synthetic navigation | [below](#ai-21--pr-464-synthetic-navigation-gate-3) |
 | AI-22 | #466 pending-decision service worker | [below](#ai-22--pr-466-pending-decision-service-worker-gate-3) |
+| AI-35 | #539 cross-host child-event attribution | [below](#ai-35--539-cross-host-child-event-attribution-gate-3) |
 
 ~~Run them oldest-PR-first: AI-13 (#356) -> AI-21 (#464) -> AI-22 (#466).~~
 **Void 2026-07-25** — all three merged with their manual gates waived. There is no

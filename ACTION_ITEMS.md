@@ -30,6 +30,16 @@ register.
 
 ## Open and blocked items
 
+**OPEN: AI-35 — #539 cross-host child-event attribution Gate-3.** Run the
+active manual Chrome guide in [`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md)
+against the eventual PR for branch `fix/issue539-page-attribution`. Verify the
+exact head and hosted checks first, then load that exact build in a fresh Chrome
+profile and confirm a cross-host child-frame event keeps its emitting `site`
+while the popup associates it with the top-level page; also confirm an unrelated
+top-level page does not inherit the event. Inspect page, popup, and service-worker
+consoles. Only Chris can complete this human Gate-3. The general guided
+resolution cursor remains AI-19; AI-35 is an additional branch-specific gate.
+
 **OPEN: AI-19 — Clear or replace the working product name before CWS submission.**
 TruNav publicly uses the exact name `NavSentinel` for a coming-soon GNSS
 anti-spoofing receiver. This is a risk flag, not legal advice. Choose either
