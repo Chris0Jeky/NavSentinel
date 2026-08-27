@@ -1535,7 +1535,12 @@ window.addEventListener(
             meta: e.metaKey
           };
 
-    const explicitNewTab = e.isTrusted && !!ctx.explicitNewTabIntent;
+    // The current trusted click remains authoritative even when a user holds
+    // Ctrl/Cmd long enough for pointerdown correlation evidence to expire.
+    // Page scripts cannot forge isTrusted, so this does not widen synthetic
+    // navigation authority.
+    const currentClickNewTabIntent = e.isTrusted && (e.ctrlKey || e.metaKey);
+    const explicitNewTab = e.isTrusted && (!!ctx.explicitNewTabIntent || currentClickNewTabIntent);
     const anchor = findAnchorFromEvent(e);
     const anchorTarget = (anchor?.target ?? "").toLowerCase();
     const isBlankAnchor = !!(anchor && anchorTarget === "_blank");
@@ -1762,8 +1767,7 @@ window.addEventListener(
         mode !== "off" &&
         e.isTrusted &&
         anchor &&
-        explicitNewTab &&
-        (e.ctrlKey || e.metaKey)
+        currentClickNewTabIntent
       );
       if (
         nativeModifiedAnchor &&

@@ -20,7 +20,7 @@ const fixture = "issue566-modifier-retry.html";
 
 test.setTimeout(90_000);
 
-type Gesture = "control-click" | "middle-click";
+type Gesture = "control-click" | "long-control-click" | "middle-click";
 type Scenario = {
   id: "native-control" | "assign-control" | "self-control";
   label: string;
@@ -81,6 +81,15 @@ async function runScenario(scenario: Scenario, gesture: Gesture): Promise<void> 
 
     if (gesture === "control-click") {
       await control.click({ modifiers: ["Control"], button: "left" });
+    } else if (gesture === "long-control-click") {
+      const box = await control.boundingBox();
+      if (!box) throw new Error(`Control #${scenario.id} has no clickable box`);
+      await opener.keyboard.down("Control");
+      await opener.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await opener.mouse.down({ button: "left" });
+      await opener.waitForTimeout(1700);
+      await opener.mouse.up({ button: "left" });
+      await opener.keyboard.up("Control");
     } else {
       await control.click({ button: "middle" });
     }
@@ -98,7 +107,7 @@ async function runScenario(scenario: Scenario, gesture: Gesture): Promise<void> 
 
     const log = await opener.locator("#event-log").innerText();
     expect(log).toContain("trusted=true");
-    expect(log).toContain(gesture === "control-click" ? "modifiers=Ctrl" : "button=1");
+    expect(log).toContain(gesture === "middle-click" ? "button=1" : "modifiers=Ctrl");
     const toast = await readToastText(opener);
     if (scenario.id === "self-control") {
       expect(toast, "The pointerdown-scheduled opener action must be blocked").toContain("Blocked popup");
@@ -120,6 +129,11 @@ for (const scenario of scenarios) {
     });
   }
 }
+
+test("location.assign timer preserves opener for a long-held Control-click @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running modifier navigation E2E tests.");
+  await runScenario(scenarios[1]!, "long-control-click");
+});
 
 test("Navigation Off preserves the page's modified-click handler @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running modifier navigation E2E tests.");
