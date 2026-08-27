@@ -1122,6 +1122,37 @@ function findAnchorFromEvent(e: MouseEvent): HTMLAnchorElement | null {
   return findAnchorInShadowRoots(e.clientX, e.clientY);
 }
 
+function isCrossSiteDestinationHost(destHost: string | null): boolean {
+  const siteRegDomain = getRegistrableDomain(siteKeyFromLocation());
+  const destRegDomain = destHost ? getRegistrableDomain(destHost) : null;
+  return !!(
+    siteRegDomain &&
+    destRegDomain &&
+    siteRegDomain !== destRegDomain &&
+    !areSameOrganization(siteRegDomain, destRegDomain)
+  );
+}
+
+function isSameTabAnchorTarget(anchor: HTMLAnchorElement): boolean {
+  const target = anchor.target.toLowerCase();
+  return !target || target === "_self";
+}
+
+function shouldIsolateMiddleClickFromPage(e: MouseEvent): boolean {
+  if (settings.defaultMode === "off" || !isTopFrame()) return false;
+  if (!e.isTrusted || e.button !== 1) return false;
+
+  const anchor = findAnchorFromEvent(e);
+  if (!anchor || !isSameTabAnchorTarget(anchor)) return false;
+
+  const parsed = parseDestination(anchor.getAttribute("href") ?? anchor.href);
+  return !!(
+    parsed.href &&
+    /^https?:\/\//i.test(parsed.href) &&
+    isCrossSiteDestinationHost(parsed.host)
+  );
+}
+
 function allowOnce(url: string, target?: string, features?: string): void {
   notifyNavAllow();
   postToMain("ns-allow-once");
@@ -1440,6 +1471,21 @@ window.addEventListener(
 );
 
 window.addEventListener(
+  "auxclick",
+  (e) => {
+    if (!(e instanceof MouseEvent)) return;
+    if (!shouldIsolateMiddleClickFromPage(e)) return;
+
+    // Keep Chromium's native middle-click default (open one child tab), while
+    // preventing page handlers from reusing the same gesture to navigate the
+    // opener. Location.assign/replace are LegacyUnforgeable, so propagation is
+    // the only point where this duplicate same-tab navigation can be stopped.
+    e.stopImmediatePropagation();
+  },
+  true
+);
+
+window.addEventListener(
   "click",
   (e) => {
     if (!(e instanceof MouseEvent)) return;
@@ -1489,11 +1535,16 @@ window.addEventListener(
             meta: e.metaKey
           };
 
-    const explicitNewTab = e.isTrusted && !!ctx.explicitNewTabIntent;
+    // The current trusted click remains authoritative even when a user holds
+    // Ctrl/Cmd long enough for pointerdown correlation evidence to expire.
+    // Page scripts cannot forge isTrusted, so this does not widen synthetic
+    // navigation authority.
+    const currentClickNewTabIntent = e.isTrusted && (e.ctrlKey || e.metaKey);
+    const explicitNewTab = e.isTrusted && (!!ctx.explicitNewTabIntent || currentClickNewTabIntent);
     const anchor = findAnchorFromEvent(e);
     const anchorTarget = (anchor?.target ?? "").toLowerCase();
     const isBlankAnchor = !!(anchor && anchorTarget === "_blank");
-    const isSameTabAnchor = !!(anchor && (!anchorTarget || anchorTarget === "_self"));
+    const isSameTabAnchor = !!(anchor && isSameTabAnchorTarget(anchor));
     const parsed = anchor ? parseDestination(anchor.getAttribute("href") ?? anchor.href) : null;
     const isAllowed = parsed?.host
       ? isAllowlisted(allowlist, siteKeyFromLocation(), parsed.host)
@@ -1508,12 +1559,7 @@ window.addEventListener(
 
     const siteRegDomain = getRegistrableDomain(siteKeyFromLocation());
     const destRegDomain = parsed?.host ? getRegistrableDomain(parsed.host) : null;
-    const isCrossSite = !!(
-      siteRegDomain &&
-      destRegDomain &&
-      siteRegDomain !== destRegDomain &&
-      !areSameOrganization(siteRegDomain, destRegDomain)
-    );
+    const isCrossSite = isCrossSiteDestinationHost(parsed?.host ?? null);
 
     const timeSincePointerdownMs = downForClick
       ? performance.now() - downForClick.ts
@@ -1717,6 +1763,26 @@ window.addEventListener(
     }
 
     if (decision === "allow") {
+      const nativeModifiedAnchor = !!(
+        mode !== "off" &&
+        e.isTrusted &&
+        anchor &&
+        currentClickNewTabIntent
+      );
+      if (
+        nativeModifiedAnchor &&
+        topFrame &&
+        isSameTabAnchor &&
+        isCrossSite &&
+        parsed?.href &&
+        /^https?:\/\//i.test(parsed.href)
+      ) {
+        // Do not preventDefault: the user's explicit new-tab navigation still
+        // belongs to Chromium. Stop only later page handlers that could also
+        // spend this gesture on an opener navigation.
+        e.stopImmediatePropagation();
+      }
+
       const silentNavEvent = e.isTrusted
         ? buildSilentNavEvent({
             destHref: parsed?.href,
@@ -1740,7 +1806,7 @@ window.addEventListener(
       // Otherwise a hostile page can dispatch pointerdown/click and self-
       // authorize its own navigation. Off is the explicit user-selected bypass,
       // so preserve its no-intervention contract for programmatic links too.
-      if (e.isTrusted || mode === "off") {
+      if ((e.isTrusted || mode === "off") && !nativeModifiedAnchor) {
         notifyNavGesture();
         notifyNavAllow();
         postToMain("ns-allow", {

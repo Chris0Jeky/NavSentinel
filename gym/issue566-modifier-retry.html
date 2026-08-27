@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Issue 566 - modifier navigation diagnostic</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, sans-serif; }
+    body { max-width: 820px; margin: 0 auto; padding: 32px; line-height: 1.45; }
+    .card { border: 1px solid #cbd5e1; border-radius: 10px; padding: 20px; margin: 18px 0; }
+    .controls { display: grid; gap: 12px; }
+    .controls a { display: block; width: fit-content; padding: 11px 16px; border-radius: 7px; background: #155e75; color: white; }
+    .controls a:focus { outline: 3px solid #f59e0b; outline-offset: 3px; }
+    #event-log { min-height: 7rem; margin: 0; padding: 12px 12px 12px 32px; background: #0f172a; color: #d1fae5; font: 12px/1.5 ui-monospace, monospace; white-space: pre-wrap; }
+    .note { color: #475569; font-size: 0.95rem; }
+  </style>
+</head>
+<body>
+  <h1>Issue 566: modifier navigation diagnostic</h1>
+  <p>
+    Page A contains ordinary same-tab anchors to the other loopback hostname.
+    Use a trusted Control-click or middle-click on one control. The browser
+    should open exactly one child tab while this opener stays on Page A.
+  </p>
+
+  <section class="card">
+    <h2>Controls</h2>
+    <div class="controls">
+      <a id="native-control" href="issue566-destination.html?case=native">Plain native control</a>
+      <a id="assign-control" href="issue566-destination.html?case=assign">Timer location.assign control</a>
+      <a id="self-control" href="issue566-destination.html?case=self">Timer window.open _self control</a>
+    </div>
+    <p class="note">
+      The second and third controls deliberately retain their native default
+      action. Their one-shot timers model page code that performs a same-tab
+      navigation immediately after the modified gesture. The 127.0.0.1 and
+      localhost hostnames keep the cross-site case entirely local.
+    </p>
+  </section>
+
+  <section class="card">
+    <h2>Event log</h2>
+    <ol id="event-log" aria-live="polite"></ol>
+  </section>
+
+  <section class="card">
+    <h2>Expected result</h2>
+    <ul>
+      <li><strong>Smart or Strict:</strong> one destination tab opens and this Page A stays here.</li>
+      <li><strong>Off:</strong> the diagnostic page handler is not isolated, so Page A also navigates.</li>
+      <li>The plain control proves native modifier behavior; the timer controls exercise page-handler isolation and stale opener authority.</li>
+      <li>The <code>window.open _self</code> control should also show <code>Blocked popup: localhost</code>; that toast is the blocked opener action, not the requested child tab.</li>
+    </ul>
+  </section>
+
+  <script>
+    const log = document.getElementById("event-log");
+    let sequence = 0;
+
+    function record(message) {
+      const item = document.createElement("li");
+      item.textContent = `${++sequence}. ${message}`;
+      log.append(item);
+    }
+
+    function describe(event) {
+      const modifiers = [
+        event.ctrlKey ? "Ctrl" : "",
+        event.metaKey ? "Meta" : "",
+        event.shiftKey ? "Shift" : "",
+        event.altKey ? "Alt" : ""
+      ].filter(Boolean).join("+") || "none";
+      return `${event.type} target=${event.currentTarget.id} button=${event.button} modifiers=${modifiers} trusted=${event.isTrusted}`;
+    }
+
+    function crossSiteDestination(testCase) {
+      const destination = new URL("issue566-destination.html", location.href);
+      destination.hostname = location.hostname === "127.0.0.1" ? "localhost" : "127.0.0.1";
+      destination.searchParams.set("case", testCase);
+      return destination.toString();
+    }
+
+    ["native-control", "assign-control", "self-control"].forEach((id) => {
+      const anchor = document.getElementById(id);
+      const testCase = id.replace("-control", "");
+      anchor.href = crossSiteDestination(testCase);
+      ["pointerdown", "click", "auxclick"].forEach((eventType) => {
+        anchor.addEventListener(eventType, (event) => {
+          record(describe(event));
+        });
+      });
+    });
+
+    function installOneShot(anchorId, action, destination, eventTypes = ["click", "auxclick"]) {
+      const anchor = document.getElementById(anchorId);
+      let scheduled = false;
+      eventTypes.forEach((eventType) => {
+        anchor.addEventListener(eventType, (event) => {
+          if (scheduled || !(event.ctrlKey || event.metaKey || event.button === 1)) return;
+          scheduled = true;
+          record(`${describe(event)}; schedule ${action}(0) -> ${destination}`);
+          setTimeout(() => {
+            record(`timer fired: ${action}`);
+            if (action === "location.assign") {
+              window.location.assign(destination);
+            } else {
+              window.open(destination, "_self");
+            }
+          }, 0);
+        });
+      });
+    }
+
+    installOneShot(
+      "assign-control",
+      "location.assign",
+      crossSiteDestination("assign-timer")
+    );
+    installOneShot(
+      "self-control",
+      "window.open",
+      crossSiteDestination("self-timer"),
+      ["pointerdown"]
+    );
+    record("Page A ready");
+  </script>
+</body>
+</html>
