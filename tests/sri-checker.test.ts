@@ -235,7 +235,7 @@ describe("sri_checker - partial SRI coverage", () => {
     expect(result.reasons).toHaveLength(0);
   });
 
-  it("returns +5 when exactly 50% have SRI (is not < 50%)", () => {
+  it("returns 0 when exactly 50% have SRI (neutral)", () => {
     const hash = "sha384-abc123";
     const doc = makeDoc(loginPage(
       scriptTag(`${EXTERNAL_ORIGIN}/a.js`, hash) +
@@ -351,6 +351,37 @@ describe("sri_checker - edge cases", () => {
     expect(result.withoutSRI).toBe(1);
     // 1/2 = 50%, neutral
     expect(result.score).toBe(0);
+  });
+
+  it("pools scripts and stylesheets with equal weighting across mirrored protection mix", () => {
+    const hash = "sha256-xyz";
+    const scriptProtected = checkSRI(makeDoc(loginPage(
+      scriptTag(`${EXTERNAL_ORIGIN}/a.js`, hash) +
+      scriptTag(`${EXTERNAL_ORIGIN}/b.js`) +
+      scriptTag(`${EXTERNAL_ORIGIN}/c.js`) +
+      scriptTag(`${EXTERNAL_ORIGIN}/d.js`) +
+      linkTag(`${EXTERNAL_ORIGIN}/e.css`) +
+      linkTag(`${EXTERNAL_ORIGIN}/f.css`) +
+      linkTag(`${EXTERNAL_ORIGIN}/g.css`)
+    )), PAGE_URL, PAGE_ORIGIN);
+
+    const protectedStyle = checkSRI(makeDoc(loginPage(
+      scriptTag(`${EXTERNAL_ORIGIN}/a.js`) +
+      scriptTag(`${EXTERNAL_ORIGIN}/b.js`) +
+      scriptTag(`${EXTERNAL_ORIGIN}/c.js`) +
+      scriptTag(`${EXTERNAL_ORIGIN}/d.js`) +
+      linkTag(`${EXTERNAL_ORIGIN}/e.css`, hash) +
+      linkTag(`${EXTERNAL_ORIGIN}/f.css`) +
+      linkTag(`${EXTERNAL_ORIGIN}/g.css`)
+    )), PAGE_URL, PAGE_ORIGIN);
+
+    expect(scriptProtected).toEqual(protectedStyle);
+    expect(scriptProtected.totalExternal).toBe(7);
+    expect(scriptProtected.withSRI).toBe(1);
+    expect(scriptProtected.withoutSRI).toBe(6);
+    expect(scriptProtected.score).toBe(5);
+    expect(scriptProtected.reasons).toEqual(protectedStyle.reasons);
+    expect(scriptProtected.score).toEqual(protectedStyle.score);
   });
 
   it("ignores link elements that are not stylesheets", () => {

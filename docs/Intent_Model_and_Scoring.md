@@ -310,6 +310,20 @@ Reason code: `nrs_pushstate_abuse`
 
 After 3 consecutive "Allow once" decisions for the same source-to-destination domain pair, a suggestion toast offers "Always Allow". Acceptance adds the pair to the permanent allowlist. Dismissal triggers a 24-hour cooldown. Pattern detection in `extension/src/shared/smart_defaults.ts`.
 
+## SRI coverage policy
+
+Credential pages apply sub-resource integrity scoring only to external resources:
+
+- 0% external-resource SRI coverage = `+8`
+- >0% and <50% external-resource SRI coverage = `+5`
+- 50% to <100% external-resource SRI coverage = neutral
+- 100% external-resource SRI coverage = `-3`
+
+Scripts and stylesheets are pooled and weighted equally.
+
+Any graduated threshold change or resource-type weighting change requires a current valid
+credential false-positive measurement before scoring changes are introduced.
+
 ## Implemented extensions
 
 - **Redirect chain correlation (P2-06)**: Per-tab navigation chains tracked in the service worker. Multi-hop chains through known redirectors elevate the final destination's NRS. See `extension/src/shared/redirect_chain.ts`.
