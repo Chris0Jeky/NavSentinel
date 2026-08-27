@@ -54,13 +54,31 @@ export async function getExtensionId(context: BrowserContext): Promise<string> {
 }
 
 export async function waitForNavSentinelBridge(page: Page, timeout = 15000): Promise<void> {
-  await page.waitForFunction(
-    () =>
-      document.documentElement.getAttribute("data-navsentinel-capture-ready") === "1" &&
-      document.documentElement.getAttribute("data-navsentinel-bridge-ready") === "1",
-    null,
-    { timeout }
-  );
+  try {
+    await page.waitForFunction(
+      () =>
+        document.documentElement.getAttribute("data-navsentinel-capture-ready") === "1" &&
+        document.documentElement.getAttribute("data-navsentinel-bridge-ready") === "1",
+      null,
+      { timeout }
+    );
+  } catch (error) {
+    const readiness = await page
+      .evaluate(() => ({
+        capture: document.documentElement.getAttribute("data-navsentinel-capture-ready"),
+        bridge: document.documentElement.getAttribute("data-navsentinel-bridge-ready")
+      }))
+      .catch(() => ({ capture: null, bridge: null }));
+    const original = error instanceof Error ? error.message : String(error);
+
+    throw new Error(
+      `NavSentinel did not initialize on this page (capture=${readiness.capture ?? "missing"}, ` +
+        `bridge=${readiness.bridge ?? "missing"}). If this is an unpacked build from ` +
+        "extension/dist, reload NavSentinel at chrome://extensions before reloading the page; " +
+        `a page reload alone can retain a stale hashed loader. Original error: ${original}`,
+      { cause: error }
+    );
+  }
   await dismissOnboarding(page.context(), 1000);
 }
 
