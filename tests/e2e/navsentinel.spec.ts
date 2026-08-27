@@ -310,6 +310,7 @@ test("Level 12 delayed same-tab navigation does not roll back a legitimate click
       await waitForNavSentinelBridge(page);
 
       const serviceWorker = await getServiceWorker(context);
+      const expectedHost = new URL(baseUrl).hostname;
       await serviceWorker.evaluate(async (eventLogKey) => {
         await chrome.storage.local.set({ [eventLogKey]: [] });
       }, EVENT_LOG_KEY);
@@ -366,8 +367,8 @@ test("Level 12 delayed same-tab navigation does not roll back a legitimate click
         id: expect.any(String),
         ts: expect.any(Number),
         kind: "nav_silent_allow",
-        site: "127.0.0.1",
-        destHost: "127.0.0.1",
+        site: expectedHost,
+        destHost: expectedHost,
         score: expect.any(Number),
         reasons: expect.any(Array),
         extra: expect.objectContaining({

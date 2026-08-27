@@ -106,14 +106,121 @@ test("credential guard records a silently allowed submit before continuing @regr
       await page.locator("#email").fill(syntheticEmail);
       await page.locator("#password").fill(syntheticPassword);
 
-      // Delegated event persistence retries for at most 600 ms. Allow browser
-      // and storage overhead, but fail if instrumentation turns a silent allow
-      // into a multi-second delay before the request starts (#252).
-      const submitRequest = page.waitForRequest(
-        (request) => request.method() === "POST" && new URL(request.url()).pathname === "/api/auth/login",
+      const expectedHost = new URL(baseUrl).hostname;
+      await serviceWorker.evaluate((eventLogKey) => {
+        type EventLogGate = {
+          reached: boolean;
+          released: boolean;
+          release: () => void;
+        };
+        const testGlobal = globalThis as typeof globalThis & {
+          __navsentinelE2EEventLogGate?: EventLogGate;
+        };
+        const originalSet = chrome.storage.local.set.bind(chrome.storage.local);
+        let releaseWrite!: () => void;
+        const writeGate = new Promise<void>((resolve) => {
+          releaseWrite = resolve;
+        });
+        const state: EventLogGate = {
+          reached: false,
+          released: false,
+          release: () => {
+            if (state.released) return;
+            state.released = true;
+            releaseWrite();
+          }
+        };
+        testGlobal.__navsentinelE2EEventLogGate = state;
+
+        chrome.storage.local.set = async (items) => {
+          if (!state.released && Object.hasOwn(items, eventLogKey)) {
+            state.reached = true;
+            await writeGate;
+          }
+          return originalSet(items);
+        };
+      }, EVENT_LOG_KEY);
+
+      // The guard stops the user's first submit event. Only its re-entrant
+      // requestSubmit after persistence reaches this page-world listener.
+      await page.evaluate(() => {
+        document.documentElement.dataset.navsentinelE2eResumedSubmits = "0";
+        document.querySelector("form")?.addEventListener("submit", () => {
+          const current = Number(
+            document.documentElement.dataset.navsentinelE2eResumedSubmits ?? "0"
+          );
+          document.documentElement.dataset.navsentinelE2eResumedSubmits = String(current + 1);
+        });
+      });
+
+      let resolvePostGate!: () => void;
+      let rejectPostGate!: (reason?: unknown) => void;
+      const postGate = new Promise<void>((resolve, reject) => {
+        resolvePostGate = resolve;
+        rejectPostGate = reject;
+      });
+      // Pause the synthetic POST at the network boundary and inspect storage before
+      // allowing it through; this proves ordering without clock-based inference.
+      await page.route("**/api/auth/login", async (route) => {
+        try {
+          const persistedCount = await serviceWorker.evaluate(async (eventLogKey) => {
+            const stored = await chrome.storage.local.get(eventLogKey);
+            const events = Array.isArray(stored[eventLogKey]) ? stored[eventLogKey] : [];
+            return events.filter(
+              (entry: { kind?: unknown }) => entry?.kind === "cred_form_evaluated"
+            ).length;
+          }, EVENT_LOG_KEY);
+          await route.continue();
+          if (persistedCount !== 1) {
+            rejectPostGate(
+              new Error(`Expected cred_form_evaluated before POST, found ${persistedCount}`)
+            );
+            return;
+          }
+          resolvePostGate();
+        } catch (error) {
+          await route.continue().catch(() => {});
+          rejectPostGate(error);
+        }
+      });
+      const submitClick = page.getByRole("button", { name: "Sign in" }).click({ noWaitAfter: true });
+
+      await expect.poll(
+        () => serviceWorker.evaluate(() => {
+          const testGlobal = globalThis as typeof globalThis & {
+            __navsentinelE2EEventLogGate?: { reached: boolean };
+          };
+          return testGlobal.__navsentinelE2EEventLogGate?.reached === true;
+        }),
         { timeout: 1500 }
-      );
-      await Promise.all([submitRequest, page.getByRole("button", { name: "Sign in" }).click()]);
+      ).toBe(true);
+
+      // Cross one page task boundary after the service worker reports that its
+      // write is blocked. A fire-and-forget caller has already queued its resume
+      // continuation by then; the awaited implementation cannot queue it until
+      // the gate below is released.
+      await page.evaluate(() => new Promise<void>((resolve) => window.setTimeout(resolve, 0)));
+      expect(
+        await page.evaluate(
+          () => Number(document.documentElement.dataset.navsentinelE2eResumedSubmits ?? "0")
+        ),
+        "The native submit must stay paused while event persistence is gated"
+      ).toBe(0);
+
+      await serviceWorker.evaluate(() => {
+        const testGlobal = globalThis as typeof globalThis & {
+          __navsentinelE2EEventLogGate?: { release: () => void };
+        };
+        testGlobal.__navsentinelE2EEventLogGate?.release();
+      });
+
+      const postWithinBudget = Promise.race([
+        postGate,
+        new Promise<void>((_, reject) => {
+          setTimeout(() => reject(new Error("Credential POST did not resume within 1500 ms")), 1500);
+        })
+      ]);
+      await Promise.all([postWithinBudget, submitClick]);
 
       await expect.poll(
         () => serviceWorker.evaluate(async (eventLogKey) => {
@@ -136,8 +243,8 @@ test("credential guard records a silently allowed submit before continuing @regr
         id: expect.any(String),
         ts: expect.any(Number),
         kind: "cred_form_evaluated",
-        site: "127.0.0.1",
-        destHost: "127.0.0.1",
+        site: expectedHost,
+        destHost: expectedHost,
         score: expect.any(Number),
         reasons: expect.any(Array),
         extra: expect.objectContaining({
