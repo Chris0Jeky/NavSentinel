@@ -306,8 +306,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function sanitizeSuiteSettingsFields(value: unknown, defaults: Record<string, unknown>): Record<string, unknown> | null {
   if (!isRecord(value)) return null;
   for (const [key, candidate] of Object.entries(value)) {
+    if (!Object.hasOwn(defaults, key)) return null;
     const defaultValue = defaults[key];
-    if (defaultValue === undefined) return null;
     if (isRecord(defaultValue)) {
       if (!sanitizeSuiteSettingsFields(candidate, defaultValue)) return null;
     } else if (typeof candidate !== typeof defaultValue ||

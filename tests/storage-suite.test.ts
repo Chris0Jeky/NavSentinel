@@ -499,6 +499,9 @@ describe("suite storage and allowlist migration", () => {
       { type: "ns-suite-settings-update", patch: [] }, popup,
     )).rejects.toThrow("invalid");
     await expect(handleSuiteSettingsUpdateMessage(
+      { type: "ns-suite-settings-update", patch: JSON.parse('{"__proto__":{}}') }, popup,
+    )).rejects.toThrow("invalid");
+    await expect(handleSuiteSettingsUpdateMessage(
       { type: "ns-suite-settings-update", patch: { logLimit: 999999 } }, popup,
     )).resolves.toMatchObject({ logLimit: 5000 });
   });
