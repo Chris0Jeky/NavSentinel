@@ -82,11 +82,15 @@ Only Chris can record this item complete.
    gh pr checks "$PR"
    ```
 
-   The worktree must be clean, `headRefName` must be the named branch, and the
-   local HEAD, remote branch SHA, and PR head SHA must be identical. All checks
-   exercising the branch must be green and no required review thread may remain
-   unresolved. If the branch has not yet been pushed or the PR lookup is empty,
-   stop and report that precondition; never test a stale build.
+   The worktree must be clean except for the one already-ledgered Windows
+   Defender quarantine line ` D tests/clickfix-detector.property.test.ts`.
+   If that exact deletion is present, record it and leave it untouched: do not
+   open, restore, stage, or allow the fixture. Stop for every other status line.
+   `headRefName` must be the named branch, and the local HEAD, remote branch SHA,
+   and PR head SHA must be identical. All checks exercising the branch must be
+   green and no required review thread may remain unresolved. If the branch has
+   not yet been pushed or the PR lookup is empty, stop and report that
+   precondition; never test a stale build.
 2. In that exact worktree run `npm ci`, then `npm run build`. Start the Gym with
    `python -m http.server 5173 --bind 127.0.0.1 --directory gym` in a second
    terminal. Create a disposable, fresh Chrome profile without signing in or
