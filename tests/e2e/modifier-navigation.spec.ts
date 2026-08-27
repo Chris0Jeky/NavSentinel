@@ -3,7 +3,12 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
-import { getGymBaseUrl, getServiceWorker, waitForNavSentinelBridge } from "./extension_test_utils";
+import {
+  getGymBaseUrl,
+  getServiceWorker,
+  readToastText,
+  waitForNavSentinelBridge
+} from "./extension_test_utils";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -94,7 +99,14 @@ async function runScenario(scenario: Scenario, gesture: Gesture): Promise<void> 
     const log = await opener.locator("#event-log").innerText();
     expect(log).toContain("trusted=true");
     expect(log).toContain(gesture === "control-click" ? "modifiers=Ctrl" : "button=1");
-    console.log(`[issue566] ${scenario.id} / ${gesture}: child=${child.url()} opener=${opener.url()} pages=${context.pages().length}`);
+    const toast = await readToastText(opener);
+    if (scenario.id === "self-control") {
+      expect(toast, "The pointerdown-scheduled opener action must be blocked").toContain("Blocked popup");
+    }
+    console.log(
+      `[issue566] ${scenario.id} / ${gesture}: child=${child.url()} opener=${opener.url()} ` +
+      `pages=${context.pages().length} toast=${toast ?? "none"}`
+    );
   } finally {
     await cleanup();
   }

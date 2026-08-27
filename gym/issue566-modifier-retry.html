@@ -49,6 +49,7 @@
       <li><strong>Smart or Strict:</strong> one destination tab opens and this Page A stays here.</li>
       <li><strong>Off:</strong> the diagnostic page handler is not isolated, so Page A also navigates.</li>
       <li>The plain control proves native modifier behavior; the timer controls exercise page-handler isolation and stale opener authority.</li>
+      <li>The <code>window.open _self</code> control should also show <code>Blocked popup: localhost</code>; that toast is the blocked opener action, not the requested child tab.</li>
     </ul>
   </section>
 
