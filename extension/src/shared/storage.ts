@@ -281,7 +281,9 @@ function createStorageWriteQueue(reportError?: (error: unknown) => void) {
   };
 }
 
-const queueSuiteSettingsWrite = createStorageWriteQueue();
+const queueSuiteSettingsWrite = createStorageWriteQueue((err) => {
+  console.warn("[NavSentinel] suite settings serialization error:", err);
+});
 
 /**
  * The service worker's single read-modify-write lane for SuiteSettings.
