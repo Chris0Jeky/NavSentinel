@@ -92,16 +92,25 @@ test("Options keeps popup changes while saving an unrelated dirty setting @regre
         const originalGet = chrome.storage.local.get.bind(chrome.storage.local) as (
           keys?: string | string[] | Record<string, unknown> | null,
         ) => Promise<Record<string, unknown>>;
+        const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
         let releaseInitialRead = () => {};
         const initialReadGate = new Promise<void>((resolve) => {
           releaseInitialRead = resolve;
+        });
+        let releaseSettingsUpdate = () => {};
+        const settingsUpdateGate = new Promise<void>((resolve) => {
+          releaseSettingsUpdate = resolve;
         });
         const state = window as Window & {
           __nsInitialSettingsReadStarted?: boolean;
           __nsInitialSettingsReadReturned?: boolean;
           __nsReleaseInitialSettingsRead?: () => void;
+          __nsSettingsUpdateReady?: boolean;
+          __nsSettingsUpdateReleased?: boolean;
+          __nsReleaseSettingsUpdate?: () => void;
         };
         state.__nsReleaseInitialSettingsRead = releaseInitialRead;
+        state.__nsReleaseSettingsUpdate = releaseSettingsUpdate;
         chrome.storage.local.get = (async (
           keys?: string | string[] | Record<string, unknown> | null,
         ) => {
@@ -117,6 +126,28 @@ test("Options keeps popup changes while saving an unrelated dirty setting @regre
           }
           return result;
         }) as typeof chrome.storage.local.get;
+        chrome.runtime.sendMessage = ((message: unknown, ...rest: unknown[]) => {
+          const result = Reflect.apply(
+            originalSendMessage,
+            chrome.runtime,
+            [message, ...rest],
+          ) as Promise<unknown>;
+          if (
+            rest.length === 0 &&
+            !state.__nsSettingsUpdateReady &&
+            typeof message === "object" &&
+            message !== null &&
+            (message as { type?: unknown }).type === "ns-suite-settings-update"
+          ) {
+            return result.then(async (response) => {
+              state.__nsSettingsUpdateReady = true;
+              await settingsUpdateGate;
+              state.__nsSettingsUpdateReleased = true;
+              return response;
+            });
+          }
+          return result;
+        }) as typeof chrome.runtime.sendMessage;
       }, SUITE_SETTINGS_KEY);
       await options.goto(`chrome-extension://${extensionId}/src/options/options.html`, {
         waitUntil: "domcontentloaded",
@@ -159,12 +190,38 @@ test("Options keeps popup changes while saving an unrelated dirty setting @regre
       await expect(options.locator("#warnOnPaste")).toHaveAttribute("aria-checked", "false");
 
       await options.locator("#save").click();
+      await options.waitForFunction(() => {
+        const state = window as Window & { __nsSettingsUpdateReady?: boolean };
+        return state.__nsSettingsUpdateReady === true;
+      });
+
+      // An edit made after the worker persists the submitted patch, but before
+      // the Save handler receives its response, must remain visible and dirty.
+      await options.locator("#navDebug").click();
+      await expect(options.locator("#navDebug")).toHaveAttribute("aria-checked", "true");
+      await options.evaluate(() => {
+        const state = window as Window & { __nsReleaseSettingsUpdate?: () => void };
+        state.__nsReleaseSettingsUpdate?.();
+      });
+      await options.waitForFunction(() => {
+        const state = window as Window & { __nsSettingsUpdateReleased?: boolean };
+        return state.__nsSettingsUpdateReleased === true;
+      });
+      await expect(options.locator("#navDebug")).toHaveAttribute("aria-checked", "true");
       await options.waitForFunction(async (settingsKey) => {
         const result = await chrome.storage.local.get(settingsKey);
         const settings = result[settingsKey];
         return settings?.nav?.defaultMode === "strict" &&
           settings?.credential?.mode === "off" &&
-          settings?.credential?.warnOnPaste === false;
+          settings?.credential?.warnOnPaste === false &&
+          settings?.nav?.debug === false;
+      }, SUITE_SETTINGS_KEY);
+
+      await expect(options.locator("#save")).toBeEnabled();
+      await options.locator("#save").click();
+      await options.waitForFunction(async (settingsKey) => {
+        const result = await chrome.storage.local.get(settingsKey);
+        return result[settingsKey]?.nav?.debug === true;
       }, SUITE_SETTINGS_KEY);
 
       expect(await getPopupSnapshot(context)).toMatchObject({
@@ -310,6 +367,10 @@ test("options import and export preserve normalized trusted-domain and allowlist
         timeout: 20_000
       });
 
+      // Import is authoritative: it must replace, not silently retain, a dirty
+      // draft whose values differ from the imported backup.
+      await options.locator('#navModeSeg .seg-btn[data-value="strict"]').click();
+      await expect(options.locator('#navModeSeg .seg-btn[data-value="strict"]')).toHaveAttribute("aria-checked", "true");
       await options.locator("#importFile").setInputFiles(importPath);
       await expect(options.locator('#navModeSeg .seg-btn[data-value="off"]')).toHaveAttribute("aria-checked", "true");
       await expect(options.locator('#credModeSeg .seg-btn[data-value="strict"]')).toHaveAttribute("aria-checked", "true");

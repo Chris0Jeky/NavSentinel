@@ -524,14 +524,12 @@ saveBtn.addEventListener("click", withReentrancyGuard(
   try {
     const baseline = renderedSettings ?? await getSuiteSettings();
     const patch = deriveOptionsSettingsPatch(baseline, readSettingsDraft());
-    if (Object.keys(patch).length === 0) {
+    if (!Object.keys(patch).length) {
       flashStatus(saveStatusEl, "No changes.");
       return;
     }
 
-    const persisted = await updateSuiteSettings(patch);
-    renderedSettings = persisted;
-    renderSettings(persisted);
+    rebaseIncomingSettings(await updateSuiteSettings(patch));
     try {
       await appendEvent({ kind: "suite_config_update", extra: { patch } });
     } catch (e) { console.warn("[NavSentinel] event log append failed (suite_config_update):", e); }
@@ -610,7 +608,7 @@ importFileEl.addEventListener("change", async () => {
       importPayload: async () => {
         return importAll(JSON.parse(await f.text()));
       },
-      refresh: init,
+      refresh: () => (renderedSettings = null, init()),
       flash: (msg, tone) => flashStatus(statusEl, msg, tone),
       isDeliveryFailure: (e) => e instanceof PromptOutcomeDeliveryError,
     });
