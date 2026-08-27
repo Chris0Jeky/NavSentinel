@@ -17,7 +17,8 @@ provenance only. Detailed retired procedures moved to
 after refreshed exact-head CI and bounded review. That waiver is not a real-Chrome
 pass. #531 separately merged under its own waiver; it does not establish a
 `measure:fp` or headed-measurement result, and #223 remains open. AI-27 and AI-28
-are resolved; AI-14 remains blocked for future measurement work.
+are resolved; AI-14 remains blocked for future measurement work. AI-30 now holds
+issue #567's Back/Forward history-integrity fix for an exact-head Gate-3.
 
 **Guided resolution cursor:** `AI-19` (`Resume at: AI-19`; conversational label
 `q-5`). Current ready order: AI-19 → optional AI-24 → AI-23 (low priority).
@@ -39,6 +40,19 @@ while the popup associates it with the top-level page; also confirm an unrelated
 top-level page does not inherit the event. Inspect page, popup, and service-worker
 consoles. Only Chris can complete this human Gate-3. The general guided
 resolution cursor remains AI-19; AI-35 is an additional branch-specific gate.
+
+**OPEN: AI-30 - PR #570 Back/Forward history-integrity Gate-3.** After every
+automated check for the current PR head is green, build that same head and follow
+the active AI-30 procedure in
+[`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md). Verify that a
+cross-site local P -> A -> B history remains intact after ordinary navigation
+allowances expire: Back stays on A, Forward returns to B, and two Back actions
+reach A then P without a NavSentinel rollback, skipped entry, or unexpected
+prompt. Also confirm the existing delayed page-initiated redirect still rolls
+back. Only Chris can record this complete. Reply `AI-30 done; Gate-3 passed on
+PR #570 at <40-character SHA>; Chrome <version>` or `AI-30 failed on PR #570 at
+<SHA>: <step and observed>`. This PR-specific gate does not move the general
+guided-resolution cursor from AI-19.
 
 **OPEN: AI-19 — Clear or replace the working product name before CWS submission.**
 TruNav publicly uses the exact name `NavSentinel` for a coming-soon GNSS
