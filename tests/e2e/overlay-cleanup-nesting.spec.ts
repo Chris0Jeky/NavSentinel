@@ -13,6 +13,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import {
   getGymBaseUrl,
+  readBuiltMainUiGuardRevision,
   updateNavigationSettings,
   waitForNavSentinelBridge,
 } from "./extension_test_utils";
@@ -85,10 +86,12 @@ async function childFrame(page: Page, fixtureCase: string, instance?: number): P
   });
   if (!frame) throw new Error(`Nested fixture frame did not load: ${fixtureCase}/${instance ?? "single"}`);
 
-  await frame.waitForFunction(() =>
+  await frame.waitForFunction((expectedGuard) =>
     document.documentElement.dataset.fixtureReady === "true" &&
-    document.documentElement.getAttribute("data-navsentinel-capture-ready") === "1",
-  null, { timeout: 10_000 });
+    document.documentElement.getAttribute("data-navsentinel-capture-ready") === "1" &&
+    document.documentElement.getAttribute("data-navsentinel-bridge-ready") === "1" &&
+    document.documentElement.getAttribute("data-navsentinel-ui-guard") === expectedGuard,
+  readBuiltMainUiGuardRevision(), { timeout: 10_000 });
   return frame;
 }
 

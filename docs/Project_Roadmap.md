@@ -122,7 +122,14 @@ reliable inner-control identity. The next candidate captures pristine DOM method
 and event/geometry accessors at document start, proves only host ownership from
 the event path, and resolves the owned mouse/keyboard control from shadow-root
 bounds or focus without consulting attacker-replaced coordinate/key accessors
-before relaying the same token. #577 retains the exact-stamp ownership
+before relaying the same token. The owner-loaded `c388c40` build still presented
+inert controls in the live child frame. Differential artifact inspection found
+that the post-build guard changed beneath an unchanged Vite loader URL, so fresh
+Playwright profiles could pass while a long-lived unpacked Chrome profile had no
+new resource identity. The candidate now content-addresses the **final** guard
+bytes, exposes an explicit guard revision at runtime, and checks both contracts
+separately in CI/E2E; unpacked extension load/reload remains an owner-only step.
+#577 retains the exact-stamp ownership
 edge; #580 retains latency measurement; #591 owns explicit redacted feedback
 export without automatic telemetry.
 The 2026-08-27 manual trial also seeded the next bounded UX slices: settings

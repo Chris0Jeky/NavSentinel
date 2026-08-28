@@ -70,6 +70,13 @@ MutationObserver detection, or visible UI. Test/Gym-only, documentation, and
 dependency-only changes do not require it. The current human queue and guides
 are in `ACTION_ITEMS.md` and `docs/agentic/GATE3_GUIDES.md`.
 
+Loading or reloading an unpacked extension at `chrome://extensions` is always
+human-owned. Agents build the exact `extension/dist`, report its Git head and
+expected runtime markers, and may inspect a claimed target tab only after the
+owner confirms the reload; they must not control that page or attempt reload
+workarounds. A target-page reload or partial readiness signal is not proof that
+Chrome accepted the intended artifact.
+
 ## Optional workflow aids
 
 The remaining `.claude/skills/` and `.agents/skills/` files are optional domain

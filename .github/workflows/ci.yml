@@ -63,6 +63,9 @@ jobs:
       - name: Build extension
         run: npm run build
 
+      - name: Check final content-loader identity
+        run: npm run check:content-loader
+
       - name: Check performance budget
         run: npm run check:perf-budget
 
@@ -78,6 +81,9 @@ jobs:
 
       - name: Build non-release reputation research profile
         run: npm run build:research-reputation
+
+      - name: Check research content-loader identity
+        run: npm run check:content-loader
 
       - name: Check research profile performance budget
         run: npm run check:perf-budget
@@ -104,6 +110,9 @@ jobs:
 
       - name: Build extension
         run: npm run build
+
+      - name: Check final content-loader identity
+        run: npm run check:content-loader
 
       - name: Check performance budget
         run: npm run check:perf-budget
@@ -155,6 +164,7 @@ jobs:
 
       - run: npm run verify:versions
       - run: npm run build
+      - run: npm run check:content-loader
       - run: npm run check:release-profile -- --release
       - run: npm run check:perf-budget
 

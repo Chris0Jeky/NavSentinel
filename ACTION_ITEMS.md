@@ -123,6 +123,22 @@ page accessors before relaying the same bounded token. This is automated candida
 evidence only. Keep AI-29 open until the pushed exact head has green hosted CI
 and Chris repeats the exact-head guide.
 
+**Latest human result (2026-08-28, PR #557 at
+`c388c40fb8b7237f04c2d94295f3e0bc80d64e3a`): FAILED in the owner-loaded
+real-world child frame.** Cleanup remained active, but trusted mouse and keyboard
+activation left Dismiss and Undo visibly present and inert, with no corresponding
+console exception. Read-only inspection confirmed enabled tokenized controls and
+an initialized bridge. Differential build inspection then found that post-build
+guard bytes had changed while the manifest retained the same Vite-generated
+loader URL, which gives a long-lived unpacked Chrome profile no new resource
+identity for the repaired guard even though fresh-profile Playwright reads the
+current disk bytes. The current candidate content-addresses the loader after
+post-processing, verifies that identity as a named CI contract, and requires a
+new runtime guard revision in every relevant Playwright page/frame. This is
+automated candidate evidence only. Keep AI-29 open until the pushed exact head
+has green hosted CI and Chris owner-reloads that exact artifact and repeats the
+control checks.
+
 **OPEN: AI-36 — #558 popup/Options patch-save synchronization Gate-3.** Run the
 active manual Chrome guide in [`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md)
 against the eventual PR for branch `fix/issue558-patch-save-sync`. Verify the

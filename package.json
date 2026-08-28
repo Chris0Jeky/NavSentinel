@@ -27,7 +27,7 @@
     "demo:showcase:operator": "node scripts/run_demo.mjs operator",
     "demo:showcase:recovery": "node scripts/run_demo.mjs recovery",
     "demo:showcase:record": "node scripts/run_demo.mjs core --record",
-    "package:ext": "npm run check:mv3-worker && node scripts/package.mjs",
+    "package:ext": "npm run check:mv3-worker && npm run check:content-loader && node scripts/package.mjs",
     "gym:serve": "vite gym --port 5173 --strictPort",
     "update:psl": "node scripts/update-psl.mjs",
     "measure:fp": "node scripts/measure-fp.mjs",
@@ -45,6 +45,7 @@
     "release:dry": "node scripts/release.mjs patch --dry-run",
     "benchmark": "node scripts/benchmark.mjs",
     "check:perf-budget": "node scripts/check-perf-budget.mjs",
+    "check:content-loader": "node scripts/check-content-loader-identity.mjs",
     "check:mv3-worker": "node scripts/check-mv3-worker-imports.mjs"
   },
   "devDependencies": {

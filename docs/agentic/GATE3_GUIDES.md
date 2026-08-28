@@ -17,11 +17,18 @@ check for its current head is green.
 1. Resolve the open PR whose head is `feat/issue555-overlay-cleanup`. Record its
    PR number and 40-character `headRefOid`. In the implementation worktree,
    require `git rev-parse HEAD` to equal that value and require `git status
-   --short` to contain no uncommitted product changes. Stop on any mismatch.
-2. On that exact head, run `npm ci` and `npm run build`. In Chrome, create a fresh
-   temporary profile, enable Developer mode at `chrome://extensions`, and load
-   `extension/dist` unpacked. Record the Chrome version and confirm the extension
-   service worker registers without an error.
+   --short` to contain no uncommitted product changes. The known Defender
+   quarantine may appear only as ` D tests/clickfix-detector.property.test.ts`;
+   do not restore, inspect, stage, execute, or allow that fixture. Stop on any
+   other mismatch.
+2. On that exact head, run `npm ci`, `npm run build`, and
+   `npm run check:content-loader`. Record the exact `extension/dist` path and the
+   reported guard revision. Loading or reloading the unpacked extension is
+   Chris-owned: the agent stops at this boundary and must not control
+   `chrome://extensions` or try an alternate reload path. In Chrome, Chris
+   creates a fresh temporary profile, enables Developer mode, and loads that
+   exact `extension/dist` unpacked. Record the Chrome version and confirm the
+   extension service worker registers without an error.
 3. Open the options page. Confirm **Auto-dismiss overlays** is off by default,
    its description says it acts only on high-risk detected overlays, and the
    switch works by mouse and keyboard. Confirm the extension popup exposes the
@@ -33,7 +40,12 @@ check for its current head is green.
 4. Start the tracked local Gym (`npm run gym:serve`) and open
    `mutation-01-delayed-overlay.html`. For this human trial, do not dispatch the
    page's `navsentinel:gym:trigger-mutation` event; that is an E2E-only
-   monitor-ready trigger. Leave the page open and wait for the visible **Human
+   monitor-ready trigger. Before testing, confirm this target document reports
+   `capture="1"`, `bridge="1"`, and the same `ui-guard` revision from
+   step 2 for the `data-navsentinel-capture-ready`,
+   `data-navsentinel-bridge-ready`, and `data-navsentinel-ui-guard` attributes.
+   Stop on a missing or old marker: the target page does not prove the expected
+   artifact. Leave the page open and wait for the visible **Human
    fallback countdown** to reach zero (the fixture's 10-second fallback; no
    click is needed). Confirm the fake session overlay is hidden automatically,
    the timing line identifies the human fallback timer, the toast says
