@@ -361,8 +361,10 @@ click, and keyboard input in page-owned window capture listeners. Mouse Dismiss
 and keyboard Undo must each perform their intended extension action while that
 count remains zero. The hostile page also retargets its realm-visible event path
 to the extension host; the test therefore requires the synchronous MAIN-world
-loader to retain pristine host ownership and resolve the actual mouse control by
-owned shadow-root bounds or the keyboard control by shadow-root focus. The
+loader to retain pristine host ownership while page-replaced mouse-coordinate
+and keyboard-key accessors remain unconsulted. It resolves the actual mouse
+control with captured list/rectangle accessors or the keyboard control with the
+captured shadow-focus accessor. The
 `compact-hostile` case proves a 51% by 51% click-capturing layer is hidden, while
 the `benign` case visibly labels and preserves its small non-interactive, low-z,
 and accessible-dialog controls.

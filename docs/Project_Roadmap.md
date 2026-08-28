@@ -119,9 +119,10 @@ already-verified bridge. The owner-loaded `848d613` build then proved that the
 fence stopped the hostile-frame reaction but exposed a cross-world retargeting
 gap: Dismiss and Undo were inert because MAIN could see the owned host without a
 reliable inner-control identity. The next candidate captures pristine DOM methods
-at document start, proves only host ownership from the event path, and resolves
-the owned mouse/keyboard control from shadow-root bounds or focus before relaying
-the same token. #577 retains the exact-stamp ownership
+and event/geometry accessors at document start, proves only host ownership from
+the event path, and resolves the owned mouse/keyboard control from shadow-root
+bounds or focus without consulting attacker-replaced coordinate/key accessors
+before relaying the same token. #577 retains the exact-stamp ownership
 edge; #580 retains latency measurement; #591 owns explicit redacted feedback
 export without automatic telemetry.
 The 2026-08-27 manual trial also seeded the next bounded UX slices: settings

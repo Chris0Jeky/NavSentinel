@@ -261,6 +261,9 @@ test("toast mouse and keyboard controls do not leak capture-phase input into the
     await expect.poll(() => frame.evaluate(() =>
       document.documentElement.dataset.controlPathRetargeted,
     )).toBe("true");
+    await expect.poll(() => frame.evaluate(() =>
+      document.documentElement.dataset.controlFieldsPoisoned,
+    )).toBe("true");
 
     const pageCount = context.pages().length;
     await frame.evaluate(() => {
@@ -279,6 +282,10 @@ test("toast mouse and keyboard controls do not leak capture-phase input into the
       !document.querySelector("#__navsentinel_toast_host")?.shadowRoot
         ?.querySelector(".wrap[data-persistent='true']"),
     )).toBe(true);
+    await expect(frame.locator("#exact-overlay-frame")).toBeHidden();
+    await expect.poll(() => frame.evaluate(() =>
+      Number(document.documentElement.dataset.poisonedMouseFieldReads ?? "-1"),
+    )).toBe(0);
     expect(context.pages()).toHaveLength(pageCount);
 
     await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
@@ -288,6 +295,9 @@ test("toast mouse and keyboard controls do not leak capture-phase input into the
     await pressFrameToastButton(frame, "Undo");
     await expect.poll(() => frame.evaluate(() =>
       Number(document.documentElement.dataset.pageControlEventCount ?? "0"),
+    )).toBe(0);
+    await expect.poll(() => frame.evaluate(() =>
+      Number(document.documentElement.dataset.poisonedKeyFieldReads ?? "-1"),
     )).toBe(0);
     await expect(frame.locator("#exact-overlay-frame")).toBeVisible();
   } finally {

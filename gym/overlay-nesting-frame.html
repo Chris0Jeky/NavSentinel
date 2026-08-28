@@ -97,6 +97,71 @@
         };
         document.documentElement.dataset.controlPathRetargeted = "true";
 
+        // The page realm can also replace ordinary Web IDL accessors after the
+        // fence installs. Redirect extension-host mouse coordinates toward the
+        // cleanup Undo button and hide Enter/Space from the keyboard path. A
+        // safe fence must use the pristine accessors captured at document start.
+        const nativeClientX = Object.getOwnPropertyDescriptor(
+          MouseEvent.prototype,
+          "clientX",
+        ).get;
+        const nativeClientY = Object.getOwnPropertyDescriptor(
+          MouseEvent.prototype,
+          "clientY",
+        ).get;
+        const nativeKey = Object.getOwnPropertyDescriptor(
+          KeyboardEvent.prototype,
+          "key",
+        ).get;
+        const extensionHost = (event) => pageComposedPath.call(event).find((node) =>
+          node instanceof HTMLElement && node.id === "__navsentinel_toast_host"
+        );
+        const spoofedUndoCoordinate = (event, axis) => {
+          const undo = [...(extensionHost(event)?.shadowRoot
+            ?.querySelectorAll("[data-ns-ui-action]") ?? [])]
+            .find((control) => control.textContent?.trim() === "Undo");
+          if (!undo) return null;
+          const rect = undo.getBoundingClientRect();
+          return axis === "x"
+            ? rect.left + rect.width / 2
+            : rect.top + rect.height / 2;
+        };
+        document.documentElement.dataset.poisonedMouseFieldReads = "0";
+        document.documentElement.dataset.poisonedKeyFieldReads = "0";
+        Object.defineProperty(MouseEvent.prototype, "clientX", {
+          configurable: true,
+          get() {
+            const coordinate = spoofedUndoCoordinate(this, "x");
+            if (coordinate === null) return nativeClientX.call(this);
+            document.documentElement.dataset.poisonedMouseFieldReads = String(
+              Number(document.documentElement.dataset.poisonedMouseFieldReads) + 1,
+            );
+            return coordinate;
+          },
+        });
+        Object.defineProperty(MouseEvent.prototype, "clientY", {
+          configurable: true,
+          get() {
+            const coordinate = spoofedUndoCoordinate(this, "y");
+            if (coordinate === null) return nativeClientY.call(this);
+            document.documentElement.dataset.poisonedMouseFieldReads = String(
+              Number(document.documentElement.dataset.poisonedMouseFieldReads) + 1,
+            );
+            return coordinate;
+          },
+        });
+        Object.defineProperty(KeyboardEvent.prototype, "key", {
+          configurable: true,
+          get() {
+            if (!extensionHost(this)) return nativeKey.call(this);
+            document.documentElement.dataset.poisonedKeyFieldReads = String(
+              Number(document.documentElement.dataset.poisonedKeyFieldReads) + 1,
+            );
+            return "Escape";
+          },
+        });
+        document.documentElement.dataset.controlFieldsPoisoned = "true";
+
         document.documentElement.dataset.pageControlEventCount = "0";
         const status = document.createElement("p");
         status.id = "hostile-click-status";

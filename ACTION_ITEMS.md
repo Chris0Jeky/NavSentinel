@@ -114,11 +114,14 @@ no corresponding console error. Read-only inspection of the live child frame
 confirmed that the controls were enabled and held valid action tokens while the
 verified MAIN-to-isolated bridge was otherwise active. A red synthetic case now
 retargets the realm-visible event path to the extension host and reproduces the
-inert Dismiss. The current local candidate uses a pristine host path only to
-prove extension ownership, then resolves mouse controls by owned shadow-root
-bounds and keyboard controls by shadow-root focus before relaying the same
-bounded token. This is automated candidate evidence only. Keep AI-29 open until
-the pushed exact head has green hosted CI and Chris repeats the exact-head guide.
+inert Dismiss. It also replaces page-realm mouse-coordinate and keyboard-key
+accessors; the prior candidate consulted the poisoned mouse fields four times.
+The current local candidate captures the required event, traversal, focus, list,
+and geometry accessors at document start, uses the pristine path only to prove
+host ownership, and resolves the owned control without consulting the poisoned
+page accessors before relaying the same bounded token. This is automated candidate
+evidence only. Keep AI-29 open until the pushed exact head has green hosted CI
+and Chris repeats the exact-head guide.
 
 **OPEN: AI-36 — #558 popup/Options patch-save synchronization Gate-3.** Run the
 active manual Chrome guide in [`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md)
