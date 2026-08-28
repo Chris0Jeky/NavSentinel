@@ -17,8 +17,11 @@ provenance only. Detailed retired procedures moved to
 after refreshed exact-head CI and bounded review. That waiver is not a real-Chrome
 pass. #531 separately merged under its own waiver; it does not establish a
 `measure:fp` or headed-measurement result, and #223 remains open. AI-27, AI-28,
-and AI-29 are resolved; AI-14 remains blocked for future measurement work. AI-30
-holds issue #567's Back/Forward history-integrity fix, and AI-33 holds issue
+and AI-29 are resolved. PR #557 merged as
+`d132eace0d2b7e905d5d6eb5ad4c831236f925b2`, closing #555, #559, and #568;
+#560 remains open for the accepted redirect-card control regression. AI-14
+remains blocked for future measurement work. AI-30 holds issue #567's
+Back/Forward history-integrity fix, and AI-33 holds issue
 #530's popup trust-pill contrast change for an exact-head visual Gate-3.
 
 **Guided resolution cursor:** `AI-19` (`Resume at: AI-19`; conversational label
@@ -35,8 +38,10 @@ register.
 **RESOLVED: AI-29 - Issue #555 opt-in overlay-cleanup Gate-3.** On 2026-08-28,
 Chris loaded PR #557's exact `ee804fa8d45f34284e073b7054cdc558b14b025d`
 artifact, reported that overlay cleanup works as intended, accepted the remaining
-regular redirect-card control regression, and explicitly authorized merge. The
-Chrome version was not supplied. **Dismiss** and **Allow once** on an ordinary
+regular redirect-card control regression, and explicitly authorized merge. PR
+#557 then merged as `d132eace0d2b7e905d5d6eb5ad4c831236f925b2`, closing #555,
+#559, and #568 while #560 remained open. The Chrome version was not supplied.
+**Dismiss** and **Allow once** on an ordinary
 redirect guard may remain visibly present but inert; this is a fail-closed UX and
 accessibility regression, not an established navigation bypass, and is tracked
 with the complete evidence boundary and repair oracle in #560. The historical
@@ -262,7 +267,8 @@ headed-measurement result and does not waive future methodology.
 ## Completed and superseded log
 
 - AI-29 - resolved 2026-08-28: Chris accepted PR #557's exact `ee804fa` overlay
-  behavior and authorized merge; #560 retains the accepted regular redirect-card
+  behavior and authorized merge; PR #557 merged as `d132eace`, closing #555,
+  #559, and #568, while #560 retains the accepted regular redirect-card
   Dismiss/Allow-once regression.
 - AI-28 — resolved 2026-08-10: #535 records the behavioural-data reset boundary;
   it clears event log, prompt outcomes, adaptive scores, and domain profiles while

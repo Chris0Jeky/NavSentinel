@@ -1,6 +1,6 @@
 # NavSentinel Project Roadmap
 
-*Created 2026-04-09. Truth refresh 2026-07-10; live/status sync 2026-08-27.*
+*Created 2026-04-09. Truth refresh 2026-07-10; live/status sync 2026-08-28.*
 
 This is the execution roadmap. [`Product_Strategy.md`](Product_Strategy.md) owns
 the product thesis, portfolio boundaries, and evidence gates; GitHub issues own
@@ -89,9 +89,11 @@ actions. Overlap with conventional ad-blocking behavior is acceptable; the
 useful mechanism boundary will be triaged later from safety, efficacy, and
 compatibility evidence. NavSentinel is pre-alpha with no established adoption.
 Chris accepted exact head `ee804fa8d45f34284e073b7054cdc558b14b025d`
-and authorized merge, completing AI-29. The accepted fail-closed regression in
-which a regular redirect card's **Dismiss** or **Allow once** control may remain
-inert is tracked in #560 with a combined hostile-frame repair oracle.
+and authorized merge, completing AI-29. PR #557 then merged as
+`d132eace0d2b7e905d5d6eb5ad4c831236f925b2`, closing #555, #559, and #568. The
+accepted fail-closed regression in which a regular redirect card's **Dismiss** or
+**Allow once** control may remain inert remains open in #560 with a combined
+hostile-frame repair oracle.
 The fresh-profile trial at `e8f5faf` proved click-time cleanup but also exposed
 that an initial high-risk overlay stayed present until it consumed a click. The
 acceptance boundary now requires bounded automatic cleanup after the page settles,
@@ -135,7 +137,7 @@ separately in CI/E2E; unpacked extension load/reload remains an owner-only step.
 The final cleanup notice is a compact Undo-only status that leaves after two
 seconds or a trusted outside pointer interaction. On that exact artifact, the
 owner confirmed the overlay behavior works as intended and accepted #560's
-regular redirect-card action regression for this merge.
+regular redirect-card action regression before the merge; #560 remains open.
 #577 retains the exact-stamp ownership
 edge; #580 retains latency measurement; #591 owns explicit redacted feedback
 export without automatic telemetry.
@@ -174,7 +176,7 @@ maintainer chooses disclosure/ownership.
 | EV-03 | P1 | Compare additive value with current protections | Agent + headed lane | #418 | Pre-registered scenarios/configurations; wins, misses, interruption, performance, and data flow published |
 | EV-04 | P1 after integrity | Measure representative-site compatibility and runtime overhead | Agent + headed lane | Reuse #127/#420; no new issue before queue cull | Declared normal journeys have zero unexplained functional breakage/page errors; startup/action latency and CPU budgets are fixed, measured, and published before broad instrumentation is enabled |
 | OPS-01 | P1 | Rotate roadmap/orchestrator and cull duplicate epics | Agent + Chris dispositions | #437 and #439–#453 | Short current roadmap, archived history, one milestone-categorized queue |
-| UX-01 | Completed 2026-08-28 | Add opt-in cleanup for high-severity deceptive overlays | Agent + completed Gate-3 | #555 / AI-29 complete; #560 follow-up | Options and popup expose the default-off setting and it round-trips; a bounded initial batch, overlays injected later, and overlays encountered by an intercepted click are hidden with Undo and no click replay; disabled/Off and benign-overlay cases stay untouched; focused unit/E2E, build, and exact-head owner evidence passed; accepted redirect-card control regression remains tracked in #560 |
+| UX-01 | Completed 2026-08-28 | Add opt-in cleanup for high-severity deceptive overlays | Agent + completed Gate-3 | #555 / PR #557 merged as `d132eace` / AI-29 complete; #560 follow-up | Options and popup expose the default-off setting and it round-trips; a bounded initial batch, overlays injected later, and overlays encountered by an intercepted click are hidden with Undo and no click replay; disabled/Off and benign-overlay cases stay untouched; focused unit/E2E, build, and exact-head owner evidence passed; accepted redirect-card control regression remains tracked in #560 |
 
 ### Existing issue dispositions
 

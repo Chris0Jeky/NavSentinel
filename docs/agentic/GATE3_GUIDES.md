@@ -15,9 +15,11 @@ Completed 2026-08-28 on PR #557 at
 `ee804fa8d45f34284e073b7054cdc558b14b025d`. Chris reported that the exact
 owner-loaded overlay cleanup works as intended, accepted the remaining
 fail-closed regular redirect-card Dismiss/Allow-once regression tracked in #560,
-and explicitly authorized merge. The Chrome version was not supplied. The
-procedure below is retained as evidence of what this gate covered; it is not an
-active action and must not be rerun or inferred from automation alone.
+and explicitly authorized merge. PR #557 then merged as
+`d132eace0d2b7e905d5d6eb5ad4c831236f925b2`, closing #555, #559, and #568 while
+#560 remained open. The Chrome version was not supplied. The procedure below is
+retained as evidence of what this gate covered; it is not an active action and
+must not be rerun or inferred from automation alone.
 
 1. Resolve the open PR whose head is `feat/issue555-overlay-cleanup`. Record its
    PR number and 40-character `headRefOid`. In the implementation worktree,
