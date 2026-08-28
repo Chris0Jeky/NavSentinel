@@ -34,7 +34,7 @@ import {
   loadReputationFilter,
   reputationEnabled,
 } from "@navsentinel/reputation-runtime";
-import { showToast } from "./ui_toast";
+import { controlToast, showOverlayCleanupToast, showToast } from "./ui_toast";
 import { explainReasonCode } from "../shared/explanations";
 import {
   buildClickContextFromEvents,
@@ -53,10 +53,19 @@ import {
   getDblclickOpenerNavUrl,
 } from "./dblclick_guard";
 import {
+  clearRestoredOverlayCleanupExclusions,
   startMutationMonitor,
+  scanExistingForegroundOverlay,
+  stopMutationMonitor,
   getMutationAlertCount,
   type MutationAlert,
 } from "./mutation_monitor";
+import {
+  reconcileDetectedOverlay,
+  restoreActiveOverlaySuppressions,
+  suppressHighSeverityOverlayInPath,
+  type OverlaySuppression,
+} from "./overlay_cleanup";
 import {
   handleOAuthRuntimeMessage,
   isOAuthRedirectMismatch,
@@ -90,6 +99,8 @@ const MAX_PENDING_BRIDGE_MESSAGES = 32;
 const BRIDGE_RETRY_MS = 100;
 const MAX_BRIDGE_RETRY_MS = 1000;
 const MAX_BRIDGE_INIT_MS = 10000;
+const SHADOW_GUARD_CORRELATION_MS = 500;
+const SHADOW_GUARD_ARRIVAL_MS = 1500;
 const RISKY_BLANK_REASONS = new Set([
   "intent_mismatch_under_interactive",
   "invisible_but_clickable",
@@ -120,7 +131,23 @@ function makeBridgeSession(): string {
 }
 
 let lastDown: DownCapture | null = null;
-let settings: NavSettings = { defaultMode: "smart", debug: false };
+let settings: NavSettings = {
+  defaultMode: "smart",
+  debug: false,
+  autoDismissOverlays: false,
+};
+type AllowPromptParams = {
+  title: string;
+  url: string;
+  host: string | null;
+  target?: string;
+  features?: string;
+  actionId?: string | null;
+  promptScore?: number;
+  outcomeFeatures?: NavOutcomeFeatures;
+  overlaySuppression?: OverlaySuppression;
+};
+let recentLocalBlankPrompt: { params: AllowPromptParams; shownAt: number } | null = null;
 let allowlist: Allowlist = {};
 let adaptiveAdjustment = 0;
 
@@ -255,6 +282,8 @@ async function initSettings() {
     console.warn("[NavSentinel] nav anomaly prime failed:", err);
   });
   previousMode = settings.defaultMode;
+  startMutationMonitorIfReady();
+  scanExistingOverlayIfEnabled();
   if (isTopFrame()) {
     sendIconUpdate(settings.defaultMode === "off" ? "gray" : "green");
     try {
@@ -280,7 +309,30 @@ if (isTopFrame()) {
 void initSettings();
 
 onNavSettingsChange((s) => {
+  const cleanupWasActive =
+    settings.defaultMode !== "off" && settings.autoDismissOverlays;
   settings = s;
+  const cleanupIsActive =
+    settings.defaultMode !== "off" && settings.autoDismissOverlays;
+  if (cleanupWasActive && !cleanupIsActive) {
+    const restored = restoreActiveOverlaySuppressions();
+    clearRestoredOverlayCleanupExclusions();
+    controlToast();
+    if (restored) {
+      appendEventSafely({
+        kind: "mutation_alert",
+        site: siteKeyFromLocation(),
+        url: location.href,
+        reasons: ["overlay_cleanup_setting_off"],
+        extra: { overlayCleanupOutcome: "restored", restored: true },
+      });
+    }
+    lastOverlayCleanupToastUndo = null;
+    overlayCleanupBudgetWarned = false;
+  } else if (!cleanupWasActive && cleanupIsActive) {
+    overlayCleanupBudgetWarned = false;
+  }
+  stopChildOverlayMonitorIfInactive();
   setDebugEnabled(s.debug);
   postToMain("ns-config", { mode: s.defaultMode, debug: s.debug });
   if (s.defaultMode !== previousMode) {
@@ -296,6 +348,8 @@ onNavSettingsChange((s) => {
       }).catch(() => {});
     }
   }
+  startMutationMonitorIfReady();
+  if (!cleanupWasActive) scanExistingOverlayIfEnabled();
   refreshDebug();
 });
 
@@ -395,6 +449,10 @@ function handleBridgeMessage(message: unknown): void {
 
   if (data.session !== bridgeSession) return;
 
+  // Compact private type: a user-control relay must survive the 66 KB
+  // content-script ceiling but is accepted only on the verified bridge.
+  if (data.type === "u") controlToast(data.id);
+
   if (data.type === "ns-bridge-ready") {
     markMainGuardReady();
     return;
@@ -439,6 +497,21 @@ function handleBridgeMessage(message: unknown): void {
 
     if (parsed.host && isAllowlisted(allowlist, siteKeyFromLocation(), parsed.host)) {
       allowActionOnce(data.id, url, data.target || "_blank", data.features);
+      return;
+    }
+
+    const localPrompt = recentLocalBlankPrompt;
+    if (
+      data.kind === "shadow_anchor" &&
+      localPrompt &&
+      typeof data.ts === "number" &&
+      Date.now() - localPrompt.shownAt <= SHADOW_GUARD_ARRIVAL_MS &&
+      Math.abs(data.ts - localPrompt.shownAt) <= SHADOW_GUARD_CORRELATION_MS &&
+      localPrompt.params.url === url &&
+      (localPrompt.params.target ?? "_blank") === (data.target || "_blank")
+    ) {
+      if (data.id !== undefined) localPrompt.params.actionId = data.id;
+      recentLocalBlankPrompt = null;
       return;
     }
 
@@ -866,26 +939,107 @@ function handleClickFixScan(): void {
 // --- Mutation monitor ---
 
 const MUTATION_START_DELAY_MS = 2000;
+// -1 = early opt-in timer, 0 = normal settle, 1 = armed, 2 = observing.
+let mutationMonitorState = 0;
+let lastOverlayCleanupToastUndo: OverlaySuppression | null = null;
+let overlayCleanupBudgetWarned = false;
 
-function handleMutationAlert(alert: MutationAlert): void {
-  if (settings.defaultMode === "off") return;
+function overlayToastControls(suppression: OverlaySuppression | null, coalesce = false) {
+  return {
+    actions: suppression ? [{ label: "Undo", onClick: suppression }] : undefined,
+    coalesce: coalesce && !suppression,
+  };
+}
+
+function isOverlayCleanupEnabled(): boolean {
+  return settings.defaultMode !== "off" && settings.autoDismissOverlays;
+}
+
+function handleOverlayCleanupCandidate(alert: MutationAlert): boolean {
+  const cleanup = reconcileDetectedOverlay(alert, isOverlayCleanupEnabled());
+  if (!cleanup) return false;
+
+  if (cleanup.action === "already_hidden") return true;
 
   appendEventSafely({
     kind: "mutation_alert",
     site: siteKeyFromLocation(),
     url: location.href,
     reasons: [alert.type],
-    extra: { details: alert.details, severity: alert.severity },
+    extra: {
+      details: alert.details,
+      severity: alert.severity,
+      overlayCleanupOutcome: cleanup.action,
+      overlayCleanupActive: cleanup.activeCount,
+      overlayAutoDismissed: cleanup.action !== "budget_exhausted",
+    },
   });
 
-  // Only show a warning toast for high-severity overlay injections.
+  if (cleanup.action === "budget_exhausted") {
+    if (!overlayCleanupBudgetWarned) {
+      overlayCleanupBudgetWarned = true;
+      sendIconUpdate("yellow");
+      showToast({
+        message: "Overlay cleanup reached its safety limit.",
+        timeoutMs: 0,
+      });
+    }
+    return true;
+  }
+
+  if (cleanup.undo !== lastOverlayCleanupToastUndo) {
+    lastOverlayCleanupToastUndo = cleanup.undo;
+    sendIconUpdate("yellow");
+    const undo = () => {
+      const restored = cleanup.undo();
+      if (lastOverlayCleanupToastUndo === cleanup.undo) {
+        lastOverlayCleanupToastUndo = null;
+      }
+      appendEventSafely({
+        kind: "mutation_alert",
+        site: siteKeyFromLocation(),
+        url: location.href,
+        reasons: ["overlay_cleanup_undo"],
+        extra: { overlayCleanupOutcome: "restored", restored },
+      });
+      return restored;
+    };
+    showOverlayCleanupToast(undo);
+  }
+  return true;
+}
+
+function handleMutationAlert(alert: MutationAlert): void {
+  if (settings.defaultMode === "off") return;
+
+  const isOverlayAlert = alert.type.startsWith("overlay_");
+  if (
+    isOverlayAlert &&
+    isOverlayCleanupEnabled() &&
+    handleOverlayCleanupCandidate(alert)
+  ) {
+    refreshDebug();
+    return;
+  }
+
+  appendEventSafely({
+    kind: "mutation_alert",
+    site: siteKeyFromLocation(),
+    url: location.href,
+    reasons: [alert.type],
+    extra: {
+      details: alert.details,
+      severity: alert.severity,
+    },
+  });
+
+  // Only show a warning toast for high-severity foreground overlays.
   // Low-severity alerts (cookie banners, chat widgets, ARIA dialogs) are
-  // still logged for telemetry but do not disturb the user.
-  if (alert.type === "overlay_injected" && alert.severity === "high") {
+  // still logged locally but do not disturb the user.
+  if (isOverlayAlert && alert.severity === "high") {
     sendIconUpdate("yellow");
     showToast({
-      message: "NavSentinel detected a suspicious overlay injected after page load. The page may be attempting a phishing attack.",
-      actions: [{ label: "Dismiss", onClick: () => {} }],
+      message: "NavSentinel detected a suspicious overlay.",
       timeoutMs: 0,
     });
   }
@@ -893,9 +1047,72 @@ function handleMutationAlert(alert: MutationAlert): void {
   refreshDebug();
 }
 
-function initMutationMonitor(): void {
-  if (settings.defaultMode === "off") return;
-  startMutationMonitor(document, handleMutationAlert);
+function startMutationMonitorIfReady(): void {
+  if (
+    mutationMonitorState !== 1 ||
+    settings.defaultMode === "off" ||
+    (!isTopFrame() && !settings.autoDismissOverlays)
+  ) {
+    return;
+  }
+  startMutationMonitor(document, handleMutationAlert, {
+    onOverlayCandidate: handleOverlayCleanupCandidate,
+    isOverlayCleanupActive: isOverlayCleanupEnabled,
+    onAutoDisconnect: () => {
+      mutationMonitorState = 0;
+    },
+  });
+  mutationMonitorState = 2;
+}
+
+/**
+ * The top frame keeps the normal security monitor active. Child frames add
+ * layout-bound observation only for the explicit overlay-cleanup opt-in, and
+ * release it again when either control becomes inactive.
+ */
+function stopChildOverlayMonitorIfInactive(): void {
+  if (
+    isTopFrame() ||
+    mutationMonitorState !== 2 ||
+    (settings.defaultMode !== "off" && settings.autoDismissOverlays)
+  ) {
+    return;
+  }
+  stopMutationMonitor();
+  mutationMonitorState = 0;
+}
+
+function scanExistingOverlayIfEnabled(): void {
+  if (
+    settings.defaultMode !== "off" &&
+    settings.autoDismissOverlays
+  ) {
+    if (mutationMonitorState <= 0) {
+      scheduleEarlyAutoDismissStart();
+      return;
+    }
+    scanExistingForegroundOverlay(document);
+  }
+}
+
+function armMutationMonitor(): void {
+  if (mutationMonitorState > 0) return;
+  mutationMonitorState = 1;
+  startMutationMonitorIfReady();
+  scanExistingOverlayIfEnabled();
+}
+
+function scheduleEarlyAutoDismissStart(): void {
+  if (mutationMonitorState !== 0) return;
+
+  mutationMonitorState = -1;
+  const schedule = () => setTimeout(armMutationMonitor, 500);
+
+  if (document.readyState === "loading") {
+    window.addEventListener("DOMContentLoaded", schedule, { once: true });
+  } else {
+    schedule();
+  }
 }
 
 function scheduleMutationMonitor(): void {
@@ -907,10 +1124,10 @@ function scheduleMutationMonitor(): void {
   // from the current time with a longer window (3 s) since we cannot know
   // how long ago the page finished loading.
   if (document.readyState === "complete") {
-    setTimeout(initMutationMonitor, 3000);
+    setTimeout(armMutationMonitor, 3000);
   } else {
     window.addEventListener("load", () => {
-      setTimeout(initMutationMonitor, MUTATION_START_DELAY_MS);
+      setTimeout(armMutationMonitor, MUTATION_START_DELAY_MS);
     }, { once: true });
   }
 }
@@ -1212,18 +1429,10 @@ function checkSmartDefaultSuggestion(sourceDomain: string, destDomain: string): 
   })();
 }
 
-function showAllowPrompt(params: {
-  title: string;
-  url: string;
-  host: string | null;
-  target?: string;
-  features?: string;
-  actionId?: string | null;
-  promptScore?: number;
-  /** Replay-grade enrichment captured at decision time (P5-C1). Absent for the
-   *  main-world bridge prompt path, which has no CDS/NRS decision context. */
-  outcomeFeatures?: NavOutcomeFeatures;
-}): void {
+function showAllowPrompt(params: AllowPromptParams): void {
+  if (params.outcomeFeatures && (params.target ?? "_blank") === "_blank") {
+    recentLocalBlankPrompt = { params, shownAt: Date.now() };
+  }
   const promptScore = params.promptScore ?? lastDebug?.cds ?? 0;
   const sourceDomain = siteKeyFromLocation();
   const destDomain = params.host ?? undefined;
@@ -1271,21 +1480,29 @@ function showAllowPrompt(params: {
     });
   }
 
+  if (params.overlaySuppression) {
+    actions.push({
+      label: "Undo",
+      onClick: params.overlaySuppression,
+    });
+  }
+
   appendEventSafely({
     kind: "nav_blank_prompt",
     site: sourceDomain,
     url: params.url,
-    ...(params.host ? { destHost: params.host } : {})
+    ...(params.host ? { destHost: params.host } : {}),
+    ...(params.overlaySuppression ? { extra: { overlayAutoDismissed: true } } : {}),
   });
 
   showToast({
-    message: `${params.title}: ${params.host ?? params.url}`,
+    message: `${params.title}${params.overlaySuppression ? " (overlay hidden)" : ""}: ${params.host ?? params.url}`,
     actions,
     // Coalesce a burst of blocked-nav prompts (ad-heavy / malicious-popup pages)
     // into the count pill so the user is not forced to act on each. The blocked
     // navigation stays blocked; the pill expands to the latest prompt's actions
     // if a popup was actually wanted.
-    coalesce: true,
+    coalesce: !params.overlaySuppression,
     onDismiss: () => {
       appendOutcomeSafely({
         domain: sourceDomain,
@@ -1652,61 +1869,87 @@ window.addEventListener(
 
     if (mode !== "off") {
       const hasClickfix = cfScore > 0;
-      if (isBlankAnchor && !isAllowed && !explicitNewTab && !smartAllowsBlank && !smartSuppressesBlankPrompt) {
-        if (nrs >= blockThreshold) {
+      const interceptBlank = isBlankAnchor && !isAllowed && !explicitNewTab &&
+        !smartAllowsBlank && !smartSuppressesBlankPrompt;
+      const blockSameTab = !isBlankAnchor && nrs >= blockThreshold;
+      if (interceptBlank || blockSameTab) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        const overlaySuppression = suppressHighSeverityOverlayInPath(
+          e.composedPath?.() ?? [],
+          settings.autoDismissOverlays,
+          anchor,
+        );
+        if (interceptBlank) {
+          if (nrs >= blockThreshold) {
+            decision = "block";
+          } else {
+            decision = "prompt";
+          }
+          // This branch has already prevented the navigation. Cleanup follows the
+          // overlay classification, not whether NRS labelled the interception a
+          // prompt or a block; real browser context can legitimately move the same
+          // deceptive click across that decision threshold.
+          if (parsed?.href) {
+            const title = hasClickfix
+              ? (decision === "block"
+                ? "Blocked: navigation + fake dialog"
+                : "Suspicious navigation + fake dialog detected")
+              : decision === "block" ? "Blocked new tab" : "Suspicious new tab";
+            showAllowPrompt({
+              title,
+              url: parsed.href,
+              host: parsed.host,
+              target: "_blank",
+              promptScore: nrs,
+              outcomeFeatures: navFeatures,
+              ...(overlaySuppression ? { overlaySuppression } : {}),
+            });
+            // Suppress standalone ClickFix toast — unified prompt covers it
+            if (hasClickfix) clickFixAlertedAt = Date.now();
+          } else {
+            const prefix = hasClickfix
+              ? "NavSentinel blocked a new tab with fake dialog detected"
+              : "NavSentinel blocked a suspicious new tab";
+            showToast({
+              message: buildPlainMessage(
+                overlaySuppression ? `${prefix} and hid its overlay` : prefix,
+                reasonCodes,
+              ),
+              ...overlayToastControls(overlaySuppression, !hasClickfix),
+            });
+            if (hasClickfix) clickFixAlertedAt = Date.now();
+          }
+        } else {
           decision = "block";
-        } else {
-          decision = "prompt";
-        }
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        if (parsed?.href) {
-          const title = hasClickfix
-            ? (decision === "block"
-              ? "Blocked: navigation + fake dialog"
-              : "Suspicious navigation + fake dialog detected")
-            : decision === "block" ? "Blocked new tab" : "Suspicious new tab";
-          showAllowPrompt({
-            title,
-            url: parsed.href,
-            host: parsed.host,
-            target: "_blank",
-            promptScore: nrs,
-            outcomeFeatures: navFeatures
+          appendEventSafely({
+            kind: "nav_click_block",
+            site: siteKeyFromLocation(),
+            url: location.href,
+            score: nrs,
+            reasons: reasonCodes,
+            ...(overlaySuppression ? { extra: { overlayAutoDismissed: true } } : {}),
           });
-          // Suppress standalone ClickFix toast — unified prompt covers it
-          if (hasClickfix) clickFixAlertedAt = Date.now();
-        } else {
-          const prefix = hasClickfix
-            ? "NavSentinel blocked a new tab with fake dialog detected"
-            : "NavSentinel blocked a suspicious new tab";
-          showToast({ message: buildPlainMessage(prefix, reasonCodes), coalesce: !hasClickfix });
+          appendOutcomeSafely({
+            domain: siteKeyFromLocation(),
+            ...(destHost ? { destDomain: destHost } : {}),
+            type: "nav",
+            score: nrs,
+            outcome: "block",
+            ...navFeatures
+          });
+          const blockPrefix = hasClickfix
+            ? "NavSentinel blocked a deceptive click with fake dialog"
+            : "NavSentinel blocked a deceptive click";
+          showToast({
+            message: buildPlainMessage(
+              overlaySuppression ? `${blockPrefix} and hid the overlay` : blockPrefix,
+              reasonCodes,
+            ),
+            ...overlayToastControls(overlaySuppression, !hasClickfix),
+          });
           if (hasClickfix) clickFixAlertedAt = Date.now();
         }
-      } else if (!isBlankAnchor && nrs >= blockThreshold) {
-        decision = "block";
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        appendEventSafely({
-          kind: "nav_click_block",
-          site: siteKeyFromLocation(),
-          url: location.href,
-          score: nrs,
-          reasons: reasonCodes
-        });
-        appendOutcomeSafely({
-          domain: siteKeyFromLocation(),
-          ...(destHost ? { destDomain: destHost } : {}),
-          type: "nav",
-          score: nrs,
-          outcome: "block",
-          ...navFeatures
-        });
-        const blockPrefix = hasClickfix
-          ? "NavSentinel blocked a deceptive click with fake dialog"
-          : "NavSentinel blocked a deceptive click";
-        showToast({ message: buildPlainMessage(blockPrefix, reasonCodes), coalesce: !hasClickfix });
-        if (hasClickfix) clickFixAlertedAt = Date.now();
       }
     }
 

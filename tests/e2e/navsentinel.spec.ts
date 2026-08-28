@@ -10,6 +10,7 @@ import {
   dismissOnboarding,
   getGymBaseUrl,
   getServiceWorker,
+  updateNavigationSettings,
   waitForNavSentinelBridge,
   waitForToastMatch,
   waitForToastText
@@ -1244,6 +1245,7 @@ test("Level 7 legit modal backdrop closes without a false positive @regression",
     });
 
     try {
+      await updateNavigationSettings(context, { autoDismissOverlays: true });
       const page = await context.newPage();
       await page.goto(`${baseUrl}/level7-legit-modal-backdrop.html`, {
         waitUntil: "domcontentloaded",
@@ -1554,6 +1556,7 @@ test("Level 9 legit overlay controls and visible docs link stay allowed @regress
     });
 
     try {
+      await updateNavigationSettings(context, { autoDismissOverlays: true });
       const page = await context.newPage();
       await page.goto(`${baseUrl}/level9-legit-video-overlay.html`, {
         waitUntil: "domcontentloaded",

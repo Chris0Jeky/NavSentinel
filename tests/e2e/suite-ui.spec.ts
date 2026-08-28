@@ -5,7 +5,12 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { EVENT_LOG_KEY, SUITE_SETTINGS_KEY, TRUSTED_DOMAINS_KEY } from "../../extension/src/shared/storage";
 import { getGymBaseUrl, getExtensionId, getServiceWorker } from "./extension_test_utils";
-import { getPopupSnapshot, openRealPopup, selectPopupMode } from "./demo-showcase-popup";
+import {
+  clickPopupTarget,
+  getPopupSnapshot,
+  openRealPopup,
+  selectPopupMode,
+} from "./demo-showcase-popup";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -17,7 +22,7 @@ const gymRoot = path.resolve(__dirname, "..", "..", "gym");
 
 test.setTimeout(120_000);
 
-test("options normalizes trusted-domain input and persists mode changes @smoke", async () => {
+test("options normalizes trusted-domain input and persists protection changes @smoke", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-ui-e2e-"));
@@ -40,9 +45,11 @@ test("options normalizes trusted-domain input and persists mode changes @smoke",
 
       await expect(options.locator('#navModeSeg .seg-btn[data-value="smart"]')).toHaveAttribute("aria-checked", "true");
       await expect(options.locator('#credModeSeg .seg-btn[data-value="smart"]')).toHaveAttribute("aria-checked", "true");
+      await expect(options.locator("#dismiss")).toHaveAttribute("aria-checked", "false");
 
       await options.locator('#navModeSeg .seg-btn[data-value="strict"]').click();
       await options.locator('#credModeSeg .seg-btn[data-value="strict"]').click();
+      await options.locator("#dismiss").click();
       await options.locator('.nav-btn[data-section="trust"]').click();
       await options.locator("#trustedInput").fill("https://login.example.com/account");
       await options.locator("#addTrusted").click();
@@ -55,6 +62,7 @@ test("options normalizes trusted-domain input and persists mode changes @smoke",
           : [];
         return (
           settings?.nav?.defaultMode === "strict" &&
+          settings?.nav?.autoDismissOverlays === true &&
           settings?.credential?.mode === "strict" &&
           trustedDomains.includes("example.com")
         );
@@ -63,8 +71,63 @@ test("options normalizes trusted-domain input and persists mode changes @smoke",
       await options.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
       await expect(options.locator('#navModeSeg .seg-btn[data-value="strict"]')).toHaveAttribute("aria-checked", "true");
       await expect(options.locator('#credModeSeg .seg-btn[data-value="strict"]')).toHaveAttribute("aria-checked", "true");
+      await expect(options.locator("#dismiss")).toHaveAttribute("aria-checked", "true");
       await options.locator('.nav-btn[data-section="trust"]').click();
       await expect(options.locator("#trustedList")).toContainText("example.com");
+    } finally {
+      await context.close();
+    }
+  } finally {
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("Options Event Log exposes bounded local overlay cleanup outcomes @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-overlay-audit-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
+    });
+    try {
+      const worker = await getServiceWorker(context);
+      await worker.evaluate(async ({ key, event }) => {
+        await chrome.storage.local.set({ [key]: [event] });
+      }, {
+        key: EVENT_LOG_KEY,
+        event: {
+          id: "overlay-audit",
+          ts: 1_710_000_000_000,
+          kind: "mutation_alert",
+          pageSite: "page.example",
+          site: "child.example",
+          reasons: ["overlay_injected"],
+          extra: {
+            severity: "high",
+            overlayCleanupOutcome: "reasserted",
+            overlayCleanupActive: 3,
+          },
+        },
+      });
+
+      const extensionId = await getExtensionId(context);
+      const options = await context.newPage();
+      await options.goto(`chrome-extension://${extensionId}/src/options/options.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000,
+      });
+      await options.locator('.nav-btn[data-section="log"]').click();
+      const row = options.locator("#eventLog .event-row-opt");
+      await expect(row).toContainText("page=page.example");
+      await expect(row).toContainText("child.example");
+      await expect(row).toContainText("cleanup=reasserted");
+      await expect(row).toContainText("tracked=3");
+      await expect(options.locator("#pane-log .pane-sub")).toContainText(
+        "Nothing leaves your browser",
+      );
     } finally {
       await context.close();
     }
@@ -365,6 +428,14 @@ test("popup renders only active-site risk, signal classes, and ClickFix shield i
       expect(snapshot.eventIconPaths[clickfixIndex]).toBe(
         "M12 3 L20 5 V11 C20 16 16 19.5 12 21 C8 19.5 4 16 4 11 V5 Z"
       );
+
+      expect(snapshot.autoDismissOverlays).toBe(false);
+      const updated = await clickPopupTarget(context, "autoDismiss");
+      expect(updated.autoDismissOverlays).toBe(true);
+      await expect.poll(() => worker.evaluate(async (key) => {
+        const result = await chrome.storage.local.get(key);
+        return result[key]?.nav?.autoDismissOverlays;
+      }, SUITE_SETTINGS_KEY)).toBe(true);
     } finally {
       await context.close();
     }

@@ -2,12 +2,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 type ShowToastType = typeof import("../extension/src/content/ui_toast").showToast;
+type ControlToastType = typeof import("../extension/src/content/ui_toast").controlToast;
 
 let showToast: ShowToastType;
+let controlToast: ControlToastType;
 
 async function loadModule(): Promise<void> {
   const mod = await import("../extension/src/content/ui_toast");
   showToast = mod.showToast;
+  controlToast = mod.controlToast;
 }
 
 describe("ui_toast", () => {
@@ -46,6 +49,15 @@ describe("ui_toast", () => {
     const wrap = getWrap();
     if (!wrap) return [];
     return Array.from(wrap.querySelectorAll("button"));
+  }
+
+  function showBriefRecovery(message: string, undo: () => void): void {
+    showToast({
+      message,
+      actions: [{ label: "Undo", onClick: undo }],
+      persistent: true,
+      briefRecovery: true,
+    });
   }
 
   describe("host and shadow DOM setup", () => {
@@ -134,6 +146,28 @@ describe("ui_toast", () => {
       expect(dismissBtn!.classList.contains("danger")).toBe(true);
     });
 
+    it("activates the owned Dismiss token relayed by the verified bridge", () => {
+      showToast({ message: "Test", timeoutMs: 0 });
+      const dismiss = getButtons().find((button) => button.textContent === "Dismiss")!;
+
+      controlToast(dismiss.dataset.nsUiAction!);
+
+      expect(getWraps()).toHaveLength(0);
+    });
+
+    it("ignores an unknown or stale relayed control token", () => {
+      showToast({ message: "First", timeoutMs: 0 });
+      const stale = getButtons().find((button) => button.textContent === "Dismiss")!
+        .dataset.nsUiAction!;
+      showToast({ message: "Current", timeoutMs: 0 });
+
+      controlToast("not-owned");
+      controlToast(stale);
+
+      expect(getWraps()).toHaveLength(1);
+      expect(getWrap()!.querySelector(".body")!.textContent).toBe("Current");
+    });
+
     it("sets message via textContent, not innerHTML (XSS-safe)", () => {
       showToast({ message: "<script>alert(1)</script>" });
       const body = getWrap()!.querySelector(".body");
@@ -168,6 +202,78 @@ describe("ui_toast", () => {
       showToast({ message: "Second" });
       expect(getWraps().length).toBe(1);
       expect(getWrap()!.querySelector(".body")!.textContent).toBe("Second");
+    });
+
+    it("replaces a card without treating replacement as user dismissal", () => {
+      const onDismiss = vi.fn();
+      showToast({ message: "Overlay hidden", onDismiss, timeoutMs: 0 });
+
+      showToast({ message: "New warning" });
+
+      expect(onDismiss).not.toHaveBeenCalled();
+    });
+
+    it("keeps a persistent cleanup Undo card beside an unrelated warning", () => {
+      const undo = vi.fn();
+      showToast({
+        message: "Overlays hidden",
+        actions: [{ label: "Undo", onClick: undo }],
+        timeoutMs: 0,
+        persistent: true,
+      });
+
+      showToast({ message: "Unrelated warning", timeoutMs: 0 });
+
+      expect(getWraps()).toHaveLength(2);
+      const messages = Array.from(getWraps(), (wrap) =>
+        wrap.querySelector(".body")?.textContent,
+      );
+      expect(messages).toEqual(["Overlays hidden", "Unrelated warning"]);
+      const undoButton = Array.from(getRoot()!.querySelectorAll("button"))
+        .find((button) => button.textContent === "Undo") as HTMLButtonElement;
+      undoButton.click();
+      expect(undo).toHaveBeenCalledTimes(1);
+      expect(getWraps()).toHaveLength(1);
+    });
+
+    it("removes only the persistent card when its feature is switched off", () => {
+      showToast({ message: "Overlays hidden", timeoutMs: 0, persistent: true });
+      showToast({ message: "Unrelated warning", timeoutMs: 0 });
+
+      controlToast();
+
+      expect(getWraps()).toHaveLength(1);
+      expect(getWrap()!.querySelector(".body")!.textContent).toBe("Unrelated warning");
+    });
+
+    it("renders brief recovery as a compact Undo-only status", () => {
+      showBriefRecovery("Overlay hidden; still watching.", vi.fn());
+
+      const wrap = getWrap()!;
+      expect(wrap.classList.contains("brief-recovery")).toBe(true);
+      expect(wrap.getAttribute("role")).toBe("status");
+      expect(wrap.getAttribute("aria-live")).toBe("polite");
+      expect(getButtons().map((button) => button.textContent)).toEqual(["Undo"]);
+    });
+
+    it("expires brief recovery after two seconds without invoking Undo", () => {
+      const undo = vi.fn();
+      const onDismiss = vi.fn();
+      showToast({
+        message: "Overlay hidden; still watching.",
+        actions: [{ label: "Undo", onClick: undo }],
+        onDismiss,
+        persistent: true,
+        briefRecovery: true,
+      });
+
+      vi.advanceTimersByTime(1999);
+      expect(getWraps()).toHaveLength(1);
+      vi.advanceTimersByTime(1);
+
+      expect(getWraps()).toHaveLength(0);
+      expect(undo).not.toHaveBeenCalled();
+      expect(onDismiss).not.toHaveBeenCalled();
     });
   });
 
@@ -310,6 +416,21 @@ describe("ui_toast", () => {
       const dismissBtn = getButtons().find((b) => b.textContent === "Dismiss")!;
       expect(() => dismissBtn.click()).not.toThrow();
       expect(getWraps().length).toBe(0);
+    });
+
+    it("does not bubble toast clicks into page document or window listeners", () => {
+      const documentClick = vi.fn();
+      const windowClick = vi.fn();
+      document.addEventListener("click", documentClick);
+      window.addEventListener("click", windowClick);
+      showToast({ message: "Test" });
+
+      getButtons().find((button) => button.textContent === "Dismiss")!.click();
+
+      expect(documentClick).not.toHaveBeenCalled();
+      expect(windowClick).not.toHaveBeenCalled();
+      document.removeEventListener("click", documentClick);
+      window.removeEventListener("click", windowClick);
     });
 
     it("does not call onDismiss if an action was clicked before dismiss", () => {

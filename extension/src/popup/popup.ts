@@ -37,6 +37,7 @@ const trustBtn = document.getElementById("trustBtn") as HTMLButtonElement;
 const untrustBtn = document.getElementById("untrustBtn") as HTMLButtonElement;
 const navSeg = document.getElementById("navSeg") as HTMLDivElement;
 const credSeg = document.getElementById("credSeg") as HTMLDivElement;
+const autoDismiss = document.getElementById("autoDismiss") as HTMLInputElement;
 const eventsEl = document.getElementById("events") as HTMLDivElement;
 const eventCountEl = document.getElementById("eventCount") as HTMLSpanElement;
 const signalsEl = document.getElementById("signals") as HTMLDivElement;
@@ -193,6 +194,7 @@ async function refreshUi(): Promise<void> {
   const settings = await getSuiteSettings();
   setSegValue(navSeg, settings.nav.defaultMode);
   setSegValue(credSeg, settings.credential.mode);
+  autoDismiss.checked = settings.nav.autoDismissOverlays;
 
   const url = await getActiveTabUrl();
   const trusted = await getTrustedDomains();
@@ -253,6 +255,7 @@ function getPopupSnapshot(): PopupSnapshot {
   const tabRiskMatch = /^Tab risk score: (\d+)$/.exec(shieldArcEl.getAttribute("aria-label") ?? "");
 
   return {
+    autoDismissOverlays: autoDismiss.checked,
     credMode: getSegValue(credSeg),
     events,
     eventIconPaths: Array.from(
@@ -267,25 +270,25 @@ function getPopupSnapshot(): PopupSnapshot {
   };
 }
 
-async function setNavMode(mode: Mode): Promise<void> {
-  setSegValue(navSeg, mode);
-  await updateSuiteSettings({ nav: { defaultMode: mode } });
+async function recordConfig(extra: Record<string, unknown>): Promise<void> {
   try {
-    await appendEvent({ kind: "suite_config_update", extra: { navMode: mode } });
+    await appendEvent({ kind: "suite_config_update", extra });
   } catch (e) {
     console.warn("[NavSentinel] event log append failed (suite_config_update):", e);
   }
+}
+
+async function setNavMode(mode: Mode): Promise<void> {
+  setSegValue(navSeg, mode);
+  await updateSuiteSettings({ nav: { defaultMode: mode } });
+  await recordConfig({ navMode: mode });
   await refreshUi();
 }
 
 async function setCredMode(mode: CredMode): Promise<void> {
   setSegValue(credSeg, mode);
   await updateSuiteSettings({ credential: { mode } });
-  try {
-    await appendEvent({ kind: "suite_config_update", extra: { credMode: mode } });
-  } catch (e) {
-    console.warn("[NavSentinel] event log append failed (suite_config_update):", e);
-  }
+  await recordConfig({ credMode: mode });
   await refreshUi();
 }
 
@@ -328,6 +331,10 @@ credSeg.addEventListener("click", async (e) => {
   const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".seg-btn");
   if (!btn || btn.getAttribute("aria-checked") === "true") return;
   await setCredMode(btn.dataset.value as CredMode);
+});
+
+autoDismiss.addEventListener("change", () => {
+  void updateSuiteSettings({ nav: { autoDismissOverlays: autoDismiss.checked } });
 });
 
 initSegKeyboard(navSeg);
@@ -409,6 +416,9 @@ chrome.runtime.onMessage.addListener((message: PopupTestMessage, sender, sendRes
             break;
           case "openOptions":
             chrome.runtime.openOptionsPage();
+            break;
+          case "autoDismiss":
+            autoDismiss.click();
             break;
           default:
             throw new Error("Unknown popup target");

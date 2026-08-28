@@ -152,6 +152,7 @@ const arbSuiteSettings: fc.Arbitrary<SuiteSettings> = fc.record({
   nav: fc.record({
     defaultMode: fc.constantFrom("smart" as const, "strict" as const, "off" as const),
     debug: fc.boolean(),
+    autoDismissOverlays: fc.boolean(),
   }),
   credential: fc.record({
     mode: fc.constantFrom("off" as const, "smart" as const, "strict" as const),
@@ -198,6 +199,7 @@ describe("storage property tests", () => {
           expect(result.credential.similarity.maxDistance).toBeLessThanOrEqual(8);
           expect(["smart", "strict", "off"]).toContain(result.nav.defaultMode);
           expect(typeof result.nav.debug).toBe("boolean");
+          expect(typeof result.nav.autoDismissOverlays).toBe("boolean");
 
           vi.unstubAllGlobals();
         }),

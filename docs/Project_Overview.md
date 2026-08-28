@@ -1,7 +1,7 @@
 # Project Overview
 
-> **Maturity:** pre-release alpha. This file describes implemented behavior, not
-> validated efficacy or release readiness. Product direction and current gates
+> **Maturity:** pre-alpha development project. This file describes implemented
+> behavior, not validated efficacy or release readiness. Product direction and current gates
 > live in [`Product_Strategy.md`](Product_Strategy.md).
 
 ## Summary
@@ -103,5 +103,14 @@ frozen until that sequence produces a credible signal.
 - cloud telemetry
 - remote reputation lookups
 - password capture or storage
-- general ad blocking or tracker blocking
 - broad browser-porting work before Chrome behavior is fully stabilized
+
+Issue #555's first overlay-cleanup vertical adds an off-by-default control. It
+hides up to five high-severity foreground layers found by a fast bounded scan
+after DOM readiness, an overlay identified after injection, or one encountered
+by an already-blocked click. An initial batch has one grouped Undo. NavSentinel
+never synthesizes or replays a click, remains inert when the setting or
+Navigation is off, and leaves covered benign dialogs and widgets usable. The
+control is available in Options and as a quick setting in the extension popup.
+Future mechanisms will be selected from observed efficacy, safety, user-control,
+and compatibility evidence.

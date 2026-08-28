@@ -176,6 +176,34 @@ activation exists.
 
 ---
 
+## 2026-08-27 - Overlay-cleanup capability and future boundary triage
+
+### D-2026-08-26-O - Opt-in cleanup may reuse existing interaction evidence
+
+**Decision:** Owner direction authorizes issue #555 as the first overlay-cleanup
+vertical under D-2026-07-10-K. Add an off-by-default setting that may hide a
+page overlay after NavSentinel's existing classifier marks it high severity,
+either on post-load injection or on an already-blocked click. The cleanup stays
+local, offers Undo, replays no click, adds no permission or runtime call, and
+requires Gate-3 because it changes extension page/UI behavior.
+
+Product direction is capability-first: preventing or removing unwanted
+foreground overlays is in scope even when the result or implementation overlaps
+with conventional ad-blocking behavior. NavSentinel is pre-alpha and has no
+established adoption, so that overlap is not a design constraint. Filter lists,
+cosmetic rules, proactive nuisance heuristics, per-site exceptions, and tab
+cleanup are possible future mechanisms to triage by safety, efficacy, user
+control, and compatibility evidence. This decision records their eligibility;
+it does not add them to the current #555 vertical or bypass normal prioritization
+under D-2026-07-10-K.
+
+**Why:** current popup/redirect defenses can stop a dangerous navigation while
+leaving the obstructing element in place, forcing repeated user interaction on
+abusive pages. The product should state and validate the relief it provides
+instead of defining the capability by a category it must avoid.
+
+---
+
 ## Earlier resolved (carried forward)
 
 - **Q1–Q6 (answered 2026-06-26):** Q1 OAuth FP cluster = implement + HOLD for `measure:fp`; **Q2** capture_isolated = split (#374) **and** bump 66→70KB; Q3 = prefer unit-testable extraction over CI-only e2e (CI-verified e2e acceptable when unavoidable); Q4 merge cadence confirmed; **Q5** Gate-3 = manual Chrome, revised by the 2026-08-01 ratification of D-2026-07-03-E to headed Chrome as primary once operational with manual spot-checks retained; Q6 = extract-to-testable + e2e for `main_guard`.

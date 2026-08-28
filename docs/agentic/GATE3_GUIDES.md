@@ -9,6 +9,120 @@
 
 # Human Gate-3 Guides — NavSentinel
 
+## Completed record: AI-29 - issue #555 opt-in overlay cleanup
+
+Completed 2026-08-28 on PR #557 at
+`ee804fa8d45f34284e073b7054cdc558b14b025d`. Chris reported that the exact
+owner-loaded overlay cleanup works as intended, accepted the remaining
+fail-closed regular redirect-card Dismiss/Allow-once regression tracked in #560,
+and explicitly authorized merge. The Chrome version was not supplied. The
+procedure below is retained as evidence of what this gate covered; it is not an
+active action and must not be rerun or inferred from automation alone.
+
+1. Resolve the open PR whose head is `feat/issue555-overlay-cleanup`. Record its
+   PR number and 40-character `headRefOid`. In the implementation worktree,
+   require `git rev-parse HEAD` to equal that value and require `git status
+   --short` to contain no uncommitted product changes. The known Defender
+   quarantine may appear only as ` D tests/clickfix-detector.property.test.ts`;
+   do not restore, inspect, stage, execute, or allow that fixture. Stop on any
+   other mismatch.
+2. On that exact head, run `npm ci`, `npm run build`, and
+   `npm run check:content-loader`. Record the exact `extension/dist` path and the
+   reported guard revision. Loading or reloading the unpacked extension is
+   Chris-owned: the agent stops at this boundary and must not control
+   `chrome://extensions` or try an alternate reload path. In Chrome, Chris
+   creates a fresh temporary profile, enables Developer mode, and loads that
+   exact `extension/dist` unpacked. Record the Chrome version and confirm the
+   extension service worker registers without an error.
+3. Open the options page. Confirm **Auto-dismiss overlays** is off by default,
+   its description says it acts only on high-risk detected overlays, and the
+   switch works by mouse and keyboard. Confirm the extension popup exposes the
+   same default-off quick setting and that its checkbox works by mouse and
+   keyboard. Turn it on in the popup, close/reopen both surfaces, and confirm it
+   remains on. Reload an already-open Options page before using its current
+   manual Save; cross-surface live synchronization is tracked separately in
+   #558.
+4. Start the tracked local Gym (`npm run gym:serve`) and open
+   `mutation-01-delayed-overlay.html`. For this human trial, do not dispatch the
+   page's `navsentinel:gym:trigger-mutation` event; that is an E2E-only
+   monitor-ready trigger. Before testing, confirm this target document reports
+   `capture="1"`, `bridge="1"`, and the same `ui-guard` revision from
+   step 2 for the `data-navsentinel-capture-ready`,
+   `data-navsentinel-bridge-ready`, and `data-navsentinel-ui-guard` attributes.
+   Stop on a missing or old marker: the target page does not prove the expected
+   artifact. Leave the page open and wait for the visible **Human
+   fallback countdown** to reach zero (the fixture's 10-second fallback; no
+   click is needed). Confirm the fake session overlay is hidden automatically,
+   the timing line identifies the human fallback timer, a small **Overlay hidden;
+   still watching** status with **Undo** appears, the underlying page is usable,
+   and no popup or navigation occurs. The status leaves after about 2 seconds or
+   the next pointer interaction outside it, so be ready at the end of the visible
+   countdown and click **Undo** promptly. Confirm the same overlay is visible
+   again; reload and repeat this step if the brief recovery window expires.
+5. With cleanup still enabled, open the popup once and confirm its checkbox is
+   still on. Then open `evasion-02-size-34pct.html` and do not interact with the
+   page. Normally within about 500 ms after DOM readiness (allow up to 2 seconds
+   for this manual check), confirm the pink high-severity trap disappears
+   automatically, the visible **Real Link** is exposed, no popup/navigation
+   occurs, and the small card contains **Overlay hidden; still watching** with
+   no separate Dismiss button. Click **Undo** within its 2-second recovery
+   window and confirm the trap returns without any click being
+   synthesized or replayed. Then click the restored trap once to exercise the
+   fallback: the new tab must stay blocked, the trap must hide again, and the
+   card must contain **(overlay hidden)** with Undo. A trap that stays until this
+   first click is a failure of automatic cleanup even if the click-time fallback
+   succeeds.
+6. Open `evasion-12-multiple-overlays.html` without interacting. Confirm both
+   stacked traps disappear within the same 2-second allowance, **Real Link** is
+   exposed, no tab/navigation occurs, and one small card contains **Overlay
+   hidden; still watching**. Click **Undo** within its brief recovery window and
+   confirm both trap
+   layers return and stay restored. Then open
+   `mutation-05-sequential-overlays.html`, wait for its 10-second human fallback
+   and the second delayed layer, and confirm both layers stay hidden. Use the
+   brief Undo notice created by the delayed cleanup (reload and repeat if its
+   2-second window expires) and confirm one Undo restores the grouped layers and
+   they remain restored.
+7. Open `overlay-nesting-lab.html?case=exact` without interacting. Confirm the
+   outer synthetic media frame remains present but its nested advertisement
+   disappears, **Nested frame content exposed** becomes visible, and the small
+   Undo card appears inside that media frame. Click **Undo** within 2 seconds and
+   confirm the nested
+   advertisement returns without opening a tab or replaying a click.
+8. Open `overlay-nesting-lab.html?case=hostile`. Click the brief **Undo** once
+   and confirm the fixture's window capture-phase **Page-level control events
+   observed** counter remains `0`, the layer returns, and no blocked popup or new
+   tab appears. Reload the fixture and leave it untouched for at least 8 seconds.
+   The nested advertisement must disappear and stay hidden while the fixture
+   fills the ordinary alert lane, rewrites the original layer, replaces it, and
+   settles. Reload once more and, while the brief notice is present, click
+   **Trigger scroll-time reinsertion** outside it. The page interaction must be
+   delivered, the notice must leave, and the new layer must also disappear
+   without a popup or new tab. In Options
+   > Event Log, confirm the local row identifies the cleanup outcome; do not
+   export or share unrelated browsing rows. Then open
+   `overlay-nesting-lab.html?case=compact-hostile` and confirm its compact
+   interactive attack disappears. Open the `case=benign` variant and confirm
+   all three controls labelled **expected visible** remain visible.
+9. Turn cleanup off and repeat the mutation fixture: the overlay must remain
+   visible and the warning must remain available. Then set Navigation mode Off,
+   enable cleanup, repeat once more, and confirm NavSentinel neither hides nor
+   blocks page content in Off mode.
+10. Restore Smart mode and enable cleanup. Exercise
+   `level7-legit-modal-backdrop.html` and `level9-legit-video-overlay.html`.
+   Confirm the dialog/backdrop and video controls remain visible and usable.
+11. Inspect the page and extension service-worker consoles for new errors. On a
+   pass, reply `AI-29 done; Gate-3 passed on PR #<n> at <40-character SHA>;
+   Chrome <version>`. On any mismatch, reply `AI-29 failed on PR #<n> at <SHA>:
+   <step and observed>` and leave the item open.
+
+Chris recorded AI-29 complete through the exact-head acceptance and merge
+authorization above. Automated Playwright evidence supported but did not replace
+that owner result. The missing templated reply and Chrome version are recorded
+limitations, not a reason to reopen the completed gate.
+
+---
+
 ## Active guide: AI-33 — issue #530 popup trust-pill contrast
 
 Run this only after the #530 implementation PR is ready and every automated

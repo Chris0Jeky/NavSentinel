@@ -2,10 +2,33 @@ import fs from "fs";
 import * as http from "node:http";
 import path from "path";
 import type { BrowserContext, Page, Worker } from "@playwright/test";
+import {
+  assertContentAddressedLoader,
+  assertUiGuardRevision,
+} from "../../scripts/content-loader-contract.mjs";
 
 type GymServerHandle = { baseUrl: string; close: () => Promise<void> };
 const SAFE_GYM_PORT_START = 46000;
 const SAFE_GYM_PORT_ATTEMPTS = 25;
+let builtMainUiGuardRevision: string | undefined;
+
+export function readBuiltMainUiGuardRevision(): string {
+  if (builtMainUiGuardRevision) return builtMainUiGuardRevision;
+  const dist = process.env.EXTENSION_PATH
+    ? path.resolve(process.env.EXTENSION_PATH)
+    : path.resolve(process.cwd(), "extension", "dist");
+  const manifest = JSON.parse(
+    fs.readFileSync(path.join(dist, "manifest.json"), "utf8"),
+  ) as { content_scripts?: Array<{ world?: string; js?: string[] }> };
+  const mainScript = manifest.content_scripts
+    ?.find((entry) => entry.world === "MAIN")
+    ?.js?.[0];
+  if (!mainScript) throw new Error("Built MAIN-world content-script loader is missing");
+  const loader = fs.readFileSync(path.join(dist, mainScript), "utf8");
+  assertContentAddressedLoader(mainScript, loader);
+  builtMainUiGuardRevision = assertUiGuardRevision(loader);
+  return builtMainUiGuardRevision;
+}
 
 export async function getServiceWorker(context: BrowserContext): Promise<Worker> {
   const existing = context.serviceWorkers()[0];
@@ -13,34 +36,77 @@ export async function getServiceWorker(context: BrowserContext): Promise<Worker>
   return context.waitForEvent("serviceworker");
 }
 
+type NavigationSettingsPatch = {
+  defaultMode?: "off" | "smart" | "strict";
+  debug?: boolean;
+  autoDismissOverlays?: boolean;
+};
+
+/** Apply a narrow navigation-settings patch without replacing sibling settings. */
+export async function updateNavigationSettings(
+  context: BrowserContext,
+  patch: NavigationSettingsPatch,
+): Promise<void> {
+  const worker = await getServiceWorker(context);
+  await worker.evaluate(async ({ key, navPatch }) => {
+    const result = await chrome.storage.local.get(key);
+    const stored = result[key] && typeof result[key] === "object"
+      ? result[key] as Record<string, unknown>
+      : {};
+    const storedNav = stored.nav && typeof stored.nav === "object"
+      ? stored.nav as Record<string, unknown>
+      : {};
+    await chrome.storage.local.set({
+      [key]: {
+        ...stored,
+        nav: {
+          defaultMode: "smart",
+          debug: false,
+          autoDismissOverlays: false,
+          ...storedNav,
+          ...navPatch,
+        },
+      },
+    });
+  }, { key: "sentinelsuite:settings_v1", navPatch: patch });
+}
+
 export async function getExtensionId(context: BrowserContext): Promise<string> {
   const worker = await getServiceWorker(context);
   return new URL(worker.url()).host;
 }
 
-export async function waitForNavSentinelBridge(page: Page, timeout = 15000): Promise<void> {
+export async function waitForNavSentinelBridge(
+  page: Page,
+  timeout = 15000,
+  expectedGuard = readBuiltMainUiGuardRevision(),
+): Promise<void> {
   try {
     await page.waitForFunction(
-      () =>
+      (expectedGuard) =>
         document.documentElement.getAttribute("data-navsentinel-capture-ready") === "1" &&
-        document.documentElement.getAttribute("data-navsentinel-bridge-ready") === "1",
-      null,
+        document.documentElement.getAttribute("data-navsentinel-bridge-ready") === "1" &&
+        document.documentElement.getAttribute("data-navsentinel-ui-guard") === expectedGuard,
+      expectedGuard,
       { timeout }
     );
   } catch (error) {
     const readiness = await page
       .evaluate(() => ({
         capture: document.documentElement.getAttribute("data-navsentinel-capture-ready"),
-        bridge: document.documentElement.getAttribute("data-navsentinel-bridge-ready")
+        bridge: document.documentElement.getAttribute("data-navsentinel-bridge-ready"),
+        guard: document.documentElement.getAttribute("data-navsentinel-ui-guard"),
       }))
-      .catch(() => ({ capture: null, bridge: null }));
+      .catch(() => ({ capture: null, bridge: null, guard: null }));
     const original = error instanceof Error ? error.message : String(error);
 
     throw new Error(
       `NavSentinel did not initialize on this page (capture=${readiness.capture ?? "missing"}, ` +
-        `bridge=${readiness.bridge ?? "missing"}). If this is an unpacked build from ` +
-        "extension/dist, reload NavSentinel at chrome://extensions before reloading the page; " +
-        `a page reload alone can retain a stale hashed loader. Original error: ${original}`,
+        `bridge=${readiness.bridge ?? "missing"}, guard=${readiness.guard ?? "missing"}; ` +
+        `expected guard=${expectedGuard}). If this is an unpacked build from ` +
+        "extension/dist, its owner must reload NavSentinel at chrome://extensions before " +
+        "reloading the page; browser automation cannot prove that Chrome accepted the new " +
+        `artifact. Original error: ${original}`,
       { cause: error }
     );
   }

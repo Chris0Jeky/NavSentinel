@@ -50,6 +50,7 @@ const ALL_KNOWN_CODES = [
   "clickfix_instruction_pattern",
   "clickfix_paste_instruction",
   "clickfix_captcha_text_with_overlay",
+  "overlay_detected",
   "overlay_injected",
   "form_action_changed",
   "password_injected",

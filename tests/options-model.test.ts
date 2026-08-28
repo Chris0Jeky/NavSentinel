@@ -146,7 +146,7 @@ describe("parseIntSafe", () => {
 
 function makeSuiteSettings(): SuiteSettings {
   return {
-    nav: { defaultMode: "smart", debug: false },
+    nav: { defaultMode: "smart", debug: false, autoDismissOverlays: false },
     credential: {
       mode: "smart",
       promptOnUntrustedDomain: true,
@@ -166,9 +166,10 @@ describe("Options settings patch and rebase (#558)", () => {
     const draft = makeSuiteSettings();
     draft.credential.similarity.maxDistance = 5;
     draft.nav.debug = true;
+    draft.nav.autoDismissOverlays = true;
 
     expect(deriveOptionsSettingsPatch(baseline, draft)).toEqual({
-      nav: { debug: true },
+      nav: { debug: true, autoDismissOverlays: true },
       credential: { similarity: { maxDistance: 5 } },
     });
   });

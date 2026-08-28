@@ -277,7 +277,10 @@ export function matchesInstructionPattern(text: string): boolean {
  * at least 25% of the viewport, with a z-index above 100. Also checks for
  * open <dialog> elements.
  */
-export function findClickFixOverlay(root: Document = document): Element | null {
+export function findClickFixOverlay(
+  root: Document = document,
+  accept?: (element: Element) => boolean,
+): Element | null {
   const vw = Math.max(window.innerWidth, 1);
   const vh = Math.max(window.innerHeight, 1);
   const viewportArea = vw * vh;
@@ -292,27 +295,45 @@ export function findClickFixOverlay(root: Document = document): Element | null {
       const rect = (dialog as HTMLElement).getBoundingClientRect();
       if (rect && rect.width > 0 && rect.height > 0) {
         const coverage = (rect.width * rect.height) / viewportArea;
-        if (coverage >= minCoverage) return dialog;
+        if (coverage >= minCoverage && (!accept || accept(dialog))) return dialog;
       }
     }
   } catch {
     // dialog selector may not be supported
   }
 
-  // Check direct children of body and their immediate children (covers most
-  // real-world overlay patterns without scanning the entire DOM).
-  // Overlays are almost always direct children of <body> or at most one
-  // level deep for framework wrappers.
-  const body = root.body;
-  if (!body) return null;
-
+  // Keep the initial scan bounded even on pathological documents. Candidates
+  // are ordered from the most recently appended/frontmost-looking nodes first.
+  // Direct documentElement children cover malformed/ad-tech documents that put
+  // a full-frame iframe beside <head>/<body> (the structure observed in AI-29),
+  // while body children plus one wrapper level preserve the ordinary SPA path.
+  const maxCandidates = 128;
+  const seen = new Set<Element>();
   const candidates: Element[] = [];
-  for (let i = 0; i < body.children.length; i++) {
-    const child = body.children[i]!;
-    candidates.push(child);
-    // Also check one level of children for framework wrappers
-    for (let j = 0; j < child.children.length; j++) {
-      candidates.push(child.children[j]!);
+  const addCandidate = (candidate: Element): void => {
+    if (candidates.length >= maxCandidates || seen.has(candidate)) return;
+    seen.add(candidate);
+    candidates.push(candidate);
+  };
+
+  const documentElement = root.documentElement;
+  if (documentElement) {
+    for (let i = documentElement.children.length - 1; i >= 0; i--) {
+      const child = documentElement.children[i]!;
+      if (child === root.head || child === root.body) continue;
+      addCandidate(child);
+    }
+  }
+
+  const body = root.body;
+  if (body) {
+    for (let i = body.children.length - 1; i >= 0 && candidates.length < maxCandidates; i--) {
+      const child = body.children[i]!;
+      addCandidate(child);
+      // Also check one level of children for framework wrappers.
+      for (let j = child.children.length - 1; j >= 0 && candidates.length < maxCandidates; j--) {
+        addCandidate(child.children[j]!);
+      }
     }
   }
 
@@ -330,7 +351,7 @@ export function findClickFixOverlay(root: Document = document): Element | null {
     const coverage = (rect.width * rect.height) / viewportArea;
     if (coverage < minCoverage) continue;
 
-    return el;
+    if (!accept || accept(el)) return el;
   }
   return null;
 }

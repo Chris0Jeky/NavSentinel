@@ -76,6 +76,7 @@ versionEl.textContent = `v${chrome.runtime.getManifest().version}`;
 // DOM references
 const navModeSeg = document.getElementById("navModeSeg") as HTMLDivElement;
 const navDebugEl = document.getElementById("navDebug") as HTMLButtonElement;
+const autoDismissOverlaysEl = document.getElementById("dismiss") as HTMLButtonElement;
 const credModeSeg = document.getElementById("credModeSeg") as HTMLDivElement;
 const blockHttpEl = document.getElementById("blockHttpPasswordSubmit") as HTMLButtonElement;
 const warnPasteEl = document.getElementById("warnOnPaste") as HTMLButtonElement;
@@ -179,6 +180,7 @@ function initToggle(el: HTMLButtonElement): void {
 }
 
 initToggle(navDebugEl);
+initToggle(autoDismissOverlaysEl);
 initToggle(blockHttpEl);
 initToggle(warnPasteEl);
 initToggle(promptUntrustedEl);
@@ -346,11 +348,20 @@ function renderEventLog(log: EventLogEntry[]): void {
     const meta = document.createElement("span");
     meta.className = "event-meta";
     const parts: string[] = [];
+    if (event.pageSite && event.pageSite !== event.site) parts.push(`page=${event.pageSite}`);
     if (event.site) parts.push(event.site);
     if (event.destHost) parts.push(`→ ${event.destHost}`);
     if (typeof event.score === "number") parts.push(`score=${event.score}`);
     if (event.reasons?.length) {
       parts.push(event.reasons.slice(0, 4).join(", "));
+    }
+    const cleanupOutcome = event.extra?.overlayCleanupOutcome;
+    if (typeof cleanupOutcome === "string") {
+      parts.push(`cleanup=${cleanupOutcome}`);
+    }
+    const cleanupActive = event.extra?.overlayCleanupActive;
+    if (typeof cleanupActive === "number" && Number.isFinite(cleanupActive)) {
+      parts.push(`tracked=${cleanupActive}`);
     }
     meta.textContent = parts.join(" · ");
 
@@ -437,6 +448,7 @@ async function refreshDomainProfiles(): Promise<void> {
 function renderSettings(settings: SuiteSettings): void {
   setSegValue(navModeSeg, settings.nav.defaultMode);
   setToggle(navDebugEl, settings.nav.debug);
+  setToggle(autoDismissOverlaysEl, settings.nav.autoDismissOverlays);
   setSegValue(credModeSeg, settings.credential.mode);
   setToggle(blockHttpEl, settings.credential.blockHttpPasswordSubmit);
   setToggle(warnPasteEl, settings.credential.warnOnPaste);
@@ -453,6 +465,7 @@ function readSettingsDraft(): SuiteSettings {
     nav: {
       defaultMode: getSegValue(navModeSeg) as SuiteSettings["nav"]["defaultMode"],
       debug: getToggle(navDebugEl),
+      autoDismissOverlays: getToggle(autoDismissOverlaysEl),
     },
     credential: {
       mode: getSegValue(credModeSeg) as CredMode,

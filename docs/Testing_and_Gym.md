@@ -169,7 +169,23 @@ It currently covers:
 - RW-07 fake re-auth interstitial prompt
 - password-paste warning and trusted-domain persistence
 - options-page trusted-domain normalization
+- options-page opt-in overlay-cleanup persistence
+- popup auto-dismiss quick-control persistence
 - options import/export round-trip behavior
+- the opt-in fast baseline hides a bounded batch of up to five pre-existing
+  high-severity foreground overlays before interaction, exposes the intended
+  page target without replaying a click, groups Undo, and leaves Navigation Off
+  inert (`evasion-02` and `evasion-12`)
+- delayed high-severity overlay auto-dismissal with an Undo restore path; the
+  default-disabled case remains visible and warning-only
+- a cross-origin media-frame reproduction with a maximum-z-index, no-src iframe
+  directly beneath the child `<html>` and a static `#container` inside it; the
+  parent-frame suppression and Undo path are exercised without new permissions
+- a twelve-child-frame matrix combining settled, delayed, body-direct, one-wrapper,
+  batched, disabled/Off, and benign cases; it also guards against the cleanup
+  toast recursively classifying itself in a small child viewport
+- blocked and prompted high-severity click overlays both hide with Undo while
+  the intercepted navigation remains blocked
 - a dedicated rollback lane for redirect recovery affordances
 - RW-15 bank/security alert redirect recovery
 - a dedicated live-web sanity lane
@@ -332,8 +348,48 @@ suppress ClickFix detection to avoid false positives.
 CDS evasion fixtures test gradient scoring and composite escalation against near-threshold signals:
 opacity just above threshold, viewport coverage just below, labeled overlays, z-index boundaries,
 composite multi-signal evasion, delayed injection, pointer-events bypass, clip-path hiding,
-filter opacity, transform scale, and shadow DOM hiding.
+filter opacity, transform scale, shadow DOM hiding, and stacked foreground overlays.
 Run with the default E2E lane. Tests: `tests/e2e/evasion.spec.ts`.
+
+Nested-frame overlay cleanup uses `overlay-nesting-lab.html`,
+`overlay-nesting-frame.html`, and `overlay-nesting-stress.html`. The regression
+and Phase-2 projects in `tests/e2e/overlay-cleanup-nesting.spec.ts` cover the
+exact real-world document shape and the mixed twelve-frame matrix. The hostile
+case also fills the ordinary alert lane, rewrites an already-hidden layer,
+replaces it, injects another layer on scroll, and counts pointer, mouse, touch,
+click, and keyboard input in page-owned window capture listeners. Mouse Dismiss
+and keyboard Undo must each perform their intended extension action while that
+count remains zero. The hostile page also retargets its realm-visible event path
+to the extension host; the test therefore requires the synchronous MAIN-world
+loader to retain pristine host ownership while page-replaced mouse-coordinate
+and keyboard-key accessors remain unconsulted. It resolves the actual mouse
+control with captured list/rectangle accessors or the keyboard control with the
+captured shadow-focus accessor. The
+`compact-hostile` case proves a 51% by 51% click-capturing layer is hidden, while
+the `benign` case visibly labels and preserves its small non-interactive, low-z,
+and accessible-dialog controls.
+Sustained checks sample at render-frame cadence with a 100 ms watchdog for
+off-screen frames that Chromium throttles, and attach the complete JSON timeline.
+`mutation-05-sequential-overlays.html` separately covers independently delayed
+layers that remain connected: one grouped Undo, Dismiss-without-restoration,
+page-owned display changes, cleanup-disabled behavior, and Navigation Off.
+
+The final synchronous MAIN-world loader is content-addressed **after** its
+post-build guard is installed. `npm run check:content-loader` verifies that the
+manifest URL matches those final bytes and contains the current UI-guard
+revision. CI reports this as a named contract before browser tests, while every
+shared Playwright page and nested overlay frame also requires that runtime
+revision. A disk-identity failure therefore points to packaging; a missing or
+old runtime marker points to extension initialization or an artifact that the
+browser did not accept. This catches build-tool and browser-contract drift more
+precisely than an overlay visibility assertion alone.
+
+Overlay-cleanup E2E assertions use a visibility timeline after the first hidden
+state. A pass requires every sampled attack layer to remain hidden for the full
+dwell window; the complete JSON timeline is attached to the Playwright result.
+CI keeps one retry for diagnosis but uses `failOnFlakyTests`, so a retry-only
+pass is still red. JUnit, HTML, and `test-results` evidence upload on every E2E
+job, including failures; do not infer success by scraping the list reporter.
 
 ### Stress lane
 
@@ -362,34 +418,47 @@ old content-script loader can fail with a console error such as `Failed to fetch
 dynamically imported module ... assets/<old-hash>.js`. Reloading that page alone
 does not refresh Chrome's extension runtime.
 
-Use this sequence after **every** rebuild:
+Use this sequence after **every** rebuild. Loading or reloading the unpacked
+extension is owner-only: agents must not navigate to or control
+`chrome://extensions`, nor attempt an alternate reload workaround.
 
-1. Let the build finish and pause any watcher while doing the manual trial.
-2. Open `chrome://extensions` and click **Reload** on NavSentinel.
-3. Reload the Gym or target page only after the extension reload completes.
-4. Confirm that the current document has both readiness markers:
+1. The agent finishes the build and reports the exact Git head, `extension/dist`
+   path, and expected marker values.
+2. The owner opens `chrome://extensions` and loads or clicks **Reload** on
+   NavSentinel.
+3. The owner reloads the Gym or target page only after the extension reload
+   completes, then confirms that step to the agent.
+4. Confirm that the current document has all three artifact/readiness markers:
 
    ```js
    ({
      capture: document.documentElement.getAttribute("data-navsentinel-capture-ready"),
-     bridge: document.documentElement.getAttribute("data-navsentinel-bridge-ready")
+     bridge: document.documentElement.getAttribute("data-navsentinel-bridge-ready"),
+     guard: document.documentElement.getAttribute("data-navsentinel-ui-guard")
    })
    ```
 
-   Both values must be `"1"`. A missing value means the current page is not
-   protected by a fully initialized NavSentinel content bridge. Reload the
-   extension first, then reload the page again.
+   `capture` and `bridge` must be `"1"`; `guard` must equal the 12-character
+   revision printed by the exact build. That value is derived from the final
+   guard template, so it changes automatically with the guard or imported MAIN
+   bundle. A missing or old value means the current page does not prove the
+   expected artifact. The owner
+   repeats the extension reload, then the page reload; the agent may inspect the
+   claimed target tab after confirmation.
 
 Popup activity is historical and can include events from earlier documents. It
 does not prove that NavSentinel initialized on the page currently under test.
-The readiness markers prove current-page initialization, but they do not identify
-which source revision produced the loaded artifact.
+The capture and bridge markers prove current-page initialization but do not
+identify which post-processed guard revision ran. The guard marker plus
+content-addressed manifest URL provide that artifact-level distinction; the
+owner's reload confirmation remains required.
 
 ## Effective manual testing workflow
 
-1. Run `npm run build`.
-2. Load `extension/dist` into Chromium, or click **Reload** for an existing
-   unpacked NavSentinel installation.
+1. The agent runs `npm run build`, records the exact head and artifact path, and
+   stops at the browser-install boundary.
+2. The owner loads `extension/dist` into Chrome, or clicks **Reload** for an
+   existing unpacked NavSentinel installation, then confirms completion.
 3. Start `npm run gym:serve`.
 4. Open the Gym index page.
 5. Run the relevant level in `smart` mode first.
