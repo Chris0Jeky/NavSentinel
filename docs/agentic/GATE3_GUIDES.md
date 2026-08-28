@@ -48,16 +48,20 @@ check for its current head is green.
    artifact. Leave the page open and wait for the visible **Human
    fallback countdown** to reach zero (the fixture's 10-second fallback; no
    click is needed). Confirm the fake session overlay is hidden automatically,
-   the timing line identifies the human fallback timer, the toast says
-   NavSentinel hid it, the underlying page is usable, and no popup or navigation
-   occurs. Click **Undo** and confirm the same overlay is visible again.
+   the timing line identifies the human fallback timer, a small **Overlay hidden;
+   still watching** status with **Undo** appears, the underlying page is usable,
+   and no popup or navigation occurs. The status leaves after about 2 seconds or
+   the next pointer interaction outside it, so be ready at the end of the visible
+   countdown and click **Undo** promptly. Confirm the same overlay is visible
+   again; reload and repeat this step if the brief recovery window expires.
 5. With cleanup still enabled, open the popup once and confirm its checkbox is
    still on. Then open `evasion-02-size-34pct.html` and do not interact with the
    page. Normally within about 500 ms after DOM readiness (allow up to 2 seconds
    for this manual check), confirm the pink high-severity trap disappears
    automatically, the visible **Real Link** is exposed, no popup/navigation
-   occurs, and the card contains **NavSentinel hid suspicious overlays**. Click
-   **Undo** and confirm the trap returns without any click being
+   occurs, and the small card contains **Overlay hidden; still watching** with
+   no separate Dismiss button. Click **Undo** within its 2-second recovery
+   window and confirm the trap returns without any click being
    synthesized or replayed. Then click the restored trap once to exercise the
    fallback: the new tab must stay blocked, the trap must hide again, and the
    card must contain **(overlay hidden)** with Undo. A trap that stays until this
@@ -65,25 +69,31 @@ check for its current head is green.
    succeeds.
 6. Open `evasion-12-multiple-overlays.html` without interacting. Confirm both
    stacked traps disappear within the same 2-second allowance, **Real Link** is
-   exposed, no tab/navigation occurs, and one card contains **NavSentinel hid
-   suspicious overlays**. Click **Undo** once and confirm both trap
+   exposed, no tab/navigation occurs, and one small card contains **Overlay
+   hidden; still watching**. Click **Undo** within its brief recovery window and
+   confirm both trap
    layers return and stay restored. Then open
    `mutation-05-sequential-overlays.html`, wait for its 10-second human fallback
-   and the second delayed layer, and confirm both layers stay hidden under one
-   Undo card. Click **Undo** once and confirm both return and remain restored.
+   and the second delayed layer, and confirm both layers stay hidden. Use the
+   brief Undo notice created by the delayed cleanup (reload and repeat if its
+   2-second window expires) and confirm one Undo restores the grouped layers and
+   they remain restored.
 7. Open `overlay-nesting-lab.html?case=exact` without interacting. Confirm the
    outer synthetic media frame remains present but its nested advertisement
-   disappears, **Nested frame content exposed** becomes visible, and the Undo
-   card appears inside that media frame. Click **Undo** and confirm the nested
+   disappears, **Nested frame content exposed** becomes visible, and the small
+   Undo card appears inside that media frame. Click **Undo** within 2 seconds and
+   confirm the nested
    advertisement returns without opening a tab or replaying a click.
-8. Open `overlay-nesting-lab.html?case=hostile` and leave it untouched for at
-   least 8 seconds. The nested advertisement must disappear and stay hidden
-   while the fixture fills the ordinary alert lane, rewrites the original
-   layer, replaces it, and settles. Click NavSentinel's **Dismiss** first and
-   confirm the fixture's window capture-phase **Page-level control events
-   observed** counter remains `0` with no blocked popup or new tab. Then click
-   **Trigger scroll-time reinsertion**; the new
-   layer must also disappear without reopening the dismissed notice. In Options
+8. Open `overlay-nesting-lab.html?case=hostile`. Click the brief **Undo** once
+   and confirm the fixture's window capture-phase **Page-level control events
+   observed** counter remains `0`, the layer returns, and no blocked popup or new
+   tab appears. Reload the fixture and leave it untouched for at least 8 seconds.
+   The nested advertisement must disappear and stay hidden while the fixture
+   fills the ordinary alert lane, rewrites the original layer, replaces it, and
+   settles. Reload once more and, while the brief notice is present, click
+   **Trigger scroll-time reinsertion** outside it. The page interaction must be
+   delivered, the notice must leave, and the new layer must also disappear
+   without a popup or new tab. In Options
    > Event Log, confirm the local row identifies the cleanup outcome; do not
    export or share unrelated browsing rows. Then open
    `overlay-nesting-lab.html?case=compact-hostile` and confirm its compact

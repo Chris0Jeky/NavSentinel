@@ -21,6 +21,8 @@
     #low-z-overlay { z-index: 99; background: rgba(30, 60, 90, 0.82); }
     #small-overlay { inset: 12px auto auto 12px; width: 120px; height: 72px; font-size: 11px; }
     #compact-hostile { inset: 12px auto auto 12px; width: 51vw; height: 51vh; }
+    #accessible-error-dialog { position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center; background: #111; color: #fff; }
+    #accessible-error-confirm { position: absolute; right: 12px; bottom: 12px; min-width: 72px; min-height: 36px; }
   </style>
   <script>
     const fixtureCase = new URLSearchParams(location.search).get("case") || "exact";
@@ -73,7 +75,7 @@
       document.documentElement.dataset.hostilePhase = "node-reinserted";
     }
 
-    if (fixtureCase === "exact" || fixtureCase === "multiple" || fixtureCase === "hostile") {
+    if (fixtureCase === "exact" || fixtureCase === "multiple" || fixtureCase === "hostile" || fixtureCase === "accessible-error") {
       addHtmlDirectFrame("exact-overlay-frame", "Synthetic nested advertisement");
     }
 
@@ -248,6 +250,27 @@
         document.body.appendChild(overlay);
       }
 
+      if (fixtureCase === "accessible-error") {
+        const dialog = document.createElement("div");
+        dialog.id = "accessible-error-dialog";
+        dialog.setAttribute("role", "dialog");
+        dialog.setAttribute("aria-modal", "true");
+        dialog.setAttribute("aria-labelledby", "accessible-error-title");
+        const title = document.createElement("h2");
+        title.id = "accessible-error-title";
+        title.textContent = "Synthetic player error";
+        const confirm = document.createElement("button");
+        confirm.id = "accessible-error-confirm";
+        confirm.type = "button";
+        confirm.textContent = "OK";
+        confirm.addEventListener("click", () => {
+          document.documentElement.dataset.dialogConfirmCount = "1";
+          dialog.remove();
+        });
+        dialog.append(title, confirm);
+        document.body.appendChild(dialog);
+      }
+
       if (fixtureCase === "benign") {
         const dialog = document.createElement("div");
         dialog.id = "benign-dialog";
@@ -275,5 +298,12 @@
 <body>
   <h1 id="underlay">Nested frame content exposed</h1>
   <p>The outer media frame intentionally has no qualifying stacking level.</p>
+  <button id="outside-toast-target" type="button">Continue synthetic playback</button>
+  <script>
+    document.getElementById("outside-toast-target").addEventListener("pointerdown", () => {
+      const current = Number(document.documentElement.dataset.outsideInteractionCount || "0");
+      document.documentElement.dataset.outsideInteractionCount = String(current + 1);
+    });
+  </script>
 </body>
 </html>

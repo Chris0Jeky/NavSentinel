@@ -222,11 +222,95 @@ test("nested cleanup hides the exact cross-origin frame pattern and Undo restore
     await expect(page.locator("#media-frame")).toBeVisible();
     await expect(frame.locator("#exact-overlay-frame")).toBeHidden({ timeout: 4000 });
     await expect(frame.locator("#underlay")).toBeVisible();
-    await waitForFrameToast(frame, /hid suspicious overlays/i);
+    await waitForFrameToast(frame, /overlay hidden/i);
     expect(context.pages()).toHaveLength(pageCount);
 
     await clickFrameToastButton(frame, "Undo");
     await expect(frame.locator("#exact-overlay-frame")).toBeVisible();
+    expect(context.pages()).toHaveLength(pageCount);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("cleanup recovery notice is small and leaves after two seconds or an outside interaction @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+  const { page, context, cleanup } = await setupNestedTest("overlay-nesting-lab.html?case=exact");
+
+  try {
+    await updateNavigationSettings(context, { autoDismissOverlays: true });
+    await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
+    await waitForNavSentinelBridge(page);
+    let frame = await childFrame(page, "exact");
+    await waitForFrameToast(frame, /overlay hidden/i);
+
+    const notice = frame.locator("#__navsentinel_toast_host .wrap[data-persistent='true']");
+    await expect(notice).toBeVisible();
+    const noticeBox = await notice.boundingBox();
+    expect(noticeBox).not.toBeNull();
+    expect(noticeBox!.width).toBeLessThanOrEqual(300);
+    expect(noticeBox!.height).toBeLessThanOrEqual(72);
+    await expect(notice.getByRole("button", { name: "Undo", exact: true })).toBeVisible();
+    await expect(notice.getByRole("button", { name: "Dismiss", exact: true })).toHaveCount(0);
+
+    await frame.locator("#outside-toast-target").click();
+    await expect.poll(() => frame.evaluate(() =>
+      document.documentElement.dataset.outsideInteractionCount,
+    )).toBe("1");
+    await expect(notice).toHaveCount(0);
+    await expect(frame.locator("#exact-overlay-frame")).toBeHidden();
+
+    await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
+    await waitForNavSentinelBridge(page);
+    frame = await childFrame(page, "exact");
+    await waitForFrameToast(frame, /overlay hidden/i);
+    await expect(frame.locator("#__navsentinel_toast_host .wrap[data-persistent='true']"))
+      .toHaveCount(0, { timeout: 3000 });
+    await expect(frame.locator("#exact-overlay-frame")).toBeHidden();
+  } finally {
+    await cleanup();
+  }
+});
+
+test("cleanup notice briefly yields to a preserved accessible player-error dialog @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+  const { page, context, cleanup } = await setupNestedTest(
+    "overlay-nesting-lab.html?case=accessible-error",
+  );
+
+  try {
+    await updateNavigationSettings(context, { autoDismissOverlays: true });
+    const pageCount = context.pages().length;
+    await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
+    await waitForNavSentinelBridge(page);
+    const frame = await childFrame(page, "accessible-error");
+    await waitForFrameToast(frame, /overlay hidden/i);
+
+    await expect(frame.locator("#exact-overlay-frame")).toBeHidden();
+    const dialog = frame.getByRole("dialog", { name: "Synthetic player error" });
+    const confirm = dialog.getByRole("button", { name: "OK", exact: true });
+    const notice = frame.locator("#__navsentinel_toast_host .brief-recovery");
+    await expect(dialog).toBeVisible();
+    await expect(confirm).toBeVisible();
+    await expect(notice).toBeVisible();
+
+    const noticeBox = await notice.boundingBox();
+    const confirmBox = await confirm.boundingBox();
+    expect(noticeBox).not.toBeNull();
+    expect(confirmBox).not.toBeNull();
+    expect(
+      noticeBox!.x < confirmBox!.x + confirmBox!.width &&
+      noticeBox!.x + noticeBox!.width > confirmBox!.x &&
+      noticeBox!.y < confirmBox!.y + confirmBox!.height &&
+      noticeBox!.y + noticeBox!.height > confirmBox!.y,
+    ).toBe(true);
+
+    await expect(notice).toHaveCount(0, { timeout: 3000 });
+    await confirm.click();
+    await expect.poll(() => frame.evaluate(() =>
+      document.documentElement.dataset.dialogConfirmCount,
+    )).toBe("1");
+    await expect(dialog).toHaveCount(0);
     expect(context.pages()).toHaveLength(pageCount);
   } finally {
     await cleanup();
@@ -260,7 +344,7 @@ test("toast mouse and keyboard controls do not leak capture-phase input into the
     await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
     await waitForNavSentinelBridge(page);
     let frame = await childFrame(page, "hostile");
-    await waitForFrameToast(frame, /hid suspicious overlays/i);
+    await waitForFrameToast(frame, /overlay hidden/i);
     await expect.poll(() => frame.evaluate(() =>
       document.documentElement.dataset.controlPathRetargeted,
     )).toBe("true");
@@ -274,8 +358,8 @@ test("toast mouse and keyboard controls do not leak capture-phase input into the
     });
     const toastHost = frame.locator("#__navsentinel_toast_host");
     await expect(toastHost.getByRole("button", { name: "Dismiss", exact: true }))
-      .toHaveCount(2);
-    await toastHost.locator(".wrap[data-persistent='true']")
+      .toHaveCount(1);
+    await toastHost.locator(".wrap:not([data-persistent='true'])")
       .getByRole("button", { name: "Dismiss", exact: true })
       .click();
     await expect.poll(() => frame.evaluate(() =>
@@ -283,7 +367,7 @@ test("toast mouse and keyboard controls do not leak capture-phase input into the
     )).toBe(0);
     await expect.poll(() => frame.evaluate(() =>
       !document.querySelector("#__navsentinel_toast_host")?.shadowRoot
-        ?.querySelector(".wrap[data-persistent='true']"),
+        ?.querySelector(".wrap:not([data-persistent='true'])"),
     )).toBe(true);
     await expect(frame.locator("#exact-overlay-frame")).toBeHidden();
     await expect.poll(() => frame.evaluate(() =>
@@ -294,7 +378,7 @@ test("toast mouse and keyboard controls do not leak capture-phase input into the
     await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
     await waitForNavSentinelBridge(page);
     frame = await childFrame(page, "hostile");
-    await waitForFrameToast(frame, /hid suspicious overlays/i);
+    await waitForFrameToast(frame, /overlay hidden/i);
     await pressFrameToastButton(frame, "Undo");
     await expect.poll(() => frame.evaluate(() =>
       Number(document.documentElement.dataset.pageControlEventCount ?? "0"),
@@ -443,6 +527,12 @@ test("nested cleanup handles a twelve-frame mixed nesting matrix without touchin
     }
 
     await expect(page.locator("#matrix > iframe")).toHaveCount(12);
+    for (const [index, fixtureCase] of cases.entries()) {
+      if (fixtureCase === "benign") continue;
+      const frame = await childFrame(page, fixtureCase, index);
+      await expect(frame.locator("#__navsentinel_toast_host .wrap[data-persistent='true']"))
+        .toHaveCount(0, { timeout: 3000 });
+    }
     expect(context.pages()).toHaveLength(pageCount);
   } finally {
     await cleanup();

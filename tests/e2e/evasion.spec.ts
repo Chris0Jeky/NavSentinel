@@ -165,7 +165,7 @@ test("Evasion 02: opt-in cleanup hides the initial overlay before interaction an
     const trap = page.locator("#trap");
     const pageCountBeforeCleanup = context.pages().length;
     await expect(trap).toBeHidden({ timeout: 2000 });
-    await waitForToastMatch(page, /hid suspicious overlays/i, 3000);
+    await waitForToastMatch(page, /overlay hidden/i, 3000);
     expect(context.pages(), "Initial cleanup must not open or replay a navigation")
       .toHaveLength(pageCountBeforeCleanup);
     expect(await page.locator(".real-link").evaluate((link) => {
@@ -210,7 +210,7 @@ test("Evasion 02: Navigation Off keeps initial cleanup inert until protection is
 
     await updateNavigationSettings(context, { defaultMode: "smart" });
     await expect(trap).toBeHidden({ timeout: 3000 });
-    await waitForToastMatch(page, /hid suspicious overlays/i, 3000);
+    await waitForToastMatch(page, /overlay hidden/i, 3000);
   } finally {
     await cleanup();
   }
@@ -665,7 +665,7 @@ test("Evasion 12: opt-in cleanup hides a bounded overlay batch and Undo restores
     const trapB = page.locator("#trap-b");
     await expect(trapA).toBeHidden({ timeout: 2000 });
     await expect(trapB).toBeHidden({ timeout: 2000 });
-    await waitForToastMatch(page, /hid suspicious overlays/i, 3000);
+    await waitForToastMatch(page, /overlay hidden/i, 3000);
     expect(context.pages(), "Batch cleanup must not open or replay navigation")
       .toHaveLength(pageCountBeforeCleanup);
     expect(await page.locator("#real-link").evaluate((link) => {

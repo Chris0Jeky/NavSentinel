@@ -459,7 +459,7 @@ test.describe("DOM Mutation Monitor", () => {
       await triggerMutationUsingE2EOnlyEvent(page);
       await page.waitForSelector("#malicious-overlay", { state: "attached", timeout: 8000 });
       await expect(page.locator("#malicious-overlay")).toBeHidden();
-      await waitForToastMatch(page, /hid suspicious overlays/i, 8000);
+      await waitForToastMatch(page, /overlay hidden/i, 8000);
 
       await expect.poll(async () => {
         const events = await extractEventLog(context);
@@ -498,7 +498,7 @@ test.describe("DOM Mutation Monitor", () => {
       await page.waitForSelector("#trap-b", { state: "attached", timeout: 8000 });
       await expect(page.locator("#trap-a")).toBeHidden();
       await expect(page.locator("#trap-b")).toBeHidden();
-      await waitForToastMatch(page, /hid suspicious overlays/i, 8000);
+      await waitForToastMatch(page, /overlay hidden/i, 8000);
 
       await page.evaluate(() => {
         const api = (window as typeof window & {
@@ -549,7 +549,7 @@ test.describe("DOM Mutation Monitor", () => {
     }
   });
 
-  test("mutation-05 Dismiss keeps later cleanup active without reopening the card @phase2", async () => {
+  test("mutation-05 brief notice expiry keeps later cleanup active without reopening it @phase2", async () => {
     test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
     const { page, context, cleanup } = await setupFixtureTest(
       "mutation-05-sequential-overlays.html?gymLayerGapMs=650",
@@ -562,14 +562,15 @@ test.describe("DOM Mutation Monitor", () => {
       const originalPageCount = context.pages().length;
       await triggerMutationUsingE2EOnlyEvent(page);
       await page.waitForSelector("#trap-b", { state: "attached", timeout: 8000 });
-      await waitForToastMatch(page, /hid suspicious overlays/i, 8000);
+      await waitForToastMatch(page, /overlay hidden/i, 8000);
 
-      await page.getByRole("button", { name: "Dismiss", exact: true }).click();
+      await expect(page.locator("#__navsentinel_toast_host .brief-recovery"))
+        .toHaveCount(0, { timeout: 3000 });
       await page.evaluate(() => {
         const api = (window as typeof window & {
           __navsentinelMutation05?: { injectNext: (source?: string) => string | null };
         }).__navsentinelMutation05;
-        if (!api?.injectNext("e2e-after-dismiss")) throw new Error("Mutation 05 fixture API unavailable");
+        if (!api?.injectNext("e2e-after-expiry")) throw new Error("Mutation 05 fixture API unavailable");
       });
       await page.waitForSelector("#trap-c", { state: "attached", timeout: 3000 });
       for (const selector of ["#trap-a", "#trap-b", "#trap-c"]) {
@@ -605,7 +606,7 @@ test.describe("DOM Mutation Monitor", () => {
         pageOwned: (element as HTMLElement).dataset.pageOwnedDisplay,
       }))).toEqual({ display: "none", priority: "", pageOwned: "none" });
       await expect(page.locator("#trap-b")).toBeHidden();
-      await waitForToastMatch(page, /hid suspicious overlays/i, 8000);
+      await waitForToastMatch(page, /overlay hidden/i, 8000);
 
       await clickToastButton(page, "Undo");
       await expect(page.locator("#trap-a")).toBeHidden();

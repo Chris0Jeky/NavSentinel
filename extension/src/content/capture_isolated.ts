@@ -34,7 +34,7 @@ import {
   loadReputationFilter,
   reputationEnabled,
 } from "@navsentinel/reputation-runtime";
-import { controlToast, showToast } from "./ui_toast";
+import { controlToast, showOverlayCleanupToast, showToast } from "./ui_toast";
 import { explainReasonCode } from "../shared/explanations";
 import {
   buildClickContextFromEvents,
@@ -1004,12 +1004,7 @@ function handleOverlayCleanupCandidate(alert: MutationAlert): boolean {
       });
       return restored;
     };
-    showToast({
-      message: "NavSentinel hid suspicious overlays; still watching.",
-      ...overlayToastControls(undo),
-      timeoutMs: 0,
-      persistent: true,
-    });
+    showOverlayCleanupToast(undo);
   }
   return true;
 }

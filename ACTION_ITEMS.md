@@ -139,6 +139,18 @@ automated candidate evidence only. Keep AI-29 open until the pushed exact head
 has green hosted CI and Chris owner-reloads that exact artifact and repeats the
 control checks.
 
+**Current candidate UX refinement (2026-08-28):** owner testing accepted the
+remaining rotating-site limitation but found one large Undo/Dismiss card per
+media frame too obstructive. Overlay-cleanup recovery is now a small Undo-only
+status that leaves after 2 seconds or the next trusted outside pointer
+interaction; redirect and security prompts are unchanged. Synthetic Chrome
+coverage proves the outside interaction still reaches the page, expiry does not
+restore the attack, twelve mixed frames shed their notices, and a preserved
+accessible player-error dialog becomes usable after the brief overlap. #593
+tracks the non-reproducible hidden-media redirect observation and #594 tracks
+any future high-confidence nuisance-dialog handling. This is automated
+candidate evidence only; AI-29 remains open for the exact-head owner pass.
+
 **OPEN: AI-36 — #558 popup/Options patch-save synchronization Gate-3.** Run the
 active manual Chrome guide in [`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md)
 against the eventual PR for branch `fix/issue558-patch-save-sync`. Verify the

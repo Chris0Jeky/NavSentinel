@@ -51,6 +51,15 @@ describe("ui_toast", () => {
     return Array.from(wrap.querySelectorAll("button"));
   }
 
+  function showBriefRecovery(message: string, undo: () => void): void {
+    showToast({
+      message,
+      actions: [{ label: "Undo", onClick: undo }],
+      persistent: true,
+      briefRecovery: true,
+    });
+  }
+
   describe("host and shadow DOM setup", () => {
     it("creates host element on first showToast call", () => {
       expect(getHost()).toBeNull();
@@ -235,6 +244,36 @@ describe("ui_toast", () => {
 
       expect(getWraps()).toHaveLength(1);
       expect(getWrap()!.querySelector(".body")!.textContent).toBe("Unrelated warning");
+    });
+
+    it("renders brief recovery as a compact Undo-only status", () => {
+      showBriefRecovery("Overlay hidden; still watching.", vi.fn());
+
+      const wrap = getWrap()!;
+      expect(wrap.classList.contains("brief-recovery")).toBe(true);
+      expect(wrap.getAttribute("role")).toBe("status");
+      expect(wrap.getAttribute("aria-live")).toBe("polite");
+      expect(getButtons().map((button) => button.textContent)).toEqual(["Undo"]);
+    });
+
+    it("expires brief recovery after two seconds without invoking Undo", () => {
+      const undo = vi.fn();
+      const onDismiss = vi.fn();
+      showToast({
+        message: "Overlay hidden; still watching.",
+        actions: [{ label: "Undo", onClick: undo }],
+        onDismiss,
+        persistent: true,
+        briefRecovery: true,
+      });
+
+      vi.advanceTimersByTime(1999);
+      expect(getWraps()).toHaveLength(1);
+      vi.advanceTimersByTime(1);
+
+      expect(getWraps()).toHaveLength(0);
+      expect(undo).not.toHaveBeenCalled();
+      expect(onDismiss).not.toHaveBeenCalled();
     });
   });
 
