@@ -12,15 +12,14 @@ provenance only. Detailed retired procedures moved to
 
 ## Current snapshot
 
-**Snapshot recorded 2026-08-10:** the explicitly waived browser-surface PRs
+**Snapshot refreshed 2026-08-28:** the explicitly waived browser-surface PRs
 #528, #532, #535, #514, #534, #520, #521, #522, #526, #533, and #542 merged
 after refreshed exact-head CI and bounded review. That waiver is not a real-Chrome
 pass. #531 separately merged under its own waiver; it does not establish a
-`measure:fp` or headed-measurement result, and #223 remains open. AI-27 and AI-28
-are resolved; AI-14 remains blocked for future measurement work. AI-29 now holds
-issue #555's opt-in overlay-cleanup browser behavior for an exact-head Gate-3;
-AI-30 holds issue #567's Back/Forward history-integrity fix; and AI-33 holds
-issue #530's popup trust-pill contrast change for an exact-head visual Gate-3.
+`measure:fp` or headed-measurement result, and #223 remains open. AI-27, AI-28,
+and AI-29 are resolved; AI-14 remains blocked for future measurement work. AI-30
+holds issue #567's Back/Forward history-integrity fix, and AI-33 holds issue
+#530's popup trust-pill contrast change for an exact-head visual Gate-3.
 
 **Guided resolution cursor:** `AI-19` (`Resume at: AI-19`; conversational label
 `q-5`). Current ready order: AI-19 → optional AI-24 → AI-23 (low priority).
@@ -31,20 +30,19 @@ repository-local harness, its ACTION_ITEMS/HANDOFF parser, hooks, and CI. Do not
 reintroduce parser, status-enum, hook, tier, or harness machinery through this
 register.
 
-## Open and blocked items
+## Recently resolved item detail
 
-**OPEN: AI-29 - Issue #555 opt-in overlay-cleanup Gate-3.** After the
-implementation PR is ready, exact-head local checks and hosted CI are green,
-build that same head, load `extension/dist` unpacked in a fresh temporary Chrome
-profile, and follow the active AI-29 procedure in
-[`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md). Verify the setting
-defaults off, persists when enabled, hides only the attack fixtures, exposes a
-working Undo, leaves the disabled/Navigation Off cases and benign overlays
-usable, and adds no unexpected console errors. Only Chris can record this
-complete. Reply `AI-29 done; Gate-3 passed on PR #<n> at <40-character SHA>;
-Chrome <version>` or `AI-29 failed on PR #<n> at <SHA>: <step and observed>`.
-This PR-specific gate does not move the general guided-resolution cursor from
-AI-19.
+**RESOLVED: AI-29 - Issue #555 opt-in overlay-cleanup Gate-3.** On 2026-08-28,
+Chris loaded PR #557's exact `ee804fa8d45f34284e073b7054cdc558b14b025d`
+artifact, reported that overlay cleanup works as intended, accepted the remaining
+regular redirect-card control regression, and explicitly authorized merge. The
+Chrome version was not supplied. **Dismiss** and **Allow once** on an ordinary
+redirect guard may remain visibly present but inert; this is a fail-closed UX and
+accessibility regression, not an established navigation bypass, and is tracked
+with the complete evidence boundary and repair oracle in #560. The historical
+attempt records below are retained as at-the-time evidence and do not reopen the
+completed gate. This PR-specific completion does not move the general guided-
+resolution cursor from AI-19.
 
 **Earlier human result (2026-08-27, PR #557 at
 `14e397b154f50b5ea8e1e30ca211404e8cf34bca`): FAILED at step 5.** In a fresh
@@ -139,7 +137,9 @@ automated candidate evidence only. Keep AI-29 open until the pushed exact head
 has green hosted CI and Chris owner-reloads that exact artifact and repeats the
 control checks.
 
-**Current candidate UX refinement (2026-08-28):** owner testing accepted the
+**Final owner result (2026-08-28, PR #557 at
+`ee804fa8d45f34284e073b7054cdc558b14b025d`): PASSED with one accepted tracked
+regression.** Owner testing accepted the
 remaining rotating-site limitation but found one large Undo/Dismiss card per
 media frame too obstructive. Overlay-cleanup recovery is now a small Undo-only
 status that leaves after 2 seconds or the next trusted outside pointer
@@ -148,8 +148,13 @@ coverage proves the outside interaction still reaches the page, expiry does not
 restore the attack, twelve mixed frames shed their notices, and a preserved
 accessible player-error dialog becomes usable after the brief overlap. #593
 tracks the non-reproducible hidden-media redirect observation and #594 tracks
-any future high-confidence nuisance-dialog handling. This is automated
-candidate evidence only; AI-29 remains open for the exact-head owner pass.
+any future high-confidence nuisance-dialog handling. Chris confirmed this exact
+artifact works as intended and authorized merge. A regular redirect guard's
+**Dismiss** and **Allow once** controls may be inert; Chris accepted that
+fail-closed regression for this merge, and #560 now owns its combined hostile-
+frame reproduction and repair.
+
+## Open and blocked items
 
 **OPEN: AI-36 — #558 popup/Options patch-save synchronization Gate-3.** Run the
 active manual Chrome guide in [`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md)
@@ -256,6 +261,9 @@ headed-measurement result and does not waive future methodology.
 
 ## Completed and superseded log
 
+- AI-29 - resolved 2026-08-28: Chris accepted PR #557's exact `ee804fa` overlay
+  behavior and authorized merge; #560 retains the accepted regular redirect-card
+  Dismiss/Allow-once regression.
 - AI-28 — resolved 2026-08-10: #535 records the behavioural-data reset boundary;
   it clears event log, prompt outcomes, adaptive scores, and domain profiles while
   preserving settings, allowlist, and trusted domains.

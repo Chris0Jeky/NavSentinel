@@ -9,10 +9,15 @@
 
 # Human Gate-3 Guides — NavSentinel
 
-## Active guide: AI-29 - issue #555 opt-in overlay cleanup
+## Completed record: AI-29 - issue #555 opt-in overlay cleanup
 
-Run this only after the #555 implementation PR is ready and every automated
-check for its current head is green.
+Completed 2026-08-28 on PR #557 at
+`ee804fa8d45f34284e073b7054cdc558b14b025d`. Chris reported that the exact
+owner-loaded overlay cleanup works as intended, accepted the remaining
+fail-closed regular redirect-card Dismiss/Allow-once regression tracked in #560,
+and explicitly authorized merge. The Chrome version was not supplied. The
+procedure below is retained as evidence of what this gate covered; it is not an
+active action and must not be rerun or inferred from automation alone.
 
 1. Resolve the open PR whose head is `feat/issue555-overlay-cleanup`. Record its
    PR number and 40-character `headRefOid`. In the implementation worktree,
@@ -111,8 +116,10 @@ check for its current head is green.
    Chrome <version>`. On any mismatch, reply `AI-29 failed on PR #<n> at <SHA>:
    <step and observed>` and leave the item open.
 
-Only Chris can record AI-29 complete. Automated Playwright evidence supports but
-does not replace this exact-head manual browser gate.
+Chris recorded AI-29 complete through the exact-head acceptance and merge
+authorization above. Automated Playwright evidence supported but did not replace
+that owner result. The missing templated reply and Chrome version are recorded
+limitations, not a reason to reopen the completed gate.
 
 ---
 
