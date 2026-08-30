@@ -384,7 +384,9 @@ page-owned display changes, cleanup-disabled behavior, and Navigation Off.
 The final synchronous isolated-world capture loader is content-addressed
 **after** its post-build input fence is installed. `npm run check:content-loader`
 verifies that the manifest URL matches those final bytes and contains the
-current UI-guard revision. `tests/e2e/toast-input-fence.spec.ts` drives the
+current UI-guard revision. The MAIN-world loader is the unmodified
+CRXJS-generated stub again and carries no post-build bytes, so it is no longer
+part of this contract. `tests/e2e/toast-input-fence.spec.ts` drives the
 toast controls with real mouse and keyboard input (not synthetic `.click()`),
 including a maximum-z-index layer inserted after the host and a page-forged
 host that must never activate a real control. CI reports this as a named contract before browser tests, while every
