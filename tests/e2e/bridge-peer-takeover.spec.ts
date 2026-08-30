@@ -28,9 +28,18 @@ type FixtureHarness = {
   cleanup: () => Promise<void>;
 };
 
+function requireLoopbackBaseUrl(baseUrl: string): void {
+  const parsed = new URL(baseUrl);
+  const loopbackHosts = new Set(["127.0.0.1", "localhost", "[::1]"]);
+  if (parsed.protocol !== "http:" || !loopbackHosts.has(parsed.hostname)) {
+    throw new Error(`Issue #186 fixture requires a loopback HTTP origin, received ${parsed.origin}`);
+  }
+}
+
 async function openFixture(fixtureCase: FixtureCase): Promise<FixtureHarness> {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running issue #186 E2E tests.");
   const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  requireLoopbackBaseUrl(baseUrl);
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), `navsentinel-186-${fixtureCase}-`));
   let context: BrowserContext | undefined;
   try {
