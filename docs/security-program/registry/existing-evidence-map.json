@@ -1387,9 +1387,7 @@
       "kind": "evidence_lane",
       "label": "Bridge peer document-start ordering model",
       "primary_scenario_id": "NS-ADV-SELF-004",
-      "supporting_scenario_ids": [
-        "NS-ADV-SELF-005"
-      ],
+      "supporting_scenario_ids": [],
       "primary_harm_boundary": "A page-owned MessageChannel peer receives the MAIN-world challenge and changes protection mode, confirmed by an independent local DOM receipt.",
       "role": "mixed",
       "current_oracle": "Trusted bundled Chromium requires the real extension loader, isolated capture, and verified bridge. The fixture separately records peer init, challenge, config acknowledgement, product readiness, benign input, and a typed DOM-only harm receipt.",
@@ -1400,7 +1398,9 @@
       "issue_refs": [
         "#186"
       ],
-      "pr_refs": [],
+      "pr_refs": [
+        "#602"
+      ],
       "paths": [
         "gym/issue186-bridge-peer.html",
         "tests/e2e/bridge-peer-takeover.spec.ts",

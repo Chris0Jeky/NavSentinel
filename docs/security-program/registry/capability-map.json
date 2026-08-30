@@ -197,7 +197,7 @@
       "failure_mode": "Critical sinks require the declared degraded behavior when identity or liveness is unavailable.",
       "known_limitation": "Ten fresh bundled-Chromium profiles rejected the earliest normal authored-page peer before it received a challenge, and a post-readiness peer was also rejected. This measures current document-start ordering only; same-session replay, a genuinely page-reachable pre-page actor, and isolated-world identity remain unproven, so #175/#186 stay open.",
       "issue_refs": ["#175", "#186", "#523"],
-      "pr_refs": ["#185", "#584"]
+      "pr_refs": ["#185", "#599", "#602"]
     },
     {
       "id": "C-05",

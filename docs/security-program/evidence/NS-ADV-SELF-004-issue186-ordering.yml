@@ -2,8 +2,8 @@ schema_version: "1.0.0"
 scenario_id: NS-ADV-SELF-004
 capability_id: C-04
 profile: release_extension
-repository_head: "e4ee9100f26094a0a00ac590c7b62112705e996d"
-extension_build_sha256: "a0915fb5fd004a9895a7d3177619f8fe8a8006dcd862bbbec1af587f443b2b8e"
+repository_head: "cc12019c4aca9d10c14707ea07c3e20ea7a73f95"
+extension_build_sha256: "7192133c4aeaed7c9894ff7970d16d119ac08a22c871a661e88c0ea8eb14a07f"
 browser:
   name: "Playwright bundled Chromium"
   version: "143.0.7499.4"
@@ -12,13 +12,17 @@ fixture:
   role: mixed
   path: "gym/issue186-bridge-peer.html"
   sha256: "1433f532eaef400f8b08ff8839d583dfa6f8781b14651179b23bb782c75afe6d"
+  hash_method: "SHA-256 of Git blob bytes at repository_head"
+  executed_worktree_sha256: "bf9e57581a7ab51edab15dc6c821625ceb79b91a17b2d04f8b3491c322abe85b"
+  executed_worktree_transform: "Git for Windows CRLF checkout of the recorded blob"
   test_path: "tests/e2e/bridge-peer-takeover.spec.ts"
-  test_sha256: "03d6f3ffe01258041cc350eb181b94d69695dacbdf8bc8b560bbe7865e263879"
+  test_sha256: "10aaa7e75f8a213bc3b320ede69b469f6cfdef1dd01decb30ed7cb831bf9deff"
+  executed_test_worktree_sha256: "37f77b13a5962bacf21b9b3f8e983bbf1f6c618c074f95e902f2ba300bcace5b"
 oracle:
   type: independent_harm
   harm_boundary: "A page-owned peer receives a MAIN-world challenge and obtains an acknowledged protection-lowering config change."
   local_artifact_path: "test-results/issue186-ordering-receipt.json"
-  local_receipt_sha256: "8afbb86e6519329fb1db03c0e833043e684437f7b69879aa944371a3d859907a"
+  local_receipt_sha256: "3cb7470c440e54527e890c43508a81a926a10d2bf06579c00d3549a1a6d8be8d"
   sink_receipt_count: 0
   sink_snapshot:
     receipts: []
@@ -30,6 +34,19 @@ oracle:
         config_acknowledgements: 0
         harm_receipts: 0
         product_ready: 10
+        network_violations: 0
+        blocked_browser_platform_attempts: 139
+  control_artifacts:
+    benign:
+      path: "test-results/issue186-benign-network-diagnostics.json"
+      sha256: "e0f9f193aabd88b0b81e7cb59b30861f873ad96c6da88a9ec0cb401de5759745"
+      network_violations: 0
+      blocked_browser_platform_attempts: 11
+    mixed:
+      path: "test-results/issue186-mixed-network-diagnostics.json"
+      sha256: "08632be6a21c30ddc0a228be0b88307bf158b5b2397246470d96fe2e07e3115f"
+      network_violations: 0
+      blocked_browser_platform_attempts: 16
 authority_scope:
   actor: "page-owned top-frame script"
   task: "one document-start init or one trusted mixed-control click"
@@ -51,15 +68,20 @@ limitations:
   - "This measures normal authored-page ordering in one bundled Chromium build, not branded Chrome or open-web reachability."
   - "Same-session replay and a genuinely page-reachable pre-page actor remain unproven."
   - "No privileged add-init-script, CDP injection, or page-external session disclosure was used to force the precondition."
+  - "A pre-launch deny proxy forwarded only the declared loopback origin and retained 139 blocked Chromium platform attempts; this is local fence evidence, not an open-network distribution."
 safety:
   synthetic_only: true
   local_inert_sink: true
+  prelaunch_deny_layer: true
   external_egress_observed: false
   unexpected_egress_attempted: false
   executable_content_present: false
   real_credentials_present: false
 network_violations: []
-blocked_external_attempts: []
+blocked_external_attempts:
+  - class: "Chromium platform CONNECT"
+    distinct_target_count: 3
+    attempt_count: 139
 qualification:
   privacy: "No raw secret, browsing history, credential, or persistent fixture state is collected."
   performance: "No release code changed; this slice does not make a new runtime performance claim."
@@ -70,5 +92,5 @@ verification:
   - "npm run check:perf-budget: 12 of 12 release budgets passed"
   - "npm run typecheck"
   - "npx eslint tests/e2e/bridge-peer-takeover.spec.ts"
-  - "CI=1 Playwright full fixture: 3 passed"
-  - "CI=1 Playwright earliest-peer repeat: 10 passed, 0 challenge or harm receipts"
+  - "CI=1 fenced Playwright full fixture: 3 passed in 50.2 seconds"
+  - "CI=1 fenced Playwright earliest-peer repeat: 10 passed, 0 challenge, harm, or fixture-network-violation receipts; 139 Chromium platform attempts blocked"
