@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Issue 566 child-frame compatibility control</title>
+</head>
+<body data-handler-clicks="0">
+  <a id="child-control" target="_self" href="issue566-destination.html?case=child-native">
+    Child-frame modified anchor
+  </a>
+  <script>
+    const anchor = document.getElementById("child-control");
+
+    function destination(testCase) {
+      const url = new URL("issue566-destination.html", location.href);
+      url.hostname = location.hostname === "127.0.0.1" ? "localhost" : "127.0.0.1";
+      url.searchParams.set("case", testCase);
+      return url.toString();
+    }
+
+    anchor.href = destination("child-native");
+    anchor.addEventListener("click", (event) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      document.body.dataset.handlerClicks = String(Number(document.body.dataset.handlerClicks) + 1);
+      setTimeout(() => window.open(destination("child-handler"), "_blank"), 0);
+    });
+  </script>
+</body>
+</html>

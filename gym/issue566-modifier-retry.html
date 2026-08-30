@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <base target="_blank" />
   <title>Issue 566 - modifier navigation diagnostic</title>
   <style>
     :root { color-scheme: light; font-family: system-ui, sans-serif; }
@@ -11,6 +12,7 @@
     .controls { display: grid; gap: 12px; }
     .controls a { display: block; width: fit-content; padding: 11px 16px; border-radius: 7px; background: #155e75; color: white; }
     .controls a:focus { outline: 3px solid #f59e0b; outline-offset: 3px; }
+    #shadow-host { display: block; width: min(100%, 440px); margin-top: 12px; }
     #event-log { min-height: 7rem; margin: 0; padding: 12px 12px 12px 32px; background: #0f172a; color: #d1fae5; font: 12px/1.5 ui-monospace, monospace; white-space: pre-wrap; }
     .note { color: #475569; font-size: 0.95rem; }
   </style>
@@ -26,15 +28,30 @@
   <section class="card">
     <h2>Controls</h2>
     <div class="controls">
-      <a id="native-control" href="issue566-destination.html?case=native">Plain native control</a>
-      <a id="assign-control" href="issue566-destination.html?case=assign">Timer location.assign control</a>
-      <a id="self-control" href="issue566-destination.html?case=self">Timer window.open _self control</a>
+      <a id="native-control" target="_self" href="issue566-destination.html?case=native">Plain native control</a>
+      <a id="assign-control" target="_self" href="issue566-destination.html?case=assign">Timer location.assign control</a>
+      <a id="self-control" target="_self" href="issue566-destination.html?case=self">Timer window.open _self control</a>
+      <a id="pointer-assign-control" target="_self" href="issue566-destination.html?case=pointer-assign">Pointerdown location.assign control</a>
+      <a id="mouse-assign-control" target="_self" href="issue566-destination.html?case=mouse-assign">Mousedown location.assign control</a>
+      <a id="top-assign-control" target="_top" href="issue566-destination.html?case=top-assign">_top location.assign control</a>
+      <a id="parent-assign-control" target="_parent" href="issue566-destination.html?case=parent-assign">_parent location.assign control</a>
+      <a id="named-assign-control" target="issue566-opener" href="issue566-destination.html?case=named-assign">Named-opener location.assign control</a>
+      <a id="empty-assign-control" target="" href="issue566-destination.html?case=empty-assign">Explicit-empty target location.assign control</a>
+      <a id="base-blank-control" href="issue566-destination.html?case=base">Base-target _blank compatibility control</a>
+      <a id="base-self-open-control" href="issue566-destination.html?case=base-self-open">Base-target _blank delayed _self control</a>
+      <a id="base-replace-control" href="issue566-destination.html?case=base-replace">Base-target _blank delayed replace control</a>
+      <a id="other-name-control" target="issue566-other" href="issue566-destination.html?case=other-name">Other named-context compatibility control</a>
+      <a id="same-site-control" target="_self" href="issue566-destination.html?case=same-site">Same-site popup compatibility control</a>
+      <a id="non-http-control" target="_self" href="javascript:void(0)">Inert non-HTTP compatibility control</a>
+      <div id="shadow-host" data-button-downs="0" data-auxclicks="0" data-anchor-auxclicks="0"></div>
+      <iframe id="child-frame" title="Child-frame compatibility control" src="issue566-modifier-child.html"></iframe>
     </div>
     <p class="note">
-      The second and third controls deliberately retain their native default
-      action. Their one-shot timers model page code that performs a same-tab
-      navigation immediately after the modified gesture. The 127.0.0.1 and
-      localhost hostnames keep the cross-site case entirely local.
+      The attack controls deliberately retain their native default action while
+      page handlers try to spend the same gesture on this opener. The base,
+      same-site, and closed-shadow controls prove that non-isolated handlers
+      remain reachable, but this issue grants them no extra popup authority.
+      The 127.0.0.1 and localhost hostnames keep every case entirely local.
     </p>
   </section>
 
@@ -48,14 +65,19 @@
     <ul>
       <li><strong>Smart or Strict:</strong> one destination tab opens and this Page A stays here.</li>
       <li><strong>Off:</strong> the diagnostic page handler is not isolated, so Page A also navigates.</li>
-      <li>The plain control proves native modifier behavior; the timer controls exercise page-handler isolation and stale opener authority.</li>
-      <li>The <code>window.open _self</code> control should also show <code>Blocked popup: localhost</code>; that toast is the blocked opener action, not the requested child tab.</li>
+      <li>The early-event and effective-target controls exercise page-handler isolation before the native child opens.</li>
+      <li>The base-target, same-site, and closed-shadow handlers remain reachable without gaining opener authority.</li>
+      <li>No early page handler should fire in Smart or Strict, so the isolated controls should not produce a second navigation or a blocked-popup toast.</li>
     </ul>
   </section>
 
   <script>
+    window.name = "issue566-opener";
     const log = document.getElementById("event-log");
     let sequence = 0;
+    const baseReplaceReceipt = "issue566-base-replace-fired";
+    document.documentElement.dataset.baseReplaceFired = sessionStorage.getItem(baseReplaceReceipt) ?? "0";
+    sessionStorage.removeItem(baseReplaceReceipt);
 
     function record(message) {
       const item = document.createElement("li");
@@ -80,11 +102,38 @@
       return destination.toString();
     }
 
-    ["native-control", "assign-control", "self-control"].forEach((id) => {
+    function sameSiteDestination(testCase) {
+      const destination = new URL("issue566-destination.html", location.href);
+      destination.searchParams.set("case", testCase);
+      return destination.toString();
+    }
+
+    const controlCases = {
+      "native-control": "native",
+      "assign-control": "assign",
+      "self-control": "self",
+      "pointer-assign-control": "pointer-assign",
+      "mouse-assign-control": "mouse-assign",
+      "top-assign-control": "top-assign",
+      "parent-assign-control": "parent-assign",
+      "named-assign-control": "named-assign",
+      "empty-assign-control": "empty-assign",
+      "base-blank-control": "base",
+      "base-self-open-control": "base-self-open",
+      "base-replace-control": "base-replace",
+      "other-name-control": "other-name",
+      "same-site-control": "same-site",
+      "non-http-control": "non-http"
+    };
+
+    Object.entries(controlCases).forEach(([id, testCase]) => {
       const anchor = document.getElementById(id);
-      const testCase = id.replace("-control", "");
-      anchor.href = crossSiteDestination(testCase);
-      ["pointerdown", "click", "auxclick"].forEach((eventType) => {
+      if (id === "same-site-control") {
+        anchor.href = sameSiteDestination(testCase);
+      } else if (id !== "non-http-control") {
+        anchor.href = crossSiteDestination(testCase);
+      }
+      ["pointerdown", "mousedown", "click", "auxclick"].forEach((eventType) => {
         anchor.addEventListener(eventType, (event) => {
           record(describe(event));
         });
@@ -122,6 +171,125 @@
       crossSiteDestination("self-timer"),
       ["pointerdown"]
     );
+    installOneShot(
+      "pointer-assign-control",
+      "location.assign",
+      crossSiteDestination("pointer-assign-timer"),
+      ["pointerdown"]
+    );
+    installOneShot(
+      "mouse-assign-control",
+      "location.assign",
+      crossSiteDestination("mouse-assign-timer"),
+      ["mousedown"]
+    );
+    installOneShot(
+      "top-assign-control",
+      "location.assign",
+      crossSiteDestination("top-assign-timer")
+    );
+    installOneShot(
+      "named-assign-control",
+      "location.assign",
+      crossSiteDestination("named-assign-timer")
+    );
+    installOneShot(
+      "parent-assign-control",
+      "location.assign",
+      crossSiteDestination("parent-assign-timer")
+    );
+    installOneShot(
+      "empty-assign-control",
+      "location.assign",
+      crossSiteDestination("empty-assign-timer")
+    );
+
+    ["click", "auxclick"].forEach((eventType) => {
+      document.getElementById("base-blank-control").addEventListener(eventType, (event) => {
+        if (!(event.ctrlKey || event.metaKey || event.button === 1)) return;
+        record(`${describe(event)}; base-target compatibility handler reached`);
+        if (event.type === "click") {
+          setTimeout(() => window.open(crossSiteDestination("base-handler"), "_blank"), 0);
+        }
+      });
+    });
+
+    document.getElementById("base-self-open-control").addEventListener("click", (event) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      record(`${describe(event)}; schedule window.open _self without opener authority`);
+      setTimeout(() => {
+        record("timer fired: base-target window.open _self");
+        window.open(crossSiteDestination("base-self-open-handler"), "_self");
+      }, 50);
+    });
+
+    document.getElementById("base-replace-control").addEventListener("click", (event) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      record(`${describe(event)}; schedule location.replace without opener authority`);
+      setTimeout(() => {
+        sessionStorage.setItem(baseReplaceReceipt, "1");
+        window.location.replace(crossSiteDestination("base-replace-handler"));
+      }, 50);
+    });
+
+    document.getElementById("other-name-control").addEventListener("click", (event) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      record(`${describe(event)}; schedule named-context compatibility popup`);
+      setTimeout(() => window.open(crossSiteDestination("other-name-handler"), "_blank"), 0);
+    });
+
+    document.getElementById("same-site-control").addEventListener("click", (event) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      record(`${describe(event)}; schedule same-site compatibility popup`);
+      setTimeout(() => window.open(sameSiteDestination("same-site-handler"), "_blank"), 0);
+    });
+
+    document.getElementById("non-http-control").addEventListener("click", (event) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      event.preventDefault();
+      record(`${describe(event)}; schedule inert non-HTTP compatibility popup`);
+      setTimeout(() => window.open(sameSiteDestination("non-http-handler"), "_blank"), 0);
+    });
+
+    const shadowHost = document.getElementById("shadow-host");
+    const shadow = shadowHost.attachShadow({ mode: "closed" });
+    shadow.innerHTML = `
+      <style>
+        .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        a, button { min-height: 48px; padding: 10px; }
+      </style>
+      <div class="row">
+        <a target="_self" href="${crossSiteDestination("shadow-anchor")}">Shadow anchor</a>
+        <button type="button">Unrelated shadow control</button>
+      </div>`;
+    const shadowAnchor = shadow.querySelector("a");
+    const shadowButton = shadow.querySelector("button");
+    shadowAnchor.addEventListener("auxclick", () => {
+      shadowHost.dataset.anchorAuxclicks = String(Number(shadowHost.dataset.anchorAuxclicks) + 1);
+    });
+    shadowButton.addEventListener("pointerdown", (event) => {
+      shadowHost.dataset.buttonDowns = String(Number(shadowHost.dataset.buttonDowns) + 1);
+      record(`closed-shadow unrelated ${event.type} button=${event.button} trusted=${event.isTrusted}`);
+    });
+    ["mousedown", "pointerup", "mouseup"].forEach((eventType) => {
+      shadowButton.addEventListener(eventType, (event) => {
+        if (event.type === "mousedown" && event.button === 1) event.preventDefault();
+        record(`closed-shadow unrelated ${event.type} button=${event.button} trusted=${event.isTrusted}`);
+      });
+    });
+    shadowButton.addEventListener("auxclick", (event) => {
+      shadowHost.dataset.auxclicks = String(Number(shadowHost.dataset.auxclicks) + 1);
+      record(`closed-shadow unrelated auxclick button=${event.button} trusted=${event.isTrusted}`);
+    });
+    requestAnimationFrame(() => {
+      const hostRect = shadowHost.getBoundingClientRect();
+      const anchorRect = shadowAnchor.getBoundingClientRect();
+      const buttonRect = shadowButton.getBoundingClientRect();
+      shadowHost.dataset.anchorX = String(anchorRect.left - hostRect.left + anchorRect.width / 2);
+      shadowHost.dataset.anchorY = String(anchorRect.top - hostRect.top + anchorRect.height / 2);
+      shadowHost.dataset.buttonX = String(buttonRect.left - hostRect.left + buttonRect.width / 2);
+      shadowHost.dataset.buttonY = String(buttonRect.top - hostRect.top + buttonRect.height / 2);
+    });
     record("Page A ready");
   </script>
 </body>

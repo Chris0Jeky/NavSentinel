@@ -790,15 +790,11 @@ function buildSilentNavEvent(params: {
 }
 
 function isImmediateWindowOpenTarget(target: unknown): boolean {
-  if (typeof target !== "string" || target === "") return true;
-  const normalized = target.toLowerCase();
-  if (normalized === "_blank") return true;
-  if (normalized === "_self" || normalized === "_top" || normalized === "_parent") return false;
-  try {
-    return target !== window.name;
-  } catch {
-    return true;
-  }
+  if (typeof target !== "string" || !target) return true;
+  return /^_blank$/i.test(target) || (
+    !/^_(self|top|parent)$/i.test(target) &&
+    target !== window.name
+  );
 }
 
 function appendImmediateSilentNav(event: EventLogEntry | null): void {
@@ -1305,16 +1301,19 @@ function tryOpenShadowRoot(el: Element): ShadowRoot | null {
   } catch { return null; }
 }
 
-function findAnchorInShadowRoots(x: number, y: number): HTMLAnchorElement | null {
+function findAnchorInShadowRoots(
+  x: number,
+  y: number,
+  eventPath: EventTarget[],
+): HTMLAnchorElement | null {
   for (const el of document.elementsFromPoint(x, y)) {
+    if (!eventPath.includes(el)) continue;
     const sr = tryOpenShadowRoot(el);
     if (!sr) continue;
     const inner = sr.elementFromPoint(x, y);
     if (inner?.tagName === "A") return inner as HTMLAnchorElement;
     const anc = inner?.closest?.("a");
     if (anc) return anc as HTMLAnchorElement;
-    const first = sr.querySelector("a");
-    if (first) return first as HTMLAnchorElement;
   }
   return null;
 }
@@ -1336,12 +1335,12 @@ function findAnchorFromEvent(e: MouseEvent): HTMLAnchorElement | null {
   // Shadow DOM fallback: composedPath() may not pierce shadow roots in all
   // Chromium builds when called from the extension's isolated world.
   // Scan all elements at click coordinates for shadow roots containing anchors.
-  return findAnchorInShadowRoots(e.clientX, e.clientY);
+  return findAnchorInShadowRoots(e.clientX, e.clientY, path);
 }
 
-function isCrossSiteDestinationHost(destHost: string | null): boolean {
+function isCrossSiteDestinationHost(destHost: string | null | undefined): boolean {
   const siteRegDomain = getRegistrableDomain(siteKeyFromLocation());
-  const destRegDomain = destHost ? getRegistrableDomain(destHost) : null;
+  const destRegDomain = getRegistrableDomain(destHost ?? "");
   return !!(
     siteRegDomain &&
     destRegDomain &&
@@ -1350,23 +1349,36 @@ function isCrossSiteDestinationHost(destHost: string | null): boolean {
   );
 }
 
-function isSameTabAnchorTarget(anchor: HTMLAnchorElement): boolean {
-  const target = anchor.target.toLowerCase();
-  return !target || target === "_self";
+// 0 = current context, 1 = explicit/effective _blank, 2 = other context.
+function classifyAnchorTarget(anchor: HTMLAnchorElement): 0 | 1 | 2 {
+  const target = anchor.getAttribute("target")
+    ?? document.querySelector<HTMLBaseElement>("base[target]")?.target
+    ?? "";
+
+  // HTML normalizes control-character and markup-shaped target values to a
+  // fresh context. Match that fail-safe browser behavior instead of treating
+  // them as opener aliases.
+  if (/[\t\n\r<]/.test(target)) return 1;
+  const keyword = target.toLowerCase();
+  if ((keyword === "_parent" || keyword === "_top") && window.top !== window) return 2;
+  if (!target || !isImmediateWindowOpenTarget(target)) return 0;
+  return keyword === "_blank" ? 1 : 2;
 }
 
-function shouldIsolateMiddleClickFromPage(e: MouseEvent): boolean {
-  if (settings.defaultMode === "off" || !isTopFrame()) return false;
-  if (!e.isTrusted || e.button !== 1) return false;
-
-  const anchor = findAnchorFromEvent(e);
-  if (!anchor || !isSameTabAnchorTarget(anchor)) return false;
-
-  const parsed = parseDestination(anchor.getAttribute("href") ?? anchor.href);
+function shouldIsolateModifiedAnchorFromPage(
+  e: MouseEvent,
+  anchor: HTMLAnchorElement | null = findAnchorFromEvent(e),
+  parsed = anchor ? parseDestination(anchor.getAttribute("href") ?? anchor.href) : null,
+): boolean {
   return !!(
-    parsed.href &&
-    /^https?:\/\//i.test(parsed.href) &&
-    isCrossSiteDestinationHost(parsed.host)
+    settings.defaultMode !== "off" &&
+    e.isTrusted &&
+    (e.button === 1 || (!e.button && (e.ctrlKey || e.metaKey))) &&
+    isTopFrame() &&
+    anchor &&
+    !classifyAnchorTarget(anchor) &&
+    /^https?:\/\//i.test(parsed?.href ?? "") &&
+    isCrossSiteDestinationHost(parsed?.host)
   );
 }
 
@@ -1655,7 +1667,6 @@ if (chrome?.runtime?.sendMessage && isTopFrame()) {
 window.addEventListener(
   "pointerdown",
   (e) => {
-    if (!(e instanceof PointerEvent)) return;
     // Pointerdown is risk-correlation evidence only. Even a trusted down can be
     // cancelled or followed by page-script navigation, so it must not mint the
     // tab-wide SW rollback allowance before a trusted click is approved.
@@ -1683,24 +1694,20 @@ window.addEventListener(
       reasonCodes: []
     });
     setActiveToken(token);
+    if (shouldIsolateModifiedAnchorFromPage(e)) e.stopImmediatePropagation();
   },
   true
 );
 
-window.addEventListener(
-  "auxclick",
-  (e) => {
-    if (!(e instanceof MouseEvent)) return;
-    if (!shouldIsolateMiddleClickFromPage(e)) return;
-
-    // Keep Chromium's native middle-click default (open one child tab), while
-    // preventing page handlers from reusing the same gesture to navigate the
-    // opener. Location.assign/replace are LegacyUnforgeable, so propagation is
-    // the only point where this duplicate same-tab navigation can be stopped.
-    e.stopImmediatePropagation();
-  },
-  true
-);
+// Keep Chromium's native middle-click default (open one child tab), while
+// preventing page handlers from reusing the same gesture to navigate the
+// opener. Location.assign/replace are LegacyUnforgeable, so propagation is
+// the only point where this duplicate same-tab navigation can be stopped.
+for (const eventType of ["mousedown", "auxclick"] as const) {
+  window.addEventListener(eventType, (e) => {
+    if (shouldIsolateModifiedAnchorFromPage(e)) e.stopImmediatePropagation();
+  }, true);
+}
 
 window.addEventListener(
   "click",
@@ -1759,9 +1766,9 @@ window.addEventListener(
     const currentClickNewTabIntent = e.isTrusted && (e.ctrlKey || e.metaKey);
     const explicitNewTab = e.isTrusted && (!!ctx.explicitNewTabIntent || currentClickNewTabIntent);
     const anchor = findAnchorFromEvent(e);
-    const anchorTarget = (anchor?.target ?? "").toLowerCase();
-    const isBlankAnchor = !!(anchor && anchorTarget === "_blank");
-    const isSameTabAnchor = !!(anchor && isSameTabAnchorTarget(anchor));
+    const anchorTargetKind = anchor ? classifyAnchorTarget(anchor) : 2;
+    const isBlankAnchor = anchorTargetKind === 1;
+    const isSameTabAnchor = anchorTargetKind === 0;
     const parsed = anchor ? parseDestination(anchor.getAttribute("href") ?? anchor.href) : null;
     const isAllowed = parsed?.host
       ? isAllowlisted(allowlist, siteKeyFromLocation(), parsed.host)
@@ -1776,7 +1783,7 @@ window.addEventListener(
 
     const siteRegDomain = getRegistrableDomain(siteKeyFromLocation());
     const destRegDomain = parsed?.host ? getRegistrableDomain(parsed.host) : null;
-    const isCrossSite = isCrossSiteDestinationHost(parsed?.host ?? null);
+    const isCrossSite = isCrossSiteDestinationHost(parsed?.host);
 
     const timeSincePointerdownMs = downForClick
       ? performance.now() - downForClick.ts
@@ -2008,18 +2015,11 @@ window.addEventListener(
     if (decision === "allow") {
       const nativeModifiedAnchor = !!(
         mode !== "off" &&
-        e.isTrusted &&
         anchor &&
         currentClickNewTabIntent
       );
-      if (
-        nativeModifiedAnchor &&
-        topFrame &&
-        isSameTabAnchor &&
-        isCrossSite &&
-        parsed?.href &&
-        /^https?:\/\//i.test(parsed.href)
-      ) {
+      const isolatedModifiedAnchor = shouldIsolateModifiedAnchorFromPage(e, anchor, parsed);
+      if (isolatedModifiedAnchor) {
         // Do not preventDefault: the user's explicit new-tab navigation still
         // belongs to Chromium. Stop only later page handlers that could also
         // spend this gesture on an opener navigation.
