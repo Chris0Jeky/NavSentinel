@@ -50,15 +50,17 @@
           const message = event.data || {};
           state.peerMessages.push(typeof message.type === "string" ? message.type : "unknown");
 
-          if (message.type === "ns-challenge" && typeof message.challenge === "string") {
+          if (message.type === "ns-challenge") {
             state.challengesReceived += 1;
-            channel.port1.postMessage({
-              source: SOURCE,
-              type: "ns-challenge-response",
-              v: VERSION,
-              session,
-              challenge: message.challenge,
-            });
+            if (typeof message.challenge === "string") {
+              channel.port1.postMessage({
+                source: SOURCE,
+                type: "ns-challenge-response",
+                v: VERSION,
+                session,
+                challenge: message.challenge,
+              });
+            }
           } else if (message.type === "ns-bridge-ready") {
             state.peerVerified = true;
             channel.port1.postMessage({

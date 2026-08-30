@@ -7,6 +7,7 @@ import {
   test,
   type BrowserContext,
   type Page,
+  type TestInfo,
 } from "@playwright/test";
 import {
   getGymBaseUrl,
@@ -25,7 +26,19 @@ type FixtureCase = "attack" | "benign" | "mixed";
 type FixtureHarness = {
   context: BrowserContext;
   page: Page;
+  browserVersion: string;
   cleanup: () => Promise<void>;
+};
+
+type PeerReceipt = {
+  profile: number;
+  browserVersion: string;
+  peerInits: number;
+  challengesReceived: number;
+  peerVerified: boolean;
+  configAcknowledged: boolean;
+  harmReached: boolean;
+  productReady: boolean;
 };
 
 function requireLoopbackBaseUrl(baseUrl: string): void {
@@ -66,6 +79,7 @@ async function openFixture(fixtureCase: FixtureCase): Promise<FixtureHarness> {
     return {
       context,
       page,
+      browserVersion: context.browser()?.version() ?? "unknown",
       cleanup: async () => {
         await context?.close();
         if (gym) await gym.close();
@@ -80,20 +94,64 @@ async function openFixture(fixtureCase: FixtureCase): Promise<FixtureHarness> {
   }
 }
 
-test("issue #186 earliest authored-page peer stays outside the verified bridge @regression", async () => {
-  const { page, cleanup } = await openFixture("attack");
-  try {
-    await waitForNavSentinelBridge(page);
-    await expect(page.locator("html")).toHaveAttribute("data-peer-init-sent", "1");
-    await page.waitForTimeout(750);
-    await expect(page.locator("html")).toHaveAttribute("data-challenges-received", "0");
-    await expect(page.locator("html")).toHaveAttribute("data-peer-verified", "0");
-    await expect(page.locator("html")).toHaveAttribute("data-config-acknowledged", "0");
-    await expect(page.locator("html")).toHaveAttribute("data-harm-reached", "0");
-    await expect(page.locator("html")).toHaveAttribute("data-navsentinel-bridge-ready", "1");
-  } finally {
-    await cleanup();
+async function readPeerReceipt(page: Page, profile: number, browserVersion: string): Promise<PeerReceipt> {
+  return page.evaluate(({ receiptProfile, version }) => ({
+    profile: receiptProfile,
+    browserVersion: version,
+    peerInits: Number(document.documentElement.dataset.peerInitSent ?? "0"),
+    challengesReceived: Number(document.documentElement.dataset.challengesReceived ?? "0"),
+    peerVerified: document.documentElement.dataset.peerVerified === "1",
+    configAcknowledged: document.documentElement.dataset.configAcknowledged === "1",
+    harmReached: document.documentElement.dataset.harmReached === "1",
+    productReady: document.documentElement.getAttribute("data-navsentinel-bridge-ready") === "1",
+  }), { receiptProfile: profile, version: browserVersion });
+}
+
+async function attachOrderingReceipt(testInfo: TestInfo, profiles: PeerReceipt[]): Promise<void> {
+  const receipt = {
+    scenarioId: "NS-ADV-SELF-004",
+    fixtureCase: "earliest-authored-page-peer",
+    freshProfiles: profiles.length,
+    totals: {
+      peerInits: profiles.reduce((sum, profile) => sum + profile.peerInits, 0),
+      challengesReceived: profiles.reduce((sum, profile) => sum + profile.challengesReceived, 0),
+      configAcknowledgements: profiles.filter((profile) => profile.configAcknowledged).length,
+      harmReceipts: profiles.filter((profile) => profile.harmReached).length,
+      productReady: profiles.filter((profile) => profile.productReady).length,
+    },
+    profiles,
+  };
+  const receiptPath = path.resolve(process.cwd(), "test-results", "issue186-ordering-receipt.json");
+  fs.mkdirSync(path.dirname(receiptPath), { recursive: true });
+  fs.writeFileSync(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`, "utf8");
+  await testInfo.attach("issue186-ordering-receipt.json", {
+    path: receiptPath,
+    contentType: "application/json",
+  });
+}
+
+test("issue #186 ten earliest authored-page peers stay outside the verified bridge @regression", async ({}, testInfo) => {
+  const receipts: PeerReceipt[] = [];
+  for (let profile = 1; profile <= 10; profile += 1) {
+    const { page, browserVersion, cleanup } = await openFixture("attack");
+    try {
+      await waitForNavSentinelBridge(page);
+      await expect(page.locator("html")).toHaveAttribute("data-peer-init-sent", "1");
+      // Cover the production 3-second half-open handshake timeout before
+      // treating the absence of a challenge or acknowledgement as stable.
+      await page.waitForTimeout(3_250);
+      await expect(page.locator("html")).toHaveAttribute("data-challenges-received", "0");
+      await expect(page.locator("html")).toHaveAttribute("data-peer-verified", "0");
+      await expect(page.locator("html")).toHaveAttribute("data-config-acknowledged", "0");
+      await expect(page.locator("html")).toHaveAttribute("data-harm-reached", "0");
+      await expect(page.locator("html")).toHaveAttribute("data-navsentinel-bridge-ready", "1");
+      receipts.push(await readPeerReceipt(page, profile, browserVersion));
+    } finally {
+      await cleanup();
+    }
   }
+  expect(receipts).toHaveLength(10);
+  await attachOrderingReceipt(testInfo, receipts);
 });
 
 test("issue #186 benign journey keeps product readiness and the local sink clear @regression", async () => {
@@ -116,8 +174,10 @@ test("issue #186 mixed journey rejects a page peer after verified readiness @reg
     await page.locator("#mixed-control").click();
     await expect(page.locator("html")).toHaveAttribute("data-benign-clicks", "1");
     await expect(page.locator("html")).toHaveAttribute("data-peer-init-sent", "1");
-    await page.waitForTimeout(750);
+    await page.waitForTimeout(3_250);
     await expect(page.locator("html")).toHaveAttribute("data-challenges-received", "0");
+    await expect(page.locator("html")).toHaveAttribute("data-peer-verified", "0");
+    await expect(page.locator("html")).toHaveAttribute("data-config-acknowledged", "0");
     await expect(page.locator("html")).toHaveAttribute("data-harm-reached", "0");
     await expect(page.locator("html")).toHaveAttribute("data-navsentinel-bridge-ready", "1");
   } finally {
