@@ -8,16 +8,18 @@ As of 2026-08-30, based on merged programme seed `d2762f296b07bfd650971141bf9bf7
 - 31 stable capabilities across proving-ground, release-integrity, research, agent-future, and optional-native tracks.
 - 11 outcome values and 8 ordered evidence states.
 - 1,512 generated local work units, nine for each scenario. They are not GitHub issues.
-- 63 current-work mappings: 12 Gym levels, 23 RW journeys, 12 evasion fixtures, 4 ClickFix fixtures, 4 DoubleClickjacking fixtures, 6 evidence lanes, and 2 browser-suite mappings.
+- 64 current-work mappings: 12 Gym levels, 23 RW journeys, 12 evasion fixtures, 4 ClickFix fixtures, 4 DoubleClickjacking fixtures, 7 evidence lanes, and 2 browser-suite mappings.
 - 12 deduplicated issue themes and zero new issues created by the seed pass.
 
 ## Evidence ceiling
 
-All 168 canonical scenarios remain `UNMODELLED`. Existing artefacts are reconciled separately: 60 mappings are `MODELLED`, 2 are `UNMODELLED`, and the bounded C-10 overlay nesting vertical is `REGRESSION_PROVEN`. No scenario is claimed as browser-proven, efficacy-measured, release-eligible, universally secure, or anonymous.
+All 168 canonical scenarios remain `UNMODELLED`. Existing artefacts are reconciled separately: 60 mappings are `MODELLED`, 2 are `UNMODELLED`, and 2 bounded lanes are `REGRESSION_PROVEN`: C-10 overlay nesting and the #566 modified-anchor opener-authority matrix. No canonical scenario is promoted by either mapping, and none is claimed as browser-proven, efficacy-measured, release-eligible, universally secure, or anonymous.
 
 The historical corpus result is `INVALID`. The historical false-positive result is `STALE`. The external live-site check and local event-coupled benchmark are `UNVERIFIED`. Bundled Chromium regression is not owner Chrome, current human Gate-3, or open-web evidence.
 
 The first #449 vertical adds one loopback-only typed sink and independent wrong-target navigation oracle. Its attack baseline reaches `HARM_REACHED`; the protected attack and mixed runs produce `BLOCKED_PRE_HARM`; the benign rerender produces `NO_SIGNAL` and remains usable. This gives F-02 `FIXTURE_PROVEN` evidence and the bounded F-03/F-04 lane `REGRESSION_PROVEN` evidence. The canonical imported scenario snapshot remains `UNMODELLED`; the repository-current evidence is recorded in the separate mapping registry.
+
+The #566 repair lane uses trusted bundled-Chromium input on loopback-only `127.0.0.1` and `localhost` fixtures. Navigation Off reaches the opener-navigation sink; Smart keeps the opener URL and history stable after the requested child closes across Ctrl/middle, early-event, and effective-target mutations. Base-target, named-context, same-site, non-HTTP, child-frame, and closed-shadow handlers and native behavior remain reachable where applicable. Page-origin popups from those non-isolated handlers are blocked as a known MEDIUM false intervention. Non-current MAIN `_self` blocking and service-worker `location.replace` rollback prove the no-grant boundary. This is `REGRESSION_PROVEN` for the mapped lane only. AI-31 owner Chrome and pointerup/mouseup holdouts remain open, and the broader C-02 and canonical WIN-004 evidence states do not advance.
 
 Four ClickFix fixtures now use only an inert sentinel or local static control, leaving 21 mapped legacy Gym pages on a machine-checked external-destination hold. ClickFix remains browser detection evidence, not OS-paste prevention or real-provider browser evidence.
 

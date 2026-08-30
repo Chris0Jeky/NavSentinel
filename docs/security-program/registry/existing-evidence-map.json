@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
   "as_of": "2026-08-30",
-  "mapping_count": 63,
+  "mapping_count": 64,
   "mappings": [
     {
       "id": "MAP-LEVEL-01",
@@ -1380,6 +1380,34 @@
         "tests/e2e/credential-guard.spec.ts",
         "tests/e2e/evasion.spec.ts",
         "tests/e2e/phase2-detections.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-LANE-MODIFIER-AUTHORITY",
+      "kind": "evidence_lane",
+      "label": "Modifier-click opener-authority regression",
+      "primary_scenario_id": "NS-ADV-WIN-004",
+      "supporting_scenario_ids": [
+        "NS-ADV-WIN-001"
+      ],
+      "primary_harm_boundary": "One trusted modified anchor gesture produces both the requested child navigation and an unauthorized opener navigation or history entry.",
+      "role": "mixed",
+      "current_oracle": "Trusted bundled Chromium independently counts requested native children and compares the opener's exact URL and history. Navigation Off reaches the opener sink; Smart and Strict contain current-context attacks, keep non-isolated handlers reachable, block their page-origin popup authority, and prove non-current MAIN _self blocking plus service-worker location.replace rollback.",
+      "oracle_type": "independent_harm",
+      "evidence_state": "REGRESSION_PROVEN",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "This is a local authored modifier matrix, not owner Chrome or broad WIN-004 proof. Non-isolated same-task and deferred page popups are blocked as a known MEDIUM PRODUCT_FALSE_INTERVENTION; pointerup and mouseup opener mutations remain an unseen holdout.",
+      "issue_refs": [
+        "#566"
+      ],
+      "pr_refs": [
+        "#572"
+      ],
+      "paths": [
+        "extension/src/content/capture_isolated.ts",
+        "gym/issue566-modifier-retry.html",
+        "gym/issue566-modifier-child.html",
+        "tests/e2e/modifier-navigation.spec.ts"
       ]
     },
     {

@@ -167,9 +167,9 @@
       "release_status": "BETA_BLOCKER",
       "permission_privacy": "Opaque context-bound capabilities minimize destinations and expire quickly.",
       "failure_mode": "Changed, stale, removed, or mismatched context rejects authority.",
-      "known_limitation": "The pending-decision broker is dormant and does not yet represent every actor, task, or consequence in production.",
+      "known_limitation": "The pending-decision broker is dormant and does not yet represent every actor, task, or consequence in production. The #566 lane covers local modified-anchor opener authority only. Non-isolated handlers remain reachable, but same-task and deferred page-origin popups are blocked as a known MEDIUM false intervention. Owner Chrome remains unproved.",
       "issue_refs": ["#566", "private:RI-01"],
-      "pr_refs": ["#466"]
+      "pr_refs": ["#466", "#572"]
     },
     {
       "id": "C-03",

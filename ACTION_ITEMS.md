@@ -163,9 +163,16 @@ green, build that same head and follow the active AI-31 procedure in
 [`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md). In Smart mode,
 verify that trusted Ctrl/Cmd-click and middle-click each open exactly one
 cross-site child while the original tab and its history remain unchanged, and
-that the synthetic page cannot reuse the gesture for `location.assign` or a
-`window.open(..., "_self")` action. Confirm Navigation Off remains inert. This
-gate is intentionally separate from #567/#570's Back/Forward history repair.
+that the synthetic page cannot reuse `pointerdown`, `mousedown`, `click`, or
+`auxclick` for `location.assign` or a `window.open(..., "_self")` action. Check
+the `_top`, `_parent`, current-name, explicit-empty, base-blank, other-name,
+same-site, child-frame, and closed-shadow controls named in the guide. Confirm
+Navigation Off remains inert. This gate is intentionally separate from
+#567/#570's Back/Forward history repair. Non-isolated modified-anchor handlers
+remain reachable, but NavSentinel mints no opener service-worker or MAIN open or
+redirect allowance. Their same-task and deferred page popups are expected to be
+blocked as a known MEDIUM false intervention. The guide also exercises the
+non-current MAIN `_self` and service-worker `location.replace` controls.
 Only Chris can record this complete. Reply `AI-31 done; Gate-3 passed on PR #<n>
 at <40-character SHA>; Chrome <version>` or `AI-31 failed on PR #<n> at <SHA>:
 <step and observed>`. This PR-specific gate does not move the general guided-

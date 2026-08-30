@@ -37,17 +37,45 @@ automated check for its current head is green.
 5. Reload Page A before each action. Ctrl/Cmd-click **Timer location.assign
    control**, close the child, then repeat with middle-click. Each action must
    open exactly one child; Page A must remain on the fixture for at least two
-   seconds with no duplicate navigation or new opener history entry.
-6. Reload Page A before each action. Ctrl/Cmd-click **Timer window.open _self
-   control**, close the child, then repeat with middle-click. Each action must
-   open exactly one child and leave Page A stable. Page A must show `Blocked
-   popup: localhost`; that card is the rejected opener action, not a block of the
-   requested child. No second destination tab may appear.
-7. Set Navigation Off, reload Page A, and Ctrl/Cmd-click **Timer location.assign
-   control** once. The child should open and Page A should also navigate to the
-   timer destination, proving Off did not isolate the site's handler. Restore
-   Smart afterward.
-8. Inspect Page A, the child destinations, and the extension service-worker
+   seconds with no duplicate navigation or new opener history entry. Reload and
+   repeat both gestures on **Timer window.open _self control**. Exactly one child
+   must open and Page A must remain fixed; no page-handler log or blocked-popup
+   toast should appear because the early handler was isolated before it ran.
+6. Reload Page A before each action. Ctrl/Cmd-click and middle-click each of
+   **Pointerdown location.assign control** and **Mousedown location.assign
+   control**. Each action must open exactly one child, and Page A's exact URL and
+   history must remain unchanged after that child closes. No early page-handler
+   log or blocked-popup toast should appear.
+7. Reload Page A before each action. Ctrl/Cmd-click and middle-click each of
+   **_top location.assign control**, **_parent location.assign control**,
+   **Named-opener location.assign control**, and **Explicit-empty target
+   location.assign control**. Every action must open exactly one child and leave
+   Page A's URL and history unchanged after the child closes.
+8. Reload Page A before each control. Ctrl/Cmd-click **Base-target _blank
+   compatibility control**, **Other named-context compatibility control**,
+   **Same-site popup compatibility control**, and **Inert non-HTTP compatibility
+   control**. The page handler must log that it ran. Only the native child opens
+   where the anchor has a browser default; the deferred page popup is blocked
+   and no extra child appears. The inert non-HTTP control creates no child. Then
+   middle-click the base-target control and confirm its trusted `auxclick`
+   handler runs.
+9. Reload Page A before each action. Ctrl/Cmd-click **Base-target _blank delayed
+   _self control** and confirm the page handler fires, exactly one native child
+   opens, and the opener URL and history stay fixed. Repeat with **Base-target
+   _blank delayed replace control**. Its handler must fire, the service worker
+   must roll the opener back to its exact URL and history state, and only the
+   requested native child may remain.
+10. Reload Page A. Ctrl/Cmd-click the child-frame control and confirm its handler
+   and native child remain reachable while its deferred page popup is blocked.
+   Middle-click the unrelated closed-shadow button and confirm its trusted
+   pointer, mouse, and auxclick phases reach the page without a new tab. Reload,
+   middle-click the actual closed-shadow anchor, and confirm exactly one child
+   opens while Page A and its history remain fixed.
+11. Set Navigation Off, reload Page A, and Ctrl/Cmd-click **Pointerdown
+   location.assign control** once. The child should open and Page A should also
+   navigate to the timer destination, proving Off did not isolate the site's
+   handler. Restore Smart afterward.
+12. Inspect Page A, the child destinations, and the extension service-worker
    console for new errors. On a pass, reply `AI-31 done; Gate-3 passed on PR #<n>
    at <40-character SHA>; Chrome <version>`. On any mismatch, reply `AI-31 failed
    on PR #<n> at <SHA>: <step and observed>` and leave the item open.
