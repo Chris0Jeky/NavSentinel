@@ -4,6 +4,22 @@ Updated 2026-08-10. This is an optional short snapshot; live Git/GitHub state,
 product tests, `docs/Project_Roadmap.md`, and `ACTION_ITEMS.md` are authoritative.
 Historical cycle detail remains in `ORCHESTRATOR.md` and is not required reading.
 
+## 2026-08-30 live delta
+
+The open browser-surface queue is PR #572, PR #599, and PR #600. Leave their
+manual owner and Chrome gates open. PR #572 is parked before AI-31 on a retained
+local rollback survivor; its current head is not merge-ready.
+
+The agent-owned #186 slice changes no release code. It adds a loopback-only
+bridge-peer fixture and real-extension browser lane. In ten fresh bundled-
+Chromium profiles, the earliest normal authored-page peer sent one init but
+received no challenge, no config acknowledgement, and no DOM harm receipt; the
+real isolated bridge became ready every time. Benign and post-readiness mixed
+controls also stayed usable and clear. This completes only
+`NS-ADV-SELF-004-01-MODEL`. Do not force `02-ATTACK` with privileged pre-page
+injection. Resume #186 only with a genuinely page-reachable same-session or
+pre-page precondition, or take the separate #175 liveness/recovery model.
+
 ## Latest product baseline
 
 At the latest live product reconciliation before this documentation update, the

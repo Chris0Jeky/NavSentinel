@@ -41,9 +41,9 @@
       "theme": "Bridge identity, liveness, recovery, and queue pressure",
       "programme_ids": ["C-04", "NS-ADV-SELF-004", "NS-ADV-SELF-005"],
       "issue_refs": ["#175", "#186", "#523"],
-      "pr_refs": ["#185", "#584"],
+      "pr_refs": ["#185", "#599"],
       "disposition": "REUSE",
-      "evidence_boundary": "#175/#186 remain beta blockers; #185 improved timeout and buffering but did not authenticate the isolated-world peer."
+      "evidence_boundary": "#175/#186 remain beta blockers. The first #186 model found no challenge exposure to the earliest normal authored-page peer in 10 fresh bundled-Chromium profiles, but same-session/pre-page reachability and authenticated recovery remain unproven. #185 improved timeout and buffering; #599 covers a separately human-gated queue-pressure slice."
     },
     {
       "theme": "Extension-origin protection-lowering decisions",

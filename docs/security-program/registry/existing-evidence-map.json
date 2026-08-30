@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
   "as_of": "2026-08-30",
-  "mapping_count": 63,
+  "mapping_count": 64,
   "mappings": [
     {
       "id": "MAP-LEVEL-01",
@@ -1380,6 +1380,31 @@
         "tests/e2e/credential-guard.spec.ts",
         "tests/e2e/evasion.spec.ts",
         "tests/e2e/phase2-detections.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-LANE-BRIDGE-PEER-ORDERING",
+      "kind": "evidence_lane",
+      "label": "Bridge peer document-start ordering model",
+      "primary_scenario_id": "NS-ADV-SELF-004",
+      "supporting_scenario_ids": [
+        "NS-ADV-SELF-005"
+      ],
+      "primary_harm_boundary": "A page-owned MessageChannel peer receives the MAIN-world challenge and changes protection mode, confirmed by an independent local DOM receipt.",
+      "role": "mixed",
+      "current_oracle": "Trusted bundled Chromium requires the real extension loader, isolated capture, and verified bridge. The fixture separately records peer init, challenge, config acknowledgement, product readiness, benign input, and a typed DOM-only harm receipt.",
+      "oracle_type": "independent_harm",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "The earliest normal authored-page peer received no challenge in ten fresh profiles and the post-readiness peer was also rejected. The harmful sink was not reached, so 02-ATTACK remains incomplete. Same-session replay and any genuinely page-reachable pre-page actor are unproven; privileged pre-page injection was deliberately not used.",
+      "issue_refs": [
+        "#186"
+      ],
+      "pr_refs": [],
+      "paths": [
+        "gym/issue186-bridge-peer.html",
+        "tests/e2e/bridge-peer-takeover.spec.ts",
+        "docs/security-program/evidence/NS-ADV-SELF-004-issue186-ordering.yml"
       ]
     },
     {

@@ -2,10 +2,10 @@
 
 This is a short execution cursor, not a second product roadmap. Reconcile it with live GitHub, [Project_Roadmap.md](../Project_Roadmap.md), and owner gates before starting a slice.
 
-PR #584 at `8a08f04d2324bbe23fb2cf5252b02b7fbff7a111` and PR #572 at `5e268b1437161e3447fc76cb5f39a30e719b9790` are reconciled and parked at their two-round review ceilings. Do not run AI-34 or AI-31 on those heads. Resume only from the unresolved defects recorded on each PR.
+PR #572 is parked before AI-31 on a reproduced rollback survivor. PRs #599 and #600 remain separately owner and browser gated. Leave those manual gates open. The first #186 model slice is agent-owned and does not change release code.
 
-1. **Close the C-04 release-integrity boundary.** Continue existing #175/#186/#523 work on bridge identity, liveness, queue pressure, and recovery. PR #584 needs a bounded queue design that cannot suppress verified ClickFix writes or drop later critical signals.
-2. **Repair PR #572's early-event authority.** Reproduce pointerdown navigation, effective `_top`/named/base targets, allowance scope, and closed-shadow auxclick before a new AI-31 gate.
+1. **Close the C-04 release-integrity boundary.** `NS-ADV-SELF-004-01-MODEL` now records that the earliest normal authored-page peer receives no challenge in ten fresh bundled-Chromium profiles and a post-readiness peer is also rejected. `02-ATTACK` remains incomplete. Do not force it with privileged pre-page injection. Resume #186 only after establishing a page-reachable same-session or pre-page precondition, or take the separate #175 liveness/recovery model without editing release runtime while #599/#600 overlap that seam.
+2. **Keep PR #572 parked before AI-31.** Resume from its retained local rollback survivor and exact service-worker lifecycle checkpoint; do not run the manual gate on the current head.
 3. **Keep C-02/C-03 authority extension-owned.** Resume the private RI-01 decision flow and merged #466 foundation only under its owner gate. Page text or page-owned UI must never grant, trust, proceed, or resume.
 4. **Finish activation disclosure.** Use existing #455 and its owner/browser gates before any release-eligibility promotion.
 5. **Repair corpus methodology before rerunning claims.** Reuse #417 for real-host routing, trusted input, protected-vs-fired scoring, a committed manifest, and invalid-run handling; #416/#426 remain execution/reporting homes.
