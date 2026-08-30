@@ -1392,11 +1392,11 @@
       ],
       "primary_harm_boundary": "One trusted modified anchor gesture produces both the requested child navigation and an unauthorized opener navigation or history entry.",
       "role": "mixed",
-      "current_oracle": "Trusted bundled Chromium independently counts requested native children, compares exact child and opener URLs plus opener history, and retains a synthetic handler-fired receipt written before the local sink. Navigation Off reaches the opener sink; Smart and Strict contain current-context attacks, keep non-isolated handlers reachable, block their page-origin popup authority, and prove non-current MAIN _self blocking plus service-worker location.replace rollback.",
+      "current_oracle": "Trusted bundled Chromium independently counts the exact requested loopback child, compares exact child and opener URLs plus opener history, and retains a synthetic handler-fired receipt written before the local sink. Navigation Off reaches the opener sink; Smart and Strict contain current-context attacks, keep non-isolated handlers reachable, and block their page-origin popup authority. The service-worker location.replace control remains a valid adjacent mutation but is not yet deterministic.",
       "oracle_type": "independent_harm",
-      "evidence_state": "REGRESSION_PROVEN",
+      "evidence_state": "FIXTURE_PROVEN",
       "evidence_validity": "CURRENT_REGRESSION",
-      "known_limitation": "This is a local authored modifier matrix, not owner Chrome or broad WIN-004 proof. Non-isolated same-task and deferred page popups are blocked as a known MEDIUM PRODUCT_FALSE_INTERVENTION; pointerup and mouseup opener mutations remain an unseen holdout.",
+      "known_limitation": "Two separate 50-profile campaigns each exposed one service-worker location.replace survivor at the local destination, so no regression-proven claim remains. This is not owner Chrome or broad WIN-004 proof. Non-isolated same-task and deferred page popups are blocked as a known MEDIUM PRODUCT_FALSE_INTERVENTION; pointerup and mouseup opener mutations remain an unseen holdout.",
       "issue_refs": [
         "#566"
       ],

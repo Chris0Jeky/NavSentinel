@@ -173,6 +173,8 @@ remain reachable, but NavSentinel mints no opener service-worker or MAIN open or
 redirect allowance. Their same-task and deferred page popups are expected to be
 blocked as a known MEDIUM false intervention. The guide also exercises the
 non-current MAIN `_self` and service-worker `location.replace` controls.
+Do not run this gate while PR #572 is parked on SP-F-013. A repeated automated
+`location.replace` survivor means there is no eligible exact head to load.
 Only Chris can record this complete. Reply `AI-31 done; Gate-3 passed on PR #<n>
 at <40-character SHA>; Chrome <version>` or `AI-31 failed on PR #<n> at <SHA>:
 <step and observed>`. This PR-specific gate does not move the general guided-

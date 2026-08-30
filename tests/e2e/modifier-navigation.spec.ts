@@ -86,12 +86,30 @@ async function openFreshScenario(): Promise<{
   }
 }
 
+async function waitForIssue566Child(
+  context: BrowserContext,
+  baseUrl: string,
+  testCase: string,
+): Promise<Page> {
+  const expected = new URL("issue566-destination.html", `${baseUrl}/`);
+  expected.hostname = expected.hostname === "127.0.0.1" ? "localhost" : "127.0.0.1";
+  expected.searchParams.set("case", testCase);
+  const expectedUrl = expected.toString();
+
+  await expect.poll(
+    () => context.pages().find((page) => page.url() === expectedUrl)?.url() ?? "",
+    { timeout: 6_000, message: `Expected local child ${expectedUrl}` },
+  ).toBe(expectedUrl);
+  const child = context.pages().find((page) => page.url() === expectedUrl);
+  if (!child) throw new Error(`Expected local child disappeared: ${expectedUrl}`);
+  return child;
+}
+
 async function runScenario(scenario: Scenario, gesture: Gesture): Promise<void> {
-  const { context, opener, cleanup } = await openFreshScenario();
+  const { baseUrl, context, opener, cleanup } = await openFreshScenario();
   try {
-    const pagesBefore = context.pages().length;
+    const existingPages = new Set(context.pages());
     const historyBefore = await opener.evaluate(() => history.length);
-    const childPromise = context.waitForEvent("page", { timeout: 6_000 });
     const control = opener.locator(`#${scenario.id}`);
 
     if (gesture === "control-click") {
@@ -109,7 +127,7 @@ async function runScenario(scenario: Scenario, gesture: Gesture): Promise<void> 
       await control.click({ button: "middle" });
     }
 
-    const child = await childPromise;
+    const child = await waitForIssue566Child(context, baseUrl, scenario.expectedQuery.slice(5));
     await child.waitForLoadState("domcontentloaded", { timeout: 10_000 });
     // The fixture's timers and the browser's tab creation must both settle
     // before the opener/page-count assertions are evaluated.
@@ -118,7 +136,9 @@ async function runScenario(scenario: Scenario, gesture: Gesture): Promise<void> 
     await expect(child).toHaveURL(new RegExp(`issue566-destination\\.html\\?${scenario.expectedQuery}`));
     await expect(opener).toHaveURL(new RegExp(`issue566-modifier-retry\\.html`));
     expect(await opener.evaluate(() => history.length), "Opener history must not advance").toBe(historyBefore);
-    expect(context.pages(), "Modifier gesture must create exactly one child tab").toHaveLength(pagesBefore + 1);
+    const addedPages = context.pages().filter((page) => !existingPages.has(page));
+    expect(addedPages, "Modifier gesture must create exactly one child tab").toHaveLength(1);
+    expect(addedPages[0]).toBe(child);
 
     const log = await opener.locator("#event-log").innerText();
     expect(log, "The isolated modifier event must not reach page handlers").not.toContain(`target=${scenario.id}`);
@@ -127,9 +147,9 @@ async function runScenario(scenario: Scenario, gesture: Gesture): Promise<void> 
     await expect(opener).toHaveURL(new RegExp(`issue566-modifier-retry\\.html`));
     expect(await opener.evaluate(() => history.length), "Closing the child must not alter opener history").toBe(historyBefore);
     await expect.poll(
-      () => context.pages().length,
+      () => context.pages().filter((page) => !existingPages.has(page)).length,
       { message: "Closing the requested child must restore the original page count" }
-    ).toBe(pagesBefore);
+    ).toBe(0);
     console.log(
       `[issue566] ${scenario.id} / ${gesture}: child=${child.url()} opener=${opener.url()} ` +
       `pages=${context.pages().length} toast=${toast ?? "none"}`
@@ -156,7 +176,7 @@ test("location.assign timer preserves opener for a long-held Control-click @regr
 test("Navigation Off preserves the page's modified-click handler @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running modifier navigation E2E tests.");
 
-  const { context, opener, cleanup } = await openFreshScenario();
+  const { baseUrl, context, opener, cleanup } = await openFreshScenario();
   try {
     const serviceWorker = await getServiceWorker(context);
     await serviceWorker.evaluate(async () => {
@@ -172,9 +192,8 @@ test("Navigation Off preserves the page's modified-click handler @regression", a
     await opener.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
     await waitForNavSentinelBridge(opener);
 
-    const childPromise = context.waitForEvent("page", { timeout: 6_000 });
     await opener.locator("#pointer-assign-control").click({ modifiers: ["Control"], button: "left" });
-    const child = await childPromise;
+    const child = await waitForIssue566Child(context, baseUrl, "pointer-assign");
 
     await child.waitForLoadState("domcontentloaded", { timeout: 10_000 });
     await opener.waitForURL(/issue566-destination\.html\?case=pointer-assign-timer/, { timeout: 10_000 });
@@ -247,12 +266,11 @@ for (const compatibility of [
 test("base-target _blank middle-click reaches its auxclick handler @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running modifier navigation E2E tests.");
 
-  const { context, opener, cleanup } = await openFreshScenario();
+  const { baseUrl, context, opener, cleanup } = await openFreshScenario();
   try {
     const pagesBefore = context.pages().length;
-    const childPromise = context.waitForEvent("page", { timeout: 6_000 });
     await opener.locator("#base-blank-control").click({ button: "middle" });
-    const child = await childPromise;
+    const child = await waitForIssue566Child(context, baseUrl, "base");
 
     await child.waitForLoadState("domcontentloaded", { timeout: 10_000 });
     await expect(child).toHaveURL(/issue566-destination\.html\?case=base$/);
@@ -267,13 +285,12 @@ test("base-target _blank middle-click reaches its auxclick handler @regression",
 test("a non-current anchor handler gets no MAIN-world opener authority @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running modifier navigation E2E tests.");
 
-  const { context, opener, cleanup } = await openFreshScenario();
+  const { baseUrl, context, opener, cleanup } = await openFreshScenario();
   try {
     const pagesBefore = context.pages().length;
     const historyBefore = await opener.evaluate(() => history.length);
-    const childPromise = context.waitForEvent("page", { timeout: 6_000 });
     await opener.locator("#base-self-open-control").click({ modifiers: ["Control"], button: "left" });
-    const child = await childPromise;
+    const child = await waitForIssue566Child(context, baseUrl, "base-self-open");
 
     await child.waitForLoadState("domcontentloaded", { timeout: 10_000 });
     await expect(opener.locator("#event-log")).toContainText("timer fired: base-target window.open _self");
@@ -290,31 +307,24 @@ test("a non-current anchor handler gets no MAIN-world opener authority @regressi
 test("a non-current anchor handler gets no service-worker opener authority @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running modifier navigation E2E tests.");
 
-  const { context, opener, cleanup } = await openFreshScenario();
+  const { baseUrl, context, opener, cleanup } = await openFreshScenario();
   try {
     // This control asserts service-worker rollback. The MAIN/content bridge can
     // be ready before the worker has registered its navigation listeners.
     await getServiceWorker(context);
     const pagesBefore = context.pages().length;
     const historyBefore = await opener.evaluate(() => history.length);
-    const childPromise = context.waitForEvent("page", { timeout: 6_000 });
     await opener.locator("#base-replace-control").click({ modifiers: ["Control"], button: "left" });
-    const child = await childPromise;
+    const child = await waitForIssue566Child(context, baseUrl, "base-replace");
 
     await child.waitForLoadState("domcontentloaded", { timeout: 10_000 });
-    await expect.poll(
-      async () => {
-        const state = await opener.evaluate(() => ({
-          href: location.href,
-          marker: document.documentElement.dataset.baseReplaceFired ?? null,
-          storedReceipt: sessionStorage.getItem("issue566-base-replace-fired"),
-          eventLog: document.getElementById("event-log")?.innerText ?? null,
-          historyLength: history.length,
-        }));
-        return state.marker === "1" ? "1" : JSON.stringify(state);
-      },
-      { timeout: 10_000, message: "The fired handler must return through NavSentinel rollback" }
-    ).toBe("1");
+    // Use a web-first locator assertion across the expected handler navigation
+    // and rollback. A direct page.evaluate can bind to the document that is
+    // being replaced and turn successful containment into a destroyed-context
+    // harness failure.
+    await expect(opener.locator("html")).toHaveAttribute("data-base-replace-fired", "1", {
+      timeout: 10_000,
+    });
     await expect(child).toHaveURL(/issue566-destination\.html\?case=base-replace$/);
     await expect(opener).toHaveURL(/issue566-modifier-retry\.html/);
     expect(await opener.evaluate(() => history.length)).toBe(historyBefore);
@@ -390,7 +400,7 @@ test("an unrelated closed-shadow middle-click reaches its page control @regressi
 test("the actual closed-shadow anchor remains isolated to its native child @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running modifier navigation E2E tests.");
 
-  const { context, opener, cleanup } = await openFreshScenario();
+  const { baseUrl, context, opener, cleanup } = await openFreshScenario();
   try {
     const pagesBefore = context.pages().length;
     const historyBefore = await opener.evaluate(() => history.length);
@@ -401,10 +411,8 @@ test("the actual closed-shadow anchor remains isolated to its native child @regr
     if (!box) throw new Error("Closed-shadow compatibility host has no clickable box");
     const anchorX = Number(await host.getAttribute("data-anchor-x"));
     const anchorY = Number(await host.getAttribute("data-anchor-y"));
-    const childPromise = context.waitForEvent("page", { timeout: 6_000 });
-
     await opener.mouse.click(box.x + anchorX, box.y + anchorY, { button: "middle" });
-    const child = await childPromise;
+    const child = await waitForIssue566Child(context, baseUrl, "shadow-anchor");
 
     await child.waitForLoadState("domcontentloaded", { timeout: 10_000 });
     await expect(child).toHaveURL(/issue566-destination\.html\?case=shadow-anchor$/);
