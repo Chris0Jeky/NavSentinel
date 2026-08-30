@@ -189,15 +189,15 @@
       "id": "C-04",
       "implementation_status": "PARTIAL",
       "profiles": ["release_extension"],
-      "source_paths": ["extension/src/content/main_guard.ts", "extension/src/content/capture_isolated.ts", "tests/bridge-outbound.test.ts", "tests/bridge-race.test.ts"],
+      "source_paths": ["extension/src/content/main_guard.ts", "extension/src/content/bridge_outbound.ts", "extension/src/content/capture_isolated.ts", "tests/bridge-outbound.test.ts", "tests/bridge-race.test.ts", "tests/e2e/bridge-clipboard-pressure.spec.ts", "tests/e2e/phase2-detections.spec.ts"],
       "scenarios_served": ["SELF", "STATE", "RUNTIME"],
       "evidence_state": "MODELLED",
       "release_status": "BETA_BLOCKER",
       "permission_privacy": "Bridge traffic is local and schema/context checked; no sensitive values are logged.",
       "failure_mode": "Critical sinks require the declared degraded behavior when identity or liveness is unavailable.",
-      "known_limitation": "Document-start ordering and challenge-response prove liveness/port possession, not isolated-world identity; #175/#186 remain open.",
+      "known_limitation": "The #523 queue-pressure lane has bounded regression evidence only and still awaits AI-37. Document-start ordering and challenge-response prove liveness/port possession, not isolated-world identity; #175/#186 remain open.",
       "issue_refs": ["#175", "#186", "#523"],
-      "pr_refs": ["#185", "#584"]
+      "pr_refs": ["#185", "#584", "#599"]
     },
     {
       "id": "C-05",

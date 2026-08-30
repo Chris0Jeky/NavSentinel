@@ -1431,11 +1431,11 @@
       ],
       "primary_harm_boundary": "Unverified clipboard receipts fill the outbound bridge queue and prevent a later critical browser-block receipt from reaching the isolated extension world.",
       "role": "mixed",
-      "current_oracle": "A deterministic unit matrix sweeps queue counts, event ordering, risk shapes, and retry windows; a controlled same-session MessageChannel sink independently distinguishes completed native clipboard operations, legitimate task completion, a browser-block receipt, delivered clipboard receipts, and true overflow after bridge recovery.",
+      "current_oracle": "Matched trusted-input bundled-Chromium arms load an ephemeral exact-artifact mutant with only coalescing disabled and the normal artifact. The mutant's real bridge loses the later browser-block receipt and reaches a typed loopback sink as HARM_REACHED; the normal artifact retains the receipt, keeps the sink empty, and a second controlled reconnect contains only its new clipboard receipt and completes without overflow. A deterministic unit matrix separately sweeps queue counts, event ordering, risk shapes, and retry windows.",
       "oracle_type": "independent_harm",
       "evidence_state": "REGRESSION_PROVEN",
       "evidence_validity": "CURRENT_REGRESSION",
-      "known_limitation": "This is one bounded deterministic unit campaign plus one queue-pressure sequence in Playwright-bundled Chromium, not a browser/version distribution. The controlled retry depends on the known page-visible same-session bridge weakness in #186; owner Chrome, general bridge identity, and OS paste or execution prevention remain separate.",
+      "known_limitation": "This is one bounded deterministic unit campaign plus exact-artifact mutant and protected queue-pressure sequences in Playwright-bundled Chromium, not a browser/version distribution. The mutant is temporary test output and changes exactly one built coalescing function; no production bypass ships. The controlled retry depends on the known page-visible same-session bridge weakness in #186; service-worker restart is downstream of this document-local pre-isolated queue, while owner Chrome, general bridge identity/recovery, and OS paste or execution prevention remain separate.",
       "issue_refs": [
         "#175",
         "#186",
