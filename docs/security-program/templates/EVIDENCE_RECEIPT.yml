@@ -1,0 +1,31 @@
+schema_version: "1.0.0"
+scenario_id: NS-ADV-FAMILY-NNN
+capability_id: F-00
+profile: proving_ground
+repository_head: ""
+extension_build_sha256: ""
+browser:
+  name: ""
+  version: ""
+  channel: ""
+fixture:
+  role: attack
+  path: ""
+  sha256: ""
+oracle:
+  type: independent_harm
+  harm_boundary: ""
+  local_receipt_sha256: ""
+outcome: TEST_INVALID
+evidence_state_before: UNMODELLED
+evidence_state_after: UNMODELLED
+valid: false
+invalid_reason: ""
+limitations: []
+safety:
+  synthetic_only: true
+  local_inert_sink: true
+  external_egress_observed: false
+  executable_content_present: false
+  real_credentials_present: false
+verification: []
