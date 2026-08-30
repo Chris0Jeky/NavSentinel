@@ -381,6 +381,97 @@ describe("#523 clipboard-pressure protected, benign, and mixed contracts", () =>
     );
   });
 
+  it("runs the deterministic #523 boundary mutation campaign", () => {
+    const floodCounts = [
+      0,
+      1,
+      2,
+      3,
+      MAX_PENDING_OUTBOUND - 1,
+      MAX_PENDING_OUTBOUND,
+      MAX_PENDING_OUTBOUND + 1,
+    ];
+    const criticalOrders = ["before", "between", "after"] as const;
+    const clipboardShapes = ["command-only", "non-command-only", "alternating"] as const;
+    const retryWindows = [1, 4] as const;
+
+    for (const floodCount of floodCounts) {
+      for (const criticalOrder of criticalOrders) {
+        for (const clipboardShape of clipboardShapes) {
+          for (const windowCount of retryWindows) {
+            const queue = new OutboundQueue(
+              MAX_PENDING_OUTBOUND,
+              RESERVED_SCARCE_OUTBOUND_SLOTS,
+            );
+            const critical = msg("ns-dblclick-second-click", {
+              id: `critical-${floodCount}-${criticalOrder}-${clipboardShape}-${windowCount}`,
+            });
+            let clipboardMessages = 0;
+
+            const enqueueClipboardBurst = (windowIndex: number, start: number, end: number) => {
+              for (let index = start; index < end; index++) {
+                const ordinal = windowIndex * floodCount + index;
+                const looksLikeCommand = clipboardShape === "command-only"
+                  ? true
+                  : clipboardShape === "non-command-only"
+                    ? false
+                    : ordinal % 2 === 0;
+                enqueueMainGuard(queue, msg("ns-clipboard-write", {
+                  window: windowIndex,
+                  ordinal,
+                  looksLikeCommand,
+                }));
+                clipboardMessages++;
+              }
+            };
+
+            if (criticalOrder === "before") {
+              enqueueMainGuard(queue, critical);
+            }
+
+            for (let windowIndex = 0; windowIndex < windowCount; windowIndex++) {
+              if (criticalOrder === "between" && windowIndex === 0) {
+                const midpoint = Math.floor(floodCount / 2);
+                enqueueClipboardBurst(windowIndex, 0, midpoint);
+                enqueueMainGuard(queue, critical);
+                enqueueClipboardBurst(windowIndex, midpoint, floodCount);
+              } else {
+                enqueueClipboardBurst(windowIndex, 0, floodCount);
+              }
+            }
+
+            if (criticalOrder === "after") {
+              enqueueMainGuard(queue, critical);
+            }
+
+            const totalClipboardMessages = floodCount * windowCount;
+            const expectedRetainedShapes = clipboardShape === "alternating"
+              ? Math.min(2, totalClipboardMessages)
+              : Math.min(1, totalClipboardMessages);
+            const expectedCoalesced = totalClipboardMessages - expectedRetainedShapes;
+            expect(queue.size).toBe(expectedRetainedShapes + 1);
+            expect(queue.size).toBeLessThanOrEqual(MAX_PENDING_OUTBOUND);
+
+            const { items, dropped, coalesced } = queue.drain();
+            const criticalReceipts = items.filter(
+              (item) => item.type === critical.type && item.payload?.id === critical.payload?.id,
+            );
+
+            expect(criticalReceipts).toEqual([critical]);
+            expect(dropped).toBe(0);
+            expect(items.filter((item) => item.type === "ns-clipboard-write")).toHaveLength(
+              expectedRetainedShapes,
+            );
+            expect(coalesced).toBe(expectedCoalesced);
+            expect(clipboardMessages).toBe(totalClipboardMessages);
+            expect(queue.size).toBe(0);
+            expect(items.length).toBeLessThanOrEqual(MAX_PENDING_OUTBOUND);
+          }
+        }
+      }
+    }
+  });
+
   it("classifies a missing readiness receipt as TEST_INVALID", () => {
     const classify = (ready: boolean, criticalReceiptDelivered: boolean) => {
       if (!ready) return "TEST_INVALID";
