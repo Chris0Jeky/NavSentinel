@@ -334,11 +334,11 @@ async function writeReceipt(
     authority_scope: {
       actor: "one authored top-frame evasion fixture",
       task: "one trusted activation per armed destination; the mixed arm sequences one benign keyboard activation and one harm pointer activation",
-      tab: "one fresh-profile tab per arm",
+      tab: "one fresh-profile initiating tab per arm plus its single consequence tab where navigation is allowed",
       frame: "top frame",
       document: `exact ${FIXTURE_NAME} document for each arm`,
       destination: "one armed loopback sink URL per arm, role, and consequence",
-      ttl: "one browser arm",
+      ttl: "one test run; the loopback sink closes in the test finally block",
       use_count: 1,
       use_count_scope: "per armed destination",
       sink_revalidation: "The fake sink validates run, scenario, role, consequence, one-use target authority, and the exact inert sentinel on every request.",
