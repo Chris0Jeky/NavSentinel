@@ -51,15 +51,18 @@ limitations:
   - "This measures normal authored-page ordering in one bundled Chromium build, not branded Chrome or open-web reachability."
   - "Same-session replay and a genuinely page-reachable pre-page actor remain unproven."
   - "No privileged add-init-script, CDP injection, or page-external session disclosure was used to force the precondition."
+  - "Network observation was unavailable: the fixture origin was loopback-only, but this run did not install a request observer or deny proxy for Chromium or extension background traffic."
 safety:
   synthetic_only: true
   local_inert_sink: true
-  external_egress_observed: false
-  unexpected_egress_attempted: false
+  external_egress_observed: null
+  unexpected_egress_attempted: null
+  network_observation_status: UNAVAILABLE
+  network_observation_reason: "No request observer or deny proxy covered Chromium or extension background traffic."
   executable_content_present: false
   real_credentials_present: false
-network_violations: []
-blocked_external_attempts: []
+network_violations: null
+blocked_external_attempts: null
 qualification:
   privacy: "No raw secret, browsing history, credential, or persistent fixture state is collected."
   performance: "No release code changed; this slice does not make a new runtime performance claim."

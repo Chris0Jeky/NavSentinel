@@ -18,7 +18,9 @@ real isolated bridge became ready every time. Benign and post-readiness mixed
 controls also stayed usable and clear. This completes only
 `NS-ADV-SELF-004-01-MODEL`. Do not force `02-ATTACK` with privileged pre-page
 injection. Resume #186 only with a genuinely page-reachable same-session or
-pre-page precondition, or take the separate #175 liveness/recovery model.
+pre-page precondition, or take the separate #175 liveness/recovery model. The
+run did not observe Chromium or extension background traffic, so it makes no
+clean-egress claim.
 
 ## Latest product baseline
 
