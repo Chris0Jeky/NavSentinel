@@ -83,10 +83,11 @@ async function toastButtonPoint(page: Page, label: string): Promise<{ x: number;
   return point!;
 }
 
+/** Full (non-persistent) cards across every element carrying the host id, so a page-forged host cannot mask the real one. */
 async function fullCardCount(page: Page): Promise<number> {
   return page.evaluate(() =>
-    document.querySelector("#__navsentinel_toast_host")?.shadowRoot
-      ?.querySelectorAll(".wrap:not([data-persistent='true'])").length ?? 0,
+    Array.from(document.querySelectorAll("#__navsentinel_toast_host")).reduce((count, host) =>
+      count + (host.shadowRoot?.querySelectorAll(".wrap:not([data-persistent='true'])").length ?? 0), 0),
   );
 }
 
@@ -167,7 +168,6 @@ test("keyboard Enter and Space activate focused toast controls @regression", asy
   const { page, context, cleanup } = await setupFenceTest("evasion-01-opacity-009.html");
   try {
     await blockTrapNewTab(page, context);
-    await countPageCaptureEvents(page);
     const focusToastButton = (label: string) => page.evaluate((expected) => {
       const host = document.querySelector("#__navsentinel_toast_host");
       const buttons = Array.from(host?.shadowRoot?.querySelectorAll("button") ?? []);
@@ -177,13 +177,17 @@ test("keyboard Enter and Space activate focused toast controls @regression", asy
     }, label);
 
     await focusToastButton("Dismiss");
+    // Count only the keyboard input; the trap click above is a page click by design.
+    await countPageCaptureEvents(page);
     const popupPromise = context.waitForEvent("page", { timeout: 1000 }).catch(() => null);
     await page.keyboard.press("Enter");
     await expect.poll(() => fullCardCount(page)).toBe(0);
     expect(await popupPromise).toBeNull();
+    expect(await pageCaptureEventCount(page)).toBe(0);
 
     await blockTrapNewTab(page, context);
     await focusToastButton("Dismiss");
+    await countPageCaptureEvents(page);
     await page.keyboard.press("Space");
     await expect.poll(() => fullCardCount(page)).toBe(0);
     expect(await pageCaptureEventCount(page)).toBe(0);
@@ -252,9 +256,12 @@ test("a page-forged toast host cannot turn an ordinary click into Allow once @re
     // Click the page body, far from the real card at the bottom-right corner.
     await page.mouse.click(40, 40);
 
+    // Activation would remove the real card synchronously; check before the
+    // card's own 4-second idle timeout can expire.
+    await page.waitForTimeout(250);
+    expect(await fullCardCount(page), "the real card must remain unactivated").toBe(1);
     expect(await popupPromise, "a forged host must not activate the real control").toBeNull();
     expect(context.pages().length).toBe(before);
-    await expect.poll(() => fullCardCount(page)).toBe(1);
   } finally {
     await cleanup();
   }
