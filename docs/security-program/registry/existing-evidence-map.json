@@ -19,7 +19,9 @@
       "evidence_validity": "CURRENT_REGRESSION",
       "known_limitation": "The fixture has no independent sink receipt and the product event remains part of the pass condition.",
       "issue_refs": [],
-      "pr_refs": [],
+      "pr_refs": [
+        "#602"
+      ],
       "paths": [
         "gym/level1-basic-opacity.html",
         "tests/e2e/navsentinel.spec.ts"
