@@ -1,6 +1,6 @@
 # Programme state
 
-As of 2026-08-30, based on merged programme seed `d2762f296b07bfd650971141bf9bf7a9b2c016b9` and the live issue and pull-request inventory refreshed for the first #449 vertical.
+As of 2026-08-30, based on merged programme seed `d2762f296b07bfd650971141bf9bf7a9b2c016b9` and the live issue and pull-request inventory refreshed through the #449 and #523 verticals.
 
 ## Seeded
 
@@ -8,16 +8,18 @@ As of 2026-08-30, based on merged programme seed `d2762f296b07bfd650971141bf9bf7
 - 31 stable capabilities across proving-ground, release-integrity, research, agent-future, and optional-native tracks.
 - 11 outcome values and 8 ordered evidence states.
 - 1,512 generated local work units, nine for each scenario. They are not GitHub issues.
-- 63 current-work mappings: 12 Gym levels, 23 RW journeys, 12 evasion fixtures, 4 ClickFix fixtures, 4 DoubleClickjacking fixtures, 6 evidence lanes, and 2 browser-suite mappings.
+- 64 current-work mappings: 12 Gym levels, 23 RW journeys, 12 evasion fixtures, 4 ClickFix fixtures, 4 DoubleClickjacking fixtures, 7 evidence lanes, and 2 browser-suite mappings.
 - 12 deduplicated issue themes and zero new issues created by the seed pass.
 
 ## Evidence ceiling
 
-All 168 canonical scenarios remain `UNMODELLED`. Existing artefacts are reconciled separately: 60 mappings are `MODELLED`, 2 are `UNMODELLED`, and the bounded C-10 overlay nesting vertical is `REGRESSION_PROVEN`. No scenario is claimed as browser-proven, efficacy-measured, release-eligible, universally secure, or anonymous.
+All 168 canonical scenarios remain `UNMODELLED`. Existing artefacts are reconciled separately: 60 mappings are `MODELLED`, 2 are `UNMODELLED`, and the bounded C-10 overlay-nesting and C-04 bridge clipboard-pressure verticals are `REGRESSION_PROVEN`. No scenario is claimed as browser-proven, efficacy-measured, release-eligible, universally secure, or anonymous.
 
 The historical corpus result is `INVALID`. The historical false-positive result is `STALE`. The external live-site check and local event-coupled benchmark are `UNVERIFIED`. Bundled Chromium regression is not owner Chrome, current human Gate-3, or open-web evidence.
 
 The first #449 vertical adds one loopback-only typed sink and independent wrong-target navigation oracle. Its attack baseline reaches `HARM_REACHED`; the protected attack and mixed runs produce `BLOCKED_PRE_HARM`; the benign rerender produces `NO_SIGNAL` and remains usable. This gives F-02 `FIXTURE_PROVEN` evidence and the bounded F-03/F-04 lane `REGRESSION_PROVEN` evidence. The canonical imported scenario snapshot remains `UNMODELLED`; the repository-current evidence is recorded in the separate mapping registry.
+
+The #523 vertical adds a bounded deterministic queue campaign and bundled-Chromium bridge-pressure sequence. Its malicious queue baseline reaches `HARM_REACHED`; the protected sequence retains the later critical receipt with no true overflow; benign and mixed controls keep legitimate clipboard use available and the verified ClickFix signal observable. This gives the C-04 lane `REGRESSION_PROVEN` evidence only. AI-37's explicit queue-policy decision and owner-Chrome run remain open, and #175/#186 still own general bridge identity, liveness, and recovery.
 
 Four ClickFix fixtures now use only an inert sentinel or local static control, leaving 21 mapped legacy Gym pages on a machine-checked external-destination hold. ClickFix remains browser detection evidence, not OS-paste prevention or real-provider browser evidence.
 
