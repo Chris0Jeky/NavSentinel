@@ -11,9 +11,13 @@ browser:
 fixture:
   role: mixed
   path: "gym/issue186-bridge-peer.html"
-  sha256: "bf9e57581a7ab51edab15dc6c821625ceb79b91a17b2d04f8b3491c322abe85b"
+  sha256: "1433f532eaef400f8b08ff8839d583dfa6f8781b14651179b23bb782c75afe6d"
+  hash_method: "SHA-256 of Git blob bytes at repository_head"
+  executed_worktree_sha256: "bf9e57581a7ab51edab15dc6c821625ceb79b91a17b2d04f8b3491c322abe85b"
+  executed_worktree_transform: "Git for Windows CRLF checkout of the recorded blob"
   test_path: "tests/e2e/bridge-peer-takeover.spec.ts"
-  test_sha256: "37f77b13a5962bacf21b9b3f8e983bbf1f6c618c074f95e902f2ba300bcace5b"
+  test_sha256: "10aaa7e75f8a213bc3b320ede69b469f6cfdef1dd01decb30ed7cb831bf9deff"
+  executed_test_worktree_sha256: "37f77b13a5962bacf21b9b3f8e983bbf1f6c618c074f95e902f2ba300bcace5b"
 oracle:
   type: independent_harm
   harm_boundary: "A page-owned peer receives a MAIN-world challenge and obtains an acknowledged protection-lowering config change."
