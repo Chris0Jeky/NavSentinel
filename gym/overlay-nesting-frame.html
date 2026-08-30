@@ -27,6 +27,7 @@
   <script>
     const params = new URLSearchParams(location.search);
     const fixtureCase = params.get("case") || "exact";
+    const programmeChurn = params.get("churn") === "1";
     const localSink = (() => {
       const raw = params.get("sink");
       if (!raw) return "";
@@ -267,7 +268,8 @@
         ), 1200);
       }
 
-      if (fixtureCase === "programme-attack" || fixtureCase === "programme-mixed") {
+      if (programmeChurn &&
+          (fixtureCase === "programme-attack" || fixtureCase === "programme-mixed")) {
         window.setTimeout(() => rewriteAttackDisplay("programme-overlay-a"), 650);
         window.setTimeout(() => replaceAttack(
           "programme-overlay-a",

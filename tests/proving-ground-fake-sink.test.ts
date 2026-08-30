@@ -1,6 +1,8 @@
+import * as http from "node:http";
 import { describe, expect, it } from "vitest";
 import {
   PROVING_GROUND_SENTINEL,
+  startProvingGroundEgressFence,
   startProvingGroundFakeSink,
 } from "./e2e/proving_ground_fake_sink";
 
@@ -38,6 +40,38 @@ describe("Proving Ground fake sink", () => {
       expect(JSON.stringify(snapshot)).not.toContain(PROVING_GROUND_SENTINEL);
     } finally {
       await sink.close();
+    }
+  });
+
+  it("blocks and records non-loopback proxy traffic before a browser can send it", async () => {
+    const attempts: Array<{ method: string; target: string; count: number }> = [];
+    const fence = await startProvingGroundEgressFence(attempts);
+
+    try {
+      const proxy = new URL(fence.proxyServer);
+      const statusCode = await new Promise<number | undefined>((resolve, reject) => {
+        const request = http.request({
+          hostname: proxy.hostname,
+          port: proxy.port,
+          method: "GET",
+          path: "http://public.invalid/synthetic",
+          headers: { host: "public.invalid" },
+        }, (response) => {
+          response.resume();
+          response.once("end", () => resolve(response.statusCode));
+        });
+        request.once("error", reject);
+        request.end();
+      });
+
+      expect(statusCode).toBe(403);
+      expect(attempts).toEqual([{
+        method: "GET",
+        target: "http://public.invalid/synthetic",
+        count: 1,
+      }]);
+    } finally {
+      await fence.close();
     }
   });
 });

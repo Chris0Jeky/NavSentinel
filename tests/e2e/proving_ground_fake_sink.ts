@@ -32,6 +32,17 @@ export type ProvingGroundFakeSink = {
   close: () => Promise<void>;
 };
 
+export type ProvingGroundEgressAttempt = {
+  method: string;
+  target: string;
+  count: number;
+};
+
+export type ProvingGroundEgressFence = {
+  proxyServer: string;
+  close: () => Promise<void>;
+};
+
 type FakeSinkOptions = {
   runId: string;
   scenarioId: string;
@@ -86,6 +97,91 @@ async function bindLoopback(server: http.Server): Promise<void> {
   }
 
   throw lastError ?? new Error("Failed to bind the Proving Ground fake sink to loopback");
+}
+
+async function bindEphemeralLoopback(server: http.Server): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const onError = (error: NodeJS.ErrnoException) => {
+      server.off("listening", onListening);
+      reject(error);
+    };
+    const onListening = () => {
+      server.off("error", onError);
+      resolve();
+    };
+
+    server.once("error", onError);
+    server.once("listening", onListening);
+    server.listen(0, "127.0.0.1");
+  });
+}
+
+export async function startProvingGroundEgressFence(
+  attempts: ProvingGroundEgressAttempt[],
+  allowedOrigins: ReadonlySet<string> = new Set(),
+): Promise<ProvingGroundEgressFence> {
+  const recordAttempt = (method: string, target: string): void => {
+    const existing = attempts.find((attempt) =>
+      attempt.method === method && attempt.target === target,
+    );
+    if (existing) existing.count += 1;
+    else attempts.push({ method, target, count: 1 });
+  };
+  const server = http.createServer((req, res) => {
+    let target: URL | null = null;
+    try {
+      target = new URL(req.url ?? "");
+    } catch {
+      // A proxy request must carry an absolute URL. Anything else fails closed.
+    }
+
+    if (target?.protocol === "http:" && allowedOrigins.has(target.origin)) {
+      const headers = { ...req.headers };
+      delete headers["proxy-connection"];
+      const upstream = http.request(target, {
+        method: req.method,
+        headers,
+      }, (upstreamResponse) => {
+        res.writeHead(upstreamResponse.statusCode ?? 502, upstreamResponse.headers);
+        upstreamResponse.pipe(res);
+      });
+      upstream.once("error", () => {
+        if (!res.headersSent) res.writeHead(502, { "content-type": "text/plain" });
+        res.end("Proving Ground loopback forwarding failed.\n");
+      });
+      req.pipe(upstream);
+      return;
+    }
+
+    recordAttempt(
+      req.method ?? "UNKNOWN",
+      target ? `${target.origin}${target.pathname}` : "unknown",
+    );
+    res.statusCode = 403;
+    res.setHeader("cache-control", "no-store");
+    res.setHeader("content-type", "text/plain; charset=utf-8");
+    res.end("Proving Ground denied non-loopback HTTP egress.\n");
+  });
+  server.on("connect", (req, socket) => {
+    recordAttempt("CONNECT", req.url ?? "unknown");
+    socket.on("error", () => {
+      // Chromium may reset a denied CONNECT tunnel while the 403 is flushing.
+    });
+    socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
+  });
+
+  await bindEphemeralLoopback(server);
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    throw new Error("Proving Ground egress fence did not expose a TCP address");
+  }
+
+  return {
+    proxyServer: `http://127.0.0.1:${address.port}`,
+    close: () => new Promise<void>((resolve, rejectClose) => {
+      server.close((error) => error ? rejectClose(error) : resolve());
+    }),
+  };
 }
 
 export async function startProvingGroundFakeSink(

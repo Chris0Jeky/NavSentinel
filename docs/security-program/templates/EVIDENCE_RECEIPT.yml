@@ -16,6 +16,10 @@ oracle:
   type: independent_harm
   harm_boundary: ""
   local_receipt_sha256: ""
+  sink_receipt_count: 0
+  sink_snapshot:
+    receipts: []
+    invalidAttempts: []
 outcome: TEST_INVALID
 evidence_state_before: UNMODELLED
 evidence_state_after: UNMODELLED
@@ -26,6 +30,9 @@ safety:
   synthetic_only: true
   local_inert_sink: true
   external_egress_observed: false
+  unexpected_egress_attempted: false
   executable_content_present: false
   real_credentials_present: false
+network_violations: []
+blocked_external_attempts: []
 verification: []

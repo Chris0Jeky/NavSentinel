@@ -23,6 +23,7 @@
   <script>
     const params = new URLSearchParams(location.search);
     const fixtureCase = params.get("case") || "exact";
+    const programmeChurn = params.get("churn") === "1";
     const localSink = (() => {
       const raw = params.get("sink");
       if (!raw) return "";
@@ -39,6 +40,7 @@
     const childHost = location.hostname === "127.0.0.1" ? "localhost" : "127.0.0.1";
     const childParams = new URLSearchParams({ case: fixtureCase });
     if (localSink) childParams.set("sink", localSink);
+    if (programmeChurn) childParams.set("churn", "1");
     document.getElementById("media-frame").src =
       `${location.protocol}//${childHost}:${location.port}/overlay-nesting-frame.html?${childParams}`;
   </script>
