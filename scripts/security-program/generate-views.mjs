@@ -202,7 +202,7 @@ const issueDeduplication = `# Issue deduplication
 
 Generated from \`registry/issue-map.json\` after reconciling live issues, pull requests, docs, tests, and source on ${issueMapDocument.as_of}.
 
-No per-scenario issue fan-out was created. The local registry retains all 1,512 scenario work units. Existing roadmap and milestone authority remains controlling.
+The registry records ${issueMapDocument.scenario_issue_count} live scenario issues, retains ${backlog.tasks.length.toLocaleString("en-US")} local scenario work units, and records ${issueMapDocument.new_issues_created} new issues created by this seed pass. Existing roadmap and milestone authority remains controlling.
 
 ${table(
   ["Theme", "Programme IDs", "Issues", "PRs", "Disposition", "Evidence boundary"],

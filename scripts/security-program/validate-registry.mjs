@@ -39,6 +39,55 @@ function requireResolved(label, values, known) {
   }
 }
 
+function requireKnown(label, value, known) {
+  if (!known.has(value)) fail(`${label} unknown value: ${value}`);
+}
+
+function findDependencyCycle(records, idOf, dependenciesOf) {
+  const recordsById = new Map(records.map((record) => [idOf(record), record]));
+  const visiting = new Set();
+  const visited = new Set();
+  const stack = [];
+
+  function visit(id) {
+    if (visiting.has(id)) return [...stack.slice(stack.indexOf(id)), id];
+    if (visited.has(id)) return null;
+
+    const record = recordsById.get(id);
+    if (!record) return null;
+    visiting.add(id);
+    stack.push(id);
+    for (const dependency of dependenciesOf(record)) {
+      const cycle = visit(dependency);
+      if (cycle) return cycle;
+    }
+    stack.pop();
+    visiting.delete(id);
+    visited.add(id);
+    return null;
+  }
+
+  for (const id of recordsById.keys()) {
+    const cycle = visit(id);
+    if (cycle) return cycle;
+  }
+  return null;
+}
+
+function evidencePromotionFindings(mapping, evidenceOrder) {
+  const findings = [];
+  const stateOrder = evidenceOrder.get(mapping.evidence_state);
+  const modelledOrder = evidenceOrder.get("MODELLED");
+  if (stateOrder === undefined || modelledOrder === undefined) return findings;
+  if (["INVALID", "STALE", "UNVERIFIED"].includes(mapping.evidence_validity) && stateOrder > modelledOrder) {
+    findings.push(`${mapping.evidence_validity} evidence cannot advance beyond MODELLED`);
+  }
+  if (mapping.oracle_type === "product_event" && stateOrder > modelledOrder) {
+    findings.push("a product-event oracle cannot independently support evidence beyond MODELLED");
+  }
+  return findings;
+}
+
 async function pathExists(relativePath) {
   try {
     await stat(path.join(root, relativePath));
@@ -52,10 +101,10 @@ async function pathExists(relativePath) {
 function unsafeFixtureFindings(value) {
   const text = typeof value === "string" ? value : JSON.stringify(value);
   const findings = [];
-  const urlPattern = /https?:\/\/[^\s"'<>`)]+/giu;
+  const urlPattern = /(?:https?:\/\/|(?<![A-Za-z0-9:+.}\-])\/\/)[^\s"'<>`)]+/giu;
   for (const match of text.matchAll(urlPattern)) {
     try {
-      const hostname = new URL(match[0]).hostname.toLowerCase();
+      const hostname = new URL(match[0], "https://fixture.test").hostname.toLowerCase().replace(/^\[(.*)\]$/u, "$1");
       if (!(hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname.endsWith(".test") || hostname.endsWith(".invalid"))) {
         findings.push(`non-reserved URL ${match[0]}`);
       }
@@ -187,6 +236,8 @@ const capabilityIds = new Set(rawCapabilityIds);
 const familyIds = new Set(scenariosDocument.scenarios.map((scenario) => scenario.family));
 const outcomeIds = evidenceDocument.outcomes.map((outcome) => outcome.id);
 const evidenceStateIds = evidenceDocument.evidence_states.map((state) => state.id);
+const evidenceStates = new Set(evidenceStateIds);
+const evidenceOrder = new Map(evidenceDocument.evidence_states.map((state) => [state.id, state.order]));
 const workSuffixes = new Set(rawWorkSuffixes);
 const taskIds = new Set(rawTaskIds);
 
@@ -204,6 +255,8 @@ requireUnique("fixture safety path", fixtureSafetyDocument.findings.map((finding
 
 for (const scenario of scenariosDocument.scenarios) {
   requireResolved(`${scenario.id} capability`, scenario.capability_dependencies, capabilityIds);
+  requireKnown(`${scenario.id} status`, scenario.status, evidenceStates);
+  requireKnown(`${scenario.id} evidence_status`, scenario.evidence_status, evidenceStates);
   if (scenario.status !== scenario.evidence_status) fail(`${scenario.id} status and evidence_status disagree`);
   const safetyText = scenario.safety_constraints.join(" ");
   for (const required of ["local or reserved test origins", "synthetic sentinel", "No real credential collection", "local, inert, inspectable", "benign and mixed controls are mandatory"]) {
@@ -225,6 +278,12 @@ for (const capability of capabilitiesDocument.capabilities) {
 for (const definition of workDefinitionsDocument.definitions) {
   requireResolved(`${definition.suffix} work-unit`, definition.depends_on_suffixes, workSuffixes);
 }
+const workDefinitionCycle = findDependencyCycle(
+  workDefinitionsDocument.definitions,
+  (definition) => definition.suffix,
+  (definition) => definition.depends_on_suffixes,
+);
+if (workDefinitionCycle) fail(`work-unit dependency cycle: ${workDefinitionCycle.join(" -> ")}`);
 for (const task of backlogDocument.tasks) {
   if (!scenarioIds.has(task.scenario_id)) fail(`${task.id} unresolved scenario: ${task.scenario_id}`);
   requireResolved(`${task.id} task`, task.depends_on, taskIds);
@@ -236,6 +295,7 @@ if (backlogDocument.tasks.length !== scenariosDocument.scenarios.length * workDe
 if (capabilityMapDocument.mappings.length !== capabilityIds.size) fail("capability map must contain exactly one entry for every capability");
 for (const mapping of capabilityMapDocument.mappings) {
   if (!capabilityIds.has(mapping.id)) fail(`capability map has unknown ID: ${mapping.id}`);
+  requireKnown(`${mapping.id} evidence_state`, mapping.evidence_state, evidenceStates);
   for (const served of mapping.scenarios_served) {
     if (!scenarioIds.has(served) && !familyIds.has(served)) fail(`${mapping.id} has unknown scenarios_served value: ${served}`);
   }
@@ -251,6 +311,8 @@ for (const mapping of capabilityMapDocument.mappings) {
 for (const mapping of existingEvidenceDocument.mappings) {
   if (!scenarioIds.has(mapping.primary_scenario_id)) fail(`${mapping.id} has unknown primary scenario: ${mapping.primary_scenario_id}`);
   requireResolved(`${mapping.id} supporting scenario`, mapping.supporting_scenario_ids, scenarioIds);
+  requireKnown(`${mapping.id} evidence_state`, mapping.evidence_state, evidenceStates);
+  for (const finding of evidencePromotionFindings(mapping, evidenceOrder)) fail(`${mapping.id}: ${finding}`);
   for (const sourcePath of mapping.paths) {
     if (sourcePath.replaceAll("\\", "/").startsWith("extension/dist/")) fail(`${mapping.id} references generated extension output: ${sourcePath}`);
     if (!await pathExists(sourcePath)) fail(`${mapping.id} references missing path: ${sourcePath}`);
@@ -338,7 +400,6 @@ for (const sourcePath of mappedHtmlPaths) {
     fail(`mapped fixture has unflagged unsafe content: ${sourcePath} (${detected.join("; ")})`);
   }
 }
-const evidenceOrder = new Map(evidenceDocument.evidence_states.map((state) => [state.id, state.order]));
 for (const mapping of existingEvidenceDocument.mappings) {
   if (mapping.paths.some((sourcePath) => flaggedFixturePaths.has(sourcePath)) && evidenceOrder.get(mapping.evidence_state) > evidenceOrder.get("MODELLED")) {
     fail(`${mapping.id} promotes a safety-held fixture beyond MODELLED`);
@@ -347,7 +408,20 @@ for (const mapping of existingEvidenceDocument.mappings) {
 
 if (unsafeFixtureFindings("Use https://sink.test and an inert sentinel only.").length !== 0) fail("unsafe-content scanner rejected its reserved-origin control");
 if (unsafeFixtureFindings("send to https://attacker.example/collect").length === 0) fail("unsafe-content scanner missed a public target");
+if (unsafeFixtureFindings("send to //attacker.example/collect").length === 0) fail("unsafe-content scanner missed a protocol-relative public target");
+if (unsafeFixtureFindings("send to http://[::1]/sink").length !== 0) fail("unsafe-content scanner rejected its IPv6 loopback control");
 if (unsafeFixtureFindings("powershell.exe -EncodedCommand AAAA").length === 0) fail("unsafe-content scanner missed an executable command pattern");
+if (!findDependencyCycle(
+  [{ id: "A", dependencies: ["B"] }, { id: "B", dependencies: ["A"] }],
+  (record) => record.id,
+  (record) => record.dependencies,
+)) fail("dependency-cycle detector missed its cyclic control");
+if (evidencePromotionFindings({ evidence_validity: "INVALID", oracle_type: "independent_harm", evidence_state: "REGRESSION_PROVEN" }, evidenceOrder).length === 0) {
+  fail("evidence-promotion guard missed its invalid-evidence control");
+}
+if (evidencePromotionFindings({ evidence_validity: "CURRENT_REGRESSION", oracle_type: "product_event", evidence_state: "REGRESSION_PROVEN" }, evidenceOrder).length === 0) {
+  fail("evidence-promotion guard missed its product-event control");
+}
 
 await validateLocalMarkdownLinks();
 

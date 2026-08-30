@@ -154,7 +154,7 @@ function parseCapabilities(master) {
       priority: stripTicks(inlineField(block, "Priority")),
       phase: stripTicks(inlineField(block, "Phase")),
       issue_policy: stripTicks(inlineField(block, "Issue policy")),
-      existing_issue_refs: inlineField(block, "Existing references").match(/#\d+/g) ?? [],
+      existing_references: inlineField(block, "Existing references").match(/#\d+/g) ?? [],
       purpose: inlineField(block, "Purpose"),
       scope: bulletList(block, "Scope", "Acceptance"),
       acceptance: bulletList(block, "Acceptance", "Dependencies:"),
@@ -169,12 +169,17 @@ function parseCapabilities(master) {
   return capabilities;
 }
 
-function sourceFiles() {
-  return fs
-    .readdirSync(sourceDir, { withFileTypes: true })
-    .filter((entry) => entry.isFile())
-    .map((entry) => entry.name)
-    .sort();
+function sourceFiles(directory = sourceDir, relativeDirectory = "") {
+  const files = [];
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const relativePath = path.join(relativeDirectory, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...sourceFiles(path.join(directory, entry.name), relativePath));
+    } else if (entry.isFile()) {
+      files.push(relativePath.replaceAll("\\", "/"));
+    }
+  }
+  return files.sort();
 }
 
 const scenarioSourcePath = path.join(sourceDir, "scenarios.json");
@@ -219,6 +224,13 @@ const importedDocuments = new Map([
   ["work-unit-definitions.json", workUnitDefinitions],
 ]);
 const files = sourceFiles();
+const advertisedCanonicalPaths = [
+  "catalog/capabilities.json",
+  "catalog/evidence_states.json",
+  "catalog/backlog_seed.json",
+  "schemas/scenario.schema.json",
+  "schemas/capability.schema.json",
+];
 const sourceProvenance = {
   schema_version: "1.0.0",
   source_generated: scenarios.generated,
@@ -238,12 +250,8 @@ const sourceProvenance = {
     "RESOURCES/DefenseVectors/AGENT_SEED_BRIEF.md outcome and evidence vocabularies",
   ],
   advertised_but_missing_from_supplied_bundle: [
-    "catalog/capabilities.json",
-    "catalog/evidence_states.json",
-    "catalog/backlog_seed.json",
-    "schemas/scenario.schema.json",
-    "schemas/capability.schema.json",
-    "the remaining files behind the advertised 268-file source set",
+    ...advertisedCanonicalPaths.filter((file) => !files.includes(file)),
+    ...(files.length < 268 ? ["the remaining files behind the advertised 268-file source set"] : []),
   ],
   note: "The imported capability, evidence-state, and work-unit registries are deterministic reconstructions from the supplied master document. The upstream validation report could not be rerun against absent upstream files.",
 };

@@ -10,7 +10,7 @@
       "priority": "P0",
       "phase": "NOW",
       "issue_policy": "REUSE_OR_REBODY_EXISTING",
-      "existing_issue_refs": [
+      "existing_references": [
         "#449"
       ],
       "purpose": "One machine-readable source of truth for threat families, scenarios, controls, dependencies, evidence state, and issue linkage.",
@@ -36,7 +36,7 @@
       "priority": "P0",
       "phase": "NOW",
       "issue_policy": "CREATE_AFTER_DEDUP",
-      "existing_issue_refs": [
+      "existing_references": [
         "#417",
         "#439"
       ],
@@ -66,7 +66,7 @@
       "priority": "P0",
       "phase": "NOW",
       "issue_policy": "REUSE_OR_REBODY_EXISTING",
-      "existing_issue_refs": [
+      "existing_references": [
         "#420",
         "#439",
         "#460",
@@ -99,7 +99,7 @@
       "priority": "P0",
       "phase": "NOW",
       "issue_policy": "REUSE_OR_REBODY_EXISTING",
-      "existing_issue_refs": [
+      "existing_references": [
         "#417",
         "#449"
       ],
@@ -129,7 +129,7 @@
       "priority": "P0",
       "phase": "NOW",
       "issue_policy": "REUSE_OR_REBODY_EXISTING",
-      "existing_issue_refs": [
+      "existing_references": [
         "#449"
       ],
       "purpose": "Grade defenses on adjacent variants rather than the fixture they were written against.",
@@ -158,7 +158,7 @@
       "priority": "P0",
       "phase": "NOW",
       "issue_policy": "REUSE_OR_REBODY_EXISTING",
-      "existing_issue_refs": [
+      "existing_references": [
         "#232",
         "#417"
       ],
@@ -188,7 +188,7 @@
       "priority": "P0",
       "phase": "NOW",
       "issue_policy": "CREATE_AFTER_DEDUP",
-      "existing_issue_refs": [
+      "existing_references": [
         "#175",
         "#186",
         "#389",
@@ -221,7 +221,7 @@
       "priority": "P1",
       "phase": "NOW",
       "issue_policy": "CREATE_AFTER_DEDUP",
-      "existing_issue_refs": [
+      "existing_references": [
         "#417",
         "#449"
       ],
@@ -252,7 +252,7 @@
       "priority": "P0",
       "phase": "NOW",
       "issue_policy": "REUSE_OR_REBODY_EXISTING",
-      "existing_issue_refs": [
+      "existing_references": [
         "#416",
         "#417",
         "#439",
@@ -286,7 +286,7 @@
       "priority": "P1",
       "phase": "AFTER_CORE_RIG",
       "issue_policy": "REUSE_EXISTING",
-      "existing_issue_refs": [
+      "existing_references": [
         "#418"
       ],
       "purpose": "Measure additive value and regressions against browser-native protection and relevant extensions.",
@@ -317,7 +317,7 @@
       "priority": "P1",
       "phase": "POST_INTEGRITY_SHADOW",
       "issue_policy": "REUSE_EXISTING_POST_BETA",
-      "existing_issue_refs": [
+      "existing_references": [
         "#440"
       ],
       "purpose": "Give scoring, explanations, experiments, and stored outcomes one versioned representation of evidence, provenance, direction, confidence, and decay.",
@@ -347,7 +347,7 @@
       "priority": "P0",
       "phase": "DESIGN_NOW_IMPLEMENT_AFTER_INTEGRITY",
       "issue_policy": "EXTEND_EXISTING_DESIGN",
-      "existing_issue_refs": [
+      "existing_references": [
         "#466",
         "#566"
       ],
@@ -378,7 +378,7 @@
       "priority": "P0",
       "phase": "NOW",
       "issue_policy": "RELEASE_BLOCKER_EXISTING_HOME",
-      "existing_issue_refs": [
+      "existing_references": [
         "#464",
         "#466"
       ],
@@ -409,7 +409,7 @@
       "priority": "P0",
       "phase": "NOW",
       "issue_policy": "REUSE_EXISTING",
-      "existing_issue_refs": [
+      "existing_references": [
         "#175",
         "#186",
         "#523"
@@ -442,7 +442,7 @@
       "priority": "P1",
       "phase": "SHADOW_AFTER_INTEGRITY",
       "issue_policy": "REUSE_EXISTING_POST_BETA",
-      "existing_issue_refs": [
+      "existing_references": [
         "#443"
       ],
       "purpose": "Correlate cross-event stories across clicks, redirects, popups, clipboard, credentials, permissions, transactions, and lifecycle.",
@@ -473,7 +473,7 @@
       "priority": "P1",
       "phase": "DESIGN_AND_METADATA_SPIKE",
       "issue_policy": "CREATE_DESIGN_ISSUE_AFTER_DEDUP",
-      "existing_issue_refs": [
+      "existing_references": [
         "#127",
         "#237",
         "#591"
@@ -506,7 +506,7 @@
       "priority": "P1",
       "phase": "POST_BETA",
       "issue_policy": "REUSE_EXISTING_POST_BETA",
-      "existing_issue_refs": [
+      "existing_references": [
         "#445"
       ],
       "purpose": "Use user-owned relationship history as a strong benign prior and expose destination identity before action without granting immunity.",
@@ -537,7 +537,7 @@
       "priority": "P1",
       "phase": "SHADOW_AFTER_EVIDENCE",
       "issue_policy": "REUSE_EXISTING_POST_BETA",
-      "existing_issue_refs": [
+      "existing_references": [
         "#441",
         "#442"
       ],
@@ -568,7 +568,7 @@
       "priority": "P0",
       "phase": "NOW",
       "issue_policy": "CREATE_AFTER_DEDUP",
-      "existing_issue_refs": [
+      "existing_references": [
         "#175",
         "#215",
         "#565"
@@ -600,7 +600,7 @@
       "priority": "P1",
       "phase": "CURRENT_VERTICAL",
       "issue_policy": "REUSE_EXISTING_CLUSTER",
-      "existing_issue_refs": [
+      "existing_references": [
         "#555",
         "#564",
         "#568",
@@ -638,7 +638,7 @@
       "priority": "P0",
       "phase": "HARDEN_CURRENT",
       "issue_policy": "REUSE_EXISTING_CLUSTER",
-      "existing_issue_refs": [
+      "existing_references": [
         "#199",
         "#200",
         "#417"
@@ -672,7 +672,7 @@
       "priority": "P1",
       "phase": "HARDEN_CURRENT",
       "issue_policy": "REUSE_EXISTING_CLUSTER",
-      "existing_issue_refs": [
+      "existing_references": [
         "#223",
         "#269",
         "#397"
@@ -706,7 +706,7 @@
       "priority": "P1",
       "phase": "RESEARCH_PROFILE",
       "issue_policy": "CREATE_RESEARCH_ISSUE_AFTER_DEDUP",
-      "existing_issue_refs": [
+      "existing_references": [
         "#448",
         "#455"
       ],
@@ -737,7 +737,7 @@
       "priority": "P1",
       "phase": "RESEARCH_PROFILE",
       "issue_policy": "CREATE_RESEARCH_ISSUE_AFTER_DEDUP",
-      "existing_issue_refs": [
+      "existing_references": [
         "#452"
       ],
       "purpose": "Preserve initiator, redirect, filename/MIME, relationship, and optional signature/hash evidence from click to download and native handoff.",
@@ -768,7 +768,7 @@
       "priority": "P1",
       "phase": "RESEARCH_ONLY",
       "issue_policy": "REUSE_EXISTING_POST_BETA",
-      "existing_issue_refs": [
+      "existing_references": [
         "#448"
       ],
       "purpose": "Attribute delegated actions and require exact policy for credentials, permissions, downloads, payments, and cross-origin consequences.",
@@ -800,7 +800,7 @@
       "priority": "P1",
       "phase": "DESIGN_ONLY_UNTIL_TRIGGER",
       "issue_policy": "REUSE_EXISTING_DESIGN_SPIKE",
-      "existing_issue_refs": [
+      "existing_references": [
         "#244",
         "#452"
       ],
@@ -831,7 +831,7 @@
       "priority": "P1",
       "phase": "ONLY_AFTER_RETENTION_AND_REVIEW",
       "issue_policy": "POST_VALIDATION",
-      "existing_issue_refs": [
+      "existing_references": [
         "#452"
       ],
       "purpose": "Correlate a suspicious browser clipboard write with a paste into a narrowly defined shell-class target.",
@@ -862,7 +862,7 @@
       "priority": "P2",
       "phase": "POST_VALIDATION",
       "issue_policy": "POST_VALIDATION",
-      "existing_issue_refs": [
+      "existing_references": [
         "#452"
       ],
       "purpose": "Optionally inspect inert/downloaded artifact metadata and enforce a user-approved handoff before execution-class actions.",
@@ -891,7 +891,7 @@
       "priority": "P2",
       "phase": "POST_VALIDATION",
       "issue_policy": "POST_VALIDATION",
-      "existing_issue_refs": [
+      "existing_references": [
         "#179",
         "#452"
       ],
@@ -922,7 +922,7 @@
       "priority": "P2",
       "phase": "POST_VALIDATION",
       "issue_policy": "POST_VALIDATION",
-      "existing_issue_refs": [
+      "existing_references": [
         "#444",
         "#452"
       ],
@@ -954,7 +954,7 @@
       "priority": "P0",
       "phase": "PREREQUISITE_TO_ANY_NATIVE_RELEASE",
       "issue_policy": "MANDATORY_BEFORE_NATIVE_SHIP",
-      "existing_issue_refs": [
+      "existing_references": [
         "#452"
       ],
       "purpose": "Prevent the privileged companion distribution path from becoming the project's largest security liability.",

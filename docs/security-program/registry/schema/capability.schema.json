@@ -21,7 +21,7 @@
           "priority",
           "phase",
           "issue_policy",
-          "existing_issue_refs",
+          "existing_references",
           "purpose",
           "scope",
           "acceptance",
@@ -42,7 +42,7 @@
           "priority": { "enum": ["P0", "P1", "P2", "P3"] },
           "phase": { "type": "string", "pattern": "^[A-Z0-9_]+$" },
           "issue_policy": { "type": "string", "pattern": "^[A-Z0-9_]+$" },
-          "existing_issue_refs": {
+          "existing_references": {
             "type": "array",
             "items": { "type": "string", "pattern": "^#[0-9]+$" },
             "uniqueItems": true

@@ -2,7 +2,7 @@
 
 Generated from `registry/issue-map.json` after reconciling live issues, pull requests, docs, tests, and source on 2026-08-30.
 
-No per-scenario issue fan-out was created. The local registry retains all 1,512 scenario work units. Existing roadmap and milestone authority remains controlling.
+The registry records 0 live scenario issues, retains 1,512 local scenario work units, and records 0 new issues created by this seed pass. Existing roadmap and milestone authority remains controlling.
 
 | Theme | Programme IDs | Issues | PRs | Disposition | Evidence boundary |
 | --- | --- | --- | --- | --- | --- |
