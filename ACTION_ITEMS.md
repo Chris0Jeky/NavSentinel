@@ -156,6 +156,21 @@ frame reproduction and repair.
 
 ## Open and blocked items
 
+**OPEN: AI-37 — #560 inert toast-control repair Gate-3.** Run the active manual
+Chrome guide in [`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md)
+against the PR for branch `fix/issue560-isolated-input-fence`. That PR moves the
+document-start toast input fence from the MAIN-world loader into the
+isolated-world capture loader (no bridge relay, host accepted by identity only)
+and places the toast host in the top layer (`popover=manual`). Verify the exact
+head and hosted checks first, then load that exact build in a fresh Chrome
+profile and confirm on a real media-embed page: a regular redirect card's
+**Dismiss** and **Allow once** respond to mouse and keyboard, the cleanup
+**Undo** still works, and clicking Dismiss never reaches the page (no
+blocked-popup notice after the click). Also confirm a page layer that appears
+after the card cannot cover it. Inspect page, popup, and service-worker
+consoles. Only Chris can complete this human Gate-3. The general guided
+resolution cursor remains AI-19; AI-37 is an additional branch-specific gate.
+
 **OPEN: AI-36 — #558 popup/Options patch-save synchronization Gate-3.** Run the
 active manual Chrome guide in [`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md)
 against the eventual PR for branch `fix/issue558-patch-save-sync`. Verify the

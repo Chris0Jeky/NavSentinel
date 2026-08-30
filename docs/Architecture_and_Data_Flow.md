@@ -448,13 +448,17 @@ It listens to `chrome.webNavigation` events to decide when a committed navigatio
 - Excludes only isolated-world-owned NavSentinel UI nodes through WeakSet identity;
   page-created elements cannot gain an exemption by spoofing an extension-like ID
 - Keeps the cleanup Undo card beside unrelated warnings. A synchronous
-  document-start fence in the generated MAIN-world loader consumes trusted
-  pointer, mouse, touch, click, and keyboard input on the extension-owned toast
-  host before page capture listeners can observe it, then relays only a click or
-  keyboard activation's bounded control token through the existing
-  verified MessagePort. The isolated world accepts the token only when it still
-  identifies a live control in the current owned shadow root and invokes its
-  WeakMap-held action; the shadow root remains the fallback boundary in unit DOMs.
+  document-start fence in the generated isolated-world capture loader consumes
+  trusted pointer, mouse, touch, click, and keyboard input whose composed path
+  includes the extension-owned toast host before page capture listeners can
+  observe it, then hands a click or keyboard activation to `ui_toast` in the
+  same isolated world. Activation is accepted only for the host this module
+  created (identity, never id) and only for a control held in its WeakMap, so a
+  page-forged host or attribute cannot activate a real control, and the user's
+  own controls never depend on the MAIN-world bridge. The toast host also lives
+  in the top layer (`popover=manual`) so a page layer inserted later at the
+  same maximum z-index cannot paint above it and swallow clicks; the shadow root
+  remains the fallback boundary in unit DOMs.
 - Records bounded cleanup outcomes in the existing local event log for review;
   no new permission, endpoint, or remote telemetry path is introduced.
 - Feeds mutation alert count into the debug overlay
