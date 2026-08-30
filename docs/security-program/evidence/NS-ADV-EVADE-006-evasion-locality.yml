@@ -2,7 +2,7 @@ schema_version: "1.0.0"
 scenario_id: NS-ADV-EVADE-006
 capability_id: F-03
 profile: proving_ground
-repository_head: "c52e2c06f022be515bf750e72dd3533bff5f3173"
+repository_head: "3c4600e9343875e279f1a4d04983863c1f18632c"
 extension_build_sha256: "9809e9fdf97a494dd66ff93551aff7aef2c2eea596dd8e9ebac0623f1b988401"
 browser:
   name: "Playwright bundled Chromium"
@@ -22,8 +22,8 @@ oracle:
   type: independent_harm
   harm_boundary: "Trusted input reaches the typed local wrong-target navigation sink."
   local_artifact_path: "test-results/issue449-evasion-locality-receipt.json"
-  local_receipt_sha256: "b8660225432a611e52ad8168ad38a00e37345ed9e3a920a8c0ea70d8573ccd04"
-  oracle_payload_sha256: "d77eb511cd66aa81e6c8dca786d3e7b7e8a8f33280082fb0769a53318d1b3949"
+  local_receipt_sha256: "acb8c12eaffd018f1579b3576f52f9291ea9de1cd40e2f8e5e2b589dc93a73ee"
+  oracle_payload_sha256: "71bc7c32e60493c5709cfa28eaac49032eaaabd4b0e2a915c9735f2c7b0d64f0"
   sink_receipt_count: 3
   invalid_sink_attempt_count: 0
   arms:
@@ -60,11 +60,11 @@ invalid_reason: ""
 authority_scope:
   actor: "one authored top-frame evasion fixture"
   task: "one trusted activation per armed destination; the mixed arm sequences one benign keyboard activation and one harm pointer activation"
-  tab: "one fresh-profile tab per arm"
+  tab: "one fresh-profile initiating tab per arm plus its single consequence tab where navigation is allowed"
   frame: "top frame"
   document: "exact evasion-05-composite.html document for each arm"
   destination: "one armed loopback fake-sink URL per arm, role, and consequence"
-  ttl: "one browser arm"
+  ttl: "one test run; the loopback sink closes in the test finally block"
   use_count: 1
   use_count_scope: "per armed destination"
   sink_revalidation: "The fake sink validates run, scenario, role, consequence, one-use target authority, and the exact inert sentinel on every request."
@@ -85,13 +85,17 @@ network_violations: []
 blocked_external_attempts:
   - class: "Chromium platform CONNECT"
     distinct_target_count: 3
-    attempt_count: 55
+    attempt_count: 56
 qualification:
   privacy: "The sink retains typed metadata and a SHA-256 of the inert sentinel; no page text, browsing history, credential, or raw secret is stored."
   performance: "No release code changed and no runtime performance claim is made."
   accessibility: "The benign control completed with native Tab and Enter; no manual assistive-technology pass was run."
   page_origin_ui: "The page cannot lower protection; non-loopback and unarmed local target overrides fail closed before navigation."
 repaired_failures:
+  - classification: HARNESS_INVALID
+    cause: "Receipt b8660225432a611e52ad8168ad38a00e37345ed9e3a920a8c0ea70d8573ccd04 enforced one-use targets but mislabeled their TTL as one browser arm while the sink remained live for the bounded test run."
+    repair: "Receipt acb8c12eaffd018f1579b3576f52f9291ea9de1cd40e2f8e5e2b589dc93a73ee records the enforced test-run TTL and exact initiating/consequence tab scope."
+    verification: "The clean-head four-arm lane was rerun after the metadata correction."
   - classification: HARNESS_INVALID
     cause: "The earlier local receipts described one use per destination, but the fake sink did not consume a target authority after that use."
     repair: "Receipt b8660225432a611e52ad8168ad38a00e37345ed9e3a920a8c0ea70d8573ccd04 uses sink-enforced one-use target identifiers; earlier local receipt hashes 66a75b4d83d85632a77a0afdad709a4226a799a4852e847423bae11577702e9a and 02bb002747f9cfafce10918141c825097014e82451c66321080674c587dda5a1 are superseded."
@@ -106,6 +110,6 @@ verification:
   - "npm run typecheck"
   - "npx eslint tests/e2e/evasion-locality-evidence.spec.ts"
   - "npx vitest run tests/proving-ground-fake-sink.test.ts --maxWorkers=2: 2 passed"
-  - "CI=1 exact-head evasion locality lane: 1 passed in 8.7 seconds"
-  - "CI=1 exact-head existing UI-004 sink lane: 3 passed in 15.2 seconds"
-  - "CI=1 exact-head evasion regression family: 17 passed in 50.2 seconds"
+  - "CI=1 exact-head evasion locality lane: 1 passed in 9.0 seconds"
+  - "CI=1 sink/fixture code head c52e2c0 existing UI-004 sink lane: 3 passed in 15.2 seconds"
+  - "CI=1 sink/fixture code head c52e2c0 evasion regression family: 17 passed in 50.2 seconds"
