@@ -381,6 +381,58 @@ describe("#523 clipboard-pressure protected, benign, and mixed contracts", () =>
     );
   });
 
+  it("resets clipboard coalescing state when drain starts the next queue window", () => {
+    const queue = new OutboundQueue(MAX_PENDING_OUTBOUND, RESERVED_SCARCE_OUTBOUND_SLOTS);
+    enqueueMainGuard(queue, msg("ns-clipboard-write", {
+      document: "old-document",
+      ordinal: 1,
+      looksLikeCommand: false,
+    }));
+    enqueueMainGuard(queue, msg("ns-clipboard-write", {
+      document: "old-document",
+      ordinal: 2,
+      looksLikeCommand: false,
+    }));
+
+    const firstWindow = queue.drain();
+    expect(firstWindow.coalesced).toBe(1);
+    expect(firstWindow.items).toEqual([
+      msg("ns-clipboard-write", {
+        document: "old-document",
+        ordinal: 2,
+        looksLikeCommand: false,
+      }),
+    ]);
+
+    enqueueMainGuard(queue, msg("ns-clipboard-write", {
+      document: "new-document",
+      ordinal: 1,
+      looksLikeCommand: false,
+    }));
+    enqueueMainGuard(queue, msg("ns-nav-blocked", {
+      id: "critical-after-reconnect",
+      document: "new-document",
+    }));
+
+    const secondWindow = queue.drain();
+    expect(secondWindow).toEqual({
+      items: [
+        msg("ns-clipboard-write", {
+          document: "new-document",
+          ordinal: 1,
+          looksLikeCommand: false,
+        }),
+        msg("ns-nav-blocked", {
+          id: "critical-after-reconnect",
+          document: "new-document",
+        }),
+      ],
+      dropped: 0,
+      coalesced: 0,
+    });
+    expect(JSON.stringify(secondWindow)).not.toContain("old-document");
+  });
+
   it("runs the deterministic #523 boundary mutation campaign", () => {
     const floodCounts = [
       0,

@@ -47,6 +47,8 @@ The canonical scenario, capability, outcome, evidence, mapping, and local-work-u
 
 After `npm run build`, `npm run test:e2e:proving-ground` runs the first bounded `NS-ADV-UI-004` vertical with trusted attack, benign, and mixed input. Its typed fake sink binds only to loopback, the browser test rejects unapproved HTTP(S) origins, and exact-head receipts are written under ignored `test-results/`. A sink receipt is the independent harm oracle; a product event or hidden element alone is not protection evidence.
 
+The targeted C-04 bridge-pressure proof runs with `npx playwright test tests/e2e/bridge-clipboard-pressure.spec.ts --project=regression`. It compares the normal exact built artifact with an OS-temporary copy whose single generated queue-coalescing function is disabled for the malicious baseline only. Both arms use trusted browser input, a loopback-only Gym and typed fake sink, and a fail-closed egress proxy; JSON receipts are written under ignored `test-results/`. The temporary mutant never edits `extension/dist`, does not bypass production behavior, and contains only an inert synthetic sentinel.
+
 The older Python flow still works when needed:
 
 ```bash
