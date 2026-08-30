@@ -129,14 +129,34 @@ const budgets = [
     glob: "assets/ui_toast-*.js",
     maxKB: 8,
   },
+  {
+    // Shared target and gesture classification keeps the synchronous content
+    // guard small while preserving one implementation across early events and
+    // the click decision path.
+    label: "modifier navigation (shared)",
+    glob: "assets/modifier-navigation-*.js",
+    maxKB: 2,
+  },
   ...(fs.existsSync(path.join(distDir, "reputation_data.bin"))
-    ? [{
+    ? [
+      {
+        label: "reputation runtime (research shared)",
+        glob: "assets/reputation-runtime~*.js",
+        maxKB: 5,
+      },
+      {
+        label: "child reputation (research shared)",
+        glob: "assets/child-reputation-*.js",
+        maxKB: 3,
+      },
+      {
         // Research-profile data budget. The release-eligible interaction-only
         // profile intentionally has no reputation asset to measure.
         label: "reputation_data.bin",
         glob: "reputation_data.bin",
         maxKB: 150,
-      }]
+      },
+    ]
     : []),
   {
     label: "total dist",

@@ -34,6 +34,7 @@ import {
   loadReputationFilter,
   reputationEnabled,
 } from "@navsentinel/reputation-runtime";
+import { checkChildFrameReputation } from "@navsentinel/child-reputation";
 import { controlToast, showOverlayCleanupToast, showToast } from "./ui_toast";
 import { explainReasonCode } from "../shared/explanations";
 import {
@@ -87,6 +88,13 @@ import {
   silentNavThrottleAllows,
   type SilentNavThrottleState,
 } from "./silent_decision";
+import {
+  effectiveAnchorTarget,
+  isBlankAnchorTarget,
+  isImmediateWindowOpenTarget,
+  isSameTabAnchorTarget,
+  isTrustedModifiedAnchorGesture,
+} from "./modifier_navigation";
 
 const CDS_SMART_BLOCK_THRESHOLD = 70;
 const NS_SOURCE = "__navsentinel__";
@@ -360,6 +368,8 @@ onAllowlistChange((list) => {
 function siteKeyFromLocation(): string {
   return location.hostname.toLowerCase();
 }
+
+const siteRegDomain = getRegistrableDomain(siteKeyFromLocation());
 
 function frameKey(): string {
   return isTopFrame() ? "top" : "frame";
@@ -787,14 +797,6 @@ function buildSilentNavEvent(params: {
       threshold: params.blockThreshold
     }
   };
-}
-
-function isImmediateWindowOpenTarget(target: unknown): boolean {
-  if (typeof target !== "string" || !target) return true;
-  return /^_blank$/i.test(target) || (
-    !/^_(self|top|parent)$/i.test(target) &&
-    target !== window.name
-  );
 }
 
 function appendImmediateSilentNav(event: EventLogEntry | null): void {
@@ -1339,7 +1341,6 @@ function findAnchorFromEvent(e: MouseEvent): HTMLAnchorElement | null {
 }
 
 function isCrossSiteDestinationHost(destHost: string | null | undefined): boolean {
-  const siteRegDomain = getRegistrableDomain(siteKeyFromLocation());
   const destRegDomain = getRegistrableDomain(destHost ?? "");
   return !!(
     siteRegDomain &&
@@ -1349,36 +1350,18 @@ function isCrossSiteDestinationHost(destHost: string | null | undefined): boolea
   );
 }
 
-// 0 = current context, 1 = explicit/effective _blank, 2 = other context.
-function classifyAnchorTarget(anchor: HTMLAnchorElement): 0 | 1 | 2 {
-  const target = anchor.getAttribute("target")
-    ?? document.querySelector<HTMLBaseElement>("base[target]")?.target
-    ?? "";
-
-  // HTML normalizes control-character and markup-shaped target values to a
-  // fresh context. Match that fail-safe browser behavior instead of treating
-  // them as opener aliases.
-  if (/[\t\n\r<]/.test(target)) return 1;
-  const keyword = target.toLowerCase();
-  if ((keyword === "_parent" || keyword === "_top") && window.top !== window) return 2;
-  if (!target || !isImmediateWindowOpenTarget(target)) return 0;
-  return keyword === "_blank" ? 1 : 2;
-}
-
 function shouldIsolateModifiedAnchorFromPage(
   e: MouseEvent,
   anchor: HTMLAnchorElement | null = findAnchorFromEvent(e),
-  parsed = anchor ? parseDestination(anchor.getAttribute("href") ?? anchor.href) : null,
 ): boolean {
   return !!(
     settings.defaultMode !== "off" &&
-    e.isTrusted &&
-    (e.button === 1 || (!e.button && (e.ctrlKey || e.metaKey))) &&
+    isTrustedModifiedAnchorGesture(e) &&
     isTopFrame() &&
     anchor &&
-    !classifyAnchorTarget(anchor) &&
-    /^https?:\/\//i.test(parsed?.href ?? "") &&
-    isCrossSiteDestinationHost(parsed?.host)
+    isSameTabAnchorTarget(effectiveAnchorTarget(anchor), true) &&
+    /^https?:$/i.test(anchor.protocol) &&
+    isCrossSiteDestinationHost(anchor.hostname)
   );
 }
 
@@ -1766,9 +1749,9 @@ window.addEventListener(
     const currentClickNewTabIntent = e.isTrusted && (e.ctrlKey || e.metaKey);
     const explicitNewTab = e.isTrusted && (!!ctx.explicitNewTabIntent || currentClickNewTabIntent);
     const anchor = findAnchorFromEvent(e);
-    const anchorTargetKind = anchor ? classifyAnchorTarget(anchor) : 2;
-    const isBlankAnchor = anchorTargetKind === 1;
-    const isSameTabAnchor = anchorTargetKind === 0;
+    const anchorTarget = anchor ? effectiveAnchorTarget(anchor) : "";
+    const isBlankAnchor = !!anchor && isBlankAnchorTarget(anchorTarget);
+    const isSameTabAnchor = !!anchor && isSameTabAnchorTarget(anchorTarget, isTopFrame());
     const parsed = anchor ? parseDestination(anchor.getAttribute("href") ?? anchor.href) : null;
     const isAllowed = parsed?.host
       ? isAllowlisted(allowlist, siteKeyFromLocation(), parsed.host)
@@ -1781,7 +1764,6 @@ window.addEventListener(
     }
     gestureNavAttempts++;
 
-    const siteRegDomain = getRegistrableDomain(siteKeyFromLocation());
     const destRegDomain = parsed?.host ? getRegistrableDomain(parsed.host) : null;
     const isCrossSite = isCrossSiteDestinationHost(parsed?.host);
 
@@ -2018,7 +2000,7 @@ window.addEventListener(
         anchor &&
         currentClickNewTabIntent
       );
-      const isolatedModifiedAnchor = shouldIsolateModifiedAnchorFromPage(e, anchor, parsed);
+      const isolatedModifiedAnchor = shouldIsolateModifiedAnchorFromPage(e, anchor);
       if (isolatedModifiedAnchor) {
         // Do not preventDefault: the user's explicit new-tab navigation still
         // belongs to Chromium. Stop only later page handlers that could also
@@ -2123,40 +2105,15 @@ window.addEventListener(
     // If the synchronous path allowed the navigation and we have a
     // cross-site destination, ask the SW for a deferred reputation check.
     if (reputationEnabled && !isTopFrame() && decision === "allow" && destRegDomain && isCrossSite && mode !== "off") {
-      void (async () => {
-        try {
-          const checks = [checkReputationViaMessage(destRegDomain)];
-          if (destHost !== null && destHost !== destRegDomain) {
-            checks.push(checkReputationViaMessage(destHost));
-          }
-          const results = await Promise.all(checks);
-          const anyBad = results.some((r) => r.knownBad);
-          const anyReady = results.some((r) => r.filterReady);
-          if (!anyBad) {
-            if (!anyReady && settings.debug) {
-              console.debug("[NavSentinel] Child-frame reputation check: filter not ready in SW");
-            }
-            return;
-          }
-          // Destination is known-bad -- late async check from child frame.
-          // The synchronous NRS path could not include the +50 knownBadDomain
-          // factor because the bloom filter is not loaded in child frames.
-          const host = destHost ?? destRegDomain;
-          appendEventSafely({
-            kind: "nav_reputation_late_warn",
-            site: siteKeyFromLocation(),
-            url: parsed?.href ?? location.href,
-            destHost: host,
-            reasons: ["late_async_child_frame"],
-          });
-          showToast({
-            message: `NavSentinel warning: ${host} is a known malicious domain`,
-            timeoutMs: 8000,
-          });
-        } catch {
-          // Graceful degradation: SW unreachable
-        }
-      })();
+      checkChildFrameReputation(
+        destRegDomain,
+        destHost,
+        parsed?.href,
+        settings.debug,
+        checkReputationViaMessage,
+        appendEvent,
+        showToast,
+      );
     }
   },
   true
