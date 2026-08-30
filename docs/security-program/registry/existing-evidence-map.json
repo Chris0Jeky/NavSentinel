@@ -1392,7 +1392,7 @@
       ],
       "primary_harm_boundary": "One trusted modified anchor gesture produces both the requested child navigation and an unauthorized opener navigation or history entry.",
       "role": "mixed",
-      "current_oracle": "Trusted bundled Chromium independently counts requested native children and compares the opener's exact URL and history. Navigation Off reaches the opener sink; Smart and Strict contain current-context attacks, keep non-isolated handlers reachable, block their page-origin popup authority, and prove non-current MAIN _self blocking plus service-worker location.replace rollback.",
+      "current_oracle": "Trusted bundled Chromium independently counts requested native children, compares exact child and opener URLs plus opener history, and retains a synthetic handler-fired receipt written before the local sink. Navigation Off reaches the opener sink; Smart and Strict contain current-context attacks, keep non-isolated handlers reachable, block their page-origin popup authority, and prove non-current MAIN _self blocking plus service-worker location.replace rollback.",
       "oracle_type": "independent_harm",
       "evidence_state": "REGRESSION_PROVEN",
       "evidence_validity": "CURRENT_REGRESSION",
