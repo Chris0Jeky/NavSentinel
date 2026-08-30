@@ -19,8 +19,10 @@ import path from "path";
 import { fileURLToPath } from "url";
 import {
   assertNoToastFor,
+  clickToastButton,
   getGymBaseUrl,
   getServiceWorker,
+  updateNavigationSettings,
   waitForNavSentinelBridge,
   waitForToastMatch,
 } from "./extension_test_utils";
@@ -94,18 +96,24 @@ async function extractEventLog(context: import("@playwright/test").BrowserContex
     const res = await chrome.storage.local.get(key);
     return Array.isArray(res[key]) ? res[key] : [];
   }, EVENT_LOG_KEY);
-  return log as Array<{ kind?: string; site?: string; score?: number; reasons?: string[] }>;
+  return log as Array<{
+    kind?: string;
+    site?: string;
+    score?: number;
+    reasons?: string[];
+    extra?: { overlayAutoDismissed?: boolean };
+  }>;
 }
 
-const MUTATION_TRIGGER_EVENT = "navsentinel:gym:trigger-mutation";
+const E2E_MUTATION_TRIGGER_EVENT = "navsentinel:gym:trigger-mutation";
 
-async function triggerMutationAfterMonitorArm(page: import("@playwright/test").Page) {
-  // capture_isolated may load after document.readyState becomes complete, in
-  // which case the monitor deliberately waits 3 seconds before arming.
+async function triggerMutationUsingE2EOnlyEvent(page: import("@playwright/test").Page) {
+  // Allow the extension's normal post-load monitor arm window to elapse before
+  // dispatching the fixture's E2E-only event. Human trials use the fixture timer.
   await page.waitForTimeout(3500);
   await page.evaluate((eventName) => {
     window.dispatchEvent(new Event(eventName));
-  }, MUTATION_TRIGGER_EVENT);
+  }, E2E_MUTATION_TRIGGER_EVENT);
 }
 
 async function waitForMutationEvent(
@@ -189,6 +197,8 @@ test.describe("DoubleClickjacking", () => {
 // ClickFix / Fake CAPTCHA Tests (P2-02)
 // ==========================================================================
 
+const SAFE_CLICKFIX_SENTINEL = "NAVSENTINEL_SENTINEL_DO_NOT_RUN";
+
 test.describe("ClickFix", () => {
   test("clickfix-01 basic: clipboard write + overlay triggers ClickFix alert @phase2", async () => {
     test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
@@ -208,6 +218,8 @@ test.describe("ClickFix", () => {
         null,
         { timeout: 5000 }
       );
+      expect(await page.evaluate(() => navigator.clipboard.readText()))
+        .toBe(SAFE_CLICKFIX_SENTINEL);
 
       // NavSentinel should detect the ClickFix pattern and show a toast
       await waitForToastMatch(
@@ -240,6 +252,8 @@ test.describe("ClickFix", () => {
         null,
         { timeout: 5000 }
       );
+      expect(await page.evaluate(() => navigator.clipboard.readText()))
+        .toBe(SAFE_CLICKFIX_SENTINEL);
 
       await waitForToastMatch(
         page,
@@ -251,7 +265,7 @@ test.describe("ClickFix", () => {
     }
   });
 
-  test("clickfix-03 legit CAPTCHA: no false positive @phase2", async () => {
+  test("clickfix-03 local verification control: no false positive @phase2", async () => {
     test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
 
     const { page, context, cleanup } = await setupFixtureTest("clickfix-03-legit-captcha.html");
@@ -267,6 +281,7 @@ test.describe("ClickFix", () => {
         null,
         { timeout: 5000 }
       );
+      expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("847293");
 
       // Should NOT trigger a ClickFix alert
       await assertNoToastFor(page, 2000);
@@ -290,6 +305,8 @@ test.describe("ClickFix", () => {
         null,
         { timeout: 5000 }
       );
+      expect(await page.evaluate(() => navigator.clipboard.readText()))
+        .toBe(SAFE_CLICKFIX_SENTINEL);
 
       await waitForToastMatch(
         page,
@@ -413,8 +430,9 @@ test.describe("DOM Mutation Monitor", () => {
     const { page, context, cleanup } = await setupFixtureTest("mutation-01-delayed-overlay.html");
 
     try {
-      await triggerMutationAfterMonitorArm(page);
+      await triggerMutationUsingE2EOnlyEvent(page);
       await page.waitForSelector("#malicious-overlay", { timeout: 8000 });
+      await expect(page.locator("#malicious-overlay")).toBeVisible();
 
       // Check that the status text confirms injection
       await page.waitForFunction(
@@ -422,6 +440,7 @@ test.describe("DOM Mutation Monitor", () => {
         null,
         { timeout: 5000 }
       );
+      await expect(page.locator("#timing")).toHaveText(/E2E-only monitor-ready event/);
 
       // NavSentinel mutation monitor should detect the overlay and show a toast
       await waitForToastMatch(
@@ -436,18 +455,233 @@ test.describe("DOM Mutation Monitor", () => {
     }
   });
 
+  test("mutation-01 opt-in cleanup hides the high-severity overlay and Undo restores it @phase2", async () => {
+    test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
+
+    const { page, context, cleanup } = await setupFixtureTest("mutation-01-delayed-overlay.html");
+
+    try {
+      await updateNavigationSettings(context, { autoDismissOverlays: true });
+      await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
+      await waitForNavSentinelBridge(page);
+
+      await triggerMutationUsingE2EOnlyEvent(page);
+      await page.waitForSelector("#malicious-overlay", { state: "attached", timeout: 8000 });
+      await expect(page.locator("#malicious-overlay")).toBeHidden();
+      await waitForToastMatch(page, /overlay hidden/i, 8000);
+
+      await expect.poll(async () => {
+        const events = await extractEventLog(context);
+        return events.some(
+          (event) => event.kind === "mutation_alert" &&
+            event.reasons?.includes("overlay_injected") &&
+            event.extra?.overlayAutoDismissed === true,
+        );
+      }).toBe(true);
+
+      await clickToastButton(page, "Undo");
+      await expect(page.locator("#malicious-overlay")).toBeVisible();
+      // The monitor observes inline-style changes with a 100 ms debounce. Keep
+      // this assertion beyond that boundary so Undo cannot silently re-hide it.
+      await page.waitForTimeout(350);
+      await expect(page.locator("#malicious-overlay")).toBeVisible();
+    } finally {
+      await cleanup();
+    }
+  });
+
+  test("mutation-05 sequential cleanup keeps delayed layers in one Undo group @phase2", async () => {
+    test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
+    const { page, context, cleanup } = await setupFixtureTest(
+      "mutation-05-sequential-overlays.html?gymLayerGapMs=650",
+    );
+
+    try {
+      await updateNavigationSettings(context, { autoDismissOverlays: true });
+      await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
+      await waitForNavSentinelBridge(page);
+      const originalPageCount = context.pages().length;
+      const originalUrl = page.url();
+
+      await triggerMutationUsingE2EOnlyEvent(page);
+      await page.waitForSelector("#trap-b", { state: "attached", timeout: 8000 });
+      await expect(page.locator("#trap-a")).toBeHidden();
+      await expect(page.locator("#trap-b")).toBeHidden();
+      await waitForToastMatch(page, /overlay hidden/i, 8000);
+
+      await page.evaluate(() => {
+        const api = (window as typeof window & {
+          __navsentinelMutation05?: { injectNext: (source?: string) => string | null };
+        }).__navsentinelMutation05;
+        if (!api?.injectNext("e2e-burst")) throw new Error("Mutation 05 fixture API unavailable");
+      });
+      await page.waitForSelector("#trap-c", { state: "attached", timeout: 3000 });
+      await expect(page.locator("#trap-c")).toBeHidden();
+
+      await clickToastButton(page, "Undo");
+      for (const selector of ["#trap-a", "#trap-b", "#trap-c"]) {
+        await expect(page.locator(selector)).toBeVisible();
+      }
+      await page.waitForTimeout(350);
+      for (const selector of ["#trap-a", "#trap-b", "#trap-c"]) {
+        await expect(page.locator(selector)).toBeVisible();
+      }
+
+      const restoredOrder = await page.evaluate(() => {
+        const api = (window as typeof window & {
+          __navsentinelMutation05?: {
+            getTimeline: () => Array<{ kind: string; id: string }>;
+          };
+        }).__navsentinelMutation05;
+        return (api?.getTimeline() ?? [])
+          .filter((entry) => entry.kind === "restored")
+          .map((entry) => entry.id);
+      });
+      expect(restoredOrder.slice(-3)).toEqual(["trap-c", "trap-b", "trap-a"]);
+      expect(context.pages()).toHaveLength(originalPageCount);
+      expect(page.url()).toBe(originalUrl);
+      expect(await page.evaluate(() => ({
+        intendedClicks: Number(document.body.dataset.intendedClicks ?? "0"),
+        trapClicks: Number(document.body.dataset.trapClicks ?? "0"),
+      }))).toEqual({ intendedClicks: 0, trapClicks: 0 });
+
+      await expect.poll(async () => {
+        const events = await extractEventLog(context);
+        return events.filter(
+          (event) => event.kind === "mutation_alert" &&
+            event.reasons?.includes("overlay_injected") &&
+            event.extra?.overlayAutoDismissed === true,
+        ).length;
+      }).toBeGreaterThanOrEqual(3);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  test("mutation-05 brief notice expiry keeps later cleanup active without reopening it @phase2", async () => {
+    test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
+    const { page, context, cleanup } = await setupFixtureTest(
+      "mutation-05-sequential-overlays.html?gymLayerGapMs=650",
+    );
+
+    try {
+      await updateNavigationSettings(context, { autoDismissOverlays: true });
+      await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
+      await waitForNavSentinelBridge(page);
+      const originalPageCount = context.pages().length;
+      await triggerMutationUsingE2EOnlyEvent(page);
+      await page.waitForSelector("#trap-b", { state: "attached", timeout: 8000 });
+      await waitForToastMatch(page, /overlay hidden/i, 8000);
+
+      await expect(page.locator("#__navsentinel_toast_host .brief-recovery"))
+        .toHaveCount(0, { timeout: 3000 });
+      await page.evaluate(() => {
+        const api = (window as typeof window & {
+          __navsentinelMutation05?: { injectNext: (source?: string) => string | null };
+        }).__navsentinelMutation05;
+        if (!api?.injectNext("e2e-after-expiry")) throw new Error("Mutation 05 fixture API unavailable");
+      });
+      await page.waitForSelector("#trap-c", { state: "attached", timeout: 3000 });
+      for (const selector of ["#trap-a", "#trap-b", "#trap-c"]) {
+        await expect(page.locator(selector)).toBeHidden();
+      }
+      await assertNoToastFor(page, 600);
+      expect(context.pages()).toHaveLength(originalPageCount);
+
+      await updateNavigationSettings(context, { autoDismissOverlays: false });
+      for (const selector of ["#trap-a", "#trap-b", "#trap-c"]) {
+        await expect(page.locator(selector)).toBeVisible();
+      }
+    } finally {
+      await cleanup();
+    }
+  });
+
+  test("mutation-05 grouped Undo preserves a page-owned display change @phase2", async () => {
+    test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
+    const { page, context, cleanup } = await setupFixtureTest(
+      "mutation-05-sequential-overlays.html?gymLayerGapMs=700&gymPageOwnsFirst=1",
+    );
+
+    try {
+      await updateNavigationSettings(context, { autoDismissOverlays: true });
+      await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
+      await waitForNavSentinelBridge(page);
+      await triggerMutationUsingE2EOnlyEvent(page);
+      await page.waitForSelector("#trap-b", { state: "attached", timeout: 8000 });
+      await expect.poll(() => page.locator("#trap-a").evaluate((element) => ({
+        display: (element as HTMLElement).style.getPropertyValue("display"),
+        priority: (element as HTMLElement).style.getPropertyPriority("display"),
+        pageOwned: (element as HTMLElement).dataset.pageOwnedDisplay,
+      }))).toEqual({ display: "none", priority: "", pageOwned: "none" });
+      await expect(page.locator("#trap-b")).toBeHidden();
+      await waitForToastMatch(page, /overlay hidden/i, 8000);
+
+      await clickToastButton(page, "Undo");
+      await expect(page.locator("#trap-a")).toBeHidden();
+      await expect(page.locator("#trap-b")).toBeVisible();
+      await page.waitForTimeout(350);
+      await expect(page.locator("#trap-a")).toBeHidden();
+      await expect(page.locator("#trap-b")).toBeVisible();
+    } finally {
+      await cleanup();
+    }
+  });
+
+  for (const inertCase of [
+    { label: "cleanup disabled", settings: { defaultMode: "smart" as const, autoDismissOverlays: false }, expectAlert: true },
+    { label: "Navigation Off", settings: { defaultMode: "off" as const, autoDismissOverlays: true }, expectAlert: false },
+  ]) {
+    test(`mutation-05 ${inertCase.label} leaves sequential layers untouched @phase2`, async () => {
+      test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
+      const { page, context, cleanup } = await setupFixtureTest(
+        "mutation-05-sequential-overlays.html?gymLayerGapMs=500",
+      );
+
+      try {
+        await updateNavigationSettings(context, inertCase.settings);
+        await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
+        await waitForNavSentinelBridge(page);
+        await triggerMutationUsingE2EOnlyEvent(page);
+        await page.waitForSelector("#trap-b", { state: "attached", timeout: 8000 });
+        await expect(page.locator("#trap-a")).toBeVisible();
+        await expect(page.locator("#trap-b")).toBeVisible();
+
+        if (inertCase.expectAlert) {
+          await waitForToastMatch(page, /detected a suspicious overlay/i, 8000);
+        } else {
+          await assertNoToastFor(page, 600);
+        }
+        const events = await extractEventLog(context);
+        const overlayEvents = events.filter(
+          (event) => event.kind === "mutation_alert" &&
+            event.reasons?.includes("overlay_injected"),
+        );
+        if (inertCase.expectAlert) {
+          expect(overlayEvents.length).toBeGreaterThanOrEqual(2);
+          expect(overlayEvents.some((event) => event.extra?.overlayAutoDismissed === true)).toBe(false);
+        } else {
+          expect(overlayEvents).toHaveLength(0);
+        }
+      } finally {
+        await cleanup();
+      }
+    });
+  }
+
   test("mutation-02 form action change: detected by monitor @phase2", async () => {
     test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
 
     const { page, context, cleanup } = await setupFixtureTest("mutation-02-form-action-change.html");
 
     try {
-      await triggerMutationAfterMonitorArm(page);
+      await triggerMutationUsingE2EOnlyEvent(page);
       await page.waitForFunction(
         () => document.getElementById("status")?.textContent?.includes("Form action changed"),
         null,
         { timeout: 8000 }
       );
+      await expect(page.locator("#timing")).toHaveText(/E2E-only monitor-ready event/);
 
       // Check the form action was actually changed
       const formAction = await page.evaluate(
@@ -467,12 +701,13 @@ test.describe("DOM Mutation Monitor", () => {
     const { page, context, cleanup } = await setupFixtureTest("mutation-03-password-inject.html");
 
     try {
-      await triggerMutationAfterMonitorArm(page);
+      await triggerMutationUsingE2EOnlyEvent(page);
       await page.waitForFunction(
         () => document.getElementById("status")?.textContent?.includes("Password field injected"),
         null,
         { timeout: 8000 }
       );
+      await expect(page.locator("#timing")).toHaveText(/E2E-only monitor-ready event/);
 
       // Verify the password field was actually injected
       const hasPassword = await page.evaluate(
@@ -485,6 +720,48 @@ test.describe("DOM Mutation Monitor", () => {
       await cleanup();
     }
   });
+
+  const mutationFallbackCases = [
+    {
+      fixture: "mutation-01-delayed-overlay.html",
+      status: "Overlay injected",
+      reason: "overlay_injected",
+    },
+    {
+      fixture: "mutation-02-form-action-change.html",
+      status: "Form action changed",
+      reason: "form_action_changed",
+    },
+    {
+      fixture: "mutation-03-password-inject.html",
+      status: "Password field injected",
+      reason: "password_injected",
+    },
+  ] as const;
+
+  for (const scenario of mutationFallbackCases) {
+    test(`${scenario.fixture} proves the human fallback timer without the full delay @phase2`, async () => {
+      test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
+
+      // The fixture-only query override keeps this proof below the human
+      // 10-second fallback while leaving extension timing and behavior intact.
+      const { page, context, cleanup } = await setupFixtureTest(
+        `${scenario.fixture}?gymTestDelayMs=4000`
+      );
+
+      try {
+        await page.waitForFunction(
+          (expectedStatus) => document.getElementById("status")?.textContent?.includes(expectedStatus),
+          scenario.status,
+          { timeout: 8000 }
+        );
+        await expect(page.locator("#timing")).toHaveText(/human fallback timer/);
+        await waitForMutationEvent(context, scenario.reason);
+      } finally {
+        await cleanup();
+      }
+    });
+  }
 
   test("mutation-04 legit dynamic: no false positive @phase2", async () => {
     test.skip(!fs.existsSync(extensionPath), "Build the extension first.");

@@ -1,0 +1,80 @@
+{
+  "schema_version": "1.0.0",
+  "source": "RESOURCES/DefenseVectors/MASTER_DOCUMENT.md section 08.5",
+  "definition_count": 9,
+  "definitions": [
+    {
+      "suffix": "01-MODEL",
+      "title": "Model invariant and harm boundary",
+      "exit": "Reviewed card, duplicate map, and safety boundary",
+      "depends_on_suffixes": []
+    },
+    {
+      "suffix": "02-ATTACK",
+      "title": "Build malicious safe fixture",
+      "exit": "Harm reaches the independent local sink without the product",
+      "depends_on_suffixes": [
+        "01-MODEL"
+      ]
+    },
+    {
+      "suffix": "03-BENIGN",
+      "title": "Build benign control",
+      "exit": "Legitimate task completes with no unexplained intervention",
+      "depends_on_suffixes": [
+        "01-MODEL"
+      ]
+    },
+    {
+      "suffix": "04-MIXED",
+      "title": "Build mixed journey",
+      "exit": "Legitimate work succeeds and the unauthorized consequence is isolated",
+      "depends_on_suffixes": [
+        "02-ATTACK",
+        "03-BENIGN"
+      ]
+    },
+    {
+      "suffix": "05-ORACLE",
+      "title": "Implement protected-vs-fired oracle",
+      "exit": "Outcome and timing are independent of the product event log",
+      "depends_on_suffixes": [
+        "02-ATTACK",
+        "03-BENIGN",
+        "04-MIXED"
+      ]
+    },
+    {
+      "suffix": "06-DEFENCE",
+      "title": "Implement smallest defensive slice",
+      "exit": "Expected policy is enforced without broad regression",
+      "depends_on_suffixes": [
+        "05-ORACLE"
+      ]
+    },
+    {
+      "suffix": "07-MUTATE",
+      "title": "Run invariant mutation campaign",
+      "exit": "Declared mutations and benign duals are recorded",
+      "depends_on_suffixes": [
+        "06-DEFENCE"
+      ]
+    },
+    {
+      "suffix": "08-QUALIFY",
+      "title": "Qualify browser, state, privacy, and performance",
+      "exit": "Relevant qualification lanes are complete",
+      "depends_on_suffixes": [
+        "07-MUTATE"
+      ]
+    },
+    {
+      "suffix": "09-CLOSE",
+      "title": "Close evidence and limitations",
+      "exit": "State is advanced truthfully with a receipt and durable handoff",
+      "depends_on_suffixes": [
+        "08-QUALIFY"
+      ]
+    }
+  ]
+}

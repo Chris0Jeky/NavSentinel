@@ -54,7 +54,11 @@ try {
 console.log(`[package:ext] Verified release profile: ${builtProfile.id}`);
 
 // Binary distributions must carry the GPL terms alongside the extension files.
-fs.copyFileSync(licensePath, path.join(distDir, "LICENSE"));
+fs.writeFileSync(
+  path.join(distDir, "LICENSE"),
+  licenseText.replace(/\r\n?/g, "\n"),
+  "utf8",
+);
 
 fs.mkdirSync(artifactsDir, { recursive: true });
 

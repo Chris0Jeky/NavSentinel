@@ -1,0 +1,1450 @@
+{
+  "schema_version": "1.0.0",
+  "as_of": "2026-08-30",
+  "mapping_count": 63,
+  "mappings": [
+    {
+      "id": "MAP-LEVEL-01",
+      "kind": "gym_level",
+      "label": "Level 1 basic opacity new-tab trap",
+      "primary_scenario_id": "NS-ADV-UI-001",
+      "supporting_scenario_ids": [
+        "NS-ADV-WIN-001"
+      ],
+      "primary_harm_boundary": "Trusted input opens an unauthorized browsing context through a transparent full-viewport target.",
+      "role": "primitive",
+      "current_oracle": "Playwright checks that the unexpected page does not survive and that a NavSentinel intervention appears.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "The fixture has no independent sink receipt and the product event remains part of the pass condition.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/level1-basic-opacity.html",
+        "tests/e2e/navsentinel.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-LEVEL-02",
+      "kind": "gym_level",
+      "label": "Level 2 moving target",
+      "primary_scenario_id": "NS-ADV-UI-002",
+      "supporting_scenario_ids": [],
+      "primary_harm_boundary": "The activation target materially changes between inspection and the trusted click.",
+      "role": "primitive",
+      "current_oracle": "Playwright observes the blocked unexpected browsing context and product UI.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "No independent record proves the actual inspected target, final hit target, and consequence as separate facts.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/level2-moving-target.html",
+        "tests/e2e/navsentinel.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-LEVEL-03",
+      "kind": "gym_level",
+      "label": "Level 3 instant injection",
+      "primary_scenario_id": "NS-ADV-UI-003",
+      "supporting_scenario_ids": [
+        "NS-ADV-RUNTIME-007"
+      ],
+      "primary_harm_boundary": "A newly injected target changes the consequence around the user's activation.",
+      "role": "primitive",
+      "current_oracle": "Playwright checks the unauthorized page is blocked and the intervention is rendered.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "The test is one authored timing point and does not establish adjacent timing robustness.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/level3-instant-injection.html",
+        "tests/e2e/navsentinel.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-LEVEL-04",
+      "kind": "gym_level",
+      "label": "Level 4 visual mimicry",
+      "primary_scenario_id": "NS-ADV-UI-006",
+      "supporting_scenario_ids": [
+        "NS-ADV-IDN-004"
+      ],
+      "primary_harm_boundary": "A browser-like page surface induces an action whose effective destination differs from the displayed context.",
+      "role": "primitive",
+      "current_oracle": "Playwright checks the deceptive navigation outcome and product UI state.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "The fixture models one visual surface and is not evidence of general browser-in-the-browser recognition.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/level4-visual-mimicry.html",
+        "tests/e2e/navsentinel.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-LEVEL-05",
+      "kind": "gym_level",
+      "label": "Level 5 popunder",
+      "primary_scenario_id": "NS-ADV-WIN-001",
+      "supporting_scenario_ids": [],
+      "primary_harm_boundary": "One trusted action creates an extra unauthorized browsing context.",
+      "role": "primitive",
+      "current_oracle": "Playwright counts browsing contexts and checks the unexpected popup is absent.",
+      "oracle_type": "browser_outcome",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "The authored primitive does not cover window geometry, named reuse, or long-delay variants.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/level5-window-open-popunder.html",
+        "tests/e2e/navsentinel.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-LEVEL-06",
+      "kind": "gym_level",
+      "label": "Level 6 programmatic click",
+      "primary_scenario_id": "NS-ADV-SELF-003",
+      "supporting_scenario_ids": [
+        "NS-ADV-UI-003"
+      ],
+      "primary_harm_boundary": "A page-generated activation attempts to consume authority for a user-level consequence.",
+      "role": "primitive",
+      "current_oracle": "Playwright checks that the programmatic action does not produce the protected navigation.",
+      "oracle_type": "browser_outcome",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "Synthetic input is not inherently malicious; this primitive does not model accessibility or delegated-agent authority.",
+      "issue_refs": [],
+      "pr_refs": [
+        "#464"
+      ],
+      "paths": [
+        "gym/level6-programmatic-click.html",
+        "tests/e2e/navsentinel.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-LEVEL-07",
+      "kind": "gym_level",
+      "label": "Level 7 legitimate modal backdrop",
+      "primary_scenario_id": "NS-ADV-UI-001",
+      "supporting_scenario_ids": [
+        "NS-ADV-PERM-008"
+      ],
+      "primary_harm_boundary": "No unauthorized consequence occurs; the accessible modal must remain usable.",
+      "role": "benign",
+      "current_oracle": "Playwright completes the intended modal interaction without a NavSentinel block.",
+      "oracle_type": "browser_outcome",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "One fixture does not cover the full accessibility, framework, and stacking-context control space.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/level7-legit-modal-backdrop.html",
+        "tests/e2e/navsentinel.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-LEVEL-08",
+      "kind": "gym_level",
+      "label": "Level 8 legitimate OAuth popup",
+      "primary_scenario_id": "NS-ADV-AUTH-005",
+      "supporting_scenario_ids": [
+        "NS-ADV-WIN-002"
+      ],
+      "primary_harm_boundary": "A scoped authentication popup must complete without authorizing an unrelated second context.",
+      "role": "benign",
+      "current_oracle": "Playwright uses trusted input and verifies one legitimate popup completes without an unexpected prompt.",
+      "oracle_type": "browser_outcome",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "The synthetic local flow does not validate provider protocol, redirect state, or open-web OAuth compatibility.",
+      "issue_refs": [
+        "#223"
+      ],
+      "pr_refs": [],
+      "paths": [
+        "gym/level8-legit-oauth-popup.html",
+        "gym/level8-oauth-consent.html",
+        "tests/e2e/navsentinel.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-LEVEL-09",
+      "kind": "gym_level",
+      "label": "Level 9 legitimate video overlay",
+      "primary_scenario_id": "NS-ADV-UI-004",
+      "supporting_scenario_ids": [
+        "NS-ADV-SUPPLY-006"
+      ],
+      "primary_harm_boundary": "A legitimate foreground media control remains usable and does not create an unauthorized consequence.",
+      "role": "benign",
+      "current_oracle": "Playwright completes the intended video-overlay interaction without suppression or blocking.",
+      "oracle_type": "browser_outcome",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "This control does not cover embedded real-player variance or every accessible dialog pattern.",
+      "issue_refs": [
+        "#594"
+      ],
+      "pr_refs": [],
+      "paths": [
+        "gym/level9-legit-video-overlay.html",
+        "tests/e2e/navsentinel.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-LEVEL-10",
+      "kind": "gym_level",
+      "label": "Level 10 redirects and forms",
+      "primary_scenario_id": "NS-ADV-NAV-001",
+      "supporting_scenario_ids": [
+        "NS-ADV-CRED-003"
+      ],
+      "primary_harm_boundary": "A delayed navigation commits or a changed form destination receives protected input outside scoped intent.",
+      "role": "mixed",
+      "current_oracle": "Playwright checks redirect recovery and form-prompt behavior through browser and product UI state.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "Rollback is post-commit containment and the form path lacks a typed independent protected-data sink receipt.",
+      "issue_refs": [
+        "#458"
+      ],
+      "pr_refs": [],
+      "paths": [
+        "gym/level10-redirects-and-forms.html",
+        "tests/e2e/navsentinel.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-LEVEL-11",
+      "kind": "gym_level",
+      "label": "Level 11 credential guard",
+      "primary_scenario_id": "NS-ADV-CRED-001",
+      "supporting_scenario_ids": [
+        "NS-ADV-CRED-003"
+      ],
+      "primary_harm_boundary": "A synthetic password submit reaches an unexpected or insecure destination.",
+      "role": "mixed",
+      "current_oracle": "Playwright checks that risky submits prompt and legitimate/trusted submits complete.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "Product modal state is the principal oracle; the lane does not prove all script-based exfiltration sinks.",
+      "issue_refs": [
+        "#199",
+        "#200"
+      ],
+      "pr_refs": [],
+      "paths": [
+        "gym/level11-credential-guard.html",
+        "tests/e2e/credential-guard.spec.ts",
+        "tests/e2e/navsentinel.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-LEVEL-12",
+      "kind": "gym_level",
+      "label": "Level 12 slow same-tab navigation",
+      "primary_scenario_id": "NS-ADV-NAV-001",
+      "supporting_scenario_ids": [],
+      "primary_harm_boundary": "No unauthorized boundary is crossed; a deliberate slow same-site navigation must remain usable.",
+      "role": "benign",
+      "current_oracle": "Playwright completes the expected navigation without an unexplained intervention.",
+      "oracle_type": "browser_outcome",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "One local control does not validate SSO, payment-return, shortener, or open-web delayed-navigation compatibility.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/level12-slow-same-tab-link.html",
+        "tests/e2e/navsentinel.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-RW-01",
+      "kind": "rw_journey",
+      "label": "RW-01 Sponsored-result overlay swap",
+      "primary_scenario_id": "NS-ADV-SUPPLY-001",
+      "supporting_scenario_ids": [
+        "NS-ADV-UI-001"
+      ],
+      "primary_harm_boundary": "A deceptive overlay turns one trusted click into an unrelated new-tab consequence.",
+      "role": "attack",
+      "current_oracle": "Playwright observes the browser consequence and the corresponding product state in a local synthetic journey.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "The test checks popup survival and product UI; it does not independently replay ad-network or search-result provenance.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/rw01-search-result-overlay-swap.html",
+        "tests/e2e/navsentinel.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-RW-03",
+      "kind": "rw_journey",
+      "label": "RW-03 Delayed redirect landing",
+      "primary_scenario_id": "NS-ADV-NAV-001",
+      "supporting_scenario_ids": [],
+      "primary_harm_boundary": "A delayed cross-site navigation commits after the action's authority has expired.",
+      "role": "attack",
+      "current_oracle": "Playwright observes the browser consequence and the corresponding product state in a local synthetic journey.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "Rollback is post-commit containment, and the test does not prove pre-harm prevention.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/rw03-delayed-redirect-landing.html",
+        "gym/rw03-final-report.html",
+        "tests/e2e/navsentinel.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-RW-04",
+      "kind": "rw_journey",
+      "label": "RW-04 Open-redirect laundering",
+      "primary_scenario_id": "NS-ADV-NAV-004",
+      "supporting_scenario_ids": [
+        "NS-ADV-AUTH-001"
+      ],
+      "primary_harm_boundary": "A benign-looking intermediary launders an unrelated final destination.",
+      "role": "attack",
+      "current_oracle": "Playwright observes the browser consequence and the corresponding product state in a local synthetic journey.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "The local three-page chain does not establish open-web redirect coverage.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/rw04-open-redirect-landing.html",
+        "gym/rw04-local-redirector.html",
+        "gym/rw04-final-offer.html",
+        "tests/e2e/navsentinel.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-RW-06",
+      "kind": "rw_journey",
+      "label": "RW-06 Legitimate auth followed by a second popup",
+      "primary_scenario_id": "NS-ADV-AUTH-005",
+      "supporting_scenario_ids": [
+        "NS-ADV-WIN-002"
+      ],
+      "primary_harm_boundary": "A legitimate authentication popup is followed by an unauthorized second browsing context.",
+      "role": "attack",
+      "current_oracle": "Playwright observes the browser consequence and the corresponding product state in a local synthetic journey.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "The synthetic flow does not validate provider protocol or concurrent production OAuth state.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/rw06-legit-auth-second-popup.html",
+        "tests/e2e/navsentinel.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-RW-07",
+      "kind": "rw_journey",
+      "label": "RW-07 Fake reauthentication interstitial",
+      "primary_scenario_id": "NS-ADV-CRED-006",
+      "supporting_scenario_ids": [],
+      "primary_harm_boundary": "A trusted-page reauthentication lure attempts to send a synthetic password to an unrelated destination.",
+      "role": "attack",
+      "current_oracle": "Playwright observes the browser consequence and the corresponding product state in a local synthetic journey.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "The form-submit oracle does not cover arbitrary script or network exfiltration sinks.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/rw07-fake-reauth-interstitial.html",
+        "tests/e2e/credential-guard.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-RW-08",
+      "kind": "rw_journey",
+      "label": "RW-08 OAuth popup window reuse laundering",
+      "primary_scenario_id": "NS-ADV-WIN-003",
+      "supporting_scenario_ids": [
+        "NS-ADV-AUTH-003"
+      ],
+      "primary_harm_boundary": "An authorized popup is reused for an unrelated destination after consent.",
+      "role": "attack",
+      "current_oracle": "Playwright observes the browser consequence and the corresponding product state in a local synthetic journey.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "One named-window sequence does not cover every browser reuse and concurrency ordering.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/rw08-window-reuse-laundering.html",
+        "gym/rw08-consent-popup.html",
+        "gym/rw08-laundered-destination.html",
+        "tests/e2e/navsentinel.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-RW-09",
+      "kind": "rw_journey",
+      "label": "RW-09 Named-target popup ambiguity",
+      "primary_scenario_id": "NS-ADV-WIN-003",
+      "supporting_scenario_ids": [
+        "NS-ADV-AUTH-003"
+      ],
+      "primary_harm_boundary": "Ambiguous empty and named targets blur which authorization flow owns a later navigation.",
+      "role": "attack",
+      "current_oracle": "Playwright observes the browser consequence and the corresponding product state in a local synthetic journey.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "The authored sequence is not a general popup ownership or identity proof.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/rw09-target-ambiguity.html",
+        "gym/rw09-consent-step1.html",
+        "gym/rw09-consent-step2.html",
+        "gym/rw09-phish-target.html",
+        "tests/e2e/navsentinel.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-RW-10",
+      "kind": "rw_journey",
+      "label": "RW-10 Keyboard-only authentication launch",
+      "primary_scenario_id": "NS-ADV-AUTH-005",
+      "supporting_scenario_ids": [],
+      "primary_harm_boundary": "No unauthorized consequence occurs; keyboard activation must retain legitimate popup authority.",
+      "role": "benign",
+      "current_oracle": "Playwright observes the browser consequence and the corresponding product state in a local synthetic journey.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "The benign control covers local Space and Enter paths, not assistive technology or provider variance.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/rw10-keyboard-auth-launch.html",
+        "gym/rw10-consent-popup.html",
+        "tests/e2e/navsentinel.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-RW-11",
+      "kind": "rw_journey",
+      "label": "RW-11 Fake invoice approval",
+      "primary_scenario_id": "NS-ADV-MONEY-001",
+      "supporting_scenario_ids": [],
+      "primary_harm_boundary": "An invoice-review action opens an unrelated payout destination.",
+      "role": "attack",
+      "current_oracle": "Playwright observes the browser consequence and the corresponding product state in a local synthetic journey.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "The browser-context assertion does not establish payment recipient or amount integrity.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/rw11-fake-invoice-approval.html",
+        "gym/rw11-unrelated-payout.html",
+        "tests/e2e/navsentinel.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-RW-12",
+      "kind": "rw_journey",
+      "label": "RW-12 Wallet-connect popup burst",
+      "primary_scenario_id": "NS-ADV-MONEY-003",
+      "supporting_scenario_ids": [
+        "NS-ADV-WIN-002"
+      ],
+      "primary_harm_boundary": "A legitimate wallet connection is followed by an unauthorized drain popup.",
+      "role": "attack",
+      "current_oracle": "Playwright observes the browser consequence and the corresponding product state in a local synthetic journey.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "The fixture models popup authority only, not wallet protocol, signing intent, or asset transfer.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/rw12-wallet-connect-burst.html",
+        "gym/rw12-wallet-connect-popup.html",
+        "gym/rw12-wallet-drain-popup.html",
+        "tests/e2e/navsentinel.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-RW-13",
+      "kind": "rw_journey",
+      "label": "RW-13 Courier tracking credential lure",
+      "primary_scenario_id": "NS-ADV-SOCIAL-004",
+      "supporting_scenario_ids": [
+        "NS-ADV-CRED-001"
+      ],
+      "primary_harm_boundary": "A parcel lure attempts to submit synthetic credentials to an unrelated destination.",
+      "role": "attack",
+      "current_oracle": "Playwright observes the browser consequence and the corresponding product state in a local synthetic journey.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "The local control does not measure lookalike diversity or arbitrary script exfiltration.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/rw13-courier-tracking-login.html",
+        "tests/e2e/credential-guard.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-RW-14",
+      "kind": "rw_journey",
+      "label": "RW-14 Express-pay overlay hijack",
+      "primary_scenario_id": "NS-ADV-MONEY-002",
+      "supporting_scenario_ids": [
+        "NS-ADV-UI-001"
+      ],
+      "primary_harm_boundary": "A payment-labelled surface routes trusted input to a hidden unrelated target.",
+      "role": "attack",
+      "current_oracle": "Playwright observes the browser consequence and the corresponding product state in a local synthetic journey.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "The fixture does not prove recipient, amount, wallet, or native payment integrity.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/rw14-checkout-express-pay-overlay.html",
+        "gym/rw14-membership-upsell.html",
+        "tests/e2e/navsentinel.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-RW-15",
+      "kind": "rw_journey",
+      "label": "RW-15 Bank security-alert redirect",
+      "primary_scenario_id": "NS-ADV-MONEY-007",
+      "supporting_scenario_ids": [
+        "NS-ADV-NAV-001"
+      ],
+      "primary_harm_boundary": "A timed security-alert lure commits an unrelated verification navigation.",
+      "role": "attack",
+      "current_oracle": "Playwright observes the browser consequence and the corresponding product state in a local synthetic journey.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "The current outcome is rollback after commit, not pre-harm blocking.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/rw15-bank-security-alert.html",
+        "gym/rw15-bank-verify-transaction.html",
+        "tests/e2e/navsentinel.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-RW-16",
+      "kind": "rw_journey",
+      "label": "RW-16 Fake document preview overlay",
+      "primary_scenario_id": "NS-ADV-FILE-001",
+      "supporting_scenario_ids": [
+        "NS-ADV-UI-001"
+      ],
+      "primary_harm_boundary": "A document-preview surface redirects trusted input to an unrelated open action.",
+      "role": "attack",
+      "current_oracle": "Playwright observes the browser consequence and the corresponding product state in a local synthetic journey.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "The local fake sink does not model downloaded artifact identity or execution.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/rw16-fake-document-preview-overlay.html",
+        "gym/rw16-unrelated-open.html",
+        "tests/e2e/navsentinel.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-RW-17",
+      "kind": "rw_journey",
+      "label": "RW-17 Media-player overlay hijack",
+      "primary_scenario_id": "NS-ADV-UI-001",
+      "supporting_scenario_ids": [],
+      "primary_harm_boundary": "A drifting media overlay consumes a play action for an unrelated advertising destination.",
+      "role": "attack",
+      "current_oracle": "Playwright observes the browser consequence and the corresponding product state in a local synthetic journey.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "One authored overlay does not cover embedded-player or supply-chain variance.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/rw17-media-overlay-hijack.html",
+        "gym/rw17-ad-landing.html",
+        "tests/e2e/navsentinel.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-RW-18",
+      "kind": "rw_journey",
+      "label": "RW-18 Fake browser update warning",
+      "primary_scenario_id": "NS-ADV-FILE-001",
+      "supporting_scenario_ids": [],
+      "primary_harm_boundary": "A fake codec or browser-update action reaches a synthetic installer destination.",
+      "role": "attack",
+      "current_oracle": "Playwright observes the browser consequence and the corresponding product state in a local synthetic journey.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "No file is executed and the lane does not establish artifact provenance or malware detection.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/rw18-browser-update-warning.html",
+        "gym/rw18-installer-download.html",
+        "tests/e2e/navsentinel.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-RW-19",
+      "kind": "rw_journey",
+      "label": "RW-19 Tech-support scareware",
+      "primary_scenario_id": "NS-ADV-SOCIAL-001",
+      "supporting_scenario_ids": [
+        "NS-ADV-WIN-002"
+      ],
+      "primary_harm_boundary": "A scare page repeatedly creates remote-support browsing contexts.",
+      "role": "attack",
+      "current_oracle": "Playwright observes the browser consequence and the corresponding product state in a local synthetic journey.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "The fixture is silent and inert; it does not model calling, remote access, or OS-level consequences.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/rw19-tech-support-scare.html",
+        "gym/rw19-remote-support.html",
+        "tests/e2e/navsentinel.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-RW-20",
+      "kind": "rw_journey",
+      "label": "RW-20 Support widget abuse",
+      "primary_scenario_id": "NS-ADV-SUPPLY-006",
+      "supporting_scenario_ids": [
+        "NS-ADV-WIN-002"
+      ],
+      "primary_harm_boundary": "A legitimate support popup is followed by an unauthorized remote-tool destination.",
+      "role": "mixed",
+      "current_oracle": "Playwright observes the browser consequence and the corresponding product state in a local synthetic journey.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "The authored widget does not cover compromised vendor code or open-web integration behavior.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/rw20-chat-widget-abuse.html",
+        "gym/rw20-chat-popup.html",
+        "gym/rw20-remote-tool.html",
+        "tests/e2e/navsentinel.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-RW-21",
+      "kind": "rw_journey",
+      "label": "RW-21 Allow-once double spend",
+      "primary_scenario_id": "NS-ADV-WIN-005",
+      "supporting_scenario_ids": [],
+      "primary_harm_boundary": "One scoped allowance is consumed twice for separate browsing-context consequences.",
+      "role": "attack",
+      "current_oracle": "Playwright observes the browser consequence and the corresponding product state in a local synthetic journey.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "This is one timing sequence and not proof for every authority token or consequence type.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/rw21-allow-once-double-spend.html",
+        "gym/rw21-settings-popup.html",
+        "gym/rw21-exfil-popup.html",
+        "tests/e2e/navsentinel.stress.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-RW-22",
+      "kind": "rw_journey",
+      "label": "RW-22 Rollback after worker restart",
+      "primary_scenario_id": "NS-ADV-STATE-001",
+      "supporting_scenario_ids": [
+        "NS-ADV-NAV-001"
+      ],
+      "primary_harm_boundary": "A service-worker restart must not lose or misapply pending rollback state.",
+      "role": "attack",
+      "current_oracle": "Playwright observes the browser consequence and the corresponding product state in a local synthetic journey.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "The synthetic worker lifecycle is not branded-browser suspension evidence and rollback remains post-commit.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/rw22-rollback-worker-restart.html",
+        "gym/rw22-order-status.html",
+        "gym/rw22-phish-landing.html",
+        "tests/e2e/navsentinel.stress.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-RW-23",
+      "kind": "rw_journey",
+      "label": "RW-23 Multi-tab prompt isolation",
+      "primary_scenario_id": "NS-ADV-WIN-008",
+      "supporting_scenario_ids": [
+        "NS-ADV-STATE-007"
+      ],
+      "primary_harm_boundary": "Concurrent tab actions must not leak prompts, authority, or state across document identities.",
+      "role": "attack",
+      "current_oracle": "Playwright observes the browser consequence and the corresponding product state in a local synthetic journey.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "The fixed two-tab sequence does not cover broad concurrency or bridge-identity compromise.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/rw23-multi-tab-prompts.html",
+        "gym/rw23-tab-a.html",
+        "gym/rw23-tab-a-popup.html",
+        "gym/rw23-tab-b.html",
+        "gym/rw23-tab-b-popup.html",
+        "tests/e2e/navsentinel.stress.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-RW-24",
+      "kind": "rw_journey",
+      "label": "RW-24 Idle-resume popup",
+      "primary_scenario_id": "NS-ADV-EVADE-003",
+      "supporting_scenario_ids": [
+        "NS-ADV-STATE-004"
+      ],
+      "primary_harm_boundary": "A popup fires after the initiating authority has expired during idle time.",
+      "role": "attack",
+      "current_oracle": "Playwright observes the browser consequence and the corresponding product state in a local synthetic journey.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "One timer boundary does not establish robustness across throttling, sleep, or BFCache.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/rw24-idle-resume-popup.html",
+        "gym/rw24-stale-popup.html",
+        "tests/e2e/navsentinel.stress.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-RW-25",
+      "kind": "rw_journey",
+      "label": "RW-25 Rapid close and reopen churn",
+      "primary_scenario_id": "NS-ADV-STATE-008",
+      "supporting_scenario_ids": [],
+      "primary_harm_boundary": "Stale authority must not survive rapid popup close/reopen churn to reach an exfiltration sink.",
+      "role": "attack",
+      "current_oracle": "Playwright observes the browser consequence and the corresponding product state in a local synthetic journey.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "The local churn sequence does not cover browser crashes, profile restart, or every reuse ordering.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/rw25-rapid-close-reopen.html",
+        "gym/rw25-churn-popup.html",
+        "gym/rw25-exfil-popup.html",
+        "tests/e2e/navsentinel.stress.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-EVASION-01",
+      "kind": "evasion_fixture",
+      "label": "Evasion 01 Opacity threshold",
+      "primary_scenario_id": "NS-ADV-UI-001",
+      "supporting_scenario_ids": [],
+      "primary_harm_boundary": "A low-opacity full-page target captures trusted input.",
+      "role": "primitive",
+      "current_oracle": "Playwright checks the resulting browsing context or intervention state for the authored threshold case.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "A single hand-authored threshold fixture is not a mutation campaign or robustness distribution.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/evasion-01-opacity-009.html",
+        "tests/e2e/evasion.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-EVASION-02",
+      "kind": "evasion_fixture",
+      "label": "Evasion 02 Size threshold",
+      "primary_scenario_id": "NS-ADV-UI-001",
+      "supporting_scenario_ids": [],
+      "primary_harm_boundary": "A sub-threshold target captures trusted input.",
+      "role": "primitive",
+      "current_oracle": "Playwright checks the resulting browsing context or intervention state for the authored threshold case.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "A single hand-authored threshold fixture is not a mutation campaign or robustness distribution.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/evasion-02-size-34pct.html",
+        "tests/e2e/evasion.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-EVASION-03",
+      "kind": "evasion_fixture",
+      "label": "Evasion 03 Whitespace accessibility label",
+      "primary_scenario_id": "NS-ADV-UI-001",
+      "supporting_scenario_ids": [],
+      "primary_harm_boundary": "A meaningless label attempts to suppress deceptive-surface scoring.",
+      "role": "primitive",
+      "current_oracle": "Playwright checks the resulting browsing context or intervention state for the authored threshold case.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "A single hand-authored threshold fixture is not a mutation campaign or robustness distribution.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/evasion-03-labeled-overlay.html",
+        "tests/e2e/evasion.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-EVASION-04",
+      "kind": "evasion_fixture",
+      "label": "Evasion 04 Z-index threshold",
+      "primary_scenario_id": "NS-ADV-UI-001",
+      "supporting_scenario_ids": [],
+      "primary_harm_boundary": "A just-below-threshold stacking value attempts to preserve an unauthorized target.",
+      "role": "primitive",
+      "current_oracle": "Playwright checks the resulting browsing context or intervention state for the authored threshold case.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "A single hand-authored threshold fixture is not a mutation campaign or robustness distribution.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/evasion-04-zindex-9998.html",
+        "tests/e2e/evasion.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-EVASION-05",
+      "kind": "evasion_fixture",
+      "label": "Evasion 05 Composite weak signals",
+      "primary_scenario_id": "NS-ADV-EVADE-006",
+      "supporting_scenario_ids": [],
+      "primary_harm_boundary": "Several individually weak signals combine around one unauthorized activation.",
+      "role": "primitive",
+      "current_oracle": "Playwright checks the resulting browsing context or intervention state for the authored threshold case.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "A single hand-authored threshold fixture is not a mutation campaign or robustness distribution.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/evasion-05-composite.html",
+        "tests/e2e/evasion.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-EVASION-06",
+      "kind": "evasion_fixture",
+      "label": "Evasion 06 Delayed overlay injection",
+      "primary_scenario_id": "NS-ADV-UI-003",
+      "supporting_scenario_ids": [],
+      "primary_harm_boundary": "A deceptive target appears after initial observation and before activation.",
+      "role": "primitive",
+      "current_oracle": "Playwright checks the resulting browsing context or intervention state for the authored threshold case.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "A single hand-authored threshold fixture is not a mutation campaign or robustness distribution.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/evasion-06-delayed-injection.html",
+        "tests/e2e/evasion.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-EVASION-07",
+      "kind": "evasion_fixture",
+      "label": "Evasion 07 Pointer-events pass-through",
+      "primary_scenario_id": "NS-ADV-UI-005",
+      "supporting_scenario_ids": [],
+      "primary_harm_boundary": "Pointer routing differs from the visible surface around trusted input.",
+      "role": "primitive",
+      "current_oracle": "Playwright checks the resulting browsing context or intervention state for the authored threshold case.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "A single hand-authored threshold fixture is not a mutation campaign or robustness distribution.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/evasion-07-pointer-events-none.html",
+        "tests/e2e/evasion.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-EVASION-08",
+      "kind": "evasion_fixture",
+      "label": "Evasion 08 Clip-path hiding",
+      "primary_scenario_id": "NS-ADV-RUNTIME-003",
+      "supporting_scenario_ids": [],
+      "primary_harm_boundary": "A clipped surface attempts to conceal its effective hit area.",
+      "role": "primitive",
+      "current_oracle": "Playwright checks the resulting browsing context or intervention state for the authored threshold case.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "A single hand-authored threshold fixture is not a mutation campaign or robustness distribution.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/evasion-08-clip-path-hidden.html",
+        "tests/e2e/evasion.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-EVASION-09",
+      "kind": "evasion_fixture",
+      "label": "Evasion 09 Filter opacity",
+      "primary_scenario_id": "NS-ADV-RUNTIME-003",
+      "supporting_scenario_ids": [],
+      "primary_harm_boundary": "CSS filter opacity attempts to evade direct opacity inspection.",
+      "role": "primitive",
+      "current_oracle": "Playwright checks the resulting browsing context or intervention state for the authored threshold case.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "A single hand-authored threshold fixture is not a mutation campaign or robustness distribution.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/evasion-09-filter-opacity.html",
+        "tests/e2e/evasion.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-EVASION-10",
+      "kind": "evasion_fixture",
+      "label": "Evasion 10 Transform scale",
+      "primary_scenario_id": "NS-ADV-RUNTIME-003",
+      "supporting_scenario_ids": [],
+      "primary_harm_boundary": "A transformed element attempts to separate declared and effective geometry.",
+      "role": "primitive",
+      "current_oracle": "Playwright checks the resulting browsing context or intervention state for the authored threshold case.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "A single hand-authored threshold fixture is not a mutation campaign or robustness distribution.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/evasion-10-transform-scale.html",
+        "tests/e2e/evasion.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-EVASION-11",
+      "kind": "evasion_fixture",
+      "label": "Evasion 11 Shadow-root surface",
+      "primary_scenario_id": "NS-ADV-RUNTIME-001",
+      "supporting_scenario_ids": [],
+      "primary_harm_boundary": "A deceptive surface is placed behind a shadow-root visibility boundary.",
+      "role": "primitive",
+      "current_oracle": "Playwright checks the resulting browsing context or intervention state for the authored threshold case.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "A single hand-authored threshold fixture is not a mutation campaign or robustness distribution.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/evasion-11-shadow-dom.html",
+        "tests/e2e/evasion.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-EVASION-12",
+      "kind": "evasion_fixture",
+      "label": "Evasion 12 Sequential overlay reinsertion",
+      "primary_scenario_id": "NS-ADV-UI-004",
+      "supporting_scenario_ids": [],
+      "primary_harm_boundary": "Repeated deceptive overlays attempt to outlive a single cleanup action.",
+      "role": "primitive",
+      "current_oracle": "Playwright checks the resulting browsing context or intervention state for the authored threshold case.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "A single hand-authored threshold fixture is not a mutation campaign or robustness distribution.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/evasion-12-multiple-overlays.html",
+        "tests/e2e/evasion.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-CLICKFIX-01",
+      "kind": "clickfix_fixture",
+      "label": "ClickFix 01 Fake CAPTCHA sentinel",
+      "primary_scenario_id": "NS-ADV-CLIP-001",
+      "supporting_scenario_ids": [],
+      "primary_harm_boundary": "A fake CAPTCHA writes an inert synthetic sentinel and directs the user toward an OS execution gesture.",
+      "role": "attack",
+      "current_oracle": "Playwright reads the clipboard and requires the exact inert sentinel plus the product alert; no OS paste or execution is attempted.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "The browser cannot observe the OS paste destination or execution, so this is detection evidence rather than end-to-end prevention.",
+      "issue_refs": [
+        "#449"
+      ],
+      "pr_refs": [
+        "#598"
+      ],
+      "paths": [
+        "gym/clickfix-01-basic.html",
+        "tests/e2e/phase2-detections.spec.ts",
+        "tests/clickfix-detector.test.ts"
+      ]
+    },
+    {
+      "id": "MAP-CLICKFIX-02",
+      "kind": "clickfix_fixture",
+      "label": "ClickFix 02 Terminal-instruction variant",
+      "primary_scenario_id": "NS-ADV-CLIP-003",
+      "supporting_scenario_ids": [
+        "NS-ADV-CLIP-001"
+      ],
+      "primary_harm_boundary": "Terminal-like instructions pair an inert synthetic clipboard sentinel with an OS execution gesture.",
+      "role": "attack",
+      "current_oracle": "Playwright reads the clipboard and requires the exact inert sentinel plus the product alert; no OS paste or execution is attempted.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "The browser cannot observe the OS paste destination or execution, so this is detection evidence rather than end-to-end prevention.",
+      "issue_refs": [
+        "#449"
+      ],
+      "pr_refs": [
+        "#598"
+      ],
+      "paths": [
+        "gym/clickfix-02-instructions.html",
+        "tests/e2e/phase2-detections.spec.ts",
+        "tests/clickfix-detector.test.ts"
+      ]
+    },
+    {
+      "id": "MAP-CLICKFIX-03",
+      "kind": "clickfix_fixture",
+      "label": "ClickFix 03 Local verification control",
+      "primary_scenario_id": "NS-ADV-CLIP-003",
+      "supporting_scenario_ids": [],
+      "primary_harm_boundary": "No unauthorized consequence occurs; ordinary CAPTCHA and OTP copy behavior must remain usable.",
+      "role": "benign",
+      "current_oracle": "Playwright completes the local verification control, copies the exact synthetic OTP, and requires no ClickFix alert.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "The local static control does not exercise a real verification provider; provider matching remains unit-only.",
+      "issue_refs": [
+        "#449"
+      ],
+      "pr_refs": [
+        "#598"
+      ],
+      "paths": [
+        "gym/clickfix-03-legit-captcha.html",
+        "tests/e2e/phase2-detections.spec.ts",
+        "tests/clickfix-detector.test.ts"
+      ]
+    },
+    {
+      "id": "MAP-CLICKFIX-04",
+      "kind": "clickfix_fixture",
+      "label": "ClickFix 04 Win+R instruction variant",
+      "primary_scenario_id": "NS-ADV-CLIP-001",
+      "supporting_scenario_ids": [],
+      "primary_harm_boundary": "A page combines an inert clipboard sentinel with instructions to open an OS launcher.",
+      "role": "attack",
+      "current_oracle": "Playwright reads the clipboard and requires the exact inert sentinel plus the product alert; no OS paste or execution is attempted.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "The browser cannot observe the OS paste destination or execution, so this is detection evidence rather than end-to-end prevention.",
+      "issue_refs": [
+        "#449"
+      ],
+      "pr_refs": [
+        "#598"
+      ],
+      "paths": [
+        "gym/clickfix-04-winr.html",
+        "tests/e2e/phase2-detections.spec.ts",
+        "tests/clickfix-detector.test.ts"
+      ]
+    },
+    {
+      "id": "MAP-DOUBLECLICK-01",
+      "kind": "doubleclick_fixture",
+      "label": "DoubleClick 01 opener rewrite",
+      "primary_scenario_id": "NS-ADV-WIN-004",
+      "supporting_scenario_ids": [],
+      "primary_harm_boundary": "A second click lets a child rewrite its opener before closing.",
+      "role": "attack",
+      "current_oracle": "Playwright and unit tests inspect the opener-navigation consequence and correlation state.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "The phase-two path includes implementation-coupled assertions and is not a broad timing campaign.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/doubleclick-01-basic.html",
+        "gym/doubleclick-01-target.html",
+        "tests/e2e/phase2-detections.spec.ts",
+        "tests/dblclick-guard.test.ts"
+      ]
+    },
+    {
+      "id": "MAP-DOUBLECLICK-02",
+      "kind": "doubleclick_fixture",
+      "label": "DoubleClick 02 OAuth consent variant",
+      "primary_scenario_id": "NS-ADV-WIN-004",
+      "supporting_scenario_ids": [
+        "NS-ADV-AUTH-006"
+      ],
+      "primary_harm_boundary": "A consent-labelled double click gives a child an opener rewrite consequence.",
+      "role": "attack",
+      "current_oracle": "Playwright observes whether the popup and opener consequence survive.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "The local consent surface does not validate OAuth scopes, provider state, or production protocol behavior.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/doubleclick-02-oauth.html",
+        "gym/doubleclick-02-consent.html",
+        "tests/e2e/phase2-detections.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-DOUBLECLICK-03",
+      "kind": "doubleclick_fixture",
+      "label": "DoubleClick 03 legitimate interaction",
+      "primary_scenario_id": "NS-ADV-WIN-004",
+      "supporting_scenario_ids": [],
+      "primary_harm_boundary": "No unauthorized consequence occurs; an ordinary double-click must remain usable.",
+      "role": "benign",
+      "current_oracle": "Playwright completes the intended local interaction without a false intervention.",
+      "oracle_type": "browser_outcome",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "One control does not measure application-wide double-click compatibility.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/doubleclick-03-legit.html",
+        "tests/e2e/phase2-detections.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-DOUBLECLICK-04",
+      "kind": "doubleclick_fixture",
+      "label": "DoubleClick 04 payment variant",
+      "primary_scenario_id": "NS-ADV-WIN-004",
+      "supporting_scenario_ids": [
+        "NS-ADV-MONEY-002"
+      ],
+      "primary_harm_boundary": "A payment-labelled double click gives a child an opener navigation consequence.",
+      "role": "attack",
+      "current_oracle": "Unit and Playwright paths inspect the opener-navigation consequence.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "The fixture does not model a payment protocol, recipient, amount, or transfer.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "gym/doubleclick-04-payment.html",
+        "gym/doubleclick-04-payment-target.html",
+        "tests/e2e/phase2-detections.spec.ts",
+        "tests/dblclick-guard.test.ts"
+      ]
+    },
+    {
+      "id": "MAP-LANE-CORPUS",
+      "kind": "evidence_lane",
+      "label": "Phishing corpus validation",
+      "primary_scenario_id": "NS-ADV-CRED-001",
+      "supporting_scenario_ids": [
+        "NS-ADV-SOCIAL-003",
+        "NS-ADV-IDN-001"
+      ],
+      "primary_harm_boundary": "A held-out phishing snapshot reaches its synthetic protected sink or a benign snapshot is interrupted.",
+      "role": "mixed",
+      "current_oracle": "The current lane scores product-facing corpus results from local snapshots.",
+      "oracle_type": "methodology",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "INVALID",
+      "known_limitation": "The historical 28% run lacks the required real-host routing, trusted input, protected-vs-fired oracle, and committed manifest; #417 owns repair.",
+      "issue_refs": [
+        "#416",
+        "#417",
+        "#426"
+      ],
+      "pr_refs": [],
+      "paths": [
+        "tests/e2e/corpus-validation.spec.ts",
+        "tests/corpus/corpus_scoring.ts",
+        "tests/corpus/results/validation-2026-05-01.md",
+        "playwright.corpus.config.ts"
+      ]
+    },
+    {
+      "id": "MAP-LANE-FALSE-POSITIVE",
+      "kind": "evidence_lane",
+      "label": "False-positive measurement",
+      "primary_scenario_id": "NS-ADV-UI-001",
+      "supporting_scenario_ids": [
+        "NS-ADV-CRED-001",
+        "NS-ADV-NAV-001"
+      ],
+      "primary_harm_boundary": "A benign journey is interrupted without an independent unauthorized consequence.",
+      "role": "benign",
+      "current_oracle": "A local measurement script counts product alerts over a user-supplied snapshot set.",
+      "oracle_type": "methodology",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "STALE",
+      "known_limitation": "The historical 0.72% result is stale and the required current input manifest and reproducible output are absent.",
+      "issue_refs": [
+        "#416",
+        "#417"
+      ],
+      "pr_refs": [],
+      "paths": [
+        "scripts/measure-fp.mjs",
+        "docs/Testing_and_Gym.md"
+      ]
+    },
+    {
+      "id": "MAP-LANE-ROLLBACK",
+      "kind": "evidence_lane",
+      "label": "Rollback browser lane",
+      "primary_scenario_id": "NS-ADV-NAV-001",
+      "supporting_scenario_ids": [
+        "NS-ADV-STATE-001"
+      ],
+      "primary_harm_boundary": "A suspicious navigation commits before local recovery returns to the prior page.",
+      "role": "mixed",
+      "current_oracle": "Playwright checks the committed URL, return navigation, and forward offer.",
+      "oracle_type": "browser_outcome",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "This lane demonstrates post-commit containment and must never be reported as pre-harm blocking.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "playwright.rollback.config.ts",
+        "tests/e2e/navsentinel.spec.ts",
+        "tests/e2e/navsentinel.stress.spec.ts",
+        "tests/sw-rollback.test.ts"
+      ]
+    },
+    {
+      "id": "MAP-LANE-STRESS",
+      "kind": "evidence_lane",
+      "label": "State and timing stress lane",
+      "primary_scenario_id": "NS-ADV-STATE-001",
+      "supporting_scenario_ids": [
+        "NS-ADV-STATE-007",
+        "NS-ADV-STATE-008"
+      ],
+      "primary_harm_boundary": "Timing, restart, or tab churn causes stale authority, state leakage, or an unauthorized browsing context.",
+      "role": "mixed",
+      "current_oracle": "Serial Playwright journeys inspect browser consequences across five authored stress sequences.",
+      "oracle_type": "browser_outcome",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "Five fixed journeys are regression cases, not a distributional robustness campaign.",
+      "issue_refs": [],
+      "pr_refs": [],
+      "paths": [
+        "playwright.stress.config.ts",
+        "tests/e2e/navsentinel.stress.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-LANE-LIVE",
+      "kind": "browser_suite",
+      "label": "Live-site compatibility check",
+      "primary_scenario_id": "NS-ADV-NAV-001",
+      "supporting_scenario_ids": [],
+      "primary_harm_boundary": "No unauthorized consequence is modelled; an external search journey should remain usable.",
+      "role": "benign",
+      "current_oracle": "Playwright visits a live Google result and checks that no prompt appears.",
+      "oracle_type": "browser_outcome",
+      "evidence_state": "UNMODELLED",
+      "evidence_validity": "UNVERIFIED",
+      "known_limitation": "This network-dependent check is not hermetic, does not model harm, and is not current owner Chrome or Gate-3 evidence.",
+      "issue_refs": [
+        "#420",
+        "#439"
+      ],
+      "pr_refs": [],
+      "paths": [
+        "playwright.live.config.ts",
+        "tests/e2e/navsentinel.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-LANE-DEFAULT-BROWSER",
+      "kind": "browser_suite",
+      "label": "Default bundled-browser regression suite",
+      "primary_scenario_id": "NS-ADV-UI-001",
+      "supporting_scenario_ids": [
+        "NS-ADV-NAV-001",
+        "NS-ADV-CRED-001"
+      ],
+      "primary_harm_boundary": "An authored attack reaches its browser sink or an authored benign journey is interrupted.",
+      "role": "mixed",
+      "current_oracle": "Playwright checks browser and product outcomes in a persistent unpacked-extension context.",
+      "oracle_type": "mixed",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "The build can be skipped when extension/dist is absent, and bundled Chromium is not owner Chrome or human Gate-3 proof.",
+      "issue_refs": [
+        "#420",
+        "#439",
+        "#460"
+      ],
+      "pr_refs": [],
+      "paths": [
+        "playwright.config.ts",
+        "tests/e2e/extension_test_utils.ts",
+        "tests/e2e/navsentinel.spec.ts",
+        "tests/e2e/credential-guard.spec.ts",
+        "tests/e2e/evasion.spec.ts",
+        "tests/e2e/phase2-detections.spec.ts"
+      ]
+    },
+    {
+      "id": "MAP-LANE-OVERLAY-NESTING",
+      "kind": "evidence_lane",
+      "label": "Overlay lifecycle nested-context regression",
+      "primary_scenario_id": "NS-ADV-UI-004",
+      "supporting_scenario_ids": [
+        "NS-ADV-SELF-002"
+      ],
+      "primary_harm_boundary": "A deceptive foreground target is reinserted or survives in a same-origin nested context after cleanup.",
+      "role": "mixed",
+      "current_oracle": "A loopback-only fake sink records the attack baseline consequence; protected attack and mixed runs require zero new sink receipts while the benign rerender remains usable.",
+      "oracle_type": "independent_harm",
+      "evidence_state": "REGRESSION_PROVEN",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "The lane uses one hand-authored same-origin UI-004 sequence in Playwright-bundled Chromium; cross-origin, broad mutation, branded Chrome, and efficacy coverage remain separate.",
+      "issue_refs": [
+        "#449",
+        "#560",
+        "#564",
+        "#577",
+        "#579",
+        "#580"
+      ],
+      "pr_refs": [
+        "#557",
+        "#598"
+      ],
+      "paths": [
+        "gym/overlay-nesting-lab.html",
+        "gym/overlay-nesting-frame.html",
+        "gym/overlay-nesting-stress.html",
+        "tests/e2e/proving_ground_fake_sink.ts",
+        "tests/e2e/proving-ground-overlay-sink.spec.ts",
+        "tests/proving-ground-fake-sink.test.ts",
+        "tests/e2e/overlay-cleanup-nesting.spec.ts",
+        "tests/overlay-cleanup.test.ts"
+      ]
+    },
+    {
+      "id": "MAP-LANE-BENCHMARK",
+      "kind": "evidence_lane",
+      "label": "Local fixture benchmark",
+      "primary_scenario_id": "NS-ADV-EVADE-006",
+      "supporting_scenario_ids": [
+        "NS-ADV-CLIP-001",
+        "NS-ADV-WIN-004"
+      ],
+      "primary_harm_boundary": "An authored fixture reaches its local browser sink or a benign control is classified incorrectly.",
+      "role": "mixed",
+      "current_oracle": "A local script runs selected Gym cases and records NavSentinel event outcomes.",
+      "oracle_type": "product_event",
+      "evidence_state": "UNMODELLED",
+      "evidence_validity": "UNVERIFIED",
+      "known_limitation": "The benchmark is product-event coupled, has no independent comparator arm, and cannot support efficacy claims.",
+      "issue_refs": [
+        "#418",
+        "#449"
+      ],
+      "pr_refs": [],
+      "paths": [
+        "scripts/benchmark.mjs",
+        "scripts/benchmark-baseline.json"
+      ]
+    }
+  ]
+}

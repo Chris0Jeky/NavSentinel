@@ -5,6 +5,7 @@
  * Trie encoding:
  *   Each node is { [label]: childNode }.
  *   A child key of "" (empty string) with value 1 marks "this path is a public suffix".
+ *   A leaf public suffix is compacted to the scalar value 1 instead of {"":1}.
  *   A child key of "*" means "any label matches here" (wildcard rule).
  *   A child key of "!" means "exception — this label is NOT a public suffix despite a
  *     wildcard at the same level".  Exception nodes store their concrete labels as keys.
@@ -103,7 +104,7 @@ export function parsePSL(text) {
   return rules;
 }
 
-function buildTrie(rules) {
+export function buildTrie(rules) {
   const root = {};
 
   for (const { type, labels } of rules) {
@@ -136,7 +137,15 @@ function buildTrie(rules) {
     }
   }
 
-  return root;
+  return compactTrie(root);
+}
+
+/** Replace only endpoint-only nodes with their equivalent scalar representation. */
+function compactTrie(node) {
+  for (const [label, child] of Object.entries(node)) {
+    if (child && typeof child === "object") node[label] = compactTrie(child);
+  }
+  return Object.keys(node).length === 1 && node[""] === 1 ? 1 : node;
 }
 
 async function main() {

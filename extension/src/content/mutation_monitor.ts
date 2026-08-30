@@ -1,14 +1,16 @@
 /**
  * DOM Mutation Monitoring module.
  *
- * Detects post-load DOM manipulations that indicate phishing or injection attacks:
- *   1. Delayed overlay injection (position: fixed/absolute/sticky, large coverage, high z-index)
- *   2. Form action attribute changes (especially cross-domain)
- *   3. Password field injection into existing forms
- *   4. Suspicious iframe injection (hidden, tiny, or cross-domain)
+ * Detects suspicious foreground overlays and post-load DOM manipulations:
+ *   1. Opt-in bounded scan of foreground overlays present after DOM readiness
+ *   2. Delayed overlay injection (position: fixed/absolute/sticky, large coverage, high z-index)
+ *   3. Form action attribute changes (especially cross-domain)
+ *   4. Password field injection into existing forms
+ *   5. Suspicious iframe injection (hidden, tiny, or cross-domain)
  *
  * Design:
- * - Starts observation >2 seconds after page load (avoids flagging SPA UI builds)
+ * - Starts observation >2 seconds after load by default; opt-in automatic
+ *   cleanup starts after 500ms so obstructing overlays are removed promptly
  * - Batches mutations with a 100ms debounce window
  * - Caps at 50 alerts per page to prevent memory bloat, of which the last 5 are
  *   RESERVED for scarce security-relevant signals so a flood of cheap alerts
@@ -20,12 +22,15 @@
  */
 
 import { matchProviderHostSrc, type ProviderHostEntry } from "../shared/iframe_provider";
+import { findClickFixOverlay } from "./clickfix_detector";
+import { isExtensionOwnedOverlayElement } from "./extension_owned_overlay";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 export type MutationAlertType =
+  | "overlay_detected"
   | "overlay_injected"
   | "form_action_changed"
   | "password_injected"
@@ -37,8 +42,40 @@ export interface MutationAlert {
   type: MutationAlertType;
   severity: MutationAlertSeverity;
   element: Element;
+  /** Bounded initial-scan batch; absent for ordinary mutation alerts. */
+  elements?: Element[];
   details: string;
   timestamp: number;
+}
+
+export interface OverlayClassification {
+  severity: MutationAlertSeverity;
+  details: string;
+}
+
+export interface MutationMonitorOptions {
+  /** Immediate, opt-in action lane. It is bounded independently of alert storage. */
+  onOverlayCandidate?: ((alert: MutationAlert) => void) | undefined;
+  /** Read lazily because settings can change while the monitor remains alive. */
+  isOverlayCleanupActive?: (() => boolean) | undefined;
+  /** Lets the owner repair its lifecycle state after the normal five-minute stop. */
+  onAutoDisconnect?: (() => void) | undefined;
+}
+
+/** Chromium may expose shadow-path elements through a different JS realm. */
+export function isHtmlElementLike(value: unknown): value is HTMLElement {
+  if (value instanceof HTMLElement) return true;
+  const candidate = value as {
+    nodeType?: unknown;
+    tagName?: unknown;
+    style?: unknown;
+    getBoundingClientRect?: unknown;
+  } | null;
+  return candidate?.nodeType === 1 &&
+    typeof candidate.tagName === "string" &&
+    candidate.style !== null &&
+    typeof candidate.style === "object" &&
+    typeof candidate.getBoundingClientRect === "function";
 }
 
 // ---------------------------------------------------------------------------
@@ -74,6 +111,11 @@ const AUTO_DISCONNECT_MS = 5 * 60 * 1000; // 5 minutes
 const MIN_OVERLAY_COVERAGE = 0.25;
 const MIN_OVERLAY_ZINDEX = 100;
 const TINY_IFRAME_PX = 10;
+/** Maximum layout classifications performed by cleanup in one observer delivery. */
+const OVERLAY_CLEANUP_CANDIDATES_PER_BATCH = 64;
+/** Maximum prominent existing layers considered by one settle/scroll rescan. */
+const OVERLAY_CLEANUP_RESCAN_LIMIT = 8;
+const OVERLAY_CLEANUP_RESCAN_DELAY_MS = 150;
 
 /**
  * Legitimate iframe providers to ignore (reCAPTCHA, analytics, ad frames, embeds).
@@ -152,6 +194,15 @@ let disconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingMutations: MutationRecord[] = [];
 const alerts: MutationAlert[] = [];
 let pageHost: string = "";
+let restoredOverlayAttributeBypass = new WeakSet<Element>();
+let restoredOverlayCleanupExclusions = new WeakSet<Element>();
+let initialOverlayAlerted = false;
+let overlayCleanupCallback: ((alert: MutationAlert) => void) | null = null;
+let overlayCleanupActive: (() => boolean) | null = null;
+let autoDisconnectCallback: (() => void) | null = null;
+let observedDocument: Document | null = null;
+let overlayRescanTimer: ReturnType<typeof setTimeout> | null = null;
+let overlaySettleRescansRemaining = 0;
 
 const observedShadowRoots = new WeakSet<ShadowRoot>();
 const shadowObserversByHost = new Map<Element, MutationObserver>();
@@ -236,34 +287,44 @@ function suspiciousIframeScheme(src: string): string | null {
  *    is the credential-redirect signal; same-origin rewrites are ordinary SPA
  *    churn and stay floodable.
  *
- * `overlay_injected` is deliberately NOT scarce: it is the layout-bound check
- * (`getComputedStyle` per element) the cap exists to bound, and it cannot be
- * classified without paying that cost. See the residual-risk note on
- * `processAddedNode`.
+ * Dynamic overlay alerts are deliberately NOT scarce: they require layout-bound
+ * checks (`getComputedStyle` per element) the cap exists to bound, and they
+ * cannot be classified without paying that cost. `overlay_detected` is the one
+ * exception: it comes from an explicit, bounded page-settle/settings scan, so
+ * admitting one result to the reserved tail cannot turn mutation churn into an
+ * unbounded layout workload.
  *
  * Classification never changes WHAT counts as suspicious — no threshold moves,
  * every predicate is the pre-existing one — only WHEN an alert may still fire.
  */
 function isScarceAlert(alert: MutationAlert): boolean {
-  if (alert.type === "password_injected" || alert.type === "suspicious_iframe") return true;
+  if (
+    alert.type === "password_injected" ||
+    alert.type === "suspicious_iframe" ||
+    alert.type === "overlay_detected"
+  ) {
+    return true;
+  }
   return alert.type === "form_action_changed" && alert.severity === "high";
 }
 
-function pushAlert(alert: MutationAlert): void {
-  if (alerts.length >= MAX_ALERTS) return;
+function pushAlert(alert: MutationAlert): boolean {
+  if (alerts.length >= MAX_ALERTS) return false;
   const scarce = isScarceAlert(alert);
+  const alertElements = alert.elements ?? [alert.element];
   if (alerts.length >= FLOODABLE_ALERT_CAP) {
     // Reserved tail: scarce types only. An element that was already scarce-alerted
     // before the boundary has already supplied its security signal, so it cannot
     // later consume a tail slot by being re-added or re-mutated.
-    if (!scarce) return;
-    if (scarceAlertedElements.has(alert.element)) return;
+    if (!scarce) return false;
+    if (alertElements.some((element) => scarceAlertedElements.has(element))) return false;
   }
   // Track scarce elements even before the boundary. This does not suppress any
   // pre-boundary alert; it only protects future reserved capacity from reuse.
-  if (scarce) scarceAlertedElements.add(alert.element);
+  if (scarce) alertElements.forEach((element) => scarceAlertedElements.add(element));
   alerts.push(alert);
   alertCallback?.(alert);
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -350,15 +411,16 @@ function matchesPatterns(el: Element, patterns: RegExp[]): boolean {
  * Check if an element or its ancestors have dialog/modal ARIA roles.
  * Mirrors the logic in `dom_builder.ts:detectLegitModalBackdrop`.
  */
+const DIALOG_SELECTOR =
+  'dialog[open],[role="dialog" i],[role="alertdialog" i],[aria-modal="true" i]';
+
 function hasDialogRole(el: Element): boolean {
   let current: Element | null = el;
   for (let depth = 0; current && depth < 5; depth++) {
-    const role = (current.getAttribute("role") ?? "").toLowerCase();
-    if (role === "dialog" || role === "alertdialog") return true;
-    if ((current.getAttribute("aria-modal") ?? "").toLowerCase() === "true") return true;
+    if (current.matches(DIALOG_SELECTOR)) return true;
     current = current.parentElement;
   }
-  return false;
+  return el.querySelector(DIALOG_SELECTOR) !== null;
 }
 
 /**
@@ -373,25 +435,30 @@ function getBenignOverlayReason(el: Element): string | null {
   return null;
 }
 
-function checkOverlay(el: Element): void {
+/**
+ * Classify one overlay-shaped element using the same policy for mutation alerts
+ * and interaction-correlated cleanup. Returning metadata rather than mutating
+ * the page keeps detection and the optional cleanup action separate.
+ */
+export function classifyOverlayElement(el: Element): OverlayClassification | null {
   // Only check elements that could plausibly be overlays
-  if (!(el instanceof HTMLElement)) return;
+  if (!isHtmlElementLike(el) || isExtensionOwnedOverlayElement(el)) return null;
 
   const cs = getComputedStyle(el);
   const pos = cs.position;
-  if (pos !== "fixed" && pos !== "absolute" && pos !== "sticky") return;
-  if (cs.display === "none" || cs.visibility === "hidden") return;
+  if (pos !== "fixed" && pos !== "absolute" && pos !== "sticky") return null;
+  if (cs.display === "none" || cs.visibility === "hidden") return null;
 
   const z = cs.zIndex === "auto" ? 0 : Number.parseInt(cs.zIndex, 10);
-  if (!Number.isFinite(z) || z < MIN_OVERLAY_ZINDEX) return;
+  if (!Number.isFinite(z) || z < MIN_OVERLAY_ZINDEX) return null;
 
   const rect = el.getBoundingClientRect();
-  if (!rect || rect.width <= 0 || rect.height <= 0) return;
+  if (!rect || rect.width <= 0 || rect.height <= 0) return null;
 
   const vw = Math.max(window.innerWidth, 1);
   const vh = Math.max(window.innerHeight, 1);
   const coverage = (rect.width * rect.height) / (vw * vh);
-  if (coverage < MIN_OVERLAY_COVERAGE) return;
+  if (coverage < MIN_OVERLAY_COVERAGE) return null;
 
   // Check for benign overlays (cookie banners, chat widgets, ARIA dialogs).
   // These are downgraded to 'low' severity instead of suppressed entirely,
@@ -400,11 +467,139 @@ function checkOverlay(el: Element): void {
   const severity: MutationAlertSeverity = benignReason ? "low" : "high";
   const suffix = benignReason ? ` (downgraded: ${benignReason})` : "";
 
+  return {
+    severity,
+    details: `Overlay detected: position=${pos}, z-index=${z}, coverage=${(coverage * 100).toFixed(1)}%${suffix}`,
+  };
+}
+
+function isCleanupLaneActive(): boolean {
+  if (!overlayCleanupCallback) return false;
+  try {
+    return overlayCleanupActive?.() ?? true;
+  } catch {
+    return false;
+  }
+}
+
+function emitOverlayCleanupCandidate(
+  element: Element,
+  classification: OverlayClassification,
+  type: "overlay_detected" | "overlay_injected",
+  elements?: Element[],
+): void {
+  if (!isCleanupLaneActive() || classification.severity !== "high") return;
+  const eligible = (elements ?? [element])
+    .filter((candidate) => !restoredOverlayCleanupExclusions.has(candidate));
+  if (eligible.length === 0) return;
+  overlayCleanupCallback?.({
+    type,
+    severity: "high",
+    element: eligible[0]!,
+    ...(elements ? { elements: eligible } : {}),
+    details: classification.details,
+    timestamp: Date.now(),
+  });
+}
+
+function collectForegroundOverlays(
+  doc: Document,
+  limit: number,
+): { elements: Element[]; details: string } {
+  const elements: Element[] = [];
+  let details = "";
+  while (elements.length < limit) {
+    const element = findClickFixOverlay(doc, (candidate) => {
+      if (elements.includes(candidate)) return false;
+      if (restoredOverlayCleanupExclusions.has(candidate)) return false;
+      try {
+        const classification = classifyOverlayElement(candidate);
+        if (classification?.severity !== "high") return false;
+        if (!details) details = classification.details;
+        return true;
+      } catch {
+        return false;
+      }
+    });
+    if (!element) break;
+    elements.push(element);
+  }
+  return { elements, details };
+}
+
+/**
+ * Classify one prominent foreground overlay that already exists when the
+ * opt-in baseline arms. The candidate walk is shared with ClickFix:
+ * open dialogs, direct body children, and one framework-wrapper level. This
+ * keeps the opt-in scan bounded instead of forcing layout across the full DOM.
+ */
+export function scanExistingForegroundOverlay(doc: Document): boolean {
+  if (!observer) return false;
+
+  const { elements, details } = collectForegroundOverlays(
+    doc,
+    RESERVED_SCARCE_ALERT_SLOTS,
+  );
+  if (!elements.length) return false;
+
+  const alert: MutationAlert = {
+    type: "overlay_detected",
+    severity: "high",
+    element: elements[0]!,
+    elements,
+    details,
+    timestamp: Date.now(),
+  };
+  emitOverlayCleanupCandidate(
+    alert.element,
+    { severity: alert.severity, details: alert.details },
+    "overlay_detected",
+    elements,
+  );
+  // Alert storage remains one-shot, while the independently bounded cleanup
+  // lane may be requested again after an opt-out/opt-in cycle.
+  if (initialOverlayAlerted) return false;
+  const emitted = pushAlert(alert);
+  if (emitted) initialOverlayAlerted = true;
+  return emitted;
+}
+
+/**
+ * Skip the next processed style/class batch for an overlay that the user has
+ * explicitly restored. The cleanup's own inline-style restoration would
+ * otherwise look like a fresh hostile reveal and immediately undo Undo. The
+ * attribute exemption is consumed by one observer batch; automatic cleanup
+ * continues to honor the user's exact-node Undo until a later intercepted click
+ * or setting cycle makes that node eligible again.
+ */
+export function bypassNextRestoredOverlayAttributeBatch(el: Element): void {
+  restoredOverlayAttributeBypass.add(el);
+  restoredOverlayCleanupExclusions.add(el);
+}
+
+/** A later intercepted click makes an explicitly restored node eligible again. */
+export function resumeOverlayCleanupForElement(el: Element): void {
+  restoredOverlayCleanupExclusions.delete(el);
+}
+
+export function isOverlayCleanupCandidateEligible(el: Element): boolean {
+  return !restoredOverlayCleanupExclusions.has(el);
+}
+
+/** A setting cycle starts a fresh cleanup session for the document. */
+export function clearRestoredOverlayCleanupExclusions(): void {
+  restoredOverlayCleanupExclusions = new WeakSet();
+}
+
+function checkOverlay(el: Element): void {
+  const classification = classifyOverlayElement(el);
+  if (!classification) return;
+
   pushAlert({
     type: "overlay_injected",
-    severity,
+    severity: classification.severity,
     element: el,
-    details: `Overlay injected: position=${pos}, z-index=${z}, coverage=${(coverage * 100).toFixed(1)}%${suffix}`,
+    details: classification.details,
     timestamp: Date.now(),
   });
 }
@@ -758,6 +953,7 @@ function processBatch(): void {
   // emit an alert the reservation does not allow.
   const batch = pendingMutations;
   pendingMutations = [];
+  const bypassedOverlayTargets = new Set<Element>();
 
   for (const record of batch) {
     if (record.type === "childList") {
@@ -775,19 +971,158 @@ function processBatch(): void {
       for (let i = 0; i < record.removedNodes.length; i++) {
         processRemovedNode(record.removedNodes[i]!);
       }
+    } else if (
+      record.type === "attributes" &&
+      (record.attributeName === "style" || record.attributeName === "class") &&
+      record.target instanceof Element &&
+      restoredOverlayAttributeBypass.has(record.target)
+    ) {
+      // Consume after the batch so suppression and restoration records that
+      // coalesce into the same batch are both ignored for this exact element.
+      bypassedOverlayTargets.add(record.target);
     } else if (record.type === "attributes" && alerts.length < MAX_ALERTS) {
       processAttributeChange(record, alerts.length >= FLOODABLE_ALERT_CAP);
     }
   }
+
+  for (const target of bypassedOverlayTargets) {
+    restoredOverlayAttributeBypass.delete(target);
+  }
+}
+
+function inspectCleanupCandidate(
+  element: Element,
+  budget: { remaining: number },
+): void {
+  if (budget.remaining <= 0 || !isCleanupLaneActive()) return;
+  if (restoredOverlayCleanupExclusions.has(element)) return;
+  budget.remaining -= 1;
+  try {
+    const classification = classifyOverlayElement(element);
+    if (classification) {
+      emitOverlayCleanupCandidate(element, classification, "overlay_injected");
+    }
+  } catch {
+    // A hostile/custom element must not abort the rest of the bounded batch.
+  }
+}
+
+function inspectCleanupSubtree(
+  node: Node,
+  budget: { remaining: number },
+): void {
+  if (!isHtmlElementLike(node) || budget.remaining <= 0) return;
+  inspectCleanupCandidate(node, budget);
+  if (budget.remaining <= 0) return;
+
+  // TreeWalker is lazy: unlike querySelectorAll it does not materialize an
+  // arbitrarily large hostile subtree before the candidate cap can stop work.
+  const walker = document.createTreeWalker(node, 1); // NodeFilter.SHOW_ELEMENT
+  let descendant: Node | null;
+  while (budget.remaining > 0 && (descendant = walker.nextNode())) {
+    inspectCleanupCandidate(descendant as Element, budget);
+  }
+}
+
+/**
+ * Cleanup runs synchronously in the observer microtask, before the security
+ * alert debounce and normally before paint. Its independent budget prevents an
+ * alert flood from disabling cleanup without making mutation churn unbounded.
+ */
+function processOverlayCleanupRecords(records: MutationRecord[]): void {
+  if (!isCleanupLaneActive()) return;
+  const budget = { remaining: OVERLAY_CLEANUP_CANDIDATES_PER_BATCH };
+
+  for (const record of records) {
+    if (budget.remaining <= 0) break;
+    if (record.type === "childList") {
+      for (let index = 0; index < record.addedNodes.length && budget.remaining > 0; index += 1) {
+        inspectCleanupSubtree(record.addedNodes[index]!, budget);
+      }
+    } else if (
+      record.type === "attributes" &&
+      (record.attributeName === "style" || record.attributeName === "class") &&
+      isHtmlElementLike(record.target) &&
+      !restoredOverlayAttributeBypass.has(record.target)
+    ) {
+      // Include descendants: toggling an ancestor class can reveal a child
+      // without mutating the child itself.
+      inspectCleanupSubtree(record.target, budget);
+    }
+  }
+}
+
+function runOverlayCleanupRescan(): void {
+  overlayRescanTimer = null;
+  const doc = observedDocument;
+  if (!doc || !isCleanupLaneActive()) return;
+
+  const { elements, details } = collectForegroundOverlays(
+    doc,
+    OVERLAY_CLEANUP_RESCAN_LIMIT,
+  );
+  if (elements.length > 0) {
+    emitOverlayCleanupCandidate(
+      elements[0]!,
+      { severity: "high", details },
+      "overlay_detected",
+      elements,
+    );
+  }
+
+  if (overlaySettleRescansRemaining > 0) {
+    overlaySettleRescansRemaining -= 1;
+    scheduleOverlayCleanupRescan(2000);
+  }
+}
+
+function scheduleOverlayCleanupRescan(
+  delayMs = OVERLAY_CLEANUP_RESCAN_DELAY_MS,
+): void {
+  if (!isCleanupLaneActive() || overlayRescanTimer !== null) return;
+  overlayRescanTimer = setTimeout(runOverlayCleanupRescan, delayMs);
+}
+
+function onOverlayViewportSignal(): void {
+  scheduleOverlayCleanupRescan();
+}
+
+function bindOverlayCleanupSignals(doc: Document): void {
+  window.addEventListener("scroll", onOverlayViewportSignal, true);
+  window.addEventListener("resize", onOverlayViewportSignal, true);
+  doc.addEventListener("visibilitychange", onOverlayViewportSignal, true);
+}
+
+function unbindOverlayCleanupSignals(): void {
+  window.removeEventListener("scroll", onOverlayViewportSignal, true);
+  window.removeEventListener("resize", onOverlayViewportSignal, true);
+  observedDocument?.removeEventListener("visibilitychange", onOverlayViewportSignal, true);
 }
 
 function onMutations(records: MutationRecord[]): void {
+  processOverlayCleanupRecords(records);
+  scheduleOverlayCleanupRescan();
   for (const r of records) {
     pendingMutations.push(r);
   }
   if (debounceTimer === null) {
     debounceTimer = setTimeout(processBatch, DEBOUNCE_MS);
   }
+}
+
+function scheduleAutoDisconnect(): void {
+  disconnectTimer = setTimeout(() => {
+    disconnectTimer = null;
+    if (isCleanupLaneActive()) {
+      // The ordinary security monitor remains time-bounded, but an explicit
+      // cleanup opt-in must survive long-lived media pages and lazy scrolling.
+      scheduleAutoDisconnect();
+      return;
+    }
+    const onAutoDisconnect = autoDisconnectCallback;
+    stopMutationMonitor();
+    onAutoDisconnect?.();
+  }, AUTO_DISCONNECT_MS);
 }
 
 // ---------------------------------------------------------------------------
@@ -802,17 +1137,25 @@ function onMutations(records: MutationRecord[]): void {
  */
 export function startMutationMonitor(
   doc: Document,
-  onAlert: (alert: MutationAlert) => void
+  onAlert: (alert: MutationAlert) => void,
+  options: MutationMonitorOptions = {},
 ): void {
   // Prevent double-start
-  if (observer) {
+  if (observer || observedDocument) {
     stopMutationMonitor();
   }
 
   pageHost = location.hostname.toLowerCase();
   alertCallback = onAlert;
+  overlayCleanupCallback = options.onOverlayCandidate ?? null;
+  overlayCleanupActive = options.isOverlayCleanupActive ?? null;
+  autoDisconnectCallback = options.onAutoDisconnect ?? null;
+  observedDocument = doc;
   alerts.length = 0;
   scarceAlertedElements = new WeakSet();
+  restoredOverlayAttributeBypass = new WeakSet();
+  restoredOverlayCleanupExclusions = new WeakSet();
+  initialOverlayAlerted = false;
 
   // Snapshot current form actions so we can detect changes later
   snapshotFormActions(doc);
@@ -823,16 +1166,21 @@ export function startMutationMonitor(
   // Scan existing DOM for shadow roots to observe
   scanForShadowRoots(doc);
 
+  if (overlayCleanupCallback) {
+    bindOverlayCleanupSignals(doc);
+    overlaySettleRescansRemaining = 2;
+    scheduleOverlayCleanupRescan(250);
+  }
+
   // Auto-disconnect after 5 minutes
-  disconnectTimer = setTimeout(() => {
-    stopMutationMonitor();
-  }, AUTO_DISCONNECT_MS);
+  scheduleAutoDisconnect();
 }
 
 /**
  * Stop the mutation monitor and clean up.
  */
 export function stopMutationMonitor(): void {
+  unbindOverlayCleanupSignals();
   if (observer) {
     observer.disconnect();
     observer = null;
@@ -849,8 +1197,17 @@ export function stopMutationMonitor(): void {
     clearTimeout(disconnectTimer);
     disconnectTimer = null;
   }
+  if (overlayRescanTimer !== null) {
+    clearTimeout(overlayRescanTimer);
+    overlayRescanTimer = null;
+  }
+  overlaySettleRescansRemaining = 0;
   pendingMutations = [];
   alertCallback = null;
+  overlayCleanupCallback = null;
+  overlayCleanupActive = null;
+  autoDisconnectCallback = null;
+  observedDocument = null;
 }
 
 /**
@@ -872,6 +1229,9 @@ export function _resetMutationState(): void {
   stopMutationMonitor();
   alerts.length = 0;
   scarceAlertedElements = new WeakSet();
+  restoredOverlayAttributeBypass = new WeakSet();
+  restoredOverlayCleanupExclusions = new WeakSet();
+  initialOverlayAlerted = false;
 }
 
 /** Exposed for testing only: number of live per-shadow-root observers. */

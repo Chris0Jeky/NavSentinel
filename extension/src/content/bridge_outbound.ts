@@ -121,6 +121,8 @@ const MAIN_GUARD_ALERT_TYPES = new Set<string>([
   "ns-nav-allowed",
   "ns-clipboard-write",
   "ns-pushstate-suspicious",
+  // Compact private type for a verified extension-UI action relay.
+  "u",
 ]);
 
 /**
@@ -133,6 +135,7 @@ const MAIN_GUARD_ALERT_TYPES = new Set<string>([
  *  - `ns-allow*`      control relays (e.g. `ns-allow-target-nav`) that
  *                     pre-authorize a user-approved navigation in the SW;
  *                     dropping one makes the SW re-block an allowed action.
+ *  - `u`              verified extension-UI action relay.
  * Routine (config-ack, pong, bridge-ready/overflow, debug) is droppable.
  */
 export function isMainGuardAlertType(type: string): boolean {

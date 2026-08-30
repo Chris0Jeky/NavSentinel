@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://navsentinel.local/schema/security-program/fixture-safety-findings.schema.json",
+  "title": "NavSentinel mapped legacy fixture safety findings",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "as_of", "finding_count", "findings"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "as_of": { "type": "string", "format": "date" },
+    "finding_count": { "type": "integer", "minimum": 0 },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "classifications", "disposition", "reason", "remediation", "issue_refs"],
+        "properties": {
+          "path": { "type": "string", "pattern": "^gym/.+\\.html$" },
+          "classifications": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "enum": ["COMMAND_SHAPED", "EXTERNAL_URL", "REMOTE_RESOURCE"] },
+            "uniqueItems": true
+          },
+          "disposition": { "enum": ["SAFETY_HOLD", "QUARANTINED"] },
+          "reason": { "type": "string", "minLength": 1 },
+          "remediation": { "type": "string", "minLength": 1 },
+          "issue_refs": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^#[0-9]+$" },
+            "uniqueItems": true
+          }
+        }
+      }
+    }
+  }
+}

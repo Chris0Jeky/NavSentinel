@@ -1,0 +1,175 @@
+{
+  "schema_version": "1.0.0",
+  "as_of": "2026-08-30",
+  "finding_count": 21,
+  "findings": [
+    {
+      "path": "gym/level1-basic-opacity.html",
+      "classifications": ["EXTERNAL_URL"],
+      "disposition": "SAFETY_HOLD",
+      "reason": "The fixture can navigate to a public IANA example destination if interception fails.",
+      "remediation": "Replace the destination with a local fake sink before programme use.",
+      "issue_refs": ["#449"]
+    },
+    {
+      "path": "gym/level2-moving-target.html",
+      "classifications": ["EXTERNAL_URL"],
+      "disposition": "SAFETY_HOLD",
+      "reason": "The fixture can navigate to a public IANA example destination if interception fails.",
+      "remediation": "Replace the destination with a local fake sink before programme use.",
+      "issue_refs": ["#449"]
+    },
+    {
+      "path": "gym/level3-instant-injection.html",
+      "classifications": ["EXTERNAL_URL"],
+      "disposition": "SAFETY_HOLD",
+      "reason": "The injected target can navigate to a public IANA example destination.",
+      "remediation": "Replace the destination with a local fake sink before programme use.",
+      "issue_refs": ["#449"]
+    },
+    {
+      "path": "gym/level4-visual-mimicry.html",
+      "classifications": ["EXTERNAL_URL"],
+      "disposition": "SAFETY_HOLD",
+      "reason": "The visual-mimicry target can navigate outside the local harness.",
+      "remediation": "Replace the destination with a local fake sink before programme use.",
+      "issue_refs": ["#449"]
+    },
+    {
+      "path": "gym/level5-window-open-popunder.html",
+      "classifications": ["EXTERNAL_URL"],
+      "disposition": "SAFETY_HOLD",
+      "reason": "The popunder target can create public network egress.",
+      "remediation": "Replace the destination with a local fake sink before programme use.",
+      "issue_refs": ["#449"]
+    },
+    {
+      "path": "gym/level6-programmatic-click.html",
+      "classifications": ["EXTERNAL_URL"],
+      "disposition": "SAFETY_HOLD",
+      "reason": "The programmatic target can navigate to a public IANA example destination.",
+      "remediation": "Replace the destination with a local fake sink before programme use.",
+      "issue_refs": ["#449"]
+    },
+    {
+      "path": "gym/level9-legit-video-overlay.html",
+      "classifications": ["EXTERNAL_URL"],
+      "disposition": "SAFETY_HOLD",
+      "reason": "The benign control includes a public external link and is not hermetic.",
+      "remediation": "Replace the link with a local benign destination before programme use.",
+      "issue_refs": ["#449"]
+    },
+    {
+      "path": "gym/rw01-search-result-overlay-swap.html",
+      "classifications": ["EXTERNAL_URL"],
+      "disposition": "SAFETY_HOLD",
+      "reason": "The journey contains non-local document and sponsored-result destinations.",
+      "remediation": "Route both destinations to local origin-separated fake sinks.",
+      "issue_refs": ["#449"]
+    },
+    {
+      "path": "gym/rw06-legit-auth-second-popup.html",
+      "classifications": ["EXTERNAL_URL"],
+      "disposition": "SAFETY_HOLD",
+      "reason": "The authentication and follow-up popups use a public IANA example destination.",
+      "remediation": "Use local origin-separated consent and harm sinks.",
+      "issue_refs": ["#449"]
+    },
+    {
+      "path": "gym/evasion-01-opacity-009.html",
+      "classifications": ["EXTERNAL_URL"],
+      "disposition": "SAFETY_HOLD",
+      "reason": "The control and trap destinations are not local.",
+      "remediation": "Use local benign and harm sinks.",
+      "issue_refs": ["#449"]
+    },
+    {
+      "path": "gym/evasion-02-size-34pct.html",
+      "classifications": ["EXTERNAL_URL"],
+      "disposition": "SAFETY_HOLD",
+      "reason": "The control and trap destinations are not local.",
+      "remediation": "Use local benign and harm sinks.",
+      "issue_refs": ["#449"]
+    },
+    {
+      "path": "gym/evasion-03-labeled-overlay.html",
+      "classifications": ["EXTERNAL_URL"],
+      "disposition": "SAFETY_HOLD",
+      "reason": "The control and trap destinations are not local.",
+      "remediation": "Use local benign and harm sinks.",
+      "issue_refs": ["#449"]
+    },
+    {
+      "path": "gym/evasion-04-zindex-9998.html",
+      "classifications": ["EXTERNAL_URL"],
+      "disposition": "SAFETY_HOLD",
+      "reason": "The control and trap destinations are not local.",
+      "remediation": "Use local benign and harm sinks.",
+      "issue_refs": ["#449"]
+    },
+    {
+      "path": "gym/evasion-05-composite.html",
+      "classifications": ["EXTERNAL_URL"],
+      "disposition": "SAFETY_HOLD",
+      "reason": "The control and trap destinations are not local.",
+      "remediation": "Use local benign and harm sinks.",
+      "issue_refs": ["#449"]
+    },
+    {
+      "path": "gym/evasion-06-delayed-injection.html",
+      "classifications": ["EXTERNAL_URL"],
+      "disposition": "SAFETY_HOLD",
+      "reason": "The control and injected trap destinations are not local.",
+      "remediation": "Use local benign and harm sinks.",
+      "issue_refs": ["#449"]
+    },
+    {
+      "path": "gym/evasion-07-pointer-events-none.html",
+      "classifications": ["EXTERNAL_URL"],
+      "disposition": "SAFETY_HOLD",
+      "reason": "The control and popup destinations are not local.",
+      "remediation": "Use local benign and harm sinks.",
+      "issue_refs": ["#449"]
+    },
+    {
+      "path": "gym/evasion-08-clip-path-hidden.html",
+      "classifications": ["EXTERNAL_URL"],
+      "disposition": "SAFETY_HOLD",
+      "reason": "The control and trap destinations are not local.",
+      "remediation": "Use local benign and harm sinks.",
+      "issue_refs": ["#449"]
+    },
+    {
+      "path": "gym/evasion-09-filter-opacity.html",
+      "classifications": ["EXTERNAL_URL"],
+      "disposition": "SAFETY_HOLD",
+      "reason": "The control and trap destinations are not local.",
+      "remediation": "Use local benign and harm sinks.",
+      "issue_refs": ["#449"]
+    },
+    {
+      "path": "gym/evasion-10-transform-scale.html",
+      "classifications": ["EXTERNAL_URL"],
+      "disposition": "SAFETY_HOLD",
+      "reason": "The control and trap destinations are not local.",
+      "remediation": "Use local benign and harm sinks.",
+      "issue_refs": ["#449"]
+    },
+    {
+      "path": "gym/evasion-11-shadow-dom.html",
+      "classifications": ["EXTERNAL_URL"],
+      "disposition": "SAFETY_HOLD",
+      "reason": "The control and shadow-root trap destinations are not local.",
+      "remediation": "Use local benign and harm sinks.",
+      "issue_refs": ["#449"]
+    },
+    {
+      "path": "gym/evasion-12-multiple-overlays.html",
+      "classifications": ["EXTERNAL_URL"],
+      "disposition": "SAFETY_HOLD",
+      "reason": "The control and sequential trap destinations are not local.",
+      "remediation": "Use local benign and harm sinks.",
+      "issue_refs": ["#449"]
+    }
+  ]
+}

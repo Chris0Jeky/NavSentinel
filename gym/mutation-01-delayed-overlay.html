@@ -31,15 +31,19 @@
 <body>
   <h1>Mutation 01 - Delayed Overlay Injection</h1>
   <div class="description">
-    <strong>Attack scenario:</strong> A malicious overlay is injected 3 seconds after
-    page load, covering the entire viewport. This mimics a post-load phishing overlay
+    <strong>Attack scenario:</strong> A malicious overlay is injected after the
+    page-load fallback timer, covering the entire viewport. This mimics a post-load phishing overlay
     that could steal credentials or trick the user.
     <br><br>
-    <strong>Expected:</strong> NavSentinel mutation monitor detects the overlay injection
-    and fires an <code>overlay_injected</code> alert.
+    <strong>Expected outcomes:</strong> Navigation Off: the overlay appears and stays,
+    with no NavSentinel alert or cleanup. Smart/Strict with cleanup off: the overlay stays
+    and a high-severity warning/event is produced. Smart/Strict with cleanup on: the overlay
+    attaches, is hidden, and <strong>Undo</strong> restores it without opening or replaying anything.
     <br><br>
-    <strong>Timing:</strong> The overlay appears automatically after 10 seconds, or immediately
-    when the Gym test sends its monitor-ready trigger.
+    <strong>Human fallback:</strong> Leave this page open and follow the visible countdown;
+    no click is needed. The overlay appears automatically when the fallback countdown reaches zero.
+    <strong>E2E-only:</strong> automated tests may dispatch the monitor-ready event below;
+    humans should not use that event.
   </div>
 
   <p>This is the legitimate page content. A login form appears below.</p>
@@ -49,13 +53,30 @@
     <button type="submit">Log In</button>
   </form>
 
-  <div id="status" class="status-pending">
-    Status: Waiting for the monitor-ready trigger (automatic after 10 seconds)...
+  <div id="timing" class="status-pending" aria-live="polite"></div>
+  <div id="status" class="status-pending" aria-live="polite">
+    Status: Waiting for the E2E-only monitor-ready event or the human fallback timer...
   </div>
 
   <script>
+    const HUMAN_FALLBACK_DELAY_MS = 10_000;
+    const TEST_DELAY_QUERY = "gymTestDelayMs";
+    const testDelay = Number(new URLSearchParams(location.search).get(TEST_DELAY_QUERY));
+    const hasBoundedTestDelay = Number.isInteger(testDelay) && testDelay > 0 && testDelay <= 5_000;
+    const fallbackDelayMs = hasBoundedTestDelay ? testDelay : HUMAN_FALLBACK_DELAY_MS;
+    const fallbackStartedAt = Date.now();
+    const timing = document.getElementById("timing");
     var injected = false;
-    function injectOverlay() {
+    function updateCountdown() {
+      if (injected || !timing) return;
+      const remainingMs = Math.max(0, fallbackDelayMs - (Date.now() - fallbackStartedAt));
+      const seconds = Math.ceil(remainingMs / 1000);
+      timing.textContent = hasBoundedTestDelay
+        ? `E2E-only bounded timer override: automatic fallback in ${seconds} second${seconds === 1 ? "" : "s"}.`
+        : `Human fallback countdown: automatic overlay injection in ${seconds} second${seconds === 1 ? "" : "s"}.`;
+      if (remainingMs > 0) window.setTimeout(updateCountdown, Math.min(1000, remainingMs));
+    }
+    function injectOverlay(source) {
       if (injected) return;
       injected = true;
       var overlay = document.createElement("div");
@@ -81,11 +102,13 @@
       document.body.appendChild(overlay);
 
       document.getElementById("status").textContent =
-        "Status: Overlay injected! NavSentinel should fire overlay_injected alert.";
+        `Status: Overlay injected by ${source === "e2e" ? "the E2E-only monitor-ready event" : "the human fallback timer"}. NavSentinel should fire overlay_injected alert.`;
       document.getElementById("status").className = "status-triggered";
+      if (timing) timing.textContent = `Injection source: ${source === "e2e" ? "E2E-only monitor-ready event" : "human fallback timer"}.`;
     }
-    window.addEventListener("navsentinel:gym:trigger-mutation", injectOverlay, { once: true });
-    setTimeout(injectOverlay, 10000);
+    window.addEventListener("navsentinel:gym:trigger-mutation", () => injectOverlay("e2e"), { once: true });
+    updateCountdown();
+    window.setTimeout(() => injectOverlay("timer"), fallbackDelayMs);
   </script>
 </body>
 </html>

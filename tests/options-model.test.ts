@@ -2,9 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   pct,
   avg,
+  deriveOptionsSettingsPatch,
   fmtTime,
   parseIntSafe,
   computePromptOutcomeStats,
+  rebaseOptionsSettingsDraft,
   withReentrancyGuard,
   classifyImportError,
   describeBehaviouralReset,
@@ -12,6 +14,7 @@ import {
   runClearStats,
   runImportFlow,
 } from "../extension/src/options/options_model";
+import type { SuiteSettings } from "../extension/src/shared/storage";
 
 describe("pct", () => {
   it("formats percentage with one decimal", () => {
@@ -138,6 +141,76 @@ describe("parseIntSafe", () => {
 
   it("handles leading zeros", () => {
     expect(parseIntSafe("007", 0)).toBe(7);
+  });
+});
+
+function makeSuiteSettings(): SuiteSettings {
+  return {
+    nav: { defaultMode: "smart", debug: false, autoDismissOverlays: false },
+    credential: {
+      mode: "smart",
+      promptOnUntrustedDomain: true,
+      promptOnMediumRisk: true,
+      mediumRiskThreshold: 40,
+      blockHttpPasswordSubmit: true,
+      warnOnPaste: true,
+      similarity: { enabled: true, maxDistance: 2 },
+    },
+    logLimit: 300,
+  };
+}
+
+describe("Options settings patch and rebase (#558)", () => {
+  it("derives only changed nested leaves and omits empty branches", () => {
+    const baseline = makeSuiteSettings();
+    const draft = makeSuiteSettings();
+    draft.credential.similarity.maxDistance = 5;
+    draft.nav.debug = true;
+    draft.nav.autoDismissOverlays = true;
+
+    expect(deriveOptionsSettingsPatch(baseline, draft)).toEqual({
+      nav: { debug: true, autoDismissOverlays: true },
+      credential: { similarity: { maxDistance: 5 } },
+    });
+  });
+
+  it("returns an empty patch when the draft still equals the rendered baseline", () => {
+    const patch = deriveOptionsSettingsPatch(makeSuiteSettings(), makeSuiteSettings());
+    expect(patch).toEqual({});
+  });
+
+  it("adopts external updates for clean Options controls", () => {
+    const baseline = makeSuiteSettings();
+    const incoming = makeSuiteSettings();
+    incoming.nav.defaultMode = "strict";
+    incoming.credential.mode = "off";
+    incoming.credential.similarity.maxDistance = 4;
+    incoming.logLimit = 800;
+
+    expect(rebaseOptionsSettingsDraft(baseline, makeSuiteSettings(), incoming)).toEqual(incoming);
+  });
+
+  it("preserves an unrelated dirty Options leaf while adopting a clean popup update", () => {
+    const baseline = makeSuiteSettings();
+    const draft = makeSuiteSettings();
+    draft.credential.warnOnPaste = false;
+    const incoming = makeSuiteSettings();
+    incoming.nav.defaultMode = "strict";
+
+    const rebased = rebaseOptionsSettingsDraft(baseline, draft, incoming);
+    expect(rebased.nav.defaultMode).toBe("strict");
+    expect(rebased.credential.warnOnPaste).toBe(false);
+  });
+
+  it("preserves a same-field dirty Options value until conflict UI is added", () => {
+    const baseline = makeSuiteSettings();
+    const draft = makeSuiteSettings();
+    draft.credential.mode = "strict";
+    const incoming = makeSuiteSettings();
+    incoming.credential.mode = "off";
+
+    const rebased = rebaseOptionsSettingsDraft(baseline, draft, incoming);
+    expect(rebased.credential.mode).toBe("strict");
   });
 });
 
@@ -432,7 +505,7 @@ describe("runImportFlow (#188)", () => {
       flash,
       isDeliveryFailure: isDelivery,
     });
-    expect(refresh).toHaveBeenCalled();
+    expect(refresh).toHaveBeenCalledWith(true);
     expect(flash).toHaveBeenCalledWith("Imported.");
   });
 
@@ -473,7 +546,7 @@ describe("runImportFlow (#188)", () => {
       flash,
       isDeliveryFailure: isDelivery,
     });
-    expect(refresh).toHaveBeenCalled();
+    expect(refresh).toHaveBeenCalledWith(true);
     expect(flash).toHaveBeenCalledWith(expect.stringMatching(/prompt-related/i), "error");
   });
 
@@ -486,7 +559,7 @@ describe("runImportFlow (#188)", () => {
       flash,
       isDeliveryFailure: isDelivery,
     });
-    expect(refresh).toHaveBeenCalled();
+    expect(refresh).toHaveBeenCalledWith(false);
     expect(flash).toHaveBeenCalledWith("Import failed.", "error");
   });
 

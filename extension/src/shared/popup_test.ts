@@ -4,7 +4,8 @@ export const POPUP_TEST_CLICK_TARGETS = [
   "trustBtn",
   "untrustBtn",
   "refreshBtn",
-  "openOptions"
+  "openOptions",
+  "autoDismiss"
 ] as const;
 export const POPUP_TEST_SELECT_TARGETS = ["navMode", "credMode"] as const;
 
@@ -17,6 +18,7 @@ export type PopupTestMessage =
   | { type: "ns_popup_test"; action: "select"; target: PopupTestSelectTarget; value: string };
 
 export type PopupSnapshot = {
+  autoDismissOverlays: boolean;
   credMode: string;
   events: string[];
   eventIconPaths: string[];

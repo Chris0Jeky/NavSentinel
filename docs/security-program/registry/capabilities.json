@@ -1,0 +1,981 @@
+{
+  "schema_version": "1.0.0",
+  "source": "RESOURCES/DefenseVectors/MASTER_DOCUMENT.md section 08",
+  "capability_count": 31,
+  "capabilities": [
+    {
+      "id": "F-01",
+      "title": "Canonical scenario registry and schema",
+      "track": "proving_ground",
+      "priority": "P0",
+      "phase": "NOW",
+      "issue_policy": "REUSE_OR_REBODY_EXISTING",
+      "existing_references": [
+        "#449"
+      ],
+      "purpose": "One machine-readable source of truth for threat families, scenarios, controls, dependencies, evidence state, and issue linkage.",
+      "scope": [
+        "Versioned JSON Schema",
+        "stable IDs",
+        "CSV/Markdown generation",
+        "validation and duplicate checks",
+        "status transitions"
+      ],
+      "acceptance": [
+        "All 168 seed scenarios validate",
+        "IDs are unique and immutable",
+        "generated views are reproducible",
+        "unknown fields fail or are explicitly versioned"
+      ],
+      "dependencies": []
+    },
+    {
+      "id": "F-02",
+      "title": "Hermetic adversarial lab and synthetic sink",
+      "track": "proving_ground",
+      "priority": "P0",
+      "phase": "NOW",
+      "issue_policy": "CREATE_AFTER_DEDUP",
+      "existing_references": [
+        "#417",
+        "#439"
+      ],
+      "purpose": "Ensure realistic browser abuse can be exercised without live targets, real secrets, external traffic, or executable payloads.",
+      "scope": [
+        "reserved/local host routing",
+        "network deny-by-default",
+        "synthetic credential/token generator",
+        "inert collector",
+        "fake download and shell sinks",
+        "profile reset"
+      ],
+      "acceptance": [
+        "No fixture can reach the public internet by default",
+        "collectors reject non-sentinel values",
+        "all artifacts are inert",
+        "one command resets browser/profile state"
+      ],
+      "dependencies": [
+        "F-01"
+      ]
+    },
+    {
+      "id": "F-03",
+      "title": "Trusted-input headed browser rig",
+      "track": "proving_ground",
+      "priority": "P0",
+      "phase": "NOW",
+      "issue_policy": "REUSE_OR_REBODY_EXISTING",
+      "existing_references": [
+        "#420",
+        "#439",
+        "#460",
+        "#498",
+        "#565"
+      ],
+      "purpose": "Exercise real Chromium/Chrome interaction, extension worlds, popups, permissions, service-worker lifecycle, and extension-origin UI.",
+      "scope": [
+        "headed branded Chrome option",
+        "persistent context",
+        "trusted pointer/keyboard input",
+        "extension reload readiness",
+        "screenshots/traces",
+        "serial topology"
+      ],
+      "acceptance": [
+        "Actions use browser-native trusted input",
+        "extension readiness is proved per document",
+        "failure artifacts identify browser/product attribution",
+        "supported topology is deterministic"
+      ],
+      "dependencies": [
+        "F-02"
+      ]
+    },
+    {
+      "id": "F-04",
+      "title": "Pre-harm protection oracle",
+      "track": "proving_ground",
+      "priority": "P0",
+      "phase": "NOW",
+      "issue_policy": "REUSE_OR_REBODY_EXISTING",
+      "existing_references": [
+        "#417",
+        "#449"
+      ],
+      "purpose": "Distinguish detector activation, warning, post-commit recovery, and actual harm prevention.",
+      "scope": [
+        "harm-boundary declarations",
+        "sink instrumentation",
+        "decision timestamps",
+        "protected-vs-fired result model",
+        "partial protection states"
+      ],
+      "acceptance": [
+        "Every scenario declares a harm boundary",
+        "results distinguish FIRED/WARNED/HELD/BLOCKED/ROLLED_BACK/HARM_REACHED",
+        "post-commit recovery is never scored as pre-commit prevention"
+      ],
+      "dependencies": [
+        "F-01",
+        "F-02",
+        "F-03"
+      ]
+    },
+    {
+      "id": "F-05",
+      "title": "Invariant-preserving mutation engine",
+      "track": "proving_ground",
+      "priority": "P0",
+      "phase": "NOW",
+      "issue_policy": "REUSE_OR_REBODY_EXISTING",
+      "existing_references": [
+        "#449"
+      ],
+      "purpose": "Grade defenses on adjacent variants rather than the fixture they were written against.",
+      "scope": [
+        "deterministic mutation seeds",
+        "timing/layout/DOM/text/frame/input axes",
+        "metamorphic expectations",
+        "survivor capture",
+        "mutation budgets"
+      ],
+      "acceptance": [
+        "Each active scenario has invariant-preserving and invariant-breaking mutations",
+        "seeds reproduce",
+        "survivors are retained without auto-opening unlimited issues",
+        "benign duals remain quiet"
+      ],
+      "dependencies": [
+        "F-01",
+        "F-04"
+      ]
+    },
+    {
+      "id": "F-06",
+      "title": "Benign and mixed journey corpus",
+      "track": "proving_ground",
+      "priority": "P0",
+      "phase": "NOW",
+      "issue_policy": "REUSE_OR_REBODY_EXISTING",
+      "existing_references": [
+        "#232",
+        "#417"
+      ],
+      "purpose": "Measure discrimination on realistic multi-step flows where legitimate and malicious behavior coexist.",
+      "scope": [
+        "SSO/OAuth/3DS/checkout/support/upload/media journeys",
+        "benign controls",
+        "mixed cases",
+        "task-state annotations",
+        "journey replay"
+      ],
+      "acceptance": [
+        "Every attack scenario has a benign control and mixed journey",
+        "prompt/block counts are measured per consequential action",
+        "controls cover accessibility and uncommon but legitimate flows"
+      ],
+      "dependencies": [
+        "F-02",
+        "F-03",
+        "F-04"
+      ]
+    },
+    {
+      "id": "F-07",
+      "title": "Lifecycle and state-chaos injector",
+      "track": "proving_ground",
+      "priority": "P0",
+      "phase": "NOW",
+      "issue_policy": "CREATE_AFTER_DEDUP",
+      "existing_references": [
+        "#175",
+        "#186",
+        "#389",
+        "#460"
+      ],
+      "purpose": "Force worker suspension, bridge loss, BFCache, tab discard, frame replacement, update, and concurrent flow conditions.",
+      "scope": [
+        "worker recycle",
+        "port loss",
+        "tab/frame churn",
+        "BFCache",
+        "extension reload/update",
+        "clock/TTL manipulation",
+        "concurrent tabs"
+      ],
+      "acceptance": [
+        "Security authority is never replayed across document/task boundaries",
+        "declared fail-safe/fail-open policy is observed",
+        "state traces identify generation and ownership"
+      ],
+      "dependencies": [
+        "F-03",
+        "F-04"
+      ]
+    },
+    {
+      "id": "F-08",
+      "title": "Train/tune/holdout corpus governance",
+      "track": "proving_ground",
+      "priority": "P1",
+      "phase": "NOW",
+      "issue_policy": "CREATE_AFTER_DEDUP",
+      "existing_references": [
+        "#417",
+        "#449"
+      ],
+      "purpose": "Prevent tuning directly against every known fixture and preserve credible unseen evaluation.",
+      "scope": [
+        "partition rules",
+        "campaign/family grouping",
+        "seed secrecy",
+        "versioned manifests",
+        "contamination checks",
+        "embargo policy"
+      ],
+      "acceptance": [
+        "Related variants cannot cross partitions accidentally",
+        "holdout remains unread by implementation agents until evaluation",
+        "corpus provenance and hashes are recorded"
+      ],
+      "dependencies": [
+        "F-01",
+        "F-05",
+        "F-06"
+      ]
+    },
+    {
+      "id": "F-09",
+      "title": "Evidence ledger, failure capture, and scorecard",
+      "track": "proving_ground",
+      "priority": "P0",
+      "phase": "NOW",
+      "issue_policy": "REUSE_OR_REBODY_EXISTING",
+      "existing_references": [
+        "#416",
+        "#417",
+        "#439",
+        "#449",
+        "#591"
+      ],
+      "purpose": "Make every security claim traceable to exact code, browser, fixture, mutation set, comparator, and limitation.",
+      "scope": [
+        "evidence status machine",
+        "run receipts",
+        "failure taxonomy",
+        "limitation ledger",
+        "scenario scorecard",
+        "artifact retention"
+      ],
+      "acceptance": [
+        "No scenario can be marked complete without required evidence",
+        "100% means only the declared envelope",
+        "failures remain visible after fixes",
+        "results link exact commit and browser version"
+      ],
+      "dependencies": [
+        "F-01",
+        "F-04"
+      ]
+    },
+    {
+      "id": "F-10",
+      "title": "Differential browser and comparator runner",
+      "track": "proving_ground",
+      "priority": "P1",
+      "phase": "AFTER_CORE_RIG",
+      "issue_policy": "REUSE_EXISTING",
+      "existing_references": [
+        "#418"
+      ],
+      "purpose": "Measure additive value and regressions against browser-native protection and relevant extensions.",
+      "scope": [
+        "bare browser",
+        "NavSentinel only",
+        "browser plus NavSentinel",
+        "selected comparator",
+        "configuration receipts",
+        "data-flow comparison"
+      ],
+      "acceptance": [
+        "Runs use supported branded browsers where required",
+        "comparators are version/config pinned",
+        "wins, misses, latency, interruptions, and data handling are reported"
+      ],
+      "dependencies": [
+        "F-03",
+        "F-04",
+        "F-08",
+        "F-09"
+      ]
+    },
+    {
+      "id": "C-01",
+      "title": "Typed evidence and signal registry",
+      "track": "research_extension",
+      "priority": "P1",
+      "phase": "POST_INTEGRITY_SHADOW",
+      "issue_policy": "REUSE_EXISTING_POST_BETA",
+      "existing_references": [
+        "#440"
+      ],
+      "purpose": "Give scoring, explanations, experiments, and stored outcomes one versioned representation of evidence, provenance, direction, confidence, and decay.",
+      "scope": [
+        "typed signal schema",
+        "provenance",
+        "confidence",
+        "direction",
+        "dedup groups",
+        "necessity-invariant tag",
+        "calibration profile"
+      ],
+      "acceptance": [
+        "Existing behavior is byte/decision parity in the first slice",
+        "stored vectors can be replayed",
+        "explanations cannot drift from scoring"
+      ],
+      "dependencies": [
+        "F-01",
+        "F-09"
+      ]
+    },
+    {
+      "id": "C-02",
+      "title": "Consequence model and scoped intent capabilities",
+      "track": "research_extension",
+      "priority": "P0",
+      "phase": "DESIGN_NOW_IMPLEMENT_AFTER_INTEGRITY",
+      "issue_policy": "EXTEND_EXISTING_DESIGN",
+      "existing_references": [
+        "#466",
+        "#566"
+      ],
+      "purpose": "Represent what action is authorized, by whom, for which tab/document/destination/data category, for how long, and how many times.",
+      "scope": [
+        "consequence taxonomy",
+        "human/agent actor",
+        "task identity",
+        "destination binding",
+        "single-use token",
+        "TTL",
+        "review→commit revalidation"
+      ],
+      "acceptance": [
+        "One gesture cannot authorize a second consequence",
+        "tokens cannot cross tab/frame/document/task",
+        "sink revalidation catches late mutation"
+      ],
+      "dependencies": [
+        "F-01",
+        "F-04"
+      ]
+    },
+    {
+      "id": "C-03",
+      "title": "Extension-origin decision authority",
+      "track": "release_integrity",
+      "priority": "P0",
+      "phase": "NOW",
+      "issue_policy": "RELEASE_BLOCKER_EXISTING_HOME",
+      "existing_references": [
+        "#464",
+        "#466"
+      ],
+      "purpose": "Ensure page-controlled UI can never proceed, trust, allow, resume, or otherwise lower protection.",
+      "scope": [
+        "pending decision broker",
+        "popup/side panel action",
+        "active context binding",
+        "warn/cancel-only page UI",
+        "tamper/redress tests"
+      ],
+      "acceptance": [
+        "All protection-lowering actions occur in extension origin",
+        "trusted-click redressing fails",
+        "stale/tab-changed/destination-changed decisions reject",
+        "UI removal causes denial only"
+      ],
+      "dependencies": [
+        "F-03",
+        "F-04",
+        "C-02"
+      ]
+    },
+    {
+      "id": "C-04",
+      "title": "Bridge identity, liveness, recovery, and fail policy",
+      "track": "release_integrity",
+      "priority": "P0",
+      "phase": "NOW",
+      "issue_policy": "REUSE_EXISTING",
+      "existing_references": [
+        "#175",
+        "#186",
+        "#523"
+      ],
+      "purpose": "Prevent hostile page takeover or silent loss of the MAIN↔isolated channel and expose per-capability readiness.",
+      "scope": [
+        "trusted-context binding",
+        "heartbeat",
+        "recovery generations",
+        "critical queue",
+        "degraded mode",
+        "fail matrix"
+      ],
+      "acceptance": [
+        "Page cannot become trusted peer",
+        "critical signals survive bounded floods",
+        "bridge death is visible",
+        "high-risk sinks follow declared fail-safe behavior"
+      ],
+      "dependencies": [
+        "F-03",
+        "F-07",
+        "F-09"
+      ]
+    },
+    {
+      "id": "C-05",
+      "title": "Episode and attack-narrative engine",
+      "track": "research_extension",
+      "priority": "P1",
+      "phase": "SHADOW_AFTER_INTEGRITY",
+      "issue_policy": "REUSE_EXISTING_POST_BETA",
+      "existing_references": [
+        "#443"
+      ],
+      "purpose": "Correlate cross-event stories across clicks, redirects, popups, clipboard, credentials, permissions, transactions, and lifecycle.",
+      "scope": [
+        "per-tab/task episode",
+        "typed events",
+        "decay curves",
+        "narrative grammars",
+        "actor/provenance",
+        "journal unit"
+      ],
+      "acceptance": [
+        "Slow/split-step variants weaken rather than bypass through TTL cliffs",
+        "legacy decisions remain unchanged in shadow mode",
+        "episodes are bounded and privacy-minimized"
+      ],
+      "dependencies": [
+        "C-01",
+        "C-02",
+        "C-04",
+        "F-07"
+      ]
+    },
+    {
+      "id": "C-06",
+      "title": "Local Data Flow Lens",
+      "track": "research_extension",
+      "priority": "P1",
+      "phase": "DESIGN_AND_METADATA_SPIKE",
+      "issue_policy": "CREATE_DESIGN_ISSUE_AFTER_DEDUP",
+      "existing_references": [
+        "#127",
+        "#237",
+        "#591"
+      ],
+      "purpose": "Show what categories of data a page accessed or transmitted, to which origin/channel, under what action, and whether the observation is inferred or proven.",
+      "scope": [
+        "source/sink graph",
+        "metadata mode",
+        "protective secret-sink mode",
+        "optional forensic CDP mode",
+        "redaction/export",
+        "confidence labels"
+      ],
+      "acceptance": [
+        "Default mode stores no raw values",
+        "every edge says OBSERVED/INFERRED/UNKNOWN",
+        "optional powerful permissions are isolated and explicit",
+        "user can inspect and clear retained metadata"
+      ],
+      "dependencies": [
+        "F-09",
+        "C-01",
+        "C-02"
+      ]
+    },
+    {
+      "id": "C-07",
+      "title": "Relationship and trust ledger",
+      "track": "research_extension",
+      "priority": "P1",
+      "phase": "POST_BETA",
+      "issue_policy": "REUSE_EXISTING_POST_BETA",
+      "existing_references": [
+        "#445"
+      ],
+      "purpose": "Use user-owned relationship history as a strong benign prior and expose destination identity before action without granting immunity.",
+      "scope": [
+        "first seen",
+        "credential relationship",
+        "OAuth relationship",
+        "familiarity",
+        "lookalike of user's world",
+        "export/clear",
+        "pre-click lens"
+      ],
+      "acceptance": [
+        "Familiarity reduces noise but cannot suppress high-consequence anomaly",
+        "ledger is bounded and transparent",
+        "no password values or raw history dossier by default"
+      ],
+      "dependencies": [
+        "C-01",
+        "C-06",
+        "F-09"
+      ]
+    },
+    {
+      "id": "C-08",
+      "title": "Confidence, abstention, and attention budget",
+      "track": "research_extension",
+      "priority": "P1",
+      "phase": "SHADOW_AFTER_EVIDENCE",
+      "issue_policy": "REUSE_EXISTING_POST_BETA",
+      "existing_references": [
+        "#441",
+        "#442"
+      ],
+      "purpose": "Route uncertain and low-value findings to a journal rather than either nagging or silently discarding them.",
+      "scope": [
+        "confidence/credibility",
+        "abstain state",
+        "severity floor",
+        "modality ladder",
+        "interruption budget",
+        "drift warning"
+      ],
+      "acceptance": [
+        "High-severity invariant events cannot be hidden by budget",
+        "benign interruption rate is bounded",
+        "shadow replay demonstrates recall/noise tradeoff before behavior change"
+      ],
+      "dependencies": [
+        "C-01",
+        "F-06",
+        "F-09"
+      ]
+    },
+    {
+      "id": "C-09",
+      "title": "Capability readiness and failure-mode matrix",
+      "track": "release_integrity",
+      "priority": "P0",
+      "phase": "NOW",
+      "issue_policy": "CREATE_AFTER_DEDUP",
+      "existing_references": [
+        "#175",
+        "#215",
+        "#565"
+      ],
+      "purpose": "State exactly which protections are active for the current tab/document and what happens when permissions, bridge, worker, browser surface, or companion are unavailable.",
+      "scope": [
+        "capability states",
+        "readiness receipts",
+        "fail-safe/fail-open matrix",
+        "last document identity",
+        "unsupported surfaces",
+        "historical-event distinction"
+      ],
+      "acceptance": [
+        "UI never implies protection from stale events",
+        "every high-risk sink has declared unavailable behavior",
+        "readiness is testable in fresh profiles and after reload"
+      ],
+      "dependencies": [
+        "C-04",
+        "F-03",
+        "F-09"
+      ]
+    },
+    {
+      "id": "C-10",
+      "title": "Reversible deceptive-surface remediation",
+      "track": "research_extension",
+      "priority": "P1",
+      "phase": "CURRENT_VERTICAL",
+      "issue_policy": "REUSE_EXISTING_CLUSTER",
+      "existing_references": [
+        "#555",
+        "#564",
+        "#568",
+        "#577",
+        "#579",
+        "#580",
+        "#591"
+      ],
+      "purpose": "Suppress high-confidence foreground traps without replaying clicks, while preserving legitimate dialogs and a durable Undo path.",
+      "scope": [
+        "bounded candidate discovery",
+        "group ownership",
+        "reinsertion handling",
+        "Undo",
+        "latency",
+        "review queue"
+      ],
+      "acceptance": [
+        "No click synthesis or retargeting",
+        "sequential layers remain suppressed",
+        "page-owned changes win",
+        "Undo remains available",
+        "legitimate controls remain usable"
+      ],
+      "dependencies": [
+        "F-03",
+        "F-06",
+        "F-09"
+      ]
+    },
+    {
+      "id": "C-11",
+      "title": "Credential and protected-data sink guard",
+      "track": "research_extension",
+      "priority": "P0",
+      "phase": "HARDEN_CURRENT",
+      "issue_policy": "REUSE_EXISTING_CLUSTER",
+      "existing_references": [
+        "#199",
+        "#200",
+        "#417"
+      ],
+      "purpose": "Protect passwords and other declared secrets at submit, script-read, or network-sink boundaries while remaining quiet on legitimate forms.",
+      "scope": [
+        "field discovery",
+        "shadow/open roots",
+        "visibility/autofill",
+        "form/action revalidation",
+        "synthetic-secret taint research",
+        "data categories"
+      ],
+      "acceptance": [
+        "Late destination mutation is caught",
+        "hidden honeypots do not trigger",
+        "protected values are never stored",
+        "same-origin script exfil is represented as a separate evidence class"
+      ],
+      "dependencies": [
+        "C-02",
+        "C-03",
+        "C-06",
+        "F-06"
+      ]
+    },
+    {
+      "id": "C-12",
+      "title": "Authorization, consent, and transaction integrity",
+      "track": "research_extension",
+      "priority": "P1",
+      "phase": "HARDEN_CURRENT",
+      "issue_policy": "REUSE_EXISTING_CLUSTER",
+      "existing_references": [
+        "#223",
+        "#269",
+        "#397"
+      ],
+      "purpose": "Bind OAuth/SSO/permission/payment review to the exact client, redirect, scope, recipient, amount, window, and task.",
+      "scope": [
+        "flow identity",
+        "state/client continuity",
+        "redirect binding",
+        "popup lineage",
+        "scope/recipient/amount diff",
+        "concurrent flows"
+      ],
+      "acceptance": [
+        "Generic parameters do not create broad false positives",
+        "missing expected metadata degrades explicitly",
+        "review→commit mutation is held",
+        "concurrent flows cannot cross-consume"
+      ],
+      "dependencies": [
+        "C-02",
+        "C-03",
+        "C-05",
+        "F-06"
+      ]
+    },
+    {
+      "id": "C-13",
+      "title": "Permission consequence mediator",
+      "track": "research_extension",
+      "priority": "P1",
+      "phase": "RESEARCH_PROFILE",
+      "issue_policy": "CREATE_RESEARCH_ISSUE_AFTER_DEDUP",
+      "existing_references": [
+        "#448",
+        "#455"
+      ],
+      "purpose": "Explain and govern site/browser permission grants by task relevance, persistence, actor, and chained escalation.",
+      "scope": [
+        "permission taxonomy",
+        "task declaration",
+        "grant observation",
+        "chain correlation",
+        "revocation guidance",
+        "agent policy"
+      ],
+      "acceptance": [
+        "Legitimate conference/map/upload journeys remain quiet",
+        "unrelated chained grants are surfaced",
+        "no page text is treated as consent"
+      ],
+      "dependencies": [
+        "C-02",
+        "C-03",
+        "F-06"
+      ]
+    },
+    {
+      "id": "C-14",
+      "title": "Download and artifact provenance",
+      "track": "research_extension",
+      "priority": "P1",
+      "phase": "RESEARCH_PROFILE",
+      "issue_policy": "CREATE_RESEARCH_ISSUE_AFTER_DEDUP",
+      "existing_references": [
+        "#452"
+      ],
+      "purpose": "Preserve initiator, redirect, filename/MIME, relationship, and optional signature/hash evidence from click to download and native handoff.",
+      "scope": [
+        "download event model",
+        "source chain",
+        "artifact metadata",
+        "inert fixture generator",
+        "user explanation",
+        "native handoff"
+      ],
+      "acceptance": [
+        "No artifact is executed in automated tests",
+        "known benign downloads are controls",
+        "mismatches are evidence rather than malware verdicts"
+      ],
+      "dependencies": [
+        "C-02",
+        "C-06",
+        "F-02",
+        "F-09"
+      ]
+    },
+    {
+      "id": "C-15",
+      "title": "Agent conduct policy and flight recorder",
+      "track": "agent_future",
+      "priority": "P1",
+      "phase": "RESEARCH_ONLY",
+      "issue_policy": "REUSE_EXISTING_POST_BETA",
+      "existing_references": [
+        "#448"
+      ],
+      "purpose": "Attribute delegated actions and require exact policy for credentials, permissions, downloads, payments, and cross-origin consequences.",
+      "scope": [
+        "actor/task identity",
+        "policy tokens",
+        "machine-readable decision API",
+        "trusted postconditions",
+        "tamper-evident local log",
+        "prompt-injection provenance"
+      ],
+      "acceptance": [
+        "Agent-suspected alone never hard-blocks accessibility users",
+        "high-consequence delegated actions need explicit scope",
+        "task state cannot cross tabs or agents"
+      ],
+      "dependencies": [
+        "C-01",
+        "C-02",
+        "C-03",
+        "C-05",
+        "F-03"
+      ]
+    },
+    {
+      "id": "N-01",
+      "title": "Native-messaging protocol and minimal host",
+      "track": "native_post_validation",
+      "priority": "P1",
+      "phase": "DESIGN_ONLY_UNTIL_TRIGGER",
+      "issue_policy": "REUSE_EXISTING_DESIGN_SPIKE",
+      "existing_references": [
+        "#244",
+        "#452"
+      ],
+      "purpose": "Provide a versioned, least-privilege, local-only transport for capabilities MV3 cannot supply.",
+      "scope": [
+        "host manifest",
+        "version handshake",
+        "extension identity allowlist",
+        "capability negotiation",
+        "message limits",
+        "audit/kill switch"
+      ],
+      "acceptance": [
+        "Extension remains functional without host",
+        "unknown/downgrade messages reject",
+        "no network egress",
+        "minimal echo PoC passes on supported OS"
+      ],
+      "dependencies": [
+        "C-09",
+        "F-09"
+      ]
+    },
+    {
+      "id": "N-02",
+      "title": "Clipboard taint and shell-sink sentinel",
+      "track": "native_post_validation",
+      "priority": "P1",
+      "phase": "ONLY_AFTER_RETENTION_AND_REVIEW",
+      "issue_policy": "POST_VALIDATION",
+      "existing_references": [
+        "#452"
+      ],
+      "purpose": "Correlate a suspicious browser clipboard write with a paste into a narrowly defined shell-class target.",
+      "scope": [
+        "salted ephemeral fingerprint",
+        "TTL",
+        "foreground target taxonomy",
+        "advisory/enforcement modes",
+        "override",
+        "no history"
+      ],
+      "acceptance": [
+        "No raw clipboard history",
+        "uncertain target is advisory",
+        "developer-command benign corpus passes",
+        "real OS false-interdiction rate is measured"
+      ],
+      "dependencies": [
+        "N-01",
+        "C-05",
+        "F-06"
+      ]
+    },
+    {
+      "id": "N-03",
+      "title": "Artifact scan and execution-boundary adapter",
+      "track": "native_post_validation",
+      "priority": "P2",
+      "phase": "POST_VALIDATION",
+      "issue_policy": "POST_VALIDATION",
+      "existing_references": [
+        "#452"
+      ],
+      "purpose": "Optionally inspect inert/downloaded artifact metadata and enforce a user-approved handoff before execution-class actions.",
+      "scope": [
+        "hash/signature metadata",
+        "scanner adapter",
+        "quarantine/hold design",
+        "Mark-of-the-Web context",
+        "execution broker lab"
+      ],
+      "acceptance": [
+        "No auto-execution",
+        "scanner errors cannot silently mark safe",
+        "signed known-good controls included",
+        "privilege is minimal"
+      ],
+      "dependencies": [
+        "N-01",
+        "C-14"
+      ]
+    },
+    {
+      "id": "N-04",
+      "title": "Header, DNS, proxy, and network-context observer",
+      "track": "native_post_validation",
+      "priority": "P2",
+      "phase": "POST_VALIDATION",
+      "issue_policy": "POST_VALIDATION",
+      "existing_references": [
+        "#179",
+        "#452"
+      ],
+      "purpose": "Add context structurally unavailable or incomplete in MV3 without intercepting TLS or exporting browsing data.",
+      "scope": [
+        "response header metadata",
+        "DNS/proxy/captive state",
+        "local anomaly evidence",
+        "privacy minimization",
+        "enterprise compatibility"
+      ],
+      "acceptance": [
+        "No TLS MITM",
+        "network anomaly never hard-blocks alone",
+        "VPN/captive/split-DNS controls pass",
+        "retained identifiers are bounded"
+      ],
+      "dependencies": [
+        "N-01",
+        "C-01",
+        "C-06"
+      ]
+    },
+    {
+      "id": "N-05",
+      "title": "Local model host with untrusted-sensor contract",
+      "track": "native_post_validation",
+      "priority": "P2",
+      "phase": "POST_VALIDATION",
+      "issue_policy": "POST_VALIDATION",
+      "existing_references": [
+        "#444",
+        "#452"
+      ],
+      "purpose": "Host optional larger local classifiers while keeping model output capped, schema-validated, and non-authoritative.",
+      "scope": [
+        "model API",
+        "artifact verification",
+        "resource limits",
+        "prompt-injection hardening",
+        "fallback hierarchy",
+        "version receipts"
+      ],
+      "acceptance": [
+        "Product remains whole without model",
+        "model cannot lower protection directly",
+        "model tamper is detected",
+        "latency/memory budgets are published"
+      ],
+      "dependencies": [
+        "N-01",
+        "C-01",
+        "C-08"
+      ]
+    },
+    {
+      "id": "N-06",
+      "title": "Signed installer, updater, rollback protection, and external review",
+      "track": "native_post_validation",
+      "priority": "P0",
+      "phase": "PREREQUISITE_TO_ANY_NATIVE_RELEASE",
+      "issue_policy": "MANDATORY_BEFORE_NATIVE_SHIP",
+      "existing_references": [
+        "#452"
+      ],
+      "purpose": "Prevent the privileged companion distribution path from becoming the project's largest security liability.",
+      "scope": [
+        "code signing",
+        "signed update metadata",
+        "artifact verification",
+        "rollback protection",
+        "key rotation",
+        "uninstall/kill switch",
+        "security review"
+      ],
+      "acceptance": [
+        "Unsigned/tampered/rollback packages reject",
+        "keys and recovery process are documented",
+        "installer requests least privilege",
+        "exact release artifact receives independent review"
+      ],
+      "dependencies": [
+        "N-01"
+      ]
+    }
+  ]
+}

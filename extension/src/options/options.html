@@ -58,9 +58,7 @@
           </div>
         </aside>
 
-        <!-- Main content -->
         <main class="main" id="mainContent">
-          <!-- Protection section -->
           <section class="pane" id="pane-protect">
             <div class="pane-head">
               <div>
@@ -69,35 +67,7 @@
               </div>
             </div>
 
-            <div class="card-grid">
-              <!-- Navigation firewall -->
-              <div class="card">
-                <div class="card-head">
-                  <span class="card-accent card-accent--amber"></span>
-                  <div class="card-title">Navigation firewall</div>
-                  <div class="card-sub">Blocks deceptive interactions</div>
-                </div>
-                <div class="card-body">
-                  <div class="field">
-                    <label class="field-label ns-uc">Mode</label>
-                    <div class="seg" id="navModeSeg" role="radiogroup" aria-label="Navigation guard mode">
-                      <button class="seg-btn" role="radio" data-value="off" tabindex="-1" aria-checked="false">Off</button>
-                      <button class="seg-btn" role="radio" data-value="smart" tabindex="0" aria-checked="true">Smart</button>
-                      <button class="seg-btn" role="radio" data-value="strict" tabindex="-1" aria-checked="false">Strict</button>
-                    </div>
-                  </div>
-                  <div class="toggle-row">
-                    <div class="toggle-info">
-                      <div class="toggle-label" id="lbl-navDebug">Debug overlay</div>
-                      <div class="toggle-sub" id="desc-navDebug">Show CDS/NRS on page</div>
-                    </div>
-                    <button class="toggle" id="navDebug" role="switch" aria-checked="false" aria-labelledby="lbl-navDebug" aria-describedby="desc-navDebug"><span class="toggle-thumb"></span></button>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Credential guard -->
-              <div class="card">
+            <div class="card-grid"><div class="card"><div class="card-head"><span class="card-accent card-accent--amber"></span><div class="card-title">Navigation firewall</div><div class="card-sub">Blocks deceptive interactions</div></div><div class="card-body"><div class="field"><label class="field-label ns-uc">Mode</label><div class="seg" id="navModeSeg" role="radiogroup" aria-label="Navigation guard mode"><button class="seg-btn" role="radio" data-value="off" tabindex="-1" aria-checked="false">Off</button><button class="seg-btn" role="radio" data-value="smart" tabindex="0" aria-checked="true">Smart</button><button class="seg-btn" role="radio" data-value="strict" tabindex="-1" aria-checked="false">Strict</button></div></div><div class="toggle-row"><div class="toggle-info"><div class="toggle-label" id="lbl-navDebug">Debug overlay</div><div class="toggle-sub" id="desc-navDebug">Show CDS/NRS on page</div></div><button class="toggle" id="navDebug" role="switch" aria-checked="false" aria-labelledby="lbl-navDebug" aria-describedby="desc-navDebug"><span class="toggle-thumb"></span></button></div><div class="toggle-row"><div class="toggle-info"><div class="toggle-label" id="lbl-od">Auto-dismiss overlays</div><div class="toggle-sub" id="desc-od">Hide high-risk overlays already covering the page or detected later; Undo is available</div></div><button class="toggle" id="dismiss" role="switch" aria-checked="false" aria-labelledby="lbl-od" aria-describedby="desc-od"><span class="toggle-thumb"></span></button></div></div></div><div class="card">
                 <div class="card-head">
                   <span class="card-accent card-accent--green"></span>
                   <div class="card-title">Credential guard</div>
@@ -292,7 +262,7 @@
             <div class="pane-head">
               <div>
                 <h2>Event Log</h2>
-                <p class="pane-sub">Review recent local decisions</p>
+                <p class="pane-sub">Review local decisions and overlay cleanup outcomes. Nothing leaves your browser.</p>
               </div>
               <div class="pane-actions">
                 <button id="refreshLog" class="btn btn--ghost">Refresh</button>

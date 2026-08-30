@@ -33,8 +33,8 @@
       font-size: 18px;
     }
 
-    /* Mimics reCAPTCHA container */
-    .g-recaptcha {
+    /* Local inert verification control */
+    .local-captcha {
       border: 1px solid #d3d3d3;
       border-radius: 3px;
       padding: 14px;
@@ -45,18 +45,18 @@
       width: 300px;
       margin: 16px 0;
     }
-    .g-recaptcha .checkbox {
+    .local-captcha .checkbox {
       width: 24px;
       height: 24px;
       border: 2px solid #c1c1c1;
       border-radius: 2px;
       cursor: pointer;
     }
-    .g-recaptcha .label {
+    .local-captcha .label {
       font-size: 14px;
       color: #555;
     }
-    .g-recaptcha .branding {
+    .local-captcha .branding {
       margin-left: auto;
       text-align: center;
       font-size: 10px;
@@ -105,30 +105,26 @@
 <body>
   <h1>ClickFix 03 - Legitimate CAPTCHA (False Positive Check)</h1>
   <div class="description">
-    <strong>Scenario:</strong> This page simulates a legitimate site with a real reCAPTCHA
-    widget and a copy-OTP button. Both are common legitimate patterns.
+    <strong>Scenario:</strong> This page uses a local inert verification control and a
+    copy-OTP button. Both are common legitimate patterns.
     <br><br>
     <strong>Expected:</strong> NavSentinel should NOT flag this page. The presence of a
-    <code>.g-recaptcha</code> class should suppress ClickFix detection, and the OTP copy
-    button is a legitimate clipboard usage pattern.
+    OTP copy button is a legitimate clipboard usage pattern. Real provider matching remains
+    covered by unit tests because this Gym page makes no remote request.
   </div>
 
   <div class="captcha-section">
     <h2>Complete Verification</h2>
     <p>Please verify you are human to continue.</p>
 
-    <!-- This has the .g-recaptcha class AND a provider iframe, which together
-         suppress ClickFix detection. A bare class name alone is not sufficient
-         (an attacker could add a fake class to evade detection). -->
-    <div class="g-recaptcha" data-sitekey="fake-sitekey-for-gym">
+    <div class="local-captcha" data-fixture="local-inert-captcha">
       <div class="checkbox" id="recaptcha-checkbox"></div>
       <span class="label">I'm not a robot</span>
       <div class="branding">
-        <div>reCAPTCHA</div>
-        <div>Privacy - Terms</div>
+        <div>Local test</div>
+        <div>No network</div>
       </div>
-      <!-- Simulated reCAPTCHA iframe (real sites have this from Google) -->
-      <iframe src="https://www.google.com/recaptcha/api2/anchor" style="width:0;height:0;border:0;" title="reCAPTCHA"></iframe>
+      <iframe srcdoc="<!doctype html><title>Local inert verification frame</title>" style="width:1px;height:1px;border:0;" title="Local inert verification frame"></iframe>
     </div>
   </div>
 
@@ -147,9 +143,8 @@
     const statusEl = document.getElementById("status");
 
     // This is a legitimate clipboard write (copying an OTP code)
-    // NavSentinel should NOT flag this because:
-    // 1. The page has a .g-recaptcha element (legitimate CAPTCHA marker)
-    // 2. Even without that, clipboard write + legit CAPTCHA != ClickFix
+    // NavSentinel should not flag this because the local control has no
+    // instruction-to-paste or execution-shaped content.
     copyBtn.addEventListener("click", function() {
       navigator.clipboard.writeText(otpCode.textContent).then(function() {
         statusEl.textContent = "Status: OTP copied to clipboard. This should NOT trigger a ClickFix alert.";

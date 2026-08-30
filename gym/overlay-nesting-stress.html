@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nested overlay cleanup stress matrix</title>
+  <style>
+    body { margin: 0; padding: 20px; font: 15px/1.4 system-ui, sans-serif; background: #101820; color: #f5f7fa; }
+    #matrix { display: grid; grid-template-columns: repeat(3, minmax(220px, 1fr)); gap: 12px; }
+    iframe { position: relative; width: 100%; height: 240px; border: 1px solid #6bc5d2; z-index: auto; background: white; }
+  </style>
+</head>
+<body>
+  <p><a href="index.html">&larr; Back to Gym index</a></p>
+  <h1>Nested overlay cleanup stress matrix</h1>
+  <p>Twelve child frames combine settled, delayed, body, wrapper, multiple, and benign cases.</p>
+  <div id="matrix"></div>
+  <script>
+    const cases = ["exact", "delayed", "body", "wrapper", "multiple", "benign",
+      "exact", "delayed", "body", "wrapper", "multiple", "benign"];
+    const childHost = location.hostname === "127.0.0.1" ? "localhost" : "127.0.0.1";
+    const matrix = document.getElementById("matrix");
+    for (const [index, fixtureCase] of cases.entries()) {
+      const frame = document.createElement("iframe");
+      frame.id = `matrix-frame-${index}`;
+      frame.title = `Nested overlay ${fixtureCase} ${index}`;
+      frame.dataset.case = fixtureCase;
+      frame.src = `${location.protocol}//${childHost}:${location.port}/overlay-nesting-frame.html?case=${fixtureCase}&instance=${index}`;
+      matrix.appendChild(frame);
+    }
+  </script>
+</body>
+</html>

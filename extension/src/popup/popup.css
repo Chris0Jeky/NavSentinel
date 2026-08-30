@@ -201,13 +201,13 @@ body {
   border-radius: 4px;
   font-size: 9px;
   background: rgba(228, 197, 68, 0.12);
-  color: var(--ns-orange);
+  color: var(--ns-purple);
   border: 1px solid rgba(228, 197, 68, 0.25);
 }
 
 .trust-pill[data-state="trusted"] {
   background: rgba(122, 183, 135, 0.12);
-  color: var(--ns-green);
+  color: var(--ns-text-2);
   border-color: rgba(122, 183, 135, 0.25);
 }
 
@@ -368,6 +368,21 @@ body {
 
 .mode-card--cred .seg-btn[aria-checked="true"] {
   background: var(--ns-green);
+}
+
+.cleanup-check {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 7px;
+  color: var(--ns-text-2);
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.cleanup-check input {
+  margin: 0;
+  accent-color: var(--ns-cyan);
 }
 
 /* Activity section */

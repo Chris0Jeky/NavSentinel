@@ -12,13 +12,15 @@ provenance only. Detailed retired procedures moved to
 
 ## Current snapshot
 
-**Snapshot recorded 2026-08-10:** the explicitly waived browser-surface PRs
+**Snapshot refreshed 2026-08-28:** the explicitly waived browser-surface PRs
 #528, #532, #535, #514, #534, #520, #521, #522, #526, #533, and #542 merged
 after refreshed exact-head CI and bounded review. That waiver is not a real-Chrome
 pass. #531 separately merged under its own waiver; it does not establish a
-`measure:fp` or headed-measurement result, and #223 remains open. AI-27 and AI-28
-are resolved; AI-14 remains blocked for future measurement work. AI-31 now holds
-issue #566's modifier-click opener-isolation behavior for an exact-head Gate-3.
+`measure:fp` or headed-measurement result, and #223 remains open. AI-27, AI-28,
+and AI-29 are resolved; AI-14 remains blocked for future measurement work. AI-30
+holds issue #567's Back/Forward history-integrity fix, AI-31 holds issue #566's
+modifier-click opener-isolation behavior, and AI-33 holds issue #530's popup
+trust-pill contrast change for an exact-head visual Gate-3.
 
 **Guided resolution cursor:** `AI-19` (`Resume at: AI-19`; conversational label
 `q-5`). Current ready order: AI-19 → optional AI-24 → AI-23 (low priority).
@@ -28,6 +30,130 @@ enum was superseded by owner decision #499 (2026-07-31), which removed the
 repository-local harness, its ACTION_ITEMS/HANDOFF parser, hooks, and CI. Do not
 reintroduce parser, status-enum, hook, tier, or harness machinery through this
 register.
+
+## Recently resolved item detail
+
+**RESOLVED: AI-29 - Issue #555 opt-in overlay-cleanup Gate-3.** On 2026-08-28,
+Chris loaded PR #557's exact `ee804fa8d45f34284e073b7054cdc558b14b025d`
+artifact, reported that overlay cleanup works as intended, accepted the remaining
+regular redirect-card control regression, and explicitly authorized merge. The
+Chrome version was not supplied. **Dismiss** and **Allow once** on an ordinary
+redirect guard may remain visibly present but inert; this is a fail-closed UX and
+accessibility regression, not an established navigation bypass, and is tracked
+with the complete evidence boundary and repair oracle in #560. The historical
+attempt records below are retained as at-the-time evidence and do not reopen the
+completed gate. This PR-specific completion does not move the general guided-
+resolution cursor from AI-19.
+
+**Earlier human result (2026-08-27, PR #557 at
+`14e397b154f50b5ea8e1e30ca211404e8cf34bca`): FAILED at step 5.** In a fresh
+Chrome profile, Chris confirmed the setting survives save/reopen and works by
+keyboard; mutation-01 is hidden when cleanup is enabled and Undo works;
+Navigation Off leaves cleanup inert; and the legitimate modal/video fixtures
+remain usable. On `evasion-02-size-34pct.html`, NavSentinel blocked the new tab
+but did not hide the deceptive overlay or expose the expected cleanup Undo.
+Console status was not reported. Keep AI-29 open until the real-Chrome mismatch
+is fixed and the new exact head passes the active procedure.
+
+**Latest human result (2026-08-27, PR #557 at
+`e8f5fafc9270a54acc510909cf670b1610cab55e`): FAILED the clarified automatic
+cleanup outcome.** After rebuilding/reloading the unpacked extension in the
+fresh profile, the popup showed cleanup enabled but the initial pink
+`evasion-02-size-34pct.html` trap remained over **Real Link** until Chris clicked
+it. The click-time fallback then correctly blocked `evil.example.com`, hid the
+trap, and showed `Blocked new tab (overlay hidden)` with Undo. This proves the
+reactive repair but not the requested pre-click behavior. Keep AI-29 open until a
+new exact head hides the settled initial trap before interaction and passes the
+revised active guide.
+
+**Subsequent exploratory real-world finding (2026-08-27):** a media embed used a
+non-qualifying outer iframe (`z-index:auto`) around a fixed maximum-z-index iframe
+attached directly below the child document's `<html>`; the innermost static
+`#container` disappeared when hidden manually. The prior top-frame-only automatic
+monitor could not reach the qualifying middle node. The current candidate adds
+bounded opt-in child-frame monitoring, direct-`<html>` discovery, isolated-world
+self-UI exclusion, and an exact synthetic plus twelve-frame stress matrix. This is
+automated candidate evidence, not a human Gate-3 completion; keep AI-29 open.
+
+**Earlier human result (2026-08-27, PR #557 at
+`f17dae0d9ad0573d73140784b76e377c2667c7eb`): FAILED on persistent real-world
+cleanup.** Across four visible media embeds, cleanup was inconsistent after
+reload and scroll. Direct inspection of one initialized child frame showed the
+first layer become hidden at about 0.3 seconds, then a page rewrite/replacement
+made both a full-player layer and a maximum-z-index child iframe visible again at
+about 2 seconds; they stayed visible for the remaining 15-second observation
+while the success card remained. Clicking NavSentinel's own **Dismiss** also
+reached a page-level click handler and produced a blocked-popup notice. This
+invalidates the prior E2E oracle, which stopped at the first hidden sample. The
+subsequent repair uses an independently bounded, persistent cleanup lane, retains
+one grouped Undo across replacement and independently delayed layers, and records
+local cleanup outcomes. Its hostile fixture first failed on the old head and now
+stays hidden across alert flooding, style rewrite, node replacement, and scroll
+reinsertion.
+
+**Latest human result (2026-08-27, PR #557 at
+`661f97f2d164535686e8650b8ec09434bf8b08ba`): CORE PERSISTENCE PASSED; Gate-3
+step 8 still FAILED.** After loading the correct build, Chris reported that the
+real multi-embed page worked flawlessly across the prior recurrence paths and
+accepted the suppression behavior. Clicking NavSentinel's **Dismiss**, however,
+still reached the hostile child frame and briefly produced another blocked-click
+notice. A stronger capture-phase fixture reproduces the escape against that head.
+The current local repair candidate installs the toast input fence synchronously
+before the MAIN bundle's asynchronous import and has red-to-green mouse Dismiss
+and keyboard Undo coverage with every page input counter held at zero. This is
+automated candidate evidence
+only. Keep AI-29 open until the pushed exact head has green hosted CI and Chris
+repeats the exact-head guide.
+
+**Latest human result (2026-08-28, PR #557 at
+`848d613ec74b9a1d1b9e026163f06585e9fc23d2`): FAILED the repaired control
+action.** The overlay remained suppressed and the document-start fence stopped
+the hostile-frame reaction, but both **Dismiss** and **Undo** became inert with
+no corresponding console error. Read-only inspection of the live child frame
+confirmed that the controls were enabled and held valid action tokens while the
+verified MAIN-to-isolated bridge was otherwise active. A red synthetic case now
+retargets the realm-visible event path to the extension host and reproduces the
+inert Dismiss. It also replaces page-realm mouse-coordinate and keyboard-key
+accessors; the prior candidate consulted the poisoned mouse fields four times.
+The current local candidate captures the required event, traversal, focus, list,
+and geometry accessors at document start, uses the pristine path only to prove
+host ownership, and resolves the owned control without consulting the poisoned
+page accessors before relaying the same bounded token. This is automated candidate
+evidence only. Keep AI-29 open until the pushed exact head has green hosted CI
+and Chris repeats the exact-head guide.
+
+**Latest human result (2026-08-28, PR #557 at
+`c388c40fb8b7237f04c2d94295f3e0bc80d64e3a`): FAILED in the owner-loaded
+real-world child frame.** Cleanup remained active, but trusted mouse and keyboard
+activation left Dismiss and Undo visibly present and inert, with no corresponding
+console exception. Read-only inspection confirmed enabled tokenized controls and
+an initialized bridge. Differential build inspection then found that post-build
+guard bytes had changed while the manifest retained the same Vite-generated
+loader URL, which gives a long-lived unpacked Chrome profile no new resource
+identity for the repaired guard even though fresh-profile Playwright reads the
+current disk bytes. The current candidate content-addresses the loader after
+post-processing, verifies that identity as a named CI contract, and requires a
+new runtime guard revision in every relevant Playwright page/frame. This is
+automated candidate evidence only. Keep AI-29 open until the pushed exact head
+has green hosted CI and Chris owner-reloads that exact artifact and repeats the
+control checks.
+
+**Final owner result (2026-08-28, PR #557 at
+`ee804fa8d45f34284e073b7054cdc558b14b025d`): PASSED with one accepted tracked
+regression.** Owner testing accepted the
+remaining rotating-site limitation but found one large Undo/Dismiss card per
+media frame too obstructive. Overlay-cleanup recovery is now a small Undo-only
+status that leaves after 2 seconds or the next trusted outside pointer
+interaction; redirect and security prompts are unchanged. Synthetic Chrome
+coverage proves the outside interaction still reaches the page, expiry does not
+restore the attack, twelve mixed frames shed their notices, and a preserved
+accessible player-error dialog becomes usable after the brief overlap. #593
+tracks the non-reproducible hidden-media redirect observation and #594 tracks
+any future high-confidence nuisance-dialog handling. Chris confirmed this exact
+artifact works as intended and authorized merge. A regular redirect guard's
+**Dismiss** and **Allow once** controls may be inert; Chris accepted that
+fail-closed regression for this merge, and #560 now owns its combined hostile-
+frame reproduction and repair.
 
 ## Open and blocked items
 
@@ -44,6 +170,53 @@ Only Chris can record this complete. Reply `AI-31 done; Gate-3 passed on PR #<n>
 at <40-character SHA>; Chrome <version>` or `AI-31 failed on PR #<n> at <SHA>:
 <step and observed>`. This PR-specific gate does not move the general guided-
 resolution cursor from AI-19.
+
+**OPEN: AI-36 — #558 popup/Options patch-save synchronization Gate-3.** Run the
+active manual Chrome guide in [`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md)
+against the eventual PR for branch `fix/issue558-patch-save-sync`. Verify the
+exact head and hosted checks first, then load that exact build in a fresh Chrome
+profile. Keep one valid Options field dirty, change both protection modes in the
+popup, and confirm the clean Options controls update live without discarding the
+dirty field. Save from Options and confirm the popup changes survive. Inspect
+Options, popup, and service-worker consoles. This gate covers the bounded
+patch-save/live-sync slice, not #558's remaining auto-save preference, dirty-state
+warning, or same-field conflict UX. Only Chris can complete this human Gate-3.
+The general guided resolution cursor remains AI-19; AI-36 is an additional
+branch-specific gate.
+
+**OPEN: AI-35 — #539 cross-host child-event attribution Gate-3.** Run the
+active manual Chrome guide in [`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md)
+against the eventual PR for branch `fix/issue539-page-attribution`. Verify the
+exact head and hosted checks first, then load that exact build in a fresh Chrome
+profile and confirm a cross-host child-frame event keeps its emitting `site`
+while the popup associates it with the top-level page; also confirm an unrelated
+top-level page does not inherit the event. Inspect page, popup, and service-worker
+consoles. Only Chris can complete this human Gate-3. The general guided
+resolution cursor remains AI-19; AI-35 is an additional branch-specific gate.
+
+**OPEN: AI-33 — Issue #530 popup trust-pill contrast Gate-3.** After the
+implementation PR is ready and exact-head automated checks are green, build that
+same head and follow the active AI-33 procedure in
+[`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md). Verify the
+observing and trusted labels remain readable, visibly distinct from signal
+chips, unclipped, keyboard-operable, and free of new popup-console errors. Only
+Chris can record this complete. Reply `AI-33 done; Gate-3 passed on PR #<n> at
+<40-character SHA>; Chrome <version>` or `AI-33 failed on PR #<n> at <SHA>:
+<step and observed>`. This PR-specific gate does not move the general guided-
+resolution cursor from AI-19.
+
+**OPEN: AI-30 - PR #570 Back/Forward history-integrity Gate-3.** After every
+automated check for the current PR head is green, build that same head and follow
+the active AI-30 procedure in
+[`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md). Verify that a
+cross-site local P -> A -> B history remains intact after ordinary navigation
+allowances expire: Back stays on A, Forward returns to B, and two Back actions
+reach A then P without a NavSentinel rollback, skipped entry, or unexpected
+prompt. Also confirm the existing delayed page-initiated redirect still rolls
+back. Only Chris can record this complete. Reply `AI-30 done; Gate-3 passed on
+PR #570 at <40-character SHA>; Chrome <version>` or `AI-30 failed on PR #570 at
+<SHA>: <step and observed>`. This PR-specific gate does not move the general
+guided-resolution cursor from AI-19.
 
 **OPEN: AI-19 — Clear or replace the working product name before CWS submission.**
 TruNav publicly uses the exact name `NavSentinel` for a coming-soon GNSS
@@ -103,6 +276,9 @@ headed-measurement result and does not waive future methodology.
 
 ## Completed and superseded log
 
+- AI-29 - resolved 2026-08-28: Chris accepted PR #557's exact `ee804fa` overlay
+  behavior and authorized merge; #560 retains the accepted regular redirect-card
+  Dismiss/Allow-once regression.
 - AI-28 — resolved 2026-08-10: #535 records the behavioural-data reset boundary;
   it clears event log, prompt outcomes, adaptive scores, and domain profiles while
   preserving settings, allowlist, and trusted domains.

@@ -102,8 +102,9 @@ export function eventIconName(kind: string): string {
  * Semantics: matching is by registrable domain over the persisted log, so the
  * gauge reflects the most recent scored risk for the DOMAIN (it can surface a score
  * from a prior visit or a sibling subdomain), not strictly the live page. Tighter
- * per-navigation binding is a tracked follow-up. event.site is a full hostname, so
- * it is reduced to a registrable domain for the comparison.
+ * per-navigation binding is a tracked follow-up. The browser-derived pageSite
+ * (when present) and legacy event.site are full hostnames, so the selected
+ * association is reduced to a registrable domain for the comparison.
  */
 export function pickSiteRiskEvent(
   log: EventLogEntry[],
@@ -116,7 +117,7 @@ export function pickSiteRiskEvent(
  * Newest-first scan for the most recent same-domain entry satisfying `match`.
  *
  * Both gauge pickers share this loop rather than each carrying a copy: they must
- * agree exactly on log order and on how `event.site` (a full hostname) is reduced
+ * agree exactly on log order and on how the event's page association is reduced
  * for comparison, so the domain semantics cannot drift apart, and the popup chunk
  * (10KB budget) does not ship the loop twice. Only the predicate differs.
  */
@@ -130,7 +131,11 @@ function pickNewestSiteEvent<T extends EventLogEntry>(
   for (let i = entries.length - 1; i >= 0; i--) {
     const ev = entries[i];
     if (!ev || !match(ev)) continue;
-    const site = ev.site ? getRegistrableDomain(normalizeHost(ev.site)) : "";
+    // New entries carry the browser-derived top-level page hostname. Prefer it
+    // so child-frame events follow the page the popup is showing; legacy rows
+    // have no pageSite and continue matching by their emitting site.
+    const associatedSite = ev.pageSite ?? ev.site;
+    const site = associatedSite ? getRegistrableDomain(normalizeHost(associatedSite)) : "";
     if (site && site === registrableDomain) return ev;
   }
   return null;
@@ -162,7 +167,8 @@ export interface UnscoredThreatEvent extends EventLogEntry {
  *  - an entry that DOES carry a score is not this state — the scored path owns it;
  *  - `mutation_alert` additionally requires `extra.severity === "high"`. The
  *    mutation monitor emits `low` for known-benign DOM churn (cookie banners,
- *    chat widgets, ARIA dialogs) and `high` for overlay injection, so gating on
+ *    chat widgets, ARIA dialogs) and `high` for suspicious initial or injected
+ *    foreground overlays, so gating on
  *    `high` keeps routine churn out of the gauge — warning on every
  *    `mutation_alert` would be the over-warning failure mode #219 cautions about.
  *    Note this is a deliberate UNDER-warn at the boundary, not a claim that
@@ -207,15 +213,15 @@ export function pickSiteUnscoredThreatEvent(
  *
  * One description per KIND, so `mutation_alert` must be truthful for every
  * high-severity alert the monitor raises — not just overlay injection. It also
- * covers a cross-domain `form_action_changed` (a form's destination rewritten,
- * nothing injected) and `password_injected`, so the wording is deliberately about
- * the page being modified rather than about content being added. Describing each
+ * covers an initial foreground overlay, a cross-domain `form_action_changed`
+ * (a form's destination rewritten), and `password_injected`, so the wording names
+ * both suspicious content and unexpected change. Describing each
  * subtype precisely would mean keying off `event.reasons[0]` (the alert type is
  * stored there) and carrying a second table in a chunk already at 96% of budget;
  * tracked rather than done here.
  */
 const UNSCORED_THREAT_TEXT: Readonly<Record<UnscoredThreatKind, string>> = {
-  mutation_alert: "the page was modified suspiciously after load",
+  mutation_alert: "suspicious page activity was detected",
   nav_blank_prompt: "a blank-target navigation was held for confirmation",
   nav_reputation_late_warn: "a frame navigated to a known-malicious domain",
   nav_rollback: "a navigation was rolled back",

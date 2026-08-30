@@ -1,6 +1,6 @@
 # Agent Index - NavSentinel
 
-Last reviewed: 2026-08-02.
+Last reviewed: 2026-08-30.
 
 This is a fast orientation layer for coding agents. It should point to interfaces and seams, not duplicate implementation details.
 
@@ -11,10 +11,11 @@ This is a fast orientation layer for coding agents. It should point to interface
 1. `CLAUDE.md` - product invariants and focused checks.
 2. `AGENTS.md` - compact Codex-specific facts.
 3. `docs/Project_Roadmap.md` - product execution and release gates.
-4. `CONTRIBUTING.md` - change-surface guidance and style expectations.
-5. This file - code-grounded seam map.
-6. `ACTION_ITEMS.md` only when the task involves a human decision/manual check.
-7. An optional runtime skill only when it materially helps the current task.
+4. `docs/security-program/README.md` for adversarial scenario, capability, and evidence work; it is subordinate to the roadmap.
+5. `CONTRIBUTING.md` - change-surface guidance and style expectations.
+6. This file - code-grounded seam map.
+7. `ACTION_ITEMS.md` only when the task involves a human decision/manual check.
+8. An optional runtime skill only when it materially helps the current task.
 
 ## Do Not Read By Default
 
@@ -37,6 +38,7 @@ This is a fast orientation layer for coding agents. It should point to interface
 | --- | --- | --- | --- |
 | Navigation capture and CDS/NRS | `capture_isolated.ts`, `scoring.ts`, `nrs.ts`, `nav_anomaly.ts`, `adaptive_scoring.ts` | `dom_builder.ts`, `debug_overlay.ts`, `domain_groups.ts` | scoring/NRS/nav-anomaly/adaptive tests, Gym E2E. |
 | Main-world guard and bridge | `main_guard.ts`, `pushstate_guard.ts`, `dblclick_guard.ts` | `clickfix_detector.ts`, `mutation_monitor.ts`, `oauth_monitor.ts` | `npm run build`, phase2-detections E2E, pushstate/dblclick/clickfix unit tests. |
+| Opt-in overlay cleanup (#555) | `storage.ts` (`nav.autoDismissOverlays`), Options + popup UI, `overlay_cleanup.ts` | `mutation_monitor.ts` classification plus bounded page-settle scan, `extension_owned_overlay.ts`, and `capture_isolated.ts` top/child-frame lifecycle | `tests/overlay-cleanup.test.ts`, mutation-monitor/storage/toggle/toast/popup-a11y tests, suite-ui + mutation-01 Phase-2 + evasion and `overlay-cleanup-nesting.spec.ts` E2E; settled/injected/click-time and cross-origin child-frame cleanup, reversible suppression, no click replay, benign/Off preservation; Gate-3 for shipped page/UI behavior. |
 | Credential guard | `credential_guard.ts`, `credential_guard_model.ts` | `credential_modal.ts`, `domain.ts`, `allowlist.ts` | credential/domain/allowlist tests, credential-guard E2E. |
 | Service worker state and rollback | `sw.ts`, `session_state.ts`, `pending_decision.ts` | `pending_decision_handlers.ts`, `pending_decision_store.ts`, `redirect_chain.ts`, `icon_manager.ts` | pending-decision handler/SW lifecycle tests, emitted static-worker import inspection, sw-rollback, session-state, redirect-chain tests, build/perf, rollback/stress E2E. |
 | JS behavior analysis (capability OFF, RI-07) | `js_behavior_monitor.ts` (enabled variant), `js_behavior_monitor.disabled.ts` (what every committed profile builds) | Selected by `capabilities.jsBehaviorInstrumentation` in `release-profiles.json` via the `@navsentinel/js-behavior-monitor` alias; `main_guard.ts` (gated init), `capture_isolated.ts` (bridge + state), `nrs.ts` (scoring), `js_behavior_state.ts` (shared state), options read-only disclosure | js-behavior-capability-off, js-behavior-monitor, js-behavior-state, js-behavior-integration, release-profile tests; `npm run build` + `npm run check:release-profile`; js-behavior E2E asserts the globals stay native. Design: `docs/design/js_behavior_analysis.md`. |
@@ -46,6 +48,7 @@ This is a fast orientation layer for coding agents. It should point to interface
 | Onboarding | `onboarding/onboarding.ts` | onboarding HTML/CSS, imports `icons.ts` | `tests/onboarding.test.ts`, `npm run build`. |
 | Prompt decision authority (RI-01) | `pending_decision.ts`, `pending_decision_handlers.ts`, `pending_decision_store.ts`, `ui_toast.ts`, `credential_modal.ts` | `sw.ts`, `credential_guard.ts`, `capture_isolated.ts`, popup/pending-action state, `tests/e2e/extension_test_utils.ts` | #466's create/list/consume broker is dormant and URL-minimized; consume uses an opaque worker-owned destination capability, and list/consume require positive current-frame enumeration. It has no producer/UI/executor. Page-injected UI still must become warn/cancel only, while proceed/allow/trust/resume moves to tab/destination-bound extension-origin UI with TTL. Test synthetic input, trusted-click redressing, host tamper/removal, removed child frames, tab/document switch, stale state, and broker lifecycle; Gate-3 required. |
 | Gym and E2E harness | `gym/index.html`, `tests/e2e/extension_test_utils.ts` | Gym HTML fixtures and E2E specs under `tests/e2e/` | Playwright spec, `npm run gym:serve`; verify volatile counts live. |
+| Adversarial security programme | `docs/security-program/README.md`, registries under `docs/security-program/registry/` | mappings, methodology, operational ledgers, `scripts/security-program/`, typed sink in `tests/e2e/proving_ground_fake_sink.ts` | `npm run security:check`; after build, `npm run test:e2e:proving-ground`; receipts stay ignored; never edit `extension/dist`. |
 | Build/release | `package.json`, `vite.config.ts`, `extension/manifest.json`, `config/release-profiles.json` | `scripts/build-extension.mjs`, `scripts/check-release-profile.mjs`, `scripts/package.mjs`, `scripts/release.mjs`, `scripts/check_versions.mjs`, `scripts/check-perf-budget.mjs` | `npm run verify:versions`, both profile builds, `npm run check:release-profile -- --release`, `npm run package:ext`. |
 | Data pipeline | `scripts/build-bloom-filter.mjs`, `scripts/fetch-phishing-corpus.mjs` | `scripts/build-test-bloom-filter.mjs`, `scripts/measure-fp.mjs`, `scripts/check-bloom-size.mjs`, `scripts/update-psl.mjs` | `npm run build:bloom`, `npm run check:bloom-size`. |
 | Contributor guidance | `CLAUDE.md`, `AGENTS.md`, `autodoc/AGENT_INDEX.md` | Optional `.claude/skills/*` and `.agents/skills/*` | No repo-local harness; use the product check for the changed seam. |
@@ -54,9 +57,10 @@ All paths above are relative to repo root. Content scripts live under `extension
 
 ## Current Agent-Readiness Observations
 
-- NavSentinel v0.4.0 is a pre-release alpha: engineering implementation is
-  substantial, but release integrity, validation, distribution, and market
-  evidence are open. Do not repeat the old "Phases 0-3 complete" framing.
+- NavSentinel v0.4.0 is pre-alpha with no established adoption: engineering
+  implementation is substantial, but release integrity, validation,
+  distribution, and market evidence are open. Do not repeat the old "Phases
+  0-3 complete" framing.
 - **UI redesign complete** (2026-05-16): brass/jade design system, design tokens, 26-icon SVG system, segmented controls replacing selects, sidebar nav options page, ShieldArc popup gauge. See `docs/REDESIGN_ORCHESTRATION.md`.
 - `docs/Product_Strategy.md` owns product direction;
   `docs/Project_Roadmap.md` owns execution; GitHub issues own implementation;

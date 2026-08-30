@@ -19,8 +19,9 @@ The manifest wires these together from:
 
 ## Maturity and release boundaries
 
-This is the architecture of a pre-release alpha. The separation and local-first
-design are substantial, but several current development paths are not production-capable:
+This is the architecture of a pre-alpha development project with no established
+adoption. The separation and local-first design are substantial, but several
+current development paths are not production-capable:
 
 - `ui_toast.ts` and `credential_modal.ts` currently let page-injected UI
   authorize protection-lowering actions. Script rejection/closed roots alone do
@@ -319,6 +320,18 @@ every behavioural store.
 
 `extension/src/shared/allowlist.ts` manages the per-site navigation allowlist, including legacy key migration and normalization.
 
+### Event-log page attribution (#539)
+
+Each event keeps `site` as the hostname of the frame or page that emitted it,
+so diagnostics retain their source. The service worker may additionally persist
+the optional `pageSite` association, derived only from the browser-provided
+`sender.tab.url` for an HTTP(S) tab. It stores the normalized hostname only —
+never the URL path, query, or fragment — and ignores caller-supplied page
+associations. The popup prefers `pageSite` when matching an event to the active
+top-level page and falls back to `site` for legacy entries. This is a
+top-level-page association, not per-navigation identity; that larger redesign
+remains with #215.
+
 ## Popup and options page
 
 ### Popup
@@ -415,9 +428,35 @@ It listens to `chrome.webNavigation` events to decide when a committed navigatio
 `extension/src/content/mutation_monitor.ts` detects post-load injection attacks via MutationObserver:
 
 - Watches for new fixed-position elements covering >= 25% of viewport added after initial load
+- When auto-dismiss is enabled, runs an independently bounded immediate cleanup
+  lane inside the top document and ordinary child frames. It inspects at most 64
+  mutation candidates per observer delivery plus eight foreground candidates
+  per settle/scroll rescan, so the 50-entry security-alert cap cannot disable the
+  opt-in action or make its layout work unbounded.
+- The ordinary alert lane still debounces for 100 ms, caps at 50 records, and
+  stops after five minutes. An active cleanup opt-in keeps observation alive for
+  long-lived/lazy media pages; child observers release when cleanup or Navigation
+  mode becomes inactive.
+- The settled scan checks direct `<html>` children plus body/framework candidates,
+  ordered from likely foreground nodes and capped at 128 candidates
 - Detects form action attribute changes and password field injection
-- Rate-limited: 100ms debounce, 50-alert hard cap, 5-minute auto-disconnect
+- Reasserts a page-overwritten suppression and groups replacement layers under
+  one 128-entry page-local Undo ledger. Explicit Undo exempts those exact nodes
+  from automatic rescan while later replacement nodes remain eligible; switching
+  cleanup off restores and resets the current group.
 - Excludes cookie consent banners, chat widgets, and elements with proper ARIA markup
+- Excludes only isolated-world-owned NavSentinel UI nodes through WeakSet identity;
+  page-created elements cannot gain an exemption by spoofing an extension-like ID
+- Keeps the cleanup Undo card beside unrelated warnings. A synchronous
+  document-start fence in the generated MAIN-world loader consumes trusted
+  pointer, mouse, touch, click, and keyboard input on the extension-owned toast
+  host before page capture listeners can observe it, then relays only a click or
+  keyboard activation's bounded control token through the existing
+  verified MessagePort. The isolated world accepts the token only when it still
+  identifies a live control in the current owned shadow root and invokes its
+  WeakMap-held action; the shadow root remains the fallback boundary in unit DOMs.
+- Records bounded cleanup outcomes in the existing local event log for review;
+  no new permission, endpoint, or remote telemetry path is introduced.
 - Feeds mutation alert count into the debug overlay
 
 ## CSP analysis

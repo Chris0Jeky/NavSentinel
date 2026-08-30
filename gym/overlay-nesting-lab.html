@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nested overlay cleanup lab</title>
+  <style>
+    body { margin: 0; padding: 24px; font: 16px/1.45 system-ui, sans-serif; background: #18222d; color: #eef6ff; }
+    #media-shell { position: relative; width: min(760px, 88vw); height: min(520px, 70vh); margin: 20px auto; }
+    #media-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 2px solid #6bc5d2; z-index: auto; }
+  </style>
+</head>
+<body>
+  <p><a href="index.html">&larr; Back to Gym index</a></p>
+  <h1>Nested overlay cleanup lab</h1>
+  <p>
+    A non-qualifying media iframe contains the selected test case. The exact case
+    recreates a fixed, maximum-z-index, no-src iframe attached directly below
+    the child document's <code>&lt;html&gt;</code>, with a static
+    <code>#container</code> in its about:blank document.
+  </p>
+  <div id="media-shell"><iframe id="media-frame" title="Synthetic media frame"></iframe></div>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const fixtureCase = params.get("case") || "exact";
+    const programmeChurn = params.get("churn") === "1";
+    const localSink = (() => {
+      const raw = params.get("sink");
+      if (!raw) return "";
+      try {
+        const parsed = new URL(raw);
+        const loopback = parsed.hostname === "127.0.0.1" ||
+          parsed.hostname === "localhost" || parsed.hostname === "[::1]";
+        return parsed.protocol === "http:" && loopback &&
+          parsed.pathname === "/__navsentinel_fake_sink" ? parsed.href : "";
+      } catch {
+        return "";
+      }
+    })();
+    const childHost = location.hostname === "127.0.0.1" ? "localhost" : "127.0.0.1";
+    const childParams = new URLSearchParams({ case: fixtureCase });
+    if (localSink) childParams.set("sink", localSink);
+    if (programmeChurn) childParams.set("churn", "1");
+    document.getElementById("media-frame").src =
+      `${location.protocol}//${childHost}:${location.port}/overlay-nesting-frame.html?${childParams}`;
+  </script>
+</body>
+</html>

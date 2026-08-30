@@ -10,6 +10,7 @@ import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 // we reset between tests.
 import {
   startMutationMonitor,
+  scanExistingForegroundOverlay,
   stopMutationMonitor,
   getMutationAlerts,
   getMutationAlertCount,
@@ -19,6 +20,7 @@ import {
   _feedMutationRecordsForTesting,
   type MutationAlert,
 } from "../extension/src/content/mutation_monitor";
+import { registerExtensionOwnedOverlayElement } from "../extension/src/content/extension_owned_overlay";
 
 // ---------------------------------------------------------------------------
 // Unit tests that work WITHOUT a full DOM
@@ -35,6 +37,7 @@ describe("mutation_monitor module API", () => {
 
   it("exports the expected public API", () => {
     expect(typeof startMutationMonitor).toBe("function");
+    expect(typeof scanExistingForegroundOverlay).toBe("function");
     expect(typeof stopMutationMonitor).toBe("function");
     expect(typeof getMutationAlerts).toBe("function");
     expect(typeof getMutationAlertCount).toBe("function");
@@ -72,6 +75,204 @@ describe("mutation_monitor DOM integration", () => {
     const alerts: MutationAlert[] = [];
     startMutationMonitor(document, (a) => alerts.push(a));
     expect(getMutationAlertCount()).toBe(0);
+    stopMutationMonitor();
+  });
+
+  it("reports one high-severity foreground overlay already present at the baseline", () => {
+    const alerts: MutationAlert[] = [];
+    const overlay = document.createElement("a");
+    overlay.style.position = "fixed";
+    overlay.style.zIndex = "10000";
+    overlay.style.display = "block";
+    const rectSpy = vi.spyOn(overlay, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(0, 0, 800, 600),
+    );
+    document.body.appendChild(overlay);
+
+    startMutationMonitor(document, (alert) => alerts.push(alert));
+
+    expect(scanExistingForegroundOverlay(document)).toBe(true);
+    expect(scanExistingForegroundOverlay(document)).toBe(false);
+    expect(alerts.filter((alert) => alert.type === "overlay_detected")).toHaveLength(1);
+
+    rectSpy.mockRestore();
+    overlay.remove();
+    stopMutationMonitor();
+  });
+
+  it("reports a bounded batch of distinct foreground overlays already present", () => {
+    const alerts: MutationAlert[] = [];
+    const overlays = Array.from({ length: 6 }, () => {
+      const overlay = document.createElement("a");
+      overlay.style.position = "fixed";
+      overlay.style.zIndex = "10000";
+      overlay.style.display = "block";
+      vi.spyOn(overlay, "getBoundingClientRect").mockReturnValue(
+        new DOMRect(0, 0, 800, 600),
+      );
+      document.body.appendChild(overlay);
+      return overlay;
+    });
+
+    startMutationMonitor(document, (alert) => alerts.push(alert));
+
+    expect(scanExistingForegroundOverlay(document)).toBe(true);
+    expect(scanExistingForegroundOverlay(document)).toBe(false);
+    const detected = alerts.filter((alert) => alert.type === "overlay_detected");
+    expect(detected).toHaveLength(1);
+    expect(detected[0]?.elements).toHaveLength(5);
+    expect(new Set(detected[0]?.elements).size).toBe(5);
+
+    overlays.forEach((overlay) => overlay.remove());
+    stopMutationMonitor();
+  });
+
+  it("finds a qualifying iframe attached directly beneath documentElement", () => {
+    const alerts: MutationAlert[] = [];
+    const overlayFrame = document.createElement("iframe");
+    overlayFrame.style.position = "fixed";
+    overlayFrame.style.zIndex = "2147483647";
+    overlayFrame.style.display = "block";
+    vi.spyOn(overlayFrame, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(0, 0, 1024, 768),
+    );
+    document.documentElement.appendChild(overlayFrame);
+
+    startMutationMonitor(document, (alert) => alerts.push(alert));
+
+    expect(scanExistingForegroundOverlay(document)).toBe(true);
+    expect(alerts).toEqual([
+      expect.objectContaining({
+        type: "overlay_detected",
+        severity: "high",
+        element: overlayFrame,
+        elements: [overlayFrame],
+      }),
+    ]);
+
+    overlayFrame.remove();
+    stopMutationMonitor();
+  });
+
+  it("prefers later foreground candidates", () => {
+    const alerts: MutationAlert[] = [];
+    const overlays = Array.from({ length: 160 }, (_, index) => {
+      const overlay = document.createElement("div");
+      overlay.id = `candidate-${index}`;
+      overlay.style.position = "fixed";
+      overlay.style.zIndex = "10000";
+      overlay.style.display = "block";
+      vi.spyOn(overlay, "getBoundingClientRect").mockReturnValue(
+        new DOMRect(0, 0, 800, 600),
+      );
+      document.body.appendChild(overlay);
+      return overlay;
+    });
+
+    startMutationMonitor(document, (alert) => alerts.push(alert));
+    expect(scanExistingForegroundOverlay(document)).toBe(true);
+
+    const detected = alerts.find((alert) => alert.type === "overlay_detected");
+    expect(detected?.elements?.map((element) => element.id)).toEqual([
+      "candidate-159",
+      "candidate-158",
+      "candidate-157",
+      "candidate-156",
+      "candidate-155",
+    ]);
+
+    overlays.forEach((overlay) => overlay.remove());
+    stopMutationMonitor();
+  });
+
+  it("caps a pathological initial candidate walk", () => {
+    const candidates = Array.from({ length: 160 }, (_, index) => {
+      const candidate = document.createElement("div");
+      candidate.id = `static-candidate-${index}`;
+      document.body.appendChild(candidate);
+      return candidate;
+    });
+    const styleSpy = vi.spyOn(window, "getComputedStyle");
+
+    startMutationMonitor(document, () => {});
+    expect(scanExistingForegroundOverlay(document)).toBe(false);
+    expect(styleSpy).toHaveBeenCalledTimes(128);
+
+    candidates.forEach((candidate) => candidate.remove());
+    stopMutationMonitor();
+  });
+
+  it("does not report a pre-existing native dialog as a risky foreground overlay", () => {
+    const alerts: MutationAlert[] = [];
+    const dialog = document.createElement("dialog");
+    dialog.setAttribute("open", "");
+    dialog.style.position = "fixed";
+    dialog.style.zIndex = "10000";
+    dialog.style.display = "block";
+    const rectSpy = vi.spyOn(dialog, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(0, 0, 800, 600),
+    );
+    document.body.appendChild(dialog);
+
+    startMutationMonitor(document, (alert) => alerts.push(alert));
+
+    expect(scanExistingForegroundOverlay(document)).toBe(false);
+    expect(alerts.some((alert) => alert.type === "overlay_detected")).toBe(false);
+
+    rectSpy.mockRestore();
+    dialog.remove();
+    stopMutationMonitor();
+  });
+
+  it("does not report a pre-existing wrapper around an open native dialog", () => {
+    const alerts: MutationAlert[] = [];
+    const wrapper = document.createElement("div");
+    wrapper.style.position = "fixed";
+    wrapper.style.zIndex = "10000";
+    wrapper.style.display = "block";
+    const dialog = document.createElement("dialog");
+    dialog.setAttribute("open", "");
+    wrapper.appendChild(dialog);
+    const rectSpy = vi.spyOn(wrapper, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(0, 0, 800, 600),
+    );
+    document.body.appendChild(wrapper);
+
+    startMutationMonitor(document, (alert) => alerts.push(alert));
+
+    expect(scanExistingForegroundOverlay(document)).toBe(false);
+    expect(alerts.some((alert) => alert.type === "overlay_detected")).toBe(false);
+
+    rectSpy.mockRestore();
+    wrapper.remove();
+    stopMutationMonitor();
+  });
+
+  it("ignores only registered extension-owned overlays, not spoofed IDs", () => {
+    const alerts: MutationAlert[] = [];
+    const registered = document.createElement("div");
+    const impostor = document.createElement("div");
+    for (const element of [registered, impostor]) {
+      element.style.position = "fixed";
+      element.style.zIndex = "2147483647";
+      element.style.display = "block";
+      vi.spyOn(element, "getBoundingClientRect").mockReturnValue(
+        new DOMRect(0, 0, 800, 600),
+      );
+      document.body.appendChild(element);
+    }
+    registered.id = "__navsentinel_real_host";
+    impostor.id = "__navsentinel_page_impostor";
+    registerExtensionOwnedOverlayElement(registered);
+
+    startMutationMonitor(document, (alert) => alerts.push(alert));
+    expect(scanExistingForegroundOverlay(document)).toBe(true);
+
+    const detected = alerts.find((alert) => alert.type === "overlay_detected");
+    expect(detected?.elements).toEqual([impostor]);
+
+    registered.remove();
+    impostor.remove();
     stopMutationMonitor();
   });
 
@@ -1109,6 +1310,160 @@ describe("mutation_monitor flood-then-inject reserve past the alert cap (#413)",
     expect(getMutationAlertCount()).toBe(50);
     return filler;
   }
+
+  it("keeps opt-in overlay cleanup reachable after the floodable alert lane is full", async () => {
+    const cleanupCandidates: MutationAlert[] = [];
+    startMutationMonitor(document, () => {}, {
+      onOverlayCandidate: (alert) => cleanupCandidates.push(alert),
+      isOverlayCleanupActive: () => true,
+    });
+    const forms = await floodWithBenignAlerts();
+    expect(getMutationAlertCount()).toBe(45);
+
+    const overlay = document.createElement("div");
+    overlay.style.position = "fixed";
+    overlay.style.zIndex = "10000";
+    overlay.style.display = "block";
+    vi.spyOn(overlay, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(0, 0, 800, 600),
+    );
+    document.body.appendChild(overlay);
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(cleanupCandidates).toEqual([
+      expect.objectContaining({
+        type: "overlay_injected",
+        severity: "high",
+        element: overlay,
+      }),
+    ]);
+    expect(getMutationAlertCount()).toBe(45);
+
+    overlay.remove();
+    forms.forEach((form) => form.remove());
+    stopMutationMonitor();
+  });
+
+  it("caps immediate cleanup classification at 64 candidates per observer delivery", async () => {
+    const cleanupCandidates: MutationAlert[] = [];
+    startMutationMonitor(document, () => {}, {
+      onOverlayCandidate: (alert) => cleanupCandidates.push(alert),
+      isOverlayCleanupActive: () => true,
+    });
+
+    const fragment = document.createDocumentFragment();
+    for (let index = 0; index < 100; index += 1) {
+      const overlay = document.createElement("div");
+      overlay.style.position = "fixed";
+      overlay.style.zIndex = String(10_000 + index);
+      vi.spyOn(overlay, "getBoundingClientRect").mockReturnValue(
+        new DOMRect(0, 0, 800, 600),
+      );
+      fragment.appendChild(overlay);
+    }
+    document.body.appendChild(fragment);
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(cleanupCandidates).toHaveLength(64);
+    document.body.replaceChildren();
+    stopMutationMonitor();
+  });
+
+  it("keeps the observer alive past five minutes only while cleanup stays opted in", async () => {
+    const cleanupCandidates: MutationAlert[] = [];
+    startMutationMonitor(document, () => {}, {
+      onOverlayCandidate: (alert) => cleanupCandidates.push(alert),
+      isOverlayCleanupActive: () => true,
+    });
+    await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 1);
+
+    const overlay = document.createElement("div");
+    overlay.style.position = "fixed";
+    overlay.style.zIndex = "10000";
+    overlay.style.display = "block";
+    vi.spyOn(overlay, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(0, 0, 800, 600),
+    );
+    document.body.appendChild(overlay);
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(cleanupCandidates).toEqual([
+      expect.objectContaining({ element: overlay, type: "overlay_injected" }),
+    ]);
+    overlay.remove();
+    stopMutationMonitor();
+  });
+
+  it("keeps a bounded page-settle overlay signal reachable after a benign flood", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (alert) => alerts.push(alert));
+    await vi.advanceTimersByTimeAsync(200);
+
+    const forms = await floodWithBenignAlerts();
+    expect(getMutationAlertCount()).toBe(45);
+
+    const overlay = document.createElement("a");
+    overlay.style.position = "fixed";
+    overlay.style.zIndex = "10000";
+    overlay.style.display = "block";
+    const rectSpy = vi.spyOn(overlay, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(0, 0, 800, 600),
+    );
+    document.body.appendChild(overlay);
+
+    expect(scanExistingForegroundOverlay(document)).toBe(true);
+    expect(alerts.filter((alert) => alert.type === "overlay_detected")).toHaveLength(1);
+    expect(getMutationAlertCount()).toBe(46);
+
+    rectSpy.mockRestore();
+    overlay.remove();
+    for (const form of forms) form.remove();
+    stopMutationMonitor();
+  });
+
+  it("does not let secondary elements in an initial batch burn the scarce reserve", async () => {
+    const alerts: MutationAlert[] = [];
+    const overlays = Array.from({ length: 5 }, (_, index) => {
+      const iframe = document.createElement("iframe");
+      iframe.src = `data:text/html,overlay-${index}`;
+      iframe.style.position = "fixed";
+      iframe.style.zIndex = "10000";
+      vi.spyOn(iframe, "getBoundingClientRect").mockReturnValue(
+        new DOMRect(0, 0, 800, 600),
+      );
+      document.body.appendChild(iframe);
+      return iframe;
+    });
+
+    startMutationMonitor(document, (alert) => alerts.push(alert));
+    expect(scanExistingForegroundOverlay(document)).toBe(true);
+    expect(getMutationAlertCount()).toBe(1);
+
+    const forms = await floodWithBenignAlerts();
+    expect(getMutationAlertCount()).toBe(45);
+
+    // Re-adding the four non-primary layers offers four scarce iframe alerts.
+    // The initial batch already represented them, so none may consume reserve.
+    for (const overlay of overlays.slice(1)) {
+      overlay.remove();
+      document.body.appendChild(overlay);
+    }
+    await vi.advanceTimersByTimeAsync(200);
+    expect(getMutationAlertCount()).toBe(45);
+
+    for (let i = 0; i < 2; i++) {
+      const input = document.createElement("input");
+      input.type = "password";
+      document.body.appendChild(input);
+    }
+    await vi.advanceTimersByTimeAsync(200);
+    expect(alerts.filter((alert) => alert.type === "password_injected")).toHaveLength(2);
+    expect(getMutationAlertCount()).toBe(47);
+
+    overlays.forEach((overlay) => overlay.remove());
+    forms.forEach((form) => form.remove());
+    stopMutationMonitor();
+  });
 
   it("emits the credential signal for a shadow root registered after a benign flood (#413)", async () => {
     const alerts: MutationAlert[] = [];

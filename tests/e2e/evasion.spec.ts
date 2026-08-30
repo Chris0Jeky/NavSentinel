@@ -27,6 +27,8 @@
  *     size detection (getBoundingClientRect returns transformed box)
  * - evasion-11 (shadow DOM): Blocked by blank-anchor via composedPath();
  *     documents that CDS overlay scoring misses shadow content
+ * - evasion-12 (multiple): Automatic cleanup hides a bounded initial batch and
+ *     one Undo restores every suppressed layer
  */
 import { test, expect, chromium } from "@playwright/test";
 import fs from "fs";
@@ -34,8 +36,10 @@ import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 import {
+  clickToastButton,
   getGymBaseUrl,
   readToastText,
+  updateNavigationSettings,
   waitForNavSentinelBridge,
   waitForToastMatch,
   waitForToastText
@@ -142,6 +146,109 @@ test("Evasion 02: medium-size overlay is blocked @regression", async () => {
     const popup = await popupPromise;
     expect(popup, "Expected the overlay new tab to be blocked").toBeNull();
     await waitForToastText(page, "Blocked new tab", 3000);
+    await expect(page).toHaveURL(/evasion-02-size-34pct\.html/);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("Evasion 02: opt-in cleanup hides the initial overlay before interaction and Undo restores it @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { page, context, cleanup } = await setupEvasionTest("evasion-02-size-34pct.html");
+
+  try {
+    await updateNavigationSettings(context, { autoDismissOverlays: true });
+    await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
+    await waitForNavSentinelBridge(page);
+
+    const trap = page.locator("#trap");
+    const pageCountBeforeCleanup = context.pages().length;
+    await expect(trap).toBeHidden({ timeout: 2000 });
+    await waitForToastMatch(page, /overlay hidden/i, 3000);
+    expect(context.pages(), "Initial cleanup must not open or replay a navigation")
+      .toHaveLength(pageCountBeforeCleanup);
+    expect(await page.locator(".real-link").evaluate((link) => {
+      const rect = link.getBoundingClientRect();
+      return document.elementFromPoint(
+        rect.left + rect.width / 2,
+        rect.top + rect.height / 2,
+      ) === link;
+    }), "The intended link should be exposed without a synthetic click").toBe(true);
+
+    await clickToastButton(page, "Undo");
+    await expect(trap).toBeVisible();
+    await page.waitForTimeout(350);
+    await expect(trap).toBeVisible();
+    await expect(page).toHaveURL(/evasion-02-size-34pct\.html/);
+
+    const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
+    await trap.click();
+    expect(await popupPromise, "The restored trap's later click must remain blocked").toBeNull();
+    await expect(trap).toBeHidden({ timeout: 3000 });
+  } finally {
+    await cleanup();
+  }
+});
+
+test("Evasion 02: Navigation Off keeps initial cleanup inert until protection is enabled @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { page, context, cleanup } = await setupEvasionTest("evasion-02-size-34pct.html");
+
+  try {
+    await updateNavigationSettings(context, {
+      defaultMode: "off",
+      autoDismissOverlays: true,
+    });
+    await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
+    await waitForNavSentinelBridge(page);
+
+    const trap = page.locator("#trap");
+    await page.waitForTimeout(3500);
+    await expect(trap).toBeVisible();
+
+    await updateNavigationSettings(context, { defaultMode: "smart" });
+    await expect(trap).toBeHidden({ timeout: 3000 });
+    await waitForToastMatch(page, /overlay hidden/i, 3000);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("Evasion 02: click-time cleanup hides a high-severity overlay on the prompt path @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { page, context, cleanup } = await setupEvasionTest("evasion-02-size-34pct.html");
+
+  try {
+    // Keep the faster initial scan inert while reshaping this fixture so the
+    // click itself, rather than page-settle cleanup, exercises the prompt path.
+    await updateNavigationSettings(context, { autoDismissOverlays: false });
+    await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
+    await waitForNavSentinelBridge(page);
+
+    // Keep the element above the cleanup classifier's 25%/z=100 boundary while
+    // removing enough NRS factors to exercise Smart's intercepted prompt path.
+    const trap = page.locator("#trap");
+    await trap.evaluate((element) => {
+      element.setAttribute("href", "index.html");
+      element.setAttribute("aria-label", "Open Gym index");
+    });
+    await page.addStyleTag({ content: ".overlay{width:51vw;height:51vh;z-index:100}" });
+    await updateNavigationSettings(context, { autoDismissOverlays: true });
+    const box = await trap.boundingBox();
+    expect(box, "#trap prompt-path overlay should be visible before the click").toBeTruthy();
+
+    const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
+    await page.mouse.click(box!.x + 8, box!.y + 8);
+
+    expect(await popupPromise, "Expected the prompted overlay new tab to stay blocked").toBeNull();
+    await waitForToastMatch(page, /Suspicious new tab \(overlay hidden\)/i, 3000);
+    await expect(trap).toBeHidden();
+
+    await clickToastButton(page, "Undo");
+    await expect(trap).toBeVisible();
     await expect(page).toHaveURL(/evasion-02-size-34pct\.html/);
   } finally {
     await cleanup();
@@ -470,8 +577,111 @@ test("Evasion 11: shadow DOM overlay is caught via composedPath @regression", as
     // composedPath() should find the inner <a target="_blank"> inside the
     // shadow root, allowing the blank-anchor gate to catch it.
     expect(popup, "Expected composedPath to find shadow DOM anchor and block it").toBeNull();
-    await waitForToastText(page, "Blocked", 5000);
+    // The local score-specific prompt survives the matching MAIN-world report,
+    // so Smart may label this suspicious or blocked without rendering twice.
+    await waitForToastMatch(page, /(?:Blocked|Suspicious) new tab/i, 5000);
     await expect(page).toHaveURL(/evasion-11-shadow-dom\.html/);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("Evasion 11: opt-in cleanup handles a shadow-path overlay across realms @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { page, context, cleanup } = await setupEvasionTest("evasion-11-shadow-dom.html");
+
+  try {
+    // Reshape the existing shadow target while automatic monitoring is inert.
+    // Enabling it afterwards makes this a deterministic click-time cleanup
+    // case instead of racing the 100 ms mutation debounce.
+    await updateNavigationSettings(context, { autoDismissOverlays: false });
+    await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
+    await waitForNavSentinelBridge(page);
+    await page.waitForFunction(
+      () => document.getElementById("shadow-host")?.getAttribute("data-shadow-ready") === "1",
+      null,
+      { timeout: 5000 },
+    );
+
+    // Make only the shadow-internal anchor overlay-shaped. Its plain host no
+    // longer qualifies, so cleanup must accept the cross-world path element.
+    await page.evaluate(() => {
+      const host = document.getElementById("shadow-host");
+      const trap = host?.shadowRoot?.getElementById("trap");
+      if (!(host instanceof HTMLElement) || !(trap instanceof HTMLElement)) return;
+      host.style.cssText = "";
+      trap.style.cssText = [
+        "position: fixed",
+        "top: 10%",
+        "left: 10%",
+        // Stay clear of the 30% coverage boundary: this case exercises the
+        // isolated-world shadow-target handoff, not sub-pixel threshold rounding.
+        "width: 60vw",
+        "height: 60vh",
+        "z-index: 10000",
+        "opacity: 0.09",
+      ].join(";");
+    });
+
+    await updateNavigationSettings(context, { autoDismissOverlays: true });
+    // Let the content setting propagate and the monitor arm. Existing shadow
+    // mutations are not replayed, so the target remains for the trusted click.
+    await page.waitForTimeout(750);
+
+    const trap = page.locator("#shadow-host").locator("#trap");
+    const box = await trap.boundingBox();
+    expect(box, "shadow-internal overlay should be visible before the click").toBeTruthy();
+
+    const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
+    await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+
+    expect(await popupPromise, "Expected the shadow overlay new tab to be blocked").toBeNull();
+    await waitForToastMatch(page, /Blocked new tab \(overlay hidden\)/i, 3000);
+    await expect(trap).toBeHidden();
+
+    await clickToastButton(page, "Undo");
+    await expect(trap).toBeVisible();
+  } finally {
+    await cleanup();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Evasion 12: multiple foreground overlays already present at page settle
+// ---------------------------------------------------------------------------
+test("Evasion 12: opt-in cleanup hides a bounded overlay batch and Undo restores it @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+
+  const { page, context, cleanup } = await setupEvasionTest("evasion-12-multiple-overlays.html");
+
+  try {
+    await updateNavigationSettings(context, { autoDismissOverlays: true });
+    const pageCountBeforeCleanup = context.pages().length;
+    await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
+    await waitForNavSentinelBridge(page);
+
+    const trapA = page.locator("#trap-a");
+    const trapB = page.locator("#trap-b");
+    await expect(trapA).toBeHidden({ timeout: 2000 });
+    await expect(trapB).toBeHidden({ timeout: 2000 });
+    await waitForToastMatch(page, /overlay hidden/i, 3000);
+    expect(context.pages(), "Batch cleanup must not open or replay navigation")
+      .toHaveLength(pageCountBeforeCleanup);
+    expect(await page.locator("#real-link").evaluate((link) => {
+      const rect = link.getBoundingClientRect();
+      return document.elementFromPoint(
+        rect.left + rect.width / 2,
+        rect.top + rect.height / 2,
+      ) === link;
+    }), "Both trap layers should be removed from the intended target").toBe(true);
+
+    await clickToastButton(page, "Undo");
+    await expect(trapA).toBeVisible();
+    await expect(trapB).toBeVisible();
+    await page.waitForTimeout(350);
+    await expect(trapA).toBeVisible();
+    await expect(trapB).toBeVisible();
   } finally {
     await cleanup();
   }
