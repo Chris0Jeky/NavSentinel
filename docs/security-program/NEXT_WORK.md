@@ -2,7 +2,7 @@
 
 This is a short execution cursor, not a second product roadmap. Reconcile it with live GitHub, [Project_Roadmap.md](../Project_Roadmap.md), and owner gates before starting a slice.
 
-PR #572 is parked before AI-31 on a reproduced rollback survivor. PRs #599 and #600 remain separately owner and browser gated. Leave those manual gates open. The first #186 model slice is agent-owned and does not change release code.
+PR #572 is parked before AI-31 on a reproduced rollback survivor. At the 2026-08-30 closeout, PRs #572 and #599 report `DIRTY` after `main` advanced, while PR #600 reports `CLEAN`; all remain separately owner and browser gated. Leave those manual gates open. The first #186 model slice is agent-owned and does not change release code. PR #603 merged the fenced evidence repair and supersedes the unfenced PR #602 network fields.
 
 1. **Close the C-04 release-integrity boundary.** `NS-ADV-SELF-004-01-MODEL` now records that the earliest normal authored-page peer receives no challenge in ten fresh bundled-Chromium profiles and a post-readiness peer is also rejected. `02-ATTACK` remains incomplete. Do not force it with privileged pre-page injection. Resume #186 only after establishing a page-reachable same-session or pre-page precondition, or take the separate #175 liveness/recovery model without editing release runtime while #599/#600 overlap that seam.
 2. **Keep PR #572 parked before AI-31.** Resume from its retained local rollback survivor and exact service-worker lifecycle checkpoint; do not run the manual gate on the current head.
