@@ -1486,7 +1486,8 @@
         "gym/local-fixture-targets.js",
         "gym/local-fixture-sink.html",
         "tests/e2e/proving_ground_fake_sink.ts",
-        "tests/e2e/evasion-locality-evidence.spec.ts"
+        "tests/e2e/evasion-locality-evidence.spec.ts",
+        "docs/security-program/evidence/NS-ADV-EVADE-006-evasion-locality.yml"
       ]
     },
     {

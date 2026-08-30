@@ -1,6 +1,6 @@
 # Programme state
 
-As of 2026-08-30, based on merged programme seed `d2762f296b07bfd650971141bf9bf7a9b2c016b9` and the live issue and pull-request inventory refreshed for the first #449 vertical.
+As of 2026-08-30, based on merged programme seed `d2762f296b07bfd650971141bf9bf7a9b2c016b9` and the live issue and pull-request inventory refreshed for the current #449 fixture-family vertical.
 
 ## Seeded
 
@@ -21,7 +21,7 @@ The first #449 vertical adds one loopback-only typed sink and independent wrong-
 
 The first #186 bridge-peer ordering slice uses the release extension, Playwright bundled Chromium 143.0.7499.4, one loopback-only page, hard-coded synthetic bridge values, and a DOM-only authority receipt. The earliest normal authored-page peer sent its init but received no challenge in ten fresh profiles; the real isolated bridge became ready every time. A benign trusted click remained usable, and a post-readiness trusted-click peer was also rejected without a challenge or protection-lowering acknowledgement. This completes the repository-current `NS-ADV-SELF-004-01-MODEL` slice only; the canonical imported scenario snapshot remains `UNMODELLED` and the evidence is recorded in the separate mapping registry. The harmful `02-ATTACK` baseline did not reproduce, and no privileged pre-page injection was used to force it. The exact-head rerun started the Proving Ground deny proxy before Chromium, forwarded only the declared loopback origin, recorded zero fixture network violations, and retained 139 blocked browser-platform attempts. Same-session replay, a genuinely page-reachable pre-page actor, branded Chrome, content-script reload, and authenticated recovery remain open under #175/#186, so C-04 stays `MODELLED` and beta-blocking. PR #602 landed the model lane; PR #603 merged the fenced methodology repair as `ccff3d1c3f920ab8cbf1907ec31d6f1c93e9f018`, and final `main` CI run `33328852994` passed Build / Unit and E2E.
 
-Four ClickFix fixtures now use only an inert sentinel or local static control. Twelve evasion fixtures now share a loopback-only benign/harm target contract, and the composite representative has separate attack, protected, benign, and mixed arms backed by a typed independent sink. Nine mapped legacy Gym pages remain on a machine-checked external-destination hold. ClickFix remains browser detection evidence, not OS-paste prevention or real-provider browser evidence, and the evasion family remains `MODELLED` rather than mutation-robustness evidence.
+Four ClickFix fixtures now use only an inert sentinel or local static control. Twelve evasion fixtures now share a loopback-only benign/harm target contract. At exact code head `d5d11b283e28883ab991b057753d3eaa1f2b3674`, bundled Chromium 143.0.7499.4 completed the composite representative's attack, protected, benign, and mixed arms with zero fixture-network violations and zero invalid sink attempts. The retained receipt SHA-256 is `66a75b4d83d85632a77a0afdad709a4226a799a4852e847423bae11577702e9a`; 56 Chromium platform connection attempts were denied before egress. Nine mapped legacy Gym pages remain on a machine-checked external-destination hold. ClickFix remains browser detection evidence, not OS-paste prevention or real-provider browser evidence, and the evasion family remains `MODELLED` rather than mutation-robustness evidence.
 
 ## Active authority
 

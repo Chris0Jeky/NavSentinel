@@ -1,0 +1,96 @@
+schema_version: "1.0.0"
+scenario_id: NS-ADV-EVADE-006
+capability_id: F-03
+profile: proving_ground
+repository_head: "d5d11b283e28883ab991b057753d3eaa1f2b3674"
+extension_build_sha256: "9809e9fdf97a494dd66ff93551aff7aef2c2eea596dd8e9ebac0623f1b988401"
+browser:
+  name: "Playwright bundled Chromium"
+  version: "143.0.7499.4"
+  channel: "bundled"
+fixture:
+  role: mixed
+  family: "evasion-01-through-12"
+  representative_path: "gym/evasion-05-composite.html"
+  localized_path_count: 12
+  sha256: "638295c4dcfd9097d94848fc0e8495d78fe8680c311e9008d44ac861486f9eb0"
+  hash_method: "SHA-256 over sorted relative paths and worktree bytes at repository_head"
+  target_contract_path: "gym/local-fixture-targets.js"
+  fallback_sink_path: "gym/local-fixture-sink.html"
+  test_path: "tests/e2e/evasion-locality-evidence.spec.ts"
+oracle:
+  type: independent_harm
+  harm_boundary: "Trusted input reaches the typed local wrong-target navigation sink."
+  local_artifact_path: "test-results/issue449-evasion-locality-receipt.json"
+  local_receipt_sha256: "66a75b4d83d85632a77a0afdad709a4226a799a4852e847423bae11577702e9a"
+  oracle_payload_sha256: "439d74fd513cabdad8094f11989a5f638e61f88e8a094148fcd95bf3fe21be6f"
+  sink_receipt_count: 3
+  invalid_sink_attempt_count: 0
+  arms:
+    attack_baseline:
+      outcome: HARM_REACHED
+      new_sink_receipts: 1
+      consequence: wrong-target-navigation
+    protected:
+      outcome: BLOCKED_PRE_HARM
+      new_sink_receipts: 0
+      consequence: wrong-target-navigation
+    benign:
+      outcome: NO_SIGNAL
+      new_sink_receipts: 1
+      consequence: benign-navigation
+    mixed:
+      outcome: BLOCKED_PRE_HARM
+      new_sink_receipts: 1
+      consequence: benign-navigation
+outcome: BLOCKED_PRE_HARM
+evidence_state_before: MODELLED
+evidence_state_after: MODELLED
+valid: true
+invalid_reason: ""
+authority_scope:
+  actor: "one authored top-frame evasion fixture"
+  task: "one trusted mouse or keyboard activation per arm"
+  tab: "one fresh-profile tab per arm"
+  frame: "top frame"
+  document: "exact evasion-05-composite.html document for each arm"
+  destination: "one armed loopback fake-sink URL per role and consequence"
+  ttl: "one browser arm"
+  use_count: 1
+  sink_revalidation: "The fake sink validates run, scenario, role, consequence, and the exact inert sentinel on every request."
+limitations:
+  - "The exact receipt exercises the composite Evasion 05 representative, not mutation robustness across all twelve fixtures."
+  - "The other eleven localized fixtures retain product-event-coupled regression checks and are not promoted beyond MODELLED."
+  - "Bundled Chromium is not branded Chrome, owner Gate-3, open-web efficacy, or release evidence."
+safety:
+  synthetic_only: true
+  local_inert_sink: true
+  prelaunch_deny_layer: true
+  external_egress_observed: false
+  unexpected_egress_attempted: false
+  executable_content_present: false
+  real_credentials_present: false
+  raw_secret_persistence: false
+network_violations: []
+blocked_external_attempts:
+  - class: "Chromium platform CONNECT"
+    distinct_target_count: 3
+    attempt_count: 56
+qualification:
+  privacy: "The sink retains typed metadata and a SHA-256 of the inert sentinel; no page text, browsing history, credential, or raw secret is stored."
+  performance: "No release code changed and no runtime performance claim is made."
+  accessibility: "The benign control completed with native Tab and Enter; no manual assistive-technology pass was run."
+  page_origin_ui: "The page cannot lower protection; non-loopback and unarmed local target overrides fail closed before navigation."
+repaired_failures:
+  - classification: FIXTURE_INVALID
+    cause: "The first strict-validator rerun assigned the attack role to an unused benign target."
+    repair: "Each arm now assigns a consequence-compatible role while the sink validator remains strict."
+    verification: "The corrected four-arm lane and all seventeen evasion regressions passed."
+verification:
+  - "npm run security:check: 168 scenarios, 31 capabilities, 65 evidence mappings, and 1512 work units"
+  - "npm run build: interaction-only release profile; content-loader revision cab71a431824"
+  - "npm run typecheck"
+  - "npx eslint tests/e2e/evasion-locality-evidence.spec.ts"
+  - "npx vitest run tests/proving-ground-fake-sink.test.ts --maxWorkers=2: 2 passed"
+  - "CI=1 exact-head evasion locality lane: 1 passed in 9.5 seconds"
+  - "CI=1 exact-head evasion regression family: 17 passed in 54.8 seconds"
