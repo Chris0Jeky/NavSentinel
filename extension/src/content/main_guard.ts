@@ -6,7 +6,12 @@ import {
   initJsBehaviorMonitor,
   jsBehaviorInstrumentationEnabled,
 } from "@navsentinel/js-behavior-monitor";
-import { OutboundQueue, isMainGuardAlertType, isFloodableAlertType } from "./bridge_outbound";
+import {
+  OutboundQueue,
+  coalesceKeyForMainGuardMessage,
+  isMainGuardAlertType,
+  isFloodableAlertType,
+} from "./bridge_outbound";
 import { enforceMapSizeCap, pruneTimestampWindow, shouldEmitRapidPushState } from "./main_guard_helpers";
 import {
   PUSHSTATE_GESTURE_WINDOW_MS,
@@ -65,10 +70,12 @@ const pendingOutbound = new OutboundQueue(MAX_PENDING_OUTBOUND, RESERVED_SCARCE_
 
 function postToIsolated(type: string, payload?: Record<string, unknown>): void {
   if (!bridgePort || !bridgeSession || !bridgeVerified) {
+    const message = { type, ...(payload !== undefined ? { payload } : {}) };
     pendingOutbound.enqueue(
-      { type, ...(payload !== undefined ? { payload } : {}) },
+      message,
       isMainGuardAlertType(type),
-      isFloodableAlertType(type)
+      isFloodableAlertType(type),
+      coalesceKeyForMainGuardMessage(message),
     );
     return;
   }

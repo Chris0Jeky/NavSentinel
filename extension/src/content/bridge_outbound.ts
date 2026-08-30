@@ -5,6 +5,9 @@
  *
  * Overflow policy: ALERTS are never evicted by routine traffic, and among items
  * of equal priority the EARLIEST are preserved (newest overflow dropped).
+ * Callers may also supply one of their own finite coalescing keys. A later
+ * message with the same key replaces the earlier message and moves to the end,
+ * preserving current metadata and temporal order without increasing queue size.
  *
  * Rationale: the pre-verification window buffers attack-onset evidence — the
  * first `ns-nav-blocked`, `ns-dblclick-second-click`, exfil, or relay signals.
@@ -24,6 +27,7 @@ interface QueuedMessage {
   message: OutboundMessage;
   priority: boolean;
   floodable: boolean;
+  coalesceKey?: string;
 }
 
 export class OutboundQueue {
@@ -32,6 +36,7 @@ export class OutboundQueue {
   private readonly items: QueuedMessage[] = [];
   private floodableCount = 0;
   private dropped = 0;
+  private coalesced = 0;
 
   constructor(cap: number, reservedForScarce = 0) {
     // Guard against a non-finite cap (e.g. NaN), which would otherwise make the
@@ -60,13 +65,36 @@ export class OutboundQueue {
    * blocked/allowed and recorded; only the redundant bridge telemetry is shed).
    * (#377/F2)
    */
-  enqueue(message: OutboundMessage, priority = false, floodable = false): void {
+  enqueue(
+    message: OutboundMessage,
+    priority = false,
+    floodable = false,
+    coalesceKey?: string,
+  ): void {
+    if (coalesceKey) {
+      const existingIndex = this.items.findIndex((item) => item.coalesceKey === coalesceKey);
+      if (existingIndex !== -1) {
+        const existing = this.items[existingIndex];
+        if (!existing) return;
+        // A coalescing key is an internal policy identifier, never page input. If
+        // a caller accidentally reuses one across priority classes, fail closed:
+        // retain the earlier item instead of weakening its admission semantics.
+        if (existing.priority !== priority || existing.floodable !== floodable) {
+          this.dropped++;
+          return;
+        }
+        this.items.splice(existingIndex, 1);
+        this.items.push({ message, priority, floodable, coalesceKey });
+        this.coalesced++;
+        return;
+      }
+    }
     if (priority && floodable && this.floodableCount >= this.cap - this.reservedForScarce) {
       this.dropped++;
       return;
     }
     if (this.items.length < this.cap) {
-      this.items.push({ message, priority, floodable });
+      this.items.push({ message, priority, floodable, ...(coalesceKey ? { coalesceKey } : {}) });
       if (floodable) this.floodableCount++;
       return;
     }
@@ -84,20 +112,23 @@ export class OutboundQueue {
     }
     this.items.splice(routineIdx, 1);
     this.dropped++;
-    this.items.push({ message, priority, floodable });
+    this.items.push({ message, priority, floodable, ...(coalesceKey ? { coalesceKey } : {}) });
     if (floodable) this.floodableCount++;
   }
 
   /**
-   * Remove and return all buffered messages (in order) plus the number dropped
-   * since the last drain, resetting both. Safe to call when empty.
+   * Remove and return all buffered messages (in order) plus the dropped and
+   * intentionally coalesced counts since the last drain, resetting all queue
+   * counters. Safe to call when empty.
    */
-  drain(): { items: OutboundMessage[]; dropped: number } {
+  drain(): { items: OutboundMessage[]; dropped: number; coalesced: number } {
     const items = this.items.splice(0, this.items.length).map((q) => q.message);
     const dropped = this.dropped;
+    const coalesced = this.coalesced;
     this.dropped = 0;
+    this.coalesced = 0;
     this.floodableCount = 0;
-    return { items, dropped };
+    return { items, dropped, coalesced };
   }
 
   /** Number of messages currently buffered. */
@@ -108,6 +139,11 @@ export class OutboundQueue {
   /** Number of messages dropped since the last drain. */
   get droppedCount(): number {
     return this.dropped;
+  }
+
+  /** Number of same-key messages intentionally replaced since the last drain. */
+  get coalescedCount(): number {
+    return this.coalesced;
   }
 }
 
@@ -145,6 +181,24 @@ export function isMainGuardAlertType(type: string): boolean {
     type.startsWith("ns-dblclick-") ||
     type.startsWith("ns-allow")
   );
+}
+
+/**
+ * Bound page-driven clipboard telemetry only while it is waiting in the
+ * unverified MAIN-world queue. One latest non-command-like and one latest
+ * command-like receipt may be retained across every handshake retry until the
+ * queue drains. The key contains no clipboard value or other page data.
+ *
+ * Post-verification messages bypass OutboundQueue entirely, so every successful
+ * clipboard write remains observable once the trusted bridge is ready. (#523)
+ */
+export function coalesceKeyForMainGuardMessage(
+  message: OutboundMessage,
+): string | undefined {
+  if (message.type !== "ns-clipboard-write") return undefined;
+  return message.payload?.looksLikeCommand === true
+    ? "ns-clipboard-write:command-like"
+    : "ns-clipboard-write:other";
 }
 
 // Priority messages emitted once per navigation decision. A page can drive these in a

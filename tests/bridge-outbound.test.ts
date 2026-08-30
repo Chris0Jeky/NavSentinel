@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   OutboundQueue,
+  coalesceKeyForMainGuardMessage,
   isMainGuardAlertType,
   isFloodableAlertType,
   type OutboundMessage,
 } from "../extension/src/content/bridge_outbound";
+import {
+  MAX_PENDING_OUTBOUND,
+  RESERVED_SCARCE_OUTBOUND_SLOTS,
+} from "../extension/src/content/main_guard_constants";
 
 const msg = (type: string, payload?: Record<string, unknown>): OutboundMessage =>
   payload !== undefined ? { type, payload } : { type };
@@ -219,6 +224,184 @@ describe("OutboundQueue floodable reservation (#377/F2)", () => {
     const { items } = q.drain();
     expect(items.filter((m) => m.type === "ns-nav-blocked").length).toBe(4);
     expect(items.some((m) => m.type === "noise")).toBe(false); // routine displaced
+  });
+});
+
+describe("#523 clipboard-pressure malicious baseline", () => {
+  it("records HARM_REACHED when clipboard alerts starve a later critical receipt", () => {
+    const queue = new OutboundQueue(MAX_PENDING_OUTBOUND, RESERVED_SCARCE_OUTBOUND_SLOTS);
+
+    for (let index = 0; index < 64; index++) {
+      queue.enqueue(
+        msg("ns-clipboard-write", {
+          ts: index,
+          contentLength: 32,
+          looksLikeCommand: false,
+        }),
+        true,
+        false,
+      );
+    }
+    queue.enqueue(msg("ns-nav-blocked", { id: "critical-after-flood" }), true, true);
+
+    const { items, dropped } = queue.drain();
+    const receipt = {
+      outcome: items.some((item) => item.payload?.id === "critical-after-flood")
+        ? "BLOCKED_PRE_HARM"
+        : "HARM_REACHED",
+      syntheticClipboardAlerts: 64,
+      deliveredClipboardAlerts: items.filter((item) => item.type === "ns-clipboard-write").length,
+      criticalReceiptDelivered: items.some(
+        (item) => item.type === "ns-nav-blocked" && item.payload?.id === "critical-after-flood",
+      ),
+      dropped,
+    } as const;
+
+    expect(receipt).toEqual({
+      outcome: "HARM_REACHED",
+      syntheticClipboardAlerts: 64,
+      deliveredClipboardAlerts: MAX_PENDING_OUTBOUND,
+      criticalReceiptDelivered: false,
+      dropped: 65 - MAX_PENDING_OUTBOUND,
+    });
+  });
+});
+
+describe("#523 clipboard-pressure protected, benign, and mixed contracts", () => {
+  const enqueueMainGuard = (queue: OutboundQueue, message: OutboundMessage) => {
+    queue.enqueue(
+      message,
+      isMainGuardAlertType(message.type),
+      isFloodableAlertType(message.type),
+      coalesceKeyForMainGuardMessage(message),
+    );
+  };
+
+  it("coalesces unverified clipboard alerts by risk shape and retains the latest metadata", () => {
+    const queue = new OutboundQueue(MAX_PENDING_OUTBOUND, RESERVED_SCARCE_OUTBOUND_SLOTS);
+    for (const [ts, looksLikeCommand] of [
+      [1, false],
+      [2, true],
+      [3, false],
+      [4, true],
+    ] as const) {
+      enqueueMainGuard(queue, msg("ns-clipboard-write", {
+        ts,
+        contentLength: ts * 10,
+        looksLikeCommand,
+      }));
+    }
+
+    const { items, dropped, coalesced } = queue.drain();
+    expect(items).toEqual([
+      msg("ns-clipboard-write", { ts: 3, contentLength: 30, looksLikeCommand: false }),
+      msg("ns-clipboard-write", { ts: 4, contentLength: 40, looksLikeCommand: true }),
+    ]);
+    expect(dropped).toBe(0);
+    expect(coalesced).toBe(2);
+  });
+
+  it("records BLOCKED_PRE_HARM when a protected clipboard flood preserves the critical receipt", () => {
+    const queue = new OutboundQueue(MAX_PENDING_OUTBOUND, RESERVED_SCARCE_OUTBOUND_SLOTS);
+    for (let index = 0; index < 64; index++) {
+      enqueueMainGuard(queue, msg("ns-clipboard-write", {
+        ts: index,
+        contentLength: 32 + index,
+        looksLikeCommand: index % 2 === 1,
+      }));
+    }
+    enqueueMainGuard(queue, msg("ns-nav-blocked", { id: "critical-after-flood" }));
+
+    const { items, dropped, coalesced } = queue.drain();
+    const receipt = {
+      outcome: items.some((item) => item.payload?.id === "critical-after-flood")
+        ? "BLOCKED_PRE_HARM"
+        : "HARM_REACHED",
+      syntheticClipboardAlerts: 64,
+      deliveredClipboardAlerts: items.filter((item) => item.type === "ns-clipboard-write").length,
+      criticalReceiptDelivered: items.some(
+        (item) => item.type === "ns-nav-blocked" && item.payload?.id === "critical-after-flood",
+      ),
+      dropped,
+      coalesced,
+    } as const;
+
+    expect(receipt).toEqual({
+      outcome: "BLOCKED_PRE_HARM",
+      syntheticClipboardAlerts: 64,
+      deliveredClipboardAlerts: 2,
+      criticalReceiptDelivered: true,
+      dropped: 0,
+      coalesced: 62,
+    });
+  });
+
+  it("keeps a benign clipboard burst usable while a later scarce signal survives mixed pressure", () => {
+    const queue = new OutboundQueue(MAX_PENDING_OUTBOUND, RESERVED_SCARCE_OUTBOUND_SLOTS);
+    let successfulNativeWrites = 0;
+    for (let index = 0; index < 80; index++) {
+      successfulNativeWrites++;
+      enqueueMainGuard(queue, msg("ns-clipboard-write", {
+        ts: index,
+        contentLength: 6,
+        looksLikeCommand: false,
+      }));
+    }
+    for (let index = 0; index < 100; index++) {
+      enqueueMainGuard(queue, msg("ns-nav-allowed", { index }));
+    }
+    enqueueMainGuard(queue, msg("ns-dblclick-second-click", { id: "mixed-critical" }));
+
+    const { items } = queue.drain();
+    expect(successfulNativeWrites).toBe(80);
+    expect(items.filter((item) => item.type === "ns-clipboard-write")).toHaveLength(1);
+    expect(items.filter((item) => item.type === "ns-nav-allowed")).toHaveLength(
+      MAX_PENDING_OUTBOUND - RESERVED_SCARCE_OUTBOUND_SLOTS,
+    );
+    expect(items).toContainEqual(msg("ns-dblclick-second-click", { id: "mixed-critical" }));
+  });
+
+  it("keeps one bounded clipboard budget across repeated unverified handshake attempts", () => {
+    const queue = new OutboundQueue(MAX_PENDING_OUTBOUND, RESERVED_SCARCE_OUTBOUND_SLOTS);
+    for (let retry = 0; retry < 4; retry++) {
+      for (let index = 0; index < 32; index++) {
+        enqueueMainGuard(queue, msg("ns-clipboard-write", {
+          ts: retry * 32 + index,
+          contentLength: index,
+          looksLikeCommand: index % 2 === 0,
+        }));
+      }
+      // A failed handshake does not drain or replace the production queue.
+      expect(queue.size).toBe(2);
+    }
+
+    enqueueMainGuard(queue, msg("ns-pushstate-suspicious", { id: "after-retries" }));
+    expect(queue.drain().items).toContainEqual(
+      msg("ns-pushstate-suspicious", { id: "after-retries" }),
+    );
+  });
+
+  it("classifies a missing readiness receipt as TEST_INVALID", () => {
+    const classify = (ready: boolean, criticalReceiptDelivered: boolean) => {
+      if (!ready) return "TEST_INVALID";
+      return criticalReceiptDelivered ? "BLOCKED_PRE_HARM" : "HARM_REACHED";
+    };
+
+    expect(classify(false, true)).toBe("TEST_INVALID");
+  });
+
+  it("bounds only clipboard alerts and derives no key from page-controlled values", () => {
+    expect(coalesceKeyForMainGuardMessage(msg("ns-nav-blocked", {
+      looksLikeCommand: true,
+    }))).toBeUndefined();
+    expect(coalesceKeyForMainGuardMessage(msg("ns-clipboard-write", {
+      looksLikeCommand: false,
+      content: "page-value-must-not-enter-the-key",
+    }))).toBe("ns-clipboard-write:other");
+    expect(coalesceKeyForMainGuardMessage(msg("ns-clipboard-write", {
+      looksLikeCommand: true,
+      content: "different-page-value",
+    }))).toBe("ns-clipboard-write:command-like");
   });
 });
 

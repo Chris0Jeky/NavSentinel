@@ -237,6 +237,58 @@ test.describe("ClickFix", () => {
     }
   });
 
+  test("clickfix-01 mixed: a benign write cannot suppress the next verified attack signal @phase2", async () => {
+    test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
+
+    const { page, context, cleanup } = await setupFixtureTest("clickfix-01-basic.html");
+
+    try {
+      await context.grantPermissions(["clipboard-write", "clipboard-read"]);
+
+      const benignCompletedAt = await page.evaluate(async () => {
+        await navigator.clipboard.writeText("847293");
+        return performance.now();
+      });
+      await page.evaluate(() => {
+        const status = document.getElementById("status");
+        if (!status) throw new Error("TEST_INVALID: ClickFix status oracle is missing");
+        const observer = new MutationObserver(() => {
+          if (status.textContent?.includes("Clipboard write triggered")) {
+            document.documentElement.dataset.clickfixAttackWriteCompletedAt = String(performance.now());
+            observer.disconnect();
+          }
+        });
+        observer.observe(status, { childList: true, characterData: true, subtree: true });
+      });
+
+      await page.click("#verify-btn");
+      await page.waitForFunction(
+        () => document.documentElement.dataset.clickfixAttackWriteCompletedAt !== undefined,
+        null,
+        { timeout: 5000 },
+      );
+      const attackCompletedAt = await page.evaluate(() =>
+        Number(document.documentElement.dataset.clickfixAttackWriteCompletedAt),
+      );
+      expect(
+        attackCompletedAt - benignCompletedAt,
+        "TEST_INVALID: benign and attack writes did not complete inside the one-second regression window",
+      ).toBeLessThan(1000);
+      expect(await page.evaluate(() => navigator.clipboard.readText()))
+        .toBe(SAFE_CLICKFIX_SENTINEL);
+
+      await waitForToastMatch(
+        page,
+        /ClickFix|clipboard|fake.*verification|Do NOT paste/i,
+        8000,
+      );
+      const events = await extractEventLog(context);
+      expect(events.filter((event) => event.kind === "clickfix_detected")).not.toHaveLength(0);
+    } finally {
+      await cleanup();
+    }
+  });
+
   test("clickfix-02 terminal variant: clipboard write + instructions triggers alert @phase2", async () => {
     test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
 
