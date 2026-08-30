@@ -56,7 +56,7 @@ type ArmObservation = {
   sinkReceiptsBefore: number;
   sinkReceiptsAfter: number;
   productEvent: string | null;
-  trustedInput: "mouse" | "keyboard";
+  trustedInput: "mouse" | "keyboard" | "keyboard_then_mouse";
 };
 
 function sha256(value: string | Buffer): string {
@@ -324,13 +324,14 @@ async function writeReceipt(
     },
     authority_scope: {
       actor: "one authored top-frame evasion fixture",
-      task: "one trusted mouse or keyboard activation per arm",
+      task: "one trusted activation per armed destination; the mixed arm sequences one benign keyboard activation and one harm pointer activation",
       tab: "one fresh-profile tab per arm",
       frame: "top frame",
       document: `exact ${FIXTURE_NAME} document for each arm`,
       destination: "one armed loopback sink URL per role and consequence",
       ttl: "one browser arm",
       use_count: 1,
+      use_count_scope: "per armed destination",
       sink_revalidation: "The fake sink validates run, scenario, role, consequence, and the exact inert sentinel on every request.",
     },
     qualification: {
@@ -444,7 +445,7 @@ test("#449 evasion targets stay local with attack, protected, benign, and mixed 
       sinkReceiptsBefore: mixedBefore,
       sinkReceiptsAfter: sink.snapshot().receipts.length,
       productEvent: await readToastText(mixed.page),
-      trustedInput: "keyboard",
+      trustedInput: "keyboard_then_mouse",
     });
     await mixed.cleanup();
 
