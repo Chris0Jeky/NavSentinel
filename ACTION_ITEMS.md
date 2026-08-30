@@ -12,7 +12,7 @@ provenance only. Detailed retired procedures moved to
 
 ## Current snapshot
 
-**Snapshot refreshed 2026-08-28:** the explicitly waived browser-surface PRs
+**Snapshot refreshed 2026-08-30:** the explicitly waived browser-surface PRs
 #528, #532, #535, #514, #534, #520, #521, #522, #526, #533, and #542 merged
 after refreshed exact-head CI and bounded review. That waiver is not a real-Chrome
 pass. #531 separately merged under its own waiver; it does not establish a
@@ -20,6 +20,9 @@ pass. #531 separately merged under its own waiver; it does not establish a
 and AI-29 are resolved; AI-14 remains blocked for future measurement work. AI-30
 holds issue #567's Back/Forward history-integrity fix, and AI-33 holds issue
 #530's popup trust-pill contrast change for an exact-head visual Gate-3.
+AI-37 holds #523's successor bridge queue-pressure fix for an exact-head
+verified-path and benign-control Gate-3; its controlled unverified retry remains
+automated evidence only.
 
 **Guided resolution cursor:** `AI-19` (`Resume at: AI-19`; conversational label
 `q-5`). Current ready order: AI-19 → optional AI-24 → AI-23 (low priority).
@@ -155,6 +158,21 @@ fail-closed regression for this merge, and #560 now owns its combined hostile-
 frame reproduction and repair.
 
 ## Open and blocked items
+
+**OPEN: AI-37 — #523 bridge queue-pressure Gate-3.** After the successor PR for
+branch `fix/issue523-unverified-clipboard-cap` is ready and every exact-head
+automated check and required review is green, build that same head and follow
+the active AI-37 procedure in
+[`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md). Confirm a benign
+OTP copy remains usable without a warning, then confirm an immediately preceding
+benign write cannot suppress the trusted fake-verification warning on the same
+page. Inspect the event log and page/service-worker consoles for a missing
+`clickfix_detected` signal, a false `bridge_buffer_overflow`, or any new error.
+The controlled same-session unverified-queue retry is automated-only and must
+not be recreated manually. Only Chris can complete this human Gate-3. Reply
+`AI-37 done; Gate-3 passed on PR #<n> at <40-character SHA>; Chrome <version>`
+or `AI-37 failed on PR #<n> at <SHA>: <step and observed>`. This branch-specific
+gate does not move the general guided-resolution cursor from AI-19.
 
 **OPEN: AI-36 — #558 popup/Options patch-save synchronization Gate-3.** Run the
 active manual Chrome guide in [`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md)

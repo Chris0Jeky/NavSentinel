@@ -27,3 +27,7 @@ All shared-foundation themes already have live or merged homes. The seed creates
 ## SP-D-007: First sink is typed and loopback-only
 
 The first #449 sink accepts one allowlisted wrong-target navigation consequence on `127.0.0.1`, requires the exact run, scenario, role, consequence, and inert sentinel, and retains only a sentinel digest. The browser lane denies unapproved HTTP(S) origins and turns readiness, network, or oracle failures into `TEST_INVALID`. This is Proving Ground infrastructure only; it adds no release permission, service, or enforcement claim.
+
+## SP-D-008: Queue pressure is bounded only before bridge verification
+
+During an unverified bridge interval, clipboard receipts coalesce to the latest command-like and latest non-command receipt. The keys contain no page-controlled clipboard value, replacement is counted separately from true overflow, and critical non-clipboard signals retain their existing queue priority. A verified bridge still receives every successful clipboard write directly: no timer or cooldown may suppress a post-verification ClickFix signal.

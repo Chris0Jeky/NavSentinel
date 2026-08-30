@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
   "as_of": "2026-08-30",
-  "mapping_count": 63,
+  "mapping_count": 64,
   "mappings": [
     {
       "id": "MAP-LEVEL-01",
@@ -1418,6 +1418,36 @@
         "tests/proving-ground-fake-sink.test.ts",
         "tests/e2e/overlay-cleanup-nesting.spec.ts",
         "tests/overlay-cleanup.test.ts"
+      ]
+    },
+    {
+      "id": "MAP-BRIDGE-CLIPBOARD-PRESSURE",
+      "kind": "evidence_lane",
+      "label": "Bridge clipboard-pressure critical-signal regression",
+      "primary_scenario_id": "NS-ADV-SELF-005",
+      "supporting_scenario_ids": [
+        "NS-ADV-CLIP-002",
+        "NS-ADV-SELF-004"
+      ],
+      "primary_harm_boundary": "Unverified clipboard receipts fill the outbound bridge queue and prevent a later critical browser-block receipt from reaching the isolated extension world.",
+      "role": "mixed",
+      "current_oracle": "A controlled same-session MessageChannel sink independently distinguishes completed native clipboard operations, legitimate task completion, a browser-block receipt, coalesced clipboard receipts, and true overflow after bridge recovery.",
+      "oracle_type": "independent_harm",
+      "evidence_state": "REGRESSION_PROVEN",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "This is one bounded queue-pressure sequence in Playwright-bundled Chromium. The controlled retry depends on the known page-visible same-session bridge weakness in #186; owner Chrome, general bridge identity, OS paste or execution prevention, and robustness coverage remain separate.",
+      "issue_refs": [
+        "#175",
+        "#186",
+        "#523"
+      ],
+      "pr_refs": [],
+      "paths": [
+        "extension/src/content/bridge_outbound.ts",
+        "extension/src/content/main_guard.ts",
+        "tests/bridge-outbound.test.ts",
+        "tests/e2e/bridge-clipboard-pressure.spec.ts",
+        "tests/e2e/phase2-detections.spec.ts"
       ]
     },
     {
