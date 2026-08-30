@@ -29,7 +29,7 @@
       "failure_mode": "Unexpected egress or non-sentinel input makes the run TEST_INVALID.",
       "known_limitation": "One typed wrong-target UI sink exists; there is no general reserved-origin router, profile reset service, fake download target, or shell-like consequence model.",
       "issue_refs": ["#417", "#439", "#449"],
-      "pr_refs": []
+      "pr_refs": ["#598"]
     },
     {
       "id": "F-03",
@@ -43,7 +43,7 @@
       "failure_mode": "Missing readiness, stale artifacts, or untrusted input makes the run TEST_INVALID.",
       "known_limitation": "The bounded lane uses Playwright-bundled Chromium; #420/#439 still do not establish an operational branded-Chrome Gate-3 lane.",
       "issue_refs": ["#420", "#439", "#449", "#460", "#498", "#565"],
-      "pr_refs": []
+      "pr_refs": ["#598"]
     },
     {
       "id": "F-04",
@@ -57,7 +57,7 @@
       "failure_mode": "A product event without independent harm fields cannot advance evidence.",
       "known_limitation": "The independent receipt is shared only by one UI-004 Gym lane; RW journeys and other consequence types do not yet use it.",
       "issue_refs": ["#417", "#449"],
-      "pr_refs": []
+      "pr_refs": ["#598"]
     },
     {
       "id": "F-05",

@@ -1051,7 +1051,9 @@
       "issue_refs": [
         "#449"
       ],
-      "pr_refs": [],
+      "pr_refs": [
+        "#598"
+      ],
       "paths": [
         "gym/clickfix-01-basic.html",
         "tests/e2e/phase2-detections.spec.ts",
@@ -1076,7 +1078,9 @@
       "issue_refs": [
         "#449"
       ],
-      "pr_refs": [],
+      "pr_refs": [
+        "#598"
+      ],
       "paths": [
         "gym/clickfix-02-instructions.html",
         "tests/e2e/phase2-detections.spec.ts",
@@ -1099,7 +1103,9 @@
       "issue_refs": [
         "#449"
       ],
-      "pr_refs": [],
+      "pr_refs": [
+        "#598"
+      ],
       "paths": [
         "gym/clickfix-03-legit-captcha.html",
         "tests/e2e/phase2-detections.spec.ts",
@@ -1122,7 +1128,9 @@
       "issue_refs": [
         "#449"
       ],
-      "pr_refs": [],
+      "pr_refs": [
+        "#598"
+      ],
       "paths": [
         "gym/clickfix-04-winr.html",
         "tests/e2e/phase2-detections.spec.ts",
@@ -1398,7 +1406,8 @@
         "#580"
       ],
       "pr_refs": [
-        "#557"
+        "#557",
+        "#598"
       ],
       "paths": [
         "gym/overlay-nesting-lab.html",
