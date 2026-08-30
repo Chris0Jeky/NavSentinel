@@ -197,6 +197,8 @@ test.describe("DoubleClickjacking", () => {
 // ClickFix / Fake CAPTCHA Tests (P2-02)
 // ==========================================================================
 
+const SAFE_CLICKFIX_SENTINEL = "NAVSENTINEL_SENTINEL_DO_NOT_RUN";
+
 test.describe("ClickFix", () => {
   test("clickfix-01 basic: clipboard write + overlay triggers ClickFix alert @phase2", async () => {
     test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
@@ -216,6 +218,8 @@ test.describe("ClickFix", () => {
         null,
         { timeout: 5000 }
       );
+      expect(await page.evaluate(() => navigator.clipboard.readText()))
+        .toBe(SAFE_CLICKFIX_SENTINEL);
 
       // NavSentinel should detect the ClickFix pattern and show a toast
       await waitForToastMatch(
@@ -248,6 +252,8 @@ test.describe("ClickFix", () => {
         null,
         { timeout: 5000 }
       );
+      expect(await page.evaluate(() => navigator.clipboard.readText()))
+        .toBe(SAFE_CLICKFIX_SENTINEL);
 
       await waitForToastMatch(
         page,
@@ -259,7 +265,7 @@ test.describe("ClickFix", () => {
     }
   });
 
-  test("clickfix-03 legit CAPTCHA: no false positive @phase2", async () => {
+  test("clickfix-03 local verification control: no false positive @phase2", async () => {
     test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
 
     const { page, context, cleanup } = await setupFixtureTest("clickfix-03-legit-captcha.html");
@@ -275,6 +281,7 @@ test.describe("ClickFix", () => {
         null,
         { timeout: 5000 }
       );
+      expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("847293");
 
       // Should NOT trigger a ClickFix alert
       await assertNoToastFor(page, 2000);
@@ -298,6 +305,8 @@ test.describe("ClickFix", () => {
         null,
         { timeout: 5000 }
       );
+      expect(await page.evaluate(() => navigator.clipboard.readText()))
+        .toBe(SAFE_CLICKFIX_SENTINEL);
 
       await waitForToastMatch(
         page,

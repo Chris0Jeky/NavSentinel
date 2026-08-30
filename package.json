@@ -19,6 +19,7 @@
     "test:e2e": "playwright test",
     "test:e2e:smoke": "playwright test --project=smoke",
     "test:e2e:regression": "playwright test --project=regression",
+    "test:e2e:proving-ground": "playwright test tests/e2e/proving-ground-overlay-sink.spec.ts --project=regression",
     "test:e2e:rollback": "playwright test -c playwright.rollback.config.ts",
     "test:e2e:live": "playwright test -c playwright.live.config.ts",
     "test:e2e:stress": "playwright test -c playwright.stress.config.ts",
