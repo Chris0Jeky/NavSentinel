@@ -76,8 +76,17 @@
     const log = document.getElementById("event-log");
     let sequence = 0;
     const baseReplaceReceipt = "issue566-base-replace-fired";
-    document.documentElement.dataset.baseReplaceFired = sessionStorage.getItem(baseReplaceReceipt) ?? "0";
-    sessionStorage.removeItem(baseReplaceReceipt);
+    document.documentElement.dataset.baseReplaceFired = "0";
+    const revealBaseReplaceReceipt = () => {
+      const receipt = sessionStorage.getItem(baseReplaceReceipt);
+      if (receipt === null) return;
+      document.documentElement.dataset.baseReplaceFired = receipt;
+    };
+    revealBaseReplaceReceipt();
+    // A service-worker rollback may restore this document from the back/forward
+    // cache or deliver a second defensive reload. Keep this fresh-profile
+    // receipt durable and expose it on pageshow in every lifecycle path.
+    window.addEventListener("pageshow", revealBaseReplaceReceipt);
 
     function record(message) {
       const item = document.createElement("li");
@@ -227,6 +236,7 @@
       if (!(event.ctrlKey || event.metaKey)) return;
       record(`${describe(event)}; schedule location.replace without opener authority`);
       setTimeout(() => {
+        record("timer fired: base-target location.replace");
         sessionStorage.setItem(baseReplaceReceipt, "1");
         window.location.replace(crossSiteDestination("base-replace-handler"));
       }, 50);

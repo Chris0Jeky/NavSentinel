@@ -292,6 +292,9 @@ test("a non-current anchor handler gets no service-worker opener authority @regr
 
   const { context, opener, cleanup } = await openFreshScenario();
   try {
+    // This control asserts service-worker rollback. The MAIN/content bridge can
+    // be ready before the worker has registered its navigation listeners.
+    await getServiceWorker(context);
     const pagesBefore = context.pages().length;
     const historyBefore = await opener.evaluate(() => history.length);
     const childPromise = context.waitForEvent("page", { timeout: 6_000 });
@@ -300,7 +303,16 @@ test("a non-current anchor handler gets no service-worker opener authority @regr
 
     await child.waitForLoadState("domcontentloaded", { timeout: 10_000 });
     await expect.poll(
-      () => opener.locator("html").getAttribute("data-base-replace-fired"),
+      async () => {
+        const state = await opener.evaluate(() => ({
+          href: location.href,
+          marker: document.documentElement.dataset.baseReplaceFired ?? null,
+          storedReceipt: sessionStorage.getItem("issue566-base-replace-fired"),
+          eventLog: document.getElementById("event-log")?.innerText ?? null,
+          historyLength: history.length,
+        }));
+        return state.marker === "1" ? "1" : JSON.stringify(state);
+      },
       { timeout: 10_000, message: "The fired handler must return through NavSentinel rollback" }
     ).toBe("1");
     await expect(child).toHaveURL(/issue566-destination\.html\?case=base-replace$/);
