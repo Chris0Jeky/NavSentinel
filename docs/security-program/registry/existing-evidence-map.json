@@ -1399,7 +1399,8 @@
         "#186"
       ],
       "pr_refs": [
-        "#602"
+        "#602",
+        "#603"
       ],
       "paths": [
         "gym/issue186-bridge-peer.html",

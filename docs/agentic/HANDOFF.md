@@ -1,14 +1,15 @@
 # NavSentinel handoff
 
-Updated 2026-08-10. This is an optional short snapshot; live Git/GitHub state,
+Updated 2026-08-30. This is an optional short snapshot; live Git/GitHub state,
 product tests, `docs/Project_Roadmap.md`, and `ACTION_ITEMS.md` are authoritative.
 Historical cycle detail remains in `ORCHESTRATOR.md` and is not required reading.
 
 ## 2026-08-30 live delta
 
-The open browser-surface queue is PR #572, PR #599, and PR #600. Leave their
-manual owner and Chrome gates open. PR #572 is parked before AI-31 on a retained
-local rollback survivor; its current head is not merge-ready.
+The open browser-surface queue is PR #572, PR #599, and PR #600. At this
+closeout, #572 and #599 report `DIRTY` after `main` advanced, while #600 reports
+`CLEAN`. Leave every manual owner and Chrome gate open. PR #572 is parked before
+AI-31 on a retained local rollback survivor; its current head is not merge-ready.
 
 The agent-owned #186 slice changes no release code. It adds a loopback-only
 bridge-peer fixture and real-extension browser lane. In ten fresh bundled-
@@ -23,11 +24,19 @@ exact-head rerun started the Proving Ground deny proxy before Chromium, recorded
 zero fixture network violations, and retained 139 blocked browser-platform
 attempts without forwarding them.
 
-## Latest product baseline
+PR #602 landed the model lane. PR #603 repaired its evidence methodology and
+merged as `ccff3d1c3f920ab8cbf1907ec31d6f1c93e9f018`; the superseded unfenced
+network fields are `HARNESS_INVALID`. Final `main` CI run `33328852994` passed
+Build / Unit and E2E, with release skipped as expected. The primary checkout was
+clean and equal to `origin/main` at that merge commit. This docs-only closeout
+changes no release code.
 
-At the latest live product reconciliation before this documentation update, the
-product baseline was **`5896756`**. The code queue was merged with merge commits
-(never squashed):
+## Historical product baseline
+
+At the 2026-08-10 product reconciliation, the product baseline was
+**`5896756`**. The table below is retained as historical context; current Git
+and the 2026-08-30 live delta above supersede it. That earlier code queue was
+merged with merge commits (never squashed):
 
 | PR | What landed |
 | --- | --- |
