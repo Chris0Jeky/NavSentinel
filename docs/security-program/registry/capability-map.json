@@ -25,8 +25,8 @@
       "scenarios_served": ["CRED", "FLOW", "SUPPLY", "NS-ADV-UI-004"],
       "evidence_state": "FIXTURE_PROVEN",
       "release_status": "FOUNDATION",
-      "permission_privacy": "The typed UI sink binds to loopback, accepts only run-scoped synthetic sentinels, stores only their digest, and fails on unexpected egress.",
-      "failure_mode": "Unexpected egress or non-sentinel input makes the run TEST_INVALID.",
+      "permission_privacy": "The typed UI sink binds to loopback, can enforce run-scoped one-use target authorities, accepts only synthetic sentinels, stores only their digest, and fails on unexpected egress.",
+      "failure_mode": "Unexpected egress, an unarmed or exhausted target, or non-sentinel input makes the run TEST_INVALID.",
       "known_limitation": "One typed wrong-target UI sink exists; there is no general reserved-origin router, profile reset service, fake download target, or shell-like consequence model.",
       "issue_refs": ["#417", "#439", "#449"],
       "pr_refs": ["#598", "#605"]

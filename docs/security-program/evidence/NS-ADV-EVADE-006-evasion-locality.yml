@@ -2,7 +2,7 @@ schema_version: "1.0.0"
 scenario_id: NS-ADV-EVADE-006
 capability_id: F-03
 profile: proving_ground
-repository_head: "07a9af6082719bf2b226bb042eae618fa4b86d59"
+repository_head: "c52e2c06f022be515bf750e72dd3533bff5f3173"
 extension_build_sha256: "9809e9fdf97a494dd66ff93551aff7aef2c2eea596dd8e9ebac0623f1b988401"
 browser:
   name: "Playwright bundled Chromium"
@@ -13,7 +13,7 @@ fixture:
   family: "evasion-01-through-12"
   representative_path: "gym/evasion-05-composite.html"
   localized_path_count: 12
-  sha256: "638295c4dcfd9097d94848fc0e8495d78fe8680c311e9008d44ac861486f9eb0"
+  sha256: "b7a9d31d19ae6ec4274ba2baa3fff14efe26f26ef714d29a1d72cecd112b6fe7"
   hash_method: "SHA-256 over sorted relative paths and worktree bytes at repository_head"
   target_contract_path: "gym/local-fixture-targets.js"
   fallback_sink_path: "gym/local-fixture-sink.html"
@@ -22,8 +22,8 @@ oracle:
   type: independent_harm
   harm_boundary: "Trusted input reaches the typed local wrong-target navigation sink."
   local_artifact_path: "test-results/issue449-evasion-locality-receipt.json"
-  local_receipt_sha256: "02bb002747f9cfafce10918141c825097014e82451c66321080674c587dda5a1"
-  oracle_payload_sha256: "9aed7b64b1e9b884d45e651820612f3f4734dc568c4e5bb89a5b5307e9451d65"
+  local_receipt_sha256: "b8660225432a611e52ad8168ad38a00e37345ed9e3a920a8c0ea70d8573ccd04"
+  oracle_payload_sha256: "d77eb511cd66aa81e6c8dca786d3e7b7e8a8f33280082fb0769a53318d1b3949"
   sink_receipt_count: 3
   invalid_sink_attempt_count: 0
   arms:
@@ -32,21 +32,26 @@ oracle:
       new_sink_receipts: 1
       consequence: wrong-target-navigation
       trusted_input: mouse
+      target_id: baseline-harm
     protected:
       outcome: BLOCKED_PRE_HARM
       new_sink_receipts: 0
       consequence: wrong-target-navigation
       trusted_input: mouse
+      target_id: protected-harm
     benign:
       outcome: NO_SIGNAL
       new_sink_receipts: 1
       consequence: benign-navigation
       trusted_input: keyboard
+      target_id: benign-benign
     mixed:
       outcome: BLOCKED_PRE_HARM
       new_sink_receipts: 1
       consequence: benign-navigation
       trusted_input: keyboard_then_mouse
+      benign_target_id: mixed-benign
+      blocked_harm_target_id: mixed-harm
 outcome: BLOCKED_PRE_HARM
 evidence_state_before: MODELLED
 evidence_state_after: MODELLED
@@ -58,11 +63,11 @@ authority_scope:
   tab: "one fresh-profile tab per arm"
   frame: "top frame"
   document: "exact evasion-05-composite.html document for each arm"
-  destination: "one armed loopback fake-sink URL per role and consequence"
+  destination: "one armed loopback fake-sink URL per arm, role, and consequence"
   ttl: "one browser arm"
   use_count: 1
   use_count_scope: "per armed destination"
-  sink_revalidation: "The fake sink validates run, scenario, role, consequence, and the exact inert sentinel on every request."
+  sink_revalidation: "The fake sink validates run, scenario, role, consequence, one-use target authority, and the exact inert sentinel on every request."
 limitations:
   - "The exact receipt exercises the composite Evasion 05 representative, not mutation robustness across all twelve fixtures."
   - "The other eleven localized fixtures retain product-event-coupled regression checks and are not promoted beyond MODELLED."
@@ -80,13 +85,17 @@ network_violations: []
 blocked_external_attempts:
   - class: "Chromium platform CONNECT"
     distinct_target_count: 3
-    attempt_count: 54
+    attempt_count: 55
 qualification:
   privacy: "The sink retains typed metadata and a SHA-256 of the inert sentinel; no page text, browsing history, credential, or raw secret is stored."
   performance: "No release code changed and no runtime performance claim is made."
   accessibility: "The benign control completed with native Tab and Enter; no manual assistive-technology pass was run."
   page_origin_ui: "The page cannot lower protection; non-loopback and unarmed local target overrides fail closed before navigation."
 repaired_failures:
+  - classification: HARNESS_INVALID
+    cause: "The earlier local receipts described one use per destination, but the fake sink did not consume a target authority after that use."
+    repair: "Receipt b8660225432a611e52ad8168ad38a00e37345ed9e3a920a8c0ea70d8573ccd04 uses sink-enforced one-use target identifiers; earlier local receipt hashes 66a75b4d83d85632a77a0afdad709a4226a799a4852e847423bae11577702e9a and 02bb002747f9cfafce10918141c825097014e82451c66321080674c587dda5a1 are superseded."
+    verification: "The fake-sink unit test consumes one target and requires replay to return 409; the existing UI-004 sink lane remains green."
   - classification: FIXTURE_INVALID
     cause: "The first strict-validator rerun assigned the attack role to an unused benign target."
     repair: "Each arm now assigns a consequence-compatible role while the sink validator remains strict."
@@ -97,5 +106,6 @@ verification:
   - "npm run typecheck"
   - "npx eslint tests/e2e/evasion-locality-evidence.spec.ts"
   - "npx vitest run tests/proving-ground-fake-sink.test.ts --maxWorkers=2: 2 passed"
-  - "CI=1 exact-head evasion locality lane: 1 passed in 9.0 seconds"
-  - "CI=1 exact-head evasion regression family: 17 passed in 54.8 seconds"
+  - "CI=1 exact-head evasion locality lane: 1 passed in 8.7 seconds"
+  - "CI=1 exact-head existing UI-004 sink lane: 3 passed in 15.2 seconds"
+  - "CI=1 exact-head evasion regression family: 17 passed in 50.2 seconds"

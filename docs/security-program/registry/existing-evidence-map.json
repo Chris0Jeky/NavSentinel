@@ -1461,7 +1461,7 @@
       ],
       "primary_harm_boundary": "Trusted input reaches a typed local wrong-target navigation sink instead of a benign local destination.",
       "role": "mixed",
-      "current_oracle": "A pre-launch deny proxy and typed loopback sink record the attack baseline; the release extension keeps the protected and mixed harm requests out while native keyboard input completes the benign task.",
+      "current_oracle": "A pre-launch deny proxy and typed loopback sink with one-use target authorities record the attack baseline; the release extension keeps the protected and mixed harm requests out while native keyboard input completes the benign task.",
       "oracle_type": "independent_harm",
       "evidence_state": "MODELLED",
       "evidence_validity": "CURRENT_REGRESSION",

@@ -34,13 +34,15 @@ changes no release code.
 PR #605 records the bounded #449 evasion-family slice. It changes only Gym fixtures, proving-ground
 tests, and programme records. All twelve evasion pages now use a shared target
 contract that rejects non-loopback or unarmed local overrides. Exact code head
-`07a9af6082719bf2b226bb042eae618fa4b86d59` passed the four-arm composite lane
+`c52e2c06f022be515bf750e72dd3533bff5f3173` passed the four-arm composite lane
 and all 17 evasion regressions in bundled Chromium 143.0.7499.4. The valid local
 receipt SHA-256 is
-`02bb002747f9cfafce10918141c825097014e82451c66321080674c587dda5a1`:
+`b8660225432a611e52ad8168ad38a00e37345ed9e3a920a8c0ea70d8573ccd04`:
 attack baseline `HARM_REACHED`, protected and mixed `BLOCKED_PRE_HARM`, benign
 `NO_SIGNAL`, zero fixture-network violations, zero invalid sink attempts, and
-54 browser-platform connection attempts denied before egress. Nine legacy
+55 browser-platform connection attempts denied before egress. Each arm uses a
+sink-enforced one-use target identifier; earlier descriptive-only use-count
+receipts are `HARNESS_INVALID` and superseded. Nine legacy
 core/RW destination holds remain. This does not change release behavior or
 promote the family beyond `MODELLED`.
 
