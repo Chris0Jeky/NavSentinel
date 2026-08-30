@@ -13,6 +13,7 @@ import {
 } from "@playwright/test";
 import {
   getGymBaseUrl,
+  getServiceWorker,
   readToastText,
   waitForNavSentinelBridge,
   waitForToastMatch,
@@ -24,6 +25,7 @@ import {
   type ProvingGroundFakeSink,
   type ProvingGroundRole,
 } from "./proving_ground_fake_sink";
+import { inspectBuiltReleaseProfile } from "../../scripts/check-release-profile.mjs";
 
 const SCENARIO_ID = "NS-ADV-EVADE-006";
 const FIXTURE_NAME = "evasion-05-composite.html";
@@ -54,12 +56,15 @@ type ArmId = "baseline" | "protected" | "benign" | "mixed";
 type ArmObservation = {
   role: ProvingGroundRole;
   productReady: boolean;
-  outcome: "HARM_REACHED" | "BLOCKED_PRE_HARM" | "NO_SIGNAL";
+  outcome: "HARM_REACHED" | "BLOCKED_PRE_HARM" | "OBSERVED";
   sinkReceiptsBefore: number;
   sinkReceiptsAfter: number;
   productEvent: string | null;
+  productEventCount?: number;
   trustedInput: "mouse" | "keyboard" | "keyboard_then_mouse";
 };
+
+type ReleaseProfileInspection = ReturnType<typeof inspectBuiltReleaseProfile>;
 
 function sha256(value: string | Buffer): string {
   return createHash("sha256").update(value).digest("hex");
@@ -71,6 +76,23 @@ function hashFiles(files: string[]): string {
     hash.update(path.relative(process.cwd(), file).replaceAll("\\", "/"));
     hash.update("\0");
     hash.update(fs.readFileSync(file));
+    hash.update("\0");
+  }
+  return hash.digest("hex");
+}
+
+function hashGitFiles(files: string[], head: string): string {
+  const hash = createHash("sha256");
+  const relativePaths = files
+    .map((file) => path.relative(process.cwd(), file).replaceAll("\\", "/"))
+    .sort();
+  for (const relativePath of relativePaths) {
+    hash.update(relativePath);
+    hash.update("\0");
+    hash.update(execFileSync("git", ["show", `${head}:${relativePath}`], {
+      cwd: process.cwd(),
+      maxBuffer: 10 * 1024 * 1024,
+    }));
     hash.update("\0");
   }
   return hash.digest("hex");
@@ -270,6 +292,7 @@ async function writeReceipt(
   sink: ProvingGroundFakeSink,
   observations: ArmObservation[],
   arms: Arm[],
+  releaseProfile: ReleaseProfileInspection,
 ): Promise<void> {
   const repository = repositoryState();
   const sinkSnapshot = sink.snapshot();
@@ -278,6 +301,8 @@ async function writeReceipt(
     path.join(gymRoot, "local-fixture-targets.js"),
     path.join(gymRoot, "local-fixture-sink.html"),
   ];
+  const gitFixtureSha256 = hashGitFiles(fixtureFiles, repository.head);
+  const executedFixtureSha256 = hashFiles(fixtureFiles);
   const receipt = {
     schema_version: "1.0.0",
     scenario_id: SCENARIO_ID,
@@ -285,6 +310,11 @@ async function writeReceipt(
     profile: "proving_ground",
     repository_head: repository.head,
     extension_build_sha256: fs.existsSync(extensionPath) ? hashDirectory(extensionPath) : "",
+    extension_profile: {
+      id: releaseProfile.profile.id,
+      release_eligible: releaseProfile.profile.releaseEligible,
+      capabilities: releaseProfile.profile.capabilities,
+    },
     browser: {
       name: "chromium",
       version: arms.find((arm) => arm.productReady)?.browserVersion ?? "unknown",
@@ -294,7 +324,9 @@ async function writeReceipt(
       family: "evasion-01-through-12",
       representative_path: `gym/${FIXTURE_NAME}`,
       localized_path_count: evasionFixturePaths.length,
-      sha256: hashFiles(fixtureFiles),
+      sha256: gitFixtureSha256,
+      git_blob_sha256: gitFixtureSha256,
+      executed_worktree_sha256: executedFixtureSha256,
     },
     oracle: {
       type: "independent_harm",
@@ -306,7 +338,7 @@ async function writeReceipt(
     outcomes: {
       attack_baseline: "HARM_REACHED",
       protected: "BLOCKED_PRE_HARM",
-      benign: "NO_SIGNAL",
+      benign: "OBSERVED",
       mixed: "BLOCKED_PRE_HARM",
     },
     evidence_state_before: "MODELLED",
@@ -368,6 +400,10 @@ async function writeReceipt(
 
 test("#449 evasion targets stay local with attack, protected, benign, and mixed evidence @regression", async ({}, testInfo) => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running locality evidence.");
+  const releaseProfile = inspectBuiltReleaseProfile(extensionPath, {
+    expectedProfile: "interaction-only",
+    requireReleaseEligible: true,
+  });
   expect(evasionFixturePaths, "The bounded family must contain exactly evasion 01 through 12").toHaveLength(12);
   const sink = await startProvingGroundFakeSink({
     runId: randomUUID(),
@@ -429,18 +465,37 @@ test("#449 evasion targets stay local with attack, protected, benign, and mixed 
 
     const benign = await openArm(sink, "benign", "benign", true);
     arms.push(benign);
+    const benignWorker = await getServiceWorker(benign.context);
+    await benignWorker.evaluate(async (eventLogKey) => {
+      await chrome.storage.local.set({ [eventLogKey]: [] });
+    }, "sentinelsuite:event_log_v1");
     const benignBefore = sink.snapshot().receipts.length;
     await activateBenignLinkByKeyboard(benign.page);
     await expect.poll(() => sink.snapshot().receipts.length).toBe(benignBefore + 1);
+    await benign.page.waitForTimeout(1_200);
     const benignProductEvent = await readToastText(benign.page);
     expect(benignProductEvent, "The benign task must complete without a product intervention").toBeNull();
+    const benignEvents = await benignWorker.evaluate(async (eventLogKey) => {
+      const stored = await chrome.storage.local.get(eventLogKey);
+      return Array.isArray(stored[eventLogKey]) ? stored[eventLogKey] : [];
+    }, "sentinelsuite:event_log_v1");
+    expect(benignEvents, "The benign task must persist only its silent allow event").toHaveLength(1);
+    expect(benignEvents[0]).toMatchObject({
+      kind: "nav_silent_allow",
+      site: "127.0.0.1",
+      destHost: "127.0.0.1",
+    });
+    expect(benignEvents[0]).toMatchObject({
+      reasons: expect.arrayContaining(["keyboard_activation"]),
+    });
     observations.push({
       role: "benign",
       productReady: true,
-      outcome: "NO_SIGNAL",
+      outcome: "OBSERVED",
       sinkReceiptsBefore: benignBefore,
       sinkReceiptsAfter: sink.snapshot().receipts.length,
-      productEvent: benignProductEvent,
+      productEvent: "nav_silent_allow",
+      productEventCount: benignEvents.length,
       trustedInput: "keyboard",
     });
     await benign.cleanup();
@@ -475,7 +530,7 @@ test("#449 evasion targets stay local with attack, protected, benign, and mixed 
       ["mixed", BENIGN_CONSEQUENCE],
     ]);
     for (const arm of arms) expect(arm.violations).toEqual([]);
-    await writeReceipt(testInfo, sink, observations, arms);
+    await writeReceipt(testInfo, sink, observations, arms, releaseProfile);
   } finally {
     for (const arm of arms) {
       if (!arm.context.pages().every((page) => page.isClosed())) {
