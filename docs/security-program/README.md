@@ -10,7 +10,7 @@ All experiments are defensive, local, inert, and synthetic. No programme fixture
 | --- | --- | --- |
 | Release extension | Unchanged | Interaction-only, local-first, zero runtime network calls, and no new powerful permission. |
 | Research extension/profile | Unchanged | Unpacked and non-release. Broader observation remains explicit research work. |
-| Proving Ground | Registry and build-time tooling only | Owns safe fixtures, local sinks, oracles, mutation, and evidence receipts. It is not release code. |
+| Proving Ground | One bounded local sink and UI-004 oracle | Owns safe fixtures, local sinks, oracles, mutation, and evidence receipts. It is test infrastructure, not release code. |
 | Optional native companion | Design only | No host, native messaging permission, enforcement, listener, updater, or distribution exists. |
 
 ## Start here
@@ -33,6 +33,8 @@ npm run security:import
 npm run security:generate
 npm run security:check
 npm run security:check:source
+npm run build
+npm run test:e2e:proving-ground
 ```
 
 `security:import` is read-only by default: when the ignored source bundle is mounted, it verifies the tracked scenario, capability, outcome, evidence-state, work-unit, and provenance snapshots against that bundle. `npm run security:import -- --write` creates missing snapshots only. Replacing an existing differing canonical snapshot requires the deliberately explicit `--write --force` mode after review. The live capability, issue, existing-evidence, and fixture-safety maps are curated repository-current inputs and are never overwritten by import or generation.
@@ -40,6 +42,8 @@ npm run security:check:source
 `security:generate` writes Markdown, CSV, and the 1,512 local scenario work units. `security:check` is clean-checkout safe: it validates schemas, counts, IDs, dependencies, tracked semantic provenance, paths, links, fixture safety holds, unsafe declarations, and deterministic views without requiring the ignored bundle. `security:check:source` adds exact physical source-bundle inventory and hash verification and therefore requires `RESOURCES/DefenseVectors` to be mounted.
 
 Run generation after an intentional registry change, then commit both source registries and generated views. Never edit `extension/dist` for programme work.
+
+The Proving Ground command runs the `NS-ADV-UI-004` attack, benign, and mixed contracts in Playwright-bundled Chromium. It writes exact-head evidence receipts only under ignored `test-results/` output. Commit the fixture, oracle, and test, but never commit generated receipts or `extension/dist`.
 
 ## Evidence rule
 

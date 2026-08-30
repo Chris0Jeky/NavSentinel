@@ -7,9 +7,9 @@ Profiles are boundaries, not a delivery promise. `release_extension`, `research_
 | ID | Capability | Track | Priority | Implementation | Profiles | Evidence | Release posture | Issues |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | F-01 | Canonical scenario registry and schema | proving_ground | P0 | SEEDED | proving_ground | MODELLED | FOUNDATION | #449 |
-| F-02 | Hermetic adversarial lab and synthetic sink | proving_ground | P0 | PARTIAL | proving_ground | UNMODELLED | FOUNDATION | #417, #439 |
-| F-03 | Trusted-input headed browser rig | proving_ground | P0 | PARTIAL | proving_ground | MODELLED | FOUNDATION | #420, #439, #460, #498, #565 |
-| F-04 | Pre-harm protection oracle | proving_ground | P0 | PARTIAL | proving_ground | MODELLED | FOUNDATION | #417, #449 |
+| F-02 | Hermetic adversarial lab and synthetic sink | proving_ground | P0 | PARTIAL | proving_ground | FIXTURE_PROVEN | FOUNDATION | #417, #439, #449 |
+| F-03 | Trusted-input headed browser rig | proving_ground | P0 | PARTIAL | proving_ground | REGRESSION_PROVEN | FOUNDATION | #420, #439, #449, #460, #498, #565 |
+| F-04 | Pre-harm protection oracle | proving_ground | P0 | PARTIAL | proving_ground | REGRESSION_PROVEN | FOUNDATION | #417, #449 |
 | F-05 | Invariant-preserving mutation engine | proving_ground | P0 | PARTIAL | proving_ground | MODELLED | FOUNDATION | #449 |
 | F-06 | Benign and mixed journey corpus | proving_ground | P0 | PARTIAL | proving_ground | MODELLED | FOUNDATION | #232, #417 |
 | F-07 | Lifecycle and state-chaos injector | proving_ground | P0 | PARTIAL | proving_ground | MODELLED | FOUNDATION | #175, #186, #389, #460 |

@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
   "as_of": "2026-08-30",
-  "finding_count": 25,
+  "finding_count": 21,
   "findings": [
     {
       "path": "gym/level1-basic-opacity.html",
@@ -169,38 +169,6 @@
       "disposition": "SAFETY_HOLD",
       "reason": "The control and sequential trap destinations are not local.",
       "remediation": "Use local benign and harm sinks.",
-      "issue_refs": ["#449"]
-    },
-    {
-      "path": "gym/clickfix-01-basic.html",
-      "classifications": ["COMMAND_SHAPED", "EXTERNAL_URL"],
-      "disposition": "QUARANTINED",
-      "reason": "The fixture writes a runnable PowerShell downloader-shaped string to the clipboard.",
-      "remediation": "Replace it with a non-executable sentinel and stop the oracle at local clipboard receipt.",
-      "issue_refs": ["#449"]
-    },
-    {
-      "path": "gym/clickfix-02-instructions.html",
-      "classifications": ["COMMAND_SHAPED", "EXTERNAL_URL"],
-      "disposition": "QUARANTINED",
-      "reason": "The fixture writes a runnable curl-to-shell-shaped string to the clipboard.",
-      "remediation": "Replace it with a non-executable sentinel and stop the oracle at local clipboard receipt.",
-      "issue_refs": ["#449"]
-    },
-    {
-      "path": "gym/clickfix-03-legit-captcha.html",
-      "classifications": ["REMOTE_RESOURCE", "EXTERNAL_URL"],
-      "disposition": "SAFETY_HOLD",
-      "reason": "The benign fixture embeds a live Google reCAPTCHA URL and is not hermetic.",
-      "remediation": "Replace it with a local inert CAPTCHA control.",
-      "issue_refs": ["#449"]
-    },
-    {
-      "path": "gym/clickfix-04-winr.html",
-      "classifications": ["COMMAND_SHAPED", "EXTERNAL_URL"],
-      "disposition": "QUARANTINED",
-      "reason": "The fixture writes a runnable PowerShell stager-shaped string to the clipboard.",
-      "remediation": "Replace it with a non-executable sentinel and stop the oracle at local clipboard receipt.",
       "issue_refs": ["#449"]
     }
   ]
