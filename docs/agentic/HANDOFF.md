@@ -31,7 +31,7 @@ Build / Unit and E2E, with release skipped as expected. The primary checkout was
 clean and equal to `origin/main` at that merge commit. This docs-only closeout
 changes no release code.
 
-The bounded #449 evasion-family slice changes only Gym fixtures, proving-ground
+PR #605 records the bounded #449 evasion-family slice. It changes only Gym fixtures, proving-ground
 tests, and programme records. All twelve evasion pages now use a shared target
 contract that rejects non-loopback or unarmed local overrides. Exact code head
 `d5d11b283e28883ab991b057753d3eaa1f2b3674` passed the four-arm composite lane

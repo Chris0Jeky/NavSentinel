@@ -29,7 +29,7 @@
       "failure_mode": "Unexpected egress or non-sentinel input makes the run TEST_INVALID.",
       "known_limitation": "One typed wrong-target UI sink exists; there is no general reserved-origin router, profile reset service, fake download target, or shell-like consequence model.",
       "issue_refs": ["#417", "#439", "#449"],
-      "pr_refs": ["#598"]
+      "pr_refs": ["#598", "#605"]
     },
     {
       "id": "F-03",
@@ -43,7 +43,7 @@
       "failure_mode": "Missing readiness, stale artifacts, or untrusted input makes the run TEST_INVALID.",
       "known_limitation": "The bounded lanes use Playwright-bundled Chromium. The evasion receipt covers one representative composite journey, not mutation robustness across all twelve fixtures, and #420/#439 still do not establish an operational branded-Chrome Gate-3 lane.",
       "issue_refs": ["#420", "#439", "#449", "#460", "#498", "#565"],
-      "pr_refs": ["#598"]
+      "pr_refs": ["#598", "#605"]
     },
     {
       "id": "F-04",
@@ -57,7 +57,7 @@
       "failure_mode": "A product event without independent harm fields cannot advance evidence.",
       "known_limitation": "Independent wrong-target navigation receipts cover the UI-004 lane and one representative evasion journey; the other eleven evasion fixtures, RW journeys, and other consequence types do not yet use one.",
       "issue_refs": ["#417", "#449"],
-      "pr_refs": ["#598"]
+      "pr_refs": ["#598", "#605"]
     },
     {
       "id": "F-05",
@@ -71,7 +71,7 @@
       "failure_mode": "Semantically invalid mutations are TEST_INVALID and never counted as security passes or misses.",
       "known_limitation": "All twelve authored evasion fixtures now use a shared local-target contract, but only the composite representative has an independent sink receipt; there is no deterministic invariant-preserving mutation engine or survivor registry.",
       "issue_refs": ["#449"],
-      "pr_refs": []
+      "pr_refs": ["#605"]
     },
     {
       "id": "F-06",

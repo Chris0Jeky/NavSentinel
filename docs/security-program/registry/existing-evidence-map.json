@@ -1469,7 +1469,9 @@
       "issue_refs": [
         "#449"
       ],
-      "pr_refs": [],
+      "pr_refs": [
+        "#605"
+      ],
       "paths": [
         "gym/evasion-01-opacity-009.html",
         "gym/evasion-02-size-34pct.html",
