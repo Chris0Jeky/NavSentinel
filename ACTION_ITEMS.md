@@ -159,8 +159,8 @@ frame reproduction and repair.
 
 ## Open and blocked items
 
-**OPEN: AI-37 — #523 bridge queue-pressure Gate-3.** After the successor PR for
-branch `fix/issue523-unverified-clipboard-cap` is ready and every exact-head
+**OPEN: AI-37 — PR #599 bridge queue-pressure Gate-3.** After PR #599 on branch
+`fix/issue523-unverified-clipboard-cap` is ready and every exact-head
 automated check and required review is green, build that same head and follow
 the active AI-37 procedure in
 [`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md). Confirm a benign

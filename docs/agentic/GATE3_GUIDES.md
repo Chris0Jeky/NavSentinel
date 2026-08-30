@@ -464,8 +464,8 @@ known page-visible same-session handshake weakness in #186. This guide does not
 complete C-04, prove general bridge identity, or establish OS paste or execution
 prevention. Only Chris can record this item complete.
 
-1. Resolve the open PR whose head is
-   `fix/issue523-unverified-clipboard-cap`. Record its number and 40-character
+1. Resolve PR #599 and require its head branch to be
+   `fix/issue523-unverified-clipboard-cap`. Record its 40-character
    `headRefOid`. In its implementation worktree, require `git rev-parse HEAD`
    to equal that value and the remote branch SHA. The worktree may contain only
    the already-ledgered Windows Defender quarantine line

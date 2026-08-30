@@ -1441,7 +1441,9 @@
         "#186",
         "#523"
       ],
-      "pr_refs": [],
+      "pr_refs": [
+        "#599"
+      ],
       "paths": [
         "extension/src/content/bridge_outbound.ts",
         "extension/src/content/main_guard.ts",
