@@ -2,7 +2,7 @@ schema_version: "1.0.0"
 scenario_id: NS-ADV-EVADE-006
 capability_id: F-03
 profile: proving_ground
-repository_head: "d5d11b283e28883ab991b057753d3eaa1f2b3674"
+repository_head: "07a9af6082719bf2b226bb042eae618fa4b86d59"
 extension_build_sha256: "9809e9fdf97a494dd66ff93551aff7aef2c2eea596dd8e9ebac0623f1b988401"
 browser:
   name: "Playwright bundled Chromium"
@@ -22,8 +22,8 @@ oracle:
   type: independent_harm
   harm_boundary: "Trusted input reaches the typed local wrong-target navigation sink."
   local_artifact_path: "test-results/issue449-evasion-locality-receipt.json"
-  local_receipt_sha256: "66a75b4d83d85632a77a0afdad709a4226a799a4852e847423bae11577702e9a"
-  oracle_payload_sha256: "439d74fd513cabdad8094f11989a5f638e61f88e8a094148fcd95bf3fe21be6f"
+  local_receipt_sha256: "02bb002747f9cfafce10918141c825097014e82451c66321080674c587dda5a1"
+  oracle_payload_sha256: "9aed7b64b1e9b884d45e651820612f3f4734dc568c4e5bb89a5b5307e9451d65"
   sink_receipt_count: 3
   invalid_sink_attempt_count: 0
   arms:
@@ -31,18 +31,22 @@ oracle:
       outcome: HARM_REACHED
       new_sink_receipts: 1
       consequence: wrong-target-navigation
+      trusted_input: mouse
     protected:
       outcome: BLOCKED_PRE_HARM
       new_sink_receipts: 0
       consequence: wrong-target-navigation
+      trusted_input: mouse
     benign:
       outcome: NO_SIGNAL
       new_sink_receipts: 1
       consequence: benign-navigation
+      trusted_input: keyboard
     mixed:
       outcome: BLOCKED_PRE_HARM
       new_sink_receipts: 1
       consequence: benign-navigation
+      trusted_input: keyboard_then_mouse
 outcome: BLOCKED_PRE_HARM
 evidence_state_before: MODELLED
 evidence_state_after: MODELLED
@@ -50,13 +54,14 @@ valid: true
 invalid_reason: ""
 authority_scope:
   actor: "one authored top-frame evasion fixture"
-  task: "one trusted mouse or keyboard activation per arm"
+  task: "one trusted activation per armed destination; the mixed arm sequences one benign keyboard activation and one harm pointer activation"
   tab: "one fresh-profile tab per arm"
   frame: "top frame"
   document: "exact evasion-05-composite.html document for each arm"
   destination: "one armed loopback fake-sink URL per role and consequence"
   ttl: "one browser arm"
   use_count: 1
+  use_count_scope: "per armed destination"
   sink_revalidation: "The fake sink validates run, scenario, role, consequence, and the exact inert sentinel on every request."
 limitations:
   - "The exact receipt exercises the composite Evasion 05 representative, not mutation robustness across all twelve fixtures."
@@ -75,7 +80,7 @@ network_violations: []
 blocked_external_attempts:
   - class: "Chromium platform CONNECT"
     distinct_target_count: 3
-    attempt_count: 56
+    attempt_count: 54
 qualification:
   privacy: "The sink retains typed metadata and a SHA-256 of the inert sentinel; no page text, browsing history, credential, or raw secret is stored."
   performance: "No release code changed and no runtime performance claim is made."
@@ -92,5 +97,5 @@ verification:
   - "npm run typecheck"
   - "npx eslint tests/e2e/evasion-locality-evidence.spec.ts"
   - "npx vitest run tests/proving-ground-fake-sink.test.ts --maxWorkers=2: 2 passed"
-  - "CI=1 exact-head evasion locality lane: 1 passed in 9.5 seconds"
+  - "CI=1 exact-head evasion locality lane: 1 passed in 9.0 seconds"
   - "CI=1 exact-head evasion regression family: 17 passed in 54.8 seconds"
