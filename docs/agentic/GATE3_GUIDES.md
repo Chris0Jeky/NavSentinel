@@ -462,7 +462,9 @@ and cannot suppress the next verified ClickFix signal. The hostile unverified
 retry and 64-write pressure oracle remain automated-only because they use the
 known page-visible same-session handshake weakness in #186. This guide does not
 complete C-04, prove general bridge identity, or establish OS paste or execution
-prevention. Only Chris can record this item complete.
+prevention. It also resolves the explicit queue-semantics owner decision still
+open in #523; browser success alone does not imply that decision. Only Chris can
+record this item complete.
 
 1. Resolve PR #599 and require its head branch to be
    `fix/issue523-unverified-clipboard-cap`. Record its 40-character
@@ -472,7 +474,12 @@ prevention. Only Chris can record this item complete.
    ` D tests/clickfix-detector.property.test.ts`; do not open, restore, allow,
    inspect, or stage that fixture. Stop on any other mismatch. Require all
    exact-head hosted checks green, the required independent review complete,
-   and every review finding triaged before opening Chrome.
+   and every review finding triaged before opening Chrome. Review the proposed
+   policy and explicitly accept or reject it: before verification, keep only the
+   latest command-like and latest non-command clipboard receipt; after
+   verification, deliver every successful clipboard write directly. Stop if
+   that policy is not accepted rather than treating the later browser steps as
+   implicit approval.
 2. On that exact head run `npm ci`,
    `npx vitest run tests/bridge-outbound.test.ts`, `npm run typecheck`,
    `npm run build`, `npm run check:content-loader`, and
@@ -508,11 +515,13 @@ prevention. Only Chris can record this item complete.
    new errors. Close all test tabs and DevTools windows, stop the Gym server,
    close the disposable profile, and remove only that profile. Do not alter an
    established profile or disable security software.
-8. On a pass, reply `AI-37 done; Gate-3 passed on PR #<n> at <40-character
-   SHA>; Chrome <version>` with any console observations. On a mismatch, reply
-   `AI-37 failed on PR #<n> at <SHA>: <step and observed result>` and leave the
-   item open. The agent must then recheck the exact head, CI, comments, and
-   merge gate; no partial pass authorizes merge.
+8. On a policy acceptance and browser pass, reply `AI-37 approved queue design;
+   Gate-3 passed on PR #<n> at <40-character SHA>; Chrome <version>` with any
+   console observations. If the policy is not accepted, reply `AI-37 rejected
+   queue design: <reason>` without running the browser steps. On a browser
+   mismatch, reply `AI-37 failed on PR #<n> at <SHA>: <step and observed
+   result>` and leave the item open. The agent must then recheck the exact head,
+   CI, comments, and merge gate; no partial pass authorizes merge.
 
 ## Index
 

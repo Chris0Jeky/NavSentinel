@@ -159,18 +159,22 @@ frame reproduction and repair.
 
 ## Open and blocked items
 
-**OPEN: AI-37 — PR #599 bridge queue-pressure Gate-3.** After PR #599 on branch
-`fix/issue523-unverified-clipboard-cap` is ready and every exact-head
-automated check and required review is green, build that same head and follow
-the active AI-37 procedure in
+**OPEN: AI-37 — PR #599 queue-design decision and bridge queue-pressure Gate-3.**
+After PR #599 on branch `fix/issue523-unverified-clipboard-cap` is ready and
+every exact-head automated check and required review is green, explicitly
+accept or reject its #523 design choice: only the unverified queue retains the
+latest command-like and non-command clipboard receipt, while every verified
+write remains directly observable. Then build that same head and follow the
+active AI-37 procedure in
 [`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md). Confirm a benign
 OTP copy remains usable without a warning, then confirm an immediately preceding
 benign write cannot suppress the trusted fake-verification warning on the same
 page. Inspect the event log and page/service-worker consoles for a missing
 `clickfix_detected` signal, a false `bridge_buffer_overflow`, or any new error.
 The controlled same-session unverified-queue retry is automated-only and must
-not be recreated manually. Only Chris can complete this human Gate-3. Reply
-`AI-37 done; Gate-3 passed on PR #<n> at <40-character SHA>; Chrome <version>`
+not be recreated manually. Only Chris can complete this owner decision and
+human Gate-3. Reply `AI-37 approved queue design; Gate-3 passed on PR #<n> at
+<40-character SHA>; Chrome <version>`, `AI-37 rejected queue design: <reason>`,
 or `AI-37 failed on PR #<n> at <SHA>: <step and observed>`. This branch-specific
 gate does not move the general guided-resolution cursor from AI-19.
 

@@ -1431,11 +1431,11 @@
       ],
       "primary_harm_boundary": "Unverified clipboard receipts fill the outbound bridge queue and prevent a later critical browser-block receipt from reaching the isolated extension world.",
       "role": "mixed",
-      "current_oracle": "A controlled same-session MessageChannel sink independently distinguishes completed native clipboard operations, legitimate task completion, a browser-block receipt, coalesced clipboard receipts, and true overflow after bridge recovery.",
+      "current_oracle": "A deterministic unit matrix sweeps queue counts, event ordering, risk shapes, and retry windows; a controlled same-session MessageChannel sink independently distinguishes completed native clipboard operations, legitimate task completion, a browser-block receipt, delivered clipboard receipts, and true overflow after bridge recovery.",
       "oracle_type": "independent_harm",
       "evidence_state": "REGRESSION_PROVEN",
       "evidence_validity": "CURRENT_REGRESSION",
-      "known_limitation": "This is one bounded queue-pressure sequence in Playwright-bundled Chromium. The controlled retry depends on the known page-visible same-session bridge weakness in #186; owner Chrome, general bridge identity, OS paste or execution prevention, and robustness coverage remain separate.",
+      "known_limitation": "This is one bounded deterministic unit campaign plus one queue-pressure sequence in Playwright-bundled Chromium, not a browser/version distribution. The controlled retry depends on the known page-visible same-session bridge weakness in #186; owner Chrome, general bridge identity, and OS paste or execution prevention remain separate.",
       "issue_refs": [
         "#175",
         "#186",
