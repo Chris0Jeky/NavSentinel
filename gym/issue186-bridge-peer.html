@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Issue 186 local bridge peer fixture</title>
+  <script>
+    (() => {
+      "use strict";
+
+      const SOURCE = "__navsentinel__";
+      const VERSION = 1;
+      const fixtureCase = new URLSearchParams(location.search).get("case") || "benign";
+      const state = {
+        fixtureCase,
+        fixtureReady: false,
+        peerInitSent: 0,
+        challengesReceived: 0,
+        peerVerified: false,
+        configAcknowledged: false,
+        acknowledgedMode: null,
+        harmReached: false,
+        benignClicks: 0,
+        peerMessages: [],
+      };
+      let peerAttempt = 0;
+
+      const publish = () => {
+        const root = document.documentElement;
+        root.dataset.fixtureReady = state.fixtureReady ? "1" : "0";
+        root.dataset.fixtureCase = state.fixtureCase;
+        root.dataset.peerInitSent = String(state.peerInitSent);
+        root.dataset.challengesReceived = String(state.challengesReceived);
+        root.dataset.peerVerified = state.peerVerified ? "1" : "0";
+        root.dataset.configAcknowledged = state.configAcknowledged ? "1" : "0";
+        root.dataset.harmReached = state.harmReached ? "1" : "0";
+        root.dataset.benignClicks = String(state.benignClicks);
+        const output = document.querySelector("#receipt");
+        if (output) output.textContent = JSON.stringify(state, null, 2);
+      };
+
+      const startSyntheticPeer = () => {
+        peerAttempt += 1;
+        const session = `issue186-local-peer-${fixtureCase}-${peerAttempt}`;
+        const channel = new MessageChannel();
+        state.peerInitSent += 1;
+        publish();
+
+        channel.port1.onmessage = (event) => {
+          const message = event.data || {};
+          state.peerMessages.push(typeof message.type === "string" ? message.type : "unknown");
+
+          if (message.type === "ns-challenge" && typeof message.challenge === "string") {
+            state.challengesReceived += 1;
+            channel.port1.postMessage({
+              source: SOURCE,
+              type: "ns-challenge-response",
+              v: VERSION,
+              session,
+              challenge: message.challenge,
+            });
+          } else if (message.type === "ns-bridge-ready") {
+            state.peerVerified = true;
+            channel.port1.postMessage({
+              source: SOURCE,
+              type: "ns-config",
+              v: VERSION,
+              session,
+              mode: "off",
+              debug: false,
+            });
+          } else if (message.type === "ns-config-ack") {
+            state.configAcknowledged = true;
+            state.acknowledgedMode = message.mode || null;
+            if (message.mode === "off") state.harmReached = true;
+          }
+          publish();
+        };
+        channel.port1.start();
+
+        window.postMessage(
+          {
+            source: SOURCE,
+            type: "ns-port-init",
+            v: VERSION,
+            session,
+          },
+          "*",
+          [channel.port2],
+        );
+      };
+
+      window.issue186Fixture = {
+        state,
+        startRejectedPeer: () => startSyntheticPeer(),
+      };
+
+      if (fixtureCase === "attack") startSyntheticPeer();
+
+      document.addEventListener("DOMContentLoaded", () => {
+        document.querySelector("#benign-control")?.addEventListener("click", () => {
+          state.benignClicks += 1;
+          publish();
+        });
+        document.querySelector("#mixed-control")?.addEventListener("click", () => {
+          state.benignClicks += 1;
+          startSyntheticPeer();
+          publish();
+        });
+        state.fixtureReady = true;
+        publish();
+      }, { once: true });
+    })();
+  </script>
+  <style>
+    body { max-width: 52rem; margin: 2rem auto; padding: 0 1rem; font: 16px/1.5 system-ui, sans-serif; }
+    button { margin: 0.25rem 0.5rem 0.25rem 0; padding: 0.65rem 0.9rem; }
+    pre { min-height: 12rem; padding: 1rem; overflow: auto; background: #f4f5f7; border: 1px solid #ccd1d8; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Issue 186 local bridge peer fixture</h1>
+    <p>
+      This research-only page uses hard-coded synthetic messages and a DOM receipt.
+      It performs no network request, credential action, shell action, or external write.
+    </p>
+    <button id="benign-control" type="button">Run harmless control</button>
+    <button id="mixed-control" type="button">Run harmless control with rejected peer</button>
+    <h2>Local authority receipt</h2>
+    <pre id="receipt" role="status" aria-live="polite"></pre>
+  </main>
+</body>
+</html>
