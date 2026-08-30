@@ -105,6 +105,9 @@ from this branch in a detached-origin worktree.
 
 ## Administration status
 
-Not yet applied at this reconciliation commit. No bulk GitHub write is
-authorized from cached package state; each issue will be re-read immediately
-before mutation and the final before/after receipt will record exact results.
+Applied after the pre-write checkpoint `0e974e6`. Every issue was re-read before
+mutation; protected body/closure timestamps matched the live reconciliation.
+The independently checked result is 75 open issues, zero unmilestoned, and
+exact milestone counts of 10/8/12/8/14/1/4/18. See
+[GITHUB_ADMIN_RECEIPT.md](GITHUB_ADMIN_RECEIPT.md) for the complete before/after
+record, closure reasons, labels, and preserved gates.

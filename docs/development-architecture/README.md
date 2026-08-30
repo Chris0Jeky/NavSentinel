@@ -9,9 +9,10 @@ queue. Authority remains, in order:
 
 1. current owner instruction;
 2. [`AGENTS.md`](../../AGENTS.md) and [`CLAUDE.md`](../../CLAUDE.md);
-3. [`Product_Strategy.md`](../Product_Strategy.md);
-4. [`Project_Roadmap.md`](../Project_Roadmap.md);
-5. live GitHub issues, pull requests, milestones, labels, and Actions;
+3. live Git, executable checks, GitHub issues, pull requests, milestones,
+   unresolved review threads, and Actions;
+4. [`Product_Strategy.md`](../Product_Strategy.md);
+5. [`Project_Roadmap.md`](../Project_Roadmap.md);
 6. [`ACTION_ITEMS.md`](../../ACTION_ITEMS.md) for human decisions and manual checks;
 7. the [security programme](../security-program/README.md) for scenario and evidence truth;
 8. this directory for architecture routing and milestone sequencing.
@@ -58,6 +59,8 @@ detector tuning.
 - [ISSUE_RECONCILIATION.md](ISSUE_RECONCILIATION.md): stale-premise and closure audit.
 - [DECISIONS.md](DECISIONS.md): accepted boundaries, design targets, and live deviations.
 - [RECONCILIATION.md](RECONCILIATION.md): package-to-live-state evidence and gates.
+- [GITHUB_ADMIN_RECEIPT.md](GITHUB_ADMIN_RECEIPT.md): applied milestones, issue
+  changes, closures, and independently checked postconditions.
 
 The execution cursor remains [`docs/security-program/NEXT_WORK.md`](../security-program/NEXT_WORK.md),
 after refreshing GitHub. The dated source package remains outside the tracked

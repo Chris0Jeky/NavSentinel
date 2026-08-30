@@ -11,11 +11,12 @@ This is a fast orientation layer for coding agents. It should point to interface
 1. `CLAUDE.md` - product invariants and focused checks.
 2. `AGENTS.md` - compact Codex-specific facts.
 3. `docs/Project_Roadmap.md` - product execution and release gates.
-4. `docs/security-program/README.md` for adversarial scenario, capability, and evidence work; it is subordinate to the roadmap.
-5. `CONTRIBUTING.md` - change-surface guidance and style expectations.
-6. This file - code-grounded seam map.
-7. `ACTION_ITEMS.md` only when the task involves a human decision/manual check.
-8. An optional runtime skill only when it materially helps the current task.
+4. `docs/development-architecture/README.md` - milestone routing and trust-boundary contracts; it is not a second roadmap.
+5. `docs/security-program/README.md` for adversarial scenario, capability, and evidence work; it is subordinate to the roadmap.
+6. `CONTRIBUTING.md` - change-surface guidance and style expectations.
+7. This file - code-grounded seam map.
+8. `ACTION_ITEMS.md` only when the task involves a human decision/manual check.
+9. An optional runtime skill only when it materially helps the current task.
 
 ## Do Not Read By Default
 
@@ -64,25 +65,28 @@ All paths above are relative to repo root. Content scripts live under `extension
 - **UI redesign complete** (2026-05-16): brass/jade design system, design tokens, 26-icon SVG system, segmented controls replacing selects, sidebar nav options page, ShieldArc popup gauge. See `docs/REDESIGN_ORCHESTRATION.md`.
 - `docs/Product_Strategy.md` owns product direction;
   `docs/Project_Roadmap.md` owns execution; GitHub issues own implementation;
-  `ACTION_ITEMS.md` owns human-only work.
+  `docs/development-architecture/` owns milestone routing and architecture
+  contracts; `ACTION_ITEMS.md` owns human-only work.
 - `docs/Comprehensive_Project_Analysis.md` is a historical snapshot from 2026-04-09 — do not treat it as current.
 - Runtime skill files are optional aids with no parity contract or validation gate.
 - Build output and generated data are easy context traps. Agents should edit source under `extension/src/` and avoid `extension/dist/`.
 - The highest-risk seams are main-world patching, bridge messages, service-worker lifecycle state, and credential/data privacy behavior.
-- Current release blockers include page-controlled prompt decision authority
-  and trusted-click redressing, wrong-tab visual capture, the fake DNR surface,
-  purpose-specific URL minimization, beta-off broad JS instrumentation,
-  #175/#186 bridge identity/recovery, #455 pre-collection disclosure/consent,
-  and product-name clearance. #356 compatibility is merged; reputation is
-  intentionally absent from the release-eligible interaction-only profile.
-  See the handoff; do not start North-Star/Horizon feature work.
+- Only M0 Proving Ground and M1 unlisted-beta release integrity are active.
+  Current release boundaries include #601 extension-origin decision authority,
+  #175/#186/#523 bridge identity/recovery/starvation policy, #176 session-URL
+  minimization, #474's owner-selected behavioral reset boundary, #455
+  pre-collection disclosure/activation, and AI-19 product-name clearance.
+  Reputation and broad JS instrumentation are intentionally absent from the
+  release-eligible interaction-only profile. Do not select planned, passive, or
+  frozen work except #417's documented test-methodology exception.
 - **`PromptOutcomeEntry` (`storage.ts`) is replay-grade enriched (P5-C1 / #238):** beyond `{domain, destDomain?, type, score, outcome, reasons?}` it now carries optional `cds`, `nrsFactors`, `navAnomalyScore`, `adaptiveAdj`, `thresholdUsed`, and a serialized `elementContext` (`ClickContext`). Populated at every `appendPromptOutcome` site — nav (`capture_isolated.ts`, snapshotted from local decision scope, not `lastDebug`) and cred (`credential_guard.ts`, now also sets `destDomain`); sanitized/bounded in `appendPromptOutcome`. All fields optional (back-compat). Foundation for the advisor journal (P5-B) and tuning corpus (P5-C5).
 - Historical merge context: the D-series discovery program merged 2026-06-05: #180 (D-PROF domain_profile reader serialization), #182 (D-STORE prompt-outcome SW-delegated writes), #183 (D-FOCUS credential-modal focus trap), #185 (D-BRIDGE outbound buffer + handshake timeout; also fixed the form-submit patch-order bug), #187 (D-SWRATE capture rate-limit persistence), #189 (D-ANOM sync-lag), #190 (D-IFRAME injected data:/blob:/srcdoc iframes), #191 (D-ONCREATE pre-hydration child-window tracking), #193 (D-REDOS content-analyzer regex bounding), #194 (D-OPTRACE options Save reentrancy guard), #195 (D-SRIHIDE inline-hidden password skip). #114-#174 merged across Cycles 6-7 (2026-05-29): toolchain migration (vite 8 / vitest 4), ESLint flat-config + CI lint gate, perf-budget CI, test-coverage + property tests, accessibility (#132-#135), prototype-pollution guards, P4-01a/b visual-sim (#172/#174), FF-01 Firefox `browser.*` shim (#173).
 - All icon SVGs from `icon()` and `logoSentinel()` include `aria-hidden="true"` (#135 merged).
-- Older JS behavior issue #127 remains relevant, but current action ownership
-  belongs in `docs/Project_Roadmap.md` and issue/PR truth comes from live
-  GitHub. `HANDOFF.md` is a short next-slice summary; `ORCHESTRATOR.md` is
-  historical cycle context, not a parallel task register.
+- JS behavior issue #127 is frozen post-beta research, not a beta-completion
+  task. Current action ownership belongs in `docs/Project_Roadmap.md`, milestone
+  routing lives in `docs/development-architecture/`, and issue/PR truth comes
+  from live GitHub. `HANDOFF.md` is a short next-slice summary;
+  `ORCHESTRATOR.md` is historical cycle context, not a parallel task register.
 
 ## Interface-On-Top Convention
 

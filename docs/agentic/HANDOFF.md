@@ -6,10 +6,19 @@ Historical cycle detail remains in `ORCHESTRATOR.md` and is not required reading
 
 ## 2026-08-30 live delta
 
-The open browser-surface queue is PR #572, PR #599, and PR #600. At this
-closeout, #572 and #599 report `DIRTY` after `main` advanced, while #600 reports
-`CLEAN`. Leave every manual owner and Chrome gate open. PR #572 is parked before
-AI-31 on a retained local rollback survivor; its current head is not merge-ready.
+The development-architecture setup refreshed `main` at
+`22377604a363141fc6e99a45800beca868307764`, assigned all 75 open issues, and
+left zero unmilestoned. M0 has 10 open issues and M1 has 8; only those milestones
+are active. Planned M2/M3/M4, gated M5, passive maintenance, and frozen R1 are
+not fallback queues. The exact architecture and applied administration receipt
+are under `docs/development-architecture/`.
+
+Four PRs are open. #572 and #599 report `DIRTY` after `main` advanced; #600
+reports `CLEAN`; #605 is a test-only M0 slice with Build / Unit red on #595's
+tracked mutation-monitor scarce-reserve assertion. Leave every manual owner and
+Chrome gate open. PR #572 is parked before AI-31 on a retained local rollback
+survivor; its current head is not merge-ready. #600 is containment, while #601
+retains the durable extension-origin authority boundary.
 
 The agent-owned #186 slice changes no release code. It adds a loopback-only
 bridge-peer fixture and real-extension browser lane. In ten fresh bundled-
@@ -109,9 +118,11 @@ still requires RI-01 extension-origin authority and #175/#186 bridge
 identity/recovery. RI-02, RI-05, RI-06, and RI-07 are merged; their waived browser
 checks are not evidence of a real-Chrome release pass.
 
-Two milestones now exist: `v0.5.0-unlisted-beta` (7 real blockers) and
-`post-beta-horizon` (the 15 frozen Horizon epics #439–#453, moved out of the
-active queue).
+Eight outcome milestones now exist. The open counts are M0 10, M1 8, M2 12,
+M3 8, M4 14, M5 1, maintenance 4, and frozen R1 18. #439 was closed as absorbed
+by active #449 plus #420; #449 is not frozen. Seven obsolete or absorbed issues
+were closed in the administration pass. No milestone move waived an owner or
+evidence gate.
 
 ## Verification caveats
 
@@ -127,6 +138,7 @@ active queue).
 ## Next sequence
 
 Chris resolves AI-19, may run optional AI-24, and decides AI-23 worktree/branch
-retirement. Agent-side, #523 needs the clipboard-telemetry semantic choice, #460
-needs an owner-authorized discriminating experiment, and AI-14 remains blocked on
-#417 methodology. Refresh Git/GitHub before selecting any new slice.
+retirement. Agent-side, finish or park #599/#600 before opening another runtime
+vertical, repair PR #605's tracked #595 failure, keep #572 parked, and retain
+#417 as the only planned-milestone methodology exception. Refresh Git/GitHub
+before selecting any new slice.

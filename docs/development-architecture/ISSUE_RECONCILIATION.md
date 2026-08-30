@@ -1,10 +1,11 @@
 # Issue-estate reconciliation
 
 The complete 82-row classification is in `ISSUE_MAP.json`. This report records
-the body/history changes that must precede milestone movement and the evidence
-used for closures. Open-issue count is not the success metric.
+the body/history changes applied before milestone movement and the evidence used
+for closures. Open-issue count is not the success metric. The final live receipt
+is [GITHUB_ADMIN_RECEIPT.md](GITHUB_ADMIN_RECEIPT.md).
 
-## Required current-body repairs
+## Applied current-body repairs
 
 | Issue | Live finding | Reconciled outcome |
 | --- | --- | --- |
@@ -24,14 +25,14 @@ used for closures. Open-issue count is not the success metric.
 | #560 | Current lifecycle body remains accurate while #600 is open. | Move to M2 without narrowing; re-read after #600 merge. |
 | #601 | Correctly records page-owned injected-UI residue. | Move to M1 and link to RI-01; do not call containment the durable authority solution. |
 
-## Verified closures or absorptions
+## Applied closures or absorptions
 
 | Issue | Evidence retained before close |
 | --- | --- |
 | #244 | #452 explicitly absorbs the native companion design/handshake slice and adds stricter retention, signing, least-privilege, and external-review prerequisites. |
 | #245 | #444 explicitly absorbs the offscreen/model runtime question and keeps the model a capped untrusted sensor. |
 | #246 | RI-02 removed the old visual-sim path; #444 retains any future semantic/logo runtime question without reviving capture. |
-| #374 | Visual-sim code/assets are absent, release checks reject their return, and the capture ceiling is back to 66 KB. Exact setup build/perf evidence is required before closure. |
+| #374 | Visual-sim code/assets are absent, release checks reject their return, and the capture ceiling is back to 66 KB. The exact setup build and all 12 performance budgets passed before closure. |
 | #439 | #449 owns the active hermetic proof programme; #420 owns the owner-machine headed lane. The one-time rig-ratification criterion is preserved in reconciliation comments. |
 | #421 | Active guidance no longer requires ORCHESTRATOR, HANDOFF is short/optional, ACTION_ITEMS is a human queue, and docs sync follows truth-changing slices. Remaining file rotation is #437. |
 | #422 | Priority ladder and milestone-gated discovery are already in instructions/decisions; the maintenance icebox completes its remaining administrative condition. |
