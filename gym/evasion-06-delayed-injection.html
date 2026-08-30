@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Evasion 06 - Delayed Injection</title>
+  <script src="local-fixture-targets.js"></script>
   <style>
     body {
       font-family: sans-serif;
@@ -60,7 +61,8 @@
     CDS detection with the same composite signals as evasion-05.
   </p>
 
-  <a id="legit-link" href="https://example.com/safe" aria-label="Safe destination link">
+  <a id="legit-link" href="local-fixture-sink.html" aria-label="Safe destination link"
+     data-navsentinel-local-target="benign" data-navsentinel-scenario="NS-ADV-UI-003">
     Click here for safe content
   </a>
 
@@ -77,7 +79,7 @@
 
         var trap = document.createElement("a");
         trap.id = "trap";
-        trap.href = "https://evil.example/evasion06";
+        trap.href = window.NavSentinelLocalTargets.url("harm", "NS-ADV-UI-003");
         trap.target = "_blank";
         trap.rel = "noreferrer";
         trap.style.cssText = [

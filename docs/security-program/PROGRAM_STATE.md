@@ -8,12 +8,12 @@ As of 2026-08-30, based on merged programme seed `d2762f296b07bfd650971141bf9bf7
 - 31 stable capabilities across proving-ground, release-integrity, research, agent-future, and optional-native tracks.
 - 11 outcome values and 8 ordered evidence states.
 - 1,512 generated local work units, nine for each scenario. They are not GitHub issues.
-- 64 current-work mappings: 12 Gym levels, 23 RW journeys, 12 evasion fixtures, 4 ClickFix fixtures, 4 DoubleClickjacking fixtures, 7 evidence lanes, and 2 browser-suite mappings.
+- 65 current-work mappings: 12 Gym levels, 23 RW journeys, 12 evasion fixtures, 4 ClickFix fixtures, 4 DoubleClickjacking fixtures, 8 evidence lanes, and 2 browser-suite mappings.
 - 12 deduplicated issue themes and zero new issues created by the seed pass.
 
 ## Evidence ceiling
 
-All 168 canonical scenarios remain `UNMODELLED`. Existing artefacts are reconciled separately: 61 mappings are `MODELLED`, 2 are `UNMODELLED`, and the bounded C-10 overlay nesting vertical is `REGRESSION_PROVEN`. No scenario is claimed as browser-proven, efficacy-measured, release-eligible, universally secure, or anonymous.
+All 168 canonical scenarios remain `UNMODELLED`. Existing artefacts are reconciled separately: 62 mappings are `MODELLED`, 2 are `UNMODELLED`, and the bounded C-10 overlay nesting vertical is `REGRESSION_PROVEN`. No scenario is claimed as browser-proven, efficacy-measured, release-eligible, universally secure, or anonymous.
 
 The historical corpus result is `INVALID`. The historical false-positive result is `STALE`. The external live-site check and local event-coupled benchmark are `UNVERIFIED`. Bundled Chromium regression is not owner Chrome, current human Gate-3, or open-web evidence.
 
@@ -21,7 +21,7 @@ The first #449 vertical adds one loopback-only typed sink and independent wrong-
 
 The first #186 bridge-peer ordering slice uses the release extension, Playwright bundled Chromium 143.0.7499.4, one loopback-only page, hard-coded synthetic bridge values, and a DOM-only authority receipt. The earliest normal authored-page peer sent its init but received no challenge in ten fresh profiles; the real isolated bridge became ready every time. A benign trusted click remained usable, and a post-readiness trusted-click peer was also rejected without a challenge or protection-lowering acknowledgement. This completes the repository-current `NS-ADV-SELF-004-01-MODEL` slice only; the canonical imported scenario snapshot remains `UNMODELLED` and the evidence is recorded in the separate mapping registry. The harmful `02-ATTACK` baseline did not reproduce, and no privileged pre-page injection was used to force it. The exact-head rerun started the Proving Ground deny proxy before Chromium, forwarded only the declared loopback origin, recorded zero fixture network violations, and retained 139 blocked browser-platform attempts. Same-session replay, a genuinely page-reachable pre-page actor, branded Chrome, content-script reload, and authenticated recovery remain open under #175/#186, so C-04 stays `MODELLED` and beta-blocking. PR #602 landed the model lane; PR #603 merged the fenced methodology repair as `ccff3d1c3f920ab8cbf1907ec31d6f1c93e9f018`, and final `main` CI run `33328852994` passed Build / Unit and E2E.
 
-Four ClickFix fixtures now use only an inert sentinel or local static control, leaving 21 mapped legacy Gym pages on a machine-checked external-destination hold. ClickFix remains browser detection evidence, not OS-paste prevention or real-provider browser evidence.
+Four ClickFix fixtures now use only an inert sentinel or local static control. Twelve evasion fixtures now share a loopback-only benign/harm target contract, and the composite representative has separate attack, protected, benign, and mixed arms backed by a typed independent sink. Nine mapped legacy Gym pages remain on a machine-checked external-destination hold. ClickFix remains browser detection evidence, not OS-paste prevention or real-provider browser evidence, and the evasion family remains `MODELLED` rather than mutation-robustness evidence.
 
 ## Active authority
 
