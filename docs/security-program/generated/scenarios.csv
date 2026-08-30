@@ -1,0 +1,169 @@
+id,family,family_name,title,priority,severity,status,evidence_status,capability_dependencies,existing_issue_refs
+NS-ADV-NAV-001,NAV,Navigation and redirect deception,Delayed cross-site `location.assign` after intent expiry,P0,S3,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-09,#458;#417
+NS-ADV-NAV-002,NAV,Navigation and redirect deception,Same-registrable-domain tenant hop,P1,S3,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-09,#223;#417
+NS-ADV-NAV-003,NAV,Navigation and redirect deception,Meta-refresh trust laundering,P1,S3,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-09,#417;#426
+NS-ADV-NAV-004,NAV,Navigation and redirect deception,Open-redirect multi-hop chain,P0,S3,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-09,#417;#418
+NS-ADV-NAV-005,NAV,Navigation and redirect deception,Form destination swapped after pointer-down,P0,S3,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-09,#356;#464
+NS-ADV-NAV-006,NAV,Navigation and redirect deception,SPA history facade followed by external commit,P1,S3,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-09,#356;#223
+NS-ADV-NAV-007,NAV,Navigation and redirect deception,Back-button bounce and history trap,P1,S3,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-09,#458;#443
+NS-ADV-NAV-008,NAV,Navigation and redirect deception,Secret-bearing URL decoration across redirects,P1,S3,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-09,#176;#468;#474
+NS-ADV-WIN-001,WIN,"Windows, tabs, popups, and opener relationships",Popunder created from a trusted click,P0,S3,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-09,#460;#498
+NS-ADV-WIN-002,WIN,"Windows, tabs, popups, and opener relationships",Popup burst after legitimate OAuth,P0,S3,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-09,#232;#498
+NS-ADV-WIN-003,WIN,"Windows, tabs, popups, and opener relationships",Named-window reuse laundering,P0,S3,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-09,#443;#417
+NS-ADV-WIN-004,WIN,"Windows, tabs, popups, and opener relationships",Child rewrites opener then closes,P0,S3,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-09,#458;#496
+NS-ADV-WIN-005,WIN,"Windows, tabs, popups, and opener relationships",Allow-once capability double spend,P0,S3,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-09,#466;#175
+NS-ADV-WIN-006,WIN,"Windows, tabs, popups, and opener relationships",Tiny or off-screen popup,P2,S3,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-09,#443
+NS-ADV-WIN-007,WIN,"Windows, tabs, popups, and opener relationships",Inherited about:blank/blob child pivots cross-origin,P1,S3,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-09,#190;#443
+NS-ADV-WIN-008,WIN,"Windows, tabs, popups, and opener relationships",Cross-tab prompt and state confusion,P0,S3,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-09,#466;#175;#186
+NS-ADV-UI-001,UI,"UI redressing, overlays, fake browser chrome, and visual coercion",Transparent full-viewport click shield,P0,S3,UNMODELLED,UNMODELLED,C-02;C-03;C-10,#555;#591
+NS-ADV-UI-002,UI,"UI redressing, overlays, fake browser chrome, and visual coercion",Moving target under cursor,P0,S3,UNMODELLED,UNMODELLED,C-02;C-03;C-10,#555;#460
+NS-ADV-UI-003,UI,"UI redressing, overlays, fake browser chrome, and visual coercion",Overlay injected after pointer-down,P0,S3,UNMODELLED,UNMODELLED,C-02;C-03;C-10,#464;#555
+NS-ADV-UI-004,UI,"UI redressing, overlays, fake browser chrome, and visual coercion",Sequential overlay reinsertion,P0,S3,UNMODELLED,UNMODELLED,C-02;C-03;C-10,#555;#591
+NS-ADV-UI-005,UI,"UI redressing, overlays, fake browser chrome, and visual coercion",Focus and pointer retargeting,P1,S3,UNMODELLED,UNMODELLED,C-02;C-03;C-10,#199;#200
+NS-ADV-UI-006,UI,"UI redressing, overlays, fake browser chrome, and visual coercion",Browser-in-the-browser fake chrome,P1,S3,UNMODELLED,UNMODELLED,C-02;C-03;C-10,#246;#443
+NS-ADV-UI-007,UI,"UI redressing, overlays, fake browser chrome, and visual coercion",Fake extension or password-manager prompt,P0,S3,UNMODELLED,UNMODELLED,C-02;C-03;C-10,#356;#464
+NS-ADV-UI-008,UI,"UI redressing, overlays, fake browser chrome, and visual coercion","Canvas, shadow, and nested-frame deceptive surface",P1,S3,UNMODELLED,UNMODELLED,C-02;C-03;C-10,#245;#246;#449
+NS-ADV-CRED-001,CRED,"Credential, secret, and form exfiltration",Cross-origin password form action,P0,S4,UNMODELLED,UNMODELLED,C-02;C-03;C-06;C-11,#417;#199
+NS-ADV-CRED-002,CRED,"Credential, secret, and form exfiltration",Same-origin form with third-party scripted exfiltration,P0,S4,UNMODELLED,UNMODELLED,C-02;C-03;C-06;C-11,#127;#532
+NS-ADV-CRED-003,CRED,"Credential, secret, and form exfiltration",Late form-action mutation,P0,S4,UNMODELLED,UNMODELLED,C-02;C-03;C-06;C-11,#356;#464
+NS-ADV-CRED-004,CRED,"Credential, secret, and form exfiltration",Hidden or autofilled credential field,P1,S4,UNMODELLED,UNMODELLED,C-02;C-03;C-06;C-11,#199;#200
+NS-ADV-CRED-005,CRED,"Credential, secret, and form exfiltration",Shadow-DOM credential form,P0,S4,UNMODELLED,UNMODELLED,C-02;C-03;C-06;C-11,#200;#449
+NS-ADV-CRED-006,CRED,"Credential, secret, and form exfiltration",Fake reauthentication on a trusted page,P0,S4,UNMODELLED,UNMODELLED,C-02;C-03;C-06;C-11,#591;#417
+NS-ADV-CRED-007,CRED,"Credential, secret, and form exfiltration","OTP, recovery-code, or seed-phrase harvesting",P0,S4,UNMODELLED,UNMODELLED,C-02;C-03;C-06;C-11,#209;#443
+NS-ADV-CRED-008,CRED,"Credential, secret, and form exfiltration",Password-manager master-password imitation,P0,S4,UNMODELLED,UNMODELLED,C-02;C-03;C-06;C-11,#246;#449
+NS-ADV-IDN-001,IDN,"Origin, URL, brand, and identity deception",Unicode homograph of an established domain,P0,S3,UNMODELLED,UNMODELLED,C-01;C-07;C-11,#209;#445
+NS-ADV-IDN-002,IDN,"Origin, URL, brand, and identity deception",Punycode and display-mode ambiguity,P1,S3,UNMODELLED,UNMODELLED,C-01;C-07;C-11,#209;#445
+NS-ADV-IDN-003,IDN,"Origin, URL, brand, and identity deception",Separator-only brand spoof,P1,S3,UNMODELLED,UNMODELLED,C-01;C-07;C-11,#209
+NS-ADV-IDN-004,IDN,"Origin, URL, brand, and identity deception",Deep subdomain and path brand stuffing,P0,S3,UNMODELLED,UNMODELLED,C-01;C-07;C-11,#445;#417
+NS-ADV-IDN-005,IDN,"Origin, URL, brand, and identity deception",Shared cloud-host tenant ambiguity,P1,S3,UNMODELLED,UNMODELLED,C-01;C-07;C-11,#417;#445
+NS-ADV-IDN-006,IDN,"Origin, URL, brand, and identity deception","IP literal, odd port, or scheme downgrade",P1,S3,UNMODELLED,UNMODELLED,C-01;C-07;C-11,#417
+NS-ADV-IDN-007,IDN,"Origin, URL, brand, and identity deception",Compromised sibling subdomain,P0,S3,UNMODELLED,UNMODELLED,C-01;C-07;C-11,#445;#417
+NS-ADV-IDN-008,IDN,"Origin, URL, brand, and identity deception",Shortener or QR destination concealment,P1,S3,UNMODELLED,UNMODELLED,C-01;C-07;C-11,#417;#443
+NS-ADV-AUTH-001,AUTH,"OAuth, OIDC, consent, device-code, QR, and passkey flows",OAuth redirect URI mismatch or open-redirect pivot,P0,S4,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-12,#223;#417
+NS-ADV-AUTH-002,AUTH,"OAuth, OIDC, consent, device-code, QR, and passkey flows",Generic `code` parameter outside an auth flow,P0,S4,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-12,#223;#269
+NS-ADV-AUTH-003,AUTH,"OAuth, OIDC, consent, device-code, QR, and passkey flows",Provider mix-up and concurrent-flow confusion,P0,S4,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-12,#223;#186
+NS-ADV-AUTH-004,AUTH,"OAuth, OIDC, consent, device-code, QR, and passkey flows",Form-post authorization response,P1,S4,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-12,#223;#417
+NS-ADV-AUTH-005,AUTH,"OAuth, OIDC, consent, device-code, QR, and passkey flows",Legitimate auth popup followed by malicious second popup,P0,S4,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-12,#498;#232
+NS-ADV-AUTH-006,AUTH,"OAuth, OIDC, consent, device-code, QR, and passkey flows",Consent phishing with excessive scopes,P1,S4,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-12,#443;#445
+NS-ADV-AUTH-007,AUTH,"OAuth, OIDC, consent, device-code, QR, and passkey flows",Device-code phishing,P1,S4,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-12,#443;#449
+NS-ADV-AUTH-008,AUTH,"OAuth, OIDC, consent, device-code, QR, and passkey flows",QR login relay or passkey-fallback phishing,P1,S4,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-12,#443;#449
+NS-ADV-CLIP-001,CLIP,"Clipboard, ClickFix, address replacement, and copy/paste abuse",Fake CAPTCHA copies a shell command,P0,S4,UNMODELLED,UNMODELLED,C-05;C-06;C-10;N-02,#523;#452
+NS-ADV-CLIP-002,CLIP,"Clipboard, ClickFix, address replacement, and copy/paste abuse",Clipboard-event flood starves a navigation alert,P0,S4,UNMODELLED,UNMODELLED,C-05;C-06;C-10;N-02,#523;#175
+NS-ADV-CLIP-003,CLIP,"Clipboard, ClickFix, address replacement, and copy/paste abuse",Developer-doc command versus dangerous command,P1,S4,UNMODELLED,UNMODELLED,C-05;C-06;C-10;N-02,#449
+NS-ADV-CLIP-004,CLIP,"Clipboard, ClickFix, address replacement, and copy/paste abuse",Cryptocurrency or bank-account replacement,P0,S4,UNMODELLED,UNMODELLED,C-05;C-06;C-10;N-02,#452
+NS-ADV-CLIP-005,CLIP,"Clipboard, ClickFix, address replacement, and copy/paste abuse",Delayed clipboard rewrite after manual copy,P1,S4,UNMODELLED,UNMODELLED,C-05;C-06;C-10;N-02,#452
+NS-ADV-CLIP-006,CLIP,"Clipboard, ClickFix, address replacement, and copy/paste abuse",HTML or image clipboard deception,P2,S4,UNMODELLED,UNMODELLED,C-05;C-06;C-10;N-02,#452
+NS-ADV-CLIP-007,CLIP,"Clipboard, ClickFix, address replacement, and copy/paste abuse",Remote-support code and control handoff,P1,S4,UNMODELLED,UNMODELLED,C-05;C-06;C-10;N-02,#443;#452
+NS-ADV-CLIP-008,CLIP,"Clipboard, ClickFix, address replacement, and copy/paste abuse",Paste into shell outside the browser,P1,S4,UNMODELLED,UNMODELLED,C-05;C-06;C-10;N-02,#244;#452
+NS-ADV-FILE-001,FILE,"Downloads, installers, archives, and browser file-system access",Fake browser update or codec download,P0,S4,UNMODELLED,UNMODELLED,C-06;C-14;N-03,#443;#449
+NS-ADV-FILE-002,FILE,"Downloads, installers, archives, and browser file-system access",Drive-by blob or data-URL download,P1,S4,UNMODELLED,UNMODELLED,C-06;C-14;N-03,#443
+NS-ADV-FILE-003,FILE,"Downloads, installers, archives, and browser file-system access","Filename, extension, icon, and MIME mismatch",P1,S4,UNMODELLED,UNMODELLED,C-06;C-14;N-03,#449
+NS-ADV-FILE-004,FILE,"Downloads, installers, archives, and browser file-system access",Password-protected archive lure,P2,S4,UNMODELLED,UNMODELLED,C-06;C-14;N-03,#443
+NS-ADV-FILE-005,FILE,"Downloads, installers, archives, and browser file-system access",Extension sideload or developer-mode lure,P1,S4,UNMODELLED,UNMODELLED,C-06;C-14;N-03,#449
+NS-ADV-FILE-006,FILE,"Downloads, installers, archives, and browser file-system access",File System Access mass modification,P2,S4,UNMODELLED,UNMODELLED,C-06;C-14;N-03,#452
+NS-ADV-FILE-007,FILE,"Downloads, installers, archives, and browser file-system access",Repeated download bomb and nuisance loop,P1,S4,UNMODELLED,UNMODELLED,C-06;C-14;N-03,#443
+NS-ADV-FILE-008,FILE,"Downloads, installers, archives, and browser file-system access",Legitimate signed installer reached through compromised advertising,P1,S4,UNMODELLED,UNMODELLED,C-06;C-14;N-03,#417;#443
+NS-ADV-FLOW-001,FLOW,Network data flows and covert exfiltration,Synthetic credential sent by fetch/XHR,P0,S4,UNMODELLED,UNMODELLED,C-01;C-05;C-06;C-11,#127;#532
+NS-ADV-FLOW-002,FLOW,Network data flows and covert exfiltration,Unload or visibility-change beacon exfiltration,P1,S4,UNMODELLED,UNMODELLED,C-01;C-05;C-06;C-11,#127;#532
+NS-ADV-FLOW-003,FLOW,Network data flows and covert exfiltration,WebSocket or streaming exfiltration,P2,S4,UNMODELLED,UNMODELLED,C-01;C-05;C-06;C-11,#127
+NS-ADV-FLOW-004,FLOW,Network data flows and covert exfiltration,"Image, font, or query-string covert channel",P2,S4,UNMODELLED,UNMODELLED,C-01;C-05;C-06;C-11,#127
+NS-ADV-FLOW-005,FLOW,Network data flows and covert exfiltration,Cross-frame postMessage handoff,P1,S4,UNMODELLED,UNMODELLED,C-01;C-05;C-06;C-11,#186;#127
+NS-ADV-FLOW-006,FLOW,Network data flows and covert exfiltration,Referrer or URL token leakage,P1,S4,UNMODELLED,UNMODELLED,C-01;C-05;C-06;C-11,#176;#468
+NS-ADV-FLOW-007,FLOW,Network data flows and covert exfiltration,Service-worker background sync or cached replay,P2,S4,UNMODELLED,UNMODELLED,C-01;C-05;C-06;C-11,#443
+NS-ADV-FLOW-008,FLOW,Network data flows and covert exfiltration,CSS or side-channel-style exfiltration envelope,P3,S4,UNMODELLED,UNMODELLED,C-01;C-05;C-06;C-11,#449
+NS-ADV-PRIV-001,PRIV,"Fingerprinting, tracking, storage, and privacy loss",Canvas fingerprinting sequence,P1,S3,UNMODELLED,UNMODELLED,C-06;C-07;C-09,#127;#445
+NS-ADV-PRIV-002,PRIV,"Fingerprinting, tracking, storage, and privacy loss",WebGL and audio composite fingerprint,P1,S3,UNMODELLED,UNMODELLED,C-06;C-07;C-09,#127
+NS-ADV-PRIV-003,PRIV,"Fingerprinting, tracking, storage, and privacy loss","Font, screen, hardware, and locale composite",P1,S3,UNMODELLED,UNMODELLED,C-06;C-07;C-09,#445
+NS-ADV-PRIV-004,PRIV,"Fingerprinting, tracking, storage, and privacy loss",WebRTC and local-network probing,P1,S3,UNMODELLED,UNMODELLED,C-06;C-07;C-09,#127
+NS-ADV-PRIV-005,PRIV,"Fingerprinting, tracking, storage, and privacy loss","Behavioral typing, mouse, and interaction biometrics",P2,S3,UNMODELLED,UNMODELLED,C-06;C-07;C-09,#445
+NS-ADV-PRIV-006,PRIV,"Fingerprinting, tracking, storage, and privacy loss","Storage resurrection, cookie syncing, and CNAME cloaking",P1,S3,UNMODELLED,UNMODELLED,C-06;C-07;C-09,#474;#445
+NS-ADV-PRIV-007,PRIV,"Fingerprinting, tracking, storage, and privacy loss",Tracking before consent,P1,S3,UNMODELLED,UNMODELLED,C-06;C-07;C-09,#445
+NS-ADV-PRIV-008,PRIV,"Fingerprinting, tracking, storage, and privacy loss",Authentication fingerprinting: security versus tracking,P1,S3,UNMODELLED,UNMODELLED,C-06;C-07;C-09,#445;#441
+NS-ADV-PERM-001,PERM,"Permissions, sensors, fullscreen, pointer lock, and nuisance capability abuse",Notification permission fatigue,P1,S3,UNMODELLED,UNMODELLED,C-02;C-03;C-13,#443
+NS-ADV-PERM-002,PERM,"Permissions, sensors, fullscreen, pointer lock, and nuisance capability abuse",Geolocation pretext,P1,S3,UNMODELLED,UNMODELLED,C-02;C-03;C-13,#443
+NS-ADV-PERM-003,PERM,"Permissions, sensors, fullscreen, pointer lock, and nuisance capability abuse",Camera or microphone verification lure,P1,S3,UNMODELLED,UNMODELLED,C-02;C-03;C-13,#443
+NS-ADV-PERM-004,PERM,"Permissions, sensors, fullscreen, pointer lock, and nuisance capability abuse","Fullscreen, audio, and pointer-lock scareware",P0,S3,UNMODELLED,UNMODELLED,C-02;C-03;C-13,#443;#449
+NS-ADV-PERM-005,PERM,"Permissions, sensors, fullscreen, pointer lock, and nuisance capability abuse",Clipboard-read permission pretext,P1,S3,UNMODELLED,UNMODELLED,C-02;C-03;C-13,#452
+NS-ADV-PERM-006,PERM,"Permissions, sensors, fullscreen, pointer lock, and nuisance capability abuse",File-picker or directory permission pretext,P1,S3,UNMODELLED,UNMODELLED,C-02;C-03;C-13,#452
+NS-ADV-PERM-007,PERM,"Permissions, sensors, fullscreen, pointer lock, and nuisance capability abuse",Chained permission escalation,P1,S3,UNMODELLED,UNMODELLED,C-02;C-03;C-13,#443;#442
+NS-ADV-PERM-008,PERM,"Permissions, sensors, fullscreen, pointer lock, and nuisance capability abuse","Legitimate conference, map, upload, and game journeys",P0,S3,UNMODELLED,UNMODELLED,C-02;C-03;C-13,#232;#420
+NS-ADV-RUNTIME-001,RUNTIME,"Dynamic DOM, script, rendering, and instrumentation evasion",Closed-shadow-root attack surface,P0,S3,UNMODELLED,UNMODELLED,C-01;C-04;C-05;C-09,#200;#449
+NS-ADV-RUNTIME-002,RUNTIME,"Dynamic DOM, script, rendering, and instrumentation evasion",Canvas or WebGL textless lure,P1,S3,UNMODELLED,UNMODELLED,C-01;C-04;C-05;C-09,#245;#246
+NS-ADV-RUNTIME-003,RUNTIME,"Dynamic DOM, script, rendering, and instrumentation evasion",Pseudo-elements and adopted-style deception,P1,S3,UNMODELLED,UNMODELLED,C-01;C-04;C-05;C-09,#555;#449
+NS-ADV-RUNTIME-004,RUNTIME,"Dynamic DOM, script, rendering, and instrumentation evasion",Obfuscated delayed dynamic import,P1,S3,UNMODELLED,UNMODELLED,C-01;C-04;C-05;C-09,#449
+NS-ADV-RUNTIME-005,RUNTIME,"Dynamic DOM, script, rendering, and instrumentation evasion",WebAssembly-mediated behavior,P2,S3,UNMODELLED,UNMODELLED,C-01;C-04;C-05;C-09,#449
+NS-ADV-RUNTIME-006,RUNTIME,"Dynamic DOM, script, rendering, and instrumentation evasion",Page patches APIs before extension initialization,P0,S3,UNMODELLED,UNMODELLED,C-01;C-04;C-05;C-09,#356;#186
+NS-ADV-RUNTIME-007,RUNTIME,"Dynamic DOM, script, rendering, and instrumentation evasion",Mutation and event flood,P0,S3,UNMODELLED,UNMODELLED,C-01;C-04;C-05;C-09,#523;#555
+NS-ADV-RUNTIME-008,RUNTIME,"Dynamic DOM, script, rendering, and instrumentation evasion",Extension detection and adaptive behavior,P1,S3,UNMODELLED,UNMODELLED,C-01;C-04;C-05;C-09,#458;#449
+NS-ADV-STATE-001,STATE,"Service-worker lifecycle, queues, races, and state isolation",Service-worker restart between action and decision,P0,S4,UNMODELLED,UNMODELLED,C-03;C-04;C-05;C-09,#175;#417
+NS-ADV-STATE-002,STATE,"Service-worker lifecycle, queues, races, and state isolation",Bridge loss or absent heartbeat,P0,S4,UNMODELLED,UNMODELLED,C-03;C-04;C-05;C-09,#175;#186
+NS-ADV-STATE-003,STATE,"Service-worker lifecycle, queues, races, and state isolation",Pre-bridge queue overflow and priority inversion,P0,S4,UNMODELLED,UNMODELLED,C-03;C-04;C-05;C-09,#523;#175
+NS-ADV-STATE-004,STATE,"Service-worker lifecycle, queues, races, and state isolation",BFCache restore with stale allowances,P0,S4,UNMODELLED,UNMODELLED,C-03;C-04;C-05;C-09,#443
+NS-ADV-STATE-005,STATE,"Service-worker lifecycle, queues, races, and state isolation",Tab discard and restore,P1,S4,UNMODELLED,UNMODELLED,C-03;C-04;C-05;C-09,#175;#420
+NS-ADV-STATE-006,STATE,"Service-worker lifecycle, queues, races, and state isolation",Extension update during an active flow,P1,S4,UNMODELLED,UNMODELLED,C-03;C-04;C-05;C-09,#415;#466
+NS-ADV-STATE-007,STATE,"Service-worker lifecycle, queues, races, and state isolation",Removed frame or document receives stale approval,P0,S4,UNMODELLED,UNMODELLED,C-03;C-04;C-05;C-09,#466;#186
+NS-ADV-STATE-008,STATE,"Service-worker lifecycle, queues, races, and state isolation",Rapid close/reopen and state leakage,P0,S4,UNMODELLED,UNMODELLED,C-03;C-04;C-05;C-09,#175;#443
+NS-ADV-FRAME-001,FRAME,"Frames, sandboxing, opaque origins, and embedded third-party flows",Nested cross-origin credential iframe,P0,S4,UNMODELLED,UNMODELLED,C-02;C-04;C-05;C-11,#190;#200
+NS-ADV-FRAME-002,FRAME,"Frames, sandboxing, opaque origins, and embedded third-party flows","Injected srcdoc, data, or blob frame",P1,S4,UNMODELLED,UNMODELLED,C-02;C-04;C-05;C-11,#190
+NS-ADV-FRAME-003,FRAME,"Frames, sandboxing, opaque origins, and embedded third-party flows",Sandboxed top-navigation by user activation,P1,S4,UNMODELLED,UNMODELLED,C-02;C-04;C-05;C-11,#464;#417
+NS-ADV-FRAME-004,FRAME,"Frames, sandboxing, opaque origins, and embedded third-party flows",Cross-frame clickjacking,P0,S4,UNMODELLED,UNMODELLED,C-02;C-04;C-05;C-11,#555;#449
+NS-ADV-FRAME-005,FRAME,"Frames, sandboxing, opaque origins, and embedded third-party flows",Removed or replaced child frame with pending action,P0,S4,UNMODELLED,UNMODELLED,C-02;C-04;C-05;C-11,#466;#186
+NS-ADV-FRAME-006,FRAME,"Frames, sandboxing, opaque origins, and embedded third-party flows",Opaque-origin or fenced-context visibility gap,P2,S4,UNMODELLED,UNMODELLED,C-02;C-04;C-05;C-11,#449
+NS-ADV-FRAME-007,FRAME,"Frames, sandboxing, opaque origins, and embedded third-party flows",Legitimate 3DS or embedded payment control,P0,S4,UNMODELLED,UNMODELLED,C-02;C-04;C-05;C-11,#232;#420
+NS-ADV-FRAME-008,FRAME,"Frames, sandboxing, opaque origins, and embedded third-party flows",Legitimate enterprise SSO embed,P0,S4,UNMODELLED,UNMODELLED,C-02;C-04;C-05;C-11,#223;#232
+NS-ADV-MONEY-001,MONEY,"Payments, wallets, invoices, and transaction manipulation",Invoice-approval redirect trap,P0,S4,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-12,#443
+NS-ADV-MONEY-002,MONEY,"Payments, wallets, invoices, and transaction manipulation",Express-pay overlay hijack,P0,S4,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-12,#555
+NS-ADV-MONEY-003,MONEY,"Payments, wallets, invoices, and transaction manipulation",Wallet-connect first approval then drain,P0,S4,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-12,#443;#498
+NS-ADV-MONEY-004,MONEY,"Payments, wallets, invoices, and transaction manipulation","Payee, account, or wallet-address swap",P0,S4,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-12,#452;#443
+NS-ADV-MONEY-005,MONEY,"Payments, wallets, invoices, and transaction manipulation",Amount or asset mutation after review,P1,S4,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-12,#443
+NS-ADV-MONEY-006,MONEY,"Payments, wallets, invoices, and transaction manipulation",Seed phrase or recovery-key request,P0,S4,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-12,#443;#449
+NS-ADV-MONEY-007,MONEY,"Payments, wallets, invoices, and transaction manipulation",Bank security-alert verification,P0,S4,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-12,#417;#443
+NS-ADV-MONEY-008,MONEY,"Payments, wallets, invoices, and transaction manipulation",QR payment or invoice substitution,P1,S4,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-12,#449
+NS-ADV-SOCIAL-001,SOCIAL,"Scareware, urgency, support scams, and behavior manipulation",Full-screen tech-support scareware,P0,S4,UNMODELLED,UNMODELLED,C-01;C-05;C-08;C-10,#443;#449
+NS-ADV-SOCIAL-002,SOCIAL,"Scareware, urgency, support scams, and behavior manipulation",Fake virus scan and escalating result,P1,S4,UNMODELLED,UNMODELLED,C-01;C-05;C-08;C-10,#443
+NS-ADV-SOCIAL-003,SOCIAL,"Scareware, urgency, support scams, and behavior manipulation",Account suspended reauthentication,P0,S4,UNMODELLED,UNMODELLED,C-01;C-05;C-08;C-10,#417
+NS-ADV-SOCIAL-004,SOCIAL,"Scareware, urgency, support scams, and behavior manipulation","Parcel, customs, or small-fee lure",P1,S4,UNMODELLED,UNMODELLED,C-01;C-05;C-08;C-10,#443
+NS-ADV-SOCIAL-005,SOCIAL,"Scareware, urgency, support scams, and behavior manipulation",Job recruitment document or installer lure,P1,S4,UNMODELLED,UNMODELLED,C-01;C-05;C-08;C-10,#443
+NS-ADV-SOCIAL-006,SOCIAL,"Scareware, urgency, support scams, and behavior manipulation",Investment or crypto urgency,P1,S4,UNMODELLED,UNMODELLED,C-01;C-05;C-08;C-10,#443
+NS-ADV-SOCIAL-007,SOCIAL,"Scareware, urgency, support scams, and behavior manipulation",Countdown and repeated interruption coercion,P1,S4,UNMODELLED,UNMODELLED,C-01;C-05;C-08;C-10,#442;#443
+NS-ADV-SOCIAL-008,SOCIAL,"Scareware, urgency, support scams, and behavior manipulation",Fake human verification and remote-support handoff,P0,S4,UNMODELLED,UNMODELLED,C-01;C-05;C-08;C-10,#452;#449
+NS-ADV-SUPPLY-001,SUPPLY,"Compromised legitimate sites, third parties, ads, and supply-chain abuse",Malvertising overlay on a reputable publisher,P0,S4,UNMODELLED,UNMODELLED,C-01;C-05;C-07;C-14,#225;#555;#568;#580;#591
+NS-ADV-SUPPLY-002,SUPPLY,"Compromised legitimate sites, third parties, ads, and supply-chain abuse",Compromised third-party CDN script on a trusted origin,P0,S4,UNMODELLED,UNMODELLED,C-01;C-05;C-07;C-14,#179;#408;#417;#445
+NS-ADV-SUPPLY-003,SUPPLY,"Compromised legitimate sites, third parties, ads, and supply-chain abuse",Tag-manager or analytics container abuse,P1,S4,UNMODELLED,UNMODELLED,C-01;C-05;C-07;C-14,#127;#232;#239;#417
+NS-ADV-SUPPLY-004,SUPPLY,"Compromised legitimate sites, third parties, ads, and supply-chain abuse",Stored or reflected script compromise on a familiar site,P0,S4,UNMODELLED,UNMODELLED,C-01;C-05;C-07;C-14,#417;#426;#445;#450
+NS-ADV-SUPPLY-005,SUPPLY,"Compromised legitimate sites, third parties, ads, and supply-chain abuse",Abandoned tenant or subdomain takeover,P1,S4,UNMODELLED,UNMODELLED,C-01;C-05;C-07;C-14,#176;#209;#445
+NS-ADV-SUPPLY-006,SUPPLY,"Compromised legitimate sites, third parties, ads, and supply-chain abuse","Compromised support, chat, or consent widget",P1,S4,UNMODELLED,UNMODELLED,C-01;C-05;C-07;C-14,#225;#591;#592
+NS-ADV-SUPPLY-007,SUPPLY,"Compromised legitimate sites, third parties, ads, and supply-chain abuse",Malicious service-worker or cache persistence after site cleanup,P1,S4,UNMODELLED,UNMODELLED,C-01;C-05;C-07;C-14,#446;#450
+NS-ADV-SUPPLY-008,SUPPLY,"Compromised legitimate sites, third parties, ads, and supply-chain abuse",Conflicting or malicious co-installed extension,P2,S4,UNMODELLED,UNMODELLED,C-01;C-05;C-07;C-14,#175;#186;#458;#498
+NS-ADV-EVADE-001,EVADE,"Cloaking, anti-analysis, environment detection, and one-shot evasion",Crawler and headless-browser cloaking,P0,S3,UNMODELLED,UNMODELLED,F-03;F-05;F-06;F-07;F-08,#417;#420;#439;#449
+NS-ADV-EVADE-002,EVADE,"Cloaking, anti-analysis, environment detection, and one-shot evasion","Geolocation, language, referrer, or campaign gating",P1,S3,UNMODELLED,UNMODELLED,F-03;F-05;F-06;F-07;F-08,#417;#449;#591
+NS-ADV-EVADE-003,EVADE,"Cloaking, anti-analysis, environment detection, and one-shot evasion","Time bomb, idle trigger, and calendar gating",P0,S3,UNMODELLED,UNMODELLED,F-03;F-05;F-06;F-07;F-08,#175;#389;#420;#443
+NS-ADV-EVADE-004,EVADE,"Cloaking, anti-analysis, environment detection, and one-shot evasion",Deep-interaction and scroll-depth trigger,P0,S3,UNMODELLED,UNMODELLED,F-03;F-05;F-06;F-07;F-08,#232;#417;#449
+NS-ADV-EVADE-005,EVADE,"Cloaking, anti-analysis, environment detection, and one-shot evasion","One-time, first-visit, or token-burn attack",P1,S3,UNMODELLED,UNMODELLED,F-03;F-05;F-06;F-07;F-08,#417;#420;#450
+NS-ADV-EVADE-006,EVADE,"Cloaking, anti-analysis, environment detection, and one-shot evasion","Randomized DOM, text, and localization variants",P0,S3,UNMODELLED,UNMODELLED,F-03;F-05;F-06;F-07;F-08,#199;#200;#408;#449
+NS-ADV-EVADE-007,EVADE,"Cloaking, anti-analysis, environment detection, and one-shot evasion","Debugger, DevTools, or instrumentation detection",P1,S3,UNMODELLED,UNMODELLED,F-03;F-05;F-06;F-07;F-08,#127;#420;#449
+NS-ADV-EVADE-008,EVADE,"Cloaking, anti-analysis, environment detection, and one-shot evasion",NavSentinel fingerprinting and selective bypass,P0,S3,UNMODELLED,UNMODELLED,F-03;F-05;F-06;F-07;F-08,#458;#565;#591
+NS-ADV-SELF-001,SELF,"NavSentinel self-protection, bridge integrity, UI authority, and tamper resistance",Page imitates NavSentinel warning or trusted UI,P0,S4,UNMODELLED,UNMODELLED,C-03;C-04;C-09;F-09,#237;#455;#592
+NS-ADV-SELF-002,SELF,"NavSentinel self-protection, bridge integrity, UI authority, and tamper resistance","Page covers, relocates, removes, or races injected warning UI",P0,S4,UNMODELLED,UNMODELLED,C-03;C-04;C-09;F-09,#555;#568;#579;#591
+NS-ADV-SELF-003,SELF,"NavSentinel self-protection, bridge integrity, UI authority, and tamper resistance",Trusted-click redressing of a protection-lowering action,P0,S4,UNMODELLED,UNMODELLED,C-03;C-04;C-09;F-09,#464;#466;#445
+NS-ADV-SELF-004,SELF,"NavSentinel self-protection, bridge integrity, UI authority, and tamper resistance","Bridge message forgery, replay, or peer takeover",P0,S4,UNMODELLED,UNMODELLED,C-03;C-04;C-09;F-09,#175;#186;#523
+NS-ADV-SELF-005,SELF,"NavSentinel self-protection, bridge integrity, UI authority, and tamper resistance",Critical-event flood and queue starvation,P0,S4,UNMODELLED,UNMODELLED,C-03;C-04;C-09;F-09,#523;#460
+NS-ADV-SELF-006,SELF,"NavSentinel self-protection, bridge integrity, UI authority, and tamper resistance","Storage, import, or configuration poisoning",P0,S4,UNMODELLED,UNMODELLED,C-03;C-04;C-09;F-09,#474;#585;#558
+NS-ADV-SELF-007,SELF,"NavSentinel self-protection, bridge integrity, UI authority, and tamper resistance","Reason-code, diagnostic, or event-attribution spoofing",P1,S4,UNMODELLED,UNMODELLED,C-03;C-04;C-09;F-09,#215;#219;#539;#585;#591
+NS-ADV-SELF-008,SELF,"NavSentinel self-protection, bridge integrity, UI authority, and tamper resistance",Degraded-mode concealment and stale unpacked loader,P0,S4,UNMODELLED,UNMODELLED,C-03;C-04;C-09;F-09,#175;#565;#215
+NS-ADV-NATIVE-001,NATIVE,Native companion and operating-system boundary,Browser-tainted clipboard pasted into a shell-class target,P0,S4,UNMODELLED,UNMODELLED,N-01;N-02;N-03;N-04;N-05;N-06,#452;#591
+NS-ADV-NATIVE-002,NATIVE,Native companion and operating-system boundary,Downloaded artifact reaches the execution boundary,P1,S4,UNMODELLED,UNMODELLED,N-01;N-02;N-03;N-04;N-05;N-06,#452;#415
+NS-ADV-NATIVE-003,NATIVE,Native companion and operating-system boundary,Foreground-process or paste-destination misclassification,P0,S4,UNMODELLED,UNMODELLED,N-01;N-02;N-03;N-04;N-05;N-06,#452
+NS-ADV-NATIVE-004,NATIVE,Native companion and operating-system boundary,"Native-messaging host spoof, protocol downgrade, or confused deputy",P0,S4,UNMODELLED,UNMODELLED,N-01;N-02;N-03;N-04;N-05;N-06,#244;#452
+NS-ADV-NATIVE-005,NATIVE,Native companion and operating-system boundary,Companion installer or updater supply-chain compromise,P0,S4,UNMODELLED,UNMODELLED,N-01;N-02;N-03;N-04;N-05;N-06,#452
+NS-ADV-NATIVE-006,NATIVE,Native companion and operating-system boundary,Local model tamper or prompt-injection influence,P1,S4,UNMODELLED,UNMODELLED,N-01;N-02;N-03;N-04;N-05;N-06,#245;#444;#452
+NS-ADV-NATIVE-007,NATIVE,Native companion and operating-system boundary,"DNS, captive-portal, proxy, or certificate-context anomaly",P2,S4,UNMODELLED,UNMODELLED,N-01;N-02;N-03;N-04;N-05;N-06,#179;#452
+NS-ADV-NATIVE-008,NATIVE,Native companion and operating-system boundary,OS clipboard replacement by another local process,P1,S4,UNMODELLED,UNMODELLED,N-01;N-02;N-03;N-04;N-05;N-06,#452
+NS-ADV-AGENT-001,AGENT,"Browser agents, automation, prompt injection, and delegated action",Invisible prompt injection aimed at a browser agent,P0,S4,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-15,#448;#449
+NS-ADV-AGENT-002,AGENT,"Browser agents, automation, prompt injection, and delegated action",Agent clicks a deceptive or retargeted surface,P0,S4,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-15,#448;#555;#568
+NS-ADV-AGENT-003,AGENT,"Browser agents, automation, prompt injection, and delegated action",Agent submits credentials across an origin or task boundary,P0,S4,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-15,#448;#199;#200
+NS-ADV-AGENT-004,AGENT,"Browser agents, automation, prompt injection, and delegated action",Agent downloads or executes an artifact,P0,S4,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-15,#448;#452
+NS-ADV-AGENT-005,AGENT,"Browser agents, automation, prompt injection, and delegated action",Agent grants browser or site permissions,P0,S4,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-15,#448;#455
+NS-ADV-AGENT-006,AGENT,"Browser agents, automation, prompt injection, and delegated action","Agent approves OAuth consent, payment, or wallet action",P0,S4,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-15,#397;#443;#448
+NS-ADV-AGENT-007,AGENT,"Browser agents, automation, prompt injection, and delegated action",Fake success state or completion proof,P1,S4,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-15,#448;#591
+NS-ADV-AGENT-008,AGENT,"Browser agents, automation, prompt injection, and delegated action","Multi-tab, multi-agent, or resumed-task state confusion",P0,S4,UNMODELLED,UNMODELLED,C-02;C-03;C-05;C-15,#223;#269;#448

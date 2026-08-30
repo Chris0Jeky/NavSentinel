@@ -1,0 +1,94 @@
+{
+  "schema_version": "1.0.0",
+  "source": "RESOURCES/DefenseVectors/AGENT_SEED_BRIEF.md and MASTER_DOCUMENT.md section 01",
+  "outcome_count": 11,
+  "evidence_state_count": 8,
+  "outcomes": [
+    {
+      "id": "NO_SIGNAL",
+      "description": "The product observed nothing relevant."
+    },
+    {
+      "id": "OBSERVED",
+      "description": "Evidence was recorded without user-facing action."
+    },
+    {
+      "id": "ANNOTATED",
+      "description": "Passive information was shown."
+    },
+    {
+      "id": "WARNED",
+      "description": "A warning was shown, but the harmful sink remained reachable without a separate trusted decision."
+    },
+    {
+      "id": "HELD_PRE_HARM",
+      "description": "The consequence was paused before the declared harm boundary."
+    },
+    {
+      "id": "BLOCKED_PRE_HARM",
+      "description": "The consequence was prevented before the declared harm boundary."
+    },
+    {
+      "id": "ROLLED_BACK_POST_COMMIT",
+      "description": "A destination committed and was then reversed; exposure may have begun."
+    },
+    {
+      "id": "RECOVERED_AFTER_EXPOSURE",
+      "description": "The product helped after harmful exposure or state change began."
+    },
+    {
+      "id": "HARM_REACHED",
+      "description": "The local sink received or committed the protected consequence."
+    },
+    {
+      "id": "NOT_APPLICABLE",
+      "description": "The scenario does not exercise the selected capability or profile."
+    },
+    {
+      "id": "TEST_INVALID",
+      "description": "Harness, browser, readiness, network, or attribution failure invalidated the result."
+    }
+  ],
+  "evidence_states": [
+    {
+      "id": "UNMODELLED",
+      "order": 0,
+      "description": "Seed only."
+    },
+    {
+      "id": "MODELLED",
+      "order": 1,
+      "description": "Invariant, boundary, malicious, benign, and mixed contracts were reviewed."
+    },
+    {
+      "id": "FIXTURE_PROVEN",
+      "order": 2,
+      "description": "The safe malicious path reaches the local harm sink and controls reproduce."
+    },
+    {
+      "id": "REGRESSION_PROVEN",
+      "order": 3,
+      "description": "The product handles the declared fixture and controls with an independent oracle."
+    },
+    {
+      "id": "ROBUSTNESS_PROVEN",
+      "order": 4,
+      "description": "Declared adjacent mutations and benign duals pass within a recorded budget."
+    },
+    {
+      "id": "BROWSER_PROVEN",
+      "order": 5,
+      "description": "Supported branded-browser lifecycle, accessibility, privacy, and performance qualification is complete."
+    },
+    {
+      "id": "EFFICACY_MEASURED",
+      "order": 6,
+      "description": "Credible corpus or holdout and false-intervention evidence exists."
+    },
+    {
+      "id": "RELEASE_ELIGIBLE",
+      "order": 7,
+      "description": "Profile, claims, permissions, package, privacy, and required gates align."
+    }
+  ]
+}

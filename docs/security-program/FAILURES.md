@@ -1,0 +1,11 @@
+# Programme failures and invalid evidence
+
+| ID | State | Failure | Operational consequence | Resume point |
+| --- | --- | --- | --- | --- |
+| SP-F-001 | OPEN | The supplied bundle contains 7 files while describing a 268-file source set; advertised canonical registries and schemas are absent. | Upstream validation claims for missing inputs are not independently reproducible. | Obtain the omitted source set, compare stable IDs and semantics, then re-import without silently replacing local reconciliation. |
+| SP-F-002 | OPEN | The historical corpus result lacks real-host routing, trusted input, a protected-vs-fired oracle, and a committed manifest. | The 28% result is `INVALID` and cannot support efficacy or release claims. | Continue #417, then run through #416/#426 only after methodology validation. |
+| SP-F-003 | OPEN | The historical false-positive result has no current reproducible input/output set. | The 0.72% result is `STALE`. | Establish a versioned benign manifest and rerun under the current release profile. |
+| SP-F-004 | OPEN | The headed live-site lane is network-dependent and no current owner-Chrome or Gate-3 receipt exists. | Bundled Chromium and the live Google check cannot promote evidence to `BROWSER_PROVEN`. | Reuse #420 for the bounded maintainer-machine run and #439 for later Proving Ground work. |
+| SP-F-005 | OPEN | The local benchmark uses product events as its main oracle and has no comparator arm. | It is `UNVERIFIED` and cannot support efficacy claims. | Define an independent sink and pinned comparator methodology before using its output. |
+| SP-F-006 | OPEN | RW-02 and RW-05 are described in the older RW programme but have no current fixture/test vertical. | They remain unmapped and make no evidence contribution. | Deduplicate against the stable scenario registry before scheduling either journey. |
+| SP-F-007 | OPEN | Twenty-five mapped legacy Gym pages contain non-local URLs, a live remote resource, or runnable command-shaped clipboard strings. | They are safety-held; the three command-shaped ClickFix pages are quarantined and none may promote programme evidence. | Reuse #449 to replace them with local origin-separated fake sinks and non-executable sentinels, then reconcile the machine-readable finding registry. |

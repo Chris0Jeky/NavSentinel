@@ -30,6 +30,7 @@ npm run test:e2e:live
 npm run test:e2e:stress
 npm run test:e2e:corpus
 npm run measure:fp
+npm run security:check
 npm run demo:showcase
 npm run demo:showcase:record
 ```
@@ -39,6 +40,10 @@ To run the Gym locally:
 ```bash
 npm run gym:serve
 ```
+
+### Adversarial programme checks
+
+The canonical scenario, capability, outcome, evidence, mapping, and local-work-unit registries live under [`docs/security-program/`](security-program/README.md). Run `npm run security:generate` after an intentional registry change and `npm run security:check` before handoff. The clean-checkout-safe check validates JSON Schemas, stable IDs, dependencies, counts, tracked semantic provenance, mapped paths, local links, fixture safety holds, unsafe declarations, and deterministic Markdown/CSV views. `npm run security:check:source` additionally requires and hashes the ignored supplied bundle. Neither command replaces browser, corpus, false-positive, accessibility, or release-gate evidence.
 
 The older Python flow still works when needed:
 

@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://navsentinel.local/schema/security-program/evidence-states.schema.json",
+  "title": "NavSentinel programme outcomes and evidence states",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "source",
+    "outcome_count",
+    "evidence_state_count",
+    "outcomes",
+    "evidence_states"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "source": { "type": "string", "minLength": 1 },
+    "outcome_count": { "const": 11 },
+    "evidence_state_count": { "const": 8 },
+    "outcomes": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/namedState" }
+    },
+    "evidence_states": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "description", "order"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]+$" },
+          "description": { "type": "string", "minLength": 1 },
+          "order": { "type": "integer", "minimum": 0, "maximum": 7 }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "namedState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "description"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]+$" },
+        "description": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

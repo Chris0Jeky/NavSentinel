@@ -1,0 +1,68 @@
+{
+  "schema_version": "1.0.0",
+  "source_generated": "2026-08-28",
+  "source_bundle_file_count": 7,
+  "files": [
+    {
+      "path": "RESOURCES/DefenseVectors/00_EXECUTIVE_ASSESSMENT.md",
+      "sha256": "b1a8f95b83f5788fb8f9b0aff37c209400e48d0a0209aa983327b261476dd363"
+    },
+    {
+      "path": "RESOURCES/DefenseVectors/AGENT_SEED_BRIEF.md",
+      "sha256": "03f55cd54bf10e56f39f7aa1582a9c4ff49da69fcee3036d4fc298fb5556bc4d"
+    },
+    {
+      "path": "RESOURCES/DefenseVectors/MASTER_DOCUMENT.md",
+      "sha256": "54963842d958c3d2c92cadb17d83a55924c71e5c803664f687300556c28afbe8"
+    },
+    {
+      "path": "RESOURCES/DefenseVectors/SCENARIO_CATALOG.md",
+      "sha256": "afbaa10b25d5111961b58f4000e81d6d671fd4cef43ff06dde9b662943c9361b"
+    },
+    {
+      "path": "RESOURCES/DefenseVectors/VALIDATION_REPORT.md",
+      "sha256": "24f5754dd75bd4137041fb62b26ae9824fcaf4886ba1b6999c9c26cea78a52b3"
+    },
+    {
+      "path": "RESOURCES/DefenseVectors/scenario-explorer.html",
+      "sha256": "b82074738ea8b7fe03f3eb2d13ea42d9c5f284e16814c39738a17b78d9060ee7"
+    },
+    {
+      "path": "RESOURCES/DefenseVectors/scenarios.json",
+      "sha256": "2d381ab1bfcead1be1c9b75ff4dffbd3ce5f79daa76fa3cec54c68ac02fa2838"
+    }
+  ],
+  "imported_outputs": [
+    {
+      "path": "docs/security-program/registry/scenarios.json",
+      "semantic_sha256": "5dee2ce40351a5f85564f2600062d996e2e8ee8e4739ca673fac9219b5383643"
+    },
+    {
+      "path": "docs/security-program/registry/capabilities.json",
+      "semantic_sha256": "5b961a58e9a7eb465a2d249b3714d6cd9073b2ea51ea825127086675f258b254"
+    },
+    {
+      "path": "docs/security-program/registry/evidence-states.json",
+      "semantic_sha256": "c84aa2bb2687e8c7321e5dbe952202a68000a176ac4ad0c70a9427192e47b2de"
+    },
+    {
+      "path": "docs/security-program/registry/work-unit-definitions.json",
+      "semantic_sha256": "19505e08502a1b540a3750bd2bed42e712b9bca852746ac868f17c5951154836"
+    }
+  ],
+  "independently_imported": [
+    "RESOURCES/DefenseVectors/scenarios.json",
+    "RESOURCES/DefenseVectors/MASTER_DOCUMENT.md capability details",
+    "RESOURCES/DefenseVectors/MASTER_DOCUMENT.md work-unit graph",
+    "RESOURCES/DefenseVectors/AGENT_SEED_BRIEF.md outcome and evidence vocabularies"
+  ],
+  "advertised_but_missing_from_supplied_bundle": [
+    "catalog/capabilities.json",
+    "catalog/evidence_states.json",
+    "catalog/backlog_seed.json",
+    "schemas/scenario.schema.json",
+    "schemas/capability.schema.json",
+    "the remaining files behind the advertised 268-file source set"
+  ],
+  "note": "The imported capability, evidence-state, and work-unit registries are deterministic reconstructions from the supplied master document. The upstream validation report could not be rerun against absent upstream files."
+}

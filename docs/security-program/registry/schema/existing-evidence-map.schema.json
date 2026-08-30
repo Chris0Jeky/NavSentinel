@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://navsentinel.local/schema/security-program/existing-evidence-map.schema.json",
+  "title": "NavSentinel existing fixture and evidence mapping",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "as_of", "mapping_count", "mappings"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "as_of": { "type": "string", "format": "date" },
+    "mapping_count": { "type": "integer", "minimum": 0 },
+    "mappings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "kind",
+          "label",
+          "primary_scenario_id",
+          "supporting_scenario_ids",
+          "primary_harm_boundary",
+          "role",
+          "current_oracle",
+          "oracle_type",
+          "evidence_state",
+          "evidence_validity",
+          "known_limitation",
+          "issue_refs",
+          "pr_refs",
+          "paths"
+        ],
+        "properties": {
+          "id": { "type": "string", "pattern": "^MAP-[A-Z0-9-]+$" },
+          "kind": {
+            "enum": ["gym_level", "rw_journey", "evasion_fixture", "clickfix_fixture", "doubleclick_fixture", "evidence_lane", "browser_suite"]
+          },
+          "label": { "type": "string", "minLength": 1 },
+          "primary_scenario_id": { "type": "string", "pattern": "^NS-ADV-[A-Z]+-[0-9]{3}$" },
+          "supporting_scenario_ids": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^NS-ADV-[A-Z]+-[0-9]{3}$" },
+            "uniqueItems": true
+          },
+          "primary_harm_boundary": { "type": "string", "minLength": 1 },
+          "role": { "enum": ["attack", "benign", "mixed", "primitive"] },
+          "current_oracle": { "type": "string", "minLength": 1 },
+          "oracle_type": { "enum": ["product_event", "browser_outcome", "independent_harm", "methodology", "mixed"] },
+          "evidence_state": {
+            "enum": [
+              "UNMODELLED",
+              "MODELLED",
+              "FIXTURE_PROVEN",
+              "REGRESSION_PROVEN",
+              "ROBUSTNESS_PROVEN",
+              "BROWSER_PROVEN",
+              "EFFICACY_MEASURED",
+              "RELEASE_ELIGIBLE"
+            ]
+          },
+          "evidence_validity": { "enum": ["CURRENT_REGRESSION", "STALE", "INVALID", "UNVERIFIED"] },
+          "known_limitation": { "type": "string", "minLength": 1 },
+          "issue_refs": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^#[0-9]+$" },
+            "uniqueItems": true
+          },
+          "pr_refs": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^#[0-9]+$" },
+            "uniqueItems": true
+          },
+          "paths": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string", "minLength": 1 },
+            "uniqueItems": true
+          }
+        }
+      }
+    }
+  }
+}

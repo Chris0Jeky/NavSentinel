@@ -1,0 +1,105 @@
+{
+  "schema_version": "1.0.0",
+  "as_of": "2026-08-30",
+  "repository": "Chris0Jeky/NavSentinel",
+  "new_issues_created": 0,
+  "scenario_issue_count": 0,
+  "entries": [
+    {
+      "theme": "Corpus methodology and claim-grade rerun",
+      "programme_ids": ["F-02", "F-03", "F-04", "F-08", "F-09"],
+      "issue_refs": ["#416", "#417", "#426"],
+      "pr_refs": [],
+      "disposition": "REUSE",
+      "evidence_boundary": "#417 owns real-host routing, trusted input, protected-vs-fired scoring, and a committed manifest; the historical 28% result remains invalid."
+    },
+    {
+      "theme": "Headed branded-browser evidence",
+      "programme_ids": ["F-03"],
+      "issue_refs": ["#420", "#439", "#460", "#498", "#565"],
+      "pr_refs": [],
+      "disposition": "REUSE",
+      "evidence_boundary": "#420 is the immediate maintainer-machine lane and #439 is the later proving-ground vision; neither proves an operational Gate-3 lane today."
+    },
+    {
+      "theme": "Proving Ground and deterministic mutators",
+      "programme_ids": ["F-04", "F-05", "F-06", "F-07", "F-09"],
+      "issue_refs": ["#449"],
+      "pr_refs": [],
+      "disposition": "REBODY_WHEN_SCHEDULED",
+      "evidence_boundary": "#449 already owns necessity invariants, mutation, capped survivor handling, and benchmark direction; bounded implementation slices should reuse it."
+    },
+    {
+      "theme": "Attack narratives and replay capsules",
+      "programme_ids": ["C-05", "F-09"],
+      "issue_refs": ["#241", "#443", "#450"],
+      "pr_refs": [],
+      "disposition": "DEFER",
+      "evidence_boundary": "Episode and capsule proposals remain post-integrity research; capsule capture must be redacted and must not import old privacy-unbounded wording."
+    },
+    {
+      "theme": "Bridge identity, liveness, recovery, and queue pressure",
+      "programme_ids": ["C-04", "NS-ADV-SELF-004", "NS-ADV-SELF-005"],
+      "issue_refs": ["#175", "#186", "#523"],
+      "pr_refs": ["#185", "#584"],
+      "disposition": "REUSE",
+      "evidence_boundary": "#175/#186 remain beta blockers; #185 improved timeout and buffering but did not authenticate the isolated-world peer."
+    },
+    {
+      "theme": "Extension-origin protection-lowering decisions",
+      "programme_ids": ["C-02", "C-03", "NS-ADV-SELF-003"],
+      "issue_refs": ["private:RI-01"],
+      "pr_refs": ["#464", "#466"],
+      "disposition": "PRIVATE_EXISTING_HOME",
+      "evidence_boundary": "The merged context-bound broker is dormant foundation; no public duplicate should imply that production actions already moved to extension-origin UI."
+    },
+    {
+      "theme": "Deceptive foreground surface lifecycle",
+      "programme_ids": ["C-10", "NS-ADV-UI-004"],
+      "issue_refs": ["#555", "#560", "#564", "#577", "#579", "#580"],
+      "pr_refs": ["#557"],
+      "disposition": "REUSE",
+      "evidence_boundary": "#557 established one bounded opt-in vertical; follow-ups already own control recovery, nested coverage, ownership, grouped Undo, and latency."
+    },
+    {
+      "theme": "Privacy-safe local feedback, export, and presentation",
+      "programme_ids": ["F-09", "C-06", "C-10"],
+      "issue_refs": ["#562", "#591", "#592"],
+      "pr_refs": [],
+      "disposition": "REUSE",
+      "evidence_boundary": "#591 is the redacted preview/export boundary; Protection Center or local counts are presentation, not proof of protection."
+    },
+    {
+      "theme": "Typed evidence, Trust Lens, and Data Flow Lens",
+      "programme_ids": ["C-01", "C-06", "C-07"],
+      "issue_refs": ["#237", "#440", "#445"],
+      "pr_refs": [],
+      "disposition": "DEFER",
+      "evidence_boundary": "#440 already owns the typed evidence substrate and #445 owns the sensitive relationship concept; neither is current release behavior."
+    },
+    {
+      "theme": "Optional native companion",
+      "programme_ids": ["N-01", "N-02", "N-03", "N-04", "N-05", "N-06"],
+      "issue_refs": ["#244", "#452"],
+      "pr_refs": [],
+      "disposition": "DEFER",
+      "evidence_boundary": "Protocol design only until retention, measured structural need, signing, update, least privilege, and external-review triggers are met."
+    },
+    {
+      "theme": "Browser-agent conduct and delegated action",
+      "programme_ids": ["C-15", "NS-ADV-AGENT-001"],
+      "issue_refs": ["#448"],
+      "pr_refs": [],
+      "disposition": "DEFER",
+      "evidence_boundary": "Agent-attribution semantics are unverified and annotate-first; this product concept is separate from the retired repository agent harness."
+    },
+    {
+      "theme": "Release and research profile separation",
+      "programme_ids": ["C-06", "N-01"],
+      "issue_refs": [],
+      "pr_refs": ["#509"],
+      "disposition": "REUSE",
+      "evidence_boundary": "The release profile remains interaction-only; research-reputation is unpacked-only and non-release, and no research/native capability is enabled by this seed."
+    }
+  ]
+}

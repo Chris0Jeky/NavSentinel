@@ -1,6 +1,6 @@
 # Agent Index - NavSentinel
 
-Last reviewed: 2026-08-27.
+Last reviewed: 2026-08-30.
 
 This is a fast orientation layer for coding agents. It should point to interfaces and seams, not duplicate implementation details.
 
@@ -11,10 +11,11 @@ This is a fast orientation layer for coding agents. It should point to interface
 1. `CLAUDE.md` - product invariants and focused checks.
 2. `AGENTS.md` - compact Codex-specific facts.
 3. `docs/Project_Roadmap.md` - product execution and release gates.
-4. `CONTRIBUTING.md` - change-surface guidance and style expectations.
-5. This file - code-grounded seam map.
-6. `ACTION_ITEMS.md` only when the task involves a human decision/manual check.
-7. An optional runtime skill only when it materially helps the current task.
+4. `docs/security-program/README.md` for adversarial scenario, capability, and evidence work; it is subordinate to the roadmap.
+5. `CONTRIBUTING.md` - change-surface guidance and style expectations.
+6. This file - code-grounded seam map.
+7. `ACTION_ITEMS.md` only when the task involves a human decision/manual check.
+8. An optional runtime skill only when it materially helps the current task.
 
 ## Do Not Read By Default
 
@@ -47,6 +48,7 @@ This is a fast orientation layer for coding agents. It should point to interface
 | Onboarding | `onboarding/onboarding.ts` | onboarding HTML/CSS, imports `icons.ts` | `tests/onboarding.test.ts`, `npm run build`. |
 | Prompt decision authority (RI-01) | `pending_decision.ts`, `pending_decision_handlers.ts`, `pending_decision_store.ts`, `ui_toast.ts`, `credential_modal.ts` | `sw.ts`, `credential_guard.ts`, `capture_isolated.ts`, popup/pending-action state, `tests/e2e/extension_test_utils.ts` | #466's create/list/consume broker is dormant and URL-minimized; consume uses an opaque worker-owned destination capability, and list/consume require positive current-frame enumeration. It has no producer/UI/executor. Page-injected UI still must become warn/cancel only, while proceed/allow/trust/resume moves to tab/destination-bound extension-origin UI with TTL. Test synthetic input, trusted-click redressing, host tamper/removal, removed child frames, tab/document switch, stale state, and broker lifecycle; Gate-3 required. |
 | Gym and E2E harness | `gym/index.html`, `tests/e2e/extension_test_utils.ts` | Gym HTML fixtures and E2E specs under `tests/e2e/` | Playwright spec, `npm run gym:serve`; verify volatile counts live. |
+| Adversarial security programme | `docs/security-program/README.md`, registries under `docs/security-program/registry/` | mappings, methodology, operational ledgers, `scripts/security-program/` | `npm run security:check`; use exact outcomes and an independent harm oracle; never edit `extension/dist`. |
 | Build/release | `package.json`, `vite.config.ts`, `extension/manifest.json`, `config/release-profiles.json` | `scripts/build-extension.mjs`, `scripts/check-release-profile.mjs`, `scripts/package.mjs`, `scripts/release.mjs`, `scripts/check_versions.mjs`, `scripts/check-perf-budget.mjs` | `npm run verify:versions`, both profile builds, `npm run check:release-profile -- --release`, `npm run package:ext`. |
 | Data pipeline | `scripts/build-bloom-filter.mjs`, `scripts/fetch-phishing-corpus.mjs` | `scripts/build-test-bloom-filter.mjs`, `scripts/measure-fp.mjs`, `scripts/check-bloom-size.mjs`, `scripts/update-psl.mjs` | `npm run build:bloom`, `npm run check:bloom-size`. |
 | Contributor guidance | `CLAUDE.md`, `AGENTS.md`, `autodoc/AGENT_INDEX.md` | Optional `.claude/skills/*` and `.agents/skills/*` | No repo-local harness; use the product check for the changed seam. |
