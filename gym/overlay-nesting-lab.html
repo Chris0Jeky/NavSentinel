@@ -21,10 +21,28 @@
   </p>
   <div id="media-shell"><iframe id="media-frame" title="Synthetic media frame"></iframe></div>
   <script>
-    const fixtureCase = new URLSearchParams(location.search).get("case") || "exact";
+    const params = new URLSearchParams(location.search);
+    const fixtureCase = params.get("case") || "exact";
+    const programmeChurn = params.get("churn") === "1";
+    const localSink = (() => {
+      const raw = params.get("sink");
+      if (!raw) return "";
+      try {
+        const parsed = new URL(raw);
+        const loopback = parsed.hostname === "127.0.0.1" ||
+          parsed.hostname === "localhost" || parsed.hostname === "[::1]";
+        return parsed.protocol === "http:" && loopback &&
+          parsed.pathname === "/__navsentinel_fake_sink" ? parsed.href : "";
+      } catch {
+        return "";
+      }
+    })();
     const childHost = location.hostname === "127.0.0.1" ? "localhost" : "127.0.0.1";
+    const childParams = new URLSearchParams({ case: fixtureCase });
+    if (localSink) childParams.set("sink", localSink);
+    if (programmeChurn) childParams.set("churn", "1");
     document.getElementById("media-frame").src =
-      `${location.protocol}//${childHost}:${location.port}/overlay-nesting-frame.html?case=${encodeURIComponent(fixtureCase)}`;
+      `${location.protocol}//${childHost}:${location.port}/overlay-nesting-frame.html?${childParams}`;
   </script>
 </body>
 </html>

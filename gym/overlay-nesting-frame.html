@@ -25,7 +25,22 @@
     #accessible-error-confirm { position: absolute; right: 12px; bottom: 12px; min-width: 72px; min-height: 36px; }
   </style>
   <script>
-    const fixtureCase = new URLSearchParams(location.search).get("case") || "exact";
+    const params = new URLSearchParams(location.search);
+    const fixtureCase = params.get("case") || "exact";
+    const programmeChurn = params.get("churn") === "1";
+    const localSink = (() => {
+      const raw = params.get("sink");
+      if (!raw) return "";
+      try {
+        const parsed = new URL(raw);
+        const loopback = parsed.hostname === "127.0.0.1" ||
+          parsed.hostname === "localhost" || parsed.hostname === "[::1]";
+        return parsed.protocol === "http:" && loopback &&
+          parsed.pathname === "/__navsentinel_fake_sink" ? parsed.href : "";
+      } catch {
+        return "";
+      }
+    })();
 
     function writeStaticContainer(frame, label) {
       const doc = frame.contentDocument;
@@ -33,10 +48,20 @@
       doc.open();
       doc.write(`<!doctype html><html><head><style>
         html,body{width:100%;height:100%;margin:0}
-        #container{display:block;width:100%;height:100%;cursor:pointer;padding:40px;box-sizing:border-box;background:rgba(255,255,255,.8)}
+        #container{display:block;width:100%;height:100%;cursor:pointer;padding:40px;box-sizing:border-box;background:rgba(255,255,255,.8);text-decoration:none}
         .card{display:grid;place-items:center;width:100%;height:100%;background:#d9d9d9;color:#111;font:700 18px system-ui}
-      </style></head><body><div id="container"><div class="card">${label}</div></div></body></html>`);
+      </style></head><body><a id="container" href="#"><span class="card">${label}</span></a></body></html>`);
       doc.close();
+      const container = doc.getElementById("container");
+      const frameWindow = frame.contentWindow;
+      if (!frameWindow || !(container instanceof frameWindow.HTMLAnchorElement)) return;
+      if (localSink) {
+        container.href = localSink;
+        container.target = "_blank";
+        container.rel = "noopener";
+      } else {
+        container.addEventListener("click", (event) => event.preventDefault());
+      }
     }
 
     function addHtmlDirectFrame(id, label) {
@@ -77,6 +102,10 @@
 
     if (fixtureCase === "exact" || fixtureCase === "multiple" || fixtureCase === "hostile" || fixtureCase === "accessible-error") {
       addHtmlDirectFrame("exact-overlay-frame", "Synthetic nested advertisement");
+    }
+
+    if (fixtureCase === "programme-attack" || fixtureCase === "programme-mixed") {
+      addHtmlDirectFrame("programme-overlay-a", "Synthetic wrong-target layer A");
     }
 
     window.addEventListener("DOMContentLoaded", () => {
@@ -239,13 +268,27 @@
         ), 1200);
       }
 
+      if (programmeChurn &&
+          (fixtureCase === "programme-attack" || fixtureCase === "programme-mixed")) {
+        window.setTimeout(() => rewriteAttackDisplay("programme-overlay-a"), 650);
+        window.setTimeout(() => replaceAttack(
+          "programme-overlay-a",
+          "programme-overlay-b",
+        ), 1300);
+      }
+
       if (fixtureCase === "compact-hostile") {
         const overlay = document.createElement("a");
         overlay.id = "compact-hostile";
         overlay.className = "attack";
         overlay.dataset.attack = "true";
-        overlay.href = "https://popup.invalid/";
-        overlay.target = "_blank";
+        overlay.href = localSink || "#";
+        if (localSink) {
+          overlay.target = "_blank";
+          overlay.rel = "noopener";
+        } else {
+          overlay.addEventListener("click", (event) => event.preventDefault());
+        }
         overlay.textContent = "Compact interactive attack — expected hidden";
         document.body.appendChild(overlay);
       }
@@ -291,6 +334,30 @@
         small.className = "attack";
         small.textContent = "Small benign control — expected visible";
         document.body.appendChild(small);
+      }
+
+      if (fixtureCase === "programme-benign" || fixtureCase === "programme-mixed") {
+        const host = document.createElement("div");
+        host.id = "programme-benign-host";
+        host.setAttribute("role", "region");
+        host.setAttribute("aria-label", "Synthetic playback controls");
+        const renderControl = () => {
+          const control = document.createElement("button");
+          control.id = "programme-benign-control";
+          control.type = "button";
+          control.textContent = "Continue synthetic playback";
+          control.addEventListener("click", () => {
+            const current = Number(document.documentElement.dataset.programmeBenignClicks || "0");
+            document.documentElement.dataset.programmeBenignClicks = String(current + 1);
+          });
+          host.replaceChildren(control);
+        };
+        renderControl();
+        document.body.appendChild(host);
+        window.setTimeout(() => {
+          renderControl();
+          document.documentElement.dataset.programmeBenignRerendered = "1";
+        }, 700);
       }
     }, { once: true });
   </script>

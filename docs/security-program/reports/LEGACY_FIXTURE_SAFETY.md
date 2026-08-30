@@ -1,16 +1,17 @@
 # Legacy fixture safety holds
 
-The seed pass found 25 mapped legacy Gym pages that do not meet the new local, inert fixture policy. They remain useful source inventory but are excluded from programme evidence and must not be run as programme attacks until remediated.
+The seed pass found 25 mapped legacy Gym pages that did not meet the local, inert fixture policy. This first #449 slice remediates four ClickFix pages; 21 external-destination holds remain excluded from programme evidence.
 
-## Quarantined command-shaped fixtures
+## Remediated in the first #449 slice
 
 - `gym/clickfix-01-basic.html`
 - `gym/clickfix-02-instructions.html`
+- `gym/clickfix-03-legit-captcha.html`
 - `gym/clickfix-04-winr.html`
 
-These pages place runnable PowerShell or curl-to-shell-shaped strings on the clipboard. No command was executed during this seed. Replace each value with a non-executable sentinel and use only a local clipboard receipt before re-enabling programme use.
+The three attack pages now write only `NAVSENTINEL_SENTINEL_DO_NOT_RUN`, and their Playwright checks independently read that exact local clipboard value. The benign page now uses a static local verification control instead of a live provider resource. These repairs remove their quarantine/safety-hold entries but do not establish OS-paste prevention or real-provider browser evidence.
 
-## Non-hermetic mapped fixtures
+## Remaining non-hermetic mapped fixtures
 
 - `gym/level1-basic-opacity.html`
 - `gym/level2-moving-target.html`
@@ -22,8 +23,7 @@ These pages place runnable PowerShell or curl-to-shell-shaped strings on the cli
 - `gym/rw01-search-result-overlay-swap.html`
 - `gym/rw06-legit-auth-second-popup.html`
 - `gym/evasion-01-opacity-009.html` through `gym/evasion-12-multiple-overlays.html`
-- `gym/clickfix-03-legit-captcha.html`
 
-These pages include public/example destinations or a live remote resource. Replace them with local origin-separated benign and harm sinks. Existing regression history can remain a dated engineering signal, but these pages cannot promote programme evidence while held.
+These 21 pages include public/example destinations. Replace them with local origin-separated benign and harm sinks in bounded follow-ups. Existing regression history can remain a dated engineering signal, but these pages cannot promote programme evidence while held.
 
 The machine-readable path list, disposition, and remediation are in [fixture-safety-findings.json](../registry/fixture-safety-findings.json). `npm run security:check` fails if a mapped unsafe page is unflagged, a finding path disappears, or a flagged page no longer contains a detectable finding without the registry being reconciled.

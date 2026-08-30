@@ -45,6 +45,8 @@ npm run gym:serve
 
 The canonical scenario, capability, outcome, evidence, mapping, and local-work-unit registries live under [`docs/security-program/`](security-program/README.md). Run `npm run security:generate` after an intentional registry change and `npm run security:check` before handoff. The clean-checkout-safe check validates JSON Schemas, stable IDs, dependencies, counts, tracked semantic provenance, mapped paths, local links, fixture safety holds, unsafe declarations, and deterministic Markdown/CSV views. `npm run security:check:source` additionally requires and hashes the ignored supplied bundle. Neither command replaces browser, corpus, false-positive, accessibility, or release-gate evidence.
 
+After `npm run build`, `npm run test:e2e:proving-ground` runs the first bounded `NS-ADV-UI-004` vertical with trusted attack, benign, and mixed input. Its typed fake sink binds only to loopback, the browser test rejects unapproved HTTP(S) origins, and exact-head receipts are written under ignored `test-results/`. A sink receipt is the independent harm oracle; a product event or hidden element alone is not protection evidence.
+
 The older Python flow still works when needed:
 
 ```bash
@@ -331,9 +333,9 @@ Current pages:
 - `gym/rw24-idle-resume-popup.html` (+ `rw24-stale-popup.html`)
 - `gym/rw25-rapid-close-reopen.html` (+ `rw25-churn-popup.html`, `rw25-exfil-popup.html`)
 - `gym/evasion-01-opacity-009.html` through `gym/evasion-11-shadow-dom.html` (CDS evasion red-team fixtures)
-- `gym/clickfix-01-basic.html` (fake CAPTCHA overlay with clipboard write + Win+R instructions)
+- `gym/clickfix-01-basic.html` (fake CAPTCHA overlay with inert clipboard sentinel + Win+R instructions)
 - `gym/clickfix-02-instructions.html` (dark-themed terminal instructions variant)
-- `gym/clickfix-03-legit-captcha.html` (legitimate reCAPTCHA + OTP copy, false positive check)
+- `gym/clickfix-03-legit-captcha.html` (local verification control + OTP copy, false positive check)
 - `gym/doubleclick-01-basic.html` (+ `doubleclick-01-target.html`) -- basic DoubleClickjacking attack simulation
 - `gym/doubleclick-02-oauth.html` (+ `doubleclick-02-consent.html`) -- OAuth consent DoubleClickjacking variant
 - `gym/doubleclick-03-legit.html` -- legitimate double-click interaction (false-positive check)
@@ -343,10 +345,10 @@ are continuing to land alongside those primitives.
 
 ### ClickFix detection lane
 
-ClickFix fixtures test detection of fake CAPTCHA overlays that write malicious commands to the
-clipboard and instruct users to paste them into Run dialogs or terminals. The legitimate CAPTCHA
-fixture (`clickfix-03`) verifies that real CAPTCHA providers (reCAPTCHA, hCaptcha, Turnstile)
-suppress ClickFix detection to avoid false positives.
+ClickFix attack fixtures write only the exact inert `NAVSENTINEL_SENTINEL_DO_NOT_RUN` value while
+preserving the visual and behavioral detection signals. Playwright reads that exact clipboard value
+but never pastes it into an OS surface. The benign `clickfix-03` fixture uses a local static
+verification control and synthetic OTP; real-provider matching remains unit-only.
 
 ### Evasion red-team lane
 
