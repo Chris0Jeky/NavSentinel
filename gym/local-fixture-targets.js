@@ -33,6 +33,7 @@
     }
     const port = Number(parsed.port);
     const target = TARGETS[role];
+    const targetId = parsed.searchParams.get("target_id") || "";
     const armed = parsed.hostname === "127.0.0.1" &&
       port >= FAKE_SINK_PORT_MIN && port <= FAKE_SINK_PORT_MAX &&
       parsed.pathname === FAKE_SINK_PATH &&
@@ -43,6 +44,7 @@
       parsed.searchParams.get("scenario_id") === scenarioId &&
       target.sinkRoles.has(parsed.searchParams.get("role")) &&
       parsed.searchParams.get("consequence") === target.consequence &&
+      /^[a-z0-9][a-z0-9-]{0,63}$/u.test(targetId) && targetId.endsWith(`-${role}`) &&
       parsed.searchParams.get("sentinel") === SENTINEL;
     if (!armed) throw new Error("unarmed-local-target");
     return parsed.href;

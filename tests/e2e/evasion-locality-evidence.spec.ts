@@ -49,6 +49,8 @@ type Arm = {
   cleanup: () => Promise<void>;
 };
 
+type ArmId = "baseline" | "protected" | "benign" | "mixed";
+
 type ArmObservation = {
   role: ProvingGroundRole;
   productReady: boolean;
@@ -119,6 +121,7 @@ function localOrigins(baseUrl: string): Set<string> {
 
 async function openArm(
   sink: ProvingGroundFakeSink,
+  armId: ArmId,
   role: ProvingGroundRole,
   withExtension: boolean,
 ): Promise<Arm> {
@@ -176,8 +179,14 @@ async function openArm(
     const fixtureUrl = new URL(`/${FIXTURE_NAME}`, baseUrl);
     const harmRole: ProvingGroundRole = role === "benign" ? "attack" : role;
     const benignRole: ProvingGroundRole = role === "attack" ? "benign" : role;
-    fixtureUrl.searchParams.set("harm_target", sink.urlFor(harmRole, HARM_CONSEQUENCE));
-    fixtureUrl.searchParams.set("benign_target", sink.urlFor(benignRole, BENIGN_CONSEQUENCE));
+    fixtureUrl.searchParams.set(
+      "harm_target",
+      sink.urlFor(harmRole, HARM_CONSEQUENCE, `${armId}-harm`),
+    );
+    fixtureUrl.searchParams.set(
+      "benign_target",
+      sink.urlFor(benignRole, BENIGN_CONSEQUENCE, `${armId}-benign`),
+    );
     await page.goto(fixtureUrl.href, { waitUntil: "domcontentloaded", timeout: 20_000 });
     await expect(page.locator("html")).toHaveAttribute("data-navsentinel-local-targets-ready", "1");
     if (withExtension) {
@@ -328,11 +337,11 @@ async function writeReceipt(
       tab: "one fresh-profile tab per arm",
       frame: "top frame",
       document: `exact ${FIXTURE_NAME} document for each arm`,
-      destination: "one armed loopback sink URL per role and consequence",
+      destination: "one armed loopback sink URL per arm, role, and consequence",
       ttl: "one browser arm",
       use_count: 1,
       use_count_scope: "per armed destination",
-      sink_revalidation: "The fake sink validates run, scenario, role, consequence, and the exact inert sentinel on every request.",
+      sink_revalidation: "The fake sink validates run, scenario, role, consequence, one-use target authority, and the exact inert sentinel on every request.",
     },
     qualification: {
       privacy: "The sink retains only typed metadata and a SHA-256 of the inert sentinel; no page text, full browsing history, credential, or raw secret is stored.",
@@ -365,12 +374,22 @@ test("#449 evasion targets stay local with attack, protected, benign, and mixed 
     scenarioId: SCENARIO_ID,
     allowedRoles: ["attack", "benign", "mixed"],
     allowedConsequences: [HARM_CONSEQUENCE, BENIGN_CONSEQUENCE],
+    targetAuthorities: [
+      { id: "baseline-harm", role: "attack", consequence: HARM_CONSEQUENCE, maxUses: 1 },
+      { id: "baseline-benign", role: "benign", consequence: BENIGN_CONSEQUENCE, maxUses: 1 },
+      { id: "protected-harm", role: "attack", consequence: HARM_CONSEQUENCE, maxUses: 1 },
+      { id: "protected-benign", role: "benign", consequence: BENIGN_CONSEQUENCE, maxUses: 1 },
+      { id: "benign-harm", role: "attack", consequence: HARM_CONSEQUENCE, maxUses: 1 },
+      { id: "benign-benign", role: "benign", consequence: BENIGN_CONSEQUENCE, maxUses: 1 },
+      { id: "mixed-harm", role: "mixed", consequence: HARM_CONSEQUENCE, maxUses: 1 },
+      { id: "mixed-benign", role: "mixed", consequence: BENIGN_CONSEQUENCE, maxUses: 1 },
+    ],
   });
   const observations: ArmObservation[] = [];
   const arms: Arm[] = [];
 
   try {
-    const baseline = await openArm(sink, "attack", false);
+    const baseline = await openArm(sink, "baseline", "attack", false);
     arms.push(baseline);
     await assertUnsafeOverridesRejected(baseline.page);
     const baselineBefore = sink.snapshot().receipts.length;
@@ -390,7 +409,7 @@ test("#449 evasion targets stay local with attack, protected, benign, and mixed 
     await baselinePopup!.close();
     await baseline.cleanup();
 
-    const protectedArm = await openArm(sink, "attack", true);
+    const protectedArm = await openArm(sink, "protected", "attack", true);
     arms.push(protectedArm);
     const protectedBefore = sink.snapshot().receipts.length;
     expect(await clickTrap(protectedArm), "The release extension must keep the sink unreachable").toBeNull();
@@ -408,7 +427,7 @@ test("#449 evasion targets stay local with attack, protected, benign, and mixed 
     });
     await protectedArm.cleanup();
 
-    const benign = await openArm(sink, "benign", true);
+    const benign = await openArm(sink, "benign", "benign", true);
     arms.push(benign);
     const benignBefore = sink.snapshot().receipts.length;
     await activateBenignLinkByKeyboard(benign.page);
@@ -426,7 +445,7 @@ test("#449 evasion targets stay local with attack, protected, benign, and mixed 
     });
     await benign.cleanup();
 
-    const mixed = await openArm(sink, "mixed", true);
+    const mixed = await openArm(sink, "mixed", "mixed", true);
     arms.push(mixed);
     const mixedBefore = sink.snapshot().receipts.length;
     await activateBenignLinkByKeyboard(mixed.page);
