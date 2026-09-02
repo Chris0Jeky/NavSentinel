@@ -1245,6 +1245,18 @@ export function _getPendingMutationCountForTesting(): number {
 }
 
 /**
+ * Exposed for testing only: synchronously deliver records queued by the primary
+ * observer through the same callback used in production. This avoids relying
+ * on a DOM emulator's MutationObserver scheduling when tests use fake timers.
+ */
+export function _flushMutationObserverRecordsForTesting(): void {
+  const records = observer?.takeRecords() ?? [];
+  if (records.length > 0) {
+    onMutations(records);
+  }
+}
+
+/**
  * Exposed for testing only: feed synthetic MutationRecords through the same
  * batching path the real observer uses. Needed because happy-dom cannot emit the
  * spec-accurate single-record self-replace shape (host in BOTH addedNodes and
