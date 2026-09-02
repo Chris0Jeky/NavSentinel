@@ -205,7 +205,7 @@ describe("RedirectChainTracker property tests", () => {
       fc.property(arbTabId, arbHttpUrl, arbTimestamp, arbTransitionType, (tabId, url, ts, tt) => {
         const tracker = new RedirectChainTracker();
         tracker.recordHop(tabId, url, ts, tt);
-        expect(tracker.getChainInfo(tabId)).toBeNull();
+        expect(tracker.getChainInfo(tabId, ts)).toBeNull();
       }),
       { numRuns: 200 }
     );
@@ -223,7 +223,7 @@ describe("RedirectChainTracker property tests", () => {
           const tracker = new RedirectChainTracker();
           tracker.recordHop(tabId, url1, ts1, tt1);
           tracker.recordHop(tabId, url2, ts1 + delta, tt2);
-          const info = tracker.getChainInfo(tabId);
+          const info = tracker.getChainInfo(tabId, ts1 + delta);
           expect(info).not.toBeNull();
           expect(info!.depth).toBe(2);
         }
@@ -244,7 +244,7 @@ describe("RedirectChainTracker property tests", () => {
           const tracker = new RedirectChainTracker();
           tracker.recordHop(tabId, url1, ts1, tt1);
           tracker.recordHop(tabId, url2, ts1 + gap, tt2);
-          expect(tracker.getChainInfo(tabId)).toBeNull();
+          expect(tracker.getChainInfo(tabId, ts1 + gap)).toBeNull();
         }
       ),
       { numRuns: 200 }
@@ -267,7 +267,7 @@ describe("RedirectChainTracker property tests", () => {
             tracker.recordHop(tabId, url, ts, tt);
             ts += delta;
           }
-          const info = tracker.getChainInfo(tabId);
+          const info = tracker.getChainInfo(tabId, ts);
           if (info) {
             expect(info.depth).toBeLessThanOrEqual(10);
           }
@@ -294,7 +294,7 @@ describe("RedirectChainTracker property tests", () => {
             ts += delta;
           }
           tracker.deleteTab(tabId);
-          expect(tracker.getChainInfo(tabId)).toBeNull();
+          expect(tracker.getChainInfo(tabId, ts)).toBeNull();
           expect(tracker.hasActiveChain(tabId, ts)).toBe(false);
         }
       ),
@@ -316,8 +316,8 @@ describe("RedirectChainTracker property tests", () => {
           tracker.recordHop(tabA, url2, ts + 100, tt);
           tracker.recordHop(tabB, url3, ts, tt);
 
-          const infoA = tracker.getChainInfo(tabA);
-          const infoB = tracker.getChainInfo(tabB);
+          const infoA = tracker.getChainInfo(tabA, ts + 100);
+          const infoB = tracker.getChainInfo(tabB, ts);
           expect(infoA).not.toBeNull();
           expect(infoA!.depth).toBe(2);
           expect(infoB).toBeNull();
@@ -341,7 +341,7 @@ describe("RedirectChainTracker property tests", () => {
           tracker.recordHop(staleTab, url2, ts + 100, tt);
 
           tracker.recordHop(freshTab, url3, ts + 100 + 15001, tt);
-          expect(tracker.getChainInfo(staleTab)).toBeNull();
+          expect(tracker.getChainInfo(staleTab, ts + 100 + 15001)).toBeNull();
         }
       ),
       { numRuns: 100 }
@@ -379,7 +379,7 @@ describe("RedirectChainTracker property tests", () => {
 
           const now = ts + delta + 1;
           const hasActive = tracker.hasActiveChain(tabId, now);
-          const info = tracker.getChainInfo(tabId);
+          const info = tracker.getChainInfo(tabId, now);
 
           if (info && info.depth >= 2) {
             expect(hasActive).toBe(true);
@@ -424,7 +424,7 @@ describe("RedirectChainTracker property tests", () => {
           for (let i = 0; i < count; i++) {
             tracker.recordHop(tabId, url, ts + i * 100, tt);
           }
-          const info = tracker.getChainInfo(tabId);
+          const info = tracker.getChainInfo(tabId, ts + (count - 1) * 100);
           expect(info).not.toBeNull();
           expect(info!.depth).toBe(Math.min(count, 10));
         }
@@ -477,7 +477,7 @@ describe("RedirectChainTracker property tests", () => {
             urls.push(url);
             ts += delta;
           }
-          const info = tracker.getChainInfo(tabId);
+          const info = tracker.getChainInfo(tabId, ts);
           if (info) {
             const chainUrls = urls.slice(0, info.depth);
             const expectedCount = chainUrls.filter((u) => isKnownRedirector(u)).length;

@@ -34,7 +34,7 @@
 import type { RedirectChainInfo } from "../shared/redirect_chain";
 
 /** How long a cached chain-info answer is considered representative. */
-export const CHAIN_INFO_TTL_MS = 30_000;
+export const CHAIN_INFO_TTL_MS = 15_000;
 
 /**
  * One bounded retry covers the case where the very first request loses its
@@ -48,6 +48,7 @@ const CHAIN_INFO_MAX_ATTEMPTS = 2;
 
 let cachedChainInfo: RedirectChainInfo | null = null;
 let cachedChainInfoAt = 0;
+let cachedChainInfoExpiresAt = 0;
 let primeStarted = false;
 
 /**
@@ -67,7 +68,10 @@ function isChainInfo(value: unknown): value is RedirectChainInfo {
     typeof candidate.viaKnownRedirector === "boolean" &&
     typeof candidate.knownRedirectorHops === "number" &&
     Number.isFinite(candidate.knownRedirectorHops) &&
-    candidate.knownRedirectorHops >= 0
+    candidate.knownRedirectorHops >= 0 &&
+    typeof candidate.expiresAt === "number" &&
+    Number.isFinite(candidate.expiresAt) &&
+    candidate.expiresAt >= 0
   );
 }
 
@@ -86,8 +90,10 @@ function requestChainInfo(attempt: number): void {
         depth: resp.depth,
         viaKnownRedirector: resp.viaKnownRedirector,
         knownRedirectorHops: resp.knownRedirectorHops,
+        expiresAt: resp.expiresAt,
       };
       cachedChainInfoAt = Date.now();
+      cachedChainInfoExpiresAt = resp.expiresAt;
     });
   } catch {
     // sendMessage throws synchronously when the extension context is gone.
@@ -120,12 +126,31 @@ export function primeChainInfoCache(): void {
 export function getFreshChainInfo(now: number = Date.now()): RedirectChainInfo | null {
   if (!cachedChainInfo) return null;
   if (now - cachedChainInfoAt > CHAIN_INFO_TTL_MS) return null;
+  if (now >= cachedChainInfoExpiresAt) return null;
   return cachedChainInfo;
+}
+
+/**
+ * A BFCache restore reuses this module instance after the worker has processed
+ * the explicit history boundary. Drop the prior document snapshot and ask the
+ * worker again before any later click can reuse unrelated chain factors.
+ */
+export function handleChainInfoPageShow(
+  event: Pick<PageTransitionEvent, "persisted">,
+): void {
+  if (!event.persisted) return;
+  _resetChainInfoCache();
+  primeChainInfoCache();
 }
 
 /** Test-only: clear cache and priming state. */
 export function _resetChainInfoCache(): void {
   cachedChainInfo = null;
   cachedChainInfoAt = 0;
+  cachedChainInfoExpiresAt = 0;
   primeStarted = false;
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("pageshow", handleChainInfoPageShow);
 }

@@ -5,6 +5,7 @@ import {
   CHAIN_INFO_RETRY_DELAY_MS,
   CHAIN_INFO_TTL_MS,
   getFreshChainInfo,
+  handleChainInfoPageShow,
   primeChainInfoCache,
   _resetChainInfoCache,
 } from "../extension/src/content/chain_info_cache";
@@ -44,7 +45,12 @@ function reply(index: number, resp: unknown, err?: string): void {
   lastError = undefined;
 }
 
-const GOOD = { depth: 4, viaKnownRedirector: true, knownRedirectorHops: 2 };
+const GOOD = {
+  depth: 4,
+  viaKnownRedirector: true,
+  knownRedirectorHops: 2,
+  expiresAt: 2_000_000_000_000,
+};
 
 describe("chain_info_cache (#389)", () => {
   beforeEach(() => {
@@ -95,12 +101,14 @@ describe("chain_info_cache (#389)", () => {
     });
 
     it("caches depth 0 (a real 'no redirects' answer)", () => {
+      const expiresAt = Date.now() + CHAIN_INFO_TTL_MS;
       primeChainInfoCache();
-      reply(0, { depth: 0, viaKnownRedirector: false, knownRedirectorHops: 0 });
+      reply(0, { depth: 0, viaKnownRedirector: false, knownRedirectorHops: 0, expiresAt });
       expect(getFreshChainInfo()).toEqual({
         depth: 0,
         viaKnownRedirector: false,
         knownRedirectorHops: 0,
+        expiresAt,
       });
     });
   });
@@ -118,6 +126,28 @@ describe("chain_info_cache (#389)", () => {
       reply(0, GOOD);
       const at = Date.now();
       expect(getFreshChainInfo(at + CHAIN_INFO_TTL_MS + 1)).toBeNull();
+    });
+
+    it("returns null once the worker-provided expiry has elapsed", () => {
+      const at = Date.now();
+      primeChainInfoCache();
+      reply(0, { ...GOOD, expiresAt: at + 1_000 });
+      expect(getFreshChainInfo(at + 1_000)).toBeNull();
+    });
+
+    it("invalidates and reprimes after a BFCache restore", () => {
+      primeChainInfoCache();
+      reply(0, GOOD);
+      expect(getFreshChainInfo()).toEqual(GOOD);
+
+      handleChainInfoPageShow({ persisted: false });
+      expect(sent).toHaveLength(1);
+      expect(getFreshChainInfo()).toEqual(GOOD);
+
+      handleChainInfoPageShow({ persisted: true });
+      expect(sent).toHaveLength(2);
+      expect(sent[1]!.message).toEqual({ type: "ns-get-chain-info" });
+      expect(getFreshChainInfo()).toBeNull();
     });
   });
 

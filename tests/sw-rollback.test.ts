@@ -1862,6 +1862,129 @@ describe("service worker rollback gating", () => {
     expect(response.shouldRollback).toBe(true);
   });
 
+  it("keeps redirect chains across onBeforeNavigate but clears explicit user boundaries", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+
+    mock.emitCommitted({
+      tabId: 67,
+      frameId: 0,
+      url: "https://redirector.test/first",
+      transitionType: "link",
+      transitionQualifiers: ["server_redirect"],
+    });
+    vi.setSystemTime(new Date("2026-03-17T12:00:01.000Z"));
+    mock.emitBeforeNavigate({ tabId: 67, frameId: 0, url: "https://redirector.test/second" });
+    mock.emitCommitted({
+      tabId: 67,
+      frameId: 0,
+      url: "https://landing.test/second",
+      transitionType: "link",
+      transitionQualifiers: ["server_redirect"],
+    });
+
+    const beforeBoundary = mock.dispatchRuntimeMessage(
+      { type: "ns-get-chain-info" },
+      { tab: { id: 67 } },
+    ) as { depth: number; expiresAt: number };
+    expect(beforeBoundary.depth).toBe(2);
+    expect(beforeBoundary.expiresAt).toBe(Date.now() + 15_000);
+
+    vi.setSystemTime(new Date("2026-03-17T12:00:02.000Z"));
+    mock.emitCommitted({
+      tabId: 67,
+      frameId: 0,
+      url: "https://typed.test/",
+      transitionType: "typed",
+      transitionQualifiers: [],
+    });
+    const afterTyped = mock.dispatchRuntimeMessage(
+      { type: "ns-get-chain-info" },
+      { tab: { id: 67 } },
+    ) as { depth: number };
+    expect(afterTyped.depth).toBe(0);
+
+    // A history traversal is another explicit boundary, including when the
+    // entry's original transition type was link.
+    mock.emitCommitted({
+      tabId: 67,
+      frameId: 0,
+      url: "https://history.test/",
+      transitionType: "link",
+      transitionQualifiers: ["forward_back"],
+    });
+    const afterHistory = mock.dispatchRuntimeMessage(
+      { type: "ns-get-chain-info" },
+      { tab: { id: 67 } },
+    ) as { depth: number };
+    expect(afterHistory.depth).toBe(0);
+  });
+
+  it("starts a fresh chain when an address-bar or bookmark boundary redirects", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+
+    let journeyStart = Date.parse("2026-03-17T12:00:00.000Z");
+    for (const [tabId, transitionType, transitionQualifiers] of [
+      [68, "auto_bookmark", ["server_redirect"]],
+      [69, "link", ["from_address_bar", "client_redirect"]],
+      [70, "link", ["forward_back", "server_redirect"]],
+    ] as const) {
+      vi.setSystemTime(new Date(journeyStart));
+      mock.emitCommitted({
+        tabId,
+        frameId: 0,
+        url: "https://old-redirect.test/first",
+        transitionType: "link",
+        transitionQualifiers: ["server_redirect"],
+      });
+      vi.setSystemTime(new Date(journeyStart + 1_000));
+      mock.emitCommitted({
+        tabId,
+        frameId: 0,
+        url: "https://old-landing.test/second",
+        transitionType: "link",
+        transitionQualifiers: ["server_redirect"],
+      });
+      expect((mock.dispatchRuntimeMessage(
+        { type: "ns-get-chain-info" },
+        { tab: { id: tabId } },
+      ) as { depth: number }).depth).toBe(2);
+
+      vi.setSystemTime(new Date(journeyStart + 2_000));
+      mock.emitCommitted({
+        tabId,
+        frameId: 0,
+        url: "https://explicit-navigation.test/redirected",
+        transitionType,
+        transitionQualifiers: [...transitionQualifiers],
+      });
+
+      // The redirect commit becomes the first hop of a new journey; it cannot
+      // extend the unrelated chain that preceded the explicit user boundary.
+      expect((mock.dispatchRuntimeMessage(
+        { type: "ns-get-chain-info" },
+        { tab: { id: tabId } },
+      ) as { depth: number }).depth).toBe(0);
+
+      vi.setSystemTime(new Date(journeyStart + 3_000));
+      mock.emitCommitted({
+        tabId,
+        frameId: 0,
+        url: "https://fresh-landing.test/final",
+        transitionType: "link",
+        transitionQualifiers: ["server_redirect"],
+      });
+      expect((mock.dispatchRuntimeMessage(
+        { type: "ns-get-chain-info" },
+        { tab: { id: tabId } },
+      ) as { depth: number }).depth).toBe(2);
+      journeyStart += 10_000;
+    }
+  });
+
   it("exempts same-domain redirect with expired gesture (registrable-domain check)", async () => {
     const mock = createChromeMock();
     vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
