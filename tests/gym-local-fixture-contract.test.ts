@@ -15,6 +15,11 @@ const fixtures = [
   { file: "level9-legit-video-overlay.html", scenarioId: "NS-ADV-UI-004", kind: "static-benign" },
 ] as const;
 
+const rwFixtures = [
+  { file: "rw01-search-result-overlay-swap.html", scenarioId: "NS-ADV-SUPPLY-001", kind: "static-dual" },
+  { file: "rw06-legit-auth-second-popup.html", scenarioId: "NS-ADV-AUTH-005", kind: "dynamic-dual" },
+] as const;
+
 describe("core Gym fixture locality contracts", () => {
   it.each(fixtures)("keeps $file on the typed local-target contract", ({ file, scenarioId, kind }) => {
     const source = fs.readFileSync(path.join(gymRoot, file), "utf8");
@@ -30,5 +35,23 @@ describe("core Gym fixture locality contracts", () => {
     expect(source).toContain('href="local-fixture-sink.html"');
     expect(source).toContain(`data-navsentinel-scenario="${scenarioId}"`);
     expect(source).toContain(`data-navsentinel-local-target="${kind === "static-benign" ? "benign" : "harm"}"`);
+  });
+});
+
+describe("RW Gym fixture locality contracts", () => {
+  it.each(rwFixtures)("keeps $file on typed local benign and harm destinations", ({ file, scenarioId, kind }) => {
+    const source = fs.readFileSync(path.join(gymRoot, file), "utf8");
+
+    expect(source).toContain('<script src="local-fixture-targets.js"></script>');
+    expect(source).not.toMatch(/https?:\/\//u);
+    if (kind === "static-dual") {
+      expect(source).toContain('href="local-fixture-sink.html"');
+      expect(source).toContain('data-navsentinel-local-target="benign"');
+      expect(source).toContain('data-navsentinel-local-target="harm"');
+      expect(source).toContain(`data-navsentinel-scenario="${scenarioId}"`);
+      return;
+    }
+    expect(source).toContain(`NavSentinelLocalTargets.url('benign', '${scenarioId}')`);
+    expect(source).toContain(`NavSentinelLocalTargets.url('harm', '${scenarioId}')`);
   });
 });

@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="local-fixture-targets.js"></script>
     <title>RW-01 - Search Result Overlay Swap</title>
     <style>
       body {
@@ -87,9 +88,11 @@
         <span class="badge">Sponsored result</span>
         <a
           class="result-link"
-          href="https://docs.acme.example/reports/q1-2026"
+          href="local-fixture-sink.html"
           target="_blank"
           rel="noreferrer"
+          data-navsentinel-local-target="benign"
+          data-navsentinel-scenario="NS-ADV-SUPPLY-001"
           aria-label="Visible Acme earnings deck result"
         >
           <div class="url">docs.acme.example/reports/q1-2026</div>
@@ -99,9 +102,11 @@
         <a
           id="rw01Trap"
           class="trap"
-          href="https://example.edu/rw01-sponsored-result"
+          href="local-fixture-sink.html"
           target="_blank"
           rel="noreferrer"
+          data-navsentinel-local-target="harm"
+          data-navsentinel-scenario="NS-ADV-SUPPLY-001"
           aria-label="Invisible sponsored-result trap"
         ></a>
       </article>

@@ -1,23 +1,6 @@
 {
   "schema_version": "1.0.0",
   "as_of": "2026-08-30",
-  "finding_count": 2,
-  "findings": [
-    {
-      "path": "gym/rw01-search-result-overlay-swap.html",
-      "classifications": ["EXTERNAL_URL"],
-      "disposition": "SAFETY_HOLD",
-      "reason": "The journey contains non-local document and sponsored-result destinations.",
-      "remediation": "Route both destinations to local origin-separated fake sinks.",
-      "issue_refs": ["#449"]
-    },
-    {
-      "path": "gym/rw06-legit-auth-second-popup.html",
-      "classifications": ["EXTERNAL_URL"],
-      "disposition": "SAFETY_HOLD",
-      "reason": "The authentication and follow-up popups use a public IANA example destination.",
-      "remediation": "Use local origin-separated consent and harm sinks.",
-      "issue_refs": ["#449"]
-    }
-  ]
+  "finding_count": 0,
+  "findings": []
 }
