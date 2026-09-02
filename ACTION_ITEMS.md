@@ -156,6 +156,21 @@ frame reproduction and repair.
 
 ## Open and blocked items
 
+**OPEN: AI-39 — #601 extension-origin Proceed-once Gate-3.** Run the active
+manual Chrome guide in [`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md)
+against PR #608 on branch `feat/issue601-extension-origin-allow`.
+This stacked slice moves only a suspicious isolated `_blank` navigation's
+protection-lowering **Proceed once** action into the extension popup. Verify the
+exact head and base first, load that exact build in a fresh Chrome profile, and
+confirm the page warning exposes only **Dismiss**. The popup must show only the
+source and destination origins plus a bounded countdown; one trusted popup click
+must open the exact synthetic destination once with `window.opener === null`,
+while replay, expiry, page navigation, and acting from another tab remain fail-closed. Confirm
+`storage.session`, popup DOM, and consoles never contain the synthetic URL's
+path, query, or fragment. Only Chris can complete this human Gate-3. The general
+guided resolution cursor remains AI-19; AI-39 is an additional branch-specific
+gate.
+
 **OPEN: AI-38 — #560 inert toast-control repair Gate-3.** Run the active manual
 Chrome guide in [`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md)
 against the PR for branch `fix/issue560-isolated-input-fence`. That PR moves the

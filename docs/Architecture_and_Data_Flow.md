@@ -23,11 +23,11 @@ This is the architecture of a pre-alpha development project with no established
 adoption. The separation and local-first design are substantial, but several
 current development paths are not production-capable:
 
-- `ui_toast.ts` and `credential_modal.ts` currently let page-injected UI
-  authorize protection-lowering actions. Script rejection/closed roots alone do
-  not solve page-controlled host redressing. RI-01 moves proceed/allow/trust/
-  resume authority to tab-bound extension-origin UI; injected UI becomes
-  warn/cancel only.
+- RI-01 remains incomplete. The #601 first vertical moves **Proceed once** for a
+  suspicious isolated `_blank` navigation to the extension popup, leaving the
+  injected toast warning/Dismiss-only for that path. Other navigation,
+  credential, trust, resume, and security-relevant Undo paths still authorize
+  through page-injected UI. AI-39 retains the real-Chrome activation gate.
 - RI-02 removes the non-functional visual-sim viewport-capture path, its
   public asset, scoring hook, and persisted state. Local artifact proof is
   green; the required human Gate-3 remains before this beta blocker can close.
@@ -384,10 +384,21 @@ It listens to `chrome.webNavigation` events to decide when a committed navigatio
 ### Suspicious popup or `_blank` navigation
 
 1. `capture_isolated.ts` captures the click context and computes CDS.
-2. `main_guard.ts` traps the popup or navigation side effect.
-3. If the destination is suspicious and not allowlisted, the isolated-world script shows a toast prompt.
-4. Allow-once sends a short-lived allowance and replays the blocked action.
-5. Always-allow records the destination host in the per-site allowlist and then replays it.
+2. For a suspicious isolated HTTP(S) `_blank` anchor, it prevents navigation,
+   retains the exact destination only in a bounded document-local slot, and asks
+   the worker to create a 30-second `blank-target-blocked` decision.
+3. The worker derives tab/window/frame/document/source/top context from trusted
+   browser state. Session persistence contains URL hashes, display origins,
+   timestamps, and opaque capabilities — never raw paths, queries, or fragments.
+4. The page toast is warning/Dismiss-only. The extension popup lists the
+   URL-free origin pair and one broker-authorized **Proceed once** action.
+5. Popup consumption burns the worker token before an exact
+   tab/frame/document delivery. The content client requires the current visible
+   source document, clears its raw-URL slot before attempting one direct open,
+   and rejects replay, expiry, navigation, malformed messages, or failed opens.
+6. MAIN action-ID, rollback/forward, Always-allow, credential, trust, resume,
+   and security-relevant Undo paths are outside this first vertical and retain
+   their existing behavior pending later RI-01 slices.
 
 ### Risky credential submit
 

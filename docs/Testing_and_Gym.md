@@ -396,6 +396,19 @@ old runtime marker points to extension initialization or an artifact that the
 browser did not accept. This catches build-tool and browser-contract drift more
 precisely than an overlay visibility assertion alone.
 
+The first production pending-decision vertical is covered by
+`tests/pending-navigation-decision.test.ts`,
+`tests/pending-decision-handlers.test.ts`,
+`tests/pending-decisions-popup.test.ts`, and `tests/sw-handlers.test.ts`. These
+prove exact create metadata, URL-free persistence/listing, active-context
+binding, consume-before-deliver token burn, exact tab/frame/document delivery,
+pagehide/expiry/source-change invalidation, delete-before-open, replay rejection,
+and popup double-click failure closure. `tests/e2e/toast-input-fence.spec.ts`
+proves with trusted input that the suspicious `_blank` page warning exposes
+Dismiss only. AI-39 remains mandatory because an ordinary Playwright tab cannot
+prove a real Chrome toolbar-popup click survives the popup → worker → content
+activation chain.
+
 Overlay-cleanup E2E assertions use a visibility timeline after the first hidden
 state. A pass requires every sampled attack layer to remain hidden for the full
 dwell window; the complete JSON timeline is attached to the Playwright result.
@@ -504,6 +517,10 @@ owner's reload confirmation remains required.
 - event-log rendering still works
 - import/export preserves normalized state
 - allowlist removal and clearing still work
+- pending navigation cards render origins only, expire visibly, and disable
+  before consuming their one-shot capability
+- a real toolbar-popup **Proceed once** opens the exact held synthetic URL once;
+  replay, tab switch, document navigation, and expiry remain blocked (AI-39)
 
 ## CI expectations
 
