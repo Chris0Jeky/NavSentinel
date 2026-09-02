@@ -74,12 +74,26 @@
 
   function apply(root = document) {
     const nodes = root.querySelectorAll("[data-navsentinel-local-target]");
+    // Static fixture anchors start without a destination. Disarm every matching
+    // anchor before validating or resolving any target so a malformed target (or
+    // hostile-origin override) cannot leave an earlier anchor navigable.
+    for (const node of nodes) {
+      if (node instanceof HTMLAnchorElement) {
+        node.removeAttribute("href");
+        delete node.dataset.navsentinelLocalTargetReady;
+      }
+    }
+
+    const destinations = [];
     for (const node of nodes) {
       if (!(node instanceof HTMLAnchorElement)) throw new Error("target-is-not-anchor");
       const role = node.dataset.navsentinelLocalTarget;
       const scenarioId = node.dataset.navsentinelScenario;
       if (!role || !scenarioId) throw new Error("target-contract-incomplete");
-      node.href = url(role, scenarioId);
+      destinations.push({ node, href: url(role, scenarioId) });
+    }
+    for (const { node, href } of destinations) {
+      node.href = href;
       node.dataset.navsentinelLocalTargetReady = "1";
     }
     document.documentElement.dataset.navsentinelLocalTargetsReady = "1";
