@@ -7,6 +7,8 @@ export const PROVING_GROUND_SINK_PATH = "/__navsentinel_fake_sink";
 const SAFE_SINK_PORT_START = 46100;
 const SAFE_SINK_PORT_ATTEMPTS = 25;
 
+export type ProvingGroundLoopbackHost = "127.0.0.1" | "::1";
+
 export type ProvingGroundRole = "attack" | "benign" | "mixed";
 
 export type ProvingGroundSinkReceipt = {
@@ -78,7 +80,7 @@ function writeInertResponse(
 </head><body><h1>${title}</h1><p>${detail}</p></body></html>`);
 }
 
-async function bindLoopback(server: http.Server): Promise<void> {
+async function bindLoopback(server: http.Server, host: ProvingGroundLoopbackHost): Promise<void> {
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt < SAFE_SINK_PORT_ATTEMPTS; attempt += 1) {
@@ -95,7 +97,7 @@ async function bindLoopback(server: http.Server): Promise<void> {
 
         server.once("error", onError);
         server.once("listening", onListening);
-        server.listen(SAFE_SINK_PORT_START + attempt, "127.0.0.1");
+        server.listen(SAFE_SINK_PORT_START + attempt, host);
       });
       return;
     } catch (error) {
@@ -103,6 +105,9 @@ async function bindLoopback(server: http.Server): Promise<void> {
     }
   }
 
+  if (host === "::1" && ["EAFNOSUPPORT", "EADDRNOTAVAIL"].includes((lastError as NodeJS.ErrnoException | null)?.code ?? "")) {
+    throw new Error("unsupported-loopback-host-family");
+  }
   throw lastError ?? new Error("Failed to bind the Proving Ground fake sink to loopback");
 }
 
@@ -191,7 +196,8 @@ export async function startProvingGroundEgressFence(
   };
 }
 
-export async function startProvingGroundFakeSink(
+export async function startProvingGroundFakeSinkForHost(
+  host: ProvingGroundLoopbackHost,
   options: FakeSinkOptions,
 ): Promise<ProvingGroundFakeSink> {
   const allowedRoles = new Set(options.allowedRoles);
@@ -297,12 +303,13 @@ export async function startProvingGroundFakeSink(
     );
   });
 
-  await bindLoopback(server);
+  await bindLoopback(server, host);
   const address = server.address();
   if (!address || typeof address === "string") {
     throw new Error("Proving Ground fake sink did not expose a TCP address");
   }
-  const origin = `http://127.0.0.1:${address.port}`;
+  const originHost = host === "::1" ? "[::1]" : host;
+  const origin = `http://${originHost}:${address.port}`;
 
   return {
     origin,
@@ -336,4 +343,10 @@ export async function startProvingGroundFakeSink(
       server.close((error) => error ? rejectClose(error) : resolve());
     }),
   };
+}
+
+export function startProvingGroundFakeSink(
+  options: FakeSinkOptions,
+): Promise<ProvingGroundFakeSink> {
+  return startProvingGroundFakeSinkForHost("127.0.0.1", options);
 }

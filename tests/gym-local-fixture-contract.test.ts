@@ -34,6 +34,9 @@ describe("core Gym fixture locality contracts", () => {
 
     expect(source).not.toMatch(/<a\b[^>]*\bhref\s*=/iu);
     expect(source).toContain(`data-navsentinel-scenario="${scenarioId}"`);
+    if (file === "level9-legit-video-overlay.html") {
+      expect(source).toContain('data-navsentinel-local-target-origin="alternate-loopback"');
+    }
     expect(source).toContain(`data-navsentinel-local-target="${kind === "static-benign" ? "benign" : "harm"}"`);
   });
 
