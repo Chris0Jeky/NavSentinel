@@ -495,6 +495,22 @@ test("RW-01 search result overlay swap blocks deceptive new tab @regression", as
 
       await waitForNavSentinelBridge(page);
 
+      const benignPopupPromise = context.waitForEvent("page", { timeout: 5000 }).catch(() => null);
+      await page.focus(".result-link");
+      await page.keyboard.press("Enter");
+      const benignPopup = await benignPopupPromise;
+      expect(benignPopup, "Expected the visible result to reach the benign local sink").not.toBeNull();
+      if (!benignPopup) throw new Error("Expected the visible result to reach the benign local sink");
+      await benignPopup.waitForLoadState("domcontentloaded", { timeout: 5000 });
+      const benignUrl = new URL(benignPopup.url());
+      expect(benignUrl.pathname).toBe("/local-fixture-sink.html");
+      expect(benignUrl.searchParams.get("role")).toBe("benign");
+      expect(benignUrl.searchParams.get("scenario_id")).toBe("NS-ADV-SUPPLY-001");
+      await expect(benignPopup.locator("html")).toHaveAttribute("data-fixture-sink-valid", "1");
+      await expect(benignPopup.locator("html")).toHaveAttribute("data-benign-completed", "1");
+      await benignPopup.close();
+      await assertNoToastFor(page);
+
       const card = page.locator(".result").first();
       const box = await card.boundingBox();
       expect(box, "Expected the sponsored result card to be visible").toBeTruthy();
@@ -632,8 +648,14 @@ test("RW-06 legit auth popup allows the first window and blocks the second @regr
 
       const popup = await popupPromise;
       expect(popup, "Expected the first auth popup to open").not.toBeNull();
-      await popup?.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
-      expect(popup?.url()).toContain("oauth=workspace-auth");
+      if (!popup) throw new Error("Expected the first auth popup to open");
+      await popup.waitForLoadState("domcontentloaded", { timeout: 5000 });
+      const popupUrl = new URL(popup.url());
+      expect(popupUrl.pathname).toBe("/local-fixture-sink.html");
+      expect(popupUrl.searchParams.get("role")).toBe("benign");
+      expect(popupUrl.searchParams.get("scenario_id")).toBe("NS-ADV-AUTH-005");
+      await expect(popup.locator("html")).toHaveAttribute("data-fixture-sink-valid", "1");
+      await expect(popup.locator("html")).toHaveAttribute("data-benign-completed", "1");
 
       await expect.poll(() => context.pages().length, { timeout: 5000 }).toBe(beforePages + 1);
       await waitForToastText(page, "Blocked popup", 3000);
