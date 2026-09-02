@@ -9,8 +9,8 @@
  * - a maximum-z-index page layer inserted AFTER the toast host painted above
  *   it, so trusted clicks never reached the extension-owned controls; and
  * - the activation relay resolved a control token from any element that merely
- *   carried the toast host id, so a page could forge one and turn an ordinary
- *   click into "Allow once".
+ *   carried the toast host id, so a page could forge one and activate a real
+ *   extension-owned control.
  */
 import { test, expect, chromium, type BrowserContext, type Page } from "@playwright/test";
 import fs from "fs";
@@ -141,23 +141,19 @@ test("trusted mouse Dismiss clears a regular block card without leaking to page 
   }
 });
 
-test("trusted mouse Allow once completes the blocked new tab exactly once @regression", async () => {
+test("the page warning exposes Dismiss as its only control @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
   const { page, context, cleanup } = await setupFenceTest("evasion-01-opacity-009.html");
   try {
     await blockTrapNewTab(page, context);
     const before = context.pages().length;
-
-    const allow = await toastButtonPoint(page, "Allow once");
-    const popupPromise = context.waitForEvent("page", { timeout: 5000 }).catch(() => null);
-    await page.mouse.click(allow.x, allow.y);
-
-    const popup = await popupPromise;
-    expect(popup, "Allow once should open the user-approved tab").not.toBeNull();
-    await expect.poll(() => fullCardCount(page)).toBe(0);
-    // No second tab may follow the single approval.
-    await page.waitForTimeout(800);
-    expect(context.pages().length).toBe(before + 1);
+    const labels = await page.evaluate(() => {
+      const host = document.querySelector("#__navsentinel_toast_host");
+      return Array.from(host?.shadowRoot?.querySelectorAll("button") ?? [], (button) =>
+        button.textContent?.trim() ?? "");
+    });
+    expect(labels).toEqual(["Dismiss"]);
+    expect(context.pages()).toHaveLength(before);
   } finally {
     await cleanup();
   }
@@ -226,25 +222,25 @@ test("toast controls stay clickable above a maximum-z-index layer inserted after
   }
 });
 
-test("a page-forged toast host cannot turn an ordinary click into Allow once @regression", async () => {
+test("a page-forged toast host cannot activate a real warning control @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
   const { page, context, cleanup } = await setupFenceTest("evasion-01-opacity-009.html");
   try {
     await blockTrapNewTab(page, context);
     // The page can read the open shadow root, so it copies whatever marks the
-    // real "Allow once" control onto a full-viewport element inside a fake host
+    // real Dismiss control onto a full-viewport element inside a fake host
     // that carries the extension's host id, then waits for any trusted click.
     await page.evaluate(() => {
       const real = document.querySelector("#__navsentinel_toast_host");
-      const allow = Array.from(real?.shadowRoot?.querySelectorAll("button") ?? [])
-        .find((button) => button.textContent?.trim() === "Allow once");
+      const dismiss = Array.from(real?.shadowRoot?.querySelectorAll("button") ?? [])
+        .find((button) => button.textContent?.trim() === "Dismiss");
       const fakeHost = document.createElement("div");
       fakeHost.id = "__navsentinel_toast_host";
       fakeHost.style.cssText = "position:fixed;inset:0;z-index:2147483646;";
       const fakeRoot = fakeHost.attachShadow({ mode: "open" });
       const bait = document.createElement("div");
       bait.style.cssText = "position:fixed;inset:0;";
-      for (const attribute of Array.from(allow?.attributes ?? [])) {
+      for (const attribute of Array.from(dismiss?.attributes ?? [])) {
         bait.setAttribute(attribute.name, attribute.value);
       }
       fakeRoot.appendChild(bait);

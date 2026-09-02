@@ -30,7 +30,7 @@ readiness is tracked only by the outcome gates below.
 
 | Gate | State | Required next move |
 |---|---|---|
-| Release integrity | **Blocked** | RI-01 extension-origin decision authority (#356/#464/#466 merged 2026-07-25 — the browser-held sub-slices are done, but no production extension-origin prompt/action flow ships yet); RI-02 visual-sim excision (#514 merged under a recorded Gate-3 waiver, not a real-Chrome pass); fake DNR removed (#528); purpose-specific data minimization and reset (#468/#535); beta-off JS behavior (#532); #175/#186 bridge identity/recovery |
+| Release integrity | **Blocked** | RI-01 extension-origin decision authority (#356/#464/#466 merged; #601's first suspicious `_blank` Proceed-once vertical is prepared but AI-39 and the remaining action classes stay open); RI-02 visual-sim excision (#514 merged under a recorded Gate-3 waiver, not a real-Chrome pass); fake DNR removed (#528); purpose-specific data minimization and reset (#468/#535); beta-off JS behavior (#532); #175/#186 bridge identity/recovery |
 | Release profile | **Implemented; Gate-3 passed** | AI-9 selected interaction-only. PR #509 merged as `3faeb1e`, closing #321. Chrome 150.0.7871.187 passed on executable/artifact head `f6815be`; default runtime/manifest/package omit reputation; deterministic `research-reputation` is unpacked-only and non-release |
 | Brand/store | **Blocked** | AI-19 name clearance; #455 pre-collection disclosure/consent; one canonical claims-verified listing; assets and fresh-install checks |
 | Detection validation | **Open** | #417 methodology, #416/#426 rerun, confidence-aware reporting |
@@ -61,12 +61,13 @@ not waive an owner, browser, measurement, privacy, permission, or external gate.
 
 ### Live execution truth
 
-Refreshed 2026-08-30 from remote GitHub and `origin/main` at
-`22377604a363141fc6e99a45800beca868307764`. Four PRs are open: #572 is
-conflict-dirty and parked before AI-31 on SP-F-013; #599 is conflict-dirty with
-owner policy and branded-Chrome gates open; #600 is clean with green hosted
-checks but its owner media-page check open; and test-only #605 is red in Build /
-Unit on #595's tracked mutation-monitor scarce-reserve assertion. There is no
+Refreshed 2026-09-02 from remote GitHub and `origin/main` at
+`4883a8eaef1b35ea176802ee8d0d97afbc854b81`. Four PRs are open: #572 remains
+parked before AI-31 on SP-F-013; #599 is reconciled and hosted-green but owner
+policy and branded-Chrome gates remain open; and #600 is reconciled,
+hosted-green, and parked on AI-38. Stacked PR #608 carries the first #601
+Proceed-once vertical and remains parked on AI-39. #607 and test-only #605
+merged; #449 remains open for the retained external-destination holds. There is no
 tag, GitHub release, or CWS release. These values are a dated snapshot, not an
 instruction to trust cached refs. Re-derive them with `git fetch origin`, the
 GitHub REST/API issue and pull-request views, and Actions before acting. The exact
@@ -89,13 +90,16 @@ The legacy browser-surface PR queue is **cleared** as of 2026-07-25; this table 
 | #468 | **MERGED 2026-07-25** as `ebeb922`. Merged head `5bac99b` (clean auto-merge, zero conflicts); exact-head CI green. RI-06 event-log URL minimization — advances RI-06 without closing it; remaining slices tracked in **#474** |
 | #457 | **MERGED 2026-07-25 (historical; retired by #499).** It delivered the then-current one-floor topology, pinned adapter, vendored fixtures, and Harness CI. Owner decision #499 removes that entire repository-local consumer/gate surface without changing extension runtime behavior. |
 
-**RI-01 local implementation note (verified 2026-08-01):** remotely backed-up
-checkpoint branch `fix/ri01-extension-origin-decisions` at `184be55` contains a context-bound,
-hash-minimizing pending-decision broker plus a synthetic-navigation-allowance
-fix. Focused broker tests pass, but the broker is not wired into production:
-service-worker handlers, active-tab/sender validation, exact-context delivery,
-popup actions, warn/cancel-only injected prompts, reconciliation with current
-`main`, and real Chrome remain open. AI-20 is resolved: Chris left the original
+**RI-01 implementation note (refreshed 2026-09-02):** the historical remotely
+backed-up branch `fix/ri01-extension-origin-decisions` remains preserved at
+`184be55`; do not reconcile it because its broker foundation has since evolved
+into `main` and the branch carries the Defender-sensitive fixture history. The
+stacked PR #608 (`feat/issue601-extension-origin-allow`) wires the broker into one
+real suspicious `_blank` Proceed-once path, excluding prompts that still carry
+overlay-cleanup Undo, with one-time exact-document URL release, worker-side
+origin/hash/context validation and openerless tab creation, plus a URL-free
+extension popup. AI-39 and all other protection-lowering action classes
+remain open, so RI-01 is not complete. AI-20 is resolved: Chris left the original
 Defender-quarantined ClickFix property fixture quarantined, while an exact
 runtime-equivalent representation passed Defender scanning and the full
 old-branch gates. The branch is not merge-ready.
@@ -183,7 +187,7 @@ maintainer chooses disclosure/ownership.
 
 | ID | Priority | Action | Owner/gate | Existing home | Done when |
 |---|---|---|---|---|---|
-| RI-01 | P0 beta blocker | Move all proceed/allow/trust/resume authority out of page-injected UI | Agent + Gate-3 | #601 | Injected UI is warn/cancel only; extension-origin action is tab/destination-bound with TTL; synthetic input, trusted-click redressing, host tamper/removal, tab switch, and stale state cannot lower protection |
+| RI-01 | P0 beta blocker | First suspicious `_blank` Proceed-once vertical prepared in PR #608; move the remaining proceed/allow/trust/resume and security-relevant Undo authority out of page-injected UI | Agent + Gate-3 (AI-39 for first vertical) | #601 | Injected UI is warn/cancel only; extension-origin action is tab/destination-bound with TTL; synthetic input, trusted-click redressing, host tamper/removal, tab switch, and stale state cannot lower protection |
 | RI-02 | P0 beta blocker | **Merged via #514 under a recorded Gate-3 waiver (not a real-Chrome pass):** excise visual-sim capture, templates, scoring hook, WAR, tests, and state | Agent + recorded waiver | #424 | No viewport capture path or placeholder asset remains; #374 closed after the current build and all 12 performance budgets passed |
 | RI-03 | P0 beta blocker | #356 is complete; recreate or explicitly defer #273 from current `main` | Agent first; Gate-3 only if #273 is recreated (AI-8 remains blocked until then) | #273/#356; #399 stays deferred | #356 remains regression coverage, replacement guides point only to current green branches, and #399 remains outside beta blockers until its measurement methodology is ready |
 | RI-04 | P0 product decision | **Implemented via merged PR #509; AI-25 Gate-3 passed:** interaction-only selected and implemented; retain research reputation as unpacked-only | Chris + agent + Gate-3 | #321 / AI-9 / AI-25 | Default release receipt, manifest/WAR, runtime, package checks, tests, and claims agree; research profile is deterministic, visibly non-release, and package/release rejected |

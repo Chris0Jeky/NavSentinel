@@ -1,12 +1,15 @@
 import {
   PENDING_DECISION_MAX_DOCUMENT_ID_LENGTH,
+  getExactHttpOrigin,
   isExactHttpUrl,
   isOpaquePendingDecisionValue,
   isPendingDecisionAction,
   isPendingDecisionRuntimeMessage,
+  isSha256Fingerprint,
   parsePendingDecisionSemantics,
   toPendingDecisionView,
   type PendingDecision,
+  type PendingDecisionDeliveryMessage,
   type PendingDecisionRuntimeFailureResponse,
   type PendingDecisionRuntimeFailureStatus,
   type PendingDecisionRuntimeMessage,
@@ -15,6 +18,7 @@ import {
   type PendingDecisionVerifiedContext,
 } from "../shared/pending_decision";
 import {
+  fingerprintPendingDecisionUrl,
   PendingDecisionStore,
   type PendingDecisionLifecycleRemovalStatus,
 } from "./pending_decision_store";
@@ -38,10 +42,22 @@ export interface PendingDecisionFrameSnapshot {
 export interface PendingDecisionRuntimeBrokerDependencies {
   runtimeId: () => string | undefined;
   extensionBaseUrl: () => string | undefined;
+  now: () => number;
+  fingerprintUrl: (exactUrl: string) => Promise<string>;
   getTab: (tabId: number) => Promise<PendingDecisionTabSnapshot>;
   queryActiveTabs: () => Promise<readonly PendingDecisionTabSnapshot[]>;
   getAllFrames: (tabId: number) => Promise<readonly PendingDecisionFrameSnapshot[]>;
   getLifecycleGeneration: (tabId: number) => number;
+  deliverDecision: (
+    tabId: number,
+    message: PendingDecisionDeliveryMessage,
+    options: { frameId: number; documentId: string },
+  ) => Promise<unknown>;
+  createTab: (properties: {
+    url: string;
+    windowId: number;
+    active: true;
+  }) => Promise<unknown>;
 }
 
 interface ActiveTabContext {
@@ -70,10 +86,14 @@ function defaultDependencies(): PendingDecisionRuntimeBrokerDependencies {
   return {
     runtimeId: () => chrome.runtime.id,
     extensionBaseUrl: () => chrome.runtime.getURL(""),
+    now: Date.now,
+    fingerprintUrl: fingerprintPendingDecisionUrl,
     getTab: (tabId) => chrome.tabs.get(tabId),
     queryActiveTabs: () => chrome.tabs.query({ active: true, lastFocusedWindow: true }),
     getAllFrames: async (tabId) => (await chrome.webNavigation.getAllFrames({ tabId })) ?? [],
     getLifecycleGeneration: () => 0,
+    deliverDecision: (tabId, message, options) => chrome.tabs.sendMessage(tabId, message, options),
+    createTab: (properties) => chrome.tabs.create(properties),
   };
 }
 
@@ -121,6 +141,18 @@ function failure(
   status: PendingDecisionRuntimeFailureStatus,
 ): PendingDecisionRuntimeFailureResponse {
   return { ok: false, operation, status };
+}
+
+function parseReleasedDestination(value: unknown): string | null {
+  if (
+    !hasExactKeys(value, ["ok", "status", "destinationUrl"]) ||
+    value.ok !== true ||
+    value.status !== "released" ||
+    !isExactHttpUrl(value.destinationUrl)
+  ) {
+    return null;
+  }
+  return value.destinationUrl;
 }
 
 function asLiveFrame(frame: PendingDecisionFrameSnapshot): LiveFrameContext | null {
@@ -240,7 +272,14 @@ export class PendingDecisionRuntimeBroker {
     if (created.status === "rejected-capacity") {
       return failure("create", "rejected-capacity");
     }
-    return { ok: true, operation: "create", status: "created" };
+    return {
+      ok: true,
+      operation: "create",
+      status: "created",
+      id: created.decision.id,
+      expiresAt: created.decision.expiresAt,
+      ...(created.replacedDecisionId ? { replacedDecisionId: created.replacedDecisionId } : {}),
+    };
   }
 
   private async handleList(
@@ -341,6 +380,13 @@ export class PendingDecisionRuntimeBroker {
         ? listed.decisions.find((candidate) => candidate.id === message.id)
         : undefined;
     if (!decision) return failure("consume", "missing");
+    if (
+      decision.kind !== "navigation" ||
+      decision.reason !== "blank-target-blocked" ||
+      message.action !== "proceed-once"
+    ) {
+      return failure("consume", "action-not-allowed");
+    }
 
     const frameBefore = activeBefore.liveFrames.get(decision.frameId);
     if (!frameBefore || frameBefore.documentId !== decision.documentId) {
@@ -372,14 +418,91 @@ export class PendingDecisionRuntimeBroker {
     );
     if (consumed.status !== "consumed") return failure("consume", consumed.status);
 
-    const activeAfter = await this.resolveActiveTab();
-    const frameAfter = activeAfter?.liveFrames.get(decision.frameId);
+    const activeAfterConsume = await this.recheckConsumedContext(
+      activeConfirmed,
+      frameConfirmed,
+      consumed.decision.expiresAt,
+    );
+    if (!activeAfterConsume) return failure("consume", "context-changed");
+
+    let released: unknown;
+    try {
+      released = await this.dependencies.deliverDecision(
+        activeAfterConsume.tabId,
+        {
+          type: "ns-pending-decision-release",
+          id: consumed.decision.id,
+          action: consumed.action,
+        },
+        {
+          frameId: consumed.decision.frameId,
+          documentId: consumed.decision.documentId,
+        },
+      );
+    } catch {
+      return failure("consume", "delivery-failed");
+    }
+    const destinationUrl = parseReleasedDestination(released);
     if (
-      !activeAfter ||
-      !activeContextsEqual(activeConfirmed, activeAfter) ||
-      !liveFramesEqual(frameConfirmed, frameAfter)
+      !destinationUrl ||
+      getExactHttpOrigin(destinationUrl) !== consumed.decision.destinationOrigin
     ) {
-      return failure("consume", "context-changed");
+      return failure("consume", "delivery-failed");
+    }
+
+    const activeAfterRelease = await this.recheckConsumedContext(
+      activeAfterConsume,
+      frameConfirmed,
+      consumed.decision.expiresAt,
+    );
+    if (!activeAfterRelease) return failure("consume", "context-changed");
+
+    let destinationUrlHash: string;
+    try {
+      destinationUrlHash = await this.dependencies.fingerprintUrl(destinationUrl);
+    } catch {
+      return failure("consume", "delivery-failed");
+    }
+    const activeAfterHash = await this.recheckConsumedContext(
+      activeAfterRelease,
+      frameConfirmed,
+      consumed.decision.expiresAt,
+    );
+    if (!activeAfterHash) return failure("consume", "context-changed");
+    if (
+      !isSha256Fingerprint(destinationUrlHash) ||
+      destinationUrlHash !== consumed.decision.destinationUrlHash
+    ) {
+      return failure("consume", "delivery-failed");
+    }
+
+    try {
+      await this.dependencies.createTab({
+        url: destinationUrl,
+        windowId: activeAfterHash.windowId,
+        active: true,
+      });
+    } catch {
+      return failure("consume", "delivery-failed");
+    }
+
+    try {
+      void this.dependencies
+        .deliverDecision(
+          activeAfterHash.tabId,
+          {
+            type: "ns-pending-decision-opened",
+            id: consumed.decision.id,
+            action: consumed.action,
+          },
+          {
+            frameId: consumed.decision.frameId,
+            documentId: consumed.decision.documentId,
+          },
+        )
+        .catch(() => {});
+    } catch {
+      // The destination tab already exists; outcome recording is best effort.
     }
     return {
       ok: true,
@@ -388,6 +511,25 @@ export class PendingDecisionRuntimeBroker {
       kind: consumed.decision.kind,
       action: consumed.action,
     };
+  }
+
+  private async recheckConsumedContext(
+    expected: ActiveTabContext,
+    expectedFrame: LiveFrameContext,
+    expiresAt: number,
+  ): Promise<ActiveTabContext | null> {
+    if (expiresAt <= this.dependencies.now()) return null;
+    const current = await this.resolveActiveTab();
+    const currentFrame = current?.liveFrames.get(expectedFrame.frameId);
+    if (
+      !current ||
+      expiresAt <= this.dependencies.now() ||
+      !activeContextsEqual(expected, current) ||
+      !liveFramesEqual(expectedFrame, currentFrame)
+    ) {
+      return null;
+    }
+    return current;
   }
 
   private isOwnContentSender(sender: chrome.runtime.MessageSender): boolean {

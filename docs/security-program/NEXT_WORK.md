@@ -11,17 +11,19 @@ passive maintenance, and frozen R1 are not fallback queues. The exact receipt is
 [`GITHUB_ADMIN_RECEIPT.md`](../development-architecture/GITHUB_ADMIN_RECEIPT.md).
 
 PR #572 remains parked before AI-31 on the retained SP-F-013 rollback survivor.
-PR #599 has been reconciled with current `main`, but its owner policy and
-branded-Chrome gates remain open. PR #600 is clean with green hosted checks but
-still needs its exact-head owner media-page check. PR #605 is the bounded
-test-only #449 slice; it carries the merged #607 deterministic observer-delivery
-repair and must still satisfy its own exact-head checks and review before merge.
+PR #599 is reconciled and hosted-green, but its owner policy and branded-Chrome
+gates remain open. PR #600 is reconciled and hosted-green but remains parked on
+AI-38. #607 and the bounded test-only #605 slice merged; #449 remains open for
+the retained external-destination holds. PR #608 carries the first #601
+extension-origin Proceed-once vertical, is stacked on #600, and remains gated by
+AI-39.
 
-1. **Finish or park the current runtime queue before opening another vertical.**
-   Keep #599 and #600 aligned with current `main`, their exact heads, owner
-   decisions, and browser gates. #600 is containment; #601 remains the durable
-   extension-origin authority outcome and should follow #600 rather than overlap
-   its capture and loader seams.
+1. **Finish and park the first #601 vertical without overclaiming RI-01.** Keep
+   #599 and #600 at their reviewed exact heads and owner gates. #601 moves only
+   suspicious isolated `_blank` Proceed-once authority without an attached
+   overlay-cleanup Undo to the extension popup; keep PR #608 stacked on #600,
+   retain AI-39, and leave the remaining action
+   classes to later bounded slices.
 2. **Extend #449 in bounded fixture-family slices.** The twelve evasion fixtures
    now share a loopback-only target contract, leaving nine core/RW
    external-destination holds. Localize those nine before adding declared

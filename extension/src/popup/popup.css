@@ -385,6 +385,71 @@ body {
   accent-color: var(--ns-cyan);
 }
 
+.pending-decisions {
+  padding: 10px 16px;
+  border-top: 1px solid var(--ns-border-soft);
+}
+
+.pending-title {
+  margin: 0 0 7px;
+  color: var(--ns-orange);
+  font-size: 10px;
+}
+
+.pending-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 5px 9px;
+  padding: 9px;
+  border: 1px solid rgba(245, 166, 35, 0.25);
+  border-radius: 7px;
+  background: rgba(245, 166, 35, 0.05);
+}
+
+.pending-route {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 3px;
+  color: var(--ns-text-2);
+  font-size: 9px;
+}
+
+.pending-route-origin {
+  overflow-wrap: anywhere;
+}
+
+.pending-route-destination {
+  color: var(--ns-text-1);
+  font-weight: 600;
+}
+
+.pending-remaining,
+.pending-status {
+  align-self: center;
+  color: var(--ns-text-3);
+  font-size: 9.5px;
+}
+
+.pending-proceed {
+  padding: 5px 8px;
+  border: 1px solid rgba(245, 166, 35, 0.35);
+  border-radius: 5px;
+  background: rgba(245, 166, 35, 0.1);
+  color: var(--ns-orange);
+  cursor: pointer;
+  font: 500 10px var(--ns-sans);
+}
+
+.pending-proceed:focus-visible {
+  outline: 2px solid var(--ns-amber);
+  outline-offset: 2px;
+}
+
+.pending-proceed:disabled {
+  cursor: wait;
+  opacity: 0.5;
+}
+
 /* Activity section */
 .activity {
   border-top: 1px solid var(--ns-border-soft);
