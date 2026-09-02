@@ -1,6 +1,10 @@
 # Programme state
 
-As of 2026-08-30, based on merged programme seed `d2762f296b07bfd650971141bf9bf7a9b2c016b9` and the live issue and pull-request inventory refreshed for the current #449 fixture-family vertical.
+As of 2026-09-02, based on current `main`
+`de3e6c96bbc1f5b40ec4c36618f8763cb91b845e`, merged programme seed
+`d2762f296b07bfd650971141bf9bf7a9b2c016b9`, and the live issue, milestone,
+pull-request, and Actions inventory refreshed for the current #449
+fixture-family vertical.
 
 ## Seeded
 
@@ -10,6 +14,27 @@ As of 2026-08-30, based on merged programme seed `d2762f296b07bfd650971141bf9bf7
 - 1,512 generated local work units, nine for each scenario. They are not GitHub issues.
 - 65 current-work mappings: 12 Gym levels, 23 RW journeys, 12 evasion fixtures, 4 ClickFix fixtures, 4 DoubleClickjacking fixtures, 8 evidence lanes, and 2 browser-suite mappings.
 - 12 deduplicated issue themes and zero new issues created by the seed pass.
+
+## Outcome board
+
+The development-architecture migration assigns all 75 open issues and leaves no
+unmilestoned queue:
+
+- active M0 Proving Ground: 10;
+- active M1 unlisted-beta release integrity: 8;
+- planned M2 interaction integrity: 12;
+- planned M3 local evidence plane: 8;
+- planned M4 efficacy and quietness: 14;
+- gated M5 beta cohort and operations: 1;
+- passive maintenance: 4;
+- frozen post-beta research: 18.
+
+Seven obsolete or absorbed issues were closed after preserving their evidence
+or successor: #244, #245, #246, #374, #421, #422, and #439. The complete
+classification and applied GitHub receipt live under
+[`docs/development-architecture/`](../development-architecture/README.md).
+Only M0 and M1 are active; #417 is the bounded test-methodology exception and
+does not activate M4 detector tuning.
 
 ## Evidence ceiling
 
@@ -26,6 +51,9 @@ Four ClickFix fixtures now use only an inert sentinel or local static control. T
 ## Active authority
 
 - Live source, tests, GitHub, [Project_Roadmap.md](../Project_Roadmap.md), and current owner gates outrank this programme state.
+- [Development architecture](../development-architecture/README.md) provides
+  milestone routing and trust-boundary contracts; it is not another roadmap or
+  human queue.
 - Release-integrity blockers, including bridge identity/recovery and extension-origin protection-lowering decisions, retain their existing homes.
 - [ACTION_ITEMS.md](../../ACTION_ITEMS.md) remains the only human-action queue. Its cursor remains AI-19; this seed closes no human decision or manual browser check.
 - The release, research, proving-ground, and optional-native profiles remain separate. The #449 vertical changes no extension runtime behavior, permission, remote service, or committed build output.

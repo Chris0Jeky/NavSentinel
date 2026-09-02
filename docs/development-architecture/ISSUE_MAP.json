@@ -1,0 +1,1192 @@
+[
+  {
+    "issue": 127,
+    "title": "JS behavior monitor: complete remaining implementation slices",
+    "current_milestone": "v0.5.0-unlisted-beta",
+    "proposed_milestone": "post-beta-horizon",
+    "proposed_track": "R1",
+    "priority": "P3",
+    "disposition": "rebody-and-move",
+    "gate": "owner-promotion",
+    "dependencies": [],
+    "rationale": "Release profiles already disable broad JS instrumentation. Remove it from the beta milestone and retain only a post-beta compatibility/performance experiment for an explicit research profile.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/127"
+  },
+  {
+    "issue": 175,
+    "title": "main_guard: no bridge heartbeat/recovery after content-script reload",
+    "current_milestone": "v0.5.0-unlisted-beta",
+    "proposed_milestone": "v0.5.0-unlisted-beta",
+    "proposed_track": "M1",
+    "priority": "P0",
+    "disposition": "keep-or-move",
+    "gate": "human/release",
+    "dependencies": [
+      "#186"
+    ],
+    "rationale": "Required for the declared unlisted-beta integrity, privacy, consent, authority, or package boundary.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/175"
+  },
+  {
+    "issue": 176,
+    "title": "sw: minimize URL persistence in storage.session (store domain, not full URL+query)",
+    "current_milestone": "",
+    "proposed_milestone": "v0.5.0-unlisted-beta",
+    "proposed_track": "M1",
+    "priority": "P0",
+    "disposition": "re-audit-conditional",
+    "gate": "human/release",
+    "dependencies": [
+      "#474"
+    ],
+    "rationale": "Compare current session-state fields with RI-06 purpose and TTL rules. Keep in M1 only if exact URL retention exceeds a documented correctness need; otherwise document and close.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/176"
+  },
+  {
+    "issue": 179,
+    "title": "csp_analyzer: blind to HTTP-header CSP (meta-only) -> false-positive source",
+    "current_milestone": "",
+    "proposed_milestone": "EV-1-efficacy-and-quietness",
+    "proposed_track": "M4",
+    "priority": "P1",
+    "disposition": "rebody-measurement-gated",
+    "gate": "measurement",
+    "dependencies": [],
+    "rationale": "Do not add native or broad network observation pre-beta. First decide whether to neutralize or remove the header-blind CSP contribution, then measure FP/TP impact.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/179"
+  },
+  {
+    "issue": 186,
+    "title": "main_guard bridge handshake authenticates port possession, not isolated-world identity (echo-verify)",
+    "current_milestone": "v0.5.0-unlisted-beta",
+    "proposed_milestone": "v0.5.0-unlisted-beta",
+    "proposed_track": "M1",
+    "priority": "P0",
+    "disposition": "keep-or-move",
+    "gate": "human/release",
+    "dependencies": [
+      "#175"
+    ],
+    "rationale": "Required for the declared unlisted-beta integrity, privacy, consent, authority, or package boundary.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/186"
+  },
+  {
+    "issue": 199,
+    "title": "credential gate: broaden hidden-detection beyond inline display:none/visibility:hidden (threat-validation-gated; residual #192)",
+    "current_milestone": "",
+    "proposed_milestone": "EV-1-efficacy-and-quietness",
+    "proposed_track": "M4",
+    "priority": "P1",
+    "disposition": "move",
+    "gate": "measurement",
+    "dependencies": [
+      "#417",
+      "#232"
+    ],
+    "rationale": "Requires valid attack and benign measurement before implementation or claim changes.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/199"
+  },
+  {
+    "issue": 200,
+    "title": "credential gate: unify presence/visibility checks across content seams onto shared helper (+ shadow DOM)",
+    "current_milestone": "",
+    "proposed_milestone": "EV-1-efficacy-and-quietness",
+    "proposed_track": "M4",
+    "priority": "P1",
+    "disposition": "move",
+    "gate": "measurement",
+    "dependencies": [
+      "#417",
+      "#232"
+    ],
+    "rationale": "Requires valid attack and benign measurement before implementation or claim changes.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/200"
+  },
+  {
+    "issue": 209,
+    "title": "domain: catch separator-only exact brand spoofs (pay-pal.com) without FP on generic hyphenations (block-chain.com)",
+    "current_milestone": "",
+    "proposed_milestone": "EV-1-efficacy-and-quietness",
+    "proposed_track": "M4",
+    "priority": "P1",
+    "disposition": "move",
+    "gate": "measurement",
+    "dependencies": [
+      "#417",
+      "#232"
+    ],
+    "rationale": "Requires valid attack and benign measurement before implementation or claim changes.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/209"
+  },
+  {
+    "issue": 215,
+    "title": "popup: bind the Current-page gauge to the live page (recency/active-tab), not the whole-domain history",
+    "current_milestone": "",
+    "proposed_milestone": "v0.6.0-local-evidence-plane",
+    "proposed_track": "M3",
+    "priority": "P1",
+    "disposition": "move",
+    "gate": "",
+    "dependencies": [
+      "M3 event identity"
+    ],
+    "rationale": "Feeds the bounded local journal, review, attribution, Protection Center, or Data Flow Lens.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/215"
+  },
+  {
+    "issue": 217,
+    "title": "scoring: reconcile nrs_user_activation_active (framed/coloured risk-reducing but carries +5 NRS weight)",
+    "current_milestone": "",
+    "proposed_milestone": "EV-1-efficacy-and-quietness",
+    "proposed_track": "M4",
+    "priority": "P1",
+    "disposition": "move",
+    "gate": "measurement",
+    "dependencies": [
+      "#417",
+      "#232"
+    ],
+    "rationale": "Requires valid attack and benign measurement before implementation or claim changes.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/217"
+  },
+  {
+    "issue": 219,
+    "title": "popup: scoreless threat events (reputation late-warn, mutation/rollback/blank-prompt) leave the Current-page gauge green",
+    "current_milestone": "",
+    "proposed_milestone": "v0.6.0-local-evidence-plane",
+    "proposed_track": "M3",
+    "priority": "P1",
+    "disposition": "move",
+    "gate": "",
+    "dependencies": [
+      "M3 event identity"
+    ],
+    "rationale": "Feeds the bounded local journal, review, attribution, Protection Center, or Data Flow Lens.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/219"
+  },
+  {
+    "issue": 223,
+    "title": "oauth_monitor: redirect/link page carrying a generic ?code= during an active flow can still false-positive redirect-mismatch",
+    "current_milestone": "",
+    "proposed_milestone": "EV-1-efficacy-and-quietness",
+    "proposed_track": "M4",
+    "priority": "P1",
+    "disposition": "move",
+    "gate": "measurement",
+    "dependencies": [
+      "#417",
+      "#232"
+    ],
+    "rationale": "Requires valid attack and benign measurement before implementation or claim changes.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/223"
+  },
+  {
+    "issue": 225,
+    "title": "mutation_monitor: ad-frame hosts (doubleclick.net, googlesyndication.com) are exempted on any subdomain/path",
+    "current_milestone": "",
+    "proposed_milestone": "EV-1-efficacy-and-quietness",
+    "proposed_track": "M4",
+    "priority": "P1",
+    "disposition": "move",
+    "gate": "measurement",
+    "dependencies": [
+      "#417",
+      "#232"
+    ],
+    "rationale": "Requires valid attack and benign measurement before implementation or claim changes.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/225"
+  },
+  {
+    "issue": 232,
+    "title": "[P5-A1] Smart-Mode-Silence CI gate (instrument before tuning)",
+    "current_milestone": "",
+    "proposed_milestone": "EV-1-efficacy-and-quietness",
+    "proposed_track": "M4",
+    "priority": "P1",
+    "disposition": "move",
+    "gate": "",
+    "dependencies": [],
+    "rationale": "Requires valid attack and benign measurement before implementation or claim changes.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/232"
+  },
+  {
+    "issue": 237,
+    "title": "[P5-B3] User-facing Decision Journal in the Chrome Side Panel",
+    "current_milestone": "",
+    "proposed_milestone": "v0.6.0-local-evidence-plane",
+    "proposed_track": "M3",
+    "priority": "P1",
+    "disposition": "move",
+    "gate": "",
+    "dependencies": [
+      "M1 data boundary"
+    ],
+    "rationale": "Feeds the bounded local journal, review, attribution, Protection Center, or Data Flow Lens.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/237"
+  },
+  {
+    "issue": 239,
+    "title": "[P5-C2] Capture the full distribution (silent allows + ignore/timeout outcomes)",
+    "current_milestone": "",
+    "proposed_milestone": "v0.6.0-local-evidence-plane",
+    "proposed_track": "M3",
+    "priority": "P1",
+    "disposition": "re-audit-and-rebody",
+    "gate": "",
+    "dependencies": [
+      "#574",
+      "#576"
+    ],
+    "rationale": "PRs #574 and #576 prove silent allow emission and causal persistence. Rebody this issue to only the still-missing ignore/timeout and full-distribution gaps.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/239"
+  },
+  {
+    "issue": 240,
+    "title": "[P5-C4] Storage + export for the flywheel (IndexedDB + event↔outcome linkage)",
+    "current_milestone": "",
+    "proposed_milestone": "post-beta-horizon",
+    "proposed_track": "R1",
+    "priority": "P3",
+    "disposition": "rebody-and-move",
+    "gate": "owner-promotion",
+    "dependencies": [
+      "#450"
+    ],
+    "rationale": "Reject the old unbounded/unlimitedStorage premise. Any future evidence store must be bounded, retention-controlled, and justified. Coordinate with #450.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/240"
+  },
+  {
+    "issue": 241,
+    "title": "[P5-C5] Offline tuning + corpus-replay harness + conformal calibration",
+    "current_milestone": "",
+    "proposed_milestone": "post-beta-horizon",
+    "proposed_track": "R1",
+    "priority": "P3",
+    "disposition": "merge-scope-into-architecture",
+    "gate": "owner-promotion",
+    "dependencies": [
+      "#417",
+      "#441",
+      "#450"
+    ],
+    "rationale": "Preserve replay-before-tune in M4, but keep conformal/self-tuning implementation post-beta under #441/#450.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/241"
+  },
+  {
+    "issue": 242,
+    "title": "[P5-D1] declarativeNetRequest hard-block fed by the bloom list",
+    "current_milestone": "",
+    "proposed_milestone": "post-beta-horizon",
+    "proposed_track": "R1",
+    "priority": "P3",
+    "disposition": "freeze-and-rebody",
+    "gate": "owner-promotion",
+    "dependencies": [
+      "owner decision"
+    ],
+    "rationale": "Interaction-only beta has no reputation runtime. Treat DNR reputation as a separate post-beta product/privacy decision.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/242"
+  },
+  {
+    "issue": 243,
+    "title": "[P5-D2] Bloom filter runtime refresh + staleness tracking",
+    "current_milestone": "",
+    "proposed_milestone": "post-beta-horizon",
+    "proposed_track": "R1",
+    "priority": "P3",
+    "disposition": "freeze-and-rebody",
+    "gate": "owner-promotion",
+    "dependencies": [
+      "owner decision"
+    ],
+    "rationale": "The old critical wording no longer matches the interaction-only release profile. Keep only as a post-beta signed-data-channel decision.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/243"
+  },
+  {
+    "issue": 244,
+    "title": "[P5-D4] Native-messaging companion — design spike + scoping",
+    "current_milestone": "",
+    "proposed_milestone": "",
+    "proposed_track": "CLOSE",
+    "priority": "P3",
+    "disposition": "close-as-duplicate",
+    "gate": "",
+    "dependencies": [
+      "#452"
+    ],
+    "rationale": "Absorbed by #452. Preserve any protocol-design acceptance criteria there.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/244"
+  },
+  {
+    "issue": 245,
+    "title": "[P5-D5] On-device ML offscreen-document spike (revisits D08 → D21)",
+    "current_milestone": "",
+    "proposed_milestone": "",
+    "proposed_track": "CLOSE",
+    "priority": "P3",
+    "disposition": "close-as-absorbed",
+    "gate": "",
+    "dependencies": [
+      "#444"
+    ],
+    "rationale": "Absorbed by #444. A model remains an untrusted optional sensor.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/245"
+  },
+  {
+    "issue": 246,
+    "title": "[P5-D6] Visual-sim pivot to logo-embedding (re-scopes P4-01c)",
+    "current_milestone": "",
+    "proposed_milestone": "",
+    "proposed_track": "CLOSE",
+    "priority": "P3",
+    "disposition": "close-as-absorbed",
+    "gate": "",
+    "dependencies": [
+      "#444"
+    ],
+    "rationale": "Visual-sim was excised and the future semantic/logo path is owned by #444. Do not revive the old capture path.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/246"
+  },
+  {
+    "issue": 269,
+    "title": "oauth_monitor: empty expectedCallbackDomain (no redirect_uri) silently passes any callback domain (pre-existing)",
+    "current_milestone": "",
+    "proposed_milestone": "EV-1-efficacy-and-quietness",
+    "proposed_track": "M4",
+    "priority": "P1",
+    "disposition": "move",
+    "gate": "measurement",
+    "dependencies": [
+      "#417",
+      "#232"
+    ],
+    "rationale": "Requires valid attack and benign measurement before implementation or claim changes.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/269"
+  },
+  {
+    "issue": 339,
+    "title": "Discovery pass 4 (2026-06-20): 29 findings on scripts / sw / storage / credential / scoring",
+    "current_milestone": "",
+    "proposed_milestone": "maintenance-icebox",
+    "proposed_track": "ICEBOX",
+    "priority": "P3",
+    "disposition": "split-reconcile-close",
+    "gate": "",
+    "dependencies": [],
+    "rationale": "Re-audit the seven residuals against current main, open no new issue unless a residual is still actionable, then close the omnibus issue.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/339"
+  },
+  {
+    "issue": 374,
+    "title": "infra: split capture_isolated chunk (lazy-load debug_overlay / visual_sim) to reclaim budget [Q2 split half]",
+    "current_milestone": "",
+    "proposed_milestone": "",
+    "proposed_track": "CLOSE",
+    "priority": "P3",
+    "disposition": "close-after-verification",
+    "gate": "",
+    "dependencies": [
+      "PR #590"
+    ],
+    "rationale": "Visual-sim is gone and package headroom was recovered by later work. Verify the current 66 KB budget and close; create a new bounded split only when measured pressure recurs.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/374"
+  },
+  {
+    "issue": 389,
+    "title": "redirect_chain: NRS may compute before the async ns-get-chain-info response caches (first-eval staleness)",
+    "current_milestone": "",
+    "proposed_milestone": "v0.5.1-interaction-integrity",
+    "proposed_track": "M2",
+    "priority": "P1",
+    "disposition": "move",
+    "gate": "",
+    "dependencies": [
+      "#569"
+    ],
+    "rationale": "Product interaction correctness or reversible remediation, not a beta-release prerequisite unless it blocks a current gate.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/389"
+  },
+  {
+    "issue": 397,
+    "title": "oauth_monitor/sw: expectedCallbackDomain is updated unconditionally to a different domain mid-flow (design-gated, OAuth FP cluster)",
+    "current_milestone": "",
+    "proposed_milestone": "EV-1-efficacy-and-quietness",
+    "proposed_track": "M4",
+    "priority": "P1",
+    "disposition": "move",
+    "gate": "measurement",
+    "dependencies": [
+      "#417",
+      "#232"
+    ],
+    "rationale": "Requires valid attack and benign measurement before implementation or claim changes.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/397"
+  },
+  {
+    "issue": 408,
+    "title": "content_analyzer: title bounded-scan can be evaded by calibrated middle-band placement (#401 finding 7, accepted tradeoff)",
+    "current_milestone": "",
+    "proposed_milestone": "maintenance-icebox",
+    "proposed_track": "ICEBOX",
+    "priority": "P3",
+    "disposition": "accepted-risk-icebox",
+    "gate": "",
+    "dependencies": [],
+    "rationale": "The issue itself records an accepted bounded tradeoff. Keep out of active milestones.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/408"
+  },
+  {
+    "issue": 415,
+    "title": "release: v0.5.0 — the first real release (CWS submission) [umbrella]",
+    "current_milestone": "v0.5.0-unlisted-beta",
+    "proposed_milestone": "v0.5.0-unlisted-beta",
+    "proposed_track": "M1",
+    "priority": "P0",
+    "disposition": "rebody-in-place",
+    "gate": "human/release",
+    "dependencies": [
+      "#455",
+      "#474",
+      "#175",
+      "#186",
+      "private RI-01"
+    ],
+    "rationale": "Remove the stale real-bloom requirement and obsolete PR references. Make the interaction-only package, current RI/PM gates, tag, GitHub release, and unlisted CWS submission authoritative.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/415"
+  },
+  {
+    "issue": 416,
+    "title": "measurement: recurring measurement-reset session — real bloom, Tranco top-1000 FP, corpus TP, benchmark baseline",
+    "current_milestone": "",
+    "proposed_milestone": "EV-1-efficacy-and-quietness",
+    "proposed_track": "M4",
+    "priority": "P1",
+    "disposition": "rebody-in-place",
+    "gate": "measurement",
+    "dependencies": [
+      "#417"
+    ],
+    "rationale": "Remove real-bloom and closed-PR assumptions. Sequence after #417 and report current interaction-only profile metrics.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/416"
+  },
+  {
+    "issue": 417,
+    "title": "corpus: methodology v2 — real-hostname routing, trusted clicks, protected-vs-fired scoring",
+    "current_milestone": "",
+    "proposed_milestone": "EV-1-efficacy-and-quietness",
+    "proposed_track": "M4",
+    "priority": "P1",
+    "disposition": "move",
+    "gate": "measurement",
+    "dependencies": [
+      "M0 outcome model"
+    ],
+    "rationale": "Requires valid attack and benign measurement before implementation or claim changes.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/417"
+  },
+  {
+    "issue": 418,
+    "title": "benchmark: make P2-10 true — add the Safe Browsing comparison arm or re-scope, and evidence the store headline",
+    "current_milestone": "",
+    "proposed_milestone": "EV-1-efficacy-and-quietness",
+    "proposed_track": "M4",
+    "priority": "P1",
+    "disposition": "move",
+    "gate": "measurement",
+    "dependencies": [
+      "#417",
+      "#416",
+      "branded Chrome"
+    ],
+    "rationale": "Requires valid attack and benign measurement before implementation or claim changes.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/418"
+  },
+  {
+    "issue": 419,
+    "title": "process: Gate-3 batch runner + risk-based browser-surface re-tiering + human-gated WIP cap",
+    "current_milestone": "",
+    "proposed_milestone": "M0-proving-ground-foundation",
+    "proposed_track": "M0",
+    "priority": "P1",
+    "disposition": "rebody-in-place",
+    "gate": "browser",
+    "dependencies": [],
+    "rationale": "Replace stale PR numbers with a current exact-head Gate-3 batch, a runtime-risk WIP cap, and machine-readable gate receipts.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/419"
+  },
+  {
+    "issue": 420,
+    "title": "infra: scheduled headed-Chrome verification lane on the maintainer machine (Gate-3 class + weekly FP smoke)",
+    "current_milestone": "",
+    "proposed_milestone": "M0-proving-ground-foundation",
+    "proposed_track": "M0",
+    "priority": "P1",
+    "disposition": "move",
+    "gate": "browser",
+    "dependencies": [
+      "#449"
+    ],
+    "rationale": "Directly improves the trustworthiness, reproducibility, or platform fidelity of browser evidence.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/420"
+  },
+  {
+    "issue": 421,
+    "title": "process: collapse the status-doc system — trim ACTION_ITEMS, fold docs-sync into code PRs, refresh orientation docs",
+    "current_milestone": "",
+    "proposed_milestone": "maintenance-icebox",
+    "proposed_track": "ICEBOX",
+    "priority": "P3",
+    "disposition": "verify-enacted-then-close",
+    "gate": "",
+    "dependencies": [
+      "#437"
+    ],
+    "rationale": "Much of the status-doc collapse appears enacted. Compare current files with acceptance, retain only missing rotation work under #437, then close.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/421"
+  },
+  {
+    "issue": 422,
+    "title": "process: replace the never-stop discovery rule with a priority ladder + hardening icebox",
+    "current_milestone": "",
+    "proposed_milestone": "maintenance-icebox",
+    "proposed_track": "ICEBOX",
+    "priority": "P3",
+    "disposition": "verify-enacted-then-close",
+    "gate": "",
+    "dependencies": [
+      "maintenance-icebox"
+    ],
+    "rationale": "The security programme already adopts a bounded queue and issue deduplication. Verify the priority ladder and icebox rules, then close.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/422"
+  },
+  {
+    "issue": 425,
+    "title": "growth: distribution and first-users plan — dogfood, unlisted beta, launch, audit outreach",
+    "current_milestone": "",
+    "proposed_milestone": "BETA-1-cohort-and-operations",
+    "proposed_track": "M5",
+    "priority": "P2",
+    "disposition": "rebody-in-place",
+    "gate": "",
+    "dependencies": [
+      "#415",
+      "external review"
+    ],
+    "rationale": "Use the current roadmap cohort targets: 15 invitations, 10 activated installs, D14/D30 outcomes, and no public launch before external review.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/425"
+  },
+  {
+    "issue": 426,
+    "title": "detection: corpus TP failure triage — classify all 72 missed pages, seed detection-gap fixes",
+    "current_milestone": "",
+    "proposed_milestone": "EV-1-efficacy-and-quietness",
+    "proposed_track": "M4",
+    "priority": "P1",
+    "disposition": "rebody-after-417",
+    "gate": "measurement",
+    "dependencies": [
+      "#417",
+      "#416"
+    ],
+    "rationale": "The 72-miss count came from an invalid corpus. Rebody only after corpus v2 produces a valid miss set; seed pattern-family issues, not one issue per page.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/426"
+  },
+  {
+    "issue": 437,
+    "title": "Standing-context budget: rotate oversized routed-path docs (ORCHESTRATOR.md, Project_Roadmap.md)",
+    "current_milestone": "",
+    "proposed_milestone": "maintenance-icebox",
+    "proposed_track": "ICEBOX",
+    "priority": "P3",
+    "disposition": "move",
+    "gate": "",
+    "dependencies": [],
+    "rationale": "Low-risk residue or process/tooling maintenance with no current outcome-gate leverage.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/437"
+  },
+  {
+    "issue": 439,
+    "title": "[EP-01] The Autonomous Proving Ground — agent-verifiable browser truth",
+    "current_milestone": "post-beta-horizon",
+    "proposed_milestone": "",
+    "proposed_track": "CLOSE",
+    "priority": "P3",
+    "disposition": "close-as-duplicate",
+    "gate": "",
+    "dependencies": [],
+    "rationale": "The active Proving Ground is #449 and the owner-machine headed lane is #420. Port any unique one-time ratification requirement, then close #439.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/439"
+  },
+  {
+    "issue": 440,
+    "title": "[EP-02] Signal Fabric — a typed evidence registry replacing the flat score bag",
+    "current_milestone": "post-beta-horizon",
+    "proposed_milestone": "post-beta-horizon",
+    "proposed_track": "R1",
+    "priority": "P3",
+    "disposition": "keep-or-move",
+    "gate": "owner-promotion",
+    "dependencies": [],
+    "rationale": "Large or speculative architecture that stays frozen until retention and evidence justify it.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/440"
+  },
+  {
+    "issue": 441,
+    "title": "[EP-03] Calibrated Judgment — conformal confidence and principled abstention",
+    "current_milestone": "post-beta-horizon",
+    "proposed_milestone": "post-beta-horizon",
+    "proposed_track": "R1",
+    "priority": "P3",
+    "disposition": "keep-or-move",
+    "gate": "owner-promotion",
+    "dependencies": [],
+    "rationale": "Large or speculative architecture that stays frozen until retention and evidence justify it.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/441"
+  },
+  {
+    "issue": 442,
+    "title": "[EP-04] Attention Budget — interruption as a governed resource",
+    "current_milestone": "post-beta-horizon",
+    "proposed_milestone": "post-beta-horizon",
+    "proposed_track": "R1",
+    "priority": "P3",
+    "disposition": "keep-or-move",
+    "gate": "owner-promotion",
+    "dependencies": [],
+    "rationale": "Large or speculative architecture that stays frozen until retention and evidence justify it.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/442"
+  },
+  {
+    "issue": 443,
+    "title": "[EP-05] Attack Narrative Engine — scoring stories, not snapshots",
+    "current_milestone": "post-beta-horizon",
+    "proposed_milestone": "post-beta-horizon",
+    "proposed_track": "R1",
+    "priority": "P3",
+    "disposition": "keep-or-move",
+    "gate": "owner-promotion",
+    "dependencies": [],
+    "rationale": "Large or speculative architecture that stays frozen until retention and evidence justify it.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/443"
+  },
+  {
+    "issue": 444,
+    "title": "[EP-06] Semantic Sentinel — a staged on-device semantic organ",
+    "current_milestone": "post-beta-horizon",
+    "proposed_milestone": "post-beta-horizon",
+    "proposed_track": "R1",
+    "priority": "P3",
+    "disposition": "keep-or-move",
+    "gate": "owner-promotion",
+    "dependencies": [],
+    "rationale": "Large or speculative architecture that stays frozen until retention and evidence justify it.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/444"
+  },
+  {
+    "issue": 445,
+    "title": "[EP-07] Trust Ledger & Lens — user-owned relationship memory as the FP-killer prior",
+    "current_milestone": "post-beta-horizon",
+    "proposed_milestone": "post-beta-horizon",
+    "proposed_track": "R1",
+    "priority": "P3",
+    "disposition": "keep-or-move",
+    "gate": "owner-promotion",
+    "dependencies": [],
+    "rationale": "Large or speculative architecture that stays frozen until retention and evidence justify it.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/445"
+  },
+  {
+    "issue": 446,
+    "title": "[EP-08] Aftermath & the Reversible Session — the recovery copilot",
+    "current_milestone": "post-beta-horizon",
+    "proposed_milestone": "post-beta-horizon",
+    "proposed_track": "R1",
+    "priority": "P3",
+    "disposition": "keep-or-move",
+    "gate": "owner-promotion",
+    "dependencies": [],
+    "rationale": "Large or speculative architecture that stays frozen until retention and evidence justify it.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/446"
+  },
+  {
+    "issue": 447,
+    "title": "[EP-09] Guardian Circle — family protection without a cloud (+ the sustainability seam)",
+    "current_milestone": "post-beta-horizon",
+    "proposed_milestone": "post-beta-horizon",
+    "proposed_track": "R1",
+    "priority": "P3",
+    "disposition": "keep-or-move",
+    "gate": "owner-promotion",
+    "dependencies": [],
+    "rationale": "Large or speculative architecture that stays frozen until retention and evidence justify it.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/447"
+  },
+  {
+    "issue": 448,
+    "title": "[EP-10] Agent Conduct Layer — seatbelt and flight recorder for agentic browsing",
+    "current_milestone": "post-beta-horizon",
+    "proposed_milestone": "post-beta-horizon",
+    "proposed_track": "R1",
+    "priority": "P3",
+    "disposition": "keep-or-move",
+    "gate": "owner-promotion",
+    "dependencies": [],
+    "rationale": "Large or speculative architecture that stays frozen until retention and evidence justify it.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/448"
+  },
+  {
+    "issue": 449,
+    "title": "[EP-11] The Proving Ground — necessity invariants, a self-adversarial gym, and the open benchmark",
+    "current_milestone": "post-beta-horizon",
+    "proposed_milestone": "M0-proving-ground-foundation",
+    "proposed_track": "M0",
+    "priority": "P1",
+    "disposition": "move-and-rebody-active",
+    "gate": "",
+    "dependencies": [
+      "PR #597",
+      "PR #598"
+    ],
+    "rationale": "Move out of the frozen horizon milestone. Rebody around the already-merged registry and oracle, remaining localizations, mutation/holdout, and evidence receipts. Public benchmark remains post-beta.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/449"
+  },
+  {
+    "issue": 450,
+    "title": "[EP-12] The Local Flywheel & Attack Capsules — self-tuning + replayable real-world corpus",
+    "current_milestone": "post-beta-horizon",
+    "proposed_milestone": "post-beta-horizon",
+    "proposed_track": "R1",
+    "priority": "P3",
+    "disposition": "keep-or-move",
+    "gate": "owner-promotion",
+    "dependencies": [],
+    "rationale": "Large or speculative architecture that stays frozen until retention and evidence justify it.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/450"
+  },
+  {
+    "issue": 451,
+    "title": "[EP-13] The Open Immune System — signed community rule packs (data, not code)",
+    "current_milestone": "post-beta-horizon",
+    "proposed_milestone": "post-beta-horizon",
+    "proposed_track": "R1",
+    "priority": "P3",
+    "disposition": "keep-or-move",
+    "gate": "owner-promotion",
+    "dependencies": [],
+    "rationale": "Large or speculative architecture that stays frozen until retention and evidence justify it.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/451"
+  },
+  {
+    "issue": 452,
+    "title": "[EP-14] Sentinel Companion — the native daemon that closes the OS gap",
+    "current_milestone": "post-beta-horizon",
+    "proposed_milestone": "post-beta-horizon",
+    "proposed_track": "R1",
+    "priority": "P3",
+    "disposition": "keep-or-move",
+    "gate": "owner-promotion",
+    "dependencies": [],
+    "rationale": "Large or speculative architecture that stays frozen until retention and evidence justify it.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/452"
+  },
+  {
+    "issue": 453,
+    "title": "[EP-15] Sentinel Mobile — go where the victims actually are",
+    "current_milestone": "post-beta-horizon",
+    "proposed_milestone": "post-beta-horizon",
+    "proposed_track": "R1",
+    "priority": "P3",
+    "disposition": "keep-or-move",
+    "gate": "owner-promotion",
+    "dependencies": [],
+    "rationale": "Large or speculative architecture that stays frozen until retention and evidence justify it.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/453"
+  },
+  {
+    "issue": 455,
+    "title": "release: add pre-collection disclosure and consent gate for CWS 2026 policy",
+    "current_milestone": "v0.5.0-unlisted-beta",
+    "proposed_milestone": "v0.5.0-unlisted-beta",
+    "proposed_track": "M1",
+    "priority": "P0",
+    "disposition": "keep-or-move",
+    "gate": "human/release",
+    "dependencies": [],
+    "rationale": "Required for the declared unlisted-beta integrity, privacy, consent, authority, or package boundary.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/455"
+  },
+  {
+    "issue": 458,
+    "title": "main-guard: Chromium own Location methods bypass prototype assign/replace wrapper",
+    "current_milestone": "",
+    "proposed_milestone": "M0-proving-ground-foundation",
+    "proposed_track": "M0",
+    "priority": "P1",
+    "disposition": "rebody-and-move-browser-evidence",
+    "gate": "browser",
+    "dependencies": [
+      "PR #534",
+      "minimum supported Chrome",
+      "current branded Chrome"
+    ],
+    "rationale": "PR #534 removed the ineffective wrappers and documented the post-commit boundary, but explicitly did not verify the issue's minimum/current branded-Chrome matrix. Narrow to that evidence residual and keep it in M0.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/458"
+  },
+  {
+    "issue": 460,
+    "title": "test harness: Windows parallel E2E can miss blank-anchor interception",
+    "current_milestone": "",
+    "proposed_milestone": "M0-proving-ground-foundation",
+    "proposed_track": "M0",
+    "priority": "P1",
+    "disposition": "move",
+    "gate": "browser",
+    "dependencies": [],
+    "rationale": "Directly improves the trustworthiness, reproducibility, or platform fidelity of browser evidence.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/460"
+  },
+  {
+    "issue": 462,
+    "title": "tooling: retire CRXJS deprecated Vite HMR option and define MAIN-world dev support",
+    "current_milestone": "",
+    "proposed_milestone": "maintenance-icebox",
+    "proposed_track": "ICEBOX",
+    "priority": "P3",
+    "disposition": "move",
+    "gate": "",
+    "dependencies": [],
+    "rationale": "Low-risk residue or process/tooling maintenance with no current outcome-gate leverage.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/462"
+  },
+  {
+    "issue": 474,
+    "title": "privacy(RI-06): remaining slice — unified clear-all behavioural-data reset",
+    "current_milestone": "v0.5.0-unlisted-beta",
+    "proposed_milestone": "v0.5.0-unlisted-beta",
+    "proposed_track": "M1",
+    "priority": "P0",
+    "disposition": "keep-beta-rebody",
+    "gate": "human/release",
+    "dependencies": [],
+    "rationale": "Update the body to reflect merged reset slices and name only the still-uncleared stores and crash-order semantics.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/474"
+  },
+  {
+    "issue": 496,
+    "title": "e2e(doubleclick): prove opener-navigation correlation in a real browser",
+    "current_milestone": "",
+    "proposed_milestone": "M0-proving-ground-foundation",
+    "proposed_track": "M0",
+    "priority": "P1",
+    "disposition": "keep-proof-milestone",
+    "gate": "browser",
+    "dependencies": [],
+    "rationale": "This is exactly an independent harm-oracle correction and belongs in M0, not a detector-feature milestone.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/496"
+  },
+  {
+    "issue": 498,
+    "title": "e2e(windows): two legitimate popup regressions fail while Ubuntu CI passes",
+    "current_milestone": "",
+    "proposed_milestone": "M0-proving-ground-foundation",
+    "proposed_track": "M0",
+    "priority": "P1",
+    "disposition": "move",
+    "gate": "browser",
+    "dependencies": [],
+    "rationale": "Directly improves the trustworthiness, reproducibility, or platform fidelity of browser evidence.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/498"
+  },
+  {
+    "issue": 523,
+    "title": "main_guard: unrate-limited ns-clipboard-write can saturate the pre-bridge priority queue and drop ns-nav-blocked (#302 sibling vector)",
+    "current_milestone": "",
+    "proposed_milestone": "v0.5.0-unlisted-beta",
+    "proposed_track": "M1",
+    "priority": "P0",
+    "disposition": "close-on-pr-599",
+    "gate": "human/release; browser",
+    "dependencies": [
+      "PR #599",
+      "AI-37"
+    ],
+    "rationale": "PR #599 supplies bounded exact-artifact evidence. Close only after AI-37 policy acceptance, branded-Chrome Gate-3, and merge.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/523"
+  },
+  {
+    "issue": 558,
+    "title": "settings: autosave by default and prevent popup/options stale-save clobber",
+    "current_milestone": "",
+    "proposed_milestone": "v0.5.1-interaction-integrity",
+    "proposed_track": "M2",
+    "priority": "P1",
+    "disposition": "move",
+    "gate": "",
+    "dependencies": [],
+    "rationale": "Product interaction correctness or reversible remediation, not a beta-release prerequisite unless it blocks a current gate.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/558"
+  },
+  {
+    "issue": 560,
+    "title": "feat(ui): compact actionable protection toasts after inactivity or outside interaction",
+    "current_milestone": "",
+    "proposed_milestone": "v0.5.1-interaction-integrity",
+    "proposed_track": "M2",
+    "priority": "P1",
+    "disposition": "move-after-pr-600",
+    "gate": "browser",
+    "dependencies": [
+      "PR #600"
+    ],
+    "rationale": "PR #600 repairs the accepted inert-control regression but does not implement the complete compact lifecycle. Rebody #560 after merge to remaining lifecycle work only.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/560"
+  },
+  {
+    "issue": 561,
+    "title": "feat(options): expose advanced protection-toast timing controls",
+    "current_milestone": "",
+    "proposed_milestone": "v0.5.1-interaction-integrity",
+    "proposed_track": "M2",
+    "priority": "P1",
+    "disposition": "move",
+    "gate": "",
+    "dependencies": [],
+    "rationale": "Product interaction correctness or reversible remediation, not a beta-release prerequisite unless it blocks a current gate.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/561"
+  },
+  {
+    "issue": 562,
+    "title": "analytics: show locally retained overlay-cleanup activity",
+    "current_milestone": "",
+    "proposed_milestone": "v0.6.0-local-evidence-plane",
+    "proposed_track": "M3",
+    "priority": "P1",
+    "disposition": "move",
+    "gate": "",
+    "dependencies": [
+      "M1 data boundary"
+    ],
+    "rationale": "Feeds the bounded local journal, review, attribution, Protection Center, or Data Flow Lens.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/562"
+  },
+  {
+    "issue": 563,
+    "title": "options: add scoped protection resets and contextual configuration actions",
+    "current_milestone": "",
+    "proposed_milestone": "v0.5.1-interaction-integrity",
+    "proposed_track": "M2",
+    "priority": "P1",
+    "disposition": "move",
+    "gate": "",
+    "dependencies": [],
+    "rationale": "Product interaction correctness or reversible remediation, not a beta-release prerequisite unless it blocks a current gate.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/563"
+  },
+  {
+    "issue": 564,
+    "title": "overlay cleanup: cover deeply nested and static shadow-root foreground traps",
+    "current_milestone": "",
+    "proposed_milestone": "v0.5.1-interaction-integrity",
+    "proposed_track": "M2",
+    "priority": "P1",
+    "disposition": "move",
+    "gate": "",
+    "dependencies": [
+      "#557"
+    ],
+    "rationale": "Product interaction correctness or reversible remediation, not a beta-release prerequisite unless it blocks a current gate.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/564"
+  },
+  {
+    "issue": 565,
+    "title": "dev: expose stale unpacked-extension loaders after rebuilding dist",
+    "current_milestone": "",
+    "proposed_milestone": "M0-proving-ground-foundation",
+    "proposed_track": "M0",
+    "priority": "P1",
+    "disposition": "move",
+    "gate": "browser",
+    "dependencies": [],
+    "rationale": "Directly improves the trustworthiness, reproducibility, or platform fidelity of browser evidence.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/565"
+  },
+  {
+    "issue": 566,
+    "title": "navigation: keep middle/Ctrl-click authority scoped to the new tab",
+    "current_milestone": "",
+    "proposed_milestone": "v0.5.1-interaction-integrity",
+    "proposed_track": "M2",
+    "priority": "P1",
+    "disposition": "keep-parked",
+    "gate": "browser",
+    "dependencies": [
+      "SP-F-013",
+      "PR #572"
+    ],
+    "rationale": "PR #572 is not merge-ready. Preserve SP-F-013, the retained base-replace survivor, and evidence downgrade. Do not run AI-31 or raise bundle budgets.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/566"
+  },
+  {
+    "issue": 569,
+    "title": "redirect chains: prevent stale chain scoring across explicit navigation boundaries",
+    "current_milestone": "",
+    "proposed_milestone": "v0.5.1-interaction-integrity",
+    "proposed_track": "M2",
+    "priority": "P1",
+    "disposition": "move",
+    "gate": "",
+    "dependencies": [],
+    "rationale": "Product interaction correctness or reversible remediation, not a beta-release prerequisite unless it blocks a current gate.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/569"
+  },
+  {
+    "issue": 577,
+    "title": "overlay cleanup: harden exact-stamp ownership and prune retained groups",
+    "current_milestone": "",
+    "proposed_milestone": "v0.5.1-interaction-integrity",
+    "proposed_track": "M2",
+    "priority": "P1",
+    "disposition": "move",
+    "gate": "",
+    "dependencies": [
+      "#557"
+    ],
+    "rationale": "Product interaction correctness or reversible remediation, not a beta-release prerequisite unless it blocks a current gate.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/577"
+  },
+  {
+    "issue": 579,
+    "title": "overlay cleanup: preserve Undo across unrelated toast replacement",
+    "current_milestone": "",
+    "proposed_milestone": "v0.5.1-interaction-integrity",
+    "proposed_track": "M2",
+    "priority": "P1",
+    "disposition": "move",
+    "gate": "",
+    "dependencies": [
+      "#557"
+    ],
+    "rationale": "Product interaction correctness or reversible remediation, not a beta-release prerequisite unless it blocks a current gate.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/579"
+  },
+  {
+    "issue": 580,
+    "title": "overlay cleanup: measure and reduce injection-to-hide latency",
+    "current_milestone": "",
+    "proposed_milestone": "v0.5.1-interaction-integrity",
+    "proposed_track": "M2",
+    "priority": "P1",
+    "disposition": "move",
+    "gate": "browser",
+    "dependencies": [
+      "#557"
+    ],
+    "rationale": "Product interaction correctness or reversible remediation, not a beta-release prerequisite unless it blocks a current gate.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/580"
+  },
+  {
+    "issue": 585,
+    "title": "event log: validate imported pageSite and preserve legacy fallback",
+    "current_milestone": "",
+    "proposed_milestone": "v0.6.0-local-evidence-plane",
+    "proposed_track": "M3",
+    "priority": "P1",
+    "disposition": "move",
+    "gate": "",
+    "dependencies": [
+      "M1 data boundary"
+    ],
+    "rationale": "Feeds the bounded local journal, review, attribution, Protection Center, or Data Flow Lens.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/585"
+  },
+  {
+    "issue": 591,
+    "title": "feat: add privacy-safe overlay review and diagnostic feedback export",
+    "current_milestone": "",
+    "proposed_milestone": "v0.6.0-local-evidence-plane",
+    "proposed_track": "M3",
+    "priority": "P1",
+    "disposition": "move",
+    "gate": "",
+    "dependencies": [
+      "M1 data boundary"
+    ],
+    "rationale": "Feeds the bounded local journal, review, attribution, Protection Center, or Data Flow Lens.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/591"
+  },
+  {
+    "issue": 592,
+    "title": "feat: add a local Protection Center with satisfying activity stats",
+    "current_milestone": "",
+    "proposed_milestone": "v0.6.0-local-evidence-plane",
+    "proposed_track": "M3",
+    "priority": "P1",
+    "disposition": "move",
+    "gate": "",
+    "dependencies": [
+      "#591",
+      "#562"
+    ],
+    "rationale": "Feeds the bounded local journal, review, attribution, Protection Center, or Data Flow Lens.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/592"
+  },
+  {
+    "issue": 593,
+    "title": "investigate: capture intermittent hidden-media redirect bypass evidence",
+    "current_milestone": "",
+    "proposed_milestone": "M0-proving-ground-foundation",
+    "proposed_track": "M0",
+    "priority": "P1",
+    "disposition": "investigation-only",
+    "gate": "",
+    "dependencies": [
+      "#591"
+    ],
+    "rationale": "Keep in M0 until a stable synthetic reproduction exists. Do not create a runtime-fix issue from a rotating live observation.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/593"
+  },
+  {
+    "issue": 594,
+    "title": "investigate: high-confidence handling for embedded-player nuisance dialogs",
+    "current_milestone": "",
+    "proposed_milestone": "v0.5.1-interaction-integrity",
+    "proposed_track": "M2",
+    "priority": "P1",
+    "disposition": "research-with-stop-condition",
+    "gate": "",
+    "dependencies": [
+      "#591"
+    ],
+    "rationale": "Do not auto-dismiss accessible dialogs from visual resemblance. Require independent signals or a user-invoked action with false-positive controls.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/594"
+  },
+  {
+    "issue": 595,
+    "title": "test: make mutation-monitor flood synchronization deterministic in CI",
+    "current_milestone": "",
+    "proposed_milestone": "M0-proving-ground-foundation",
+    "proposed_track": "M0",
+    "priority": "P1",
+    "disposition": "fix-harness-not-assertion",
+    "gate": "",
+    "dependencies": [],
+    "rationale": "Synchronize MutationObserver delivery without weakening reserve-count assertions.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/595"
+  },
+  {
+    "issue": 601,
+    "title": "Page-realm reach into the injected toast UI (RI-01 residue after #600)",
+    "current_milestone": "",
+    "proposed_milestone": "v0.5.0-unlisted-beta",
+    "proposed_track": "M1",
+    "priority": "P0",
+    "disposition": "keep-beta-link-private-ri01",
+    "gate": "human/release",
+    "dependencies": [
+      "PR #600",
+      "private RI-01"
+    ],
+    "rationale": "Cheap containment can land, but durable closure is the private RI-01 extension-origin authority path. Do not treat page-injected hardening as the final security boundary.",
+    "url": "https://github.com/Chris0Jeky/NavSentinel/issues/601"
+  }
+]
