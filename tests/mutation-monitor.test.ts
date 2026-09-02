@@ -1269,6 +1269,17 @@ describe("mutation_monitor flood-then-inject reserve past the alert cap (#413)",
    * test fails on its own security-relevant assertion rather than being masked
    * here; the exact 45 is pinned by the reserve-bound test below.
    */
+  async function waitForMutationObserverDelivery(): Promise<void> {
+    // happy-dom captures the native queueMicrotask implementation before
+    // Vitest installs fake timers. Wait for its observer callback explicitly so
+    // the following debounce advance cannot race record delivery.
+    for (let turn = 0; turn < 10; turn += 1) {
+      await Promise.resolve();
+      if (_getPendingMutationCountForTesting() > 0) return;
+    }
+    throw new Error("MutationObserver did not deliver the flood records");
+  }
+
   async function floodWithBenignAlerts(): Promise<HTMLFormElement[]> {
     const alertCountBeforeFlood = getMutationAlertCount();
     const forms: HTMLFormElement[] = [];
@@ -1281,6 +1292,7 @@ describe("mutation_monitor flood-then-inject reserve past the alert cap (#413)",
       form.setAttribute("action", "/benign-" + i + "-a");
       forms.push(form);
     }
+    await waitForMutationObserverDelivery();
     await vi.advanceTimersByTimeAsync(200);
     // The helper can also run after a deliberately seeded scarce alert; baseline
     // registration itself must never add an alert in either case.
@@ -1289,6 +1301,7 @@ describe("mutation_monitor flood-then-inject reserve past the alert cap (#413)",
     for (let i = 0; i < forms.length; i++) {
       forms[i]!.setAttribute("action", "/benign-" + i + "-b");
     }
+    await waitForMutationObserverDelivery();
     await vi.advanceTimersByTimeAsync(200);
 
     // 60 floodable alerts offered; the flood is now the only alert source.
