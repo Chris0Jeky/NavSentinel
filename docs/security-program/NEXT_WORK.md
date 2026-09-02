@@ -16,9 +16,8 @@ branded-Chrome gates remain open. PR #600 is clean with green hosted checks but
 still needs its exact-head owner media-page check. PR #610 is the bounded
 test-only #449 parent slice for the seven core locality fixtures; it must still
 satisfy its own exact-head checks and review before merge. The final two RW
-locality holds are prepared as a stacked follow-up whose PR number is
-pending/unpublished; that follow-up remains based on #610 until the parent
-lands.
+locality holds are PR #613, the stacked follow-up; PR #613 remains based on
+#610 until the parent lands.
 
 1. **Finish or park the current runtime queue before opening another vertical.**
    Keep #599 and #600 aligned with current `main`, their exact heads, owner
