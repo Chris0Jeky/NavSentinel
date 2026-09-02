@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="local-fixture-targets.js"></script>
   <title>Evasion 01 - Opacity 0.09 overlay</title>
   <style>
     body { font-family: sans-serif; padding: 24px; }
@@ -45,9 +46,11 @@
     </p>
   </div>
 
-  <a class="real-link" href="https://example.com">Real Link</a>
+  <a class="real-link" href="local-fixture-sink.html"
+     data-navsentinel-local-target="benign" data-navsentinel-scenario="NS-ADV-UI-001">Real Link</a>
 
   <!-- Attacker overlay: opacity 0.09, just above old 0.08 threshold -->
-  <a id="trap" class="overlay" href="https://evil.example.com" target="_blank" rel="noreferrer" aria-label=""></a>
+  <a id="trap" class="overlay" href="local-fixture-sink.html" target="_blank" rel="noreferrer" aria-label=""
+     data-navsentinel-local-target="harm" data-navsentinel-scenario="NS-ADV-UI-001"></a>
 </body>
 </html>
