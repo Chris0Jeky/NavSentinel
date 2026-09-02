@@ -4,6 +4,7 @@ import {
   PROVING_GROUND_SENTINEL,
   startProvingGroundEgressFence,
   startProvingGroundFakeSink,
+  startProvingGroundFakeSinkForHost,
 } from "./e2e/proving_ground_fake_sink";
 
 describe("Proving Ground fake sink", () => {
@@ -89,6 +90,42 @@ describe("Proving Ground fake sink", () => {
       }]);
     } finally {
       await fence.close();
+    }
+  });
+
+  it("reaches a real IPv6 loopback sink or reports unsupported host family", async () => {
+    let sink: Awaited<ReturnType<typeof startProvingGroundFakeSinkForHost>>;
+    try {
+      sink = await startProvingGroundFakeSinkForHost("::1", {
+        runId: "unit-ipv6-run",
+        scenarioId: "NS-ADV-WIN-001",
+        allowedRoles: ["attack"],
+        allowedConsequences: ["unauthorized-browsing-context"],
+        targetAuthorities: [{
+          id: "unit-ipv6-harm",
+          role: "attack",
+          consequence: "unauthorized-browsing-context",
+          maxUses: 1,
+        }],
+      });
+    } catch (error) {
+      expect(error).toEqual(new Error("unsupported-loopback-host-family"));
+      return;
+    }
+
+    try {
+      expect(new URL(sink.origin).hostname).toBe("[::1]");
+      const targetUrl = sink.urlFor("attack", "unauthorized-browsing-context", "unit-ipv6-harm");
+      const accepted = await fetch(targetUrl);
+      expect(accepted.status).toBe(200);
+      expect(sink.snapshot().receipts).toEqual([expect.objectContaining({
+        scenarioId: "NS-ADV-WIN-001",
+        role: "attack",
+        consequence: "unauthorized-browsing-context",
+        targetId: "unit-ipv6-harm",
+      })]);
+    } finally {
+      await sink.close();
     }
   });
 });

@@ -1600,9 +1600,14 @@ test("Level 9 legit overlay controls and visible docs link stay allowed @regress
       if (!popup) throw new Error("Expected the visible docs link to open");
       await popup.waitForLoadState("domcontentloaded", { timeout: 5000 });
       const popupUrl = new URL(popup.url());
+      const pageUrl = new URL(page.url());
       expect(popupUrl.pathname).toBe("/local-fixture-sink.html");
       expect(popupUrl.searchParams.get("role")).toBe("benign");
       expect(popupUrl.searchParams.get("scenario_id")).toBe("NS-ADV-UI-004");
+      expect(["127.0.0.1", "localhost"]).toContain(popupUrl.hostname);
+      expect(popupUrl.hostname).not.toBe(pageUrl.hostname);
+      expect(popupUrl.origin).not.toBe(pageUrl.origin);
+      expect(popupUrl.port).toBe(pageUrl.port);
       await expect(popup.locator("html")).toHaveAttribute("data-fixture-sink-valid", "1");
       await expect(popup.locator("html")).toHaveAttribute("data-benign-completed", "1");
       expect(context.pages().length).toBeGreaterThan(beforePages);
@@ -1784,8 +1789,55 @@ test("Level 5 blocks window.open popunder @smoke", async () => {
       });
 
       await waitForNavSentinelBridge(page);
+      const originalUrl = page.url();
+      const beforePages = context.pages().length;
       await page.click("#area");
       await waitForToastText(page, "Blocked popup", 3000);
+      expect(page.url()).toBe(originalUrl);
+      expect(context.pages()).toHaveLength(beforePages);
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("Level 5 popup consequence reaches the typed local harm sink without extension @regression", async () => {
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: ["--disable-extensions"]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/level5-window-open-popunder.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      const originalUrl = page.url();
+      const beforePages = context.pages().length;
+      const popupPromise = context.waitForEvent("page", { timeout: 5000 });
+      await page.click("#area");
+      const popup = await popupPromise;
+      await popup.waitForLoadState("domcontentloaded", { timeout: 5000 });
+      const popupUrl = new URL(popup.url());
+      expect(popupUrl.pathname).toBe("/local-fixture-sink.html");
+      expect(popupUrl.searchParams.get("role")).toBe("harm");
+      expect(popupUrl.searchParams.get("scenario_id")).toBe("NS-ADV-WIN-001");
+      expect(popupUrl.searchParams.get("consequence")).toBe("unauthorized-browsing-context");
+      await expect(popup.locator("html")).toHaveAttribute("data-fixture-sink-valid", "1");
+      await expect(popup.locator("html")).toHaveAttribute("data-harm-reached", "1");
+      expect(page.url()).toBe(originalUrl);
+      expect(context.pages()).toHaveLength(beforePages + 1);
+      await popup.close();
     } finally {
       await context.close();
     }
