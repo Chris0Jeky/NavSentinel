@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Evasion 07 - pointer-events: none bypass</title>
+  <script src="local-fixture-targets.js"></script>
   <style>
     body {
       font-family: sans-serif;
@@ -72,7 +73,8 @@
     redirect relies on the main_guard.ts window.open intercept.
   </p>
 
-  <a id="legit-link" href="https://example.com/safe" aria-label="Safe destination link">
+  <a id="legit-link" aria-label="Safe destination link"
+     data-navsentinel-local-target="benign" data-navsentinel-scenario="NS-ADV-UI-005">
     Click here for safe content
   </a>
 
@@ -89,7 +91,7 @@
       e.stopPropagation();
       // Attempt malicious redirect via window.open
       try {
-        window.open("https://evil.example/evasion07", "_blank");
+        window.open(window.NavSentinelLocalTargets.url("harm", "NS-ADV-UI-005"), "_blank");
       } catch (err) {
         // main_guard.ts should catch this
       }

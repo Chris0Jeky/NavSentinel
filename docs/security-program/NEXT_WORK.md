@@ -1,13 +1,51 @@
 # Next work
 
-This is a short execution cursor, not a second product roadmap. Reconcile it with live GitHub, [Project_Roadmap.md](../Project_Roadmap.md), and owner gates before starting a slice.
+This is a short execution cursor, not a second product roadmap. Reconcile it
+with live GitHub, [Project_Roadmap.md](../Project_Roadmap.md), the
+[development architecture](../development-architecture/README.md), and owner
+gates before starting a slice.
 
-PR #572 remains parked before AI-31. Behavior head `03f04f4` passed the 30-case trusted bundled-Chromium matrix, both unchanged profile budgets, and hosted run `33318797927`, but later exact-head campaigns invalidated the qualification claim. Run `33320724757` exposed destroyed-document evaluation and generic page-attribution harness errors. After correcting those methods, two separate 50-profile campaigns each retained one valid local `base-replace-handler` survivor. A source-baseline acknowledgement candidate still produced one survivor and exceeded the unchanged research profile budget, so it was not pushed. SP-F-013 owns the exact resume point and the mapped lane is only `FIXTURE_PROVEN`. PRs #599 and #600 remain separately human-gated; do not infer their policy or browser decisions.
+The 2026-08-30 administration pass assigns all 75 open issues: M0 has 10 and M1
+has 8; only those two milestones are active. Planned M2/M3/M4, gated M5,
+passive maintenance, and frozen R1 are not fallback queues. The exact receipt is
+[`GITHUB_ADMIN_RECEIPT.md`](../development-architecture/GITHUB_ADMIN_RECEIPT.md).
 
-1. **Close the C-04 release-integrity boundary.** Continue existing #175/#186 work on bridge identity, liveness, and recovery after leaving #523's PR #599 at its owner policy gate. Do not merge or infer the human decision.
-2. **Keep PR #572 parked before AI-31 on SP-F-013.** Preserve the corrected exact-child and document-replacement harness methods, the valid local survivor, the known MEDIUM false intervention, the pointerup/mouseup holdout, and the rare possible rollback redelivery. Resume with exact service-worker transition capture; do not widen opener authority or raise a bundle budget.
-3. **Keep C-02/C-03 authority extension-owned.** Resume the private RI-01 decision flow and merged #466 foundation only under its owner gate. Page text or page-owned UI must never grant, trust, proceed, or resume.
-4. **Finish activation disclosure.** Use existing #455 and its owner/browser gates before any release-eligibility promotion.
-5. **Repair corpus methodology before rerunning claims.** Reuse #417 for real-host routing, trusted input, protected-vs-fired scoring, a committed manifest, and invalid-run handling; #416/#426 remain execution/reporting homes.
-6. **Extend #449 in bounded fixture-family slices.** Localize the remaining 21 external-destination holds, then add declared adjacent mutation axes for `NS-ADV-UI-004` before any robustness claim. Keep each sink typed and local rather than building a generic collector.
-7. **Respect human and external gates.** Resume [ACTION_ITEMS.md](../../ACTION_ITEMS.md) at AI-19. Keep AI-31, AI-37, owner Chrome, accessibility, release-signing, store review, and external review open until directly evidenced.
+PR #572 remains parked before AI-31 on the retained SP-F-013 rollback survivor.
+PR #599 has been reconciled with current `main`, but its owner policy and
+branded-Chrome gates remain open. PR #600 is clean with green hosted checks but
+still needs its exact-head owner media-page check. PR #610 merged the bounded
+test-only #449 parent slice for the seven core locality fixtures. The final two
+RW locality holds are PR #613, now retargeted to `main`; it must re-satisfy its
+exact-head checks and review against the landed parent before merge.
+
+1. **Finish or park the current runtime queue before opening another vertical.**
+   Keep #599 and #600 aligned with current `main`, their exact heads, owner
+   decisions, and browser gates. #600 is containment; #601 remains the durable
+   extension-origin authority outcome and should follow #600 rather than overlap
+   its capture and loader seams.
+2. **Keep #449 locality bounded and typed.** The twelve evasion, seven core,
+   and two RW fixtures now share a loopback-only target contract; no mapped
+   external-destination holds remain. Before adding declared adjacent mutation
+   axes for `NS-ADV-UI-004`, retain the existing MODELLED ceiling and the
+   representative-evasion receipt limitation. Keep each sink typed and local
+   rather than building a generic collector.
+3. **Keep PR #572 parked before AI-31.** Resume only from its retained local
+   survivor and exact service-worker lifecycle checkpoint; do not run the manual
+   gate on the current head.
+4. **Close the C-04 release-integrity boundary without manufacturing an attack.**
+   The first #186 model slice is merged, but same-session/pre-page reachability,
+   authenticated recovery, and #175 liveness remain open. Do not force a result
+   with privileged pre-page injection.
+5. **Keep protection-lowering authority extension-owned.** Page text or
+   page-owned UI may warn or cancel; it must not grant allow, trust, proceed,
+   resume, or security-relevant Undo. Use #601 and the worker-owned exact-context
+   capability architecture.
+6. **Finish activation disclosure and valid methodology.** #455 remains the M1
+   activation/consent home. #417 may proceed as the one planned-milestone
+   exception for real-host routing, trusted input, protected-versus-fired
+   outcomes, committed manifests, and invalid-run handling; #416/#426 remain
+   measurement/reporting homes.
+7. **Respect human and external gates.** Resume
+   [ACTION_ITEMS.md](../../ACTION_ITEMS.md) at AI-19. Keep owner Chrome,
+   accessibility, release-signing, store review, and external review open until
+   directly evidenced.

@@ -1,6 +1,6 @@
 # NavSentinel Project Roadmap
 
-*Created 2026-04-09. Truth refresh 2026-07-10; live/status sync 2026-08-27.*
+*Created 2026-04-09. Truth refresh 2026-07-10; live/status sync 2026-08-30.*
 
 This is the execution roadmap. [`Product_Strategy.md`](Product_Strategy.md) owns
 the product thesis, portfolio boundaries, and evidence gates; GitHub issues own
@@ -38,17 +38,41 @@ readiness is tracked only by the outcome gates below.
 | Distribution | **Not started** | unlisted beta, 15 invitations, 10 activated daily-use installs, D14/D30 check-ins |
 | Public security posture | **Blocked** | independent external review of the exact beta commit/package |
 
+### Outcome milestone board
+
+Live GitHub administration on 2026-08-30 assigned all 75 open issues and left
+zero unmilestoned. The milestone contracts and exact issue sets are in
+[`docs/development-architecture/`](development-architecture/README.md).
+
+| Milestone | State | Open issues | Outcome |
+|---|---|---:|---|
+| `M0-proving-ground-foundation` | **Active** | 10 | Trustworthy hermetic browser evidence |
+| `v0.5.0-unlisted-beta` | **Active** | 8 | Release integrity for the interaction-only artifact |
+| `v0.5.1-interaction-integrity` | Planned | 12 | Scoped, usable, accessible, reversible consequences |
+| `v0.6.0-local-evidence-plane` | Planned | 8 | Bounded journal, Protection Center, corrections, and Data Flow Lens |
+| `EV-1-efficacy-and-quietness` | Planned | 14 | Valid attack, benign, performance, and comparator evidence |
+| `BETA-1-cohort-and-operations` | Gated | 1 | First daily-use cohort and operated release path |
+| `maintenance-icebox` | Passive | 4 | Accepted residue with explicit activation conditions |
+| `post-beta-horizon` | Frozen | 18 | Research options requiring explicit promotion |
+
+Only M0 and M1 are active. Issue #417 may advance bounded test methodology;
+that exception does not activate M4 detector tuning. A milestone assignment does
+not waive an owner, browser, measurement, privacy, permission, or external gate.
+
 ### Live execution truth
 
-Refreshed 2026-08-10 from remote GitHub and `origin/main`: the browser-surface
-queue (#528, #532, #535, #514, #534, #520, #521, #522, #526, #533, #542) and the
-separate #531 OAuth slice had merged by `origin/main` `5896756`. Their explicit
-waivers are not real-Chrome or measurement evidence. #223 remains open for its
-future measurement work. There is no tag, GitHub release, or CWS release. These
-values are dated snapshots, not an instruction to trust cached refs. Re-derive
-them with `git fetch origin`, `gh pr list --state open`, `gh issue list --state
-open`, and the GitHub Actions view before acting. The exact 2026-07-10 audit
-baseline remains in `Product_Strategy.md` as provenance rather than current status.
+Refreshed 2026-08-30 from remote GitHub and `origin/main` at
+`22377604a363141fc6e99a45800beca868307764`. Four PRs are open: #572 is
+conflict-dirty and parked before AI-31 on SP-F-013; #599 is conflict-dirty with
+owner policy and branded-Chrome gates open; #600 is clean with green hosted
+checks but its owner media-page check open; and test-only #605 is red in Build /
+Unit on #595's tracked mutation-monitor scarce-reserve assertion. There is no
+tag, GitHub release, or CWS release. These values are a dated snapshot, not an
+instruction to trust cached refs. Re-derive them with `git fetch origin`, the
+GitHub REST/API issue and pull-request views, and Actions before acting. The exact
+2026-07-10 audit baseline remains in `Product_Strategy.md` as provenance rather
+than current status.
+
 Owner directive #499 retires the repository-local agent harness (tier, project
 hooks, lifecycle scripts, vendored floor, validation commands, and Harness CI).
 That infrastructure-only change does not alter extension runtime behavior or
@@ -76,9 +100,11 @@ Defender-quarantined ClickFix property fixture quarantined, while an exact
 runtime-equivalent representation passed Defender scanning and the full
 old-branch gates. The branch is not merge-ready.
 
-The North-Star and Horizon documents are frozen option portfolios. Their 15
-Horizon issues (#439–#453) do not authorize implementation and should be culled
-or moved to a post-beta milestone. Use live GitHub state first;
+The North-Star and Horizon documents are option portfolios. Issue #439 was
+closed as absorbed by active #449 plus #420; #449 is the promoted M0 programme.
+The other 13 original Horizon issues (#440–#448 and #450–#453) remain in the
+18-issue frozen `post-beta-horizon` milestone together with #127 and #240–#243.
+They do not authorize implementation. Use live GitHub state first;
 [`HANDOFF.md`](agentic/HANDOFF.md) is an optional short snapshot, and
 [`ACTION_ITEMS.md`](../ACTION_ITEMS.md) is needed only for human-owned actions.
 
@@ -157,42 +183,40 @@ maintainer chooses disclosure/ownership.
 
 | ID | Priority | Action | Owner/gate | Existing home | Done when |
 |---|---|---|---|---|---|
-| RI-01 | P0 beta blocker | Move all proceed/allow/trust/resume authority out of page-injected UI | Agent + Gate-3 | Private release task | Injected UI is warn/cancel only; extension-origin action is tab/destination-bound with TTL; synthetic input, trusted-click redressing, host tamper/removal, tab switch, and stale state cannot lower protection |
-| RI-02 | P0 beta blocker | **Merged via #514 under a recorded Gate-3 waiver (not a real-Chrome pass):** excise visual-sim capture, templates, scoring hook, WAR, tests, and state | Agent + recorded waiver | #424 | No viewport capture path or placeholder asset remains; #374 is optional coordination, not a prerequisite |
+| RI-01 | P0 beta blocker | Move all proceed/allow/trust/resume authority out of page-injected UI | Agent + Gate-3 | #601 | Injected UI is warn/cancel only; extension-origin action is tab/destination-bound with TTL; synthetic input, trusted-click redressing, host tamper/removal, tab switch, and stale state cannot lower protection |
+| RI-02 | P0 beta blocker | **Merged via #514 under a recorded Gate-3 waiver (not a real-Chrome pass):** excise visual-sim capture, templates, scoring hook, WAR, tests, and state | Agent + recorded waiver | #424 | No viewport capture path or placeholder asset remains; #374 closed after the current build and all 12 performance budgets passed |
 | RI-03 | P0 beta blocker | #356 is complete; recreate or explicitly defer #273 from current `main` | Agent first; Gate-3 only if #273 is recreated (AI-8 remains blocked until then) | #273/#356; #399 stays deferred | #356 remains regression coverage, replacement guides point only to current green branches, and #399 remains outside beta blockers until its measurement methodology is ready |
 | RI-04 | P0 product decision | **Implemented via merged PR #509; AI-25 Gate-3 passed:** interaction-only selected and implemented; retain research reputation as unpacked-only | Chris + agent + Gate-3 | #321 / AI-9 / AI-25 | Default release receipt, manifest/WAR, runtime, package checks, tests, and claims agree; research profile is deterministic, visibly non-release, and package/release rejected |
 | RI-05 | P0 beta blocker | **Merged via #528 under a recorded Gate-3 waiver (not a real-Chrome pass):** remove fake DNR feature surface and unused permissions | Agent + recorded waiver | CWS checklist; redesign #242/#243 later | No test rules/toggle/DNR permission in beta manifest |
 | RI-06 | P0 privacy blocker | **Partially merged via #468/#535:** inventory every store; minimize by purpose; reset the event log, prompt outcomes, adaptive scores, and domain profiles while preserving user configuration. Navigation-category profiles and smart-default cooldowns remain outside that reset boundary | Agent + privacy review | #474 | Persistent records use least-identifying data; exact session URLs remain only for correctness with tab binding/TTL; rollback/OAuth/allow tests pass; the remaining navigation-category profile and cooldown stores have their own clear/disposition before RI-06 closes |
 | RI-07 | P0 beta blocker | **Merged via #532 under a recorded Gate-3 waiver (not a real-Chrome pass):** explicit beta capability flag leaves JS behavior instrumentation off | Agent + recorded waiver | #127 or a scoped release-profile issue | Fresh beta defaults/migration/UI/runtime agree; fetch/XHR/beacon/password-value prototypes are not wrapped; core navigation remains active; compatibility/perf evidence required to enable. **Implemented as `capabilities.jsBehaviorInstrumentation` (false in every committed profile).** |
-| RI-08 | P0 beta blocker | Authenticate/recover the MAIN-world bridge and fail closed when unavailable | Agent + Gate-3 | #175/#186 | Hostile page code cannot become the trusted peer or suppress protection; reload/death recovery is bounded and tested |
+| RI-08 | P0 beta blocker | Authenticate/recover the MAIN-world bridge and fail closed when unavailable. The first #186 ordering model found no challenge exposure to the earliest normal authored-page peer in 10 fresh bundled-Chromium profiles; same-session/pre-page reachability, #175 recovery, and #523/#599 starvation policy remain open. | Agent + Gate-3 | #175/#186/#523 | Hostile page code cannot become the trusted peer or suppress protection; critical consequence signals survive routine pressure; reload/death recovery is bounded and tested |
 | RI-09 | Public-launch blocker | Obtain an independent external security review | Agent + external reviewer | P3-09 | Exact release commit/package reviewed; findings resolved or explicitly accepted |
 | PM-01 | P0 release blocker | Clear or replace the working product name | Chris | AI-19 | Search/domain/CWS/legal decision recorded before submission |
 | PM-02 | P0 release blocker | Verify one canonical store/privacy copy and reporting route against the package | Agent + Chris submission | `docs/cws-listing/`; `SECURITY.md` | Correct category, complete data inventory, supported claims, private vulnerability route, derived minimum Chrome, assets/fresh install complete |
 | PM-03 | P0 beta compliance blocker | Add pre-install disclosure/consent evidence plus in-product activation | Agent + Gate-3 | #455 | CWS listing/install consent mapping is evidenced; fresh installs stay passive until in-product activation; Limited Use declaration, categories/uses, and revocation/reset match the package |
-| EV-01 | P1 after integrity | Recruit and measure the first daily-use cohort | Chris-led | #425 — rebody before use | 15 invitations; 10 activated; 7/10 enabled D14 and 6/10 D30; every non-install/disable reason recorded |
+| EV-01 | P1 after integrity | Recruit and measure the first daily-use cohort | Chris-led | #425 / `BETA-1-cohort-and-operations` | 15 invitations; 10 activated; 7/10 enabled D14 and 6/10 D30; every non-install/disable reason recorded |
 | EV-02 | P1 | Finish valid FP/TP methodology and reproducible runs | Agent + headed/network gate | #416/#417/#426 | Committed inputs/results and confidence-aware reporting; no tune-before-measure |
 | EV-03 | P1 | Compare additive value with current protections | Agent + headed lane | #418 | Pre-registered scenarios/configurations; wins, misses, interruption, performance, and data flow published |
 | EV-04 | P1 after integrity | Measure representative-site compatibility and runtime overhead | Agent + headed lane | Reuse #127/#420; no new issue before queue cull | Declared normal journeys have zero unexplained functional breakage/page errors; startup/action latency and CPU budgets are fixed, measured, and published before broad instrumentation is enabled |
-| OPS-01 | P1 | Rotate roadmap/orchestrator and cull duplicate epics | Agent + Chris dispositions | #437 and #439–#453 | Short current roadmap, archived history, one milestone-categorized queue |
+| OPS-01 | Completed 2026-08-30; rotation residual open | Establish one milestone-categorized queue and remove duplicate process/epic owners | Agent + Chris dispositions | #437; #439 closed; #449 active; #440–#448/#450–#453 frozen | All open issues are milestone-categorized; duplicate/process issues are closed with successors; #437 retains the bounded roadmap/archive rotation |
 | UX-01 | Completed 2026-08-28 | Add opt-in cleanup for high-severity deceptive overlays | Agent + completed Gate-3 | #555 / AI-29 complete; #560 follow-up | Options and popup expose the default-off setting and it round-trips; a bounded initial batch, overlays injected later, and overlays encountered by an intercepted click are hidden with Undo and no click replay; disabled/Off and benign-overlay cases stay untouched; focused unit/E2E, build, and exact-head owner evidence passed; accepted redirect-card control regression remains tracked in #560 |
 
-### Existing issue dispositions
+### Issue-estate migration receipt
 
-- #415: create one `v0.5.0-unlisted-beta` milestone containing only real blockers.
-- #321: DONE — PR #509 merged as `3faeb1e` after AI-25 Gate-3, closing the issue.
-- #356: DONE — merged 2026-07-25 (`3bd9e02`); #273 recreate/defer; #399 is closed and
-  remains measurement-deferred under #223/#417.
-- #419/#421/#422: close enacted scope; retain only concrete unfinished work.
-- #423: close when the verified-claims policy lands.
-- #424: rebody as RI-02; move #245/#246 to post-beta or close them.
-- #425: replace public-launch-first/WAU wording with integrity-gated dogfood,
-  15 invitations, 10 activated installs, and manual D14/D30 measurement; no
-  public launch before the external review and no WAU KPI without an approved
-  collection mechanism.
-- #426: rebody as blocked on #417 plus a headed rerun.
-- #437: rotate this file and ORCHESTRATOR after release-integrity work.
-- #439 duplicates #420; cull or post-beta-milestone the remaining Horizon issues.
-- Verify #184 against current truth and close it if reconciliation is complete.
+- All 75 open issues are assigned exactly once across the eight outcome
+  milestones; the audited counts are 10/8/12/8/14/1/4/18.
+- #127, #176, #239, #243, #339, #415, #416, #419, #425, #426, #449, #458,
+  and #474 now state current outcomes and evidence gates.
+- #244/#245/#246 were closed as absorbed by #452/#444; #374 closed only after
+  the current build and all 12 performance budgets passed.
+- #421/#422 closed as enacted with remaining rotation in #437; #439 closed as
+  absorbed by active #449 plus #420.
+- #458 remains open in M0 for its branded/minimum-Chrome evidence matrix; #176,
+  #474, #523, and #601 remain open in M1 without inferred owner decisions.
+
+See the exact sets, comments, state reasons, labels, and pre/post counts in the
+[`GitHub administration receipt`](development-architecture/GITHUB_ADMIN_RECEIPT.md).
 
 ### 90-day sequence
 
@@ -208,7 +232,7 @@ maintainer chooses disclosure/ownership.
    fund only Decision Journal + recovery guidance; otherwise change segment/
    position or stop before advanced architecture.
 
-Last updated: 2026-08-27
+Last updated: 2026-08-30
 
 ---
 

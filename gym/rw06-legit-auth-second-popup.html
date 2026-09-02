@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="local-fixture-targets.js"></script>
     <title>RW-06 - Legit Auth Then Second Popup</title>
     <style>
       body {
@@ -45,14 +46,14 @@
     <script>
       document.getElementById('rw06Signin').addEventListener('click', () => {
         window.open(
-          'https://example.com/?oauth=workspace-auth',
+          window.NavSentinelLocalTargets.url('benign', 'NS-ADV-AUTH-005'),
           'workspace-auth',
           'popup,width=520,height=640'
         );
 
         window.setTimeout(() => {
           window.open(
-            'https://example.com/?oauth=second-popup',
+            window.NavSentinelLocalTargets.url('harm', 'NS-ADV-AUTH-005'),
             'workspace-followup',
             'popup,width=520,height=640'
           );

@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
   "as_of": "2026-08-30",
-  "mapping_count": 64,
+  "mapping_count": 66,
   "mappings": [
     {
       "id": "MAP-LEVEL-01",
@@ -1383,6 +1383,32 @@
       ]
     },
     {
+      "id": "MAP-LANE-BRIDGE-PEER-ORDERING",
+      "kind": "evidence_lane",
+      "label": "Bridge peer document-start ordering model",
+      "primary_scenario_id": "NS-ADV-SELF-004",
+      "supporting_scenario_ids": [],
+      "primary_harm_boundary": "A page-owned MessageChannel peer receives the MAIN-world challenge and changes protection mode, confirmed by an independent local DOM receipt.",
+      "role": "mixed",
+      "current_oracle": "Trusted bundled Chromium requires the real extension loader, isolated capture, and verified bridge. The fixture separately records peer init, challenge, config acknowledgement, product readiness, benign input, and a typed DOM-only harm receipt.",
+      "oracle_type": "independent_harm",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "The earliest normal authored-page peer received no challenge in ten fresh profiles and the post-readiness peer was also rejected. The harmful sink was not reached, so 02-ATTACK remains incomplete. Same-session replay and any genuinely page-reachable pre-page actor are unproven; privileged pre-page injection was deliberately not used.",
+      "issue_refs": [
+        "#186"
+      ],
+      "pr_refs": [
+        "#602",
+        "#603"
+      ],
+      "paths": [
+        "gym/issue186-bridge-peer.html",
+        "tests/e2e/bridge-peer-takeover.spec.ts",
+        "docs/security-program/evidence/NS-ADV-SELF-004-issue186-ordering.yml"
+      ]
+    },
+    {
       "id": "MAP-LANE-MODIFIER-AUTHORITY",
       "kind": "evidence_lane",
       "label": "Modifier-click opener-authority regression",
@@ -1446,6 +1472,52 @@
         "tests/proving-ground-fake-sink.test.ts",
         "tests/e2e/overlay-cleanup-nesting.spec.ts",
         "tests/overlay-cleanup.test.ts"
+      ]
+    },
+    {
+      "id": "MAP-LANE-EVASION-LOCALITY",
+      "kind": "evidence_lane",
+      "label": "Evasion fixture local-target safety contract",
+      "primary_scenario_id": "NS-ADV-EVADE-006",
+      "supporting_scenario_ids": [
+        "NS-ADV-UI-001",
+        "NS-ADV-UI-003",
+        "NS-ADV-UI-004",
+        "NS-ADV-UI-005",
+        "NS-ADV-RUNTIME-001",
+        "NS-ADV-RUNTIME-003"
+      ],
+      "primary_harm_boundary": "Trusted input reaches a typed local wrong-target navigation sink instead of a benign local destination.",
+      "role": "mixed",
+      "current_oracle": "A pre-launch deny proxy and typed loopback sink with one-use target authorities record the attack baseline; the qualified interaction-only release build keeps the protected and mixed harm requests out while native keyboard input completes the benign task and its nav_silent_allow event is recorded separately.",
+      "oracle_type": "independent_harm",
+      "evidence_state": "MODELLED",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "The exact sink receipt exercises the composite Evasion 05 representative. The other eleven localized fixtures retain their existing product-event-coupled regression checks and are not promoted beyond MODELLED.",
+      "issue_refs": [
+        "#449"
+      ],
+      "pr_refs": [
+        "#605"
+      ],
+      "paths": [
+        "gym/evasion-01-opacity-009.html",
+        "gym/evasion-02-size-34pct.html",
+        "gym/evasion-03-labeled-overlay.html",
+        "gym/evasion-04-zindex-9998.html",
+        "gym/evasion-05-composite.html",
+        "gym/evasion-06-delayed-injection.html",
+        "gym/evasion-07-pointer-events-none.html",
+        "gym/evasion-08-clip-path-hidden.html",
+        "gym/evasion-09-filter-opacity.html",
+        "gym/evasion-10-transform-scale.html",
+        "gym/evasion-11-shadow-dom.html",
+        "gym/evasion-12-multiple-overlays.html",
+        "gym/local-fixture-targets.js",
+        "gym/local-fixture-sink.html",
+        "tests/e2e/proving_ground_fake_sink.ts",
+        "tests/e2e/evasion-locality-evidence.spec.ts",
+        "docs/security-program/evidence/NS-ADV-EVADE-006-evasion-locality.yml"
       ]
     },
     {

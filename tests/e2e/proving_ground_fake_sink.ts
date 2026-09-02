@@ -7,6 +7,8 @@ export const PROVING_GROUND_SINK_PATH = "/__navsentinel_fake_sink";
 const SAFE_SINK_PORT_START = 46100;
 const SAFE_SINK_PORT_ATTEMPTS = 25;
 
+export type ProvingGroundLoopbackHost = "127.0.0.1" | "::1";
+
 export type ProvingGroundRole = "attack" | "benign" | "mixed";
 
 export type ProvingGroundSinkReceipt = {
@@ -15,6 +17,7 @@ export type ProvingGroundSinkReceipt = {
   scenarioId: string;
   role: ProvingGroundRole;
   consequence: string;
+  targetId?: string;
   method: "GET";
   sentinelSha256: string;
   receivedAt: string;
@@ -27,7 +30,7 @@ export type ProvingGroundSinkSnapshot = {
 
 export type ProvingGroundFakeSink = {
   origin: string;
-  urlFor: (role: ProvingGroundRole, consequence: string) => string;
+  urlFor: (role: ProvingGroundRole, consequence: string, targetId?: string) => string;
   snapshot: () => ProvingGroundSinkSnapshot;
   close: () => Promise<void>;
 };
@@ -48,6 +51,12 @@ type FakeSinkOptions = {
   scenarioId: string;
   allowedRoles: readonly ProvingGroundRole[];
   allowedConsequences: readonly string[];
+  targetAuthorities?: readonly {
+    id: string;
+    role: ProvingGroundRole;
+    consequence: string;
+    maxUses: number;
+  }[];
 };
 
 function digest(value: string): string {
@@ -71,7 +80,7 @@ function writeInertResponse(
 </head><body><h1>${title}</h1><p>${detail}</p></body></html>`);
 }
 
-async function bindLoopback(server: http.Server): Promise<void> {
+async function bindLoopback(server: http.Server, host: ProvingGroundLoopbackHost): Promise<void> {
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt < SAFE_SINK_PORT_ATTEMPTS; attempt += 1) {
@@ -88,7 +97,7 @@ async function bindLoopback(server: http.Server): Promise<void> {
 
         server.once("error", onError);
         server.once("listening", onListening);
-        server.listen(SAFE_SINK_PORT_START + attempt, "127.0.0.1");
+        server.listen(SAFE_SINK_PORT_START + attempt, host);
       });
       return;
     } catch (error) {
@@ -96,6 +105,9 @@ async function bindLoopback(server: http.Server): Promise<void> {
     }
   }
 
+  if (host === "::1" && ["EAFNOSUPPORT", "EADDRNOTAVAIL"].includes((lastError as NodeJS.ErrnoException | null)?.code ?? "")) {
+    throw new Error("unsupported-loopback-host-family");
+  }
   throw lastError ?? new Error("Failed to bind the Proving Ground fake sink to loopback");
 }
 
@@ -184,11 +196,30 @@ export async function startProvingGroundEgressFence(
   };
 }
 
-export async function startProvingGroundFakeSink(
+export async function startProvingGroundFakeSinkForHost(
+  host: ProvingGroundLoopbackHost,
   options: FakeSinkOptions,
 ): Promise<ProvingGroundFakeSink> {
   const allowedRoles = new Set(options.allowedRoles);
   const allowedConsequences = new Set(options.allowedConsequences);
+  const targetAuthorities = new Map(
+    (options.targetAuthorities ?? []).map((authority) => [authority.id, authority]),
+  );
+  if (targetAuthorities.size !== (options.targetAuthorities?.length ?? 0)) {
+    throw new Error("Target authority identifiers must be unique");
+  }
+  for (const authority of targetAuthorities.values()) {
+    if (!/^[a-z0-9][a-z0-9-]{0,63}$/u.test(authority.id)) {
+      throw new Error(`Target authority identifier is invalid: ${authority.id}`);
+    }
+    if (!allowedRoles.has(authority.role) || !allowedConsequences.has(authority.consequence)) {
+      throw new Error(`Target authority is outside the sink allowlist: ${authority.id}`);
+    }
+    if (!Number.isSafeInteger(authority.maxUses) || authority.maxUses < 1) {
+      throw new Error(`Target authority maxUses must be a positive integer: ${authority.id}`);
+    }
+  }
+  const targetUses = new Map<string, number>();
   const receipts: ProvingGroundSinkReceipt[] = [];
   const invalidAttempts: ProvingGroundSinkSnapshot["invalidAttempts"] = [];
   const sentinelSha256 = digest(PROVING_GROUND_SENTINEL);
@@ -213,6 +244,7 @@ export async function startProvingGroundFakeSink(
     const scenarioId = reqUrl.searchParams.get("scenario_id") ?? "";
     const role = reqUrl.searchParams.get("role") ?? "";
     const consequence = reqUrl.searchParams.get("consequence") ?? "";
+    const targetId = reqUrl.searchParams.get("target_id") ?? "";
     const sentinel = reqUrl.searchParams.get("sentinel") ?? "";
 
     if (runId !== options.runId) {
@@ -235,6 +267,22 @@ export async function startProvingGroundFakeSink(
       reject(res, "Only the exact synthetic sentinel is accepted");
       return;
     }
+    if (targetAuthorities.size > 0) {
+      const authority = targetAuthorities.get(targetId);
+      if (!authority || authority.role !== role || authority.consequence !== consequence) {
+        reject(res, "Target authority is not armed");
+        return;
+      }
+      const uses = targetUses.get(targetId) ?? 0;
+      if (uses >= authority.maxUses) {
+        reject(res, "Target authority use count is exhausted", 409);
+        return;
+      }
+      targetUses.set(targetId, uses + 1);
+    } else if (targetId) {
+      reject(res, "Unexpected target authority identifier");
+      return;
+    }
 
     receipts.push({
       sequence: receipts.length + 1,
@@ -242,6 +290,7 @@ export async function startProvingGroundFakeSink(
       scenarioId,
       role: role as ProvingGroundRole,
       consequence,
+      ...(targetId ? { targetId } : {}),
       method: "GET",
       sentinelSha256,
       receivedAt: new Date().toISOString(),
@@ -254,25 +303,35 @@ export async function startProvingGroundFakeSink(
     );
   });
 
-  await bindLoopback(server);
+  await bindLoopback(server, host);
   const address = server.address();
   if (!address || typeof address === "string") {
     throw new Error("Proving Ground fake sink did not expose a TCP address");
   }
-  const origin = `http://127.0.0.1:${address.port}`;
+  const originHost = host === "::1" ? "[::1]" : host;
+  const origin = `http://${originHost}:${address.port}`;
 
   return {
     origin,
-    urlFor: (role, consequence) => {
+    urlFor: (role, consequence, targetId) => {
       if (!allowedRoles.has(role)) throw new Error(`Fixture role is not armed: ${role}`);
       if (!allowedConsequences.has(consequence)) {
         throw new Error(`Consequence is not armed: ${consequence}`);
+      }
+      if (targetAuthorities.size > 0) {
+        const authority = targetAuthorities.get(targetId ?? "");
+        if (!authority || authority.role !== role || authority.consequence !== consequence) {
+          throw new Error(`Target authority is not armed: ${targetId ?? "missing"}`);
+        }
+      } else if (targetId) {
+        throw new Error(`Target authority is not expected: ${targetId}`);
       }
       const url = new URL(PROVING_GROUND_SINK_PATH, origin);
       url.searchParams.set("run_id", options.runId);
       url.searchParams.set("scenario_id", options.scenarioId);
       url.searchParams.set("role", role);
       url.searchParams.set("consequence", consequence);
+      if (targetId) url.searchParams.set("target_id", targetId);
       url.searchParams.set("sentinel", PROVING_GROUND_SENTINEL);
       return url.href;
     },
@@ -284,4 +343,10 @@ export async function startProvingGroundFakeSink(
       server.close((error) => error ? rejectClose(error) : resolve());
     }),
   };
+}
+
+export function startProvingGroundFakeSink(
+  options: FakeSinkOptions,
+): Promise<ProvingGroundFakeSink> {
+  return startProvingGroundFakeSinkForHost("127.0.0.1", options);
 }

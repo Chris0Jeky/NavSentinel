@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Evasion 09 - filter: opacity() bypass</title>
+  <script src="local-fixture-targets.js"></script>
   <style>
     body {
       font-family: sans-serif;
@@ -86,11 +87,13 @@
     function values to close this evasion vector.
   </p>
 
-  <a id="legit-link" href="https://example.com/safe" aria-label="Safe destination link">
+  <a id="legit-link" aria-label="Safe destination link"
+     data-navsentinel-local-target="benign" data-navsentinel-scenario="NS-ADV-RUNTIME-003">
     Click here for safe content
   </a>
 
   <!-- Evasion overlay: filter opacity bypass, composite signals -->
-  <a id="trap" href="https://evil.example/evasion09" target="_blank" rel="noreferrer"></a>
+  <a id="trap" target="_blank" rel="noreferrer"
+     data-navsentinel-local-target="harm" data-navsentinel-scenario="NS-ADV-RUNTIME-003"></a>
 </body>
 </html>

@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Evasion 12 - Multiple Foreground Overlays</title>
+  <script src="local-fixture-targets.js"></script>
   <style>
     body {
       font-family: sans-serif;
@@ -59,8 +60,11 @@
     the normal click-time navigation guard is still the fallback.
   </div>
 
-  <a id="real-link" href="https://example.com/safe">Real Link</a>
-  <a id="trap-a" class="overlay-trap" href="https://evil.example/multi-a" target="_blank" rel="noreferrer"></a>
-  <a id="trap-b" class="overlay-trap" href="https://evil.example/multi-b" target="_blank" rel="noreferrer"></a>
+  <a id="real-link"
+     data-navsentinel-local-target="benign" data-navsentinel-scenario="NS-ADV-UI-004">Real Link</a>
+  <a id="trap-a" class="overlay-trap" target="_blank" rel="noreferrer"
+     data-navsentinel-local-target="harm" data-navsentinel-scenario="NS-ADV-UI-004"></a>
+  <a id="trap-b" class="overlay-trap" target="_blank" rel="noreferrer"
+     data-navsentinel-local-target="harm" data-navsentinel-scenario="NS-ADV-UI-004"></a>
 </body>
 </html>
