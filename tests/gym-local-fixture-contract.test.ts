@@ -27,8 +27,24 @@ describe("core Gym fixture locality contracts", () => {
       return;
     }
 
-    expect(source).toContain('href="local-fixture-sink.html"');
+    expect(source).not.toMatch(/<a\b[^>]*\bhref\s*=/iu);
     expect(source).toContain(`data-navsentinel-scenario="${scenarioId}"`);
     expect(source).toContain(`data-navsentinel-local-target="${kind === "static-benign" ? "benign" : "harm"}"`);
+  });
+
+  it("keeps every static helper consumer inert until target validation succeeds", () => {
+    const consumers = fs.readdirSync(gymRoot)
+      .filter((file) => file.endsWith(".html"))
+      .filter((file) => /data-navsentinel-local-target=/u.test(fs.readFileSync(path.join(gymRoot, file), "utf8")));
+
+    expect(consumers).toHaveLength(17);
+    for (const file of consumers) {
+      const source = fs.readFileSync(path.join(gymRoot, file), "utf8");
+      const targetAnchors = [...source.matchAll(/<a\b[^>]*data-navsentinel-local-target=[^>]*>/giu)];
+      expect(targetAnchors, `${file} must contain typed target anchors`).not.toHaveLength(0);
+      for (const anchor of targetAnchors) {
+        expect(anchor[0], `${file} target anchor must not expose an initial href`).not.toMatch(/\bhref\s*=/iu);
+      }
+    }
   });
 });
