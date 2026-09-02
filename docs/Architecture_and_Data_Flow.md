@@ -384,9 +384,11 @@ It listens to `chrome.webNavigation` events to decide when a committed navigatio
 ### Suspicious popup or `_blank` navigation
 
 1. `capture_isolated.ts` captures the click context and computes CDS.
-2. For a suspicious isolated HTTP(S) `_blank` anchor, it prevents navigation,
-   retains the exact destination only in a bounded document-local slot, and asks
-   the worker to create a 30-second `blank-target-blocked` decision.
+2. For a suspicious isolated HTTP(S) `_blank` anchor with no overlay-cleanup
+   recovery action, it prevents navigation, retains the exact destination only
+   in a bounded document-local slot, and asks the worker to create a 30-second
+   `blank-target-blocked` decision. Interceptions carrying the existing
+   security-relevant Undo action remain on the legacy prompt in this slice.
 3. The worker derives tab/window/frame/document/source/top context from trusted
    browser state. Session persistence contains URL hashes, display origins,
    timestamps, and opaque capabilities — never raw paths, queries, or fragments.

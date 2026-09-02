@@ -95,8 +95,9 @@ backed-up branch `fix/ri01-extension-origin-decisions` remains preserved at
 `184be55`; do not reconcile it because its broker foundation has since evolved
 into `main` and the branch carries the Defender-sensitive fixture history. The
 stacked PR #608 (`feat/issue601-extension-origin-allow`) wires the broker into one
-real suspicious `_blank` Proceed-once path with exact-document delivery and a
-URL-free extension popup. AI-39 and all other protection-lowering action classes
+real suspicious `_blank` Proceed-once path, excluding prompts that still carry
+overlay-cleanup Undo, with exact-document delivery and a URL-free extension
+popup. AI-39 and all other protection-lowering action classes
 remain open, so RI-01 is not complete. AI-20 is resolved: Chris left the original
 Defender-quarantined ClickFix property fixture quarantined, while an exact
 runtime-equivalent representation passed Defender scanning and the full

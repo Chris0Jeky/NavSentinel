@@ -404,8 +404,10 @@ prove exact create metadata, URL-free persistence/listing, active-context
 binding, consume-before-deliver token burn, exact tab/frame/document delivery,
 pagehide/expiry/source-change invalidation, delete-before-open, replay rejection,
 and popup double-click failure closure. `tests/e2e/toast-input-fence.spec.ts`
-proves with trusted input that the suspicious `_blank` page warning exposes
-Dismiss only. AI-39 remains mandatory because an ordinary Playwright tab cannot
+proves with trusted input that the eligible suspicious `_blank` page warning
+exposes Dismiss only. Existing `evasion.spec.ts` cleanup cases prove that prompts
+carrying an overlay-recovery Undo remain on their legacy path. AI-39 remains
+mandatory because an ordinary Playwright tab cannot
 prove a real Chrome toolbar-popup click survives the popup → worker → content
 activation chain.
 

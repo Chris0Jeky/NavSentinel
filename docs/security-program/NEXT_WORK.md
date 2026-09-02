@@ -20,8 +20,9 @@ AI-39.
 
 1. **Finish and park the first #601 vertical without overclaiming RI-01.** Keep
    #599 and #600 at their reviewed exact heads and owner gates. #601 moves only
-   suspicious isolated `_blank` Proceed-once authority to the extension popup;
-   keep PR #608 stacked on #600, retain AI-39, and leave the remaining action
+   suspicious isolated `_blank` Proceed-once authority without an attached
+   overlay-cleanup Undo to the extension popup; keep PR #608 stacked on #600,
+   retain AI-39, and leave the remaining action
    classes to later bounded slices.
 2. **Extend #449 in bounded fixture-family slices.** The twelve evasion fixtures
    now share a loopback-only target contract, leaving nine core/RW

@@ -160,7 +160,8 @@ frame reproduction and repair.
 manual Chrome guide in [`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md)
 against PR #608 on branch `feat/issue601-extension-origin-allow`.
 This stacked slice moves only a suspicious isolated `_blank` navigation's
-protection-lowering **Proceed once** action into the extension popup. Verify the
+protection-lowering **Proceed once** action into the extension popup when no
+overlay-cleanup recovery action is attached. Verify the
 exact head and base first, load that exact build in a fresh Chrome profile, and
 confirm the page warning exposes only **Dismiss**. The popup must show only the
 source and destination origins plus a bounded countdown; one trusted popup click

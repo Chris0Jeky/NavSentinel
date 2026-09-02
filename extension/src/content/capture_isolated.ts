@@ -1906,10 +1906,12 @@ window.addEventListener(
               outcomeFeatures: navFeatures,
               ...(overlaySuppression ? { overlaySuppression } : {}),
             } satisfies AllowPromptParams;
-            if (/^https?:\/\//i.test(parsed.href) && parsed.host) {
+            if (/^https?:\/\//i.test(parsed.href) && parsed.host && !overlaySuppression) {
               // Reuse the exact-URL bridge correlation already used by the
               // injected prompt path. It suppresses a duplicate MAIN shadow
               // action without adding a second always-on correlation model.
+              // Overlay-cleanup recovery remains on the legacy prompt until
+              // its security-relevant Undo action moves extension-side too.
               recentLocalBlankPrompt = { params: prompt, shownAt: Date.now() };
               const pendingSignals: Array<"cross_site" | "NRS-high"> = [];
               if (
