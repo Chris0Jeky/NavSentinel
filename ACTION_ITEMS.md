@@ -156,6 +156,20 @@ frame reproduction and repair.
 
 ## Open and blocked items
 
+**OPEN: AI-40 - PR #609 stale redirect-chain boundary Gate-3.** After every
+automated check for the current PR head is green, build that exact head and run
+the active AI-40 procedure in
+[`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md) in a fresh Chrome
+profile. Confirm the tracked three-step redirect journey exposes redirect-chain
+NRS factors before traversal, then use Chrome's physical Back and Forward
+controls and confirm the restored pages inherit neither factor. The page must
+report a real BFCache restore; a normal reload is not equivalent. Also confirm
+the same factors expire without navigation and inspect the page and service-
+worker consoles. Only Chris can record this human Gate-3. Reply `AI-40 done;
+Gate-3 passed on PR #609 at <40-character SHA>; Chrome <version>` or `AI-40
+failed on PR #609 at <SHA>: <step and observed>`. This PR-specific gate does not
+move the general guided-resolution cursor from AI-19.
+
 **OPEN: AI-36 — #558 popup/Options patch-save synchronization Gate-3.** Run the
 active manual Chrome guide in [`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md)
 against the eventual PR for branch `fix/issue558-patch-save-sync`. Verify the

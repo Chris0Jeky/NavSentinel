@@ -82,6 +82,8 @@ Current unit coverage lives in:
 - `tests/nrs-ceiling.test.ts`
 - `tests/nrs-clickfix.test.ts`
 - `tests/redirect-chain.test.ts`
+- `tests/redirect-chain-property.test.ts`
+- `tests/chain-info-cache.test.ts`
 - `tests/oauth-monitor.test.ts`
 - `tests/mutation-monitor.test.ts`
 - `tests/domain-groups.test.ts`
@@ -108,6 +110,9 @@ These currently cover:
 - DoubleClickjacking NRS factor (+40 weight, factor combinations, allowlist interaction)
 - Bloom filter reputation: MurmurHash3, binary format parsing, known-bad domain lookup, false positive verification, and NRS integration (+50 weight)
 - PushState abuse NRS factor (+20 weight, gesture correlation, rapid-fire detection)
+- redirect-chain read-time expiry, explicit address/history boundaries, fresh
+  post-boundary redirects, content-cache/BFCache invalidation, and a real-302
+  Playwright journey that proves factors disappear after Back and Forward
 - NRS scoring ceiling (diminishing returns above 100, compound FP mitigation, opener-allowed factor)
 - ClickFix NRS integration (clickfix score cap at 40, combined scoring with navigation factors)
 - Redirect chain correlation (per-hop scoring, known redirector detection, chain cap, stale pruning)
