@@ -10,21 +10,25 @@ has 8; only those two milestones are active. Planned M2/M3/M4, gated M5,
 passive maintenance, and frozen R1 are not fallback queues. The exact receipt is
 [`GITHUB_ADMIN_RECEIPT.md`](../development-architecture/GITHUB_ADMIN_RECEIPT.md).
 
-At that snapshot, PR #572 is conflict-dirty and parked before AI-31 on the
-retained SP-F-013 rollback survivor. PR #599 is conflict-dirty with its owner
-policy and branded-Chrome gates open. PR #600 is clean with green hosted checks
-but still needs its exact-head owner media-page check. PR #605 is the bounded
-test-only #449 slice and is red in Build / Unit on #595's mutation-monitor
-scarce-reserve assertion; the failure is tracked and must not be called flaky.
+PR #572 remains parked before AI-31 on the retained SP-F-013 rollback survivor.
+PR #599 has been reconciled with current `main`, but its owner policy and
+branded-Chrome gates remain open. PR #600 is clean with green hosted checks but
+still needs its exact-head owner media-page check. PR #610 merged the bounded
+test-only #449 parent slice for the seven core locality fixtures. The final two
+RW locality holds are PR #613, now retargeted to `main`; it must re-satisfy its
+exact-head checks and review against the landed parent before merge.
 
 1. **Finish or park the current runtime queue before opening another vertical.**
-   Reconcile #599 and #600 against current `main`, their exact heads, owner
+   Keep #599 and #600 aligned with current `main`, their exact heads, owner
    decisions, and browser gates. #600 is containment; #601 remains the durable
-   extension-origin authority outcome.
-2. **Repair the current M0 red.** Investigate PR #605's deterministic #595
-   failure, preserve its valid failure mode, and re-prove only the changed test
-   seam. Until it merges, `main` remains at 64 mappings and 21 held external
-   destinations.
+   extension-origin authority outcome and should follow #600 rather than overlap
+   its capture and loader seams.
+2. **Keep #449 locality bounded and typed.** The twelve evasion, seven core,
+   and two RW fixtures now share a loopback-only target contract; no mapped
+   external-destination holds remain. Before adding declared adjacent mutation
+   axes for `NS-ADV-UI-004`, retain the existing MODELLED ceiling and the
+   representative-evasion receipt limitation. Keep each sink typed and local
+   rather than building a generic collector.
 3. **Keep PR #572 parked before AI-31.** Resume only from its retained local
    survivor and exact service-worker lifecycle checkpoint; do not run the manual
    gate on the current head.

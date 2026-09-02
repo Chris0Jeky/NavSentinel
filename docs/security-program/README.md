@@ -10,7 +10,7 @@ All experiments are defensive, local, inert, and synthetic. No programme fixture
 | --- | --- | --- |
 | Release extension | Unchanged | Interaction-only, local-first, zero runtime network calls, and no new powerful permission. |
 | Research extension/profile | Unchanged | Unpacked and non-release. Broader observation remains explicit research work. |
-| Proving Ground | One bounded local sink and UI-004 oracle | Owns safe fixtures, local sinks, oracles, mutation, and evidence receipts. It is test infrastructure, not release code. |
+| Proving Ground | Bounded typed local sinks for UI-004 and one representative evasion journey | Owns safe fixtures, local sinks, oracles, mutation, and evidence receipts. It is test infrastructure, not release code. |
 | Optional native companion | Design only | No host, native messaging permission, enforcement, listener, updater, or distribution exists. |
 
 ## Start here
@@ -43,7 +43,7 @@ npm run test:e2e:proving-ground
 
 Run generation after an intentional registry change, then commit both source registries and generated views. Never edit `extension/dist` for programme work.
 
-The Proving Ground command runs the `NS-ADV-UI-004` attack, benign, and mixed contracts in Playwright-bundled Chromium. It writes exact-head evidence receipts only under ignored `test-results/` output. Commit the fixture, oracle, and test, but never commit generated receipts or `extension/dist`.
+The Proving Ground command runs the `NS-ADV-UI-004` attack, benign, and mixed contracts in Playwright-bundled Chromium. The separate `tests/e2e/evasion-locality-evidence.spec.ts` lane runs attack-baseline, protected, benign, and mixed contracts for the composite evasion representative. Both write exact-head evidence receipts only under ignored `test-results/` output. Commit the fixture, oracle, and test, but never commit generated receipts or `extension/dist`.
 
 ## Evidence rule
 

@@ -25,53 +25,53 @@
       "scenarios_served": ["CRED", "FLOW", "SUPPLY", "NS-ADV-UI-004"],
       "evidence_state": "FIXTURE_PROVEN",
       "release_status": "FOUNDATION",
-      "permission_privacy": "The typed UI sink binds to loopback, accepts only run-scoped synthetic sentinels, stores only their digest, and fails on unexpected egress.",
-      "failure_mode": "Unexpected egress or non-sentinel input makes the run TEST_INVALID.",
+      "permission_privacy": "The typed UI sink binds to loopback, can enforce run-scoped one-use target authorities, accepts only synthetic sentinels, stores only their digest, and fails on unexpected egress.",
+      "failure_mode": "Unexpected egress, an unarmed or exhausted target, or non-sentinel input makes the run TEST_INVALID.",
       "known_limitation": "One typed wrong-target UI sink exists; there is no general reserved-origin router, profile reset service, fake download target, or shell-like consequence model.",
       "issue_refs": ["#417", "#439", "#449"],
-      "pr_refs": ["#598"]
+      "pr_refs": ["#598", "#605"]
     },
     {
       "id": "F-03",
       "implementation_status": "PARTIAL",
       "profiles": ["proving_ground"],
-      "source_paths": ["playwright.config.ts", "tests/e2e/extension_test_utils.ts", "tests/e2e/playwright-topology.ts", "tests/e2e/proving-ground-overlay-sink.spec.ts"],
+      "source_paths": ["playwright.config.ts", "tests/e2e/extension_test_utils.ts", "tests/e2e/playwright-topology.ts", "tests/e2e/proving-ground-overlay-sink.spec.ts", "tests/e2e/evasion-locality-evidence.spec.ts"],
       "scenarios_served": ["EVADE", "SELF", "STATE", "NS-ADV-UI-004"],
       "evidence_state": "REGRESSION_PROVEN",
       "release_status": "FOUNDATION",
-      "permission_privacy": "The UI-004 lane uses a disposable persistent profile, trusted Playwright clicks, and a loopback-only request fence; loading or reloading owner Chrome remains owner-owned.",
+      "permission_privacy": "The UI-004 and evasion-locality lanes use disposable persistent profiles, trusted Playwright input, typed loopback sinks, and a loopback-only request fence; loading or reloading owner Chrome remains owner-owned.",
       "failure_mode": "Missing readiness, stale artifacts, or untrusted input makes the run TEST_INVALID.",
-      "known_limitation": "The bounded lane uses Playwright-bundled Chromium; #420/#439 still do not establish an operational branded-Chrome Gate-3 lane.",
+      "known_limitation": "The bounded lanes use Playwright-bundled Chromium. The evasion receipt covers one representative composite journey, not mutation robustness across all twelve fixtures, and #420/#439 still do not establish an operational branded-Chrome Gate-3 lane.",
       "issue_refs": ["#420", "#439", "#449", "#460", "#498", "#565"],
-      "pr_refs": ["#598"]
+      "pr_refs": ["#598", "#605"]
     },
     {
       "id": "F-04",
       "implementation_status": "PARTIAL",
       "profiles": ["proving_ground"],
-      "source_paths": ["tests/corpus/corpus_scoring.ts", "tests/corpus/corpus_scoring.test.ts", "tests/e2e/overlay-cleanup-nesting.spec.ts", "tests/e2e/proving_ground_fake_sink.ts", "tests/e2e/proving-ground-overlay-sink.spec.ts"],
+      "source_paths": ["tests/corpus/corpus_scoring.ts", "tests/corpus/corpus_scoring.test.ts", "tests/e2e/overlay-cleanup-nesting.spec.ts", "tests/e2e/proving_ground_fake_sink.ts", "tests/e2e/proving-ground-overlay-sink.spec.ts", "tests/e2e/evasion-locality-evidence.spec.ts"],
       "scenarios_served": ["NAV", "UI", "CRED", "NS-ADV-UI-004"],
       "evidence_state": "REGRESSION_PROVEN",
       "release_status": "FOUNDATION",
       "permission_privacy": "Oracles must store outcome metadata rather than secrets or page content.",
       "failure_mode": "A product event without independent harm fields cannot advance evidence.",
-      "known_limitation": "The independent receipt is shared only by one UI-004 Gym lane; RW journeys and other consequence types do not yet use it.",
+      "known_limitation": "Independent wrong-target navigation receipts cover the UI-004 lane and one representative evasion journey; the other eleven evasion fixtures, RW journeys, and other consequence types do not yet use one.",
       "issue_refs": ["#417", "#449"],
-      "pr_refs": ["#598"]
+      "pr_refs": ["#598", "#605"]
     },
     {
       "id": "F-05",
       "implementation_status": "PARTIAL",
       "profiles": ["proving_ground"],
-      "source_paths": ["gym/evasion-05-composite.html", "tests/e2e/evasion.spec.ts", "tests/scoring.property.test.ts"],
+      "source_paths": ["gym/evasion-05-composite.html", "gym/local-fixture-targets.js", "gym/local-fixture-sink.html", "tests/e2e/evasion.spec.ts", "tests/e2e/evasion-locality-evidence.spec.ts", "tests/scoring.property.test.ts"],
       "scenarios_served": ["UI", "RUNTIME", "EVADE"],
       "evidence_state": "MODELLED",
       "release_status": "FOUNDATION",
       "permission_privacy": "Generated variants must remain inert, local, deterministic, and free of production-visible test markers.",
       "failure_mode": "Semantically invalid mutations are TEST_INVALID and never counted as security passes or misses.",
-      "known_limitation": "Current evasions are authored fixtures; there is no deterministic invariant-preserving mutation engine or survivor registry.",
+      "known_limitation": "All twelve authored evasion fixtures now use a shared local-target contract, but only the composite representative has an independent sink receipt; there is no deterministic invariant-preserving mutation engine or survivor registry.",
       "issue_refs": ["#449"],
-      "pr_refs": []
+      "pr_refs": ["#605"]
     },
     {
       "id": "F-06",

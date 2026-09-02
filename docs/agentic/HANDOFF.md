@@ -40,6 +40,24 @@ Build / Unit and E2E, with release skipped as expected. The primary checkout was
 clean and equal to `origin/main` at that merge commit. This docs-only closeout
 changes no release code.
 
+PR #605 records the bounded #449 evasion-family slice. It changes only Gym fixtures, proving-ground
+tests, and programme records. All twelve evasion pages now use a shared target
+contract that rejects non-loopback or unarmed local overrides. Exact code head
+`b8a87caf67fad373d2b3e1d35180b64ff901a32b` passed the four-arm composite lane
+and all 17 evasion regressions in bundled Chromium 143.0.7499.4. The valid local
+receipt SHA-256 is
+`6714563aa23497c69e1fa563fa27296fb82abe71945f94fa2e3abe573534c2df`:
+attack baseline `HARM_REACHED`, protected and mixed `BLOCKED_PRE_HARM`, benign
+`OBSERVED` with one persisted `nav_silent_allow` event and no UI intervention,
+zero fixture-network violations, zero invalid sink attempts, and
+56 browser-platform connection attempts denied before egress. Each arm uses a
+sink-enforced one-use target identifier with a test-run TTL; earlier
+checkout-dependent hash, unqualified profile, incorrect benign outcome,
+descriptive-only use-count, or inaccurate arm-lifetime receipts are
+`HARNESS_INVALID` and superseded. Nine legacy
+core/RW destination holds remain. This does not change release behavior or
+promote the family beyond `MODELLED`.
+
 ## Historical product baseline
 
 At the 2026-08-10 product reconciliation, the product baseline was

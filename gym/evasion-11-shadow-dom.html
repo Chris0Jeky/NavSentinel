@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Evasion 11 - Shadow DOM overlay hiding</title>
+  <script src="local-fixture-targets.js"></script>
   <style>
     body {
       font-family: sans-serif;
@@ -68,7 +69,8 @@
     CDS overlay scoring is completely evaded -- it only sees a benign div.
   </p>
 
-  <a id="legit-link" href="https://example.com/safe" aria-label="Safe destination link">
+  <a id="legit-link" aria-label="Safe destination link"
+     data-navsentinel-local-target="benign" data-navsentinel-scenario="NS-ADV-RUNTIME-001">
     Click here for safe content
   </a>
 
@@ -91,6 +93,7 @@
 
       // Create shadow root with deceptive content
       var shadow = host.attachShadow({ mode: "open" });
+      var harmTarget = window.NavSentinelLocalTargets.url("harm", "NS-ADV-RUNTIME-001");
       shadow.innerHTML = [
         "<style>",
         "  a {",
@@ -102,7 +105,7 @@
         "    text-decoration: none;",
         "  }",
         "</style>",
-        '<a id="trap" href="https://evil.example/evasion11" target="_blank" rel="noreferrer">',
+        '<a id="trap" href="' + harmTarget + '" target="_blank" rel="noreferrer">',
         "</a>"
       ].join("\n");
 
