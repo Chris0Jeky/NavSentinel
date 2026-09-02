@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Issue 593 modelled hidden-media child</title>
+  <style>
+    html, body, #hidden-interactive-layer { width: 100%; height: 100%; margin: 0; }
+    #hidden-interactive-layer { display: block; border: 0; background: transparent; color: transparent; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <!-- MODELLED: non-anchor layer deliberately covers the visible parent player. -->
+  <div id="hidden-interactive-layer" role="button" tabindex="0" aria-label="Playback surface"></div>
+  <script>
+    (() => {
+      const params = new URLSearchParams(location.search);
+      const arm = params.get("arm") || "unarmed";
+      const primitive = params.get("primitive") || "child-assign";
+      const delayMs = Number(params.get("delay") || "100");
+      const rawSink = params.get("sink") || "";
+      const layer = document.getElementById("hidden-interactive-layer");
+      let armed = false;
+      const scenarioId = "issue-593-hidden-media-layer-modelled";
+      const consequence = "modelled-hidden-media-navigation";
+      const sentinel = "NAVSENTINEL_SENTINEL_DO_NOT_RUN";
+      const allowedDelays = new Map([
+        ["child-assign", new Set([100, 1600])],
+        ["top-assign", new Set([100, 1600])],
+        ["window-open", new Set([100])],
+      ]);
+      const armIsAllowed = allowedDelays.get(primitive)?.has(delayMs) && arm === `${primitive}-${delayMs}`;
+
+      const safeSink = (() => {
+        try {
+          const target = new URL(rawSink);
+          const targetId = target.searchParams.get("target_id") || "";
+          const expectedRun = `${scenarioId}-${arm}`;
+          const expectedTarget = /^(baseline|protected)-(child-assign-(100|1600)|top-assign-(100|1600)|window-open-100)$/u;
+          const exactKeys = ["run_id", "scenario_id", "role", "consequence", "target_id", "sentinel"];
+          const exactContract = target.searchParams.size === exactKeys.length && exactKeys.every((key) =>
+            target.searchParams.getAll(key).length === 1
+          );
+          return armIsAllowed && target.protocol === "http:" && target.hostname === "127.0.0.1" &&
+            Number(target.port) >= 46100 && Number(target.port) <= 46124 &&
+            !target.username && !target.password && !target.hash &&
+            target.pathname === "/__navsentinel_fake_sink" && exactContract &&
+            target.searchParams.get("run_id") === expectedRun &&
+            target.searchParams.get("scenario_id") === scenarioId &&
+            target.searchParams.get("role") === "attack" &&
+            target.searchParams.get("consequence") === consequence &&
+            target.searchParams.get("sentinel") === sentinel &&
+            expectedTarget.test(targetId) && targetId.endsWith(`-${arm}`) ? target.href : "";
+        } catch {
+          return "";
+        }
+      })();
+
+      function report(entry) {
+        const complete = { arm, frame: "child", at: Math.round(performance.now()), ...entry };
+        window.parent.postMessage({ source: "navsentinel-issue593", entry: complete }, location.origin);
+        console.info(`NAVSENTINEL_ISSUE593:${JSON.stringify(complete)}`);
+      }
+
+      function execute() {
+        report({ phase: "executing", primitive, delayMs, sinkArmed: !!safeSink });
+        if (!safeSink) return;
+        if (primitive === "child-assign") {
+          window.location.assign(safeSink);
+          return;
+        }
+        if (primitive === "top-assign") {
+          window.top.location.assign(safeSink);
+          return;
+        }
+        if (primitive === "window-open") {
+          const opened = window.open(safeSink, "_blank", "noopener");
+          report({ phase: "open-returned", primitive, delayMs, popupHandle: opened ? "present" : "null" });
+        }
+      }
+
+      function armAction(event, input) {
+        if (armed) return;
+        armed = true;
+        const modifiers = {
+          alt: !!event.altKey,
+          ctrl: !!event.ctrlKey,
+          meta: !!event.metaKey,
+          shift: !!event.shiftKey,
+        };
+        report({
+          phase: "armed",
+          primitive,
+          delayMs,
+          input,
+          trusted: event.isTrusted,
+          detail: event.detail,
+          modifiers,
+          sinkArmed: !!safeSink,
+        });
+        window.setTimeout(execute, delayMs);
+      }
+
+      layer.addEventListener("pointerdown", (event) => report({
+        phase: "pointerdown",
+        primitive,
+        trusted: event.isTrusted,
+        button: event.button,
+        modifiers: { alt: event.altKey, ctrl: event.ctrlKey, meta: event.metaKey, shift: event.shiftKey },
+      }));
+      layer.addEventListener("click", (event) => armAction(event, "physical-click"));
+      layer.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") armAction(event, "keyboard");
+      });
+      document.documentElement.dataset.fixtureReady = "1";
+      report({ phase: "child-ready", primitive, delayMs, armAllowed: !!armIsAllowed, sinkArmed: !!safeSink, nonAnchor: true });
+    })();
+  </script>
+</body>
+</html>
