@@ -13,11 +13,10 @@ passive maintenance, and frozen R1 are not fallback queues. The exact receipt is
 PR #572 remains parked before AI-31 on the retained SP-F-013 rollback survivor.
 PR #599 has been reconciled with current `main`, but its owner policy and
 branded-Chrome gates remain open. PR #600 is clean with green hosted checks but
-still needs its exact-head owner media-page check. PR #610 is the bounded
-test-only #449 parent slice for the seven core locality fixtures; it must still
-satisfy its own exact-head checks and review before merge. The final two RW
-locality holds are PR #613, the stacked follow-up; PR #613 remains based on
-#610 until the parent lands.
+still needs its exact-head owner media-page check. PR #610 merged the bounded
+test-only #449 parent slice for the seven core locality fixtures. The final two
+RW locality holds are PR #613, now retargeted to `main`; it must re-satisfy its
+exact-head checks and review against the landed parent before merge.
 
 1. **Finish or park the current runtime queue before opening another vertical.**
    Keep #599 and #600 aligned with current `main`, their exact heads, owner
