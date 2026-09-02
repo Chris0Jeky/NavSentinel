@@ -157,9 +157,20 @@ function createChromeMock(initialLocalStore: Record<string, unknown> = {}) {
             if (
               typeof message === "object" &&
               message !== null &&
-              (message as { type?: unknown }).type === "ns-pending-decision-deliver"
+              (message as { type?: unknown }).type === "ns-pending-decision-release"
             ) {
-              return Promise.resolve({ ok: true, status: "opened" });
+              return Promise.resolve({
+                ok: true,
+                status: "released",
+                destinationUrl: PENDING_DESTINATION_URL,
+              });
+            }
+            if (
+              typeof message === "object" &&
+              message !== null &&
+              (message as { type?: unknown }).type === "ns-pending-decision-opened"
+            ) {
+              return Promise.resolve({ ok: true, status: "acknowledged" });
             }
             return undefined;
           },
@@ -329,7 +340,7 @@ describe("service worker handlers", () => {
           type: "ns-pending-decision-create",
           semantics: {
             kind: "navigation",
-            reason: "navigation-blocked",
+            reason: "blank-target-blocked",
             actions: ["proceed-once"],
             destinationUrl: PENDING_DESTINATION_URL,
           },
@@ -381,7 +392,22 @@ describe("service worker handlers", () => {
       expect(mock.sentMessages).toContainEqual({
         tabId: 41,
         message: {
-          type: "ns-pending-decision-deliver",
+          type: "ns-pending-decision-release",
+          id: authorization.id,
+          action: "proceed-once",
+        },
+        options: { frameId: 0, documentId: "document-top-41" },
+      });
+      expect(mock.chrome.tabs.create).toHaveBeenCalledWith({
+        url: PENDING_DESTINATION_URL,
+        windowId: 7,
+        active: true,
+      });
+      expect(mock.chrome.tabs.create.mock.calls[0]?.[0]).not.toHaveProperty("openerTabId");
+      expect(mock.sentMessages).toContainEqual({
+        tabId: 41,
+        message: {
+          type: "ns-pending-decision-opened",
           id: authorization.id,
           action: "proceed-once",
         },

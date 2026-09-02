@@ -516,15 +516,27 @@ export interface PendingDecisionConsumeSuccessResponse {
   action: PendingDecisionAction;
 }
 
-/** Strict URL-free envelope delivered from the worker to one exact document. */
-export interface PendingDecisionDeliveryMessage {
-  type: "ns-pending-decision-deliver";
+/** Strict URL-free request for one exact document to release its ephemeral URL. */
+export interface PendingDecisionReleaseMessage {
+  type: "ns-pending-decision-release";
   id: string;
   action: PendingDecisionAction;
 }
 
+/** Best-effort receipt after the worker has opened the authorized destination. */
+export interface PendingDecisionOpenedMessage {
+  type: "ns-pending-decision-opened";
+  id: string;
+  action: PendingDecisionAction;
+}
+
+export type PendingDecisionDeliveryMessage =
+  | PendingDecisionReleaseMessage
+  | PendingDecisionOpenedMessage;
+
 export type PendingDecisionDeliveryResponse =
-  | { ok: true; status: "opened" }
+  | { ok: true; status: "released"; destinationUrl: string }
+  | { ok: true; status: "acknowledged" }
   | { ok: false; status: "rejected" };
 
 export type PendingDecisionRuntimeResponse =

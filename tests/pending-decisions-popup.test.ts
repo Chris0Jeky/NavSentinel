@@ -72,9 +72,8 @@ describe("PendingDecisionsPopupController", () => {
     await harness.controller.refresh();
 
     expect(harness.host.hidden).toBe(false);
-    expect(harness.host.textContent).toContain(
-      "https://source.test → https://destination.test",
-    );
+    expect(harness.host.textContent).toContain("From https://source.test");
+    expect(harness.host.textContent).toContain("To https://destination.test");
     expect(harness.host.textContent).toContain("30s remaining");
     expect(harness.host.textContent).not.toContain("private");
     expect(harness.host.querySelectorAll("button")).toHaveLength(1);

@@ -93,31 +93,49 @@ function createHarness() {
   const queryActiveTabs = vi.fn(async () => [{ ...activeTab }]);
   const getAllFrames = vi.fn(async (tabId: number) => frameSnapshots(frames, tabId));
   const deliverySnapshots: string[] = [];
-  const deliverDecision = vi.fn(async () => {
+  const deliverDecision = vi.fn(async (
+    _tabId: number,
+    message: { type: string },
+  ) => {
     deliverySnapshots.push(JSON.stringify(storage.data[PENDING_DECISION_STORAGE_KEY]));
-    return { ok: true, status: "opened" };
+    return message.type === "ns-pending-decision-release"
+      ? { ok: true, status: "released", destinationUrl: DESTINATION_URL }
+      : { ok: true, status: "acknowledged" };
   });
+  const createTab = vi.fn(async (_properties: {
+    url: string;
+    windowId: number;
+    active: true;
+  }) => ({ id: 99 }));
+  const fingerprintUrl = vi.fn(
+    async (url: string) => createHash("sha256").update(url).digest("hex"),
+  );
   const store = new PendingDecisionStore({
     storage,
     now: () => now.value,
     generateOpaqueValue: opaqueGenerator(),
-    fingerprintUrl: async (url) => createHash("sha256").update(url).digest("hex"),
+    fingerprintUrl,
   });
   const broker = new PendingDecisionRuntimeBroker(store, {
     runtimeId: () => "test-extension-id",
     extensionBaseUrl: () => "chrome-extension://test-extension-id/",
+    now: () => now.value,
+    fingerprintUrl,
     getTab,
     queryActiveTabs,
     getAllFrames,
     getLifecycleGeneration: () => lifecycleGeneration.value,
     deliverDecision,
+    createTab,
   });
   return {
     activeTab,
     broker,
+    createTab,
     deliverDecision,
     deliverySnapshots,
     frames,
+    fingerprintUrl,
     getAllFrames,
     getTab,
     lifecycleGeneration,
@@ -182,7 +200,7 @@ function createMessage(): PendingDecisionRuntimeMessage {
     type: "ns-pending-decision-create",
     semantics: {
       kind: "navigation",
-      reason: "navigation-blocked",
+      reason: "blank-target-blocked",
       actions: ["proceed-once"],
       destinationUrl: DESTINATION_URL,
       score: 81,
@@ -239,7 +257,7 @@ describe("PendingDecisionRuntimeBroker", () => {
 
     expect(decision).toMatchObject({
       kind: "navigation",
-      reason: "navigation-blocked",
+      reason: "blank-target-blocked",
       actions: ["proceed-once"],
       sourceOrigin: "https://source.test",
       topOrigin: "https://source.test",
@@ -264,11 +282,24 @@ describe("PendingDecisionRuntimeBroker", () => {
       kind: "navigation",
       action: "proceed-once",
     });
-    expect(harness.deliverySnapshots).toHaveLength(1);
-    expect(harness.deliverySnapshots[0]).not.toContain(decision.id);
-    expect(harness.deliverDecision).toHaveBeenCalledWith(
+    expect(harness.deliverySnapshots).toHaveLength(2);
+    expect(harness.deliverySnapshots.every((snapshot) => !snapshot.includes(decision.id))).toBe(true);
+    expect(harness.deliverDecision).toHaveBeenNthCalledWith(
+      1,
       7,
-      { type: "ns-pending-decision-deliver", id: decision.id, action: "proceed-once" },
+      { type: "ns-pending-decision-release", id: decision.id, action: "proceed-once" },
+      { frameId: 0, documentId: TOP_DOCUMENT_ID },
+    );
+    expect(harness.createTab).toHaveBeenCalledWith({
+      url: DESTINATION_URL,
+      windowId: 2,
+      active: true,
+    });
+    expect(harness.createTab.mock.calls[0]?.[0]).not.toHaveProperty("openerTabId");
+    expect(harness.deliverDecision).toHaveBeenNthCalledWith(
+      2,
+      7,
+      { type: "ns-pending-decision-opened", id: decision.id, action: "proceed-once" },
       { frameId: 0, documentId: TOP_DOCUMENT_ID },
     );
     expect(
@@ -611,6 +642,117 @@ describe("PendingDecisionRuntimeBroker", () => {
     expect(
       await harness.broker.handle(consumeMessage(decision), extensionSender()),
     ).toEqual({ ok: false, operation: "consume", status: "missing" });
+  });
+
+  it("rejects a released URL unless its exact HTTP origin and SHA-256 match", async () => {
+    for (const releasedUrl of [
+      "javascript:alert(1)",
+      "https://other.test/private/continue?token=destination-secret#dest-fragment",
+      "https://destination.test/private/other?token=destination-secret#dest-fragment",
+    ]) {
+      const harness = createHarness();
+      const decision = await createAndList(harness);
+      harness.deliverDecision.mockResolvedValueOnce({
+        ok: true,
+        status: "released",
+        destinationUrl: releasedUrl,
+      });
+
+      expect(
+        await harness.broker.handle(consumeMessage(decision), extensionSender()),
+      ).toEqual({ ok: false, operation: "consume", status: "delivery-failed" });
+      expect(harness.createTab).not.toHaveBeenCalled();
+      expect(
+        await harness.broker.handle(consumeMessage(decision), extensionSender()),
+      ).toEqual({ ok: false, operation: "consume", status: "missing" });
+    }
+  });
+
+  it("rechecks the exact tab and document after release and after async hashing", async () => {
+    for (const changeDuring of ["release", "hash"] as const) {
+      const harness = createHarness();
+      const decision = await createAndList(harness);
+      const changeContext = () => {
+        harness.activeTab.url = "https://source.test/replaced";
+        harness.frames.set(frameKey(7, 0), {
+          frameId: 0,
+          url: "https://source.test/replaced",
+          documentId: "replacement-document",
+          documentLifecycle: "active",
+          errorOccurred: false,
+        });
+      };
+      if (changeDuring === "release") {
+        harness.deliverDecision.mockImplementationOnce(async () => {
+          changeContext();
+          return { ok: true, status: "released", destinationUrl: DESTINATION_URL };
+        });
+      } else {
+        harness.fingerprintUrl.mockImplementation(async (url: string) => {
+          if (url === DESTINATION_URL) changeContext();
+          return createHash("sha256").update(url).digest("hex");
+        });
+      }
+
+      expect(
+        await harness.broker.handle(consumeMessage(decision), extensionSender()),
+      ).toEqual({ ok: false, operation: "consume", status: "context-changed" });
+      expect(harness.createTab).not.toHaveBeenCalled();
+    }
+  });
+
+  it("rechecks TTL after release and hashing, then treats failed tab create as non-retryable", async () => {
+    for (const expiryDuring of ["release", "hash"] as const) {
+      const expired = createHarness();
+      const expiredDecision = await createAndList(expired);
+      if (expiryDuring === "release") {
+        expired.deliverDecision.mockImplementationOnce(async () => {
+          expired.now.value += 30_000;
+          return { ok: true, status: "released", destinationUrl: DESTINATION_URL };
+        });
+      } else {
+        expired.fingerprintUrl.mockImplementation(async (url: string) => {
+          if (url === DESTINATION_URL) expired.now.value += 30_000;
+          return createHash("sha256").update(url).digest("hex");
+        });
+      }
+      expect(
+        await expired.broker.handle(consumeMessage(expiredDecision), extensionSender()),
+      ).toEqual({ ok: false, operation: "consume", status: "context-changed" });
+      expect(expired.createTab).not.toHaveBeenCalled();
+    }
+
+    const failedOpen = createHarness();
+    const failedOpenDecision = await createAndList(failedOpen);
+    failedOpen.createTab.mockRejectedValueOnce(new Error("tab create failed with sensitive detail"));
+    const failedResponse = await failedOpen.broker.handle(
+      consumeMessage(failedOpenDecision),
+      extensionSender(),
+    );
+    expect(failedResponse).toEqual({
+      ok: false,
+      operation: "consume",
+      status: "delivery-failed",
+    });
+    expect(JSON.stringify(failedResponse)).not.toContain("sensitive detail");
+    expect(failedOpen.deliverDecision).toHaveBeenCalledTimes(1);
+    expect(
+      await failedOpen.broker.handle(consumeMessage(failedOpenDecision), extensionSender()),
+    ).toEqual({ ok: false, operation: "consume", status: "missing" });
+  });
+
+  it("does not turn a successful tab create into failure when the opened receipt is lost", async () => {
+    const harness = createHarness();
+    const decision = await createAndList(harness);
+    harness.deliverDecision
+      .mockResolvedValueOnce({ ok: true, status: "released", destinationUrl: DESTINATION_URL })
+      .mockRejectedValueOnce(new Error("source document closed"));
+
+    expect(
+      await harness.broker.handle(consumeMessage(decision), extensionSender()),
+    ).toMatchObject({ ok: true, operation: "consume", status: "consumed" });
+    expect(harness.createTab).toHaveBeenCalledTimes(1);
+    expect(harness.deliverDecision).toHaveBeenCalledTimes(2);
   });
 
   it("fails closed on dependency/storage errors and permits a clean retry", async () => {

@@ -172,8 +172,9 @@ reviewed head of PR #600.
 
 Only Chris can record AI-39 complete. Unit tests prove token burn, context
 binding, URL minimization, and replay rejection; headed Playwright proves the
-page warning has no protection-lowering control. Neither proves that a real
-toolbar-popup activation survives delivery into the exact content document.
+page warning has no protection-lowering control. Neither proves that real Chrome
+accepts the worker-created exact destination tab, leaves it openerless, and
+delivers the best-effort outcome receipt to the source document.
 
 ---
 

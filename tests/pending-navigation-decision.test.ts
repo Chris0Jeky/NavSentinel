@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   PendingNavigationDecisionClient,
-  openDisownedBlankWindow,
   type PendingNavigationDecisionClientDependencies,
 } from "../extension/src/content/pending_navigation_decision";
 import type { PendingDecisionDeliveryResponse } from "../extension/src/shared/pending_decision";
@@ -23,12 +22,13 @@ function extensionSender(overrides: Record<string, unknown> = {}): chrome.runtim
 function createHarness() {
   const state = {
     currentUrl: SOURCE_URL,
+    extensionBaseUrl: "chrome-extension://test-extension-id/",
     now: 1_000,
+    runtimeId: "test-extension-id",
     visible: true,
   };
   const responses: unknown[] = [];
   const sent: unknown[] = [];
-  const opened: string[] = [];
   const timers = new Map<number, () => void>();
   let nextTimer = 1;
   let messageListener:
@@ -39,16 +39,10 @@ function createHarness() {
     ) => void)
     | undefined;
   let pageHideListener: (() => void) | undefined;
-  const clientRef: { current?: PendingNavigationDecisionClient } = {};
   const onProceed = vi.fn();
-  const openBlank = vi.fn((exactUrl: string): Window | null => {
-    expect(clientRef.current?.pendingCountForTest).toBe(0);
-    opened.push(exactUrl);
-    return {} as Window;
-  });
   const dependencies: PendingNavigationDecisionClientDependencies = {
-    runtimeId: () => "test-extension-id",
-    extensionBaseUrl: () => "chrome-extension://test-extension-id/",
+    runtimeId: () => state.runtimeId,
+    extensionBaseUrl: () => state.extensionBaseUrl,
     sendMessage: async (message) => {
       sent.push(structuredClone(message));
       return responses.shift();
@@ -62,7 +56,6 @@ function createHarness() {
     now: () => state.now,
     currentUrl: () => state.currentUrl,
     isVisible: () => state.visible,
-    openBlank,
     setTimer: (callback) => {
       const id = nextTimer++;
       timers.set(id, callback);
@@ -73,7 +66,6 @@ function createHarness() {
     },
   };
   const client = new PendingNavigationDecisionClient(dependencies);
-  clientRef.current = client;
 
   function createResponse(
     id = FIRST_ID,
@@ -116,8 +108,6 @@ function createHarness() {
     createResponse,
     deliver,
     onProceed,
-    openBlank,
-    opened,
     pageHide: () => pageHideListener?.(),
     responses,
     sent,
@@ -127,37 +117,7 @@ function createHarness() {
 }
 
 describe("PendingNavigationDecisionClient", () => {
-  it("severs the child opener before navigating to the approved destination", () => {
-    const replace = vi.fn();
-    const close = vi.fn();
-    const child = {
-      opener: {} as Window,
-      location: { replace },
-      close,
-    } as unknown as Window;
-    const openWindow = vi.fn(() => child);
-
-    expect(openDisownedBlankWindow(DESTINATION_URL, openWindow)).toBe(child);
-    expect(openWindow).toHaveBeenCalledWith("about:blank", "_blank");
-    expect(child.opener).toBeNull();
-    expect(replace).toHaveBeenCalledWith(DESTINATION_URL);
-    expect(close).not.toHaveBeenCalled();
-  });
-
-  it("closes the inert child when navigation cannot be prepared", () => {
-    const close = vi.fn();
-    const child = {
-      opener: {} as Window,
-      location: { replace: vi.fn(() => { throw new Error("navigation failed"); }) },
-      close,
-    } as unknown as Window;
-
-    expect(openDisownedBlankWindow(DESTINATION_URL, () => child)).toBeNull();
-    expect(child.opener).toBeNull();
-    expect(close).toHaveBeenCalledTimes(1);
-  });
-
-  it("keeps the raw URL in one ephemeral slot and opens it once after exact delivery", async () => {
+  it("burns the raw URL slot before one release and records only after an opened receipt", async () => {
     const harness = createHarness();
     expect(await harness.create()).toBe(true);
     expect(harness.client.pendingCountForTest).toBe(1);
@@ -176,7 +136,7 @@ describe("PendingNavigationDecisionClient", () => {
     ]);
 
     const message = {
-      type: "ns-pending-decision-deliver",
+      type: "ns-pending-decision-release",
       id: FIRST_ID,
       action: "proceed-once",
     };
@@ -184,18 +144,67 @@ describe("PendingNavigationDecisionClient", () => {
       ok: false,
       status: "rejected",
     });
+    expect(
+      harness.deliver(
+        message,
+        extensionSender({ url: "https://attacker.test/forged-sender" }),
+      ),
+    ).toEqual({ ok: false, status: "rejected" });
+    expect(
+      harness.deliver(message, extensionSender({ url: undefined, origin: "https://attacker.test" })),
+    ).toEqual({ ok: false, status: "rejected" });
     expect(harness.deliver({ ...message, destinationUrl: DESTINATION_URL })).toEqual({
       ok: false,
       status: "rejected",
     });
     expect(harness.client.pendingCountForTest).toBe(1);
 
-    expect(harness.deliver(message)).toEqual({ ok: true, status: "opened" });
-    expect(harness.opened).toEqual([DESTINATION_URL]);
-    expect(harness.openBlank).toHaveBeenCalledWith(DESTINATION_URL);
-    expect(harness.onProceed).toHaveBeenCalledTimes(1);
+    expect(harness.deliver(message, extensionSender({ url: undefined, origin: undefined }))).toEqual({
+      ok: true,
+      status: "released",
+      destinationUrl: DESTINATION_URL,
+    });
+    expect(harness.client.pendingCountForTest).toBe(0);
+    expect(harness.client.awaitingOpenedCountForTest).toBe(1);
+    expect(harness.onProceed).not.toHaveBeenCalled();
     expect(harness.deliver(message)).toEqual({ ok: false, status: "rejected" });
-    expect(harness.openBlank).toHaveBeenCalledTimes(1);
+
+    harness.state.visible = false;
+    const opened = {
+      type: "ns-pending-decision-opened",
+      id: FIRST_ID,
+      action: "proceed-once",
+    };
+    expect(harness.deliver(opened)).toEqual({ ok: true, status: "acknowledged" });
+    expect(harness.client.awaitingOpenedCountForTest).toBe(0);
+    expect(harness.onProceed).toHaveBeenCalledTimes(1);
+    expect(harness.deliver(opened)).toEqual({ ok: false, status: "rejected" });
+  });
+
+  it("accepts Firefox extension-origin background metadata", async () => {
+    const harness = createHarness();
+    harness.state.runtimeId = "navsentinel@navsentinel.app";
+    harness.state.extensionBaseUrl = "moz-extension://test-runtime-uuid/";
+    expect(await harness.create()).toBe(true);
+
+    expect(
+      harness.deliver(
+        {
+          type: "ns-pending-decision-release",
+          id: FIRST_ID,
+          action: "proceed-once",
+        },
+        {
+          id: "navsentinel@navsentinel.app",
+          url: "moz-extension://test-runtime-uuid/_generated_background_page.html",
+          origin: "moz-extension://test-runtime-uuid",
+        } as chrome.runtime.MessageSender,
+      ),
+    ).toEqual({
+      ok: true,
+      status: "released",
+      destinationUrl: DESTINATION_URL,
+    });
   });
 
   it("replaces the same-scope slot and clears all ephemeral state on pagehide", async () => {
@@ -207,14 +216,23 @@ describe("PendingNavigationDecisionClient", () => {
     expect(harness.client.pendingCountForTest).toBe(1);
     expect(
       harness.deliver({
-        type: "ns-pending-decision-deliver",
+        type: "ns-pending-decision-release",
         id: FIRST_ID,
         action: "proceed-once",
       }),
     ).toEqual({ ok: false, status: "rejected" });
+    expect(
+      harness.deliver({
+        type: "ns-pending-decision-release",
+        id: SECOND_ID,
+        action: "proceed-once",
+      }),
+    ).toMatchObject({ ok: true, status: "released" });
+    expect(harness.client.awaitingOpenedCountForTest).toBe(1);
 
     harness.pageHide();
     expect(harness.client.pendingCountForTest).toBe(0);
+    expect(harness.client.awaitingOpenedCountForTest).toBe(0);
     expect(harness.timers.size).toBe(0);
   });
 
@@ -237,25 +255,52 @@ describe("PendingNavigationDecisionClient", () => {
     expect(harness.timers.size).toBe(0);
   });
 
-  it("burns the slot on hidden, changed, expired, or failed-open delivery", async () => {
+  it("burns the raw slot on hidden, changed, or expired release", async () => {
     for (const arrange of [
       (harness: ReturnType<typeof createHarness>) => { harness.state.visible = false; },
       (harness: ReturnType<typeof createHarness>) => { harness.state.currentUrl += "#changed"; },
       (harness: ReturnType<typeof createHarness>) => { harness.state.now += 30_000; },
-      (harness: ReturnType<typeof createHarness>) => { harness.openBlank.mockReturnValueOnce(null); },
     ]) {
       const harness = createHarness();
       expect(await harness.create()).toBe(true);
       arrange(harness);
       const message = {
-        type: "ns-pending-decision-deliver",
+        type: "ns-pending-decision-release",
         id: FIRST_ID,
         action: "proceed-once",
       };
       expect(harness.deliver(message)).toEqual({ ok: false, status: "rejected" });
       expect(harness.client.pendingCountForTest).toBe(0);
+      expect(harness.client.awaitingOpenedCountForTest).toBe(0);
       expect(harness.onProceed).not.toHaveBeenCalled();
       expect(harness.deliver(message)).toEqual({ ok: false, status: "rejected" });
+    }
+  });
+
+  it("rejects a stale or context-changed opened receipt without recording an allow", async () => {
+    for (const arrange of [
+      (harness: ReturnType<typeof createHarness>) => { harness.state.currentUrl += "#changed"; },
+      (harness: ReturnType<typeof createHarness>) => { harness.state.now += 30_000; },
+    ]) {
+      const harness = createHarness();
+      expect(await harness.create()).toBe(true);
+      expect(
+        harness.deliver({
+          type: "ns-pending-decision-release",
+          id: FIRST_ID,
+          action: "proceed-once",
+        }),
+      ).toMatchObject({ ok: true, status: "released" });
+      arrange(harness);
+      expect(
+        harness.deliver({
+          type: "ns-pending-decision-opened",
+          id: FIRST_ID,
+          action: "proceed-once",
+        }),
+      ).toEqual({ ok: false, status: "rejected" });
+      expect(harness.client.awaitingOpenedCountForTest).toBe(0);
+      expect(harness.onProceed).not.toHaveBeenCalled();
     }
   });
 

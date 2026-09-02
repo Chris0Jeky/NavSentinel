@@ -40,6 +40,13 @@ interface EphemeralBlankNavigation {
   onProceed: () => void;
 }
 
+interface ReleasedBlankNavigation {
+  sourceUrl: string;
+  expiresAt: number;
+  timer: number;
+  onProceed: () => void;
+}
+
 interface CreatedDecisionMetadata {
   id: string;
   expiresAt: number;
@@ -61,7 +68,6 @@ export interface PendingNavigationDecisionClientDependencies {
   now: () => number;
   currentUrl: () => string;
   isVisible: () => boolean;
-  openBlank: (exactUrl: string) => Window | null;
   setTimer: (callback: () => void, delayMs: number) => number;
   clearTimer: (timer: number) => void;
 }
@@ -82,36 +88,9 @@ function defaultDependencies(): PendingNavigationDecisionClientDependencies {
     now: Date.now,
     currentUrl: () => location.href,
     isVisible: () => document.visibilityState === "visible",
-    openBlank: openDisownedBlankWindow,
     setTimer: (callback, delayMs) => window.setTimeout(callback, delayMs),
     clearTimer: (timer) => window.clearTimeout(timer),
   };
-}
-
-/**
- * Opens an inert same-origin child, severs its opener synchronously, and only
- * then navigates it to the approved destination. This prevents a suspicious
- * child from replacing the protected source tab via reverse tabnabbing.
- */
-export function openDisownedBlankWindow(
-  exactUrl: string,
-  openWindow: (url?: string | URL, target?: string) => Window | null = window.open.bind(window),
-): Window | null {
-  let opened: Window | null = null;
-  try {
-    opened = openWindow("about:blank", "_blank");
-    if (!opened) return null;
-    opened.opener = null;
-    opened.location.replace(exactUrl);
-    return opened;
-  } catch {
-    try {
-      opened?.close();
-    } catch {
-      // The one-shot broker capability is already burned by the caller.
-    }
-    return null;
-  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -121,6 +100,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
   const keys = Object.keys(value);
   return keys.length === expected.length && expected.every((key) => keys.includes(key));
+}
+
+function extensionAuthority(value: string | undefined): string | null {
+  if (!value) return null;
+  try {
+    const parsed = new URL(value);
+    if (!parsed.protocol || !parsed.host) return null;
+    return `${parsed.protocol}//${parsed.host}`;
+  } catch {
+    return null;
+  }
 }
 
 function parseCreatedDecision(value: unknown, now: number): CreatedDecisionMetadata | null {
@@ -153,7 +143,8 @@ function parseCreatedDecision(value: unknown, now: number): CreatedDecisionMetad
 function parseDeliveryMessage(value: unknown): PendingDecisionDeliveryMessage | null {
   if (!isRecord(value) || !hasExactKeys(value, ["type", "id", "action"])) return null;
   if (
-    value.type !== "ns-pending-decision-deliver" ||
+    (value.type !== "ns-pending-decision-release" &&
+      value.type !== "ns-pending-decision-opened") ||
     !isOpaquePendingDecisionValue(value.id) ||
     value.action !== "proceed-once"
   ) {
@@ -164,11 +155,13 @@ function parseDeliveryMessage(value: unknown): PendingDecisionDeliveryMessage | 
 
 /**
  * Owns the only raw destination copy after broker creation. Records are
- * document-local, bounded, short-lived, and removed before navigation is tried.
+ * document-local, bounded, short-lived, and burned before the URL is released
+ * to the worker for verification and tab creation.
  */
 export class PendingNavigationDecisionClient {
   private readonly dependencies: PendingNavigationDecisionClientDependencies;
   private readonly pending = new Map<string, EphemeralBlankNavigation>();
+  private readonly awaitingOpened = new Map<string, ReleasedBlankNavigation>();
   private requestGeneration = 0;
 
   constructor(dependencies: PendingNavigationDecisionClientDependencies = defaultDependencies()) {
@@ -204,7 +197,12 @@ export class PendingNavigationDecisionClient {
       return false;
     }
 
-    if (created.replacedDecisionId) this.clearRecord(created.replacedDecisionId);
+    if (created.replacedDecisionId) {
+      this.clearRecord(created.replacedDecisionId);
+      this.clearOpenedReceipt(created.replacedDecisionId);
+    }
+    this.clearRecord(created.id);
+    this.clearOpenedReceipt(created.id);
     this.clearExpired(now);
     while (this.pending.size >= PENDING_DECISION_MAX_PER_TAB) {
       const oldest = [...this.pending.entries()].sort(
@@ -232,9 +230,18 @@ export class PendingNavigationDecisionClient {
     message: unknown,
     sender: chrome.runtime.MessageSender,
   ): PendingDecisionDeliveryResponse | undefined {
-    if (!isRecord(message) || message.type !== "ns-pending-decision-deliver") return undefined;
+    if (
+      !isRecord(message) ||
+      (message.type !== "ns-pending-decision-release" &&
+        message.type !== "ns-pending-decision-opened")
+    ) {
+      return undefined;
+    }
     const delivery = parseDeliveryMessage(message);
     if (!delivery || !this.isOwnExtensionSender(sender)) return { ok: false, status: "rejected" };
+    if (delivery.type === "ns-pending-decision-opened") {
+      return this.handleOpenedReceipt(delivery.id);
+    }
     const record = this.pending.get(delivery.id);
     if (!record) return { ok: false, status: "rejected" };
 
@@ -248,44 +255,76 @@ export class PendingNavigationDecisionClient {
       return { ok: false, status: "rejected" };
     }
 
-    // Burn the content-side capability before the one protection-lowering side effect.
+    const destinationUrl = record.destinationUrl;
+    // Burn the content-side raw-URL capability before releasing its value.
     this.clearRecord(delivery.id);
-    let opened: Window | null = null;
-    try {
-      opened = this.dependencies.openBlank(record.destinationUrl);
-    } catch {
-      // The broker token is already consumed; failure cannot be retried.
+    this.clearExpired(now);
+    while (this.awaitingOpened.size >= PENDING_DECISION_MAX_PER_TAB) {
+      const oldest = [...this.awaitingOpened.entries()].sort(
+        ([leftId, left], [rightId, right]) =>
+          left.expiresAt - right.expiresAt || leftId.localeCompare(rightId),
+      )[0];
+      if (!oldest) break;
+      this.clearOpenedReceipt(oldest[0]);
     }
-    if (!opened) return { ok: false, status: "rejected" };
-    try {
-      record.onProceed();
-    } catch {
-      // Outcome recording must not turn a completed navigation into a retry.
-    }
-    return { ok: true, status: "opened" };
+    const timer = this.dependencies.setTimer(
+      () => this.clearOpenedReceipt(delivery.id),
+      Math.max(0, record.expiresAt - now),
+    );
+    this.awaitingOpened.set(delivery.id, {
+      sourceUrl: record.sourceUrl,
+      expiresAt: record.expiresAt,
+      timer,
+      onProceed: record.onProceed,
+    });
+    return { ok: true, status: "released", destinationUrl };
   }
 
   get pendingCountForTest(): number {
     return this.pending.size;
   }
 
+  get awaitingOpenedCountForTest(): number {
+    return this.awaitingOpened.size;
+  }
+
+  private handleOpenedReceipt(id: string): PendingDecisionDeliveryResponse {
+    const record = this.awaitingOpened.get(id);
+    if (!record) return { ok: false, status: "rejected" };
+    if (
+      record.expiresAt <= this.dependencies.now() ||
+      record.sourceUrl !== this.dependencies.currentUrl()
+    ) {
+      this.clearOpenedReceipt(id);
+      return { ok: false, status: "rejected" };
+    }
+    this.clearOpenedReceipt(id);
+    try {
+      record.onProceed();
+    } catch {
+      // Outcome recording is best effort after the worker confirms tab creation.
+    }
+    return { ok: true, status: "acknowledged" };
+  }
+
   private isOwnExtensionSender(sender: chrome.runtime.MessageSender): boolean {
     const runtimeId = this.dependencies.runtimeId();
-    const extensionBaseUrl = this.dependencies.extensionBaseUrl();
-    if (
-      !runtimeId ||
-      sender.id !== runtimeId ||
-      extensionBaseUrl !== `chrome-extension://${runtimeId}/`
-    ) {
-      return false;
-    }
-    if (sender.url !== undefined && !sender.url.startsWith(extensionBaseUrl)) return false;
-    return sender.origin === undefined || sender.origin === `chrome-extension://${runtimeId}`;
+    const ownAuthority = extensionAuthority(this.dependencies.extensionBaseUrl());
+    if (!runtimeId || sender.id !== runtimeId || !ownAuthority) return false;
+
+    // Browser implementations and older versions may omit MessageSender.url
+    // for background-to-content messages. Treat URL/origin metadata as optional
+    // defense-in-depth while the internal extension ID remains authoritative.
+    if (sender.url !== undefined && extensionAuthority(sender.url) !== ownAuthority) return false;
+    return sender.origin === undefined || sender.origin === ownAuthority;
   }
 
   private clearExpired(now: number): void {
     for (const [id, record] of this.pending) {
       if (record.expiresAt <= now) this.clearRecord(id);
+    }
+    for (const [id, record] of this.awaitingOpened) {
+      if (record.expiresAt <= now) this.clearOpenedReceipt(id);
     }
   }
 
@@ -296,8 +335,16 @@ export class PendingNavigationDecisionClient {
     this.pending.delete(id);
   }
 
+  private clearOpenedReceipt(id: string): void {
+    const record = this.awaitingOpened.get(id);
+    if (!record) return;
+    this.dependencies.clearTimer(record.timer);
+    this.awaitingOpened.delete(id);
+  }
+
   private clearAll(): void {
     for (const id of [...this.pending.keys()]) this.clearRecord(id);
+    for (const id of [...this.awaitingOpened.keys()]) this.clearOpenedReceipt(id);
   }
 }
 
@@ -315,6 +362,19 @@ export function showPendingBlankNavigationPrompt(
   const sourceDomain = request.sourceDomain;
   const destinationHost = request.destinationHost;
   const outcomeFeatures = request.outcomeFeatures;
+  let outcomeRecorded = false;
+  const recordOutcome = (outcome: "allow_once" | "dismiss") => {
+    if (outcomeRecorded) return;
+    outcomeRecorded = true;
+    void appendPromptOutcome({
+      domain: sourceDomain,
+      destDomain: destinationHost,
+      type: "nav",
+      score,
+      outcome,
+      ...outcomeFeatures,
+    }).catch(() => {});
+  };
   void appendEvent({
     kind: "nav_blank_prompt",
     site: sourceDomain,
@@ -325,16 +385,7 @@ export function showPendingBlankNavigationPrompt(
     destinationUrl: request.destinationUrl,
     score,
     signals: request.signals,
-    onProceed: () => {
-      void appendPromptOutcome({
-        domain: sourceDomain,
-        destDomain: destinationHost,
-        type: "nav",
-        score,
-        outcome: "allow_once",
-        ...outcomeFeatures,
-      }).catch(() => {});
-    },
+    onProceed: () => recordOutcome("allow_once"),
   });
   void pending.then((created) => {
     showToast({
@@ -342,6 +393,7 @@ export function showPendingBlankNavigationPrompt(
         ? `${request.title}${request.overlayHidden ? " (overlay hidden)" : ""}: ${destinationHost}. Open NavSentinel to review.`
         : `${request.title}: ${destinationHost}. Navigation remains blocked.`,
       coalesce: !request.overlayHidden,
+      onDismiss: () => recordOutcome("dismiss"),
     });
   });
   return pending;

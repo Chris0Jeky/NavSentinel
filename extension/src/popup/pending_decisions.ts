@@ -152,7 +152,14 @@ export class PendingDecisionsPopupController {
 
       const route = document.createElement("div");
       route.className = "pending-route ns-mono";
-      route.textContent = `${decision.sourceOrigin} → ${decision.destinationOrigin}`;
+      const source = document.createElement("div");
+      source.className = "pending-route-origin";
+      source.textContent = `From ${decision.sourceOrigin}`;
+      route.appendChild(source);
+      const destination = document.createElement("div");
+      destination.className = "pending-route-origin pending-route-destination";
+      destination.textContent = `To ${decision.destinationOrigin}`;
+      route.appendChild(destination);
       card.appendChild(route);
 
       const remaining = document.createElement("div");
