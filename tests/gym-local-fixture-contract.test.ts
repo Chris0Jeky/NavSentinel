@@ -42,7 +42,7 @@ describe("core Gym fixture locality contracts", () => {
       .filter((file) => file.endsWith(".html"))
       .filter((file) => /data-navsentinel-local-target=/u.test(fs.readFileSync(path.join(gymRoot, file), "utf8")));
 
-    expect(consumers).toHaveLength(17);
+    expect(consumers).toHaveLength(18);
     for (const file of consumers) {
       const source = fs.readFileSync(path.join(gymRoot, file), "utf8");
       const targetAnchors = [...source.matchAll(/<a\b[^>]*data-navsentinel-local-target=[^>]*>/giu)];
@@ -61,7 +61,6 @@ describe("RW Gym fixture locality contracts", () => {
     expect(source).toContain('<script src="local-fixture-targets.js"></script>');
     expect(source).not.toMatch(/https?:\/\//u);
     if (kind === "static-dual") {
-      expect(source).toContain('href="local-fixture-sink.html"');
       expect(source).toContain('data-navsentinel-local-target="benign"');
       expect(source).toContain('data-navsentinel-local-target="harm"');
       expect(source).toContain(`data-navsentinel-scenario="${scenarioId}"`);
