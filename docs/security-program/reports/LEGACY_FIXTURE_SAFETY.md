@@ -1,6 +1,6 @@
 # Legacy fixture safety holds
 
-The seed pass found 25 mapped legacy Gym pages that did not meet the local, inert fixture policy. Two bounded #449 slices have remediated four ClickFix pages and twelve evasion pages; nine external-destination holds remain excluded from programme evidence.
+The seed pass found 25 mapped legacy Gym pages that did not meet the local, inert fixture policy. Three bounded #449 slices have remediated four ClickFix pages, twelve evasion pages, and seven core pages; two external-destination holds remain excluded from programme evidence.
 
 ## Remediated in the first #449 slice
 
@@ -17,7 +17,7 @@ The three attack pages now write only `NAVSENTINEL_SENTINEL_DO_NOT_RUN`, and the
 
 All twelve pages now resolve benign and harm destinations through `gym/local-fixture-targets.js`, which rejects non-loopback or unarmed local overrides and falls back to `gym/local-fixture-sink.html`. A representative composite journey uses the typed fake sink for attack, protected, benign, and mixed browser arms. This removes the family from the safety hold without claiming independent harm evidence or mutation robustness for the other eleven fixtures.
 
-## Remaining non-hermetic mapped fixtures
+## Remediated in the core-fixture #449 slice
 
 - `gym/level1-basic-opacity.html`
 - `gym/level2-moving-target.html`
@@ -26,8 +26,13 @@ All twelve pages now resolve benign and harm destinations through `gym/local-fix
 - `gym/level5-window-open-popunder.html`
 - `gym/level6-programmatic-click.html`
 - `gym/level9-legit-video-overlay.html`
+
+These pages now resolve harm destinations through `gym/local-fixture-targets.js` and the video control's benign link resolves to the typed local sink. The focused contract test checks each mapping and rejects absolute destinations; existing regression checks remain behavior-oriented and do not promote the seven fixtures to independent harm evidence.
+
+## Remaining non-hermetic mapped fixtures
+
 - `gym/rw01-search-result-overlay-swap.html`
 - `gym/rw06-legit-auth-second-popup.html`
-These nine pages include public/example destinations. Replace them with typed local benign and harm destinations in bounded follow-ups. Existing regression history can remain a dated engineering signal, but these pages cannot promote programme evidence while held.
+These two pages include public/example destinations. Replace them with typed local benign and harm destinations in bounded follow-ups. Existing regression history can remain a dated engineering signal, but these pages cannot promote programme evidence while held.
 
 The machine-readable path list, disposition, and remediation are in [fixture-safety-findings.json](../registry/fixture-safety-findings.json). `npm run security:check` fails if a mapped unsafe page is unflagged, a finding path disappears, or a flagged page no longer contains a detectable finding without the registry being reconciled.

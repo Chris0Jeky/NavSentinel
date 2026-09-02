@@ -22,9 +22,9 @@ repair and must still satisfy its own exact-head checks and review before merge.
    decisions, and browser gates. #600 is containment; #601 remains the durable
    extension-origin authority outcome and should follow #600 rather than overlap
    its capture and loader seams.
-2. **Extend #449 in bounded fixture-family slices.** The twelve evasion fixtures
-   now share a loopback-only target contract, leaving nine core/RW
-   external-destination holds. Localize those nine before adding declared
+2. **Extend #449 in bounded fixture-family slices.** The twelve evasion and seven
+   core fixtures now share a loopback-only target contract, leaving two RW
+   external-destination holds. Localize those two before adding declared
    adjacent mutation axes for `NS-ADV-UI-004`; the representative evasion
    receipt is not a robustness claim. Keep each sink typed and local rather than
    building a generic collector.

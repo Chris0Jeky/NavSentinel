@@ -46,8 +46,8 @@ An outcome describes what the independent harm oracle observed. An evidence stat
 
 | Disposition | Mapped records | Fixture paths |
 | --- | --- | --- |
-| CLEAR | 56 | 0 |
-| SAFETY_HOLD | 9 | 9 |
+| CLEAR | 63 | 0 |
+| SAFETY_HOLD | 2 | 2 |
 | QUARANTINED | 0 | 0 |
 
 Safety-held and quarantined fixtures are excluded from programme evidence promotion until localized and reconciled.
