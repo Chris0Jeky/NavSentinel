@@ -450,6 +450,7 @@ export type PendingDecisionRuntimeFailureStatus =
   | "mismatch"
   | "action-not-allowed"
   | "context-changed"
+  | "delivery-failed"
   | "rejected-capacity"
   | "unavailable";
 
@@ -493,6 +494,9 @@ export interface PendingDecisionCreateSuccessResponse {
   ok: true;
   operation: "create";
   status: "created";
+  id: string;
+  expiresAt: number;
+  replacedDecisionId?: string;
 }
 
 export interface PendingDecisionListSuccessResponse {
@@ -511,6 +515,17 @@ export interface PendingDecisionConsumeSuccessResponse {
   kind: PendingDecision["kind"];
   action: PendingDecisionAction;
 }
+
+/** Strict URL-free envelope delivered from the worker to one exact document. */
+export interface PendingDecisionDeliveryMessage {
+  type: "ns-pending-decision-deliver";
+  id: string;
+  action: PendingDecisionAction;
+}
+
+export type PendingDecisionDeliveryResponse =
+  | { ok: true; status: "opened" }
+  | { ok: false; status: "rejected" };
 
 export type PendingDecisionRuntimeResponse =
   | PendingDecisionRuntimeFailureResponse

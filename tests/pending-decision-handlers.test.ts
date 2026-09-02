@@ -92,6 +92,11 @@ function createHarness() {
   const getTab = vi.fn(async (_tabId: number) => ({ ...activeTab }));
   const queryActiveTabs = vi.fn(async () => [{ ...activeTab }]);
   const getAllFrames = vi.fn(async (tabId: number) => frameSnapshots(frames, tabId));
+  const deliverySnapshots: string[] = [];
+  const deliverDecision = vi.fn(async () => {
+    deliverySnapshots.push(JSON.stringify(storage.data[PENDING_DECISION_STORAGE_KEY]));
+    return { ok: true, status: "opened" };
+  });
   const store = new PendingDecisionStore({
     storage,
     now: () => now.value,
@@ -105,10 +110,13 @@ function createHarness() {
     queryActiveTabs,
     getAllFrames,
     getLifecycleGeneration: () => lifecycleGeneration.value,
+    deliverDecision,
   });
   return {
     activeTab,
     broker,
+    deliverDecision,
+    deliverySnapshots,
     frames,
     getAllFrames,
     getTab,
@@ -184,11 +192,16 @@ function createMessage(): PendingDecisionRuntimeMessage {
 }
 
 async function createAndList(harness: ReturnType<typeof createHarness>) {
-  expect(await harness.broker.handle(createMessage(), contentSender())).toEqual({
+  const created = await harness.broker.handle(createMessage(), contentSender());
+  expect(created).toMatchObject({
     ok: true,
     operation: "create",
     status: "created",
+    expiresAt: 40_000,
   });
+  expect(created).toHaveProperty("id");
+  expect(created).not.toHaveProperty("deliveryToken");
+  expect(JSON.stringify(created)).not.toContain(DESTINATION_URL);
   const listed = await harness.broker.handle(
     { type: "ns-pending-decision-list" },
     extensionSender(),
@@ -251,6 +264,13 @@ describe("PendingDecisionRuntimeBroker", () => {
       kind: "navigation",
       action: "proceed-once",
     });
+    expect(harness.deliverySnapshots).toHaveLength(1);
+    expect(harness.deliverySnapshots[0]).not.toContain(decision.id);
+    expect(harness.deliverDecision).toHaveBeenCalledWith(
+      7,
+      { type: "ns-pending-decision-deliver", id: decision.id, action: "proceed-once" },
+      { frameId: 0, documentId: TOP_DOCUMENT_ID },
+    );
     expect(
       await harness.broker.handle(consumeMessage(decision), extensionSender()),
     ).toEqual({ ok: false, operation: "consume", status: "missing" });
@@ -614,7 +634,7 @@ describe("PendingDecisionRuntimeBroker", () => {
     const writeFailure = await writeHarness.broker.handle(createMessage(), contentSender());
     expect(writeFailure).toEqual({ ok: false, operation: "create", status: "unavailable" });
     expect(JSON.stringify(writeFailure)).not.toContain("sensitive detail");
-    expect(await writeHarness.broker.handle(createMessage(), contentSender())).toEqual({
+    expect(await writeHarness.broker.handle(createMessage(), contentSender())).toMatchObject({
       ok: true,
       operation: "create",
       status: "created",
@@ -634,5 +654,28 @@ describe("PendingDecisionRuntimeBroker", () => {
       status: "unavailable",
     });
     expect(JSON.stringify(dependencyFailure)).not.toContain("sensitive detail");
+  });
+
+  it("burns before delivery and makes rejected or failed delivery non-retryable", async () => {
+    for (const rejectedDelivery of [
+      () => Promise.resolve({ ok: false, status: "rejected" }),
+      () => Promise.reject(new Error("document delivery failed with sensitive detail")),
+    ]) {
+      const harness = createHarness();
+      const decision = await createAndList(harness);
+      harness.deliverDecision.mockImplementationOnce(rejectedDelivery);
+
+      const failure = await harness.broker.handle(consumeMessage(decision), extensionSender());
+      expect(failure).toEqual({
+        ok: false,
+        operation: "consume",
+        status: "delivery-failed",
+      });
+      expect(JSON.stringify(failure)).not.toContain("sensitive detail");
+      expect(
+        await harness.broker.handle(consumeMessage(decision), extensionSender()),
+      ).toEqual({ ok: false, operation: "consume", status: "missing" });
+      expect(harness.deliverDecision).toHaveBeenCalledTimes(1);
+    }
   });
 });

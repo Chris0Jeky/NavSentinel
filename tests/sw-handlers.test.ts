@@ -71,7 +71,7 @@ function createChromeMock(initialLocalStore: Record<string, unknown> = {}) {
   const sentMessages: Array<{
     tabId: number;
     message: unknown;
-    options?: { frameId?: number };
+    options?: { frameId?: number; documentId?: string };
   }> = [];
 
   let lastErrorValue: { message: string } | undefined;
@@ -142,7 +142,7 @@ function createChromeMock(initialLocalStore: Record<string, unknown> = {}) {
           (
             tabId: number,
             message: unknown,
-            optionsOrCallback?: { frameId?: number } | (() => void),
+            optionsOrCallback?: { frameId?: number; documentId?: string } | (() => void),
             callback?: () => void,
           ) => {
             const options =
@@ -154,6 +154,14 @@ function createChromeMock(initialLocalStore: Record<string, unknown> = {}) {
               ...(options ? { options } : {}),
             });
             done?.();
+            if (
+              typeof message === "object" &&
+              message !== null &&
+              (message as { type?: unknown }).type === "ns-pending-decision-deliver"
+            ) {
+              return Promise.resolve({ ok: true, status: "opened" });
+            }
+            return undefined;
           },
         ),
       },
@@ -328,7 +336,14 @@ describe("service worker handlers", () => {
         },
         pendingContentSender(),
       );
-      expect(created).toEqual({ ok: true, operation: "create", status: "created" });
+      expect(created).toMatchObject({
+        ok: true,
+        operation: "create",
+        status: "created",
+      });
+      expect(created).toHaveProperty("id");
+      expect(created).toHaveProperty("expiresAt");
+      expect(created).not.toHaveProperty("deliveryToken");
       expect(JSON.stringify(mock.chrome.storage.session._store)).not.toContain("/account");
       expect(JSON.stringify(mock.chrome.storage.session._store)).not.toContain("/continue");
       expect(JSON.stringify(mock.chrome.storage.session._store)).not.toContain("step=2");
@@ -362,6 +377,15 @@ describe("service worker handlers", () => {
         status: "consumed",
         kind: "navigation",
         action: "proceed-once",
+      });
+      expect(mock.sentMessages).toContainEqual({
+        tabId: 41,
+        message: {
+          type: "ns-pending-decision-deliver",
+          id: authorization.id,
+          action: "proceed-once",
+        },
+        options: { frameId: 0, documentId: "document-top-41" },
       });
       expect(mock.chrome.storage.session._store["ns_sw:allowUntil"]).toBeUndefined();
       expect(mock.chrome.storage.session._store["ns_sw:allowTarget"]).toBeUndefined();

@@ -65,7 +65,10 @@ const budgets = [
     // RI-02 removes the visual-simulation runtime from the always-on chunk, so the
     // temporary 70KB stopgap can return to the previous 66KB ceiling. #374 remains
     // limited to any future non-visual lazy-chunk work.
-    maxKB: 66,
+    // #601 is that non-visual split: the one-shot decision implementation is a
+    // separate ~4.6KB lazy chunk. Its Vite import/preload bootstrap adds ~0.9KB
+    // to capture while total dist remains under the independent 500KB ceiling.
+    maxKB: 67,
   },
   {
     label: "main_guard (MAIN world)",
@@ -90,7 +93,9 @@ const budgets = [
   {
     label: "popup JS",
     glob: "assets/popup.html-*.js",
-    maxKB: 10,
+    // #601 keeps the ~3.9KB decision controller in a lazy chunk; this measured
+    // 0.2KB allowance is only the popup entry's dynamic-import bootstrap.
+    maxKB: 10.5,
   },
   {
     label: "options JS",

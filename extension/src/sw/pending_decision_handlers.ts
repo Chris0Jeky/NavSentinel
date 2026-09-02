@@ -7,6 +7,7 @@ import {
   parsePendingDecisionSemantics,
   toPendingDecisionView,
   type PendingDecision,
+  type PendingDecisionDeliveryMessage,
   type PendingDecisionRuntimeFailureResponse,
   type PendingDecisionRuntimeFailureStatus,
   type PendingDecisionRuntimeMessage,
@@ -42,6 +43,11 @@ export interface PendingDecisionRuntimeBrokerDependencies {
   queryActiveTabs: () => Promise<readonly PendingDecisionTabSnapshot[]>;
   getAllFrames: (tabId: number) => Promise<readonly PendingDecisionFrameSnapshot[]>;
   getLifecycleGeneration: (tabId: number) => number;
+  deliverDecision: (
+    tabId: number,
+    message: PendingDecisionDeliveryMessage,
+    options: { frameId: number; documentId: string },
+  ) => Promise<unknown>;
 }
 
 interface ActiveTabContext {
@@ -74,6 +80,7 @@ function defaultDependencies(): PendingDecisionRuntimeBrokerDependencies {
     queryActiveTabs: () => chrome.tabs.query({ active: true, lastFocusedWindow: true }),
     getAllFrames: async (tabId) => (await chrome.webNavigation.getAllFrames({ tabId })) ?? [],
     getLifecycleGeneration: () => 0,
+    deliverDecision: (tabId, message, options) => chrome.tabs.sendMessage(tabId, message, options),
   };
 }
 
@@ -240,7 +247,14 @@ export class PendingDecisionRuntimeBroker {
     if (created.status === "rejected-capacity") {
       return failure("create", "rejected-capacity");
     }
-    return { ok: true, operation: "create", status: "created" };
+    return {
+      ok: true,
+      operation: "create",
+      status: "created",
+      id: created.decision.id,
+      expiresAt: created.decision.expiresAt,
+      ...(created.replacedDecisionId ? { replacedDecisionId: created.replacedDecisionId } : {}),
+    };
   }
 
   private async handleList(
@@ -380,6 +394,30 @@ export class PendingDecisionRuntimeBroker {
       !liveFramesEqual(frameConfirmed, frameAfter)
     ) {
       return failure("consume", "context-changed");
+    }
+    let delivery: unknown;
+    try {
+      delivery = await this.dependencies.deliverDecision(
+        activeAfter.tabId,
+        {
+          type: "ns-pending-decision-deliver",
+          id: consumed.decision.id,
+          action: consumed.action,
+        },
+        {
+          frameId: consumed.decision.frameId,
+          documentId: consumed.decision.documentId,
+        },
+      );
+    } catch {
+      return failure("consume", "delivery-failed");
+    }
+    if (
+      !hasExactKeys(delivery, ["ok", "status"]) ||
+      delivery.ok !== true ||
+      delivery.status !== "opened"
+    ) {
+      return failure("consume", "delivery-failed");
     }
     return {
       ok: true,

@@ -1897,7 +1897,7 @@ window.addEventListener(
                 ? "Blocked: navigation + fake dialog"
                 : "Suspicious navigation + fake dialog detected")
               : decision === "block" ? "Blocked new tab" : "Suspicious new tab";
-            showAllowPrompt({
+            const prompt = {
               title,
               url: parsed.href,
               host: parsed.host,
@@ -1905,7 +1905,39 @@ window.addEventListener(
               promptScore: nrs,
               outcomeFeatures: navFeatures,
               ...(overlaySuppression ? { overlaySuppression } : {}),
-            });
+            } satisfies AllowPromptParams;
+            if (/^https?:\/\//i.test(parsed.href) && parsed.host) {
+              // Reuse the exact-URL bridge correlation already used by the
+              // injected prompt path. It suppresses a duplicate MAIN shadow
+              // action without adding a second always-on correlation model.
+              recentLocalBlankPrompt = { params: prompt, shownAt: Date.now() };
+              const pendingSignals: Array<"cross_site" | "NRS-high"> = [];
+              if (
+                destHost !== location.hostname &&
+                (!siteRegDomain || !destRegDomain || siteRegDomain !== destRegDomain)
+              ) {
+                pendingSignals.push("cross_site");
+              }
+              if (nrs >= blockThreshold) pendingSignals.push("NRS-high");
+              void import("./pending_navigation_decision")
+                .then(({ showPendingBlankNavigationPrompt }) =>
+                  showPendingBlankNavigationPrompt({
+                    title,
+                    destinationUrl: parsed.href as string,
+                    destinationHost: parsed.host as string,
+                    sourceDomain: siteKeyFromLocation(),
+                    score: nrs,
+                    signals: pendingSignals,
+                    outcomeFeatures: navFeatures,
+                    overlayHidden: !!overlaySuppression,
+                  }),
+                )
+                .catch(() => {
+                  showToast({ message: "NavSentinel blocked a suspicious new tab." });
+                });
+            } else {
+              showAllowPrompt(prompt);
+            }
             // Suppress standalone ClickFix toast — unified prompt covers it
             if (hasClickfix) clickFixAlertedAt = Date.now();
           } else {
