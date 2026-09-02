@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="local-fixture-targets.js"></script>
   <title>Evasion 05 - Composite near-threshold signals</title>
   <style>
     body { font-family: sans-serif; padding: 24px; margin: 0; }
@@ -64,9 +65,11 @@
     </ul>
   </div>
 
-  <a id="legit-link" class="real-link" href="https://example.com">Real Link</a>
+  <a id="legit-link" class="real-link" href="local-fixture-sink.html"
+     data-navsentinel-local-target="benign" data-navsentinel-scenario="NS-ADV-EVADE-006">Real Link</a>
 
   <!-- Attacker overlay: all near-threshold signals combined -->
-  <a id="trap" class="overlay" href="https://evil.example.com" target="_blank" rel="noreferrer" aria-label=" "></a>
+  <a id="trap" class="overlay" href="local-fixture-sink.html" target="_blank" rel="noreferrer" aria-label=" "
+     data-navsentinel-local-target="harm" data-navsentinel-scenario="NS-ADV-EVADE-006"></a>
 </body>
 </html>
