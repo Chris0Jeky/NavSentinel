@@ -248,13 +248,21 @@ async function clickTrap(arm: Arm): Promise<Page | null> {
 }
 
 async function activateBenignLinkByKeyboard(page: Page): Promise<void> {
+  const benignTarget = await page.locator("#legit-link").getAttribute("href");
+  expect(benignTarget, "The benign link must expose its exact local destination").toBeTruthy();
+  const committedTarget = new URL(benignTarget!, page.url()).href;
   let activeId = "";
   for (let attempt = 0; attempt < 4 && activeId !== "legit-link"; attempt += 1) {
     await page.keyboard.press("Tab");
     activeId = await page.evaluate(() => document.activeElement?.id ?? "");
   }
   expect(activeId, "Native Tab traversal must reach the benign link").toBe("legit-link");
+  const navigation = page.waitForURL(committedTarget, {
+    waitUntil: "domcontentloaded",
+    timeout: 10_000,
+  });
   await page.keyboard.press("Enter");
+  await navigation;
 }
 
 async function assertUnsafeOverridesRejected(page: Page): Promise<void> {
