@@ -27,7 +27,11 @@ import {
   computeJsBehaviorScore,
   type JsBehaviorState,
 } from "../shared/js_behavior_state";
-import { getFreshChainInfo, primeChainInfoCache } from "./chain_info_cache";
+import {
+  getFreshChainInfo,
+  handleChainInfoPageShow,
+  primeChainInfoCache,
+} from "./chain_info_cache";
 import {
   checkReputationViaMessage,
   isKnownBadDestination,
@@ -1607,7 +1611,10 @@ if (chrome?.runtime?.sendMessage && isTopFrame()) {
     });
   };
 
-  window.addEventListener("pageshow", () => runForward());
+  window.addEventListener("pageshow", (event) => {
+    handleChainInfoPageShow(event);
+    runForward();
+  });
   window.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
       runForward();

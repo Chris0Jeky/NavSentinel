@@ -48,7 +48,6 @@ const CHAIN_INFO_MAX_ATTEMPTS = 2;
 
 let cachedChainInfo: RedirectChainInfo | null = null;
 let cachedChainInfoAt = 0;
-let cachedChainInfoExpiresAt = 0;
 let primeStarted = false;
 
 /**
@@ -86,14 +85,8 @@ function requestChainInfo(attempt: number): void {
         scheduleRetry(attempt);
         return;
       }
-      cachedChainInfo = {
-        depth: resp.depth,
-        viaKnownRedirector: resp.viaKnownRedirector,
-        knownRedirectorHops: resp.knownRedirectorHops,
-        expiresAt: resp.expiresAt,
-      };
+      cachedChainInfo = { ...resp };
       cachedChainInfoAt = Date.now();
-      cachedChainInfoExpiresAt = resp.expiresAt;
     });
   } catch {
     // sendMessage throws synchronously when the extension context is gone.
@@ -126,7 +119,7 @@ export function primeChainInfoCache(): void {
 export function getFreshChainInfo(now: number = Date.now()): RedirectChainInfo | null {
   if (!cachedChainInfo) return null;
   if (now - cachedChainInfoAt > CHAIN_INFO_TTL_MS) return null;
-  if (now >= cachedChainInfoExpiresAt) return null;
+  if (now >= cachedChainInfo.expiresAt) return null;
   return cachedChainInfo;
 }
 
@@ -139,7 +132,8 @@ export function handleChainInfoPageShow(
   event: Pick<PageTransitionEvent, "persisted">,
 ): void {
   if (!event.persisted) return;
-  _resetChainInfoCache();
+  cachedChainInfo = null;
+  primeStarted = false;
   primeChainInfoCache();
 }
 
@@ -147,10 +141,5 @@ export function handleChainInfoPageShow(
 export function _resetChainInfoCache(): void {
   cachedChainInfo = null;
   cachedChainInfoAt = 0;
-  cachedChainInfoExpiresAt = 0;
   primeStarted = false;
-}
-
-if (typeof window !== "undefined") {
-  window.addEventListener("pageshow", handleChainInfoPageShow);
 }
