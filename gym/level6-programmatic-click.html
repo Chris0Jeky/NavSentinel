@@ -2,6 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8" />
+  <script src="local-fixture-targets.js"></script>
   <title>Level 6 - Programmatic Click</title>
   <style>
     body { font-family: sans-serif; padding: 24px; }
@@ -14,7 +15,8 @@
   <p>Click "Continue". The site triggers a hidden link click.</p>
 
   <button id="real">Continue</button>
-  <a id="hiddenLink" href="https://example.org/?forced=1" target="_blank" rel="noreferrer">Hidden</a>
+  <a id="hiddenLink" href="local-fixture-sink.html" target="_blank" rel="noreferrer"
+     data-navsentinel-local-target="harm" data-navsentinel-scenario="NS-ADV-SELF-003">Hidden</a>
 
   <script>
     document.getElementById('real').addEventListener('click', () => {

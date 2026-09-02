@@ -2,6 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8" />
+  <script src="local-fixture-targets.js"></script>
   <title>Level 9 - Legit Video Overlay</title>
   <style>
     body { font-family: sans-serif; padding: 24px; }
@@ -35,7 +36,8 @@
   </div>
   <div id="status">Status: paused</div>
 
-  <p>Also a normal visible link: <a href="https://example.org" target="_blank" rel="noreferrer">Open docs</a></p>
+  <p>Also a normal visible link: <a href="local-fixture-sink.html" target="_blank" rel="noreferrer"
+     data-navsentinel-local-target="benign" data-navsentinel-scenario="NS-ADV-UI-004">Open docs</a></p>
 
   <script>
     let playing = false;

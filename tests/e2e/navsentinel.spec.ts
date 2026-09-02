@@ -1575,8 +1575,14 @@ test("Level 9 legit overlay controls and visible docs link stay allowed @regress
 
       const popup = await popupPromise;
       expect(popup, "Expected the visible docs link to open").not.toBeNull();
-      await popup?.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
-      expect(popup?.url()).toContain("example.org");
+      if (!popup) throw new Error("Expected the visible docs link to open");
+      await popup.waitForLoadState("domcontentloaded", { timeout: 5000 });
+      const popupUrl = new URL(popup.url());
+      expect(popupUrl.pathname).toBe("/local-fixture-sink.html");
+      expect(popupUrl.searchParams.get("role")).toBe("benign");
+      expect(popupUrl.searchParams.get("scenario_id")).toBe("NS-ADV-UI-004");
+      await expect(popup.locator("html")).toHaveAttribute("data-fixture-sink-valid", "1");
+      await expect(popup.locator("html")).toHaveAttribute("data-benign-completed", "1");
       expect(context.pages().length).toBeGreaterThan(beforePages);
       await assertNoToastFor(page);
     } finally {
