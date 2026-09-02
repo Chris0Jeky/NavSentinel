@@ -123,7 +123,7 @@ limitations, not a reason to reopen the completed gate.
 
 ---
 
-## Active guide: AI-37 — issue #560 inert toast-control repair
+## Active guide: AI-38 — issue #560 inert toast-control repair
 
 Run this only after the `fix/issue560-isolated-input-fence` PR is ready and
 every automated check for its current head is green.
@@ -159,11 +159,11 @@ every automated check for its current head is green.
    element to `<html>`). The card must remain on top and its controls must
    still respond.
 9. Inspect page, popup, and service-worker consoles for new errors. On a pass,
-   reply `AI-37 done; Gate-3 passed on PR #<n> at <40-character SHA>; Chrome
-   <version>`. On any mismatch, reply `AI-37 failed on PR #<n> at <SHA>: <step
+   reply `AI-38 done; Gate-3 passed on PR #<n> at <40-character SHA>; Chrome
+   <version>`. On any mismatch, reply `AI-38 failed on PR #<n> at <SHA>: <step
    and observed>` and leave the item open.
 
-Only Chris can record AI-37 complete. The trusted-input Playwright coverage in
+Only Chris can record AI-38 complete. The trusted-input Playwright coverage in
 `tests/e2e/toast-input-fence.spec.ts` supports but does not replace this
 exact-head real-page gate.
 
@@ -506,7 +506,7 @@ Only Chris can record this item complete.
 | AI-13 | #356 MAIN-world compatibility | in [`../../ACTION_ITEMS.md`](../../ACTION_ITEMS.md) |
 | AI-21 | #464 synthetic navigation | [below](#ai-21--pr-464-synthetic-navigation-gate-3) |
 | AI-22 | #466 pending-decision service worker | [below](#ai-22--pr-466-pending-decision-service-worker-gate-3) |
-| AI-37 | #560 inert toast-control repair | [above](#active-guide-ai-37--issue-560-inert-toast-control-repair) |
+| AI-38 | #560 inert toast-control repair | [above](#active-guide-ai-38--issue-560-inert-toast-control-repair) |
 | AI-36 | #558 popup/Options patch-save synchronization | [above](#ai-36--558-popupoptions-patch-save-synchronization-gate-3) |
 | AI-35 | #539 cross-host child-event attribution | [below](#ai-35--539-cross-host-child-event-attribution-gate-3) |
 
