@@ -4,6 +4,27 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script src="local-fixture-targets.js"></script>
+  <script>
+    (() => {
+      const mutations = {
+        control: { opacity: "0.09", zIndex: "9998" },
+        "opacity-010": { opacity: "0.10", zIndex: "9998" },
+        "zindex-9997": { opacity: "0.09", zIndex: "9997" },
+      };
+      const root = document.documentElement;
+      const requested = new URLSearchParams(location.search).get("mutation") || "control";
+      if (!Object.hasOwn(mutations, requested)) {
+        root.setAttribute("data-navsentinel-fixture-invalid", "unrecognized-mutation");
+        return;
+      }
+      const mutation = mutations[requested];
+      root.setAttribute("data-navsentinel-evasion-mutation", requested);
+      if (requested !== "control") {
+        root.style.setProperty("--evasion-trap-opacity", mutation.opacity);
+        root.style.setProperty("--evasion-trap-z-index", mutation.zIndex);
+      }
+    })();
+  </script>
   <title>Evasion 05 - Composite near-threshold signals</title>
   <style>
     body { font-family: sans-serif; padding: 24px; margin: 0; }
@@ -31,9 +52,9 @@
       top: 0; left: 0;
       width: 58.3vw;
       height: 58.3vh;
-      opacity: 0.09;
+      opacity: var(--evasion-trap-opacity, 0.09);
       background: red;
-      z-index: 9998;
+      z-index: var(--evasion-trap-z-index, 9998);
       cursor: pointer;
     }
     .info {
