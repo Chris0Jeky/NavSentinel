@@ -64,9 +64,15 @@ describe("RW Gym fixture locality contracts", () => {
     expect(source).toContain('<script src="local-fixture-targets.js"></script>');
     expect(source).not.toMatch(/https?:\/\//u);
     if (kind === "static-dual") {
-      expect(source).toContain('data-navsentinel-local-target="benign"');
-      expect(source).toContain('data-navsentinel-local-target="harm"');
-      expect(source).toContain(`data-navsentinel-scenario="${scenarioId}"`);
+      const benignAnchor = source.match(/<a\b[^>]*data-navsentinel-local-target=["']benign["'][^>]*>/iu)?.[0] ?? "";
+      const harmAnchor = source.match(/<a\b[^>]*data-navsentinel-local-target=["']harm["'][^>]*>/iu)?.[0] ?? "";
+
+      expect(benignAnchor, `${file} must contain a typed benign anchor`).not.toBe("");
+      expect(harmAnchor, `${file} must contain a typed harm anchor`).not.toBe("");
+      expect(benignAnchor, `${file} benign anchor must carry scenario id`).toContain(`data-navsentinel-scenario="${scenarioId}"`);
+      expect(harmAnchor, `${file} harm anchor must carry scenario id`).toContain(`data-navsentinel-scenario="${scenarioId}"`);
+      expect(benignAnchor, `${file} benign anchor must not expose an initial href`).not.toMatch(/\bhref\s*=/iu);
+      expect(harmAnchor, `${file} harm anchor must not expose an initial href`).not.toMatch(/\bhref\s*=/iu);
       return;
     }
     expect(source).toContain(`NavSentinelLocalTargets.url('benign', '${scenarioId}')`);
