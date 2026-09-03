@@ -19,6 +19,8 @@ import {
   waitForToastMatch,
 } from "./extension_test_utils";
 import {
+  PROVING_GROUND_SENTINEL,
+  PROVING_GROUND_SINK_PATH,
   startProvingGroundEgressFence,
   startProvingGroundFakeSink,
   type ProvingGroundEgressAttempt,
@@ -114,6 +116,21 @@ type MutationObservation = MutationDefinition & {
   fingerprint: MutationFingerprint;
 };
 
+type NormalizedTargetAuthority = {
+  origin: string;
+  pathname: string;
+  fragment: string;
+  credentials: { username: string; password: string };
+  queryNames: string[];
+  queryCount: number;
+  runIdSha256: string;
+  scenarioId: string | null;
+  role: string | null;
+  consequence: string | null;
+  targetId: string | null;
+  sentinelSha256: string;
+};
+
 type ArmObservation = {
   mutation: MutationObservation;
   role: ProvingGroundRole;
@@ -138,6 +155,68 @@ type ReleaseProfileInspection = ReturnType<typeof inspectBuiltReleaseProfile>;
 
 function sha256(value: string | Buffer): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function normalizeTargetAuthority(href: string): NormalizedTargetAuthority {
+  const url = new URL(href);
+  const queryEntries = [...url.searchParams.entries()];
+  const value = (name: string): string | null => url.searchParams.get(name);
+  return {
+    origin: url.origin,
+    pathname: url.pathname,
+    fragment: url.hash,
+    credentials: { username: url.username, password: url.password },
+    queryNames: queryEntries.map(([name]) => name).sort(),
+    queryCount: queryEntries.length,
+    runIdSha256: sha256(value("run_id") ?? ""),
+    scenarioId: value("scenario_id"),
+    role: value("role"),
+    consequence: value("consequence"),
+    targetId: value("target_id"),
+    sentinelSha256: sha256(value("sentinel") ?? ""),
+  };
+}
+
+async function assertArmedTargetAuthorities(
+  page: Page,
+  sink: ProvingGroundFakeSink,
+  fixtureUrl: URL,
+  armId: ArmId,
+  harmRole: ProvingGroundRole,
+  benignRole: ProvingGroundRole,
+): Promise<void> {
+  const expected = {
+    harm: normalizeTargetAuthority(sink.urlFor(harmRole, HARM_CONSEQUENCE, `${armId}-harm`)),
+    benign: normalizeTargetAuthority(sink.urlFor(benignRole, BENIGN_CONSEQUENCE, `${armId}-benign`)),
+  };
+  expect(expected.harm.pathname, "The armed harm authority must use the proving-ground sink path")
+    .toBe(PROVING_GROUND_SINK_PATH);
+  expect(expected.benign.pathname, "The armed benign authority must use the proving-ground sink path")
+    .toBe(PROVING_GROUND_SINK_PATH);
+  expect(expected.harm.sentinelSha256).toBe(sha256(PROVING_GROUND_SENTINEL));
+  expect(expected.benign.sentinelSha256).toBe(sha256(PROVING_GROUND_SENTINEL));
+  const sinkHostname = new URL(sink.origin).hostname;
+  expect(sinkHostname, "The sink must remain on the fixture's same-loopback hostname")
+    .toBe(fixtureUrl.hostname);
+
+  const actualHrefs = await page.evaluate(() => ({
+    harm: document.querySelector<HTMLAnchorElement>("#trap")?.href ?? null,
+    benign: document.querySelector<HTMLAnchorElement>("#legit-link")?.href ?? null,
+  }));
+  expect(actualHrefs.harm, "The harm target must be armed before activation").not.toBeNull();
+  expect(actualHrefs.benign, "The benign target must be armed before activation").not.toBeNull();
+  const actual = {
+    harm: normalizeTargetAuthority(actualHrefs.harm!),
+    benign: normalizeTargetAuthority(actualHrefs.benign!),
+  };
+  expect(new URL(actualHrefs.harm!).hostname, "The harm target must use the same-loopback hostname")
+    .toBe(fixtureUrl.hostname);
+  expect(new URL(actualHrefs.benign!).hostname, "The benign target must use the same-loopback hostname")
+    .toBe(fixtureUrl.hostname);
+  expect(actual.harm, "The live harm href must match its exact armed target authority")
+    .toEqual(expected.harm);
+  expect(actual.benign, "The live benign href must match its exact armed target authority")
+    .toEqual(expected.benign);
 }
 
 function hashFiles(files: string[]): string {
@@ -274,8 +353,8 @@ async function openArm(
     const page = await context.newPage();
     const fixtureUrl = new URL(`/${FIXTURE_NAME}`, baseUrl);
     fixtureUrl.searchParams.set("mutation", mutation);
-    const harmRole: ProvingGroundRole = role === "benign" ? "attack" : role;
-    const benignRole: ProvingGroundRole = role === "attack" ? "benign" : role;
+    const harmRole: ProvingGroundRole = role === "mixed" ? "mixed" : "attack";
+    const benignRole: ProvingGroundRole = role === "mixed" ? "mixed" : "benign";
     await installFixtureTargetBootstrap(page, sink.createFixtureBootstrap({
       fixtureOrigin: fixtureUrl.origin,
       fixturePath: fixtureUrl.pathname,
@@ -295,6 +374,7 @@ async function openArm(
     if (withExtension) {
       await waitForNavSentinelBridge(page);
     }
+    await assertArmedTargetAuthorities(page, sink, fixtureUrl, armId, harmRole, benignRole);
 
     return {
       page,
