@@ -6,6 +6,7 @@ import path from "node:path";
 import {
   CorpusManifestError,
   createCorpusManifest,
+  loadCorpusManifest,
   loadValidatedCorpusManifest,
   snapshotFilename,
   type CorpusManifestFailedEntry,
@@ -116,6 +117,19 @@ describe("corpus manifest contract", () => {
       error: "download_failed",
     }]));
     expectInvalid(() => loadValidatedCorpusManifest({ manifestPath, snapshotsDir }), "manifest_no_usable_snapshots");
+  });
+
+  it("keeps a valid legacy manifest URL spelling while structure-only loading", () => {
+    const { manifestPath } = makeDirectory();
+    const legacyUrl = "https://EXAMPLE.test:443/login";
+    writeManifest(manifestPath, manifest([
+      successfulEntry({
+        url: legacyUrl,
+        filename: snapshotFilename("openphish", legacyUrl),
+      }),
+    ]));
+
+    expect(loadCorpusManifest({ manifestPath }).entries[0]?.url).toBe(legacyUrl);
   });
 
   it("rejects unsafe names, duplicate URLs, inconsistent counts, and invalid entry fields", () => {

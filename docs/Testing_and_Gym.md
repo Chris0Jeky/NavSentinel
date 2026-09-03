@@ -11,9 +11,10 @@ The project uses a mix of deterministic Gym pages, Vitest unit tests, and Playwr
 
 Green tests do **not** by themselves prove open-web efficacy, `<0.1%` false-
 positive performance, compatibility, competitor superiority, or external audit.
-The corpus lane can skip when its local manifest/snapshots are absent, and the
-current corpus result is methodologically invalid. Keep regression, operational
-beta, and claim-grade evidence separate as defined in `Product_Strategy.md`.
+The corpus lane fails closed as `TEST_INVALID` when its required local
+manifest/snapshots are absent or invalid, and every current corpus result remains
+methodologically `INVALID`. Keep regression, operational beta, and claim-grade
+evidence separate as defined in `Product_Strategy.md`.
 
 ## Local commands
 
@@ -409,8 +410,11 @@ Tests: `tests/e2e/navsentinel.stress.spec.ts`.
 ### Phishing corpus lane
 
 Tests NavSentinel against HTML snapshots of real phishing pages downloaded from OpenPhish
-and PhishTank feeds. Measures true positive and false negative rates. Requires local
-snapshot download before running.
+and PhishTank feeds. The lane fails closed as `TEST_INVALID` if required local
+inputs are absent or invalid. It may produce engineering observations, but remains
+methodologically `INVALID` and does not support an efficacy claim until #417's
+real-host routing, trusted input, headed validation, and owner-curated committed
+result gates are met.
 Run with `npm run test:e2e:corpus`. Config: `playwright.corpus.config.ts`.
 Tests: `tests/e2e/corpus-validation.spec.ts`.
 

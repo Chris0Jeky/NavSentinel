@@ -50,6 +50,47 @@ function canonicalUrl(value) {
   return new URL(value).href;
 }
 
+/**
+ * Normalize untrusted feed rows before any selection or download work.
+ * This is intentionally stricter than manifest validation: old manifests retain
+ * their recorded URL spelling, while newly received candidates are canonical.
+ */
+export function normalizeCorpusCandidates(entries) {
+  const normalized = [];
+  const seenUrls = new Set();
+  let invalidCount = 0;
+  let duplicateCount = 0;
+
+  for (const entry of Array.isArray(entries) ? entries : []) {
+    if (!isRecord(entry) || !isSource(entry.source) || typeof entry.url !== "string" || entry.url !== entry.url.trim() || entry.url.length === 0 || !/^https?:\/\//iu.test(entry.url) || entry.url.includes("#")) {
+      invalidCount++;
+      continue;
+    }
+
+    let url;
+    try {
+      const parsed = new URL(entry.url);
+      if ((parsed.protocol !== "http:" && parsed.protocol !== "https:") || parsed.username || parsed.password || parsed.hash) {
+        invalidCount++;
+        continue;
+      }
+      url = parsed.href;
+    } catch {
+      invalidCount++;
+      continue;
+    }
+
+    if (seenUrls.has(url)) {
+      duplicateCount++;
+      continue;
+    }
+    seenUrls.add(url);
+    normalized.push({ source: entry.source, url });
+  }
+
+  return { entries: normalized, invalidCount, duplicateCount };
+}
+
 export function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
 }
@@ -142,11 +183,8 @@ export function createCorpusManifest({ generatedAt, feedSources, entries }) {
   });
 }
 
-/**
- * Read and prove every usable snapshot before a test can treat it as corpus input.
- * Failed downloads remain accounted for in the manifest but are intentionally not test entries.
- */
-export function loadValidatedCorpusManifest({ manifestPath, snapshotsDir }) {
+/** Read and validate a manifest without touching its snapshot directory. */
+export function loadCorpusManifest({ manifestPath }) {
   let raw;
   try {
     raw = fs.readFileSync(manifestPath, "utf8");
@@ -154,14 +192,20 @@ export function loadValidatedCorpusManifest({ manifestPath, snapshotsDir }) {
     fail(error && typeof error === "object" && error.code === "ENOENT" ? "manifest_missing" : "manifest_unreadable");
   }
 
-  let parsed;
   try {
-    parsed = JSON.parse(raw);
-  } catch {
+    return validateCorpusManifest(JSON.parse(raw));
+  } catch (error) {
+    if (error instanceof CorpusManifestError) throw error;
     fail("manifest_unparseable");
   }
+}
 
-  const manifest = validateCorpusManifest(parsed);
+/**
+ * Read and prove every usable snapshot before a test can treat it as corpus input.
+ * Failed downloads remain accounted for in the manifest but are intentionally not test entries.
+ */
+export function loadValidatedCorpusManifest({ manifestPath, snapshotsDir }) {
+  const manifest = loadCorpusManifest({ manifestPath });
   const snapshotRoot = path.resolve(snapshotsDir);
   const entries = manifest.entries.filter((entry) => entry.filename !== null);
   if (entries.length === 0) fail("manifest_no_usable_snapshots");
@@ -189,4 +233,99 @@ export function loadValidatedCorpusManifest({ manifestPath, snapshotsDir }) {
   }
 
   return { manifest, entries };
+}
+
+function prepareAbsentOutputDirectory(outputDir) {
+  if (typeof outputDir !== "string" || outputDir.length === 0) fail("output_invalid");
+
+  const outputPath = path.resolve(outputDir);
+  const parentPath = path.dirname(outputPath);
+  if (outputPath === parentPath) fail("output_exists");
+  requireAbsentOutput(outputPath);
+
+  let parentMetadata;
+  try {
+    parentMetadata = fs.lstatSync(parentPath);
+  } catch {
+    fail("output_invalid");
+  }
+  if (!parentMetadata.isDirectory() || parentMetadata.isSymbolicLink()) fail("output_invalid");
+
+  const prefix = path.join(parentPath, `.${path.basename(outputPath)}.rehydrate-`);
+  try {
+    return { outputPath, stagePath: fs.mkdtempSync(prefix) };
+  } catch {
+    fail("output_write_failed");
+  }
+}
+
+function requireAbsentOutput(outputPath) {
+  try {
+    fs.lstatSync(outputPath);
+  } catch (error) {
+    if (error && typeof error === "object" && error.code === "ENOENT") return;
+    fail("output_invalid");
+  }
+  fail("output_exists");
+}
+
+/**
+ * Recreate an absent snapshot directory from a completed manifest without
+ * changing that manifest. The caller owns transport; this function validates
+ * every response before atomically publishing the complete directory.
+ */
+export async function rehydrateCorpusSnapshots({ manifestPath, outputDir, fetchSnapshot }) {
+  if (typeof fetchSnapshot !== "function") fail("download_failed");
+
+  const manifest = loadCorpusManifest({ manifestPath });
+  const entries = manifest.entries.filter((entry) => entry.filename !== null);
+  if (entries.length === 0) fail("manifest_no_usable_snapshots");
+
+  const { outputPath, stagePath } = prepareAbsentOutputDirectory(outputDir);
+  let published = false;
+  try {
+    for (const entry of entries) {
+      let downloaded;
+      try {
+        downloaded = await fetchSnapshot(entry);
+      } catch {
+        fail("download_failed");
+      }
+      if (!(downloaded instanceof Uint8Array)) fail("download_failed");
+
+      const bytes = Buffer.from(downloaded);
+      if (bytes.length !== entry.sizeBytes) fail("download_size_mismatch");
+      if (sha256(bytes) !== entry.sha256) fail("download_digest_mismatch");
+
+      const snapshotPath = path.resolve(stagePath, entry.filename);
+      if (!snapshotPath.startsWith(`${stagePath}${path.sep}`)) fail("output_write_failed");
+      try {
+        fs.writeFileSync(snapshotPath, bytes, { flag: "wx" });
+      } catch {
+        fail("output_write_failed");
+      }
+    }
+
+    requireAbsentOutput(outputPath);
+    try {
+      fs.renameSync(stagePath, outputPath);
+      published = true;
+    } catch {
+      fail("output_publish_failed");
+    }
+  } finally {
+    if (!published) {
+      try {
+        fs.rmSync(stagePath, { recursive: true, force: true });
+      } catch {
+        // The original stable error remains the only reportable outcome.
+      }
+    }
+  }
+
+  return {
+    rehydrated: entries.length,
+    failed: manifest.failed,
+    filenames: entries.map((entry) => entry.filename),
+  };
 }
