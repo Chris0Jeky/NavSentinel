@@ -32,8 +32,9 @@ claim Gate-3.
    and two RW fixtures now share a loopback-only target contract; no mapped
    external-destination holds remain. The Evasion 05 representative now records
    one control plus four deterministic neighbours across two CSS and two
-   structural axes, each with benign and mixed duals. Retain the MODELLED
-   ceiling: randomized DOM, text, localization,
+   structural axes, each with benign and mixed duals. Every arm now compares
+   both live hrefs with its exact normalized harm and benign target authorities
+   before activation. Retain the MODELLED ceiling: randomized DOM, text, localization,
    timing, viewport, and holdout robustness remain unproved. Before adding
    declared adjacent mutation axes for `NS-ADV-UI-004`, keep each sink typed and
    local rather than building a generic collector.

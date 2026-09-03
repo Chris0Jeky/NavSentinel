@@ -2,7 +2,7 @@ schema_version: "1.0.0"
 scenario_id: NS-ADV-EVADE-006
 capability_id: F-03
 profile: proving_ground
-repository_head: "74be1931dfc99e2ed23cc1522d64592124de025e"
+repository_head: "a11ad6c93290e676ea55f6c8d06a7af7e48e865b"
 extension_build_sha256: "9809e9fdf97a494dd66ff93551aff7aef2c2eea596dd8e9ebac0623f1b988401"
 extension_profile:
   id: interaction-only
@@ -21,7 +21,7 @@ fixture:
   sha256: "3abaf82c4602aabdd38a9c68e84af1c5bc302c633410da42977eb95612f3636c"
   hash_method: "SHA-256 over sorted relative paths and Git blob bytes at repository_head"
   git_blob_sha256: "3abaf82c4602aabdd38a9c68e84af1c5bc302c633410da42977eb95612f3636c"
-  executed_worktree_sha256: "9ba68dc22a12a90df32eb25efa490610f332c14f5b97504f36bd5498d14ad0cc"
+  executed_worktree_sha256: "4cea4a723350b9da152e99b03fefe7d58bc8bc159bde5732599414503faa66d2"
   executed_hash_method: "SHA-256 over sorted relative paths and CRLF checkout bytes used by the browser run"
   target_contract_path: "gym/local-fixture-targets.js"
   fallback_sink_path: "gym/local-fixture-sink.html"
@@ -30,10 +30,17 @@ oracle:
   type: independent_harm
   harm_boundary: "Trusted input reaches the typed local wrong-target navigation sink."
   local_artifact_path: "test-results/issue449-evasion-locality-receipt.json"
-  local_receipt_sha256: "63e1a4a688b03e626d701e15bb29f0642270958979cd3ce6a6a86503abe293a1"
-  oracle_payload_sha256: "795a319425e8cc5126979abb0c09732ae98ccc11bc6cf3af8bda356e43687298"
+  local_receipt_sha256: "ce75304243ca3521846c9d239700ac1a63e820dc9cdec2f14680c203ab47c944"
+  oracle_payload_sha256: "4b0c9694bd5bb514edfd7e0a0d02ea4246d79269075923e13bfda3003ada4898"
   sink_receipt_count: 3
   invalid_sink_attempt_count: 0
+  target_authority_assertion:
+    timing: before_activation
+    target_count_per_arm: 2
+    normalized_fields: [origin, pathname, fragment, credentials, query_names, query_count, run_id_sha256, scenario_id, role, consequence, target_id, sentinel_sha256]
+    exact_arm_target_ids: true
+    same_loopback_hostname: true
+    raw_runtime_urls_persisted: false
   arms:
     attack_baseline:
       outcome: HARM_REACHED
@@ -67,7 +74,7 @@ mutation_campaign:
   selector: mutation
   deterministic: true
   hash_method: "SHA-256(UTF-8 bytes of JSON.stringify({cases: mutation_campaign.cases}))"
-  payload_sha256: "795a319425e8cc5126979abb0c09732ae98ccc11bc6cf3af8bda356e43687298"
+  payload_sha256: "4b0c9694bd5bb514edfd7e0a0d02ea4246d79269075923e13bfda3003ada4898"
   control_case_count: 1
   declared_mutation_count: 4
   total_arm_count: 20
@@ -88,7 +95,7 @@ mutation_campaign:
       outcomes: [HARM_REACHED, BLOCKED_PRE_HARM, OBSERVED, BLOCKED_PRE_HARM]
       sink_receipt_count: 3
       network_violation_count: 0
-      blocked_external_attempt_count: 53
+      blocked_external_attempt_count: 58
     - id: opacity-010
       changed_axis: opacity
       requested_query: "mutation=opacity-010"
@@ -102,7 +109,7 @@ mutation_campaign:
       outcomes: [HARM_REACHED, BLOCKED_PRE_HARM, OBSERVED, BLOCKED_PRE_HARM]
       sink_receipt_count: 3
       network_violation_count: 0
-      blocked_external_attempt_count: 53
+      blocked_external_attempt_count: 54
     - id: zindex-9997
       changed_axis: z_index
       requested_query: "mutation=zindex-9997"
@@ -116,7 +123,7 @@ mutation_campaign:
       outcomes: [HARM_REACHED, BLOCKED_PRE_HARM, OBSERVED, BLOCKED_PRE_HARM]
       sink_receipt_count: 3
       network_violation_count: 0
-      blocked_external_attempt_count: 53
+      blocked_external_attempt_count: 56
     - id: dom-depth-1
       changed_axis: dom_depth
       requested_query: "mutation=dom-depth-1"
@@ -130,7 +137,7 @@ mutation_campaign:
       outcomes: [HARM_REACHED, BLOCKED_PRE_HARM, OBSERVED, BLOCKED_PRE_HARM]
       sink_receipt_count: 3
       network_violation_count: 0
-      blocked_external_attempt_count: 56
+      blocked_external_attempt_count: 57
     - id: class-token-a7c1
       changed_axis: class_list
       requested_query: "mutation=class-token-a7c1"
@@ -144,7 +151,7 @@ mutation_campaign:
       outcomes: [HARM_REACHED, BLOCKED_PRE_HARM, OBSERVED, BLOCKED_PRE_HARM]
       sink_receipt_count: 3
       network_violation_count: 0
-      blocked_external_attempt_count: 56
+      blocked_external_attempt_count: 57
   survivors: []
   invalid_cases: []
 outcome: BLOCKED_PRE_HARM
@@ -158,7 +165,7 @@ authority_scope:
   tab: "one fresh-profile initiating tab per arm plus its single consequence tab where navigation is allowed"
   frame: "top frame"
   document: "exact evasion-05-composite.html document plus one allowlisted mutation selector for each arm"
-  destination: "one armed loopback fake-sink URL per arm, role, and consequence"
+  destination: "one exact armed loopback fake-sink URL per arm, role, consequence, and target ID; both harm and benign assignments are normalized and compared before activation"
   bootstrap: "An immutable Playwright page-init resolver binds only the exact fixture origin/path and exact role/scenario/origin-mode keys. The sink enforces same-loopback as an equal hostname and alternate-loopback as a different hostname. It changes only one frozen, non-writable Window resolver; the browser lane proves assignment and redefinition are rejected. It injects no input, event, navigation, document-node mutation, product call, or decision."
   ttl: "one test run; the loopback sink closes in the test finally block"
   use_count: 1
@@ -184,12 +191,12 @@ network_violations: []
 blocked_external_attempts:
   - class: "Chromium platform CONNECT"
     distinct_target_count: 3
-    attempt_count: 271
+    attempt_count: 282
 qualification:
-  privacy: "The sink retains typed metadata and a SHA-256 of the inert sentinel; no page text, browsing history, credential, or raw secret is stored."
+  privacy: "The sink retains typed metadata and a SHA-256 of the inert sentinel; normalized authority assertions keep full runtime URLs, raw run IDs, and the sentinel transient, and no page text, browsing history, credential, or raw secret is stored."
   performance: "No release code changed and no runtime performance claim is made."
   accessibility: "The benign control completed with native Tab and Enter; no manual assistive-technology pass was run."
-  page_origin_ui: "Query input cannot select or replace a destination: legacy harm_target and benign_target authority is rejected. The allowlisted mutation query changes only one CSS or structural axis while preserving layout, target, readiness, and benign-link invariants. The sink rejects origin-mode hostname mismatches, and the browser lane rejects resolver assignment and redefinition while preserving its identity and resolution. The exact page-scoped resolver is harness configuration only, not hostile-page authority proof in an already armed context."
+  page_origin_ui: "Query input cannot select or replace a destination: legacy harm_target and benign_target authority is rejected. Before activation, every arm compares both live hrefs with its exact normalized armed authorities, including target ID, role, consequence, origin, path, query shape, hashed run ID, and hashed sentinel. The allowlisted mutation query changes only one CSS or structural axis while preserving layout, target, readiness, and benign-link invariants. The sink rejects origin-mode hostname mismatches, and the browser lane rejects resolver assignment and redefinition while preserving its identity and resolution. The exact page-scoped resolver is harness configuration only, not hostile-page authority proof in an already armed context."
 repaired_failures:
   - classification: HARNESS_INVALID
     cause: "The first uncommitted mutation draft hashed only the control sink snapshot and observations, so changing a mutant outcome or sink snapshot did not change the oracle payload digest."
@@ -222,5 +229,5 @@ verification:
   - "npm run typecheck"
   - "npm run lint"
   - "npx vitest run tests/proving-ground-fake-sink.test.ts: 5 passed"
-  - "CI=1 exact-head evasion locality mutation lane: 1 passed with 20 arms in 46.8 seconds"
-  - "CI=1 exact-head evasion regression family: 17 passed in 51.0 seconds"
+  - "CI=1 exact-head evasion locality mutation lane: 1 passed with 20 arms in 48.3 seconds"
+  - "CI=1 exact-head evasion regression family: 17 passed in 57.7 seconds"
