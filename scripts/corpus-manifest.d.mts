@@ -11,7 +11,14 @@ export type CorpusManifestErrorCode =
   | "snapshot_not_regular"
   | "snapshot_missing"
   | "snapshot_size_mismatch"
-  | "snapshot_digest_mismatch";
+  | "snapshot_digest_mismatch"
+  | "output_invalid"
+  | "output_exists"
+  | "download_failed"
+  | "download_size_mismatch"
+  | "download_digest_mismatch"
+  | "output_write_failed"
+  | "output_publish_failed";
 
 export interface CorpusManifestSuccessEntry {
   filename: string;
@@ -42,6 +49,17 @@ export interface CorpusManifest {
   entries: Array<CorpusManifestSuccessEntry | CorpusManifestFailedEntry>;
 }
 
+export interface CorpusCandidate {
+  source: CorpusManifestSource;
+  url: string;
+}
+
+export interface NormalizedCorpusCandidates {
+  entries: CorpusCandidate[];
+  invalidCount: number;
+  duplicateCount: number;
+}
+
 export class CorpusManifestError extends Error {
   constructor(code: CorpusManifestErrorCode);
   readonly outcome: "TEST_INVALID";
@@ -49,9 +67,10 @@ export class CorpusManifestError extends Error {
 }
 
 export const CORPUS_MANIFEST_SCHEMA_VERSION: "1.0.0";
-export function sha256(bytes: string | Buffer): string;
+export function sha256(bytes: string | Uint8Array): string;
 export function snapshotFilename(source: CorpusManifestSource, url: string): string;
 export function validateCorpusManifest(value: unknown): CorpusManifest;
+export function normalizeCorpusCandidates(entries: unknown): NormalizedCorpusCandidates;
 export function createCorpusManifest(value: {
   generatedAt: string;
   feedSources: CorpusManifestSource[];
@@ -61,3 +80,9 @@ export function loadValidatedCorpusManifest(value: { manifestPath: string; snaps
   manifest: CorpusManifest;
   entries: CorpusManifestSuccessEntry[];
 };
+export function loadCorpusManifest(value: { manifestPath: string }): CorpusManifest;
+export function rehydrateCorpusSnapshots(value: {
+  manifestPath: string;
+  outputDir: string;
+  fetchSnapshot(entry: CorpusManifestSuccessEntry): Promise<Uint8Array> | Uint8Array;
+}): Promise<{ rehydrated: number; failed: number; filenames: string[] }>;
