@@ -905,6 +905,43 @@ async function runMutationCase(definition: MutationDefinition): Promise<{ result
   }
 }
 
+test("#449 rejects a same-role target authority swap before activation @regression", async () => {
+  const sink = await startProvingGroundFakeSink({
+    runId: randomUUID(),
+    scenarioId: SCENARIO_ID,
+    allowedRoles: ["attack", "benign", "mixed"],
+    allowedConsequences: [HARM_CONSEQUENCE, BENIGN_CONSEQUENCE],
+    targetAuthorities: [
+      { id: "baseline-harm", role: "attack", consequence: HARM_CONSEQUENCE, maxUses: 1 },
+      { id: "baseline-benign", role: "benign", consequence: BENIGN_CONSEQUENCE, maxUses: 1 },
+      { id: "swap-harm", role: "attack", consequence: HARM_CONSEQUENCE, maxUses: 1 },
+    ],
+  });
+  let baseline: Arm | null = null;
+
+  try {
+    baseline = await openArm(sink, "baseline", "attack", false, "control");
+    const fixtureUrl = new URL(baseline.page.url());
+    const swappedTarget = sink.urlFor("attack", HARM_CONSEQUENCE, "swap-harm");
+    await baseline.page.locator("#trap").evaluate((element, href) => {
+      (element as HTMLAnchorElement).href = href;
+    }, swappedTarget);
+
+    await expect(assertArmedTargetAuthorities(
+      baseline.page,
+      sink,
+      fixtureUrl,
+      "baseline",
+      "attack",
+      "benign",
+    )).rejects.toThrow();
+    expect(sink.snapshot()).toEqual({ receipts: [], invalidAttempts: [] });
+  } finally {
+    await baseline?.cleanup().catch(() => {});
+    await sink.close();
+  }
+});
+
 test("#449 evasion targets stay local with attack, protected, benign, and mixed evidence @regression", async ({}, testInfo) => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running locality evidence.");
   const releaseProfile = inspectBuiltReleaseProfile(extensionPath, {
