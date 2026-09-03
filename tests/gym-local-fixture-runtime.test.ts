@@ -10,9 +10,16 @@ const helperSource = fs.readFileSync(
   "utf8",
 );
 
-function loadFixture(url: string, initialHref = "https://attacker.example/egress") {
+function loadFixture(
+  url: string,
+  initialHref = "https://attacker.example/egress",
+  originMode?: "same-loopback" | "alternate-loopback",
+) {
   const window = new Window({ url });
-  window.document.body.innerHTML = `<a id="target" href="${initialHref}" data-navsentinel-local-target="harm" data-navsentinel-scenario="NS-ADV-UI-001">Target</a>`;
+  const originModeAttribute = originMode
+    ? ` data-navsentinel-local-target-origin="${originMode}"`
+    : "";
+  window.document.body.innerHTML = `<a id="target" href="${initialHref}" data-navsentinel-local-target="harm" data-navsentinel-scenario="NS-ADV-UI-001"${originModeAttribute}>Target</a>`;
   window.eval(helperSource);
   window.document.dispatchEvent(new window.Event("DOMContentLoaded"));
   return window;
@@ -58,8 +65,29 @@ describe("Gym local-fixture target runtime contract", () => {
     expect(parsed.searchParams.get("scenario_id")).toBe("NS-ADV-UI-004");
   });
 
+  it.each([
+    ["IPv4", "http://127.0.0.1:5173/level5-window-open-popunder.html", "127.0.0.1"],
+    ["IPv6", "http://[::1]:5173/level5-window-open-popunder.html", "[::1]"],
+  ])("keeps the default harm fallback on its single-family %s Gym origin", (_family, fixtureUrl, hostname) => {
+    const window = loadFixture(fixtureUrl);
+    const target = new URL(localTargets(window).url("harm", "NS-ADV-WIN-001"));
+    const anchor = window.document.querySelector("#target") as unknown as HTMLAnchorElement | null;
+
+    expect(window.document.documentElement.dataset.navsentinelLocalTargetsReady).toBe("1");
+    expect(anchor?.href).toContain(`${hostname === "[::1]" ? "[::1]" : hostname}:5173/local-fixture-sink.html`);
+    expect(target.hostname).toBe(hostname);
+    expect(target.origin).toBe(new URL(fixtureUrl).origin);
+    expect(target.pathname).toBe("/local-fixture-sink.html");
+    expect(target.searchParams.get("role")).toBe("harm");
+    expect(target.searchParams.get("consequence")).toBe("unauthorized-browsing-context");
+  });
+
   it("fails closed when IPv6 cannot provide an alternate loopback origin", () => {
-    const window = loadFixture("http://[::1]:5173/level9-legit-video-overlay.html");
+    const window = loadFixture(
+      "http://[::1]:5173/level9-legit-video-overlay.html",
+      undefined,
+      "alternate-loopback",
+    );
     const anchor = window.document.querySelector("#target");
 
     expect(window.document.documentElement.dataset.navsentinelLocalTargetsReady).toBe("0");

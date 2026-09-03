@@ -71,7 +71,10 @@
       throw new Error("non-loopback-fixture-origin");
     }
     const target = new URL("/local-fixture-sink.html", location.href);
-    if (role === "harm" || originMode === "alternate-loopback") {
+    // Keep the default fallback on the fixture server so a Gym bound to one
+    // loopback address family stays reachable. Evidence lanes supply an armed
+    // sink override; hostname separation is only for fixtures that request it.
+    if (originMode === "alternate-loopback") {
       target.hostname = alternateLoopbackHost(location.hostname);
     }
     target.searchParams.set("scenario_id", scenarioId);

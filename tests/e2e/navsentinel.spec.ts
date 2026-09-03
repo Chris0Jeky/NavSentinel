@@ -1829,7 +1829,9 @@ test("Level 5 popup consequence reaches the typed local harm sink without extens
       const popup = await popupPromise;
       await popup.waitForLoadState("domcontentloaded", { timeout: 5000 });
       const popupUrl = new URL(popup.url());
+      const fixtureUrl = new URL(originalUrl);
       expect(popupUrl.pathname).toBe("/local-fixture-sink.html");
+      expect(popupUrl.origin).toBe(fixtureUrl.origin);
       expect(popupUrl.searchParams.get("role")).toBe("harm");
       expect(popupUrl.searchParams.get("scenario_id")).toBe("NS-ADV-WIN-001");
       expect(popupUrl.searchParams.get("consequence")).toBe("unauthorized-browsing-context");
