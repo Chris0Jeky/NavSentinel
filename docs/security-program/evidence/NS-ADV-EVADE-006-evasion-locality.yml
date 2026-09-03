@@ -2,7 +2,7 @@ schema_version: "1.0.0"
 scenario_id: NS-ADV-EVADE-006
 capability_id: F-03
 profile: proving_ground
-repository_head: "b9078c2284cd0c0abf356cb1ebcec53cb7002f8e"
+repository_head: "28d09321eb588476f863d5bc13dd454d72d82861"
 extension_build_sha256: "9809e9fdf97a494dd66ff93551aff7aef2c2eea596dd8e9ebac0623f1b988401"
 extension_profile:
   id: interaction-only
@@ -30,8 +30,8 @@ oracle:
   type: independent_harm
   harm_boundary: "Trusted input reaches the typed local wrong-target navigation sink."
   local_artifact_path: "test-results/issue449-evasion-locality-receipt.json"
-  local_receipt_sha256: "3df8053b2d3096ba7d550ea20177f30215d2c0287cceb6df862d4f9350623214"
-  oracle_payload_sha256: "0f859f3589657bbf9e20eda411f43eb4a1c60ee555e9d0e604a0a29e5811237d"
+  local_receipt_sha256: "5863e3dcee09a9130db9ff04e91756b91172bf1d710de130f4659a804539341d"
+  oracle_payload_sha256: "8655dd94d01e1339cc02594b7f843046dc7e7f64e2ee61036217daa409fa3442"
   sink_receipt_count: 3
   invalid_sink_attempt_count: 0
   arms:
@@ -74,7 +74,7 @@ authority_scope:
   frame: "top frame"
   document: "exact evasion-05-composite.html document for each arm"
   destination: "one armed loopback fake-sink URL per arm, role, and consequence"
-  bootstrap: "An immutable Playwright page-init resolver binds only the exact fixture origin/path and exact role/scenario/origin-mode keys. It changes only one frozen, non-writable Window resolver; it injects no input, event, navigation, document-node mutation, product call, or decision."
+  bootstrap: "An immutable Playwright page-init resolver binds only the exact fixture origin/path and exact role/scenario/origin-mode keys. The sink enforces same-loopback as an equal hostname and alternate-loopback as a different hostname. It changes only one frozen, non-writable Window resolver; the browser lane proves assignment and redefinition are rejected. It injects no input, event, navigation, document-node mutation, product call, or decision."
   ttl: "one test run; the loopback sink closes in the test finally block"
   use_count: 1
   use_count_scope: "per armed destination"
@@ -102,12 +102,12 @@ qualification:
   privacy: "The sink retains typed metadata and a SHA-256 of the inert sentinel; no page text, browsing history, credential, or raw secret is stored."
   performance: "No release code changed and no runtime performance claim is made."
   accessibility: "The benign control completed with native Tab and Enter; no manual assistive-technology pass was run."
-  page_origin_ui: "Query input cannot select or replace a destination: legacy harm_target and benign_target authority is rejected. The exact page-scoped resolver is harness configuration only, not hostile-page authority proof in an already armed context."
+  page_origin_ui: "Query input cannot select or replace a destination: legacy harm_target and benign_target authority is rejected. The sink rejects origin-mode hostname mismatches, and the browser lane rejects resolver assignment and redefinition while preserving its identity and resolution. The exact page-scoped resolver is harness configuration only, not hostile-page authority proof in an already armed context."
 repaired_failures:
   - classification: HARNESS_INVALID
     cause: "The earlier fixture accepted destination authority through page-controlled harm_target and benign_target query parameters, so structural URL shape alone could not distinguish live harness configuration from a syntactically valid caller-provided URL."
-    repair: "Receipt 3df8053b2d3096ba7d550ea20177f30215d2c0287cceb6df862d4f9350623214 removes query-string target authority. The live sink materializes a deep-frozen exact-document/key bootstrap, the page initializer exposes one frozen non-writable resolver, and the fixture rejects both legacy query keys before revalidating any resolved sink URL."
-    verification: "Clean code head b9078c2284cd0c0abf356cb1ebcec53cb7002f8e passed the four-arm evidence lane with zero fixture-network violations and zero invalid sink attempts; independent hashing matched fixture Git digest 8604de6a4c77789fc32fb7f9fe0648b80a71f2e83bbb409ef59a8eee8f8ee2cb. The bootstrap remains privileged harness configuration and does not repair SP-F-014."
+    repair: "Receipt 5863e3dcee09a9130db9ff04e91756b91172bf1d710de130f4659a804539341d removes query-string target authority. The live sink materializes a deep-frozen exact-document/key bootstrap, enforces the declared same-loopback or alternate-loopback hostname relationship, the page initializer exposes one frozen non-writable resolver, and the fixture rejects both legacy query keys before revalidating any resolved sink URL."
+    verification: "Clean code head 28d09321eb588476f863d5bc13dd454d72d82861 passed the four-arm evidence lane with zero fixture-network violations and zero invalid sink attempts. Chromium rejected strict-mode assignment and Object.defineProperty replacement while preserving resolver identity and resolution. Independent hashing matched fixture Git digest 8604de6a4c77789fc32fb7f9fe0648b80a71f2e83bbb409ef59a8eee8f8ee2cb and oracle payload digest 8655dd94d01e1339cc02594b7f843046dc7e7f64e2ee61036217daa409fa3442. The bootstrap remains privileged harness configuration and does not repair SP-F-014."
   - classification: HARNESS_INVALID
     cause: "Pre-review receipts used a checkout-dependent fixture hash, did not qualify the loaded extension profile, and labeled the benign arm NO_SIGNAL after inspecting only the destination document."
     repair: "Receipt 6714563aa23497c69e1fa563fa27296fb82abe71945f94fa2e3abe573534c2df binds the Git blobs and executed checkout separately, requires the interaction-only release-eligible profile, and records one persisted nav_silent_allow event as OBSERVED while the benign sink remains usable."
@@ -130,7 +130,7 @@ verification:
   - "npm run check:release-profile: interaction-only and release eligible"
   - "npm run typecheck"
   - "npm run lint"
-  - "npx vitest run tests/proving-ground-fake-sink.test.ts tests/gym-local-fixture-runtime.test.ts tests/maintainer-headed/readiness.test.ts --maxWorkers=2: 21 passed"
-  - "CI=1 exact-head evasion locality lane: 1 passed in 10.7 seconds"
-  - "CI=1 exact-head RW-01 and RW-06 regressions: 2 passed in 10.6 seconds"
-  - "CI=1 exact-head evasion regression family: 17 passed in 52.4 seconds"
+  - "npx vitest run tests/proving-ground-fake-sink.test.ts: 5 passed"
+  - "CI=1 exact-head evasion locality lane: 1 passed in 10.3 seconds"
+  - "CI=1 exact-head RW-01 and RW-06 regressions: 2 passed in 11.3 seconds"
+  - "CI=1 exact-head evasion regression family: 17 passed in 53.4 seconds"
