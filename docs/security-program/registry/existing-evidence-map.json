@@ -807,7 +807,7 @@
       "oracle_type": "mixed",
       "evidence_state": "MODELLED",
       "evidence_validity": "CURRENT_REGRESSION",
-      "known_limitation": "The control plus two deterministic adjacent CSS values is not a randomized DOM, text, localization, timing, viewport, or holdout campaign.",
+      "known_limitation": "A single hand-authored threshold fixture is not a mutation campaign or robustness distribution.",
       "issue_refs": [],
       "pr_refs": [],
       "paths": [
@@ -887,7 +887,7 @@
       "oracle_type": "mixed",
       "evidence_state": "MODELLED",
       "evidence_validity": "CURRENT_REGRESSION",
-      "known_limitation": "A single hand-authored threshold fixture is not a mutation campaign or robustness distribution.",
+      "known_limitation": "The control plus two deterministic adjacent CSS values is not a randomized DOM, text, localization, timing, viewport, or holdout campaign.",
       "issue_refs": [],
       "pr_refs": [],
       "paths": [
