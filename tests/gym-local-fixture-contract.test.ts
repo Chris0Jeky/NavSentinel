@@ -71,11 +71,15 @@ describe("RW Gym fixture locality contracts", () => {
       expect(harmAnchor, `${file} must contain a typed harm anchor`).not.toBe("");
       expect(benignAnchor, `${file} benign anchor must carry scenario id`).toContain(`data-navsentinel-scenario="${scenarioId}"`);
       expect(harmAnchor, `${file} harm anchor must carry scenario id`).toContain(`data-navsentinel-scenario="${scenarioId}"`);
+      expect(harmAnchor, `${file} harm anchor must request origin separation`)
+        .toContain('data-navsentinel-local-target-origin="alternate-loopback"');
       expect(benignAnchor, `${file} benign anchor must not expose an initial href`).not.toMatch(/\bhref\s*=/iu);
       expect(harmAnchor, `${file} harm anchor must not expose an initial href`).not.toMatch(/\bhref\s*=/iu);
       return;
     }
     expect(source).toContain(`NavSentinelLocalTargets.url('benign', '${scenarioId}')`);
-    expect(source).toContain(`NavSentinelLocalTargets.url('harm', '${scenarioId}')`);
+    expect(source).toContain(
+      `NavSentinelLocalTargets.url('harm', '${scenarioId}', 'alternate-loopback')`,
+    );
   });
 });

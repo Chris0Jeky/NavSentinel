@@ -28,6 +28,21 @@ const gymRoot = path.resolve(__dirname, "..", "..", "gym");
 
 test.setTimeout(120_000);
 
+function startRwHarmSink(scenarioId: string, targetId: string) {
+  return startProvingGroundFakeSinkForHost("127.0.0.2", {
+    runId: randomUUID(),
+    scenarioId,
+    allowedRoles: ["attack"],
+    allowedConsequences: ["wrong-target-navigation"],
+    targetAuthorities: [{
+      id: targetId,
+      role: "attack",
+      consequence: "wrong-target-navigation",
+      maxUses: 1,
+    }],
+  });
+}
+
 test("Level 1 blocks new tabs @smoke", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
@@ -478,18 +493,7 @@ test("RW-01 search result overlay swap blocks deceptive new tab @regression", as
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
-  const sink = await startProvingGroundFakeSinkForHost("127.0.0.2", {
-    runId: randomUUID(),
-    scenarioId: "NS-ADV-SUPPLY-001",
-    allowedRoles: ["attack"],
-    allowedConsequences: ["wrong-target-navigation"],
-    targetAuthorities: [{
-      id: "rw01-harm",
-      role: "attack",
-      consequence: "wrong-target-navigation",
-      maxUses: 1,
-    }],
-  });
+  const sink = await startRwHarmSink("NS-ADV-SUPPLY-001", "rw01-harm");
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
 
@@ -643,6 +647,7 @@ test("RW-06 legit auth popup allows the first window and blocks the second @regr
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  const sink = await startRwHarmSink("NS-ADV-AUTH-005", "rw06-harm");
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
 
@@ -655,7 +660,12 @@ test("RW-06 legit auth popup allows the first window and blocks the second @regr
 
     try {
       const page = await context.newPage();
-      await page.goto(`${baseUrl}/rw06-legit-auth-second-popup.html`, {
+      const fixtureUrl = new URL("/rw06-legit-auth-second-popup.html", baseUrl);
+      fixtureUrl.searchParams.set(
+        "harm_target",
+        sink.urlFor("attack", "wrong-target-navigation", "rw06-harm"),
+      );
+      await page.goto(fixtureUrl.href, {
         waitUntil: "domcontentloaded",
         timeout: 20_000
       });
@@ -682,10 +692,12 @@ test("RW-06 legit auth popup allows the first window and blocks the second @regr
       await waitForToastText(page, "Blocked popup", 3000);
       await page.waitForTimeout(300);
       expect(context.pages().length).toBe(beforePages + 1);
+      expect(sink.snapshot()).toEqual({ receipts: [], invalidAttempts: [] });
     } finally {
       await context.close();
     }
   } finally {
+    await sink.close();
     if (gym) await gym.close();
     fs.rmSync(userDataDir, { recursive: true, force: true });
   }
