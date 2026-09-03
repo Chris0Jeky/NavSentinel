@@ -2,7 +2,7 @@ schema_version: "1.0.0"
 scenario_id: NS-ADV-EVADE-006
 capability_id: F-03
 profile: proving_ground
-repository_head: "6f82678c2c4590b8fe29da140d409816ab68b3c1"
+repository_head: "aca511694be2a70d6f6e3858e12ed9ff33f3dec7"
 extension_build_sha256: "9809e9fdf97a494dd66ff93551aff7aef2c2eea596dd8e9ebac0623f1b988401"
 extension_profile:
   id: interaction-only
@@ -30,9 +30,9 @@ oracle:
   type: independent_harm
   harm_boundary: "Trusted input reaches the typed local wrong-target navigation sink."
   local_artifact_path: "test-results/issue449-evasion-locality-receipt.json"
-  local_receipt_sha256: "e9c60c7701ea54748080861f47dc39c7d20de96694b8cb03d65adfca48d84862"
-  oracle_payload_sha256: "65eb868c20b02b73e6fa8924d3e3773e94cea64bf6abea5573109e161dbefd84"
-  sink_receipt_count: 18
+  local_receipt_sha256: "c664ff39f3e8153047268481b380b13b9f04a864371269f8e4c7b4c59311c597"
+  oracle_payload_sha256: "0fdca2901981b3e241fa9579db8f1c4985dd9fc9f301c993f9bab12267853b69"
+  sink_receipt_count: 3
   invalid_sink_attempt_count: 0
   target_authority_assertion:
     timing: before_activation
@@ -76,7 +76,7 @@ mutation_campaign:
   selector: mutation
   deterministic: true
   hash_method: "SHA-256(UTF-8 bytes of JSON.stringify({cases: mutation_campaign.cases}))"
-  payload_sha256: "65eb868c20b02b73e6fa8924d3e3773e94cea64bf6abea5573109e161dbefd84"
+  payload_sha256: "0fdca2901981b3e241fa9579db8f1c4985dd9fc9f301c993f9bab12267853b69"
   control_case_count: 1
   declared_mutation_count: 5
   total_arm_count: 24
@@ -97,7 +97,7 @@ mutation_campaign:
       outcomes: [HARM_REACHED, BLOCKED_PRE_HARM, OBSERVED, BLOCKED_PRE_HARM]
       sink_receipt_count: 3
       network_violation_count: 0
-      blocked_external_attempt_count: 55
+      blocked_external_attempt_count: 53
     - id: opacity-010
       changed_axis: opacity
       requested_query: "mutation=opacity-010"
@@ -111,7 +111,7 @@ mutation_campaign:
       outcomes: [HARM_REACHED, BLOCKED_PRE_HARM, OBSERVED, BLOCKED_PRE_HARM]
       sink_receipt_count: 3
       network_violation_count: 0
-      blocked_external_attempt_count: 56
+      blocked_external_attempt_count: 50
     - id: zindex-9997
       changed_axis: z_index
       requested_query: "mutation=zindex-9997"
@@ -125,7 +125,7 @@ mutation_campaign:
       outcomes: [HARM_REACHED, BLOCKED_PRE_HARM, OBSERVED, BLOCKED_PRE_HARM]
       sink_receipt_count: 3
       network_violation_count: 0
-      blocked_external_attempt_count: 54
+      blocked_external_attempt_count: 50
     - id: dom-depth-1
       changed_axis: dom_depth
       requested_query: "mutation=dom-depth-1"
@@ -139,7 +139,7 @@ mutation_campaign:
       outcomes: [HARM_REACHED, BLOCKED_PRE_HARM, OBSERVED, BLOCKED_PRE_HARM]
       sink_receipt_count: 3
       network_violation_count: 0
-      blocked_external_attempt_count: 52
+      blocked_external_attempt_count: 51
     - id: class-token-a7c1
       changed_axis: class_list
       requested_query: "mutation=class-token-a7c1"
@@ -153,7 +153,7 @@ mutation_campaign:
       outcomes: [HARM_REACHED, BLOCKED_PRE_HARM, OBSERVED, BLOCKED_PRE_HARM]
       sink_receipt_count: 3
       network_violation_count: 0
-      blocked_external_attempt_count: 54
+      blocked_external_attempt_count: 50
     - id: transform-scale-101
       changed_axis: transform
       requested_query: "mutation=transform-scale-101"
@@ -169,7 +169,7 @@ mutation_campaign:
       outcomes: [HARM_REACHED, BLOCKED_PRE_HARM, OBSERVED, BLOCKED_PRE_HARM]
       sink_receipt_count: 3
       network_violation_count: 0
-      blocked_external_attempt_count: 55
+      blocked_external_attempt_count: 53
   survivors: []
   invalid_cases: []
 outcome: BLOCKED_PRE_HARM
@@ -208,7 +208,7 @@ network_violations: []
 blocked_external_attempts:
   - class: "Chromium platform CONNECT"
     distinct_target_count: 3
-    attempt_count: 326
+    attempt_count: 307
 qualification:
   privacy: "The authority normalizer adds no full runtime URLs or raw sentinel to the receipt. Existing sink snapshots persist synthetic run UUIDs and typed metadata plus a SHA-256 of the inert sentinel; no page text, browsing history, credential, or raw secret is stored."
   performance: "No release code changed and no runtime performance claim is made."
@@ -246,5 +246,5 @@ verification:
   - "npm run typecheck"
   - "npx eslint tests/e2e/evasion-locality-evidence.spec.ts"
   - "npx vitest run tests/gym-local-fixture-runtime.test.ts tests/gym-local-fixture-contract.test.ts tests/proving-ground-fake-sink.test.ts: 28 passed"
-  - "CI=1 exact-head evasion locality lane: 4 passed with 24 campaign arms in 58.7 seconds"
+  - "CI=1 exact-head evasion locality lane: 4 passed with 24 campaign arms in 57.0 seconds"
   - "CI=1 exact-head evasion regression family: 17 passed in 55.2 seconds"
