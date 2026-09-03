@@ -305,6 +305,51 @@ async function assertUnsafeOverridesRejected(page: Page): Promise<void> {
     .toBe("legacy-target-override-rejected");
 }
 
+async function assertFixtureBootstrapCannotBeReplaced(page: Page, sink: ProvingGroundFakeSink): Promise<void> {
+  const result = await page.evaluate((expectedHref) => {
+    "use strict";
+    const target = window as unknown as {
+      NavSentinelFixtureTargetBootstrap: {
+        resolve: (role: string, scenario: string, originMode: string) => unknown;
+      };
+    };
+    const original = target.NavSentinelFixtureTargetBootstrap;
+    const originalResolution = original.resolve("harm", "NS-ADV-EVADE-006", "same-loopback");
+    let assignment = "accepted";
+    try {
+      target.NavSentinelFixtureTargetBootstrap = { resolve: () => ({ status: "replaced" }) };
+    } catch (error) {
+      assignment = error instanceof TypeError ? "rejected" : "unexpected-error";
+    }
+    let defineProperty = "accepted";
+    try {
+      Object.defineProperty(window, "NavSentinelFixtureTargetBootstrap", {
+        value: { resolve: () => ({ status: "replaced" }) },
+      });
+    } catch (error) {
+      defineProperty = error instanceof TypeError ? "rejected" : "unexpected-error";
+    }
+    const current = target.NavSentinelFixtureTargetBootstrap;
+    const currentResolution = current.resolve("harm", "NS-ADV-EVADE-006", "same-loopback");
+    return {
+      assignment,
+      defineProperty,
+      identityPreserved: current === original,
+      resolutionPreserved: JSON.stringify(currentResolution) === JSON.stringify(originalResolution),
+      expectedHref,
+      actualHref: (currentResolution as { href?: string }).href,
+    };
+  }, sink.urlFor("attack", HARM_CONSEQUENCE, "baseline-harm"));
+  expect(result).toEqual({
+    assignment: "rejected",
+    defineProperty: "rejected",
+    identityPreserved: true,
+    resolutionPreserved: true,
+    expectedHref: sink.urlFor("attack", HARM_CONSEQUENCE, "baseline-harm"),
+    actualHref: sink.urlFor("attack", HARM_CONSEQUENCE, "baseline-harm"),
+  });
+}
+
 async function writeReceipt(
   testInfo: TestInfo,
   sink: ProvingGroundFakeSink,
@@ -466,6 +511,7 @@ test("#449 evasion targets stay local with attack, protected, benign, and mixed 
       history.replaceState(null, "", original);
       return { unbound, mismatch };
     }, SCENARIO_ID)).toEqual({ unbound: "unbound", mismatch: "document-mismatch" });
+    await assertFixtureBootstrapCannotBeReplaced(baseline.page, sink);
     await assertUnsafeOverridesRejected(baseline.page);
     const baselineBefore = sink.snapshot().receipts.length;
     const baselinePopup = await clickTrap(baseline);

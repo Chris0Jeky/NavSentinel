@@ -216,6 +216,38 @@ describe("Proving Ground fake sink", () => {
         "wrong-target-navigation",
         "unit-alternate-ipv4-harm",
       );
+      const alternateBinding = {
+        targetRole: "harm" as const,
+        scenarioId: "NS-ADV-SUPPLY-001",
+        originMode: "alternate-loopback" as const,
+        source: {
+          kind: "armed-sink" as const,
+          sinkRole: "attack" as const,
+          consequence: "wrong-target-navigation",
+          targetId: "unit-alternate-ipv4-harm",
+        },
+      };
+      const bootstrap = sink.createFixtureBootstrap({
+        fixtureOrigin: "http://127.0.0.1:5173",
+        fixturePath: "/level9-legit-video-overlay.html",
+        bindings: [alternateBinding],
+      });
+      expect(bootstrap.bindings[0]).toMatchObject({
+        targetRole: "harm",
+        scenarioId: "NS-ADV-SUPPLY-001",
+        originMode: "alternate-loopback",
+        source: { kind: "armed-sink", href: targetUrl },
+      });
+      expect(() => sink.createFixtureBootstrap({
+        fixtureOrigin: "http://127.0.0.1:5173",
+        fixturePath: "/level9-legit-video-overlay.html",
+        bindings: [{ ...alternateBinding, originMode: "same-loopback" }],
+      })).toThrow("Fixture armed sink hostname does not match fixture origin for same-loopback");
+      expect(() => sink.createFixtureBootstrap({
+        fixtureOrigin: "http://127.0.0.2:5173",
+        fixturePath: "/level9-legit-video-overlay.html",
+        bindings: [alternateBinding],
+      })).toThrow("Fixture armed sink hostname must differ from fixture origin for alternate-loopback");
       const accepted = await fetch(targetUrl);
       expect(accepted.status).toBe(200);
       expect(sink.snapshot().receipts).toEqual([expect.objectContaining({
