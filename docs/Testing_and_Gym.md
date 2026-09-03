@@ -413,19 +413,27 @@ Tests NavSentinel against HTML snapshots of real phishing pages downloaded from 
 and PhishTank feeds. The lane fails closed as `TEST_INVALID` if required local
 inputs are absent or invalid. It may produce engineering observations, but remains
 methodologically `INVALID` and does not support an efficacy claim until #417's
-real-host routing, trusted input, headed validation, and owner-curated committed
-result gates are met.
+headed owner validation and owner-curated committed-result gates are met. Real-host
+replay and trusted input are mechanics only and do not remove those gates.
 Run with `npm run test:e2e:corpus`. Config: `playwright.corpus.config.ts`.
 Tests: `tests/e2e/corpus-validation.spec.ts`.
 
 `npm run test:e2e:corpus:contract` is an owner-corpus-input-free mechanics contract. It
-fulfills only inert script-free HTML under exact HTTPS `.test` URLs, requires
-full NavSentinel readiness, and uses Playwright locator activation with an
-independent runner probe. An empty-allowlist proxy fence and route aborts
-prevent page-origin HTTP(S) egress. It proves neither live-corpus route
-integration, owner-headed validation, a committed manifest/result, efficacy,
-Gate-3, nor completion of any #417 methodology pillar; all remain
-`INVALID`/unproven.
+fulfills inert HTML under exact HTTPS `.test` URLs, including a blocked
+inline-script sentinel, requires full NavSentinel readiness, and uses Playwright
+locator activation with an independent runner probe. An empty-allowlist proxy
+fence and route aborts prevent page-origin HTTP(S) egress. The contract exercises
+the same route/input/receipt path as the manual runner with synthetic reserved
+domains. It does not validate an owner corpus run, a committed manifest/result,
+efficacy, or Gate-3; those remain `INVALID`/unproven.
+
+The manual corpus runner replays only SHA-256-validated snapshot bytes at their
+recorded canonical URLs. It uses native Playwright activation and a one-use
+inert receipt for an unblocked selected navigation; every other page HTTP(S)
+request is invalid and denied. A receipt is first-hop mechanics evidence only,
+not corpus validity, efficacy, owner-headed validation, or Gate-3. The static
+runner does not execute snapshot JavaScript; popup forms and links without a
+provable source opener are not exercisable in this first slice.
 
 ### False positive measurement
 

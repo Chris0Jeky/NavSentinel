@@ -95,6 +95,7 @@ describe("corpus manifest contract", () => {
     expect(loaded.manifest).toMatchObject({ totalUrls: 2, downloaded: 1, failed: 1 });
     expect(loaded.entries).toHaveLength(1);
     expect(loaded.entries[0]?.filename).toBe(filename);
+    expect(loaded.entries[0]?.bytes).toEqual(BYTES);
     expect(loaded.entries[0]).not.toHaveProperty("discardedDiagnostic");
   });
 
@@ -130,6 +131,15 @@ describe("corpus manifest contract", () => {
     ]));
 
     expect(loadCorpusManifest({ manifestPath }).entries[0]?.url).toBe(legacyUrl);
+  });
+
+  it("rejects non-canonical recorded URLs before browser replay", () => {
+    const { manifestPath, snapshotsDir } = makeDirectory();
+    const legacyUrl = "https://EXAMPLE.test:443/login";
+    const entry = successfulEntry({ url: legacyUrl, filename: snapshotFilename("openphish", legacyUrl) });
+    writeManifest(manifestPath, manifest([entry]));
+    fs.writeFileSync(path.join(snapshotsDir, entry.filename), BYTES);
+    expectInvalid(() => loadValidatedCorpusManifest({ manifestPath, snapshotsDir }), "replay_url_not_canonical");
   });
 
   it("rejects unsafe names, duplicate URLs, inconsistent counts, and invalid entry fields", () => {

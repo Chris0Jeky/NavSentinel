@@ -210,7 +210,11 @@ export function loadValidatedCorpusManifest({ manifestPath, snapshotsDir }) {
   const entries = manifest.entries.filter((entry) => entry.filename !== null);
   if (entries.length === 0) fail("manifest_no_usable_snapshots");
 
+  const replayEntries = [];
   for (const entry of entries) {
+    // Browser routing canonicalizes URLs. Refuse old non-canonical spelling so
+    // replay cannot silently move a snapshot to a different recorded identity.
+    if (canonicalUrl(entry.url) !== entry.url) fail("replay_url_not_canonical");
     const snapshotPath = path.resolve(snapshotRoot, entry.filename);
     if (!snapshotPath.startsWith(`${snapshotRoot}${path.sep}`)) fail("snapshot_path_invalid");
 
@@ -230,9 +234,10 @@ export function loadValidatedCorpusManifest({ manifestPath, snapshotsDir }) {
     }
     if (bytes.length !== entry.sizeBytes) fail("snapshot_size_mismatch");
     if (sha256(bytes) !== entry.sha256) fail("snapshot_digest_mismatch");
+    replayEntries.push({ ...entry, bytes });
   }
 
-  return { manifest, entries };
+  return { manifest, entries: replayEntries };
 }
 
 function prepareAbsentOutputDirectory(outputDir) {

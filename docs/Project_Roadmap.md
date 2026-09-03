@@ -232,7 +232,7 @@ See the exact sets, comments, state reasons, labels, and pre/post counts in the
    fund only Decision Journal + recovery guidance; otherwise change segment/
    position or stop before advanced architecture.
 
-Last updated: 2026-08-30
+Last updated: 2026-09-03
 
 ---
 
@@ -599,12 +599,15 @@ Results inform P1-02 hardening priorities.
 **Corpus-v2 status (#417):** the 2026-05-01 28% number is methodologically invalid in both
 directions (served from 127.0.0.1 → domain/reputation signals neutered; synthetic
 `isTrusted=false` clicks; static snapshots miss JS-injected forms) and its raw per-page
-results are gitignored. The rebuild (#417) has four pillars: **(1) protected-vs-fired scoring —
-DONE** (`tests/corpus/corpus_scoring.ts`, unit-tested; a post-render `nav_rollback` no longer
-counts the same as a pre-harm block/prompt, so the TP number means "the user was protected");
-**(2) real-hostname routing, (3) trusted clicks, (4) a committed manifest — remain**, each
-needing a headed run to validate. The corpus TP triage (#426) is gated on this rebuild + a
-headed re-run.
+results are gitignored. The rebuild (#417) has four pillars: **(1) protected-vs-fired scoring:
+DONE** (`tests/corpus/corpus_scoring.ts`, unit-tested; a signal that fires but fails to stop
+the independent harm receipt is not protection); **(2) real-hostname replay and (3) trusted
+click mechanics: INTEGRATED** through the shared static runner and proved only with reserved
+`.test` contract pages; **(4) an owner-curated committed manifest/result: PENDING**. The runner
+now fails the whole run closed when readiness, routing, input, cleanup, or denominator
+completion fails. Snapshot JavaScript/dynamic-form replay, the headed owner corpus run,
+efficacy, and Gate-3 remain unverified. The corpus TP triage (#426) is gated on that valid
+headed rerun.
 
 #### P1-07: CDS evasion red-team test suite
 
