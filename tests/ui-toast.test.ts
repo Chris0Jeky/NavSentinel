@@ -1,16 +1,17 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-type ShowToastType = typeof import("../extension/src/content/ui_toast").showToast;
-type ControlToastType = typeof import("../extension/src/content/ui_toast").controlToast;
+type ToastModule = typeof import("../extension/src/content/ui_toast");
 
-let showToast: ShowToastType;
-let controlToast: ControlToastType;
+let showToast: ToastModule["showToast"];
+let controlToast: ToastModule["controlToast"];
+let activateOwnedToastControl: ToastModule["activateOwnedToastControl"];
 
 async function loadModule(): Promise<void> {
   const mod = await import("../extension/src/content/ui_toast");
   showToast = mod.showToast;
   controlToast = mod.controlToast;
+  activateOwnedToastControl = mod.activateOwnedToastControl;
 }
 
 describe("ui_toast", () => {
@@ -146,26 +147,58 @@ describe("ui_toast", () => {
       expect(dismissBtn!.classList.contains("danger")).toBe(true);
     });
 
-    it("activates the owned Dismiss token relayed by the verified bridge", () => {
+    it("activates the owned control found on a fenced trusted event path", () => {
       showToast({ message: "Test", timeoutMs: 0 });
       const dismiss = getButtons().find((button) => button.textContent === "Dismiss")!;
+      const path = [dismiss, dismiss.parentElement, getWrap(), getRoot(), getHost(), document.documentElement, document, window];
 
-      controlToast(dismiss.dataset.nsUiAction!);
-
+      expect(activateOwnedToastControl(getHost(), path)).toBe(true);
       expect(getWraps()).toHaveLength(0);
     });
 
-    it("ignores an unknown or stale relayed control token", () => {
+    it("ignores a forged host, a page element, and a stale control", () => {
       showToast({ message: "First", timeoutMs: 0 });
-      const stale = getButtons().find((button) => button.textContent === "Dismiss")!
-        .dataset.nsUiAction!;
+      const stale = getButtons().find((button) => button.textContent === "Dismiss")!;
       showToast({ message: "Current", timeoutMs: 0 });
+      const host = getHost()!;
 
-      controlToast("not-owned");
-      controlToast(stale);
+      // A page-created host that copies the extension's id and a bait control
+      // that copies every attribute of the real one.
+      const fakeHost = document.createElement("div");
+      fakeHost.id = "__navsentinel_toast_host";
+      const bait = document.createElement("div");
+      for (const attribute of Array.from(getButtons()[0]!.attributes)) {
+        bait.setAttribute(attribute.name, attribute.value);
+      }
+      expect(activateOwnedToastControl(fakeHost, [bait, fakeHost, document, window])).toBe(false);
+
+      // The real host with a page element on the path, and with a control
+      // from a card that was already replaced.
+      const pageButton = document.createElement("button");
+      expect(activateOwnedToastControl(host, [pageButton, host, document, window])).toBe(false);
+      expect(activateOwnedToastControl(host, [stale, host, document, window])).toBe(false);
 
       expect(getWraps()).toHaveLength(1);
       expect(getWrap()!.querySelector(".body")!.textContent).toBe("Current");
+    });
+
+    it("places the host in the top layer as a manual popover when supported", async () => {
+      const showPopover = vi.fn();
+      Object.defineProperty(HTMLElement.prototype, "showPopover", {
+        configurable: true,
+        value: showPopover,
+      });
+      try {
+        vi.resetModules();
+        await loadModule();
+        showToast({ message: "Test", timeoutMs: 0 });
+        const host = getHost()!;
+        expect(host.getAttribute("popover")).toBe("manual");
+        expect(showPopover).toHaveBeenCalledTimes(1);
+        expect(showPopover.mock.instances[0]).toBe(host);
+      } finally {
+        delete (HTMLElement.prototype as unknown as Record<string, unknown>).showPopover;
+      }
     });
 
     it("sets message via textContent, not innerHTML (XSS-safe)", () => {

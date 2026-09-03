@@ -123,6 +123,52 @@ limitations, not a reason to reopen the completed gate.
 
 ---
 
+## Active guide: AI-38 — issue #560 inert toast-control repair
+
+Run this only after the `fix/issue560-isolated-input-fence` PR is ready and
+every automated check for its current head is green.
+
+1. Resolve the open PR whose head is `fix/issue560-isolated-input-fence`. Record
+   its PR number and 40-character `headRefOid`. In the implementation worktree,
+   require `git rev-parse HEAD` to equal that value and confirm there are no
+   uncommitted product changes. Stop on any mismatch.
+2. Require the exact-head Build / Unit and E2E checks to be green and all review
+   findings to be triaged. Run `npm ci`, `npm run build`, and
+   `npm run check:content-loader` in that worktree. Record the
+   `ui-guard=<revision>` value the build prints.
+3. In a fresh temporary Chrome profile, load that worktree's `extension/dist`
+   unpacked. After any rebuild, click **Reload** for NavSentinel in
+   `chrome://extensions` before reloading a page. Record the Chrome version.
+4. Open a real media-embed page that previously showed inert controls (or
+   `http://127.0.0.1:5173/evasion-01-opacity-009.html` from `npm run gym:serve`
+   as the site-neutral stand-in). Confirm the document reports `capture="1"`,
+   `bridge="1"`, and the step-2 `ui-guard` revision on the
+   `data-navsentinel-capture-ready`, `data-navsentinel-bridge-ready`, and
+   `data-navsentinel-ui-guard` attributes. Stop on a missing or old marker.
+5. Trigger a regular block card (click the deceptive overlay or the page's
+   trap). With the mouse, click **Dismiss**: the card must leave, no new tab may
+   open, and no second "blocked" notice may follow the click. Trigger the card
+   again and click **Allow once**: exactly one approved tab must open.
+6. Trigger the card again, Tab to **Dismiss**, and press Enter; repeat with
+   Space. The card must leave each time without a page reaction.
+7. With overlay cleanup enabled in the popup, confirm on a page whose cleanup
+   card appears (for example `mutation-01-delayed-overlay.html`) that **Undo**
+   still restores the layer with mouse and keyboard.
+8. On the media page, wait for any page layer that re-appears after the card
+   (or in DevTools append a `position:fixed; inset:0; z-index:2147483647`
+   element to `<html>`). The card must remain on top and its controls must
+   still respond.
+9. Inspect page, popup, and service-worker consoles for new errors. On a pass,
+   reply `AI-38 done; Gate-3 passed on PR #<n> at <40-character SHA>; Chrome
+   <version>`. On any mismatch, reply `AI-38 failed on PR #<n> at <SHA>: <step
+   and observed>` and leave the item open.
+
+Only Chris can record AI-38 complete. The trusted-input Playwright coverage in
+`tests/e2e/toast-input-fence.spec.ts` supports but does not replace this
+exact-head real-page gate.
+
+---
+
 ## Active guide: AI-33 — issue #530 popup trust-pill contrast
 
 Run this only after the #530 implementation PR is ready and every automated
@@ -539,6 +585,7 @@ Only Chris can record this item complete.
 | AI-13 | #356 MAIN-world compatibility | in [`../../ACTION_ITEMS.md`](../../ACTION_ITEMS.md) |
 | AI-21 | #464 synthetic navigation | [below](#ai-21--pr-464-synthetic-navigation-gate-3) |
 | AI-22 | #466 pending-decision service worker | [below](#ai-22--pr-466-pending-decision-service-worker-gate-3) |
+| AI-38 | #560 inert toast-control repair | [above](#active-guide-ai-38--issue-560-inert-toast-control-repair) |
 | AI-36 | #558 popup/Options patch-save synchronization | [above](#ai-36--558-popupoptions-patch-save-synchronization-gate-3) |
 | AI-35 | #539 cross-host child-event attribution | [below](#ai-35--539-cross-host-child-event-attribution-gate-3) |
 

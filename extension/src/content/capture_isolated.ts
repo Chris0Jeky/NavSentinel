@@ -35,6 +35,11 @@ import {
   reputationEnabled,
 } from "@navsentinel/reputation-runtime";
 import { controlToast, showOverlayCleanupToast, showToast } from "./ui_toast";
+// Consumed by the generated document-start loader (see
+// scripts/build-extension.mjs): the synchronous input fence hands trusted click
+// and keyboard activation on the extension-owned toast host to this same
+// isolated world, so the user's own controls never depend on the MAIN bridge.
+export { activateOwnedToastControl as activateUiControl } from "./ui_toast";
 import { explainReasonCode } from "../shared/explanations";
 import {
   buildClickContextFromEvents,
@@ -448,10 +453,6 @@ function handleBridgeMessage(message: unknown): void {
   }
 
   if (data.session !== bridgeSession) return;
-
-  // Compact private type: a user-control relay must survive the 66 KB
-  // content-script ceiling but is accepted only on the verified bridge.
-  if (data.type === "u") controlToast(data.id);
 
   if (data.type === "ns-bridge-ready") {
     markMainGuardReady();

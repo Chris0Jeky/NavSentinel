@@ -384,10 +384,15 @@ off-screen frames that Chromium throttles, and attach the complete JSON timeline
 layers that remain connected: one grouped Undo, Dismiss-without-restoration,
 page-owned display changes, cleanup-disabled behavior, and Navigation Off.
 
-The final synchronous MAIN-world loader is content-addressed **after** its
-post-build guard is installed. `npm run check:content-loader` verifies that the
-manifest URL matches those final bytes and contains the current UI-guard
-revision. CI reports this as a named contract before browser tests, while every
+The final synchronous isolated-world capture loader is content-addressed
+**after** its post-build input fence is installed. `npm run check:content-loader`
+verifies that the manifest URL matches those final bytes and contains the
+current UI-guard revision. The MAIN-world loader is the unmodified
+CRXJS-generated stub again and carries no post-build bytes, so it is no longer
+part of this contract. `tests/e2e/toast-input-fence.spec.ts` drives the
+toast controls with real mouse and keyboard input (not synthetic `.click()`),
+including a maximum-z-index layer inserted after the host and a page-forged
+host that must never activate a real control. CI reports this as a named contract before browser tests, while every
 shared Playwright page and nested overlay frame also requires that runtime
 revision. A disk-identity failure therefore points to packaging; a missing or
 old runtime marker points to extension initialization or an artifact that the
