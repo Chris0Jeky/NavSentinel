@@ -2,7 +2,8 @@
   "use strict";
 
   const SENTINEL = "NAVSENTINEL_SENTINEL_DO_NOT_RUN";
-  const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
+  const LOOPBACK_HOSTS = new Set(["127.0.0.1", "127.0.0.2", "localhost", "[::1]"]);
+  const ARMED_LOOPBACK_HOSTS = new Set(["127.0.0.1", "127.0.0.2", "[::1]"]);
   const FAKE_SINK_PATH = "/__navsentinel_fake_sink";
   const FAKE_SINK_PORT_MIN = 46100;
   const FAKE_SINK_PORT_MAX = 46124;
@@ -44,7 +45,7 @@
     const port = Number(parsed.port);
     const target = TARGETS[role];
     const targetId = parsed.searchParams.get("target_id") || "";
-    const armed = (parsed.hostname === "127.0.0.1" || parsed.hostname === "[::1]") &&
+    const armed = ARMED_LOOPBACK_HOSTS.has(parsed.hostname) &&
       port >= FAKE_SINK_PORT_MIN && port <= FAKE_SINK_PORT_MAX &&
       parsed.pathname === FAKE_SINK_PATH &&
       parsed.username === "" && parsed.password === "" && parsed.hash === "" &&

@@ -1,4 +1,5 @@
 import { test, expect, chromium } from "@playwright/test";
+import { randomUUID } from "node:crypto";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -15,6 +16,7 @@ import {
   waitForToastMatch,
   waitForToastText
 } from "./extension_test_utils";
+import { startProvingGroundFakeSinkForHost } from "./proving_ground_fake_sink";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -476,6 +478,18 @@ test("RW-01 search result overlay swap blocks deceptive new tab @regression", as
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  const sink = await startProvingGroundFakeSinkForHost("127.0.0.2", {
+    runId: randomUUID(),
+    scenarioId: "NS-ADV-SUPPLY-001",
+    allowedRoles: ["attack"],
+    allowedConsequences: ["wrong-target-navigation"],
+    targetAuthorities: [{
+      id: "rw01-harm",
+      role: "attack",
+      consequence: "wrong-target-navigation",
+      maxUses: 1,
+    }],
+  });
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
 
@@ -488,7 +502,12 @@ test("RW-01 search result overlay swap blocks deceptive new tab @regression", as
 
     try {
       const page = await context.newPage();
-      await page.goto(`${baseUrl}/rw01-search-result-overlay-swap.html`, {
+      const fixtureUrl = new URL("/rw01-search-result-overlay-swap.html", baseUrl);
+      fixtureUrl.searchParams.set(
+        "harm_target",
+        sink.urlFor("attack", "wrong-target-navigation", "rw01-harm"),
+      );
+      await page.goto(fixtureUrl.href, {
         waitUntil: "domcontentloaded",
         timeout: 20_000
       });
@@ -521,11 +540,13 @@ test("RW-01 search result overlay swap blocks deceptive new tab @regression", as
       const popup = await popupPromise;
       expect(popup, "Expected the deceptive sponsored-result new tab to be blocked").toBeNull();
       await waitForToastText(page, "Blocked new tab", 3000);
+      expect(sink.snapshot()).toEqual({ receipts: [], invalidAttempts: [] });
       await expect(page).toHaveURL(/rw01-search-result-overlay-swap\.html/);
     } finally {
       await context.close();
     }
   } finally {
+    await sink.close();
     if (gym) await gym.close();
     fs.rmSync(userDataDir, { recursive: true, force: true });
   }

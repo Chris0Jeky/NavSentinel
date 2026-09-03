@@ -128,4 +128,38 @@ describe("Proving Ground fake sink", () => {
       await sink.close();
     }
   });
+
+  it("reaches a host-separated sink within the IPv4 loopback family", async () => {
+    const sink = await startProvingGroundFakeSinkForHost("127.0.0.2", {
+      runId: "unit-alternate-ipv4-run",
+      scenarioId: "NS-ADV-SUPPLY-001",
+      allowedRoles: ["attack"],
+      allowedConsequences: ["wrong-target-navigation"],
+      targetAuthorities: [{
+        id: "unit-alternate-ipv4-harm",
+        role: "attack",
+        consequence: "wrong-target-navigation",
+        maxUses: 1,
+      }],
+    });
+
+    try {
+      expect(new URL(sink.origin).hostname).toBe("127.0.0.2");
+      const targetUrl = sink.urlFor(
+        "attack",
+        "wrong-target-navigation",
+        "unit-alternate-ipv4-harm",
+      );
+      const accepted = await fetch(targetUrl);
+      expect(accepted.status).toBe(200);
+      expect(sink.snapshot().receipts).toEqual([expect.objectContaining({
+        scenarioId: "NS-ADV-SUPPLY-001",
+        role: "attack",
+        consequence: "wrong-target-navigation",
+        targetId: "unit-alternate-ipv4-harm",
+      })]);
+    } finally {
+      await sink.close();
+    }
+  });
 });

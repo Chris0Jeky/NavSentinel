@@ -44,6 +44,16 @@ describe("Gym local-fixture target runtime contract", () => {
     expect(anchor?.getAttribute("data-navsentinel-local-target-ready")).toBe("1");
   });
 
+  it("arms a host-separated sink on the same IPv4 loopback family", () => {
+    const target = "http://127.0.0.2:46100/__navsentinel_fake_sink?run_id=123e4567-e89b-42d3-a456-426614174000&scenario_id=NS-ADV-UI-001&role=attack&consequence=wrong-target-navigation&target_id=proof-harm&sentinel=NAVSENTINEL_SENTINEL_DO_NOT_RUN";
+    const window = loadFixture(`http://127.0.0.1:5173/level1-basic-opacity.html?harm_target=${encodeURIComponent(target)}`);
+    const anchor = window.document.querySelector("#target");
+
+    expect(window.document.documentElement.dataset.navsentinelLocalTargetsReady).toBe("1");
+    expect(anchor?.getAttribute("href")).toBe(target);
+    expect(anchor?.getAttribute("data-navsentinel-local-target-ready")).toBe("1");
+  });
+
   it("disarms every static target when a non-loopback origin rejects validation", () => {
     const window = loadFixture("https://attacker.example/fixture.html");
     const anchor = window.document.querySelector("#target");
