@@ -256,6 +256,8 @@ Current lane intent:
   - timing edge cases, state isolation, and worker lifecycle scenarios
 - `npm run test:e2e:corpus`
   - validation against real phishing page snapshots (requires local download via `node scripts/fetch-phishing-corpus.mjs`)
+- `npm run test:e2e:maintainer-headed`
+  - serial, no-retry receipt from operator-prepared branded Chrome; excluded from normal E2E discovery and CI
 - `npm run measure:fp`
   - false positive measurement against Tranco top-1000 sites
 - `npm run demo:showcase`
@@ -452,6 +454,36 @@ extension is owner-only: agents must not navigate to or control
    expected artifact. The owner
    repeats the extension reload, then the page reload; the agent may inspect the
    claimed target tab after confirmation.
+
+### Maintainer-headed benign receipt (#420)
+
+This narrow lane never launches Chrome, reloads an extension, opens
+`chrome://extensions`, visits live sites, schedules itself, runs FP measurement,
+or claims Gate-3. Chrome Stable no longer supports extension side-load flags,
+and Chrome 136+ remote debugging requires a non-default custom user-data
+directory. The operator starts branded Chrome with that dedicated profile,
+loads/reloads the exact `extension/dist`, and confirms the exact current Git head.
+
+After `npm run build`, run the isolated lane from the same PowerShell session:
+
+```powershell
+$env:NAVSENTINEL_MAINTAINER_CDP_ENDPOINT = "http://127.0.0.1:9222"
+$env:NAVSENTINEL_MAINTAINER_RELOAD_HEAD = (git rev-parse HEAD)
+$env:NAVSENTINEL_MAINTAINER_DEDICATED_PROFILE = "acknowledged"
+$env:NAVSENTINEL_MAINTAINER_EXTENSION_ID = "<the operator-confirmed unpacked extension ID>"
+npm run test:e2e:maintainer-headed
+```
+
+The endpoint is strictly loopback HTTP and the repository must be clean. The
+endpoint's CDP metadata and returned WebSocket target must remain numeric-loopback. The
+runner fails closed on missing/mismatched inputs, build/profile, Chrome/worker,
+readiness, typed-sink, or page/worker-error checks. It creates and closes only
+its local Gym page and sink popup, never the attached browser/context. Both pass
+and failure write ignored JSON and Markdown receipts in
+`artifacts/maintainer-headed/`, with typed metadata and digests only--not
+endpoints, profile paths, URLs, page/console text, sentinels, credentials, or
+secrets. `OBSERVED` is one benign local observation, not Gate-3, release,
+open-web, robustness, or false-positive evidence.
 
 Popup activity is historical and can include events from earlier documents. It
 does not prove that NavSentinel initialized on the page currently under test.

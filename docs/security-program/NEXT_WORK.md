@@ -14,9 +14,14 @@ PR #572 remains parked before AI-31 on the retained SP-F-013 rollback survivor.
 PR #599 has been reconciled with current `main`, but its owner policy and
 branded-Chrome gates remain open. PR #600 is clean with green hosted checks but
 still needs its exact-head owner media-page check. PR #610 merged the bounded
-test-only #449 parent slice for the seven core locality fixtures. The final two
-RW locality holds are PR #613, now retargeted to `main`; it must re-satisfy its
-exact-head checks and review against the landed parent before merge.
+test-only #449 parent slice for the seven core locality fixtures. PR #613 merged
+the final RW locality sink slice, PR #614 merged loopback sink hardening, and PR
+#615 merged the static RW scenario assertion. Those merges retain the
+MODELLED/local-only ceiling. #420 now has a bounded maintainer-headed runner:
+the operator prepares branded Chrome and reloads the exact build, while the
+runner attaches through loopback CDP for one local benign Gym observation. It
+writes redacted pass/failure receipts but does not schedule, measure FP, or
+claim Gate-3.
 
 1. **Finish or park the current runtime queue before opening another vertical.**
    Keep #599 and #600 aligned with current `main`, their exact heads, owner

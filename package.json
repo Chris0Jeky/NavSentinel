@@ -24,6 +24,7 @@
     "test:e2e:live": "playwright test -c playwright.live.config.ts",
     "test:e2e:stress": "playwright test -c playwright.stress.config.ts",
     "test:e2e:corpus": "playwright test -c playwright.corpus.config.ts",
+    "test:e2e:maintainer-headed": "playwright test -c playwright.maintainer.config.ts",
     "demo:showcase": "node scripts/run_demo.mjs core",
     "demo:showcase:operator": "node scripts/run_demo.mjs operator",
     "demo:showcase:recovery": "node scripts/run_demo.mjs recovery",
