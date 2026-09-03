@@ -1249,7 +1249,9 @@ describe("mutation_monitor alert-cap cleanup (#409)", () => {
 describe("mutation_monitor flood-then-inject reserve past the alert cap (#413)", () => {
   beforeEach(() => {
     _resetMutationState();
-    vi.useFakeTimers({ shouldAdvanceTime: true });
+    // This suite advances every timer explicitly. Real-time auto-advancement can
+    // drain an observer batch before the pending-delivery assertion observes it.
+    vi.useFakeTimers({ shouldAdvanceTime: false });
   });
 
   afterEach(() => {
