@@ -54,7 +54,9 @@ type Arm = {
 
 type ArmId = "baseline" | "protected" | "benign" | "mixed";
 
-type MutationId = "control" | "opacity-010" | "zindex-9997";
+type MutationId = "control" | "opacity-010" | "zindex-9997" | "dom-depth-1" | "class-token-a7c1";
+
+type MutationAxis = "control" | "opacity" | "zIndex" | "domDepth" | "classList";
 
 type MutationDefinition = {
   id: MutationId;
@@ -62,22 +64,58 @@ type MutationDefinition = {
   declaredZIndex: string;
   computedOpacity: string;
   computedZIndex: string;
+  axis: MutationAxis;
 };
 
 const MUTATION_DEFINITIONS: readonly MutationDefinition[] = [
-  { id: "control", declaredOpacity: "0.09", declaredZIndex: "9998", computedOpacity: "0.09", computedZIndex: "9998" },
-  { id: "opacity-010", declaredOpacity: "0.10", declaredZIndex: "9998", computedOpacity: "0.1", computedZIndex: "9998" },
-  { id: "zindex-9997", declaredOpacity: "0.09", declaredZIndex: "9997", computedOpacity: "0.09", computedZIndex: "9997" },
+  { id: "control", declaredOpacity: "0.09", declaredZIndex: "9998", computedOpacity: "0.09", computedZIndex: "9998", axis: "control" },
+  { id: "opacity-010", declaredOpacity: "0.10", declaredZIndex: "9998", computedOpacity: "0.1", computedZIndex: "9998", axis: "opacity" },
+  { id: "zindex-9997", declaredOpacity: "0.09", declaredZIndex: "9997", computedOpacity: "0.09", computedZIndex: "9997", axis: "zIndex" },
+  { id: "dom-depth-1", declaredOpacity: "0.09", declaredZIndex: "9998", computedOpacity: "0.09", computedZIndex: "9998", axis: "domDepth" },
+  { id: "class-token-a7c1", declaredOpacity: "0.09", declaredZIndex: "9998", computedOpacity: "0.09", computedZIndex: "9998", axis: "classList" },
 ];
+
+type RectFingerprint = { x: number; y: number; width: number; height: number; top: number; right: number; bottom: number; left: number };
+
+type MutationFingerprint = {
+  classList: string[];
+  parentTag: string | null;
+  ancestorDepthFromBody: number;
+  computedStyle: {
+    position: string;
+    opacity: string;
+    zIndex: string;
+    cursor: string;
+    width: string;
+    height: string;
+    top: string;
+    left: string;
+  };
+  rect: RectFingerprint;
+  targetAttributes: Array<[string, string]>;
+  targetHrefPresent: boolean;
+  targetReady: string | null;
+  localTargetsReady: string | null;
+  benignLink: {
+    attributes: Array<[string, string]>;
+    hrefPresent: boolean;
+    ready: string | null;
+    parentTag: string | null;
+    computedStyle: { display: string; width: string; height: string; top: string; left: string };
+    rect: RectFingerprint;
+  };
+};
 
 type MutationObservation = MutationDefinition & {
   reported: string | null;
   invalid: string | null;
   computedOpacity: string;
   computedZIndex: string;
+  fingerprint: MutationFingerprint;
 };
 
 type ArmObservation = {
+  mutation: MutationObservation;
   role: ProvingGroundRole;
   productReady: boolean;
   outcome: "HARM_REACHED" | "BLOCKED_PRE_HARM" | "OBSERVED";
@@ -385,13 +423,67 @@ async function assertFixtureBootstrapCannotBeReplaced(page: Page, sink: ProvingG
 
 async function readMutationObservation(page: Page, definition: MutationDefinition): Promise<MutationObservation> {
   const observed = await page.evaluate(() => {
+    const rounded = (value: number): number => Number(value.toFixed(3));
+    const rectFingerprint = (element: Element): RectFingerprint => {
+      const rect = element.getBoundingClientRect();
+      return {
+        x: rounded(rect.x), y: rounded(rect.y), width: rounded(rect.width), height: rounded(rect.height),
+        top: rounded(rect.top), right: rounded(rect.right), bottom: rounded(rect.bottom), left: rounded(rect.left),
+      };
+    };
+    const attributes = (element: Element, excluded: Set<string>): Array<[string, string]> => Array.from(element.attributes)
+      .filter((attribute) => !excluded.has(attribute.name))
+      .map((attribute) => [attribute.name, attribute.value] as [string, string])
+      .sort(([left], [right]) => left.localeCompare(right));
+    const depthFromBody = (element: Element): number => {
+      let depth = 0;
+      for (let parent = element.parentElement; parent && parent !== document.body; parent = parent.parentElement) depth += 1;
+      return depth;
+    };
     const root = document.documentElement;
     const trap = document.querySelector<HTMLElement>("#trap");
+    const benignLink = document.querySelector<HTMLElement>("#legit-link");
+    const trapStyle = trap ? getComputedStyle(trap) : null;
+    const benignStyle = benignLink ? getComputedStyle(benignLink) : null;
     return {
       reported: root.getAttribute("data-navsentinel-evasion-mutation"),
       invalid: root.getAttribute("data-navsentinel-fixture-invalid"),
-      computedOpacity: trap ? getComputedStyle(trap).opacity : "missing-trap",
-      computedZIndex: trap ? getComputedStyle(trap).zIndex : "missing-trap",
+      computedOpacity: trapStyle?.opacity ?? "missing-trap",
+      computedZIndex: trapStyle?.zIndex ?? "missing-trap",
+      fingerprint: {
+        classList: trap ? Array.from(trap.classList) : [],
+        parentTag: trap?.parentElement?.tagName ?? null,
+        ancestorDepthFromBody: trap ? depthFromBody(trap) : -1,
+        computedStyle: {
+          position: trapStyle?.position ?? "missing-trap",
+          opacity: trapStyle?.opacity ?? "missing-trap",
+          zIndex: trapStyle?.zIndex ?? "missing-trap",
+          cursor: trapStyle?.cursor ?? "missing-trap",
+          width: trapStyle?.width ?? "missing-trap",
+          height: trapStyle?.height ?? "missing-trap",
+          top: trapStyle?.top ?? "missing-trap",
+          left: trapStyle?.left ?? "missing-trap",
+        },
+        rect: trap ? rectFingerprint(trap) : { x: -1, y: -1, width: -1, height: -1, top: -1, right: -1, bottom: -1, left: -1 },
+        targetAttributes: trap ? attributes(trap, new Set(["class", "href"])) : [],
+        targetHrefPresent: Boolean(trap?.getAttribute("href")),
+        targetReady: trap?.getAttribute("data-navsentinel-local-target-ready") ?? null,
+        localTargetsReady: root.getAttribute("data-navsentinel-local-targets-ready"),
+        benignLink: {
+          attributes: benignLink ? attributes(benignLink, new Set(["href"])) : [],
+          hrefPresent: Boolean(benignLink?.getAttribute("href")),
+          ready: benignLink?.getAttribute("data-navsentinel-local-target-ready") ?? null,
+          parentTag: benignLink?.parentElement?.tagName ?? null,
+          computedStyle: {
+            display: benignStyle?.display ?? "missing-link",
+            width: benignStyle?.width ?? "missing-link",
+            height: benignStyle?.height ?? "missing-link",
+            top: benignStyle?.top ?? "missing-link",
+            left: benignStyle?.left ?? "missing-link",
+          },
+          rect: benignLink ? rectFingerprint(benignLink) : { x: -1, y: -1, width: -1, height: -1, top: -1, right: -1, bottom: -1, left: -1 },
+        },
+      },
     };
   });
   expect(observed.invalid, "The requested mutation must be recognised by the fixture").toBeNull();
@@ -406,12 +498,51 @@ async function readMutationObservation(page: Page, definition: MutationDefinitio
 function assertMutationAxes(
   control: MutationObservation,
   mutant: MutationObservation,
-  changedAxis: "opacity" | "zIndex",
+  changedAxis: MutationAxis,
 ): void {
-  const opacityChanged = mutant.computedOpacity !== control.computedOpacity;
-  const zIndexChanged = mutant.computedZIndex !== control.computedZIndex;
-  expect(opacityChanged, `${mutant.id} must differ from control on its declared axis`).toBe(changedAxis === "opacity");
-  expect(zIndexChanged, `${mutant.id} must differ from control on its declared axis`).toBe(changedAxis === "zIndex");
+  expect(mutant.axis, `${mutant.id} must declare the checked mutation axis`).toBe(changedAxis);
+  expect(mutant.fingerprint.computedStyle.position).toBe(control.fingerprint.computedStyle.position);
+  expect(mutant.fingerprint.computedStyle.cursor).toBe(control.fingerprint.computedStyle.cursor);
+  expect(mutant.fingerprint.computedStyle.width).toBe(control.fingerprint.computedStyle.width);
+  expect(mutant.fingerprint.computedStyle.height).toBe(control.fingerprint.computedStyle.height);
+  expect(mutant.fingerprint.computedStyle.top).toBe(control.fingerprint.computedStyle.top);
+  expect(mutant.fingerprint.computedStyle.left).toBe(control.fingerprint.computedStyle.left);
+  expect(mutant.fingerprint.rect).toEqual(control.fingerprint.rect);
+  expect(mutant.fingerprint.targetAttributes).toEqual(control.fingerprint.targetAttributes);
+  expect(mutant.fingerprint.targetHrefPresent).toBe(control.fingerprint.targetHrefPresent);
+  expect(mutant.fingerprint.targetReady).toBe(control.fingerprint.targetReady);
+  expect(mutant.fingerprint.localTargetsReady).toBe(control.fingerprint.localTargetsReady);
+  expect(mutant.fingerprint.benignLink).toEqual(control.fingerprint.benignLink);
+  if (changedAxis === "opacity") {
+    expect(mutant.fingerprint.classList).toEqual(control.fingerprint.classList);
+    expect(mutant.fingerprint.parentTag).toBe(control.fingerprint.parentTag);
+    expect(mutant.fingerprint.ancestorDepthFromBody).toBe(control.fingerprint.ancestorDepthFromBody);
+    expect(mutant.fingerprint.computedStyle.opacity).not.toBe(control.fingerprint.computedStyle.opacity);
+    expect(mutant.fingerprint.computedStyle.zIndex).toBe(control.fingerprint.computedStyle.zIndex);
+  } else if (changedAxis === "zIndex") {
+    expect(mutant.fingerprint.classList).toEqual(control.fingerprint.classList);
+    expect(mutant.fingerprint.parentTag).toBe(control.fingerprint.parentTag);
+    expect(mutant.fingerprint.ancestorDepthFromBody).toBe(control.fingerprint.ancestorDepthFromBody);
+    expect(mutant.fingerprint.computedStyle.opacity).toBe(control.fingerprint.computedStyle.opacity);
+    expect(mutant.fingerprint.computedStyle.zIndex).not.toBe(control.fingerprint.computedStyle.zIndex);
+  } else if (changedAxis === "domDepth") {
+    expect(mutant.fingerprint.classList).toEqual(control.fingerprint.classList);
+    expect(mutant.fingerprint.parentTag).toBe("SPAN");
+    expect(mutant.fingerprint.parentTag).not.toBe(control.fingerprint.parentTag);
+    expect(mutant.fingerprint.ancestorDepthFromBody).toBe(control.fingerprint.ancestorDepthFromBody + 1);
+    expect(mutant.fingerprint.computedStyle.opacity).toBe(control.fingerprint.computedStyle.opacity);
+    expect(mutant.fingerprint.computedStyle.zIndex).toBe(control.fingerprint.computedStyle.zIndex);
+  } else if (changedAxis === "classList") {
+    expect(mutant.fingerprint.classList).toEqual(["evasion-overlay--token-a7c1"]);
+    expect(mutant.fingerprint.classList).not.toEqual(control.fingerprint.classList);
+    expect(mutant.fingerprint.parentTag).toBe(control.fingerprint.parentTag);
+    expect(mutant.fingerprint.ancestorDepthFromBody).toBe(control.fingerprint.ancestorDepthFromBody);
+    expect(mutant.fingerprint.computedStyle.opacity).toBe(control.fingerprint.computedStyle.opacity);
+    expect(mutant.fingerprint.computedStyle.zIndex).toBe(control.fingerprint.computedStyle.zIndex);
+  } else {
+    expect(mutant.fingerprint.computedStyle.opacity).toBe(control.fingerprint.computedStyle.opacity);
+    expect(mutant.fingerprint.computedStyle.zIndex).toBe(control.fingerprint.computedStyle.zIndex);
+  }
 }
 
 async function writeReceipt(
@@ -484,8 +615,8 @@ async function writeReceipt(
       arms.some((arm) => arm.violations.length > 0) ? "Fixture attempted undeclared network egress" : "",
     ].filter(Boolean).join("; "),
     limitations: [
-      "This receipt proves the shared local-target contract and one representative composite journey across control plus two deterministic CSS neighbours, not mutation robustness across all twelve evasion fixtures.",
-      "The mutation campaign changes only the trap opacity or z-index, one at a time. Its allowlisted query selector cannot select destinations, roles, authorities, or sink URLs.",
+      "This receipt proves the shared local-target contract and one representative composite journey across control plus four deterministic CSS and structural neighbours, not mutation robustness across all twelve evasion fixtures.",
+      "The mutation campaign changes only one declared trap opacity, z-index, DOM-depth, or class-token axis at a time. Its allowlisted query selector cannot select destinations, roles, authorities, or sink URLs.",
       "The existing evasion regression suite remains product-event coupled; its twelve protected fixtures are checked separately and are not promoted beyond MODELLED here.",
       "Bundled Chromium is not branded Chrome, owner Gate-3, open-web efficacy, or release evidence.",
       "Playwright page.addInitScript is privileged harness configuration only; it supplies no hostile or authored-page authority evidence, and SP-F-014 remains PARTIAL.",
@@ -524,7 +655,7 @@ async function writeReceipt(
       cases: campaignCases,
       payload_sha256: campaignPayloadSha256,
       hash_method: "SHA-256(UTF-8 bytes of JSON.stringify({cases: mutation_campaign.cases}))",
-      qualification: "Two deterministic CSS neighbours only; query selection cannot change target authority.",
+      qualification: "Four deterministic CSS and structural neighbours only; query selection cannot change target authority.",
     },
     network_violations: campaign.flatMap((entry) => entry.networkViolations),
     blocked_external_attempts: campaign.flatMap((entry) => entry.blockedExternalAttempts),
@@ -596,6 +727,7 @@ async function runMutationCase(definition: MutationDefinition): Promise<{ result
     await baselinePopup!.waitForLoadState("domcontentloaded", { timeout: 5_000 });
     await expect.poll(() => sink.snapshot().receipts.length).toBe(baselineBefore + 1);
     observations.push({
+      mutation,
       role: "attack", productReady: false, outcome: "HARM_REACHED",
       sinkReceiptsBefore: baselineBefore, sinkReceiptsAfter: sink.snapshot().receipts.length,
       productEvent: null, trustedInput: "mouse",
@@ -605,13 +737,14 @@ async function runMutationCase(definition: MutationDefinition): Promise<{ result
 
     const protectedArm = await openArm(sink, "protected", "attack", true, definition.id);
     arms.push(protectedArm);
-    await readMutationObservation(protectedArm.page, definition);
+    const protectedMutation = await readMutationObservation(protectedArm.page, definition);
     const protectedBefore = sink.snapshot().receipts.length;
     expect(await clickTrap(protectedArm), "The release extension must keep the sink unreachable").toBeNull();
     await waitForToastMatch(protectedArm.page, /Blocked new tab|blocked deceptive click/i, 3_000);
     await protectedArm.page.waitForTimeout(200);
     expect(sink.snapshot().receipts).toHaveLength(protectedBefore);
     observations.push({
+      mutation: protectedMutation,
       role: "attack", productReady: true, outcome: "BLOCKED_PRE_HARM",
       sinkReceiptsBefore: protectedBefore, sinkReceiptsAfter: sink.snapshot().receipts.length,
       productEvent: await readToastText(protectedArm.page), trustedInput: "mouse",
@@ -620,7 +753,7 @@ async function runMutationCase(definition: MutationDefinition): Promise<{ result
 
     const benign = await openArm(sink, "benign", "benign", true, definition.id);
     arms.push(benign);
-    await readMutationObservation(benign.page, definition);
+    const benignMutation = await readMutationObservation(benign.page, definition);
     const benignWorker = await getServiceWorker(benign.context);
     await benignWorker.evaluate(async (eventLogKey) => {
       await chrome.storage.local.set({ [eventLogKey]: [] });
@@ -639,6 +772,7 @@ async function runMutationCase(definition: MutationDefinition): Promise<{ result
     expect(benignEvents[0]).toMatchObject({ kind: "nav_silent_allow", site: "127.0.0.1", destHost: "127.0.0.1" });
     expect(benignEvents[0]).toMatchObject({ reasons: expect.arrayContaining(["keyboard_activation"]) });
     observations.push({
+      mutation: benignMutation,
       role: "benign", productReady: true, outcome: "OBSERVED",
       sinkReceiptsBefore: benignBefore, sinkReceiptsAfter: sink.snapshot().receipts.length,
       productEvent: "nav_silent_allow", productEventCount: benignEvents.length, trustedInput: "keyboard",
@@ -647,7 +781,7 @@ async function runMutationCase(definition: MutationDefinition): Promise<{ result
 
     const mixed = await openArm(sink, "mixed", "mixed", true, definition.id);
     arms.push(mixed);
-    await readMutationObservation(mixed.page, definition);
+    const mixedMutation = await readMutationObservation(mixed.page, definition);
     const mixedBefore = sink.snapshot().receipts.length;
     await activateBenignLinkByKeyboard(mixed.page);
     await expect.poll(() => sink.snapshot().receipts.length).toBe(mixedBefore + 1);
@@ -659,6 +793,7 @@ async function runMutationCase(definition: MutationDefinition): Promise<{ result
     await mixed.page.waitForTimeout(200);
     expect(sink.snapshot().receipts).toHaveLength(mixedBefore + 1);
     observations.push({
+      mutation: mixedMutation,
       role: "mixed", productReady: true, outcome: "BLOCKED_PRE_HARM",
       sinkReceiptsBefore: mixedBefore, sinkReceiptsAfter: sink.snapshot().receipts.length,
       productEvent: await readToastText(mixed.page), trustedInput: "keyboard_then_mouse",
@@ -669,6 +804,10 @@ async function runMutationCase(definition: MutationDefinition): Promise<{ result
     expect(sink.snapshot().receipts.map((receipt) => [receipt.role, receipt.consequence])).toEqual([
       ["attack", HARM_CONSEQUENCE], ["benign", BENIGN_CONSEQUENCE], ["mixed", BENIGN_CONSEQUENCE],
     ]);
+    for (const observation of observations) {
+      expect(observation.mutation.fingerprint, `${observation.role} must preserve the mutation fingerprint`)
+        .toEqual(mutation.fingerprint);
+    }
     for (const arm of arms) expect(arm.violations).toEqual([]);
     return {
       result: {
@@ -703,9 +842,15 @@ test("#449 evasion targets stay local with attack, protected, benign, and mixed 
   expect(control, "The mutation campaign must include a control case").toBeDefined();
   const opacity = campaign.find((entry) => entry.mutation.id === "opacity-010");
   const zIndex = campaign.find((entry) => entry.mutation.id === "zindex-9997");
+  const domDepth = campaign.find((entry) => entry.mutation.id === "dom-depth-1");
+  const classToken = campaign.find((entry) => entry.mutation.id === "class-token-a7c1");
   expect(opacity).toBeDefined();
   expect(zIndex).toBeDefined();
+  expect(domDepth).toBeDefined();
+  expect(classToken).toBeDefined();
   assertMutationAxes(control!.mutation, opacity!.mutation, "opacity");
   assertMutationAxes(control!.mutation, zIndex!.mutation, "zIndex");
+  assertMutationAxes(control!.mutation, domDepth!.mutation, "domDepth");
+  assertMutationAxes(control!.mutation, classToken!.mutation, "classList");
   await writeReceipt(testInfo, control!, campaign, allArms, releaseProfile);
 });
