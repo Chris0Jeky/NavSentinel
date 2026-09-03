@@ -15,11 +15,11 @@ const extensionPath = process.env.EXTENSION_PATH
   : path.resolve(__dirname, "..", "..", "extension", "dist");
 
 const ATTACK_SOURCE_URL = "https://attack.corpus-contract.test/login";
-const ATTACK_RECEIPT_URL = "https://credential-receipt.corpus-contract.test/received";
+const ATTACK_RECEIPT_URL = "https://credential-receipt.attack-contract.test/received";
 const BENIGN_SOURCE_URL = "https://benign.corpus-contract.test/home";
 const BENIGN_RECEIPT_URL = "https://benign.corpus-contract.test/visited";
 const MIXED_SOURCE_URL = "https://mixed.corpus-contract.test/choices";
-const MIXED_RECEIPT_URL = "https://mixed-receipt.corpus-contract.test/visited";
+const MIXED_RECEIPT_URL = "https://mixed.corpus-contract.test/visited";
 
 type ProbeRecord = {
   type: "pointerdown" | "click" | "submit";
@@ -90,13 +90,27 @@ function assertReservedTestUrl(url: string): void {
   }
 }
 
+function reservedTestSite(url: string): string {
+  return new URL(url).hostname.split(".").slice(-2).join(".");
+}
+
+function assertScenarioTopology(): void {
+  if (reservedTestSite(ATTACK_SOURCE_URL) === reservedTestSite(ATTACK_RECEIPT_URL)) {
+    throw new Error("TEST_INVALID:attack_not_cross_site");
+  }
+  if (new URL(BENIGN_SOURCE_URL).origin !== new URL(BENIGN_RECEIPT_URL).origin ||
+      new URL(MIXED_SOURCE_URL).origin !== new URL(MIXED_RECEIPT_URL).origin) {
+    throw new Error("TEST_INVALID:control_not_same_origin");
+  }
+}
+
 function corpusResponse(body: string) {
   return {
     status: 200,
     contentType: "text/html; charset=utf-8",
     headers: {
       "cache-control": "no-store",
-      "content-security-policy": "default-src 'none'; base-uri 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; img-src 'none'; form-action https://credential-receipt.corpus-contract.test",
+      "content-security-policy": "default-src 'none'; base-uri 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; img-src 'none'; form-action https://credential-receipt.attack-contract.test",
       "x-content-type-options": "nosniff",
     },
     body,
@@ -106,6 +120,7 @@ function corpusResponse(body: string) {
 async function startCorpusHarness(): Promise<CorpusHarness> {
   if (!fs.existsSync(extensionPath)) throw new Error("TEST_INVALID:extension_build_missing");
   for (const url of fixtures.keys()) assertReservedTestUrl(url);
+  assertScenarioTopology();
 
   const probeRecords: ProbeRecord[] = [];
   const routeHits = new Map<string, number>();
