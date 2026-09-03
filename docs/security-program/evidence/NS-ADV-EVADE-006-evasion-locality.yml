@@ -3,6 +3,7 @@ scenario_id: NS-ADV-EVADE-006
 capability_id: F-03
 profile: proving_ground
 repository_head: "b8a87caf67fad373d2b3e1d35180b64ff901a32b"
+record_status: "HISTORICAL_PRE_BOOTSTRAP: the receipt and hashes below predate the page-scoped bootstrap. Rerun from a clean committed bootstrap head before treating them as executed evidence for this contract."
 extension_build_sha256: "9809e9fdf97a494dd66ff93551aff7aef2c2eea596dd8e9ebac0623f1b988401"
 extension_profile:
   id: interaction-only
@@ -74,14 +75,17 @@ authority_scope:
   frame: "top frame"
   document: "exact evasion-05-composite.html document for each arm"
   destination: "one armed loopback fake-sink URL per arm, role, and consequence"
+  bootstrap: "An immutable Playwright page-init resolver binds only the exact fixture origin/path and exact role/scenario/origin-mode keys. It changes only one frozen, non-writable Window resolver; it injects no input, event, navigation, document-node mutation, product call, or decision."
   ttl: "one test run; the loopback sink closes in the test finally block"
   use_count: 1
   use_count_scope: "per armed destination"
-  sink_revalidation: "The fake sink validates run, scenario, role, consequence, one-use target authority, and the exact inert sentinel on every request."
+  sink_revalidation: "The final fake sink independently validates active run, scenario, role, consequence, one-use target authority, and the exact inert sentinel on every request."
 limitations:
+  - "This is a historical pre-bootstrap receipt. Its exact head, build, fixture, and receipt hashes do not attest to the page-scoped bootstrap until a clean committed-head rerun refreshes them."
   - "The exact receipt exercises the composite Evasion 05 representative, not mutation robustness across all twelve fixtures."
   - "The other eleven localized fixtures retain product-event-coupled regression checks and are not promoted beyond MODELLED."
   - "Bundled Chromium is not branded Chrome, owner Gate-3, open-web efficacy, or release evidence."
+  - "Playwright page.addInitScript is privileged harness configuration only; it supplies no hostile or authored-page authority evidence, and SP-F-014 remains PARTIAL."
 safety:
   synthetic_only: true
   local_inert_sink: true
@@ -100,7 +104,7 @@ qualification:
   privacy: "The sink retains typed metadata and a SHA-256 of the inert sentinel; no page text, browsing history, credential, or raw secret is stored."
   performance: "No release code changed and no runtime performance claim is made."
   accessibility: "The benign control completed with native Tab and Enter; no manual assistive-technology pass was run."
-  page_origin_ui: "The page cannot lower protection; non-loopback and unarmed local target overrides fail closed before navigation."
+  page_origin_ui: "Query input cannot select or replace a destination: legacy harm_target and benign_target authority is rejected. The exact page-scoped resolver is harness configuration only, not hostile-page authority proof in an already armed context."
 repaired_failures:
   - classification: HARNESS_INVALID
     cause: "Pre-review receipts used a checkout-dependent fixture hash, did not qualify the loaded extension profile, and labeled the benign arm NO_SIGNAL after inspecting only the destination document."

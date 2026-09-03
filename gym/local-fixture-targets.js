@@ -9,12 +9,10 @@
   const FAKE_SINK_PORT_MAX = 46124;
   const TARGETS = Object.freeze({
     benign: Object.freeze({
-      parameter: "benign_target",
       consequence: "benign-navigation",
       sinkRoles: new Set(["benign", "mixed"]),
     }),
     harm: Object.freeze({
-      parameter: "harm_target",
       consequence: "wrong-target-navigation",
       sinkRoles: new Set(["attack", "mixed"]),
     }),
@@ -85,14 +83,33 @@
     return target.href;
   }
 
+  function resolveBootstrap(role, scenarioId, originMode) {
+    const resolver = window.NavSentinelFixtureTargetBootstrap;
+    if (!resolver || typeof resolver.resolve !== "function") return null;
+    const result = resolver.resolve(role, scenarioId, originMode);
+    if (!result || result.status === "document-mismatch") {
+      throw new Error("bootstrap-document-mismatch");
+    }
+    if (result.status !== "resolved") throw new Error("bootstrap-target-unbound");
+    if (result.kind === "fallback") return fallbackUrl(role, scenarioId, originMode);
+    if (result.kind !== "armed-sink" || typeof result.href !== "string") {
+      throw new Error("bootstrap-target-unbound");
+    }
+    // The bootstrap may only return URLs materialized by the live fake sink;
+    // re-check the complete structural contract at the final fixture boundary.
+    return assertArmedLoopbackUrl(result.href, role, scenarioId);
+  }
+
   function url(role, scenarioId, originMode = "same-loopback") {
     if (!Object.hasOwn(TARGETS, role)) throw new Error("invalid-target-role");
     if (!ORIGIN_MODES.has(originMode)) throw new Error("invalid-origin-mode");
     const checkedScenarioId = assertScenarioId(scenarioId);
-    const override = new URLSearchParams(location.search).get(TARGETS[role].parameter);
-    return override
-      ? assertArmedLoopbackUrl(override, role, checkedScenarioId)
-      : fallbackUrl(role, checkedScenarioId, originMode);
+    const legacyParameters = new URLSearchParams(location.search);
+    if (legacyParameters.has("harm_target") || legacyParameters.has("benign_target")) {
+      throw new Error("legacy-target-override-rejected");
+    }
+    return resolveBootstrap(role, checkedScenarioId, originMode) ??
+      fallbackUrl(role, checkedScenarioId, originMode);
   }
 
   function apply(root = document) {
