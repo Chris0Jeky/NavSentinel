@@ -432,6 +432,15 @@ export async function startProvingGroundFakeSinkForHost(
       if (!FIXTURE_SINK_ROLES[binding.targetRole].has(binding.source.sinkRole)) {
         throw new Error(`Fixture sink role is invalid for target role: ${binding.targetRole}`);
       }
+      const href = urlFor(binding.source.sinkRole, binding.source.consequence, binding.source.targetId);
+      const sinkHostname = new URL(href).hostname;
+      const fixtureHostname = new URL(fixtureOrigin).hostname;
+      if (originMode === "same-loopback" && sinkHostname !== fixtureHostname) {
+        throw new Error("Fixture armed sink hostname does not match fixture origin for same-loopback");
+      }
+      if (originMode === "alternate-loopback" && sinkHostname === fixtureHostname) {
+        throw new Error("Fixture armed sink hostname must differ from fixture origin for alternate-loopback");
+      }
       return {
         targetRole: binding.targetRole,
         scenarioId: binding.scenarioId,
@@ -440,7 +449,7 @@ export async function startProvingGroundFakeSinkForHost(
           kind: "armed-sink" as const,
           // Only the live sink can materialize the destination. This lookup
           // validates role, consequence, and target authority without spending it.
-          href: urlFor(binding.source.sinkRole, binding.source.consequence, binding.source.targetId),
+          href,
         },
       };
     });
