@@ -30,7 +30,7 @@ oracle:
   type: independent_harm
   harm_boundary: "Trusted input reaches the typed local wrong-target navigation sink."
   local_artifact_path: "test-results/issue449-evasion-locality-receipt.json"
-  local_receipt_sha256: "a8318a6f99fad5c451e86c0c91175b33665a16b49ba1ca56f6d812fc7b4282e7"
+  local_receipt_sha256: "04a8d58586702ea38f02c2a36522ea6115fb62fc5275af073ab74643583ddd1c"
   oracle_payload_sha256: "a8318a6f99fad5c451e86c0c91175b33665a16b49ba1ca56f6d812fc7b4282e7"
   sink_receipt_count: 3
   invalid_sink_attempt_count: 0
