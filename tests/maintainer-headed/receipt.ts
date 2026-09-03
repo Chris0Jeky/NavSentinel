@@ -56,7 +56,7 @@ export function validateMaintainerInputs(env: NodeJS.ProcessEnv, repository: Rep
 export function parseChromeMetadata(value: unknown): { product: "Chrome"; version: string; debuggerUrl: string } {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new MaintainerHeadedError("browser_identity", "invalid-cdp-metadata");
   const browser = (value as Record<string, unknown>).Browser;
-  if (typeof browser !== "string" || !/^Chrome\/[^/\s]+$/u.test(browser)) throw new MaintainerHeadedError("browser_identity", "non-chrome-product");
+  if (typeof browser !== "string" || !/^Chrome\/(?:0|[1-9]\d{0,5})\.(?:0|[1-9]\d{0,5})\.(?:0|[1-9]\d{0,5})\.(?:0|[1-9]\d{0,5})$/u.test(browser)) throw new MaintainerHeadedError("browser_identity", "non-chrome-product");
   const debuggerUrl = (value as Record<string, unknown>).webSocketDebuggerUrl;
   try {
     const parsed = new URL(typeof debuggerUrl === "string" ? debuggerUrl : "");

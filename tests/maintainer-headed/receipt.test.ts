@@ -24,6 +24,9 @@ describe("maintainer-headed receipt contract", () => {
   it("accepts only redaction-safe Chrome CDP product metadata", () => {
     expect(parseChromeMetadata({ Browser: "Chrome/140.0.7339.1", webSocketDebuggerUrl: "ws://127.0.0.1:9222/devtools/browser/token" })).toEqual({ product: "Chrome", version: "140.0.7339.1", debuggerUrl: "ws://127.0.0.1:9222/devtools/browser/token" });
     expect(() => parseChromeMetadata({ Browser: "Chromium/140.0.0.0" })).toThrow("non-chrome-product");
+    const poison = { Browser: "Chrome/secret-value-must-not-persist", webSocketDebuggerUrl: "ws://127.0.0.1:9222/devtools/browser/token" };
+    expect(() => parseChromeMetadata(poison)).toThrow("non-chrome-product");
+    expect(() => serializeDeterministic({ version: parseChromeMetadata(poison).version })).toThrow("non-chrome-product");
     expect(() => parseChromeMetadata({ Browser: "Chrome/140.0.0.0", webSocketDebuggerUrl: "ws://remote.invalid:9222/token" })).toThrow("non-loopback-cdp-metadata");
   });
 
