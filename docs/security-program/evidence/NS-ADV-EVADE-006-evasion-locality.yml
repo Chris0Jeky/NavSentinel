@@ -231,4 +231,4 @@ verification:
   - "npm run lint"
   - "npx vitest run tests/proving-ground-fake-sink.test.ts: 5 passed"
   - "CI=1 exact-head evasion locality lane: 3 passed with 20 campaign arms in 1.6 minutes"
-  - "CI=1 exact-head evasion regression family: 17 passed in 57.7 seconds"
+  - "CI=1 exact-head evasion regression family: 17 passed in 55.2 seconds"
