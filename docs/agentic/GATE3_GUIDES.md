@@ -447,18 +447,25 @@ Only Chris can record this item complete.
    appears. Recovery is always: freeze the build, reload the unpacked
    extension once, then reload the fixture. Stop on missing or mismatched
    current-page markers.
-3. Open `http://127.0.0.1:5173/index.html?ai35=top`. In page DevTools confirm
-   both readiness markers are `"1"`:
+3. Open `http://127.0.0.1:5173/index.html?ai35=top`. In page DevTools inspect all
+   three artifact/readiness markers:
 
    ```js
-   ["data-navsentinel-capture-ready", "data-navsentinel-bridge-ready"].map(
-     (name) => document.documentElement.getAttribute(name)
-   )
+   ({
+     capture: document.documentElement.getAttribute("data-navsentinel-capture-ready"),
+     bridge: document.documentElement.getAttribute("data-navsentinel-bridge-ready"),
+     guard: document.documentElement.getAttribute("data-navsentinel-ui-guard")
+   })
    ```
+
+   Require `capture` and `bridge` to equal `"1"` and `guard` to equal the
+   12-character revision recorded from the frozen build in step 2. Stop on any
+   mismatch.
 
    In the top page's DevTools, inject a visible child frame served by the other
    loopback hostname, then wait for its load and select that frame's DevTools
-   context to confirm the same two readiness markers:
+   context. Run the same three-marker probe there and require the same exact
+   values before continuing:
 
    ```js
    await (async () => {
