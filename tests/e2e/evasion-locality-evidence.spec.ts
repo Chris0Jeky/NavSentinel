@@ -23,6 +23,7 @@ import {
   PROVING_GROUND_SINK_PATH,
   startProvingGroundEgressFence,
   startProvingGroundFakeSink,
+  startProvingGroundFakeSinkForHost,
   type ProvingGroundEgressAttempt,
   type ProvingGroundFakeSink,
   type ProvingGroundRole,
@@ -1070,6 +1071,204 @@ test("#449 rejects an unknown mutation selector before arming trusted targets @r
     await egressFence?.close().catch(() => {});
     await gym.close();
     await sink.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("#449 keeps alternate-loopback harm and same-loopback benign targets isolated @regression", async () => {
+  const topologyScenarioId = "NS-ADV-UI-001";
+  const harmTargetId = "alternate-loopback-harm";
+  const benignTargetId = "same-loopback-benign";
+  const harmSink = await startProvingGroundFakeSinkForHost("127.0.0.2", {
+    runId: randomUUID(),
+    scenarioId: topologyScenarioId,
+    allowedRoles: ["attack"],
+    allowedConsequences: [HARM_CONSEQUENCE],
+    targetAuthorities: [{
+      id: harmTargetId, role: "attack", consequence: HARM_CONSEQUENCE, maxUses: 1,
+    }],
+  });
+  const benignSink = await startProvingGroundFakeSinkForHost("127.0.0.1", {
+    runId: randomUUID(),
+    scenarioId: topologyScenarioId,
+    allowedRoles: ["benign"],
+    allowedConsequences: [BENIGN_CONSEQUENCE],
+    targetAuthorities: [{
+      id: benignTargetId, role: "benign", consequence: BENIGN_CONSEQUENCE, maxUses: 1,
+    }],
+  });
+  const gym = await startGymServer(gymRoot);
+  const fixtureUrl = new URL("/evasion-04-zindex-9998.html", gym.baseUrl);
+  const harmHref = harmSink.urlFor("attack", HARM_CONSEQUENCE, harmTargetId);
+  const benignHref = benignSink.urlFor("benign", BENIGN_CONSEQUENCE, benignTargetId);
+  const expectedHarm = normalizeTargetAuthority(harmHref);
+  const expectedBenign = normalizeTargetAuthority(benignHref);
+  const harmAuthorityUrl = new URL(harmHref);
+  const benignAuthorityUrl = new URL(benignHref);
+  expect(harmAuthorityUrl.hostname).toBe("127.0.0.2");
+  expect(benignAuthorityUrl.hostname).toBe("127.0.0.1");
+  expect(harmAuthorityUrl.searchParams.get("scenario_id")).toBe(topologyScenarioId);
+  expect(benignAuthorityUrl.searchParams.get("scenario_id")).toBe(topologyScenarioId);
+  expect(harmAuthorityUrl.searchParams.get("target_id")).not.toBe(benignTargetId);
+  expect(harmAuthorityUrl.searchParams.get("run_id")).not.toBe(benignAuthorityUrl.searchParams.get("run_id"));
+
+  const harmBootstrap = harmSink.createFixtureBootstrap({
+    fixtureOrigin: fixtureUrl.origin,
+    fixturePath: fixtureUrl.pathname,
+    bindings: [{
+      targetRole: "harm", scenarioId: topologyScenarioId, originMode: "alternate-loopback",
+      source: {
+        kind: "armed-sink", sinkRole: "attack", consequence: HARM_CONSEQUENCE,
+        targetId: harmTargetId,
+      },
+    }],
+  });
+  const benignBootstrap = benignSink.createFixtureBootstrap({
+    fixtureOrigin: fixtureUrl.origin,
+    fixturePath: fixtureUrl.pathname,
+    bindings: [{
+      targetRole: "benign", scenarioId: topologyScenarioId, originMode: "same-loopback",
+      source: {
+        kind: "armed-sink", sinkRole: "benign", consequence: BENIGN_CONSEQUENCE,
+        targetId: benignTargetId,
+      },
+    }],
+  });
+  const bootstrap = {
+    fixtureOrigin: fixtureUrl.origin,
+    fixturePath: fixtureUrl.pathname,
+    bindings: [...harmBootstrap.bindings, ...benignBootstrap.bindings],
+  };
+  const allowedOrigins = localOrigins(gym.baseUrl);
+  allowedOrigins.add(harmSink.origin);
+  allowedOrigins.add(benignSink.origin);
+  const violations: ProvingGroundEgressAttempt[] = [];
+  const blockedExternalAttempts: ProvingGroundEgressAttempt[] = [];
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-evasion-alternate-loopback-"));
+  let context: BrowserContext | null = null;
+  let egressFence: Awaited<ReturnType<typeof startProvingGroundEgressFence>> | null = null;
+
+  try {
+    egressFence = await startProvingGroundEgressFence(blockedExternalAttempts, allowedOrigins);
+    context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      proxy: { server: egressFence.proxyServer },
+      args: [
+        "--disable-extensions",
+        "--disable-background-networking",
+        "--disable-client-side-phishing-detection",
+        "--disable-component-update",
+        "--disable-default-apps",
+        "--disable-domain-reliability",
+        "--disable-quic",
+        "--disable-sync",
+        "--metrics-recording-only",
+        "--no-default-browser-check",
+        "--no-first-run",
+        "--safebrowsing-disable-auto-update",
+        "--disable-features=AccountConsistency,AutofillServerCommunication,CertificateTransparencyComponentUpdater,MediaRouter,NetworkTimeServiceQuerying,OptimizationHints,Signin",
+      ],
+    });
+    const page = await context.newPage();
+    await context.route("**/*", async (route) => {
+      const target = new URL(route.request().url());
+      if ((target.protocol === "http:" || target.protocol === "https:") &&
+          !allowedOrigins.has(target.origin)) {
+        violations.push({ method: route.request().method(), target: `${target.origin}${target.pathname}`, count: 1 });
+        await route.abort("blockedbyclient");
+        return;
+      }
+      await route.continue();
+    });
+    await installFixtureTargetBootstrap(page, bootstrap);
+    await page.goto(fixtureUrl.href, { waitUntil: "domcontentloaded", timeout: 20_000 });
+    await expect(page.locator("html")).toHaveAttribute("data-navsentinel-local-targets-ready", "1");
+
+    const initialTargets = await page.evaluate(() => {
+      const resolver = (window as unknown as {
+        NavSentinelFixtureTargetBootstrap: {
+          resolve: (role: string, scenarioId: string, originMode: string) => unknown;
+        };
+      }).NavSentinelFixtureTargetBootstrap;
+      const readHref = (selector: string): string | null =>
+        document.querySelector<HTMLAnchorElement>(selector)?.href ?? null;
+      return {
+        descriptor: Object.getOwnPropertyDescriptor(window, "NavSentinelFixtureTargetBootstrap"),
+        harm: readHref("#trap"),
+        benign: readHref(".real-link"),
+        harmResolution: resolver.resolve("harm", "NS-ADV-UI-001", "alternate-loopback"),
+        benignResolution: resolver.resolve("benign", "NS-ADV-UI-001", "same-loopback"),
+      };
+    });
+    expect(initialTargets.descriptor).toMatchObject({ writable: false, configurable: false });
+    expect(initialTargets.harm).not.toBeNull();
+    expect(initialTargets.benign).not.toBeNull();
+    expect(normalizeTargetAuthority(initialTargets.harm!)).toEqual(expectedHarm);
+    expect(normalizeTargetAuthority(initialTargets.benign!)).toEqual(expectedBenign);
+    expect(new URL(initialTargets.harm!).hostname).toBe("127.0.0.2");
+    expect(new URL(initialTargets.benign!).hostname).toBe("127.0.0.1");
+    expect(initialTargets.harmResolution).toEqual({ status: "resolved", kind: "armed-sink", href: harmHref });
+    expect(initialTargets.benignResolution).toEqual({ status: "resolved", kind: "armed-sink", href: benignHref });
+
+    const benignTarget = await page.locator(".real-link").getAttribute("href");
+    expect(benignTarget, "The benign link must expose its exact local destination").toBeTruthy();
+    const committedBenignTarget = new URL(benignTarget!, page.url()).href;
+    let activeBenignLink = false;
+    for (let attempt = 0; attempt < 4 && !activeBenignLink; attempt += 1) {
+      await page.keyboard.press("Tab");
+      activeBenignLink = await page.evaluate(() => document.activeElement?.matches(".real-link") ?? false);
+    }
+    expect(activeBenignLink, "Native Tab traversal must reach the benign link").toBe(true);
+    const benignNavigation = page.waitForURL(committedBenignTarget, {
+      waitUntil: "domcontentloaded", timeout: 10_000,
+    });
+    await page.keyboard.press("Enter");
+    await benignNavigation;
+    await expect.poll(() => benignSink.snapshot().receipts).toHaveLength(1);
+    expect(benignSink.snapshot().receipts[0]).toMatchObject({
+      runId: benignAuthorityUrl.searchParams.get("run_id"),
+      scenarioId: topologyScenarioId,
+      role: "benign",
+      consequence: BENIGN_CONSEQUENCE,
+      targetId: benignTargetId,
+    });
+
+    await page.goto(fixtureUrl.href, { waitUntil: "domcontentloaded", timeout: 20_000 });
+    await expect(page.locator("html")).toHaveAttribute("data-navsentinel-local-targets-ready", "1");
+    const reopenedTargets = await page.evaluate(() => ({
+      harm: document.querySelector<HTMLAnchorElement>("#trap")?.href ?? null,
+      benign: document.querySelector<HTMLAnchorElement>(".real-link")?.href ?? null,
+    }));
+    expect(normalizeTargetAuthority(reopenedTargets.harm!)).toEqual(expectedHarm);
+    expect(normalizeTargetAuthority(reopenedTargets.benign!)).toEqual(expectedBenign);
+
+    const trap = page.locator("#trap");
+    const box = await trap.boundingBox();
+    expect(box, "The z-index trap must be reachable by trusted pointer input").toBeTruthy();
+    const popupPromise = context.waitForEvent("page", { timeout: 1_500 });
+    await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+    const popup = await popupPromise;
+    await popup.waitForLoadState("domcontentloaded", { timeout: 5_000 });
+    expect(popup.url()).toBe(harmHref);
+    await expect.poll(() => harmSink.snapshot().receipts).toHaveLength(1);
+    expect(harmSink.snapshot().receipts[0]).toMatchObject({
+      runId: harmAuthorityUrl.searchParams.get("run_id"),
+      scenarioId: topologyScenarioId,
+      role: "attack",
+      consequence: HARM_CONSEQUENCE,
+      targetId: harmTargetId,
+    });
+    expect(harmSink.snapshot().invalidAttempts).toEqual([]);
+    expect(benignSink.snapshot().invalidAttempts).toEqual([]);
+    expect(violations).toEqual([]);
+    await popup.close();
+  } finally {
+    await context?.close().catch(() => {});
+    await egressFence?.close().catch(() => {});
+    await gym.close();
+    await harmSink.close();
+    await benignSink.close();
     fs.rmSync(userDataDir, { recursive: true, force: true });
   }
 });
