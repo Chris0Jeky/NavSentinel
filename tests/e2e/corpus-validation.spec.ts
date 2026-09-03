@@ -10,6 +10,7 @@ import {
   DETECTION_EVENT_KINDS,
   type ProtectionLevel,
 } from "../corpus/corpus_scoring";
+import { loadValidatedCorpusManifest } from "../../scripts/corpus-manifest.mjs";
 
 /*
  * Corpus-v2 status (#417):
@@ -167,24 +168,6 @@ async function clearEventLog(context: import("@playwright/test").BrowserContext)
 
 // ── Manifest types ─────────────────────────────────────────────────
 
-interface ManifestEntry {
-  filename: string | null;
-  url: string;
-  source: string;
-  fetchDate: string;
-  sizeBytes: number;
-  error?: string;
-}
-
-interface Manifest {
-  generatedAt: string;
-  feedSources: string[];
-  totalUrls: number;
-  downloaded: number;
-  failed: number;
-  entries: ManifestEntry[];
-}
-
 // ── Test result types ──────────────────────────────────────────────
 
 interface PageResult {
@@ -204,16 +187,11 @@ interface PageResult {
 // ── Main test ──────────────────────────────────────────────────────
 
 test("Phishing corpus validation @corpus", async () => {
-  // Skip if prerequisites are missing
+  // The extension is an independent build prerequisite. Corpus input itself is
+  // never skipped: the loader fails closed with TEST_INVALID on every invalid
+  // manifest or snapshot state.
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running corpus tests.");
-  test.skip(!fs.existsSync(manifestPath), "Run fetch-phishing-corpus.mjs first to create the manifest.");
-
-  const manifest: Manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
-  const testable = manifest.entries.filter(
-    (e) => e.filename && e.sizeBytes > 0 && fs.existsSync(path.join(snapshotsDir, e.filename))
-  );
-
-  test.skip(testable.length === 0, "No downloadable snapshots found. Run fetch-phishing-corpus.mjs.");
+  const { manifest, entries: testable } = loadValidatedCorpusManifest({ manifestPath, snapshotsDir });
 
   // Allow plenty of time for the full corpus
   test.setTimeout(testable.length * 30_000 + 60_000);

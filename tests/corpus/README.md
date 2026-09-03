@@ -1,11 +1,13 @@
 # Real-World Phishing Test Corpus
 
-Infrastructure for testing NavSentinel against snapshots of real phishing pages.
-This measures the extension's true positive rate on in-the-wild threats.
+Infrastructure intended to test NavSentinel against snapshots of real phishing
+pages. It does not currently produce a claim-grade true-positive rate: #417's
+real-host routing, trusted input, headed validation, and efficacy gates remain
+pending/`INVALID`.
 
 ## How it works
 
-1. **Fetch snapshots** from public phishing feeds (OpenPhish, PhishTank).
+1. **Fetch snapshots** from public phishing feeds (OpenPhish, PhishTank) and emit a versioned manifest with deterministic filenames, byte sizes, and SHA-256 digests.
 2. **Serve each snapshot** locally via a test HTTP server.
 3. **Load the page** in Chromium with NavSentinel installed.
 4. **Record detections** — nav prompts, credential warnings, rollbacks.
@@ -35,7 +37,7 @@ npm run test:e2e:corpus
 | Path | Description |
 |------|-------------|
 | `scripts/fetch-phishing-corpus.mjs` | Downloads phishing page snapshots |
-| `tests/corpus/manifest.json` | Metadata for downloaded snapshots (gitignored) |
+| `tests/corpus/manifest.json` | Versioned snapshot metadata and byte digests (gitignored) |
 | `tests/corpus/snapshots/` | Downloaded HTML files (gitignored) |
 | `tests/e2e/corpus-validation.spec.ts` | Playwright test that validates detection |
 | `playwright.corpus.config.ts` | Playwright config for corpus tests |
@@ -57,8 +59,17 @@ on a page sourced from a known-phishing feed.
 
 - **Snapshots are not committed** — they contain third-party HTML from phishing
   pages and are gitignored. You must run `fetch-phishing-corpus.mjs` locally.
-- **Tests require local snapshots** — the corpus validation spec skips if no
-  manifest or snapshots exist. This means it will not run in CI by default.
+  The generated manifest uses `schema_version: "1.0.0"`; every successful entry
+  has a deterministic filename, exact byte size, and lowercase SHA-256 digest.
+- **Corpus input fails closed** — the validation lane rejects missing, malformed,
+  empty, unsafe, or byte-mismatched manifests/snapshots as `TEST_INVALID`; it
+  never silently filters invalid entries. Failed downloads are retained only as
+  validated `download_failed` accounting records and are not testable snapshots.
+- **This is contract support, not a valid corpus result** — no real corpus
+  manifest or validation results are committed. Real-host routing, trusted user
+  input, headed validation, and efficacy evidence remain pending/`INVALID` under
+  #417. The current local-server/synthetic-input methodology must not be used to
+  claim a true-positive rate.
 - **Feeds are free** — no API keys required. OpenPhish and PhishTank provide
   public feeds of verified phishing URLs.
 - **Pages may be down** — phishing pages are taken down quickly. The fetch script
