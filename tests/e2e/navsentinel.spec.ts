@@ -1,4 +1,5 @@
 import { test, expect, chromium } from "@playwright/test";
+import { randomUUID } from "node:crypto";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -15,6 +16,7 @@ import {
   waitForToastMatch,
   waitForToastText
 } from "./extension_test_utils";
+import { startProvingGroundFakeSinkForHost } from "./proving_ground_fake_sink";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -25,6 +27,21 @@ const extensionPath = process.env.EXTENSION_PATH
 const gymRoot = path.resolve(__dirname, "..", "..", "gym");
 
 test.setTimeout(120_000);
+
+function startRwHarmSink(scenarioId: string, targetId: string) {
+  return startProvingGroundFakeSinkForHost("127.0.0.2", {
+    runId: randomUUID(),
+    scenarioId,
+    allowedRoles: ["attack"],
+    allowedConsequences: ["wrong-target-navigation"],
+    targetAuthorities: [{
+      id: targetId,
+      role: "attack",
+      consequence: "wrong-target-navigation",
+      maxUses: 1,
+    }],
+  });
+}
 
 test("Level 1 blocks new tabs @smoke", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
@@ -476,6 +493,7 @@ test("RW-01 search result overlay swap blocks deceptive new tab @regression", as
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  const sink = await startRwHarmSink("NS-ADV-SUPPLY-001", "rw01-harm");
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
 
@@ -488,7 +506,12 @@ test("RW-01 search result overlay swap blocks deceptive new tab @regression", as
 
     try {
       const page = await context.newPage();
-      await page.goto(`${baseUrl}/rw01-search-result-overlay-swap.html`, {
+      const fixtureUrl = new URL("/rw01-search-result-overlay-swap.html", baseUrl);
+      fixtureUrl.searchParams.set(
+        "harm_target",
+        sink.urlFor("attack", "wrong-target-navigation", "rw01-harm"),
+      );
+      await page.goto(fixtureUrl.href, {
         waitUntil: "domcontentloaded",
         timeout: 20_000
       });
@@ -521,11 +544,13 @@ test("RW-01 search result overlay swap blocks deceptive new tab @regression", as
       const popup = await popupPromise;
       expect(popup, "Expected the deceptive sponsored-result new tab to be blocked").toBeNull();
       await waitForToastText(page, "Blocked new tab", 3000);
+      expect(sink.snapshot()).toEqual({ receipts: [], invalidAttempts: [] });
       await expect(page).toHaveURL(/rw01-search-result-overlay-swap\.html/);
     } finally {
       await context.close();
     }
   } finally {
+    await sink.close();
     if (gym) await gym.close();
     fs.rmSync(userDataDir, { recursive: true, force: true });
   }
@@ -622,6 +647,7 @@ test("RW-06 legit auth popup allows the first window and blocks the second @regr
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  const sink = await startRwHarmSink("NS-ADV-AUTH-005", "rw06-harm");
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
 
@@ -634,7 +660,12 @@ test("RW-06 legit auth popup allows the first window and blocks the second @regr
 
     try {
       const page = await context.newPage();
-      await page.goto(`${baseUrl}/rw06-legit-auth-second-popup.html`, {
+      const fixtureUrl = new URL("/rw06-legit-auth-second-popup.html", baseUrl);
+      fixtureUrl.searchParams.set(
+        "harm_target",
+        sink.urlFor("attack", "wrong-target-navigation", "rw06-harm"),
+      );
+      await page.goto(fixtureUrl.href, {
         waitUntil: "domcontentloaded",
         timeout: 20_000
       });
@@ -661,10 +692,12 @@ test("RW-06 legit auth popup allows the first window and blocks the second @regr
       await waitForToastText(page, "Blocked popup", 3000);
       await page.waitForTimeout(300);
       expect(context.pages().length).toBe(beforePages + 1);
+      expect(sink.snapshot()).toEqual({ receipts: [], invalidAttempts: [] });
     } finally {
       await context.close();
     }
   } finally {
+    await sink.close();
     if (gym) await gym.close();
     fs.rmSync(userDataDir, { recursive: true, force: true });
   }
@@ -1829,7 +1862,9 @@ test("Level 5 popup consequence reaches the typed local harm sink without extens
       const popup = await popupPromise;
       await popup.waitForLoadState("domcontentloaded", { timeout: 5000 });
       const popupUrl = new URL(popup.url());
+      const fixtureUrl = new URL(originalUrl);
       expect(popupUrl.pathname).toBe("/local-fixture-sink.html");
+      expect(popupUrl.origin).toBe(fixtureUrl.origin);
       expect(popupUrl.searchParams.get("role")).toBe("harm");
       expect(popupUrl.searchParams.get("scenario_id")).toBe("NS-ADV-WIN-001");
       expect(popupUrl.searchParams.get("consequence")).toBe("unauthorized-browsing-context");

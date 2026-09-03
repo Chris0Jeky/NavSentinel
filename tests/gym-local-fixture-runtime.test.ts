@@ -10,9 +10,16 @@ const helperSource = fs.readFileSync(
   "utf8",
 );
 
-function loadFixture(url: string, initialHref = "https://attacker.example/egress") {
+function loadFixture(
+  url: string,
+  initialHref = "https://attacker.example/egress",
+  originMode?: "same-loopback" | "alternate-loopback",
+) {
   const window = new Window({ url });
-  window.document.body.innerHTML = `<a id="target" href="${initialHref}" data-navsentinel-local-target="harm" data-navsentinel-scenario="NS-ADV-UI-001">Target</a>`;
+  const originModeAttribute = originMode
+    ? ` data-navsentinel-local-target-origin="${originMode}"`
+    : "";
+  window.document.body.innerHTML = `<a id="target" href="${initialHref}" data-navsentinel-local-target="harm" data-navsentinel-scenario="NS-ADV-UI-001"${originModeAttribute}>Target</a>`;
   window.eval(helperSource);
   window.document.dispatchEvent(new window.Event("DOMContentLoaded"));
   return window;
@@ -29,6 +36,16 @@ function localTargets(window: Window): LocalTargetApi {
 describe("Gym local-fixture target runtime contract", () => {
   it("arms a typed loopback override", () => {
     const target = "http://127.0.0.1:46100/__navsentinel_fake_sink?run_id=123e4567-e89b-42d3-a456-426614174000&scenario_id=NS-ADV-UI-001&role=attack&consequence=wrong-target-navigation&target_id=proof-harm&sentinel=NAVSENTINEL_SENTINEL_DO_NOT_RUN";
+    const window = loadFixture(`http://127.0.0.1:5173/level1-basic-opacity.html?harm_target=${encodeURIComponent(target)}`);
+    const anchor = window.document.querySelector("#target");
+
+    expect(window.document.documentElement.dataset.navsentinelLocalTargetsReady).toBe("1");
+    expect(anchor?.getAttribute("href")).toBe(target);
+    expect(anchor?.getAttribute("data-navsentinel-local-target-ready")).toBe("1");
+  });
+
+  it("arms a host-separated sink on the same IPv4 loopback family", () => {
+    const target = "http://127.0.0.2:46100/__navsentinel_fake_sink?run_id=123e4567-e89b-42d3-a456-426614174000&scenario_id=NS-ADV-UI-001&role=attack&consequence=wrong-target-navigation&target_id=proof-harm&sentinel=NAVSENTINEL_SENTINEL_DO_NOT_RUN";
     const window = loadFixture(`http://127.0.0.1:5173/level1-basic-opacity.html?harm_target=${encodeURIComponent(target)}`);
     const anchor = window.document.querySelector("#target");
 
@@ -58,8 +75,29 @@ describe("Gym local-fixture target runtime contract", () => {
     expect(parsed.searchParams.get("scenario_id")).toBe("NS-ADV-UI-004");
   });
 
+  it.each([
+    ["IPv4", "http://127.0.0.1:5173/level5-window-open-popunder.html", "127.0.0.1"],
+    ["IPv6", "http://[::1]:5173/level5-window-open-popunder.html", "[::1]"],
+  ])("keeps the default harm fallback on its single-family %s Gym origin", (_family, fixtureUrl, hostname) => {
+    const window = loadFixture(fixtureUrl);
+    const target = new URL(localTargets(window).url("harm", "NS-ADV-WIN-001"));
+    const anchor = window.document.querySelector("#target") as unknown as HTMLAnchorElement | null;
+
+    expect(window.document.documentElement.dataset.navsentinelLocalTargetsReady).toBe("1");
+    expect(anchor?.href).toContain(`${hostname === "[::1]" ? "[::1]" : hostname}:5173/local-fixture-sink.html`);
+    expect(target.hostname).toBe(hostname);
+    expect(target.origin).toBe(new URL(fixtureUrl).origin);
+    expect(target.pathname).toBe("/local-fixture-sink.html");
+    expect(target.searchParams.get("role")).toBe("harm");
+    expect(target.searchParams.get("consequence")).toBe("unauthorized-browsing-context");
+  });
+
   it("fails closed when IPv6 cannot provide an alternate loopback origin", () => {
-    const window = loadFixture("http://[::1]:5173/level9-legit-video-overlay.html");
+    const window = loadFixture(
+      "http://[::1]:5173/level9-legit-video-overlay.html",
+      undefined,
+      "alternate-loopback",
+    );
     const anchor = window.document.querySelector("#target");
 
     expect(window.document.documentElement.dataset.navsentinelLocalTargetsReady).toBe("0");

@@ -2,7 +2,8 @@
   "use strict";
 
   const SENTINEL = "NAVSENTINEL_SENTINEL_DO_NOT_RUN";
-  const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
+  const LOOPBACK_HOSTS = new Set(["127.0.0.1", "127.0.0.2", "localhost", "[::1]"]);
+  const ARMED_LOOPBACK_HOSTS = new Set(["127.0.0.1", "127.0.0.2", "[::1]"]);
   const FAKE_SINK_PATH = "/__navsentinel_fake_sink";
   const FAKE_SINK_PORT_MIN = 46100;
   const FAKE_SINK_PORT_MAX = 46124;
@@ -44,7 +45,7 @@
     const port = Number(parsed.port);
     const target = TARGETS[role];
     const targetId = parsed.searchParams.get("target_id") || "";
-    const armed = (parsed.hostname === "127.0.0.1" || parsed.hostname === "[::1]") &&
+    const armed = ARMED_LOOPBACK_HOSTS.has(parsed.hostname) &&
       port >= FAKE_SINK_PORT_MIN && port <= FAKE_SINK_PORT_MAX &&
       parsed.pathname === FAKE_SINK_PATH &&
       parsed.username === "" && parsed.password === "" && parsed.hash === "" &&
@@ -71,7 +72,10 @@
       throw new Error("non-loopback-fixture-origin");
     }
     const target = new URL("/local-fixture-sink.html", location.href);
-    if (role === "harm" || originMode === "alternate-loopback") {
+    // Keep the default fallback on the fixture server so a Gym bound to one
+    // loopback address family stays reachable. Evidence lanes supply an armed
+    // sink override; hostname separation is only for fixtures that request it.
+    if (originMode === "alternate-loopback") {
       target.hostname = alternateLoopbackHost(location.hostname);
     }
     target.searchParams.set("scenario_id", scenarioId);

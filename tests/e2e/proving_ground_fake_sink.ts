@@ -7,7 +7,7 @@ export const PROVING_GROUND_SINK_PATH = "/__navsentinel_fake_sink";
 const SAFE_SINK_PORT_START = 46100;
 const SAFE_SINK_PORT_ATTEMPTS = 25;
 
-export type ProvingGroundLoopbackHost = "127.0.0.1" | "::1";
+export type ProvingGroundLoopbackHost = "127.0.0.1" | "127.0.0.2" | "::1";
 
 export type ProvingGroundRole = "attack" | "benign" | "mixed";
 

@@ -57,6 +57,19 @@ describe("core Gym fixture locality contracts", () => {
   });
 });
 
+describe("Evasion Gym fixture locality contracts", () => {
+  it("pins alternate-loopback usage to the two cross-loopback fixtures", () => {
+    const evasion04 = fs.readFileSync(path.join(gymRoot, "evasion-04-zindex-9998.html"), "utf8");
+    const evasion11 = fs.readFileSync(path.join(gymRoot, "evasion-11-shadow-dom.html"), "utf8");
+
+    expect(evasion04).toContain('data-navsentinel-local-target="harm"');
+    expect(evasion04).toContain('data-navsentinel-local-target-origin="alternate-loopback"');
+    expect(evasion11).toContain(
+      'window.NavSentinelLocalTargets.url("harm", "NS-ADV-RUNTIME-001", "alternate-loopback")',
+    );
+  });
+});
+
 describe("RW Gym fixture locality contracts", () => {
   it.each(rwFixtures)("keeps $file on typed local benign and harm destinations", ({ file, scenarioId, kind }) => {
     const source = fs.readFileSync(path.join(gymRoot, file), "utf8");
@@ -71,11 +84,15 @@ describe("RW Gym fixture locality contracts", () => {
       expect(harmAnchor, `${file} must contain a typed harm anchor`).not.toBe("");
       expect(benignAnchor, `${file} benign anchor must carry scenario id`).toContain(`data-navsentinel-scenario="${scenarioId}"`);
       expect(harmAnchor, `${file} harm anchor must carry scenario id`).toContain(`data-navsentinel-scenario="${scenarioId}"`);
+      expect(harmAnchor, `${file} harm anchor must request origin separation`)
+        .toContain('data-navsentinel-local-target-origin="alternate-loopback"');
       expect(benignAnchor, `${file} benign anchor must not expose an initial href`).not.toMatch(/\bhref\s*=/iu);
       expect(harmAnchor, `${file} harm anchor must not expose an initial href`).not.toMatch(/\bhref\s*=/iu);
       return;
     }
     expect(source).toContain(`NavSentinelLocalTargets.url('benign', '${scenarioId}')`);
-    expect(source).toContain(`NavSentinelLocalTargets.url('harm', '${scenarioId}')`);
+    expect(source).toContain(
+      `NavSentinelLocalTargets.url('harm', '${scenarioId}', 'alternate-loopback')`,
+    );
   });
 });
