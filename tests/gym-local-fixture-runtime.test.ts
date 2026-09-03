@@ -125,6 +125,26 @@ describe("Gym local-fixture target runtime contract", () => {
     expect(anchor?.hasAttribute("href")).toBe(false);
   });
 
+  it("disarms every static target before rejecting a pre-existing fixture-invalid marker", () => {
+    const window = new Window({ url: "http://127.0.0.1:5173/evasion-05-composite.html?mutation=unknown-selector" });
+    window.document.body.innerHTML = `
+      <a id="harm" href="https://attacker.example/harm" data-navsentinel-local-target="harm" data-navsentinel-scenario="NS-ADV-EVADE-006" data-navsentinel-local-target-ready="1">Harm</a>
+      <a id="benign" href="https://attacker.example/benign" data-navsentinel-local-target="benign" data-navsentinel-scenario="NS-ADV-EVADE-006" data-navsentinel-local-target-ready="1">Benign</a>`;
+    window.document.documentElement.setAttribute("data-navsentinel-fixture-invalid", "unrecognized-mutation");
+
+    window.eval(helperSource);
+    window.document.dispatchEvent(new window.Event("DOMContentLoaded"));
+
+    expect(window.document.documentElement.dataset.navsentinelLocalTargetsReady).toBe("0");
+    expect(window.document.documentElement.dataset.navsentinelLocalTargetsError)
+      .toBe("fixture-invalid:unrecognized-mutation");
+    for (const id of ["harm", "benign"]) {
+      const anchor = window.document.querySelector(`#${id}`);
+      expect(anchor?.hasAttribute("href")).toBe(false);
+      expect(anchor?.getAttribute("data-navsentinel-local-target-ready")).toBeNull();
+    }
+  });
+
   it("fails closed when a resolver is bound to another exact document", () => {
     const window = new Window({ url: "http://127.0.0.1:5173/level1-basic-opacity.html" });
     window.document.body.innerHTML = '<a id="target" href="https://attacker.example/egress" data-navsentinel-local-target="harm" data-navsentinel-scenario="NS-ADV-UI-001">Target</a>';

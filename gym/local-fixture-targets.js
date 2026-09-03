@@ -124,6 +124,9 @@
       }
     }
 
+    const invalidMarker = document.documentElement.getAttribute("data-navsentinel-fixture-invalid");
+    if (invalidMarker !== null) throw new Error(`fixture-invalid:${invalidMarker}`);
+
     const destinations = [];
     for (const node of nodes) {
       if (!(node instanceof HTMLAnchorElement)) throw new Error("target-is-not-anchor");

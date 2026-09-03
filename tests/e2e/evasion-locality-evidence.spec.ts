@@ -966,6 +966,114 @@ test("#449 rejects a same-role target authority swap before activation @regressi
   }
 });
 
+test("#449 rejects an unknown mutation selector before arming trusted targets @regression", async () => {
+  const sink = await startProvingGroundFakeSink({
+    runId: randomUUID(),
+    scenarioId: SCENARIO_ID,
+    allowedRoles: ["attack", "benign"],
+    allowedConsequences: [HARM_CONSEQUENCE, BENIGN_CONSEQUENCE],
+    targetAuthorities: [
+      { id: "unknown-selector-harm", role: "attack", consequence: HARM_CONSEQUENCE, maxUses: 1 },
+      { id: "unknown-selector-benign", role: "benign", consequence: BENIGN_CONSEQUENCE, maxUses: 1 },
+    ],
+  });
+  const gym = await startGymServer(gymRoot);
+  const baseUrl = gym.baseUrl;
+  const fixtureUrl = new URL(`/${FIXTURE_NAME}`, baseUrl);
+  fixtureUrl.searchParams.set("mutation", "unknown-selector");
+  const allowedOrigins = localOrigins(baseUrl);
+  allowedOrigins.add(sink.origin);
+  const violations: ProvingGroundEgressAttempt[] = [];
+  const blockedExternalAttempts: ProvingGroundEgressAttempt[] = [];
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-evasion-unknown-selector-"));
+  let context: BrowserContext | null = null;
+  let egressFence: Awaited<ReturnType<typeof startProvingGroundEgressFence>> | null = null;
+
+  try {
+    egressFence = await startProvingGroundEgressFence(blockedExternalAttempts, allowedOrigins);
+    context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      proxy: { server: egressFence.proxyServer },
+      args: [
+        "--disable-extensions",
+        "--disable-background-networking",
+        "--disable-client-side-phishing-detection",
+        "--disable-component-update",
+        "--disable-default-apps",
+        "--disable-domain-reliability",
+        "--disable-quic",
+        "--disable-sync",
+        "--metrics-recording-only",
+        "--no-default-browser-check",
+        "--no-first-run",
+        "--safebrowsing-disable-auto-update",
+        "--disable-features=AccountConsistency,AutofillServerCommunication,CertificateTransparencyComponentUpdater,MediaRouter,NetworkTimeServiceQuerying,OptimizationHints,Signin",
+      ],
+    });
+    const page = await context.newPage();
+    await context.route("**/*", async (route) => {
+      const target = new URL(route.request().url());
+      if ((target.protocol === "http:" || target.protocol === "https:") &&
+          !allowedOrigins.has(target.origin)) {
+        violations.push({ method: route.request().method(), target: `${target.origin}${target.pathname}`, count: 1 });
+        await route.abort("blockedbyclient");
+        return;
+      }
+      await route.continue();
+    });
+    await installFixtureTargetBootstrap(page, sink.createFixtureBootstrap({
+      fixtureOrigin: fixtureUrl.origin,
+      fixturePath: fixtureUrl.pathname,
+      bindings: [
+        {
+          targetRole: "harm", scenarioId: SCENARIO_ID, originMode: "same-loopback",
+          source: {
+            kind: "armed-sink", sinkRole: "attack", consequence: HARM_CONSEQUENCE,
+            targetId: "unknown-selector-harm",
+          },
+        },
+        {
+          targetRole: "benign", scenarioId: SCENARIO_ID, originMode: "same-loopback",
+          source: {
+            kind: "armed-sink", sinkRole: "benign", consequence: BENIGN_CONSEQUENCE,
+            targetId: "unknown-selector-benign",
+          },
+        },
+      ],
+    }));
+
+    await page.goto(fixtureUrl.href, { waitUntil: "domcontentloaded", timeout: 20_000 });
+    await expect.poll(() => page.evaluate(() => ({
+      invalid: document.documentElement.getAttribute("data-navsentinel-fixture-invalid"),
+      selected: document.documentElement.getAttribute("data-navsentinel-evasion-mutation"),
+      targetsReady: document.documentElement.getAttribute("data-navsentinel-local-targets-ready"),
+      targetError: document.documentElement.getAttribute("data-navsentinel-local-targets-error"),
+      targets: ["#trap", "#legit-link"].map((selector) => {
+        const target = document.querySelector<HTMLAnchorElement>(selector);
+        return { href: target?.getAttribute("href") ?? null, ready: target?.getAttribute("data-navsentinel-local-target-ready") ?? null };
+      }),
+    }))).toEqual({
+      invalid: "unrecognized-mutation",
+      selected: null,
+      targetsReady: "0",
+      targetError: "fixture-invalid:unrecognized-mutation",
+      targets: [
+        { href: null, ready: null },
+        { href: null, ready: null },
+      ],
+    });
+    expect(sink.snapshot()).toEqual({ receipts: [], invalidAttempts: [] });
+    expect(violations).toEqual([]);
+  } finally {
+    await context?.close().catch(() => {});
+    await egressFence?.close().catch(() => {});
+    await gym.close();
+    await sink.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
 test("#449 evasion targets stay local with attack, protected, benign, and mixed evidence @regression", async ({}, testInfo) => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running locality evidence.");
   const releaseProfile = inspectBuiltReleaseProfile(extensionPath, {

@@ -2,7 +2,7 @@ schema_version: "1.0.0"
 scenario_id: NS-ADV-EVADE-006
 capability_id: F-03
 profile: proving_ground
-repository_head: "85f33523c0649ddf11972b9381498c70055ecebd"
+repository_head: "3ba8e1ae2a0e5ce724c92d50d6f15d217c982228"
 extension_build_sha256: "9809e9fdf97a494dd66ff93551aff7aef2c2eea596dd8e9ebac0623f1b988401"
 extension_profile:
   id: interaction-only
@@ -18,10 +18,10 @@ fixture:
   family: "evasion-01-through-12"
   representative_path: "gym/evasion-05-composite.html"
   localized_path_count: 12
-  sha256: "3abaf82c4602aabdd38a9c68e84af1c5bc302c633410da42977eb95612f3636c"
+  sha256: "4982068389528e3881ccd8a704903d49307de41989af435358dd179a121b5a3f"
   hash_method: "SHA-256 over sorted relative paths and Git blob bytes at repository_head"
-  git_blob_sha256: "3abaf82c4602aabdd38a9c68e84af1c5bc302c633410da42977eb95612f3636c"
-  executed_worktree_sha256: "4cea4a723350b9da152e99b03fefe7d58bc8bc159bde5732599414503faa66d2"
+  git_blob_sha256: "4982068389528e3881ccd8a704903d49307de41989af435358dd179a121b5a3f"
+  executed_worktree_sha256: "4c5189cf43f0349284b6a87799dc032a77e8f3997ba38a6cddaf60f3b7bfcda7"
   executed_hash_method: "SHA-256 over sorted relative paths and CRLF checkout bytes used by the browser run"
   target_contract_path: "gym/local-fixture-targets.js"
   fallback_sink_path: "gym/local-fixture-sink.html"
@@ -30,8 +30,8 @@ oracle:
   type: independent_harm
   harm_boundary: "Trusted input reaches the typed local wrong-target navigation sink."
   local_artifact_path: "test-results/issue449-evasion-locality-receipt.json"
-  local_receipt_sha256: "04a8d58586702ea38f02c2a36522ea6115fb62fc5275af073ab74643583ddd1c"
-  oracle_payload_sha256: "a8318a6f99fad5c451e86c0c91175b33665a16b49ba1ca56f6d812fc7b4282e7"
+  local_receipt_sha256: "582947ef52ae9b10016037b1404bdbf2a22acd40b3301ebd1d72f51c8bd28c94"
+  oracle_payload_sha256: "16f9bcd856092ba189b19b58a17629c76b58254ec7d51d8bf3d7a083676cb9e7"
   sink_receipt_count: 3
   invalid_sink_attempt_count: 0
   target_authority_assertion:
@@ -76,7 +76,7 @@ mutation_campaign:
   selector: mutation
   deterministic: true
   hash_method: "SHA-256(UTF-8 bytes of JSON.stringify({cases: mutation_campaign.cases}))"
-  payload_sha256: "a8318a6f99fad5c451e86c0c91175b33665a16b49ba1ca56f6d812fc7b4282e7"
+  payload_sha256: "16f9bcd856092ba189b19b58a17629c76b58254ec7d51d8bf3d7a083676cb9e7"
   control_case_count: 1
   declared_mutation_count: 4
   total_arm_count: 20
@@ -97,7 +97,7 @@ mutation_campaign:
       outcomes: [HARM_REACHED, BLOCKED_PRE_HARM, OBSERVED, BLOCKED_PRE_HARM]
       sink_receipt_count: 3
       network_violation_count: 0
-      blocked_external_attempt_count: 55
+      blocked_external_attempt_count: 54
     - id: opacity-010
       changed_axis: opacity
       requested_query: "mutation=opacity-010"
@@ -111,7 +111,7 @@ mutation_campaign:
       outcomes: [HARM_REACHED, BLOCKED_PRE_HARM, OBSERVED, BLOCKED_PRE_HARM]
       sink_receipt_count: 3
       network_violation_count: 0
-      blocked_external_attempt_count: 52
+      blocked_external_attempt_count: 49
     - id: zindex-9997
       changed_axis: z_index
       requested_query: "mutation=zindex-9997"
@@ -125,7 +125,7 @@ mutation_campaign:
       outcomes: [HARM_REACHED, BLOCKED_PRE_HARM, OBSERVED, BLOCKED_PRE_HARM]
       sink_receipt_count: 3
       network_violation_count: 0
-      blocked_external_attempt_count: 55
+      blocked_external_attempt_count: 56
     - id: dom-depth-1
       changed_axis: dom_depth
       requested_query: "mutation=dom-depth-1"
@@ -139,7 +139,7 @@ mutation_campaign:
       outcomes: [HARM_REACHED, BLOCKED_PRE_HARM, OBSERVED, BLOCKED_PRE_HARM]
       sink_receipt_count: 3
       network_violation_count: 0
-      blocked_external_attempt_count: 56
+      blocked_external_attempt_count: 50
     - id: class-token-a7c1
       changed_axis: class_list
       requested_query: "mutation=class-token-a7c1"
@@ -153,7 +153,7 @@ mutation_campaign:
       outcomes: [HARM_REACHED, BLOCKED_PRE_HARM, OBSERVED, BLOCKED_PRE_HARM]
       sink_receipt_count: 3
       network_violation_count: 0
-      blocked_external_attempt_count: 56
+      blocked_external_attempt_count: 53
   survivors: []
   invalid_cases: []
 outcome: BLOCKED_PRE_HARM
@@ -176,7 +176,6 @@ authority_scope:
 limitations:
   - "The exact receipt exercises the composite Evasion 05 control plus four deterministic neighbours across two CSS and two structural axes; it is not a randomized DOM, text, localization, timing, viewport, or holdout campaign."
   - "The mutation selector changes only one allowlisted opacity, z-index, wrapper-depth, or class-token axis and cannot select a destination, role, authority, or sink URL."
-  - "The fixture marks an unrecognized mutation selector invalid, but this slice does not add a dedicated unknown-selector browser regression."
   - "The other eleven localized fixtures retain product-event-coupled regression checks and are not promoted beyond MODELLED."
   - "Bundled Chromium is not branded Chrome, owner Gate-3, open-web efficacy, or release evidence."
   - "Playwright page.addInitScript is privileged harness configuration only; it supplies no hostile or authored-page authority evidence, and SP-F-014 remains PARTIAL."
@@ -193,7 +192,7 @@ network_violations: []
 blocked_external_attempts:
   - class: "Chromium platform CONNECT"
     distinct_target_count: 3
-    attempt_count: 274
+    attempt_count: 262
 qualification:
   privacy: "The authority normalizer adds no full runtime URLs or raw sentinel to the receipt. Existing sink snapshots persist synthetic run UUIDs and typed metadata plus a SHA-256 of the inert sentinel; no page text, browsing history, credential, or raw secret is stored."
   performance: "No release code changed and no runtime performance claim is made."
@@ -231,5 +230,5 @@ verification:
   - "npm run typecheck"
   - "npm run lint"
   - "npx vitest run tests/proving-ground-fake-sink.test.ts: 5 passed"
-  - "CI=1 exact-head evasion locality lane: 2 passed with 20 campaign arms in 50.8 seconds"
-  - "CI=1 exact-head evasion regression family: 17 passed in 57.7 seconds"
+  - "CI=1 exact-head evasion locality lane: 3 passed with 20 campaign arms in 1.6 minutes"
+  - "CI=1 exact-head evasion regression family: 17 passed in 55.2 seconds"
