@@ -22,7 +22,11 @@ import fs from "node:fs";
 import path from "node:path";
 import https from "node:https";
 import http from "node:http";
-import crypto from "node:crypto";
+import {
+  createCorpusManifest,
+  sha256,
+  snapshotFilename,
+} from "./corpus-manifest.mjs";
 
 // ── Constants ──────────────────────────────────────────────────────
 
@@ -203,15 +207,6 @@ async function fetchPhishTankUrls() {
 
 // ── Snapshot naming ────────────────────────────────────────────────
 
-/**
- * Generate a deterministic filename for a snapshot.
- * Format: {source}-{sha256-first-16-chars}.html
- */
-function snapshotFilename(source, url) {
-  const hash = crypto.createHash("sha256").update(url).digest("hex").slice(0, 16);
-  return `${source}-${hash}.html`;
-}
-
 // ── Main ───────────────────────────────────────────────────────────
 
 async function main() {
@@ -299,6 +294,7 @@ async function main() {
         source: entry.source,
         fetchDate: new Date().toISOString(),
         sizeBytes: buf.length,
+        sha256: sha256(buf),
       });
     } else {
       failed++;
@@ -310,20 +306,18 @@ async function main() {
         source: entry.source,
         fetchDate: new Date().toISOString(),
         sizeBytes: 0,
-        error: "Download failed or empty response",
+        sha256: null,
+        error: "download_failed",
       });
     }
   }
 
   // Write manifest
-  const manifestData = {
+  const manifestData = createCorpusManifest({
     generatedAt: new Date().toISOString(),
     feedSources: opts.source === "all" ? ["openphish", "phishtank"] : [opts.source],
-    totalUrls: selected.length,
-    downloaded,
-    failed,
     entries: manifest,
-  };
+  });
 
   fs.writeFileSync(MANIFEST_PATH, JSON.stringify(manifestData, null, 2), "utf-8");
 
