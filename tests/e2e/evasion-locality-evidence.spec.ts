@@ -600,6 +600,9 @@ function assertMutationAxes(
   expect(mutant.fingerprint.targetReady).toBe(control.fingerprint.targetReady);
   expect(mutant.fingerprint.localTargetsReady).toBe(control.fingerprint.localTargetsReady);
   expect(mutant.fingerprint.benignLink).toEqual(control.fingerprint.benignLink);
+  if (changedAxis !== "transform") {
+    expect(mutant.fingerprint.rect).toEqual(control.fingerprint.rect);
+  }
   if (changedAxis === "opacity") {
     expect(mutant.fingerprint.classList).toEqual(control.fingerprint.classList);
     expect(mutant.fingerprint.parentTag).toBe(control.fingerprint.parentTag);
@@ -650,7 +653,6 @@ function assertMutationAxes(
     expect(mutant.fingerprint.rect.right).toBeCloseTo(controlCenterX + mutant.fingerprint.rect.width / 2, 2);
     expect(mutant.fingerprint.rect.bottom).toBeCloseTo(controlCenterY + mutant.fingerprint.rect.height / 2, 2);
   } else {
-    expect(mutant.fingerprint.rect).toEqual(control.fingerprint.rect);
     expect(mutant.fingerprint.computedStyle.opacity).toBe(control.fingerprint.computedStyle.opacity);
     expect(mutant.fingerprint.computedStyle.zIndex).toBe(control.fingerprint.computedStyle.zIndex);
     expect(mutant.fingerprint.computedStyle.transform).toBe(control.fingerprint.computedStyle.transform);
@@ -751,8 +753,8 @@ async function writeReceipt(
       arms.some((arm) => arm.violations.length > 0) ? "Fixture attempted undeclared network egress" : "",
     ].filter(Boolean).join("; "),
     limitations: [
-      "This receipt proves the shared local-target contract and one representative composite journey across control plus four deterministic CSS and structural neighbours, not mutation robustness across all twelve evasion fixtures.",
-      "The mutation campaign changes only one declared trap opacity, z-index, DOM-depth, or class-token axis at a time. Its allowlisted query selector cannot select destinations, roles, authorities, or sink URLs.",
+      "This receipt proves the shared local-target contract and one representative composite journey across control plus five deterministic CSS and structural neighbours, not mutation robustness across all twelve evasion fixtures.",
+      "The mutation campaign changes only one declared trap opacity, z-index, DOM-depth, class-token, or transform axis at a time; the transform case requires deterministic 1.01 center-origin geometry. Its allowlisted query selector cannot select destinations, roles, authorities, or sink URLs.",
       "The existing evasion regression suite remains product-event coupled; its twelve protected fixtures are checked separately and are not promoted beyond MODELLED here.",
       "Bundled Chromium is not branded Chrome, owner Gate-3, open-web efficacy, or release evidence.",
       "Playwright page.addInitScript is privileged harness configuration only; it supplies no hostile or authored-page authority evidence, and SP-F-014 remains PARTIAL.",
