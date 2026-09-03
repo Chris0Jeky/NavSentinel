@@ -621,6 +621,7 @@ function assertMutationAxes(
     expect(mutant.fingerprint.ancestorDepthFromBody).toBe(control.fingerprint.ancestorDepthFromBody + 1);
     expect(mutant.fingerprint.computedStyle.opacity).toBe(control.fingerprint.computedStyle.opacity);
     expect(mutant.fingerprint.computedStyle.zIndex).toBe(control.fingerprint.computedStyle.zIndex);
+    expect(mutant.fingerprint.computedStyle.transform).toBe(control.fingerprint.computedStyle.transform);
   } else if (changedAxis === "classList") {
     expect(mutant.fingerprint.classList).toEqual(["evasion-overlay--token-a7c1"]);
     expect(mutant.fingerprint.classList).not.toEqual(control.fingerprint.classList);
@@ -635,7 +636,6 @@ function assertMutationAxes(
     expect(mutant.fingerprint.ancestorDepthFromBody).toBe(control.fingerprint.ancestorDepthFromBody);
     expect(mutant.fingerprint.computedStyle.opacity).toBe(control.fingerprint.computedStyle.opacity);
     expect(mutant.fingerprint.computedStyle.zIndex).toBe(control.fingerprint.computedStyle.zIndex);
-    expect(mutant.fingerprint.computedStyle.transform).toBe(control.fingerprint.computedStyle.transform);
     expect(mutant.fingerprint.computedStyle.transform).not.toBe(control.fingerprint.computedStyle.transform);
     const controlCenterX = control.fingerprint.rect.x + control.fingerprint.rect.width / 2;
     const controlCenterY = control.fingerprint.rect.y + control.fingerprint.rect.height / 2;
