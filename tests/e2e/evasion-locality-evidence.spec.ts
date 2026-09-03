@@ -57,25 +57,28 @@ type Arm = {
 
 type ArmId = "baseline" | "protected" | "benign" | "mixed";
 
-type MutationId = "control" | "opacity-010" | "zindex-9997" | "dom-depth-1" | "class-token-a7c1";
+type MutationId = "control" | "opacity-010" | "zindex-9997" | "dom-depth-1" | "class-token-a7c1" | "transform-scale-101";
 
-type MutationAxis = "control" | "opacity" | "zIndex" | "domDepth" | "classList";
+type MutationAxis = "control" | "opacity" | "zIndex" | "domDepth" | "classList" | "transform";
 
 type MutationDefinition = {
   id: MutationId;
   declaredOpacity: string;
   declaredZIndex: string;
+  declaredTransform: string;
   computedOpacity: string;
   computedZIndex: string;
+  computedTransform: string;
   axis: MutationAxis;
 };
 
 const MUTATION_DEFINITIONS: readonly MutationDefinition[] = [
-  { id: "control", declaredOpacity: "0.09", declaredZIndex: "9998", computedOpacity: "0.09", computedZIndex: "9998", axis: "control" },
-  { id: "opacity-010", declaredOpacity: "0.10", declaredZIndex: "9998", computedOpacity: "0.1", computedZIndex: "9998", axis: "opacity" },
-  { id: "zindex-9997", declaredOpacity: "0.09", declaredZIndex: "9997", computedOpacity: "0.09", computedZIndex: "9997", axis: "zIndex" },
-  { id: "dom-depth-1", declaredOpacity: "0.09", declaredZIndex: "9998", computedOpacity: "0.09", computedZIndex: "9998", axis: "domDepth" },
-  { id: "class-token-a7c1", declaredOpacity: "0.09", declaredZIndex: "9998", computedOpacity: "0.09", computedZIndex: "9998", axis: "classList" },
+  { id: "control", declaredOpacity: "0.09", declaredZIndex: "9998", declaredTransform: "none", computedOpacity: "0.09", computedZIndex: "9998", computedTransform: "none", axis: "control" },
+  { id: "opacity-010", declaredOpacity: "0.10", declaredZIndex: "9998", declaredTransform: "none", computedOpacity: "0.1", computedZIndex: "9998", computedTransform: "none", axis: "opacity" },
+  { id: "zindex-9997", declaredOpacity: "0.09", declaredZIndex: "9997", declaredTransform: "none", computedOpacity: "0.09", computedZIndex: "9997", computedTransform: "none", axis: "zIndex" },
+  { id: "dom-depth-1", declaredOpacity: "0.09", declaredZIndex: "9998", declaredTransform: "none", computedOpacity: "0.09", computedZIndex: "9998", computedTransform: "none", axis: "domDepth" },
+  { id: "class-token-a7c1", declaredOpacity: "0.09", declaredZIndex: "9998", declaredTransform: "none", computedOpacity: "0.09", computedZIndex: "9998", computedTransform: "none", axis: "classList" },
+  { id: "transform-scale-101", declaredOpacity: "0.09", declaredZIndex: "9998", declaredTransform: "scale(1.01)", computedOpacity: "0.09", computedZIndex: "9998", computedTransform: "matrix(1.01, 0, 0, 1.01, 0, 0)", axis: "transform" },
 ];
 
 type RectFingerprint = { x: number; y: number; width: number; height: number; top: number; right: number; bottom: number; left: number };
@@ -88,6 +91,7 @@ type MutationFingerprint = {
     position: string;
     opacity: string;
     zIndex: string;
+    transform: string;
     cursor: string;
     width: string;
     height: string;
@@ -539,6 +543,7 @@ async function readMutationObservation(page: Page, definition: MutationDefinitio
           position: trapStyle?.position ?? "missing-trap",
           opacity: trapStyle?.opacity ?? "missing-trap",
           zIndex: trapStyle?.zIndex ?? "missing-trap",
+          transform: trapStyle?.transform ?? "missing-trap",
           cursor: trapStyle?.cursor ?? "missing-trap",
           width: trapStyle?.width ?? "missing-trap",
           height: trapStyle?.height ?? "missing-trap",
@@ -573,6 +578,8 @@ async function readMutationObservation(page: Page, definition: MutationDefinitio
     .toBe(definition.computedOpacity);
   expect(observed.computedZIndex, "The trap z-index must match the mutation definition")
     .toBe(definition.computedZIndex);
+  expect(observed.fingerprint.computedStyle.transform, "The trap transform must match the mutation definition")
+    .toBe(definition.computedTransform);
   return { ...definition, ...observed };
 }
 
@@ -588,24 +595,28 @@ function assertMutationAxes(
   expect(mutant.fingerprint.computedStyle.height).toBe(control.fingerprint.computedStyle.height);
   expect(mutant.fingerprint.computedStyle.top).toBe(control.fingerprint.computedStyle.top);
   expect(mutant.fingerprint.computedStyle.left).toBe(control.fingerprint.computedStyle.left);
-  expect(mutant.fingerprint.rect).toEqual(control.fingerprint.rect);
   expect(mutant.fingerprint.targetAttributes).toEqual(control.fingerprint.targetAttributes);
   expect(mutant.fingerprint.targetHrefPresent).toBe(control.fingerprint.targetHrefPresent);
   expect(mutant.fingerprint.targetReady).toBe(control.fingerprint.targetReady);
   expect(mutant.fingerprint.localTargetsReady).toBe(control.fingerprint.localTargetsReady);
   expect(mutant.fingerprint.benignLink).toEqual(control.fingerprint.benignLink);
+  if (changedAxis !== "transform") {
+    expect(mutant.fingerprint.rect).toEqual(control.fingerprint.rect);
+  }
   if (changedAxis === "opacity") {
     expect(mutant.fingerprint.classList).toEqual(control.fingerprint.classList);
     expect(mutant.fingerprint.parentTag).toBe(control.fingerprint.parentTag);
     expect(mutant.fingerprint.ancestorDepthFromBody).toBe(control.fingerprint.ancestorDepthFromBody);
     expect(mutant.fingerprint.computedStyle.opacity).not.toBe(control.fingerprint.computedStyle.opacity);
     expect(mutant.fingerprint.computedStyle.zIndex).toBe(control.fingerprint.computedStyle.zIndex);
+    expect(mutant.fingerprint.computedStyle.transform).toBe(control.fingerprint.computedStyle.transform);
   } else if (changedAxis === "zIndex") {
     expect(mutant.fingerprint.classList).toEqual(control.fingerprint.classList);
     expect(mutant.fingerprint.parentTag).toBe(control.fingerprint.parentTag);
     expect(mutant.fingerprint.ancestorDepthFromBody).toBe(control.fingerprint.ancestorDepthFromBody);
     expect(mutant.fingerprint.computedStyle.opacity).toBe(control.fingerprint.computedStyle.opacity);
     expect(mutant.fingerprint.computedStyle.zIndex).not.toBe(control.fingerprint.computedStyle.zIndex);
+    expect(mutant.fingerprint.computedStyle.transform).toBe(control.fingerprint.computedStyle.transform);
   } else if (changedAxis === "domDepth") {
     expect(mutant.fingerprint.classList).toEqual(control.fingerprint.classList);
     expect(mutant.fingerprint.parentTag).toBe("SPAN");
@@ -613,6 +624,7 @@ function assertMutationAxes(
     expect(mutant.fingerprint.ancestorDepthFromBody).toBe(control.fingerprint.ancestorDepthFromBody + 1);
     expect(mutant.fingerprint.computedStyle.opacity).toBe(control.fingerprint.computedStyle.opacity);
     expect(mutant.fingerprint.computedStyle.zIndex).toBe(control.fingerprint.computedStyle.zIndex);
+    expect(mutant.fingerprint.computedStyle.transform).toBe(control.fingerprint.computedStyle.transform);
   } else if (changedAxis === "classList") {
     expect(mutant.fingerprint.classList).toEqual(["evasion-overlay--token-a7c1"]);
     expect(mutant.fingerprint.classList).not.toEqual(control.fingerprint.classList);
@@ -620,9 +632,30 @@ function assertMutationAxes(
     expect(mutant.fingerprint.ancestorDepthFromBody).toBe(control.fingerprint.ancestorDepthFromBody);
     expect(mutant.fingerprint.computedStyle.opacity).toBe(control.fingerprint.computedStyle.opacity);
     expect(mutant.fingerprint.computedStyle.zIndex).toBe(control.fingerprint.computedStyle.zIndex);
+    expect(mutant.fingerprint.computedStyle.transform).toBe(control.fingerprint.computedStyle.transform);
+  } else if (changedAxis === "transform") {
+    expect(mutant.fingerprint.classList).toEqual(control.fingerprint.classList);
+    expect(mutant.fingerprint.parentTag).toBe(control.fingerprint.parentTag);
+    expect(mutant.fingerprint.ancestorDepthFromBody).toBe(control.fingerprint.ancestorDepthFromBody);
+    expect(mutant.fingerprint.computedStyle.opacity).toBe(control.fingerprint.computedStyle.opacity);
+    expect(mutant.fingerprint.computedStyle.zIndex).toBe(control.fingerprint.computedStyle.zIndex);
+    expect(mutant.fingerprint.computedStyle.transform).not.toBe(control.fingerprint.computedStyle.transform);
+    const controlCenterX = control.fingerprint.rect.x + control.fingerprint.rect.width / 2;
+    const controlCenterY = control.fingerprint.rect.y + control.fingerprint.rect.height / 2;
+    const mutantCenterX = mutant.fingerprint.rect.x + mutant.fingerprint.rect.width / 2;
+    const mutantCenterY = mutant.fingerprint.rect.y + mutant.fingerprint.rect.height / 2;
+    expect(mutant.fingerprint.rect.width).toBeCloseTo(control.fingerprint.rect.width * 1.01, 2);
+    expect(mutant.fingerprint.rect.height).toBeCloseTo(control.fingerprint.rect.height * 1.01, 2);
+    expect(mutantCenterX).toBeCloseTo(controlCenterX, 2);
+    expect(mutantCenterY).toBeCloseTo(controlCenterY, 2);
+    expect(mutant.fingerprint.rect.x).toBeCloseTo(controlCenterX - mutant.fingerprint.rect.width / 2, 2);
+    expect(mutant.fingerprint.rect.y).toBeCloseTo(controlCenterY - mutant.fingerprint.rect.height / 2, 2);
+    expect(mutant.fingerprint.rect.right).toBeCloseTo(controlCenterX + mutant.fingerprint.rect.width / 2, 2);
+    expect(mutant.fingerprint.rect.bottom).toBeCloseTo(controlCenterY + mutant.fingerprint.rect.height / 2, 2);
   } else {
     expect(mutant.fingerprint.computedStyle.opacity).toBe(control.fingerprint.computedStyle.opacity);
     expect(mutant.fingerprint.computedStyle.zIndex).toBe(control.fingerprint.computedStyle.zIndex);
+    expect(mutant.fingerprint.computedStyle.transform).toBe(control.fingerprint.computedStyle.transform);
   }
 }
 
@@ -720,8 +753,8 @@ async function writeReceipt(
       arms.some((arm) => arm.violations.length > 0) ? "Fixture attempted undeclared network egress" : "",
     ].filter(Boolean).join("; "),
     limitations: [
-      "This receipt proves the shared local-target contract and one representative composite journey across control plus four deterministic CSS and structural neighbours, not mutation robustness across all twelve evasion fixtures.",
-      "The mutation campaign changes only one declared trap opacity, z-index, DOM-depth, or class-token axis at a time. Its allowlisted query selector cannot select destinations, roles, authorities, or sink URLs.",
+      "This receipt proves the shared local-target contract and one representative composite journey across control plus five deterministic CSS and structural neighbours, not mutation robustness across all twelve evasion fixtures.",
+      "The mutation campaign changes only one declared trap opacity, z-index, DOM-depth, class-token, or transform axis at a time; the transform case requires deterministic 1.01 center-origin geometry. Its allowlisted query selector cannot select destinations, roles, authorities, or sink URLs.",
       "The existing evasion regression suite remains product-event coupled; its twelve protected fixtures are checked separately and are not promoted beyond MODELLED here.",
       "Bundled Chromium is not branded Chrome, owner Gate-3, open-web efficacy, or release evidence.",
       "Playwright page.addInitScript is privileged harness configuration only; it supplies no hostile or authored-page authority evidence, and SP-F-014 remains PARTIAL.",
@@ -760,7 +793,7 @@ async function writeReceipt(
       cases: campaignCases,
       payload_sha256: campaignPayloadSha256,
       hash_method: "SHA-256(UTF-8 bytes of JSON.stringify({cases: mutation_campaign.cases}))",
-      qualification: "Four deterministic CSS and structural neighbours only; query selection cannot change target authority.",
+      qualification: "Five deterministic CSS and structural neighbours only; query selection cannot change target authority.",
     },
     network_violations: campaign.flatMap((entry) => entry.networkViolations),
     blocked_external_attempts: campaign.flatMap((entry) => entry.blockedExternalAttempts),
@@ -1292,13 +1325,16 @@ test("#449 evasion targets stay local with attack, protected, benign, and mixed 
   const zIndex = campaign.find((entry) => entry.mutation.id === "zindex-9997");
   const domDepth = campaign.find((entry) => entry.mutation.id === "dom-depth-1");
   const classToken = campaign.find((entry) => entry.mutation.id === "class-token-a7c1");
+  const transform = campaign.find((entry) => entry.mutation.id === "transform-scale-101");
   expect(opacity).toBeDefined();
   expect(zIndex).toBeDefined();
   expect(domDepth).toBeDefined();
   expect(classToken).toBeDefined();
+  expect(transform).toBeDefined();
   assertMutationAxes(control!.mutation, opacity!.mutation, "opacity");
   assertMutationAxes(control!.mutation, zIndex!.mutation, "zIndex");
   assertMutationAxes(control!.mutation, domDepth!.mutation, "domDepth");
   assertMutationAxes(control!.mutation, classToken!.mutation, "classList");
+  assertMutationAxes(control!.mutation, transform!.mutation, "transform");
   await writeReceipt(testInfo, control!, campaign, allArms, releaseProfile);
 });

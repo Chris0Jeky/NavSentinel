@@ -1465,7 +1465,7 @@
       "oracle_type": "independent_harm",
       "evidence_state": "MODELLED",
       "evidence_validity": "CURRENT_REGRESSION",
-      "known_limitation": "The exact sink receipt exercises the composite Evasion 05 control plus four deterministic neighbours across two CSS and two structural axes. The other eleven localized fixtures retain their existing product-event-coupled regression checks, and randomized DOM, text, localization, timing, viewport, and holdout robustness remain unproved.",
+      "known_limitation": "The exact sink receipt exercises the composite Evasion 05 control plus five deterministic neighbours across three CSS and two structural axes. The other eleven localized fixtures retain their existing product-event-coupled regression checks, and randomized DOM, text, localization, timing, viewport, and holdout robustness remain unproved.",
       "issue_refs": [
         "#449"
       ],
