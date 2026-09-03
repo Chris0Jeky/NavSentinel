@@ -135,15 +135,32 @@ check for its current head is green.
    `tests/clickfix-detector.property.test.ts`, do not allow, inspect, restore, or
    stage it; record that limitation. Stop on any other mismatch.
 2. Require the exact-head Build / Unit and E2E checks to be green and all review
-   findings to be triaged. Run `npm ci`,
+   findings to be triaged. Record and freeze the 40-character head for this
+   trial. Run `npm ci`,
    `npx vitest run tests/popup-contrast.test.ts`, `npm run typecheck`,
    `npm run build`, and `npm run check:perf-budget` in that worktree.
+   Record the resulting `extension/dist` path and 12-character UI-guard
+   revision, then do not rebuild during the browser pass. If a rebuild is
+   unavoidable, stop and repeat the extension reload and current-page fixture
+   reload sequence in step 4 before continuing.
 3. In a second terminal in that worktree, run `npm run gym:serve` and require it
    to start successfully on port 5173. Keep that process running for the trial;
    stop rather than substitute another server if the strict port check fails.
-4. In a fresh temporary Chrome profile, load that worktree's `extension/dist`
-   unpacked. After any rebuild, click **Reload** for NavSentinel in
-   `chrome://extensions` before reloading a page. Record the Chrome version.
+4. In a fresh temporary Chrome profile, load that worktree's frozen
+   `extension/dist` unpacked. Loading or reloading the unpacked extension is
+   Chris-owned. After any rebuild, Chris must click **Reload** for NavSentinel
+   in `chrome://extensions` once, then reload the current Gym fixture before
+   continuing. Record the Chrome version. After each fixture reload, verify the
+   current page reports `capture="1"`, `bridge="1"`, and the recorded UI-guard
+   revision on the `data-navsentinel-capture-ready`,
+   `data-navsentinel-bridge-ready`, and `data-navsentinel-ui-guard` attributes.
+   A popup entry from an earlier page load is historical activity, not evidence
+   that this current page is ready or protected. Record whether the stale-loader
+   signature
+   `Failed to fetch dynamically imported module: chrome-extension://.../assets/capture_isolated.ts-<old hash>.js`
+   appears. Recovery is always: freeze the build, reload the unpacked
+   extension once, then reload the fixture. Stop on missing or mismatched
+   current-page markers.
 5. Open `http://127.0.0.1:5173/` and then open the NavSentinel popup.
    Confirm the gold observing trust pill is readable, fully visible, and not
    confused with the orange or green signal chips. Its text label must remain
@@ -174,10 +191,28 @@ head is green.
    must contain no uncommitted product changes. The known Defender quarantine may
    appear only as ` D tests/clickfix-detector.property.test.ts`; do not restore,
    allow, inspect, stage, or exclude that fixture. Stop for any other mismatch.
-2. On that exact head, run `npm ci` and `npm run build`. Create a fresh temporary
-   Chrome profile, leave it unsigned-in, enable Developer mode at
-   `chrome://extensions`, and load `extension/dist` unpacked. Record the Chrome
-   version and confirm the extension service worker registers without an error.
+2. On that exact head, record and freeze the 40-character head for this trial,
+   then run `npm ci` and `npm run build`. Record the resulting `extension/dist`
+   path and 12-character UI-guard revision, then do not rebuild during the
+   browser pass. If a rebuild is unavoidable, stop and repeat the extension
+   reload and current-page fixture reload sequence below before continuing.
+   Create a fresh temporary Chrome profile, leave it unsigned-in, enable
+   Developer mode at `chrome://extensions`, and load `extension/dist` unpacked.
+   Record the Chrome version and confirm the extension service worker registers
+   without an error.
+   Loading or reloading the unpacked extension is Chris-owned. After any
+   rebuild, Chris must click **Reload** for NavSentinel in
+   `chrome://extensions` once, then reload the current Gym fixture. After each
+   fixture reload, verify the current page reports `capture="1"`, `bridge="1"`,
+   and the recorded UI-guard revision on the
+   `data-navsentinel-capture-ready`, `data-navsentinel-bridge-ready`, and
+   `data-navsentinel-ui-guard` attributes. Treat any popup activity from a prior
+   page load as historical, not as current-page evidence. Record whether the
+   stale-loader signature
+   `Failed to fetch dynamically imported module: chrome-extension://.../assets/capture_isolated.ts-<old hash>.js`
+   appears. Recovery is always: freeze the build, reload the unpacked
+   extension once, then reload the fixture. Stop on missing or mismatched
+   current-page markers.
    In NavSentinel Options, use Smart Navigation mode and confirm neither
    `localhost` nor `127.0.0.1` is allowlisted or trusted.
 3. Start the tracked Gym with `npm run gym:serve`, then open
@@ -286,12 +321,29 @@ that remain in #558. Only Chris can record this item complete.
    exact head, and no required review thread may remain unresolved. If the branch
    has not been pushed or the PR lookup is empty, stop and report that
    precondition; never test a stale build.
-2. In that exact worktree run `npm ci`, then `npm run build`. Create a
+2. In that exact worktree record and freeze the 40-character head for this
+   trial, then run `npm ci`, followed by `npm run build`. Record the resulting
+   `extension/dist` path and 12-character UI-guard revision, then do not rebuild
+   during the browser pass. If a rebuild is unavoidable, stop and repeat the
+   extension reload and current-page fixture reload sequence below before
+   continuing. Create a
    disposable, fresh Chrome profile without signing in or changing an
    established profile. Load the exact `<worktree>/extension/dist` directory
    unpacked from `chrome://extensions`. If the extension was already loaded,
-   use **Reload** there before opening either extension surface. Open the
-   service-worker inspector and keep it visible for errors.
+   use **Reload** there before opening either extension surface. Loading or
+   reloading the unpacked extension is Chris-owned. Before reloading any Gym
+   fixture used in this trial, Chris must click **Reload** for NavSentinel once
+   in `chrome://extensions`. After each fixture reload, verify the current page
+   reports `capture="1"`, `bridge="1"`, and the recorded UI-guard revision on
+   the `data-navsentinel-capture-ready`, `data-navsentinel-bridge-ready`, and
+   `data-navsentinel-ui-guard` attributes. Popup activity from an earlier page
+   load is historical and does not prove the current page is ready or
+   protected. Record whether the stale-loader signature
+   `Failed to fetch dynamically imported module: chrome-extension://.../assets/capture_isolated.ts-<old hash>.js`
+   appears. Recovery is always: freeze the build, reload the unpacked
+   extension once, then reload the fixture. Stop on missing or mismatched
+   current-page markers. Open the service-worker inspector and keep it visible
+   for errors.
 3. Open NavSentinel Options. Establish a visible baseline with Navigation
    **Smart**, Credential **Smart**, and **Paste warnings**
    checked, then click **Save**. Reload Options once and confirm that baseline.
@@ -371,14 +423,30 @@ Only Chris can record this item complete.
    green and no required review thread may remain unresolved. If the branch has
    not yet been pushed or the PR lookup is empty, stop and report that
    precondition; never test a stale build.
-2. In that exact worktree run `npm ci`, then `npm run build`. Start the Gym with
+2. In that exact worktree record and freeze the 40-character head for this
+   trial, then run `npm ci`, followed by `npm run build`. Record the resulting
+   `extension/dist` path and 12-character UI-guard revision, then do not rebuild
+   during the browser pass. If a rebuild is unavoidable, stop and repeat the
+   extension reload and current-page fixture reload sequence below before
+   continuing. Start the Gym with
    `python -m http.server 5173 --bind 127.0.0.1 --directory gym` in a second
    terminal. Create a disposable, fresh Chrome profile without signing in or
    changing an established profile. Load the exact
    `<worktree>/extension/dist` directory unpacked from `chrome://extensions`.
-   Confirm Navigation is **Smart** and no localhost/127.0.0.1 allowlist entry is
-   present. If the extension was already loaded, use **Reload** in
-   `chrome://extensions` before opening the Gym page.
+   Loading or reloading the unpacked extension is Chris-owned. Confirm
+   Navigation is **Smart** and no localhost/127.0.0.1 allowlist entry is
+   present. If the extension was already loaded, Chris must use **Reload** in
+   `chrome://extensions` once before reloading the Gym fixture. After each
+   fixture reload, verify the current page reports `capture="1"`, `bridge="1"`,
+   and the recorded UI-guard revision on the
+   `data-navsentinel-capture-ready`, `data-navsentinel-bridge-ready`, and
+   `data-navsentinel-ui-guard` attributes. Treat popup activity from an earlier
+   page load as historical, not as current-page evidence. Record whether the
+   stale-loader signature
+   `Failed to fetch dynamically imported module: chrome-extension://.../assets/capture_isolated.ts-<old hash>.js`
+   appears. Recovery is always: freeze the build, reload the unpacked
+   extension once, then reload the fixture. Stop on missing or mismatched
+   current-page markers.
 3. Open `http://127.0.0.1:5173/index.html?ai35=top`. In page DevTools confirm
    both readiness markers are `"1"`:
 
