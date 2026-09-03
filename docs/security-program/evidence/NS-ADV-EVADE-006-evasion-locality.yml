@@ -193,7 +193,7 @@ blocked_external_attempts:
     distinct_target_count: 3
     attempt_count: 282
 qualification:
-  privacy: "The sink retains typed metadata and a SHA-256 of the inert sentinel; normalized authority assertions keep full runtime URLs, raw run IDs, and the sentinel transient, and no page text, browsing history, credential, or raw secret is stored."
+  privacy: "The authority normalizer adds no full runtime URLs or raw sentinel to the receipt. Existing sink snapshots persist synthetic run UUIDs and typed metadata plus a SHA-256 of the inert sentinel; no page text, browsing history, credential, or raw secret is stored."
   performance: "No release code changed and no runtime performance claim is made."
   accessibility: "The benign control completed with native Tab and Enter; no manual assistive-technology pass was run."
   page_origin_ui: "Query input cannot select or replace a destination: legacy harm_target and benign_target authority is rejected. Before activation, every arm compares both live hrefs with its exact normalized armed authorities, including target ID, role, consequence, origin, path, query shape, hashed run ID, and hashed sentinel. The allowlisted mutation query changes only one CSS or structural axis while preserving layout, target, readiness, and benign-link invariants. The sink rejects origin-mode hostname mismatches, and the browser lane rejects resolver assignment and redefinition while preserving its identity and resolution. The exact page-scoped resolver is harness configuration only, not hostile-page authority proof in an already armed context."
