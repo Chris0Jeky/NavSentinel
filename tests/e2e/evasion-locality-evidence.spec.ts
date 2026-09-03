@@ -54,6 +54,29 @@ type Arm = {
 
 type ArmId = "baseline" | "protected" | "benign" | "mixed";
 
+type MutationId = "control" | "opacity-010" | "zindex-9997";
+
+type MutationDefinition = {
+  id: MutationId;
+  declaredOpacity: string;
+  declaredZIndex: string;
+  computedOpacity: string;
+  computedZIndex: string;
+};
+
+const MUTATION_DEFINITIONS: readonly MutationDefinition[] = [
+  { id: "control", declaredOpacity: "0.09", declaredZIndex: "9998", computedOpacity: "0.09", computedZIndex: "9998" },
+  { id: "opacity-010", declaredOpacity: "0.10", declaredZIndex: "9998", computedOpacity: "0.1", computedZIndex: "9998" },
+  { id: "zindex-9997", declaredOpacity: "0.09", declaredZIndex: "9997", computedOpacity: "0.09", computedZIndex: "9997" },
+];
+
+type MutationObservation = MutationDefinition & {
+  reported: string | null;
+  invalid: string | null;
+  computedOpacity: string;
+  computedZIndex: string;
+};
+
 type ArmObservation = {
   role: ProvingGroundRole;
   productReady: boolean;
@@ -63,6 +86,14 @@ type ArmObservation = {
   productEvent: string | null;
   productEventCount?: number;
   trustedInput: "mouse" | "keyboard" | "keyboard_then_mouse";
+};
+
+type CampaignCase = {
+  mutation: MutationObservation;
+  observations: ArmObservation[];
+  sinkSnapshot: ReturnType<ProvingGroundFakeSink["snapshot"]>;
+  networkViolations: ProvingGroundEgressAttempt[];
+  blockedExternalAttempts: ProvingGroundEgressAttempt[];
 };
 
 type ReleaseProfileInspection = ReturnType<typeof inspectBuiltReleaseProfile>;
@@ -147,6 +178,7 @@ async function openArm(
   armId: ArmId,
   role: ProvingGroundRole,
   withExtension: boolean,
+  mutation: MutationId,
 ): Promise<Arm> {
   // Evidence must run against the repository-owned server for this arm, never
   // an arbitrary GYM_BASE_URL supplied by the environment.
@@ -203,6 +235,7 @@ async function openArm(
 
     const page = await context.newPage();
     const fixtureUrl = new URL(`/${FIXTURE_NAME}`, baseUrl);
+    fixtureUrl.searchParams.set("mutation", mutation);
     const harmRole: ProvingGroundRole = role === "benign" ? "attack" : role;
     const benignRole: ProvingGroundRole = role === "attack" ? "benign" : role;
     await installFixtureTargetBootstrap(page, sink.createFixtureBootstrap({
@@ -350,15 +383,46 @@ async function assertFixtureBootstrapCannotBeReplaced(page: Page, sink: ProvingG
   });
 }
 
+async function readMutationObservation(page: Page, definition: MutationDefinition): Promise<MutationObservation> {
+  const observed = await page.evaluate(() => {
+    const root = document.documentElement;
+    const trap = document.querySelector<HTMLElement>("#trap");
+    return {
+      reported: root.getAttribute("data-navsentinel-evasion-mutation"),
+      invalid: root.getAttribute("data-navsentinel-fixture-invalid"),
+      computedOpacity: trap ? getComputedStyle(trap).opacity : "missing-trap",
+      computedZIndex: trap ? getComputedStyle(trap).zIndex : "missing-trap",
+    };
+  });
+  expect(observed.invalid, "The requested mutation must be recognised by the fixture").toBeNull();
+  expect(observed.reported, "The fixture must report the requested mutation").toBe(definition.id);
+  expect(observed.computedOpacity, "The trap opacity must match the mutation definition")
+    .toBe(definition.computedOpacity);
+  expect(observed.computedZIndex, "The trap z-index must match the mutation definition")
+    .toBe(definition.computedZIndex);
+  return { ...definition, ...observed };
+}
+
+function assertMutationAxes(
+  control: MutationObservation,
+  mutant: MutationObservation,
+  changedAxis: "opacity" | "zIndex",
+): void {
+  const opacityChanged = mutant.computedOpacity !== control.computedOpacity;
+  const zIndexChanged = mutant.computedZIndex !== control.computedZIndex;
+  expect(opacityChanged, `${mutant.id} must differ from control on its declared axis`).toBe(changedAxis === "opacity");
+  expect(zIndexChanged, `${mutant.id} must differ from control on its declared axis`).toBe(changedAxis === "zIndex");
+}
+
 async function writeReceipt(
   testInfo: TestInfo,
-  sink: ProvingGroundFakeSink,
-  observations: ArmObservation[],
+  controlCase: CampaignCase,
+  campaign: CampaignCase[],
   arms: Arm[],
   releaseProfile: ReleaseProfileInspection,
 ): Promise<void> {
   const repository = repositoryState();
-  const sinkSnapshot = sink.snapshot();
+  const sinkSnapshot = controlCase.sinkSnapshot;
   const fixtureFiles = [
     ...evasionFixturePaths,
     path.join(gymRoot, "local-fixture-targets.js"),
@@ -366,6 +430,14 @@ async function writeReceipt(
   ];
   const gitFixtureSha256 = hashGitFiles(fixtureFiles, repository.head);
   const executedFixtureSha256 = hashFiles(fixtureFiles);
+  const campaignCases = campaign.map((entry) => ({
+    mutation: entry.mutation,
+    observations: entry.observations,
+    sink_snapshot: entry.sinkSnapshot,
+    network_violations: entry.networkViolations,
+    blocked_external_attempts: entry.blockedExternalAttempts,
+  }));
+  const campaignPayloadSha256 = sha256(JSON.stringify({ cases: campaignCases }));
   const receipt = {
     schema_version: "1.0.0",
     scenario_id: SCENARIO_ID,
@@ -394,9 +466,9 @@ async function writeReceipt(
     oracle: {
       type: "independent_harm",
       harm_boundary: "Trusted input reaches the typed local wrong-target navigation sink.",
-      local_receipt_sha256: sha256(JSON.stringify({ sinkSnapshot, observations })),
+      local_receipt_sha256: campaignPayloadSha256,
       sink_snapshot: sinkSnapshot,
-      observations,
+      observations: controlCase.observations,
     },
     outcomes: {
       attack_baseline: "HARM_REACHED",
@@ -412,7 +484,8 @@ async function writeReceipt(
       arms.some((arm) => arm.violations.length > 0) ? "Fixture attempted undeclared network egress" : "",
     ].filter(Boolean).join("; "),
     limitations: [
-      "This receipt proves the shared local-target contract and one representative composite journey, not mutation robustness across all twelve evasion fixtures.",
+      "This receipt proves the shared local-target contract and one representative composite journey across control plus two deterministic CSS neighbours, not mutation robustness across all twelve evasion fixtures.",
+      "The mutation campaign changes only the trap opacity or z-index, one at a time. Its allowlisted query selector cannot select destinations, roles, authorities, or sink URLs.",
       "The existing evasion regression suite remains product-event coupled; its twelve protected fixtures are checked separately and are not promoted beyond MODELLED here.",
       "Bundled Chromium is not branded Chrome, owner Gate-3, open-web efficacy, or release evidence.",
       "Playwright page.addInitScript is privileged harness configuration only; it supplies no hostile or authored-page authority evidence, and SP-F-014 remains PARTIAL.",
@@ -446,8 +519,15 @@ async function writeReceipt(
       accessibility: "The benign control is reached with native Tab and Enter; no assistive-technology pass was run.",
       page_origin_ui: "Query input cannot select or replace a destination. The bootstrap is harness configuration only, not hostile-page authority proof in an already armed context.",
     },
-    network_violations: arms.flatMap((arm) => arm.violations),
-    blocked_external_attempts: arms.flatMap((arm) => arm.blockedExternalAttempts),
+    mutation_campaign: {
+      selector: "mutation",
+      cases: campaignCases,
+      payload_sha256: campaignPayloadSha256,
+      hash_method: "SHA-256(UTF-8 bytes of JSON.stringify({cases: mutation_campaign.cases}))",
+      qualification: "Two deterministic CSS neighbours only; query selection cannot change target authority.",
+    },
+    network_violations: campaign.flatMap((entry) => entry.networkViolations),
+    blocked_external_attempts: campaign.flatMap((entry) => entry.blockedExternalAttempts),
     verification: [
       "npm run security:check",
       "npm run build",
@@ -464,13 +544,7 @@ async function writeReceipt(
   });
 }
 
-test("#449 evasion targets stay local with attack, protected, benign, and mixed evidence @regression", async ({}, testInfo) => {
-  test.skip(!fs.existsSync(extensionPath), "Build the extension before running locality evidence.");
-  const releaseProfile = inspectBuiltReleaseProfile(extensionPath, {
-    expectedProfile: "interaction-only",
-    requireReleaseEligible: true,
-  });
-  expect(evasionFixturePaths, "The bounded family must contain exactly evasion 01 through 12").toHaveLength(12);
+async function runMutationCase(definition: MutationDefinition): Promise<{ result: CampaignCase; arms: Arm[] }> {
   const sink = await startProvingGroundFakeSink({
     runId: randomUUID(),
     scenarioId: SCENARIO_ID,
@@ -491,8 +565,9 @@ test("#449 evasion targets stay local with attack, protected, benign, and mixed 
   const arms: Arm[] = [];
 
   try {
-    const baseline = await openArm(sink, "baseline", "attack", false);
+    const baseline = await openArm(sink, "baseline", "attack", false, definition.id);
     arms.push(baseline);
+    const mutation = await readMutationObservation(baseline.page, definition);
     await expect.poll(() => baseline.page.evaluate(() => {
       const descriptor = Object.getOwnPropertyDescriptor(window, "NavSentinelFixtureTargetBootstrap");
       return Boolean(descriptor && descriptor.writable === false && descriptor.configurable === false &&
@@ -511,45 +586,41 @@ test("#449 evasion targets stay local with attack, protected, benign, and mixed 
       history.replaceState(null, "", original);
       return { unbound, mismatch };
     }, SCENARIO_ID)).toEqual({ unbound: "unbound", mismatch: "document-mismatch" });
-    await assertFixtureBootstrapCannotBeReplaced(baseline.page, sink);
-    await assertUnsafeOverridesRejected(baseline.page);
+    if (definition.id === "control") {
+      await assertFixtureBootstrapCannotBeReplaced(baseline.page, sink);
+      await assertUnsafeOverridesRejected(baseline.page);
+    }
     const baselineBefore = sink.snapshot().receipts.length;
     const baselinePopup = await clickTrap(baseline);
     expect(baselinePopup, "The no-product baseline must reach the local fake sink").not.toBeNull();
     await baselinePopup!.waitForLoadState("domcontentloaded", { timeout: 5_000 });
     await expect.poll(() => sink.snapshot().receipts.length).toBe(baselineBefore + 1);
     observations.push({
-      role: "attack",
-      productReady: false,
-      outcome: "HARM_REACHED",
-      sinkReceiptsBefore: baselineBefore,
-      sinkReceiptsAfter: sink.snapshot().receipts.length,
-      productEvent: null,
-      trustedInput: "mouse",
+      role: "attack", productReady: false, outcome: "HARM_REACHED",
+      sinkReceiptsBefore: baselineBefore, sinkReceiptsAfter: sink.snapshot().receipts.length,
+      productEvent: null, trustedInput: "mouse",
     });
     await baselinePopup!.close();
     await baseline.cleanup();
 
-    const protectedArm = await openArm(sink, "protected", "attack", true);
+    const protectedArm = await openArm(sink, "protected", "attack", true, definition.id);
     arms.push(protectedArm);
+    await readMutationObservation(protectedArm.page, definition);
     const protectedBefore = sink.snapshot().receipts.length;
     expect(await clickTrap(protectedArm), "The release extension must keep the sink unreachable").toBeNull();
     await waitForToastMatch(protectedArm.page, /Blocked new tab|blocked deceptive click/i, 3_000);
     await protectedArm.page.waitForTimeout(200);
     expect(sink.snapshot().receipts).toHaveLength(protectedBefore);
     observations.push({
-      role: "attack",
-      productReady: true,
-      outcome: "BLOCKED_PRE_HARM",
-      sinkReceiptsBefore: protectedBefore,
-      sinkReceiptsAfter: sink.snapshot().receipts.length,
-      productEvent: await readToastText(protectedArm.page),
-      trustedInput: "mouse",
+      role: "attack", productReady: true, outcome: "BLOCKED_PRE_HARM",
+      sinkReceiptsBefore: protectedBefore, sinkReceiptsAfter: sink.snapshot().receipts.length,
+      productEvent: await readToastText(protectedArm.page), trustedInput: "mouse",
     });
     await protectedArm.cleanup();
 
-    const benign = await openArm(sink, "benign", "benign", true);
+    const benign = await openArm(sink, "benign", "benign", true, definition.id);
     arms.push(benign);
+    await readMutationObservation(benign.page, definition);
     const benignWorker = await getServiceWorker(benign.context);
     await benignWorker.evaluate(async (eventLogKey) => {
       await chrome.storage.local.set({ [eventLogKey]: [] });
@@ -565,28 +636,18 @@ test("#449 evasion targets stay local with attack, protected, benign, and mixed 
       return Array.isArray(stored[eventLogKey]) ? stored[eventLogKey] : [];
     }, "sentinelsuite:event_log_v1");
     expect(benignEvents, "The benign task must persist only its silent allow event").toHaveLength(1);
-    expect(benignEvents[0]).toMatchObject({
-      kind: "nav_silent_allow",
-      site: "127.0.0.1",
-      destHost: "127.0.0.1",
-    });
-    expect(benignEvents[0]).toMatchObject({
-      reasons: expect.arrayContaining(["keyboard_activation"]),
-    });
+    expect(benignEvents[0]).toMatchObject({ kind: "nav_silent_allow", site: "127.0.0.1", destHost: "127.0.0.1" });
+    expect(benignEvents[0]).toMatchObject({ reasons: expect.arrayContaining(["keyboard_activation"]) });
     observations.push({
-      role: "benign",
-      productReady: true,
-      outcome: "OBSERVED",
-      sinkReceiptsBefore: benignBefore,
-      sinkReceiptsAfter: sink.snapshot().receipts.length,
-      productEvent: "nav_silent_allow",
-      productEventCount: benignEvents.length,
-      trustedInput: "keyboard",
+      role: "benign", productReady: true, outcome: "OBSERVED",
+      sinkReceiptsBefore: benignBefore, sinkReceiptsAfter: sink.snapshot().receipts.length,
+      productEvent: "nav_silent_allow", productEventCount: benignEvents.length, trustedInput: "keyboard",
     });
     await benign.cleanup();
 
-    const mixed = await openArm(sink, "mixed", "mixed", true);
+    const mixed = await openArm(sink, "mixed", "mixed", true, definition.id);
     arms.push(mixed);
+    await readMutationObservation(mixed.page, definition);
     const mixedBefore = sink.snapshot().receipts.length;
     await activateBenignLinkByKeyboard(mixed.page);
     await expect.poll(() => sink.snapshot().receipts.length).toBe(mixedBefore + 1);
@@ -598,30 +659,53 @@ test("#449 evasion targets stay local with attack, protected, benign, and mixed 
     await mixed.page.waitForTimeout(200);
     expect(sink.snapshot().receipts).toHaveLength(mixedBefore + 1);
     observations.push({
-      role: "mixed",
-      productReady: true,
-      outcome: "BLOCKED_PRE_HARM",
-      sinkReceiptsBefore: mixedBefore,
-      sinkReceiptsAfter: sink.snapshot().receipts.length,
-      productEvent: await readToastText(mixed.page),
-      trustedInput: "keyboard_then_mouse",
+      role: "mixed", productReady: true, outcome: "BLOCKED_PRE_HARM",
+      sinkReceiptsBefore: mixedBefore, sinkReceiptsAfter: sink.snapshot().receipts.length,
+      productEvent: await readToastText(mixed.page), trustedInput: "keyboard_then_mouse",
     });
     await mixed.cleanup();
 
     expect(sink.snapshot().invalidAttempts).toEqual([]);
     expect(sink.snapshot().receipts.map((receipt) => [receipt.role, receipt.consequence])).toEqual([
-      ["attack", HARM_CONSEQUENCE],
-      ["benign", BENIGN_CONSEQUENCE],
-      ["mixed", BENIGN_CONSEQUENCE],
+      ["attack", HARM_CONSEQUENCE], ["benign", BENIGN_CONSEQUENCE], ["mixed", BENIGN_CONSEQUENCE],
     ]);
     for (const arm of arms) expect(arm.violations).toEqual([]);
-    await writeReceipt(testInfo, sink, observations, arms, releaseProfile);
+    return {
+      result: {
+        mutation, observations, sinkSnapshot: sink.snapshot(),
+        networkViolations: arms.flatMap((arm) => arm.violations),
+        blockedExternalAttempts: arms.flatMap((arm) => arm.blockedExternalAttempts),
+      },
+      arms,
+    };
   } finally {
     for (const arm of arms) {
-      if (!arm.context.pages().every((page) => page.isClosed())) {
-        await arm.cleanup().catch(() => {});
-      }
+      if (!arm.context.pages().every((page) => page.isClosed())) await arm.cleanup().catch(() => {});
     }
     await sink.close();
   }
+}
+
+test("#449 evasion targets stay local with attack, protected, benign, and mixed evidence @regression", async ({}, testInfo) => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running locality evidence.");
+  const releaseProfile = inspectBuiltReleaseProfile(extensionPath, {
+    expectedProfile: "interaction-only", requireReleaseEligible: true,
+  });
+  expect(evasionFixturePaths, "The bounded family must contain exactly evasion 01 through 12").toHaveLength(12);
+  const campaign: CampaignCase[] = [];
+  const allArms: Arm[] = [];
+  for (const definition of MUTATION_DEFINITIONS) {
+    const entry = await runMutationCase(definition);
+    campaign.push(entry.result);
+    allArms.push(...entry.arms);
+  }
+  const control = campaign.find((entry) => entry.mutation.id === "control");
+  expect(control, "The mutation campaign must include a control case").toBeDefined();
+  const opacity = campaign.find((entry) => entry.mutation.id === "opacity-010");
+  const zIndex = campaign.find((entry) => entry.mutation.id === "zindex-9997");
+  expect(opacity).toBeDefined();
+  expect(zIndex).toBeDefined();
+  assertMutationAxes(control!.mutation, opacity!.mutation, "opacity");
+  assertMutationAxes(control!.mutation, zIndex!.mutation, "zIndex");
+  await writeReceipt(testInfo, control!, campaign, allArms, releaseProfile);
 });
