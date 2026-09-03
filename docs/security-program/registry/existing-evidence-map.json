@@ -807,7 +807,7 @@
       "oracle_type": "mixed",
       "evidence_state": "MODELLED",
       "evidence_validity": "CURRENT_REGRESSION",
-      "known_limitation": "A single hand-authored threshold fixture is not a mutation campaign or robustness distribution.",
+      "known_limitation": "The control plus two deterministic adjacent CSS values is not a randomized DOM, text, localization, timing, viewport, or holdout campaign.",
       "issue_refs": [],
       "pr_refs": [],
       "paths": [
@@ -1465,7 +1465,7 @@
       "oracle_type": "independent_harm",
       "evidence_state": "MODELLED",
       "evidence_validity": "CURRENT_REGRESSION",
-      "known_limitation": "The exact sink receipt exercises the composite Evasion 05 representative. The other eleven localized fixtures retain their existing product-event-coupled regression checks and are not promoted beyond MODELLED.",
+      "known_limitation": "The exact sink receipt exercises the composite Evasion 05 control plus two deterministic one-axis CSS neighbours. The other eleven localized fixtures retain their existing product-event-coupled regression checks, and randomized DOM, text, localization, timing, viewport, and holdout robustness remain unproved.",
       "issue_refs": [
         "#449"
       ],

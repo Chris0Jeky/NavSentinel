@@ -2,7 +2,7 @@ schema_version: "1.0.0"
 scenario_id: NS-ADV-EVADE-006
 capability_id: F-03
 profile: proving_ground
-repository_head: "28d09321eb588476f863d5bc13dd454d72d82861"
+repository_head: "55a240e620c80938be76530113bf1b854d73f992"
 extension_build_sha256: "9809e9fdf97a494dd66ff93551aff7aef2c2eea596dd8e9ebac0623f1b988401"
 extension_profile:
   id: interaction-only
@@ -18,10 +18,10 @@ fixture:
   family: "evasion-01-through-12"
   representative_path: "gym/evasion-05-composite.html"
   localized_path_count: 12
-  sha256: "8604de6a4c77789fc32fb7f9fe0648b80a71f2e83bbb409ef59a8eee8f8ee2cb"
+  sha256: "fb3764997cd7e156945f076d25347e55c2f09e2507a79a50c53a7a825cc4b930"
   hash_method: "SHA-256 over sorted relative paths and Git blob bytes at repository_head"
-  git_blob_sha256: "8604de6a4c77789fc32fb7f9fe0648b80a71f2e83bbb409ef59a8eee8f8ee2cb"
-  executed_worktree_sha256: "ba1d19173f6ac5d3b05749400bd81de0aa0328d47ab4f746ab75e702e0292fa3"
+  git_blob_sha256: "fb3764997cd7e156945f076d25347e55c2f09e2507a79a50c53a7a825cc4b930"
+  executed_worktree_sha256: "1ec673568b19f48897995238373c7b62c827b34434778e1dedda023fe777cd13"
   executed_hash_method: "SHA-256 over sorted relative paths and CRLF checkout bytes used by the browser run"
   target_contract_path: "gym/local-fixture-targets.js"
   fallback_sink_path: "gym/local-fixture-sink.html"
@@ -30,8 +30,8 @@ oracle:
   type: independent_harm
   harm_boundary: "Trusted input reaches the typed local wrong-target navigation sink."
   local_artifact_path: "test-results/issue449-evasion-locality-receipt.json"
-  local_receipt_sha256: "5863e3dcee09a9130db9ff04e91756b91172bf1d710de130f4659a804539341d"
-  oracle_payload_sha256: "8655dd94d01e1339cc02594b7f843046dc7e7f64e2ee61036217daa409fa3442"
+  local_receipt_sha256: "5c880be21d78cc880337bac0814d47ca10dbaf5869078c0db3e0cb8086b79092"
+  oracle_payload_sha256: "a19773f28bd3a4194e543d517ce783ed601516a2c71266f236c907982fc53a99"
   sink_receipt_count: 3
   invalid_sink_attempt_count: 0
   arms:
@@ -62,6 +62,53 @@ oracle:
       trusted_input: keyboard_then_mouse
       benign_target_id: mixed-benign
       blocked_harm_target_id: mixed-harm
+mutation_campaign:
+  work_unit: NS-ADV-EVADE-006-07-MUTATE
+  selector: mutation
+  deterministic: true
+  hash_method: "SHA-256(UTF-8 bytes of JSON.stringify({cases: mutation_campaign.cases}))"
+  payload_sha256: "a19773f28bd3a4194e543d517ce783ed601516a2c71266f236c907982fc53a99"
+  control_case_count: 1
+  declared_mutation_count: 2
+  total_arm_count: 12
+  total_sink_receipt_count: 9
+  invalid_sink_attempt_count: 0
+  cases:
+    - id: control
+      changed_axis: none
+      requested_query: "mutation=control"
+      declared_opacity: "0.09"
+      declared_z_index: "9998"
+      observed_opacity: "0.09"
+      observed_z_index: "9998"
+      outcomes: [HARM_REACHED, BLOCKED_PRE_HARM, OBSERVED, BLOCKED_PRE_HARM]
+      sink_receipt_count: 3
+      network_violation_count: 0
+      blocked_external_attempt_count: 54
+    - id: opacity-010
+      changed_axis: opacity
+      requested_query: "mutation=opacity-010"
+      declared_opacity: "0.10"
+      declared_z_index: "9998"
+      observed_opacity: "0.1"
+      observed_z_index: "9998"
+      outcomes: [HARM_REACHED, BLOCKED_PRE_HARM, OBSERVED, BLOCKED_PRE_HARM]
+      sink_receipt_count: 3
+      network_violation_count: 0
+      blocked_external_attempt_count: 55
+    - id: zindex-9997
+      changed_axis: z_index
+      requested_query: "mutation=zindex-9997"
+      declared_opacity: "0.09"
+      declared_z_index: "9997"
+      observed_opacity: "0.09"
+      observed_z_index: "9997"
+      outcomes: [HARM_REACHED, BLOCKED_PRE_HARM, OBSERVED, BLOCKED_PRE_HARM]
+      sink_receipt_count: 3
+      network_violation_count: 0
+      blocked_external_attempt_count: 57
+  survivors: []
+  invalid_cases: []
 outcome: BLOCKED_PRE_HARM
 evidence_state_before: MODELLED
 evidence_state_after: MODELLED
@@ -69,10 +116,10 @@ valid: true
 invalid_reason: ""
 authority_scope:
   actor: "one authored top-frame evasion fixture"
-  task: "one trusted activation per armed destination; the mixed arm sequences one benign keyboard activation and one harm pointer activation"
+  task: "one trusted activation per armed destination in each campaign case; the mixed arm sequences one benign keyboard activation and one harm pointer activation"
   tab: "one fresh-profile initiating tab per arm plus its single consequence tab where navigation is allowed"
   frame: "top frame"
-  document: "exact evasion-05-composite.html document for each arm"
+  document: "exact evasion-05-composite.html document plus one allowlisted mutation selector for each arm"
   destination: "one armed loopback fake-sink URL per arm, role, and consequence"
   bootstrap: "An immutable Playwright page-init resolver binds only the exact fixture origin/path and exact role/scenario/origin-mode keys. The sink enforces same-loopback as an equal hostname and alternate-loopback as a different hostname. It changes only one frozen, non-writable Window resolver; the browser lane proves assignment and redefinition are rejected. It injects no input, event, navigation, document-node mutation, product call, or decision."
   ttl: "one test run; the loopback sink closes in the test finally block"
@@ -80,7 +127,9 @@ authority_scope:
   use_count_scope: "per armed destination"
   sink_revalidation: "The final fake sink independently validates active run, scenario, role, consequence, one-use target authority, and the exact inert sentinel on every request."
 limitations:
-  - "The exact receipt exercises the composite Evasion 05 representative, not mutation robustness across all twelve fixtures."
+  - "The exact receipt exercises the composite Evasion 05 control plus two deterministic one-axis CSS neighbours; it is not a randomized DOM, text, localization, timing, viewport, or holdout campaign."
+  - "The mutation selector changes only allowlisted opacity or z-index values inside their existing scored bands and cannot select a destination, role, authority, or sink URL."
+  - "The fixture marks an unrecognized mutation selector invalid, but this slice does not add a dedicated unknown-selector browser regression."
   - "The other eleven localized fixtures retain product-event-coupled regression checks and are not promoted beyond MODELLED."
   - "Bundled Chromium is not branded Chrome, owner Gate-3, open-web efficacy, or release evidence."
   - "Playwright page.addInitScript is privileged harness configuration only; it supplies no hostile or authored-page authority evidence, and SP-F-014 remains PARTIAL."
@@ -97,13 +146,17 @@ network_violations: []
 blocked_external_attempts:
   - class: "Chromium platform CONNECT"
     distinct_target_count: 3
-    attempt_count: 57
+    attempt_count: 166
 qualification:
   privacy: "The sink retains typed metadata and a SHA-256 of the inert sentinel; no page text, browsing history, credential, or raw secret is stored."
   performance: "No release code changed and no runtime performance claim is made."
   accessibility: "The benign control completed with native Tab and Enter; no manual assistive-technology pass was run."
-  page_origin_ui: "Query input cannot select or replace a destination: legacy harm_target and benign_target authority is rejected. The sink rejects origin-mode hostname mismatches, and the browser lane rejects resolver assignment and redefinition while preserving its identity and resolution. The exact page-scoped resolver is harness configuration only, not hostile-page authority proof in an already armed context."
+  page_origin_ui: "Query input cannot select or replace a destination: legacy harm_target and benign_target authority is rejected. The allowlisted mutation query changes only one CSS value inside its existing scored band. The sink rejects origin-mode hostname mismatches, and the browser lane rejects resolver assignment and redefinition while preserving its identity and resolution. The exact page-scoped resolver is harness configuration only, not hostile-page authority proof in an already armed context."
 repaired_failures:
+  - classification: HARNESS_INVALID
+    cause: "The first uncommitted mutation draft hashed only the control sink snapshot and observations, so changing a mutant outcome or sink snapshot did not change the oracle payload digest."
+    repair: "Receipt 5c880be21d78cc880337bac0814d47ca10dbaf5869078c0db3e0cb8086b79092 hashes the exact serialized mutation_campaign.cases array and exposes digest a19773f28bd3a4194e543d517ce783ed601516a2c71266f236c907982fc53a99 in both the oracle and campaign records."
+    verification: "Independent recomputation matched the campaign digest. Clean code head 55a240e620c80938be76530113bf1b854d73f992 ran all twelve control/mutation arms with the expected outcomes, nine typed sink receipts, zero invalid sink attempts, and zero fixture-network violations."
   - classification: HARNESS_INVALID
     cause: "The earlier fixture accepted destination authority through page-controlled harm_target and benign_target query parameters, so structural URL shape alone could not distinguish live harness configuration from a syntactically valid caller-provided URL."
     repair: "Receipt 5863e3dcee09a9130db9ff04e91756b91172bf1d710de130f4659a804539341d removes query-string target authority. The live sink materializes a deep-frozen exact-document/key bootstrap, enforces the declared same-loopback or alternate-loopback hostname relationship, the page initializer exposes one frozen non-writable resolver, and the fixture rejects both legacy query keys before revalidating any resolved sink URL."
@@ -131,6 +184,5 @@ verification:
   - "npm run typecheck"
   - "npm run lint"
   - "npx vitest run tests/proving-ground-fake-sink.test.ts: 5 passed"
-  - "CI=1 exact-head evasion locality lane: 1 passed in 10.3 seconds"
-  - "CI=1 exact-head RW-01 and RW-06 regressions: 2 passed in 11.3 seconds"
-  - "CI=1 exact-head evasion regression family: 17 passed in 53.4 seconds"
+  - "CI=1 exact-head evasion locality mutation lane: 1 passed with 12 arms in 27.5 seconds"
+  - "CI=1 exact-head evasion regression family: 17 passed in 50.7 seconds"

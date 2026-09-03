@@ -30,10 +30,12 @@ claim Gate-3.
    its capture and loader seams.
 2. **Keep #449 locality bounded and typed.** The twelve evasion, seven core,
    and two RW fixtures now share a loopback-only target contract; no mapped
-   external-destination holds remain. Before adding declared adjacent mutation
-   axes for `NS-ADV-UI-004`, retain the existing MODELLED ceiling and the
-   representative-evasion receipt limitation. Keep each sink typed and local
-   rather than building a generic collector.
+   external-destination holds remain. The Evasion 05 representative now records
+   one control plus two deterministic, one-axis CSS neighbours with benign and
+   mixed duals. Retain the MODELLED ceiling: randomized DOM, text, localization,
+   timing, viewport, and holdout robustness remain unproved. Before adding
+   declared adjacent mutation axes for `NS-ADV-UI-004`, keep each sink typed and
+   local rather than building a generic collector.
 3. **Keep PR #572 parked before AI-31.** Resume only from its retained local
    survivor and exact service-worker lifecycle checkpoint; do not run the manual
    gate on the current head.
