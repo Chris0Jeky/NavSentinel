@@ -61,6 +61,14 @@ on a page sourced from a known-phishing feed.
 
 ## Important notes
 
+`npm run test:e2e:corpus:contract` needs no owner-held corpus input. It is
+mechanics-only and uses only inert
+script-free HTML at exact HTTPS `.test` URLs, in-memory route fulfilment, an
+empty-allowlist egress fence, full readiness checks, and Playwright-native
+input. It proves neither live-corpus route integration, owner-headed
+validation, a committed manifest/result, efficacy, Gate-3, nor completion of a
+#417 methodology pillar; all remain `INVALID`/unproven.
+
 - **Snapshots are not committed** — they contain third-party HTML from phishing
   pages and are gitignored. You must run `fetch-phishing-corpus.mjs` locally.
   The generated manifest uses `schema_version: "1.0.0"`; every successful entry
