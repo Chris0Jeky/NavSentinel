@@ -649,6 +649,29 @@ async function writeReceipt(
     blocked_external_attempts: entry.blockedExternalAttempts,
   }));
   const campaignPayloadSha256 = sha256(JSON.stringify({ cases: campaignCases }));
+  const targetAuthorityAssertion = {
+    timing: "before_activation",
+    target_count_per_arm: 2,
+    asserted_arm_count: arms.length,
+    asserted_target_count: arms.length * 2,
+    normalized_fields: [
+      "origin",
+      "pathname",
+      "fragment",
+      "credentials",
+      "query_names",
+      "query_count",
+      "run_id_sha256",
+      "scenario_id",
+      "role",
+      "consequence",
+      "target_id",
+      "sentinel_sha256",
+    ],
+    exact_arm_target_ids: true,
+    same_loopback_hostname: true,
+    raw_runtime_urls_persisted: false,
+  };
   const receipt = {
     schema_version: "1.0.0",
     scenario_id: SCENARIO_ID,
@@ -678,6 +701,7 @@ async function writeReceipt(
       type: "independent_harm",
       harm_boundary: "Trusted input reaches the typed local wrong-target navigation sink.",
       local_receipt_sha256: campaignPayloadSha256,
+      target_authority_assertion: targetAuthorityAssertion,
       sink_snapshot: sinkSnapshot,
       observations: controlCase.observations,
     },
