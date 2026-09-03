@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import {
   CorpusReplayHarness,
   CorpusReplayInvalid,
+  CORPUS_RECEIPT_SETTLE_MS,
   exerciseFirstEligibleControl,
 } from "./corpus_replay_harness";
 
@@ -97,11 +98,16 @@ test("shared corpus replay uses exact reserved URLs and trusted native input @co
     if (exercise.receiptBefore === null) {
       throw new CorpusReplayInvalid("input_unavailable");
     }
+    let settleObserved = false;
+    setTimeout(() => {
+      settleObserved = true;
+    }, Math.floor(CORPUS_RECEIPT_SETTLE_MS / 2));
     const harmReached = await harness.awaitTerminal(
       exercise.receiptBefore,
       async () => false,
     );
     expect(harmReached).toBe(true);
+    expect(settleObserved).toBe(true);
     expect(harness.receipts).toEqual([
       { url: BENIGN_RECEIPT_URL, method: "GET" },
     ]);
@@ -238,21 +244,23 @@ test("corpus receipt routing records an unprotected POST as harm @corpus-contrac
   }
 });
 
-test("shared corpus replay skips a dormant attack control and contains one armed popup receipt @corpus-contract @regression", async () => {
+test("shared corpus replay skips a constrained attack control before filling and contains one armed popup receipt @corpus-contract @regression", async () => {
   const harness = await startHarness();
   try {
     const page = await harness.open({
       url: MIXED_SOURCE_URL,
       bytes: sourceBytes(
         "mixed-source",
-        `<form hidden action="${ATTACK_RECEIPT_URL}" method="post">
-           <input type="password"><button type="submit">Do not select</button>
+        `<form action="${ATTACK_RECEIPT_URL}" method="post">
+           <input type="password" pattern="[0-9]{6}" required>
+           <button type="submit">Do not select</button>
          </form>
          <a target="_blank" rel="opener" href="${MIXED_RECEIPT_URL}">Open selected receipt</a>`,
       ),
     });
     const exercise = await exerciseFirstEligibleControl(harness, page);
     expect(exercise.kind).toBe("link");
+    expect(await page.locator('input[type="password"]').inputValue()).toBe("");
     if (exercise.receiptBefore === null) {
       throw new CorpusReplayInvalid("input_unavailable");
     }

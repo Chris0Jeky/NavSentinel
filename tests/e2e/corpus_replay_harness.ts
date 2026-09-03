@@ -28,6 +28,8 @@ export type ProbeExpectation = {
   target: Locator;
 };
 
+export const CORPUS_RECEIPT_SETTLE_MS = 500;
+
 export type NativeExerciseResult =
   | {
       kind: "none";
@@ -574,6 +576,10 @@ export class CorpusReplayHarness {
         this.receipts.length > receiptBefore &&
         (!this.arm?.allowPopup || this.arm.popup !== null)
       ) {
+        // Event persistence is asynchronous. Keep the receipt visible while
+        // late/post-commit product signals settle before the caller scores it.
+        await delay(CORPUS_RECEIPT_SETTLE_MS);
+        this.throwIfInvalid();
         return true;
       }
       if (await protectedNow()) {
@@ -655,6 +661,15 @@ async function prepareForm(form: Locator): Promise<boolean> {
   const fillable: Array<{ locator: Locator; type: string | null }> = [];
   for (let index = 0; index < (await inputs.count()); index += 1) {
     const input = inputs.nth(index);
+    const hasUnsupportedConstraint = await input
+      .evaluate(
+        (element) =>
+          ["pattern", "minlength", "maxlength", "min", "max", "step"].some(
+            (attribute) => element.hasAttribute(attribute),
+          ),
+      )
+      .catch(() => true);
+    if (hasUnsupportedConstraint) return false;
     const needsValue = await input
       .evaluate((element) => {
         if (
@@ -713,8 +728,7 @@ async function prepareForm(form: Locator): Promise<boolean> {
           return !control.willValidate || control.validity.valid;
         }),
     );
-    if (!valid) throw new CorpusReplayInvalid("form_preparation_failed");
-    return true;
+    return valid;
   } catch {
     throw new CorpusReplayInvalid("form_preparation_failed");
   }

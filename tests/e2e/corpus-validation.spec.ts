@@ -13,6 +13,7 @@ import { loadValidatedCorpusManifest } from "../../scripts/corpus-manifest.mjs";
 import {
   CorpusReplayHarness,
   CorpusReplayInvalid,
+  CORPUS_RECEIPT_SETTLE_MS,
   exerciseFirstEligibleControl,
   type NativeExerciseResult,
 } from "./corpus_replay_harness";
@@ -115,6 +116,7 @@ function writeResults(input: ResultsWriteInput): void {
       snapshotJavaScript: "blocked; dynamic-form replay is not implemented",
       nativeInput: "Playwright locator fill/click with independent trusted-event probes",
       harmOracle: "one-use source-bound in-memory first-hop navigation receipt",
+      postReceiptSettleMs: CORPUS_RECEIPT_SETTLE_MS,
       getFormReceipt: "exact action origin/path; browser-generated query is not asserted",
       egress: "context deny-by-default route plus empty-allowlist proxy",
     },
