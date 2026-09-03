@@ -7,9 +7,11 @@
   <script>
     (() => {
       const mutations = {
-        control: { opacity: "0.09", zIndex: "9998" },
-        "opacity-010": { opacity: "0.10", zIndex: "9998" },
-        "zindex-9997": { opacity: "0.09", zIndex: "9997" },
+        control: { kind: "control", opacity: "0.09", zIndex: "9998" },
+        "opacity-010": { kind: "css", opacity: "0.10", zIndex: "9998" },
+        "zindex-9997": { kind: "css", opacity: "0.09", zIndex: "9997" },
+        "dom-depth-1": { kind: "structural", opacity: "0.09", zIndex: "9998" },
+        "class-token-a7c1": { kind: "structural", opacity: "0.09", zIndex: "9998" },
       };
       const root = document.documentElement;
       const requested = new URLSearchParams(location.search).get("mutation") || "control";
@@ -19,7 +21,7 @@
       }
       const mutation = mutations[requested];
       root.setAttribute("data-navsentinel-evasion-mutation", requested);
-      if (requested !== "control") {
+      if (mutation.kind === "css") {
         root.style.setProperty("--evasion-trap-opacity", mutation.opacity);
         root.style.setProperty("--evasion-trap-z-index", mutation.zIndex);
       }
@@ -47,7 +49,7 @@
       - whitespace-only aria-label
       - position: absolute
     */
-    .overlay {
+    .overlay, .evasion-overlay--token-a7c1 {
       position: absolute;
       top: 0; left: 0;
       width: 58.3vw;
@@ -92,5 +94,30 @@
   <!-- Attacker overlay: all near-threshold signals combined -->
   <a id="trap" class="overlay" target="_blank" rel="noreferrer" aria-label=" "
      data-navsentinel-local-target="harm" data-navsentinel-scenario="NS-ADV-EVADE-006"></a>
+
+  <script>
+    (() => {
+      const root = document.documentElement;
+      const requested = root.getAttribute("data-navsentinel-evasion-mutation");
+      const structuralMutations = new Set(["dom-depth-1", "class-token-a7c1"]);
+      if (!structuralMutations.has(requested)) return;
+      const trap = document.querySelector("#trap");
+      if (!(trap instanceof HTMLAnchorElement)) {
+        root.setAttribute("data-navsentinel-fixture-invalid", "structural-mutation-trap-missing");
+        return;
+      }
+      if (requested === "dom-depth-1") {
+        const wrapper = document.createElement("span");
+        trap.replaceWith(wrapper);
+        wrapper.append(trap);
+      } else if (trap.className !== "overlay") {
+        root.setAttribute("data-navsentinel-fixture-invalid", "structural-mutation-class-unexpected");
+        return;
+      } else {
+        trap.className = "evasion-overlay--token-a7c1";
+      }
+      root.setAttribute("data-navsentinel-evasion-structural-applied", requested);
+    })();
+  </script>
 </body>
 </html>
