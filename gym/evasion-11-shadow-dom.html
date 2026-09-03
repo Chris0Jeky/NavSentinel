@@ -93,7 +93,7 @@
 
       // Create shadow root with deceptive content
       var shadow = host.attachShadow({ mode: "open" });
-      var harmTarget = window.NavSentinelLocalTargets.url("harm", "NS-ADV-RUNTIME-001");
+      var harmTarget = window.NavSentinelLocalTargets.url("harm", "NS-ADV-RUNTIME-001", "alternate-loopback");
       shadow.innerHTML = [
         "<style>",
         "  a {",
