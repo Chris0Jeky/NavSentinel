@@ -418,6 +418,15 @@ result gates are met.
 Run with `npm run test:e2e:corpus`. Config: `playwright.corpus.config.ts`.
 Tests: `tests/e2e/corpus-validation.spec.ts`.
 
+`npm run test:e2e:corpus:contract` is an owner-corpus-input-free mechanics contract. It
+fulfills only inert script-free HTML under exact HTTPS `.test` URLs, requires
+full NavSentinel readiness, and uses Playwright locator activation with an
+independent runner probe. An empty-allowlist proxy fence and route aborts
+prevent page-origin HTTP(S) egress. It proves neither live-corpus route
+integration, owner-headed validation, a committed manifest/result, efficacy,
+Gate-3, nor completion of any #417 methodology pillar; all remain
+`INVALID`/unproven.
+
 ### False positive measurement
 
 Visits Tranco top-1000 sites with NavSentinel loaded to measure false positive rate.
