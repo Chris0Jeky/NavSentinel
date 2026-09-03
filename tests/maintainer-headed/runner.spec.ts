@@ -4,7 +4,8 @@ import path from "node:path";
 import { chromium, expect, test, type BrowserContext, type Page, type Worker } from "@playwright/test";
 import { inspectBuiltReleaseProfile } from "../../scripts/check-release-profile.mjs";
 import { readBuiltMainUiGuardRevision, startGymServer } from "../e2e/extension_test_utils";
-import { startProvingGroundFakeSink } from "../e2e/proving_ground_fake_sink";
+import { startProvingGroundFakeSinkForHost, type ProvingGroundFakeSink } from "../e2e/proving_ground_fake_sink";
+import { installFixtureTargetBootstrap } from "../e2e/local_fixture_target_bootstrap";
 import { MaintainerHeadedError, hashDirectory, hashFiles, parseChromeMetadata, readRepositorySnapshot, redactError, sha256, validateMaintainerInputs, writeEvidenceReceipt } from "./receipt";
 import { waitForMaintainerReadiness } from "./readiness";
 
@@ -59,7 +60,7 @@ test("#420 records one operator-prepared branded-Chrome benign receipt", async (
   let ownedPage: Page | undefined;
   let popup: Page | undefined;
   let gym: Awaited<ReturnType<typeof startGymServer>> | undefined;
-  let sink: Awaited<ReturnType<typeof startProvingGroundFakeSink>> | undefined;
+  let sink: ProvingGroundFakeSink | undefined;
 
   try {
     repository = readRepositorySnapshot();
@@ -82,11 +83,20 @@ test("#420 records one operator-prepared branded-Chrome benign receipt", async (
     context.on("serviceworker", (worker) => { if (worker.url().startsWith(workerPrefix)) observeWorker(worker, errors); });
     verification.push("operator_acknowledged_exact_current_head", "dedicated_profile_acknowledged", "chrome_cdp_attached", "operator_acknowledged_extension_id_worker_present");
 
-    sink = await startProvingGroundFakeSink({ runId: randomUUID(), scenarioId: "NS-ADV-UI-004", allowedRoles: ["benign"], allowedConsequences: ["benign-navigation"], targetAuthorities: [{ id: "level9-benign", role: "benign", consequence: "benign-navigation", maxUses: 1 }] });
+    sink = await startProvingGroundFakeSinkForHost("127.0.0.2", { runId: randomUUID(), scenarioId: "NS-ADV-UI-004", allowedRoles: ["benign"], allowedConsequences: ["benign-navigation"], targetAuthorities: [{ id: "level9-benign", role: "benign", consequence: "benign-navigation", maxUses: 1 }] });
     gym = await startGymServer(path.resolve(process.cwd(), "gym"));
     const url = new URL("/level9-legit-video-overlay.html", gym.baseUrl);
-    url.searchParams.set("benign_target", sink.urlFor("benign", "benign-navigation", "level9-benign"));
     ownedPage = await context.newPage();
+    await installFixtureTargetBootstrap(ownedPage, sink.createFixtureBootstrap({
+      fixtureOrigin: url.origin,
+      fixturePath: url.pathname,
+      bindings: [{
+        targetRole: "benign",
+        scenarioId: "NS-ADV-UI-004",
+        originMode: "alternate-loopback",
+        source: { kind: "armed-sink", sinkRole: "benign", consequence: "benign-navigation", targetId: "level9-benign" },
+      }],
+    }));
     observePage(ownedPage, errors);
     await ownedPage.goto(url.href, { waitUntil: "domcontentloaded", timeout: 20_000 });
     markers = await waitForMaintainerReadiness(ownedPage, readBuiltMainUiGuardRevision());

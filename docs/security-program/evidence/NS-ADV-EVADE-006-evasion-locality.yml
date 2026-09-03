@@ -2,7 +2,7 @@ schema_version: "1.0.0"
 scenario_id: NS-ADV-EVADE-006
 capability_id: F-03
 profile: proving_ground
-repository_head: "b8a87caf67fad373d2b3e1d35180b64ff901a32b"
+repository_head: "b9078c2284cd0c0abf356cb1ebcec53cb7002f8e"
 extension_build_sha256: "9809e9fdf97a494dd66ff93551aff7aef2c2eea596dd8e9ebac0623f1b988401"
 extension_profile:
   id: interaction-only
@@ -18,10 +18,10 @@ fixture:
   family: "evasion-01-through-12"
   representative_path: "gym/evasion-05-composite.html"
   localized_path_count: 12
-  sha256: "967aabfce145b9b3adfb6477f4d69cabd93b74f4197566d4a75e8cb14ac620d3"
+  sha256: "8604de6a4c77789fc32fb7f9fe0648b80a71f2e83bbb409ef59a8eee8f8ee2cb"
   hash_method: "SHA-256 over sorted relative paths and Git blob bytes at repository_head"
-  git_blob_sha256: "967aabfce145b9b3adfb6477f4d69cabd93b74f4197566d4a75e8cb14ac620d3"
-  executed_worktree_sha256: "b7a9d31d19ae6ec4274ba2baa3fff14efe26f26ef714d29a1d72cecd112b6fe7"
+  git_blob_sha256: "8604de6a4c77789fc32fb7f9fe0648b80a71f2e83bbb409ef59a8eee8f8ee2cb"
+  executed_worktree_sha256: "ba1d19173f6ac5d3b05749400bd81de0aa0328d47ab4f746ab75e702e0292fa3"
   executed_hash_method: "SHA-256 over sorted relative paths and CRLF checkout bytes used by the browser run"
   target_contract_path: "gym/local-fixture-targets.js"
   fallback_sink_path: "gym/local-fixture-sink.html"
@@ -30,8 +30,8 @@ oracle:
   type: independent_harm
   harm_boundary: "Trusted input reaches the typed local wrong-target navigation sink."
   local_artifact_path: "test-results/issue449-evasion-locality-receipt.json"
-  local_receipt_sha256: "6714563aa23497c69e1fa563fa27296fb82abe71945f94fa2e3abe573534c2df"
-  oracle_payload_sha256: "0da01b5fcfa772bb6f4d76d7a57d0b92916aae226949f09dc72134b49e7722c0"
+  local_receipt_sha256: "3df8053b2d3096ba7d550ea20177f30215d2c0287cceb6df862d4f9350623214"
+  oracle_payload_sha256: "0f859f3589657bbf9e20eda411f43eb4a1c60ee555e9d0e604a0a29e5811237d"
   sink_receipt_count: 3
   invalid_sink_attempt_count: 0
   arms:
@@ -74,14 +74,16 @@ authority_scope:
   frame: "top frame"
   document: "exact evasion-05-composite.html document for each arm"
   destination: "one armed loopback fake-sink URL per arm, role, and consequence"
+  bootstrap: "An immutable Playwright page-init resolver binds only the exact fixture origin/path and exact role/scenario/origin-mode keys. It changes only one frozen, non-writable Window resolver; it injects no input, event, navigation, document-node mutation, product call, or decision."
   ttl: "one test run; the loopback sink closes in the test finally block"
   use_count: 1
   use_count_scope: "per armed destination"
-  sink_revalidation: "The fake sink validates run, scenario, role, consequence, one-use target authority, and the exact inert sentinel on every request."
+  sink_revalidation: "The final fake sink independently validates active run, scenario, role, consequence, one-use target authority, and the exact inert sentinel on every request."
 limitations:
   - "The exact receipt exercises the composite Evasion 05 representative, not mutation robustness across all twelve fixtures."
   - "The other eleven localized fixtures retain product-event-coupled regression checks and are not promoted beyond MODELLED."
   - "Bundled Chromium is not branded Chrome, owner Gate-3, open-web efficacy, or release evidence."
+  - "Playwright page.addInitScript is privileged harness configuration only; it supplies no hostile or authored-page authority evidence, and SP-F-014 remains PARTIAL."
 safety:
   synthetic_only: true
   local_inert_sink: true
@@ -95,13 +97,17 @@ network_violations: []
 blocked_external_attempts:
   - class: "Chromium platform CONNECT"
     distinct_target_count: 3
-    attempt_count: 56
+    attempt_count: 57
 qualification:
   privacy: "The sink retains typed metadata and a SHA-256 of the inert sentinel; no page text, browsing history, credential, or raw secret is stored."
   performance: "No release code changed and no runtime performance claim is made."
   accessibility: "The benign control completed with native Tab and Enter; no manual assistive-technology pass was run."
-  page_origin_ui: "The page cannot lower protection; non-loopback and unarmed local target overrides fail closed before navigation."
+  page_origin_ui: "Query input cannot select or replace a destination: legacy harm_target and benign_target authority is rejected. The exact page-scoped resolver is harness configuration only, not hostile-page authority proof in an already armed context."
 repaired_failures:
+  - classification: HARNESS_INVALID
+    cause: "The earlier fixture accepted destination authority through page-controlled harm_target and benign_target query parameters, so structural URL shape alone could not distinguish live harness configuration from a syntactically valid caller-provided URL."
+    repair: "Receipt 3df8053b2d3096ba7d550ea20177f30215d2c0287cceb6df862d4f9350623214 removes query-string target authority. The live sink materializes a deep-frozen exact-document/key bootstrap, the page initializer exposes one frozen non-writable resolver, and the fixture rejects both legacy query keys before revalidating any resolved sink URL."
+    verification: "Clean code head b9078c2284cd0c0abf356cb1ebcec53cb7002f8e passed the four-arm evidence lane with zero fixture-network violations and zero invalid sink attempts; independent hashing matched fixture Git digest 8604de6a4c77789fc32fb7f9fe0648b80a71f2e83bbb409ef59a8eee8f8ee2cb. The bootstrap remains privileged harness configuration and does not repair SP-F-014."
   - classification: HARNESS_INVALID
     cause: "Pre-review receipts used a checkout-dependent fixture hash, did not qualify the loaded extension profile, and labeled the benign arm NO_SIGNAL after inspecting only the destination document."
     repair: "Receipt 6714563aa23497c69e1fa563fa27296fb82abe71945f94fa2e3abe573534c2df binds the Git blobs and executed checkout separately, requires the interaction-only release-eligible profile, and records one persisted nav_silent_allow event as OBSERVED while the benign sink remains usable."
@@ -123,8 +129,8 @@ verification:
   - "npm run build: interaction-only release profile; content-loader revision cab71a431824"
   - "npm run check:release-profile: interaction-only and release eligible"
   - "npm run typecheck"
-  - "npx eslint tests/e2e/evasion-locality-evidence.spec.ts"
-  - "npx vitest run tests/proving-ground-fake-sink.test.ts --maxWorkers=2: 2 passed"
+  - "npm run lint"
+  - "npx vitest run tests/proving-ground-fake-sink.test.ts tests/gym-local-fixture-runtime.test.ts tests/maintainer-headed/readiness.test.ts --maxWorkers=2: 21 passed"
   - "CI=1 exact-head evasion locality lane: 1 passed in 10.7 seconds"
-  - "CI=1 sink/fixture code head c52e2c0 existing UI-004 sink lane: 3 passed in 15.2 seconds"
-  - "CI=1 sink/fixture code head c52e2c0 evasion regression family: 17 passed in 50.2 seconds"
+  - "CI=1 exact-head RW-01 and RW-06 regressions: 2 passed in 10.6 seconds"
+  - "CI=1 exact-head evasion regression family: 17 passed in 52.4 seconds"

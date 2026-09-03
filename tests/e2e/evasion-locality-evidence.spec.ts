@@ -12,9 +12,9 @@ import {
   type TestInfo,
 } from "@playwright/test";
 import {
-  getGymBaseUrl,
   getServiceWorker,
   readToastText,
+  startGymServer,
   waitForNavSentinelBridge,
   waitForToastMatch,
 } from "./extension_test_utils";
@@ -25,6 +25,7 @@ import {
   type ProvingGroundFakeSink,
   type ProvingGroundRole,
 } from "./proving_ground_fake_sink";
+import { installFixtureTargetBootstrap } from "./local_fixture_target_bootstrap";
 import { inspectBuiltReleaseProfile } from "../../scripts/check-release-profile.mjs";
 
 const SCENARIO_ID = "NS-ADV-EVADE-006";
@@ -147,7 +148,10 @@ async function openArm(
   role: ProvingGroundRole,
   withExtension: boolean,
 ): Promise<Arm> {
-  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  // Evidence must run against the repository-owned server for this arm, never
+  // an arbitrary GYM_BASE_URL supplied by the environment.
+  const gym = await startGymServer(gymRoot);
+  const baseUrl = gym.baseUrl;
   const allowedOrigins = localOrigins(baseUrl);
   allowedOrigins.add(sink.origin);
   const violations: ProvingGroundEgressAttempt[] = [];
@@ -201,14 +205,20 @@ async function openArm(
     const fixtureUrl = new URL(`/${FIXTURE_NAME}`, baseUrl);
     const harmRole: ProvingGroundRole = role === "benign" ? "attack" : role;
     const benignRole: ProvingGroundRole = role === "attack" ? "benign" : role;
-    fixtureUrl.searchParams.set(
-      "harm_target",
-      sink.urlFor(harmRole, HARM_CONSEQUENCE, `${armId}-harm`),
-    );
-    fixtureUrl.searchParams.set(
-      "benign_target",
-      sink.urlFor(benignRole, BENIGN_CONSEQUENCE, `${armId}-benign`),
-    );
+    await installFixtureTargetBootstrap(page, sink.createFixtureBootstrap({
+      fixtureOrigin: fixtureUrl.origin,
+      fixturePath: fixtureUrl.pathname,
+      bindings: [
+        {
+          targetRole: "harm", scenarioId: SCENARIO_ID, originMode: "same-loopback",
+          source: { kind: "armed-sink", sinkRole: harmRole, consequence: HARM_CONSEQUENCE, targetId: `${armId}-harm` },
+        },
+        {
+          targetRole: "benign", scenarioId: SCENARIO_ID, originMode: "same-loopback",
+          source: { kind: "armed-sink", sinkRole: benignRole, consequence: BENIGN_CONSEQUENCE, targetId: `${armId}-benign` },
+        },
+      ],
+    }));
     await page.goto(fixtureUrl.href, { waitUntil: "domcontentloaded", timeout: 20_000 });
     await expect(page.locator("html")).toHaveAttribute("data-navsentinel-local-targets-ready", "1");
     if (withExtension) {
@@ -271,9 +281,9 @@ async function assertUnsafeOverridesRejected(page: Page): Promise<void> {
     const api = (window as unknown as {
       NavSentinelLocalTargets: { url: (role: "harm", scenarioId: string) => string };
     }).NavSentinelLocalTargets;
-    const attempt = (target: string): string => {
+    const attempt = (parameter: "harm_target" | "benign_target", target: string): string => {
       const candidate = new URL(originalUrl);
-      candidate.searchParams.set("harm_target", target);
+      candidate.searchParams.set(parameter, target);
       history.replaceState(null, "", candidate.href);
       try {
         api.url("harm", "NS-ADV-EVADE-006");
@@ -285,14 +295,14 @@ async function assertUnsafeOverridesRejected(page: Page): Promise<void> {
       }
     };
     return {
-      reservedExternal: attempt("https://not-a-live-target.invalid/"),
-      unarmedLocal: attempt("http://127.0.0.1:46100/untyped-local-target"),
+      harmTarget: attempt("harm_target", "http://127.0.0.1:46100/__navsentinel_fake_sink?run_id=123e4567-e89b-42d3-a456-426614174000&scenario_id=NS-ADV-EVADE-006&role=attack&consequence=wrong-target-navigation&target_id=baseline-harm&sentinel=NAVSENTINEL_SENTINEL_DO_NOT_RUN"),
+      benignTarget: attempt("benign_target", "http://127.0.0.1:46100/__navsentinel_fake_sink?run_id=123e4567-e89b-42d3-a456-426614174000&scenario_id=NS-ADV-EVADE-006&role=benign&consequence=benign-navigation&target_id=baseline-benign&sentinel=NAVSENTINEL_SENTINEL_DO_NOT_RUN"),
     };
   });
-  expect(rejections.reservedExternal, "A reserved external override must fail closed before navigation")
-    .toBe("non-loopback-target");
-  expect(rejections.unarmedLocal, "An untyped local override must fail closed before navigation")
-    .toBe("unarmed-local-target");
+  expect(rejections.harmTarget, "A syntactically armed-looking harm query cannot override a trusted resolver")
+    .toBe("legacy-target-override-rejected");
+  expect(rejections.benignTarget, "A syntactically armed-looking benign query cannot override a trusted resolver")
+    .toBe("legacy-target-override-rejected");
 }
 
 async function writeReceipt(
@@ -360,6 +370,7 @@ async function writeReceipt(
       "This receipt proves the shared local-target contract and one representative composite journey, not mutation robustness across all twelve evasion fixtures.",
       "The existing evasion regression suite remains product-event coupled; its twelve protected fixtures are checked separately and are not promoted beyond MODELLED here.",
       "Bundled Chromium is not branded Chrome, owner Gate-3, open-web efficacy, or release evidence.",
+      "Playwright page.addInitScript is privileged harness configuration only; it supplies no hostile or authored-page authority evidence, and SP-F-014 remains PARTIAL.",
     ],
     safety: {
       synthetic_only: true,
@@ -378,15 +389,17 @@ async function writeReceipt(
       frame: "top frame",
       document: `exact ${FIXTURE_NAME} document for each arm`,
       destination: "one armed loopback sink URL per arm, role, and consequence",
+      bootstrap: "An immutable page-init resolver matches only the exact fixture origin/path and exact role/scenario/origin-mode keys. It changes only one frozen, non-writable Window resolver; it injects no input, event, navigation, document-node mutation, product call, or decision.",
       ttl: "one test run; the loopback sink closes in the test finally block",
       use_count: 1,
       use_count_scope: "per armed destination",
-      sink_revalidation: "The fake sink validates run, scenario, role, consequence, one-use target authority, and the exact inert sentinel on every request.",
+      sink_revalidation: "The final fake sink independently validates active run, scenario, role, consequence, one-use target authority, and the exact inert sentinel on every request.",
     },
     qualification: {
       privacy: "The sink retains only typed metadata and a SHA-256 of the inert sentinel; no page text, full browsing history, credential, or raw secret is stored.",
       performance: "No release code changed and no runtime performance claim is made.",
       accessibility: "The benign control is reached with native Tab and Enter; no assistive-technology pass was run.",
+      page_origin_ui: "Query input cannot select or replace a destination. The bootstrap is harness configuration only, not hostile-page authority proof in an already armed context.",
     },
     network_violations: arms.flatMap((arm) => arm.violations),
     blocked_external_attempts: arms.flatMap((arm) => arm.blockedExternalAttempts),
@@ -435,6 +448,24 @@ test("#449 evasion targets stay local with attack, protected, benign, and mixed 
   try {
     const baseline = await openArm(sink, "baseline", "attack", false);
     arms.push(baseline);
+    await expect.poll(() => baseline.page.evaluate(() => {
+      const descriptor = Object.getOwnPropertyDescriptor(window, "NavSentinelFixtureTargetBootstrap");
+      return Boolean(descriptor && descriptor.writable === false && descriptor.configurable === false &&
+        Object.isFrozen(descriptor.value));
+    })).toBe(true);
+    await expect.poll(() => baseline.page.evaluate((scenarioId) => {
+      const resolver = (window as unknown as {
+        NavSentinelFixtureTargetBootstrap: {
+          resolve: (role: string, scenario: string, originMode: string) => { status: string };
+        };
+      }).NavSentinelFixtureTargetBootstrap;
+      const original = location.href;
+      const unbound = resolver.resolve("harm", scenarioId, "alternate-loopback").status;
+      history.replaceState(null, "", "/bootstrap-other-document.html");
+      const mismatch = resolver.resolve("harm", scenarioId, "same-loopback").status;
+      history.replaceState(null, "", original);
+      return { unbound, mismatch };
+    }, SCENARIO_ID)).toEqual({ unbound: "unbound", mismatch: "document-mismatch" });
     await assertUnsafeOverridesRejected(baseline.page);
     const baselineBefore = sink.snapshot().receipts.length;
     const baselinePopup = await clickTrap(baseline);

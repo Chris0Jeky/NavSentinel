@@ -17,6 +17,7 @@ import {
   waitForToastText
 } from "./extension_test_utils";
 import { startProvingGroundFakeSinkForHost } from "./proving_ground_fake_sink";
+import { installFixtureTargetBootstrap } from "./local_fixture_target_bootstrap";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -507,10 +508,20 @@ test("RW-01 search result overlay swap blocks deceptive new tab @regression", as
     try {
       const page = await context.newPage();
       const fixtureUrl = new URL("/rw01-search-result-overlay-swap.html", baseUrl);
-      fixtureUrl.searchParams.set(
-        "harm_target",
-        sink.urlFor("attack", "wrong-target-navigation", "rw01-harm"),
-      );
+      await installFixtureTargetBootstrap(page, sink.createFixtureBootstrap({
+        fixtureOrigin: fixtureUrl.origin,
+        fixturePath: fixtureUrl.pathname,
+        bindings: [
+          {
+            targetRole: "harm", scenarioId: "NS-ADV-SUPPLY-001", originMode: "alternate-loopback",
+            source: { kind: "armed-sink", sinkRole: "attack", consequence: "wrong-target-navigation", targetId: "rw01-harm" },
+          },
+          {
+            targetRole: "benign", scenarioId: "NS-ADV-SUPPLY-001", originMode: "same-loopback",
+            source: { kind: "fallback" },
+          },
+        ],
+      }));
       await page.goto(fixtureUrl.href, {
         waitUntil: "domcontentloaded",
         timeout: 20_000
@@ -661,10 +672,20 @@ test("RW-06 legit auth popup allows the first window and blocks the second @regr
     try {
       const page = await context.newPage();
       const fixtureUrl = new URL("/rw06-legit-auth-second-popup.html", baseUrl);
-      fixtureUrl.searchParams.set(
-        "harm_target",
-        sink.urlFor("attack", "wrong-target-navigation", "rw06-harm"),
-      );
+      await installFixtureTargetBootstrap(page, sink.createFixtureBootstrap({
+        fixtureOrigin: fixtureUrl.origin,
+        fixturePath: fixtureUrl.pathname,
+        bindings: [
+          {
+            targetRole: "harm", scenarioId: "NS-ADV-AUTH-005", originMode: "alternate-loopback",
+            source: { kind: "armed-sink", sinkRole: "attack", consequence: "wrong-target-navigation", targetId: "rw06-harm" },
+          },
+          {
+            targetRole: "benign", scenarioId: "NS-ADV-AUTH-005", originMode: "same-loopback",
+            source: { kind: "fallback" },
+          },
+        ],
+      }));
       await page.goto(fixtureUrl.href, {
         waitUntil: "domcontentloaded",
         timeout: 20_000
