@@ -76,7 +76,7 @@ mutation_campaign:
   selector: mutation
   deterministic: true
   hash_method: "SHA-256(UTF-8 bytes of JSON.stringify({cases: mutation_campaign.cases}))"
-  payload_sha256: "4b0c9694bd5bb514edfd7e0a0d02ea4246d79269075923e13bfda3003ada4898"
+  payload_sha256: "a8318a6f99fad5c451e86c0c91175b33665a16b49ba1ca56f6d812fc7b4282e7"
   control_case_count: 1
   declared_mutation_count: 4
   total_arm_count: 20
