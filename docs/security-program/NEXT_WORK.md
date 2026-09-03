@@ -31,8 +31,9 @@ claim Gate-3.
 2. **Keep #449 locality bounded and typed.** The twelve evasion, seven core,
    and two RW fixtures now share a loopback-only target contract; no mapped
    external-destination holds remain. The Evasion 05 representative now records
-   one control plus two deterministic, one-axis CSS neighbours with benign and
-   mixed duals. Retain the MODELLED ceiling: randomized DOM, text, localization,
+   one control plus four deterministic neighbours across two CSS and two
+   structural axes, each with benign and mixed duals. Retain the MODELLED
+   ceiling: randomized DOM, text, localization,
    timing, viewport, and holdout robustness remain unproved. Before adding
    declared adjacent mutation axes for `NS-ADV-UI-004`, keep each sink typed and
    local rather than building a generic collector.
