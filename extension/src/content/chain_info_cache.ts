@@ -34,7 +34,7 @@
 import type { RedirectChainInfo } from "../shared/redirect_chain";
 
 /** How long a cached chain-info answer is considered representative. */
-export const CHAIN_INFO_TTL_MS = 30_000;
+export const CHAIN_INFO_TTL_MS = 15_000;
 
 /**
  * One bounded retry covers the case where the very first request loses its
@@ -67,7 +67,10 @@ function isChainInfo(value: unknown): value is RedirectChainInfo {
     typeof candidate.viaKnownRedirector === "boolean" &&
     typeof candidate.knownRedirectorHops === "number" &&
     Number.isFinite(candidate.knownRedirectorHops) &&
-    candidate.knownRedirectorHops >= 0
+    candidate.knownRedirectorHops >= 0 &&
+    typeof candidate.expiresAt === "number" &&
+    Number.isFinite(candidate.expiresAt) &&
+    candidate.expiresAt >= 0
   );
 }
 
@@ -82,11 +85,7 @@ function requestChainInfo(attempt: number): void {
         scheduleRetry(attempt);
         return;
       }
-      cachedChainInfo = {
-        depth: resp.depth,
-        viaKnownRedirector: resp.viaKnownRedirector,
-        knownRedirectorHops: resp.knownRedirectorHops,
-      };
+      cachedChainInfo = { ...resp };
       cachedChainInfoAt = Date.now();
     });
   } catch {
@@ -120,7 +119,22 @@ export function primeChainInfoCache(): void {
 export function getFreshChainInfo(now: number = Date.now()): RedirectChainInfo | null {
   if (!cachedChainInfo) return null;
   if (now - cachedChainInfoAt > CHAIN_INFO_TTL_MS) return null;
+  if (now >= cachedChainInfo.expiresAt) return null;
   return cachedChainInfo;
+}
+
+/**
+ * A BFCache restore reuses this module instance after the worker has processed
+ * the explicit history boundary. Drop the prior document snapshot and ask the
+ * worker again before any later click can reuse unrelated chain factors.
+ */
+export function handleChainInfoPageShow(
+  event: Pick<PageTransitionEvent, "persisted">,
+): void {
+  if (!event.persisted) return;
+  cachedChainInfo = null;
+  primeStarted = false;
+  primeChainInfoCache();
 }
 
 /** Test-only: clear cache and priming state. */

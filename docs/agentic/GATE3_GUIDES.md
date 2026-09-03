@@ -244,6 +244,53 @@ does not replace this exact-head manual browser gate.
 
 ---
 
+## Active guide: AI-40 - PR #609 stale redirect-chain boundary
+
+Run this only after PR #609 is ready and every automated check for its current
+head is green.
+
+1. Resolve PR #609 and record its 40-character `headRefOid`. In the implementation
+   worktree, require `git rev-parse HEAD` to equal that value. `git status --short`
+   must contain no uncommitted product changes. The known Defender quarantine may
+   appear only as ` D tests/clickfix-detector.property.test.ts`; do not restore,
+   inspect, stage, execute, or allow that fixture. Stop for any other mismatch.
+2. On that exact head, run `npm ci`, `npm run build`, and the focused automated
+   journey: `npx playwright test tests/e2e/phase2-detections.spec.ts
+   --project=phase2 --workers=1 -g "chain-05 Back and Forward"`. Create a fresh,
+   unsigned-in Chrome profile, enable Developer mode at `chrome://extensions`,
+   and load that exact `extension/dist` unpacked. Record the Chrome version and
+   confirm the extension service worker registers without an error. In Options,
+   use Smart Navigation mode, enable the debug overlay, and confirm neither
+   `localhost` nor `127.0.0.1` is allowlisted or trusted.
+3. Start the tracked Gym with `npm run gym:serve`, then open
+   `http://localhost:5173/redirect-chain-boundary.html`. Follow **Start redirect
+   journey** and each **Continue** link within five seconds of the prior landing.
+   On landing 3, click **Check current NRS factors**. The debug panel must list
+   both `nrs_redirect_chain_depth` and `nrs_redirect_via_known_redirector`; stop
+   if the precondition is absent.
+4. Use Chrome's physical **Back** control. Confirm landing 2 remains visible and
+   the page says `BFCache restored: yes`. A normal reload or a `no` result does
+   not prove this branch; retry once in the same disposable profile, then report
+   the gate unproven if Chrome still does not retain the page. Click **Check
+   current NRS factors** and confirm neither redirect-chain factor appears.
+5. Use Chrome's physical **Forward** control. Confirm landing 3 reports
+   `BFCache restored: yes`, remains stable, and another factor check contains
+   neither redirect-chain factor. No stale-chain warning, rollback, or prompt may
+   appear after either traversal.
+6. Return to the fixture start URL, rebuild the three landings within five
+   seconds each, and confirm the factors are initially present. Wait at least 16
+   seconds without navigating, check again, and confirm both factors are absent.
+7. Inspect the fixture and extension service-worker consoles for new errors. On
+   a pass, reply `AI-40 done; Gate-3 passed on PR #609 at <40-character SHA>;
+   Chrome <version>`. On any mismatch, reply `AI-40 failed on PR #609 at <SHA>:
+   <step and observed>` and leave the item open.
+
+Only Chris can record AI-40 complete. The normal Playwright project disables
+BFCache, so its real-302 Back/Forward journey supports but does not replace this
+exact-head branded-Chrome lifecycle gate.
+
+---
+
 > ## ⚠️ SUPERSEDED 2026-07-25 — read before running anything here
 >
 > **All three PRs these guides gate have merged**, and Chris chose to clear their
@@ -539,6 +586,7 @@ Only Chris can record this item complete.
 | AI-13 | #356 MAIN-world compatibility | in [`../../ACTION_ITEMS.md`](../../ACTION_ITEMS.md) |
 | AI-21 | #464 synthetic navigation | [below](#ai-21--pr-464-synthetic-navigation-gate-3) |
 | AI-22 | #466 pending-decision service worker | [below](#ai-22--pr-466-pending-decision-service-worker-gate-3) |
+| AI-40 | #609 stale redirect-chain boundary | [above](#active-guide-ai-40---pr-609-stale-redirect-chain-boundary) |
 | AI-36 | #558 popup/Options patch-save synchronization | [above](#ai-36--558-popupoptions-patch-save-synchronization-gate-3) |
 | AI-35 | #539 cross-host child-event attribution | [below](#ai-35--539-cross-host-child-event-attribution-gate-3) |
 
