@@ -116,6 +116,9 @@ test("#420 records one operator-prepared branded-Chrome benign receipt", async (
     await ownedPage?.close().catch(() => undefined);
     await gym?.close().catch(() => undefined);
     await sink?.close().catch(() => undefined);
+    if (!failure && errors.length > 0) {
+      failure = new MaintainerHeadedError("runtime_error", "page-or-worker-error");
+    }
     const typedFailure = failure instanceof MaintainerHeadedError ? failure : undefined;
     const valid = !failure && errors.length === 0;
     writeEvidenceReceipt(receiptDirectory, {
