@@ -12,6 +12,7 @@ export type CorpusManifestErrorCode =
   | "snapshot_missing"
   | "snapshot_size_mismatch"
   | "snapshot_digest_mismatch"
+  | "replay_url_not_canonical"
   | "output_invalid"
   | "output_exists"
   | "download_failed"
@@ -37,6 +38,11 @@ export interface CorpusManifestFailedEntry {
   sizeBytes: 0;
   sha256: null;
   error: "download_failed";
+}
+
+export interface CorpusReplayEntry extends CorpusManifestSuccessEntry {
+  /** Exact, digest-validated snapshot bytes for in-memory browser replay. */
+  bytes: Buffer;
 }
 
 export interface CorpusManifest {
@@ -78,7 +84,7 @@ export function createCorpusManifest(value: {
 }): CorpusManifest;
 export function loadValidatedCorpusManifest(value: { manifestPath: string; snapshotsDir: string }): {
   manifest: CorpusManifest;
-  entries: CorpusManifestSuccessEntry[];
+  entries: CorpusReplayEntry[];
 };
 export function loadCorpusManifest(value: { manifestPath: string }): CorpusManifest;
 export function rehydrateCorpusSnapshots(value: {
