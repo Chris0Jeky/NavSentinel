@@ -6,6 +6,7 @@ import { inspectBuiltReleaseProfile } from "../../scripts/check-release-profile.
 import { readBuiltMainUiGuardRevision, startGymServer } from "../e2e/extension_test_utils";
 import { startProvingGroundFakeSink } from "../e2e/proving_ground_fake_sink";
 import { MaintainerHeadedError, hashDirectory, hashFiles, parseChromeMetadata, readRepositorySnapshot, redactError, sha256, validateMaintainerInputs, writeEvidenceReceipt } from "./receipt";
+import { waitForMaintainerReadiness } from "./readiness";
 
 const fixturePath = path.resolve(process.cwd(), "gym", "level9-legit-video-overlay.html");
 const fixtureContractPath = path.resolve(process.cwd(), "gym", "local-fixture-targets.js");
@@ -22,12 +23,6 @@ function assertBuild(): { buildSha256: string; profile: Record<string, unknown> 
   try { profile = inspectBuiltReleaseProfile(extensionPath, { expectedProfile: "interaction-only", requireReleaseEligible: true }).profile; } catch (error) { throw new MaintainerHeadedError("build_identity", "invalid-release-profile", redactError(error).sha256); }
   const buildSha256 = hashDirectory(extensionPath);
   return { buildSha256, profile: { id: profile.id, release_eligible: profile.releaseEligible, capabilities: profile.capabilities } };
-}
-
-async function readiness(page: Page, guard: string): Promise<Record<string, string | null>> {
-  const markers = await page.evaluate(() => ({ capture: document.documentElement.getAttribute("data-navsentinel-capture-ready"), bridge: document.documentElement.getAttribute("data-navsentinel-bridge-ready"), ui_guard: document.documentElement.getAttribute("data-navsentinel-ui-guard") }));
-  if (markers.capture !== "1" || markers.bridge !== "1" || markers.ui_guard !== guard) throw new MaintainerHeadedError("extension_readiness", "readiness-marker-mismatch");
-  return markers;
 }
 
 async function noToast(page: Page, durationMs: number): Promise<boolean> {
@@ -94,7 +89,7 @@ test("#420 records one operator-prepared branded-Chrome benign receipt", async (
     ownedPage = await context.newPage();
     observePage(ownedPage, errors);
     await ownedPage.goto(url.href, { waitUntil: "domcontentloaded", timeout: 20_000 });
-    markers = await readiness(ownedPage, readBuiltMainUiGuardRevision());
+    markers = await waitForMaintainerReadiness(ownedPage, readBuiltMainUiGuardRevision());
     verification.push("capture_bridge_ui_guard_match_exact_build");
     await ownedPage.locator("#overlayBtn").click();
     await expect(ownedPage.locator("#status")).toHaveText("Status: playing");
