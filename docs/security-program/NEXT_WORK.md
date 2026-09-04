@@ -10,10 +10,16 @@ has 8; only those two milestones are active. Planned M2/M3/M4, gated M5,
 passive maintenance, and frozen R1 are not fallback queues. The exact receipt is
 [`GITHUB_ADMIN_RECEIPT.md`](../development-architecture/GITHUB_ADMIN_RECEIPT.md).
 
-PR #572 remains parked before AI-31 on the retained SP-F-013 rollback survivor.
-PR #599 has been reconciled with current `main`, but its owner policy and
-branded-Chrome gates remain open. PR #600 is clean with green hosted checks but
-still needs its exact-head owner media-page check. PR #610 merged the bounded
+As of 2026-09-04, `origin/main` is `a440e35` and the runtime queue is parked in
+full: **#572** (AI-31, still held on the retained SP-F-013 rollback survivor),
+**#599** (AI-37, reconciled with current `main`; owner queue-design decision and
+branded-Chrome check open), **#600** (AI-38, containment; owner media-page
+check), **#608** (AI-39, stacked on #600 and must follow it), **#609** (AI-40,
+branded-Chrome BFCache check), and **#636** (AI-41, the #593 child-frame
+navigation-authority boundary). All six are ready-for-review with green
+exact-head CI; none may be merged by an agent. Issue **#637** is the residue home
+for the remaining child-frame `ns-allow` -> `form.submit(target=_top)` path, and
+#593 stays open. PR #610 merged the bounded
 test-only #449 parent slice for the seven core locality fixtures. PR #613 merged
 the final RW locality sink slice, PR #614 merged loopback sink hardening, and PR
 #615 merged the static RW scenario assertion. Those merges retain the
@@ -23,11 +29,13 @@ runner attaches through loopback CDP for one local benign Gym observation. It
 writes redacted pass/failure receipts but does not schedule, measure FP, or
 claim Gate-3.
 
-1. **Finish or park the current runtime queue before opening another vertical.**
-   Keep #599 and #600 aligned with current `main`, their exact heads, owner
-   decisions, and browser gates. #600 is containment; #601 remains the durable
-   extension-origin authority outcome and should follow #600 rather than overlap
-   its capture and loader seams.
+1. **The runtime queue is parked; do not open another vertical over it.**
+   #572, #599, #600, #608, #609, and #636 are all parked on owner gates, so no
+   agent-side work remains on them beyond keeping them aligned with current
+   `main` and their exact heads. #600 is containment; #601 (PR #608) remains the
+   durable extension-origin authority outcome and must follow #600 rather than
+   overlap its capture and loader seams. New work goes to #637 or the next
+   bounded M0/M1 slice, not across those seams.
 2. **Keep #449 locality bounded and typed.** The twelve evasion, seven core,
    and two RW fixtures now share a loopback-only target contract; no mapped
    external-destination holds remain. The Evasion 05 representative now records
