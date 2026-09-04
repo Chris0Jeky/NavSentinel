@@ -18,8 +18,9 @@ after refreshed exact-head CI and bounded review. That waiver is not a real-Chro
 pass. #531 separately merged under its own waiver; it does not establish a
 `measure:fp` or headed-measurement result, and #223 remains open. AI-27, AI-28,
 and AI-29 are resolved; AI-14 remains blocked for future measurement work. AI-30
-holds issue #567's Back/Forward history-integrity fix, and AI-33 holds issue
-#530's popup trust-pill contrast change for an exact-head visual Gate-3.
+holds issue #567's Back/Forward history-integrity fix, AI-31 holds issue #566's
+modifier-click opener-isolation behavior, and AI-33 holds issue #530's popup
+trust-pill contrast change for an exact-head visual Gate-3.
 
 **Guided resolution cursor:** `AI-19` (`Resume at: AI-19`; conversational label
 `q-5`). Current ready order: AI-19 → optional AI-24 → AI-23 (low priority).
@@ -155,6 +156,29 @@ fail-closed regression for this merge, and #560 now owns its combined hostile-
 frame reproduction and repair.
 
 ## Open and blocked items
+
+**OPEN: AI-31 - Issue #566 modifier-click authority Gate-3.** After the
+implementation PR is ready and every automated check for its current head is
+green, build that same head and follow the active AI-31 procedure in
+[`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md). In Smart mode,
+verify that trusted Ctrl/Cmd-click and middle-click each open exactly one
+cross-site child while the original tab and its history remain unchanged, and
+that the synthetic page cannot reuse `pointerdown`, `mousedown`, `click`, or
+`auxclick` for `location.assign` or a `window.open(..., "_self")` action. Check
+the `_top`, `_parent`, current-name, explicit-empty, base-blank, other-name,
+same-site, child-frame, and closed-shadow controls named in the guide. Confirm
+Navigation Off remains inert. This gate is intentionally separate from
+#567/#570's Back/Forward history repair. Non-isolated modified-anchor handlers
+remain reachable, but NavSentinel mints no opener service-worker or MAIN open or
+redirect allowance. Their same-task and deferred page popups are expected to be
+blocked as a known MEDIUM false intervention. The guide also exercises the
+non-current MAIN `_self` and service-worker `location.replace` controls.
+Do not run this gate while PR #572 is parked on SP-F-013. A repeated automated
+`location.replace` survivor means there is no eligible exact head to load.
+Only Chris can record this complete. Reply `AI-31 done; Gate-3 passed on PR #<n>
+at <40-character SHA>; Chrome <version>` or `AI-31 failed on PR #<n> at <SHA>:
+<step and observed>`. This PR-specific gate does not move the general guided-
+resolution cursor from AI-19.
 
 **OPEN: AI-36 — #558 popup/Options patch-save synchronization Gate-3.** Run the
 active manual Chrome guide in [`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md)

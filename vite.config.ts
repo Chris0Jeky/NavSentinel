@@ -42,6 +42,12 @@ export default defineConfig({
           ? "extension/src/shared/reputation_runtime.enabled.ts"
           : "extension/src/shared/reputation_runtime.disabled.ts",
       ),
+      "@navsentinel/child-reputation": resolve(
+        __dirname,
+        profile.capabilities.reputation
+          ? "extension/src/content/child_reputation.enabled.ts"
+          : "extension/src/content/child_reputation.disabled.ts",
+      ),
       // RI-07: with the capability off (every committed profile) the patch-bearing
       // monitor is never linked, so fetch / XHR / sendBeacon / password-value
       // prototypes are not wrapped at all rather than wrapped and left inert.
@@ -71,6 +77,27 @@ export default defineConfig({
               test: /[\\/]src[\\/](?:shared[\\/]pending_decision|sw[\\/]pending_decision_(?:handlers|store))\.ts$/,
               entriesAware: true,
               priority: 10
+            },
+            {
+              // Research reputation is shared by the content script and service
+              // worker. Keep it out of the already capped capture entry without
+              // changing runtime ordering or linking it into release builds.
+              name: "reputation-runtime",
+              test: /[\\/]src[\\/]shared[\\/](?:reputation|reputation_runtime\.enabled)\.ts$/,
+              entriesAware: true,
+              priority: 9
+            },
+            {
+              name: "child-reputation",
+              test: /[\\/]src[\\/]content[\\/]child_reputation\.enabled\.ts$/,
+              entriesAware: false,
+              priority: 8
+            },
+            {
+              name: "modifier-navigation",
+              test: /[\\/]src[\\/]content[\\/]modifier_navigation\.ts$/,
+              entriesAware: false,
+              priority: 7
             }
           ]
         }

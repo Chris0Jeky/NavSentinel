@@ -34,6 +34,7 @@ import {
   loadReputationFilter,
   reputationEnabled,
 } from "@navsentinel/reputation-runtime";
+import { checkChildFrameReputation } from "@navsentinel/child-reputation";
 import { controlToast, showOverlayCleanupToast, showToast } from "./ui_toast";
 import { explainReasonCode } from "../shared/explanations";
 import {
@@ -87,6 +88,13 @@ import {
   silentNavThrottleAllows,
   type SilentNavThrottleState,
 } from "./silent_decision";
+import {
+  effectiveAnchorTarget,
+  isBlankAnchorTarget,
+  isImmediateWindowOpenTarget,
+  isSameTabAnchorTarget,
+  isTrustedModifiedAnchorGesture,
+} from "./modifier_navigation";
 
 const CDS_SMART_BLOCK_THRESHOLD = 70;
 const NS_SOURCE = "__navsentinel__";
@@ -360,6 +368,8 @@ onAllowlistChange((list) => {
 function siteKeyFromLocation(): string {
   return location.hostname.toLowerCase();
 }
+
+const siteRegDomain = getRegistrableDomain(siteKeyFromLocation());
 
 function frameKey(): string {
   return isTopFrame() ? "top" : "frame";
@@ -787,18 +797,6 @@ function buildSilentNavEvent(params: {
       threshold: params.blockThreshold
     }
   };
-}
-
-function isImmediateWindowOpenTarget(target: unknown): boolean {
-  if (typeof target !== "string" || target === "") return true;
-  const normalized = target.toLowerCase();
-  if (normalized === "_blank") return true;
-  if (normalized === "_self" || normalized === "_top" || normalized === "_parent") return false;
-  try {
-    return target !== window.name;
-  } catch {
-    return true;
-  }
 }
 
 function appendImmediateSilentNav(event: EventLogEntry | null): void {
@@ -1305,16 +1303,19 @@ function tryOpenShadowRoot(el: Element): ShadowRoot | null {
   } catch { return null; }
 }
 
-function findAnchorInShadowRoots(x: number, y: number): HTMLAnchorElement | null {
+function findAnchorInShadowRoots(
+  x: number,
+  y: number,
+  eventPath: EventTarget[],
+): HTMLAnchorElement | null {
   for (const el of document.elementsFromPoint(x, y)) {
+    if (!eventPath.includes(el)) continue;
     const sr = tryOpenShadowRoot(el);
     if (!sr) continue;
     const inner = sr.elementFromPoint(x, y);
     if (inner?.tagName === "A") return inner as HTMLAnchorElement;
     const anc = inner?.closest?.("a");
     if (anc) return anc as HTMLAnchorElement;
-    const first = sr.querySelector("a");
-    if (first) return first as HTMLAnchorElement;
   }
   return null;
 }
@@ -1336,7 +1337,32 @@ function findAnchorFromEvent(e: MouseEvent): HTMLAnchorElement | null {
   // Shadow DOM fallback: composedPath() may not pierce shadow roots in all
   // Chromium builds when called from the extension's isolated world.
   // Scan all elements at click coordinates for shadow roots containing anchors.
-  return findAnchorInShadowRoots(e.clientX, e.clientY);
+  return findAnchorInShadowRoots(e.clientX, e.clientY, path);
+}
+
+function isCrossSiteDestinationHost(destHost: string | null | undefined): boolean {
+  const destRegDomain = getRegistrableDomain(destHost ?? "");
+  return !!(
+    siteRegDomain &&
+    destRegDomain &&
+    siteRegDomain !== destRegDomain &&
+    !areSameOrganization(siteRegDomain, destRegDomain)
+  );
+}
+
+function shouldIsolateModifiedAnchorFromPage(
+  e: MouseEvent,
+  anchor: HTMLAnchorElement | null = findAnchorFromEvent(e),
+): boolean {
+  return !!(
+    settings.defaultMode !== "off" &&
+    isTrustedModifiedAnchorGesture(e) &&
+    isTopFrame() &&
+    anchor &&
+    isSameTabAnchorTarget(effectiveAnchorTarget(anchor), true) &&
+    /^https?:$/i.test(anchor.protocol) &&
+    isCrossSiteDestinationHost(anchor.hostname)
+  );
 }
 
 function allowOnce(url: string, target?: string, features?: string): void {
@@ -1624,7 +1650,6 @@ if (chrome?.runtime?.sendMessage && isTopFrame()) {
 window.addEventListener(
   "pointerdown",
   (e) => {
-    if (!(e instanceof PointerEvent)) return;
     // Pointerdown is risk-correlation evidence only. Even a trusted down can be
     // cancelled or followed by page-script navigation, so it must not mint the
     // tab-wide SW rollback allowance before a trusted click is approved.
@@ -1652,9 +1677,20 @@ window.addEventListener(
       reasonCodes: []
     });
     setActiveToken(token);
+    if (shouldIsolateModifiedAnchorFromPage(e)) e.stopImmediatePropagation();
   },
   true
 );
+
+// Keep Chromium's native middle-click default (open one child tab), while
+// preventing page handlers from reusing the same gesture to navigate the
+// opener. Location.assign/replace are LegacyUnforgeable, so propagation is
+// the only point where this duplicate same-tab navigation can be stopped.
+for (const eventType of ["mousedown", "auxclick"] as const) {
+  window.addEventListener(eventType, (e) => {
+    if (shouldIsolateModifiedAnchorFromPage(e)) e.stopImmediatePropagation();
+  }, true);
+}
 
 window.addEventListener(
   "click",
@@ -1706,11 +1742,16 @@ window.addEventListener(
             meta: e.metaKey
           };
 
-    const explicitNewTab = e.isTrusted && !!ctx.explicitNewTabIntent;
+    // The current trusted click remains authoritative even when a user holds
+    // Ctrl/Cmd long enough for pointerdown correlation evidence to expire.
+    // Page scripts cannot forge isTrusted, so this does not widen synthetic
+    // navigation authority.
+    const currentClickNewTabIntent = e.isTrusted && (e.ctrlKey || e.metaKey);
+    const explicitNewTab = e.isTrusted && (!!ctx.explicitNewTabIntent || currentClickNewTabIntent);
     const anchor = findAnchorFromEvent(e);
-    const anchorTarget = (anchor?.target ?? "").toLowerCase();
-    const isBlankAnchor = !!(anchor && anchorTarget === "_blank");
-    const isSameTabAnchor = !!(anchor && (!anchorTarget || anchorTarget === "_self"));
+    const anchorTarget = anchor ? effectiveAnchorTarget(anchor) : "";
+    const isBlankAnchor = !!anchor && isBlankAnchorTarget(anchorTarget);
+    const isSameTabAnchor = !!anchor && isSameTabAnchorTarget(anchorTarget, isTopFrame());
     const parsed = anchor ? parseDestination(anchor.getAttribute("href") ?? anchor.href) : null;
     const isAllowed = parsed?.host
       ? isAllowlisted(allowlist, siteKeyFromLocation(), parsed.host)
@@ -1723,14 +1764,8 @@ window.addEventListener(
     }
     gestureNavAttempts++;
 
-    const siteRegDomain = getRegistrableDomain(siteKeyFromLocation());
     const destRegDomain = parsed?.host ? getRegistrableDomain(parsed.host) : null;
-    const isCrossSite = !!(
-      siteRegDomain &&
-      destRegDomain &&
-      siteRegDomain !== destRegDomain &&
-      !areSameOrganization(siteRegDomain, destRegDomain)
-    );
+    const isCrossSite = isCrossSiteDestinationHost(parsed?.host);
 
     const timeSincePointerdownMs = downForClick
       ? performance.now() - downForClick.ts
@@ -1960,6 +1995,19 @@ window.addEventListener(
     }
 
     if (decision === "allow") {
+      const nativeModifiedAnchor = !!(
+        mode !== "off" &&
+        anchor &&
+        currentClickNewTabIntent
+      );
+      const isolatedModifiedAnchor = shouldIsolateModifiedAnchorFromPage(e, anchor);
+      if (isolatedModifiedAnchor) {
+        // Do not preventDefault: the user's explicit new-tab navigation still
+        // belongs to Chromium. Stop only later page handlers that could also
+        // spend this gesture on an opener navigation.
+        e.stopImmediatePropagation();
+      }
+
       const silentNavEvent = e.isTrusted
         ? buildSilentNavEvent({
             destHref: parsed?.href,
@@ -1983,7 +2031,7 @@ window.addEventListener(
       // Otherwise a hostile page can dispatch pointerdown/click and self-
       // authorize its own navigation. Off is the explicit user-selected bypass,
       // so preserve its no-intervention contract for programmatic links too.
-      if (e.isTrusted || mode === "off") {
+      if ((e.isTrusted || mode === "off") && !nativeModifiedAnchor) {
         notifyNavGesture();
         notifyNavAllow();
         postToMain("ns-allow", {
@@ -2057,40 +2105,15 @@ window.addEventListener(
     // If the synchronous path allowed the navigation and we have a
     // cross-site destination, ask the SW for a deferred reputation check.
     if (reputationEnabled && !isTopFrame() && decision === "allow" && destRegDomain && isCrossSite && mode !== "off") {
-      void (async () => {
-        try {
-          const checks = [checkReputationViaMessage(destRegDomain)];
-          if (destHost !== null && destHost !== destRegDomain) {
-            checks.push(checkReputationViaMessage(destHost));
-          }
-          const results = await Promise.all(checks);
-          const anyBad = results.some((r) => r.knownBad);
-          const anyReady = results.some((r) => r.filterReady);
-          if (!anyBad) {
-            if (!anyReady && settings.debug) {
-              console.debug("[NavSentinel] Child-frame reputation check: filter not ready in SW");
-            }
-            return;
-          }
-          // Destination is known-bad -- late async check from child frame.
-          // The synchronous NRS path could not include the +50 knownBadDomain
-          // factor because the bloom filter is not loaded in child frames.
-          const host = destHost ?? destRegDomain;
-          appendEventSafely({
-            kind: "nav_reputation_late_warn",
-            site: siteKeyFromLocation(),
-            url: parsed?.href ?? location.href,
-            destHost: host,
-            reasons: ["late_async_child_frame"],
-          });
-          showToast({
-            message: `NavSentinel warning: ${host} is a known malicious domain`,
-            timeoutMs: 8000,
-          });
-        } catch {
-          // Graceful degradation: SW unreachable
-        }
-      })();
+      checkChildFrameReputation(
+        destRegDomain,
+        destHost,
+        parsed?.href,
+        settings.debug,
+        checkReputationViaMessage,
+        appendEvent,
+        showToast,
+      );
     }
   },
   true
