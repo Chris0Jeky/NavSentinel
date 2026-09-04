@@ -123,6 +123,62 @@ limitations, not a reason to reopen the completed gate.
 
 ---
 
+## Active guide: AI-41 - issue #593 child-frame navigation authority
+
+Run this only after PR #636 (branch `fix/issue593-child-frame-location-20260904`)
+is ready and every automated check for its current head is green.
+
+1. Resolve PR #636 and record its 40-character `headRefOid`. In the
+   implementation worktree, require `git rev-parse HEAD` to equal that value.
+   `git status --short` must contain no uncommitted product changes. The known
+   Defender quarantine may appear only as
+   ` D tests/clickfix-detector.property.test.ts`; do not restore, inspect, stage,
+   execute, or allow that fixture. Stop for any other mismatch.
+2. On that exact head run `npm run build`, then create a fresh, unsigned-in
+   Chrome profile, enable Developer mode at `chrome://extensions`, and load that
+   exact `extension/dist` unpacked. Record the Chrome version and confirm the
+   service worker registers without an error. Loading and reloading the unpacked
+   extension is Chris-owned; after any rebuild, click **Reload** for NavSentinel
+   once, then reload the fixture page. On every fixture load verify the page
+   reports `capture="1"`, `bridge="1"`, and the built UI-guard revision on
+   `data-navsentinel-capture-ready`, `data-navsentinel-bridge-ready`, and
+   `data-navsentinel-ui-guard`. In Options use Smart Navigation mode and confirm
+   neither `localhost` nor `127.0.0.1` is allowlisted or trusted.
+3. Start the tracked Gym with `npm run gym:serve`. This gate needs a real
+   cross-site hop, so open the fixture on `localhost` and let it navigate to a
+   `127.0.0.1` destination — a same-host journey is skipped by design and proves
+   nothing. Wait at least six seconds after the page loads before clicking:
+   navigations within five seconds of a typed/address-bar load are treated as
+   part of that user-requested navigation.
+4. Deceptive case. On a page whose visible control is covered by a nearly
+   transparent same-origin iframe, click the visible control once. Confirm the
+   tab does **not** silently settle on the third-party destination: NavSentinel
+   must return the tab to the source page and show its "rolled back a suspicious
+   redirect" notice with a working **Proceed** action. Take **Proceed** once and
+   confirm the destination then loads and stays.
+5. Benign control A — declared child navigation. On a page with a visible,
+   ordinary embedded frame containing a real link with `target="_top"`, focus
+   that link and press **Enter**. The destination must load and the tab must
+   stay there with no rollback and no prompt.
+6. Benign control B — top-frame script navigation. On an ordinary page, click a
+   visible button whose own script navigates the tab a moment later. The
+   destination must load and stay, unchanged from before this branch.
+7. Benign control C — everyday browsing. In the same profile, visit three sites
+   you normally use that embed third-party frames (for example a video embed, a
+   consent or login frame, and a site with ads), interact for a minute each, and
+   confirm no rollback notice appears on a navigation you asked for.
+8. Inspect the fixture page console and the extension service-worker console for
+   new errors. On a pass, reply `AI-41 done; Gate-3 passed on PR #636 at
+   <40-character SHA>; Chrome <version>`. On any mismatch, reply `AI-41 failed on
+   PR #636 at <SHA>: <step and observed>` and leave the item open.
+
+Only Chris can record AI-41 complete. The modelled Playwright regression
+(`tests/e2e/issue593-hidden-media-layer.spec.ts`) supports but does not replace
+this exact-head branded-Chrome gate, and it cannot speak to real embeds on the
+open web, which is what step 7 exists to sample.
+
+---
+
 ## Active guide: AI-33 — issue #530 popup trust-pill contrast
 
 Run this only after the #530 implementation PR is ready and every automated

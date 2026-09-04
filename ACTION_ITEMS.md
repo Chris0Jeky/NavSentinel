@@ -156,6 +156,23 @@ frame reproduction and repair.
 
 ## Open and blocked items
 
+**OPEN: AI-41 - #593 child-frame navigation authority Gate-3.** Run the active
+AI-41 procedure in [`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md)
+against PR #636 (branch `fix/issue593-child-frame-location-20260904`). Verify
+the exact head and hosted checks first, then build that head and load it in a
+fresh Chrome profile. Confirm that a trusted click on a visible control covered
+by a nearly transparent same-origin iframe no longer leaves the tab silently on
+the frame's chosen cross-site destination, and that the existing rollback notice
+and its Proceed action work. Then confirm the benign controls still pass: a
+declared `target="_top"` link inside a visible embedded frame activated by
+keyboard, a top-frame button whose own script navigates the tab, and a minute of
+ordinary browsing on three sites that embed third-party frames. Inspect the page
+and service-worker consoles. This gate covers only the child-frame navigation-
+authority boundary; it does not cover a child frame navigating itself, which the
+PR documents as out of model. Only Chris can complete this human Gate-3. The
+general guided resolution cursor remains AI-19; AI-41 is an additional
+branch-specific gate.
+
 **OPEN: AI-36 — #558 popup/Options patch-save synchronization Gate-3.** Run the
 active manual Chrome guide in [`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md)
 against the eventual PR for branch `fix/issue558-patch-save-sync`. Verify the

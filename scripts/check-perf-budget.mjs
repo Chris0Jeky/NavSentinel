@@ -65,7 +65,15 @@ const budgets = [
     // RI-02 removes the visual-simulation runtime from the always-on chunk, so the
     // temporary 70KB stopgap can return to the previous 66KB ceiling. #374 remains
     // limited to any future non-visual lazy-chunk work.
-    maxKB: 66,
+    // Bumped 66 -> 67 (#593): the child-frame navigation-authority boundary adds
+    // ~0.45KB (a pure predicate module, a submit-control probe, and the call
+    // site). Measured on this branch: interaction-only 65.4 -> 65.8KB and the
+    // research-reputation profile 65.9 -> 66.3KB, with total dist still far
+    // under 500KB. The research profile is the binding one and had ~0.1KB of
+    // headroom left, so this bump buys the security fix room, not a new
+    // allowance for feature growth. The split/trim obligation above stands and
+    // is now overdue: the next capture growth slice must split this chunk.
+    maxKB: 67,
   },
   {
     label: "main_guard (MAIN world)",
