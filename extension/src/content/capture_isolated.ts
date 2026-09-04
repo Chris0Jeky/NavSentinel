@@ -1324,30 +1324,18 @@ function findAnchorInShadowRoots(x: number, y: number): HTMLAnchorElement | null
  * True when a click resolves to a navigation the clicking frame itself declared
  * through a form submit control. Paired with an anchor href, this is the
  * "in-frame navigation intent" that lets a child frame mint tab-wide
- * navigation authority (#593); a bare element does not qualify.
+ * navigation authority (#593); a bare element does not qualify. Deliberately
+ * conservative: a missed intent only costs a child frame the tab-wide
+ * allowance, which downgrades the navigation to the existing rollback prompt.
  */
 function hasFormSubmitIntent(e: MouseEvent): boolean {
-  const seen: Element[] = [];
-  for (const node of e.composedPath?.() ?? []) {
-    if (node instanceof Element) seen.push(node);
-  }
-  if (e.target instanceof Element && !seen.includes(e.target)) seen.push(e.target);
-  const closestSubmit = e.target instanceof Element
-    ? e.target.closest("button, input[type='submit'], input[type='image']")
-    : null;
-  if (closestSubmit && !seen.includes(closestSubmit)) seen.push(closestSubmit);
-  for (const el of seen) {
-    if (el instanceof HTMLInputElement) {
-      const type = el.type.toLowerCase();
-      if ((type === "submit" || type === "image") && (el.form ?? el.closest("form"))) return true;
-      continue;
-    }
-    if (el instanceof HTMLButtonElement) {
-      const type = (el.getAttribute("type") ?? "submit").toLowerCase();
-      if (type !== "button" && type !== "reset" && (el.form ?? el.closest("form"))) return true;
-    }
-  }
-  return false;
+  const target = e.target instanceof Element ? e.target : null;
+  const control = target?.closest("button, input") ?? null;
+  if (!(control instanceof HTMLButtonElement || control instanceof HTMLInputElement)) return false;
+  if (!(control.form ?? control.closest("form"))) return false;
+  const type = (control.getAttribute("type") ?? "").toLowerCase();
+  if (control instanceof HTMLInputElement) return type === "submit" || type === "image";
+  return type !== "button" && type !== "reset";
 }
 
 function findAnchorFromEvent(e: MouseEvent): HTMLAnchorElement | null {
