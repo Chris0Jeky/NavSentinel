@@ -76,7 +76,7 @@ type Expectation = "blocked-pre-harm" | "rolled-back" | "out-of-model" | "benign
 
 type Arm = {
   id: string;
-  primitive: "child-assign" | "top-assign" | "window-open" | "anchor-top" | "top-script";
+  primitive: "child-assign" | "top-assign" | "window-open" | "anchor-top" | "top-script" | "forged-anchor-top";
   delayMs: number;
   /** Which input the harness delivers. */
   input: "physical-click" | "keyboard" | "top-physical-click" | "none";
@@ -89,6 +89,10 @@ const arms: readonly Arm[] = [
   // --- attack arms ---
   { id: "top-assign-100", primitive: "top-assign", delayMs: 100, input: "physical-click", layer: "hidden", role: "attack", expectation: "rolled-back" },
   { id: "top-assign-1600", primitive: "top-assign", delayMs: 1_600, input: "physical-click", layer: "hidden", role: "attack", expectation: "rolled-back" },
+  // Review finding: the intent signal is page-declared markup, so a deceptive
+  // layer can wrap itself in an anchor. A fragment-only or `javascript:` href is
+  // not a cross-document destination and must not buy tab-wide authority.
+  { id: "forged-anchor-top-100", primitive: "forged-anchor-top", delayMs: 100, input: "physical-click", layer: "hidden", role: "attack", expectation: "rolled-back" },
   { id: "window-open-100", primitive: "window-open", delayMs: 100, input: "physical-click", layer: "hidden", role: "attack", expectation: "blocked-pre-harm" },
   { id: "child-assign-100", primitive: "child-assign", delayMs: 100, input: "physical-click", layer: "hidden", role: "attack", expectation: "out-of-model" },
   { id: "child-assign-1600", primitive: "child-assign", delayMs: 1_600, input: "physical-click", layer: "hidden", role: "attack", expectation: "out-of-model" },
@@ -358,7 +362,9 @@ async function runArm(
     popupObservationArmed = true;
 
     if (arm.input === "physical-click") {
-      await frame.locator("#hidden-interactive-layer").click();
+      await frame.locator(
+        arm.primitive === "forged-anchor-top" ? "#forged-intent-layer" : "#hidden-interactive-layer",
+      ).click();
       await expect.poll(() => {
         const armedEntry = armedDiagnostic(diagnostics, "child", "physical-click");
         if (!armedEntry) return null;
@@ -494,7 +500,8 @@ for (const arm of arms) {
     expect(baseline.sinkReceiptsAfter, "baseline must prove this armed consequence is reachable").toBe(
       baseline.sinkReceiptsBefore + 1,
     );
-    if (arm.primitive === "top-assign" || arm.primitive === "top-script" || arm.primitive === "anchor-top") {
+    if (arm.primitive === "top-assign" || arm.primitive === "top-script" ||
+        arm.primitive === "anchor-top" || arm.primitive === "forged-anchor-top") {
       expect(baseline.topReturnedToFixture, "an unprotected browser must leave the tab on the destination").toBe(false);
     }
 

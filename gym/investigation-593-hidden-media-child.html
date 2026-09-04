@@ -14,6 +14,9 @@
 <body>
   <!-- MODELLED: non-anchor layer deliberately covers the visible parent player. -->
   <div id="hidden-interactive-layer" role="button" tabindex="0" aria-label="Playback surface"></div>
+  <!-- MODELLED: the same layer, but wrapped in a fragment-only anchor so it
+       falsely *declares* a navigation intent it never uses. -->
+  <a id="forged-intent-layer" href="#" hidden aria-label="Playback surface"></a>
   <!-- Benign control: a child frame that DECLARES where it sends the tab. -->
   <a id="declared-top-link" hidden target="_top">Open the linked page</a>
   <script>
@@ -36,6 +39,7 @@
         ["child-assign-1600", { primitive: "child-assign", delayMs: 1600 }],
         ["child-assign-no-input", { primitive: "child-assign", delayMs: 100 }],
         ["top-assign-100", { primitive: "top-assign", delayMs: 100 }],
+        ["forged-anchor-top-100", { primitive: "forged-anchor-top", delayMs: 100 }],
         ["top-assign-1600", { primitive: "top-assign", delayMs: 1600 }],
         ["window-open-100", { primitive: "window-open", delayMs: 100 }],
         ["benign-anchor-top-keyboard", { primitive: "anchor-top", delayMs: 0 }],
@@ -83,7 +87,7 @@
           window.location.assign(safeSink);
           return;
         }
-        if (primitive === "top-assign") {
+        if (primitive === "top-assign" || primitive === "forged-anchor-top") {
           window.top.location.assign(safeSink);
           return;
         }
@@ -115,7 +119,18 @@
         window.setTimeout(execute, delayMs);
       }
 
-      if (primitive === "anchor-top") {
+      if (primitive === "forged-anchor-top") {
+        // The layer is an anchor whose href goes nowhere; its click handler
+        // suppresses the default action and drives the top frame by script.
+        const forged = document.getElementById("forged-intent-layer");
+        forged.hidden = false;
+        forged.style.cssText = "position:absolute;inset:0;width:100%;height:100%;display:block";
+        layer.hidden = true;
+        forged.addEventListener("click", (event) => {
+          event.preventDefault();
+          armAction(event, "physical-click");
+        });
+      } else if (primitive === "anchor-top") {
         // The benign control declares its destination in the DOM: a real anchor
         // with an href and target="_top". The extension can see this intent, so
         // the frame keeps its navigation authority.

@@ -1321,21 +1321,30 @@ function findAnchorInShadowRoots(x: number, y: number): HTMLAnchorElement | null
 }
 
 /**
+ * Selector for a control whose default action submits a form: a `<button>`
+ * whose type defaults to submit, or a submit/image input.
+ */
+const SUBMIT_INTENT_SELECTOR =
+  "button:not([type=button]):not([type=reset]),input[type=submit],input[type=image]";
+
+/**
  * True when a click resolves to a navigation the clicking frame itself declared
- * through a form submit control. Paired with an anchor href, this is the
- * "in-frame navigation intent" that lets a child frame mint tab-wide
- * navigation authority (#593); a bare element does not qualify. Deliberately
- * conservative: a missed intent only costs a child frame the tab-wide
+ * through a form submit control. Paired with a cross-document anchor href, this
+ * is the "in-frame navigation intent" that lets a child frame mint tab-wide
+ * navigation authority (#593); a bare element does not qualify.
+ *
+ * Deliberately conservative in BOTH directions. Missing an intent (a submit
+ * control inside a shadow root, say) only costs a child frame the tab-wide
  * allowance, which downgrades the navigation to the existing rollback prompt.
+ * Seeing one that the page never honours (a submit button whose handler calls
+ * preventDefault and then scripts a navigation) is a known forgeable path: the
+ * signal is page-declared markup, so it raises the cost of the #593 pattern
+ * rather than making it impossible. See the PR and the evidence-map limitation.
  */
 function hasFormSubmitIntent(e: MouseEvent): boolean {
   const target = e.target instanceof Element ? e.target : null;
-  const control = target?.closest("button, input") ?? null;
-  if (!(control instanceof HTMLButtonElement || control instanceof HTMLInputElement)) return false;
-  if (!(control.form ?? control.closest("form"))) return false;
-  const type = (control.getAttribute("type") ?? "").toLowerCase();
-  if (control instanceof HTMLInputElement) return type === "submit" || type === "image";
-  return type !== "button" && type !== "reset";
+  const control = target?.closest(SUBMIT_INTENT_SELECTOR) ?? null;
+  return !!(control as HTMLButtonElement | HTMLInputElement | null)?.form;
 }
 
 function findAnchorFromEvent(e: MouseEvent): HTMLAnchorElement | null {
@@ -2012,7 +2021,12 @@ window.addEventListener(
         isTopFrame: topFrame,
         isTrustedInput: e.isTrusted,
         mode,
-        hasInFrameNavigationIntent: !!parsed?.href || hasFormSubmitIntent(e)
+        // A bare href is not enough: `href="#"` or `javascript:` resolves fine
+        // and would let the deceptive layer declare an intent it never uses.
+        // Only a real cross-document http(s) destination counts.
+        hasInFrameNavigationIntent:
+          isDocumentNavigationHref(parsed?.href, destHost, location.href) ||
+          hasFormSubmitIntent(e)
       })) {
         notifyNavGesture();
         notifyNavAllow();

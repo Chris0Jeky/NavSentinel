@@ -1533,12 +1533,14 @@
       "oracle_type": "independent_harm",
       "evidence_state": "REGRESSION_PROVEN",
       "evidence_validity": "CURRENT_REGRESSION",
-      "known_limitation": "Local synthetic loopback fixtures only. Location members are unforgeable, so the protected outcome is post-commit rollback, not pre-harm blocking; a child frame navigating itself is recorded as out of model; and modifiers, transient blank targets, and opener relationships are untested. No open-web or owner-Chrome evidence.",
+      "known_limitation": "Local synthetic loopback fixtures only, with no open-web or owner-Chrome evidence. The boundary raises the cost of the pattern rather than closing it: the in-frame intent signal is page-declared markup, so a deceptive layer that wraps itself in a form submit control still inherits authority (a fragment-only or javascript: anchor no longer does, and forged-anchor-top-100 guards that). The frame-local main-world allowance is deliberately unchanged, so the pre-existing ns-allow -> form.submit(target=_top) -> ns-allow-target-nav path is also uncovered. Location members are unforgeable, so the protected outcome is post-commit rollback, not pre-harm blocking; a child frame navigating itself is recorded as out of model; the worker's 5 s typed-origin window is stepped around by the harness and is not exercised; and modifiers, transient blank targets, and opener relationships are untested. The accepted false-positive cost is broader than the clicking frame: a gesture-less child click whose PARENT then navigates the tab is also downgraded to the rollback prompt.",
       "issue_refs": [
         "#593",
         "#458"
       ],
-      "pr_refs": [],
+      "pr_refs": [
+        "#636"
+      ],
       "paths": [
         "gym/investigation-593-hidden-media-layer.html",
         "gym/investigation-593-hidden-media-child.html",
