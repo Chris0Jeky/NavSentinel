@@ -2,18 +2,17 @@
   "use strict";
 
   const SENTINEL = "NAVSENTINEL_SENTINEL_DO_NOT_RUN";
-  const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
+  const LOOPBACK_HOSTS = new Set(["127.0.0.1", "127.0.0.2", "localhost", "[::1]"]);
+  const ARMED_LOOPBACK_HOSTS = new Set(["127.0.0.1", "127.0.0.2", "[::1]"]);
   const FAKE_SINK_PATH = "/__navsentinel_fake_sink";
   const FAKE_SINK_PORT_MIN = 46100;
   const FAKE_SINK_PORT_MAX = 46124;
   const TARGETS = Object.freeze({
     benign: Object.freeze({
-      parameter: "benign_target",
       consequence: "benign-navigation",
       sinkRoles: new Set(["benign", "mixed"]),
     }),
     harm: Object.freeze({
-      parameter: "harm_target",
       consequence: "wrong-target-navigation",
       sinkRoles: new Set(["attack", "mixed"]),
     }),
@@ -44,7 +43,7 @@
     const port = Number(parsed.port);
     const target = TARGETS[role];
     const targetId = parsed.searchParams.get("target_id") || "";
-    const armed = (parsed.hostname === "127.0.0.1" || parsed.hostname === "[::1]") &&
+    const armed = ARMED_LOOPBACK_HOSTS.has(parsed.hostname) &&
       port >= FAKE_SINK_PORT_MIN && port <= FAKE_SINK_PORT_MAX &&
       parsed.pathname === FAKE_SINK_PATH &&
       parsed.username === "" && parsed.password === "" && parsed.hash === "" &&
@@ -71,7 +70,10 @@
       throw new Error("non-loopback-fixture-origin");
     }
     const target = new URL("/local-fixture-sink.html", location.href);
-    if (role === "harm" || originMode === "alternate-loopback") {
+    // Keep the default fallback on the fixture server so a Gym bound to one
+    // loopback address family stays reachable. Evidence lanes supply an armed
+    // sink override; hostname separation is only for fixtures that request it.
+    if (originMode === "alternate-loopback") {
       target.hostname = alternateLoopbackHost(location.hostname);
     }
     target.searchParams.set("scenario_id", scenarioId);
@@ -81,14 +83,33 @@
     return target.href;
   }
 
+  function resolveBootstrap(role, scenarioId, originMode) {
+    const resolver = window.NavSentinelFixtureTargetBootstrap;
+    if (!resolver || typeof resolver.resolve !== "function") return null;
+    const result = resolver.resolve(role, scenarioId, originMode);
+    if (!result || result.status === "document-mismatch") {
+      throw new Error("bootstrap-document-mismatch");
+    }
+    if (result.status !== "resolved") throw new Error("bootstrap-target-unbound");
+    if (result.kind === "fallback") return fallbackUrl(role, scenarioId, originMode);
+    if (result.kind !== "armed-sink" || typeof result.href !== "string") {
+      throw new Error("bootstrap-target-unbound");
+    }
+    // The bootstrap may only return URLs materialized by the live fake sink;
+    // re-check the complete structural contract at the final fixture boundary.
+    return assertArmedLoopbackUrl(result.href, role, scenarioId);
+  }
+
   function url(role, scenarioId, originMode = "same-loopback") {
     if (!Object.hasOwn(TARGETS, role)) throw new Error("invalid-target-role");
     if (!ORIGIN_MODES.has(originMode)) throw new Error("invalid-origin-mode");
     const checkedScenarioId = assertScenarioId(scenarioId);
-    const override = new URLSearchParams(location.search).get(TARGETS[role].parameter);
-    return override
-      ? assertArmedLoopbackUrl(override, role, checkedScenarioId)
-      : fallbackUrl(role, checkedScenarioId, originMode);
+    const legacyParameters = new URLSearchParams(location.search);
+    if (legacyParameters.has("harm_target") || legacyParameters.has("benign_target")) {
+      throw new Error("legacy-target-override-rejected");
+    }
+    return resolveBootstrap(role, checkedScenarioId, originMode) ??
+      fallbackUrl(role, checkedScenarioId, originMode);
   }
 
   function apply(root = document) {
@@ -102,6 +123,9 @@
         delete node.dataset.navsentinelLocalTargetReady;
       }
     }
+
+    const invalidMarker = document.documentElement.getAttribute("data-navsentinel-fixture-invalid");
+    if (invalidMarker !== null) throw new Error(`fixture-invalid:${invalidMarker}`);
 
     const destinations = [];
     for (const node of nodes) {

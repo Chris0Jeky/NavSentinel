@@ -9,6 +9,7 @@
  * Usage:
  *   node scripts/fetch-phishing-corpus.mjs [--limit N] [--dry-run]
  *                                           [--timeout MS] [--source SOURCE]
+ *   node scripts/fetch-phishing-corpus.mjs --from-manifest PATH --output-dir DIR
  *
  * Options:
  *   --limit N       Max snapshots to download per run (default: 50)
@@ -22,7 +23,13 @@ import fs from "node:fs";
 import path from "node:path";
 import https from "node:https";
 import http from "node:http";
-import crypto from "node:crypto";
+import {
+  createCorpusManifest,
+  normalizeCorpusCandidates,
+  rehydrateCorpusSnapshots,
+  sha256,
+  snapshotFilename,
+} from "./corpus-manifest.mjs";
 
 // ── Constants ──────────────────────────────────────────────────────
 
@@ -44,26 +51,39 @@ function parseArgs() {
     dryRun: false,
     timeout: 10_000,
     source: "all",
+    fromManifest: null,
+    outputDir: null,
+    provided: { limit: false, dryRun: false, source: false, fromManifest: false, outputDir: false },
   };
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    if (arg === "--limit" && args[i + 1]) {
-      const n = parseInt(args[++i], 10);
+    const requiredValue = (flag) => {
+      const value = args[++i];
+      if (!value || value.startsWith("--")) {
+        console.error(`Invalid ${flag} value`);
+        process.exit(1);
+      }
+      return value;
+    };
+    if (arg === "--limit") {
+      opts.provided.limit = true;
+      const n = parseInt(requiredValue("--limit"), 10);
       if (!Number.isFinite(n) || n < 1) {
-        console.error(`Invalid --limit value: ${args[i]} (must be a positive integer)`);
+        console.error("Invalid --limit value (must be a positive integer)");
         process.exit(1);
       }
       opts.limit = n;
-    } else if (arg === "--timeout" && args[i + 1]) {
-      const n = parseInt(args[++i], 10);
+    } else if (arg === "--timeout") {
+      const n = parseInt(requiredValue("--timeout"), 10);
       if (!Number.isFinite(n) || n < 1000) {
-        console.error(`Invalid --timeout value: ${args[i]} (must be >= 1000 ms)`);
+        console.error("Invalid --timeout value (must be >= 1000 ms)");
         process.exit(1);
       }
       opts.timeout = n;
-    } else if (arg === "--source" && args[i + 1]) {
-      const s = args[++i].toLowerCase();
+    } else if (arg === "--source") {
+      opts.provided.source = true;
+      const s = requiredValue("--source").toLowerCase();
       if (!["openphish", "phishtank", "all"].includes(s)) {
         console.error(`Invalid --source value: ${s} (must be openphish, phishtank, or all)`);
         process.exit(1);
@@ -71,6 +91,13 @@ function parseArgs() {
       opts.source = s;
     } else if (arg === "--dry-run") {
       opts.dryRun = true;
+      opts.provided.dryRun = true;
+    } else if (arg === "--from-manifest") {
+      opts.fromManifest = requiredValue("--from-manifest");
+      opts.provided.fromManifest = true;
+    } else if (arg === "--output-dir") {
+      opts.outputDir = requiredValue("--output-dir");
+      opts.provided.outputDir = true;
     } else if (arg === "--help" || arg === "-h") {
       console.log(`Usage: node scripts/fetch-phishing-corpus.mjs [options]
 
@@ -79,8 +106,13 @@ Options:
   --dry-run       Fetch URLs but skip page downloads
   --timeout MS    Per-page download timeout in ms (default: 10000)
   --source SRC    Feed source: openphish, phishtank, or all (default: all)
+  --from-manifest PATH  Rehydrate an existing manifest without feed access
+  --output-dir DIR      Required absent directory for --from-manifest output
   --help, -h      Show this help`);
       process.exit(0);
+    } else {
+      console.error("Unknown option");
+      process.exit(1);
     }
   }
 
@@ -95,7 +127,7 @@ const USER_AGENT = "NavSentinel-CorpusFetcher/1.0 (security-research; https://gi
  * Fetch a URL via HTTP or HTTPS, following up to maxRedirects redirects.
  * Returns the final response body as a Buffer.
  */
-function fetchUrl(url, timeoutMs = 15_000, maxRedirects = 5) {
+function fetchUrl(url, timeoutMs = 15_000, maxRedirects = 5, maxBytes = Number.POSITIVE_INFINITY) {
   return new Promise((resolve, reject) => {
     const attempt = (currentUrl, remaining) => {
       const mod = currentUrl.startsWith("https:") ? https : http;
@@ -103,11 +135,11 @@ function fetchUrl(url, timeoutMs = 15_000, maxRedirects = 5) {
 
       const req = mod.get(currentUrl, reqOpts, (res) => {
         if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          res.resume();
           if (remaining <= 0) {
             reject(new Error(`Too many redirects fetching ${url}`));
             return;
           }
-          res.resume();
           const next = new URL(res.headers.location, currentUrl).toString();
           attempt(next, remaining - 1);
           return;
@@ -119,7 +151,16 @@ function fetchUrl(url, timeoutMs = 15_000, maxRedirects = 5) {
         }
 
         const chunks = [];
-        res.on("data", (chunk) => chunks.push(chunk));
+        let receivedBytes = 0;
+        res.on("data", (chunk) => {
+          receivedBytes += chunk.length;
+          if (receivedBytes > maxBytes) {
+            reject(new Error("Response exceeded configured byte limit"));
+            res.destroy();
+            return;
+          }
+          chunks.push(chunk);
+        });
         res.on("end", () => resolve(Buffer.concat(chunks)));
         res.on("error", reject);
       });
@@ -158,13 +199,12 @@ async function fetchOpenPhishUrls() {
   try {
     const buf = await fetchUrl(OPENPHISH_FEED_URL, 30_000);
     const urls = buf.toString("utf-8")
-      .split("\n")
-      .map((l) => l.trim())
-      .filter((l) => l.startsWith("http"));
+      .split(/\r?\n/u)
+      .filter((line) => line.length > 0);
     console.log(`  OpenPhish: ${urls.length} URLs`);
     return urls.map((url) => ({ url, source: "openphish" }));
-  } catch (err) {
-    console.warn(`  OpenPhish feed failed: ${err.message}`);
+  } catch {
+    console.warn("  OpenPhish feed unavailable");
     return [];
   }
 }
@@ -191,31 +231,44 @@ async function fetchPhishTankUrls() {
       return [];
     }
     const urls = entries
-      .filter((e) => e.url && e.verified === "yes")
-      .map((e) => ({ url: e.url, source: "phishtank" }));
+      .filter((entry) => entry !== null && typeof entry === "object" && entry.verified === "yes")
+      .map((entry) => ({ url: entry.url, source: "phishtank" }));
     console.log(`  PhishTank: ${urls.length} verified URLs`);
     return urls;
-  } catch (err) {
-    console.warn(`  PhishTank feed failed: ${err.message}`);
+  } catch {
+    console.warn("  PhishTank feed unavailable");
     return [];
   }
 }
 
 // ── Snapshot naming ────────────────────────────────────────────────
 
-/**
- * Generate a deterministic filename for a snapshot.
- * Format: {source}-{sha256-first-16-chars}.html
- */
-function snapshotFilename(source, url) {
-  const hash = crypto.createHash("sha256").update(url).digest("hex").slice(0, 16);
-  return `${source}-${hash}.html`;
-}
-
 // ── Main ───────────────────────────────────────────────────────────
 
 async function main() {
   const opts = parseArgs();
+
+  if (opts.provided.fromManifest || opts.provided.outputDir) {
+    if (!opts.provided.fromManifest || !opts.provided.outputDir) {
+      console.error("Rehydration requires both --from-manifest and --output-dir");
+      process.exit(1);
+    }
+    if (opts.provided.limit || opts.provided.dryRun || opts.provided.source) {
+      console.error("Rehydration forbids --limit, --dry-run, and --source");
+      process.exit(1);
+    }
+
+    console.log("\nNavSentinel Phishing Corpus Rehydration");
+    console.log(`  Timeout: ${opts.timeout} ms`);
+    const result = await rehydrateCorpusSnapshots({
+      manifestPath: opts.fromManifest,
+      outputDir: opts.outputDir,
+      fetchSnapshot: (entry) => fetchUrl(new URL(entry.url).href, opts.timeout, 0, entry.sizeBytes),
+    });
+    console.log(`  Rehydrated: ${result.rehydrated}`);
+    console.log(`  Failed records retained: ${result.failed}`);
+    return;
+  }
 
   console.log(`\nNavSentinel Phishing Corpus Fetcher`);
   console.log(`===================================`);
@@ -243,17 +296,17 @@ async function main() {
     process.exit(1);
   }
 
-  console.log(`\nTotal feed URLs: ${feedEntries.length}`);
+  const normalized = normalizeCorpusCandidates(feedEntries);
+  feedEntries = normalized.entries;
+  console.log(`\nFeed candidates: ${normalized.entries.length + normalized.invalidCount + normalized.duplicateCount}`);
+  console.log(`Safe candidates: ${feedEntries.length}`);
+  console.log(`Quarantined candidates: ${normalized.invalidCount}`);
+  console.log(`Duplicate candidates: ${normalized.duplicateCount}`);
 
-  // Deduplicate by URL
-  const seen = new Set();
-  feedEntries = feedEntries.filter((e) => {
-    if (seen.has(e.url)) return false;
-    seen.add(e.url);
-    return true;
-  });
-
-  console.log(`Unique URLs: ${feedEntries.length}`);
+  if (feedEntries.length === 0) {
+    console.error("\nNo safe feed candidates remain after preflight.");
+    process.exit(1);
+  }
 
   // Shuffle for variety, then cap at limit
   shuffle(feedEntries);
@@ -261,11 +314,7 @@ async function main() {
   console.log(`Selected for download: ${selected.length}\n`);
 
   if (opts.dryRun) {
-    console.log("DRY RUN — listing selected URLs:\n");
-    for (const entry of selected) {
-      console.log(`  [${entry.source}] ${entry.url}`);
-    }
-    console.log(`\n${selected.length} URLs would be downloaded.`);
+    console.log(`DRY RUN: ${selected.length} safe candidates would be downloaded.`);
     process.exit(0);
   }
 
@@ -282,9 +331,7 @@ async function main() {
     const filename = snapshotFilename(entry.source, entry.url);
     const filepath = path.join(SNAPSHOTS_DIR, filename);
 
-    process.stdout.write(
-      `  [${i + 1}/${selected.length}] ${entry.source}: ${truncateUrl(entry.url, 60)} ... `
-    );
+    process.stdout.write(`  [${i + 1}/${selected.length}] ${entry.source} ... `);
 
     const buf = await downloadPage(entry.url, opts.timeout);
 
@@ -299,6 +346,7 @@ async function main() {
         source: entry.source,
         fetchDate: new Date().toISOString(),
         sizeBytes: buf.length,
+        sha256: sha256(buf),
       });
     } else {
       failed++;
@@ -310,20 +358,18 @@ async function main() {
         source: entry.source,
         fetchDate: new Date().toISOString(),
         sizeBytes: 0,
-        error: "Download failed or empty response",
+        sha256: null,
+        error: "download_failed",
       });
     }
   }
 
   // Write manifest
-  const manifestData = {
+  const manifestData = createCorpusManifest({
     generatedAt: new Date().toISOString(),
     feedSources: opts.source === "all" ? ["openphish", "phishtank"] : [opts.source],
-    totalUrls: selected.length,
-    downloaded,
-    failed,
     entries: manifest,
-  };
+  });
 
   fs.writeFileSync(MANIFEST_PATH, JSON.stringify(manifestData, null, 2), "utf-8");
 
@@ -332,8 +378,6 @@ async function main() {
   console.log(`Corpus fetch complete`);
   console.log(`  Downloaded: ${downloaded}`);
   console.log(`  Failed:     ${failed}`);
-  console.log(`  Manifest:   ${MANIFEST_PATH}`);
-  console.log(`  Snapshots:  ${SNAPSHOTS_DIR}`);
   console.log(`${"=".repeat(50)}\n`);
 }
 
@@ -348,13 +392,11 @@ function shuffle(arr) {
   return arr;
 }
 
-/** Truncate a URL for display. */
-function truncateUrl(url, maxLen) {
-  if (url.length <= maxLen) return url;
-  return url.slice(0, maxLen - 3) + "...";
-}
-
 main().catch((err) => {
-  console.error(`\nFatal error: ${err.message}`);
+  if (err && typeof err === "object" && err.outcome === "TEST_INVALID") {
+    console.error(`\nFatal error: ${err.message}`);
+  } else {
+    console.error("\nFatal error: corpus operation failed");
+  }
   process.exit(1);
 });

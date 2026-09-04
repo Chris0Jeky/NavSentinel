@@ -72,6 +72,17 @@ describe("classifyCorpusOutcome", () => {
     expect(out.firedBy).toEqual(["nav_rollback"]);
   });
 
+  it("never calls a receipt-proven harmful navigation protected", () => {
+    const out = classifyCorpusOutcome({ detectionKinds: ["nav_click_block"], harmReached: true });
+    expect(out.level).toBe("fired");
+    expect(out.protectedBy).toEqual([]);
+    expect(out.firedBy).toContain("nav_click_block");
+  });
+
+  it("keeps an un-signalled harm receipt as a miss", () => {
+    expect(classifyCorpusOutcome({ harmReached: true }).level).toBe("miss");
+  });
+
   it("classifies no signals as miss", () => {
     expect(classifyCorpusOutcome({}).level).toBe("miss");
     expect(classifyCorpusOutcome({ detectionKinds: [] }).level).toBe("miss");
