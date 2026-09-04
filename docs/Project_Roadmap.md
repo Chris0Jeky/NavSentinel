@@ -1,6 +1,6 @@
 # NavSentinel Project Roadmap
 
-*Created 2026-04-09. Truth refresh 2026-07-10; live/status sync 2026-08-30.*
+*Created 2026-04-09. Truth refresh 2026-07-10; live/status sync 2026-09-04.*
 
 This is the execution roadmap. [`Product_Strategy.md`](Product_Strategy.md) owns
 the product thesis, portfolio boundaries, and evidence gates; GitHub issues own
@@ -61,13 +61,14 @@ not waive an owner, browser, measurement, privacy, permission, or external gate.
 
 ### Live execution truth
 
-Refreshed 2026-08-30 from remote GitHub and `origin/main` at
-`22377604a363141fc6e99a45800beca868307764`. Four PRs are open: #572 is
-conflict-dirty and parked before AI-31 on SP-F-013; #599 is conflict-dirty with
-owner policy and branded-Chrome gates open; #600 is clean with green hosted
-checks but its owner media-page check open; and test-only #605 is red in Build /
-Unit on #595's tracked mutation-monitor scarce-reserve assertion. There is no
-tag, GitHub release, or CWS release. These values are a dated snapshot, not an
+Refreshed 2026-09-04 from remote GitHub and `origin/main` at `a440e35`. Six PRs
+are open, all ready-for-review and clean with green exact-head CI, and every one
+is held on a human Chrome gate: #572 (AI-31, additionally parked on SP-F-013),
+#599 (AI-37), #600 (AI-38), #608 (AI-39, stacked on #600), #609 (AI-40), and
+#636 (AI-41). PR #636 turns the #593 hidden-media probe into a green regression
+by denying inherited click authority to gesture-less child-frame navigation;
+issue #593 stays open, and the remaining `form.submit(target=_top)` residue is
+tracked in #637. There is no tag, GitHub release, or CWS release. These values are a dated snapshot, not an
 instruction to trust cached refs. Re-derive them with `git fetch origin`, the
 GitHub REST/API issue and pull-request views, and Actions before acting. The exact
 2026-07-10 audit baseline remains in `Product_Strategy.md` as provenance rather
