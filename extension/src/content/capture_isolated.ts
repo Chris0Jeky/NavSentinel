@@ -202,6 +202,7 @@ let bridgeAttemptGen = 0;
 let forwardCheckInFlight = false;
 let forwardCheckTimer = 0;
 let previousMode = "";
+let navigationBaselineReady = false;
 let gestureNavAttempts = 0;
 let gestureDownId: number | null = null;
 const FORWARD_CHECK_INFLIGHT_TIMEOUT_MS = 2_000;
@@ -272,7 +273,6 @@ async function initSettings() {
   } catch (err) {
     console.warn("[NavSentinel] Failed to load adaptive threshold, using default", err);
   }
-  document.documentElement.setAttribute("data-navsentinel-capture-ready", "1");
   setDebugEnabled(settings.debug);
   postToMain("ns-config", { mode: settings.defaultMode, debug: settings.debug });
   postToMain("ns-ping");
@@ -295,10 +295,19 @@ async function initSettings() {
   if (isTopFrame()) {
     sendIconUpdate(settings.defaultMode === "off" ? "gray" : "green");
     try {
-      chrome.runtime.sendMessage({ type: "ns-ready" });
+      chrome.runtime.sendMessage({ type: "ns-ready" }, (response) => {
+        if (chrome.runtime.lastError || response?.baselineReady !== true) {
+          document.documentElement.setAttribute("data-navsentinel-capture-unavailable", "sw");
+          return;
+        }
+        navigationBaselineReady = true;
+        document.documentElement.setAttribute("data-navsentinel-capture-ready", "1");
+      });
     } catch {
-      // ignore
+      document.documentElement.setAttribute("data-navsentinel-capture-unavailable", "sw");
     }
+  } else {
+    document.documentElement.setAttribute("data-navsentinel-capture-ready", "1");
   }
 }
 
@@ -1359,9 +1368,14 @@ function shouldIsolateModifiedAnchorFromPage(
     isTrustedModifiedAnchorGesture(e) &&
     isTopFrame() &&
     anchor &&
-    isSameTabAnchorTarget(effectiveAnchorTarget(anchor), true) &&
-    /^https?:$/i.test(anchor.protocol) &&
-    isCrossSiteDestinationHost(anchor.hostname)
+    (
+      (!navigationBaselineReady && previousMode !== "") ||
+      (
+        isSameTabAnchorTarget(effectiveAnchorTarget(anchor), true) &&
+        /^https?:$/i.test(anchor.protocol) &&
+        isCrossSiteDestinationHost(anchor.hostname)
+      )
+    )
   );
 }
 

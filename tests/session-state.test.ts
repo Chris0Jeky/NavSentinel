@@ -1091,6 +1091,80 @@ describe("SW integration: state persistence through session storage", () => {
     });
   });
 
+  it("establishes a cold source baseline before acknowledging product readiness", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+    await flushAsync();
+
+    const response = mock.dispatchRuntimeMessage(
+      { type: "ns-ready" },
+      { tab: { id: 15, url: "https://source.test/page" }, frameId: 0 },
+    );
+    await flushAsync();
+
+    expect(response).toEqual({ ok: true, baselineReady: true });
+    expect(mock.sessionStore["ns_sw:lastUrl"]).toEqual({
+      "15": "https://source.test/page",
+    });
+    expect(mock.sessionStore["ns_sw:gestureUntil"]).toBeUndefined();
+    expect(mock.sessionStore["ns_sw:allowUntil"]).toBeUndefined();
+    expect(mock.sessionStore["ns_sw:allowTarget"]).toBeUndefined();
+    expect(mock.sessionStore["ns_sw:userNavContextUntil"]).toBeUndefined();
+
+    mock.emitBeforeNavigate({
+      tabId: 15,
+      frameId: 0,
+      url: "https://destination.test/page",
+    });
+    mock.emitCommitted({
+      tabId: 15,
+      frameId: 0,
+      url: "https://destination.test/page",
+      transitionType: "link",
+    });
+    await flushAsync();
+
+    expect(mock.sessionStore["ns_sw:lastCommitted"]).toEqual({
+      "15": expect.objectContaining({
+        url: "https://destination.test/page",
+        prevUrl: "https://source.test/page",
+        allowedAtCommit: false,
+      }),
+    });
+    expect(mock.sessionStore["ns_sw:pendingRollback"]).toEqual({
+      "15": {
+        url: "https://destination.test/page",
+        prevUrl: "https://source.test/page",
+        qualifiers: [],
+      },
+    });
+
+    mock.dispatchRuntimeMessage(
+      { type: "ns-ready" },
+      { tab: { id: 15, url: "https://destination.test/page" }, frameId: 0 },
+    );
+    await flushAsync();
+    expect(mock.sentMessages).toContainEqual({
+      tabId: 15,
+      message: {
+        type: "ns-rollback",
+        url: "https://destination.test/page",
+        prevUrl: "https://source.test/page",
+        qualifiers: [],
+      },
+    });
+
+    mock.dispatchRuntimeMessage(
+      { type: "ns-ready" },
+      { tab: { id: 15, url: "https://source.test/page" }, frameId: 0 },
+    );
+    await flushAsync();
+    expect(mock.sessionStore["ns_sw:lastUrl"]).toEqual({
+      "15": "https://destination.test/page",
+    });
+  });
+
   it("persists allow-nav state to session storage", async () => {
     const mock = createChromeMock();
     vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);

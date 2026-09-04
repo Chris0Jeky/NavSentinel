@@ -840,6 +840,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return runWhenHydrated(() => {
       const tabId = sender.tab?.id;
       if (typeof tabId === "number") {
+        const topUrl = typeof sender.tab?.url === "string" ? sender.tab.url : "";
+        if (topUrl && lastUrlByTab.get(tabId) === undefined) {
+          // Product readiness includes a Chrome-owned source baseline. This
+          // mints no gesture or navigation authority and closes the cold-worker
+          // race where a destination commit could otherwise arrive first.
+          lastUrlByTab.set(tabId, topUrl);
+          swState.persistMap(lastUrlByTab, "lastUrl");
+        }
         readyTabs.add(tabId);
         swState.persistReadyTabs();
         const pending = pendingRollbackByTab.get(tabId);
@@ -851,7 +859,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           trySendRollback(tabId, pending);
         }
       }
-    }, false);
+      sendResponse?.({ ok: true, baselineReady: typeof tabId === "number" });
+    });
   }
 
   if (message.type === "ns-check-rollback") {
