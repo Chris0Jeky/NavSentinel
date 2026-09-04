@@ -87,6 +87,7 @@ import {
   silentNavThrottleAllows,
   type SilentNavThrottleState,
 } from "./silent_decision";
+import { grantsTabNavigationAuthority } from "./nav_authority";
 
 const CDS_SMART_BLOCK_THRESHOLD = 70;
 const NS_SOURCE = "__navsentinel__";
@@ -1319,6 +1320,36 @@ function findAnchorInShadowRoots(x: number, y: number): HTMLAnchorElement | null
   return null;
 }
 
+/**
+ * True when a click resolves to a navigation the clicking frame itself declared
+ * through a form submit control. Paired with an anchor href, this is the
+ * "in-frame navigation intent" that lets a child frame mint tab-wide
+ * navigation authority (#593); a bare element does not qualify.
+ */
+function hasFormSubmitIntent(e: MouseEvent): boolean {
+  const seen: Element[] = [];
+  for (const node of e.composedPath?.() ?? []) {
+    if (node instanceof Element) seen.push(node);
+  }
+  if (e.target instanceof Element && !seen.includes(e.target)) seen.push(e.target);
+  const closestSubmit = e.target instanceof Element
+    ? e.target.closest("button, input[type='submit'], input[type='image']")
+    : null;
+  if (closestSubmit && !seen.includes(closestSubmit)) seen.push(closestSubmit);
+  for (const el of seen) {
+    if (el instanceof HTMLInputElement) {
+      const type = el.type.toLowerCase();
+      if ((type === "submit" || type === "image") && (el.form ?? el.closest("form"))) return true;
+      continue;
+    }
+    if (el instanceof HTMLButtonElement) {
+      const type = (el.getAttribute("type") ?? "submit").toLowerCase();
+      if (type !== "button" && type !== "reset" && (el.form ?? el.closest("form"))) return true;
+    }
+  }
+  return false;
+}
+
 function findAnchorFromEvent(e: MouseEvent): HTMLAnchorElement | null {
   const path = e.composedPath?.() ?? [];
   for (const el of path) {
@@ -1983,9 +2014,22 @@ window.addEventListener(
       // Otherwise a hostile page can dispatch pointerdown/click and self-
       // authorize its own navigation. Off is the explicit user-selected bypass,
       // so preserve its no-intervention contract for programmatic links too.
-      if (e.isTrusted || mode === "off") {
+      // The tab-wide gesture/allow windows suppress the delayed page-initiated
+      // redirect rollback for the whole tab. A trusted click in a hidden child
+      // frame used to mint them and then drive `top.location.assign(...)`
+      // through unchallenged (#593), so a child frame now needs an in-frame
+      // navigation intent — an anchor href or a form submit — to inherit that
+      // authority. The frame-local main-world allowance is unchanged.
+      if (grantsTabNavigationAuthority({
+        isTopFrame: topFrame,
+        isTrustedInput: e.isTrusted,
+        mode,
+        hasInFrameNavigationIntent: !!parsed?.href || hasFormSubmitIntent(e)
+      })) {
         notifyNavGesture();
         notifyNavAllow();
+      }
+      if (e.isTrusted || mode === "off") {
         postToMain("ns-allow", {
           allowOpen: mode === "off" || explicitNewTab,
           allowRedirect: true
