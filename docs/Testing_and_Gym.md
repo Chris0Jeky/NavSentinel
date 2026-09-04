@@ -11,9 +11,10 @@ The project uses a mix of deterministic Gym pages, Vitest unit tests, and Playwr
 
 Green tests do **not** by themselves prove open-web efficacy, `<0.1%` false-
 positive performance, compatibility, competitor superiority, or external audit.
-The corpus lane can skip when its local manifest/snapshots are absent, and the
-current corpus result is methodologically invalid. Keep regression, operational
-beta, and claim-grade evidence separate as defined in `Product_Strategy.md`.
+The corpus lane fails closed as `TEST_INVALID` when its required local
+manifest/snapshots are absent or invalid, and every current corpus result remains
+methodologically `INVALID`. Keep regression, operational beta, and claim-grade
+evidence separate as defined in `Product_Strategy.md`.
 
 ## Local commands
 
@@ -48,6 +49,8 @@ The canonical scenario, capability, outcome, evidence, mapping, and local-work-u
 After `npm run build`, `npm run test:e2e:proving-ground` runs the first bounded `NS-ADV-UI-004` vertical with trusted attack, benign, and mixed input. Its typed fake sink binds only to loopback, the browser test rejects unapproved HTTP(S) origins, and exact-head receipts are written under ignored `test-results/`. A sink receipt is the independent harm oracle; a product event or hidden element alone is not protection evidence.
 
 The targeted C-04 bridge-pressure proof runs with `npx playwright test tests/e2e/bridge-clipboard-pressure.spec.ts --project=regression`. It compares the normal exact built artifact with an OS-temporary copy whose single generated queue-coalescing function is disabled for the malicious baseline only. Both arms use trusted browser input, a loopback-only Gym and typed fake sink, and a fail-closed egress proxy; JSON receipts are written under ignored `test-results/`. The temporary mutant never edits `extension/dist`, does not bypass production behavior, and contains only an inert synthetic sentinel.
+
+Local fixtures never accept destination URLs from `harm_target` or `benign_target` query parameters. An E2E caller instead asks the live typed sink to build an immutable, page-scoped bootstrap for one exact loopback origin/path and exact `(target role, scenario, origin mode)` keys. The Playwright page init script only configures those destinations before navigation: it changes only one frozen, non-writable Window resolver and injects no input, event, navigation, document-node mutation, product call, or decision. Query input cannot select or replace a destination; this is harness configuration, not a proof about hostile-page authority in an already armed context. The fixture revalidates every armed result structurally, and the final sink independently revalidates active run, scenario, authority, sentinel, and one-use count. This remains local-only `MODELLED` evidence, not Chrome Gate-3 or release evidence.
 
 The older Python flow still works when needed:
 
@@ -258,6 +261,8 @@ Current lane intent:
   - timing edge cases, state isolation, and worker lifecycle scenarios
 - `npm run test:e2e:corpus`
   - validation against real phishing page snapshots (requires local download via `node scripts/fetch-phishing-corpus.mjs`)
+- `npm run test:e2e:maintainer-headed`
+  - serial, no-retry receipt from operator-prepared branded Chrome; excluded from normal E2E discovery and CI
 - `npm run measure:fp`
   - false positive measurement against Tranco top-1000 sites
 - `npm run demo:showcase`
@@ -409,10 +414,30 @@ Tests: `tests/e2e/navsentinel.stress.spec.ts`.
 ### Phishing corpus lane
 
 Tests NavSentinel against HTML snapshots of real phishing pages downloaded from OpenPhish
-and PhishTank feeds. Measures true positive and false negative rates. Requires local
-snapshot download before running.
+and PhishTank feeds. The lane fails closed as `TEST_INVALID` if required local
+inputs are absent or invalid. It may produce engineering observations, but remains
+methodologically `INVALID` and does not support an efficacy claim until #417's
+headed owner validation and owner-curated committed-result gates are met. Real-host
+replay and trusted input are mechanics only and do not remove those gates.
 Run with `npm run test:e2e:corpus`. Config: `playwright.corpus.config.ts`.
 Tests: `tests/e2e/corpus-validation.spec.ts`.
+
+`npm run test:e2e:corpus:contract` is an owner-corpus-input-free mechanics contract. It
+fulfills inert HTML under exact HTTPS `.test` URLs, including a blocked
+inline-script sentinel, requires full NavSentinel readiness, and uses Playwright
+locator activation with an independent runner probe. An empty-allowlist proxy
+fence and route aborts prevent page-origin HTTP(S) egress. The contract exercises
+the same route/input/receipt path as the manual runner with synthetic reserved
+domains. It does not validate an owner corpus run, a committed manifest/result,
+efficacy, or Gate-3; those remain `INVALID`/unproven.
+
+The manual corpus runner replays only SHA-256-validated snapshot bytes at their
+recorded canonical URLs. It uses native Playwright activation and a one-use
+inert receipt for an unblocked selected navigation; every other page HTTP(S)
+request is invalid and denied. A receipt is first-hop mechanics evidence only,
+not corpus validity, efficacy, owner-headed validation, or Gate-3. The static
+runner does not execute snapshot JavaScript; popup forms and links without a
+provable source opener are not exercisable in this first slice.
 
 ### False positive measurement
 
@@ -454,6 +479,36 @@ extension is owner-only: agents must not navigate to or control
    expected artifact. The owner
    repeats the extension reload, then the page reload; the agent may inspect the
    claimed target tab after confirmation.
+
+### Maintainer-headed benign receipt (#420)
+
+This narrow lane never launches Chrome, reloads an extension, opens
+`chrome://extensions`, visits live sites, schedules itself, runs FP measurement,
+or claims Gate-3. Chrome Stable no longer supports extension side-load flags,
+and Chrome 136+ remote debugging requires a non-default custom user-data
+directory. The operator starts branded Chrome with that dedicated profile,
+loads/reloads the exact `extension/dist`, and confirms the exact current Git head.
+
+After `npm run build`, run the isolated lane from the same PowerShell session:
+
+```powershell
+$env:NAVSENTINEL_MAINTAINER_CDP_ENDPOINT = "http://127.0.0.1:9222"
+$env:NAVSENTINEL_MAINTAINER_RELOAD_HEAD = (git rev-parse HEAD)
+$env:NAVSENTINEL_MAINTAINER_DEDICATED_PROFILE = "acknowledged"
+$env:NAVSENTINEL_MAINTAINER_EXTENSION_ID = "<the operator-confirmed unpacked extension ID>"
+npm run test:e2e:maintainer-headed
+```
+
+The endpoint is strictly loopback HTTP and the repository must be clean. The
+endpoint's CDP metadata and returned WebSocket target must remain numeric-loopback. The
+runner fails closed on missing/mismatched inputs, build/profile, Chrome/worker,
+readiness, typed-sink, or page/worker-error checks. It creates and closes only
+its local Gym page and sink popup, never the attached browser/context. Both pass
+and failure write ignored JSON and Markdown receipts in
+`artifacts/maintainer-headed/`, with typed metadata and digests only--not
+endpoints, profile paths, URLs, page/console text, sentinels, credentials, or
+secrets. `OBSERVED` is one benign local observation, not Gate-3, release,
+open-web, robustness, or false-positive evidence.
 
 Popup activity is historical and can include events from earlier documents. It
 does not prove that NavSentinel initialized on the page currently under test.

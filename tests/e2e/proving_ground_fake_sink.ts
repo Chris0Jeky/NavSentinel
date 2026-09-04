@@ -7,7 +7,7 @@ export const PROVING_GROUND_SINK_PATH = "/__navsentinel_fake_sink";
 const SAFE_SINK_PORT_START = 46100;
 const SAFE_SINK_PORT_ATTEMPTS = 25;
 
-export type ProvingGroundLoopbackHost = "127.0.0.1" | "::1";
+export type ProvingGroundLoopbackHost = "127.0.0.1" | "127.0.0.2" | "::1";
 
 export type ProvingGroundRole = "attack" | "benign" | "mixed";
 
@@ -30,9 +30,45 @@ export type ProvingGroundSinkSnapshot = {
 
 export type ProvingGroundFakeSink = {
   origin: string;
+  scenarioId: string;
   urlFor: (role: ProvingGroundRole, consequence: string, targetId?: string) => string;
+  createFixtureBootstrap: (input: FixtureBootstrapInput) => FixtureTargetBootstrap;
   snapshot: () => ProvingGroundSinkSnapshot;
   close: () => Promise<void>;
+};
+
+export type FixtureTargetRole = "harm" | "benign";
+export type FixtureTargetOriginMode = "same-loopback" | "alternate-loopback";
+
+export type FixtureBootstrapBinding = {
+  targetRole: FixtureTargetRole;
+  scenarioId: string;
+  originMode?: FixtureTargetOriginMode;
+  source:
+    | { kind: "fallback" }
+    | {
+      kind: "armed-sink";
+      sinkRole: ProvingGroundRole;
+      consequence: string;
+      targetId: string;
+    };
+};
+
+export type FixtureBootstrapInput = {
+  fixtureOrigin: string;
+  fixturePath: string;
+  bindings: readonly FixtureBootstrapBinding[];
+};
+
+export type FixtureTargetBootstrap = {
+  fixtureOrigin: string;
+  fixturePath: string;
+  bindings: readonly {
+    targetRole: FixtureTargetRole;
+    scenarioId: string;
+    originMode: FixtureTargetOriginMode;
+    source: { kind: "fallback" } | { kind: "armed-sink"; href: string };
+  }[];
 };
 
 export type ProvingGroundEgressAttempt = {
@@ -58,6 +94,38 @@ type FakeSinkOptions = {
     maxUses: number;
   }[];
 };
+
+const FIXTURE_LOOPBACK_HOSTS = new Set(["127.0.0.1", "127.0.0.2", "localhost", "[::1]"]);
+const FIXTURE_TARGET_ROLES = new Set<FixtureTargetRole>(["harm", "benign"]);
+const FIXTURE_ORIGIN_MODES = new Set<FixtureTargetOriginMode>(["same-loopback", "alternate-loopback"]);
+const FIXTURE_SINK_ROLES: Readonly<Record<FixtureTargetRole, ReadonlySet<ProvingGroundRole>>> = {
+  harm: new Set(["attack", "mixed"]),
+  benign: new Set(["benign", "mixed"]),
+};
+
+function normalizeFixtureOrigin(value: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error("Fixture origin must be a loopback HTTP origin");
+  }
+  if (parsed.protocol !== "http:" || !FIXTURE_LOOPBACK_HOSTS.has(parsed.hostname) ||
+      parsed.pathname !== "/" || parsed.search || parsed.hash || parsed.username || parsed.password ||
+      parsed.origin !== value) {
+    throw new Error("Fixture origin must be a loopback HTTP origin");
+  }
+  return parsed.origin;
+}
+
+function normalizeFixturePath(value: string): string {
+  if (!value.startsWith("/")) throw new Error("Fixture path must be an exact normalized absolute path");
+  const parsed = new URL(value, "http://fixture.invalid");
+  if (parsed.origin !== "http://fixture.invalid" || parsed.pathname !== value || parsed.search || parsed.hash) {
+    throw new Error("Fixture path must be an exact normalized absolute path");
+  }
+  return parsed.pathname;
+}
 
 function digest(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
@@ -311,30 +379,95 @@ export async function startProvingGroundFakeSinkForHost(
   const originHost = host === "::1" ? "[::1]" : host;
   const origin = `http://${originHost}:${address.port}`;
 
+  const urlFor = (role: ProvingGroundRole, consequence: string, targetId?: string): string => {
+    if (!allowedRoles.has(role)) throw new Error(`Fixture role is not armed: ${role}`);
+    if (!allowedConsequences.has(consequence)) {
+      throw new Error(`Consequence is not armed: ${consequence}`);
+    }
+    if (targetAuthorities.size > 0) {
+      const authority = targetAuthorities.get(targetId ?? "");
+      if (!authority || authority.role !== role || authority.consequence !== consequence) {
+        throw new Error(`Target authority is not armed: ${targetId ?? "missing"}`);
+      }
+    } else if (targetId) {
+      throw new Error(`Target authority is not expected: ${targetId}`);
+    }
+    const url = new URL(PROVING_GROUND_SINK_PATH, origin);
+    url.searchParams.set("run_id", options.runId);
+    url.searchParams.set("scenario_id", options.scenarioId);
+    url.searchParams.set("role", role);
+    url.searchParams.set("consequence", consequence);
+    if (targetId) url.searchParams.set("target_id", targetId);
+    url.searchParams.set("sentinel", PROVING_GROUND_SENTINEL);
+    return url.href;
+  };
+
+  const createFixtureBootstrap = (input: FixtureBootstrapInput): FixtureTargetBootstrap => {
+    const fixtureOrigin = normalizeFixtureOrigin(input.fixtureOrigin);
+    const fixturePath = normalizeFixturePath(input.fixturePath);
+    const keys = new Set<string>();
+    const bindings = input.bindings.map((binding) => {
+      if (!FIXTURE_TARGET_ROLES.has(binding.targetRole)) {
+        throw new Error(`Fixture target role is invalid: ${binding.targetRole}`);
+      }
+      if (binding.scenarioId !== options.scenarioId) {
+        throw new Error(`Fixture bootstrap scenario does not match sink: ${binding.scenarioId}`);
+      }
+      const originMode = binding.originMode ?? "same-loopback";
+      if (!FIXTURE_ORIGIN_MODES.has(originMode)) {
+        throw new Error(`Fixture target origin mode is invalid: ${originMode}`);
+      }
+      const key = `${binding.targetRole}\u0000${binding.scenarioId}\u0000${originMode}`;
+      if (keys.has(key)) throw new Error("Fixture bootstrap target keys must be unique");
+      keys.add(key);
+      if (binding.source.kind === "fallback") {
+        return {
+          targetRole: binding.targetRole,
+          scenarioId: binding.scenarioId,
+          originMode,
+          source: { kind: "fallback" as const },
+        };
+      }
+      if (binding.source.kind !== "armed-sink") throw new Error("Fixture target source is invalid");
+      if (!FIXTURE_SINK_ROLES[binding.targetRole].has(binding.source.sinkRole)) {
+        throw new Error(`Fixture sink role is invalid for target role: ${binding.targetRole}`);
+      }
+      const href = urlFor(binding.source.sinkRole, binding.source.consequence, binding.source.targetId);
+      const sinkHostname = new URL(href).hostname;
+      const fixtureHostname = new URL(fixtureOrigin).hostname;
+      if (originMode === "same-loopback" && sinkHostname !== fixtureHostname) {
+        throw new Error("Fixture armed sink hostname does not match fixture origin for same-loopback");
+      }
+      if (originMode === "alternate-loopback" && sinkHostname === fixtureHostname) {
+        throw new Error("Fixture armed sink hostname must differ from fixture origin for alternate-loopback");
+      }
+      return {
+        targetRole: binding.targetRole,
+        scenarioId: binding.scenarioId,
+        originMode,
+        source: {
+          kind: "armed-sink" as const,
+          // Only the live sink can materialize the destination. This lookup
+          // validates role, consequence, and target authority without spending it.
+          href,
+        },
+      };
+    });
+    return Object.freeze({
+      fixtureOrigin,
+      fixturePath,
+      bindings: Object.freeze(bindings.map((binding) => Object.freeze({
+        ...binding,
+        source: Object.freeze({ ...binding.source }),
+      }))),
+    });
+  };
+
   return {
     origin,
-    urlFor: (role, consequence, targetId) => {
-      if (!allowedRoles.has(role)) throw new Error(`Fixture role is not armed: ${role}`);
-      if (!allowedConsequences.has(consequence)) {
-        throw new Error(`Consequence is not armed: ${consequence}`);
-      }
-      if (targetAuthorities.size > 0) {
-        const authority = targetAuthorities.get(targetId ?? "");
-        if (!authority || authority.role !== role || authority.consequence !== consequence) {
-          throw new Error(`Target authority is not armed: ${targetId ?? "missing"}`);
-        }
-      } else if (targetId) {
-        throw new Error(`Target authority is not expected: ${targetId}`);
-      }
-      const url = new URL(PROVING_GROUND_SINK_PATH, origin);
-      url.searchParams.set("run_id", options.runId);
-      url.searchParams.set("scenario_id", options.scenarioId);
-      url.searchParams.set("role", role);
-      url.searchParams.set("consequence", consequence);
-      if (targetId) url.searchParams.set("target_id", targetId);
-      url.searchParams.set("sentinel", PROVING_GROUND_SENTINEL);
-      return url.href;
-    },
+    scenarioId: options.scenarioId,
+    urlFor,
+    createFixtureBootstrap,
     snapshot: () => ({
       receipts: receipts.map((receipt) => ({ ...receipt })),
       invalidAttempts: invalidAttempts.map((attempt) => ({ ...attempt })),

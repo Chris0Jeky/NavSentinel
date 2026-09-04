@@ -4,6 +4,31 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script src="local-fixture-targets.js"></script>
+  <script>
+    (() => {
+      const mutations = {
+        control: { kind: "control", opacity: "0.09", zIndex: "9998", transform: "none" },
+        "opacity-010": { kind: "css", opacity: "0.10", zIndex: "9998", transform: "none" },
+        "zindex-9997": { kind: "css", opacity: "0.09", zIndex: "9997", transform: "none" },
+        "dom-depth-1": { kind: "structural", opacity: "0.09", zIndex: "9998", transform: "none" },
+        "class-token-a7c1": { kind: "structural", opacity: "0.09", zIndex: "9998", transform: "none" },
+        "transform-scale-101": { kind: "css", opacity: "0.09", zIndex: "9998", transform: "scale(1.01)" },
+      };
+      const root = document.documentElement;
+      const requested = new URLSearchParams(location.search).get("mutation") || "control";
+      if (!Object.hasOwn(mutations, requested)) {
+        root.setAttribute("data-navsentinel-fixture-invalid", "unrecognized-mutation");
+        return;
+      }
+      const mutation = mutations[requested];
+      root.setAttribute("data-navsentinel-evasion-mutation", requested);
+      if (mutation.kind === "css") {
+        root.style.setProperty("--evasion-trap-opacity", mutation.opacity);
+        root.style.setProperty("--evasion-trap-z-index", mutation.zIndex);
+        root.style.setProperty("--evasion-trap-transform", mutation.transform);
+      }
+    })();
+  </script>
   <title>Evasion 05 - Composite near-threshold signals</title>
   <style>
     body { font-family: sans-serif; padding: 24px; margin: 0; }
@@ -26,14 +51,15 @@
       - whitespace-only aria-label
       - position: absolute
     */
-    .overlay {
+    .overlay, .evasion-overlay--token-a7c1 {
       position: absolute;
       top: 0; left: 0;
       width: 58.3vw;
       height: 58.3vh;
-      opacity: 0.09;
+      opacity: var(--evasion-trap-opacity, 0.09);
       background: red;
-      z-index: 9998;
+      z-index: var(--evasion-trap-z-index, 9998);
+      transform: var(--evasion-trap-transform, none);
       cursor: pointer;
     }
     .info {
@@ -71,5 +97,30 @@
   <!-- Attacker overlay: all near-threshold signals combined -->
   <a id="trap" class="overlay" target="_blank" rel="noreferrer" aria-label=" "
      data-navsentinel-local-target="harm" data-navsentinel-scenario="NS-ADV-EVADE-006"></a>
+
+  <script>
+    (() => {
+      const root = document.documentElement;
+      const requested = root.getAttribute("data-navsentinel-evasion-mutation");
+      const structuralMutations = new Set(["dom-depth-1", "class-token-a7c1"]);
+      if (!structuralMutations.has(requested)) return;
+      const trap = document.querySelector("#trap");
+      if (!(trap instanceof HTMLAnchorElement)) {
+        root.setAttribute("data-navsentinel-fixture-invalid", "structural-mutation-trap-missing");
+        return;
+      }
+      if (requested === "dom-depth-1") {
+        const wrapper = document.createElement("span");
+        trap.replaceWith(wrapper);
+        wrapper.append(trap);
+      } else if (trap.className !== "overlay") {
+        root.setAttribute("data-navsentinel-fixture-invalid", "structural-mutation-class-unexpected");
+        return;
+      } else {
+        trap.className = "evasion-overlay--token-a7c1";
+      }
+      root.setAttribute("data-navsentinel-evasion-structural-applied", requested);
+    })();
+  </script>
 </body>
 </html>

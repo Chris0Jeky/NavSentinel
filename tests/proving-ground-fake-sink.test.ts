@@ -28,6 +28,26 @@ describe("Proving Ground fake sink", () => {
         .toThrow("Target authority is not armed: missing");
 
       const targetUrl = sink.urlFor("attack", "wrong-target-navigation", "unit-attack-harm");
+      const bootstrap = sink.createFixtureBootstrap({
+        fixtureOrigin: "http://127.0.0.1:5173",
+        fixturePath: "/level9-legit-video-overlay.html",
+        bindings: [{
+          targetRole: "harm",
+          scenarioId: "NS-ADV-UI-004",
+          originMode: "same-loopback",
+          source: {
+            kind: "armed-sink",
+            sinkRole: "attack",
+            consequence: "wrong-target-navigation",
+            targetId: "unit-attack-harm",
+          },
+        }],
+      });
+      expect(bootstrap.bindings[0]?.source).toEqual({ kind: "armed-sink", href: targetUrl });
+      expect(Object.isFrozen(bootstrap)).toBe(true);
+      expect(Object.isFrozen(bootstrap.bindings)).toBe(true);
+      expect(Object.isFrozen(bootstrap.bindings[0]?.source)).toBe(true);
+      expect(sink.snapshot()).toEqual({ receipts: [], invalidAttempts: [] });
       const accepted = await fetch(targetUrl);
       expect(accepted.status).toBe(200);
 
@@ -56,6 +76,52 @@ describe("Proving Ground fake sink", () => {
       });
       expect(snapshot.receipts[0]?.sentinelSha256).toMatch(/^[a-f0-9]{64}$/u);
       expect(JSON.stringify(snapshot)).not.toContain(PROVING_GROUND_SENTINEL);
+    } finally {
+      await sink.close();
+    }
+  });
+
+  it("validates fixture bootstrap inputs before exposing a page-scoped destination", async () => {
+    const sink = await startProvingGroundFakeSink({
+      runId: "bootstrap-validation-run",
+      scenarioId: "NS-ADV-UI-004",
+      allowedRoles: ["benign"],
+      allowedConsequences: ["benign-navigation"],
+      targetAuthorities: [{ id: "bootstrap-benign", role: "benign", consequence: "benign-navigation", maxUses: 1 }],
+    });
+    try {
+      const binding = {
+        targetRole: "benign" as const,
+        scenarioId: "NS-ADV-UI-004",
+        originMode: "same-loopback" as const,
+        source: { kind: "armed-sink" as const, sinkRole: "benign" as const, consequence: "benign-navigation", targetId: "bootstrap-benign" },
+      };
+      expect(() => sink.createFixtureBootstrap({
+        fixtureOrigin: "https://example.invalid",
+        fixturePath: "/level9-legit-video-overlay.html",
+        bindings: [binding],
+      })).toThrow("Fixture origin must be a loopback HTTP origin");
+      expect(() => sink.createFixtureBootstrap({
+        fixtureOrigin: "http://127.0.0.1:5173",
+        fixturePath: "/fixture/../level9-legit-video-overlay.html",
+        bindings: [binding],
+      })).toThrow("Fixture path must be an exact normalized absolute path");
+      expect(() => sink.createFixtureBootstrap({
+        fixtureOrigin: "http://127.0.0.1:5173",
+        fixturePath: "/level9-legit-video-overlay.html",
+        bindings: [binding, binding],
+      })).toThrow("Fixture bootstrap target keys must be unique");
+      expect(() => sink.createFixtureBootstrap({
+        fixtureOrigin: "http://127.0.0.1:5173",
+        fixturePath: "/level9-legit-video-overlay.html",
+        bindings: [{ ...binding, scenarioId: "NS-ADV-OTHER-001" }],
+      })).toThrow("Fixture bootstrap scenario does not match sink");
+      expect(() => sink.createFixtureBootstrap({
+        fixtureOrigin: "http://127.0.0.1:5173",
+        fixturePath: "/level9-legit-video-overlay.html",
+        bindings: [{ ...binding, targetRole: "harm", source: { ...binding.source, sinkRole: "benign" } }],
+      })).toThrow("Fixture sink role is invalid for target role: harm");
+      expect(sink.snapshot()).toEqual({ receipts: [], invalidAttempts: [] });
     } finally {
       await sink.close();
     }
@@ -123,6 +189,72 @@ describe("Proving Ground fake sink", () => {
         role: "attack",
         consequence: "unauthorized-browsing-context",
         targetId: "unit-ipv6-harm",
+      })]);
+    } finally {
+      await sink.close();
+    }
+  });
+
+  it("reaches a host-separated sink within the IPv4 loopback family", async () => {
+    const sink = await startProvingGroundFakeSinkForHost("127.0.0.2", {
+      runId: "unit-alternate-ipv4-run",
+      scenarioId: "NS-ADV-SUPPLY-001",
+      allowedRoles: ["attack"],
+      allowedConsequences: ["wrong-target-navigation"],
+      targetAuthorities: [{
+        id: "unit-alternate-ipv4-harm",
+        role: "attack",
+        consequence: "wrong-target-navigation",
+        maxUses: 1,
+      }],
+    });
+
+    try {
+      expect(new URL(sink.origin).hostname).toBe("127.0.0.2");
+      const targetUrl = sink.urlFor(
+        "attack",
+        "wrong-target-navigation",
+        "unit-alternate-ipv4-harm",
+      );
+      const alternateBinding = {
+        targetRole: "harm" as const,
+        scenarioId: "NS-ADV-SUPPLY-001",
+        originMode: "alternate-loopback" as const,
+        source: {
+          kind: "armed-sink" as const,
+          sinkRole: "attack" as const,
+          consequence: "wrong-target-navigation",
+          targetId: "unit-alternate-ipv4-harm",
+        },
+      };
+      const bootstrap = sink.createFixtureBootstrap({
+        fixtureOrigin: "http://127.0.0.1:5173",
+        fixturePath: "/level9-legit-video-overlay.html",
+        bindings: [alternateBinding],
+      });
+      expect(bootstrap.bindings[0]).toMatchObject({
+        targetRole: "harm",
+        scenarioId: "NS-ADV-SUPPLY-001",
+        originMode: "alternate-loopback",
+        source: { kind: "armed-sink", href: targetUrl },
+      });
+      expect(() => sink.createFixtureBootstrap({
+        fixtureOrigin: "http://127.0.0.1:5173",
+        fixturePath: "/level9-legit-video-overlay.html",
+        bindings: [{ ...alternateBinding, originMode: "same-loopback" }],
+      })).toThrow("Fixture armed sink hostname does not match fixture origin for same-loopback");
+      expect(() => sink.createFixtureBootstrap({
+        fixtureOrigin: "http://127.0.0.2:5173",
+        fixturePath: "/level9-legit-video-overlay.html",
+        bindings: [alternateBinding],
+      })).toThrow("Fixture armed sink hostname must differ from fixture origin for alternate-loopback");
+      const accepted = await fetch(targetUrl);
+      expect(accepted.status).toBe(200);
+      expect(sink.snapshot().receipts).toEqual([expect.objectContaining({
+        scenarioId: "NS-ADV-SUPPLY-001",
+        role: "attack",
+        consequence: "wrong-target-navigation",
+        targetId: "unit-alternate-ipv4-harm",
       })]);
     } finally {
       await sink.close();

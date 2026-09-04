@@ -12,19 +12,23 @@ import {
   type TestInfo,
 } from "@playwright/test";
 import {
-  getGymBaseUrl,
   getServiceWorker,
   readToastText,
+  startGymServer,
   waitForNavSentinelBridge,
   waitForToastMatch,
 } from "./extension_test_utils";
 import {
+  PROVING_GROUND_SENTINEL,
+  PROVING_GROUND_SINK_PATH,
   startProvingGroundEgressFence,
   startProvingGroundFakeSink,
+  startProvingGroundFakeSinkForHost,
   type ProvingGroundEgressAttempt,
   type ProvingGroundFakeSink,
   type ProvingGroundRole,
 } from "./proving_ground_fake_sink";
+import { installFixtureTargetBootstrap } from "./local_fixture_target_bootstrap";
 import { inspectBuiltReleaseProfile } from "../../scripts/check-release-profile.mjs";
 
 const SCENARIO_ID = "NS-ADV-EVADE-006";
@@ -53,7 +57,87 @@ type Arm = {
 
 type ArmId = "baseline" | "protected" | "benign" | "mixed";
 
+type MutationId = "control" | "opacity-010" | "zindex-9997" | "dom-depth-1" | "class-token-a7c1" | "transform-scale-101";
+
+type MutationAxis = "control" | "opacity" | "zIndex" | "domDepth" | "classList" | "transform";
+
+type MutationDefinition = {
+  id: MutationId;
+  declaredOpacity: string;
+  declaredZIndex: string;
+  declaredTransform: string;
+  computedOpacity: string;
+  computedZIndex: string;
+  computedTransform: string;
+  axis: MutationAxis;
+};
+
+const MUTATION_DEFINITIONS: readonly MutationDefinition[] = [
+  { id: "control", declaredOpacity: "0.09", declaredZIndex: "9998", declaredTransform: "none", computedOpacity: "0.09", computedZIndex: "9998", computedTransform: "none", axis: "control" },
+  { id: "opacity-010", declaredOpacity: "0.10", declaredZIndex: "9998", declaredTransform: "none", computedOpacity: "0.1", computedZIndex: "9998", computedTransform: "none", axis: "opacity" },
+  { id: "zindex-9997", declaredOpacity: "0.09", declaredZIndex: "9997", declaredTransform: "none", computedOpacity: "0.09", computedZIndex: "9997", computedTransform: "none", axis: "zIndex" },
+  { id: "dom-depth-1", declaredOpacity: "0.09", declaredZIndex: "9998", declaredTransform: "none", computedOpacity: "0.09", computedZIndex: "9998", computedTransform: "none", axis: "domDepth" },
+  { id: "class-token-a7c1", declaredOpacity: "0.09", declaredZIndex: "9998", declaredTransform: "none", computedOpacity: "0.09", computedZIndex: "9998", computedTransform: "none", axis: "classList" },
+  { id: "transform-scale-101", declaredOpacity: "0.09", declaredZIndex: "9998", declaredTransform: "scale(1.01)", computedOpacity: "0.09", computedZIndex: "9998", computedTransform: "matrix(1.01, 0, 0, 1.01, 0, 0)", axis: "transform" },
+];
+
+type RectFingerprint = { x: number; y: number; width: number; height: number; top: number; right: number; bottom: number; left: number };
+
+type MutationFingerprint = {
+  classList: string[];
+  parentTag: string | null;
+  ancestorDepthFromBody: number;
+  computedStyle: {
+    position: string;
+    opacity: string;
+    zIndex: string;
+    transform: string;
+    cursor: string;
+    width: string;
+    height: string;
+    top: string;
+    left: string;
+  };
+  rect: RectFingerprint;
+  targetAttributes: Array<[string, string]>;
+  targetHrefPresent: boolean;
+  targetReady: string | null;
+  localTargetsReady: string | null;
+  benignLink: {
+    attributes: Array<[string, string]>;
+    hrefPresent: boolean;
+    ready: string | null;
+    parentTag: string | null;
+    computedStyle: { display: string; width: string; height: string; top: string; left: string };
+    rect: RectFingerprint;
+  };
+};
+
+type MutationObservation = MutationDefinition & {
+  reported: string | null;
+  invalid: string | null;
+  computedOpacity: string;
+  computedZIndex: string;
+  fingerprint: MutationFingerprint;
+};
+
+type NormalizedTargetAuthority = {
+  origin: string;
+  pathname: string;
+  fragment: string;
+  credentials: { username: string; password: string };
+  queryNames: string[];
+  queryCount: number;
+  runIdSha256: string;
+  scenarioId: string | null;
+  role: string | null;
+  consequence: string | null;
+  targetId: string | null;
+  sentinelSha256: string;
+};
+
 type ArmObservation = {
+  mutation: MutationObservation;
   role: ProvingGroundRole;
   productReady: boolean;
   outcome: "HARM_REACHED" | "BLOCKED_PRE_HARM" | "OBSERVED";
@@ -64,10 +148,80 @@ type ArmObservation = {
   trustedInput: "mouse" | "keyboard" | "keyboard_then_mouse";
 };
 
+type CampaignCase = {
+  mutation: MutationObservation;
+  observations: ArmObservation[];
+  sinkSnapshot: ReturnType<ProvingGroundFakeSink["snapshot"]>;
+  networkViolations: ProvingGroundEgressAttempt[];
+  blockedExternalAttempts: ProvingGroundEgressAttempt[];
+};
+
 type ReleaseProfileInspection = ReturnType<typeof inspectBuiltReleaseProfile>;
 
 function sha256(value: string | Buffer): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function normalizeTargetAuthority(href: string): NormalizedTargetAuthority {
+  const url = new URL(href);
+  const queryEntries = [...url.searchParams.entries()];
+  const value = (name: string): string | null => url.searchParams.get(name);
+  return {
+    origin: url.origin,
+    pathname: url.pathname,
+    fragment: url.hash,
+    credentials: { username: url.username, password: url.password },
+    queryNames: queryEntries.map(([name]) => name).sort(),
+    queryCount: queryEntries.length,
+    runIdSha256: sha256(value("run_id") ?? ""),
+    scenarioId: value("scenario_id"),
+    role: value("role"),
+    consequence: value("consequence"),
+    targetId: value("target_id"),
+    sentinelSha256: sha256(value("sentinel") ?? ""),
+  };
+}
+
+async function assertArmedTargetAuthorities(
+  page: Page,
+  sink: ProvingGroundFakeSink,
+  fixtureUrl: URL,
+  armId: ArmId,
+  harmRole: ProvingGroundRole,
+  benignRole: ProvingGroundRole,
+): Promise<void> {
+  const expected = {
+    harm: normalizeTargetAuthority(sink.urlFor(harmRole, HARM_CONSEQUENCE, `${armId}-harm`)),
+    benign: normalizeTargetAuthority(sink.urlFor(benignRole, BENIGN_CONSEQUENCE, `${armId}-benign`)),
+  };
+  expect(expected.harm.pathname, "The armed harm authority must use the proving-ground sink path")
+    .toBe(PROVING_GROUND_SINK_PATH);
+  expect(expected.benign.pathname, "The armed benign authority must use the proving-ground sink path")
+    .toBe(PROVING_GROUND_SINK_PATH);
+  expect(expected.harm.sentinelSha256).toBe(sha256(PROVING_GROUND_SENTINEL));
+  expect(expected.benign.sentinelSha256).toBe(sha256(PROVING_GROUND_SENTINEL));
+  const sinkHostname = new URL(sink.origin).hostname;
+  expect(sinkHostname, "The sink must remain on the fixture's same-loopback hostname")
+    .toBe(fixtureUrl.hostname);
+
+  const actualHrefs = await page.evaluate(() => ({
+    harm: document.querySelector<HTMLAnchorElement>("#trap")?.href ?? null,
+    benign: document.querySelector<HTMLAnchorElement>("#legit-link")?.href ?? null,
+  }));
+  expect(actualHrefs.harm, "The harm target must be armed before activation").not.toBeNull();
+  expect(actualHrefs.benign, "The benign target must be armed before activation").not.toBeNull();
+  const actual = {
+    harm: normalizeTargetAuthority(actualHrefs.harm!),
+    benign: normalizeTargetAuthority(actualHrefs.benign!),
+  };
+  expect(new URL(actualHrefs.harm!).hostname, "The harm target must use the same-loopback hostname")
+    .toBe(fixtureUrl.hostname);
+  expect(new URL(actualHrefs.benign!).hostname, "The benign target must use the same-loopback hostname")
+    .toBe(fixtureUrl.hostname);
+  expect(actual.harm, "The live harm href must match its exact armed target authority")
+    .toEqual(expected.harm);
+  expect(actual.benign, "The live benign href must match its exact armed target authority")
+    .toEqual(expected.benign);
 }
 
 function hashFiles(files: string[]): string {
@@ -146,8 +300,12 @@ async function openArm(
   armId: ArmId,
   role: ProvingGroundRole,
   withExtension: boolean,
+  mutation: MutationId,
 ): Promise<Arm> {
-  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  // Evidence must run against the repository-owned server for this arm, never
+  // an arbitrary GYM_BASE_URL supplied by the environment.
+  const gym = await startGymServer(gymRoot);
+  const baseUrl = gym.baseUrl;
   const allowedOrigins = localOrigins(baseUrl);
   allowedOrigins.add(sink.origin);
   const violations: ProvingGroundEgressAttempt[] = [];
@@ -199,21 +357,29 @@ async function openArm(
 
     const page = await context.newPage();
     const fixtureUrl = new URL(`/${FIXTURE_NAME}`, baseUrl);
-    const harmRole: ProvingGroundRole = role === "benign" ? "attack" : role;
-    const benignRole: ProvingGroundRole = role === "attack" ? "benign" : role;
-    fixtureUrl.searchParams.set(
-      "harm_target",
-      sink.urlFor(harmRole, HARM_CONSEQUENCE, `${armId}-harm`),
-    );
-    fixtureUrl.searchParams.set(
-      "benign_target",
-      sink.urlFor(benignRole, BENIGN_CONSEQUENCE, `${armId}-benign`),
-    );
+    fixtureUrl.searchParams.set("mutation", mutation);
+    const harmRole: ProvingGroundRole = role === "mixed" ? "mixed" : "attack";
+    const benignRole: ProvingGroundRole = role === "mixed" ? "mixed" : "benign";
+    await installFixtureTargetBootstrap(page, sink.createFixtureBootstrap({
+      fixtureOrigin: fixtureUrl.origin,
+      fixturePath: fixtureUrl.pathname,
+      bindings: [
+        {
+          targetRole: "harm", scenarioId: SCENARIO_ID, originMode: "same-loopback",
+          source: { kind: "armed-sink", sinkRole: harmRole, consequence: HARM_CONSEQUENCE, targetId: `${armId}-harm` },
+        },
+        {
+          targetRole: "benign", scenarioId: SCENARIO_ID, originMode: "same-loopback",
+          source: { kind: "armed-sink", sinkRole: benignRole, consequence: BENIGN_CONSEQUENCE, targetId: `${armId}-benign` },
+        },
+      ],
+    }));
     await page.goto(fixtureUrl.href, { waitUntil: "domcontentloaded", timeout: 20_000 });
     await expect(page.locator("html")).toHaveAttribute("data-navsentinel-local-targets-ready", "1");
     if (withExtension) {
       await waitForNavSentinelBridge(page);
     }
+    await assertArmedTargetAuthorities(page, sink, fixtureUrl, armId, harmRole, benignRole);
 
     return {
       page,
@@ -271,9 +437,9 @@ async function assertUnsafeOverridesRejected(page: Page): Promise<void> {
     const api = (window as unknown as {
       NavSentinelLocalTargets: { url: (role: "harm", scenarioId: string) => string };
     }).NavSentinelLocalTargets;
-    const attempt = (target: string): string => {
+    const attempt = (parameter: "harm_target" | "benign_target", target: string): string => {
       const candidate = new URL(originalUrl);
-      candidate.searchParams.set("harm_target", target);
+      candidate.searchParams.set(parameter, target);
       history.replaceState(null, "", candidate.href);
       try {
         api.url("harm", "NS-ADV-EVADE-006");
@@ -285,25 +451,223 @@ async function assertUnsafeOverridesRejected(page: Page): Promise<void> {
       }
     };
     return {
-      reservedExternal: attempt("https://not-a-live-target.invalid/"),
-      unarmedLocal: attempt("http://127.0.0.1:46100/untyped-local-target"),
+      harmTarget: attempt("harm_target", "http://127.0.0.1:46100/__navsentinel_fake_sink?run_id=123e4567-e89b-42d3-a456-426614174000&scenario_id=NS-ADV-EVADE-006&role=attack&consequence=wrong-target-navigation&target_id=baseline-harm&sentinel=NAVSENTINEL_SENTINEL_DO_NOT_RUN"),
+      benignTarget: attempt("benign_target", "http://127.0.0.1:46100/__navsentinel_fake_sink?run_id=123e4567-e89b-42d3-a456-426614174000&scenario_id=NS-ADV-EVADE-006&role=benign&consequence=benign-navigation&target_id=baseline-benign&sentinel=NAVSENTINEL_SENTINEL_DO_NOT_RUN"),
     };
   });
-  expect(rejections.reservedExternal, "A reserved external override must fail closed before navigation")
-    .toBe("non-loopback-target");
-  expect(rejections.unarmedLocal, "An untyped local override must fail closed before navigation")
-    .toBe("unarmed-local-target");
+  expect(rejections.harmTarget, "A syntactically armed-looking harm query cannot override a trusted resolver")
+    .toBe("legacy-target-override-rejected");
+  expect(rejections.benignTarget, "A syntactically armed-looking benign query cannot override a trusted resolver")
+    .toBe("legacy-target-override-rejected");
+}
+
+async function assertFixtureBootstrapCannotBeReplaced(page: Page, sink: ProvingGroundFakeSink): Promise<void> {
+  const result = await page.evaluate((expectedHref) => {
+    "use strict";
+    const target = window as unknown as {
+      NavSentinelFixtureTargetBootstrap: {
+        resolve: (role: string, scenario: string, originMode: string) => unknown;
+      };
+    };
+    const original = target.NavSentinelFixtureTargetBootstrap;
+    const originalResolution = original.resolve("harm", "NS-ADV-EVADE-006", "same-loopback");
+    let assignment = "accepted";
+    try {
+      target.NavSentinelFixtureTargetBootstrap = { resolve: () => ({ status: "replaced" }) };
+    } catch (error) {
+      assignment = error instanceof TypeError ? "rejected" : "unexpected-error";
+    }
+    let defineProperty = "accepted";
+    try {
+      Object.defineProperty(window, "NavSentinelFixtureTargetBootstrap", {
+        value: { resolve: () => ({ status: "replaced" }) },
+      });
+    } catch (error) {
+      defineProperty = error instanceof TypeError ? "rejected" : "unexpected-error";
+    }
+    const current = target.NavSentinelFixtureTargetBootstrap;
+    const currentResolution = current.resolve("harm", "NS-ADV-EVADE-006", "same-loopback");
+    return {
+      assignment,
+      defineProperty,
+      identityPreserved: current === original,
+      resolutionPreserved: JSON.stringify(currentResolution) === JSON.stringify(originalResolution),
+      expectedHref,
+      actualHref: (currentResolution as { href?: string }).href,
+    };
+  }, sink.urlFor("attack", HARM_CONSEQUENCE, "baseline-harm"));
+  expect(result).toEqual({
+    assignment: "rejected",
+    defineProperty: "rejected",
+    identityPreserved: true,
+    resolutionPreserved: true,
+    expectedHref: sink.urlFor("attack", HARM_CONSEQUENCE, "baseline-harm"),
+    actualHref: sink.urlFor("attack", HARM_CONSEQUENCE, "baseline-harm"),
+  });
+}
+
+async function readMutationObservation(page: Page, definition: MutationDefinition): Promise<MutationObservation> {
+  const observed = await page.evaluate(() => {
+    const rounded = (value: number): number => Number(value.toFixed(3));
+    const rectFingerprint = (element: Element): RectFingerprint => {
+      const rect = element.getBoundingClientRect();
+      return {
+        x: rounded(rect.x), y: rounded(rect.y), width: rounded(rect.width), height: rounded(rect.height),
+        top: rounded(rect.top), right: rounded(rect.right), bottom: rounded(rect.bottom), left: rounded(rect.left),
+      };
+    };
+    const attributes = (element: Element, excluded: Set<string>): Array<[string, string]> => Array.from(element.attributes)
+      .filter((attribute) => !excluded.has(attribute.name))
+      .map((attribute) => [attribute.name, attribute.value] as [string, string])
+      .sort(([left], [right]) => left.localeCompare(right));
+    const depthFromBody = (element: Element): number => {
+      let depth = 0;
+      for (let parent = element.parentElement; parent && parent !== document.body; parent = parent.parentElement) depth += 1;
+      return depth;
+    };
+    const root = document.documentElement;
+    const trap = document.querySelector<HTMLElement>("#trap");
+    const benignLink = document.querySelector<HTMLElement>("#legit-link");
+    const trapStyle = trap ? getComputedStyle(trap) : null;
+    const benignStyle = benignLink ? getComputedStyle(benignLink) : null;
+    return {
+      reported: root.getAttribute("data-navsentinel-evasion-mutation"),
+      invalid: root.getAttribute("data-navsentinel-fixture-invalid"),
+      computedOpacity: trapStyle?.opacity ?? "missing-trap",
+      computedZIndex: trapStyle?.zIndex ?? "missing-trap",
+      fingerprint: {
+        classList: trap ? Array.from(trap.classList) : [],
+        parentTag: trap?.parentElement?.tagName ?? null,
+        ancestorDepthFromBody: trap ? depthFromBody(trap) : -1,
+        computedStyle: {
+          position: trapStyle?.position ?? "missing-trap",
+          opacity: trapStyle?.opacity ?? "missing-trap",
+          zIndex: trapStyle?.zIndex ?? "missing-trap",
+          transform: trapStyle?.transform ?? "missing-trap",
+          cursor: trapStyle?.cursor ?? "missing-trap",
+          width: trapStyle?.width ?? "missing-trap",
+          height: trapStyle?.height ?? "missing-trap",
+          top: trapStyle?.top ?? "missing-trap",
+          left: trapStyle?.left ?? "missing-trap",
+        },
+        rect: trap ? rectFingerprint(trap) : { x: -1, y: -1, width: -1, height: -1, top: -1, right: -1, bottom: -1, left: -1 },
+        targetAttributes: trap ? attributes(trap, new Set(["class", "href"])) : [],
+        targetHrefPresent: Boolean(trap?.getAttribute("href")),
+        targetReady: trap?.getAttribute("data-navsentinel-local-target-ready") ?? null,
+        localTargetsReady: root.getAttribute("data-navsentinel-local-targets-ready"),
+        benignLink: {
+          attributes: benignLink ? attributes(benignLink, new Set(["href"])) : [],
+          hrefPresent: Boolean(benignLink?.getAttribute("href")),
+          ready: benignLink?.getAttribute("data-navsentinel-local-target-ready") ?? null,
+          parentTag: benignLink?.parentElement?.tagName ?? null,
+          computedStyle: {
+            display: benignStyle?.display ?? "missing-link",
+            width: benignStyle?.width ?? "missing-link",
+            height: benignStyle?.height ?? "missing-link",
+            top: benignStyle?.top ?? "missing-link",
+            left: benignStyle?.left ?? "missing-link",
+          },
+          rect: benignLink ? rectFingerprint(benignLink) : { x: -1, y: -1, width: -1, height: -1, top: -1, right: -1, bottom: -1, left: -1 },
+        },
+      },
+    };
+  });
+  expect(observed.invalid, "The requested mutation must be recognised by the fixture").toBeNull();
+  expect(observed.reported, "The fixture must report the requested mutation").toBe(definition.id);
+  expect(observed.computedOpacity, "The trap opacity must match the mutation definition")
+    .toBe(definition.computedOpacity);
+  expect(observed.computedZIndex, "The trap z-index must match the mutation definition")
+    .toBe(definition.computedZIndex);
+  expect(observed.fingerprint.computedStyle.transform, "The trap transform must match the mutation definition")
+    .toBe(definition.computedTransform);
+  return { ...definition, ...observed };
+}
+
+function assertMutationAxes(
+  control: MutationObservation,
+  mutant: MutationObservation,
+  changedAxis: MutationAxis,
+): void {
+  expect(mutant.axis, `${mutant.id} must declare the checked mutation axis`).toBe(changedAxis);
+  expect(mutant.fingerprint.computedStyle.position).toBe(control.fingerprint.computedStyle.position);
+  expect(mutant.fingerprint.computedStyle.cursor).toBe(control.fingerprint.computedStyle.cursor);
+  expect(mutant.fingerprint.computedStyle.width).toBe(control.fingerprint.computedStyle.width);
+  expect(mutant.fingerprint.computedStyle.height).toBe(control.fingerprint.computedStyle.height);
+  expect(mutant.fingerprint.computedStyle.top).toBe(control.fingerprint.computedStyle.top);
+  expect(mutant.fingerprint.computedStyle.left).toBe(control.fingerprint.computedStyle.left);
+  expect(mutant.fingerprint.targetAttributes).toEqual(control.fingerprint.targetAttributes);
+  expect(mutant.fingerprint.targetHrefPresent).toBe(control.fingerprint.targetHrefPresent);
+  expect(mutant.fingerprint.targetReady).toBe(control.fingerprint.targetReady);
+  expect(mutant.fingerprint.localTargetsReady).toBe(control.fingerprint.localTargetsReady);
+  expect(mutant.fingerprint.benignLink).toEqual(control.fingerprint.benignLink);
+  if (changedAxis !== "transform") {
+    expect(mutant.fingerprint.rect).toEqual(control.fingerprint.rect);
+  }
+  if (changedAxis === "opacity") {
+    expect(mutant.fingerprint.classList).toEqual(control.fingerprint.classList);
+    expect(mutant.fingerprint.parentTag).toBe(control.fingerprint.parentTag);
+    expect(mutant.fingerprint.ancestorDepthFromBody).toBe(control.fingerprint.ancestorDepthFromBody);
+    expect(mutant.fingerprint.computedStyle.opacity).not.toBe(control.fingerprint.computedStyle.opacity);
+    expect(mutant.fingerprint.computedStyle.zIndex).toBe(control.fingerprint.computedStyle.zIndex);
+    expect(mutant.fingerprint.computedStyle.transform).toBe(control.fingerprint.computedStyle.transform);
+  } else if (changedAxis === "zIndex") {
+    expect(mutant.fingerprint.classList).toEqual(control.fingerprint.classList);
+    expect(mutant.fingerprint.parentTag).toBe(control.fingerprint.parentTag);
+    expect(mutant.fingerprint.ancestorDepthFromBody).toBe(control.fingerprint.ancestorDepthFromBody);
+    expect(mutant.fingerprint.computedStyle.opacity).toBe(control.fingerprint.computedStyle.opacity);
+    expect(mutant.fingerprint.computedStyle.zIndex).not.toBe(control.fingerprint.computedStyle.zIndex);
+    expect(mutant.fingerprint.computedStyle.transform).toBe(control.fingerprint.computedStyle.transform);
+  } else if (changedAxis === "domDepth") {
+    expect(mutant.fingerprint.classList).toEqual(control.fingerprint.classList);
+    expect(mutant.fingerprint.parentTag).toBe("SPAN");
+    expect(mutant.fingerprint.parentTag).not.toBe(control.fingerprint.parentTag);
+    expect(mutant.fingerprint.ancestorDepthFromBody).toBe(control.fingerprint.ancestorDepthFromBody + 1);
+    expect(mutant.fingerprint.computedStyle.opacity).toBe(control.fingerprint.computedStyle.opacity);
+    expect(mutant.fingerprint.computedStyle.zIndex).toBe(control.fingerprint.computedStyle.zIndex);
+    expect(mutant.fingerprint.computedStyle.transform).toBe(control.fingerprint.computedStyle.transform);
+  } else if (changedAxis === "classList") {
+    expect(mutant.fingerprint.classList).toEqual(["evasion-overlay--token-a7c1"]);
+    expect(mutant.fingerprint.classList).not.toEqual(control.fingerprint.classList);
+    expect(mutant.fingerprint.parentTag).toBe(control.fingerprint.parentTag);
+    expect(mutant.fingerprint.ancestorDepthFromBody).toBe(control.fingerprint.ancestorDepthFromBody);
+    expect(mutant.fingerprint.computedStyle.opacity).toBe(control.fingerprint.computedStyle.opacity);
+    expect(mutant.fingerprint.computedStyle.zIndex).toBe(control.fingerprint.computedStyle.zIndex);
+    expect(mutant.fingerprint.computedStyle.transform).toBe(control.fingerprint.computedStyle.transform);
+  } else if (changedAxis === "transform") {
+    expect(mutant.fingerprint.classList).toEqual(control.fingerprint.classList);
+    expect(mutant.fingerprint.parentTag).toBe(control.fingerprint.parentTag);
+    expect(mutant.fingerprint.ancestorDepthFromBody).toBe(control.fingerprint.ancestorDepthFromBody);
+    expect(mutant.fingerprint.computedStyle.opacity).toBe(control.fingerprint.computedStyle.opacity);
+    expect(mutant.fingerprint.computedStyle.zIndex).toBe(control.fingerprint.computedStyle.zIndex);
+    expect(mutant.fingerprint.computedStyle.transform).not.toBe(control.fingerprint.computedStyle.transform);
+    const controlCenterX = control.fingerprint.rect.x + control.fingerprint.rect.width / 2;
+    const controlCenterY = control.fingerprint.rect.y + control.fingerprint.rect.height / 2;
+    const mutantCenterX = mutant.fingerprint.rect.x + mutant.fingerprint.rect.width / 2;
+    const mutantCenterY = mutant.fingerprint.rect.y + mutant.fingerprint.rect.height / 2;
+    expect(mutant.fingerprint.rect.width).toBeCloseTo(control.fingerprint.rect.width * 1.01, 2);
+    expect(mutant.fingerprint.rect.height).toBeCloseTo(control.fingerprint.rect.height * 1.01, 2);
+    expect(mutantCenterX).toBeCloseTo(controlCenterX, 2);
+    expect(mutantCenterY).toBeCloseTo(controlCenterY, 2);
+    expect(mutant.fingerprint.rect.x).toBeCloseTo(controlCenterX - mutant.fingerprint.rect.width / 2, 2);
+    expect(mutant.fingerprint.rect.y).toBeCloseTo(controlCenterY - mutant.fingerprint.rect.height / 2, 2);
+    expect(mutant.fingerprint.rect.right).toBeCloseTo(controlCenterX + mutant.fingerprint.rect.width / 2, 2);
+    expect(mutant.fingerprint.rect.bottom).toBeCloseTo(controlCenterY + mutant.fingerprint.rect.height / 2, 2);
+  } else {
+    expect(mutant.fingerprint.computedStyle.opacity).toBe(control.fingerprint.computedStyle.opacity);
+    expect(mutant.fingerprint.computedStyle.zIndex).toBe(control.fingerprint.computedStyle.zIndex);
+    expect(mutant.fingerprint.computedStyle.transform).toBe(control.fingerprint.computedStyle.transform);
+  }
 }
 
 async function writeReceipt(
   testInfo: TestInfo,
-  sink: ProvingGroundFakeSink,
-  observations: ArmObservation[],
+  controlCase: CampaignCase,
+  campaign: CampaignCase[],
   arms: Arm[],
   releaseProfile: ReleaseProfileInspection,
 ): Promise<void> {
   const repository = repositoryState();
-  const sinkSnapshot = sink.snapshot();
+  const sinkSnapshot = controlCase.sinkSnapshot;
   const fixtureFiles = [
     ...evasionFixturePaths,
     path.join(gymRoot, "local-fixture-targets.js"),
@@ -311,6 +675,37 @@ async function writeReceipt(
   ];
   const gitFixtureSha256 = hashGitFiles(fixtureFiles, repository.head);
   const executedFixtureSha256 = hashFiles(fixtureFiles);
+  const campaignCases = campaign.map((entry) => ({
+    mutation: entry.mutation,
+    observations: entry.observations,
+    sink_snapshot: entry.sinkSnapshot,
+    network_violations: entry.networkViolations,
+    blocked_external_attempts: entry.blockedExternalAttempts,
+  }));
+  const campaignPayloadSha256 = sha256(JSON.stringify({ cases: campaignCases }));
+  const targetAuthorityAssertion = {
+    timing: "before_activation",
+    target_count_per_arm: 2,
+    asserted_arm_count: arms.length,
+    asserted_target_count: arms.length * 2,
+    normalized_fields: [
+      "origin",
+      "pathname",
+      "fragment",
+      "credentials",
+      "query_names",
+      "query_count",
+      "run_id_sha256",
+      "scenario_id",
+      "role",
+      "consequence",
+      "target_id",
+      "sentinel_sha256",
+    ],
+    exact_arm_target_ids: true,
+    same_loopback_hostname: true,
+    raw_runtime_urls_persisted: false,
+  };
   const receipt = {
     schema_version: "1.0.0",
     scenario_id: SCENARIO_ID,
@@ -339,9 +734,10 @@ async function writeReceipt(
     oracle: {
       type: "independent_harm",
       harm_boundary: "Trusted input reaches the typed local wrong-target navigation sink.",
-      local_receipt_sha256: sha256(JSON.stringify({ sinkSnapshot, observations })),
+      local_receipt_sha256: campaignPayloadSha256,
+      target_authority_assertion: targetAuthorityAssertion,
       sink_snapshot: sinkSnapshot,
-      observations,
+      observations: controlCase.observations,
     },
     outcomes: {
       attack_baseline: "HARM_REACHED",
@@ -357,9 +753,11 @@ async function writeReceipt(
       arms.some((arm) => arm.violations.length > 0) ? "Fixture attempted undeclared network egress" : "",
     ].filter(Boolean).join("; "),
     limitations: [
-      "This receipt proves the shared local-target contract and one representative composite journey, not mutation robustness across all twelve evasion fixtures.",
+      "This receipt proves the shared local-target contract and one representative composite journey across control plus five deterministic CSS and structural neighbours, not mutation robustness across all twelve evasion fixtures.",
+      "The mutation campaign changes only one declared trap opacity, z-index, DOM-depth, class-token, or transform axis at a time; the transform case requires deterministic 1.01 center-origin geometry. Its allowlisted query selector cannot select destinations, roles, authorities, or sink URLs.",
       "The existing evasion regression suite remains product-event coupled; its twelve protected fixtures are checked separately and are not promoted beyond MODELLED here.",
       "Bundled Chromium is not branded Chrome, owner Gate-3, open-web efficacy, or release evidence.",
+      "Playwright page.addInitScript is privileged harness configuration only; it supplies no hostile or authored-page authority evidence, and SP-F-014 remains PARTIAL.",
     ],
     safety: {
       synthetic_only: true,
@@ -378,18 +776,27 @@ async function writeReceipt(
       frame: "top frame",
       document: `exact ${FIXTURE_NAME} document for each arm`,
       destination: "one armed loopback sink URL per arm, role, and consequence",
+      bootstrap: "An immutable page-init resolver matches only the exact fixture origin/path and exact role/scenario/origin-mode keys. It changes only one frozen, non-writable Window resolver; it injects no input, event, navigation, document-node mutation, product call, or decision.",
       ttl: "one test run; the loopback sink closes in the test finally block",
       use_count: 1,
       use_count_scope: "per armed destination",
-      sink_revalidation: "The fake sink validates run, scenario, role, consequence, one-use target authority, and the exact inert sentinel on every request.",
+      sink_revalidation: "The final fake sink independently validates active run, scenario, role, consequence, one-use target authority, and the exact inert sentinel on every request.",
     },
     qualification: {
       privacy: "The sink retains only typed metadata and a SHA-256 of the inert sentinel; no page text, full browsing history, credential, or raw secret is stored.",
       performance: "No release code changed and no runtime performance claim is made.",
       accessibility: "The benign control is reached with native Tab and Enter; no assistive-technology pass was run.",
+      page_origin_ui: "Query input cannot select or replace a destination. The bootstrap is harness configuration only, not hostile-page authority proof in an already armed context.",
     },
-    network_violations: arms.flatMap((arm) => arm.violations),
-    blocked_external_attempts: arms.flatMap((arm) => arm.blockedExternalAttempts),
+    mutation_campaign: {
+      selector: "mutation",
+      cases: campaignCases,
+      payload_sha256: campaignPayloadSha256,
+      hash_method: "SHA-256(UTF-8 bytes of JSON.stringify({cases: mutation_campaign.cases}))",
+      qualification: "Five deterministic CSS and structural neighbours only; query selection cannot change target authority.",
+    },
+    network_violations: campaign.flatMap((entry) => entry.networkViolations),
+    blocked_external_attempts: campaign.flatMap((entry) => entry.blockedExternalAttempts),
     verification: [
       "npm run security:check",
       "npm run build",
@@ -406,13 +813,7 @@ async function writeReceipt(
   });
 }
 
-test("#449 evasion targets stay local with attack, protected, benign, and mixed evidence @regression", async ({}, testInfo) => {
-  test.skip(!fs.existsSync(extensionPath), "Build the extension before running locality evidence.");
-  const releaseProfile = inspectBuiltReleaseProfile(extensionPath, {
-    expectedProfile: "interaction-only",
-    requireReleaseEligible: true,
-  });
-  expect(evasionFixturePaths, "The bounded family must contain exactly evasion 01 through 12").toHaveLength(12);
+async function runMutationCase(definition: MutationDefinition): Promise<{ result: CampaignCase; arms: Arm[] }> {
   const sink = await startProvingGroundFakeSink({
     runId: randomUUID(),
     scenarioId: SCENARIO_ID,
@@ -433,46 +834,64 @@ test("#449 evasion targets stay local with attack, protected, benign, and mixed 
   const arms: Arm[] = [];
 
   try {
-    const baseline = await openArm(sink, "baseline", "attack", false);
+    const baseline = await openArm(sink, "baseline", "attack", false, definition.id);
     arms.push(baseline);
-    await assertUnsafeOverridesRejected(baseline.page);
+    const mutation = await readMutationObservation(baseline.page, definition);
+    await expect.poll(() => baseline.page.evaluate(() => {
+      const descriptor = Object.getOwnPropertyDescriptor(window, "NavSentinelFixtureTargetBootstrap");
+      return Boolean(descriptor && descriptor.writable === false && descriptor.configurable === false &&
+        Object.isFrozen(descriptor.value));
+    })).toBe(true);
+    await expect.poll(() => baseline.page.evaluate((scenarioId) => {
+      const resolver = (window as unknown as {
+        NavSentinelFixtureTargetBootstrap: {
+          resolve: (role: string, scenario: string, originMode: string) => { status: string };
+        };
+      }).NavSentinelFixtureTargetBootstrap;
+      const original = location.href;
+      const unbound = resolver.resolve("harm", scenarioId, "alternate-loopback").status;
+      history.replaceState(null, "", "/bootstrap-other-document.html");
+      const mismatch = resolver.resolve("harm", scenarioId, "same-loopback").status;
+      history.replaceState(null, "", original);
+      return { unbound, mismatch };
+    }, SCENARIO_ID)).toEqual({ unbound: "unbound", mismatch: "document-mismatch" });
+    if (definition.id === "control") {
+      await assertFixtureBootstrapCannotBeReplaced(baseline.page, sink);
+      await assertUnsafeOverridesRejected(baseline.page);
+    }
     const baselineBefore = sink.snapshot().receipts.length;
     const baselinePopup = await clickTrap(baseline);
     expect(baselinePopup, "The no-product baseline must reach the local fake sink").not.toBeNull();
     await baselinePopup!.waitForLoadState("domcontentloaded", { timeout: 5_000 });
     await expect.poll(() => sink.snapshot().receipts.length).toBe(baselineBefore + 1);
     observations.push({
-      role: "attack",
-      productReady: false,
-      outcome: "HARM_REACHED",
-      sinkReceiptsBefore: baselineBefore,
-      sinkReceiptsAfter: sink.snapshot().receipts.length,
-      productEvent: null,
-      trustedInput: "mouse",
+      mutation,
+      role: "attack", productReady: false, outcome: "HARM_REACHED",
+      sinkReceiptsBefore: baselineBefore, sinkReceiptsAfter: sink.snapshot().receipts.length,
+      productEvent: null, trustedInput: "mouse",
     });
     await baselinePopup!.close();
     await baseline.cleanup();
 
-    const protectedArm = await openArm(sink, "protected", "attack", true);
+    const protectedArm = await openArm(sink, "protected", "attack", true, definition.id);
     arms.push(protectedArm);
+    const protectedMutation = await readMutationObservation(protectedArm.page, definition);
     const protectedBefore = sink.snapshot().receipts.length;
     expect(await clickTrap(protectedArm), "The release extension must keep the sink unreachable").toBeNull();
     await waitForToastMatch(protectedArm.page, /Blocked new tab|blocked deceptive click/i, 3_000);
     await protectedArm.page.waitForTimeout(200);
     expect(sink.snapshot().receipts).toHaveLength(protectedBefore);
     observations.push({
-      role: "attack",
-      productReady: true,
-      outcome: "BLOCKED_PRE_HARM",
-      sinkReceiptsBefore: protectedBefore,
-      sinkReceiptsAfter: sink.snapshot().receipts.length,
-      productEvent: await readToastText(protectedArm.page),
-      trustedInput: "mouse",
+      mutation: protectedMutation,
+      role: "attack", productReady: true, outcome: "BLOCKED_PRE_HARM",
+      sinkReceiptsBefore: protectedBefore, sinkReceiptsAfter: sink.snapshot().receipts.length,
+      productEvent: await readToastText(protectedArm.page), trustedInput: "mouse",
     });
     await protectedArm.cleanup();
 
-    const benign = await openArm(sink, "benign", "benign", true);
+    const benign = await openArm(sink, "benign", "benign", true, definition.id);
     arms.push(benign);
+    const benignMutation = await readMutationObservation(benign.page, definition);
     const benignWorker = await getServiceWorker(benign.context);
     await benignWorker.evaluate(async (eventLogKey) => {
       await chrome.storage.local.set({ [eventLogKey]: [] });
@@ -488,28 +907,19 @@ test("#449 evasion targets stay local with attack, protected, benign, and mixed 
       return Array.isArray(stored[eventLogKey]) ? stored[eventLogKey] : [];
     }, "sentinelsuite:event_log_v1");
     expect(benignEvents, "The benign task must persist only its silent allow event").toHaveLength(1);
-    expect(benignEvents[0]).toMatchObject({
-      kind: "nav_silent_allow",
-      site: "127.0.0.1",
-      destHost: "127.0.0.1",
-    });
-    expect(benignEvents[0]).toMatchObject({
-      reasons: expect.arrayContaining(["keyboard_activation"]),
-    });
+    expect(benignEvents[0]).toMatchObject({ kind: "nav_silent_allow", site: "127.0.0.1", destHost: "127.0.0.1" });
+    expect(benignEvents[0]).toMatchObject({ reasons: expect.arrayContaining(["keyboard_activation"]) });
     observations.push({
-      role: "benign",
-      productReady: true,
-      outcome: "OBSERVED",
-      sinkReceiptsBefore: benignBefore,
-      sinkReceiptsAfter: sink.snapshot().receipts.length,
-      productEvent: "nav_silent_allow",
-      productEventCount: benignEvents.length,
-      trustedInput: "keyboard",
+      mutation: benignMutation,
+      role: "benign", productReady: true, outcome: "OBSERVED",
+      sinkReceiptsBefore: benignBefore, sinkReceiptsAfter: sink.snapshot().receipts.length,
+      productEvent: "nav_silent_allow", productEventCount: benignEvents.length, trustedInput: "keyboard",
     });
     await benign.cleanup();
 
-    const mixed = await openArm(sink, "mixed", "mixed", true);
+    const mixed = await openArm(sink, "mixed", "mixed", true, definition.id);
     arms.push(mixed);
+    const mixedMutation = await readMutationObservation(mixed.page, definition);
     const mixedBefore = sink.snapshot().receipts.length;
     await activateBenignLinkByKeyboard(mixed.page);
     await expect.poll(() => sink.snapshot().receipts.length).toBe(mixedBefore + 1);
@@ -521,30 +931,410 @@ test("#449 evasion targets stay local with attack, protected, benign, and mixed 
     await mixed.page.waitForTimeout(200);
     expect(sink.snapshot().receipts).toHaveLength(mixedBefore + 1);
     observations.push({
-      role: "mixed",
-      productReady: true,
-      outcome: "BLOCKED_PRE_HARM",
-      sinkReceiptsBefore: mixedBefore,
-      sinkReceiptsAfter: sink.snapshot().receipts.length,
-      productEvent: await readToastText(mixed.page),
-      trustedInput: "keyboard_then_mouse",
+      mutation: mixedMutation,
+      role: "mixed", productReady: true, outcome: "BLOCKED_PRE_HARM",
+      sinkReceiptsBefore: mixedBefore, sinkReceiptsAfter: sink.snapshot().receipts.length,
+      productEvent: await readToastText(mixed.page), trustedInput: "keyboard_then_mouse",
     });
     await mixed.cleanup();
 
     expect(sink.snapshot().invalidAttempts).toEqual([]);
     expect(sink.snapshot().receipts.map((receipt) => [receipt.role, receipt.consequence])).toEqual([
-      ["attack", HARM_CONSEQUENCE],
-      ["benign", BENIGN_CONSEQUENCE],
-      ["mixed", BENIGN_CONSEQUENCE],
+      ["attack", HARM_CONSEQUENCE], ["benign", BENIGN_CONSEQUENCE], ["mixed", BENIGN_CONSEQUENCE],
     ]);
+    for (const observation of observations) {
+      expect(observation.mutation.fingerprint, `${observation.role} must preserve the mutation fingerprint`)
+        .toEqual(mutation.fingerprint);
+    }
     for (const arm of arms) expect(arm.violations).toEqual([]);
-    await writeReceipt(testInfo, sink, observations, arms, releaseProfile);
+    return {
+      result: {
+        mutation, observations, sinkSnapshot: sink.snapshot(),
+        networkViolations: arms.flatMap((arm) => arm.violations),
+        blockedExternalAttempts: arms.flatMap((arm) => arm.blockedExternalAttempts),
+      },
+      arms,
+    };
   } finally {
     for (const arm of arms) {
-      if (!arm.context.pages().every((page) => page.isClosed())) {
-        await arm.cleanup().catch(() => {});
-      }
+      if (!arm.context.pages().every((page) => page.isClosed())) await arm.cleanup().catch(() => {});
     }
     await sink.close();
   }
+}
+
+test("#449 rejects a same-role target authority swap before activation @regression", async () => {
+  const sink = await startProvingGroundFakeSink({
+    runId: randomUUID(),
+    scenarioId: SCENARIO_ID,
+    allowedRoles: ["attack", "benign", "mixed"],
+    allowedConsequences: [HARM_CONSEQUENCE, BENIGN_CONSEQUENCE],
+    targetAuthorities: [
+      { id: "baseline-harm", role: "attack", consequence: HARM_CONSEQUENCE, maxUses: 1 },
+      { id: "baseline-benign", role: "benign", consequence: BENIGN_CONSEQUENCE, maxUses: 1 },
+      { id: "swap-harm", role: "attack", consequence: HARM_CONSEQUENCE, maxUses: 1 },
+    ],
+  });
+  let baseline: Arm | null = null;
+
+  try {
+    baseline = await openArm(sink, "baseline", "attack", false, "control");
+    const fixtureUrl = new URL(baseline.page.url());
+    const swappedTarget = sink.urlFor("attack", HARM_CONSEQUENCE, "swap-harm");
+    await baseline.page.locator("#trap").evaluate((element, href) => {
+      (element as HTMLAnchorElement).href = href;
+    }, swappedTarget);
+
+    await expect(assertArmedTargetAuthorities(
+      baseline.page,
+      sink,
+      fixtureUrl,
+      "baseline",
+      "attack",
+      "benign",
+    )).rejects.toThrow();
+    expect(sink.snapshot()).toEqual({ receipts: [], invalidAttempts: [] });
+  } finally {
+    await baseline?.cleanup().catch(() => {});
+    await sink.close();
+  }
+});
+
+test("#449 rejects an unknown mutation selector before arming trusted targets @regression", async () => {
+  const sink = await startProvingGroundFakeSink({
+    runId: randomUUID(),
+    scenarioId: SCENARIO_ID,
+    allowedRoles: ["attack", "benign"],
+    allowedConsequences: [HARM_CONSEQUENCE, BENIGN_CONSEQUENCE],
+    targetAuthorities: [
+      { id: "unknown-selector-harm", role: "attack", consequence: HARM_CONSEQUENCE, maxUses: 1 },
+      { id: "unknown-selector-benign", role: "benign", consequence: BENIGN_CONSEQUENCE, maxUses: 1 },
+    ],
+  });
+  const gym = await startGymServer(gymRoot);
+  const baseUrl = gym.baseUrl;
+  const fixtureUrl = new URL(`/${FIXTURE_NAME}`, baseUrl);
+  fixtureUrl.searchParams.set("mutation", "unknown-selector");
+  const allowedOrigins = localOrigins(baseUrl);
+  allowedOrigins.add(sink.origin);
+  const violations: ProvingGroundEgressAttempt[] = [];
+  const blockedExternalAttempts: ProvingGroundEgressAttempt[] = [];
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-evasion-unknown-selector-"));
+  let context: BrowserContext | null = null;
+  let egressFence: Awaited<ReturnType<typeof startProvingGroundEgressFence>> | null = null;
+
+  try {
+    egressFence = await startProvingGroundEgressFence(blockedExternalAttempts, allowedOrigins);
+    context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      proxy: { server: egressFence.proxyServer },
+      args: [
+        "--disable-extensions",
+        "--disable-background-networking",
+        "--disable-client-side-phishing-detection",
+        "--disable-component-update",
+        "--disable-default-apps",
+        "--disable-domain-reliability",
+        "--disable-quic",
+        "--disable-sync",
+        "--metrics-recording-only",
+        "--no-default-browser-check",
+        "--no-first-run",
+        "--safebrowsing-disable-auto-update",
+        "--disable-features=AccountConsistency,AutofillServerCommunication,CertificateTransparencyComponentUpdater,MediaRouter,NetworkTimeServiceQuerying,OptimizationHints,Signin",
+      ],
+    });
+    const page = await context.newPage();
+    await context.route("**/*", async (route) => {
+      const target = new URL(route.request().url());
+      if ((target.protocol === "http:" || target.protocol === "https:") &&
+          !allowedOrigins.has(target.origin)) {
+        violations.push({ method: route.request().method(), target: `${target.origin}${target.pathname}`, count: 1 });
+        await route.abort("blockedbyclient");
+        return;
+      }
+      await route.continue();
+    });
+    await installFixtureTargetBootstrap(page, sink.createFixtureBootstrap({
+      fixtureOrigin: fixtureUrl.origin,
+      fixturePath: fixtureUrl.pathname,
+      bindings: [
+        {
+          targetRole: "harm", scenarioId: SCENARIO_ID, originMode: "same-loopback",
+          source: {
+            kind: "armed-sink", sinkRole: "attack", consequence: HARM_CONSEQUENCE,
+            targetId: "unknown-selector-harm",
+          },
+        },
+        {
+          targetRole: "benign", scenarioId: SCENARIO_ID, originMode: "same-loopback",
+          source: {
+            kind: "armed-sink", sinkRole: "benign", consequence: BENIGN_CONSEQUENCE,
+            targetId: "unknown-selector-benign",
+          },
+        },
+      ],
+    }));
+
+    await page.goto(fixtureUrl.href, { waitUntil: "domcontentloaded", timeout: 20_000 });
+    await expect.poll(() => page.evaluate(() => ({
+      invalid: document.documentElement.getAttribute("data-navsentinel-fixture-invalid"),
+      selected: document.documentElement.getAttribute("data-navsentinel-evasion-mutation"),
+      targetsReady: document.documentElement.getAttribute("data-navsentinel-local-targets-ready"),
+      targetError: document.documentElement.getAttribute("data-navsentinel-local-targets-error"),
+      targets: ["#trap", "#legit-link"].map((selector) => {
+        const target = document.querySelector<HTMLAnchorElement>(selector);
+        return { href: target?.getAttribute("href") ?? null, ready: target?.getAttribute("data-navsentinel-local-target-ready") ?? null };
+      }),
+    }))).toEqual({
+      invalid: "unrecognized-mutation",
+      selected: null,
+      targetsReady: "0",
+      targetError: "fixture-invalid:unrecognized-mutation",
+      targets: [
+        { href: null, ready: null },
+        { href: null, ready: null },
+      ],
+    });
+    expect(sink.snapshot()).toEqual({ receipts: [], invalidAttempts: [] });
+    expect(violations).toEqual([]);
+  } finally {
+    await context?.close().catch(() => {});
+    await egressFence?.close().catch(() => {});
+    await gym.close();
+    await sink.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("#449 keeps alternate-loopback harm and same-loopback benign targets isolated @regression", async () => {
+  const topologyScenarioId = "NS-ADV-UI-001";
+  const harmTargetId = "alternate-loopback-harm";
+  const benignTargetId = "same-loopback-benign";
+  const harmSink = await startProvingGroundFakeSinkForHost("127.0.0.2", {
+    runId: randomUUID(),
+    scenarioId: topologyScenarioId,
+    allowedRoles: ["attack"],
+    allowedConsequences: [HARM_CONSEQUENCE],
+    targetAuthorities: [{
+      id: harmTargetId, role: "attack", consequence: HARM_CONSEQUENCE, maxUses: 1,
+    }],
+  });
+  const benignSink = await startProvingGroundFakeSinkForHost("127.0.0.1", {
+    runId: randomUUID(),
+    scenarioId: topologyScenarioId,
+    allowedRoles: ["benign"],
+    allowedConsequences: [BENIGN_CONSEQUENCE],
+    targetAuthorities: [{
+      id: benignTargetId, role: "benign", consequence: BENIGN_CONSEQUENCE, maxUses: 1,
+    }],
+  });
+  const gym = await startGymServer(gymRoot);
+  const fixtureUrl = new URL("/evasion-04-zindex-9998.html", gym.baseUrl);
+  const harmHref = harmSink.urlFor("attack", HARM_CONSEQUENCE, harmTargetId);
+  const benignHref = benignSink.urlFor("benign", BENIGN_CONSEQUENCE, benignTargetId);
+  const expectedHarm = normalizeTargetAuthority(harmHref);
+  const expectedBenign = normalizeTargetAuthority(benignHref);
+  const harmAuthorityUrl = new URL(harmHref);
+  const benignAuthorityUrl = new URL(benignHref);
+  expect(harmAuthorityUrl.hostname).toBe("127.0.0.2");
+  expect(benignAuthorityUrl.hostname).toBe("127.0.0.1");
+  expect(harmAuthorityUrl.searchParams.get("scenario_id")).toBe(topologyScenarioId);
+  expect(benignAuthorityUrl.searchParams.get("scenario_id")).toBe(topologyScenarioId);
+  expect(harmAuthorityUrl.searchParams.get("target_id")).not.toBe(benignTargetId);
+  expect(harmAuthorityUrl.searchParams.get("run_id")).not.toBe(benignAuthorityUrl.searchParams.get("run_id"));
+
+  const harmBootstrap = harmSink.createFixtureBootstrap({
+    fixtureOrigin: fixtureUrl.origin,
+    fixturePath: fixtureUrl.pathname,
+    bindings: [{
+      targetRole: "harm", scenarioId: topologyScenarioId, originMode: "alternate-loopback",
+      source: {
+        kind: "armed-sink", sinkRole: "attack", consequence: HARM_CONSEQUENCE,
+        targetId: harmTargetId,
+      },
+    }],
+  });
+  const benignBootstrap = benignSink.createFixtureBootstrap({
+    fixtureOrigin: fixtureUrl.origin,
+    fixturePath: fixtureUrl.pathname,
+    bindings: [{
+      targetRole: "benign", scenarioId: topologyScenarioId, originMode: "same-loopback",
+      source: {
+        kind: "armed-sink", sinkRole: "benign", consequence: BENIGN_CONSEQUENCE,
+        targetId: benignTargetId,
+      },
+    }],
+  });
+  const bootstrap = {
+    fixtureOrigin: fixtureUrl.origin,
+    fixturePath: fixtureUrl.pathname,
+    bindings: [...harmBootstrap.bindings, ...benignBootstrap.bindings],
+  };
+  const allowedOrigins = localOrigins(gym.baseUrl);
+  allowedOrigins.add(harmSink.origin);
+  allowedOrigins.add(benignSink.origin);
+  const violations: ProvingGroundEgressAttempt[] = [];
+  const blockedExternalAttempts: ProvingGroundEgressAttempt[] = [];
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-evasion-alternate-loopback-"));
+  let context: BrowserContext | null = null;
+  let egressFence: Awaited<ReturnType<typeof startProvingGroundEgressFence>> | null = null;
+
+  try {
+    egressFence = await startProvingGroundEgressFence(blockedExternalAttempts, allowedOrigins);
+    context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      proxy: { server: egressFence.proxyServer },
+      args: [
+        "--disable-extensions",
+        "--disable-background-networking",
+        "--disable-client-side-phishing-detection",
+        "--disable-component-update",
+        "--disable-default-apps",
+        "--disable-domain-reliability",
+        "--disable-quic",
+        "--disable-sync",
+        "--metrics-recording-only",
+        "--no-default-browser-check",
+        "--no-first-run",
+        "--safebrowsing-disable-auto-update",
+        "--disable-features=AccountConsistency,AutofillServerCommunication,CertificateTransparencyComponentUpdater,MediaRouter,NetworkTimeServiceQuerying,OptimizationHints,Signin",
+      ],
+    });
+    const page = await context.newPage();
+    await context.route("**/*", async (route) => {
+      const target = new URL(route.request().url());
+      if ((target.protocol === "http:" || target.protocol === "https:") &&
+          !allowedOrigins.has(target.origin)) {
+        violations.push({ method: route.request().method(), target: `${target.origin}${target.pathname}`, count: 1 });
+        await route.abort("blockedbyclient");
+        return;
+      }
+      await route.continue();
+    });
+    await installFixtureTargetBootstrap(page, bootstrap);
+    await page.goto(fixtureUrl.href, { waitUntil: "domcontentloaded", timeout: 20_000 });
+    await expect(page.locator("html")).toHaveAttribute("data-navsentinel-local-targets-ready", "1");
+
+    const initialTargets = await page.evaluate(() => {
+      const resolver = (window as unknown as {
+        NavSentinelFixtureTargetBootstrap: {
+          resolve: (role: string, scenarioId: string, originMode: string) => unknown;
+        };
+      }).NavSentinelFixtureTargetBootstrap;
+      const readHref = (selector: string): string | null =>
+        document.querySelector<HTMLAnchorElement>(selector)?.href ?? null;
+      return {
+        descriptor: Object.getOwnPropertyDescriptor(window, "NavSentinelFixtureTargetBootstrap"),
+        harm: readHref("#trap"),
+        benign: readHref(".real-link"),
+        harmResolution: resolver.resolve("harm", "NS-ADV-UI-001", "alternate-loopback"),
+        benignResolution: resolver.resolve("benign", "NS-ADV-UI-001", "same-loopback"),
+      };
+    });
+    expect(initialTargets.descriptor).toMatchObject({ writable: false, configurable: false });
+    expect(initialTargets.harm).not.toBeNull();
+    expect(initialTargets.benign).not.toBeNull();
+    expect(normalizeTargetAuthority(initialTargets.harm!)).toEqual(expectedHarm);
+    expect(normalizeTargetAuthority(initialTargets.benign!)).toEqual(expectedBenign);
+    expect(new URL(initialTargets.harm!).hostname).toBe("127.0.0.2");
+    expect(new URL(initialTargets.benign!).hostname).toBe("127.0.0.1");
+    expect(initialTargets.harmResolution).toEqual({ status: "resolved", kind: "armed-sink", href: harmHref });
+    expect(initialTargets.benignResolution).toEqual({ status: "resolved", kind: "armed-sink", href: benignHref });
+
+    const benignTarget = await page.locator(".real-link").getAttribute("href");
+    expect(benignTarget, "The benign link must expose its exact local destination").toBeTruthy();
+    const committedBenignTarget = new URL(benignTarget!, page.url()).href;
+    let activeBenignLink = false;
+    for (let attempt = 0; attempt < 4 && !activeBenignLink; attempt += 1) {
+      await page.keyboard.press("Tab");
+      activeBenignLink = await page.evaluate(() => document.activeElement?.matches(".real-link") ?? false);
+    }
+    expect(activeBenignLink, "Native Tab traversal must reach the benign link").toBe(true);
+    const benignNavigation = page.waitForURL(committedBenignTarget, {
+      waitUntil: "domcontentloaded", timeout: 10_000,
+    });
+    await page.keyboard.press("Enter");
+    await benignNavigation;
+    await expect.poll(() => benignSink.snapshot().receipts).toHaveLength(1);
+    expect(benignSink.snapshot().receipts[0]).toMatchObject({
+      runId: benignAuthorityUrl.searchParams.get("run_id"),
+      scenarioId: topologyScenarioId,
+      role: "benign",
+      consequence: BENIGN_CONSEQUENCE,
+      targetId: benignTargetId,
+    });
+
+    await page.goto(fixtureUrl.href, { waitUntil: "domcontentloaded", timeout: 20_000 });
+    await expect(page.locator("html")).toHaveAttribute("data-navsentinel-local-targets-ready", "1");
+    const reopenedTargets = await page.evaluate(() => ({
+      harm: document.querySelector<HTMLAnchorElement>("#trap")?.href ?? null,
+      benign: document.querySelector<HTMLAnchorElement>(".real-link")?.href ?? null,
+    }));
+    expect(normalizeTargetAuthority(reopenedTargets.harm!)).toEqual(expectedHarm);
+    expect(normalizeTargetAuthority(reopenedTargets.benign!)).toEqual(expectedBenign);
+
+    const trap = page.locator("#trap");
+    const box = await trap.boundingBox();
+    expect(box, "The z-index trap must be reachable by trusted pointer input").toBeTruthy();
+    const popupPromise = context.waitForEvent("page", { timeout: 1_500 });
+    await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+    const popup = await popupPromise;
+    await popup.waitForLoadState("domcontentloaded", { timeout: 5_000 });
+    expect(popup.url()).toBe(harmHref);
+    await expect.poll(() => harmSink.snapshot().receipts).toHaveLength(1);
+    expect(harmSink.snapshot().receipts[0]).toMatchObject({
+      runId: harmAuthorityUrl.searchParams.get("run_id"),
+      scenarioId: topologyScenarioId,
+      role: "attack",
+      consequence: HARM_CONSEQUENCE,
+      targetId: harmTargetId,
+    });
+    expect(harmSink.snapshot().invalidAttempts).toEqual([]);
+    expect(benignSink.snapshot().invalidAttempts).toEqual([]);
+    expect(violations).toEqual([]);
+    await popup.close();
+  } finally {
+    await context?.close().catch(() => {});
+    await egressFence?.close().catch(() => {});
+    await gym.close();
+    await harmSink.close();
+    await benignSink.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("#449 evasion targets stay local with attack, protected, benign, and mixed evidence @regression", async ({}, testInfo) => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running locality evidence.");
+  const releaseProfile = inspectBuiltReleaseProfile(extensionPath, {
+    expectedProfile: "interaction-only", requireReleaseEligible: true,
+  });
+  expect(evasionFixturePaths, "The bounded family must contain exactly evasion 01 through 12").toHaveLength(12);
+  const campaign: CampaignCase[] = [];
+  const allArms: Arm[] = [];
+  for (const definition of MUTATION_DEFINITIONS) {
+    const entry = await runMutationCase(definition);
+    campaign.push(entry.result);
+    allArms.push(...entry.arms);
+  }
+  const control = campaign.find((entry) => entry.mutation.id === "control");
+  expect(control, "The mutation campaign must include a control case").toBeDefined();
+  const opacity = campaign.find((entry) => entry.mutation.id === "opacity-010");
+  const zIndex = campaign.find((entry) => entry.mutation.id === "zindex-9997");
+  const domDepth = campaign.find((entry) => entry.mutation.id === "dom-depth-1");
+  const classToken = campaign.find((entry) => entry.mutation.id === "class-token-a7c1");
+  const transform = campaign.find((entry) => entry.mutation.id === "transform-scale-101");
+  expect(opacity).toBeDefined();
+  expect(zIndex).toBeDefined();
+  expect(domDepth).toBeDefined();
+  expect(classToken).toBeDefined();
+  expect(transform).toBeDefined();
+  assertMutationAxes(control!.mutation, opacity!.mutation, "opacity");
+  assertMutationAxes(control!.mutation, zIndex!.mutation, "zIndex");
+  assertMutationAxes(control!.mutation, domDepth!.mutation, "domDepth");
+  assertMutationAxes(control!.mutation, classToken!.mutation, "classList");
+  assertMutationAxes(control!.mutation, transform!.mutation, "transform");
+  await writeReceipt(testInfo, control!, campaign, allArms, releaseProfile);
 });

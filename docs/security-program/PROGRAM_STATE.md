@@ -12,7 +12,7 @@ fixture-family vertical.
 - 31 stable capabilities across proving-ground, release-integrity, research, agent-future, and optional-native tracks.
 - 11 outcome values and 8 ordered evidence states.
 - 1,512 generated local work units, nine for each scenario. They are not GitHub issues.
-- 65 current-work mappings: 12 Gym levels, 23 RW journeys, 12 evasion fixtures, 4 ClickFix fixtures, 4 DoubleClickjacking fixtures, 8 evidence lanes, and 2 browser-suite mappings.
+- 66 current-work mappings: 12 Gym levels, 23 RW journeys, 12 evasion fixtures, 4 ClickFix fixtures, 4 DoubleClickjacking fixtures, 9 evidence lanes, and 2 browser-suite mappings.
 - 12 deduplicated issue themes and zero new issues created by the seed pass.
 
 ## Outcome board
