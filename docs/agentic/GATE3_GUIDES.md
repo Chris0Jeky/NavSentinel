@@ -125,6 +125,17 @@ limitations, not a reason to reopen the completed gate.
 
 ## Active guide: AI-33 — issue #530 popup trust-pill contrast
 
+> **POST-MERGE since 2026-09-04 — read before step 1.** PR #582 merged on
+> 2026-08-27 (head `02b8e5c4504ff5127a9b6c4af7cf8cc30fd07da2`, merge commit
+> `d1895b51763a6c6b7b5280f0ea80664d2f0c796d`) with this gate still open, and no waiver
+> record for that merge was found in `ACTION_ITEMS.md`, `HANDOFF.md`, or
+> `DECISIONS.md`; no waiver or owner decision is claimed. The gate now applies
+> to current `main`: skip the open-PR, branch, and exact-PR-head prechecks
+> below, build `main` from a clean checkout, and record its 40-character head
+> instead. Reply `AI-33 done; Gate-3 passed on main at <40-character SHA>;
+> Chrome <version>` or `AI-33 failed on main at <SHA>: <step and observed>`.
+> Every per-PR or per-branch reply line below is superseded by these two.
+
 Run this only after the #530 implementation PR is ready and every automated
 check for its current head is green.
 
@@ -174,8 +185,8 @@ check for its current head is green.
    returns without clipping or stale text.
 7. Inspect the popup console for new errors, then stop the Gym server. On a pass,
    reply `AI-33 done;
-   Gate-3 passed on PR #<n> at <40-character SHA>; Chrome <version>`. On any
-   mismatch, reply `AI-33 failed on PR #<n> at <SHA>: <step and observed>` and
+   Gate-3 passed on main at <40-character SHA>; Chrome <version>`. On any
+   mismatch, reply `AI-33 failed on main at <SHA>: <step and observed>` and
    leave the item open.
 
 Only Chris can record AI-33 complete. The computed WCAG test supports but does
@@ -184,6 +195,17 @@ not replace this exact-head visual and keyboard gate.
 ---
 
 ## Active guide: AI-30 - PR #570 Back/Forward history integrity
+
+> **POST-MERGE since 2026-09-04 — read before step 1.** PR #570 merged on
+> 2026-08-27 (head `20fad0ac9d19bcbe3a1ca6b2d43ab14c7438ce53`, merge commit
+> `ff063a677b6c633c1eca4955dbfe9b277e529f3a`) with this gate still open, and no waiver
+> record for that merge was found in `ACTION_ITEMS.md`, `HANDOFF.md`, or
+> `DECISIONS.md`; no waiver or owner decision is claimed. The gate now applies
+> to current `main`: skip the open-PR, branch, and exact-PR-head prechecks
+> below, build `main` from a clean checkout, and record its 40-character head
+> instead. Reply `AI-30 done; Gate-3 passed on main at <40-character SHA>;
+> Chrome <version>` or `AI-30 failed on main at <SHA>: <step and observed>`.
+> Every per-PR or per-branch reply line below is superseded by these two.
 
 Run this only after PR #570 is ready and every automated check for its current
 head is green.
@@ -235,9 +257,9 @@ head is green.
    the destination briefly commits before NavSentinel returns to the Level 10
    page. This proves a later page-initiated redirect is still evaluated normally.
 6. Inspect the History fixture, Level 10, and extension service-worker consoles
-   for new errors. On a pass, reply `AI-30 done; Gate-3 passed on PR #570 at
+   for new errors. On a pass, reply `AI-30 done; Gate-3 passed on main at
    <40-character SHA>; Chrome <version>`. On any mismatch, reply `AI-30 failed on
-   PR #570 at <SHA>: <step and observed>` and leave the item open.
+   main at <SHA>: <step and observed>` and leave the item open.
 
 Only Chris can record AI-30 complete. Automated Playwright evidence supports but
 does not replace this exact-head manual browser gate.
@@ -289,6 +311,17 @@ SHA written elsewhere: a stale pin is exactly what made the AI-13 guide abort on
 precheck.
 
 ## AI-36 — #558 popup/Options patch-save synchronization Gate-3
+
+> **POST-MERGE since 2026-09-04 — read before step 1.** PR #589 merged on
+> 2026-08-27 (head `ee75bf408e04f528b0ee08006471f318fba3ef96`, merge commit
+> `003905094982b9a772cc5f06fe504d372c99dd6b`) with this gate still open, and no waiver
+> record for that merge was found in `ACTION_ITEMS.md`, `HANDOFF.md`, or
+> `DECISIONS.md`; no waiver or owner decision is claimed. The gate now applies
+> to current `main`: skip the open-PR, branch, and exact-PR-head prechecks
+> below, build `main` from a clean checkout, and record its 40-character head
+> instead. Reply `AI-36 done; Gate-3 passed on main at <40-character SHA>;
+> Chrome <version>` or `AI-36 failed on main at <SHA>: <step and observed>`.
+> Every per-PR or per-branch reply line below is superseded by these two.
 
 **🚨 OPEN: AI-36 — Run the #558 popup/Options patch-save synchronization
 Gate-3 (GUIDE PREPARED; LIVE EXACT-HEAD PRECHECK REQUIRED).** This bounded
@@ -382,13 +415,24 @@ that remain in #558. Only Chris can record this item complete.
    failure. Close the disposable profile and remove only that profile; do not
    alter an established profile or disable security software.
 9. Only Chris may record completion. Reply
-   `AI-36 done; Gate-3 passed on branch fix/issue558-patch-save-sync at
+   `AI-36 done; Gate-3 passed on main at
    <40-character SHA>; Chrome <version>` with console observations, or
-   `AI-36 failed on branch fix/issue558-patch-save-sync at <SHA>: <step and
+   `AI-36 failed on main at <SHA>: <step and
    observed result>`. Do not merge on a partial pass; recheck exact head, CI,
    comments, and the repository merge gate afterward.
 
 ## AI-35 — #539 cross-host child-event attribution Gate-3
+
+> **POST-MERGE since 2026-09-04 — read before step 1.** PR #586 merged on
+> 2026-08-27 (head `96be8e09cfe51168e4231625154ed366a408940b`, merge commit
+> `b68f403a7f14379305cf1376f3ee4f188ef31493`) with this gate still open, and no waiver
+> record for that merge was found in `ACTION_ITEMS.md`, `HANDOFF.md`, or
+> `DECISIONS.md`; no waiver or owner decision is claimed. The gate now applies
+> to current `main`: skip the open-PR, branch, and exact-PR-head prechecks
+> below, build `main` from a clean checkout, and record its 40-character head
+> instead. Reply `AI-35 done; Gate-3 passed on main at <40-character SHA>;
+> Chrome <version>` or `AI-35 failed on main at <SHA>: <step and observed>`.
+> Every per-PR or per-branch reply line below is superseded by these two.
 
 **🚨 OPEN: AI-35 — Run the #539 cross-host child-event attribution Gate-3
 (GUIDE PREPARED; LIVE EXACT-HEAD PRECHECK REQUIRED).** This browser-surface
@@ -526,9 +570,9 @@ Only Chris can record this item complete.
    Ctrl+C, close the disposable Chrome profile, and remove only that disposable
    profile. Do not alter an established profile or disable security software.
 7. Only Chris may record completion. Reply
-   `AI-35 done; Gate-3 passed on branch fix/issue539-page-attribution at
+   `AI-35 done; Gate-3 passed on main at
    <40-character SHA>; Chrome <version>` with console observations, or
-   `AI-35 failed on branch fix/issue539-page-attribution at <SHA>: <step and
+   `AI-35 failed on main at <SHA>: <step and
    observed result>`. Do not merge on a partial pass; recheck exact head, CI,
    comments, and the repository merge gate afterward.
 

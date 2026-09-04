@@ -68,7 +68,8 @@ is held on a human Chrome gate: #572 (AI-31, additionally parked on SP-F-013),
 #636 (AI-41). PR #636 turns the #593 hidden-media probe into a green regression
 by denying inherited click authority to gesture-less child-frame navigation;
 issue #593 stays open, and the remaining `form.submit(target=_top)` residue is
-tracked in #637. There is no tag, GitHub release, or CWS release. These values are a dated snapshot, not an
+tracked in #637. Test-only #605 merged on 2026-09-02 as
+`4883a8eaef1b35ea176802ee8d0d97afbc854b81`. There is no tag, GitHub release, or CWS release. These values are a dated snapshot, not an
 instruction to trust cached refs. Re-derive them with `git fetch origin`, the
 GitHub REST/API issue and pull-request views, and Actions before acting. The exact
 2026-07-10 audit baseline remains in `Product_Strategy.md` as provenance rather

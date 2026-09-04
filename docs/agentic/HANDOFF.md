@@ -10,6 +10,10 @@ Historical cycle detail remains in `ORCHESTRATOR.md` and is not required reading
 the Codex agent's #449 evasion-locality chain plus #622/#623/#625). Six PRs are
 open, all ready-for-review, all `MERGEABLE`/`CLEAN`, and every one held on a human
 Chrome gate per `DECISIONS.md` D-2026-07-03-H. None may be merged by an agent.
+This exceeds D-2026-07-03-D's WIP cap of three open human-gated PRs; no further
+browser-surface PR should be opened until that queue drains. The test-only PR
+#605 named in the 2026-08-30 delta merged on 2026-09-02 as
+`4883a8eaef1b35ea176802ee8d0d97afbc854b81`, so its red-check item is closed.
 
 | PR | Branch | Exact head | Gate | State |
 | --- | --- | --- | --- | --- |
@@ -71,7 +75,9 @@ as pre-merge gates "against the eventual PR", but those PRs merged on 2026-08-27
 merges was found** in `docs/agentic/DECISIONS.md`, `HANDOFF.md`,
 `ACTION_ITEMS.md`, or `docs/Project_Roadmap.md`; they are therefore recorded as
 open post-merge Gate-3 checks on current `main`. No waiver or owner decision is
-claimed or inferred.
+claimed or inferred. Their four guides in `docs/agentic/GATE3_GUIDES.md` now carry
+matching post-merge banners that skip the open-PR prechecks and use the
+`... on main at <SHA>` reply lines.
 
 Environment, for the next session: Windows Defender quarantines
 `tests/clickfix-detector.property.test.ts` in agent worktrees, so it can appear

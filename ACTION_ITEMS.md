@@ -28,7 +28,9 @@ and #223 remains open. AI-27, AI-28, and AI-29 are resolved; AI-14 remains
 blocked for future measurement work.
 
 **Guided resolution cursor:** `AI-19` (`Resume at: AI-19`; conversational label
-`q-5`). Current ready order: AI-19 → optional AI-24 → AI-23 (low priority).
+`q-5`). Current ready order: AI-19 → optional AI-24 → AI-23 (low priority). The six
+branch-held Gate-3 items and the four post-merge checks (AI-30, AI-33, AI-35,
+AI-36) are unordered additions to that queue.
 
 **Status vocabulary note:** issue #421's proposed `OPEN | HELD | BLOCKED` parser
 enum was superseded by owner decision #499 (2026-07-31), which removed the
@@ -225,6 +227,9 @@ dirty field. Save from Options and confirm the popup changes survive. Inspect
 Options, popup, and service-worker consoles. This gate covers the bounded
 patch-save/live-sync slice, not #558's remaining auto-save preference, dirty-state
 warning, or same-field conflict UX. Only Chris can complete this human Gate-3.
+The AI-36 guide carries a matching post-merge banner. Reply `AI-36 done; Gate-3
+passed on main at <40-character SHA>; Chrome <version>` or `AI-36 failed on main
+at <SHA>: <step and observed>`.
 The general guided resolution cursor remains AI-19; AI-36 is an additional
 branch-specific gate.
 
@@ -239,7 +244,10 @@ against current `main`. Build that exact head, load that build in a fresh Chrome
 profile, and confirm a cross-host child-frame event keeps its emitting `site`
 while the popup associates it with the top-level page; also confirm an unrelated
 top-level page does not inherit the event. Inspect page, popup, and service-worker
-consoles. Only Chris can complete this human Gate-3. The general guided
+consoles. Only Chris can complete this human Gate-3. The AI-35 guide carries a
+matching post-merge banner. Reply `AI-35 done; Gate-3 passed on main at
+<40-character SHA>; Chrome <version>` or `AI-35 failed on main at <SHA>: <step
+and observed>`. The general guided
 resolution cursor remains AI-19; AI-35 is an additional branch-specific gate.
 
 **OPEN: AI-33 — Issue #530 popup trust-pill contrast post-merge Gate-3.** This
