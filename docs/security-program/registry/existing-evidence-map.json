@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
   "as_of": "2026-08-30",
-  "mapping_count": 65,
+  "mapping_count": 66,
   "mappings": [
     {
       "id": "MAP-LEVEL-01",
@@ -1490,6 +1490,38 @@
         "tests/e2e/proving_ground_fake_sink.ts",
         "tests/e2e/evasion-locality-evidence.spec.ts",
         "docs/security-program/evidence/NS-ADV-EVADE-006-evasion-locality.yml"
+      ]
+    },
+    {
+      "id": "MAP-BRIDGE-CLIPBOARD-PRESSURE",
+      "kind": "evidence_lane",
+      "label": "Bridge clipboard-pressure critical-signal regression",
+      "primary_scenario_id": "NS-ADV-SELF-005",
+      "supporting_scenario_ids": [
+        "NS-ADV-CLIP-002",
+        "NS-ADV-SELF-004"
+      ],
+      "primary_harm_boundary": "Unverified clipboard receipts fill the outbound bridge queue and prevent a later critical browser-block receipt from reaching the isolated extension world.",
+      "role": "mixed",
+      "current_oracle": "Matched trusted-input bundled-Chromium arms load an ephemeral exact-artifact mutant with only coalescing disabled and the normal artifact. The mutant's real bridge loses the later browser-block receipt and reaches a typed loopback sink as HARM_REACHED; the normal artifact retains the receipt, keeps the sink empty, and a second controlled reconnect contains only its new clipboard receipt and completes without overflow. A deterministic unit matrix separately sweeps queue counts, event ordering, risk shapes, and retry windows.",
+      "oracle_type": "independent_harm",
+      "evidence_state": "REGRESSION_PROVEN",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "This is one bounded deterministic unit campaign plus exact-artifact mutant and protected queue-pressure sequences in Playwright-bundled Chromium, not a browser/version distribution. The mutant is temporary test output and changes exactly one built coalescing function; no production bypass ships. The controlled retry depends on the known page-visible same-session bridge weakness in #186; service-worker restart is downstream of this document-local pre-isolated queue, while owner Chrome, general bridge identity/recovery, and OS paste or execution prevention remain separate.",
+      "issue_refs": [
+        "#175",
+        "#186",
+        "#523"
+      ],
+      "pr_refs": [
+        "#599"
+      ],
+      "paths": [
+        "extension/src/content/bridge_outbound.ts",
+        "extension/src/content/main_guard.ts",
+        "tests/bridge-outbound.test.ts",
+        "tests/e2e/bridge-clipboard-pressure.spec.ts",
+        "tests/e2e/phase2-detections.spec.ts"
       ]
     },
     {

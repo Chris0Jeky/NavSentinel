@@ -532,6 +532,76 @@ Only Chris can record this item complete.
    observed result>`. Do not merge on a partial pass; recheck exact head, CI,
    comments, and the repository merge gate afterward.
 
+## AI-37 — #523 bridge queue-pressure Gate-3
+
+**OPEN: AI-37 — Run the #523 successor bridge queue-pressure Gate-3 (GUIDE
+PREPARED; LIVE EXACT-HEAD PRECHECK REQUIRED).** This bounded browser-surface
+guide checks that the queue-pressure repair preserves legitimate clipboard use
+and cannot suppress the next verified ClickFix signal. The hostile unverified
+retry and 64-write pressure oracle remain automated-only because they use the
+known page-visible same-session handshake weakness in #186. This guide does not
+complete C-04, prove general bridge identity, or establish OS paste or execution
+prevention. It also resolves the explicit queue-semantics owner decision still
+open in #523; browser success alone does not imply that decision. Only Chris can
+record this item complete.
+
+1. Resolve PR #599 and require its head branch to be
+   `fix/issue523-unverified-clipboard-cap`. Record its 40-character
+   `headRefOid`. In its implementation worktree, require `git rev-parse HEAD`
+   to equal that value and the remote branch SHA. The worktree may contain only
+   the already-ledgered Windows Defender quarantine line
+   ` D tests/clickfix-detector.property.test.ts`; do not open, restore, allow,
+   inspect, or stage that fixture. Stop on any other mismatch. Require all
+   exact-head hosted checks green, the required independent review complete,
+   and every review finding triaged before opening Chrome. Review the proposed
+   policy and explicitly accept or reject it: before verification, keep only the
+   latest command-like and latest non-command clipboard receipt; after
+   verification, deliver every successful clipboard write directly. Stop if
+   that policy is not accepted rather than treating the later browser steps as
+   implicit approval.
+2. On that exact head run `npm ci`,
+   `npx vitest run tests/bridge-outbound.test.ts`, `npm run typecheck`,
+   `npm run build`, `npm run check:content-loader`, and
+   `npm run check:perf-budget`. Record the build's capture, bridge, and UI-guard
+   markers. Loading or reloading the unpacked extension is Chris-owned: the
+   agent stops at this boundary and must not operate `chrome://extensions`.
+3. Start the tracked local Gym with `npm run gym:serve`. In a fresh unsigned-in
+   Chrome profile, load this exact worktree's `extension/dist` unpacked, record
+   the Chrome version, and confirm its service worker registers without an
+   error. In NavSentinel Options select Smart mode and confirm neither
+   `localhost` nor `127.0.0.1` is trusted or allowlisted.
+4. Open
+   `http://127.0.0.1:5173/clickfix-03-legit-captcha.html?ai37=benign`. Confirm
+   `data-navsentinel-capture-ready` and `data-navsentinel-bridge-ready` are both
+   `"1"`. Physically click **Copy Code**. The status must report **OTP copied**,
+   the page must remain usable, and no ClickFix or clipboard warning may appear
+   during the next two seconds. Physically select the local inert verification
+   checkbox as a second benign control; it must remain usable without a warning.
+5. Open
+   `http://127.0.0.1:5173/clickfix-01-basic.html?ai37=mixed` and require the same
+   two readiness markers. In that page's ordinary DevTools console run only
+   `await navigator.clipboard.writeText("847293")`; this is the bounded benign
+   prewrite. Promptly return to the page and physically click **I am not a
+   robot** once. Do not open an OS Run dialog and do not paste or execute the
+   clipboard value. The page status must report that its inert sentinel write
+   completed, and NavSentinel must show its fake-verification/clipboard warning.
+   A missing warning is a failure even if the page status changes normally.
+6. Open NavSentinel Options > Event Log. Confirm the mixed trial recorded a
+   `clickfix_detected` event and the benign page did not. Confirm neither trial
+   added a `bridge_buffer_overflow` row. The log must not display either raw
+   clipboard value. Do not export or share unrelated browsing rows.
+7. Inspect the two page consoles and the extension service-worker console for
+   new errors. Close all test tabs and DevTools windows, stop the Gym server,
+   close the disposable profile, and remove only that profile. Do not alter an
+   established profile or disable security software.
+8. On a policy acceptance and browser pass, reply `AI-37 approved queue design;
+   Gate-3 passed on PR #<n> at <40-character SHA>; Chrome <version>` with any
+   console observations. If the policy is not accepted, reply `AI-37 rejected
+   queue design: <reason>` without running the browser steps. On a browser
+   mismatch, reply `AI-37 failed on PR #<n> at <SHA>: <step and observed
+   result>` and leave the item open. The agent must then recheck the exact head,
+   CI, comments, and merge gate; no partial pass authorizes merge.
+
 ## Index
 
 | Item | PR | Guide |
@@ -539,6 +609,7 @@ Only Chris can record this item complete.
 | AI-13 | #356 MAIN-world compatibility | in [`../../ACTION_ITEMS.md`](../../ACTION_ITEMS.md) |
 | AI-21 | #464 synthetic navigation | [below](#ai-21--pr-464-synthetic-navigation-gate-3) |
 | AI-22 | #466 pending-decision service worker | [below](#ai-22--pr-466-pending-decision-service-worker-gate-3) |
+| AI-37 | #523 bridge queue pressure | [above](#ai-37--523-bridge-queue-pressure-gate-3) |
 | AI-36 | #558 popup/Options patch-save synchronization | [above](#ai-36--558-popupoptions-patch-save-synchronization-gate-3) |
 | AI-35 | #539 cross-host child-event attribution | [below](#ai-35--539-cross-host-child-event-attribution-gate-3) |
 
