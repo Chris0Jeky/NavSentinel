@@ -69,6 +69,11 @@ const OBSERVATION_MS = 3_500;
  * user-requested navigation and skips it. Every protected arm therefore waits
  * past that window before arming, so an arm can never "pass" for the unrelated
  * reason that the fixture had only just been typed into the address bar.
+ *
+ * The converse is also true and is a real limitation of the product, not of the
+ * harness: INSIDE that 5 s window the worker returns early before any allowance
+ * is consulted, so this boundary provably does nothing there. These arms
+ * deliberately step around it rather than characterise it.
  */
 const TYPED_ORIGIN_SETTLE_MS = 6_000;
 
