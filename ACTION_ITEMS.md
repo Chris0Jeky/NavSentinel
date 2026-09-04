@@ -158,7 +158,7 @@ frame reproduction and repair.
 
 **OPEN: AI-41 - #593 child-frame navigation authority Gate-3.** Run the active
 AI-41 procedure in [`docs/agentic/GATE3_GUIDES.md`](docs/agentic/GATE3_GUIDES.md)
-against the PR for branch `fix/issue593-child-frame-location-20260904`. Verify
+against PR #636 (branch `fix/issue593-child-frame-location-20260904`). Verify
 the exact head and hosted checks first, then build that head and load it in a
 fresh Chrome profile. Confirm that a trusted click on a visible control covered
 by a nearly transparent same-origin iframe no longer leaves the tab silently on
