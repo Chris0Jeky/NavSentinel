@@ -36,16 +36,30 @@ function staticFile(res,pathname,{lab=false}={}){
     res.writeHead(200,{'Content-Type':MIME[ext],'Content-Security-Policy':lab?"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'":CSP,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer'});res.end(data);
   }catch{return respond(res,404,{error:'Not found'});}
 }
-async function createService({port=4318,labPort=4319,dataDir=path.join(ROOT,'.local'),quiet=false}={}){
+async function createService({port=4318,labPort=4319,dataDir=path.join(ROOT,'.local'),quiet=false,clock=Date.now}={}){
   if(!Number.isInteger(port)||port<0||port>65535||!Number.isInteger(labPort)||labPort<0||labPort>65535)throw new Error('Invalid port');
   fs.mkdirSync(dataDir,{recursive:true,mode:0o700});
   const lockPath=path.join(dataDir,'service.lock');
   const lockFd=fs.openSync(lockPath,'wx',0o600);fs.writeFileSync(lockFd,String(process.pid));fs.closeSync(lockFd);
   let ledger;try{ledger=new Ledger(dataDir);}catch(e){fs.unlinkSync(lockPath);throw e;}
-  const adminToken=randomToken(),agentToken=randomToken(),caps=new CapabilityStore(),pending=new Map(),rate=new Map();
+  const adminToken=randomToken(),agentToken=randomToken(),sinkToken=randomToken(),caps=new CapabilityStore({now:clock}),pending=new Map(),rate=new Map();
+  const journeyId=`broker-${randomToken().slice(0,18)}`;
+  const brokerEffects={count:0,lastRequestId:null};
   const started=Date.now(),sinkCounts={navigation:0,credential:0,overlay:0,popup:0,clipboard:0};
   let actualPort=port,actualLabPort=labPort,closed=false;
-  function prune(){for(const [k,v]of pending)if(v.expiresAt<=Date.now())pending.delete(k);caps.prune();}
+  function prune(){for(const [k,v]of pending)if(v.expiresAt<=clock())pending.delete(k);caps.prune();}
+  const fixtureAdapter=()=>({id:'local-counter-v1',action:'navigate',autoDestination:`http://127.0.0.1:${actualLabPort}/broker-fixture/auto`,reviewDestination:`http://127.0.0.1:${actualLabPort}/broker-fixture/review`,observationUrl:`http://127.0.0.1:${actualLabPort}/broker-effects`,effect:'fixture-counter-only'});
+  function fixtureKind(event){
+    if(event.action!=='navigate')return null;
+    const adapter=fixtureAdapter();
+    return event.destination===adapter.autoDestination?'auto':event.destination===adapter.reviewDestination?'review':null;
+  }
+  async function executeFixture(requestId){
+    // The endpoint is constructed entirely by the service. Never fetch a caller URL.
+    const response=await fetch(`http://127.0.0.1:${actualLabPort}/broker-effect`,{method:'POST',headers:{Authorization:`Bearer ${sinkToken}`,'Content-Type':'application/json'},body:JSON.stringify({requestId}),redirect:'error',signal:AbortSignal.timeout(2000)});
+    if(!response.ok)throw new Error('Fixture sink rejected the effect');
+    return response.json();
+  }
   const pendingView=p=>({id:p.id,caller:p.caller,event:p.event,result:p.result,expiresAt:p.expiresAt});
   function addReceipt(event,result,kind='decision',requestId=null){return ledger.append({kind,requestId,...Core.publicReceipt(event,result,{sourceKind:'broker'})});}
   const server=http.createServer(async(req,res)=>{
@@ -55,7 +69,7 @@ async function createService({port=4318,labPort=4319,dataDir=path.join(ROOT,'.lo
       if(req.headers.origin && req.headers.origin!==expectedOrigin)return respond(res,403,{error:'Cross-origin requests are not accepted'});
       if(req.headers['sec-fetch-site']==='cross-site')return respond(res,403,{error:'Cross-site request rejected'});
       const url=new URL(req.url,expectedOrigin);
-      if(url.pathname==='/api/health'&&req.method==='GET')return respond(res,200,{version:Core.VERSION,uptimeSeconds:Math.floor((Date.now()-started)/1000),mode:'cooperative intent broker',osHooks:false,labPort:actualLabPort});
+      if(url.pathname==='/api/health'&&req.method==='GET')return respond(res,200,{version:Core.VERSION,uptimeSeconds:Math.floor((Date.now()-started)/1000),mode:'cooperative intent broker',osHooks:false,labPort:actualLabPort,fixtureAdapter:fixtureAdapter()});
       if(!url.pathname.startsWith('/api/')){
         if(req.method!=='GET'&&req.method!=='HEAD')return respond(res,405,{error:'Method not allowed'});
         return staticFile(res,url.pathname);
@@ -63,7 +77,7 @@ async function createService({port=4318,labPort=4319,dataDir=path.join(ROOT,'.lo
       const token=String(req.headers.authorization||'').replace(/^Bearer /,'');
       const role=constantEqual(token,adminToken)?'admin':constantEqual(token,agentToken)?'agent':null;
       if(!role)return respond(res,401,{error:'A valid session token is required'});
-      const now=Date.now();let bucket=rate.get(role);if(!bucket||bucket.until<=now){bucket={count:0,until:now+60000};rate.set(role,bucket);}if(++bucket.count>240)return respond(res,429,{error:'Request budget exhausted; retry after one minute'});
+      const now=clock();let bucket=rate.get(role);if(!bucket||bucket.until<=now){bucket={count:0,until:now+60000};rate.set(role,bucket);}if(++bucket.count>240)return respond(res,429,{error:'Request budget exhausted; retry after one minute'});
       prune();
       if(url.pathname==='/api/state'&&req.method==='GET'){
         if(role!=='admin')return respond(res,403,{error:'Administrator token required'});
@@ -87,12 +101,13 @@ async function createService({port=4318,labPort=4319,dataDir=path.join(ROOT,'.lo
         if(pending.size>=256)return respond(res,503,{error:'Pending-request capacity reached'});
         const declared=Core.normalizeEvent(body.event);
         // A caller cannot select its identity or claim a privileged sensor provenance.
-        const event={...declared,actor:role==='agent'?'research-agent':'local-operator',evidence:'declared'};
-        const allowed=event.action==='navigate'&&Core.origin(event.destination)==='https://reference.test';
+        const id=`req-${randomToken().slice(0,18)}`;
+        const event={...declared,id,journeyId,actor:role==='agent'?'research-agent':'local-operator',evidence:'declared'};
+        const allowed=fixtureKind(event)==='auto'||(event.action==='navigate'&&Core.origin(event.destination)==='https://reference.test');
         if(!allowed&&!event.signals.includes('agent_outside_scope'))event.signals.push('agent_outside_scope');
         // There is deliberately no shell executor. Missing taint metadata never authorizes one.
         if(event.action==='shell-paste')return respond(res,422,{error:'Shell execution is not a supported capability',decision:'block'});
-        const canonical=Core.normalizeEvent(event),result=Core.evaluate(canonical,{mode:'smart'}),id=`req-${randomToken().slice(0,18)}`;
+        const canonical=Core.normalizeEvent(event),result=Core.evaluate(canonical,{mode:'smart'});
         const record={id,event:canonical,result,caller:role,expiresAt:now+60000,approved:false};
         const receipt=addReceipt(canonical,result,'decision',id);
         let capability=null;
@@ -110,11 +125,22 @@ async function createService({port=4318,labPort=4319,dataDir=path.join(ROOT,'.lo
         return respond(res,200,{capability,event:record.event,caller:record.caller});
       }
       if(url.pathname==='/api/consume'){
-        const canonical=Core.normalizeEvent(body.event);
-        let grant;try{grant=caps.consume({token:body.token,event:canonical,caller:role});}catch(e){return respond(res,409,{error:e.message,executed:false});}
-        // This executor only records an inert consequence. It cannot run commands, visit URLs or upload data.
-        const receipt=addReceipt(grant.event,Core.evaluate(grant.event),'capability-consumed',grant.requestId);pending.delete(grant.requestId);
-        return respond(res,200,{executed:false,accepted:true,effect:'Inert executor receipt recorded; no external action was taken',receipt});
+        // CapabilityStore burns before parsing/validating context, including malformed events.
+        let grant;try{grant=caps.consume({token:body.token,event:body.event,caller:role});}catch(e){return respond(res,409,{error:e.message,executed:false});}
+        pending.delete(grant.requestId);
+        const fixtureOnly=!!fixtureKind(grant.event);
+        let observation=null;
+        if(fixtureOnly){
+          try{observation=await executeFixture(grant.requestId);}catch{
+            // A transport failure may happen after the sink effect. Never retry a consumed grant.
+            return respond(res,502,{accepted:true,executed:null,effectStatus:'unknown',fixtureOnly:true,error:'Fixture effect could not be confirmed; inspect the independent observation endpoint. Grant consumed.'});
+          }
+        }
+        let receipt;
+        try{receipt=addReceipt(grant.event,Core.evaluate(grant.event),fixtureOnly?'fixture-effect':'capability-consumed',grant.requestId);}catch{
+          return respond(res,503,{accepted:true,executed:fixtureOnly,fixtureOnly,observation,receiptStatus:'unavailable',error:'Consumed grant could not be journaled. Do not retry; inspect the independent fixture observation.'});
+        }
+        return respond(res,200,{executed:fixtureOnly,accepted:true,fixtureOnly,effect:fixtureOnly?'Local fixture counter incremented; no destination was visited':'Inert executor receipt recorded; no external action was taken',observation,receipt});
       }
       if(url.pathname==='/api/revoke'){
         if(role!=='admin')return respond(res,403,{error:'Administrator token required'});
@@ -124,9 +150,20 @@ async function createService({port=4318,labPort=4319,dataDir=path.join(ROOT,'.lo
     }catch(error){if(!res.headersSent)respond(res,error.status||400,{error:error.message||'Request rejected'});else res.end();}
   });
   server.requestTimeout=5000;server.headersTimeout=5000;server.maxHeadersCount=40;
-  const labServer=http.createServer((req,res)=>{
+  const labServer=http.createServer(async(req,res)=>{
     if(req.headers.host!==`127.0.0.1:${actualLabPort}`)return respond(res,403,{error:'Unexpected Host'});
     const url=new URL(req.url,`http://127.0.0.1:${actualLabPort}`);
+    if(url.pathname==='/broker-effects'&&req.method==='GET')return respond(res,200,{fixtureOnly:true,...brokerEffects});
+    if(url.pathname==='/broker-effect'){
+      if(req.method!=='POST')return respond(res,405,{error:'Method not allowed'});
+      if(!constantEqual(req.headers.authorization,`Bearer ${sinkToken}`))return respond(res,403,{error:'Internal fixture adapter required'});
+      try{
+        const body=await bodyJson(req);
+        if(Object.keys(body).length!==1||typeof body.requestId!=='string'||!/^req-[A-Za-z0-9_-]{18}$/.test(body.requestId))return respond(res,400,{error:'Invalid fixture receipt identity'});
+        brokerEffects.count++;brokerEffects.lastRequestId=body.requestId;
+        return respond(res,200,{fixtureOnly:true,...brokerEffects});
+      }catch(error){return respond(res,error.status||400,{error:error.message});}
+    }
     if(url.pathname==='/sink'){
       const kind=url.searchParams.get('kind');if(!Object.hasOwn(sinkCounts,kind))return respond(res,400,{error:'Invalid sink'});
       if(!['GET','POST'].includes(req.method))return respond(res,405,{error:'Method not allowed'});
@@ -140,7 +177,9 @@ async function createService({port=4318,labPort=4319,dataDir=path.join(ROOT,'.lo
   const listen=(s,p)=>new Promise((resolve,reject)=>{s.once('error',reject);s.listen(p,'127.0.0.1',()=>{s.removeListener('error',reject);resolve(s.address().port);});});
   try{actualPort=await listen(server,port);actualLabPort=await listen(labServer,labPort);}catch(e){server.close();labServer.close();fs.unlinkSync(lockPath);throw e;}
   const session={origin:`http://127.0.0.1:${actualPort}`,labOrigin:`http://127.0.0.1:${actualLabPort}`,adminToken,agentToken};
-  const sessionPath=path.join(dataDir,'session.json');fs.writeFileSync(sessionPath,JSON.stringify(session,null,2),{mode:0o600});
+  // Client bootstrap never includes the operator credential. The owner gets it in memory/stdout.
+  const clientSession={origin:session.origin,labOrigin:session.labOrigin,agentToken};
+  const sessionPath=path.join(dataDir,'session.json');fs.writeFileSync(sessionPath,JSON.stringify(clientSession,null,2),{mode:0o600});
   const close=async()=>{
     if(closed)return;closed=true;caps.revokeAll();
     await Promise.all([server,labServer].map(s=>new Promise(resolve=>{s.close(resolve);s.closeAllConnections?.();})));
