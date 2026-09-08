@@ -10,6 +10,7 @@
     #player { position: relative; width: min(760px, 92vw); aspect-ratio: 16 / 9; overflow: hidden; background: #182c3f; box-shadow: 0 16px 50px #0008; }
     #player-poster { position: absolute; inset: 0; display: grid; place-items: center; background: radial-gradient(circle at 65% 20%, #4c84a8, #182c3f 60%); }
     #visible-player-control { position: absolute; inset: auto 24px 24px; min-height: 44px; color: white; background: #0d1520cc; border: 1px solid #b7e6ff99; border-radius: 6px; z-index: 20; }
+    #top-submit-form { position: absolute; inset: auto 24px 84px; z-index: 30; }
     /* MODELLED: an iframe-sized interactive layer that a user cannot reasonably see. */
     #hidden-media-layer { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; opacity: 0.015; z-index: 10; pointer-events: auto; }
     /* Benign control: the same embed, actually visible to the user. */
@@ -21,6 +22,9 @@
   <main id="player" aria-label="Modelled embedded media player">
     <div id="player-poster"><strong>Modelled media player</strong></div>
     <button id="visible-player-control" type="button">Play visible media</button>
+    <form id="top-submit-form" method="get" hidden>
+      <button id="top-submit-control" type="submit">Continue in top frame</button>
+    </form>
     <iframe id="hidden-media-layer" title="MODELLED hidden interactive media layer"></iframe>
   </main>
   <output id="fixture-status" aria-live="polite"></output>
@@ -51,6 +55,9 @@
         ["top-assign-1600", { primitive: "top-assign", delayMs: 1600 }],
         ["window-open-100", { primitive: "window-open", delayMs: 100 }],
         ["top-form-submit-100", { primitive: "top-form-submit", delayMs: 100 }],
+        ["benign-declared-form-submit-100", { primitive: "declared-form-submit", delayMs: 100 }],
+        ["benign-declared-request-submit-100", { primitive: "declared-request-submit", delayMs: 100 }],
+        ["benign-top-form-submit-100", { primitive: "top-form-submit-control", delayMs: 100 }],
         ["benign-anchor-top-keyboard", { primitive: "anchor-top", delayMs: 0 }],
         ["benign-top-script-100", { primitive: "top-script", delayMs: 100 }],
       ]);
@@ -120,6 +127,35 @@
           if (safeSink) location.assign(safeSink);
         }, delayMs);
       });
+
+      if (primitive === "top-form-submit-control" && safeSink) {
+        const form = document.getElementById("top-submit-form");
+        const target = new URL(safeSink);
+        form.action = `${target.origin}${target.pathname}`;
+        for (const [name, value] of target.searchParams) {
+          const field = document.createElement("input");
+          field.type = "hidden";
+          field.name = name;
+          field.value = value;
+          form.append(field);
+        }
+        form.hidden = false;
+        document.getElementById("top-submit-control").addEventListener("click", (event) => {
+          event.preventDefault();
+          record({
+            phase: "armed",
+            frameOverride: "parent",
+            primitive,
+            delayMs,
+            input: "top-physical-click",
+            trusted: event.isTrusted,
+            detail: event.detail,
+            modifiers: { alt: !!event.altKey, ctrl: !!event.ctrlKey, meta: !!event.metaKey, shift: !!event.shiftKey },
+            sinkArmed: true,
+          });
+          window.setTimeout(() => form.submit(), delayMs);
+        });
+      }
 
       const frameEl = document.getElementById("hidden-media-layer");
       if (layer === "visible") frameEl.classList.add("visible-layer");

@@ -4,6 +4,13 @@
  * The fixture is local/synthetic and its only consequence is a typed loopback
  * fake-sink receipt.
  *
+ * Issue #637 extends this model with the interceptable form path. Before the
+ * fix, a bare-element click in the child granted a frame-local redirect
+ * allowance; `form.submit(target=_top)` spent it, emitted an exact-target
+ * worker allowance, and left the tab on the sink. The regression requires
+ * zero sink receipts for that undeclared form while preserving a child submit
+ * control whose action is declared in-frame and ordinary top-frame submits.
+ *
  * Measured mechanism (base a440e35): the content script runs in every frame, so
  * a trusted click on a bare element inside a hidden child frame minted the
  * TAB-WIDE `ns-nav-gesture` / `ns-allow-nav` windows. The child then called
@@ -78,11 +85,11 @@ const OBSERVATION_MS = 3_500;
  */
 const TYPED_ORIGIN_SETTLE_MS = 6_000;
 
-type Expectation = "blocked-pre-harm" | "rolled-back" | "out-of-model" | "benign-allowed" | "bypass-reproduced";
+type Expectation = "blocked-pre-harm" | "rolled-back" | "out-of-model" | "benign-allowed";
 
 type Arm = {
   id: string;
-  primitive: "child-assign" | "top-assign" | "window-open" | "anchor-top" | "top-script" | "forged-anchor-top" | "top-form-submit";
+  primitive: "child-assign" | "top-assign" | "window-open" | "anchor-top" | "top-script" | "forged-anchor-top" | "top-form-submit" | "declared-form-submit" | "declared-request-submit" | "top-form-submit-control";
   delayMs: number;
   /** Which input the harness delivers. */
   input: "physical-click" | "keyboard" | "top-physical-click" | "none";
@@ -103,13 +110,16 @@ const arms: readonly Arm[] = [
   // Issue #637 pre-fix oracle: a bare-element click grants the child frame's
   // MAIN world a redirect allowance, then form.submit(target=_top) converts
   // that frame-local allowance into a tab-wide exact-target allowance.
-  { id: "top-form-submit-100", primitive: "top-form-submit", delayMs: 100, input: "physical-click", layer: "hidden", role: "attack", expectation: "bypass-reproduced" },
+  { id: "top-form-submit-100", primitive: "top-form-submit", delayMs: 100, input: "physical-click", layer: "hidden", role: "attack", expectation: "blocked-pre-harm" },
   { id: "child-assign-100", primitive: "child-assign", delayMs: 100, input: "physical-click", layer: "hidden", role: "attack", expectation: "out-of-model" },
   { id: "child-assign-1600", primitive: "child-assign", delayMs: 1_600, input: "physical-click", layer: "hidden", role: "attack", expectation: "out-of-model" },
   { id: "child-assign-no-input", primitive: "child-assign", delayMs: 100, input: "none", layer: "hidden", role: "attack", expectation: "out-of-model" },
   // --- benign / false-positive controls ---
   { id: "benign-anchor-top-keyboard", primitive: "anchor-top", delayMs: 0, input: "keyboard", layer: "visible", role: "benign", expectation: "benign-allowed" },
   { id: "benign-top-script-100", primitive: "top-script", delayMs: 100, input: "top-physical-click", layer: "visible", role: "benign", expectation: "benign-allowed" },
+  { id: "benign-declared-form-submit-100", primitive: "declared-form-submit", delayMs: 100, input: "physical-click", layer: "visible", role: "benign", expectation: "benign-allowed" },
+  { id: "benign-declared-request-submit-100", primitive: "declared-request-submit", delayMs: 100, input: "physical-click", layer: "visible", role: "benign", expectation: "benign-allowed" },
+  { id: "benign-top-form-submit-100", primitive: "top-form-submit-control", delayMs: 100, input: "top-physical-click", layer: "visible", role: "benign", expectation: "benign-allowed" },
 ];
 
 type Observation = {
@@ -424,9 +434,12 @@ async function runArm(
     }
 
     if (arm.input === "physical-click") {
-      await frame.locator(
-        arm.primitive === "forged-anchor-top" ? "#forged-intent-layer" : "#hidden-interactive-layer",
-      ).click();
+      const clickTarget = arm.primitive === "forged-anchor-top"
+        ? "#forged-intent-layer"
+        : arm.primitive === "declared-form-submit" || arm.primitive === "declared-request-submit"
+          ? "#declared-top-submit"
+          : "#hidden-interactive-layer";
+      await frame.locator(clickTarget).click();
       await expect.poll(() => {
         const armedEntry = armedDiagnostic(diagnostics, "child", "physical-click");
         if (!armedEntry) return null;
@@ -456,7 +469,9 @@ async function runArm(
         return { trusted: armedEntry.trusted, detail: armedEntry.detail };
       }, { timeout: 5_000 }).toEqual({ trusted: true, detail: 0 });
     } else if (arm.input === "top-physical-click") {
-      await page.locator("#visible-player-control").click();
+      await page.locator(
+        arm.primitive === "top-form-submit-control" ? "#top-submit-control" : "#visible-player-control",
+      ).click();
       await expect.poll(() => {
         const armedEntry = armedDiagnostic(diagnostics, "parent", "top-physical-click");
         if (!armedEntry) return null;
@@ -566,7 +581,10 @@ for (const arm of arms) {
       baseline.sinkReceiptsBefore + 1,
     );
     if (arm.primitive === "top-assign" || arm.primitive === "top-script" ||
-        arm.primitive === "anchor-top" || arm.primitive === "forged-anchor-top") {
+        arm.primitive === "anchor-top" || arm.primitive === "forged-anchor-top" ||
+        arm.primitive === "top-form-submit" || arm.primitive === "declared-form-submit" ||
+        arm.primitive === "declared-request-submit" ||
+        arm.primitive === "top-form-submit-control") {
       expect(baseline.topReturnedToFixture, "an unprotected browser must leave the tab on the destination").toBe(false);
     }
 
@@ -578,6 +596,12 @@ for (const arm of arms) {
           observed.sinkReceiptsAfter,
           "BLOCKED_PRE_HARM: no request may reach the sink at all",
         ).toBe(observed.sinkReceiptsBefore);
+        if (arm.primitive === "top-form-submit") {
+          expect(
+            observed.workerEvidence,
+            "BLOCKED_PRE_HARM: no target allowance or top-frame commit may reach the worker",
+          ).toBeNull();
+        }
         break;
       case "rolled-back":
         // `Location` members are unforgeable (#458), so the request itself
@@ -610,24 +634,6 @@ for (const arm of arms) {
           observed.topReturnedToFixture,
           "BENIGN_ALLOWED: a legitimate navigation must not be rolled back",
         ).toBe(false);
-        break;
-      case "bypass-reproduced":
-        expect(
-          observed.sinkReceiptsAfter,
-          "ISSUE_637_REPRODUCED: the protected form submit reached the armed sink",
-        ).toBe(observed.sinkReceiptsBefore + 1);
-        expect(
-          observed.topReturnedToFixture,
-          "ISSUE_637_REPRODUCED: the worker left the tab on the child-chosen destination",
-        ).toBe(false);
-        expect(
-          observed.workerEvidence?.allowance,
-          "ISSUE_637_REPRODUCED: the worker must receive the exact-target allowance",
-        ).toMatchObject({ matchQueryPrefix: true });
-        expect(
-          observed.workerEvidence?.commit,
-          "ISSUE_637_REPRODUCED: the worker must observe the top-frame sink commit",
-        ).toMatchObject({ url: observed.finalTopUrl });
         break;
     }
   });
