@@ -1,6 +1,6 @@
 import type { CredMode, EventLogEntry, SuiteSettings } from "../shared/storage";
 import { classifyEventTone } from "../shared/event_tone";
-import { cleanupStatus } from "../shared/cleanup_status";
+import { renderCleanupStatus } from "../shared/cleanup_status";
 import { icon, logoSentinel } from "../shared/icons";
 import { getSegValue, initSegKeyboard, setSegValue } from "../shared/seg_control";
 import {
@@ -135,10 +135,19 @@ let settingsGeneration = 0;
 let conflicts: string[] = [];
 let autoSaveTimer: number | undefined;
 let saveBusy = false;
+let saveInFlight: Promise<void> | null = null;
 const numericControls = [mediumThresholdEl, similarityMaxDistEl, logLimitEl];
 
 function validNumbers(): boolean {
   return numericControls.every(el => el.value.trim() !== "" && el.validity.valid);
+}
+
+function captureInvalidNumbers(): Array<[HTMLInputElement, string]> {
+  return numericControls.filter(el => !el.value.trim() || !el.validity.valid).map(el => [el, el.value]);
+}
+
+function restoreInvalidNumbers(values: Array<[HTMLInputElement, string]>): void {
+  for (const [el, value] of values) el.value = value;
 }
 
 function updateDraftState(): void {
@@ -152,10 +161,7 @@ function updateDraftState(): void {
   conflictTextEl.textContent = `Changed in another window: ${conflicts.join(", ")}. Your edits have not been overwritten.`;
   // Report persisted behavior, even when the controls contain a manual draft.
   if (renderedSettings) {
-    const cleanup = cleanupStatus(renderedSettings.nav);
-    const el = document.getElementById("cleanupStatus")!;
-    el.textContent = cleanup.text;
-    el.dataset.state = cleanup.state;
+    renderCleanupStatus(document.getElementById("cleanupStatus")!, renderedSettings.nav);
   }
 }
 
@@ -535,13 +541,13 @@ function rebaseIncomingSettings(incoming: SuiteSettings): void {
   }
   // Preserve invalid/incomplete numeric text too; parsing it into a fallback
   // during an unrelated storage event would silently erase the user's input.
-  const invalid = numericControls.filter(el => !el.value.trim() || !el.validity.valid).map(el => [el, el.value] as const);
+  const invalid = captureInvalidNumbers();
   const rebasedDraft = baseline
     ? rebaseOptionsSettingsDraft(baseline, draft, incoming)
     : incoming;
   renderedSettings = incoming;
   renderSettings(rebasedDraft);
-  if (baseline) for (const [el, value] of invalid) el.value = value;
+  if (baseline) restoreInvalidNumbers(invalid);
   updateDraftState();
 }
 
@@ -562,7 +568,7 @@ async function init(replaceDraft = false): Promise<void> {
   await refreshDomainProfiles();
 }
 
-async function saveSettings(): Promise<void> {
+async function saveSettingsInner(): Promise<void> {
   if (saveBusy || conflicts.length || !validNumbers()) return;
   let saved = false;
   saveBusy = true;
@@ -602,6 +608,16 @@ async function saveSettings(): Promise<void> {
   }
 }
 
+function saveSettings(): Promise<void> {
+  if (saveInFlight) return saveInFlight;
+  const pending = saveSettingsInner();
+  saveInFlight = pending;
+  void pending.finally(() => {
+    if (saveInFlight === pending) saveInFlight = null;
+  });
+  return pending;
+}
+
 saveBtn.addEventListener("click", () => { void saveSettings(); });
 for (const el of [navModeSeg, credModeSeg, navDebugEl, autoDismissOverlaysEl, blockHttpEl, warnPasteEl, promptUntrustedEl, promptMediumEl, similarityEnabledEl]) {
   el.addEventListener("click", draftChanged);
@@ -637,7 +653,9 @@ document.getElementById("keepDraft")!.addEventListener("click", () => {
   draftChanged();
 });
 document.getElementById("useExternal")!.addEventListener("click", () => {
+  const invalid = captureInvalidNumbers();
   if (renderedSettings) renderSettings(acceptExternalSettings(readSettingsDraft(), renderedSettings, conflicts));
+  restoreInvalidNumbers(invalid);
   conflicts = [];
   draftChanged();
 });
@@ -698,6 +716,11 @@ importFileEl.addEventListener("change", async () => {
   const f = importFileEl.files?.[0];
   if (!f) return;
   try {
+    // An import is authoritative. Cancel a pending autosave and let an already
+    // dispatched write finish before the import crosses the worker boundary.
+    window.clearTimeout(autoSaveTimer);
+    settingsGeneration++;
+    await saveInFlight;
     // Thin adapter: orchestration (import → refresh → status, with the non-atomic
     // partial-vs-total failure handling) lives in the unit-tested runImportFlow.
     await runImportFlow({

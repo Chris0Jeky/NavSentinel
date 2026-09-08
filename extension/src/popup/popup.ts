@@ -1,6 +1,6 @@
 import type { CredMode, EventLogEntry } from "../shared/storage";
 import type { Mode } from "../shared/types";
-import { cleanupStatus } from "../shared/cleanup_status";
+import { renderCleanupStatus } from "../shared/cleanup_status";
 import { classifyEventTone } from "../shared/event_tone";
 import { icon, logoSentinel } from "../shared/icons";
 import { getSegValue, initSegKeyboard, setSegValue } from "../shared/seg_control";
@@ -197,10 +197,7 @@ async function refreshUi(): Promise<void> {
   setSegValue(navSeg, settings.nav.defaultMode);
   setSegValue(credSeg, settings.credential.mode);
   autoDismiss.checked = settings.nav.autoDismissOverlays;
-  const cleanup = cleanupStatus(settings.nav);
-  const cleanupEl = document.getElementById("cleanupStatus")!;
-  cleanupEl.textContent = cleanup.text;
-  cleanupEl.dataset.state = cleanup.state;
+  renderCleanupStatus(document.getElementById("cleanupStatus")!, settings.nav);
 
   const url = await getActiveTabUrl();
   const trusted = await getTrustedDomains();
