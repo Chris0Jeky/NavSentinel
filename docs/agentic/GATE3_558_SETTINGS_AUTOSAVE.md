@@ -31,6 +31,9 @@ result in `ACTION_ITEMS.md`; this guide does not assert owner acceptance.
    mouse and keyboard operation and readable status at a narrow window width.
 8. Export with auto-save disabled, enable it, then import the backup. Auto-save
    returns to disabled. Import intentionally replaces the complete draft.
+   Also import a backup with `settings.logLimit` set to `55`. The Log ring
+   buffer accepts it without a validation error; change Navigation and save,
+   then export again and confirm `logLimit` remains `55` (#648).
 
 Automated disposable-Chromium tests cover these storage/UI paths; they do not
 replace the owner's unpacked Chrome reload and visual acceptance. Record pass or
