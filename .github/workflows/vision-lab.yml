@@ -1,0 +1,42 @@
+name: Vision Lab
+
+on:
+  pull_request:
+    paths:
+      - 'experiments/vision-lab/**'
+      - 'scripts/vision-lab/**'
+      - '.github/workflows/vision-lab.yml'
+      - 'package.json'
+      - 'package-lock.json'
+  push:
+    branches: [main]
+    paths:
+      - 'experiments/vision-lab/**'
+      - 'scripts/vision-lab/**'
+      - '.github/workflows/vision-lab.yml'
+      - 'package.json'
+      - 'package-lock.json'
+  workflow_dispatch:
+
+jobs:
+  vision-lab:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run vision:test
+      - run: npm run vision:build
+      - name: Check generated standalone pages
+        run: git diff --exit-code -- experiments/vision-lab/NavSentinel-Browser.html experiments/vision-lab/NavSentinel-Desktop.html experiments/vision-lab/NavSentinel-Intent-Relay.html experiments/vision-lab/extension/shared/core.js
+      - run: npx playwright install --with-deps chromium
+      - run: npm run vision:test:browser
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: vision-lab-browser-evidence
+          path: artifacts/vision-lab
+          retention-days: 7

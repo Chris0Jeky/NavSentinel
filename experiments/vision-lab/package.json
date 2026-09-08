@@ -1,0 +1,14 @@
+{
+  "name": "navsentinel-vision-lab",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Three local-first NavSentinel prototypes, an experimental MV3 extension, and a cooperative intent broker.",
+  "scripts": {
+    "start": "node daemon/server.cjs",
+    "test": "node --test tests/*.test.cjs",
+    "build": "node scripts/build.cjs",
+    "demo:agent": "node examples/agent.cjs",
+    "verify": "npm test && npm run build"
+  },
+  "engines": { "node": ">=22" }
+}
