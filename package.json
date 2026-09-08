@@ -11,7 +11,7 @@
     "vision:build": "node experiments/vision-lab/scripts/build.cjs",
     "vision:test": "node --test experiments/vision-lab/tests/*.test.cjs",
     "vision:test:browser": "node scripts/vision-lab/smoke-browser.mjs",
-    "vision:desktop:install": "npm ci --prefix experiments/vision-lab/desktop",
+    "vision:desktop:install": "npm ci --prefix experiments/vision-lab/desktop && node experiments/vision-lab/desktop/node_modules/electron/install.js",
     "vision:desktop": "npm start --prefix experiments/vision-lab/desktop",
     "vision:test:desktop": "node scripts/vision-lab/smoke-desktop.mjs",
     "dev": "vite",
