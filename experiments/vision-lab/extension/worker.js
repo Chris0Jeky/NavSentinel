@@ -53,7 +53,8 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
    const tabs=await chrome.tabs.query({});await Promise.all(tabs.filter(t=>Number.isInteger(t.id)).map(t=>chrome.tabs.sendMessage(t.id,{type:'ns-disable',origin}).catch(()=>{})));const live=await contexts();for(const [key,value]of Object.entries(live))if(value.origin===origin)delete live[key];await saveContexts(live);return {enabled:false,reloadRecommended:true};
   }
   if(message.type==='clear'){
-   const tabIds=[...new Set(s.records.map(record=>record?.tabId).filter(tabId=>Number.isInteger(tabId)))];
+   const tabs=await chrome.tabs.query({});
+   const tabIds=[...new Set([...s.records.map(record=>record?.tabId),...tabs.map(tab=>tab?.id)].filter(tabId=>Number.isInteger(tabId)))];
    await chrome.storage.local.set({records:[]});
    await Promise.all(tabIds.map(tabId=>chrome.action.setBadgeText({tabId,text:''}).catch(()=>{})));
    await chrome.action.setBadgeText({text:''});
