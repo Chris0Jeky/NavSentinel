@@ -22,9 +22,13 @@ def new_page(browser,mode='extension',width=1480,height=1040,bridge=False):
  Object.defineProperty(window,'localStorage',{configurable:true,value:{getItem:k=>data.get(k)||null,setItem:(k,v)=>data.set(k,String(v)),removeItem:k=>data.delete(k),clear:()=>data.clear()}}); }""")
  if bridge:
   session=json.loads((ROOT/'.local/session.json').read_text())
+  # Legacy substituted-transport harness only. The current browser lane is
+  # npm run vision:test:browser; operator authority is no longer in client files.
+  operator_token=os.environ.get('NS_OPERATOR_TOKEN')
+  if not operator_token: raise RuntimeError('Legacy UI bridge needs explicit NS_OPERATOR_TOKEN; prefer npm run vision:test:browser.')
   def transport(input):
    body=json.dumps(input['body']).encode() if input.get('body') is not None else None
-   req=urllib.request.Request(session['origin']+input['path'],data=body,headers={'Authorization':'Bearer '+session['adminToken'],'Content-Type':'application/json'},method=input.get('method','GET'))
+   req=urllib.request.Request(session['origin']+input['path'],data=body,headers={'Authorization':'Bearer '+operator_token,'Content-Type':'application/json'},method=input.get('method','GET'))
    try:
     with urllib.request.urlopen(req) as response:return {'status':response.status,'data':json.load(response)}
    except urllib.error.HTTPError as e:return {'status':e.code,'data':json.load(e)}

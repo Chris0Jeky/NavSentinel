@@ -164,6 +164,17 @@ frame reproduction and repair.
 
 ## Open and blocked items
 
+**OPEN: AI-42 — Vision overhaul Protection Center browser acceptance.**
+Candidate branch `codex/vision-overhaul` adds a new extension-owned evidence UI,
+popup/Options entry points, themes and minimized file export. The owner requested
+implementation on 2026-09-08; this does not itself confirm a branded-Chrome
+load/reload or accept the new visible UI. Follow
+[`docs/vision-overhaul/BROWSER_ACCEPTANCE.md`](docs/vision-overhaul/BROWSER_ACCEPTANCE.md)
+against the PR's exact head. Automated renderer, disposable Chromium, native-shell
+and file-exchange results belong in
+[`docs/vision-overhaul/VALIDATION.md`](docs/vision-overhaul/VALIDATION.md).
+The existing guided cursor and other browser gates remain unchanged.
+
 ### Branch-held Gate-3 items
 
 Each item below is defined **only** inside its own PR branch's `ACTION_ITEMS.md`
