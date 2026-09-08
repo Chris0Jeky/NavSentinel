@@ -600,6 +600,38 @@ describe("suite storage and allowlist migration", () => {
     expect(silentKept.map((e) => e.id)).toEqual(silent.slice(-10).map((e) => e.id)); // newest 10
   });
 
+  it("normalizes imported pageSite hostnames and omits URL-shaped values (#585)", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { importAll } = await import("../extension/src/shared/storage");
+    await importAll({
+      eventLog: [
+        { id: "ordinary", ts: 1, kind: "nav_click_block", pageSite: "Portal.Example.Test." },
+        { id: "ipv4", ts: 2, kind: "nav_click_block", pageSite: "127.0.0.1" },
+        { id: "ipv6", ts: 3, kind: "nav_click_block", pageSite: "[2001:DB8::1]" },
+        { id: "empty", ts: 4, kind: "nav_click_block", pageSite: "" },
+        { id: "full-url", ts: 5, kind: "nav_click_block", pageSite: "https://portal.example.test/account?token=secret#fragment" },
+        { id: "path", ts: 6, kind: "nav_click_block", pageSite: "portal.example.test/account" },
+        { id: "invalid", ts: 7, kind: "nav_click_block", pageSite: "not a hostname" },
+      ],
+    });
+
+    const stored = store["sentinelsuite:event_log_v1"] as Array<{ id: string; pageSite?: string }>;
+    expect(stored.map((entry) => entry.pageSite)).toEqual([
+      "portal.example.test",
+      "127.0.0.1",
+      "2001:db8::1",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ]);
+    expect(JSON.stringify(stored)).not.toContain("/account");
+    expect(JSON.stringify(stored)).not.toContain("token=secret");
+    expect(JSON.stringify(stored)).not.toContain("#fragment");
+  });
+
   it("caps an all-silent imported event log to the newest N via trimEventLog (#252)", async () => {
     const { chrome, store } = createChromeMock();
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);

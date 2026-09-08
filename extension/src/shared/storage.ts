@@ -1,6 +1,6 @@
 import type { Mode } from "./types";
 import { ALLOWLIST_KEY, getAllowlist, normalizeAllowlist, type Allowlist } from "./allowlist";
-import { getRegistrableDomain, hostForUrl, normalizeHost, safeUrlParse } from "./domain";
+import { getRegistrableDomain, hostForUrl, isIPAddress, normalizeHost, safeUrlParse } from "./domain";
 import {
   ADAPTIVE_SCORES_KEY,
   clearAdaptiveScoresDirect,
@@ -622,6 +622,44 @@ function isEventKind(value: unknown): value is EventKind {
   return typeof value === "string" && EVENT_KINDS.has(value as EventKind);
 }
 
+const EVENT_HOST_LABEL_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i;
+
+/**
+ * Normalize an event page association without ever treating it as a URL.
+ *
+ * `pageSite` is a hostname-only field. In particular, do not prepend a scheme
+ * and parse arbitrary input here: doing that would turn a persisted path,
+ * query, or fragment into an apparently valid host. IPv6 is checked through
+ * the URL parser only after it has been identified as an address so its
+ * bracketed URL-authority form remains compatible with `normalizeHost`.
+ */
+export function normalizeEventPageSite(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = normalizeHost(value.trim());
+  if (!normalized || normalized.length > 253) return undefined;
+
+  if (isIPAddress(normalized)) {
+    if (!normalized.includes(":")) return normalized;
+    try {
+      const parsed = new URL(`https://${hostForUrl(normalized)}`);
+      return parsed.hostname ? normalized : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  // A four-label, all-numeric host is parsed as an IPv4 address by browsers;
+  // do not let an out-of-range address fall through as a DNS hostname.
+  if (/^\d+(?:\.\d+){3}$/.test(normalized)) return undefined;
+
+  // A colon can only be valid here as part of an IPv6 literal. Reject it (and
+  // all URL/path delimiters) before validating ordinary DNS labels.
+  if (normalized.includes(":")) return undefined;
+  const labels = normalized.split(".");
+  if (labels.some((label) => !EVENT_HOST_LABEL_RE.test(label))) return undefined;
+  return normalized;
+}
+
 function isEventLogEntry(value: unknown): value is EventLogEntry {
   if (!isRecord(value)) return false;
   const entry = value as Record<string, unknown>;
@@ -941,11 +979,12 @@ function stripUrlQueryAndFragment(raw: string): string {
 }
 
 function buildEventLogEntry(partial: EventLogAppendPartial): EventLogEntry {
+  const pageSite = normalizeEventPageSite(partial.pageSite);
   return {
     id: partial.id ?? makeId(),
     ts: Number.isFinite(partial.ts) ? (partial.ts as number) : Date.now(),
     kind: partial.kind,
-    ...(partial.pageSite !== undefined ? { pageSite: partial.pageSite.slice(0, MAX_EVENT_STRING_LEN) } : {}),
+    ...(pageSite === undefined ? {} : { pageSite }),
     ...(partial.site !== undefined ? { site: partial.site } : {}),
     // RI-06: persist only origin+path for new entries (drop query+fragment tokens).
     ...(partial.url !== undefined ? { url: minimizeEventUrl(partial.url) } : {}),
@@ -1339,7 +1378,8 @@ function sanitizeImportedEventLogEntry(e: EventLogEntry): EventLogEntry {
   // a truncated tail is at worst cosmetic. (#299 R2)
   const cap = (s: string): string => (s.length > MAX_EVENT_STRING_LEN ? s.slice(0, MAX_EVENT_STRING_LEN) : s);
   const out: EventLogEntry = { id: cap(e.id), ts: e.ts, kind: e.kind };
-  if (e.pageSite !== undefined) out.pageSite = cap(e.pageSite);
+  const pageSite = normalizeEventPageSite(e.pageSite);
+  if (pageSite !== undefined) out.pageSite = pageSite;
   if (e.site !== undefined) out.site = cap(e.site);
   if (e.url !== undefined) out.url = cap(minimizeEventUrl(e.url));
   if (e.destHost !== undefined) out.destHost = cap(e.destHost);
