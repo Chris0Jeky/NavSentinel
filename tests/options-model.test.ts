@@ -1,12 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   pct,
+  findSettingsConflicts,
+  acceptExternalSettings,
   avg,
-  deriveOptionsSettingsPatch,
   fmtTime,
-  parseIntSafe,
   computePromptOutcomeStats,
-  rebaseOptionsSettingsDraft,
   withReentrancyGuard,
   classifyImportError,
   describeBehaviouralReset,
@@ -15,6 +14,7 @@ import {
   runImportFlow,
 } from "../extension/src/options/options_model";
 import type { SuiteSettings } from "../extension/src/shared/storage";
+import { deriveOptionsSettingsPatch, parseOptionsInt as parseIntSafe, rebaseOptionsSettingsDraft } from "../extension/src/shared/storage";
 
 describe("pct", () => {
   it("formats percentage with one decimal", () => {
@@ -146,6 +146,7 @@ describe("parseIntSafe", () => {
 
 function makeSuiteSettings(): SuiteSettings {
   return {
+    autoSave: true,
     nav: { defaultMode: "smart", debug: false, autoDismissOverlays: false },
     credential: {
       mode: "smart",
@@ -159,6 +160,28 @@ function makeSuiteSettings(): SuiteSettings {
     logLimit: 300,
   };
 }
+
+describe("settings conflicts", () => {
+  it("offers a choice only for divergent same-field edits and preserves unrelated edits", () => {
+    const baseline = makeSuiteSettings();
+    const draft = makeSuiteSettings();
+    draft.nav.defaultMode = "strict";
+    draft.credential.warnOnPaste = false;
+    const incoming = makeSuiteSettings();
+    incoming.nav.defaultMode = "off";
+    incoming.logLimit = 500;
+    const paths = findSettingsConflicts(baseline, draft, incoming);
+    expect(paths).toEqual(["nav.defaultMode"]);
+    const rebased = rebaseOptionsSettingsDraft(baseline, draft, incoming);
+    const accepted = acceptExternalSettings(rebased, incoming, paths);
+    expect(accepted.nav.defaultMode).toBe("off");
+    expect(accepted.credential.warnOnPaste).toBe(false);
+    expect(accepted.logLimit).toBe(500);
+    expect(rebased.nav.defaultMode).toBe("strict");
+    expect(findSettingsConflicts(baseline, draft, draft)).toEqual([]);
+    expect(findSettingsConflicts(baseline, baseline, incoming)).toEqual([]);
+  });
+});
 
 describe("Options settings patch and rebase (#558)", () => {
   it("derives only changed nested leaves and omits empty branches", () => {
