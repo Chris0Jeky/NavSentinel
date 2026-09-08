@@ -12,7 +12,9 @@ npm run vision:start
 
 Open `http://127.0.0.1:4318/?mode=desktop`. Browser, Desktop and Relay now have
 Forest, Paper and Midnight styles. **Imported evidence** reads the minimized
-JSON exported by the real extension's **Protection Center**. Import is explicit;
+JSON exported by the **Protection Center candidate in PR #640**. That browser
+surface is delivered separately and still has an owner Chrome acceptance check.
+The Lab itself runs with built-in synthetic scenarios. File import is explicit;
 its history, separate user assessments and export are independent of synthetic
 scenarios, extension storage and broker authority.
 
@@ -44,15 +46,12 @@ npm run vision:build
 npx playwright install chromium
 npm run vision:test:browser
 npm run vision:test:desktop
-# Build before checking the real disposable test-extension storage/export path:
-npm run build
-npm run vision:test:extension
 ```
 
-Current implementation, complete source inventory, evidence and remaining gates:
-[overhaul map](../../docs/vision-overhaul/README.md),
-[validation](../../docs/vision-overhaul/VALIDATION.md),
-[browser acceptance](../../docs/vision-overhaul/BROWSER_ACCEPTANCE.md).
+Current delivery scope and verification: [Lab delivery](../../docs/vision-lab-delivery.md).
+The [complete original source inventory](../../docs/vision-overhaul/RESOURCE_INVENTORY.json)
+preserves all 62 supplied files by path, byte size and SHA-256. Extension-facing
+work and manual checks remain separate in [ACTION_ITEMS.md](../../ACTION_ITEMS.md).
 
 ## Original prototype brief (historical, 2026-09-07)
 
