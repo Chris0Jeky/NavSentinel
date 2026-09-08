@@ -1,5 +1,61 @@
 # NavSentinel · Vision Lab
 
+## Maintained overhaul (2026-09-08)
+
+Run from the **NavSentinel repository root**:
+
+```sh
+npm ci
+npm run vision:build
+npm run vision:start
+```
+
+Open `http://127.0.0.1:4318/?mode=desktop`. Browser, Desktop and Relay now have
+Forest, Paper and Midnight styles. **Imported evidence** reads the minimized
+JSON exported by the real extension's **Protection Center**. Import is explicit;
+its history, separate user assessments and export are independent of synthetic
+scenarios, extension storage and broker authority.
+
+For the native shell, stop the standalone service, then:
+
+```sh
+npm run vision:desktop:install
+npm run vision:desktop
+```
+
+Electron 44.2.0 is locked and has been exercised on Windows. It hosts the same
+workspace in a sandboxed renderer and owns the broker. It adds no OS interception.
+
+Relay's live request selector now includes two **fixed local counter** fixtures.
+Connect with the operator token printed in the service terminal, choose the
+review fixture, request, approve, consume, and inspect the independent counter.
+Repeat consume: it rejects and the counter stays at one. The auto fixture
+demonstrates the small pre-approved contract. External destinations still create
+inert receipts; the broker never fetches caller URLs or runs commands. Client
+`.local/session.json` contains only client authority, not the operator token.
+
+```sh
+npm run vision:test
+npm run vision:build
+npx playwright install chromium
+npm run vision:test:browser
+npm run vision:test:desktop
+# Build before checking the real disposable test-extension storage/export path:
+npm run build
+npm run vision:test:extension
+```
+
+Current implementation, complete source inventory, evidence and remaining gates:
+[overhaul map](../../docs/vision-overhaul/README.md),
+[validation](../../docs/vision-overhaul/VALIDATION.md),
+[browser acceptance](../../docs/vision-overhaul/BROWSER_ACCEPTANCE.md).
+
+## Original prototype brief (historical, 2026-09-07)
+
+The text below records the supplied bundle before this overhaul. Historical
+test counts, native-runtime gaps, token-file details and inert-only execution
+claims are superseded by the maintained section and current validation above.
+
 **Three source-grounded, interactive product prototypes.** A browser guardian, a desktop investigation workspace, and a local intent broker for cooperative agents. Built as an isolated experiment, not a replacement for the upstream extension.
 
 ## Open the prototypes immediately

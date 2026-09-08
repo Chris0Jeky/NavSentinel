@@ -6,7 +6,8 @@ import {_electron as electron} from 'playwright';
 const root = path.resolve('experiments/vision-lab');
 const output = path.resolve('artifacts/vision-lab');
 fs.mkdirSync(output,{recursive:true});
-const dataDir = fs.mkdtempSync(path.join(output,'desktop-session-'));
+const sessions=path.join(root,'.local/test-runs');fs.mkdirSync(sessions,{recursive:true});
+const dataDir = fs.mkdtempSync(path.join(sessions,'desktop-session-'));
 const executablePath = path.join(root,'desktop/node_modules/electron/dist',process.platform==='win32'?'electron.exe':process.platform==='darwin'?'Electron.app/Contents/MacOS/Electron':'electron');
 const checks = [];
 const application = await electron.launch({executablePath,args:[path.join(root,'desktop')],
@@ -33,6 +34,22 @@ try {
   assert.equal(rejected,true);checks.push('arbitrary transport rejected');
   const journalWrite = await page.evaluate(()=>globalThis.navDesktop.request({path:'/api/scenario',method:'POST',body:{id:'overlay'}}));
   assert.equal(journalWrite.status,200);checks.push('native IPC creates a fixture receipt');
+  const effect = await page.evaluate(async()=>{
+    const call=(path,body)=>globalThis.navDesktop.request({path,method:body?'POST':'GET',body});
+    const health=await call('/api/health');
+    const request=await call('/api/request',{event:{id:'native-fixture',actor:'local-operator',action:'navigate',
+      source:'https://source.test',destination:health.data.fixtureAdapter.autoDestination,
+      context:{tab:1,frame:0,document:'native-test',navigation:'native-navigation',actionId:'native-action'},
+      signals:['accessible_control'],evidence:'declared'}});
+    if(request.status!==200)throw Error('Native fixture request failed');
+    const body={token:request.data.capability.token,event:request.data.event};
+    const consumed=await call('/api/consume',body);
+    const replay=await call('/api/consume',body);
+    return {consumed,replay,observationUrl:health.data.fixtureAdapter.observationUrl};
+  });
+  assert.equal(effect.consumed.data.executed,true);assert.equal(effect.replay.status,409);
+  assert.equal((await (await fetch(effect.observationUrl)).json()).count,1);
+  checks.push('native request/consume causes one independently observed fixture effect; replay causes none');
   // A hidden native window does not produce compositor screenshots reliably on
   // Windows. The browser smoke lane captures the identical served renderer.
 } finally { await application.close(); }

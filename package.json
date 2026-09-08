@@ -7,6 +7,13 @@
     "node": "^20.19.0 || ^22.13.0 || >=24"
   },
   "scripts": {
+    "vision:start": "node experiments/vision-lab/daemon/server.cjs",
+    "vision:build": "node experiments/vision-lab/scripts/build.cjs",
+    "vision:test": "node --test experiments/vision-lab/tests/*.test.cjs",
+    "vision:test:browser": "node scripts/vision-lab/smoke-browser.mjs",
+    "vision:desktop:install": "npm ci --prefix experiments/vision-lab/desktop",
+    "vision:desktop": "npm start --prefix experiments/vision-lab/desktop",
+    "vision:test:desktop": "node scripts/vision-lab/smoke-desktop.mjs",
     "dev": "vite",
     "build": "node scripts/build-extension.mjs",
     "build:research-reputation": "node scripts/build-extension.mjs research-reputation",
