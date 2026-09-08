@@ -1,4 +1,4 @@
-import type { CredMode, EventLogEntry, SuiteSettings } from "../shared/storage";
+import type { CredMode, EventLogEntry, SuiteSettings, SuiteSettingsPatch } from "../shared/storage";
 import { classifyEventTone } from "../shared/event_tone";
 import { renderCleanupStatus } from "../shared/cleanup_status";
 import { icon, logoSentinel } from "../shared/icons";
@@ -131,7 +131,13 @@ const sidebarNav = document.getElementById("sidebarNav") as HTMLElement;
 // settings object, so a popup write cannot be silently overwritten by a stale
 // Options page. (#558)
 let renderedSettings: SuiteSettings | null = null;
+// Keep the requested draft separate from the settings the page originally
+// displayed. A delayed successful response must preserve edits made after Save,
+// while a storage notification during the request needs the original baseline
+// to identify a competing same-field writer. (#647)
 let submittedSettings: SuiteSettings | null = null;
+let submittedBaseline: SuiteSettings | null = null;
+let submittedPatch: SuiteSettingsPatch | null = null;
 let settingsGeneration = 0;
 let conflicts: string[] = [];
 let autoSaveTimer: number | undefined;
@@ -534,8 +540,16 @@ function readSettingsDraft(): SuiteSettings {
   };
 }
 
-function rebaseIncomingSettings(incoming: SuiteSettings): void {
-  const baseline = submittedSettings ?? renderedSettings;
+function settingsMatchPatch(settings: unknown, patch: unknown): boolean {
+  if (!patch || typeof patch !== "object" || Array.isArray(patch)) return Object.is(settings, patch);
+  if (!settings || typeof settings !== "object" || Array.isArray(settings)) return false;
+  return Object.entries(patch).every(([key, value]) =>
+    settingsMatchPatch((settings as Record<string, unknown>)[key], value),
+  );
+}
+
+function rebaseIncomingSettings(incoming: SuiteSettings, baselineOverride?: SuiteSettings | null): void {
+  const baseline = baselineOverride ?? submittedSettings ?? renderedSettings;
   const draft = readSettingsDraft();
   if (baseline) {
     conflicts = [...new Set([...conflicts, ...findSettingsConflicts(baseline, draft, incoming)])];
@@ -555,7 +569,7 @@ function rebaseIncomingSettings(incoming: SuiteSettings): void {
 async function init(replaceDraft = false): Promise<void> {
   if (replaceDraft) {
     settingsGeneration++;
-    submittedSettings = renderedSettings = null;
+    submittedSettings = submittedBaseline = submittedPatch = renderedSettings = null;
     conflicts = [];
   }
   const s = await getSuiteSettings();
@@ -589,23 +603,27 @@ async function saveSettingsInner(): Promise<void> {
     }
 
     const generation = settingsGeneration;
-    // Keep the displayed baseline while the worker serializes this patch. Its
-    // conditional update can then distinguish our own write from a competing
-    // same-field write that arrived first.
-    submittedSettings = baseline;
+    // Storage notifications use the original displayed baseline to detect a
+    // competing same-field writer. Response rebases use the submitted draft so
+    // they preserve edits made while this request was in flight.
+    submittedSettings = draft;
+    submittedBaseline = baseline;
+    submittedPatch = patch;
     try {
       const persisted = await updateSuiteSettings(patch, baseline);
       if (generation === settingsGeneration) rebaseIncomingSettings(persisted);
       saved = generation === settingsGeneration;
     } catch (error) {
       if (error instanceof SuiteSettingsConflictError) {
-        if (generation === settingsGeneration) rebaseIncomingSettings(error.settings);
+        if (generation === settingsGeneration) rebaseIncomingSettings(error.settings, submittedBaseline);
         flashStatus(saveStatusEl, "Settings changed in another window.", "warning");
         return;
       }
       throw error;
     } finally {
       submittedSettings = null;
+      submittedBaseline = null;
+      submittedPatch = null;
     }
     await appendEventSafely({ kind: "suite_config_update", extra: { patch } });
     flashStatus(saveStatusEl, "Saved.");
@@ -800,6 +818,9 @@ clearBehaviouralBtn.addEventListener(
 // Changes from the popup and other extension contexts arrive through the same
 // canonical storage channel. Clean controls update immediately; dirty fields
 // remain visible for the user to save intentionally. (#558)
-onSuiteSettingsChange(rebaseIncomingSettings);
+onSuiteSettingsChange((incoming) => rebaseIncomingSettings(
+  incoming,
+  submittedPatch && settingsMatchPatch(incoming, submittedPatch) ? submittedSettings : submittedBaseline,
+));
 
 void init();
