@@ -9,6 +9,7 @@ fs.mkdirSync(output,{recursive:true});
 const sessions=path.join(root,'.local/test-runs');fs.mkdirSync(sessions,{recursive:true});
 const dataDir = fs.mkdtempSync(path.join(sessions,'desktop-session-'));
 const executablePath = path.join(root,'desktop/node_modules/electron/dist',process.platform==='win32'?'electron.exe':process.platform==='darwin'?'Electron.app/Contents/MacOS/Electron':'electron');
+assert.ok(fs.existsSync(executablePath),'Install the native runtime first: npm run vision:desktop:install');
 const checks = [];
 const application = await electron.launch({executablePath,args:[path.join(root,'desktop')],
   env:{...process.env,NS_DESKTOP_DATA_DIR:dataDir,NS_DESKTOP_PORT:'0',NS_DESKTOP_LAB_PORT:'0',NS_DESKTOP_HIDDEN:'1'},timeout:60000});
