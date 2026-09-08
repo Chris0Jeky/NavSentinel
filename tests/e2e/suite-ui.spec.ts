@@ -430,8 +430,8 @@ test("Options keeps popup changes while saving an unrelated dirty setting @regre
         credMode: "off",
       });
 
-      // A completed import supersedes an older Save response that is still in
-      // flight; releasing that response must not repaint the imported settings.
+      // Import waits for an older Save response, then becomes authoritative.
+      // A delayed Save must never overwrite the imported settings afterward.
       await options.evaluate(() => {
         const state = window as Window & { __nsArmSettingsUpdate?: () => void };
         state.__nsArmSettingsUpdate?.();
@@ -453,9 +453,9 @@ test("Options keeps popup changes while saving an unrelated dirty setting @regre
           },
         })),
       });
-      await expect(options.locator('#navModeSeg .seg-btn[data-value="off"]'))
+      await expect(options.locator('#navModeSeg .seg-btn[data-value="strict"]'))
         .toHaveAttribute("aria-checked", "true");
-      await expect(options.locator("#navDebug")).toHaveAttribute("aria-checked", "false");
+      await expect(options.locator("#navDebug")).toHaveAttribute("aria-checked", "true");
       await options.evaluate(() => {
         const state = window as Window & { __nsReleaseSettingsUpdate?: () => void };
         state.__nsReleaseSettingsUpdate?.();
