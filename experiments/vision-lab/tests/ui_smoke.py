@@ -83,7 +83,7 @@ with sync_playwright() as p:
  live=new_page(browser,'relay',bridge=True);live.wait_for_timeout(150)
  click(live,'nav','[data-view="requests"]');ok('actual service bridge connected',not live.locator('[data-action="api-request"]').is_disabled())
  click(live,'api-request');live.wait_for_timeout(150);click(live,'api-approve');live.wait_for_timeout(150);click(live,'api-consume');live.wait_for_timeout(150)
- ok('renderer consumes actual inert API capability','Accepted once' in live.locator('main').inner_text())
+ ok('renderer reports actual fixture execution','Executed' in live.locator('main').inner_text())
  click(live,'api-consume');live.wait_for_timeout(150);ok('renderer displays actual replay rejection','Unknown, used or revoked' in live.locator('main').inner_text())
  live.screenshot(path=str(ROOT/'artifacts'/'relay-live-api.png'),full_page=True);live.close()
  ok('no uncaught browser exceptions',not errors)
