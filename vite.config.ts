@@ -59,7 +59,8 @@ export default defineConfig({
     emptyOutDir: true,
     rolldownOptions: {
       input: {
-        onboarding: resolve(__dirname, "extension/src/onboarding/onboarding.html")
+        onboarding: resolve(__dirname, "extension/src/onboarding/onboarding.html"),
+        evidence: resolve(__dirname, "extension/src/evidence/evidence.html")
       },
       output: {
         // Chrome MV3 module workers require static imports. Keep the pending-decision

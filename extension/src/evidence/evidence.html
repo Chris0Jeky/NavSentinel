@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en" data-theme="forest">
+<head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>Protection Center · NavSentinel</title><link rel="stylesheet" href="./evidence.css" /></head>
+<body>
+  <a class="skip" href="#journal">Skip to journal</a>
+  <div class="shell">
+    <aside class="rail" aria-label="Workspace navigation">
+      <a class="brand" href="#overview"><span class="brand-mark" aria-hidden="true">N</span> NavSentinel</a>
+      <p class="eyebrow">LOCAL PROTECTION WORKSPACE</p>
+      <nav aria-label="Protection Center"><a href="#overview">Overview</a><a href="#journal">Evidence journal</a><a href="#coverage">Coverage & limits</a><a href="../options/options.html">Protection settings ↗</a></nav>
+      <div class="rail-bottom"><label for="theme">Appearance</label><select id="theme"><option value="forest">Forest</option><option value="paper">Paper</option><option value="midnight">Midnight</option></select><p>Appearance is stored only for this page. Protection settings are unchanged.</p></div>
+    </aside>
+    <main id="overview">
+      <header class="page-head"><div><p class="eyebrow">PROTECTION CENTER</p><h1>Your browsing.<br /><em>A clearer picture.</em></h1><p class="lede">Explore what NavSentinel recorded, understand its signals, and keep control of your local evidence.</p></div><button id="refresh" class="secondary">Refresh evidence</button></header>
+      <p id="status" class="status" role="status" aria-live="polite">Loading local evidence…</p>
+      <section class="metrics" aria-label="Recorded evidence summary"><article><span id="total">—</span><h2>Recorded events</h2><p>Bounded local history</p></article><article><span id="scored">—</span><h2>Events with a score</h2><p>Heuristic points, not probabilities</p></article><article><span id="sites">—</span><h2>Hostnames in history</h2><p>May include earlier visits and frames</p></article></section>
+      <section class="panel" aria-labelledby="modes-title"><div class="section-head"><div><p class="eyebrow">YOUR CONFIGURATION</p><h2 id="modes-title">Protection modes</h2></div><a href="../options/options.html">Change settings ↗</a></div><p id="modes">Reading settings…</p><p class="fine">These are saved preferences. They do not prove the guard is running in a particular tab or that this extension build was reloaded.</p></section>
+      <section class="panel" id="journal" aria-labelledby="journal-title" tabindex="-1"><div class="section-head"><div><p class="eyebrow">RECORDED OBSERVATIONS</p><h2 id="journal-title">Evidence journal</h2></div><button id="export" disabled>Export visible events</button></div>
+        <p class="fine">Exports contain timestamps, event codes, hostnames, known signal codes and optional scores. Hostnames can reveal browsing activity. Paths, queries, raw values and internal IDs are excluded.</p>
+        <div class="filters"><label class="search" for="search">Find a hostname<input id="search" type="search" maxlength="253" placeholder="e.g. example.com" /></label><div class="category-control"><label for="category">Category</label><select id="category"><option value="all">All events</option><option value="navigation">Navigation</option><option value="credential">Credentials</option><option value="activity">Other activity</option></select></div><label class="check"><input type="checkbox" id="scoredOnly" /> With a score</label><button id="resetFilters" class="secondary">Reset filters</button></div>
+        <p id="results" class="fine" role="status" aria-live="polite"></p><div id="events"></div><div class="paging"><button id="previous" class="secondary">Previous</button><span id="pageLabel"></span><button id="next" class="secondary">Next</button></div>
+      </section>
+      <section class="panel" id="coverage" aria-labelledby="coverage-title"><p class="eyebrow">EVIDENCE WITH BOUNDARIES</p><h2 id="coverage-title">What this view can tell you</h2><div class="coverage"><article><h3>Recorded, not independently verified</h3><p>Entries describe extension observations and decisions. Counts are not prevented attacks, protection rates or a safety verdict. An empty journal means no retained events.</p></article><article><h3>Local and deliberately limited</h3><p>This view reads the extension’s existing bounded history. It does not collect new page data, contact a server or connect to a desktop service. Missing fields stay unavailable.</p></article><article><h3>You stay in control</h3><p>Review navigation and credential settings, trust lists and retention in <a href="../options/options.html">Protection settings</a>. Clear behavioural data there to erase existing history through the shared reset flow.</p></article><article><h3>Build and browser limits still apply</h3><p>The standard build focuses on browser interactions. Broad JavaScript instrumentation is off. This journal cannot prove complete coverage of a page or that an observed consequence was prevented.</p></article></div></section>
+      <footer>NavSentinel · Pre-release local workspace · No new decision authority</footer>
+    </main>
+  </div><script type="module" src="./evidence.ts"></script>
+</body></html>
