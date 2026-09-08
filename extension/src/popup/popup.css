@@ -554,3 +554,6 @@ body {
   outline: 2px solid var(--ns-amber);
   outline-offset: 2px;
 }
+.cleanup-status { color: var(--ns-text-muted, #a1a7b3); font-size: 11px; }
+.cleanup-status[data-state="active"] { color: var(--ns-green); }
+.cleanup-status[data-state="paused"] { color: var(--ns-red); }

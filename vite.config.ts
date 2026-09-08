@@ -68,6 +68,14 @@ export default defineConfig({
         codeSplitting: {
           groups: [
             {
+              // Keep Options presentation/operation helpers separate as the
+              // settings editor grows; total-dist budget still covers both.
+              name: "options-model",
+              test: /[\\/]src[\\/]options[\\/]options_model\.ts$/,
+              entriesAware: true,
+              priority: 10
+            },
+            {
               name: "pending-decision-runtime",
               test: /[\\/]src[\\/](?:shared[\\/]pending_decision|sw[\\/]pending_decision_(?:handlers|store))\.ts$/,
               entriesAware: true,
