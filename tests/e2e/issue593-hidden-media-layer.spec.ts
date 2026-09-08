@@ -44,6 +44,7 @@ import {
   readBuiltMainUiGuardRevision,
   readToastText,
   updateNavigationSettings,
+  getServiceWorker,
   waitForNavSentinelBridge,
 } from "./extension_test_utils";
 import {
@@ -77,11 +78,11 @@ const OBSERVATION_MS = 3_500;
  */
 const TYPED_ORIGIN_SETTLE_MS = 6_000;
 
-type Expectation = "blocked-pre-harm" | "rolled-back" | "out-of-model" | "benign-allowed";
+type Expectation = "blocked-pre-harm" | "rolled-back" | "out-of-model" | "benign-allowed" | "bypass-reproduced";
 
 type Arm = {
   id: string;
-  primitive: "child-assign" | "top-assign" | "window-open" | "anchor-top" | "top-script" | "forged-anchor-top";
+  primitive: "child-assign" | "top-assign" | "window-open" | "anchor-top" | "top-script" | "forged-anchor-top" | "top-form-submit";
   delayMs: number;
   /** Which input the harness delivers. */
   input: "physical-click" | "keyboard" | "top-physical-click" | "none";
@@ -99,6 +100,10 @@ const arms: readonly Arm[] = [
   // not a cross-document destination and must not buy tab-wide authority.
   { id: "forged-anchor-top-100", primitive: "forged-anchor-top", delayMs: 100, input: "physical-click", layer: "hidden", role: "attack", expectation: "rolled-back" },
   { id: "window-open-100", primitive: "window-open", delayMs: 100, input: "physical-click", layer: "hidden", role: "attack", expectation: "blocked-pre-harm" },
+  // Issue #637 pre-fix oracle: a bare-element click grants the child frame's
+  // MAIN world a redirect allowance, then form.submit(target=_top) converts
+  // that frame-local allowance into a tab-wide exact-target allowance.
+  { id: "top-form-submit-100", primitive: "top-form-submit", delayMs: 100, input: "physical-click", layer: "hidden", role: "attack", expectation: "bypass-reproduced" },
   { id: "child-assign-100", primitive: "child-assign", delayMs: 100, input: "physical-click", layer: "hidden", role: "attack", expectation: "out-of-model" },
   { id: "child-assign-1600", primitive: "child-assign", delayMs: 1_600, input: "physical-click", layer: "hidden", role: "attack", expectation: "out-of-model" },
   { id: "child-assign-no-input", primitive: "child-assign", delayMs: 100, input: "none", layer: "hidden", role: "attack", expectation: "out-of-model" },
@@ -127,6 +132,7 @@ type Observation = {
   fixtureUrl: string;
   finalTopUrl: string | null;
   topReturnedToFixture: boolean | null;
+  workerEvidence: Record<string, unknown> | null;
 };
 
 /**
@@ -259,6 +265,9 @@ async function runArm(
   let fixtureHref = "";
   let finalTopUrl: string | null = null;
   let topReturnedToFixture: boolean | null = null;
+  let workerEvidence: Record<string, unknown> | null = null;
+  let workerEvidencePromise: Promise<Record<string, unknown> | null> | null = null;
+  let protectedTabId: number | null = null;
 
   try {
     context = await chromium.launchPersistentContext(userDataDir, {
@@ -337,6 +346,12 @@ async function runArm(
       await updateNavigationSettings(context, { defaultMode: "smart", autoDismissOverlays: false });
       await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
       await waitForNavSentinelBridge(page);
+      const worker = await getServiceWorker(context);
+      protectedTabId = await worker.evaluate(async (currentUrl) => {
+        const tabs = await chrome.tabs.query({});
+        return tabs.find((candidate) => candidate.url === currentUrl)?.id ?? null;
+      }, page.url());
+      expect(protectedTabId, "protected run must resolve its worker tab before arming").not.toBeNull();
     }
 
     const frame = await childFrame(page, arm);
@@ -365,6 +380,48 @@ async function runArm(
       await page.waitForTimeout(TYPED_ORIGIN_SETTLE_MS);
     }
     popupObservationArmed = true;
+
+    if (mode === "protected" && typeof protectedTabId === "number") {
+      const worker = await getServiceWorker(context);
+      workerEvidencePromise = worker.evaluate(({ tabId, timeoutMs }) => new Promise((resolve) => {
+        let allowance: Record<string, unknown> | null = null;
+        let commit: Record<string, unknown> | null = null;
+        let timer = 0;
+        const finish = () => {
+          if (!allowance || !commit) return;
+          chrome.runtime.onMessage.removeListener(onMessage);
+          chrome.webNavigation.onCommitted.removeListener(onCommitted);
+          clearTimeout(timer);
+          resolve({ allowance, commit });
+        };
+        const onMessage = (message: unknown, sender: chrome.runtime.MessageSender) => {
+          const candidate = message as Record<string, unknown> | null;
+          if (sender.tab?.id !== tabId || candidate?.type !== "ns-allow-target-nav") return;
+          allowance = {
+            url: candidate.url,
+            ttlMs: candidate.ttlMs,
+            matchQueryPrefix: candidate.matchQueryPrefix,
+          };
+          finish();
+        };
+        const onCommitted = (details: chrome.webNavigation.WebNavigationTransitionCallbackDetails) => {
+          if (details.tabId !== tabId || details.frameId !== 0) return;
+          commit = {
+            url: details.url,
+            transitionType: details.transitionType,
+            transitionQualifiers: details.transitionQualifiers,
+          };
+          finish();
+        };
+        chrome.runtime.onMessage.addListener(onMessage);
+        chrome.webNavigation.onCommitted.addListener(onCommitted);
+        timer = self.setTimeout(() => {
+          chrome.runtime.onMessage.removeListener(onMessage);
+          chrome.webNavigation.onCommitted.removeListener(onCommitted);
+          resolve(allowance || commit ? { allowance, commit } : null);
+        }, timeoutMs);
+      }), { tabId: protectedTabId, timeoutMs: arm.delayMs + 6_000 });
+    }
 
     if (arm.input === "physical-click") {
       await frame.locator(
@@ -424,6 +481,7 @@ async function runArm(
 
     finalTopUrl = page.url();
     topReturnedToFixture = finalTopUrl.split("#")[0] === fixtureHref.split("#")[0];
+    workerEvidence = await workerEvidencePromise;
 
     toastText = await readToastText(page).catch(() => null);
     reasonCode = await page.evaluate(() => {
@@ -458,6 +516,7 @@ async function runArm(
       fixtureUrl: fixtureHref,
       finalTopUrl,
       topReturnedToFixture,
+      workerEvidence,
     };
     expect(snapshot.invalidAttempts, "fixture must use only an armed local sink target").toEqual([]);
     expect(fixtureEgressViolations, "the fixture must not request any non-local origin").toEqual([]);
@@ -484,6 +543,7 @@ async function runArm(
         fixtureUrl: fixtureHref,
         finalTopUrl,
         topReturnedToFixture,
+        workerEvidence,
       };
     }
     await attachDiagnostics(testInfo, observation);
@@ -550,6 +610,24 @@ for (const arm of arms) {
           observed.topReturnedToFixture,
           "BENIGN_ALLOWED: a legitimate navigation must not be rolled back",
         ).toBe(false);
+        break;
+      case "bypass-reproduced":
+        expect(
+          observed.sinkReceiptsAfter,
+          "ISSUE_637_REPRODUCED: the protected form submit reached the armed sink",
+        ).toBe(observed.sinkReceiptsBefore + 1);
+        expect(
+          observed.topReturnedToFixture,
+          "ISSUE_637_REPRODUCED: the worker left the tab on the child-chosen destination",
+        ).toBe(false);
+        expect(
+          observed.workerEvidence?.allowance,
+          "ISSUE_637_REPRODUCED: the worker must receive the exact-target allowance",
+        ).toMatchObject({ matchQueryPrefix: true });
+        expect(
+          observed.workerEvidence?.commit,
+          "ISSUE_637_REPRODUCED: the worker must observe the top-frame sink commit",
+        ).toMatchObject({ url: observed.finalTopUrl });
         break;
     }
   });

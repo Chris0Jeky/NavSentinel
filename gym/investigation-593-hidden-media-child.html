@@ -19,6 +19,7 @@
   <a id="forged-intent-layer" href="#" hidden aria-label="Playback surface"></a>
   <!-- Benign control: a child frame that DECLARES where it sends the tab. -->
   <a id="declared-top-link" hidden target="_top">Open the linked page</a>
+  <form id="top-submit-form" method="get" target="_top" hidden></form>
   <script>
     (() => {
       const params = new URLSearchParams(location.search);
@@ -30,6 +31,7 @@
       const rawSink = params.get("sink") || "";
       const layer = document.getElementById("hidden-interactive-layer");
       const declaredLink = document.getElementById("declared-top-link");
+      const topSubmitForm = document.getElementById("top-submit-form");
       let armed = false;
       const scenarioId = "issue-593-hidden-media-layer-modelled";
       const consequence = "modelled-hidden-media-navigation";
@@ -42,6 +44,7 @@
         ["forged-anchor-top-100", { primitive: "forged-anchor-top", delayMs: 100 }],
         ["top-assign-1600", { primitive: "top-assign", delayMs: 1600 }],
         ["window-open-100", { primitive: "window-open", delayMs: 100 }],
+        ["top-form-submit-100", { primitive: "top-form-submit", delayMs: 100 }],
         ["benign-anchor-top-keyboard", { primitive: "anchor-top", delayMs: 0 }],
         ["benign-top-script-100", { primitive: "top-script", delayMs: 100 }],
       ]);
@@ -94,6 +97,19 @@
         if (primitive === "window-open") {
           const opened = window.open(safeSink, "_blank", "noopener");
           report({ phase: "open-returned", primitive, delayMs, popupHandle: opened ? "present" : "null" });
+          return;
+        }
+        if (primitive === "top-form-submit") {
+          const target = new URL(safeSink);
+          topSubmitForm.action = `${target.origin}${target.pathname}`;
+          for (const [name, value] of target.searchParams) {
+            const input = document.createElement("input");
+            input.type = "hidden";
+            input.name = name;
+            input.value = value;
+            topSubmitForm.append(input);
+          }
+          topSubmitForm.submit();
         }
       }
 
