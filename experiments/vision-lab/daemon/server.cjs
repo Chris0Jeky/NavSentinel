@@ -151,8 +151,11 @@ async function createService({port=4318,labPort=4319,dataDir=path.join(ROOT,'.lo
   });
   server.requestTimeout=5000;server.headersTimeout=5000;server.maxHeadersCount=40;
   const labServer=http.createServer(async(req,res)=>{
+    const expectedOrigin=`http://127.0.0.1:${actualLabPort}`;
     if(req.headers.host!==`127.0.0.1:${actualLabPort}`)return respond(res,403,{error:'Unexpected Host'});
-    const url=new URL(req.url,`http://127.0.0.1:${actualLabPort}`);
+    if(req.headers.origin&&req.headers.origin!==expectedOrigin)return respond(res,403,{error:'Cross-origin requests are not accepted'});
+    if(req.headers['sec-fetch-site']==='cross-site')return respond(res,403,{error:'Cross-site request rejected'});
+    const url=new URL(req.url,expectedOrigin);
     if(url.pathname==='/broker-effects'&&req.method==='GET')return respond(res,200,{fixtureOnly:true,...brokerEffects});
     if(url.pathname==='/broker-effect'){
       if(req.method!=='POST')return respond(res,405,{error:'Method not allowed'});
