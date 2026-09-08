@@ -30,7 +30,7 @@ extension package hash. This is a development candidate, not a release verdict.
 | `npm run check:perf-budget` | **12/12 passed** | 474.1 KiB / 500 KiB total; popup remains within 10 KiB budget |
 | `npm run security:check` | Passed | 168 scenarios, 31 capabilities, 65 mappings, 1,512 work units and deterministic views remain valid |
 | `npm run package:ext` | Passed | Current interaction-only extension ZIP generated |
-| `npm run vision:test` | **116/116 passed** | Synthetic contracts, API roles, capabilities, persistence, observed effects, strict import, native bridge and LF/CRLF build identity |
+| `npm run vision:test` | **117/117 passed** | Synthetic contracts, API roles, capabilities, persistence, observed effects, strict import, native bridge and LF/CRLF build identity |
 | `npm run vision:build` | Passed | Three standalone HTML artifacts rebuilt with script CSP hashes |
 | `npm run vision:test:browser` | **15 checkpoints passed** | Every served view, all themes, 390px layouts, native storage, actual file entrypoints/CSP, import/correction/download/clear, real API fetch and independent effect/replay observation |
 | `npm run vision:test:extension` | **4 checkpoints passed** | Disposable installed test extension reads real Chrome storage and downloads minimized evidence; themes, persistence and narrow layout |
