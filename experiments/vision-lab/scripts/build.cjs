@@ -1,6 +1,6 @@
 'use strict';
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
-const root=path.resolve(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');
+const root=path.resolve(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8').replace(/\r\n/g,'\n');
 fs.mkdirSync(path.join(root,'artifacts'),{recursive:true});
 const css=read('web/style.css');
 const modes=[['extension','NavSentinel-Browser.html','The browser guardian'],['desktop','NavSentinel-Desktop.html','The desktop companion'],['relay','NavSentinel-Intent-Relay.html','The intent broker']];
