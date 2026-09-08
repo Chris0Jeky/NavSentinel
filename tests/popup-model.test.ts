@@ -448,7 +448,9 @@ describe("pickSiteRiskEvent (#205)", () => {
 
   it.each([
     ["127.0.0.1", "127.0.0.1"],
+    ["127.000.000.001", "127.0.0.1"],
     ["[2001:DB8::1]", "2001:db8::1"],
+    ["[2001:0DB8:0:0:0:0:0:1]", "2001:db8::1"],
   ])("preserves valid IP pageSite association: %s", (pageSite, activeSite) => {
     const event: EventLogEntry = {
       id: "ip-page-site",

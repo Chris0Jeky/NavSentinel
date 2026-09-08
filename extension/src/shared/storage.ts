@@ -629,9 +629,9 @@ const EVENT_HOST_LABEL_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i;
  *
  * `pageSite` is a hostname-only field. In particular, do not prepend a scheme
  * and parse arbitrary input here: doing that would turn a persisted path,
- * query, or fragment into an apparently valid host. IPv6 is checked through
- * the URL parser only after it has been identified as an address so its
- * bracketed URL-authority form remains compatible with `normalizeHost`.
+ * query, or fragment into an apparently valid host. IP literals are passed
+ * through the URL parser only after they have been identified as addresses so
+ * accepted values get the same canonical hostname spelling as the browser.
  */
 export function normalizeEventPageSite(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
@@ -639,10 +639,10 @@ export function normalizeEventPageSite(value: unknown): string | undefined {
   if (!normalized || normalized.length > 253) return undefined;
 
   if (isIPAddress(normalized)) {
-    if (!normalized.includes(":")) return normalized;
     try {
       const parsed = new URL(`https://${hostForUrl(normalized)}`);
-      return parsed.hostname ? normalized : undefined;
+      const canonical = normalizeHost(parsed.hostname);
+      return canonical && isIPAddress(canonical) ? canonical : undefined;
     } catch {
       return undefined;
     }

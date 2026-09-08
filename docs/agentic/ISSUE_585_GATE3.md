@@ -58,6 +58,11 @@ Chris can record the browser pass.
    needed for the target Chrome environment. Confirm no popup, page, or
    service-worker console errors, then close the disposable profile and stop
    the fixture server.
+5. For the #646 follow-up, repeat with accepted noncanonical IP literals such
+   as `127.000.000.001` and `[2001:0DB8:0:0:0:0:0:1]`. Confirm that the event
+   log stores the browser-compatible hostnames (`127.0.0.1` and
+   `2001:db8::1`) and that the popup association follows the browser's
+   `location.hostname` where the target address is available.
 
 Record either `AI-44 done; Gate-3 passed on main at <40-character SHA>` or the
 exact failing step and observed result. Do not treat the automated tests or a
