@@ -504,7 +504,7 @@ describe("appendEvent", () => {
     }]);
   });
 
-  it("bounds pageSite on direct appends", async () => {
+  it("omits malformed pageSite on direct appends", async () => {
     const { chrome, store } = createChromeMock();
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
@@ -512,11 +512,38 @@ describe("appendEvent", () => {
     await appendEvent({
       id: "bounded-page-site",
       kind: "nav_click_block",
-      pageSite: "x".repeat(3000),
+      pageSite: "https://portal.example.test/account?token=secret#fragment",
     });
 
     const entry = (store[EVENT_LOG_KEY] as Array<{ pageSite?: string }>)[0]!;
-    expect(entry.pageSite).toHaveLength(2048);
+    expect(entry.pageSite).toBeUndefined();
+  });
+
+  it("omits an out-of-range IPv4-shaped pageSite on direct appends", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { appendEvent } = await import("../extension/src/shared/storage");
+    await appendEvent({ id: "invalid-ip-page-site", kind: "nav_click_block", pageSite: "256.0.0.1" });
+
+    const entry = (store[EVENT_LOG_KEY] as Array<{ pageSite?: string }>)[0]!;
+    expect(entry.pageSite).toBeUndefined();
+  });
+
+  it.each([
+    ["Portal.Example.Test.", "portal.example.test"],
+    ["127.0.0.1", "127.0.0.1"],
+    ["[2001:DB8::1]", "2001:db8::1"],
+    ["2001:DB8::2", "2001:db8::2"],
+  ])("normalizes valid direct pageSite hostnames: %s", async (pageSite, expected) => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { appendEvent } = await import("../extension/src/shared/storage");
+    await appendEvent({ id: "valid-page-site", kind: "nav_click_block", pageSite });
+
+    const entry = (store[EVENT_LOG_KEY] as Array<{ pageSite?: string }>)[0]!;
+    expect(entry.pageSite).toBe(expected);
   });
 
   it("retries delegated event-log appends when the service worker is initially unreachable", async () => {

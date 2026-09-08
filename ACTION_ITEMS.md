@@ -12,11 +12,10 @@ provenance only. Detailed retired procedures moved to
 
 ## Current snapshot
 
-**Snapshot refreshed 2026-09-04:** `origin/main` is `a440e35`. Six PRs are open
-and every one of them is held on a human Chrome gate: #572 (AI-31), #599
-(AI-37), #600 (AI-38), #608 (AI-39), #609 (AI-40), and #636 (AI-41). Those six
-items are defined only inside their own PR branches and are listed as pointers
-under "Branch-held Gate-3 items" below. AI-30, AI-33, AI-35, and AI-36 are now
+**Queue refreshed 2026-09-08:** This register is the stable queue of
+human-owned Chrome gates, not an inventory of every open pull request. The
+seven branch-held items below are pointers to their authoritative branch guides;
+re-check GitHub for current pull-request state. AI-30, AI-33, AI-35, and AI-36 are now
 **post-merge** checks: PRs #570, #582, #586, and #589 merged on 2026-08-27 and no
 waiver record for those merges was found in `docs/agentic/DECISIONS.md`,
 `HANDOFF.md`, this file, or `docs/Project_Roadmap.md`, so each check stays open
@@ -28,7 +27,7 @@ and #223 remains open. AI-27, AI-28, and AI-29 are resolved; AI-14 remains
 blocked for future measurement work.
 
 **Guided resolution cursor:** `AI-19` (`Resume at: AI-19`; conversational label
-`q-5`). Current ready order: AI-19 → optional AI-24 → AI-23 (low priority). The six
+`q-5`). Current ready order: AI-19 → optional AI-24 → AI-23 (low priority). The seven
 branch-held Gate-3 items and the four post-merge checks (AI-30, AI-33, AI-35,
 AI-36) are unordered additions to that queue.
 
@@ -169,9 +168,16 @@ frame reproduction and repair.
 Each item below is defined **only** inside its own PR branch's `ACTION_ITEMS.md`
 and `docs/agentic/GATE3_GUIDES.md`; `main` carries no procedure for them, so this
 list is a pointer, not the gate. Read the full procedure in that branch's
-`docs/agentic/GATE3_GUIDES.md` before acting. All six PRs are ready-for-review
-and `MERGEABLE`/`CLEAN` as of 2026-09-04; only Chris can complete any of them.
+`docs/agentic/GATE3_GUIDES.md` before acting. Each remains subject to its stated
+Gate-3 requirements; only Chris can complete any of them.
 
+- **OPEN: AI-44** — PR #644 (issue #585), branch
+  `codex/wave-events-20260908`. Scope: imported and direct event rows preserve
+  hostname-only page association and the popup falls back to a valid legacy
+  `site` when `pageSite` is unusable. The owner Chrome procedure is in
+  [`docs/agentic/ISSUE_585_GATE3.md`](docs/agentic/ISSUE_585_GATE3.md) on that
+  branch. Owner acceptance is not claimed; build and load the exact PR head
+  before running it. This branch-specific gate does not change the AI-19 cursor.
 - **AI-31** — PR #572 (issue #566), branch `fix/issue566-modifier-authority`,
   exact head `e35a88e0a5ea24cf9c33d97b68ccfbeda57974bf`. Scope: trusted
   Ctrl/Cmd-click and middle-click keep modifier-click authority in the requested
