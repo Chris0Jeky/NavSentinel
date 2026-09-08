@@ -14,6 +14,7 @@
     "vision:desktop:install": "npm ci --prefix experiments/vision-lab/desktop && node experiments/vision-lab/desktop/node_modules/electron/install.js",
     "vision:desktop": "npm start --prefix experiments/vision-lab/desktop",
     "vision:test:desktop": "node scripts/vision-lab/smoke-desktop.mjs",
+    "vision:test:extension": "node scripts/vision-lab/smoke-extension.mjs",
     "dev": "vite",
     "build": "node scripts/build-extension.mjs",
     "build:research-reputation": "node scripts/build-extension.mjs research-reputation",
