@@ -3,6 +3,7 @@ const {test}=require('node:test'),assert=require('node:assert/strict'),fs=requir
 const root=path.resolve(__dirname,'..');
 const app=fs.readFileSync(path.join(root,'web/app.js'),'utf8');
 const functions=app.split(/\r?\n/).filter(line=>/^async function (api|consumeLive)\(/.test(line)).join('\n');
+const refreshFunctions=app.split(/\r?\n/).filter(line=>/^async function (api|refreshService)\(/.test(line)).join('\n');
 for(const fixture of [
  {name:'executed effect despite journal error',status:503,data:{accepted:true,executed:true,error:'Journal unavailable'},expected:'Executed'},
  {name:'unknown effect after adapter failure',status:502,data:{accepted:true,executed:null,error:'Effect uncertain'},expected:'Unknown'},
@@ -22,13 +23,22 @@ for(const fixture of [
  assert.equal(context.liveOutcome.retry,false);
 });
 
+test('initial authentication failure remains visible to the connect flow',async()=>{
+ const context={structuredClone,apiToken:'invalid',health:null,remote:null,connected:false};
+ context.fetch=async path=>({status:path==='/api/health'?200:401,json:async()=>path==='/api/health'?{ok:true}:{error:'Invalid operator token'}});
+ vm.runInNewContext(refreshFunctions+'\nglobalThis.connectAttempt=()=>refreshService({required:true});',context,{timeout:1000});
+ await assert.rejects(context.connectAttempt,/Invalid operator token/);
+ assert.equal(context.connected,false);
+ assert.equal(context.remote,null);
+});
+
 test('journal clear removes distinct tab badge overrides despite a closed tab',async()=>{
  let listener;const badges=[],writes=[];
  const event={addListener(){}};
- const chrome={runtime:{id:'lab',getURL:value=>'chrome-extension://lab/'+value,onInstalled:event,onStartup:event,onMessage:{addListener:fn=>{listener=fn;}}},tabs:{onRemoved:event},permissions:{onRemoved:event},storage:{local:{get:async()=>({records:[{tabId:1},{tabId:1},{tabId:2},{}]}),set:async value=>{writes.push(value);}}},action:{setBadgeText:async value=>{badges.push(value);if(value.tabId===2)throw Error('Closed tab');}}};
+ const chrome={runtime:{id:'lab',getURL:value=>'chrome-extension://lab/'+value,onInstalled:event,onStartup:event,onMessage:{addListener:fn=>{listener=fn;}}},tabs:{onRemoved:event,query:async()=>[{id:1},{id:3}]},permissions:{onRemoved:event},storage:{local:{get:async()=>({records:[{tabId:1},{tabId:1},{tabId:2},{}]}),set:async value=>{writes.push(value);}}},action:{setBadgeText:async value=>{badges.push(value);if(value.tabId===2)throw Error('Closed tab');}}};
  vm.runInNewContext(fs.readFileSync(path.join(root,'extension/worker.js'),'utf8'),{chrome,NSCore:{},importScripts(){},console},{timeout:1000});
  const response=await new Promise(resolve=>listener({type:'clear'},{id:'lab',url:'chrome-extension://lab/popup.html'},resolve));
  assert.equal(response.cleared,true);
  assert.deepEqual(JSON.parse(JSON.stringify(writes)),[{records:[]}]);
- assert.deepEqual(JSON.parse(JSON.stringify(badges)),[{tabId:1,text:''},{tabId:2,text:''},{text:''}]);
+ assert.deepEqual(JSON.parse(JSON.stringify(badges)),[{tabId:1,text:''},{tabId:2,text:''},{tabId:3,text:''},{text:''}]);
 });
