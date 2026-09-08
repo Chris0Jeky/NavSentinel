@@ -27,12 +27,10 @@ provenance only. Detailed retired procedures moved to
 
 ## Current snapshot
 
-**Snapshot refreshed 2026-09-08:** `origin/main` is `fd5bdfc`. Seven PRs are open
-and every one of them is held on a human Chrome gate: #572 (AI-31), #599
-(AI-37), #600 (AI-38), #608 (AI-39), #609 (AI-40), #636 (AI-41), and #644
-(AI-44). Those seven
-items are defined only inside their own PR branches and are listed as pointers
-under "Branch-held Gate-3 items" below. AI-30, AI-33, AI-35, and AI-36 are now
+**Queue refreshed 2026-09-08:** This register is the stable queue of
+human-owned Chrome gates, not an inventory of every open pull request. The
+seven branch-held items below are pointers to their authoritative branch guides;
+re-check GitHub for current pull-request state. AI-30, AI-33, AI-35, and AI-36 are now
 **post-merge** checks: PRs #570, #582, #586, and #589 merged on 2026-08-27 and no
 waiver record for those merges was found in `docs/agentic/DECISIONS.md`,
 `HANDOFF.md`, this file, or `docs/Project_Roadmap.md`, so each check stays open
