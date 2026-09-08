@@ -11,6 +11,14 @@ Automated renderer and disposable-extension tests are not human acceptance.
 Record the candidate Git head and Chrome version with the result. This item does
 not change the guided-resolution cursor.
 
+**OPEN: AI-43 — Settings autosave and conflict choices.** The #558 follow-up
+adds default autosave, explicit same-field conflict choices, and persisted
+cleanup status. The owner Chrome check is
+[the AI-43 procedure](docs/agentic/GATE3_558_SETTINGS_AUTOSAVE.md). Automated
+tests do not establish owner acceptance. Record the candidate Git head and
+Chrome version with the result. This item does not change the guided-resolution
+cursor.
+
 **Purpose:** the concise, durable register for human decisions and manual checks.
 It is not a live GitHub snapshot: re-check Git, GitHub, and product checks before
 acting. `docs/Project_Roadmap.md` holds execution work; archive material is

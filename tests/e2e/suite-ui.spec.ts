@@ -68,8 +68,20 @@ test("Options autosaves validated edits and resolves cross-window conflicts expl
     await expect(options.locator("#blockHttpPasswordSubmit")).toHaveAttribute("aria-checked", "true");
     await expect(options.locator("#dirtyStatus")).toHaveText("All changes saved");
 
+    await options.locator("#mediumRiskThreshold").fill("");
     await options.locator('#navModeSeg [data-value="strict"]').click();
     await other.locator('#navModeSeg [data-value="off"]').click();
+    await other.locator("#save").click();
+    await expect(options.locator("#settingsConflict")).toBeVisible();
+    await options.locator("#useExternal").click();
+    await expect(options.locator('#navModeSeg [data-value="off"]')).toHaveAttribute("aria-checked", "true");
+    await expect(options.locator("#mediumRiskThreshold")).toHaveValue("");
+    await options.locator("#mediumRiskThreshold").fill("54");
+    await options.locator("#discard").click();
+    await expect(options.locator("#mediumRiskThreshold")).toHaveValue("55");
+
+    await options.locator('#navModeSeg [data-value="strict"]').click();
+    await other.locator('#navModeSeg [data-value="smart"]').click();
     await other.locator("#save").click();
     await expect(options.locator("#settingsConflict")).toBeVisible();
     await options.locator("#keepDraft").click();
@@ -80,6 +92,45 @@ test("Options autosaves validated edits and resolves cross-window conflicts expl
     await options.reload();
     await expect(options.locator("#autoSave")).toBeChecked();
     await expect(options.locator("#cleanupStatus")).toHaveText("Active");
+  } finally {
+    await context.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("Options import cancels a pending autosave before replacing settings @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-import-autosave-"));
+  const importPath = path.join(userDataDir, "authoritative-import.json");
+  fs.writeFileSync(importPath, JSON.stringify({ settings: { nav: { defaultMode: "off" } } }));
+  const context = await chromium.launchPersistentContext(userDataDir, {
+    headless: false,
+    args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
+  });
+  try {
+    const extensionId = await getExtensionId(context);
+    const options = await context.newPage();
+    await options.goto(`chrome-extension://${extensionId}/src/options/options.html`);
+    await options.evaluate(() => {
+      const originalText = File.prototype.text;
+      File.prototype.text = async function(): Promise<string> {
+        await new Promise(resolve => window.setTimeout(resolve, 350));
+        return originalText.call(this);
+      };
+      const originalSend = chrome.runtime.sendMessage;
+      chrome.runtime.sendMessage = ((message: unknown, ...args: unknown[]) => {
+        if ((message as { type?: unknown })?.type === "ns-suite-settings-update") {
+          return new Promise(resolve => window.setTimeout(() => resolve(Reflect.apply(originalSend, chrome.runtime, [message, ...args])), 500));
+        }
+        return Reflect.apply(originalSend, chrome.runtime, [message, ...args]);
+      }) as typeof chrome.runtime.sendMessage;
+    });
+    await options.locator('#navModeSeg [data-value="strict"]').click();
+    await options.locator("#importFile").setInputFiles(importPath);
+    await expect(options.locator('#navModeSeg [data-value="off"]')).toHaveAttribute("aria-checked", "true");
+    await options.waitForTimeout(800);
+    const worker = await getServiceWorker(context);
+    await expect.poll(() => worker.evaluate(async key => (await chrome.storage.local.get(key))[key]?.nav?.defaultMode, SUITE_SETTINGS_KEY)).toBe("off");
   } finally {
     await context.close();
     fs.rmSync(userDataDir, { recursive: true, force: true });
