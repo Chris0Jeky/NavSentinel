@@ -16,6 +16,10 @@ JSON exported by the real extension's **Protection Center**. Import is explicit;
 its history, separate user assessments and export are independent of synthetic
 scenarios, extension storage and broker authority.
 
+Saved review packages can also be imported to continue a review, preserving
+assessments with their observations. See [review package portability](docs/REVIEW-PACKAGES.md)
+for append behavior, validation, and the distinction from protection settings.
+
 For the native shell, stop the standalone service, then:
 
 ```sh
