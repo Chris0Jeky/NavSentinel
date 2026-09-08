@@ -12,3 +12,16 @@ test('standalone HTML and CSP hashes are identical from LF and Windows CRLF sour
   for(const name of ['NavSentinel-Browser.html','NavSentinel-Desktop.html','NavSentinel-Intent-Relay.html'])assert.equal(fs.readFileSync(path.join(temporary,'lf',name),'utf8'),fs.readFileSync(path.join(temporary,'crlf',name),'utf8'),name);
  }finally{if(path.dirname(temporary)!==os.tmpdir()||!path.basename(temporary).startsWith('navsentinel-build-'))throw Error('Unexpected temporary cleanup target');fs.rmSync(temporary,{recursive:true});}
 });
+
+test('Lab preserves consumed execution outcomes and clears per-tab badges',()=>{
+ const root=path.resolve(__dirname,'..');
+ const app=fs.readFileSync(path.join(root,'web/app.js'),'utf8');
+ const worker=fs.readFileSync(path.join(root,'extension/worker.js'),'utf8');
+ assert.match(app,/status:'Executed'/);
+ assert.match(app,/status:'Unknown'/);
+ assert.match(app,/Do not retry/);
+ assert.match(app,/e\.data/);
+ assert.match(app,/liveRequest\.capability&&!liveOutcome/);
+ assert.match(worker,/record\?\.tabId/);
+ assert.match(worker,/setBadgeText\(\{tabId,text:''\}\)/);
+});

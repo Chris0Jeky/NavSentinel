@@ -52,7 +52,13 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
    const origin=matchOrigin(message.origin);s.enabledOrigins=s.enabledOrigins.filter(x=>x!==origin);await chrome.storage.local.set({enabledOrigins:s.enabledOrigins});await syncRegistration(s.enabledOrigins);
    const tabs=await chrome.tabs.query({});await Promise.all(tabs.filter(t=>Number.isInteger(t.id)).map(t=>chrome.tabs.sendMessage(t.id,{type:'ns-disable',origin}).catch(()=>{})));const live=await contexts();for(const [key,value]of Object.entries(live))if(value.origin===origin)delete live[key];await saveContexts(live);return {enabled:false,reloadRecommended:true};
   }
-  if(message.type==='clear'){await chrome.storage.local.set({records:[]});await chrome.action.setBadgeText({text:''});return {cleared:true};}
+  if(message.type==='clear'){
+   const tabIds=[...new Set(s.records.map(record=>record?.tabId).filter(tabId=>Number.isInteger(tabId)))];
+   await chrome.storage.local.set({records:[]});
+   await Promise.all(tabIds.map(tabId=>chrome.action.setBadgeText({tabId,text:''}).catch(()=>{})));
+   await chrome.action.setBadgeText({text:''});
+   return {cleared:true};
+  }
   if(message.type==='undo'||message.type==='approve'){
    const [active]=await chrome.tabs.query({active:true,lastFocusedWindow:true});if(!active||active.id!==tabId)throw Error('The requesting tab is no longer active');
    const x=await contexts(),key=contextKey(tabId,message.localId),entry=x[key];if(!entry||!s.enabledOrigins.includes(entry.origin))throw Error('The consequence is missing, expired, or no longer enabled');
