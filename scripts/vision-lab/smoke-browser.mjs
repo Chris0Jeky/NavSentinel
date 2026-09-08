@@ -96,6 +96,16 @@ try {
   assert.equal(await page.locator('#evidence-table tbody tr').count(),0);
   const retained=await page.evaluate(()=>JSON.parse(localStorage.getItem('navsentinel-vision-lab-v1')).records.length);
   assert.ok(retained>0);pass('imported history clear preserves synthetic history');
+  await page.locator('#evidence-file').setInputFiles(path.join(output,'workspace-export.json'));
+  await page.locator('#dialog[open]').getByRole('heading',{name:'Review this import.'}).waitFor();
+  assert.ok((await page.locator('#dialog').innerText()).includes('1 separate assessments'));
+  await click('[data-evidence-action="apply"]');
+  await page.reload();await nav('evidence');
+  const restored=await page.evaluate(()=>JSON.parse(localStorage.getItem('navsentinel-imported-evidence-v1')));
+  assert.deepEqual(restored.events,exported.events);assert.deepEqual(restored.corrections,exported.corrections);
+  await click('[data-evidence-action="inspect"]');
+  assert.ok((await page.locator('#evidence-detail').innerText()).includes('uncertain'));
+  pass('downloaded review package restores linked assessments after clear and reload');
 
   await page.goto(service.origin+'/?mode=relay');
   await click('[data-action="connect"]');await page.locator('#broker-token').fill(service.adminToken);
