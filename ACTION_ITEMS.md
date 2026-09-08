@@ -4,6 +4,13 @@
 
 # ACTION ITEMS — Human-Owned Tasks (NavSentinel)
 
+**OPEN: AI-45 — Protection Center export preview.** The #591 follow-up opens a
+reviewable snapshot before saving a local evidence file. The owner Chrome check
+is [the export review procedure](docs/vision-overhaul/EXPORT_REVIEW.md#human-chrome-check--ai-45).
+Automated renderer and disposable-extension tests are not human acceptance.
+Record the candidate Git head and Chrome version with the result. This item does
+not change the guided-resolution cursor.
+
 **Purpose:** the concise, durable register for human decisions and manual checks.
 It is not a live GitHub snapshot: re-check Git, GitHub, and product checks before
 acting. `docs/Project_Roadmap.md` holds execution work; archive material is

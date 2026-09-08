@@ -39,11 +39,31 @@ test("Protection Center built renderer filters and exports minimized evidence ac
   await page.getByLabel("Find a hostname").fill("credential.test");
   await page.getByLabel("Category", { exact: true }).selectOption("credential");
   await expect(page.locator("details")).toHaveCount(1);
-  const downloadPromise = page.waitForEvent("download");
+  const downloads: string[] = [];
+  page.on("download", download => downloads.push(download.suggestedFilename()));
   await page.getByRole("button", { name: "Export visible events" }).click();
+  const dialog = page.getByRole("dialog", { name: "Review your evidence export" });
+  await expect(dialog).toBeVisible();
+  await expect(page.getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
+  expect(downloads).toEqual([]);
+  await page.keyboard.press("Escape");
+  await expect(dialog).not.toBeVisible();
+  await expect(page.getByRole("button", { name: "Export visible events" })).toBeFocused();
+  await page.getByRole("button", { name: "Export visible events" }).click();
+  const reviewed = await page.getByLabel("File contents (read only)").inputValue();
+  for (const theme of ["forest", "paper", "midnight"]) {
+    await page.evaluate(value => { document.documentElement.dataset.theme = value; }, theme);
+    await page.screenshot({ path: testInfo.outputPath(`export-${theme}.png`) });
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await dialog.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath("export-mobile.png") });
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download reviewed file" }).click();
   const download = await downloadPromise;
   const file = await download.path();
   const contents = readFileSync(file!, "utf8");
+  expect(contents).toBe(reviewed);
   const data = JSON.parse(contents);
   expect(data.events).toHaveLength(1);
   expect(data.events[0]).toMatchObject({ kind: "cred_submit_prompt", outcome: "recorded", sourceSite: "source.test", destinationSite: "credential.test" });
