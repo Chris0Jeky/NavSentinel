@@ -47,6 +47,7 @@
         ["top-assign-1600", { primitive: "top-assign", delayMs: 1600 }],
         ["window-open-100", { primitive: "window-open", delayMs: 100 }],
         ["top-form-submit-100", { primitive: "top-form-submit", delayMs: 100 }],
+        ["empty-formaction-submit-100", { primitive: "empty-formaction-submit", delayMs: 100 }],
         ["benign-declared-form-submit-100", { primitive: "declared-form-submit", delayMs: 100 }],
         ["benign-declared-request-submit-100", { primitive: "declared-request-submit", delayMs: 100 }],
         ["benign-anchor-top-keyboard", { primitive: "anchor-top", delayMs: 0 }],
@@ -119,7 +120,7 @@
           topSubmitForm.requestSubmit(document.getElementById("declared-top-submit"));
           return;
         }
-        if (primitive === "top-form-submit" || primitive === "declared-form-submit") {
+        if (primitive === "top-form-submit" || primitive === "declared-form-submit" || primitive === "empty-formaction-submit") {
           topSubmitForm.submit();
         }
       }
@@ -146,8 +147,13 @@
         window.setTimeout(execute, delayMs);
       }
 
-      if (primitive === "declared-form-submit" || primitive === "declared-request-submit") {
+      if (primitive === "declared-form-submit" || primitive === "declared-request-submit" || primitive === "empty-formaction-submit") {
         if (safeSink) configureTopSubmitForm();
+        if (primitive === "empty-formaction-submit") {
+          // Empty declares this document; submit() ignores the submitter and
+          // attempts the form's distinct top-frame sink action instead.
+          document.getElementById("declared-top-submit").setAttribute("formaction", "");
+        }
         if (primitive === "declared-request-submit") {
           const submitter = document.getElementById("declared-top-submit");
           submitter.setAttribute("formaction", topSubmitForm.action);

@@ -642,7 +642,7 @@ function patchedOpen(
 }
 
 function resolveFormAction(form: HTMLFormElement, submitter?: HTMLElement | null): string | undefined {
-  const raw = submitter?.getAttribute("formaction") || form.getAttribute("action");
+  const raw = submitter?.getAttribute("formaction") ?? form.getAttribute("action");
   if (!raw) return location.href;
   try {
     return new URL(raw, location.href).toString();

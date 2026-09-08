@@ -1349,7 +1349,9 @@ function formSubmitIntentUrl(e: MouseEvent): string | null {
   const submitterAction = control?.getAttribute("formaction");
   const formAction = form.getAttribute("action");
   try {
-    return new URL(submitterAction || formAction || location.href, location.href).toString();
+    // An explicitly empty submitter action overrides the form action and
+    // declares this document. Only a missing attribute inherits the form.
+    return new URL((submitterAction ?? formAction) || location.href, location.href).toString();
   } catch {
     return null;
   }

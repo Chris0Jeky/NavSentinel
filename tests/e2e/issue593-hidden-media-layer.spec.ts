@@ -89,7 +89,7 @@ type Expectation = "blocked-pre-harm" | "rolled-back" | "out-of-model" | "benign
 
 type Arm = {
   id: string;
-  primitive: "child-assign" | "top-assign" | "window-open" | "anchor-top" | "top-script" | "forged-anchor-top" | "top-form-submit" | "declared-form-submit" | "declared-request-submit" | "top-form-submit-control";
+  primitive: "child-assign" | "top-assign" | "window-open" | "anchor-top" | "top-script" | "forged-anchor-top" | "top-form-submit" | "declared-form-submit" | "declared-request-submit" | "top-form-submit-control" | "empty-formaction-submit";
   delayMs: number;
   /** Which input the harness delivers. */
   input: "physical-click" | "keyboard" | "top-physical-click" | "none";
@@ -111,6 +111,7 @@ const arms: readonly Arm[] = [
   // MAIN world a redirect allowance, then form.submit(target=_top) converts
   // that frame-local allowance into a tab-wide exact-target allowance.
   { id: "top-form-submit-100", primitive: "top-form-submit", delayMs: 100, input: "physical-click", layer: "hidden", role: "attack", expectation: "blocked-pre-harm" },
+  { id: "empty-formaction-submit-100", primitive: "empty-formaction-submit", delayMs: 100, input: "physical-click", layer: "hidden", role: "attack", expectation: "blocked-pre-harm" },
   { id: "child-assign-100", primitive: "child-assign", delayMs: 100, input: "physical-click", layer: "hidden", role: "attack", expectation: "out-of-model" },
   { id: "child-assign-1600", primitive: "child-assign", delayMs: 1_600, input: "physical-click", layer: "hidden", role: "attack", expectation: "out-of-model" },
   { id: "child-assign-no-input", primitive: "child-assign", delayMs: 100, input: "none", layer: "hidden", role: "attack", expectation: "out-of-model" },
@@ -436,7 +437,7 @@ async function runArm(
     if (arm.input === "physical-click") {
       const clickTarget = arm.primitive === "forged-anchor-top"
         ? "#forged-intent-layer"
-        : arm.primitive === "declared-form-submit" || arm.primitive === "declared-request-submit"
+        : arm.primitive === "declared-form-submit" || arm.primitive === "declared-request-submit" || arm.primitive === "empty-formaction-submit"
           ? "#declared-top-submit"
           : "#hidden-interactive-layer";
       await frame.locator(clickTarget).click();
@@ -583,7 +584,7 @@ for (const arm of arms) {
     if (arm.primitive === "top-assign" || arm.primitive === "top-script" ||
         arm.primitive === "anchor-top" || arm.primitive === "forged-anchor-top" ||
         arm.primitive === "top-form-submit" || arm.primitive === "declared-form-submit" ||
-        arm.primitive === "declared-request-submit" ||
+        arm.primitive === "declared-request-submit" || arm.primitive === "empty-formaction-submit" ||
         arm.primitive === "top-form-submit-control") {
       expect(baseline.topReturnedToFixture, "an unprotected browser must leave the tab on the destination").toBe(false);
     }
@@ -596,7 +597,7 @@ for (const arm of arms) {
           observed.sinkReceiptsAfter,
           "BLOCKED_PRE_HARM: no request may reach the sink at all",
         ).toBe(observed.sinkReceiptsBefore);
-        if (arm.primitive === "top-form-submit") {
+        if (arm.primitive === "top-form-submit" || arm.primitive === "empty-formaction-submit") {
           expect(
             observed.workerEvidence,
             "BLOCKED_PRE_HARM: no target allowance or top-frame commit may reach the worker",

@@ -14,8 +14,9 @@ Gate-3 result.
    is the human-owned proof that branded Chrome accepted the artifact.
 4. Run the focused local regression:
    `$env:CI='1'; npx playwright test tests/e2e/issue593-hidden-media-layer.spec.ts
-   --project=regression --workers=1`. Require the `top-form-submit-100` attack
-   arm to report `BLOCKED_PRE_HARM` with zero sink receipts. Require both
+   --project=regression --workers=1`. Require the `top-form-submit-100` and
+   `empty-formaction-submit-100` attack arms to report `BLOCKED_PRE_HARM` with
+   zero sink receipts. Require all three of
    `benign-declared-form-submit-100`, `benign-declared-request-submit-100`, and
    `benign-top-form-submit-100` to report `BENIGN_ALLOWED`.
 5. In the reloaded branded profile, use an ordinary top-frame GET form and one
