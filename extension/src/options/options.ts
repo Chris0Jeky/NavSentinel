@@ -36,6 +36,7 @@ import {
   importAll,
   onSuiteSettingsChange,
   PromptOutcomeDeliveryError,
+  SuiteSettingsConflictError,
   removeTrustedDomain,
   updateSuiteSettings,
   type PromptOutcomeEntry
@@ -588,11 +589,21 @@ async function saveSettingsInner(): Promise<void> {
     }
 
     const generation = settingsGeneration;
-    submittedSettings = draft;
+    // Keep the displayed baseline while the worker serializes this patch. Its
+    // conditional update can then distinguish our own write from a competing
+    // same-field write that arrived first.
+    submittedSettings = baseline;
     try {
-      const persisted = await updateSuiteSettings(patch);
+      const persisted = await updateSuiteSettings(patch, baseline);
       if (generation === settingsGeneration) rebaseIncomingSettings(persisted);
       saved = generation === settingsGeneration;
+    } catch (error) {
+      if (error instanceof SuiteSettingsConflictError) {
+        if (generation === settingsGeneration) rebaseIncomingSettings(error.settings);
+        flashStatus(saveStatusEl, "Settings changed in another window.", "warning");
+        return;
+      }
+      throw error;
     } finally {
       submittedSettings = null;
     }

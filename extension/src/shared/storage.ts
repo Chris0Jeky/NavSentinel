@@ -50,7 +50,27 @@ export type SuiteSettingsPatch = Partial<Omit<SuiteSettings, "nav" | "credential
 };
 
 /** Settings writes from popup/options to the service worker. */
-export type SuiteSettingsUpdateMessage = { type: "ns-suite-settings-update"; patch: unknown };
+export type SuiteSettingsUpdateMessage = {
+  type: "ns-suite-settings-update";
+  patch: unknown;
+  /**
+   * Options supplies the settings it rendered before editing. The worker uses it
+   * only to reject a competing edit to the same leaf; popup writes stay
+   * unconditional.
+   */
+  expected?: unknown;
+};
+
+/** A worker response that preserves the current settings for conflict recovery. */
+export type SuiteSettingsUpdateResponse = SuiteSettings & { conflict?: true };
+
+/** Raised in an extension page when the worker rejects a stale Options patch. */
+export class SuiteSettingsConflictError extends Error {
+  constructor(readonly settings: SuiteSettings) {
+    super("settings changed in another window");
+    this.name = "SuiteSettingsConflictError";
+  }
+}
 
 export const SUITE_SETTINGS_KEY = "sentinelsuite:settings_v1";
 export const TRUSTED_DOMAINS_KEY = "sentinelsuite:trusted_domains_v1";
@@ -305,9 +325,38 @@ const queueSuiteSettingsWrite = createStorageWriteQueue((err) => {
  * through runtime messaging. Keeping this direct lane worker-owned prevents two
  * independently loaded page modules from interleaving their own queues. (#558)
  */
-function updateSuiteSettingsDirect(partial: SuiteSettingsPatch): Promise<SuiteSettings> {
-  return queueSuiteSettingsWrite(async (): Promise<SuiteSettings> => {
+function patchMatchesExpectedSettings(
+  current: SettingsRecord,
+  expected: SettingsRecord,
+  patch: SettingsRecord,
+): boolean {
+  for (const [key, value] of Object.entries(patch)) {
+    if (isRecord(value)) {
+      if (!patchMatchesExpectedSettings(
+        current[key] as SettingsRecord,
+        expected[key] as SettingsRecord,
+        value,
+      )) return false;
+    } else if (current[key] !== expected[key] && current[key] !== value) {
+      // An identical retry is already satisfied; a different intervening value
+      // must reach Options as an explicit conflict rather than be overwritten.
+      return false;
+    }
+  }
+  return true;
+}
+
+function updateSuiteSettingsDirect(
+  partial: SuiteSettingsPatch,
+  expected?: SuiteSettings,
+): Promise<SuiteSettingsUpdateResponse> {
+  return queueSuiteSettingsWrite(async (): Promise<SuiteSettingsUpdateResponse> => {
     const cur = await getSuiteSettings();
+    if (expected && !patchMatchesExpectedSettings(
+      cur as unknown as SettingsRecord,
+      expected as unknown as SettingsRecord,
+      partial as SettingsRecord,
+    )) return { ...cur, conflict: true };
     const merged = mergeSuiteSettings(cur, partial);
     await chrome.storage.local.set({ [SUITE_SETTINGS_KEY]: merged });
     return merged;
@@ -338,7 +387,7 @@ function sanitizeSuiteSettingsFields(value: unknown, defaults: Record<string, un
 export async function handleSuiteSettingsUpdateMessage(
   message: SuiteSettingsUpdateMessage,
   sender?: chrome.runtime.MessageSender,
-): Promise<SuiteSettings> {
+): Promise<SuiteSettingsUpdateResponse> {
   if (!sender || sender.id !== chrome.runtime.id || (
     sender.url !== chrome.runtime.getURL("src/popup/popup.html") &&
     sender.url !== chrome.runtime.getURL("src/options/options.html")
@@ -350,22 +399,37 @@ export async function handleSuiteSettingsUpdateMessage(
     DEFAULT_SUITE_SETTINGS as unknown as Record<string, unknown>,
   ) as SuiteSettingsPatch | null;
   if (!patch) throw new Error("invalid");
-  return updateSuiteSettingsDirect(patch);
+  let expected: SuiteSettings | undefined;
+  if (message.expected !== undefined) {
+    const sanitized = sanitizeSuiteSettingsFields(
+      message.expected,
+      DEFAULT_SUITE_SETTINGS as unknown as Record<string, unknown>,
+    ) as SuiteSettingsPatch | null;
+    if (!sanitized) throw new Error("invalid");
+    expected = mergeSuiteSettings(structuredClone(DEFAULT_SUITE_SETTINGS), sanitized);
+  }
+  return updateSuiteSettingsDirect(patch, expected);
 }
 
-export function updateSuiteSettings(partial: SuiteSettingsPatch): Promise<SuiteSettings> {
+function unwrapSuiteSettingsUpdate(response: SuiteSettingsUpdateResponse | undefined): SuiteSettings {
+  if (!response) throw new Error("suite-settings update failed");
+  if (response.conflict) {
+    const { conflict: _conflict, ...settings } = response;
+    throw new SuiteSettingsConflictError(settings);
+  }
+  return response;
+}
+
+export function updateSuiteSettings(partial: SuiteSettingsPatch, expected?: SuiteSettings): Promise<SuiteSettings> {
   if (shouldDelegatePromptOutcomeWrite()) {
     // Do not fall back to a page-local write when delivery fails: it would revive
     // the lost-update race this worker boundary closes. (#558)
-    return chrome.runtime.sendMessage({ type: "ns-suite-settings-update", patch: partial })
-      .then((settings: SuiteSettings | undefined) => {
-        if (settings) return settings;
-        throw new Error("suite-settings update failed");
-      });
+    return chrome.runtime.sendMessage({ type: "ns-suite-settings-update", patch: partial, ...(expected ? { expected } : {}) })
+      .then((response: SuiteSettingsUpdateResponse | undefined) => unwrapSuiteSettingsUpdate(response));
   }
   // Non-extension test environments have no runtime messenger. Production page
   // contexts always do, and therefore always take the worker-owned path above.
-  return updateSuiteSettingsDirect(partial);
+  return updateSuiteSettingsDirect(partial, expected).then(unwrapSuiteSettingsUpdate);
 }
 
 export function onSuiteSettingsChange(cb: (s: SuiteSettings) => void): void {
