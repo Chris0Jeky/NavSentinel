@@ -419,6 +419,49 @@ describe("pickSiteRiskEvent (#205)", () => {
     expect(pickSiteRiskEvent([legacy], "example.test")?.id).toBe("legacy");
   });
 
+  it("falls back to the legacy site when pageSite is empty", () => {
+    const legacyAssociation: EventLogEntry = {
+      id: "empty-page-site",
+      ts: 1,
+      kind: "nav_click_block",
+      site: "portal.example.test",
+      pageSite: "",
+      score: 50,
+    };
+
+    expect(pickSiteRiskEvent([legacyAssociation], "example.test")?.id).toBe("empty-page-site");
+  });
+
+  it("falls back to the legacy site when pageSite is URL-shaped", () => {
+    const legacyAssociation: EventLogEntry = {
+      id: "url-page-site",
+      ts: 1,
+      kind: "nav_click_block",
+      site: "portal.example.test",
+      pageSite: "https://other.test/account?token=secret#fragment",
+      score: 50,
+    };
+
+    expect(pickSiteRiskEvent([legacyAssociation], "example.test")?.id).toBe("url-page-site");
+    expect(pickSiteRiskEvent([legacyAssociation], "other.test")).toBeNull();
+  });
+
+  it.each([
+    ["127.0.0.1", "127.0.0.1"],
+    ["[2001:DB8::1]", "2001:db8::1"],
+  ])("preserves valid IP pageSite association: %s", (pageSite, activeSite) => {
+    const event: EventLogEntry = {
+      id: "ip-page-site",
+      ts: 1,
+      kind: "nav_click_block",
+      site: "frame.other.test",
+      pageSite,
+      score: 80,
+    };
+
+    expect(pickSiteRiskEvent([event], activeSite)?.id).toBe("ip-page-site");
+  });
+
   it("returns null when no event matches the active site (no other-site risk shown)", () => {
     const log = [ev("1", "other.com", 90), ev("2", "evil.test", 95)];
     expect(pickSiteRiskEvent(log, "example.com")).toBeNull();
