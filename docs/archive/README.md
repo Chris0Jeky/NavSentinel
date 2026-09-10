@@ -27,7 +27,8 @@ Archived here:
   - provenance for the 2026-08-12 ACTION_ITEMS queue trim; not current guidance
 
 `docs/agentic/ORCHESTRATOR.md` is a compatibility pointer to the retired historical
-cycle ledger above, not a canonical living orchestrator. For current work, start with live Git/GitHub state,
+cycle ledger above, not a canonical living orchestrator. For current work, start
+with live Git/GitHub state,
 `docs/Project_Roadmap.md`, and `ACTION_ITEMS.md` when a human decision or manual
 check is involved.
 
