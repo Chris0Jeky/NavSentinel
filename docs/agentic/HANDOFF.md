@@ -2,7 +2,8 @@
 
 Updated 2026-09-08. This is an optional short snapshot; live Git/GitHub state,
 product tests, `docs/Project_Roadmap.md`, and `ACTION_ITEMS.md` are authoritative.
-Historical cycle detail remains in `ORCHESTRATOR.md` and is not required reading.
+Historical cycle detail is linked from `ORCHESTRATOR.md` to its archive and is not
+required reading.
 
 ## 2026-09-08 issue wave (22:42 UTC snapshot)
 
