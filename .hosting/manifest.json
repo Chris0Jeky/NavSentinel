@@ -1,0 +1,15 @@
+{
+  "schema_version":1,"reviewed_on":"2026-09-10","repository":"Chris0Jeky/NavSentinel","stable_id":"navsentinel","runtime_class":"local",
+  "public_origin":null,"origin_evidence":"not-configured",
+  "target":"Local MV3 extension; separately approved static landing/privacy site",
+  "source_paths":["README.md","ACTION_ITEMS.md"],
+  "persistent_state":["Existing chrome.storage.local/session state"],
+  "invariants":["No extension runtime network calls or telemetry","Preserve extension/store identity and storage namespaces","Do not recreate the retired repository-local agent harness","Interaction-only release profile and browser efficacy gates remain unchanged"],
+  "gates":["AI-19 final name clearance and owner choice","Store identity and rename migration review","Separate static-site publication approval"],
+  "tasks":[
+    {"id":"NS1","goal":"Continue AI-19 rename preparation","acceptance":"Inventory display strings versus extension ID, storage keys, package coordinates and store metadata; no rename applied"},
+    {"id":"NS2","goal":"Prepare the public site boundary","acceptance":"Landing/privacy/support content comes from verified product behavior; no protection or audit claims invented"},
+    {"id":"NS3","goal":"Verify release compatibility before branding changes","acceptance":"Existing profile/package checks pass; no native host or reputation service is introduced"}
+  ],
+  "activation_authorized":false
+}
