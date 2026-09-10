@@ -20,8 +20,8 @@ Browser-level coverage exists in `tests/e2e/visual-sim.spec.ts` (P4-01b).
 **deterministic placeholder hashes** (seeded PRNG), not hashes of real brand login
 screenshots. With placeholders, no real captured page matches a brand, so the pipeline runs
 but never fires a true positive. Making spoof detection real requires generating templates
-from actual brand login pages — tracked as **P4-01c** in `docs/Project_Roadmap.md` /
-`docs/agentic/ORCHESTRATOR.md`. Until then, treat visual-sim as plumbing-complete, detection-pending.
+from actual brand login pages — tracked as **P4-01c** in `docs/Project_Roadmap.md`.
+Until then, treat visual-sim as plumbing-complete, detection-pending.
 
 ## Constraints
 
