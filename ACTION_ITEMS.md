@@ -12,9 +12,11 @@ provenance only. Detailed retired procedures moved to
 
 ## Current snapshot
 
-**Snapshot refreshed 2026-09-04:** `origin/main` is `a440e35`. Six PRs are open
-and every one of them is held on a human Chrome gate: #572 (AI-31), #599
-(AI-37), #600 (AI-38), #608 (AI-39), #609 (AI-40), and #636 (AI-41). Those six
+**Browser-gate index refreshed 2026-09-10:** eleven open PRs carry branch-held
+human Chrome gates: #572 (AI-31), #599 (AI-37), #600 (AI-38), #608 (AI-39),
+#609 (AI-40), #636 (AI-41), #640 (AI-42), #643 (AI-43), #644 (AI-44),
+#641 (AI-45), and #649 (AI-46). This is not the total open-PR count or a claim
+that these candidates have completed their other checks. These eleven
 items are defined only inside their own PR branches and are listed as pointers
 under "Branch-held Gate-3 items" below. AI-30, AI-33, AI-35, and AI-36 are now
 **post-merge** checks: PRs #570, #582, #586, and #589 merged on 2026-08-27 and no
@@ -28,7 +30,7 @@ and #223 remains open. AI-27, AI-28, and AI-29 are resolved; AI-14 remains
 blocked for future measurement work.
 
 **Guided resolution cursor:** `AI-19` (`Resume at: AI-19`; conversational label
-`q-5`). Current ready order: AI-19 → optional AI-24 → AI-23 (low priority). The six
+`q-5`). Current ready order: AI-19 → optional AI-24 → AI-23 (low priority). The eleven
 branch-held Gate-3 items and the four post-merge checks (AI-30, AI-33, AI-35,
 AI-36) are unordered additions to that queue.
 
@@ -167,10 +169,12 @@ frame reproduction and repair.
 ### Branch-held Gate-3 items
 
 Each item below is defined **only** inside its own PR branch's `ACTION_ITEMS.md`
-and `docs/agentic/GATE3_GUIDES.md`; `main` carries no procedure for them, so this
-list is a pointer, not the gate. Read the full procedure in that branch's
-`docs/agentic/GATE3_GUIDES.md` before acting. All six PRs are ready-for-review
-and `MERGEABLE`/`CLEAN` as of 2026-09-04; only Chris can complete any of them.
+and the procedure named in its entry; `main` carries no procedure for them, so
+this list is a pointer, not the gate. Read that procedure before acting and
+verify the live PR head before building. AI-31 through AI-41 retain their
+2026-09-04 snapshot heads below; AI-42 through AI-46 were checked on 2026-09-10.
+Only Chris can complete these owner checks. This index update does not resolve
+issue #639's owner decision about where future gate procedures should live.
 
 - **AI-31** — PR #572 (issue #566), branch `fix/issue566-modifier-authority`,
   exact head `e35a88e0a5ea24cf9c33d97b68ccfbeda57974bf`. Scope: trusted
@@ -212,6 +216,31 @@ and `MERGEABLE`/`CLEAN` as of 2026-09-04; only Chris can complete any of them.
   and the named benign controls still passing. It does not cover a child frame
   navigating itself, which stays out of model; the residue is issue #637. Full
   procedure in that branch's `docs/agentic/GATE3_GUIDES.md`.
+
+- **AI-42** — PR #640, branch `codex/vision-overhaul`, exact head
+  `f969735d8e735976db9f4f9a9bcf96d221ecd3f4`. Scope: Protection Center, its
+  popup/Options entry points, themes, and minimized evidence export. Full
+  [browser acceptance procedure](https://github.com/Chris0Jeky/NavSentinel/blob/f969735d8e735976db9f4f9a9bcf96d221ecd3f4/docs/vision-overhaul/BROWSER_ACCEPTANCE.md).
+- **AI-43** — PR #643 (issue #558), branch `codex/wave-settings-20260908`,
+  exact head `3067e38c640e88b9c265e7c2e841a70d86c2e8d4`. Scope: default
+  autosave and explicit conflict choices. Full
+  [settings procedure](https://github.com/Chris0Jeky/NavSentinel/blob/3067e38c640e88b9c265e7c2e841a70d86c2e8d4/docs/agentic/GATE3_558_SETTINGS_AUTOSAVE.md).
+  Dependent fixes #655 and #658 must follow their parent and retain their added checks.
+- **AI-44** — PR #644 (issue #585), branch `codex/wave-events-20260908`,
+  exact head `c4507486753e5be3249fb5d43afa94bb8522bb76`. Scope: imported
+  page-site validation and valid legacy popup fallback. Full
+  [event association procedure](https://github.com/Chris0Jeky/NavSentinel/blob/c4507486753e5be3249fb5d43afa94bb8522bb76/docs/agentic/ISSUE_585_GATE3.md).
+  Dependent IP-site fix #657 must follow its parent and retain its added checks.
+- **AI-45** — PR #641 (issue #591), branch `codex/wave-evidence-20260908`,
+  exact head `ae52f03a08553f8ab819245c05045b3644fefd75`. Scope: preview the
+  exact local evidence snapshot before downloading it. Full
+  [export review procedure](https://github.com/Chris0Jeky/NavSentinel/blob/ae52f03a08553f8ab819245c05045b3644fefd75/docs/vision-overhaul/EXPORT_REVIEW.md#human-chrome-check--ai-45).
+  This is stacked on #640; AI-42 remains open and the parent must land first.
+- **AI-46** — PR #649 (issue #637), branch `codex/wave-child-form-20260908`,
+  exact head `56d06a11d1ad8d4b00391c3eca99645da0312279`. Scope: child-frame
+  form target allowances. Full
+  [child-form procedure](https://github.com/Chris0Jeky/NavSentinel/blob/56d06a11d1ad8d4b00391c3eca99645da0312279/docs/agentic/AI-46-issue637-child-form-target.md).
+  This is stacked on #636; AI-41 remains open and the parent must land first.
 
 **OPEN: AI-36 — #558 popup/Options patch-save synchronization post-merge
 Gate-3.** This is no longer a pre-merge gate. PR #589 merged on 2026-08-27 (head
