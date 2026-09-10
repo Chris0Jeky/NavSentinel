@@ -94,7 +94,7 @@ jobs:
     needs: build-and-unit
     # Bound a hung browser/test process while leaving the evidence-upload step
     # time to run after the test-step timeout fires.
-    timeout-minutes: 35
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v5
