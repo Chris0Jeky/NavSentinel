@@ -9,6 +9,9 @@ jobs:
   stress:
     name: Stress Lane
     runs-on: ubuntu-latest
+    # Bound a hung stress process while leaving the failure-trace upload time
+    # to run after the test-step timeout fires.
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -29,6 +32,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run stress tests
+        timeout-minutes: 30
         run: xvfb-run -a npm run test:e2e:stress
 
       - name: Upload traces on failure
