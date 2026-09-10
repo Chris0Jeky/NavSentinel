@@ -27,7 +27,7 @@ All twelve pages now resolve benign and harm destinations through `gym/local-fix
 - `gym/level6-programmatic-click.html`
 - `gym/level9-legit-video-overlay.html`
 
-These pages now resolve harm destinations through `gym/local-fixture-targets.js` and the video control's benign link resolves to the typed local sink. The focused contract test checks each mapping and rejects absolute destinations; existing regression checks remain behavior-oriented and do not promote the seven fixtures to independent harm evidence.
+These pages now resolve harm destinations through `gym/local-fixture-targets.js` and the video control's benign link resolves to the typed local sink. The focused contract test checks each mapping and rejects absolute destinations. Level 6 also pairs an extension-disabled local-sink control with the extension-enabled protected regression, so browser-native popup suppression cannot be misattributed to NavSentinel. These behavior-oriented regressions do not promote the seven fixtures to independent harm evidence.
 
 ## Remediated in the RW-journey #449 slice
 
