@@ -18,6 +18,9 @@ on:
       - 'package-lock.json'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   vision-lab:
     runs-on: ubuntu-latest
