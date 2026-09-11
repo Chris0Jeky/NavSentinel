@@ -29,6 +29,9 @@ jobs:
   build-and-unit:
     name: Build / Unit
     runs-on: ubuntu-latest
+    # Keep dependency installation, tests, and packaging bounded if a tool
+    # process stops responding.
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -145,6 +148,9 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [build-and-unit, e2e]
     runs-on: ubuntu-latest
+    # A tag release must not hold a runner indefinitely if packaging or the
+    # release action stalls.
+    timeout-minutes: 30
     permissions:
       contents: write
     steps:
