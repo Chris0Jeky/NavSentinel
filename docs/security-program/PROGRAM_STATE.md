@@ -1,10 +1,13 @@
 # Programme state
 
-As of 2026-09-02, based on current `main`
-`de3e6c96bbc1f5b40ec4c36618f8763cb91b845e`, merged programme seed
+As of 2026-09-12, based on the reconciled #649 merge receipt
+`c78ba99da5d3357833a5fcd3f4f09bdb255db7a6`, later #687 receipt
+`63e3bbbc401f272e88abc88a4f890ba4003bdb1f`, later #655 receipt
+`9b7ce93652b08c0e7f124f3ef132e46c6ab39909`, merged programme seed
 `d2762f296b07bfd650971141bf9bf7a9b2c016b9`, and the live issue, milestone,
 pull-request, and Actions inventory refreshed for the current #449
-fixture-family vertical.
+fixture-family vertical. Fetch `origin/main` before using this dated receipt as
+an exact build identity.
 
 ## Seeded
 
@@ -48,6 +51,56 @@ The first #186 bridge-peer ordering slice uses the release extension, Playwright
 
 Four ClickFix fixtures now use only an inert sentinel or local static control. Twelve evasion, seven core, and two RW fixtures now share a loopback-only typed target contract. At exact code head `b8a87caf67fad373d2b3e1d35180b64ff901a32b`, the interaction-only release-eligible build in bundled Chromium 143.0.7499.4 completed the composite representative's attack, protected, benign, and mixed arms with sink-enforced one-use target authorities, a test-run TTL, zero fixture-network violations, and zero invalid sink attempts. The benign task reached its sink without UI intervention and persisted one `nav_silent_allow` event, so its truthful outcome is `OBSERVED`, not `NO_SIGNAL`. The retained receipt SHA-256 is `6714563aa23497c69e1fa563fa27296fb82abe71945f94fa2e3abe573534c2df`; its Git fixture hash `967aabfce145b9b3adfb6477f4d69cabd93b74f4197566d4a75e8cb14ac620d3` was independently reproduced, and 56 Chromium platform connection attempts were denied before egress. Earlier local receipts with checkout-dependent hashing, unqualified profile state, incorrect benign outcome, descriptive-only use counts, or an inaccurate arm-lifetime label are `HARNESS_INVALID` and superseded. The RW-01 and RW-06 regression journeys now assert accepted benign local sinks and blocked typed harm follow-ups while remaining `MODELLED`; no mapped legacy destination remains on a safety hold. ClickFix remains browser detection evidence, not OS-paste prevention or real-provider browser evidence, and the evasion, core, and RW fixture families remain `MODELLED` rather than mutation-robustness evidence.
 
+## Live security tracker
+
+This tracker was refreshed from the listed merge receipts on 2026-09-12. The
+browser candidates #600, #609, #636, #640, #641, #643, #644, #649, #657, #608,
+and #655 are merged. Their owner-installed Chrome checks remain consolidated in
+the seven explicit **OPEN — not run** AI-47 rows in
+[`ACTION_ITEMS.md`](../../ACTION_ITEMS.md); no owner result is inferred from a
+merge or from automated Chromium/CI.
+
+The following security-relevant candidates are tracked here. #637 is
+**CLOSED/implemented via #649**, not an active residue route. #658 remains open
+at local head `7bcf9a4`; it has no merge commit and its AI-47 child result is
+**OPEN — not run**. The merge-SHA column is intentionally explicit: an open PR
+has no merge commit to record, so its placeholder must not be replaced with a
+guessed or branch-head SHA.
+
+| PR | Scope | Head at refresh | Base at refresh | Live state | Merge SHA |
+| --- | --- | --- | --- | --- | --- |
+| #649 | Child-frame form target allowance | `04fde241cda6d313b042049c3e118b02381c8954` | `595903af89ff3bfb526e71de68f71f8c9459e6d1` | MERGED; no owner observation | `c78ba99da5d3357833a5fcd3f4f09bdb255db7a6` |
+| #687 | Delayed clipboard rewrite adversarial lane | `b43de5d82c599f7e2b32e6d7e81668b308ec127d` | receipt reconciled after #649 | MERGED test-only; `MODELLED` evidence and `UNVERIFIED` diagnostic; no owner Chrome or OS-prevention claim | `63e3bbbc401f272e88abc88a4f890ba4003bdb1f` |
+| #655 | Imported integer Options log limit | `2f4bc289efe4ad610f2ae4e8926bb84dce3c5fa8` | receipt reconciled after #649 | MERGED; AI-47 row 6 remains **OPEN — not run** | `9b7ce93652b08c0e7f124f3ef132e46c6ab39909` |
+| #658 | Conditional same-field Options writes | `7bcf9a4` | local pending head | **OPEN — not run; not merged** | **PENDING — no merge commit** |
+
+The #649 child-form checks are now subject to AI-47 row 4, which remains
+**OPEN — not run** until Chris records the observation. #687 is merged test-only
+work; its `MODELLED` evidence and `UNVERIFIED` diagnostic do not establish owner
+Chrome behavior, OS-paste prevention, or a release claim. If #658 merges,
+refresh the generated security-program views and this tracker from the resulting
+exact `main` head; do not promote a pending or diagnostic result beyond its
+machine-checked `MODELLED` ceiling.
+
+## Prioritized open follow-ups
+
+These are live routing entries, not implementation or acceptance claims:
+
+1. #688 — effective submitter authority.
+2. #691 — export privacy/correctness.
+3. #684 — receipt integrity.
+4. #692 — release clean gate.
+5. #686 — pending navigation ordering.
+6. #690 — autosave/import ordering.
+7. #689 — export boundary.
+8. #693 — mutation-observer test determinism.
+9. CLIP-005 — timing, focus, and ignore-warning mutations.
+
+`NEXT_WORK.md` owns this execution order. #572 remains parked on SP-F-013 and
+#599 remains outside the one-time browser-queue authorization. C-04
+authenticated-recovery and live-port-death work remains open without
+manufacturing reachability; owner and external gates remain in `ACTION_ITEMS.md`.
+
 ## Active authority
 
 - Live source, tests, GitHub, [Project_Roadmap.md](../Project_Roadmap.md), and current owner gates outrank this programme state.
@@ -55,7 +108,9 @@ Four ClickFix fixtures now use only an inert sentinel or local static control. T
   milestone routing and trust-boundary contracts; it is not another roadmap or
   human queue.
 - Release-integrity blockers, including bridge identity/recovery and extension-origin protection-lowering decisions, retain their existing homes.
-- [ACTION_ITEMS.md](../../ACTION_ITEMS.md) remains the only human-action queue. Its cursor remains AI-19; this seed closes no human decision or manual browser check.
+- [ACTION_ITEMS.md](../../ACTION_ITEMS.md) remains the only human-action queue.
+  Its cursor remains AI-19 and the named browser checks are consolidated under
+  AI-47; this programme refresh closes no human decision or manual browser check.
 - The release, research, proving-ground, and optional-native profiles remain separate. The #449 vertical changes no extension runtime behavior, permission, remote service, or committed build output.
 
 ## Source boundary
