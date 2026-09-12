@@ -623,11 +623,13 @@ describe("suite storage and allowlist migration", () => {
       eventLog: [
         { id: "ordinary", ts: 1, kind: "nav_click_block", pageSite: "Portal.Example.Test." },
         { id: "ipv4", ts: 2, kind: "nav_click_block", pageSite: "127.0.0.1" },
-        { id: "ipv6", ts: 3, kind: "nav_click_block", pageSite: "[2001:DB8::1]" },
-        { id: "empty", ts: 4, kind: "nav_click_block", pageSite: "" },
-        { id: "full-url", ts: 5, kind: "nav_click_block", pageSite: "https://portal.example.test/account?token=secret#fragment" },
-        { id: "path", ts: 6, kind: "nav_click_block", pageSite: "portal.example.test/account" },
-        { id: "invalid", ts: 7, kind: "nav_click_block", pageSite: "not a hostname" },
+        { id: "ipv4-noncanonical", ts: 3, kind: "nav_click_block", pageSite: "127.000.000.001" },
+        { id: "ipv6", ts: 4, kind: "nav_click_block", pageSite: "[2001:DB8::1]" },
+        { id: "ipv6-noncanonical", ts: 5, kind: "nav_click_block", pageSite: "[2001:0DB8:0:0:0:0:0:1]" },
+        { id: "empty", ts: 6, kind: "nav_click_block", pageSite: "" },
+        { id: "full-url", ts: 7, kind: "nav_click_block", pageSite: "https://portal.example.test/account?token=secret#fragment" },
+        { id: "path", ts: 8, kind: "nav_click_block", pageSite: "portal.example.test/account" },
+        { id: "invalid", ts: 9, kind: "nav_click_block", pageSite: "not a hostname" },
       ],
     });
 
@@ -635,6 +637,8 @@ describe("suite storage and allowlist migration", () => {
     expect(stored.map((entry) => entry.pageSite)).toEqual([
       "portal.example.test",
       "127.0.0.1",
+      "127.0.0.1",
+      "2001:db8::1",
       "2001:db8::1",
       undefined,
       undefined,

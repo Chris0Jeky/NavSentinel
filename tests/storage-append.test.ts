@@ -533,7 +533,9 @@ describe("appendEvent", () => {
   it.each([
     ["Portal.Example.Test.", "portal.example.test"],
     ["127.0.0.1", "127.0.0.1"],
+    ["127.000.000.001", "127.0.0.1"],
     ["[2001:DB8::1]", "2001:db8::1"],
+    ["[2001:0DB8:0:0:0:0:0:1]", "2001:db8::1"],
     ["2001:DB8::2", "2001:db8::2"],
   ])("normalizes valid direct pageSite hostnames: %s", async (pageSite, expected) => {
     const { chrome, store } = createChromeMock();
