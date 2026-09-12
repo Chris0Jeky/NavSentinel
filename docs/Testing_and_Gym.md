@@ -142,9 +142,17 @@ Representative E2E coverage lives in:
 - `tests/e2e/navsentinel.stress.spec.ts`
 - `tests/e2e/corpus-validation.spec.ts`
 - `tests/e2e/phase2-detections.spec.ts`
+- `tests/e2e/bridge-reload-recovery.spec.ts`
 
 This list is intentionally representative because spec counts move. Use
 `rg --files tests/e2e -g '*.spec.ts'` for current inventory.
+
+The issue #175 bridge-reload regression has a no-reload native benign control and
+a second arm that calls `page.reload()`, requires fresh capture and bridge
+readiness, and repeats the control once against a typed loopback sink. The sink
+arms no harmful role and the browser route denies unexpected HTTP(S) origins.
+This is automated reload/reinitialization evidence only; it does not simulate
+periodic heartbeat or recovery from a live `MessagePort` death.
 
 It currently covers:
 
