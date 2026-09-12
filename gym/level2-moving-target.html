@@ -2,6 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8" />
+  <script src="local-fixture-targets.js"></script>
   <title>Level 2 - Moving Target Overlay</title>
   <style>
     body { font-family: sans-serif; padding: 24px; height: 200vh; }
@@ -25,7 +26,8 @@
 
   <button id="realBtn">Real Button</button>
 
-  <a id="trap" href="https://example.org" target="_blank" rel="noreferrer"></a>
+  <a id="trap" target="_blank" rel="noreferrer"
+     data-navsentinel-local-target="harm" data-navsentinel-scenario="NS-ADV-UI-002"></a>
 
   <script>
     const trap = document.getElementById('trap');

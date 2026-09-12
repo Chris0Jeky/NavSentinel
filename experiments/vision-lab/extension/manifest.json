@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "NavSentinel · Vision Lab",
+  "version": "0.1.0",
+  "description": "Experimental opt-in interaction guard and inert scenario lab. Not the production NavSentinel extension.",
+  "permissions": ["storage", "scripting", "activeTab"],
+  "host_permissions": ["http://127.0.0.1/*"],
+  "optional_host_permissions": ["https://*/*", "http://*/*"],
+  "background": {"service_worker": "worker.js"},
+  "action": {"default_popup": "popup.html", "default_title": "NavSentinel Lab · inspect this page"},
+  "content_security_policy": {"extension_pages": "script-src 'self'; object-src 'none'; base-uri 'none'"},
+  "icons": {"32": "icon32.png", "128": "icon128.png"}
+}

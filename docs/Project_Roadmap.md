@@ -1,6 +1,6 @@
 # NavSentinel Project Roadmap
 
-*Created 2026-04-09. Truth refresh 2026-07-10; live/status sync 2026-08-30.*
+*Created 2026-04-09. Truth refresh 2026-07-10; live/status sync 2026-09-04.*
 
 This is the execution roadmap. [`Product_Strategy.md`](Product_Strategy.md) owns
 the product thesis, portfolio boundaries, and evidence gates; GitHub issues own
@@ -30,7 +30,7 @@ readiness is tracked only by the outcome gates below.
 
 | Gate | State | Required next move |
 |---|---|---|
-| Release integrity | **Blocked** | RI-01 extension-origin decision authority (#356/#464/#466 merged; #601's first suspicious `_blank` Proceed-once vertical is prepared but AI-39 and the remaining action classes stay open); RI-02 visual-sim excision (#514 merged under a recorded Gate-3 waiver, not a real-Chrome pass); fake DNR removed (#528); purpose-specific data minimization and reset (#468/#535); beta-off JS behavior (#532); #175/#186 bridge identity/recovery |
+| Release integrity | **Blocked** | RI-01 extension-origin decision authority (#356/#464/#466 merged; #601's first suspicious `_blank` Proceed-once vertical is prepared under the AI-47/former-AI-39 post-merge check, while the remaining action classes stay open); RI-02 visual-sim excision (#514 merged under a recorded Gate-3 waiver, not a real-Chrome pass); fake DNR removed (#528); purpose-specific data minimization and reset (#468/#535); beta-off JS behavior (#532); #175/#186 bridge identity/recovery |
 | Release profile | **Implemented; Gate-3 passed** | AI-9 selected interaction-only. PR #509 merged as `3faeb1e`, closing #321. Chrome 150.0.7871.187 passed on executable/artifact head `f6815be`; default runtime/manifest/package omit reputation; deterministic `research-reputation` is unpacked-only and non-release |
 | Brand/store | **Blocked** | AI-19 name clearance; #455 pre-collection disclosure/consent; one canonical claims-verified listing; assets and fresh-install checks |
 | Detection validation | **Open** | #417 methodology, #416/#426 rerun, confidence-aware reporting |
@@ -61,14 +61,15 @@ not waive an owner, browser, measurement, privacy, permission, or external gate.
 
 ### Live execution truth
 
-Refreshed 2026-09-02 from remote GitHub and `origin/main` at
-`4883a8eaef1b35ea176802ee8d0d97afbc854b81`. Four PRs are open: #572 remains
-parked before AI-31 on SP-F-013; #599 is reconciled and hosted-green but owner
-policy and branded-Chrome gates remain open; and #600 is reconciled,
-hosted-green, and parked on AI-38. Stacked PR #608 carries the first #601
-Proceed-once vertical and remains parked on AI-39. #607 and test-only #605
-merged; #449 remains open for the retained external-destination holds. There is no
-tag, GitHub release, or CWS release. These values are a dated snapshot, not an
+Refreshed 2026-09-04 from remote GitHub and `origin/main` at `a440e35`. Six PRs
+are open, all ready-for-review and clean with green exact-head CI, and every one
+is held on a human Chrome gate: #572 (AI-31, additionally parked on SP-F-013),
+#599 (AI-37), #600 (AI-38), #608 (AI-39, stacked on #600), #609 (AI-40), and
+#636 (AI-41). PR #636 turns the #593 hidden-media probe into a green regression
+by denying inherited click authority to gesture-less child-frame navigation;
+issue #593 stays open, and the remaining `form.submit(target=_top)` residue is
+tracked in #637. Test-only #605 merged on 2026-09-02 as
+`4883a8eaef1b35ea176802ee8d0d97afbc854b81`. There is no tag, GitHub release, or CWS release. These values are a dated snapshot, not an
 instruction to trust cached refs. Re-derive them with `git fetch origin`, the
 GitHub REST/API issue and pull-request views, and Actions before acting. The exact
 2026-07-10 audit baseline remains in `Product_Strategy.md` as provenance rather
@@ -98,8 +99,9 @@ stacked PR #608 (`feat/issue601-extension-origin-allow`) wires the broker into o
 real suspicious `_blank` Proceed-once path, excluding prompts that still carry
 overlay-cleanup Undo, with one-time exact-document URL release, worker-side
 origin/hash/context validation and openerless tab creation, plus a URL-free
-extension popup. AI-39 and all other protection-lowering action classes
-remain open, so RI-01 is not complete. AI-20 is resolved: Chris left the original
+extension popup. AI-47's former-AI-39 sub-result and all other
+protection-lowering action classes remain open, so RI-01 is not complete. AI-20
+is resolved: Chris left the original
 Defender-quarantined ClickFix property fixture quarantined, while an exact
 runtime-equivalent representation passed Defender scanning and the full
 old-branch gates. The branch is not merge-ready.
@@ -187,7 +189,7 @@ maintainer chooses disclosure/ownership.
 
 | ID | Priority | Action | Owner/gate | Existing home | Done when |
 |---|---|---|---|---|---|
-| RI-01 | P0 beta blocker | First suspicious `_blank` Proceed-once vertical prepared in PR #608; move the remaining proceed/allow/trust/resume and security-relevant Undo authority out of page-injected UI | Agent + Gate-3 (AI-39 for first vertical) | #601 | Injected UI is warn/cancel only; extension-origin action is tab/destination-bound with TTL; synthetic input, trusted-click redressing, host tamper/removal, tab switch, and stale state cannot lower protection |
+| RI-01 | P0 beta blocker | First suspicious `_blank` Proceed-once vertical prepared in PR #608; move the remaining proceed/allow/trust/resume and security-relevant Undo authority out of page-injected UI | Agent + Gate-3 (AI-47 step 2 / former AI-39 for first vertical) | #601 | Injected UI is warn/cancel only; extension-origin action is tab/destination-bound with TTL; synthetic input, trusted-click redressing, host tamper/removal, tab switch, and stale state cannot lower protection |
 | RI-02 | P0 beta blocker | **Merged via #514 under a recorded Gate-3 waiver (not a real-Chrome pass):** excise visual-sim capture, templates, scoring hook, WAR, tests, and state | Agent + recorded waiver | #424 | No viewport capture path or placeholder asset remains; #374 closed after the current build and all 12 performance budgets passed |
 | RI-03 | P0 beta blocker | #356 is complete; recreate or explicitly defer #273 from current `main` | Agent first; Gate-3 only if #273 is recreated (AI-8 remains blocked until then) | #273/#356; #399 stays deferred | #356 remains regression coverage, replacement guides point only to current green branches, and #399 remains outside beta blockers until its measurement methodology is ready |
 | RI-04 | P0 product decision | **Implemented via merged PR #509; AI-25 Gate-3 passed:** interaction-only selected and implemented; retain research reputation as unpacked-only | Chris + agent + Gate-3 | #321 / AI-9 / AI-25 | Default release receipt, manifest/WAR, runtime, package checks, tests, and claims agree; research profile is deterministic, visibly non-release, and package/release rejected |
@@ -236,7 +238,7 @@ See the exact sets, comments, state reasons, labels, and pre/post counts in the
    fund only Decision Journal + recovery guidance; otherwise change segment/
    position or stop before advanced architecture.
 
-Last updated: 2026-08-30
+Last updated: 2026-09-03
 
 ---
 
@@ -603,12 +605,15 @@ Results inform P1-02 hardening priorities.
 **Corpus-v2 status (#417):** the 2026-05-01 28% number is methodologically invalid in both
 directions (served from 127.0.0.1 → domain/reputation signals neutered; synthetic
 `isTrusted=false` clicks; static snapshots miss JS-injected forms) and its raw per-page
-results are gitignored. The rebuild (#417) has four pillars: **(1) protected-vs-fired scoring —
-DONE** (`tests/corpus/corpus_scoring.ts`, unit-tested; a post-render `nav_rollback` no longer
-counts the same as a pre-harm block/prompt, so the TP number means "the user was protected");
-**(2) real-hostname routing, (3) trusted clicks, (4) a committed manifest — remain**, each
-needing a headed run to validate. The corpus TP triage (#426) is gated on this rebuild + a
-headed re-run.
+results are gitignored. The rebuild (#417) has four pillars: **(1) protected-vs-fired scoring:
+DONE** (`tests/corpus/corpus_scoring.ts`, unit-tested; a signal that fires but fails to stop
+the independent harm receipt is not protection); **(2) real-hostname replay and (3) trusted
+click mechanics: INTEGRATED** through the shared static runner and proved only with reserved
+`.test` contract pages; **(4) an owner-curated committed manifest/result: PENDING**. The runner
+now fails the whole run closed when readiness, routing, input, cleanup, or denominator
+completion fails. Snapshot JavaScript/dynamic-form replay, the headed owner corpus run,
+efficacy, and Gate-3 remain unverified. The corpus TP triage (#426) is gated on that valid
+headed rerun.
 
 #### P1-07: CDS evasion red-team test suite
 

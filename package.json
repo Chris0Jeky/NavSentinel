@@ -7,6 +7,13 @@
     "node": "^20.19.0 || ^22.13.0 || >=24"
   },
   "scripts": {
+    "vision:start": "node experiments/vision-lab/daemon/server.cjs",
+    "vision:build": "node experiments/vision-lab/scripts/build.cjs",
+    "vision:test": "node --test experiments/vision-lab/tests/*.test.cjs",
+    "vision:test:browser": "node scripts/vision-lab/smoke-browser.mjs",
+    "vision:desktop:install": "npm ci --prefix experiments/vision-lab/desktop && node experiments/vision-lab/desktop/node_modules/electron/install.js",
+    "vision:desktop": "npm start --prefix experiments/vision-lab/desktop",
+    "vision:test:desktop": "node scripts/vision-lab/smoke-desktop.mjs",
     "dev": "vite",
     "build": "node scripts/build-extension.mjs",
     "build:research-reputation": "node scripts/build-extension.mjs research-reputation",
@@ -24,6 +31,8 @@
     "test:e2e:live": "playwright test -c playwright.live.config.ts",
     "test:e2e:stress": "playwright test -c playwright.stress.config.ts",
     "test:e2e:corpus": "playwright test -c playwright.corpus.config.ts",
+    "test:e2e:corpus:contract": "playwright test -c playwright.corpus.config.ts --grep @corpus-contract",
+    "test:e2e:maintainer-headed": "playwright test -c playwright.maintainer.config.ts",
     "demo:showcase": "node scripts/run_demo.mjs core",
     "demo:showcase:operator": "node scripts/run_demo.mjs operator",
     "demo:showcase:recovery": "node scripts/run_demo.mjs recovery",
@@ -66,10 +75,10 @@
     "fast-check": "^4.6.0",
     "happy-dom": "^20.9.0",
     "playwright": "^1.49.0",
-    "sharp": "^0.35.3",
+    "sharp": "^0.35.4",
     "typescript": "^5.6.0",
     "typescript-eslint": "^8.59.4",
     "vite": "^8.2.2",
-    "vitest": "^4.1.7"
+    "vitest": "^4.1.11"
   }
 }

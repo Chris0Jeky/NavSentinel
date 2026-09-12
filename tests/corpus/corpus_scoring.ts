@@ -66,6 +66,8 @@ export interface CorpusSignals {
    * overlay — all after the page rendered.
    */
   hadToast?: boolean;
+  /** A one-use inert receipt observed the selected native action reach its destination. */
+  harmReached?: boolean;
 }
 
 export interface CorpusOutcome {
@@ -99,6 +101,14 @@ export function classifyCorpusOutcome(signals: CorpusSignals): CorpusOutcome {
 
   const firedBy = [...kinds].filter((k) => FIRED_LATE_EVENT_KINDS.has(k));
   if (signals.hadToast) firedBy.push("toast");
+  // A pre-harm signal is not protection if the independently routed receipt
+  // proves the selected action nevertheless reached its destination. Preserve
+  // actual signals as late/fired observations; the receipt itself is evidence,
+  // not a product signal.
+  if (signals.harmReached) {
+    for (const signal of protectedBy) if (!firedBy.includes(signal)) firedBy.push(signal);
+    return { level: firedBy.length > 0 ? "fired" : "miss", protectedBy: [], firedBy };
+  }
 
   let level: ProtectionLevel;
   if (protectedBy.length > 0) level = "protected";

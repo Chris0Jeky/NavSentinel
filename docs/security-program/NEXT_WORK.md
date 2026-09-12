@@ -10,26 +10,42 @@ has 8; only those two milestones are active. Planned M2/M3/M4, gated M5,
 passive maintenance, and frozen R1 are not fallback queues. The exact receipt is
 [`GITHUB_ADMIN_RECEIPT.md`](../development-architecture/GITHUB_ADMIN_RECEIPT.md).
 
-PR #572 remains parked before AI-31 on the retained SP-F-013 rollback survivor.
-PR #599 is reconciled and hosted-green, but its owner policy and branded-Chrome
-gates remain open. PR #600 is reconciled and hosted-green but remains parked on
-AI-38. #607 and the bounded test-only #605 slice merged; #449 remains open for
-the retained external-destination holds. PR #608 carries the first #601
-extension-origin Proceed-once vertical, is stacked on #600, and remains gated by
-AI-39.
+As of 2026-09-04, `origin/main` is `a440e35` and the runtime queue is parked in
+full: **#572** (AI-31, still held on the retained SP-F-013 rollback survivor),
+**#599** (AI-37, reconciled with current `main`; owner queue-design decision and
+branded-Chrome check open), **#600** (AI-38, containment; owner media-page
+check), **#608** (AI-39, stacked on #600 and must follow it), **#609** (AI-40,
+branded-Chrome BFCache check), and **#636** (AI-41, the #593 child-frame
+navigation-authority boundary). All six are ready-for-review with green
+exact-head CI; none may be merged by an agent. Issue **#637** is the residue home
+for the remaining child-frame `ns-allow` -> `form.submit(target=_top)` path, and
+#593 stays open. PR #610 merged the bounded
+test-only #449 parent slice for the seven core locality fixtures. PR #613 merged
+the final RW locality sink slice, PR #614 merged loopback sink hardening, and PR
+#615 merged the static RW scenario assertion. Those merges retain the
+MODELLED/local-only ceiling. #420 now has a bounded maintainer-headed runner:
+the operator prepares branded Chrome and reloads the exact build, while the
+runner attaches through loopback CDP for one local benign Gym observation. It
+writes redacted pass/failure receipts but does not schedule, measure FP, or
+claim Gate-3.
 
-1. **Finish and park the first #601 vertical without overclaiming RI-01.** Keep
-   #599 and #600 at their reviewed exact heads and owner gates. #601 moves only
-   suspicious isolated `_blank` Proceed-once authority without an attached
-   overlay-cleanup Undo to the extension popup; keep PR #608 stacked on #600,
-   retain AI-39, and leave the remaining action
-   classes to later bounded slices.
-2. **Extend #449 in bounded fixture-family slices.** The twelve evasion fixtures
-   now share a loopback-only target contract, leaving nine core/RW
-   external-destination holds. Localize those nine before adding declared
-   adjacent mutation axes for `NS-ADV-UI-004`; the representative evasion
-   receipt is not a robustness claim. Keep each sink typed and local rather than
-   building a generic collector.
+1. **The runtime queue is parked; do not open another vertical over it.**
+   #572, #599, #600, #608, #609, and #636 are all parked on owner gates, so no
+   agent-side work remains on them beyond keeping them aligned with current
+   `main` and their exact heads. #600 is containment; #601 (PR #608) remains the
+   durable extension-origin authority outcome and must follow #600 rather than
+   overlap its capture and loader seams. New work goes to #637 or the next
+   bounded M0/M1 slice, not across those seams.
+2. **Keep #449 locality bounded and typed.** The twelve evasion, seven core,
+   and two RW fixtures now share a loopback-only target contract; no mapped
+   external-destination holds remain. The Evasion 05 representative now records
+   one control plus four deterministic neighbours across two CSS and two
+   structural axes, each with benign and mixed duals. Every arm now compares
+   both live hrefs with its exact normalized harm and benign target authorities
+   before activation. Retain the MODELLED ceiling: randomized DOM, text, localization,
+   timing, viewport, and holdout robustness remain unproved. Before adding
+   declared adjacent mutation axes for `NS-ADV-UI-004`, keep each sink typed and
+   local rather than building a generic collector.
 3. **Keep PR #572 parked before AI-31.** Resume only from its retained local
    survivor and exact service-worker lifecycle checkpoint; do not run the manual
    gate on the current head.
