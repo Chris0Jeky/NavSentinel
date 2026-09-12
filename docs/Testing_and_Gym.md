@@ -570,6 +570,9 @@ CI currently runs on every PR:
 
 The CI E2E job runs serially (`workers: 1`, `fullyParallel: false`); see
 "Worker topology" above for why local runs now match it.
+Hosted E2E tests have a 30-minute test-step timeout inside a 60-minute job
+budget; a timeout fails the check while leaving setup and the following
+evidence-upload step time to run with `if: always()`.
 
 The stress lane (`npm run test:e2e:stress`) runs on a nightly schedule.
 The corpus and FP measurement lanes run manually (they require local data).

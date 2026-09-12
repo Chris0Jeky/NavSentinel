@@ -1,8 +1,148 @@
 # NavSentinel handoff
 
-Updated 2026-08-30. This is an optional short snapshot; live Git/GitHub state,
+Updated 2026-09-08. This is an optional short snapshot; live Git/GitHub state,
 product tests, `docs/Project_Roadmap.md`, and `ACTION_ITEMS.md` are authoritative.
-Historical cycle detail remains in `ORCHESTRATOR.md` and is not required reading.
+Historical cycle detail is linked from `ORCHESTRATOR.md` to its archive and is not
+required reading.
+
+## 2026-09-08 issue wave (22:42 UTC snapshot)
+
+Chris authorized a multi-agent issue/PR wave, including bounded fixes from later
+milestones, while explicitly retaining existing human Chrome gates. This is
+the scope for this wave, not activation of frozen research or a gate waiver.
+Luna xhigh handled paved implementation; Terra high supplied independent
+reviews and the harder conditional-settings-write implementation.
+
+PR #651 merged as `b81ffb41e4f78aa1d02482a85a4128de4c41f464` after exact-head
+Build / Unit, E2E, and Vision Lab success, independent review, and comment
+triage. Fresh local proof passed 126 Lab contracts, the deterministic build,
+and all 16 browser checkpoints; post-merge main CI also passed. Its two nonblocking UI findings became #652
+and #653, addressed by separate PR #656 rather than reopening the review loop.
+
+| PR | Scope | Remaining boundary |
+| --- | --- | --- |
+| #654 | #417 inert loopback production-CLI transport tests | Merged as `3cc0928` after green CI and independent review; no owner corpus or efficacy claim |
+| #655 | #648 imported integer log limits remain saveable | Parent #643, then AI-43 with the added `55` import check |
+| #656 | #652/#653 Lab initial-auth errors and evicted-tab badge clearing | Independent review passed; refreshed hosted E2E pending |
+| #657 | #646 canonical IP `pageSite` association | Parent #644, then AI-44; independent review found no blocker |
+| #658 | #647 conditional concurrent Options writes | Parent #643, then AI-43; independent review passed, E2E pending |
+| #660 | Patch Sharp and Vitest development dependencies | Clean Codex review; hosted E2E pending, no Chrome gate |
+
+The corpus tests passed 37/37 with typecheck/lint; Options passed its build,
+typecheck/lint and strict serial import/save/export browser regression; the
+Lab fixes passed 127 contracts and 16 browser checkpoints. These are automated
+proofs, not owner-installed Chrome acceptance.
+
+The IP fix passed 254 focused tests plus typecheck/lint/build. Conditional
+settings writes passed 3,159 unit tests plus typecheck/lint/build and a real
+two-window race regression. The known quarantined property-test file was absent
+locally and its deletion was never staged; full hosted CI remains the complete
+checkout check. Legacy Python Lab smoke debt exposed in inherited code on
+#657 is tracked in #659; the supported Node browser lane passes independently.
+
+The dependency-only change passed all 3,184 tests across 110 files, including
+the property-test file, plus typecheck/lint/build and a Sharp SVG-to-PNG
+roundtrip. `npm audit` reports zero vulnerabilities with Sharp 0.35.4 and
+Vitest 4.1.11, replacing the prior one high/two moderate development findings.
+Hosted Build / Unit and Vision Lab pass. No production dependency or runtime
+source changed in this slice.
+
+Human queue: `ACTION_ITEMS.md` remains the register; retain AI-19 and the
+post-merge checks already listed there. Branch-held gates include #572 AI-31,
+#599 AI-37, #600 AI-38, #608 AI-39, #609 AI-40, #636 AI-41, #640 AI-42,
+#643 AI-43, #644 AI-44, #641 AI-45, and #649 AI-46. Follow #600 before #608,
+#636 before #649, #640 before #641, and each new fix after its parent. Retarget
+children and re-prove against the new base before merging. #572 also retains
+its pre-Gate-3 SP-F-013 blocker. No human result or waiver was supplied here.
+
+Local receipts and the #655 candidate extension are under
+`artifacts/issue-wave-20260908/` in the primary checkout. Preserve the existing
+`tests/clickfix-detector.property.test.ts` deletion; it was not committed.
+The older snapshots below are history, including their PR counts and heads.
+Ordinary removal succeeded for the clean log-limit worktree. Corpus, IP, and
+conditional-settings worktrees were preserved after plain `git worktree remove`
+refused the unstaged property-test deletion; no force or restore was used.
+
+## 2026-09-04 live delta
+
+`origin/main` is `a440e35` (PR #635 merged 2026-09-03T21:40Z; PRs #621-#635 were
+the Codex agent's #449 evasion-locality chain plus #622/#623/#625). Six PRs are
+open, all ready-for-review, all `MERGEABLE`/`CLEAN`, and every one held on a human
+Chrome gate per `DECISIONS.md` D-2026-07-03-H. None may be merged by an agent.
+This exceeds D-2026-07-03-D's WIP cap of three open human-gated PRs; no further
+browser-surface PR should be opened until that queue drains. The test-only PR
+#605 named in the 2026-08-30 delta merged on 2026-09-02 as
+`4883a8eaef1b35ea176802ee8d0d97afbc854b81`, so its red-check item is closed.
+
+| PR | Branch | Exact head | Gate | State |
+| --- | --- | --- | --- | --- |
+| #572 | `fix/issue566-modifier-authority` | `e35a88e0a5ea24cf9c33d97b68ccfbeda57974bf` | AI-31 | re-reconciled with `main` today; CI run 33821991601 success. Still PARKED before AI-31 on failure record SP-F-013 (the ~1-in-50 rollback survivor); green CI is not containment evidence |
+| #599 | `fix/issue523-unverified-clipboard-cap` | `d6f6b7efa2dd83e6845d474eb059a81afce863d7` | AI-37 | re-reconciled today; CI run 33821845180 success, unit 3188/3188. Owner #523 queue-design decision and the bridge queue-pressure Chrome check remain open |
+| #600 | `fix/issue560-isolated-input-fence` | `04470a5dc230b07f261c66213c2ba23770fc9cd3` | AI-38 | containment only; owner media-page Chrome check open |
+| #608 | `feat/issue601-extension-origin-allow` | `8b12ffbd3a76c0abdf8fbe8090980640a7bc50e5` | AI-39 | stacked on #600 and must follow it |
+| #609 | `fix/issue569-stale-redirect-chain` | `3f42f7d0ac5607b333433505419fc35593cd7c4e` | AI-40 | branded-Chrome BFCache check open |
+| #636 | `fix/issue593-child-frame-location-20260904` | `344ba6aea8ae0f8edfa108d42e3569598288cf2a` | AI-41 | new today; CI run 33825137291 success; one adversarial review round done (a HIGH `href="#"` forgery bypass fixed and pinned by a new arm) |
+
+PR #636 converts the parked #593 probe
+(`origin/test/issue593-hidden-media-evidence-20260903` @ `cad5bfb`) into a green
+regression: a child-frame trusted click now mints the tab-wide
+`ns-nav-gesture`/`ns-allow-nav` windows only when the frame declared a
+cross-document http(s) anchor or a form submit control, and gesture-less
+child-initiated `top` navigation falls through to the existing rollback path. It
+raised the `capture_isolated` perf budget 66 -> 67 KB (the research-reputation
+profile was at ~0.1 KB headroom). Limits, stated plainly: the signal is forgeable
+by a `<form><button>` that `preventDefault()`s then scripts navigation; nothing
+changes inside the worker's 5 s typed-origin window; and a hidden frame
+navigating ITSELF is out of model - it reaches the sink with zero input, proven
+by a no-input control arm. Issue #593 stays open.
+
+Residue is filed as issue #637 (child-frame `ns-allow` ->
+`form.submit(target=_top)` -> `ns-allow-target-nav`), milestone
+`v0.5.1-interaction-integrity`, labels `bug` / `track:interaction`.
+
+Each of AI-31, AI-37, AI-38, AI-39, AI-40, and AI-41 is defined **only** inside
+its own PR branch's `ACTION_ITEMS.md` and `docs/agentic/GATE3_GUIDES.md`. `main`
+does not list them, so the human queue on `main` is incomplete; `ACTION_ITEMS.md`
+now carries a pointer list under "Branch-held Gate-3 items".
+
+Branch preservation: the unpushed #496 probe commits were pushed today as
+`fix/issue496-doubleclick` @ `b75e5fc`. The uncommitted 2026-08-30 experiment for
+a fail-closed cold-worker baseline was preserved (unverified, not applied) on
+pushed branch `wip/issue566-baseline-fail-closed-20260830` @ `5df408c`. Local-only
+superseded branches `docs/security-wave-handoff-20260902` @ `f5ac384` (its
+NEXT_WORK refresh is folded into this change) and
+`refactor/issue588-bundle-headroom` @ `cae79c5` (pre-rebase v1; v2 merged as
+#590), plus remote `docs/issue557-post-merge-record` @ `cab309e`, are candidates
+for owner-approved retirement under AI-23. The only fact worth keeping from the
+last of those is that PR #557 merged as
+`d132eace0d2b7e905d5d6eb5ad4c831236f925b2` closing #555/#559/#568; it is now in
+the AI-29 resolved log line. About 60 Codex worktrees under
+`C:\Users\Public\codex-shell-home\NavSentinel-*` were inspected; all are merged
+and clean and none holds unpreserved work.
+
+Four items on `main` are stale and were reworded today. AI-30 (#567 / PR #570),
+AI-33 (#530 / PR #582), AI-35 (#539 / PR #586), and AI-36 (#558 / PR #589) read
+as pre-merge gates "against the eventual PR", but those PRs merged on 2026-08-27:
+#570 head `20fad0ac9d19bcbe3a1ca6b2d43ab14c7438ce53` merge
+`ff063a677b6c633c1eca4955dbfe9b277e529f3a`; #582 head
+`02b8e5c4504ff5127a9b6c4af7cf8cc30fd07da2` merge
+`d1895b51763a6c6b7b5280f0ea80664d2f0c796d`; #586 head
+`96be8e09cfe51168e4231625154ed366a408940b` merge
+`b68f403a7f14379305cf1376f3ee4f188ef31493`; #589 head
+`ee75bf408e04f528b0ee08006471f318fba3ef96` merge
+`003905094982b9a772cc5f06fe504d372c99dd6b`. **No waiver record for those four
+merges was found** in `docs/agentic/DECISIONS.md`, `HANDOFF.md`,
+`ACTION_ITEMS.md`, or `docs/Project_Roadmap.md`; they are therefore recorded as
+open post-merge Gate-3 checks on current `main`. No waiver or owner decision is
+claimed or inferred. Their four guides in `docs/agentic/GATE3_GUIDES.md` now carry
+matching post-merge banners that skip the open-PR prechecks and use the
+`... on main at <SHA>` reply lines.
+
+Environment, for the next session: Windows Defender quarantines
+`tests/clickfix-detector.property.test.ts` in agent worktrees, so it can appear
+as a spurious ` D` in `git status` - never stage that deletion. Leaked Codex MCP
+containers had taken free RAM to ~600 MB and were swept with the estate hygiene
+script before today's work.
 
 ## 2026-08-30 live delta
 
@@ -156,7 +296,11 @@ evidence gate.
 ## Next sequence
 
 Chris resolves AI-19, may run optional AI-24, and decides AI-23 worktree/branch
-retirement. Agent-side, finish or park #599/#600 before opening another runtime
-vertical, repair PR #605's tracked #595 failure, keep #572 parked, and retain
-#417 as the only planned-milestone methodology exception. Refresh Git/GitHub
-before selecting any new slice.
+retirement; the branch-held Gate-3 items AI-31/37/38/39/40/41 are his too, and
+#608 must not be checked before #600. The finish-or-park step is done: all six
+open runtime PRs (#572, #599, #600, #608, #609, #636) are parked on owner gates,
+so no agent-side work remains on them. Agent-side next is issue #637 or the next
+bounded M0/M1 slice; do not open new runtime verticals that overlap the #600 /
+#608 capture and loader seams. The four post-merge Gate-3 checks (AI-30, AI-33,
+AI-35, AI-36) now apply to current `main` and have no waiver record. Refresh
+Git/GitHub before selecting any new slice.

@@ -12,6 +12,7 @@ export default defineConfig({
   fullyParallel: topology.fullyParallel,
   workers: topology.workers,
   retries: process.env.CI ? 1 : 0,
+  failOnFlakyTests: !!process.env.CI,
   reporter: "list",
   projects: [
     {
