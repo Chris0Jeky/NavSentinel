@@ -766,3 +766,10 @@ body {
   .sidebar-info { display: none; }
   .card-body--grid { grid-template-columns: 1fr; }
 }
+/* Persistent, keyboard-accessible state survives pane navigation and status flashes. */
+.settings-state { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 12px 24px; background: var(--ns-bg-raised, #17202a); border-bottom: 1px solid var(--ns-amber, #e5b45a); }
+.settings-state[hidden] { display: none; }
+#dirtyStatus { flex: 1; font-weight: 600; }
+.cleanup-status { color: var(--ns-text-muted, #a1a7b3); font-weight: 600; }
+.cleanup-status[data-state="active"] { color: var(--ns-green); }
+.cleanup-status[data-state="paused"] { color: var(--ns-red); }

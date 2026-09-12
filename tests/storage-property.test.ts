@@ -149,6 +149,7 @@ const arbPromptOutcomeEntry: fc.Arbitrary<PromptOutcomeEntry> = fc.record(
 );
 
 const arbSuiteSettings: fc.Arbitrary<SuiteSettings> = fc.record({
+  autoSave: fc.boolean(),
   nav: fc.record({
     defaultMode: fc.constantFrom("smart" as const, "strict" as const, "off" as const),
     debug: fc.boolean(),
