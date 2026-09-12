@@ -71,8 +71,8 @@ separate reviewed branch identity from integrated `main` identity.
 | PR | Scope | Head at refresh | Base at refresh | Live state | Merge SHA |
 | --- | --- | --- | --- | --- | --- |
 | #649 | Child-frame form target allowance | `04fde241cda6d313b042049c3e118b02381c8954` | `595903af89ff3bfb526e71de68f71f8c9459e6d1` | MERGED; no owner observation | `c78ba99da5d3357833a5fcd3f4f09bdb255db7a6` |
-| #687 | Delayed clipboard rewrite adversarial lane | `b43de5d82c599f7e2b32e6d7e81668b308ec127d` | receipt reconciled after #649 | MERGED test-only; `MODELLED` evidence and `UNVERIFIED` diagnostic; no owner Chrome or OS-prevention claim | `63e3bbbc401f272e88abc88a4f890ba4003bdb1f` |
-| #655 | Imported integer Options log limit | `2f4bc289efe4ad610f2ae4e8926bb84dce3c5fa8` | receipt reconciled after #649 | MERGED; AI-47 row 6 remains **OPEN — not run** | `9b7ce93652b08c0e7f124f3ef132e46c6ab39909` |
+| #687 | Delayed clipboard rewrite adversarial lane | `b43de5d82c599f7e2b32e6d7e81668b308ec127d` | `c78ba99da5d3357833a5fcd3f4f09bdb255db7a6` | MERGED test-only; `MODELLED` evidence and `UNVERIFIED` diagnostic; no owner Chrome or OS-prevention claim | `63e3bbbc401f272e88abc88a4f890ba4003bdb1f` |
+| #655 | Imported integer Options log limit | `d00da7499ba755de05f47fd67e2a05ca5b94dc75` | `63e3bbbc401f272e88abc88a4f890ba4003bdb1f` | MERGED; AI-47 row 6 remains **OPEN — not run** | `9b7ce93652b08c0e7f124f3ef132e46c6ab39909` |
 | #658 | Conditional same-field Options writes | `0dc62f62e722de651169d3646669c0faf06fbd24` | `9b7ce93652b08c0e7f124f3ef132e46c6ab39909` | MERGED; AI-47 row 6 remains **OPEN — not run** | `8a9435349e0dcdbe834bfee2beeeccafd5b39ccf` |
 
 The #649 child-form checks are now subject to AI-47 row 4, which remains
