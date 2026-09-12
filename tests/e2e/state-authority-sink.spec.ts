@@ -27,9 +27,8 @@ import {
 
 const HARM_CONSEQUENCE = "wrong-target-navigation";
 const BENIGN_CONSEQUENCE = "benign-navigation";
-const extensionPath = process.env.EXTENSION_PATH
-  ? path.resolve(process.env.EXTENSION_PATH)
-  : path.resolve(process.cwd(), "extension", "dist");
+const repositoryRoot = path.resolve(process.cwd());
+const extensionPath = path.join(repositoryRoot, "extension", "dist");
 const gymRoot = path.resolve(process.cwd(), "gym");
 
 test.setTimeout(180_000);
@@ -69,6 +68,16 @@ type ArmObservation = {
   invalidAttempts: number;
   browserBackgroundAttemptsDenied: number;
 };
+
+type ExtensionProvenance = {
+  repositoryHead: string;
+  gitSourceSha256: string;
+  executedSourceSha256: string;
+  buildSha256: string;
+  trackedInputCount: number;
+};
+
+let extensionProvenance: ExtensionProvenance | undefined;
 
 const scenarios: readonly ScenarioDefinition[] = [
   {
@@ -165,6 +174,56 @@ function hashDirectory(root: string): string {
   };
   visit(root);
   return hashFiles(files);
+}
+
+function trackedBuildInputs(repositoryHead: string): string[] {
+  const pathspecs = [
+    "extension",
+    "scripts",
+    "package.json",
+    "package-lock.json",
+    "vite.config.ts",
+    "tsconfig.json",
+  ];
+  return execFileSync(
+    "git",
+    ["ls-tree", "-r", "--name-only", "-z", repositoryHead, "--", ...pathspecs],
+    { cwd: repositoryRoot, encoding: "utf8" },
+  ).split("\0").filter(Boolean).map((relativePath) => path.join(repositoryRoot, relativePath));
+}
+
+function prepareCurrentHeadExtension(): ExtensionProvenance {
+  if (process.env.EXTENSION_PATH && path.resolve(process.env.EXTENSION_PATH) !== extensionPath) {
+    throw new Error("State-authority evidence rejects EXTENSION_PATH outside the current worktree build.");
+  }
+  const repositoryHead = execFileSync("git", ["rev-parse", "HEAD"], {
+    cwd: repositoryRoot,
+    encoding: "utf8",
+  }).trim();
+  const sourceFiles = trackedBuildInputs(repositoryHead);
+  const gitSourceSha256 = hashGitFiles(sourceFiles, repositoryHead);
+  const executedSourceSha256 = hashCanonicalWorktreeFiles(sourceFiles);
+  if (executedSourceSha256 !== gitSourceSha256) {
+    throw new Error("Extension build inputs must match the recorded Git head before evidence is collected.");
+  }
+
+  const buildEnvironment = { ...process.env };
+  delete buildEnvironment.EXTENSION_PATH;
+  execFileSync(process.execPath, [path.join(repositoryRoot, "scripts", "build-extension.mjs")], {
+    cwd: repositoryRoot,
+    env: buildEnvironment,
+    stdio: "inherit",
+  });
+  if (!fs.existsSync(path.join(extensionPath, "manifest.json"))) {
+    throw new Error("Current-head extension build did not produce extension/dist/manifest.json.");
+  }
+  return {
+    repositoryHead,
+    gitSourceSha256,
+    executedSourceSha256,
+    buildSha256: hashDirectory(extensionPath),
+    trackedInputCount: sourceFiles.length,
+  };
 }
 
 function allowedLoopbackOrigins(baseUrl: string): Set<string> {
@@ -373,6 +432,7 @@ async function attachReceipt(
   observations: ArmObservation[],
   browserVersion: string,
 ): Promise<void> {
+  if (!extensionProvenance) throw new Error("Current-head extension provenance was not established.");
   const repositoryHead = execFileSync("git", ["rev-parse", "HEAD"], {
     cwd: process.cwd(),
     encoding: "utf8",
@@ -388,10 +448,28 @@ async function attachReceipt(
   const gitSourceSha256 = hashGitFiles(campaignFiles, repositoryHead);
   const executedSourceSha256 = hashCanonicalWorktreeFiles(campaignFiles);
   expect(executedSourceSha256, "Campaign sources must match the recorded Git head").toBe(gitSourceSha256);
+  expect(repositoryHead, "Repository head must not change after the extension build").toBe(extensionProvenance.repositoryHead);
+  const currentBuildInputs = trackedBuildInputs(repositoryHead);
+  expect(
+    hashCanonicalWorktreeFiles(currentBuildInputs),
+    "Extension sources must not change after the current-head build",
+  ).toBe(extensionProvenance.executedSourceSha256);
+  expect(hashDirectory(extensionPath), "Loaded extension bytes must match the current-head build").toBe(
+    extensionProvenance.buildSha256,
+  );
   const receipt = {
     schema_version: 1,
     repository_head: repositoryHead,
-    extension_build_sha256: hashDirectory(extensionPath),
+    extension_build_sha256: extensionProvenance.buildSha256,
+    extension_build_provenance: {
+      build_command: "node scripts/build-extension.mjs",
+      fixed_path: "extension/dist",
+      repository_head: extensionProvenance.repositoryHead,
+      git_source_sha256: extensionProvenance.gitSourceSha256,
+      executed_source_sha256: extensionProvenance.executedSourceSha256,
+      exact_head_match: true,
+      tracked_input_count: extensionProvenance.trackedInputCount,
+    },
     campaign_source: {
       git_sha256: gitSourceSha256,
       executed_sha256: executedSourceSha256,
@@ -420,9 +498,12 @@ async function attachReceipt(
   });
 }
 
+test.beforeAll(() => {
+  extensionProvenance = prepareCurrentHeadExtension();
+});
+
 for (const scenario of scenarios) {
   test(`${scenario.rw} ${scenario.label} has an independent harm oracle under adverse popup policy @stress`, async ({}, testInfo) => {
-    test.skip(!fs.existsSync(extensionPath), "Build the extension before running state-authority evidence.");
     const observations: ArmObservation[] = [];
 
     const baseline = await openArm(scenario, "baseline");
