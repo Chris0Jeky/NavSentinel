@@ -14,6 +14,45 @@ When a decision changes, edit it in place and date the change.
 
 ---
 
+## 2026-09-12 — One-time September browser-queue consolidation
+
+### D-2026-09-12-P — Named human-gated candidates may merge before the consolidated Chrome check
+
+**Decision:** Chris explicitly directed the agent to merge the current open PRs
+that are gated behind human testing and retain that testing as a consolidated
+human TODO. This is a one-time authorization for the named September queue, not
+a standing relaxation of D-2026-07-03-D/H and not a claim that any manual check
+passed.
+
+The authorization applies to #599, #600, #608, #609, #636, #640, #641, #643,
+#644, #649, #655, #657, and #658 only when the candidate still has no blocker
+other than its owner/browser gate or stack ordering. It also accepts #599's
+bounded candidate queue-pressure policy for this consolidation without claiming
+the pending branded-Chrome observation. Every candidate still needs current-base
+conflict resolution, exact-head proving checks, one bounded review, resolved or
+triaged review comments, the three-minute pushed-head age, and oldest-parent-first
+stack handling. A landed parent changes the child's base: retarget and re-prove
+the child before merge.
+
+PR #572 is explicitly outside this waiver because its retained SP-F-013 rollback
+survivor is a pre-Gate-3 containment failure, not missing human testing. Draft PR
+#662 is unrelated to this browser queue. Any new red check, confirmed
+CRITICAL/HIGH defect, unresolved conflict, or changed risk boundary parks that
+candidate rather than borrowing authority from this decision.
+
+The manual checks for candidates that actually merge move to **AI-47** in
+`ACTION_ITEMS.md`. AI-47 remains open until Chris tests the consolidated current
+`main` artifact in owner-loaded branded Chrome and reports the exact head and
+browser version. Automated Chromium and green CI remain regression evidence,
+not a substitute for that result.
+
+**Why:** the old per-branch human queue exceeded its WIP cap and prevented
+otherwise reviewed work from consolidating. The explicit owner direction trades
+pre-merge browser evidence for one coherent post-merge pass while preserving all
+code, review, CI, conflict, and known-defect gates.
+
+---
+
 ## 2026-07-03 — Deferred decisions resolved (maintainer delegated the calls)
 
 Chris delegated: *"take a stance yourself and call the shots in the best way possible."* The stances below adopt and operationalize the 2026-07-02 strategic review (`docs/Course_Correction.md`, `docs/Strategic_Outlook.md`). Reversible; flag any you'd change.
