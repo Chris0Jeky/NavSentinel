@@ -149,6 +149,22 @@ describe("chain_info_cache (#389)", () => {
       expect(sent[1]!.message).toEqual({ type: "ns-get-chain-info" });
       expect(getFreshChainInfo()).toBeNull();
     });
+
+    it("rejects a pre-restore reply that arrives after BFCache invalidation", () => {
+      primeChainInfoCache();
+
+      handleChainInfoPageShow({ persisted: true });
+      expect(sent).toHaveLength(2);
+
+      // The first request was made by the pre-restore document generation. It
+      // must not refill the cache during the window before the fresh reply.
+      reply(0, { ...GOOD, depth: 9 });
+      expect(getFreshChainInfo()).toBeNull();
+
+      const fresh = { ...GOOD, depth: 0, viaKnownRedirector: false, knownRedirectorHops: 0 };
+      reply(1, fresh);
+      expect(getFreshChainInfo()).toEqual(fresh);
+    });
   });
 
   describe("reply validation", () => {

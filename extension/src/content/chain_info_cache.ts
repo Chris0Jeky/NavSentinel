@@ -49,6 +49,7 @@ const CHAIN_INFO_MAX_ATTEMPTS = 2;
 let cachedChainInfo: RedirectChainInfo | null = null;
 let cachedChainInfoAt = 0;
 let primeStarted = false;
+let requestGeneration = 0;
 
 /**
  * Accept only a fully well-formed chain-info reply. The sender is our own
@@ -74,15 +75,18 @@ function isChainInfo(value: unknown): value is RedirectChainInfo {
   );
 }
 
-function requestChainInfo(attempt: number): void {
+function requestChainInfo(attempt: number, generation: number): void {
   try {
     chrome.runtime.sendMessage({ type: "ns-get-chain-info" }, (resp: unknown) => {
-      if (chrome.runtime.lastError) {
-        scheduleRetry(attempt);
-        return;
-      }
-      if (!isChainInfo(resp)) {
-        scheduleRetry(attempt);
+      // Read lastError for every callback, including stale generations, so
+      // Chrome does not report an unhandled message-port error.
+      const runtimeError = chrome.runtime.lastError;
+      // A document restored from BFCache starts a new authority generation.
+      // An earlier worker request can outlive the pagehide/pageshow interval;
+      // never let that reply repopulate the cleared cache.
+      if (generation !== requestGeneration) return;
+      if (runtimeError || !isChainInfo(resp)) {
+        scheduleRetry(attempt, generation);
         return;
       }
       cachedChainInfo = { ...resp };
@@ -90,14 +94,15 @@ function requestChainInfo(attempt: number): void {
     });
   } catch {
     // sendMessage throws synchronously when the extension context is gone.
-    scheduleRetry(attempt);
+    scheduleRetry(attempt, generation);
   }
 }
 
-function scheduleRetry(attempt: number): void {
+function scheduleRetry(attempt: number, generation: number): void {
   if (attempt + 1 >= CHAIN_INFO_MAX_ATTEMPTS) return;
   setTimeout(() => {
-    requestChainInfo(attempt + 1);
+    if (generation !== requestGeneration) return;
+    requestChainInfo(attempt + 1, generation);
   }, CHAIN_INFO_RETRY_DELAY_MS);
 }
 
@@ -109,7 +114,7 @@ function scheduleRetry(attempt: number): void {
 export function primeChainInfoCache(): void {
   if (primeStarted) return;
   primeStarted = true;
-  requestChainInfo(0);
+  requestChainInfo(0, requestGeneration);
 }
 
 /**
@@ -132,13 +137,14 @@ export function handleChainInfoPageShow(
   event: Pick<PageTransitionEvent, "persisted">,
 ): void {
   if (!event.persisted) return;
+  requestGeneration++;
   cachedChainInfo = null;
-  primeStarted = false;
-  primeChainInfoCache();
+  requestChainInfo(0, requestGeneration);
 }
 
 /** Test-only: clear cache and priming state. */
 export function _resetChainInfoCache(): void {
+  requestGeneration++;
   cachedChainInfo = null;
   cachedChainInfoAt = 0;
   primeStarted = false;
