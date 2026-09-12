@@ -20,6 +20,11 @@ const rwFixtures = [
   { file: "rw06-legit-auth-second-popup.html", scenarioId: "NS-ADV-AUTH-005", kind: "dynamic-dual" },
 ] as const;
 
+const clipboardFixture = {
+  file: "clickfix-05-delayed-rewrite.html",
+  scenarioId: "NS-ADV-CLIP-005",
+} as const;
+
 describe("core Gym fixture locality contracts", () => {
   it.each(fixtures)("keeps $file on the typed local-target contract", ({ file, scenarioId, kind }) => {
     const source = fs.readFileSync(path.join(gymRoot, file), "utf8");
@@ -97,5 +102,23 @@ describe("RW Gym fixture locality contracts", () => {
     expect(source).toContain(
       `NavSentinelLocalTargets.url('harm', '${scenarioId}', 'alternate-loopback')`,
     );
+  });
+});
+
+describe("clipboard time-bomb Gym fixture contract", () => {
+  it("keeps malicious and benign consequences on typed inert local targets", () => {
+    const source = fs.readFileSync(path.join(gymRoot, clipboardFixture.file), "utf8");
+    const harmAnchor = source.match(/<a\b[^>]*data-navsentinel-local-target=["']harm["'][^>]*>/iu)?.[0] ?? "";
+    const benignAnchor = source.match(/<a\b[^>]*data-navsentinel-local-target=["']benign["'][^>]*>/iu)?.[0] ?? "";
+
+    expect(source).toContain('<script src="local-fixture-targets.js"></script>');
+    expect(source).not.toMatch(/https?:\/\//u);
+    expect(source).toContain("NAVSENTINEL_SENTINEL_DO_NOT_RUN");
+    expect(source).not.toMatch(/\b(?:powershell|pwsh)(?:\.exe)?\s+(?:-|\/)\w/iu);
+    expect(source).not.toMatch(/\bcmd(?:\.exe)?\s+\/[ck]\b/iu);
+    expect(harmAnchor).toContain(`data-navsentinel-scenario="${clipboardFixture.scenarioId}"`);
+    expect(benignAnchor).toContain(`data-navsentinel-scenario="${clipboardFixture.scenarioId}"`);
+    expect(harmAnchor).not.toMatch(/\bhref\s*=/iu);
+    expect(benignAnchor).not.toMatch(/\bhref\s*=/iu);
   });
 });

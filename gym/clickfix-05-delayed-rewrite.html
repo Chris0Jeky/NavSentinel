@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ClickFix 05 - Delayed clipboard rewrite</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: system-ui, sans-serif;
+      background: #eef2f7;
+      color: #172033;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; }
+    main {
+      width: min(52rem, 92vw);
+      margin: 2rem auto;
+      padding: 1.5rem;
+      background: #fff;
+      border: 1px solid #cbd5e1;
+      border-radius: 12px;
+      box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+    }
+    h1, h2 { margin-top: 0; }
+    .case-card, .otp-card {
+      margin-top: 1.25rem;
+      padding: 1rem;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      background: #f8fafc;
+    }
+    .copy-source {
+      display: inline-block;
+      margin: 0.5rem 0;
+      padding: 0.6rem 0.8rem;
+      border: 1px solid #94a3b8;
+      border-radius: 6px;
+      background: #fff;
+      font: 600 1rem/1.2 ui-monospace, monospace;
+      user-select: text;
+    }
+    label { display: block; margin-top: 0.75rem; font-weight: 600; }
+    input, textarea, button {
+      font: inherit;
+    }
+    input, textarea {
+      display: block;
+      width: 100%;
+      margin-top: 0.35rem;
+      padding: 0.65rem;
+      border: 1px solid #94a3b8;
+      border-radius: 6px;
+      background: #fff;
+    }
+    button {
+      margin-top: 0.75rem;
+      padding: 0.6rem 0.85rem;
+      border: 0;
+      border-radius: 6px;
+      background: #1d4ed8;
+      color: #fff;
+      cursor: pointer;
+    }
+    #activity-log {
+      min-height: 4rem;
+      padding-left: 1.25rem;
+      color: #475569;
+    }
+    #rewrite-overlay {
+      position: fixed;
+      inset: 0 0 0 auto;
+      z-index: 10000;
+      display: none;
+      width: 56vw;
+      height: 100vh;
+      padding: 2rem;
+      overflow: auto;
+      background: rgba(8, 15, 30, 0.97);
+      color: #f8fafc;
+      box-shadow: -12px 0 30px rgba(15, 23, 42, 0.35);
+    }
+    #rewrite-overlay[data-active="1"] { display: block; }
+    #rewrite-overlay textarea {
+      min-height: 6rem;
+      background: #020617;
+      color: #cbd5e1;
+      border-color: #64748b;
+      font-family: ui-monospace, monospace;
+    }
+    #rewrite-overlay .warning {
+      padding: 0.8rem;
+      border: 1px solid #f59e0b;
+      border-radius: 6px;
+      background: #451a03;
+    }
+    .target-anchor, .sink-frame { display: none; }
+    .status { font-weight: 700; }
+  </style>
+  <script>
+    (() => {
+      const mode = new URLSearchParams(location.search).get("mode") || "attack";
+      if (!new Set(["attack", "benign", "mixed"]).has(mode)) {
+        document.documentElement.dataset.navsentinelFixtureInvalid = "unrecognized-mode";
+        return;
+      }
+      document.documentElement.dataset.navsentinelClipboardMode = mode;
+    })();
+  </script>
+</head>
+<body>
+  <main>
+    <h1>Support case workspace</h1>
+    <p>
+      This inert local fixture models a page that looks ordinary when the user manually copies a
+      case token, then performs a delayed clipboard rewrite amid routine progress updates.
+    </p>
+
+    <section class="case-card" aria-labelledby="case-heading">
+      <h2 id="case-heading">Case hand-off</h2>
+      <p>Select and copy this harmless case token with the browser's native copy shortcut:</p>
+      <code id="manual-copy-source" class="copy-source" tabindex="0">CASE-48-DELTA</code>
+      <p id="attack-status" class="status" data-state="ready">Waiting for a manual copy.</p>
+      <ol id="activity-log" aria-label="Local case activity"></ol>
+    </section>
+
+    <section class="otp-card" aria-labelledby="otp-heading">
+      <h2 id="otp-heading">Legitimate one-time code</h2>
+      <p>Copy and paste this synthetic OTP to finish the local control journey:</p>
+      <code id="otp-source" class="copy-source" tabindex="0">847293</code>
+      <label for="otp-input">One-time code</label>
+      <input id="otp-input" inputmode="numeric" autocomplete="one-time-code" />
+      <button id="verify-otp" type="button">Verify local code</button>
+      <p id="otp-status" class="status" data-state="ready">OTP control ready.</p>
+    </section>
+  </main>
+
+  <aside id="rewrite-overlay" aria-labelledby="verification-heading" aria-modal="true" role="dialog">
+    <h2 id="verification-heading">Security verification</h2>
+    <p class="warning">Verify you are human before the case can continue.</p>
+    <ol>
+      <li>Open a terminal window.</li>
+      <li>Press Ctrl+V to paste the verification token.</li>
+      <li>Press Enter to verify.</li>
+    </ol>
+    <p>
+      The field below is a browser-only simulator. It never invokes a native shell and accepts
+      only the exact inert NavSentinel sentinel.
+    </p>
+    <label for="simulated-shell-input">Inert terminal simulator</label>
+    <textarea id="simulated-shell-input" spellcheck="false"></textarea>
+    <button id="simulate-shell-submit" type="button">Send to inert local sink</button>
+    <p id="shell-status" class="status" data-state="ready">No simulated paste submitted.</p>
+  </aside>
+
+  <a id="harm-target" class="target-anchor" target="clipboard-harm-sink"
+     data-navsentinel-local-target="harm"
+     data-navsentinel-scenario="NS-ADV-CLIP-005">Inert harm sink</a>
+  <a id="benign-target" class="target-anchor" target="clipboard-benign-sink"
+     data-navsentinel-local-target="benign"
+     data-navsentinel-scenario="NS-ADV-CLIP-005">Benign control sink</a>
+  <iframe class="sink-frame" name="clipboard-harm-sink" title="Inert harm sink"></iframe>
+  <iframe class="sink-frame" name="clipboard-benign-sink" title="Benign control sink"></iframe>
+
+  <script src="local-fixture-targets.js"></script>
+  <script>
+    (() => {
+      "use strict";
+
+      const MODE = document.documentElement.dataset.navsentinelClipboardMode || "invalid";
+      const MANUAL_TOKEN = "CASE-48-DELTA";
+      const OTP_TOKEN = "847293";
+      const INERT_REWRITE = "NAVSENTINEL_SENTINEL_DO_NOT_RUN";
+      const REWRITE_DELAY_MS = 900;
+      const attackStatus = document.getElementById("attack-status");
+      const activityLog = document.getElementById("activity-log");
+      const overlay = document.getElementById("rewrite-overlay");
+      const shellInput = document.getElementById("simulated-shell-input");
+      const shellStatus = document.getElementById("shell-status");
+      const otpInput = document.getElementById("otp-input");
+      const otpStatus = document.getElementById("otp-status");
+      const harmTarget = document.getElementById("harm-target");
+      const benignTarget = document.getElementById("benign-target");
+      let rewriteArmed = MODE === "attack" || MODE === "mixed";
+
+      function setStatus(element, state, text) {
+        element.dataset.state = state;
+        element.textContent = text;
+      }
+
+      function addNoise(text) {
+        const item = document.createElement("li");
+        item.textContent = text;
+        activityLog.appendChild(item);
+      }
+
+      function selectedText() {
+        return window.getSelection()?.toString().trim() || "";
+      }
+
+      document.addEventListener("copy", () => {
+        if (!rewriteArmed || selectedText() !== MANUAL_TOKEN) return;
+        rewriteArmed = false;
+        setStatus(attackStatus, "manual-copy-observed", "Manual copy observed; local case updates continue.");
+
+        window.setTimeout(() => addNoise("Case metadata refreshed."), 140);
+        window.setTimeout(() => addNoise("Local preview rendered."), 360);
+        window.setTimeout(() => addNoise("Verification step prepared."), 610);
+        window.setTimeout(() => {
+          overlay.dataset.active = "1";
+          overlay.removeAttribute("aria-hidden");
+        }, 720);
+        window.setTimeout(async () => {
+          try {
+            await navigator.clipboard.writeText(INERT_REWRITE);
+            setStatus(attackStatus, "rewrite-complete", "Delayed clipboard rewrite completed.");
+          } catch (error) {
+            document.documentElement.dataset.navsentinelFixtureInvalid = "clipboard-rewrite-failed";
+            setStatus(
+              attackStatus,
+              "rewrite-failed",
+              `Delayed clipboard rewrite failed: ${error instanceof Error ? error.message : "unknown error"}`,
+            );
+          }
+        }, REWRITE_DELAY_MS);
+      });
+
+      document.getElementById("simulate-shell-submit").addEventListener("click", () => {
+        if (shellInput.value !== INERT_REWRITE || harmTarget.dataset.navsentinelLocalTargetReady !== "1") {
+          document.documentElement.dataset.navsentinelFixtureInvalid = "harm-consequence-mismatch";
+          setStatus(shellStatus, "rejected", "The inert local sink rejected this value.");
+          return;
+        }
+        document.querySelector('iframe[name="clipboard-harm-sink"]').src = harmTarget.href;
+        setStatus(shellStatus, "harm-dispatched", "The inert shell-paste consequence reached the local sink.");
+      });
+
+      document.getElementById("verify-otp").addEventListener("click", () => {
+        if (otpInput.value !== OTP_TOKEN || benignTarget.dataset.navsentinelLocalTargetReady !== "1") {
+          setStatus(otpStatus, "rejected", "The synthetic OTP did not match.");
+          return;
+        }
+        document.querySelector('iframe[name="clipboard-benign-sink"]').src = benignTarget.href;
+        setStatus(otpStatus, "verified", "Synthetic OTP verified locally.");
+      });
+
+      overlay.setAttribute("aria-hidden", "true");
+    })();
+  </script>
+</body>
+</html>

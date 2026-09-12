@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
-  "as_of": "2026-09-04",
-  "mapping_count": 66,
+  "as_of": "2026-09-12",
+  "mapping_count": 67,
   "mappings": [
     {
       "id": "MAP-LEVEL-01",
@@ -1135,6 +1135,33 @@
         "gym/clickfix-04-winr.html",
         "tests/e2e/phase2-detections.spec.ts",
         "tests/clickfix-detector.test.ts"
+      ]
+    },
+    {
+      "id": "MAP-CLICKFIX-05",
+      "kind": "clickfix_fixture",
+      "label": "ClickFix 05 delayed clipboard rewrite campaign",
+      "primary_scenario_id": "NS-ADV-CLIP-005",
+      "supporting_scenario_ids": [
+        "NS-ADV-CLIP-001"
+      ],
+      "primary_harm_boundary": "A delayed page write replaces manually copied benign text and the rewritten value reaches an inert shell-paste sink.",
+      "role": "mixed",
+      "current_oracle": "Four serial bundled-Chromium arms require the extension-disabled rewrite to reach a one-use typed sink, the release extension to show its ClickFix warning before any simulated paste, a benign manual OTP copy and paste to remain quiet and usable, and the mixed journey to reach only the benign sink.",
+      "oracle_type": "mixed",
+      "evidence_state": "REGRESSION_PROVEN",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "NavSentinel warns but does not block or restore the rewritten clipboard, so protected harm absence models a user honoring the warning. The browser-only terminal simulator does not cover an OS paste target, branded Chrome, open-web behavior, adjacent timing/focus mutations, or efficacy.",
+      "issue_refs": [
+        "#449",
+        "#452"
+      ],
+      "pr_refs": [],
+      "paths": [
+        "gym/clickfix-05-delayed-rewrite.html",
+        "gym/local-fixture-targets.js",
+        "tests/e2e/clipboard-timebomb.spec.ts",
+        "tests/e2e/proving_ground_fake_sink.ts"
       ]
     },
     {
