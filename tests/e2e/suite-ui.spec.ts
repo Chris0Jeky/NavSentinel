@@ -53,7 +53,11 @@ test("options normalizes trusted-domain input and persists protection changes @s
       await options.locator('.nav-btn[data-section="trust"]').click();
       await options.locator("#trustedInput").fill("https://login.example.com/account");
       await options.locator("#addTrusted").click();
+      await expect(options.locator("#trustedList")).toContainText("example.com");
       await options.locator("#save").click();
+      // Do not reload while the guarded save is still appending its audit event.
+      await expect(options.locator("#saveStatus")).toHaveText("Saved.");
+      await expect(options.locator("#save")).toBeEnabled();
       await options.waitForFunction(async ({ settingsKey, trustedDomainsKey }) => {
         const result = await chrome.storage.local.get([settingsKey, trustedDomainsKey]);
         const settings = result[settingsKey];

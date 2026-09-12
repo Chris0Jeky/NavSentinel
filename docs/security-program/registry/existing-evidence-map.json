@@ -887,7 +887,7 @@
       "oracle_type": "mixed",
       "evidence_state": "MODELLED",
       "evidence_validity": "CURRENT_REGRESSION",
-      "known_limitation": "A single hand-authored threshold fixture is not a mutation campaign or robustness distribution.",
+      "known_limitation": "This product-event regression covers only the default hand-authored Evasion 05 threshold case. MAP-LANE-EVASION-LOCALITY separately owns the deterministic mutation campaign, typed sink, and robustness limitations.",
       "issue_refs": [],
       "pr_refs": [],
       "paths": [
@@ -1461,11 +1461,11 @@
       ],
       "primary_harm_boundary": "Trusted input reaches a typed local wrong-target navigation sink instead of a benign local destination.",
       "role": "mixed",
-      "current_oracle": "A pre-launch deny proxy and typed loopback sink with one-use target authorities record the attack baseline; the qualified interaction-only release build keeps the protected and mixed harm requests out while native keyboard input completes the benign task and its nav_silent_allow event is recorded separately.",
+      "current_oracle": "A pre-launch deny proxy and typed loopback sink with one-use target authorities record the attack baseline; each arm first matches both live hrefs to its exact normalized armed authorities, then the qualified interaction-only release build keeps the protected and mixed harm requests out while native keyboard input completes the benign task and its nav_silent_allow event is recorded separately.",
       "oracle_type": "independent_harm",
       "evidence_state": "MODELLED",
       "evidence_validity": "CURRENT_REGRESSION",
-      "known_limitation": "The exact sink receipt exercises the composite Evasion 05 representative. The other eleven localized fixtures retain their existing product-event-coupled regression checks and are not promoted beyond MODELLED.",
+      "known_limitation": "The exact sink receipt exercises the composite Evasion 05 control plus five deterministic neighbours across three CSS and two structural axes. The other eleven localized fixtures retain their existing product-event-coupled regression checks, and randomized DOM, text, localization, timing, viewport, and holdout robustness remain unproved.",
       "issue_refs": [
         "#449"
       ],

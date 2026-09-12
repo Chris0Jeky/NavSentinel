@@ -2,6 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8" />
+  <script src="local-fixture-targets.js"></script>
   <title>Level 4 - Visual Mimicry</title>
   <style>
     body { font-family: sans-serif; padding: 24px; }
@@ -31,7 +32,8 @@
     <p>Click "Download". The visual button is a div; the anchor on top goes elsewhere.</p>
     <div class="download">
       Download
-      <a id="trap" href="https://example.edu" target="_blank" rel="noreferrer"></a>
+      <a id="trap" target="_blank" rel="noreferrer"
+         data-navsentinel-local-target="harm" data-navsentinel-scenario="NS-ADV-UI-006"></a>
     </div>
   </div>
 </body>
