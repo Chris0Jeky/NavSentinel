@@ -50,6 +50,16 @@ After `npm run build`, `npm run test:e2e:proving-ground` runs the first bounded 
 
 Local fixtures never accept destination URLs from `harm_target` or `benign_target` query parameters. An E2E caller instead asks the live typed sink to build an immutable, page-scoped bootstrap for one exact loopback origin/path and exact `(target role, scenario, origin mode)` keys. The Playwright page init script only configures those destinations before navigation: it changes only one frozen, non-writable Window resolver and injects no input, event, navigation, document-node mutation, product call, or decision. Query input cannot select or replace a destination; this is harness configuration, not a proof about hostile-page authority in an already armed context. The fixture revalidates every armed result structurally, and the final sink independently revalidates active run, scenario, authority, sentinel, and one-use count. This remains local-only `MODELLED` evidence, not Chrome Gate-3 or release evidence.
 
+`npm run test:e2e:stress` also includes the bounded
+[`STATE_AUTHORITY_CAMPAIGN.md`](security-program/STATE_AUTHORITY_CAMPAIGN.md)
+lane for RW-21, RW-24, and RW-25. It launches Playwright-bundled Chromium with
+native popup blocking deliberately disabled, proves that the extension-disabled
+attack reaches a typed local harm sink, then requires zero harm receipts with the
+release extension in protected and mixed arms. A native-keyboard benign control
+must still reach its own one-use sink authority. This is independent local
+regression evidence, not branded-Chrome, real sleep/restart, open-web efficacy,
+or release evidence.
+
 The older Python flow still works when needed:
 
 ```bash
@@ -140,6 +150,7 @@ Representative E2E coverage lives in:
 - `tests/e2e/suite-ui.spec.ts`
 - `tests/e2e/evasion.spec.ts`
 - `tests/e2e/navsentinel.stress.spec.ts`
+- `tests/e2e/state-authority-sink.spec.ts`
 - `tests/e2e/corpus-validation.spec.ts`
 - `tests/e2e/phase2-detections.spec.ts`
 
