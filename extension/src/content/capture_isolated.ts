@@ -1346,10 +1346,20 @@ const SUBMIT_INTENT_SELECTOR =
  * signal is page-declared markup, so it raises the cost of the #593 pattern
  * rather than making it impossible. See the PR and the evidence-map limitation.
  */
-function hasFormSubmitIntent(e: MouseEvent): boolean {
+function formSubmitIntentUrl(e: MouseEvent): string | null {
   const target = e.target instanceof Element ? e.target : null;
   const control = target?.closest(SUBMIT_INTENT_SELECTOR) ?? null;
-  return !!(control as HTMLButtonElement | HTMLInputElement | null)?.form;
+  const form = (control as HTMLButtonElement | HTMLInputElement | null)?.form;
+  if (!form) return null;
+  const submitterAction = control?.getAttribute("formaction");
+  const formAction = form.getAttribute("action");
+  try {
+    // An explicitly empty submitter action overrides the form action and
+    // declares this document. Only a missing attribute inherits the form.
+    return new URL((submitterAction ?? formAction) || location.href, location.href).toString();
+  } catch {
+    return null;
+  }
 }
 
 function findAnchorFromEvent(e: MouseEvent): HTMLAnchorElement | null {
@@ -1932,7 +1942,7 @@ window.addEventListener(
                 ? "Blocked: navigation + fake dialog"
                 : "Suspicious navigation + fake dialog detected")
               : decision === "block" ? "Blocked new tab" : "Suspicious new tab";
-            showAllowPrompt({
+            const prompt = {
               title,
               url: parsed.href,
               host: parsed.host,
@@ -1940,7 +1950,24 @@ window.addEventListener(
               promptScore: nrs,
               outcomeFeatures: navFeatures,
               ...(overlaySuppression ? { overlaySuppression } : {}),
-            });
+            } satisfies AllowPromptParams;
+            if (/^https?:\/\//i.test(parsed.href) && parsed.host && !overlaySuppression) {
+              // Reuse the exact-URL bridge correlation already used by the
+              // injected prompt path. It suppresses a duplicate MAIN shadow
+              // action without adding a second always-on correlation model.
+              // Overlay-cleanup recovery remains on the legacy prompt until
+              // its security-relevant Undo action moves extension-side too.
+              recentLocalBlankPrompt = { params: prompt, shownAt: Date.now() };
+              void import("./pending_navigation_decision")
+                .then(({ default: showPendingBlankNavigationPrompt }) =>
+                  showPendingBlankNavigationPrompt(prompt),
+                )
+                .catch(() => {
+                  showToast({ message: "NavSentinel blocked a suspicious new tab." });
+                });
+            } else {
+              showAllowPrompt(prompt);
+            }
             // Suppress standalone ClickFix toast — unified prompt covers it
             if (hasClickfix) clickFixAlertedAt = Date.now();
           } else {
@@ -2024,7 +2051,9 @@ window.addEventListener(
       // frame used to mint them and then drive `top.location.assign(...)`
       // through unchallenged (#593), so a child frame now needs an in-frame
       // navigation intent — an anchor href or a form submit — to inherit that
-      // authority. The frame-local main-world allowance is unchanged.
+      // authority. The MAIN-world form allowance below is separately bound to
+      // the declared action so it cannot authorize an unrelated form target.
+      const declaredFormAction = formSubmitIntentUrl(e);
       if (grantsTabNavigationAuthority({
         isTopFrame: topFrame,
         isTrustedInput: e.isTrusted,
@@ -2034,7 +2063,7 @@ window.addEventListener(
         // Only a real cross-document http(s) destination counts.
         hasInFrameNavigationIntent:
           isDocumentNavigationHref(parsed?.href, destHost, location.href) ||
-          hasFormSubmitIntent(e)
+          declaredFormAction !== null
       })) {
         notifyNavGesture();
         notifyNavAllow();
@@ -2042,7 +2071,12 @@ window.addEventListener(
       if (e.isTrusted || mode === "off") {
         postToMain("ns-allow", {
           allowOpen: mode === "off" || explicitNewTab,
-          allowRedirect: true
+          allowRedirect: true,
+          // A child frame's intercepted form submission may spend this
+          // allowance only on the action declared by the clicked submit
+          // control. Top-frame and Off-mode behavior remain unrestricted.
+          restrictRedirectTarget: !topFrame && mode !== "off",
+          ...(declaredFormAction ? { redirectTarget: declaredFormAction } : {})
         });
       }
 

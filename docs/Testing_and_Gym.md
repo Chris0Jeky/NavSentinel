@@ -26,6 +26,7 @@ npm run test
 npm run test:e2e
 npm run test:e2e:smoke
 npm run test:e2e:regression
+npm run test:e2e:clipboard-timebomb
 npm run test:e2e:rollback
 npm run test:e2e:live
 npm run test:e2e:stress
@@ -47,6 +48,10 @@ npm run gym:serve
 The canonical scenario, capability, outcome, evidence, mapping, and local-work-unit registries live under [`docs/security-program/`](security-program/README.md). Run `npm run security:generate` after an intentional registry change and `npm run security:check` before handoff. The clean-checkout-safe check validates JSON Schemas, stable IDs, dependencies, counts, tracked semantic provenance, mapped paths, local links, fixture safety holds, unsafe declarations, and deterministic Markdown/CSV views. `npm run security:check:source` additionally requires and hashes the ignored supplied bundle. Neither command replaces browser, corpus, false-positive, accessibility, or release-gate evidence.
 
 After `npm run build`, `npm run test:e2e:proving-ground` runs the first bounded `NS-ADV-UI-004` vertical with trusted attack, benign, and mixed input. Its typed fake sink binds only to loopback, the browser test rejects unapproved HTTP(S) origins, and exact-head receipts are written under ignored `test-results/`. A sink receipt is the independent harm oracle; a product event or hidden element alone is not protection evidence.
+
+`npm run test:e2e:clipboard-timebomb` runs the four-arm `NS-ADV-CLIP-005` lane. Native keyboard copy first places a benign case token on the clipboard; deterministic local UI noise precedes a delayed page-originated rewrite. The extension-disabled baseline rewrites to the exact inert sentinel, pastes only into a browser-hosted simulator, and reaches a one-use typed loopback sink. The release-extension arm requires a ClickFix warning and deliberately stops before paste. The matched benign arm uses the same delayed mechanism to write a harmless locally formatted case token, remains quiet, and reaches only its benign sink; the mixed arm preserves a separate OTP control and also reaches only its benign sink. The warning does not block or restore the clipboard; ignoring it remains an explicit untested-danger path rather than a claimed pass.
+
+CLIP-005's JSON attachments are diagnostic observations, not exact-head evidence receipts. They declare `evidenceValidity: UNVERIFIED`, `promotionCeiling: MODELLED`, `provenanceBound: false`, and the missing provenance fields. The registry repeats `evidence_validity: UNVERIFIED`; validation rejects promotion above `MODELLED` while the runner cannot fail closed on a stale release-eligible `extension/dist`.
 
 Local fixtures never accept destination URLs from `harm_target` or `benign_target` query parameters. An E2E caller instead asks the live typed sink to build an immutable, page-scoped bootstrap for one exact loopback origin/path and exact `(target role, scenario, origin mode)` keys. The Playwright page init script only configures those destinations before navigation: it changes only one frozen, non-writable Window resolver and injects no input, event, navigation, document-node mutation, product call, or decision. Query input cannot select or replace a destination; this is harness configuration, not a proof about hostile-page authority in an already armed context. The fixture revalidates every armed result structurally, and the final sink independently revalidates active run, scenario, authority, sentinel, and one-use count. This remains local-only `MODELLED` evidence, not Chrome Gate-3 or release evidence.
 
@@ -148,6 +153,7 @@ Representative E2E coverage lives in:
 - `tests/e2e/corpus-validation.spec.ts`
 - `tests/e2e/phase2-detections.spec.ts`
 - `tests/e2e/bridge-reload-recovery.spec.ts`
+- `tests/e2e/clipboard-timebomb.spec.ts`
 
 This list is intentionally representative because spec counts move. Use
 `rg --files tests/e2e -g '*.spec.ts'` for current inventory.
@@ -358,6 +364,8 @@ Current pages:
 - `gym/clickfix-01-basic.html` (fake CAPTCHA overlay with inert clipboard sentinel + Win+R instructions)
 - `gym/clickfix-02-instructions.html` (dark-themed terminal instructions variant)
 - `gym/clickfix-03-legit-captcha.html` (local verification control + OTP copy, false positive check)
+- `gym/clickfix-04-winr.html` (Win+R instruction variant with an inert sentinel)
+- `gym/clickfix-05-delayed-rewrite.html` (manual benign copy followed by delayed inert clipboard replacement, typed sink, benign OTP, and mixed controls)
 - `gym/doubleclick-01-basic.html` (+ `doubleclick-01-target.html`) -- basic DoubleClickjacking attack simulation
 - `gym/doubleclick-02-oauth.html` (+ `doubleclick-02-consent.html`) -- OAuth consent DoubleClickjacking variant
 - `gym/doubleclick-03-legit.html` -- legitimate double-click interaction (false-positive check)
@@ -371,6 +379,9 @@ ClickFix attack fixtures write only the exact inert `NAVSENTINEL_SENTINEL_DO_NOT
 preserving the visual and behavioral detection signals. Playwright reads that exact clipboard value
 but never pastes it into an OS surface. The benign `clickfix-03` fixture uses a local static
 verification control and synthetic OTP; real-provider matching remains unit-only.
+`clickfix-05` adds the first typed browser-only paste consequence for this family. Its four arms
+separate reachable harm, product warning, benign usability, and mixed behavior; because the extension
+does not interdict the clipboard itself, the protected outcome is `WARNED`, not `BLOCKED_PRE_HARM`.
 
 ### Evasion red-team lane
 
@@ -417,6 +428,21 @@ revision. A disk-identity failure therefore points to packaging; a missing or
 old runtime marker points to extension initialization or an artifact that the
 browser did not accept. This catches build-tool and browser-contract drift more
 precisely than an overlay visibility assertion alone.
+
+The first production pending-decision vertical is covered by
+`tests/pending-navigation-decision.test.ts`,
+`tests/pending-decision-handlers.test.ts`,
+`tests/pending-decisions-popup.test.ts`, and `tests/sw-handlers.test.ts`. These
+prove exact create metadata, URL-free persistence/listing, active-context
+binding, consume-before-deliver token burn, exact tab/frame/document delivery,
+pagehide/expiry/source-change invalidation, delete-before-open, replay rejection,
+and popup double-click failure closure. `tests/e2e/toast-input-fence.spec.ts`
+proves with trusted input that the eligible suspicious `_blank` page warning
+exposes Dismiss only. Existing `evasion.spec.ts` cleanup cases prove that prompts
+carrying an overlay-recovery Undo remain on their legacy path. AI-39 remains
+mandatory because an ordinary Playwright tab cannot
+prove a real Chrome toolbar-popup click survives the popup → worker → content
+activation chain.
 
 Overlay-cleanup E2E assertions use a visibility timeline after the first hidden
 state. A pass requires every sampled attack layer to remain hidden for the full
@@ -576,6 +602,10 @@ owner's reload confirmation remains required.
 - event-log rendering still works
 - import/export preserves normalized state
 - allowlist removal and clearing still work
+- pending navigation cards render origins only, expire visibly, and disable
+  before consuming their one-shot capability
+- a real toolbar-popup **Proceed once** opens the exact held synthetic URL once;
+  replay, tab switch, document navigation, and expiry remain blocked (AI-39)
 
 ## CI expectations
 
