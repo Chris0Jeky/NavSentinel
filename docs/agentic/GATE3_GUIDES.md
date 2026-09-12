@@ -123,12 +123,19 @@ limitations, not a reason to reopen the completed gate.
 
 ---
 
-## Active guide: AI-41 - issue #593 child-frame navigation authority
+## Retained guide: AI-41 - issue #593 child-frame navigation authority
+
+> **POST-MERGE QUEUE since 2026-09-12 — read before step 1.** Under
+> [`D-2026-09-12-P`](DECISIONS.md), PR #636 may merge after its non-human gates
+> without completing this branded-Chrome check first. If it merges, preserve
+> every step below as the former AI-41 sub-result inside consolidated AI-47 on
+> current `main`; this guide is neither a renewed pre-merge gate nor evidence
+> that the human check passed.
 
 Run this only after PR #636 (branch `fix/issue593-child-frame-location-20260904`)
-is ready and every automated check for its current head is green.
+actually merges and every automated check for its reconciled head is green.
 
-1. Resolve PR #636 and record its 40-character `headRefOid`. In the
+1. Record the then-current 40-character `main` SHA containing PR #636. In the
    implementation worktree, require `git rev-parse HEAD` to equal that value.
    `git status --short` must contain no uncommitted product changes. The known
    Defender quarantine may appear only as
@@ -168,14 +175,15 @@ is ready and every automated check for its current head is green.
    consent or login frame, and a site with ads), interact for a minute each, and
    confirm no rollback notice appears on a navigation you asked for.
 8. Inspect the fixture page console and the extension service-worker console for
-   new errors. On a pass, reply `AI-41 done; Gate-3 passed on PR #636 at
-   <40-character SHA>; Chrome <version>`. On any mismatch, reply `AI-41 failed on
-   PR #636 at <SHA>: <step and observed>` and leave the item open.
+   new errors. Record either `AI-47 child-frame sub-result (former AI-41) passed
+   on main at <40-character SHA>; Chrome <version>` or `AI-47 child-frame
+   sub-result (former AI-41) failed on main at <SHA>: <step and observed>` and
+   leave consolidated AI-47 open until every named sub-result is present.
 
-Only Chris can record AI-41 complete. The modelled Playwright regression
-(`tests/e2e/issue593-hidden-media-layer.spec.ts`) supports but does not replace
-this exact-head branded-Chrome gate, and it cannot speak to real embeds on the
-open web, which is what step 7 exists to sample.
+Only Chris can record this AI-47 sub-result complete. The modelled Playwright
+regression (`tests/e2e/issue593-hidden-media-layer.spec.ts`) supports but does
+not replace this exact-head branded-Chrome gate, and it cannot speak to real
+embeds on the open web, which is what step 7 exists to sample.
 
 ---
 
