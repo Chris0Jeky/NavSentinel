@@ -1,4 +1,5 @@
 import type { EventKind, EventLogEntry } from "../shared/storage";
+import { normalizeEventPageSite } from "../shared/storage";
 import { isKnownReasonCode } from "../shared/explanations";
 
 /** Explicit wire vocabulary. A new runtime event needs deliberate export review. */
@@ -34,11 +35,10 @@ export interface EvidenceExport {
 
 /** Accept hostname metadata only: never turn an arbitrary URL into exportable text. */
 export function evidenceHostname(value: unknown): string | null {
-  if (typeof value !== "string" || value.length > 253 || !value.length) return null;
-  const host = value.toLowerCase();
-  if (!/^[a-z0-9.-]+$/.test(host)) return null;
-  if (host.split(".").some(label => !label.length || label.length > 63 || label.startsWith("-") || label.endsWith("-"))) return null;
-  return host;
+  // The portable format remains stricter than backup import about whitespace.
+  // Reuse the hostname/IP validator rather than adding a second URL parser.
+  if (typeof value !== "string" || value !== value.trim()) return null;
+  return normalizeEventPageSite(value) ?? null;
 }
 
 /** New objects from a strict allowlist; never spread stored/caller-owned entries. */
@@ -62,7 +62,9 @@ export function projectEvidence(log: readonly EventLogEntry[]): EvidenceEvent[] 
     if (typeof entry.score === "number" && Number.isFinite(entry.score) && entry.score >= 0 && entry.score <= 100) event.score = entry.score;
     events.push(event);
   }
-  return events;
+  // Retention remains insertion-bounded above. Within that retained snapshot,
+  // imported timestamps determine chronology; stable ties keep insertion order.
+  return events.sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
 }
 
 export function createEvidenceExport(events: readonly EvidenceEvent[], now = new Date()): EvidenceExport {

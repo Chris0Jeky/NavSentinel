@@ -3,7 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 const mocks = vi.hoisted(() => ({ getEventLog: vi.fn(), getSuiteSettings: vi.fn() }));
-vi.mock("../extension/src/shared/storage", () => mocks);
+vi.mock("../extension/src/shared/storage", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../extension/src/shared/storage")>(),
+  ...mocks,
+}));
 const html = readFileSync(resolve("extension/src/evidence/evidence.html"), "utf8");
 const get = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 const input = (id: string, value: string): void => { get<HTMLInputElement>(id).value = value; get(id).dispatchEvent(new Event("input")); };
@@ -69,6 +72,46 @@ describe("Protection Center wired UI", () => {
     get("downloadExport").click();
     expect(createUrl).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(get("export"));
+  });
+  it("accepts the exact byte boundary in the wired preview and download", async () => {
+    const limit = 8 * 1024 * 1024;
+    get("export").click();
+    const text = get<HTMLTextAreaElement>("exportPreview").value.padEnd(limit, " ");
+    get("cancelExport").click();
+    await vi.waitFor(() => expect(get<HTMLTextAreaElement>("exportPreview").value).toBe(""));
+    vi.spyOn(JSON, "stringify").mockReturnValueOnce(text);
+    let blob: Blob | undefined;
+    vi.spyOn(URL, "createObjectURL").mockImplementation(value => { blob = value as Blob; return "blob:test"; });
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    get("export").click();
+    expect(get<HTMLDialogElement>("exportDialog").open).toBe(true);
+    expect(get<HTMLTextAreaElement>("exportPreview").value).toBe(text);
+    get("downloadExport").click();
+    expect(blob?.size).toBe(limit);
+    expect(await blob!.text()).toBe(text);
+  });
+  it("refuses one byte over the limit and invalidates an older prepared snapshot", () => {
+    const createUrl = vi.spyOn(URL, "createObjectURL");
+    get("export").click();
+    const text = get<HTMLTextAreaElement>("exportPreview").value.padEnd(8 * 1024 * 1024 + 1, " ");
+    vi.spyOn(JSON, "stringify").mockReturnValueOnce(text);
+    // Programmatic reentry while the old dialog is open must not preserve its download.
+    get("export").click();
+    expect(get("status").textContent).toContain("exceeds 8 MiB");
+    expect(get<HTMLTextAreaElement>("exportPreview").value).toBe("");
+    get("downloadExport").click();
+    expect(createUrl).not.toHaveBeenCalled();
+  });
+  it("shows imported timestamps newest first but previews the same rows oldest first", async () => {
+    const row = (ts: number, site: string) => ({ id: site, ts, kind: "nav_click_block", site });
+    mocks.getEventLog.mockResolvedValue([row(3000, "late.test"), row(1000, "early.test"), row(NaN, "bad.test"), row(1000, "tie.test")]);
+    get("refresh").click();
+    await vi.waitFor(() => expect(get("total").textContent).toBe("3"));
+    const routes = [...document.querySelectorAll(".event-route")].map(node => node.textContent);
+    expect(routes).toEqual(["late.test → Destination unavailable", "tie.test → Destination unavailable", "early.test → Destination unavailable"]);
+    get("export").click();
+    const payload = JSON.parse(get<HTMLTextAreaElement>("exportPreview").value);
+    expect(payload.events.map((row: { sourceSite: string }) => row.sourceSite)).toEqual(["early.test", "tie.test", "late.test"]);
   });
   it("keeps a failed refresh visibly stale and permits retry", async () => {
     mocks.getEventLog.mockRejectedValueOnce(new Error("offline"));

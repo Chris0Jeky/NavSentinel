@@ -9,7 +9,25 @@ function object(value,label){if(!value||typeof value!=='object'||Array.isArray(v
 function keys(value,allowed,label){object(value,label);if(Object.keys(value).some(key=>!allowed.includes(key)))throw Error(label+' contains unsupported fields. Export minimized evidence from the extension first.');}
 function iso(value){if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)||!Number.isFinite(Date.parse(value))||new Date(value).toISOString()!==value)throw Error('Expected a canonical ISO timestamp.');return value;}
 function opaque(value){if(typeof value!=='string'||!/^[-a-zA-Z0-9_:]{1,100}$/.test(value))throw Error('Invalid observation identifier.');return value;}
-function site(value){if(value===null)return null;if(typeof value!=='string'||value.length>253||value!==value.toLowerCase()||!value.split('.').every(label=>/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label)))throw Error('Sites must be canonical hostnames, never URLs, paths, or user information.');return value;}
+function site(value){
+  if(value===null)return null;
+  const invalid=()=>{throw Error('Sites must be canonical hostnames, never URLs, paths, or user information.');};
+  if(typeof value!=='string'||!value.length||value.length>253||value!==value.toLowerCase())return invalid();
+  // The extension exports IPv6 without brackets. Only parse a lexically fenced
+  // address; never extract a hostname from arbitrary URL-shaped metadata.
+  if(value.includes(':')){
+    if(!/^[0-9a-f:.]+$/.test(value))return invalid();
+    try{if(new URL('https://['+value+']/').hostname!=='['+value+']')return invalid();}
+    catch{return invalid();}
+    return value;
+  }
+  if(!value.split('.').every(label=>/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label)))return invalid();
+  if(/^\d+(?:\.\d+){3}$/.test(value)){
+    try{if(new URL('https://'+value+'/').hostname!==value)return invalid();}
+    catch{return invalid();}
+  }
+  return value;
+}
 function event(value){keys(value,['id','timestamp','kind','sourceSite','destinationSite','outcome','reasons','score'],'Observation');if(!KINDS.includes(value.kind)||value.outcome!=='recorded')throw Error('Unsupported event kind or outcome.');if(!Array.isArray(value.reasons)||value.reasons.length>16||value.reasons.some(reason=>!REASONS.includes(reason)))throw Error('Unsupported or excessive reason codes.');const result={id:opaque(value.id),timestamp:iso(value.timestamp),kind:value.kind,sourceSite:site(value.sourceSite),destinationSite:site(value.destinationSite),outcome:'recorded',reasons:[...new Set(value.reasons)]};if(Object.hasOwn(value,'score')){if(typeof value.score!=='number'||!Number.isFinite(value.score)||value.score<0||value.score>100)throw Error('Score must be between 0 and 100.');result.score=value.score;}return result;}
 function envelope(value){keys(value,['format','schema','exportedAt','source','evidence','events'],'Evidence file');if(value.format!=='navsentinel-evidence'||value.schema!==1||value.source!=='navsentinel-extension'||value.evidence!=='recorded-observation')throw Error('This is not a supported NavSentinel extension evidence export.');if(!Array.isArray(value.events)||value.events.length>MAX_EVENTS)throw Error('Evidence must contain at most '+MAX_EVENTS+' observations.');const seen=new Set(),events=value.events.map(row=>{const clean=event(row);if(seen.has(clean.id))throw Error('Duplicate observation identifier in file.');seen.add(clean.id);return clean;});return {format:'navsentinel-evidence',schema:1,exportedAt:iso(value.exportedAt),source:'navsentinel-extension',evidence:'recorded-observation',events};}
 function parse(text){if(typeof text!=='string'||new TextEncoder().encode(text).length>MAX_BYTES)throw Error('Evidence file exceeds the 8 MiB limit.');return envelope(JSON.parse(text));}
