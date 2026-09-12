@@ -1,3 +1,5 @@
+import { FormAttemptGate, clickFormBinding, formBindingUnchanged, resolveFormIntent, validateFormReceiver, type FormBinding } from "./form_intent";
+import { isFormIntent, isHttpFormIntent, type FormIntent } from "../shared/form_intent";
 // RI-07: resolved by the bundler to `js_behavior_monitor.disabled.ts` (a no-op)
 // unless the active release profile declares `capabilities.jsBehaviorInstrumentation`.
 // Every committed profile leaves it false, so no release build links the fetch /
@@ -149,6 +151,8 @@ let allowOpenUntil = 0;
 let allowRedirectUntil = 0;
 let restrictRedirectTarget = false;
 let allowedRedirectTarget = "";
+const childFormGate = new FormAttemptGate();
+let activeChildFormCall = false;
 let popupIntentArmed = false;
 let popupIntentClearTimer = 0;
 
@@ -177,6 +181,8 @@ const blockedActions = new Map<
     url?: string;
     target?: string;
     features?: string;
+    formBinding?: FormBinding;
+    waitingForForm?: boolean;
   }
 >();
 
@@ -345,6 +351,7 @@ function maybeArmPopupIntent(
   }
   if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
 
+  if (isSubframe() && clickFormBinding(event)) return;
   const source = findPopupIntentSource(event.target);
   if (!source) return;
   if (!isSafePopupIntentSource(source)) return;
@@ -382,6 +389,7 @@ function pruneBlockedActions(): void {
 }
 
 function postBlocked(params: {
+  formIntent?: FormIntent;
   id: string;
   kind: string;
   url?: string;
@@ -396,6 +404,7 @@ function postBlocked(params: {
     console.debug("[NavSentinel] blocked", { ...params, mode, ts: nowMs() });
   }
   postToIsolated("ns-nav-blocked", {
+    ...(params.formIntent ? { formIntent: params.formIntent } : {}),
     id: params.id,
     kind: params.kind,
     ...(params.url !== undefined ? { url: params.url } : {}),
@@ -430,22 +439,19 @@ function notifyAllowedTarget(url: string | URL | undefined, options?: { matchQue
   }
 }
 
-function isGetForm(form: HTMLFormElement, submitter?: HTMLElement | null): boolean {
-  const raw = submitter?.getAttribute("formmethod") || form.getAttribute("method") || form.method || "get";
-  return raw.toLowerCase() === "get";
-}
-
 function registerBlockedAction(params: {
   kind: string;
   url?: string;
   target?: string;
   features?: string;
   action: () => void;
+  formBinding?: FormBinding;
 }): void {
   pruneBlockedActions();
   const id = makeId();
   blockedActions.set(id, {
     action: params.action,
+    ...(params.formBinding ? { formBinding: params.formBinding } : {}),
     expiresAt: nowMs() + BLOCKED_ACTION_TTL_MS,
     kind: params.kind,
     ...(params.url !== undefined ? { url: params.url } : {}),
@@ -455,6 +461,7 @@ function registerBlockedAction(params: {
   // Bound the Map against a synchronous flood the TTL prune can't catch (#301).
   enforceMapSizeCap(blockedActions, MAX_BLOCKED_ACTIONS);
   postBlocked({
+    ...(params.formBinding ? { formIntent: params.formBinding.intent } : {}),
     id,
     kind: params.kind,
     ...(params.url !== undefined ? { url: params.url } : {}),
@@ -562,14 +569,6 @@ function isSubframeSelfTarget(target: string | undefined): boolean {
   return target === window.name;
 }
 
-function isFormSelfTarget(formTarget: string): boolean {
-  if (!formTarget) return true; // empty/missing form target = submit to self
-  const t = formTarget.toLowerCase();
-  if (t === "_self") return true;
-  if (RESERVED_TARGETS.has(t)) return false;
-  return formTarget === window.name;
-}
-
 function recordWindowOpen(): void {
   lastWindowOpenTs = nowMs();
   postToIsolated("ns-dblclick-window-open", { ts: lastWindowOpenTs });
@@ -636,16 +635,6 @@ function patchedOpen(
   return null;
 }
 
-function resolveFormAction(form: HTMLFormElement, submitter?: HTMLElement | null): string | undefined {
-  const raw = submitter?.getAttribute("formaction") ?? form.getAttribute("action");
-  if (!raw) return location.href;
-  try {
-    return new URL(raw, location.href).toString();
-  } catch {
-    return undefined;
-  }
-}
-
 /**
  * LOCATION_INTERCEPTION_BOUNDARY (#458)
  *
@@ -697,66 +686,62 @@ function resolveFormAction(form: HTMLFormElement, submitter?: HTMLElement | null
  */
 
 function patchForms(): void {
-  const patchedFormSubmit = function (this: HTMLFormElement): void {
-    const actionUrl = resolveFormAction(this);
-    if (isOff() || (isSubframe() && isFormSelfTarget(this.target))) {
-      postAllowed({ kind: "form_submit", ...(actionUrl !== undefined ? { url: actionUrl } : {}) });
-      notifyAllowedTarget(actionUrl, { matchQueryPrefix: isGetForm(this) });
-      nativeFormSubmit.call(this);
-      return;
-    }
-
-    const allowance = consumeRedirectAllowance(actionUrl);
-    if (allowance !== "none") {
-      postAllowed({ kind: "form_submit", ...(actionUrl !== undefined ? { url: actionUrl } : {}) });
-      notifyAllowedTarget(actionUrl, { matchQueryPrefix: isGetForm(this) });
-      nativeFormSubmit.call(this);
-      return;
-    }
-
-    registerBlockedAction({
-      kind: "form_submit",
-      ...(actionUrl !== undefined ? { url: actionUrl } : {}),
-      action: () => nativeFormSubmit.call(this)
-    });
-  };
-  // Writable+configurable (#349): a frozen submit threw when js_behavior_monitor
-  // (and legit form libraries) reassign HTMLFormElement.prototype.submit. Now the
-  // page/js_behavior wrapper chains cleanly on top of ours (wrapper -> our wrapper
-  // -> native); the redirect-allowance gate is unchanged.
-  softPatchProto(HTMLFormElement.prototype, "submit", patchedFormSubmit, "HTMLFormElement.prototype.submit");
-
-  if (nativeFormRequestSubmit) {
-    const patchedFormRequestSubmit = function (this: HTMLFormElement, submitter?: HTMLElement | null): void {
-      const actionUrl = resolveFormAction(this, submitter);
-      if (isOff() || (isSubframe() && isFormSelfTarget(this.target))) {
-        postAllowed({
-          kind: "form_request_submit",
-          ...(actionUrl !== undefined ? { url: actionUrl } : {})
-        });
-        notifyAllowedTarget(actionUrl, { matchQueryPrefix: isGetForm(this, submitter) });
-        nativeFormRequestSubmit.call(this, submitter);
-        return;
-      }
-
-      const allowance = consumeRedirectAllowance(actionUrl);
-      if (allowance !== "none") {
-        postAllowed({
-          kind: "form_request_submit",
-          ...(actionUrl !== undefined ? { url: actionUrl } : {})
-        });
-        notifyAllowedTarget(actionUrl, { matchQueryPrefix: isGetForm(this, submitter) });
-        nativeFormRequestSubmit.call(this, submitter);
-        return;
-      }
-
-      registerBlockedAction({
-        kind: "form_request_submit",
-        ...(actionUrl !== undefined ? { url: actionUrl } : {}),
-        action: () => nativeFormRequestSubmit.call(this, submitter)
-      });
+  function submit(form: HTMLFormElement, submitter: HTMLElement | null, request: boolean): void {
+    // Validation must precede authority consumption: invalid requestSubmit
+    // arguments retain native TypeError/NotFoundError behavior.
+    validateFormReceiver(form, submitter);
+    const intent = resolveFormIntent(form, submitter);
+    const kind = request ? "form_request_submit" : "form_submit";
+    const binding = intent ? { form, submitter, intent } : null;
+    const native = () => {
+      activeChildFormCall = true;
+      try {
+        if (request) nativeFormRequestSubmit.call(form, submitter);
+        else nativeFormSubmit.call(form);
+      } finally { activeChildFormCall = false; }
     };
-    softPatchProto(HTMLFormElement.prototype, "requestSubmit", patchedFormRequestSubmit, "HTMLFormElement.prototype.requestSubmit");
+    const allowed = () => {
+      postAllowed({ kind, ...(intent ? { url: intent.actionUrl, target: intent.target } : {}) });
+      // Child forms never turn a metadata tuple into generic worker authority.
+      if (!isSubframe() && intent && isHttpFormIntent(intent)) {
+        notifyAllowedTarget(intent.actionUrl, { matchQueryPrefix: intent.method === "get" });
+      }
+      native();
+    };
+    if (isOff()) { allowed(); return; }
+    if (isSubframe()) {
+      const spent = intent ? childFormGate.consume(form, submitter, intent, nowMs())
+        : { allowed: false, ...childFormGate.revoke() };
+      if (intent && (intent.targetScope === "self" || intent.method === "dialog")) {
+        if (spent.attemptId || spent.gestureTime !== undefined) postToIsolated("ns-form-intent-cancel", { ...spent });
+        allowed();
+        return;
+      }
+      if (spent.allowed && intent && isHttpFormIntent(intent)) { allowed(); return; }
+      if (spent.attemptId || spent.gestureTime !== undefined) postToIsolated("ns-form-intent-cancel", { ...spent });
+    } else if (intent?.method === "dialog" || consumeRedirectAllowance(intent?.actionUrl) !== "none") {
+      allowed();
+      return;
+    }
+    registerBlockedAction({
+      kind,
+      ...(intent ? { url: intent.actionUrl, target: intent.target } : {}),
+      ...(binding ? { formBinding: binding } : {}),
+      // The closure is not a frozen destination. Re-resolve DOM identity and
+      // ALL effective attributes immediately before every approved replay.
+      action: () => {
+        if (!binding || !formBindingUnchanged(binding)) return;
+        allowed();
+      },
+    });
+  }
+  softPatchProto(HTMLFormElement.prototype, "submit", function (this: HTMLFormElement): void {
+    submit(this, null, false);
+  }, "HTMLFormElement.prototype.submit");
+  if (typeof nativeFormRequestSubmit === "function") {
+    softPatchProto(HTMLFormElement.prototype, "requestSubmit", function (this: HTMLFormElement, submitter?: HTMLElement | null): void {
+      submit(this, submitter ?? null, true);
+    }, "HTMLFormElement.prototype.requestSubmit");
   }
 }
 
@@ -792,9 +777,31 @@ function handleBridgeMessage(message: unknown): void {
     allowRedirect?: boolean;
     restrictRedirectTarget?: boolean;
     redirectTarget?: string;
+    formIntent?: unknown;
+    gestureTime?: number;
+    attemptId?: string;
+    ok?: boolean;
   };
   if (!data || data.source !== NS_SOURCE || data.v !== PROTOCOL_VERSION) return;
   if (!bridgeSession || data.session !== bridgeSession) return;
+
+  if (data.type === "ns-allow-form" && isSubframe() && typeof data.attemptId === "string" &&
+      /^[a-f0-9]{32}$/.test(data.attemptId) && isFormIntent(data.formIntent) && typeof data.gestureTime === "number") {
+    childFormGate.authorize(data.attemptId, data.formIntent, data.gestureTime, nowMs());
+    return;
+  }
+  if (data.type === "ns-form-replay-ready" && data.id) {
+    const entry = blockedActions.get(data.id);
+    if (!entry?.waitingForForm) return;
+    blockedActions.delete(data.id); // Acknowledgements and replays are one-use.
+    if (!data.ok || entry.expiresAt <= nowMs() || !entry.formBinding || !formBindingUnchanged(entry.formBinding)) {
+      if (typeof data.attemptId === "string") postToIsolated("ns-form-intent-cancel", { attemptId: data.attemptId });
+      postToIsolated("ns-form-replay-rejected");
+      return;
+    }
+    entry.action();
+    return;
+  }
 
   if (data.type === "ns-gesture-allow") {
     markAllowance({ allowOpen: true, allowRedirect: true });
@@ -802,7 +809,10 @@ function handleBridgeMessage(message: unknown): void {
   }
 
   if (data.type === "ns-config") {
-    if (data.mode) mode = data.mode;
+    if (data.mode) {
+      if (mode !== data.mode) childFormGate.clear();
+      mode = data.mode;
+    }
     if (typeof data.debug === "boolean") debug = data.debug;
     syncJsBehaviorMonitor();
     postToIsolated("ns-config-ack", { mode, debug });
@@ -841,9 +851,15 @@ function handleBridgeMessage(message: unknown): void {
 
   if (data.type === "ns-allow-action" && data.id) {
     const entry = blockedActions.get(data.id);
-    if (!entry) return;
-    if (entry.expiresAt <= nowMs()) {
+    if (!entry || entry.waitingForForm) return;
+    if (entry.expiresAt <= nowMs() || (entry.formBinding && !formBindingUnchanged(entry.formBinding))) {
       blockedActions.delete(data.id);
+      if (entry.formBinding) postToIsolated("ns-form-replay-rejected");
+      return;
+    }
+    if (isSubframe() && entry.formBinding) {
+      entry.waitingForForm = true;
+      postToIsolated("ns-form-replay-request", { id: data.id, formIntent: entry.formBinding.intent });
       return;
     }
     blockedActions.delete(data.id);
@@ -877,6 +893,14 @@ window.addEventListener(
   "click",
   (event) => {
     if (!(event instanceof MouseEvent)) return;
+    if (event.isTrusted && isSubframe()) {
+      const binding = clickFormBinding(event);
+      childFormGate.capture(binding, event.timeStamp, nowMs());
+      if (binding) {
+        markAllowance({ allowOpen: false, allowRedirect: false });
+        popupIntentArmed = false;
+      }
+    }
     if (event.isTrusted) lastGestureTs = nowMs();
     maybeArmPopupIntent(event);
     maybeArmPopupIntent(event, { keyboardOnly: true });
@@ -897,6 +921,20 @@ window.addEventListener(
   },
   true
 );
+
+window.addEventListener("invalid", () => {
+  if (!isSubframe()) return;
+  const revoked = childFormGate.revoke();
+  if (revoked.attemptId || revoked.gestureTime !== undefined) postToIsolated("ns-form-intent-cancel", revoked);
+}, true);
+
+window.addEventListener("submit", () => {
+  if (isSubframe() && !activeChildFormCall) childFormGate.clear();
+}, true);
+window.addEventListener("pagehide", () => {
+  childFormGate.clear();
+  blockedActions.clear();
+});
 
 function generateChallenge(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
@@ -936,6 +974,9 @@ window.addEventListener(
     event.stopImmediatePropagation();
     event.stopPropagation();
 
+    // A new transport must not inherit a form capability or replay closure.
+    childFormGate.clear();
+    blockedActions.clear();
     // A new init supersedes any handshake already in progress; drop its timer.
     clearBridgeHandshakeTimer();
     bridgePort?.close();

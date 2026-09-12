@@ -1,3 +1,4 @@
+import { ChildFormAuthority } from "./child_form_authority";
 import { computeCDS } from "../shared/scoring";
 import { appendEvent, appendPromptOutcome, getPromptOutcomes, getNavSettings, onNavSettingsChange, buildNavOutcomeFeatures, type EventLogEntry, type NavSettings, type NavOutcomeFeatures } from "../shared/storage";
 import { ADAPTIVE_SCORES_KEY, getEffectiveThresholdAdjustment } from "../shared/adaptive_scoring";
@@ -192,6 +193,8 @@ const PRIORITY_BRIDGE_TYPES = new Set<string>([
   "ns-allow-once",
   "ns-allow-action",
   "ns-allow-target-nav",
+  "ns-allow-form",
+  "ns-form-replay-ready",
 ]);
 let mainGuard: "unknown" | "yes" | "no" = "unknown";
 let lastNav: { kind: string; url: string; status: "allowed" | "blocked"; target?: string } | null = null;
@@ -321,6 +324,7 @@ void initSettings();
 onNavSettingsChange((s) => {
   const cleanupWasActive =
     settings.defaultMode !== "off" && settings.autoDismissOverlays;
+  if (settings.defaultMode !== s.defaultMode) childForms.reset();
   settings = s;
   const cleanupIsActive =
     settings.defaultMode !== "off" && settings.autoDismissOverlays;
@@ -441,6 +445,9 @@ function handleBridgeMessage(message: unknown): void {
     // Allow-target-nav relay (ns-allow-target-nav)
     ttlMs?: number;
     matchQueryPrefix?: boolean;
+    formIntent?: unknown;
+    attemptId?: string;
+    gestureTime?: number;
     // Pre-verification buffer overflow count (ns-bridge-overflow)
     dropped?: number;
   };
@@ -458,6 +465,8 @@ function handleBridgeMessage(message: unknown): void {
   }
 
   if (data.session !== bridgeSession) return;
+
+  if (childForms.handleBridge(data)) return;
 
   if (data.type === "ns-bridge-ready") {
     markMainGuardReady();
@@ -484,6 +493,7 @@ function handleBridgeMessage(message: unknown): void {
   }
 
   if (data.type === "ns-nav-blocked") {
+    childForms.recordBlocked(data);
     lastNav = {
       kind: data.kind ?? "unknown",
       url: data.url ?? "",
@@ -1325,42 +1335,14 @@ function findAnchorInShadowRoots(x: number, y: number): HTMLAnchorElement | null
   return null;
 }
 
-/**
- * Selector for a control whose default action submits a form: a `<button>`
- * whose type defaults to submit, or a submit/image input.
- */
-const SUBMIT_INTENT_SELECTOR =
-  "button:not([type=button]):not([type=reset]),input[type=submit],input[type=image]";
-
-/**
- * True when a click resolves to a navigation the clicking frame itself declared
- * through a form submit control. Paired with a cross-document anchor href, this
- * is the "in-frame navigation intent" that lets a child frame mint tab-wide
- * navigation authority (#593); a bare element does not qualify.
- *
- * Deliberately conservative in BOTH directions. Missing an intent (a submit
- * control inside a shadow root, say) only costs a child frame the tab-wide
- * allowance, which downgrades the navigation to the existing rollback prompt.
- * Seeing one that the page never honours (a submit button whose handler calls
- * preventDefault and then scripts a navigation) is a known forgeable path: the
- * signal is page-declared markup, so it raises the cost of the #593 pattern
- * rather than making it impossible. See the PR and the evidence-map limitation.
- */
-function formSubmitIntentUrl(e: MouseEvent): string | null {
-  const target = e.target instanceof Element ? e.target : null;
-  const control = target?.closest(SUBMIT_INTENT_SELECTOR) ?? null;
-  const form = (control as HTMLButtonElement | HTMLInputElement | null)?.form;
-  if (!form) return null;
-  const submitterAction = control?.getAttribute("formaction");
-  const formAction = form.getAttribute("action");
-  try {
-    // An explicitly empty submitter action overrides the form action and
-    // declares this document. Only a missing attribute inherits the form.
-    return new URL((submitterAction ?? formAction) || location.href, location.href).toString();
-  } catch {
-    return null;
-  }
-}
+const childForms = new ChildFormAuthority({
+  enabled: () => !isTopFrame() && settings.defaultMode !== "off",
+  post: postToMain,
+  reject: () => showToast({ message: "NavSentinel blocked a changed or expired form submission. Use a fresh submit action." }),
+});
+window.addEventListener("submit", event => childForms.submit(event as SubmitEvent), true);
+window.addEventListener("invalid", () => childForms.invalid(), true);
+window.addEventListener("pagehide", () => childForms.reset());
 
 function findAnchorFromEvent(e: MouseEvent): HTMLAnchorElement | null {
   const path = e.composedPath?.() ?? [];
@@ -1396,7 +1378,7 @@ function allowOnce(url: string, target?: string, features?: string): void {
 
 function allowActionOnce(actionId?: string | null, url?: string, target?: string, features?: string): void {
   if (actionId) {
-    notifyNavAllow();
+    if (!childForms.approveAction(actionId)) notifyNavAllow();
     postToMain("ns-allow-action", { id: actionId });
     return;
   }
@@ -2016,6 +1998,7 @@ window.addEventListener(
       }
     }
 
+    if (decision !== "allow" && e.isTrusted && !topFrame) childForms.reset();
     if (decision === "block") {
       sendIconUpdate("red", tabBlockCount + 1);
     } else if (decision === "prompt") {
@@ -2046,37 +2029,24 @@ window.addEventListener(
       // Otherwise a hostile page can dispatch pointerdown/click and self-
       // authorize its own navigation. Off is the explicit user-selected bypass,
       // so preserve its no-intervention contract for programmatic links too.
-      // The tab-wide gesture/allow windows suppress the delayed page-initiated
-      // redirect rollback for the whole tab. A trusted click in a hidden child
-      // frame used to mint them and then drive `top.location.assign(...)`
-      // through unchallenged (#593), so a child frame now needs an in-frame
-      // navigation intent — an anchor href or a form submit — to inherit that
-      // authority. The MAIN-world form allowance below is separately bound to
-      // the declared action so it cannot authorize an unrelated form target.
-      const declaredFormAction = formSubmitIntentUrl(e);
+      // Child form authority is form-typed and one-use, never an opener/tab
+      // gesture window. Native submits and wrappers share effective metadata.
+      const declaredFormIntent = childForms.approvedClick(e);
       if (grantsTabNavigationAuthority({
         isTopFrame: topFrame,
         isTrustedInput: e.isTrusted,
         mode,
-        // A bare href is not enough: `href="#"` or `javascript:` resolves fine
-        // and would let the deceptive layer declare an intent it never uses.
-        // Only a real cross-document http(s) destination counts.
-        hasInFrameNavigationIntent:
-          isDocumentNavigationHref(parsed?.href, destHost, location.href) ||
-          declaredFormAction !== null
+        hasInFrameNavigationIntent: isDocumentNavigationHref(parsed?.href, destHost, location.href),
+        isFormSubmission: declaredFormIntent !== null,
       })) {
         notifyNavGesture();
         notifyNavAllow();
       }
-      if (e.isTrusted || mode === "off") {
+      if ((e.isTrusted || mode === "off") && !declaredFormIntent) {
         postToMain("ns-allow", {
           allowOpen: mode === "off" || explicitNewTab,
           allowRedirect: true,
-          // A child frame's intercepted form submission may spend this
-          // allowance only on the action declared by the clicked submit
-          // control. Top-frame and Off-mode behavior remain unrestricted.
           restrictRedirectTarget: !topFrame && mode !== "off",
-          ...(declaredFormAction ? { redirectTarget: declaredFormAction } : {})
         });
       }
 

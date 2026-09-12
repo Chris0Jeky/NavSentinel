@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EVENT_LOG_KEY, type EventLogEntry } from "../extension/src/shared/storage";
 
 type RuntimeMessage = Record<string, unknown>;
-type RuntimeSender = { tab?: { id?: number; url?: string }; frameId?: number };
+type RuntimeSender = { id?: string; tab?: { id?: number; url?: string }; frameId?: number; documentId?: string };
 type SendResponse = (response?: unknown) => void;
 
 type _ChromeMock = ReturnType<typeof createChromeMock>;
@@ -66,6 +66,7 @@ function createChromeMock(options: { deferSends?: boolean } = {}) {
   return {
     chrome: {
       runtime: {
+        id: "test-extension",
         onMessage: runtimeOnMessage,
         onInstalled: runtimeOnInstalled,
         onStartup: runtimeOnStartup
@@ -2445,5 +2446,121 @@ describe("service worker rollback in-flight guard (#360)", () => {
     mock.flushSend(1);
     mock.emitTabUpdated(TAB, { status: "complete" }, { url: URL_B });
     expect(rollbackSendsFor(mock, URL_B)).toBe(1);
+  });
+});
+
+// #688 exercises the real worker handlers and session store, not only the pure
+// matcher. Sender frame/document identity belongs to Chrome in production.
+describe("child-form worker capability (#688)", () => {
+  const origin = "https://source.test/start";
+  const url = "https://sink.test/accept?original=1";
+  const id = "a".repeat(32);
+  const source = { id: "test-extension", tab: { id: 71, url: origin }, frameId: 3, documentId: "child-document" };
+  const intent = { actionUrl: url, method: "post", enctype: "application/x-www-form-urlencoded", target: "_top", targetScope: "top" };
+  beforeEach(() => { vi.resetModules(); vi.useFakeTimers(); vi.setSystemTime(10000); });
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+  async function setup() {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+    await flushMicrotasks();
+    return mock;
+  }
+  function arm(mock: _ChromeMock, formIntent = intent, attemptId = id) {
+    return mock.dispatchRuntimeMessage({ type: "ns-form-intent", formIntent, attemptId, issuedAt: Date.now() }, source);
+  }
+  function start(mock: _ChromeMock, destination = url) { mock.emitBeforeNavigate({ tabId: 71, frameId: 0, url: destination }); }
+  function commit(mock: _ChromeMock, destination = url, transitionType = "form_submit", transitionQualifiers: string[] = []) {
+    mock.emitCommitted({ tabId: 71, frameId: 0, url: destination, transitionType, transitionQualifiers });
+    return mock.dispatchRuntimeMessage({ type: "ns-check-rollback" }, { tab: { id: 71 } }) as { shouldRollback: boolean; entry?: { allowedAtCommit?: boolean } };
+  }
+  it("allows an exact form start and commit once, including a slow response", async () => {
+    const mock = await setup(); expect(arm(mock)).toEqual({ ok: true });
+    start(mock); vi.setSystemTime(15000);
+    expect(commit(mock).entry?.allowedAtCommit).toBe(true);
+    expect(commit(mock).entry?.allowedAtCommit).toBe(false);
+  });
+  it("accepts a server redirect only after its matched form start", async () => {
+    const mock = await setup(); arm(mock); start(mock);
+    expect(commit(mock, "https://redirect.test/done", "form_submit", ["server_redirect"]).entry?.allowedAtCommit).toBe(true);
+  });
+  it("GET replaces the action query, rather than matching a misleading prefix", async () => {
+    const mock = await setup(); arm(mock, { ...intent, method: "get" });
+    start(mock, "https://sink.test/accept?sentinel=1");
+    expect(commit(mock, "https://sink.test/accept?sentinel=1").entry?.allowedAtCommit).toBe(true);
+  });
+  it.each([url, "https://different.test/harm"])("a cancelled click cannot authorize location/link navigation to %s", async destination => {
+    const mock = await setup(); arm(mock); start(mock, destination);
+    const result = commit(mock, destination, "link");
+    expect(result.shouldRollback).toBe(true);
+    expect(result.entry?.allowedAtCommit).toBe(false);
+  });
+  it.each(["missing", "wrong", "duplicate", "expired"])("rejects a %s start, even with a redirect qualifier", async variant => {
+    const mock = await setup(); arm(mock);
+    if (variant === "expired") vi.setSystemTime(11500);
+    if (variant !== "missing") start(mock, variant === "wrong" ? "https://wrong.test/" : url);
+    if (variant === "duplicate") start(mock);
+    expect(commit(mock, "https://redirect.test/done", "form_submit", ["server_redirect"]).entry?.allowedAtCommit).toBe(false);
+  });
+  it("a mismatch burns the first attempt, rather than allowing a later exact retry", async () => {
+    const mock = await setup(); arm(mock); start(mock, "https://wrong.test/"); start(mock);
+    expect(commit(mock).entry?.allowedAtCommit).toBe(false);
+  });
+  it("rejects duplicate runtime authorization instead of extending its expiry", async () => {
+    const mock = await setup(); expect(arm(mock)).toEqual({ ok: true }); vi.setSystemTime(11000);
+    expect(arm(mock)).toEqual({ ok: false }); vi.setSystemTime(11500); start(mock);
+    expect(commit(mock).entry?.allowedAtCommit).toBe(false);
+  });
+  it("a self-targeted form cannot authorize a top-frame form commit", async () => {
+    const mock = await setup(); arm(mock, { ...intent, target: "", targetScope: "self" }); start(mock);
+    expect(commit(mock).entry?.allowedAtCommit).toBe(false);
+  });
+  it("burns authority on source-frame replacement or a navigation error", async () => {
+    const mock = await setup(); arm(mock);
+    mock.emitBeforeNavigate({ tabId: 71, frameId: 3, url: "https://source.test/replaced" }); start(mock);
+    expect(commit(mock).entry?.allowedAtCommit).toBe(false);
+    arm(mock, intent, "b".repeat(32)); start(mock);
+    mock.emitErrorOccurred({ tabId: 71, frameId: 0 });
+    expect(commit(mock).entry?.allowedAtCommit).toBe(false);
+  });
+  it("rejects page-supplied identity and cancellation from a sibling document", async () => {
+    const mock = await setup();
+    const message = { type: "ns-form-intent", formIntent: intent, attemptId: id, issuedAt: 10000 };
+    for (const sender of [{}, { ...source, id: "foreign" }, { ...source, frameId: 0 }, { ...source, documentId: "" }]) {
+      expect(mock.dispatchRuntimeMessage(message, sender)).toEqual({ ok: false });
+    }
+    arm(mock);
+    mock.dispatchRuntimeMessage({ type: "ns-form-intent-cancel", attemptId: id }, { ...source, documentId: "sibling" });
+    start(mock); expect(commit(mock).entry?.allowedAtCommit).toBe(true);
+  });
+  it("same-document cancellation is final", async () => {
+    const mock = await setup(); arm(mock);
+    mock.dispatchRuntimeMessage({ type: "ns-form-intent-cancel", attemptId: id }, source);
+    start(mock); expect(commit(mock).entry?.allowedAtCommit).toBe(false);
+  });
+  it("revokes generic windows rather than inheriting an older click", async () => {
+    const mock = await setup();
+    mock.dispatchRuntimeMessage({ type: "ns-allow-nav", ttlMs: 1500 }, source);
+    mock.dispatchRuntimeMessage({ type: "ns-nav-gesture", ttlMs: 1500 }, source);
+    arm(mock); start(mock);
+    expect(commit(mock, url, "link").entry?.allowedAtCommit).toBe(false);
+  });
+  it("hydrates a matched start but not a second spend after worker restart", async () => {
+    const original = await setup(); arm(original); start(original); await flushMicrotasks();
+    const snapshot = structuredClone(original.chrome.storage.session._store);
+    vi.resetModules();
+    const restored = createChromeMock(); Object.assign(restored.chrome.storage.session._store, snapshot);
+    vi.stubGlobal("chrome", restored.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw"); await flushMicrotasks();
+    vi.setSystemTime(15000);
+    expect(commit(restored).entry?.allowedAtCommit).toBe(true);
+    expect(commit(restored).entry?.allowedAtCommit).toBe(false);
+  });
+  it("rejects unbounded, future-dated, non-HTTP and body-bearing metadata", async () => {
+    const mock = await setup();
+    for (const changed of [{ issuedAt: 10001 }, { issuedAt: 8500 }, { attemptId: "invalid" },
+      { formIntent: { ...intent, actionUrl: "javascript:void(0)" } }, { formIntent: { ...intent, password: "sentinel" } }]) {
+      expect(mock.dispatchRuntimeMessage({ type: "ns-form-intent", formIntent: intent, attemptId: id, issuedAt: 10000, ...changed }, source)).toEqual({ ok: false });
+    }
   });
 });
