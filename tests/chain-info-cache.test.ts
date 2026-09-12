@@ -188,6 +188,10 @@ describe("chain_info_cache (#389)", () => {
         "a negative knownRedirectorHops",
         { depth: 3, viaKnownRedirector: true, knownRedirectorHops: -2 },
       ],
+      [
+        "a non-numeric expiresAt",
+        { ...GOOD, expiresAt: "later" },
+      ],
     ];
 
     for (const [label, resp] of malformed) {

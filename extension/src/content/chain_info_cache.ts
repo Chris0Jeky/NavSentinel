@@ -69,9 +69,8 @@ function isChainInfo(value: unknown): value is RedirectChainInfo {
     typeof candidate.knownRedirectorHops === "number" &&
     Number.isFinite(candidate.knownRedirectorHops) &&
     candidate.knownRedirectorHops >= 0 &&
-    typeof candidate.expiresAt === "number" &&
     Number.isFinite(candidate.expiresAt) &&
-    candidate.expiresAt >= 0
+    (candidate.expiresAt as number) >= 0
   );
 }
 
