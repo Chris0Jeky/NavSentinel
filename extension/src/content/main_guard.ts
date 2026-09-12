@@ -147,6 +147,8 @@ let allowOnceRemaining = 0;
 let allowOnceUntil = 0;
 let allowOpenUntil = 0;
 let allowRedirectUntil = 0;
+let restrictRedirectTarget = false;
+let allowedRedirectTarget = "";
 let popupIntentArmed = false;
 let popupIntentClearTimer = 0;
 
@@ -194,12 +196,19 @@ function recordNav(status: NavStatus, params: { kind: string; url?: string }): v
   });
 }
 
-function markAllowance(params: { allowOpen: boolean; allowRedirect: boolean }): void {
+function markAllowance(params: {
+  allowOpen: boolean;
+  allowRedirect: boolean;
+  restrictRedirectTarget?: boolean;
+  redirectTarget?: string;
+}): void {
   const now = nowMs();
   openCount = 0;
   redirectCount = 0;
   allowOpenUntil = params.allowOpen ? now + OPEN_TTL_MS : 0;
   allowRedirectUntil = params.allowRedirect ? now + REDIRECT_TTL_MS : 0;
+  restrictRedirectTarget = params.restrictRedirectTarget === true;
+  allowedRedirectTarget = typeof params.redirectTarget === "string" ? params.redirectTarget : "";
 }
 
 function isOff(): boolean {
@@ -343,8 +352,11 @@ function maybeArmPopupIntent(
   armPopupIntent();
 }
 
-function consumeRedirectAllowance(): "allowed" | "none" {
+function consumeRedirectAllowance(actionUrl: string | undefined): "allowed" | "none" {
   const now = nowMs();
+  if (restrictRedirectTarget && (!actionUrl || actionUrl !== allowedRedirectTarget)) {
+    return "none";
+  }
   if (
     allowRedirectUntil > 0 &&
     now <= allowRedirectUntil &&
@@ -418,8 +430,8 @@ function notifyAllowedTarget(url: string | URL | undefined, options?: { matchQue
   }
 }
 
-function isGetForm(form: HTMLFormElement): boolean {
-  const raw = form.getAttribute("method") || form.method || "get";
+function isGetForm(form: HTMLFormElement, submitter?: HTMLElement | null): boolean {
+  const raw = submitter?.getAttribute("formmethod") || form.getAttribute("method") || form.method || "get";
   return raw.toLowerCase() === "get";
 }
 
@@ -624,8 +636,8 @@ function patchedOpen(
   return null;
 }
 
-function resolveFormAction(form: HTMLFormElement): string | undefined {
-  const raw = form.getAttribute("action");
+function resolveFormAction(form: HTMLFormElement, submitter?: HTMLElement | null): string | undefined {
+  const raw = submitter?.getAttribute("formaction") ?? form.getAttribute("action");
   if (!raw) return location.href;
   try {
     return new URL(raw, location.href).toString();
@@ -694,7 +706,7 @@ function patchForms(): void {
       return;
     }
 
-    const allowance = consumeRedirectAllowance();
+    const allowance = consumeRedirectAllowance(actionUrl);
     if (allowance !== "none") {
       postAllowed({ kind: "form_submit", ...(actionUrl !== undefined ? { url: actionUrl } : {}) });
       notifyAllowedTarget(actionUrl, { matchQueryPrefix: isGetForm(this) });
@@ -716,24 +728,24 @@ function patchForms(): void {
 
   if (nativeFormRequestSubmit) {
     const patchedFormRequestSubmit = function (this: HTMLFormElement, submitter?: HTMLElement | null): void {
-      const actionUrl = resolveFormAction(this);
+      const actionUrl = resolveFormAction(this, submitter);
       if (isOff() || (isSubframe() && isFormSelfTarget(this.target))) {
         postAllowed({
           kind: "form_request_submit",
           ...(actionUrl !== undefined ? { url: actionUrl } : {})
         });
-        notifyAllowedTarget(actionUrl, { matchQueryPrefix: isGetForm(this) });
+        notifyAllowedTarget(actionUrl, { matchQueryPrefix: isGetForm(this, submitter) });
         nativeFormRequestSubmit.call(this, submitter);
         return;
       }
 
-      const allowance = consumeRedirectAllowance();
+      const allowance = consumeRedirectAllowance(actionUrl);
       if (allowance !== "none") {
         postAllowed({
           kind: "form_request_submit",
           ...(actionUrl !== undefined ? { url: actionUrl } : {})
         });
-        notifyAllowedTarget(actionUrl, { matchQueryPrefix: isGetForm(this) });
+        notifyAllowedTarget(actionUrl, { matchQueryPrefix: isGetForm(this, submitter) });
         nativeFormRequestSubmit.call(this, submitter);
         return;
       }
@@ -778,6 +790,8 @@ function handleBridgeMessage(message: unknown): void {
     debug?: boolean;
     allowOpen?: boolean;
     allowRedirect?: boolean;
+    restrictRedirectTarget?: boolean;
+    redirectTarget?: string;
   };
   if (!data || data.source !== NS_SOURCE || data.v !== PROTOCOL_VERSION) return;
   if (!bridgeSession || data.session !== bridgeSession) return;
@@ -808,7 +822,12 @@ function handleBridgeMessage(message: unknown): void {
   if (data.type === "ns-allow") {
     const allowOpen = data.allowOpen === true;
     const allowRedirect = data.allowRedirect === true;
-    markAllowance({ allowOpen, allowRedirect });
+    markAllowance({
+      allowOpen,
+      allowRedirect,
+      restrictRedirectTarget: data.restrictRedirectTarget === true,
+      ...(typeof data.redirectTarget === "string" ? { redirectTarget: data.redirectTarget } : {})
+    });
     if (debug) {
       console.debug("[NavSentinel] allowance", {
         allowOpen,
