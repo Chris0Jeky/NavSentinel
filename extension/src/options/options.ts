@@ -4,6 +4,7 @@ import { renderCleanupStatus } from "../shared/cleanup_status";
 import { icon, logoSentinel } from "../shared/icons";
 import { getSegValue, initSegKeyboard, setSegValue } from "../shared/seg_control";
 import {
+  OptionsWriteCoordinator,
   computePromptOutcomeStats,
   acceptExternalSettings,
   findSettingsConflicts,
@@ -143,6 +144,26 @@ let conflicts: string[] = [];
 let autoSaveTimer: number | undefined;
 let saveBusy = false;
 let saveInFlight: Promise<void> | null = null;
+const writes = new OptionsWriteCoordinator();
+let importApplying = false;
+let importIncoming: SuiteSettings | null = null;
+let importIncomingRevision = 0;
+const shell = document.querySelector<HTMLElement>(".shell")!;
+const importProgress = document.createElement("p");
+importProgress.className = "settings-state";
+importProgress.setAttribute("role", "status");
+importProgress.hidden = true;
+shell.before(importProgress);
+// Inert fences trusted UI activation. The capture fence also rejects synthetic
+// events, rather than relying on a disabled button as a write-ordering lock.
+for (const type of ["click", "input", "change", "keydown"]) {
+  document.addEventListener(type, (event) => {
+    if (writes.importPending && event.target instanceof Node && shell.contains(event.target)) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  }, true);
+}
 const numericControls = [mediumThresholdEl, similarityMaxDistEl, logLimitEl];
 
 function validNumbers(): boolean {
@@ -162,8 +183,8 @@ function updateDraftState(): void {
   dirtyStatusEl.textContent = conflicts.length ? "Conflicting changes — choose which values to keep." :
     !validNumbers() ? "Unsaved changes — enter valid numbers within the shown limits." :
     dirty ? "Unsaved changes" : "All changes saved";
-  discardBtn.disabled = !dirty || saveBusy;
-  saveBtn.disabled = saveBusy || conflicts.length > 0 || !validNumbers();
+  discardBtn.disabled = !dirty || saveBusy || writes.importPending;
+  saveBtn.disabled = saveBusy || writes.importPending || conflicts.length > 0 || !validNumbers();
   conflictEl.hidden = conflicts.length === 0;
   conflictTextEl.textContent = `Changed in another window: ${conflicts.join(", ")}. Your edits have not been overwritten.`;
   // Report persisted behavior, even when the controls contain a manual draft.
@@ -175,7 +196,7 @@ function updateDraftState(): void {
 function draftChanged(): void {
   updateDraftState();
   window.clearTimeout(autoSaveTimer);
-  if (renderedSettings?.autoSave && !conflicts.length && validNumbers()) {
+  if (!writes.importPending && renderedSettings?.autoSave && !conflicts.length && validNumbers() && Object.keys(deriveOptionsSettingsPatch(renderedSettings, readSettingsDraft())).length) {
     autoSaveTimer = window.setTimeout(() => { void saveSettings(); }, 250);
   }
 }
@@ -639,7 +660,7 @@ async function saveSettingsInner(): Promise<void> {
 
 function saveSettings(): Promise<void> {
   if (saveInFlight) return saveInFlight;
-  const pending = saveSettingsInner();
+  const pending = writes.write(saveSettingsInner);
   saveInFlight = pending;
   void pending.finally(() => {
     if (saveInFlight === pending) saveInFlight = null;
@@ -653,22 +674,25 @@ for (const el of [navModeSeg, credModeSeg, navDebugEl, autoDismissOverlaysEl, bl
 }
 for (const el of numericControls) el.addEventListener("input", draftChanged);
 
-autoSaveEl.addEventListener("change", async () => {
+autoSaveEl.addEventListener("change", () => {
+  if (writes.importPending) return;
   window.clearTimeout(autoSaveTimer);
   autoSaveEl.disabled = true;
   const enabled = autoSaveEl.checked;
-  try {
-    const incoming = await updateSuiteSettings({ autoSave: enabled });
-    rebaseIncomingSettings(incoming);
-    autoSaveEl.checked = incoming.autoSave;
-    draftChanged();
-  } catch {
-    autoSaveEl.checked = renderedSettings?.autoSave ?? true;
-    flashStatus(saveStatusEl, "Could not save auto-save preference.", "error");
-  } finally {
-    autoSaveEl.disabled = false;
-    updateDraftState();
-  }
+  void writes.write(async () => {
+    try {
+      const incoming = await updateSuiteSettings({ autoSave: enabled });
+      rebaseIncomingSettings(incoming);
+      autoSaveEl.checked = incoming.autoSave;
+      draftChanged();
+    } catch {
+      autoSaveEl.checked = renderedSettings?.autoSave ?? true;
+      flashStatus(saveStatusEl, "Could not save auto-save preference.", "error");
+    } finally {
+      autoSaveEl.disabled = false;
+      updateDraftState();
+    }
+  });
 });
 
 discardBtn.addEventListener("click", () => {
@@ -741,27 +765,65 @@ exportBtn.addEventListener("click", async () => {
   flashStatus(statusEl, "Exported.");
 });
 
+/** Read persistence even when a failed import emitted no storage notification. */
+async function refreshImportedSettings(replaceDraft = false): Promise<void> {
+  const revision = importIncomingRevision;
+  const loaded = await getSuiteSettings();
+  const incoming = revision !== importIncomingRevision && importIncoming ? importIncoming : loaded;
+  if (replaceDraft) {
+    settingsGeneration++;
+    submittedSettings = submittedBaseline = submittedPatch = null;
+    conflicts = [];
+    renderSettings(renderedSettings = incoming);
+  } else {
+    // The draft and invalid numeric text stayed untouched while the import ran.
+    // Rebase them over actual persistence and retain same-leaf conflicts.
+    rebaseIncomingSettings(incoming);
+  }
+  importIncoming = null;
+  updateDraftState();
+  await refreshAllowlist();
+  await refreshTrusted();
+  await refreshEventLog();
+  await refreshStats();
+  await refreshDomainProfiles();
+}
+
 importFileEl.addEventListener("change", async () => {
   const f = importFileEl.files?.[0];
-  if (!f) return;
+  if (!f || writes.importPending) return;
+  window.clearTimeout(autoSaveTimer);
+  const previousInert = shell.inert;
+  const previousBusy = shell.getAttribute("aria-busy");
+  shell.inert = true;
+  shell.setAttribute("aria-busy", "true");
+  importProgress.textContent = "Importing — settings controls are temporarily unavailable.";
+  importProgress.hidden = false;
   try {
-    // An import is authoritative. Cancel a pending autosave and let an already
-    // dispatched write finish before the import crosses the worker boundary.
-    window.clearTimeout(autoSaveTimer);
-    settingsGeneration++;
-    await saveInFlight;
-    // Thin adapter: orchestration (import → refresh → status, with the non-atomic
-    // partial-vs-total failure handling) lives in the unit-tested runImportFlow.
-    await runImportFlow({
-      importPayload: async () => {
-        return importAll(JSON.parse(await f.text()));
-      },
-      refresh: init,
-      flash: (msg, tone) => flashStatus(statusEl, msg, tone),
-      isDeliveryFailure: (e) => e instanceof PromptOutcomeDeliveryError,
+    await writes.import(async () => {
+      // Both Save and auto-save preference writes admitted earlier have drained.
+      settingsGeneration++;
+      importApplying = true;
+      importIncoming = null;
+      await runImportFlow({
+        importPayload: async () => importAll(JSON.parse(await f.text())),
+        refresh: refreshImportedSettings,
+        flash: (msg, tone) => flashStatus(statusEl, msg, tone),
+        isDeliveryFailure: (e) => e instanceof PromptOutcomeDeliveryError,
+      });
     });
   } finally {
+    importApplying = false;
+    if (importIncoming) rebaseIncomingSettings(importIncoming);
+    importIncoming = null;
+    shell.inert = previousInert;
+    if (previousBusy === null) shell.removeAttribute("aria-busy");
+    else shell.setAttribute("aria-busy", previousBusy);
+    importProgress.hidden = true;
     importFileEl.value = "";
+    // A rejected import must not strand the cancelled dirty autosave. This also
+    // keeps conflicts, manual-save mode and incomplete numbers unscheduled.
+    draftChanged();
   }
 });
 
@@ -818,9 +880,16 @@ clearBehaviouralBtn.addEventListener(
 // Changes from the popup and other extension contexts arrive through the same
 // canonical storage channel. Clean controls update immediately; dirty fields
 // remain visible for the user to save intentionally. (#558)
-onSuiteSettingsChange((incoming) => rebaseIncomingSettings(
-  incoming,
-  submittedPatch && settingsMatchPatch(incoming, submittedPatch) ? submittedSettings : submittedBaseline,
-));
+onSuiteSettingsChange((incoming) => {
+  if (importApplying) {
+    importIncoming = incoming;
+    importIncomingRevision++;
+    return;
+  }
+  rebaseIncomingSettings(
+    incoming,
+    submittedPatch && settingsMatchPatch(incoming, submittedPatch) ? submittedSettings : submittedBaseline,
+  );
+});
 
 void init();
