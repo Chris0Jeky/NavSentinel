@@ -24,6 +24,12 @@ import {
   type ProvingGroundFakeSink,
   type ProvingGroundRole,
 } from "./proving_ground_fake_sink";
+import {
+  assertCurrentHeadBuildInputs,
+  hashCanonicalWorktreeFiles,
+  hashGitFiles,
+  trackedBuildInputs,
+} from "./extension_build_provenance";
 
 const HARM_CONSEQUENCE = "wrong-target-navigation";
 const BENIGN_CONSEQUENCE = "benign-navigation";
@@ -126,43 +132,6 @@ function hashFiles(files: string[]): string {
   return hash.digest("hex");
 }
 
-function hashGitFiles(files: string[], head: string): string {
-  const hash = createHash("sha256");
-  const relativePaths = files
-    .map((file) => path.relative(process.cwd(), file).replaceAll("\\", "/"))
-    .sort();
-  for (const relativePath of relativePaths) {
-    hash.update(relativePath);
-    hash.update("\0");
-    hash.update(execFileSync("git", ["rev-parse", `${head}:${relativePath}`], {
-      cwd: process.cwd(),
-      encoding: "utf8",
-    }).trim());
-    hash.update("\0");
-  }
-  return hash.digest("hex");
-}
-
-function hashCanonicalWorktreeFiles(files: string[]): string {
-  const hash = createHash("sha256");
-  const relativePaths = files
-    .map((file) => path.relative(process.cwd(), file).replaceAll("\\", "/"))
-    .sort();
-  for (const relativePath of relativePaths) {
-    const file = path.resolve(process.cwd(), relativePath);
-    const blobId = execFileSync(
-      "git",
-      ["hash-object", "--filters", `--path=${relativePath}`, file],
-      { cwd: process.cwd(), encoding: "utf8" },
-    ).trim();
-    hash.update(relativePath);
-    hash.update("\0");
-    hash.update(blobId);
-    hash.update("\0");
-  }
-  return hash.digest("hex");
-}
-
 function hashDirectory(root: string): string {
   const files: string[] = [];
   const visit = (directory: string): void => {
@@ -176,22 +145,6 @@ function hashDirectory(root: string): string {
   return hashFiles(files);
 }
 
-function trackedBuildInputs(repositoryHead: string): string[] {
-  const pathspecs = [
-    "extension",
-    "scripts",
-    "package.json",
-    "package-lock.json",
-    "vite.config.ts",
-    "tsconfig.json",
-  ];
-  return execFileSync(
-    "git",
-    ["ls-tree", "-r", "--name-only", "-z", repositoryHead, "--", ...pathspecs],
-    { cwd: repositoryRoot, encoding: "utf8" },
-  ).split("\0").filter(Boolean).map((relativePath) => path.join(repositoryRoot, relativePath));
-}
-
 function prepareCurrentHeadExtension(): ExtensionProvenance {
   if (process.env.EXTENSION_PATH && path.resolve(process.env.EXTENSION_PATH) !== extensionPath) {
     throw new Error("State-authority evidence rejects EXTENSION_PATH outside the current worktree build.");
@@ -200,12 +153,7 @@ function prepareCurrentHeadExtension(): ExtensionProvenance {
     cwd: repositoryRoot,
     encoding: "utf8",
   }).trim();
-  const sourceFiles = trackedBuildInputs(repositoryHead);
-  const gitSourceSha256 = hashGitFiles(sourceFiles, repositoryHead);
-  const executedSourceSha256 = hashCanonicalWorktreeFiles(sourceFiles);
-  if (executedSourceSha256 !== gitSourceSha256) {
-    throw new Error("Extension build inputs must match the recorded Git head before evidence is collected.");
-  }
+  const buildInputs = assertCurrentHeadBuildInputs(repositoryRoot, repositoryHead);
 
   const buildEnvironment = { ...process.env };
   delete buildEnvironment.EXTENSION_PATH;
@@ -219,10 +167,10 @@ function prepareCurrentHeadExtension(): ExtensionProvenance {
   }
   return {
     repositoryHead,
-    gitSourceSha256,
-    executedSourceSha256,
+    gitSourceSha256: buildInputs.gitSha256,
+    executedSourceSha256: buildInputs.executedSha256,
     buildSha256: hashDirectory(extensionPath),
-    trackedInputCount: sourceFiles.length,
+    trackedInputCount: buildInputs.files.length,
   };
 }
 
@@ -441,17 +389,18 @@ async function attachReceipt(
     path.join(gymRoot, scenario.fixture),
     path.join(gymRoot, "local-fixture-targets.js"),
     path.resolve(process.cwd(), "tests", "e2e", "state-authority-sink.spec.ts"),
+    path.resolve(process.cwd(), "tests", "e2e", "extension_build_provenance.ts"),
     path.resolve(process.cwd(), "tests", "e2e", "local_fixture_target_bootstrap.ts"),
     path.resolve(process.cwd(), "tests", "e2e", "proving_ground_fake_sink.ts"),
     path.resolve(process.cwd(), "playwright.stress.config.ts"),
   ];
-  const gitSourceSha256 = hashGitFiles(campaignFiles, repositoryHead);
-  const executedSourceSha256 = hashCanonicalWorktreeFiles(campaignFiles);
+  const gitSourceSha256 = hashGitFiles(repositoryRoot, campaignFiles, repositoryHead);
+  const executedSourceSha256 = hashCanonicalWorktreeFiles(repositoryRoot, campaignFiles);
   expect(executedSourceSha256, "Campaign sources must match the recorded Git head").toBe(gitSourceSha256);
   expect(repositoryHead, "Repository head must not change after the extension build").toBe(extensionProvenance.repositoryHead);
-  const currentBuildInputs = trackedBuildInputs(repositoryHead);
+  const currentBuildInputs = trackedBuildInputs(repositoryRoot, repositoryHead);
   expect(
-    hashCanonicalWorktreeFiles(currentBuildInputs),
+    hashCanonicalWorktreeFiles(repositoryRoot, currentBuildInputs),
     "Extension sources must not change after the current-head build",
   ).toBe(extensionProvenance.executedSourceSha256);
   expect(hashDirectory(extensionPath), "Loaded extension bytes must match the current-head build").toBe(
