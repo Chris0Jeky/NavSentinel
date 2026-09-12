@@ -48,7 +48,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   getGymBaseUrl,
-  readBuiltMainUiGuardRevision,
+  readBuiltUiGuardRevision,
   readToastText,
   updateNavigationSettings,
   getServiceWorker,
@@ -374,7 +374,7 @@ async function runArm(
         root.getAttribute("data-navsentinel-capture-ready") === "1" &&
         root.getAttribute("data-navsentinel-bridge-ready") === "1" &&
         root.getAttribute("data-navsentinel-ui-guard") === expectedGuard;
-    }, mode === "protected" ? readBuiltMainUiGuardRevision() : "", { timeout: 15_000 });
+    }, mode === "protected" ? readBuiltUiGuardRevision() : "", { timeout: 15_000 });
 
     readiness = await frame.evaluate(() => ({
       fixtureReady: document.documentElement.dataset.fixtureReady ?? null,
