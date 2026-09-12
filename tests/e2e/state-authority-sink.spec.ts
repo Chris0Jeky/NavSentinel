@@ -125,10 +125,30 @@ function hashGitFiles(files: string[], head: string): string {
   for (const relativePath of relativePaths) {
     hash.update(relativePath);
     hash.update("\0");
-    hash.update(execFileSync("git", ["show", `${head}:${relativePath}`], {
+    hash.update(execFileSync("git", ["rev-parse", `${head}:${relativePath}`], {
       cwd: process.cwd(),
-      maxBuffer: 10 * 1024 * 1024,
-    }));
+      encoding: "utf8",
+    }).trim());
+    hash.update("\0");
+  }
+  return hash.digest("hex");
+}
+
+function hashCanonicalWorktreeFiles(files: string[]): string {
+  const hash = createHash("sha256");
+  const relativePaths = files
+    .map((file) => path.relative(process.cwd(), file).replaceAll("\\", "/"))
+    .sort();
+  for (const relativePath of relativePaths) {
+    const file = path.resolve(process.cwd(), relativePath);
+    const blobId = execFileSync(
+      "git",
+      ["hash-object", "--filters", `--path=${relativePath}`, file],
+      { cwd: process.cwd(), encoding: "utf8" },
+    ).trim();
+    hash.update(relativePath);
+    hash.update("\0");
+    hash.update(blobId);
     hash.update("\0");
   }
   return hash.digest("hex");
@@ -366,7 +386,7 @@ async function attachReceipt(
     path.resolve(process.cwd(), "playwright.stress.config.ts"),
   ];
   const gitSourceSha256 = hashGitFiles(campaignFiles, repositoryHead);
-  const executedSourceSha256 = hashFiles(campaignFiles);
+  const executedSourceSha256 = hashCanonicalWorktreeFiles(campaignFiles);
   expect(executedSourceSha256, "Campaign sources must match the recorded Git head").toBe(gitSourceSha256);
   const receipt = {
     schema_version: 1,
