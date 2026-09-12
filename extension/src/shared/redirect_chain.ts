@@ -21,12 +21,14 @@ export interface RedirectChainInfo {
   depth: number;
   viaKnownRedirector: boolean;
   knownRedirectorHops: number;
+  /** Absolute time at which this chain must stop contributing to scoring. */
+  expiresAt: number;
 }
 
 // --- Constants ---
 
 const CHAIN_WINDOW_MS = 10_000;
-const CHAIN_STALE_MS = 15_000;
+export const CHAIN_STALE_MS = 15_000;
 const CHAIN_MAX_HOPS = 10;
 const CHAIN_MAP_MAX = 100;
 
@@ -209,12 +211,20 @@ export class RedirectChainTracker {
   }
 
   /**
-   * Get chain info for a tab. Returns null if no meaningful chain exists
-   * (single-hop chains are not considered redirect chains).
+   * Get chain info for a tab at an explicit point in time. A read is also a
+   * pruning boundary: a session-restored chain must not remain usable merely
+   * because no later navigation happened to call recordHop.
+   * Returns null if no meaningful chain exists (single-hop chains are not
+   * considered redirect chains).
    */
-  getChainInfo(tabId: number): RedirectChainInfo | null {
+  getChainInfo(tabId: number, now: number = Date.now()): RedirectChainInfo | null {
+    this.pruneStale(now);
     const chain = this.chains.get(tabId);
     if (!chain || chain.hops.length < 2) return null;
+
+    const lastHop = chain.hops[chain.hops.length - 1];
+    if (!lastHop) return null;
+    const expiresAt = lastHop.ts + CHAIN_STALE_MS;
 
     let knownRedirectorHops = 0;
     for (const hop of chain.hops) {
@@ -227,6 +237,7 @@ export class RedirectChainTracker {
       depth: chain.hops.length,
       viaKnownRedirector: knownRedirectorHops > 0,
       knownRedirectorHops,
+      expiresAt,
     };
   }
 
@@ -264,7 +275,7 @@ export class RedirectChainTracker {
       // map outside the recordHop path (tests, future callers); fall back to startedAt so it
       // is still time-pruned. (#285, #390)
       const refTs = lastHop ? lastHop.ts : chain.startedAt;
-      if (now - refTs > CHAIN_STALE_MS) {
+      if (now - refTs >= CHAIN_STALE_MS) {
         this.chains.delete(tabId);
       }
     }

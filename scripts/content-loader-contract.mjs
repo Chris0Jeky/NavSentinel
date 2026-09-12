@@ -39,7 +39,7 @@ export function assertContentAddressedLoader(loaderPath, content) {
 export function finalizeUiGuardLoader(loaderTemplate) {
   const placeholderMarker = uiGuardMarker(UI_GUARD_REVISION_PLACEHOLDER);
   if (loaderTemplate.split(placeholderMarker).length !== 2) {
-    throw new Error("MAIN-world loader must contain exactly one UI guard placeholder");
+    throw new Error("UI-guard loader must contain exactly one UI guard placeholder");
   }
   const revision = contentLoaderDigest(loaderTemplate);
   return {
@@ -55,7 +55,7 @@ export function assertUiGuardRevision(content) {
   );
   const matches = [...String(content).matchAll(markerPattern)];
   if (matches.length !== 1 || !matches[0]?.[1]) {
-    throw new Error("MAIN-world loader must contain exactly one valid UI guard revision");
+    throw new Error("UI-guard loader must contain exactly one valid UI guard revision");
   }
   const revision = matches[0][1];
   const loaderTemplate = String(content).replace(
@@ -65,7 +65,7 @@ export function assertUiGuardRevision(content) {
   const expected = contentLoaderDigest(loaderTemplate);
   if (revision !== expected) {
     throw new Error(
-      `MAIN-world loader UI guard revision is stale: found ${revision}, expected ${expected}`,
+      `UI-guard loader revision is stale: found ${revision}, expected ${expected}`,
     );
   }
   return revision;

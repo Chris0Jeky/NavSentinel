@@ -14,6 +14,7 @@
  */
 import { test, expect, chromium } from "@playwright/test";
 import fs from "fs";
+import * as http from "node:http";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -85,6 +86,128 @@ async function setupFixtureTest(fixtureName: string) {
       fs.rmSync(userDataDir, { recursive: true, force: true });
     }
   };
+}
+
+type RedirectChainServer = {
+  baseUrl: string;
+  redirectHits: number[];
+  close: () => Promise<void>;
+};
+
+function redirectChainPage(step: number): string {
+  const nextLink = step < 3
+    ? `<a id="next" href="/go/${step + 1}">Continue to landing ${step + 1}</a>`
+    : "<p id=\"complete\">Redirect journey complete</p>";
+  return `<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8"><title>Redirect landing ${step}</title></head>
+  <body><main><h1>Redirect landing ${step}</h1>${nextLink}</main></body>
+</html>`;
+}
+
+async function startRedirectChainServer(): Promise<RedirectChainServer> {
+  const redirectHits: number[] = [];
+  const server = http.createServer((req, res) => {
+    const requestUrl = new URL(req.url ?? "/", "http://127.0.0.1");
+    res.setHeader("cache-control", "no-store");
+
+    if (requestUrl.pathname === "/start") {
+      res.setHeader("content-type", "text/html; charset=utf-8");
+      res.end(`<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8"><title>Redirect journey start</title></head>
+  <body><main><h1>Redirect journey start</h1><a id="next" href="/go/1">Continue to landing 1</a></main></body>
+</html>`);
+      return;
+    }
+
+    const redirectMatch = /^\/go\/([1-3])$/.exec(requestUrl.pathname);
+    if (redirectMatch) {
+      const step = Number(redirectMatch[1]);
+      redirectHits.push(step);
+      res.statusCode = 302;
+      res.setHeader("location", `/redirect/landing-${step}`);
+      res.end();
+      return;
+    }
+
+    const landingMatch = /^\/redirect\/landing-([1-3])$/.exec(requestUrl.pathname);
+    if (landingMatch) {
+      res.setHeader("content-type", "text/html; charset=utf-8");
+      res.end(redirectChainPage(Number(landingMatch[1])));
+      return;
+    }
+
+    res.statusCode = 404;
+    res.end("Not found");
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    server.close();
+    throw new Error("Failed to bind redirect-chain server");
+  }
+
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}`,
+    redirectHits,
+    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+  };
+}
+
+async function readRawRedirectChain(
+  context: import("@playwright/test").BrowserContext,
+  tabUrl: string,
+): Promise<{ tabFound: boolean; entryPresent: boolean; urls: string[] }> {
+  const sw = await getServiceWorker(context);
+  return sw.evaluate(async ({ key, expectedUrl }) => {
+    const tabs = await chrome.tabs.query({});
+    const tab = tabs.find((candidate) => candidate.url === expectedUrl);
+    if (typeof tab?.id !== "number") {
+      return { tabFound: false, entryPresent: false, urls: [] };
+    }
+
+    const stored = await chrome.storage.session.get(key);
+    const map = stored[key] && typeof stored[key] === "object"
+      ? stored[key] as Record<string, unknown>
+      : {};
+    const entry = map[String(tab.id)];
+    if (!entry || typeof entry !== "object") {
+      return { tabFound: true, entryPresent: false, urls: [] };
+    }
+    const hops = Array.isArray((entry as { hops?: unknown }).hops)
+      ? (entry as { hops: Array<{ url?: unknown }> }).hops
+      : [];
+    return {
+      tabFound: true,
+      entryPresent: true,
+      urls: hops.flatMap((hop) => typeof hop?.url === "string" ? [hop.url] : []),
+    };
+  }, { key: "ns_sw:redirectChains", expectedUrl: tabUrl });
+}
+
+async function clickRedirectChainDebugProbe(page: import("@playwright/test").Page): Promise<string> {
+  await page.evaluate(() => {
+    document.getElementById("navsentinel-redirect-chain-probe")?.remove();
+    const probe = document.createElement("a");
+    probe.id = "navsentinel-redirect-chain-probe";
+    probe.href = "#navsentinel-redirect-chain-probe-target";
+    probe.textContent = "NavSentinel redirect-chain probe";
+    probe.addEventListener("click", (event) => event.preventDefault());
+    document.body.appendChild(probe);
+    probe.click();
+  });
+
+  const handle = await page.waitForFunction(() => {
+    const host = document.querySelector("#__navsentinel_debug_host");
+    const text = host?.shadowRoot?.querySelector("pre")?.textContent?.trim();
+    return text?.includes("NRS factors:") ? text : null;
+  }, null, { timeout: 5000 });
+  return (await handle.jsonValue()) as string;
 }
 
 /**
@@ -415,6 +538,83 @@ test.describe("Redirect Chains", () => {
       );
     } finally {
       await cleanup();
+    }
+  });
+
+  test("chain-05 Back and Forward clear stale redirect factors @phase2", async () => {
+    test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
+
+    const redirectServer = await startRedirectChainServer();
+    const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-chain-boundary-"));
+    let context: import("@playwright/test").BrowserContext | null = null;
+
+    try {
+      context = await chromium.launchPersistentContext(userDataDir, {
+        headless: false,
+        timeout: 60_000,
+        args: [
+          `--disable-extensions-except=${extensionPath}`,
+          `--load-extension=${extensionPath}`,
+        ],
+      });
+      await updateNavigationSettings(context, { debug: true });
+
+      const page = await context.newPage();
+      await page.goto(`${redirectServer.baseUrl}/start`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000,
+      });
+      await waitForNavSentinelBridge(page);
+
+      const landingUrls = [1, 2, 3].map(
+        (step) => `${redirectServer.baseUrl}/redirect/landing-${step}`,
+      );
+      for (const [index, landingUrl] of landingUrls.entries()) {
+        await expect(page.locator("#next")).toBeVisible();
+        await Promise.all([
+          page.waitForURL(landingUrl, { timeout: 10_000 }),
+          page.locator("#next").click(),
+        ]);
+        await waitForNavSentinelBridge(page);
+        expect(redirectServer.redirectHits).toEqual(
+          Array.from({ length: index + 1 }, (_, hitIndex) => hitIndex + 1),
+        );
+      }
+
+      await expect.poll(
+        async () => await readRawRedirectChain(context!, page.url()),
+        { timeout: 5000 },
+      ).toEqual({ tabFound: true, entryPresent: true, urls: landingUrls });
+
+      let debugText = await clickRedirectChainDebugProbe(page);
+      expect(debugText).toContain("nrs_redirect_chain_depth");
+      expect(debugText).toContain("nrs_redirect_via_known_redirector");
+
+      await page.goBack({ waitUntil: "domcontentloaded", timeout: 10_000 });
+      await expect(page).toHaveURL(landingUrls[1]!);
+      await waitForNavSentinelBridge(page);
+      await expect.poll(
+        async () => await readRawRedirectChain(context!, page.url()),
+        { timeout: 5000 },
+      ).toEqual({ tabFound: true, entryPresent: false, urls: [] });
+      debugText = await clickRedirectChainDebugProbe(page);
+      expect(debugText).not.toContain("nrs_redirect_chain_depth");
+      expect(debugText).not.toContain("nrs_redirect_via_known_redirector");
+
+      await page.goForward({ waitUntil: "domcontentloaded", timeout: 10_000 });
+      await expect(page).toHaveURL(landingUrls[2]!);
+      await waitForNavSentinelBridge(page);
+      await expect.poll(
+        async () => await readRawRedirectChain(context!, page.url()),
+        { timeout: 5000 },
+      ).toEqual({ tabFound: true, entryPresent: false, urls: [] });
+      debugText = await clickRedirectChainDebugProbe(page);
+      expect(debugText).not.toContain("nrs_redirect_chain_depth");
+      expect(debugText).not.toContain("nrs_redirect_via_known_redirector");
+    } finally {
+      if (context) await context.close();
+      await redirectServer.close();
+      fs.rmSync(userDataDir, { recursive: true, force: true });
     }
   });
 });
