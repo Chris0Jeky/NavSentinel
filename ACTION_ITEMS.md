@@ -22,9 +22,9 @@ Before that instruction, eleven open PRs carried branch-held
 human Chrome gates: #572 (AI-31), #599 (AI-37), #600 (AI-38), #608 (AI-39),
 #609 (AI-40), #636 (AI-41), #640 (AI-42), #643 (AI-43), #644 (AI-44),
 #641 (AI-45), and #649 (AI-46). This is not the total open-PR count or a claim
-that these candidates have completed their other checks. These eleven
-items are defined only inside their own PR branches and are listed as pointers
-under "Branch-held Gate-3 items" below. AI-30, AI-33, AI-35, and AI-36 are now
+that these candidates have completed their other checks. At that time their
+procedures lived only inside their own PR branches; the remaining branch-held
+pointers are listed below. AI-30, AI-33, AI-35, and AI-36 are now
 **post-merge** checks: PRs #570, #582, #586, and #589 merged on 2026-08-27 and no
 waiver record for those merges was found in `docs/agentic/DECISIONS.md`,
 `HANDOFF.md`, this file, or `docs/Project_Roadmap.md`, so each check stays open
@@ -34,6 +34,10 @@ merged after refreshed exact-head CI and bounded review; that waiver is not a
 real-Chrome pass and establishes no `measure:fp` or headed-measurement result,
 and #223 remains open. AI-27, AI-28, and AI-29 are resolved; AI-14 remains
 blocked for future measurement work.
+
+PR #600 merged as `c8b1a70bef3c92600fdf7af3fb9fdc5e73b236f2` under the
+one-time waiver. Its Chrome work is now a current-`main` AI-47 subprocedure,
+not a branch-held item or a human-test pass.
 
 **Guided resolution cursor:** `AI-19` (`Resume at: AI-19`; conversational label
 `q-5`). Current ready order: AI-19 → AI-47 → optional AI-24 → AI-23 (low
@@ -197,12 +201,6 @@ issue #639's owner decision about where future gate procedures should live.
   the #523 unverified-queue design, plus a bridge queue-pressure Chrome check
   that a benign clipboard write cannot suppress the trusted fake-verification
   warning. Full procedure in that branch's `docs/agentic/GATE3_GUIDES.md`.
-- **AI-38** — PR #600 (issue #560), branch `fix/issue560-isolated-input-fence`,
-  exact head `04470a5dc230b07f261c66213c2ba23770fc9cd3`. Scope: on a real
-  media-embed page, a redirect card's Dismiss and Allow once respond to mouse and
-  keyboard, clicks never reach the page, and a later page layer cannot cover the
-  card. Containment only. Full procedure in that branch's
-  `docs/agentic/GATE3_GUIDES.md`.
 - **AI-39** — PR #608 (issue #601), branch
   `feat/issue601-extension-origin-allow`, exact head
   `8b12ffbd3a76c0abdf8fbe8090980640a7bc50e5`. Scope: the protection-lowering
@@ -248,6 +246,15 @@ issue #639's owner decision about where future gate procedures should live.
   form target allowances. Full
   [child-form procedure](https://github.com/Chris0Jeky/NavSentinel/blob/56d06a11d1ad8d4b00391c3eca99645da0312279/docs/agentic/AI-46-issue637-child-form-target.md).
   This is stacked on #636; AI-41 remains open and the parent must land first.
+
+### Merged Gate-3 work retained under AI-47
+
+- **Former AI-38 — PR #600 (issue #560), merged as `c8b1a70`.** The
+  isolated-world toast input fence and top-layer host remain subject to the
+  [current-`main` AI-47 owned-controls subprocedure](docs/agentic/GATE3_GUIDES.md#ai-47-former-ai-38-pr-600-current-main-toast-control-subprocedure).
+  Run it only against a current `main` build that contains that merge. Record
+  its required AI-47 sub-result; it is not a standalone or consolidated
+  Gate-3 pass.
 
 **OPEN: AI-47 — September browser-queue consolidated post-merge Chrome check.**
 On 2026-09-12 Chris explicitly directed the agent to merge the open PRs gated
