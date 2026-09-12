@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { chromium, expect, test, type BrowserContext, type Page, type Worker } from "@playwright/test";
 import { inspectBuiltReleaseProfile } from "../../scripts/check-release-profile.mjs";
-import { readBuiltMainUiGuardRevision, startGymServer } from "../e2e/extension_test_utils";
+import { readBuiltUiGuardRevision, startGymServer } from "../e2e/extension_test_utils";
 import { startProvingGroundFakeSinkForHost, type ProvingGroundFakeSink } from "../e2e/proving_ground_fake_sink";
 import { installFixtureTargetBootstrap } from "../e2e/local_fixture_target_bootstrap";
 import { MaintainerHeadedError, hashDirectory, hashFiles, parseChromeMetadata, readRepositorySnapshot, redactError, sha256, validateMaintainerInputs, writeEvidenceReceipt } from "./receipt";
@@ -99,7 +99,7 @@ test("#420 records one operator-prepared branded-Chrome benign receipt", async (
     }));
     observePage(ownedPage, errors);
     await ownedPage.goto(url.href, { waitUntil: "domcontentloaded", timeout: 20_000 });
-    markers = await waitForMaintainerReadiness(ownedPage, readBuiltMainUiGuardRevision());
+    markers = await waitForMaintainerReadiness(ownedPage, readBuiltUiGuardRevision());
     verification.push("capture_bridge_ui_guard_match_exact_build");
     await ownedPage.locator("#overlayBtn").click();
     await expect(ownedPage.locator("#status")).toHaveText("Status: playing");
