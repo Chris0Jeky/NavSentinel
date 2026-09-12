@@ -54,6 +54,7 @@ Executed locally on Node 22.16.0:
   boundary behaviors, then passed 29 patched contracts. It used the locally
   available TypeScript 5.8.3 transpiler to execute source modules. This is **not**
   Vitest, a typecheck, a Vite build, browser evidence or independent review.
+- `npm run vision:build`: rebuilt all three hash-pinned, network-disabled standalone previews.
 - `git diff --check` passed.
 
 The sandbox could not install the lockfile dependency graph: the offline cache
@@ -72,11 +73,14 @@ npm run vision:test
 npm run vision:build
 ```
 
-The maintained served Lab and native shell use the changed shared importer.
-The three checked-in self-contained HTML previews retain their previous build
-receipt in this source-focused change: regenerate them with `vision:build` before
-using them to assess the new IPv6 contract. Old downloaded previews are not new
-consumer evidence.
+The served Lab, native shell and regenerated checked-in self-contained HTML
+previews all contain the changed importer. The generator preserves hash-pinned
+inline scripts and the no-network CSP. Old downloaded previews are not evidence
+for this new contract. Initial hosted qualification found a DOM-library mismatch
+in a new test and stale previews; both were corrected. The branch-scoped one-off
+generation job removed itself after publishing the deterministic outputs, leaving
+no workflow or permission change in the final diff. Current hosted results belong
+to the exact heads recorded in the PR, not to the earlier failing head.
 
 Before owner acceptance, follow [EXPORT_REVIEW.md](EXPORT_REVIEW.md) and add a
 synthetic legacy URL-shaped `pageSite`, IPv4 and IPv6, out-of-order imported dates,
