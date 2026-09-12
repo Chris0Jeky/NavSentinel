@@ -39,6 +39,10 @@ PR #600 merged as `c8b1a70bef3c92600fdf7af3fb9fdc5e73b236f2` under the
 one-time waiver. Its Chrome work is now a current-`main` AI-47 subprocedure,
 not a branch-held item or a human-test pass.
 
+PR #609 merged as `e35f5430660767d4998c8f4d727b38444f3f9b14` under the same
+waiver. Its Back/Forward Cache Chrome work is now a current-`main` AI-47
+subprocedure, not a branch-held item or a human-test pass.
+
 **Guided resolution cursor:** `AI-19` (`Resume at: AI-19`; conversational label
 `q-5`). Current ready order: AI-19 → AI-47 → optional AI-24 → AI-23 (low
 priority). The branch-held pointers remain until their PRs actually merge. The
@@ -183,8 +187,8 @@ Each item below is defined **only** inside its own PR branch's `ACTION_ITEMS.md`
 and the procedure named in its entry; `main` carries no procedure for them, so
 this list is a pointer, not the gate. Read that procedure before acting and
 verify the live PR head before building. Each remaining branch-held entry carries
-its own historical snapshot head where applicable; former AI-38 is instead a
-current-`main` AI-47 subprocedure below. AI-42 through AI-46 were checked on
+its own historical snapshot head where applicable; former AI-38 and AI-40 are
+instead current-`main` AI-47 subprocedures below. AI-42 through AI-46 were checked on
 2026-09-10. Only Chris can complete these owner checks. This index update does
 not resolve issue #639's owner decision about where future gate procedures should
 live.
@@ -210,11 +214,6 @@ live.
   once with a null opener, and stays fail-closed on replay, expiry, navigation,
   and another tab. This slice is stacked on #600 and must follow it. Full
   procedure in that branch's `docs/agentic/GATE3_GUIDES.md`.
-- **AI-40** — PR #609 (issue #569), branch `fix/issue569-stale-redirect-chain`,
-  exact head `3f42f7d0ac5607b333433505419fc35593cd7c4e`. Scope: pages restored
-  by a real branded-Chrome BFCache Back/Forward inherit no redirect-chain NRS
-  factors, and the same factors expire without navigation. A reload is not
-  equivalent. Full procedure in that branch's `docs/agentic/GATE3_GUIDES.md`.
 - **AI-41** — PR #636 (issue #593), branch
   `fix/issue593-child-frame-location-20260904`, exact head
   `344ba6aea8ae0f8edfa108d42e3569598288cf2a`. Scope: a trusted click under a
@@ -257,6 +256,13 @@ live.
   Run it only against a current `main` build that contains that merge. Record
   its required AI-47 sub-result; it is not a standalone or consolidated
   Gate-3 pass.
+- **Former AI-40 — PR #609 (issue #569), merged as
+  `e35f5430660767d4998c8f4d727b38444f3f9b14`.** The Back/Forward Cache
+  redirect-chain boundary remains subject to the
+  [current-`main` AI-47 history subprocedure](docs/agentic/GATE3_GUIDES.md#ai-47-subprocedure-former-ai-40---609-stale-redirect-chain-boundary).
+  Run it only against a current `main` build that contains that merge. Record
+  its required AI-47 sub-result; it is not a standalone or consolidated
+  Gate-3 pass.
 
 **OPEN: AI-47 — September browser-queue consolidated post-merge Chrome check.**
 On 2026-09-12 Chris explicitly directed the agent to merge the open PRs gated
@@ -267,9 +273,9 @@ any branch-held Gate-3 passed. It applies only to named candidates that actually
 merge after current-base conflict resolution, exact-head checks, review, and
 stack ordering; record their merge commits here in the closeout sync. **This is
 an index, not a shortened replacement procedure:** every step and evidence field
-in the exact-head guide linked under the branch-held AI item above remains
-required. Record a sub-result for each former AI item before reporting AI-47 as
-passed; one omitted sub-result keeps AI-47 open.
+in each applicable current-`main` AI-47 subprocedure and branch-held exact guide
+remains required. Record a sub-result for each former AI item before reporting
+AI-47 as passed; one omitted sub-result keeps AI-47 open.
 
 Build the then-current `main`, record its 40-character SHA, and have Chris load
 or reload that exact `extension/dist` in a fresh branded-Chrome profile. Confirm
@@ -286,8 +292,8 @@ revision printed by the build, then run this consolidated sequence:
    exactly once with a null opener, and remains fail-closed after replay,
    expiry, navigation, or use from another tab. Confirm path/query/fragment data
    is absent from `chrome.storage.session`, popup DOM, and relevant consoles.
-3. **History and redirect freshness (#609 / former AI-40):** complete the exact
-   AI-40 guide. A real
+3. **History and redirect freshness (#609 / former AI-40):** complete the
+   [exact former AI-40 guide retained as this AI-47 subprocedure](docs/agentic/GATE3_GUIDES.md#ai-47-subprocedure-former-ai-40---609-stale-redirect-chain-boundary). A real
    Back/Forward Cache restore inherits no stale redirect-chain factors, and the
    same factors expire without a navigation. A reload is not an equivalent
    check.
