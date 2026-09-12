@@ -51,8 +51,9 @@ styles and representative desktop/relay/Center layouts.
 
 ## NOT verified
 
-- Owner-installed branded Chrome acceptance: **AI-42 remains open**. The exact
-  unpacked reload is human-owned. Automated Chromium does not close it.
+- Owner-installed branded Chrome acceptance remains open as the #640/AI-42
+  sub-result of consolidated post-merge AI-47. The exact unpacked reload is
+  human-owned. Automated Chromium does not close it.
 - Real runtime of the supplied experimental MV3 guard. Its admitted
   programmatic-submit and other sensor limitations remain documented.
 - New detector efficacy, benign-corpus measurement, browser comparison, or OS
@@ -90,7 +91,8 @@ consistency is not an independent signature.
 
 One asynchronous Sol runtime review found no blocking defects. Its proof-gap
 finding led to the native request/consume/independent-counter check, which passes.
-The highest-value next step is owner feedback on AI-42 and the three styles,
+The highest-value next step is the #640/AI-42 sub-result within AI-47 and owner
+feedback on the three styles,
 then evidence-driven refinement of the workspace and the already-held #601
 decision-authority branch. The supplied experimental guard and native horizon
 must not silently replace current protections.

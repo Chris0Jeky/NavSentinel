@@ -112,15 +112,18 @@ try {
   await click('[data-action="connect-submit"]');await nav('requests');
   await page.locator('#request-scenario').selectOption('fixture-review');
   await click('[data-action="api-request"]');
+  const approvalResponse=page.waitForResponse(response=>response.url()===service.origin+'/api/approve');
   await click('[data-action="api-approve"]');
+  const approvedRequest=await (await approvalResponse).json();
   await click('[data-action="api-consume"]');
-  await page.getByText('Accepted once',{exact:false}).first().waitFor();
+  await page.getByText('Executed',{exact:true}).first().waitFor();
   assert.equal((await (await fetch(service.labOrigin+'/broker-effects')).json()).count,1);
-  expectingReplayRejection=true;
-  await click('[data-action="api-consume"]');
-  await page.getByText('Unknown, used or revoked',{exact:false}).first().waitFor();
+  assert.equal(await page.locator('[data-action="api-consume"]').count(),0);
+  const replay=await fetch(service.origin+'/api/consume',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${service.adminToken}`},body:JSON.stringify({token:approvedRequest.capability.token,event:approvedRequest.event})});
+  assert.equal(replay.status,409);
+  assert.match((await replay.json()).error,/Unknown, used or revoked/);
   assert.equal((await (await fetch(service.labOrigin+'/broker-effects')).json()).count,1);
-  pass('real browser networking: approval causes one independently observed fixture effect; replay causes none');
+  pass('browser approval causes one fixture effect; direct API replay is rejected without another effect');
   assert.deepEqual(errors,[]);
   pass('zero uncaught renderer errors; expected HTTP rejection classified');
   fs.writeFileSync(path.join(output,'browser-smoke.json'),JSON.stringify({at:new Date().toISOString(),browser:browser.version(),checks,errors,expectedDiagnostics,
