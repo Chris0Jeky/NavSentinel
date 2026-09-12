@@ -1,0 +1,77 @@
+name: One-off mutation delivery qualification
+
+on:
+  push:
+    branches: [test/deterministic-mutation-delivery-20260912]
+    paths: [.github/workflows/oneoff-mutation-delivery-20260912.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    if: github.repository == 'Chris0Jeky/NavSentinel' && github.ref == 'refs/heads/test/deterministic-mutation-delivery-20260912'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    outputs:
+      sha: ${{ steps.publish.outputs.sha }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+      - id: publish
+        name: Apply the exact test-only diff and remove transport files
+        run: |
+          set -euo pipefail
+          git apply --check -- docs/testing/mutation-monitor-693.patch
+          git apply -- docs/testing/mutation-monitor-693.patch
+          git diff --check
+          git add -- tests/mutation-monitor.test.ts
+          git rm -- docs/testing/mutation-monitor-693.patch .github/workflows/oneoff-mutation-delivery-20260912.yml
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'test: await bounded observer delivery at both reserve callsites'
+          git rev-parse HEAD^{tree}
+          git push origin HEAD:refs/heads/test/deterministic-mutation-delivery-20260912
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+  qualify:
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ needs.publish.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npx vitest run tests/mutation-observer-delivery.test.ts
+      - name: Targeted case in 30 fresh processes
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            log="$RUNNER_TEMP/mutation-target-$attempt.log"
+            if ! npx vitest run tests/mutation-monitor.test.ts -t 'emits the credential signal for a shadow root registered after a benign flood' > "$log" 2>&1; then
+              cat "$log"
+              exit 1
+            fi
+            echo "Target fresh process $attempt/30 passed"
+          done
+      - name: Whole mutation file in 15 fresh processes
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 15); do
+            log="$RUNNER_TEMP/mutation-file-$attempt.log"
+            if ! npx vitest run tests/mutation-monitor.test.ts > "$log" 2>&1; then
+              cat "$log"
+              exit 1
+            fi
+            echo "Whole-file fresh process $attempt/15 passed"
+          done
+      - name: Unmodified default parallel suite
+        run: npm test
