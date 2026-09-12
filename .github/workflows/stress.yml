@@ -5,16 +5,22 @@ on:
     - cron: "0 3 * * *" # nightly at 03:00 UTC
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   stress:
     name: Stress Lane
     runs-on: ubuntu-latest
+    # Bound a hung stress process while leaving the failure-trace upload time
+    # to run after the test-step timeout fires.
+    timeout-minutes: 60
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Setup Node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 20
           cache: npm
@@ -29,11 +35,12 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run stress tests
+        timeout-minutes: 30
         run: xvfb-run -a npm run test:e2e:stress
 
       - name: Upload traces on failure
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: stress-traces
           path: test-results/

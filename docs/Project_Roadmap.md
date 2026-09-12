@@ -1,6 +1,6 @@
 # NavSentinel Project Roadmap
 
-*Created 2026-04-09. Truth refresh 2026-07-10; live/status sync 2026-08-30.*
+*Created 2026-04-09. Truth refresh 2026-07-10; live/status sync 2026-09-04.*
 
 This is the execution roadmap. [`Product_Strategy.md`](Product_Strategy.md) owns
 the product thesis, portfolio boundaries, and evidence gates; GitHub issues own
@@ -61,13 +61,15 @@ not waive an owner, browser, measurement, privacy, permission, or external gate.
 
 ### Live execution truth
 
-Refreshed 2026-08-30 from remote GitHub and `origin/main` at
-`22377604a363141fc6e99a45800beca868307764`. Four PRs are open: #572 is
-conflict-dirty and parked before AI-31 on SP-F-013; #599 is conflict-dirty with
-owner policy and branded-Chrome gates open; #600 is clean with green hosted
-checks but its owner media-page check open; and test-only #605 is red in Build /
-Unit on #595's tracked mutation-monitor scarce-reserve assertion. There is no
-tag, GitHub release, or CWS release. These values are a dated snapshot, not an
+Refreshed 2026-09-04 from remote GitHub and `origin/main` at `a440e35`. Six PRs
+are open, all ready-for-review and clean with green exact-head CI, and every one
+is held on a human Chrome gate: #572 (AI-31, additionally parked on SP-F-013),
+#599 (AI-37), #600 (AI-38), #608 (AI-39, stacked on #600), #609 (AI-40), and
+#636 (AI-41). PR #636 turns the #593 hidden-media probe into a green regression
+by denying inherited click authority to gesture-less child-frame navigation;
+issue #593 stays open, and the remaining `form.submit(target=_top)` residue is
+tracked in #637. Test-only #605 merged on 2026-09-02 as
+`4883a8eaef1b35ea176802ee8d0d97afbc854b81`. There is no tag, GitHub release, or CWS release. These values are a dated snapshot, not an
 instruction to trust cached refs. Re-derive them with `git fetch origin`, the
 GitHub REST/API issue and pull-request views, and Actions before acting. The exact
 2026-07-10 audit baseline remains in `Product_Strategy.md` as provenance rather
@@ -232,7 +234,7 @@ See the exact sets, comments, state reasons, labels, and pre/post counts in the
    fund only Decision Journal + recovery guidance; otherwise change segment/
    position or stop before advanced architecture.
 
-Last updated: 2026-08-30
+Last updated: 2026-09-03
 
 ---
 
@@ -599,12 +601,15 @@ Results inform P1-02 hardening priorities.
 **Corpus-v2 status (#417):** the 2026-05-01 28% number is methodologically invalid in both
 directions (served from 127.0.0.1 → domain/reputation signals neutered; synthetic
 `isTrusted=false` clicks; static snapshots miss JS-injected forms) and its raw per-page
-results are gitignored. The rebuild (#417) has four pillars: **(1) protected-vs-fired scoring —
-DONE** (`tests/corpus/corpus_scoring.ts`, unit-tested; a post-render `nav_rollback` no longer
-counts the same as a pre-harm block/prompt, so the TP number means "the user was protected");
-**(2) real-hostname routing, (3) trusted clicks, (4) a committed manifest — remain**, each
-needing a headed run to validate. The corpus TP triage (#426) is gated on this rebuild + a
-headed re-run.
+results are gitignored. The rebuild (#417) has four pillars: **(1) protected-vs-fired scoring:
+DONE** (`tests/corpus/corpus_scoring.ts`, unit-tested; a signal that fires but fails to stop
+the independent harm receipt is not protection); **(2) real-hostname replay and (3) trusted
+click mechanics: INTEGRATED** through the shared static runner and proved only with reserved
+`.test` contract pages; **(4) an owner-curated committed manifest/result: PENDING**. The runner
+now fails the whole run closed when readiness, routing, input, cleanup, or denominator
+completion fails. Snapshot JavaScript/dynamic-form replay, the headed owner corpus run,
+efficacy, and Gate-3 remain unverified. The corpus TP triage (#426) is gated on that valid
+headed rerun.
 
 #### P1-07: CDS evasion red-team test suite
 

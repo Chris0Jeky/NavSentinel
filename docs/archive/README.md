@@ -18,13 +18,17 @@ Archived here:
 - `docs/archive/ORCHESTRATOR.md`
   - Cycle 1-7 work orchestrator (UI redesign + the #114-#174 systematic merge);
     archived 2026-06-05
+- `docs/archive/ORCHESTRATOR-history-2026-09.md`
+  - historical cycle ledger formerly routed at `docs/agentic/ORCHESTRATOR.md`;
+    archived 2026-09-10
 - `docs/archive/ORCHESTRATION.md`
   - redesign-era (2026-05-16) autonomous-orchestration document; archived 2026-06-05
 - `docs/archive/ACTION_ITEMS_HISTORY_2026-08-12.md`
   - provenance for the 2026-08-12 ACTION_ITEMS queue trim; not current guidance
 
-`docs/agentic/ORCHESTRATOR.md` is also a retired historical cycle ledger, not a
-canonical living orchestrator. For current work, start with live Git/GitHub state,
+`docs/agentic/ORCHESTRATOR.md` is a compatibility pointer to the retired historical
+cycle ledger above, not a canonical living orchestrator. For current work, start
+with live Git/GitHub state,
 `docs/Project_Roadmap.md`, and `ACTION_ITEMS.md` when a human decision or manual
 check is involved.
 

@@ -125,6 +125,17 @@ limitations, not a reason to reopen the completed gate.
 
 ## Active guide: AI-33 — issue #530 popup trust-pill contrast
 
+> **POST-MERGE since 2026-09-04 — read before step 1.** PR #582 merged on
+> 2026-08-27 (head `02b8e5c4504ff5127a9b6c4af7cf8cc30fd07da2`, merge commit
+> `d1895b51763a6c6b7b5280f0ea80664d2f0c796d`) with this gate still open, and no waiver
+> record for that merge was found in `ACTION_ITEMS.md`, `HANDOFF.md`, or
+> `DECISIONS.md`; no waiver or owner decision is claimed. The gate now applies
+> to current `main`: skip the open-PR, branch, and exact-PR-head prechecks
+> below, build `main` from a clean checkout, and record its 40-character head
+> instead. Reply `AI-33 done; Gate-3 passed on main at <40-character SHA>;
+> Chrome <version>` or `AI-33 failed on main at <SHA>: <step and observed>`.
+> Every per-PR or per-branch reply line below is superseded by these two.
+
 Run this only after the #530 implementation PR is ready and every automated
 check for its current head is green.
 
@@ -135,19 +146,38 @@ check for its current head is green.
    `tests/clickfix-detector.property.test.ts`, do not allow, inspect, restore, or
    stage it; record that limitation. Stop on any other mismatch.
 2. Require the exact-head Build / Unit and E2E checks to be green and all review
-   findings to be triaged. Run `npm ci`,
+   findings to be triaged. Record and freeze the 40-character head for this
+   trial. Run `npm ci`,
    `npx vitest run tests/popup-contrast.test.ts`, `npm run typecheck`,
    `npm run build`, and `npm run check:perf-budget` in that worktree.
+   Record the resulting `extension/dist` path and 12-character UI-guard
+   revision, then do not rebuild during the browser pass. If a rebuild is
+   unavoidable, stop and repeat the extension reload and current-page fixture
+   reload sequence in step 4 before continuing.
 3. In a second terminal in that worktree, run `npm run gym:serve` and require it
    to start successfully on port 5173. Keep that process running for the trial;
    stop rather than substitute another server if the strict port check fails.
-4. In a fresh temporary Chrome profile, load that worktree's `extension/dist`
-   unpacked. After any rebuild, click **Reload** for NavSentinel in
-   `chrome://extensions` before reloading a page. Record the Chrome version.
-5. Open `http://127.0.0.1:5173/` and then open the NavSentinel popup.
-   Confirm the gold observing trust pill is readable, fully visible, and not
-   confused with the orange or green signal chips. Its text label must remain
-   present so the state does not rely on colour alone.
+4. In a fresh temporary Chrome profile, load that worktree's frozen
+   `extension/dist` unpacked. Loading or reloading the unpacked extension is
+   Chris-owned. After any rebuild, Chris must click **Reload** for NavSentinel
+   in `chrome://extensions` once, then reload the current Gym fixture before
+   continuing. Record the Chrome version. On the initial fixture load and after
+   each subsequent fixture reload, verify the current page reports
+   `capture="1"`, `bridge="1"`, and the recorded UI-guard revision on the
+   `data-navsentinel-capture-ready`,
+   `data-navsentinel-bridge-ready`, and `data-navsentinel-ui-guard` attributes.
+   A popup entry from an earlier page load is historical activity, not evidence
+   that this current page is ready or protected. Record whether the stale-loader
+   signature
+   `Failed to fetch dynamically imported module: chrome-extension://.../assets/capture_isolated.ts-<old hash>.js`
+   appears. Recovery is always: freeze the build, reload the unpacked
+   extension once, then reload the fixture. Stop on missing or mismatched
+   current-page markers.
+5. Open `http://127.0.0.1:5173/`. Before opening the NavSentinel popup, require
+   the current page to report all three exact marker values from step 4. Then
+   open the popup and confirm the gold observing trust pill is readable, fully
+   visible, and not confused with the orange or green signal chips. Its text
+   label must remain present so the state does not rely on colour alone.
 6. Reach the popup's **Trust** action with Tab and activate it with Enter. Reopen
    the popup if Chrome closes it after activation. Confirm the trusted pill is
    readable, fully visible, and distinguishable by its label and green treatment.
@@ -155,8 +185,8 @@ check for its current head is green.
    returns without clipping or stale text.
 7. Inspect the popup console for new errors, then stop the Gym server. On a pass,
    reply `AI-33 done;
-   Gate-3 passed on PR #<n> at <40-character SHA>; Chrome <version>`. On any
-   mismatch, reply `AI-33 failed on PR #<n> at <SHA>: <step and observed>` and
+   Gate-3 passed on main at <40-character SHA>; Chrome <version>`. On any
+   mismatch, reply `AI-33 failed on main at <SHA>: <step and observed>` and
    leave the item open.
 
 Only Chris can record AI-33 complete. The computed WCAG test supports but does
@@ -166,6 +196,17 @@ not replace this exact-head visual and keyboard gate.
 
 ## Active guide: AI-30 - PR #570 Back/Forward history integrity
 
+> **POST-MERGE since 2026-09-04 — read before step 1.** PR #570 merged on
+> 2026-08-27 (head `20fad0ac9d19bcbe3a1ca6b2d43ab14c7438ce53`, merge commit
+> `ff063a677b6c633c1eca4955dbfe9b277e529f3a`) with this gate still open, and no waiver
+> record for that merge was found in `ACTION_ITEMS.md`, `HANDOFF.md`, or
+> `DECISIONS.md`; no waiver or owner decision is claimed. The gate now applies
+> to current `main`: skip the open-PR, branch, and exact-PR-head prechecks
+> below, build `main` from a clean checkout, and record its 40-character head
+> instead. Reply `AI-30 done; Gate-3 passed on main at <40-character SHA>;
+> Chrome <version>` or `AI-30 failed on main at <SHA>: <step and observed>`.
+> Every per-PR or per-branch reply line below is superseded by these two.
+
 Run this only after PR #570 is ready and every automated check for its current
 head is green.
 
@@ -174,16 +215,37 @@ head is green.
    must contain no uncommitted product changes. The known Defender quarantine may
    appear only as ` D tests/clickfix-detector.property.test.ts`; do not restore,
    allow, inspect, stage, or exclude that fixture. Stop for any other mismatch.
-2. On that exact head, run `npm ci` and `npm run build`. Create a fresh temporary
-   Chrome profile, leave it unsigned-in, enable Developer mode at
-   `chrome://extensions`, and load `extension/dist` unpacked. Record the Chrome
-   version and confirm the extension service worker registers without an error.
+2. On that exact head, record and freeze the 40-character head for this trial,
+   then run `npm ci` and `npm run build`. Record the resulting `extension/dist`
+   path and 12-character UI-guard revision, then do not rebuild during the
+   browser pass. If a rebuild is unavoidable, stop and repeat the extension
+   reload and current-page fixture reload sequence below before continuing.
+   Create a fresh temporary Chrome profile, leave it unsigned-in, enable
+   Developer mode at `chrome://extensions`, and load `extension/dist` unpacked.
+   Record the Chrome version and confirm the extension service worker registers
+   without an error.
+   Loading or reloading the unpacked extension is Chris-owned. After any
+   rebuild, Chris must click **Reload** for NavSentinel in
+   `chrome://extensions` once, then reload the current Gym fixture. On the
+   initial fixture load and after each subsequent fixture reload, verify the
+   current page reports `capture="1"`, `bridge="1"`, and the recorded UI-guard
+   revision on the
+   `data-navsentinel-capture-ready`, `data-navsentinel-bridge-ready`, and
+   `data-navsentinel-ui-guard` attributes. Treat any popup activity from a prior
+   page load as historical, not as current-page evidence. Record whether the
+   stale-loader signature
+   `Failed to fetch dynamically imported module: chrome-extension://.../assets/capture_isolated.ts-<old hash>.js`
+   appears. Recovery is always: freeze the build, reload the unpacked
+   extension once, then reload the fixture. Stop on missing or mismatched
+   current-page markers.
    In NavSentinel Options, use Smart Navigation mode and confirm neither
    `localhost` nor `127.0.0.1` is allowlisted or trusted.
 3. Start the tracked Gym with `npm run gym:serve`, then open
    `http://127.0.0.1:5173/history-01-back-forward.html?step=p`. Follow the visible
-   link from P to A and from A to B. Confirm the host alternates between
-   `127.0.0.1:5173` and `localhost:5173`, proving the fixture crossed sites.
+   link from P to A and from A to B. Before leaving P, and again after reaching
+   A and B, require all three exact marker values from step 2. Confirm the host
+   alternates between `127.0.0.1:5173` and `localhost:5173`, proving the fixture
+   crossed sites.
 4. On B, wait at least 11 seconds so the normal click and recent-navigation
    allowances expire. Use Chrome's physical **Back** control. Confirm A loads and
    remains on screen for at least two seconds with no rollback, prompt, or toast.
@@ -195,22 +257,25 @@ head is green.
    the destination briefly commits before NavSentinel returns to the Level 10
    page. This proves a later page-initiated redirect is still evaluated normally.
 6. Inspect the History fixture, Level 10, and extension service-worker consoles
-   for new errors. On a pass, reply `AI-30 done; Gate-3 passed on PR #570 at
+   for new errors. On a pass, reply `AI-30 done; Gate-3 passed on main at
    <40-character SHA>; Chrome <version>`. On any mismatch, reply `AI-30 failed on
-   PR #570 at <SHA>: <step and observed>` and leave the item open.
+   main at <SHA>: <step and observed>` and leave the item open.
 
 Only Chris can record AI-30 complete. Automated Playwright evidence supports but
 does not replace this exact-head manual browser gate.
 
 ---
 
-## Active guide: AI-40 - PR #609 stale redirect-chain boundary
+## AI-47 subprocedure: former AI-40 - #609 stale redirect-chain boundary
 
-Run this only after PR #609 is ready and every automated check for its current
-head is green.
+Run this as step 3 of AI-47 only after PR #609 has merged under
+`D-2026-09-12-P` and every non-human gate is green. The procedure and evidence
+fields below are retained from the former AI-40 gate; moving the check after
+merge is not a test result.
 
-1. Resolve PR #609 and record its 40-character `headRefOid`. In the implementation
-   worktree, require `git rev-parse HEAD` to equal that value. `git status --short`
+1. Resolve the then-current `main` and record its 40-character SHA. In the
+   implementation worktree, require `git rev-parse HEAD` to equal that value.
+   `git status --short`
    must contain no uncommitted product changes. The known Defender quarantine may
    appear only as ` D tests/clickfix-detector.property.test.ts`; do not restore,
    inspect, stage, execute, or allow that fixture. Stop for any other mismatch.
@@ -241,13 +306,13 @@ head is green.
    seconds each, and confirm the factors are initially present. Wait at least 16
    seconds without navigating, check again, and confirm both factors are absent.
 7. Inspect the fixture and extension service-worker consoles for new errors. On
-   a pass, reply `AI-40 done; Gate-3 passed on PR #609 at <40-character SHA>;
-   Chrome <version>`. On any mismatch, reply `AI-40 failed on PR #609 at <SHA>:
-   <step and observed>` and leave the item open.
+   a pass, record `AI-47 step 3 (former AI-40) passed on main at <40-character
+   SHA>; Chrome <version>`. On any mismatch, record `AI-47 step 3 failed on main
+   at <SHA>: <step and observed>` and leave AI-47 open.
 
-Only Chris can record AI-40 complete. The normal Playwright project disables
-BFCache, so its real-302 Back/Forward journey supports but does not replace this
-exact-head branded-Chrome lifecycle gate.
+Only Chris can record this AI-47 sub-result. The normal Playwright project
+disables BFCache, so its real-302 Back/Forward journey supports but does not
+replace this exact-head branded-Chrome lifecycle check.
 
 ---
 
@@ -297,6 +362,17 @@ precheck.
 
 ## AI-36 — #558 popup/Options patch-save synchronization Gate-3
 
+> **POST-MERGE since 2026-09-04 — read before step 1.** PR #589 merged on
+> 2026-08-27 (head `ee75bf408e04f528b0ee08006471f318fba3ef96`, merge commit
+> `003905094982b9a772cc5f06fe504d372c99dd6b`) with this gate still open, and no waiver
+> record for that merge was found in `ACTION_ITEMS.md`, `HANDOFF.md`, or
+> `DECISIONS.md`; no waiver or owner decision is claimed. The gate now applies
+> to current `main`: skip the open-PR, branch, and exact-PR-head prechecks
+> below, build `main` from a clean checkout, and record its 40-character head
+> instead. Reply `AI-36 done; Gate-3 passed on main at <40-character SHA>;
+> Chrome <version>` or `AI-36 failed on main at <SHA>: <step and observed>`.
+> Every per-PR or per-branch reply line below is superseded by these two.
+
 **🚨 OPEN: AI-36 — Run the #558 popup/Options patch-save synchronization
 Gate-3 (GUIDE PREPARED; LIVE EXACT-HEAD PRECHECK REQUIRED).** This bounded
 browser-surface slice makes an open Options page adopt clean settings changed in
@@ -333,12 +409,27 @@ that remain in #558. Only Chris can record this item complete.
    exact head, and no required review thread may remain unresolved. If the branch
    has not been pushed or the PR lookup is empty, stop and report that
    precondition; never test a stale build.
-2. In that exact worktree run `npm ci`, then `npm run build`. Create a
-   disposable, fresh Chrome profile without signing in or changing an
+2. In that exact worktree record and freeze the 40-character head for this
+   trial, then run `npm ci`, followed by `npm run build`. Record the resulting
+   `extension/dist` path and 12-character UI-guard revision, then do not rebuild
+   during the browser pass. If a rebuild is unavoidable, stop and repeat the
+   owner unpacked-extension reload before reopening either extension surface.
+   Create a disposable, fresh Chrome profile without signing in or changing an
    established profile. Load the exact `<worktree>/extension/dist` directory
    unpacked from `chrome://extensions`. If the extension was already loaded,
-   use **Reload** there before opening either extension surface. Open the
-   service-worker inspector and keep it visible for errors.
+   use **Reload** there before opening either extension surface. Loading or
+   reloading the unpacked extension is Chris-owned. This trial uses only
+   extension-owned Options, popup, and service-worker surfaces; it does not use
+   a Gym page, target-page markers, or historical popup activity as evidence
+   that a content loader is current. If a target page is added to the trial,
+   stop and apply the full recovery sequence before accepting its evidence:
+   freeze the build, have Chris reload the unpacked extension once, load or
+   reload the fixture, require `capture="1"`, `bridge="1"`, and the recorded
+   UI-guard revision on the `data-navsentinel-capture-ready`,
+   `data-navsentinel-bridge-ready`, and `data-navsentinel-ui-guard` attributes,
+   and record whether
+   `Failed to fetch dynamically imported module: chrome-extension://.../assets/capture_isolated.ts-<old hash>.js`
+   appears. Open the service-worker inspector and keep it visible for errors.
 3. Open NavSentinel Options. Establish a visible baseline with Navigation
    **Smart**, Credential **Smart**, and **Paste warnings**
    checked, then click **Save**. Reload Options once and confirm that baseline.
@@ -374,13 +465,24 @@ that remain in #558. Only Chris can record this item complete.
    failure. Close the disposable profile and remove only that profile; do not
    alter an established profile or disable security software.
 9. Only Chris may record completion. Reply
-   `AI-36 done; Gate-3 passed on branch fix/issue558-patch-save-sync at
+   `AI-36 done; Gate-3 passed on main at
    <40-character SHA>; Chrome <version>` with console observations, or
-   `AI-36 failed on branch fix/issue558-patch-save-sync at <SHA>: <step and
+   `AI-36 failed on main at <SHA>: <step and
    observed result>`. Do not merge on a partial pass; recheck exact head, CI,
    comments, and the repository merge gate afterward.
 
 ## AI-35 — #539 cross-host child-event attribution Gate-3
+
+> **POST-MERGE since 2026-09-04 — read before step 1.** PR #586 merged on
+> 2026-08-27 (head `96be8e09cfe51168e4231625154ed366a408940b`, merge commit
+> `b68f403a7f14379305cf1376f3ee4f188ef31493`) with this gate still open, and no waiver
+> record for that merge was found in `ACTION_ITEMS.md`, `HANDOFF.md`, or
+> `DECISIONS.md`; no waiver or owner decision is claimed. The gate now applies
+> to current `main`: skip the open-PR, branch, and exact-PR-head prechecks
+> below, build `main` from a clean checkout, and record its 40-character head
+> instead. Reply `AI-35 done; Gate-3 passed on main at <40-character SHA>;
+> Chrome <version>` or `AI-35 failed on main at <SHA>: <step and observed>`.
+> Every per-PR or per-branch reply line below is superseded by these two.
 
 **🚨 OPEN: AI-35 — Run the #539 cross-host child-event attribution Gate-3
 (GUIDE PREPARED; LIVE EXACT-HEAD PRECHECK REQUIRED).** This browser-surface
@@ -418,26 +520,50 @@ Only Chris can record this item complete.
    green and no required review thread may remain unresolved. If the branch has
    not yet been pushed or the PR lookup is empty, stop and report that
    precondition; never test a stale build.
-2. In that exact worktree run `npm ci`, then `npm run build`. Start the Gym with
+2. In that exact worktree record and freeze the 40-character head for this
+   trial, then run `npm ci`, followed by `npm run build`. Record the resulting
+   `extension/dist` path and 12-character UI-guard revision, then do not rebuild
+   during the browser pass. If a rebuild is unavoidable, stop and repeat the
+   extension reload and current-page fixture reload sequence below before
+   continuing. Start the Gym with
    `python -m http.server 5173 --bind 127.0.0.1 --directory gym` in a second
    terminal. Create a disposable, fresh Chrome profile without signing in or
    changing an established profile. Load the exact
    `<worktree>/extension/dist` directory unpacked from `chrome://extensions`.
-   Confirm Navigation is **Smart** and no localhost/127.0.0.1 allowlist entry is
-   present. If the extension was already loaded, use **Reload** in
-   `chrome://extensions` before opening the Gym page.
-3. Open `http://127.0.0.1:5173/index.html?ai35=top`. In page DevTools confirm
-   both readiness markers are `"1"`:
+   Loading or reloading the unpacked extension is Chris-owned. Confirm
+   Navigation is **Smart** and no localhost/127.0.0.1 allowlist entry is
+   present. If the extension was already loaded, Chris must use **Reload** in
+   `chrome://extensions` once before reloading the Gym fixture. On the initial
+   fixture load and after each subsequent fixture reload, verify the current
+   page reports `capture="1"`, `bridge="1"`, and the recorded UI-guard revision
+   on the
+   `data-navsentinel-capture-ready`, `data-navsentinel-bridge-ready`, and
+   `data-navsentinel-ui-guard` attributes. Treat popup activity from an earlier
+   page load as historical, not as current-page evidence. Record whether the
+   stale-loader signature
+   `Failed to fetch dynamically imported module: chrome-extension://.../assets/capture_isolated.ts-<old hash>.js`
+   appears. Recovery is always: freeze the build, reload the unpacked
+   extension once, then reload the fixture. Stop on missing or mismatched
+   current-page markers.
+3. Open `http://127.0.0.1:5173/index.html?ai35=top`. In page DevTools inspect all
+   three artifact/readiness markers:
 
    ```js
-   ["data-navsentinel-capture-ready", "data-navsentinel-bridge-ready"].map(
-     (name) => document.documentElement.getAttribute(name)
-   )
+   ({
+     capture: document.documentElement.getAttribute("data-navsentinel-capture-ready"),
+     bridge: document.documentElement.getAttribute("data-navsentinel-bridge-ready"),
+     guard: document.documentElement.getAttribute("data-navsentinel-ui-guard")
+   })
    ```
+
+   Require `capture` and `bridge` to equal `"1"` and `guard` to equal the
+   12-character revision recorded from the frozen build in step 2. Stop on any
+   mismatch.
 
    In the top page's DevTools, inject a visible child frame served by the other
    loopback hostname, then wait for its load and select that frame's DevTools
-   context to confirm the same two readiness markers:
+   context. Run the same three-marker probe there and require the same exact
+   values before continuing:
 
    ```js
    await (async () => {
@@ -494,9 +620,9 @@ Only Chris can record this item complete.
    Ctrl+C, close the disposable Chrome profile, and remove only that disposable
    profile. Do not alter an established profile or disable security software.
 7. Only Chris may record completion. Reply
-   `AI-35 done; Gate-3 passed on branch fix/issue539-page-attribution at
+   `AI-35 done; Gate-3 passed on main at
    <40-character SHA>; Chrome <version>` with console observations, or
-   `AI-35 failed on branch fix/issue539-page-attribution at <SHA>: <step and
+   `AI-35 failed on main at <SHA>: <step and
    observed result>`. Do not merge on a partial pass; recheck exact head, CI,
    comments, and the repository merge gate afterward.
 
@@ -507,7 +633,7 @@ Only Chris can record this item complete.
 | AI-13 | #356 MAIN-world compatibility | in [`../../ACTION_ITEMS.md`](../../ACTION_ITEMS.md) |
 | AI-21 | #464 synthetic navigation | [below](#ai-21--pr-464-synthetic-navigation-gate-3) |
 | AI-22 | #466 pending-decision service worker | [below](#ai-22--pr-466-pending-decision-service-worker-gate-3) |
-| AI-40 | #609 stale redirect-chain boundary | [above](#active-guide-ai-40---pr-609-stale-redirect-chain-boundary) |
+| AI-47 step 3 (former AI-40) | #609 stale redirect-chain boundary | [above](#ai-47-subprocedure-former-ai-40---609-stale-redirect-chain-boundary) |
 | AI-36 | #558 popup/Options patch-save synchronization | [above](#ai-36--558-popupoptions-patch-save-synchronization-gate-3) |
 | AI-35 | #539 cross-host child-event attribution | [below](#ai-35--539-cross-host-child-event-attribution-gate-3) |
 

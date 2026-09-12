@@ -18,14 +18,20 @@
         benign: "benign-navigation",
         harm: "wrong-target-navigation",
       });
+      const SCENARIO_CONSEQUENCES = Object.freeze({
+        "NS-ADV-WIN-001": "unauthorized-browsing-context",
+      });
       const params = new URLSearchParams(location.search);
       const role = params.get("role") || "";
       const scenarioId = params.get("scenario_id") || "";
       const consequence = params.get("consequence") || "";
+      const expectedConsequence = role === "harm"
+        ? (SCENARIO_CONSEQUENCES[scenarioId] || CONSEQUENCES.harm)
+        : CONSEQUENCES[role];
       const valid = location.protocol === "http:" &&
         LOOPBACK_HOSTS.has(location.hostname) &&
         Object.hasOwn(CONSEQUENCES, role) &&
-        CONSEQUENCES[role] === consequence &&
+        expectedConsequence === consequence &&
         /^NS-ADV-[A-Z0-9-]+$/u.test(scenarioId) &&
         params.get("sentinel") === EXPECTED_SENTINEL;
 
