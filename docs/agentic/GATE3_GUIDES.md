@@ -123,6 +123,67 @@ limitations, not a reason to reopen the completed gate.
 
 ---
 
+## Active guide: AI-39 — issue #601 extension-origin Proceed once
+
+> **POST-MERGE CONSOLIDATION under
+> [`D-2026-09-12-P`](DECISIONS.md#d-2026-09-12-p--named-human-gated-candidates-may-merge-before-the-consolidated-chrome-check):**
+> the pre-merge Chrome execution was waived for PR #608, not passed. If #608
+> merges, run this complete procedure as the former-AI-39 sub-result in AI-47
+> against the then-current consolidated `main` artifact. The identity check in
+> step 1 therefore pins `main` and the #608 merge ancestry instead of the
+> historical stacked base.
+
+1. Record PR #608's merged 40-character head and merge commit from live GitHub,
+   plus the 40-character `main` SHA being tested. Require the test worktree's
+   `git rev-parse HEAD` to equal that `main` SHA and require the #608 merge commit
+   to be its ancestor. Stop on any mismatch or uncommitted product change. If
+   Defender quarantines
+   `tests/clickfix-detector.property.test.ts`, do not inspect, restore, stage, or
+   work around it; record the limitation.
+2. Require the tested `main` head's Build / Unit and E2E checks to be green and
+   every #608 review finding triaged. Run `npm ci`, `npm run build`,
+   `npm run check:content-loader`, `npm run check:perf-budget`, and
+   `npm run security:check`. Record the build's `ui-guard=<revision>` value.
+3. In a fresh temporary Chrome profile, load this worktree's `extension/dist`
+   unpacked. After every rebuild, click **Reload** in `chrome://extensions`
+   before reloading the target page. Record the Chrome version.
+4. Serve a synthetic loopback Gym page with a suspicious HTTP(S) `_blank`
+   destination whose path, query, and fragment contain a unique non-secret
+   marker. Trigger the held navigation. Confirm no tab opens and the page toast
+   contains **Dismiss** only — no Proceed, Allow once, Always allow, or Undo.
+5. Open NavSentinel from the Chrome toolbar before the 30-second deadline. The
+   **Navigation held** card must show only source origin → destination origin
+   and seconds remaining. Inspect its DOM: the unique path/query/fragment marker
+   and opaque delivery token must not appear.
+6. Activate **Proceed once** with the mouse. Exactly one tab must open at the
+   complete expected synthetic URL. On that destination, require
+   `window.opener === null`; any live opener fails the gate. Reopen the popup
+   and confirm the decision is absent. A rapid double-click or any attempted
+   replay must not open a second tab. Repeat once with keyboard Tab + Enter.
+7. Trigger again and wait past 30 seconds before acting. The card must expire
+   and no tab may open. Trigger again, switch to a different active HTTP tab,
+   and open NavSentinel there; the original decision must not be offered or
+   executable. Navigate the original document before acting and confirm its
+   old decision is unavailable.
+8. In the extension service-worker console, inspect
+   `chrome.storage.session.get("ns_sw:pendingDecision")` while a synthetic
+   decision is pending. Only bounded origins, hashes, timestamps, and opaque
+   identifiers may exist; the unique path/query/fragment marker must not.
+9. Inspect page, popup, and service-worker consoles for new errors. On a pass,
+   record `AI-47 step 2 / former AI-39 passed on main at <40-character SHA>;
+   PR #608 merge <40-character SHA>; Chrome <version>`. On any mismatch, record
+   `AI-47 step 2 / former AI-39 failed on main at <SHA>: <step and observed>`
+   and leave AI-47 open.
+
+Only Chris can record AI-47's former-AI-39 sub-result complete. Unit tests
+prove token burn, context
+binding, URL minimization, and replay rejection; headed Playwright proves the
+page warning has no protection-lowering control. Neither proves that real Chrome
+accepts the worker-created exact destination tab, leaves it openerless, and
+delivers the best-effort outcome receipt to the source document.
+
+---
+
 ## Retained guide: AI-41 - issue #593 child-frame navigation authority
 
 > **POST-MERGE QUEUE since 2026-09-12 — read before step 1.** Under
@@ -755,6 +816,7 @@ Only Chris can record this item complete.
 | AI-13 | #356 MAIN-world compatibility | in [`../../ACTION_ITEMS.md`](../../ACTION_ITEMS.md) |
 | AI-21 | #464 synthetic navigation | [below](#ai-21--pr-464-synthetic-navigation-gate-3) |
 | AI-22 | #466 pending-decision service worker | [below](#ai-22--pr-466-pending-decision-service-worker-gate-3) |
+| AI-47 step 2 (former AI-39) | #601 extension-origin Proceed once | [above](#active-guide-ai-39--issue-601-extension-origin-proceed-once) |
 | AI-47 step 3 (former AI-40) | #609 stale redirect-chain boundary | [above](#ai-47-subprocedure-former-ai-40---609-stale-redirect-chain-boundary) |
 | AI-38 | #560 inert toast-control repair | [above](#ai-47-former-ai-38-pr-600-current-main-toast-control-subprocedure) |
 | AI-36 | #558 popup/Options patch-save synchronization | [above](#ai-36--558-popupoptions-patch-save-synchronization-gate-3) |
