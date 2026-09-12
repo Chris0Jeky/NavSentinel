@@ -3,7 +3,8 @@
 As of 2026-09-12, based on the reconciled #649 merge receipt
 `c78ba99da5d3357833a5fcd3f4f09bdb255db7a6`, later #687 receipt
 `63e3bbbc401f272e88abc88a4f890ba4003bdb1f`, later #655 receipt
-`9b7ce93652b08c0e7f124f3ef132e46c6ab39909`, merged programme seed
+`9b7ce93652b08c0e7f124f3ef132e46c6ab39909`, later #658 receipt
+`8a9435349e0dcdbe834bfee2beeeccafd5b39ccf`, merged programme seed
 `d2762f296b07bfd650971141bf9bf7a9b2c016b9`, and the live issue, milestone,
 pull-request, and Actions inventory refreshed for the current #449
 fixture-family vertical. Fetch `origin/main` before using this dated receipt as
@@ -63,26 +64,23 @@ the seven explicit **OPEN — not run** AI-47 rows in
 merge or from automated Chromium/CI.
 
 The following security-relevant candidates are tracked here. #637 is
-**CLOSED/implemented via #649**, not an active residue route. #658 remains open
-at local head `7bcf9a4`; it has no merge commit and its AI-47 child result is
-**OPEN — not run**. The merge-SHA column is intentionally explicit: an open PR
-has no merge commit to record, so its placeholder must not be replaced with a
-guessed or branch-head SHA.
+**CLOSED/implemented via #649**, not an active residue route. #658 is merged;
+its AI-47 child result remains **OPEN — not run**. The head and merge-SHA columns
+separate reviewed branch identity from integrated `main` identity.
 
 | PR | Scope | Head at refresh | Base at refresh | Live state | Merge SHA |
 | --- | --- | --- | --- | --- | --- |
 | #649 | Child-frame form target allowance | `04fde241cda6d313b042049c3e118b02381c8954` | `595903af89ff3bfb526e71de68f71f8c9459e6d1` | MERGED; no owner observation | `c78ba99da5d3357833a5fcd3f4f09bdb255db7a6` |
 | #687 | Delayed clipboard rewrite adversarial lane | `b43de5d82c599f7e2b32e6d7e81668b308ec127d` | receipt reconciled after #649 | MERGED test-only; `MODELLED` evidence and `UNVERIFIED` diagnostic; no owner Chrome or OS-prevention claim | `63e3bbbc401f272e88abc88a4f890ba4003bdb1f` |
 | #655 | Imported integer Options log limit | `2f4bc289efe4ad610f2ae4e8926bb84dce3c5fa8` | receipt reconciled after #649 | MERGED; AI-47 row 6 remains **OPEN — not run** | `9b7ce93652b08c0e7f124f3ef132e46c6ab39909` |
-| #658 | Conditional same-field Options writes | `7bcf9a4` | local pending head | **OPEN — not run; not merged** | **PENDING — no merge commit** |
+| #658 | Conditional same-field Options writes | `0dc62f62e722de651169d3646669c0faf06fbd24` | `9b7ce93652b08c0e7f124f3ef132e46c6ab39909` | MERGED; AI-47 row 6 remains **OPEN — not run** | `8a9435349e0dcdbe834bfee2beeeccafd5b39ccf` |
 
 The #649 child-form checks are now subject to AI-47 row 4, which remains
 **OPEN — not run** until Chris records the observation. #687 is merged test-only
 work; its `MODELLED` evidence and `UNVERIFIED` diagnostic do not establish owner
-Chrome behavior, OS-paste prevention, or a release claim. If #658 merges,
-refresh the generated security-program views and this tracker from the resulting
-exact `main` head; do not promote a pending or diagnostic result beyond its
-machine-checked `MODELLED` ceiling.
+Chrome behavior, OS-paste prevention, or a release claim. Generated views now
+link `MAP-CLICKFIX-05` to #687; this traceability repair does not promote the
+diagnostic beyond its machine-checked `MODELLED` ceiling.
 
 ## Prioritized open follow-ups
 

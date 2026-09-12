@@ -76,14 +76,14 @@ not waive an owner, browser, measurement, privacy, permission, or external gate.
 
 Refreshed 2026-09-12 from reconciled merge receipts: #649
 `c78ba99da5d3357833a5fcd3f4f09bdb255db7a6`, #687
-`63e3bbbc401f272e88abc88a4f890ba4003bdb1f`, and #655
-`9b7ce93652b08c0e7f124f3ef132e46c6ab39909`. Fetch `origin/main` before using
+`63e3bbbc401f272e88abc88a4f890ba4003bdb1f`, #655
+`9b7ce93652b08c0e7f124f3ef132e46c6ab39909`, and #658
+`8a9435349e0dcdbe834bfee2beeeccafd5b39ccf`. Fetch `origin/main` before using
 this dated receipt as an exact build identity. The merged browser chain includes
-#600, #609, #636, #640, #641, #643, #644, #649, #657, #608, and #655; all seven
+#600, #609, #636, #640, #641, #643, #644, #649, #657, #608, #655, and #658; all seven
 owner-installed Chrome rows remain **OPEN — not run** under AI-47 in
-[`ACTION_ITEMS.md`](../ACTION_ITEMS.md), not waived by the merges. #658 remains
-pending at local head `7bcf9a4`, with no merge SHA and an **OPEN — not run**
-child result until it actually lands. Test-only #687 is merged, but stays
+[`ACTION_ITEMS.md`](../ACTION_ITEMS.md), not waived by the merges. #658 is
+merged, but its AI-47 child result remains **OPEN — not run**. Test-only #687 is merged, but stays
 `MODELLED` with an `UNVERIFIED` diagnostic; it is not owner Chrome evidence or
 OS-paste prevention. The live receipt tracker is
 [`PROGRAM_STATE.md`](security-program/PROGRAM_STATE.md). PR #572 remains parked

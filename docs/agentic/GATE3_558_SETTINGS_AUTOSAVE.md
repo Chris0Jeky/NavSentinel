@@ -2,10 +2,10 @@
 
 Post-merge branded-Chrome subprocedure retained by the consolidated AI-47
 check in `ACTION_ITEMS.md`. Under D-2026-09-12-P this is no longer a pre-merge
-human gate for merged #643 and #655. Only Chris may perform and record this
+human gate for merged #643, #655, and #658. Only Chris may perform and record this
 sub-result under AI-47; an agent may only preserve Chris's explicit observation.
-#658 remains **OPEN — not run** until it actually merges, so this guide does not
-assert owner acceptance for #658 or any other candidate.
+#658's Human result remains **OPEN — not run**; its merge does not assert owner
+acceptance for #658 or any other candidate.
 
 1. Build the then-current `main` head selected for AI-47 with `npm run build`.
    In a disposable Chrome profile, the owner loads/reloads that checkout's
@@ -46,7 +46,7 @@ assert owner acceptance for #658 or any other candidate.
 
 Automated disposable-Chromium tests cover these storage/UI paths; they do not
 replace Chris's unpacked Chrome reload and visual acceptance. Only Chris may
-record a #643/#655 pass or the exact failing step as the former-AI-43 sub-result
-under AI-47. #658 remains **OPEN — not run** until it merges and Chris observes
-its distinct same-field behavior. No telemetry, permissions, or runtime guard
+record a #643/#655/#658 pass or the exact failing step as the former-AI-43
+sub-result under AI-47. #658 remains **OPEN — not run** until Chris observes its
+distinct same-field behavior. No telemetry, permissions, or runtime guard
 changes are part of this slice.

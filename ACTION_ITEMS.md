@@ -18,9 +18,9 @@ testing under [`D-2026-09-12-P`](docs/agentic/DECISIONS.md), provided every
 non-human gate still passes. The retained browser work is consolidated as AI-47
 below. Every AI-47 Human result is **OPEN — not run**: a merge, CI, or automated
 Chromium result is not a human-test result. Browser merge receipts cover #600,
-#609, #636, #640, #641, #643, #644, #649, #657, #608, and now #655. PR #658
-remains unmerged at local head `7bcf9a4`; do not run or record its child result
-until it actually merges. PR #599 remains outside pending AI-37's explicit
+#609, #636, #640, #641, #643, #644, #649, #657, #608, #655, and #658. PR #658
+merged as `8a9435349e0dcdbe834bfee2beeeccafd5b39ccf`; its child result remains
+**OPEN — not run**. PR #599 remains outside pending AI-37's explicit
 queue-policy choice, and PR #572 remains parked outside on SP-F-013. PR #687
 merged as `63e3bbbc401f272e88abc88a4f890ba4003bdb1f`, but remains a test-only
 delayed-clipboard lane: its evidence is `MODELLED`/`UNVERIFIED`, not owner
@@ -47,10 +47,9 @@ subprocedure, not a branch-held item or a human-test pass.
 
 **Guided resolution cursor:** `AI-19` (`Resume at: AI-19`; conversational label
 `q-5`). Current ready order: AI-19 → AI-47 → optional AI-24 → AI-23 (low
-priority). The #649 child-form and #655 imported-log-limit checks are attached to
-AI-47 after their merges, but remain **OPEN — not run**. #658 remains a future
-AI-47 child result only after its actual merge; until then it is explicitly
-**OPEN — not run**. The four older post-merge checks (AI-30, AI-33, AI-35,
+priority). The #649 child-form, #655 imported-log-limit, and #658 conditional-write
+checks are attached to AI-47 after their merges, but remain **OPEN — not run**.
+The four older post-merge checks (AI-30, AI-33, AI-35,
 AI-36) are unordered additions to that queue.
 
 **Status vocabulary note:** issue #421's proposed `OPEN | HELD | BLOCKED` parser
@@ -209,14 +208,13 @@ live.
   the #523 unverified-queue design, plus a bridge queue-pressure Chrome check
   that a benign clipboard write cannot suppress the trusted fake-verification
   warning. Full procedure in that branch's `docs/agentic/GATE3_GUIDES.md`.
-### Pending integration candidates
+### Integration closeout receipt
 
-These rows are live integration pointers, not human-test results. The merge-SHA
-field deliberately stays a placeholder until GitHub records an actual merge:
+This row records integration state, not a human-test result:
 
 | PR | Scope | Head at refresh | State | Merge SHA |
 | --- | --- | --- | --- | --- |
-| #658 | Conditional same-field Options writes | `7bcf9a4` | **OPEN — not run; not merged** | **PENDING — no merge commit** |
+| #658 | Conditional same-field Options writes | `0dc62f62e722de651169d3646669c0faf06fbd24` | MERGED; Human result remains **OPEN — not run** | `8a9435349e0dcdbe834bfee2beeeccafd5b39ccf` |
 
 ### Merged browser work retained under AI-47
 
@@ -232,7 +230,7 @@ preserve Chris's explicit observation.
 | 3 | Redirect freshness #609 — `e35f5430660767d4998c8f4d727b38444f3f9b14` | [#609 former-AI-40 procedure](docs/agentic/GATE3_GUIDES.md#ai-47-subprocedure-former-ai-40---609-stale-redirect-chain-boundary) | OPEN — not run |
 | 4 | Child-frame navigation #636 — `d91d11f546a925cfc45f721856e1c8b0378ff23d`; form targets #649 — `c78ba99da5d3357833a5fcd3f4f09bdb255db7a6` | [#636 former-AI-41 procedure](docs/agentic/GATE3_GUIDES.md#retained-guide-ai-41---issue-593-child-frame-navigation-authority); [#649 former-AI-46 procedure](docs/agentic/AI-46-issue637-child-form-target.md) | OPEN — not run |
 | 5 | Protection Center #640 — `a49cbc3e37f8ade547a97266588d894db1c3c33f`; evidence preview #641 — `7548954701f99377fed149c3be20135e39fe0b44` | [#640 acceptance procedure](docs/vision-overhaul/BROWSER_ACCEPTANCE.md); [#641 export procedure](docs/vision-overhaul/EXPORT_REVIEW.md#human-chrome-check--ai-45) | OPEN — not run |
-| 6 | Settings #643 — `9524a8a7c38f972e66ef49b0f4cc991fb751e67f`; imported log limit #655 — `9b7ce93652b08c0e7f124f3ef132e46c6ab39909`; #658 remains pending | [#643/#655 current-main procedure](docs/agentic/GATE3_558_SETTINGS_AUTOSAVE.md); [#658 procedure after merge](docs/agentic/GATE3_558_SETTINGS_AUTOSAVE.md) | OPEN — not run |
+| 6 | Settings #643 — `9524a8a7c38f972e66ef49b0f4cc991fb751e67f`; imported log limit #655 — `9b7ce93652b08c0e7f124f3ef132e46c6ab39909`; conditional writes #658 — `8a9435349e0dcdbe834bfee2beeeccafd5b39ccf` | [#643/#655/#658 current-main procedure](docs/agentic/GATE3_558_SETTINGS_AUTOSAVE.md) | OPEN — not run |
 | 7 | Event association #644 — `7184e9d0a3bca699cae5e05426137258c836850e`; canonical IP sites #657 — `c760bb086023c4b83c8ef65693b5adf475414fda` | [#644/#657 association procedure](docs/agentic/ISSUE_585_GATE3.md) | OPEN — not run |
 
 **OPEN: AI-47 — September browser-queue consolidated post-merge Chrome check.**
@@ -278,12 +276,11 @@ revision printed by the build, then run this consolidated sequence:
    exact guides, including popup/Options entry points, themes, category states,
    keyboard operation, cancel paths, preview/download byte parity, minimized
    export privacy, and the absence of page-injected Allow/Proceed controls.
-6. **Settings concurrency ([#643/#655 / former AI-43](docs/agentic/GATE3_558_SETTINGS_AUTOSAVE.md); [#658 after merge](docs/agentic/GATE3_558_SETTINGS_AUTOSAVE.md)):** complete the exact
-   guide for merged #643/#655. Default autosave, explicit conflicts, and
+6. **Settings concurrency ([#643/#655/#658 / former AI-43](docs/agentic/GATE3_558_SETTINGS_AUTOSAVE.md)):** complete the exact
+   guide for merged #643/#655/#658. Default autosave, explicit conflicts, and
    imported integer log limit `55` must match the guide. #658's same-field
    collision, disjoint-window merge, and preservation of the losing draft remain
-   **OPEN — not run** at `7bcf9a4` and are not a current-`main` result until #658
-   actually merges.
+   **OPEN — not run** for Chris to observe on the selected current-`main` build.
 7. **Event association ([#644/#657 / former AI-44](docs/agentic/ISSUE_585_GATE3.md)):** complete the exact guide and the child-PR addition. Imported event `pageSite` validation,
    full-URL sanitization, legacy popup fallback, and canonical IP-site
    association remain correct without leaking an event to an unrelated
@@ -293,7 +290,7 @@ Inspect page, popup, Options, Protection Center, and service-worker consoles for
 new errors during the relevant steps. Only after Chris has explicitly recorded
 every applicable row may Chris report `AI-47 done; consolidated Gate-3 passed on
 main at <40-character SHA>; Chrome <version>`. #658 keeps row 6 and AI-47 open
-until it merges and Chris records its observation. On a mismatch, Chris records
+until Chris records its observation. On a mismatch, Chris records
 `AI-47 failed on main at <SHA>: <numbered step and observed result>`. A failure
 reopens the smallest affected issue/PR slice; it does not invalidate unrelated
 checks. The general guided cursor remains AI-19.

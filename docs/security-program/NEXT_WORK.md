@@ -12,12 +12,13 @@ passive maintenance, and frozen R1 are not fallback queues. The exact receipt is
 
 As of 2026-09-12, the reconciled merge receipts are #649
 `c78ba99da5d3357833a5fcd3f4f09bdb255db7a6`, #687
-`63e3bbbc401f272e88abc88a4f890ba4003bdb1f`, and #655
-`9b7ce93652b08c0e7f124f3ef132e46c6ab39909`. Fetch `origin/main` before using
+`63e3bbbc401f272e88abc88a4f890ba4003bdb1f`, #655
+`9b7ce93652b08c0e7f124f3ef132e46c6ab39909`, and #658
+`8a9435349e0dcdbe834bfee2beeeccafd5b39ccf`. Fetch `origin/main` before using
 this dated receipt as an exact build identity. The merged browser chain's seven
 AI-47 rows remain **OPEN — not run** in `ACTION_ITEMS.md`; a merge or CI result
-is not owner Chrome acceptance. #658 remains pending at local head `7bcf9a4` and
-is **OPEN — not run** until it actually merges. #687 is merged test-only work:
+is not owner Chrome acceptance. #658 is merged, while its AI-47 result remains
+**OPEN — not run**. #687 is merged test-only work:
 its evidence stays `MODELLED` and its diagnostic `UNVERIFIED`; it is neither
 owner Chrome evidence nor OS-paste prevention.
 
@@ -51,7 +52,7 @@ or an acceptance result.
 5. **#686 — pending navigation ordering.** Keep pending-decision order and
    lifecycle authority explicit.
 6. **#690 — autosave/import ordering.** Preserve explicit import and saved-state
-   ordering without treating pending #658 behavior as current-main evidence.
+   ordering across the now-merged #658 conditional-write boundary.
 7. **#689 — export boundary.** Keep privacy and correctness boundaries local and
    separately evidenced.
 8. **#693 — mutation-observer test determinism.** Make the test seam
