@@ -10,6 +10,7 @@ import {
   finalizeUiGuardLoader,
   UI_GUARD_REVISION_PLACEHOLDER,
 } from "./content-loader-contract.mjs";
+import { compactKnownOptionsHtml } from "./packaged-html.mjs";
 import { RELEASE_PROFILE_ENV, resolveReleaseProfile } from "./release-profile.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -46,15 +47,34 @@ function runNode(scriptPath, args = [], extraEnv = {}) {
 
 function compactPackagedHtml() {
   const distSrc = path.join(root, "extension", "dist", "src");
+  const distAssets = path.join(root, "extension", "dist", "assets");
+  const stylesheetsByHref = new Map();
+  try {
+    for (const entry of fs.readdirSync(distAssets, { withFileTypes: true })) {
+      if (!entry.isFile() || !entry.name.endsWith(".css")) continue;
+      stylesheetsByHref.set(
+        `/assets/${entry.name}`,
+        fs.readFileSync(path.join(distAssets, entry.name), "utf8"),
+      );
+    }
+  } catch {
+    // The options-only compactor treats an empty map as unresolved and returns
+    // the original HTML. Later build checks remain responsible for missing assets.
+  }
   for (const relative of fs.readdirSync(distSrc, { recursive: true })) {
     if (!relative.endsWith(".html")) continue;
     const file = path.join(distSrc, relative);
     const html = fs.readFileSync(file, "utf8");
     // Comments are source guidance, not extension payload. Keep conditional
     // comments if one is ever added, and make artifact bytes platform-stable.
-    const compacted = html
+    const normalized = html
       .replace(/\r\n?/g, "\n")
       .replace(/<!--(?!\[if\b)[\s\S]*?-->/gi, "");
+    const compacted = compactKnownOptionsHtml(
+      relative.split(path.sep).join("/"),
+      normalized,
+      stylesheetsByHref,
+    );
     if (compacted !== html) fs.writeFileSync(file, compacted, "utf8");
   }
 }
