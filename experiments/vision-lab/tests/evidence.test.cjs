@@ -5,6 +5,22 @@ const timestamp='2026-09-08T12:00:00.000Z';
 const row=(changes={})=>({id:'event-1',timestamp,kind:'nav_click_block',sourceSite:'reader.test',destinationSite:'other.test',outcome:'recorded',reasons:['nrs_cross_site'],score:75,...changes});
 const file=(events=[row()])=>({format:'navsentinel-evidence',schema:1,exportedAt:timestamp,source:'navsentinel-extension',evidence:'recorded-observation',events});
 test('valid extension export projects only recorded observation metadata',()=>{const clean=E.parse(JSON.stringify(file()));assert.deepEqual(clean,file());const projection=E.project(clean.events[0]);assert.equal(projection.outcome,'Recorded observation');assert.match(projection.knowledgeGap,/does not independently prove prevention/);assert.equal(projection.source,'reader.test');});
+test('canonical IPv6 survives import, saved history and review export without acquiring authority',()=>{
+  for(const host of ['::1','2001:db8::1','::ffff:c000:280']){
+    const imported=E.parse(JSON.stringify(file([row({sourceSite:host,destinationSite:host})])));
+    const state=E.merge(E.empty(),imported).state;
+    const restored=E.restore(JSON.parse(JSON.stringify(state)));
+    const reviewed=E.reviewEnvelope(E.exportReview(restored,timestamp));
+    assert.equal(reviewed.events[0].sourceSite,host);
+    assert.equal(reviewed.events[0].destinationSite,host);
+    assert.equal(reviewed.events[0].outcome,'recorded');
+  }
+});
+test('IP support rejects noncanonical addresses, ports, zones and URL-shaped metadata',()=>{
+  for(const sourceSite of ['[::1]','[::1]:443','::1?secret','fe80::1%eth0','1::2::3','2001:0db8::1','::ffff:192.0.2.128','999.0.0.1','127.000.000.001','https://[::1]/private','::1\n']){
+    assert.throws(()=>E.envelope(file([row({sourceSite})])),/canonical hostnames/);
+  }
+});
 test('reject raw values, unknown keys, prototype fields and action authority at every boundary',()=>{for(const key of ['url','password','body','capability','allowOnce','__proto__']){const value=JSON.parse(JSON.stringify(file()));Object.defineProperty(value.events[0],key,{value:'sensitive',enumerable:true});assert.throws(()=>E.envelope(value),/unsupported fields/);}assert.throws(()=>E.envelope({...file(),token:'secret'}),/unsupported fields/);assert.throws(()=>E.envelope(file([row({outcome:'prevented'})])),/Unsupported/);assert.throws(()=>E.envelope(file([row({kind:'<img src=x onerror=alert(1)>'})])),/Unsupported/);});
 test('hostnames reject executable text, URLs, paths, Unicode and user information',()=>{for(const sourceSite of ['https://reader.test/path?q=secret','reader.test/path','user@reader.test','reader.test:443','<svg/onload=alert(1)>','MiXeD.test','-bad.test','bad-.test','a..test','é.test','[::1]',undefined])assert.throws(()=>E.envelope(file([row({sourceSite})])),/canonical hostnames/);assert.equal(E.envelope(file([row({sourceSite:null,destinationSite:'127.0.0.1'})])).events[0].sourceSite,null);});
 test('strict schema, timestamp, identifier and score bounds',()=>{for(const value of [null,{},[],{...file(),schema:2},{...file(),evidence:'verified-prevention'},{...file(),source:'page'}])assert.throws(()=>E.envelope(value));for(const timestamp of ['today','2026-02-30T00:00:00.000Z','2026-09-08',0])assert.throws(()=>E.envelope(file([row({timestamp})])));for(const id of ['','x/y','<script>', 'x'.repeat(101)])assert.throws(()=>E.envelope(file([row({id})])));for(const score of [NaN,Infinity,-1,101,'75'])assert.throws(()=>E.envelope(file([row({score})])));assert.throws(()=>E.envelope(file([row(),row()])),/Duplicate/);});

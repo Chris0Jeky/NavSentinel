@@ -2123,13 +2123,17 @@ export async function exportAll(): Promise<{
   const exportedAt = Date.now();
   const allowlist = await getAllowlist();
   const trustedDomains = await getTrustedDomains();
-  // RI-06: minimize every event-log URL on the way out (drop query+fragment) so
-  // already-stored LEGACY full URLs — persisted before the append-path change —
-  // are also reduced in exports, matching what new entries now store.
+  // Revalidate legacy rows at the export boundary, even before a worker has
+  // migrated them. A hostname-only page association must never export a URL,
+  // path or query that an older version accepted (#691). Do not mutate storage.
   const eventLog = (await getEventLog()).map((entry) => {
-    if (entry.url === undefined) return entry;
-    const minimized = minimizeEventUrl(entry.url);
-    return minimized === entry.url ? entry : { ...entry, url: minimized };
+    const { pageSite: rawPageSite, url: rawUrl, ...rest } = entry;
+    const pageSite = normalizeEventPageSite(rawPageSite);
+    return {
+      ...rest,
+      ...(pageSite === undefined ? {} : { pageSite }),
+      ...(rawUrl === undefined ? {} : { url: minimizeEventUrl(rawUrl) }),
+    };
   });
   const promptOutcomes = await getPromptOutcomes();
   // A dormant or newly-started worker may not have completed legacy migration
