@@ -199,6 +199,10 @@ It currently covers:
 - a dedicated rollback lane for redirect recovery affordances
 - RW-15 bank/security alert redirect recovery
 - a dedicated live-web sanity lane
+- a neutral local browser-platform opener contract that records source/child
+  provenance and parent-tab sink commits across HTTP opener methods; it loads no
+  NavSentinel artifact and is therefore attribution evidence only (see
+  [browser boundary report](security-program/reports/DOUBLECLICK_BROWSER_BOUNDARY.md))
 
 `playwright.config.ts` intentionally scopes Playwright discovery to `tests/e2e/**/*.spec.ts`. This keeps Vitest files out of the Playwright runner.
 
