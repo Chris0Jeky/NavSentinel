@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Issue 593 modelled hidden-media child</title>
   <style>
-    html, body, #hidden-interactive-layer, #declared-top-link { width: 100%; height: 100%; margin: 0; }
+    html, body, #hidden-interactive-layer, #declared-top-link, #declared-top-submit { width: 100%; height: 100%; margin: 0; }
     #hidden-interactive-layer { display: block; border: 0; background: transparent; color: transparent; cursor: pointer; }
     #declared-top-link { display: grid; place-items: center; color: #eaf4ff; background: #1d3550; }
     [hidden] { display: none !important; }
@@ -19,6 +19,9 @@
   <a id="forged-intent-layer" href="#" hidden aria-label="Playback surface"></a>
   <!-- Benign control: a child frame that DECLARES where it sends the tab. -->
   <a id="declared-top-link" hidden target="_top">Open the linked page</a>
+  <form id="top-submit-form" method="get" target="_top" hidden>
+    <button id="declared-top-submit" type="submit">Continue</button>
+  </form>
   <script>
     (() => {
       const params = new URLSearchParams(location.search);
@@ -30,6 +33,7 @@
       const rawSink = params.get("sink") || "";
       const layer = document.getElementById("hidden-interactive-layer");
       const declaredLink = document.getElementById("declared-top-link");
+      const topSubmitForm = document.getElementById("top-submit-form");
       let armed = false;
       const scenarioId = "issue-593-hidden-media-layer-modelled";
       const consequence = "modelled-hidden-media-navigation";
@@ -42,6 +46,10 @@
         ["forged-anchor-top-100", { primitive: "forged-anchor-top", delayMs: 100 }],
         ["top-assign-1600", { primitive: "top-assign", delayMs: 1600 }],
         ["window-open-100", { primitive: "window-open", delayMs: 100 }],
+        ["top-form-submit-100", { primitive: "top-form-submit", delayMs: 100 }],
+        ["empty-formaction-submit-100", { primitive: "empty-formaction-submit", delayMs: 100 }],
+        ["benign-declared-form-submit-100", { primitive: "declared-form-submit", delayMs: 100 }],
+        ["benign-declared-request-submit-100", { primitive: "declared-request-submit", delayMs: 100 }],
         ["benign-anchor-top-keyboard", { primitive: "anchor-top", delayMs: 0 }],
         ["benign-top-script-100", { primitive: "top-script", delayMs: 100 }],
       ]);
@@ -80,6 +88,18 @@
         console.info(`NAVSENTINEL_ISSUE593:${JSON.stringify(complete)}`);
       }
 
+      function configureTopSubmitForm() {
+        const target = new URL(safeSink);
+        topSubmitForm.action = `${target.origin}${target.pathname}`;
+        for (const [name, value] of target.searchParams) {
+          const field = document.createElement("input");
+          field.type = "hidden";
+          field.name = name;
+          field.value = value;
+          topSubmitForm.append(field);
+        }
+      }
+
       function execute() {
         report({ phase: "executing", primitive, delayMs, sinkArmed: !!safeSink });
         if (!safeSink) return;
@@ -94,6 +114,14 @@
         if (primitive === "window-open") {
           const opened = window.open(safeSink, "_blank", "noopener");
           report({ phase: "open-returned", primitive, delayMs, popupHandle: opened ? "present" : "null" });
+          return;
+        }
+        if (primitive === "declared-request-submit") {
+          topSubmitForm.requestSubmit(document.getElementById("declared-top-submit"));
+          return;
+        }
+        if (primitive === "top-form-submit" || primitive === "declared-form-submit" || primitive === "empty-formaction-submit") {
+          topSubmitForm.submit();
         }
       }
 
@@ -119,7 +147,25 @@
         window.setTimeout(execute, delayMs);
       }
 
-      if (primitive === "forged-anchor-top") {
+      if (primitive === "declared-form-submit" || primitive === "declared-request-submit" || primitive === "empty-formaction-submit") {
+        if (safeSink) configureTopSubmitForm();
+        if (primitive === "empty-formaction-submit") {
+          // Empty declares this document; submit() ignores the submitter and
+          // attempts the form's distinct top-frame sink action instead.
+          document.getElementById("declared-top-submit").setAttribute("formaction", "");
+        }
+        if (primitive === "declared-request-submit") {
+          const submitter = document.getElementById("declared-top-submit");
+          submitter.setAttribute("formaction", topSubmitForm.action);
+          submitter.setAttribute("formmethod", "get");
+        }
+        topSubmitForm.hidden = false;
+        layer.hidden = true;
+        document.getElementById("declared-top-submit").addEventListener("click", (event) => {
+          event.preventDefault();
+          armAction(event, "physical-click");
+        });
+      } else if (primitive === "forged-anchor-top") {
         // The layer is an anchor whose href goes nowhere; its click handler
         // suppresses the default action and drives the top frame by script.
         const forged = document.getElementById("forged-intent-layer");
@@ -150,6 +196,7 @@
           });
         });
       } else if (primitive !== "top-script") {
+        if (primitive === "top-form-submit" && safeSink) configureTopSubmitForm();
         layer.addEventListener("pointerdown", (event) => report({
           phase: "pointerdown",
           primitive,

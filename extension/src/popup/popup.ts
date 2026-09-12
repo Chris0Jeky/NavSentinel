@@ -462,3 +462,4 @@ chrome.runtime.onMessage.addListener((message: PopupTestMessage, sender, sendRes
 versionEl.textContent = chrome.runtime.getManifest().version;
 onSuiteSettingsChange(() => { void refreshUi(); });
 void refreshUi();
+void import("./pending_decisions");

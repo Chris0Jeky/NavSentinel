@@ -630,7 +630,7 @@ test("options import and export preserve normalized trusted-domain and allowlist
         settings: {
           nav: { defaultMode: "off", debug: true },
           credential: { mode: "strict", mediumRiskThreshold: 55 },
-          logLimit: 120
+          logLimit: 55
         },
         allowlist: {
           " Example.com ": [" Login.Example.com "]
@@ -680,12 +680,21 @@ test("options import and export preserve normalized trusted-domain and allowlist
       await options.locator("#importFile").setInputFiles(importPath);
       await expect(options.locator('#navModeSeg .seg-btn[data-value="off"]')).toHaveAttribute("aria-checked", "true");
       await expect(options.locator('#credModeSeg .seg-btn[data-value="strict"]')).toHaveAttribute("aria-checked", "true");
-      await expect(options.locator("#logLimit")).toHaveValue("120");
+      await expect(options.locator("#logLimit")).toHaveValue("55");
+      expect(await options.locator("#logLimit").evaluate((input: HTMLInputElement) => input.checkValidity())).toBe(true);
       await expect(options.locator("#allowlist")).toContainText("example.com");
       await expect(options.locator("#allowlist")).toContainText("login.example.com");
       await expect(options.locator("#trustedList")).toContainText("example.com");
       await expect(options.locator("#trustedList")).toContainText("127.0.0.1");
       await expect(options.locator("#eventLog")).toContainText("cred_trust_domain");
+
+      // Every bounded integer accepted by import must leave subsequent edits saveable.
+      await options.locator('#navModeSeg .seg-btn[data-value="smart"]').click();
+      const worker = await getServiceWorker(context);
+      await expect.poll(() => worker.evaluate(async key => {
+        const settings = (await chrome.storage.local.get(key))[key];
+        return { mode: settings?.nav?.defaultMode, logLimit: settings?.logLimit };
+      }, SUITE_SETTINGS_KEY)).toEqual({ mode: "smart", logLimit: 55 });
 
       const downloadPromise = options.waitForEvent("download");
       await options.locator("#exportBtn").click();
@@ -699,9 +708,9 @@ test("options import and export preserve normalized trusted-domain and allowlist
         trustedDomains: string[];
       };
 
-      expect(exported.settings.nav.defaultMode).toBe("off");
+      expect(exported.settings.nav.defaultMode).toBe("smart");
       expect(exported.settings.credential.mode).toBe("strict");
-      expect(exported.settings.logLimit).toBe(120);
+      expect(exported.settings.logLimit).toBe(55);
       expect(exported.allowlist).toEqual({
         "example.com": ["login.example.com"]
       });
