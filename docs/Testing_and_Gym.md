@@ -56,7 +56,11 @@ lane for RW-21, RW-24, and RW-25. It launches Playwright-bundled Chromium with
 native popup blocking deliberately disabled, proves that the extension-disabled
 attack reaches a typed local harm sink, then requires zero harm receipts with the
 release extension in protected and mixed arms. A native-keyboard benign control
-must still reach its own one-use sink authority. This is independent local
+must still reach its own one-use sink authority. Before the lane collects any
+receipt, it rejects an external `EXTENSION_PATH`, verifies all tracked extension
+build inputs against the current Git head, and rebuilds the fixed
+`extension/dist` path. Each receipt binds those source hashes to the exact
+loaded-build hash and rechecks both before attachment. This is independent local
 regression evidence, not branded-Chrome, real sleep/restart, open-web efficacy,
 or release evidence.
 
