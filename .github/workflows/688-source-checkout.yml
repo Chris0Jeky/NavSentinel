@@ -1,0 +1,23 @@
+name: Issue 688 pinned source checkout
+on:
+  push:
+    branches: [fix/688-effective-form-authority-20260913]
+    paths: [.github/workflows/688-source-checkout.yml]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: 476301ad1c4b56fc83ed335ac83e343dc93d675e
+          persist-credentials: false
+      - run: git archive --format=tar.gz --output=/tmp/navsentinel-source.tar.gz HEAD
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: issue688-pinned-source
+          path: /tmp/navsentinel-source.tar.gz
+          retention-days: 1
+          if-no-files-found: error
