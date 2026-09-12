@@ -23,5 +23,15 @@
       <section class="panel" id="coverage" aria-labelledby="coverage-title"><p class="eyebrow">EVIDENCE WITH BOUNDARIES</p><h2 id="coverage-title">What this view can tell you</h2><div class="coverage"><article><h3>Recorded, not independently verified</h3><p>Entries describe extension observations and decisions. Counts are not prevented attacks, protection rates or a safety verdict. An empty journal means no retained events.</p></article><article><h3>Local and deliberately limited</h3><p>This view reads the extension’s existing bounded history. It does not collect new page data, contact a server or connect to a desktop service. Missing fields stay unavailable.</p></article><article><h3>You stay in control</h3><p>Review navigation and credential settings, trust lists and retention in <a href="../options/options.html">Protection settings</a>. Clear behavioural data there to erase existing history through the shared reset flow.</p></article><article><h3>Build and browser limits still apply</h3><p>The standard build focuses on browser interactions. Broad JavaScript instrumentation is off. This journal cannot prove complete coverage of a page or that an observed consequence was prevented.</p></article></div></section>
       <footer>NavSentinel · Pre-release local workspace · No new decision authority</footer>
     </main>
-  </div><script type="module" src="./evidence.ts"></script>
+  </div>
+  <dialog id="exportDialog" aria-labelledby="exportTitle" aria-describedby="exportDisclosure">
+    <h2 id="exportTitle">Review your evidence export</h2>
+    <p id="exportDisclosure">Hostnames and timestamps can reveal browsing activity. Review the exact file below before saving or sharing it. Nothing is uploaded.</p>
+    <p id="exportSummary" class="fine"></p>
+    <label for="exportPreview">File contents (read only)</label>
+    <textarea id="exportPreview" readonly spellcheck="false" wrap="off"></textarea>
+    <p class="fine">To share voluntarily, download this file and attach it yourself to a support report. Public GitHub issues make attachments public. Cancel and narrow the journal filters if this file contains activity you do not want to share.</p>
+    <div class="export-actions"><button id="cancelExport" class="secondary" autofocus>Cancel</button><button id="downloadExport">Download reviewed file</button></div>
+  </dialog>
+  <script type="module" src="./evidence.ts"></script>
 </body></html>
