@@ -11,6 +11,9 @@ const exportButton = byId<HTMLButtonElement>("export");
 const refreshButton = byId<HTMLButtonElement>("refresh");
 const previous = byId<HTMLButtonElement>("previous");
 const next = byId<HTMLButtonElement>("next");
+const exportDialog = byId<HTMLDialogElement>("exportDialog");
+const exportPreview = byId<HTMLTextAreaElement>("exportPreview");
+let preparedExport: { text: string; filename: string; count: number } | null = null;
 let events: EvidenceEvent[] = [];
 let visible: EvidenceEvent[] = [];
 let page = 0;
@@ -84,13 +87,35 @@ refreshButton.addEventListener("click", () => { void refresh(); });
 exportButton.addEventListener("click", () => {
   // Filter displays newest first; retain chronological ordering in the portable file.
   const payload = createEvidenceExport(visible.slice().reverse());
-  const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
+  const text = JSON.stringify(payload, null, 2);
+  const bytes = new Blob([text]).size;
+  if (bytes > 8 * 1024 * 1024) {
+    status.textContent = "This export exceeds 8 MiB. Narrow the journal filters and preview again.";
+    return;
+  }
+  preparedExport = { text, filename: `navsentinel-evidence-${payload.exportedAt.slice(0, 10)}.json`, count: payload.events.length };
+  exportPreview.value = text;
+  byId("exportSummary").textContent = `${payload.events.length} recorded observations · ${bytes.toLocaleString()} bytes · Prepared ${new Date(payload.exportedAt).toLocaleString()}`;
+  exportDialog.showModal();
+});
+byId("cancelExport").addEventListener("click", () => exportDialog.close());
+exportDialog.addEventListener("close", () => {
+  preparedExport = null;
+  exportPreview.value = "";
+  exportButton.focus();
+});
+byId("downloadExport").addEventListener("click", () => {
+  if (!preparedExport) return;
+  // Download exactly the bytes reviewed, even if time or the journal has changed.
+  const snapshot = preparedExport;
+  const url = URL.createObjectURL(new Blob([snapshot.text], { type: "application/json" }));
   const link = element("a", "");
   link.href = url;
-  link.download = `navsentinel-evidence-${new Date().toISOString().slice(0, 10)}.json`;
+  link.download = snapshot.filename;
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-  status.textContent = `Prepared ${payload.events.length} minimized events for download. Review hostnames before sharing.`;
+  exportDialog.close();
+  status.textContent = `Prepared ${snapshot.count} reviewed, minimized events for download. Nothing was uploaded.`;
 });
 const theme = byId<HTMLSelectElement>("theme");
 const themes = new Set(["forest", "paper", "midnight"]);
