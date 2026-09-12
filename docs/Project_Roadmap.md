@@ -10,6 +10,19 @@ phase labels and artifact counts must not be read as product readiness.
 
 ---
 
+## Owner-directed Vision Lab programme (2026-09-08)
+
+The owner requested an ambitious implementation programme from
+`RESOURCES/NavSentinel-Vision-Lab`, including prototypes, consistent styles,
+testing and delivery. The [overhaul map](vision-overhaul/README.md) records the
+62-file inventory, retained/rejected ideas, issue reuse and current checks.
+The programme adds a local Protection Center over existing event storage,
+explicit minimized evidence export/import, three presentation themes, a native
+lab shell and one measured cooperative fixture consequence. This section records
+programme provenance, not live PR state, and does not promote the experimental
+detector or declare a release. The current #640 visible-UI acceptance boundary is
+retained under AI-47 and the one-time D-2026-09-12-P merge policy.
+
 ## Status Snapshot
 
 | Phase | Title | Tasks | Implementation artifacts merged | Validation/release state |

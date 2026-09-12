@@ -63,6 +63,11 @@ export function explainReasonCode(code: string): string {
   return Object.hasOwn(EXPLANATIONS, code) ? EXPLANATIONS[code]! : code;
 }
 
+/** Finite registry membership for minimized evidence exports. */
+export function isKnownReasonCode(code: string): boolean {
+  return Object.hasOwn(EXPLANATIONS, code);
+}
+
 export function explainReasonCodes(codes: string[]): string[] {
   return codes.map(explainReasonCode);
 }
