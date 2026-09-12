@@ -277,8 +277,8 @@ revision printed by the build, then run this consolidated sequence:
    exactly once with a null opener, and remains fail-closed after replay,
    expiry, navigation, or use from another tab. Confirm path/query/fragment data
    is absent from `chrome.storage.session`, popup DOM, and relevant consoles.
-3. **History and redirect freshness (#609 / former AI-40):** complete the exact
-   AI-40 guide. A real
+3. **History and redirect freshness (#609 / former AI-40):** complete the
+   [exact former AI-40 guide retained as this AI-47 subprocedure](docs/agentic/GATE3_GUIDES.md#ai-47-subprocedure-former-ai-40---609-stale-redirect-chain-boundary). A real
    Back/Forward Cache restore inherits no stale redirect-chain factors, and the
    same factors expire without a navigation. A reload is not an equivalent
    check.
