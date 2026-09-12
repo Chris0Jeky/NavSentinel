@@ -7,7 +7,7 @@ from pathlib import Path
 import json, os, time, urllib.request
 ROOT=Path(__file__).resolve().parents[1]
 FILES={'extension':'NavSentinel-Browser.html','desktop':'NavSentinel-Desktop.html','relay':'NavSentinel-Intent-Relay.html'}
-checks=[];errors=[];console_errors=[]
+checks=[];errors=[];console_errors=[];bridge_state={}
 def ok(name,condition=True):
  if not condition: raise AssertionError(name)
  checks.append(name);print("PASS",name,flush=True)
@@ -26,12 +26,19 @@ def new_page(browser,mode='extension',width=1480,height=1040,bridge=False):
   # npm run vision:test:browser; operator authority is no longer in client files.
   operator_token=os.environ.get('NS_OPERATOR_TOKEN')
   if not operator_token: raise RuntimeError('Legacy UI bridge needs explicit NS_OPERATOR_TOKEN; prefer npm run vision:test:browser.')
+  approvals=[]
   def transport(input):
    body=json.dumps(input['body']).encode() if input.get('body') is not None else None
    req=urllib.request.Request(session['origin']+input['path'],data=body,headers={'Authorization':'Bearer '+operator_token,'Content-Type':'application/json'},method=input.get('method','GET'))
    try:
-    with urllib.request.urlopen(req) as response:return {'status':response.status,'data':json.load(response)}
+    with urllib.request.urlopen(req) as response:
+     result={'status':response.status,'data':json.load(response)}
+     if input['path']=='/api/approve': approvals.append(result['data'])
+     return result
    except urllib.error.HTTPError as e:return {'status':e.code,'data':json.load(e)}
+  def fixture_effects():
+   with urllib.request.urlopen(session['labOrigin']+'/broker-effects') as response:return json.load(response)
+  bridge_state.clear();bridge_state.update(approvals=approvals,fixture_effects=fixture_effects,transport=transport)
   page.expose_function('__testTransport',transport)
   page.evaluate("window.navDesktop={request:input=>window.__testTransport(input)}")
  page.set_content((ROOT/FILES[mode]).read_text(),wait_until='load')
@@ -81,10 +88,14 @@ with sync_playwright() as p:
  # An explicitly disclosed transport adapter drives the actual loopback API.
  # This validates renderer/API integration, NOT Electron's IPC or browser networking.
  live=new_page(browser,'relay',bridge=True);live.wait_for_timeout(150)
- click(live,'nav','[data-view="requests"]');ok('actual service bridge connected',not live.locator('[data-action="api-request"]').is_disabled())
- click(live,'api-request');live.wait_for_timeout(150);click(live,'api-approve');live.wait_for_timeout(150);click(live,'api-consume');live.wait_for_timeout(150)
- ok('renderer consumes actual inert API capability','Accepted once' in live.locator('main').inner_text())
- click(live,'api-consume');live.wait_for_timeout(150);ok('renderer displays actual replay rejection','Unknown, used or revoked' in live.locator('main').inner_text())
+ click(live,'nav','[data-view="requests"]');ok('actual service bridge connected',not live.locator('[data-action="api-request"]').is_disabled());live.locator('#request-scenario').select_option('fixture-review')
+ click(live,'api-request');live.wait_for_timeout(150);click(live,'api-approve');live.wait_for_timeout(150);ok('approval response captured for replay probe',len(bridge_state['approvals'])==1)
+ click(live,'api-consume');live.wait_for_timeout(150)
+ ok('renderer reports actual fixture execution','Executed' in live.locator('main').inner_text())
+ ok('terminal execution removes the consumed control',live.locator('[data-action="api-consume"]').count()==0)
+ ok('one fixture effect follows the terminal execution',bridge_state['fixture_effects']()['count']==1)
+ replay=bridge_state['transport']({'path':'/api/consume','method':'POST','body':{'token':bridge_state['approvals'][0]['capability']['token'],'event':bridge_state['approvals'][0]['event']}})
+ ok('transport replay is rejected without a second fixture effect',replay['status']==409 and 'Unknown, used or revoked' in replay['data']['error'] and bridge_state['fixture_effects']()['count']==1)
  live.screenshot(path=str(ROOT/'artifacts'/'relay-live-api.png'),full_page=True);live.close()
  ok('no uncaught browser exceptions',not errors)
  browser_version=browser.version

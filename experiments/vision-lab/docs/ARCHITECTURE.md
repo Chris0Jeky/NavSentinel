@@ -91,7 +91,7 @@ Journal replacement uses fsync plus rename; the containing directory is not fsyn
 
 The three generated HTML files need no install and no remote resources. Content Security Policy pins their inline scripts by hash and prohibits network access. The source studio uses only locally served scripts and same-origin API calls. The Node service needs version 22 or later and no npm dependencies. Never bind it to a LAN/public interface or publish its session tokens.
 
-Electron 44.2.0 is a separate, optional pinned dependency verified against the official stable release index on 2026-09-07. It was not downloaded or run here. Run `npm install` inside `desktop`, retain the generated lockfile after local verification, and stop the standalone service before launching the shell. Signing, installers, updates, native-service installation and user-data ACLs are not provided.
+Electron 44.2.0 is a separate, optional pinned dependency verified against the official stable release index on 2026-09-07. The repository-root install and desktop smoke commands exercise this pinned dependency locally. From the repository root, run `npm run vision:desktop:install`, then `npm run vision:desktop`; stop the standalone service before launching the shell. Signing, installers, updates, native-service installation and user-data ACLs are not provided.
 
 ## Promotion gates
 
