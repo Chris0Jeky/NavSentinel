@@ -365,11 +365,17 @@ remains with #215.
 - pending rollback and forward-offer state
 - DoubleClickjacking child-window tracking
 - OAuth flow state per tab
-- redirect chain correlation
+- redirect chain correlation with a latest-hop expiry and explicit user-navigation boundaries
 
 All 15 ephemeral Maps/Sets are backed by `chrome.storage.session` via a write-through cache (`extension/src/shared/session_state.ts`). In-memory Maps are the primary sync read path; every write is mirrored to session storage (fire-and-forget). On SW restart, `hydrate()` restores state from session storage before the first event is processed (handlers gate on a hydrate-ready promise). Session storage is cleared when the browser closes.
 
 It listens to `chrome.webNavigation` events to decide when a committed navigation should be treated as legitimate, rolled back, or offered back to the user.
+
+Redirect-chain state is pruned when it is read as well as when a new hop arrives.
+Typed, bookmark, address-bar, Back, and Forward commits clear the prior journey;
+a redirect qualifier on that boundary starts a fresh chain rather than extending
+or discarding the old one. Content-side scoring honors the worker's absolute
+latest-hop expiry and drops its cached answer on a BFCache `pageshow` restore.
 
 ### PushState guard
 
