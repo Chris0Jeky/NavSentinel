@@ -106,6 +106,18 @@ describe("known Options artifact HTML compaction", () => {
     expect(compactKnownOptionsHtml(OPTIONS_PATH, malformed, SAFE_STYLES)).toBe(malformed);
   });
 
+  it("leaves HTML unchanged when a character reference conceals a stylesheet relation", () => {
+    const html = optionsDocument("<div>\n      <span>x</span>\n    </div>").replace(
+      "</head>",
+      '    <link rel="style&#x73;heet" href="/assets/uninspected.css">\n  </head>',
+    );
+    const parsed = new DOMParser().parseFromString(html, "text/html");
+    const concealedLink = parsed.querySelector('link[href="/assets/uninspected.css"]');
+
+    expect(concealedLink?.getAttribute("rel")).toBe("stylesheet");
+    expect(compactKnownOptionsHtml(OPTIONS_PATH, html, SAFE_STYLES)).toBe(html);
+  });
+
   it.each([
     ["inline", "<script>const x = 1;</script>"],
     ["nonempty external", '<script type="module" crossorigin src="/assets/options.html-test.js"> </script>'],

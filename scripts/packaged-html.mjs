@@ -33,6 +33,11 @@ function parseStrictAttributes(raw) {
       const end = raw.indexOf(quote, offset + 1);
       if (end < 0) return null;
       value = raw.slice(offset + 1, end);
+      // The browser decodes character references before interpreting attributes.
+      // Comparing their raw spelling could therefore miss a security-relevant
+      // rel/src/href value (for example, style&#x73;heet). Fail closed instead of
+      // duplicating the HTML parser inside this packaging optimization.
+      if (value.includes("&")) return null;
       offset = end + 1;
     }
     attributes.set(name, value);
