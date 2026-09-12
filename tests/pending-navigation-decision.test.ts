@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  derivePendingBlankNavigationSignals,
   PendingNavigationDecisionClient,
   type PendingNavigationDecisionClientDependencies,
 } from "../extension/src/content/pending_navigation_decision";
@@ -9,6 +10,20 @@ const DESTINATION_URL = "https://destination.test/private/path?secret=value#frag
 const SOURCE_URL = "https://source.test/current/page";
 const FIRST_ID = "a".repeat(32);
 const SECOND_ID = "b".repeat(32);
+
+describe("derivePendingBlankNavigationSignals", () => {
+  it("preserves cross-site and score-threshold semantics behind the lazy boundary", () => {
+    expect(
+      derivePendingBlankNavigationSignals("source.test", "destination.test", 81, 70),
+    ).toEqual(["cross_site", "NRS-high"]);
+    expect(
+      derivePendingBlankNavigationSignals("app.example.com", "cdn.example.com", 69, 70),
+    ).toEqual([]);
+    expect(
+      derivePendingBlankNavigationSignals("source.test", "source.test", 70, 70),
+    ).toEqual(["NRS-high"]);
+  });
+});
 
 function extensionSender(overrides: Record<string, unknown> = {}): chrome.runtime.MessageSender {
   return {

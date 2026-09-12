@@ -1941,26 +1941,9 @@ window.addEventListener(
               // Overlay-cleanup recovery remains on the legacy prompt until
               // its security-relevant Undo action moves extension-side too.
               recentLocalBlankPrompt = { params: prompt, shownAt: Date.now() };
-              const pendingSignals: Array<"cross_site" | "NRS-high"> = [];
-              if (
-                destHost !== location.hostname &&
-                (!siteRegDomain || !destRegDomain || siteRegDomain !== destRegDomain)
-              ) {
-                pendingSignals.push("cross_site");
-              }
-              if (nrs >= blockThreshold) pendingSignals.push("NRS-high");
               void import("./pending_navigation_decision")
-                .then(({ showPendingBlankNavigationPrompt }) =>
-                  showPendingBlankNavigationPrompt({
-                    title,
-                    destinationUrl: parsed.href as string,
-                    destinationHost: parsed.host as string,
-                    sourceDomain: siteKeyFromLocation(),
-                    score: nrs,
-                    signals: pendingSignals,
-                    outcomeFeatures: navFeatures,
-                    overlayHidden: !!overlaySuppression,
-                  }),
+                .then(({ default: showPendingBlankNavigationPrompt }) =>
+                  showPendingBlankNavigationPrompt(prompt),
                 )
                 .catch(() => {
                   showToast({ message: "NavSentinel blocked a suspicious new tab." });

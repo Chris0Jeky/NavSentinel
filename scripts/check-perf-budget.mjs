@@ -65,17 +65,17 @@ const budgets = [
     // RI-02 removes the visual-simulation runtime from the always-on chunk, so the
     // temporary 70KB stopgap can return to the previous 66KB ceiling. #374 remains
     // limited to any future non-visual lazy-chunk work.
-    // #601 is that non-visual split: the one-shot decision implementation is a
-    // separate ~4.6KB lazy chunk. Its Vite import/preload bootstrap adds ~0.9KB
-    // to capture while total dist remains under the independent 500KB ceiling.
+    // #601 is that non-visual split: the one-shot decision implementation stays
+    // in lazy chunks while its import/preload bootstrap remains in capture.
     // Bumped 66 -> 67 (#593): the child-frame navigation-authority boundary adds
     // ~0.45KB (a pure predicate module, a submit-control probe, and the call
     // site). Measured on this branch: interaction-only 65.4 -> 65.8KB and the
     // research-reputation profile 65.9 -> 66.3KB, with total dist still far
     // under 500KB. The research profile is the binding one and had ~0.1KB of
     // headroom left, so this bump buys the security fix room, not a new
-    // allowance for feature growth. The split/trim obligation above stands and
-    // is now overdue: the next capture growth slice must split this chunk.
+    // allowance for feature growth. Their integration moves signal derivation
+    // behind #601's lazy boundary: 66.4KB interaction-only and 66.9KB research.
+    // The next capture growth slice must split or trim this chunk again.
     maxKB: 67,
   },
   {

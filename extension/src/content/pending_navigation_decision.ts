@@ -12,6 +12,7 @@ import {
   appendPromptOutcome,
   type NavOutcomeFeatures,
 } from "../shared/storage";
+import { getRegistrableDomain } from "../shared/domain";
 import { showToast } from "./ui_toast";
 
 export interface PendingBlankNavigationRequest {
@@ -23,13 +24,11 @@ export interface PendingBlankNavigationRequest {
 
 export interface PendingBlankNavigationPromptRequest {
   title: string;
-  destinationUrl: string;
-  destinationHost: string;
-  sourceDomain: string;
-  score: number;
-  signals: readonly PendingDecisionSignalCode[];
+  url: string;
+  host: string | null;
+  promptScore: number;
   outcomeFeatures: NavOutcomeFeatures;
-  overlayHidden: boolean;
+  overlayHidden?: boolean;
 }
 
 interface EphemeralBlankNavigation {
@@ -355,13 +354,39 @@ export function requestPendingBlankNavigation(request: PendingBlankNavigationReq
   return pendingNavigationDecisions.create(request);
 }
 
-export function showPendingBlankNavigationPrompt(
+export function derivePendingBlankNavigationSignals(
+  sourceHost: string,
+  destinationHost: string,
+  score: number,
+  blockThreshold: number,
+): PendingDecisionSignalCode[] {
+  const sourceRegDomain = getRegistrableDomain(sourceHost);
+  const destinationRegDomain = getRegistrableDomain(destinationHost);
+  const signals: PendingDecisionSignalCode[] = [];
+  if (
+    destinationHost !== sourceHost &&
+    (!sourceRegDomain || !destinationRegDomain || sourceRegDomain !== destinationRegDomain)
+  ) {
+    signals.push("cross_site");
+  }
+  if (score >= blockThreshold) signals.push("NRS-high");
+  return signals;
+}
+
+export default function showPendingBlankNavigationPrompt(
   request: PendingBlankNavigationPromptRequest,
 ): Promise<boolean> {
-  const score = Math.max(0, Math.min(100, Math.round(request.score)));
-  const sourceDomain = request.sourceDomain;
-  const destinationHost = request.destinationHost;
+  const destinationHost = request.host;
+  if (!destinationHost) return Promise.resolve(false);
+  const sourceDomain = location.hostname.toLowerCase();
+  const score = Math.max(0, Math.min(100, Math.round(request.promptScore)));
   const outcomeFeatures = request.outcomeFeatures;
+  const signals = derivePendingBlankNavigationSignals(
+    sourceDomain,
+    destinationHost,
+    request.promptScore,
+    request.outcomeFeatures.thresholdUsed!,
+  );
   let outcomeRecorded = false;
   const recordOutcome = (outcome: "allow_once" | "dismiss") => {
     if (outcomeRecorded) return;
@@ -382,9 +407,9 @@ export function showPendingBlankNavigationPrompt(
     ...(request.overlayHidden ? { extra: { overlayAutoDismissed: true } } : {}),
   }).catch(() => {});
   const pending = requestPendingBlankNavigation({
-    destinationUrl: request.destinationUrl,
+    destinationUrl: request.url,
     score,
-    signals: request.signals,
+    signals,
     onProceed: () => recordOutcome("allow_once"),
   });
   void pending.then((created) => {
