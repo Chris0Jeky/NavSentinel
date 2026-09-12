@@ -1,4 +1,4 @@
-name: Issue 688 pinned source checkout
+name: Issue 688 pinned test dependencies
 on:
   push:
     branches: [fix/688-effective-form-authority-20260913]
@@ -6,18 +6,22 @@ on:
 permissions:
   contents: read
 jobs:
-  source:
+  dependencies:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
           ref: 476301ad1c4b56fc83ed335ac83e343dc93d675e
           persist-credentials: false
-      - run: git archive --format=tar.gz --output=/tmp/navsentinel-source.tar.gz HEAD
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: tar -czf /tmp/navsentinel-test-dependencies.tar.gz node_modules package-lock.json
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
-          name: issue688-pinned-source
-          path: /tmp/navsentinel-source.tar.gz
+          name: issue688-test-dependencies
+          path: /tmp/navsentinel-test-dependencies.tar.gz
           retention-days: 1
           if-no-files-found: error
