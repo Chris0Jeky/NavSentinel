@@ -41,13 +41,34 @@ describe("Protection Center wired UI", () => {
     get("resetFilters").click();
     expect(document.querySelectorAll("details.event")).toHaveLength(25);
   });
-  it("exports all filtered rows, not just the displayed page", () => {
+  it("previews all filtered rows and downloads the exact reviewed snapshot", async () => {
     let blob: Blob | undefined;
     vi.spyOn(URL, "createObjectURL").mockImplementation(value => { blob = value as Blob; return "blob:test"; });
     vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     get("export").click();
+    const reviewed = get<HTMLTextAreaElement>("exportPreview").value;
+    expect(JSON.parse(reviewed).events).toHaveLength(28);
+    expect(reviewed).not.toContain("private-");
+    expect(get<HTMLDialogElement>("exportDialog").open).toBe(true);
+    expect(blob).toBeUndefined();
+    // A later refresh must not silently change what the user already reviewed.
+    mocks.getEventLog.mockResolvedValue([]);
+    get("refresh").click();
+    await vi.waitFor(() => expect(get("total").textContent).toBe("0"));
+    get("downloadExport").click();
     expect(blob?.type).toBe("application/json");
-    expect(get("status").textContent).toContain("28 minimized events");
+    expect(await blob!.text()).toBe(reviewed);
+    expect(get("status").textContent).toContain("28 reviewed, minimized events");
+    expect(get<HTMLDialogElement>("exportDialog").open).toBe(false);
+  });
+  it("cancel clears the preview without preparing a download", async () => {
+    const createUrl = vi.spyOn(URL, "createObjectURL");
+    get("export").click();
+    get("cancelExport").click();
+    await vi.waitFor(() => expect(get<HTMLTextAreaElement>("exportPreview").value).toBe(""));
+    get("downloadExport").click();
+    expect(createUrl).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(get("export"));
   });
   it("keeps a failed refresh visibly stale and permits retry", async () => {
     mocks.getEventLog.mockRejectedValueOnce(new Error("offline"));

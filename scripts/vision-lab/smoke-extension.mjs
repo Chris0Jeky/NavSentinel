@@ -42,9 +42,13 @@ try {
   await page.setViewportSize({width:390,height:844});
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   checks.push('three themes, persistence and 390px layout');
-  const pending=page.waitForEvent('download');await page.locator('#export').click();
+  await page.locator('#export').click();
+  const preview=await page.locator('#exportPreview').inputValue();
+  await page.screenshot({path:path.join(output,'protection-center-export-preview.png')});
+  const pending=page.waitForEvent('download');await page.locator('#downloadExport').click();
   const download=await pending;const filename=path.join(output,'extension-evidence.json');await download.saveAs(filename);
   const contents=fs.readFileSync(filename,'utf8');const data=JSON.parse(contents);
+  assert.equal(contents,preview,'Downloaded bytes must match the reviewed preview');
   assert.equal(data.format,'navsentinel-evidence');assert.equal(data.events.length,2);
   assert.equal(contents.includes('PRIVATE_CANARY'),false);
   assert.equal(contents.includes('/private'),false);
