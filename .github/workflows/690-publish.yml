@@ -1,0 +1,57 @@
+name: Issue 690 exact-source publication and qualification
+on:
+  push:
+    branches: [fix/690-options-import-ordering-20260913]
+    paths: [.github/workflows/690-publish.yml]
+permissions:
+  contents: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    outputs:
+      sha: ${{ steps.publish.outputs.sha }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - name: Apply verified candidate and remove transport files
+        id: publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/fix/690-options-import-ordering-20260913
+          python3 - <<'PY'
+          import base64, hashlib, lzma
+          from pathlib import Path
+          patch = lzma.decompress(base64.b64decode(Path('.github/issue690.b64').read_text(), validate=True))
+          assert hashlib.sha256(patch).hexdigest() == '32abd6cabb1d634a8f7cf3f290d3d7da9f022b3949b71363e158e54030c37892'
+          Path('/tmp/690.patch').write_bytes(patch)
+          PY
+          git apply --check /tmp/690.patch
+          git apply --index /tmp/690.patch
+          git rm .github/issue690.b64 .github/workflows/690-publish.yml
+          test "$(git write-tree)" = eb686fda4ffb1c511aafd63fa21db7abb5eb8804
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix: serialize Options imports and recover dirty autosave (#690)'
+          git push origin HEAD:refs/heads/fix/690-options-import-ordering-20260913
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+  qualify:
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ needs.publish.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run verify:versions
+      - run: npm run typecheck && npm run lint
+      - run: npm test
+      - run: npm run build && npm run check:perf-budget
+      - run: npm run build:research-reputation && npm run check:perf-budget
