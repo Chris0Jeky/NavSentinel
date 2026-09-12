@@ -2,7 +2,7 @@ import { rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { defineConfig, type Plugin } from "vite";
 import { crx } from "@crxjs/vite-plugin";
-import manifest from "./extension/manifest.json";
+import manifest from "./extension/manifest.json" with { type: "json" };
 import {
   configureManifestForProfile,
   resolveReleaseProfile,
@@ -26,7 +26,7 @@ function profileAssets(selectedProfile: ReleaseProfile): Plugin {
     },
     writeBundle() {
       if (!selectedProfile.capabilities.reputation) {
-        rmSync(resolve(__dirname, "extension/dist/reputation_data.bin"), { force: true });
+        rmSync(resolve(import.meta.dirname, "extension/dist/reputation_data.bin"), { force: true });
       }
     },
   };
@@ -37,7 +37,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@navsentinel/reputation-runtime": resolve(
-        __dirname,
+        import.meta.dirname,
         profile.capabilities.reputation
           ? "extension/src/shared/reputation_runtime.enabled.ts"
           : "extension/src/shared/reputation_runtime.disabled.ts",
@@ -46,7 +46,7 @@ export default defineConfig({
       // monitor is never linked, so fetch / XHR / sendBeacon / password-value
       // prototypes are not wrapped at all rather than wrapped and left inert.
       "@navsentinel/js-behavior-monitor": resolve(
-        __dirname,
+        import.meta.dirname,
         profile.capabilities.jsBehaviorInstrumentation
           ? "extension/src/content/js_behavior_monitor.ts"
           : "extension/src/content/js_behavior_monitor.disabled.ts",
@@ -59,13 +59,22 @@ export default defineConfig({
     emptyOutDir: true,
     rolldownOptions: {
       input: {
-        onboarding: resolve(__dirname, "extension/src/onboarding/onboarding.html")
+        onboarding: resolve(import.meta.dirname, "extension/src/onboarding/onboarding.html"),
+        evidence: resolve(import.meta.dirname, "extension/src/evidence/evidence.html")
       },
       output: {
         // Chrome MV3 module workers require static imports. Keep the pending-decision
         // runtime out of the 25 KiB worker entry without turning it into import().
         codeSplitting: {
           groups: [
+            {
+              // Keep Options presentation/operation helpers separate as the
+              // settings editor grows; total-dist budget still covers both.
+              name: "options-model",
+              test: /[\\/]src[\\/]options[\\/]options_model\.ts$/,
+              entriesAware: true,
+              priority: 10
+            },
             {
               name: "pending-decision-runtime",
               test: /[\\/]src[\\/](?:shared[\\/]pending_decision|sw[\\/]pending_decision_(?:handlers|store))\.ts$/,

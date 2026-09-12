@@ -36,6 +36,7 @@ export interface CredentialSettings {
 }
 
 export interface SuiteSettings {
+  autoSave: boolean;
   nav: NavSettings;
   credential: CredentialSettings;
   logLimit: number;
@@ -144,6 +145,7 @@ export function buildNavOutcomeFeatures(input: {
 }
 
 const DEFAULT_SUITE_SETTINGS: SuiteSettings = {
+  autoSave: true,
   nav: {
     defaultMode: "smart",
     debug: false,
@@ -201,6 +203,7 @@ function mergeSuiteSettings(cur: SuiteSettings, partial: SuiteSettingsPatch): Su
   };
 
   next.logLimit = clampInt(next.logLimit, 50, 5000, DEFAULT_SUITE_SETTINGS.logLimit);
+  next.autoSave = typeof next.autoSave === "boolean" ? next.autoSave : true;
   next.credential.mediumRiskThreshold = clampInt(
     next.credential.mediumRiskThreshold,
     0,

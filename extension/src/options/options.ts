@@ -1,14 +1,14 @@
 import type { CredMode, EventLogEntry, SuiteSettings } from "../shared/storage";
 import { classifyEventTone } from "../shared/event_tone";
+import { renderCleanupStatus } from "../shared/cleanup_status";
 import { icon, logoSentinel } from "../shared/icons";
 import { getSegValue, initSegKeyboard, setSegValue } from "../shared/seg_control";
 import {
   computePromptOutcomeStats,
-  deriveOptionsSettingsPatch,
+  acceptExternalSettings,
+  findSettingsConflicts,
   describeJsBehaviorCapability,
   fmtTime,
-  parseIntSafe,
-  rebaseOptionsSettingsDraft,
   runClearBehaviouralData,
   runClearStats,
   runImportFlow,
@@ -20,6 +20,9 @@ import {
 import { jsBehaviorInstrumentationEnabled } from "@navsentinel/js-behavior-monitor";
 import {
   addTrustedDomainWithResult,
+  deriveOptionsSettingsPatch,
+  parseOptionsInt as parseIntSafe,
+  rebaseOptionsSettingsDraft,
   appendEvent,
   clearEventLog,
   clearAdaptiveScores,
@@ -100,6 +103,11 @@ const exportBtn = document.getElementById("exportBtn") as HTMLButtonElement;
 const importFileEl = document.getElementById("importFile") as HTMLInputElement;
 const statusEl = document.getElementById("status") as HTMLSpanElement;
 const saveBtn = document.getElementById("save") as HTMLButtonElement;
+const autoSaveEl = document.getElementById("autoSave") as HTMLInputElement;
+const discardBtn = document.getElementById("discard") as HTMLButtonElement;
+const dirtyStatusEl = document.getElementById("dirtyStatus")!;
+const conflictEl = document.getElementById("settingsConflict")!;
+const conflictTextEl = document.getElementById("conflictText")!;
 const saveStatusEl = document.getElementById("saveStatus") as HTMLSpanElement;
 const statTotalEl = document.getElementById("statTotal") as HTMLDivElement;
 const statAllowRateEl = document.getElementById("statAllowRate") as HTMLDivElement;
@@ -124,6 +132,46 @@ const sidebarNav = document.getElementById("sidebarNav") as HTMLElement;
 let renderedSettings: SuiteSettings | null = null;
 let submittedSettings: SuiteSettings | null = null;
 let settingsGeneration = 0;
+let conflicts: string[] = [];
+let autoSaveTimer: number | undefined;
+let saveBusy = false;
+let saveInFlight: Promise<void> | null = null;
+const numericControls = [mediumThresholdEl, similarityMaxDistEl, logLimitEl];
+
+function validNumbers(): boolean {
+  return numericControls.every(el => el.value.trim() !== "" && el.validity.valid);
+}
+
+function captureInvalidNumbers(): Array<[HTMLInputElement, string]> {
+  return numericControls.filter(el => !el.value.trim() || !el.validity.valid).map(el => [el, el.value]);
+}
+
+function restoreInvalidNumbers(values: Array<[HTMLInputElement, string]>): void {
+  for (const [el, value] of values) el.value = value;
+}
+
+function updateDraftState(): void {
+  const dirty = !!renderedSettings && (Object.keys(deriveOptionsSettingsPatch(renderedSettings, readSettingsDraft())).length > 0 || !validNumbers());
+  dirtyStatusEl.textContent = conflicts.length ? "Conflicting changes — choose which values to keep." :
+    !validNumbers() ? "Unsaved changes — enter valid numbers within the shown limits." :
+    dirty ? "Unsaved changes" : "All changes saved";
+  discardBtn.disabled = !dirty || saveBusy;
+  saveBtn.disabled = saveBusy || conflicts.length > 0 || !validNumbers();
+  conflictEl.hidden = conflicts.length === 0;
+  conflictTextEl.textContent = `Changed in another window: ${conflicts.join(", ")}. Your edits have not been overwritten.`;
+  // Report persisted behavior, even when the controls contain a manual draft.
+  if (renderedSettings) {
+    renderCleanupStatus(document.getElementById("cleanupStatus")!, renderedSettings.nav);
+  }
+}
+
+function draftChanged(): void {
+  updateDraftState();
+  window.clearTimeout(autoSaveTimer);
+  if (renderedSettings?.autoSave && !conflicts.length && validNumbers()) {
+    autoSaveTimer = window.setTimeout(() => { void saveSettings(); }, 250);
+  }
+}
 
 // Sidebar navigation
 sidebarNav.addEventListener("click", (e) => {
@@ -446,6 +494,7 @@ async function refreshDomainProfiles(): Promise<void> {
 }
 
 function renderSettings(settings: SuiteSettings): void {
+  autoSaveEl.checked = settings.autoSave;
   setSegValue(navModeSeg, settings.nav.defaultMode);
   setToggle(navDebugEl, settings.nav.debug);
   setToggle(autoDismissOverlaysEl, settings.nav.autoDismissOverlays);
@@ -462,6 +511,7 @@ function renderSettings(settings: SuiteSettings): void {
 
 function readSettingsDraft(): SuiteSettings {
   return {
+    autoSave: autoSaveEl.checked,
     nav: {
       defaultMode: getSegValue(navModeSeg) as SuiteSettings["nav"]["defaultMode"],
       debug: getToggle(navDebugEl),
@@ -485,21 +535,32 @@ function readSettingsDraft(): SuiteSettings {
 
 function rebaseIncomingSettings(incoming: SuiteSettings): void {
   const baseline = submittedSettings ?? renderedSettings;
+  const draft = readSettingsDraft();
+  if (baseline) {
+    conflicts = [...new Set([...conflicts, ...findSettingsConflicts(baseline, draft, incoming)])];
+  }
+  // Preserve invalid/incomplete numeric text too; parsing it into a fallback
+  // during an unrelated storage event would silently erase the user's input.
+  const invalid = captureInvalidNumbers();
   const rebasedDraft = baseline
-    ? rebaseOptionsSettingsDraft(baseline, readSettingsDraft(), incoming)
+    ? rebaseOptionsSettingsDraft(baseline, draft, incoming)
     : incoming;
   renderedSettings = incoming;
   renderSettings(rebasedDraft);
+  if (baseline) restoreInvalidNumbers(invalid);
+  updateDraftState();
 }
 
 async function init(replaceDraft = false): Promise<void> {
   if (replaceDraft) {
     settingsGeneration++;
     submittedSettings = renderedSettings = null;
+    conflicts = [];
   }
   const s = await getSuiteSettings();
   // A storage change may have supplied fresher settings while this read was pending.
   if (!renderedSettings) renderSettings(renderedSettings = s);
+  updateDraftState();
   await refreshAllowlist();
   await refreshTrusted();
   await refreshEventLog();
@@ -507,16 +568,18 @@ async function init(replaceDraft = false): Promise<void> {
   await refreshDomainProfiles();
 }
 
-saveBtn.addEventListener("click", withReentrancyGuard(
-  () => saveBtn.disabled,
-  (busy) => { saveBtn.disabled = busy; },
-  async () => {
-  // Guarded against concurrent saves (withReentrancyGuard): a double/triple-click
-  // before the first updateSuiteSettings() resolves would otherwise fire
-  // overlapping read-modify-write calls. The inner try/catch drives the
-  // user-facing status; the guard owns the busy flag + reset.
+async function saveSettingsInner(): Promise<void> {
+  if (saveBusy || conflicts.length || !validNumbers()) return;
+  let saved = false;
+  saveBusy = true;
+  updateDraftState();
+  // Keep one transaction in flight. Edits made while saving remain a draft,
+  // and a successful autosave schedules the next dirty patch in finally.
   try {
-    const baseline = renderedSettings ?? await getSuiteSettings();
+    // Reconcile pending external changes before deriving the narrow patch.
+    rebaseIncomingSettings(await getSuiteSettings());
+    if (conflicts.length) return;
+    const baseline = renderedSettings!;
     const draft = readSettingsDraft();
     const patch = deriveOptionsSettingsPatch(baseline, draft);
     if (!Object.keys(patch).length) {
@@ -529,6 +592,7 @@ saveBtn.addEventListener("click", withReentrancyGuard(
     try {
       const persisted = await updateSuiteSettings(patch);
       if (generation === settingsGeneration) rebaseIncomingSettings(persisted);
+      saved = generation === settingsGeneration;
     } finally {
       submittedSettings = null;
     }
@@ -537,8 +601,64 @@ saveBtn.addEventListener("click", withReentrancyGuard(
   } catch (e) {
     console.warn("[NavSentinel] settings save failed:", e);
     flashStatus(saveStatusEl, "Save failed.", "error");
+  } finally {
+    saveBusy = false;
+    updateDraftState();
+    if (saved && renderedSettings?.autoSave && Object.keys(deriveOptionsSettingsPatch(renderedSettings, readSettingsDraft())).length) draftChanged();
   }
-}));
+}
+
+function saveSettings(): Promise<void> {
+  if (saveInFlight) return saveInFlight;
+  const pending = saveSettingsInner();
+  saveInFlight = pending;
+  void pending.finally(() => {
+    if (saveInFlight === pending) saveInFlight = null;
+  });
+  return pending;
+}
+
+saveBtn.addEventListener("click", () => { void saveSettings(); });
+for (const el of [navModeSeg, credModeSeg, navDebugEl, autoDismissOverlaysEl, blockHttpEl, warnPasteEl, promptUntrustedEl, promptMediumEl, similarityEnabledEl]) {
+  el.addEventListener("click", draftChanged);
+}
+for (const el of numericControls) el.addEventListener("input", draftChanged);
+
+autoSaveEl.addEventListener("change", async () => {
+  window.clearTimeout(autoSaveTimer);
+  autoSaveEl.disabled = true;
+  const enabled = autoSaveEl.checked;
+  try {
+    const incoming = await updateSuiteSettings({ autoSave: enabled });
+    rebaseIncomingSettings(incoming);
+    autoSaveEl.checked = incoming.autoSave;
+    draftChanged();
+  } catch {
+    autoSaveEl.checked = renderedSettings?.autoSave ?? true;
+    flashStatus(saveStatusEl, "Could not save auto-save preference.", "error");
+  } finally {
+    autoSaveEl.disabled = false;
+    updateDraftState();
+  }
+});
+
+discardBtn.addEventListener("click", () => {
+  window.clearTimeout(autoSaveTimer);
+  conflicts = [];
+  if (renderedSettings) renderSettings(renderedSettings);
+  updateDraftState();
+});
+document.getElementById("keepDraft")!.addEventListener("click", () => {
+  conflicts = [];
+  draftChanged();
+});
+document.getElementById("useExternal")!.addEventListener("click", () => {
+  const invalid = captureInvalidNumbers();
+  if (renderedSettings) renderSettings(acceptExternalSettings(readSettingsDraft(), renderedSettings, conflicts));
+  restoreInvalidNumbers(invalid);
+  conflicts = [];
+  draftChanged();
+});
 
 clearAllowlistBtn.addEventListener("click", async () => {
   await clearAllowlist();
@@ -596,6 +716,11 @@ importFileEl.addEventListener("change", async () => {
   const f = importFileEl.files?.[0];
   if (!f) return;
   try {
+    // An import is authoritative. Cancel a pending autosave and let an already
+    // dispatched write finish before the import crosses the worker boundary.
+    window.clearTimeout(autoSaveTimer);
+    settingsGeneration++;
+    await saveInFlight;
     // Thin adapter: orchestration (import → refresh → status, with the non-atomic
     // partial-vs-total failure handling) lives in the unit-tested runImportFlow.
     await runImportFlow({

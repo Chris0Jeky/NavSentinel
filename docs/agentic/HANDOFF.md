@@ -1,8 +1,67 @@
 # NavSentinel handoff
 
-Updated 2026-09-04. This is an optional short snapshot; live Git/GitHub state,
+Updated 2026-09-08. This is an optional short snapshot; live Git/GitHub state,
 product tests, `docs/Project_Roadmap.md`, and `ACTION_ITEMS.md` are authoritative.
-Historical cycle detail remains in `ORCHESTRATOR.md` and is not required reading.
+Historical cycle detail is linked from `ORCHESTRATOR.md` to its archive and is not
+required reading.
+
+## 2026-09-08 issue wave (22:42 UTC snapshot)
+
+Chris authorized a multi-agent issue/PR wave, including bounded fixes from later
+milestones, while explicitly retaining existing human Chrome gates. This is
+the scope for this wave, not activation of frozen research or a gate waiver.
+Luna xhigh handled paved implementation; Terra high supplied independent
+reviews and the harder conditional-settings-write implementation.
+
+PR #651 merged as `b81ffb41e4f78aa1d02482a85a4128de4c41f464` after exact-head
+Build / Unit, E2E, and Vision Lab success, independent review, and comment
+triage. Fresh local proof passed 126 Lab contracts, the deterministic build,
+and all 16 browser checkpoints; post-merge main CI also passed. Its two nonblocking UI findings became #652
+and #653, addressed by separate PR #656 rather than reopening the review loop.
+
+| PR | Scope | Remaining boundary |
+| --- | --- | --- |
+| #654 | #417 inert loopback production-CLI transport tests | Merged as `3cc0928` after green CI and independent review; no owner corpus or efficacy claim |
+| #655 | #648 imported integer log limits remain saveable | Parent #643, then AI-43 with the added `55` import check |
+| #656 | #652/#653 Lab initial-auth errors and evicted-tab badge clearing | Independent review passed; refreshed hosted E2E pending |
+| #657 | #646 canonical IP `pageSite` association | Parent #644, then AI-44; independent review found no blocker |
+| #658 | #647 conditional concurrent Options writes | Parent #643, then AI-43; independent review passed, E2E pending |
+| #660 | Patch Sharp and Vitest development dependencies | Clean Codex review; hosted E2E pending, no Chrome gate |
+
+The corpus tests passed 37/37 with typecheck/lint; Options passed its build,
+typecheck/lint and strict serial import/save/export browser regression; the
+Lab fixes passed 127 contracts and 16 browser checkpoints. These are automated
+proofs, not owner-installed Chrome acceptance.
+
+The IP fix passed 254 focused tests plus typecheck/lint/build. Conditional
+settings writes passed 3,159 unit tests plus typecheck/lint/build and a real
+two-window race regression. The known quarantined property-test file was absent
+locally and its deletion was never staged; full hosted CI remains the complete
+checkout check. Legacy Python Lab smoke debt exposed in inherited code on
+#657 is tracked in #659; the supported Node browser lane passes independently.
+
+The dependency-only change passed all 3,184 tests across 110 files, including
+the property-test file, plus typecheck/lint/build and a Sharp SVG-to-PNG
+roundtrip. `npm audit` reports zero vulnerabilities with Sharp 0.35.4 and
+Vitest 4.1.11, replacing the prior one high/two moderate development findings.
+Hosted Build / Unit and Vision Lab pass. No production dependency or runtime
+source changed in this slice.
+
+Human queue: `ACTION_ITEMS.md` remains the register; retain AI-19 and the
+post-merge checks already listed there. Branch-held gates include #572 AI-31,
+#599 AI-37, #600 AI-38, #608 AI-39, #609 AI-40, #636 AI-41, #640 AI-42,
+#643 AI-43, #644 AI-44, #641 AI-45, and #649 AI-46. Follow #600 before #608,
+#636 before #649, #640 before #641, and each new fix after its parent. Retarget
+children and re-prove against the new base before merging. #572 also retains
+its pre-Gate-3 SP-F-013 blocker. No human result or waiver was supplied here.
+
+Local receipts and the #655 candidate extension are under
+`artifacts/issue-wave-20260908/` in the primary checkout. Preserve the existing
+`tests/clickfix-detector.property.test.ts` deletion; it was not committed.
+The older snapshots below are history, including their PR counts and heads.
+Ordinary removal succeeded for the clean log-limit worktree. Corpus, IP, and
+conditional-settings worktrees were preserved after plain `git worktree remove`
+refused the unstaged property-test deletion; no force or restore was used.
 
 ## 2026-09-04 live delta
 

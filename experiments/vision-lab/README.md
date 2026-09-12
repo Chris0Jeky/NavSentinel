@@ -131,14 +131,22 @@ npm run build
 
 The Node tests need no dependencies. The build regenerates the three standalone HTML files and copies the portable kernel into the extension. Keep generated files in sync with source.
 
-Optional browser checks require Python Playwright and a Chromium executable:
+Optional browser checks require Python Playwright and a Chromium executable. The
+legacy UI bridge smoke also requires a fresh local broker and its operator token;
+it proves the rendered terminal outcome, then sends one deliberate replay through
+the test transport and confirms the independent fixture counter remains at one.
 
 ```sh
+# terminal 1, from experiments/vision-lab
+node daemon/server.cjs
+
+# terminal 2, with the operator token printed by terminal 1 kept out of files
+export NS_OPERATOR_TOKEN='...'
 python tests/ui_smoke.py
 python tests/live_extension.py
 ```
 
-The UI harness uses in-memory documents and explicitly substitutes storage/transport under managed-browser restrictions. Its 52 checks are not a claim of native Electron or extension execution. `tests/live_extension.py` respects administrator policy, starts its own ephemeral fixture server, and reports infrastructure limitations instead of mislabeling them as passes. It is intended for an unmanaged local testing machine. Set `CHROMIUM_PATH` where necessary.
+The UI harness uses in-memory documents and explicitly substitutes storage/transport under managed-browser restrictions. Its 58 checks are not a claim of native Electron or extension execution. `tests/live_extension.py` respects administrator policy, starts its own ephemeral fixture server, and reports infrastructure limitations instead of mislabeling them as passes. It is intended for an unmanaged local testing machine. Set `CHROMIUM_PATH` where necessary.
 
 ## What is included
 

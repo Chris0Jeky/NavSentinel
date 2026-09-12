@@ -1,14 +1,16 @@
 # Issue #585 popup association Gate-3
 
-This issue changes the shipped popup `Current page` gauge association, so the
-visible popup behavior remains a human-owned Gate-3 check. The automated
+This issue changes the shipped popup `Current page` gauge association. Under
+the one-time decision `D-2026-09-12-P`, this procedure is no longer a pre-merge
+gate for PR #644; it remains the exact event-association subprocedure required
+by the consolidated post-merge `AI-47` check on current `main`. The automated
 storage and popup-model tests prove the sanitization and selection rules; only
-Chris can record the browser pass.
+Chris can record the browser result.
 
 ## Procedure
 
-1. Confirm the worktree, PR, and built `extension/dist` all point at the exact
-   pushed head. Build the interaction-only profile and load that `dist`
+1. Confirm the built `extension/dist` points at the exact current `main` head
+   being tested. Build the interaction-only profile and load that `dist`
    directory in a disposable Chrome profile. Keep established profiles and
    extensions untouched.
 2. Start the Gym fixture server and open a fresh HTTP page at
@@ -64,6 +66,7 @@ Chris can record the browser pass.
    `2001:db8::1`) and that the popup association follows the browser's
    `location.hostname` where the target address is available.
 
-Record either `AI-44 done; Gate-3 passed on main at <40-character SHA>` or the
-exact failing step and observed result. Do not treat the automated tests or a
-partial extension reload as a human Gate-3 pass.
+Record this as the former AI-44 sub-result under AI-47, including the exact
+40-character `main` SHA and Chrome version, or record the exact failing step
+and observed result. Do not treat the automated tests or a partial extension
+reload as a human Gate-3 pass.

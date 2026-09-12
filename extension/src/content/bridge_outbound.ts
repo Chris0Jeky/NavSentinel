@@ -121,8 +121,6 @@ const MAIN_GUARD_ALERT_TYPES = new Set<string>([
   "ns-nav-allowed",
   "ns-clipboard-write",
   "ns-pushstate-suspicious",
-  // Compact private type for a verified extension-UI action relay.
-  "u",
 ]);
 
 /**

@@ -66,6 +66,20 @@ function createChromeMock(initial: Store = {}) {
 }
 
 describe("suite storage and allowlist migration", () => {
+  it("defaults autosave on, validates its type, and round-trips the disabled preference", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const { getSuiteSettings, updateSuiteSettings, exportAll, importAll, SUITE_SETTINGS_KEY } = await import("../extension/src/shared/storage");
+    expect((await getSuiteSettings()).autoSave).toBe(true);
+    await updateSuiteSettings({ autoSave: false });
+    const exported = await exportAll();
+    expect(exported.settings.autoSave).toBe(false);
+    await updateSuiteSettings({ autoSave: true });
+    await importAll({ settings: exported.settings });
+    expect((await getSuiteSettings()).autoSave).toBe(false);
+    store[SUITE_SETTINGS_KEY] = { autoSave: "false" };
+    expect((await getSuiteSettings()).autoSave).toBe(true);
+  });
   beforeEach(() => {
     vi.resetModules();
   });

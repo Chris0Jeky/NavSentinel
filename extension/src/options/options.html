@@ -33,16 +33,28 @@
               Import
               <input id="importFile" type="file" accept="application/json" hidden />
             </label>
-            <button id="save" class="btn btn--primary">Save changes</button>
           </div>
         </div>
       </header>
+
+      <div class="settings-state" aria-label="Settings save controls">
+        <label><input id="autoSave" type="checkbox" checked /> Auto-save changes</label>
+        <span id="dirtyStatus" role="status" aria-live="polite">Loading settings…</span>
+        <button id="save" class="btn btn--primary">Save changes</button>
+        <button id="discard" class="btn btn--ghost" disabled>Discard</button>
+      </div>
+      <div id="settingsConflict" class="settings-state" hidden>
+        <span id="conflictText" role="alert"></span>
+        <button id="keepDraft" class="btn btn--primary">Keep my edits</button>
+        <button id="useExternal" class="btn btn--ghost">Use external values</button>
+      </div>
 
       <div class="body">
         <!-- Sidebar -->
         <aside class="sidebar">
           <div class="sidebar-label ns-uc">navigate</div>
           <nav class="sidebar-nav" id="sidebarNav">
+            <a class="nav-btn" href="../evidence/evidence.html">Protection Center ↗</a>
             <button class="nav-btn active" data-section="protect" aria-current="true"><span id="navShieldIcon"></span> Protection</button>
             <button class="nav-btn" data-section="analytics"><span id="navChartIcon"></span> Analytics</button>
             <button class="nav-btn" data-section="log"><span id="navListIcon"></span> Event log</button>
@@ -64,6 +76,7 @@
               <div>
                 <h2>Protection Settings</h2>
                 <p class="pane-sub">Configure navigation and credential defenses</p>
+                <p>Overlay cleanup: <span id="cleanupStatus" class="cleanup-status" role="status"></span></p>
               </div>
             </div>
 
