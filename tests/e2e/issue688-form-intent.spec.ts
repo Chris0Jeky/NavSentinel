@@ -34,7 +34,7 @@ async function runArm(variant: FormCase, protectedArm: boolean, info: TestInfo) 
   const fence = await startProvingGroundEgressFence(denied, new Set([lab.fixtureOrigin, lab.sinkOrigin]));
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), "ns-form-688-"));
   const context = await chromium.launchPersistentContext(profile, {
-    headless: true,
+    headless: true, channel: "chromium",
     ...(process.env.NAVSENTINEL_TEST_CHROMIUM_EXECUTABLE ? { executablePath: process.env.NAVSENTINEL_TEST_CHROMIUM_EXECUTABLE } : {}),
     proxy: { server: fence.proxyServer }, viewport: { width: 1100, height: 850 },
     args: ["--host-resolver-rules=MAP localhost 127.0.0.1", "--disable-background-networking", "--disable-component-update",
