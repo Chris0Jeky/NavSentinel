@@ -4,13 +4,12 @@
 
 # ACTION ITEMS — Human-Owned Tasks (NavSentinel)
 
-**OPEN: AI-43 — Settings autosave and conflict choices.** The #558 follow-up
-adds default autosave, explicit same-field conflict choices, and persisted
-cleanup status. The owner Chrome check is
-[the AI-43 procedure](docs/agentic/GATE3_558_SETTINGS_AUTOSAVE.md). Automated
-tests do not establish owner acceptance. Record the candidate Git head and
-Chrome version with the result. This item does not change the guided-resolution
-cursor.
+**OPEN: AI-45 — Protection Center export preview.** The #591 follow-up opens a
+reviewable snapshot before saving a local evidence file. The owner Chrome check
+is [the export review procedure](docs/vision-overhaul/EXPORT_REVIEW.md#human-chrome-check--ai-45).
+Automated renderer and disposable-extension tests are not human acceptance.
+Record the candidate Git head and Chrome version with the result. This item does
+not change the guided-resolution cursor.
 
 **Purpose:** the concise, durable register for human decisions and manual checks.
 It is not a live GitHub snapshot: re-check Git, GitHub, and product checks before
@@ -20,11 +19,19 @@ provenance only. Detailed retired procedures moved to
 
 ## Current snapshot
 
-**Snapshot refreshed 2026-09-04:** `origin/main` is `a440e35`. Six PRs are open
-and every one of them is held on a human Chrome gate: #572 (AI-31), #599
-(AI-37), #600 (AI-38), #608 (AI-39), #609 (AI-40), and #636 (AI-41). Those six
-items are defined only inside their own PR branches and are listed as pointers
-under "Branch-held Gate-3 items" below. AI-30, AI-33, AI-35, and AI-36 are now
+**Browser-gate index refreshed 2026-09-12:** Chris explicitly authorized the
+current named human-gated queue to merge before manual Chrome testing under
+[`D-2026-09-12-P`](docs/agentic/DECISIONS.md), provided every non-human gate
+still passes. The retained browser work is consolidated as AI-47 below; this is
+not a human-test result. PR #599 remains outside pending AI-37's explicit
+queue-policy choice, and PR #572 remains parked outside on SP-F-013.
+Before that instruction, eleven open PRs carried branch-held
+human Chrome gates: #572 (AI-31), #599 (AI-37), #600 (AI-38), #608 (AI-39),
+#609 (AI-40), #636 (AI-41), #640 (AI-42), #643 (AI-43), #644 (AI-44),
+#641 (AI-45), and #649 (AI-46). This is not the total open-PR count or a claim
+that these candidates have completed their other checks. At that time their
+procedures lived only inside their own PR branches; the remaining branch-held
+pointers are listed below. AI-30, AI-33, AI-35, and AI-36 are now
 **post-merge** checks: PRs #570, #582, #586, and #589 merged on 2026-08-27 and no
 waiver record for those merges was found in `docs/agentic/DECISIONS.md`,
 `HANDOFF.md`, this file, or `docs/Project_Roadmap.md`, so each check stays open
@@ -35,10 +42,19 @@ real-Chrome pass and establishes no `measure:fp` or headed-measurement result,
 and #223 remains open. AI-27, AI-28, and AI-29 are resolved; AI-14 remains
 blocked for future measurement work.
 
+PR #600 merged as `c8b1a70bef3c92600fdf7af3fb9fdc5e73b236f2` under the
+one-time waiver. Its Chrome work is now a current-`main` AI-47 subprocedure,
+not a branch-held item or a human-test pass.
+
+PR #609 merged as `e35f5430660767d4998c8f4d727b38444f3f9b14` under the same
+waiver. Its Back/Forward Cache Chrome work is now a current-`main` AI-47
+subprocedure, not a branch-held item or a human-test pass.
+
 **Guided resolution cursor:** `AI-19` (`Resume at: AI-19`; conversational label
-`q-5`). Current ready order: AI-19 → optional AI-24 → AI-23 (low priority). The six
-branch-held Gate-3 items and the four post-merge checks (AI-30, AI-33, AI-35,
-AI-36) are unordered additions to that queue.
+`q-5`). Current ready order: AI-19 → AI-47 → optional AI-24 → AI-23 (low
+priority). The branch-held pointers remain until their PRs actually merge. The
+four older post-merge checks (AI-30, AI-33, AI-35, AI-36) are unordered
+additions to that queue.
 
 **Status vocabulary note:** issue #421's proposed `OPEN | HELD | BLOCKED` parser
 enum was superseded by owner decision #499 (2026-07-31), which removed the
@@ -175,10 +191,14 @@ frame reproduction and repair.
 ### Branch-held Gate-3 items
 
 Each item below is defined **only** inside its own PR branch's `ACTION_ITEMS.md`
-and `docs/agentic/GATE3_GUIDES.md`; `main` carries no procedure for them, so this
-list is a pointer, not the gate. Read the full procedure in that branch's
-`docs/agentic/GATE3_GUIDES.md` before acting. All six PRs are ready-for-review
-and `MERGEABLE`/`CLEAN` as of 2026-09-04; only Chris can complete any of them.
+and the procedure named in its entry; `main` carries no procedure for them, so
+this list is a pointer, not the gate. Read that procedure before acting and
+verify the live PR head before building. Each remaining branch-held entry carries
+its own historical snapshot head where applicable; former AI-38 and AI-40 are
+instead current-`main` AI-47 subprocedures below. AI-42 through AI-46 were checked on
+2026-09-10. Only Chris can complete these owner checks. This index update does
+not resolve issue #639's owner decision about where future gate procedures should
+live.
 
 - **AI-31** — PR #572 (issue #566), branch `fix/issue566-modifier-authority`,
   exact head `e35a88e0a5ea24cf9c33d97b68ccfbeda57974bf`. Scope: trusted
@@ -194,12 +214,6 @@ and `MERGEABLE`/`CLEAN` as of 2026-09-04; only Chris can complete any of them.
   the #523 unverified-queue design, plus a bridge queue-pressure Chrome check
   that a benign clipboard write cannot suppress the trusted fake-verification
   warning. Full procedure in that branch's `docs/agentic/GATE3_GUIDES.md`.
-- **AI-38** — PR #600 (issue #560), branch `fix/issue560-isolated-input-fence`,
-  exact head `04470a5dc230b07f261c66213c2ba23770fc9cd3`. Scope: on a real
-  media-embed page, a redirect card's Dismiss and Allow once respond to mouse and
-  keyboard, clicks never reach the page, and a later page layer cannot cover the
-  card. Containment only. Full procedure in that branch's
-  `docs/agentic/GATE3_GUIDES.md`.
 - **AI-39** — PR #608 (issue #601), branch
   `feat/issue601-extension-origin-allow`, exact head
   `8b12ffbd3a76c0abdf8fbe8090980640a7bc50e5`. Scope: the protection-lowering
@@ -207,11 +221,6 @@ and `MERGEABLE`/`CLEAN` as of 2026-09-04; only Chris can complete any of them.
   once with a null opener, and stays fail-closed on replay, expiry, navigation,
   and another tab. This slice is stacked on #600 and must follow it. Full
   procedure in that branch's `docs/agentic/GATE3_GUIDES.md`.
-- **AI-40** — PR #609 (issue #569), branch `fix/issue569-stale-redirect-chain`,
-  exact head `3f42f7d0ac5607b333433505419fc35593cd7c4e`. Scope: pages restored
-  by a real branded-Chrome BFCache Back/Forward inherit no redirect-chain NRS
-  factors, and the same factors expire without navigation. A reload is not
-  equivalent. Full procedure in that branch's `docs/agentic/GATE3_GUIDES.md`.
 - **AI-41** — PR #636 (issue #593), branch
   `fix/issue593-child-frame-location-20260904`, exact head
   `344ba6aea8ae0f8edfa108d42e3569598288cf2a`. Scope: a trusted click under a
@@ -220,6 +229,107 @@ and `MERGEABLE`/`CLEAN` as of 2026-09-04; only Chris can complete any of them.
   and the named benign controls still passing. It does not cover a child frame
   navigating itself, which stays out of model; the residue is issue #637. Full
   procedure in that branch's `docs/agentic/GATE3_GUIDES.md`.
+
+- **AI-42** — PR #640, branch `codex/vision-overhaul`, exact head
+  `f969735d8e735976db9f4f9a9bcf96d221ecd3f4`. Scope: Protection Center, its
+  popup/Options entry points, themes, and minimized evidence export. Full
+  [browser acceptance procedure](https://github.com/Chris0Jeky/NavSentinel/blob/f969735d8e735976db9f4f9a9bcf96d221ecd3f4/docs/vision-overhaul/BROWSER_ACCEPTANCE.md).
+- **AI-43** — PR #643 (issue #558), branch `codex/wave-settings-20260908`,
+  exact head `3067e38c640e88b9c265e7c2e841a70d86c2e8d4`. Scope: default
+  autosave and explicit conflict choices. Full
+  [settings procedure](https://github.com/Chris0Jeky/NavSentinel/blob/3067e38c640e88b9c265e7c2e841a70d86c2e8d4/docs/agentic/GATE3_558_SETTINGS_AUTOSAVE.md).
+  Dependent fixes #655 and #658 must follow their parent and retain their added checks.
+- **AI-44** — PR #644 (issue #585), branch `codex/wave-events-20260908`,
+  exact head `c4507486753e5be3249fb5d43afa94bb8522bb76`. Scope: imported
+  page-site validation and valid legacy popup fallback. Full
+  [event association procedure](https://github.com/Chris0Jeky/NavSentinel/blob/c4507486753e5be3249fb5d43afa94bb8522bb76/docs/agentic/ISSUE_585_GATE3.md).
+  Dependent IP-site fix #657 must follow its parent and retain its added checks.
+- **AI-45** — PR #641 (issue #591), branch `codex/wave-evidence-20260908`,
+  exact head `ae52f03a08553f8ab819245c05045b3644fefd75`. Scope: preview the
+  exact local evidence snapshot before downloading it. Full
+  [export review procedure](https://github.com/Chris0Jeky/NavSentinel/blob/ae52f03a08553f8ab819245c05045b3644fefd75/docs/vision-overhaul/EXPORT_REVIEW.md#human-chrome-check--ai-45).
+  This is stacked on #640; AI-42 remains open and the parent must land first.
+- **AI-46** — PR #649 (issue #637), branch `codex/wave-child-form-20260908`,
+  exact head `56d06a11d1ad8d4b00391c3eca99645da0312279`. Scope: child-frame
+  form target allowances. Full
+  [child-form procedure](https://github.com/Chris0Jeky/NavSentinel/blob/56d06a11d1ad8d4b00391c3eca99645da0312279/docs/agentic/AI-46-issue637-child-form-target.md).
+  This is stacked on #636; AI-41 remains open and the parent must land first.
+
+### Merged Gate-3 work retained under AI-47
+
+- **Former AI-38 — PR #600 (issue #560), merged as `c8b1a70`.** The
+  isolated-world toast input fence and top-layer host remain subject to the
+  [current-`main` AI-47 owned-controls subprocedure](docs/agentic/GATE3_GUIDES.md#ai-47-former-ai-38-pr-600-current-main-toast-control-subprocedure).
+  Run it only against a current `main` build that contains that merge. Record
+  its required AI-47 sub-result; it is not a standalone or consolidated
+  Gate-3 pass.
+- **Former AI-40 — PR #609 (issue #569), merged as
+  `e35f5430660767d4998c8f4d727b38444f3f9b14`.** The Back/Forward Cache
+  redirect-chain boundary remains subject to the
+  [current-`main` AI-47 history subprocedure](docs/agentic/GATE3_GUIDES.md#ai-47-subprocedure-former-ai-40---609-stale-redirect-chain-boundary).
+  Run it only against a current `main` build that contains that merge. Record
+  its required AI-47 sub-result; it is not a standalone or consolidated
+  Gate-3 pass.
+
+**OPEN: AI-47 — September browser-queue consolidated post-merge Chrome check.**
+On 2026-09-12 Chris explicitly directed the agent to merge the open PRs gated
+behind human testing and retain the testing as one human TODO. The one-time
+scope and exclusions are recorded in
+[`D-2026-09-12-P`](docs/agentic/DECISIONS.md). This item is not evidence that
+any branch-held Gate-3 passed. It applies only to named candidates that actually
+merge after current-base conflict resolution, exact-head checks, review, and
+stack ordering; record their merge commits here in the closeout sync. **This is
+an index, not a shortened replacement procedure:** every step and evidence field
+in each applicable current-`main` AI-47 subprocedure and branch-held exact guide
+remains required. Record a sub-result for each former AI item before reporting
+AI-47 as passed; one omitted sub-result keeps AI-47 open.
+
+Build the then-current `main`, record its 40-character SHA, and have Chris load
+or reload that exact `extension/dist` in a fresh branded-Chrome profile. Confirm
+the current page has capture and bridge markers `"1"` and the exact guard
+revision printed by the build, then run this consolidated sequence:
+
+1. **Owned controls (#600 / former AI-38):** complete the linked current-`main`
+   subprocedure, including mouse and keyboard Dismiss and Undo, zero page-owned
+   input reactions, and proof that a later hostile page layer cannot cover the
+   extension host.
+2. **Proceed authority (#608 / former AI-39):** complete the exact AI-39 guide.
+   Page-injected UI remains warn/dismiss only; Proceed once lives in the
+   extension popup, shows only the bounded origin/countdown presentation, opens
+   exactly once with a null opener, and remains fail-closed after replay,
+   expiry, navigation, or use from another tab. Confirm path/query/fragment data
+   is absent from `chrome.storage.session`, popup DOM, and relevant consoles.
+3. **History and redirect freshness (#609 / former AI-40):** complete the
+   [exact former AI-40 guide retained as this AI-47 subprocedure](docs/agentic/GATE3_GUIDES.md#ai-47-subprocedure-former-ai-40---609-stale-redirect-chain-boundary). A real
+   Back/Forward Cache restore inherits no stale redirect-chain factors, and the
+   same factors expire without a navigation. A reload is not an equivalent
+   check.
+4. **Child-frame authority (#636/#649 / former AI-41/46):** complete both exact
+   guides. The transparent child-frame navigation case is contained with its
+   deliberate Proceed path intact; the normal declared-form and Back paths stay
+   compatible; changed, replayed, or unrelated form targets remain denied.
+5. **Protection Center and export (#640/#641 / former AI-42/45):** complete both
+   exact guides, including popup/Options entry points, themes, category states,
+   keyboard operation, cancel paths, preview/download byte parity, minimized
+   export privacy, and the absence of page-injected Allow/Proceed controls.
+6. **Settings concurrency (#643/#655/#658 / former AI-43):** complete the exact
+   [AI-43 settings guide](docs/agentic/GATE3_558_SETTINGS_AUTOSAVE.md) and the
+   child-PR additions. Default autosave,
+   explicit conflicts, imported integer log limit `55`, same-field collision,
+   disjoint-window merge, and preservation of the losing draft all match the
+   active guide.
+7. **Event association (#644/#657 / former AI-44):** complete the exact AI-44
+   guide and the child-PR addition. Imported event `pageSite` validation,
+   full-URL sanitization, legacy popup fallback, and canonical IP-site
+   association remain correct without leaking an event to an unrelated
+   top-level page.
+
+Inspect page, popup, Options, Protection Center, and service-worker consoles for
+new errors during the relevant steps. Report `AI-47 done; consolidated Gate-3
+passed on main at <40-character SHA>; Chrome <version>` or `AI-47 failed on main
+at <SHA>: <numbered step and observed result>`. A failure reopens the smallest
+affected issue/PR slice; it does not invalidate unrelated checks. The general
+guided cursor remains AI-19.
 
 **OPEN: AI-36 — #558 popup/Options patch-save synchronization post-merge
 Gate-3.** This is no longer a pre-merge gate. PR #589 merged on 2026-08-27 (head
