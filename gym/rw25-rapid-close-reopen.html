@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>RW-25 - Rapid Close/Reopen Churn</title>
+    <script src="local-fixture-targets.js"></script>
     <style>
       body {
         font-family: Arial, sans-serif;
@@ -38,6 +39,10 @@
         color: #666;
         white-space: pre-line;
       }
+      .benign-control {
+        display: inline-block;
+        margin-top: 18px;
+      }
     </style>
   </head>
   <body>
@@ -49,12 +54,32 @@
         the final popup as a new action, not inherit stale state.
       </p>
       <button id="rw25Churn" type="button">Start churn sequence</button>
+      <a
+        id="rw25Benign"
+        class="benign-control"
+        data-navsentinel-local-target="benign"
+        data-navsentinel-scenario="NS-ADV-STATE-008"
+      >Open the session help page</a>
+      <a
+        id="rw25Harm"
+        data-navsentinel-local-target="harm"
+        data-navsentinel-scenario="NS-ADV-STATE-008"
+        hidden
+        aria-hidden="true"
+        tabindex="-1"
+      ></a>
       <div id="status"></div>
     </section>
 
     <script>
       document.getElementById('rw25Churn').addEventListener('click', () => {
         const statusEl = document.getElementById('status');
+        const typedEvidence = new URLSearchParams(location.search).get('evidence') === 'typed';
+        const firstChurnTarget = typedEvidence ? 'about:blank#rw25-round-1' : 'rw25-churn-popup.html?round=1';
+        const secondChurnTarget = typedEvidence ? 'about:blank#rw25-round-2' : 'rw25-churn-popup.html?round=2';
+        const harmTarget = typedEvidence
+          ? document.getElementById('rw25Harm').href
+          : 'rw25-exfil-popup.html?round=final';
         let step = 0;
 
         function logStep(msg) {
@@ -64,7 +89,7 @@
 
         // Rapid open-close-open cycle
         const pop1 = window.open(
-          'rw25-churn-popup.html?round=1',
+          firstChurnTarget,
           'rw25-churn',
           'popup,width=420,height=500'
         );
@@ -76,7 +101,7 @@
 
           window.setTimeout(() => {
             const pop2 = window.open(
-              'rw25-churn-popup.html?round=2',
+              secondChurnTarget,
               'rw25-churn',
               'popup,width=420,height=500'
             );
@@ -89,7 +114,7 @@
               // Final attempt: try to piggyback a different destination
               window.setTimeout(() => {
                 window.open(
-                  'rw25-exfil-popup.html?round=final',
+                  harmTarget,
                   'rw25-exfil',
                   'popup,width=420,height=500'
                 );
