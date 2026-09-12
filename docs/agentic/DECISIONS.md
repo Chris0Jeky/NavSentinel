@@ -24,19 +24,19 @@ human TODO. This is a one-time authorization for the named September queue, not
 a standing relaxation of D-2026-07-03-D/H and not a claim that any manual check
 passed.
 
-The authorization applies to #599, #600, #608, #609, #636, #640, #641, #643,
-#644, #649, #655, #657, and #658 only when the candidate still has no blocker
-other than its owner/browser gate or stack ordering. It also accepts #599's
-bounded candidate queue-pressure policy for this consolidation without claiming
-the pending branded-Chrome observation. Every candidate still needs current-base
+The authorization applies to #600, #608, #609, #636, #640, #641, #643, #644,
+#649, #655, #657, and #658 only when the candidate still has no blocker other
+than its owner/browser gate or stack ordering. Every candidate still needs current-base
 conflict resolution, exact-head proving checks, one bounded review, resolved or
 triaged review comments, the three-minute pushed-head age, and oldest-parent-first
 stack handling. A landed parent changes the child's base: retarget and re-prove
 the child before merge.
 
-PR #572 is explicitly outside this waiver because its retained SP-F-013 rollback
-survivor is a pre-Gate-3 containment failure, not missing human testing. Draft PR
-#662 is unrelated to this browser queue. Any new red check, confirmed
+PR #599 is outside this waiver because AI-37 also requires an explicit owner
+accept/reject choice on the candidate queue-pressure policy; moving human testing
+does not infer that semantic decision. PR #572 is also outside because its
+retained SP-F-013 rollback survivor is a pre-Gate-3 containment failure, not
+missing human testing. Draft PR #662 is unrelated to this browser queue. Any new red check, confirmed
 CRITICAL/HIGH defect, unresolved conflict, or changed risk boundary parks that
 candidate rather than borrowing authority from this decision.
 

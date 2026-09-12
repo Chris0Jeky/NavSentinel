@@ -16,7 +16,8 @@ provenance only. Detailed retired procedures moved to
 current named human-gated queue to merge before manual Chrome testing under
 [`D-2026-09-12-P`](docs/agentic/DECISIONS.md), provided every non-human gate
 still passes. The retained browser work is consolidated as AI-47 below; this is
-not a human-test result. PR #572 remains parked outside the waiver on SP-F-013.
+not a human-test result. PR #599 remains outside pending AI-37's explicit
+queue-policy choice, and PR #572 remains parked outside on SP-F-013.
 Before that instruction, eleven open PRs carried branch-held
 human Chrome gates: #572 (AI-31), #599 (AI-37), #600 (AI-38), #608 (AI-39),
 #609 (AI-40), #636 (AI-41), #640 (AI-42), #643 (AI-43), #644 (AI-44),
@@ -255,39 +256,50 @@ scope and exclusions are recorded in
 [`D-2026-09-12-P`](docs/agentic/DECISIONS.md). This item is not evidence that
 any branch-held Gate-3 passed. It applies only to named candidates that actually
 merge after current-base conflict resolution, exact-head checks, review, and
-stack ordering; record their merge commits here in the closeout sync.
+stack ordering; record their merge commits here in the closeout sync. **This is
+an index, not a shortened replacement procedure:** every step and evidence field
+in the exact-head guide linked under the branch-held AI item above remains
+required. Record a sub-result for each former AI item before reporting AI-47 as
+passed; one omitted sub-result keeps AI-47 open.
 
 Build the then-current `main`, record its 40-character SHA, and have Chris load
 or reload that exact `extension/dist` in a fresh branded-Chrome profile. Confirm
 the current page has capture and bridge markers `"1"` and the exact guard
 revision printed by the build, then run this consolidated sequence:
 
-1. **Bridge pressure (#599 / former AI-37):** a benign clipboard write cannot
-   suppress the trusted fake-verification warning under the bounded pressure
-   case.
-2. **Owned controls and proceed authority (#600/#608 / former AI-38/39):** on
-   the media-hostile case, mouse and keyboard actions operate the extension
-   control without reaching the page; Proceed once lives in the extension
-   popup, opens exactly once with a null opener, and remains fail-closed after
-   replay, expiry, navigation, or use from another tab.
-3. **History and redirect freshness (#609 / former AI-40):** a real
+1. **Owned controls (#600 / former AI-38):** complete the exact AI-38 guide,
+   including mouse and keyboard Dismiss and Undo, zero page-owned input
+   reactions, and proof that a later hostile page layer cannot cover the
+   extension host.
+2. **Proceed authority (#608 / former AI-39):** complete the exact AI-39 guide.
+   Page-injected UI remains warn/dismiss only; Proceed once lives in the
+   extension popup, shows only the bounded origin/countdown presentation, opens
+   exactly once with a null opener, and remains fail-closed after replay,
+   expiry, navigation, or use from another tab. Confirm path/query/fragment data
+   is absent from `chrome.storage.session`, popup DOM, and relevant consoles.
+3. **History and redirect freshness (#609 / former AI-40):** complete the exact
+   AI-40 guide. A real
    Back/Forward Cache restore inherits no stale redirect-chain factors, and the
    same factors expire without a navigation. A reload is not an equivalent
    check.
-4. **Child-frame authority (#636/#649 / former AI-41/46):** the transparent
-   child-frame navigation case is contained with its deliberate Proceed path
-   intact; declared child-form targets work, while changed, replayed, or
-   unrelated targets remain denied.
-5. **Protection Center and export (#640/#641 / former AI-42/45):** popup and
-   Options entry points, themes, category states, minimized preview, and the
-   downloaded local evidence snapshot agree without exposing excluded detail.
-6. **Settings concurrency (#643/#655/#658 / former AI-43):** default autosave,
+4. **Child-frame authority (#636/#649 / former AI-41/46):** complete both exact
+   guides. The transparent child-frame navigation case is contained with its
+   deliberate Proceed path intact; the normal declared-form and Back paths stay
+   compatible; changed, replayed, or unrelated form targets remain denied.
+5. **Protection Center and export (#640/#641 / former AI-42/45):** complete both
+   exact guides, including popup/Options entry points, themes, category states,
+   keyboard operation, cancel paths, preview/download byte parity, minimized
+   export privacy, and the absence of page-injected Allow/Proceed controls.
+6. **Settings concurrency (#643/#655/#658 / former AI-43):** complete the exact
+   AI-43 guide and the child-PR additions. Default autosave,
    explicit conflicts, imported integer log limit `55`, same-field collision,
    disjoint-window merge, and preservation of the losing draft all match the
    active guide.
-7. **Event association (#644/#657 / former AI-44):** imported event `pageSite`
-   validation, legacy popup fallback, and canonical IP-site association remain
-   correct without leaking an event to an unrelated top-level page.
+7. **Event association (#644/#657 / former AI-44):** complete the exact AI-44
+   guide and the child-PR addition. Imported event `pageSite` validation,
+   full-URL sanitization, legacy popup fallback, and canonical IP-site
+   association remain correct without leaking an event to an unrelated
+   top-level page.
 
 Inspect page, popup, Options, Protection Center, and service-worker consoles for
 new errors during the relevant steps. Report `AI-47 done; consolidated Gate-3
