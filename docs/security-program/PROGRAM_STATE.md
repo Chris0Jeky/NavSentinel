@@ -1,10 +1,14 @@
 # Programme state
 
-As of 2026-09-12, based on `origin/main`
-`e35f5430660767d4998c8f4d727b38444f3f9b14` at this slice's branch point, merged programme seed
+As of 2026-09-12, based on the reconciled #649 merge receipt
+`c78ba99da5d3357833a5fcd3f4f09bdb255db7a6`, later #687 receipt
+`63e3bbbc401f272e88abc88a4f890ba4003bdb1f`, later #655 receipt
+`9b7ce93652b08c0e7f124f3ef132e46c6ab39909`, later #658 receipt
+`8a9435349e0dcdbe834bfee2beeeccafd5b39ccf`, merged programme seed
 `d2762f296b07bfd650971141bf9bf7a9b2c016b9`, and the live issue, milestone,
 pull-request, and Actions inventory refreshed for the current #449
-fixture-family vertical.
+fixture-family vertical. Fetch `origin/main` before using this dated receipt as
+an exact build identity.
 
 ## Seeded
 
@@ -50,6 +54,53 @@ The original four ClickFix fixtures now use only an inert sentinel or local stat
 
 The fifth ClickFix fixture models `NS-ADV-CLIP-005`: a native manual copy of a benign case token, three deterministic local UI updates, and a delayed replacement with the exact inert sentinel. Its extension-disabled arm reaches a one-use `inert-shell-paste` sink (`HARM_REACHED`). The release-extension arm shows the expected ClickFix warning while the user stops before the simulated paste (`WARNED`); the clipboard remains rewritten, so this is not a prevention claim. The matched benign arm performs its own delayed page-originated rewrite to a harmless locally formatted case token, remains quiet, and reaches only its benign sink (`OBSERVED`); the mixed arm shows the warning and completes only the benign OTP consequence (`WARNED`). A pre-launch deny proxy and browser route allow only the exact loopback fixture and sink origins. The runner cannot reject a stale release-eligible `extension/dist`, so its diagnostic attachments declare `evidenceValidity: UNVERIFIED`, `promotionCeiling: MODELLED`, and `provenanceBound: false`; the registry mirrors that machine-checked ceiling. Native/OS paste destinations, a user ignoring the warning, branded Chrome, open-web behavior, and adjacent timing/focus mutations remain unproved.
 
+## Live security tracker
+
+This tracker was refreshed from the listed merge receipts on 2026-09-12. The
+browser candidates #600, #609, #636, #640, #641, #643, #644, #649, #657, #608,
+and #655 are merged. Their owner-installed Chrome checks remain consolidated in
+the seven explicit **OPEN — not run** AI-47 rows in
+[`ACTION_ITEMS.md`](../../ACTION_ITEMS.md); no owner result is inferred from a
+merge or from automated Chromium/CI.
+
+The following security-relevant candidates are tracked here. #637 is
+**CLOSED/implemented via #649**, not an active residue route. #658 is merged;
+its AI-47 child result remains **OPEN — not run**. The head and merge-SHA columns
+separate reviewed branch identity from integrated `main` identity.
+
+| PR | Scope | Head at refresh | Base at refresh | Live state | Merge SHA |
+| --- | --- | --- | --- | --- | --- |
+| #649 | Child-frame form target allowance | `04fde241cda6d313b042049c3e118b02381c8954` | `595903af89ff3bfb526e71de68f71f8c9459e6d1` | MERGED; no owner observation | `c78ba99da5d3357833a5fcd3f4f09bdb255db7a6` |
+| #687 | Delayed clipboard rewrite adversarial lane | `b43de5d82c599f7e2b32e6d7e81668b308ec127d` | `c78ba99da5d3357833a5fcd3f4f09bdb255db7a6` | MERGED test-only; `MODELLED` evidence and `UNVERIFIED` diagnostic; no owner Chrome or OS-prevention claim | `63e3bbbc401f272e88abc88a4f890ba4003bdb1f` |
+| #655 | Imported integer Options log limit | `d00da7499ba755de05f47fd67e2a05ca5b94dc75` | `63e3bbbc401f272e88abc88a4f890ba4003bdb1f` | MERGED; AI-47 row 6 remains **OPEN — not run** | `9b7ce93652b08c0e7f124f3ef132e46c6ab39909` |
+| #658 | Conditional same-field Options writes | `0dc62f62e722de651169d3646669c0faf06fbd24` | `9b7ce93652b08c0e7f124f3ef132e46c6ab39909` | MERGED; AI-47 row 6 remains **OPEN — not run** | `8a9435349e0dcdbe834bfee2beeeccafd5b39ccf` |
+
+The #649 child-form checks are now subject to AI-47 row 4, which remains
+**OPEN — not run** until Chris records the observation. #687 is merged test-only
+work; its `MODELLED` evidence and `UNVERIFIED` diagnostic do not establish owner
+Chrome behavior, OS-paste prevention, or a release claim. Generated views now
+link `MAP-CLICKFIX-05` to #687; this traceability repair does not promote the
+diagnostic beyond its machine-checked `MODELLED` ceiling.
+
+## Prioritized open follow-ups
+
+These are live routing entries, not implementation or acceptance claims:
+
+1. #688 — effective submitter authority.
+2. #691 — export privacy/correctness.
+3. #684 — receipt integrity.
+4. #692 — release clean gate.
+5. #686 — pending navigation ordering.
+6. #690 — autosave/import ordering.
+7. #689 — export boundary.
+8. #693 — mutation-observer test determinism.
+9. CLIP-005 — timing, focus, and ignore-warning mutations.
+
+`NEXT_WORK.md` owns this execution order. #572 remains parked on SP-F-013 and
+#599 remains outside the one-time browser-queue authorization. C-04
+authenticated-recovery and live-port-death work remains open without
+manufacturing reachability; owner and external gates remain in `ACTION_ITEMS.md`.
+
 ## Active authority
 
 - Live source, tests, GitHub, [Project_Roadmap.md](../Project_Roadmap.md), and current owner gates outrank this programme state.
@@ -57,7 +108,9 @@ The fifth ClickFix fixture models `NS-ADV-CLIP-005`: a native manual copy of a b
   milestone routing and trust-boundary contracts; it is not another roadmap or
   human queue.
 - Release-integrity blockers, including bridge identity/recovery and extension-origin protection-lowering decisions, retain their existing homes.
-- [ACTION_ITEMS.md](../../ACTION_ITEMS.md) remains the only human-action queue. Its cursor remains AI-19 and the waived browser-queue checks are consolidated under AI-47; this test-only slice closes neither item and adds no shipped browser behavior requiring another Gate-3 entry.
+- [ACTION_ITEMS.md](../../ACTION_ITEMS.md) remains the only human-action queue.
+  Its cursor remains AI-19 and the named browser checks are consolidated under
+  AI-47; this programme refresh closes no human decision or manual browser check.
 - The release, research, proving-ground, and optional-native profiles remain separate. The #449 vertical changes no extension runtime behavior, permission, remote service, or committed build output.
 
 ## Source boundary

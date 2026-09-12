@@ -1156,7 +1156,9 @@
         "#449",
         "#452"
       ],
-      "pr_refs": [],
+      "pr_refs": [
+        "#687"
+      ],
       "paths": [
         "gym/clickfix-05-delayed-rewrite.html",
         "gym/local-fixture-targets.js",

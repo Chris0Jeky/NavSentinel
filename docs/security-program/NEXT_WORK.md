@@ -10,69 +10,68 @@ has 8; only those two milestones are active. Planned M2/M3/M4, gated M5,
 passive maintenance, and frozen R1 are not fallback queues. The exact receipt is
 [`GITHUB_ADMIN_RECEIPT.md`](../development-architecture/GITHUB_ADMIN_RECEIPT.md).
 
-The 2026-09-12 adversarial expansion adds one bounded M0 test vertical for
-`NS-ADV-CLIP-005`. It models a manual benign copy followed by a delayed inert
-clipboard rewrite, with an extension-disabled harm baseline, a release-extension
-warning arm, a matched delayed benign formatting rewrite, and a mixed OTP
-control. Its typed sink and pre-launch egress fence are browser-only test
-infrastructure. Diagnostic output is explicitly `UNVERIFIED` and capped at
-`MODELLED` because this runner cannot reject a stale release-eligible build. It
-does not alter runtime behavior, satisfy native/OS coverage, or turn a warning
-into a block.
+As of 2026-09-12, the reconciled merge receipts are #649
+`c78ba99da5d3357833a5fcd3f4f09bdb255db7a6`, #687
+`63e3bbbc401f272e88abc88a4f890ba4003bdb1f`, #655
+`9b7ce93652b08c0e7f124f3ef132e46c6ab39909`, and #658
+`8a9435349e0dcdbe834bfee2beeeccafd5b39ccf`. Fetch `origin/main` before using
+this dated receipt as an exact build identity. The merged browser chain's seven
+AI-47 rows remain **OPEN — not run** in `ACTION_ITEMS.md`; a merge or CI result
+is not owner Chrome acceptance. #658 is merged, while its AI-47 result remains
+**OPEN — not run**. #687 is merged test-only work:
+its evidence stays `MODELLED` and its diagnostic `UNVERIFIED`; it is neither
+owner Chrome evidence nor OS-paste prevention.
 
-As of 2026-09-04, `origin/main` is `a440e35` and the runtime queue is parked in
-full: **#572** (AI-31, still held on the retained SP-F-013 rollback survivor),
-**#599** (AI-37, reconciled with current `main`; owner queue-design decision and
-branded-Chrome check open), **#600** (AI-38, containment; owner media-page
-check), **#608** (AI-39, stacked on #600 and must follow it), **#609** (AI-40,
-branded-Chrome BFCache check), and **#636** (AI-41, the #593 child-frame
-navigation-authority boundary). All six are ready-for-review with green
-exact-head CI; none may be merged by an agent. Issue **#637** is the residue home
-for the remaining child-frame `ns-allow` -> `form.submit(target=_top)` path, and
-#593 stays open. PR #610 merged the bounded
-test-only #449 parent slice for the seven core locality fixtures. PR #613 merged
-the final RW locality sink slice, PR #614 merged loopback sink hardening, and PR
-#615 merged the static RW scenario assertion. Those merges retain the
-MODELLED/local-only ceiling. #420 now has a bounded maintainer-headed runner:
-the operator prepares branded Chrome and reloads the exact build, while the
-runner attaches through loopback CDP for one local benign Gym observation. It
-writes redacted pass/failure receipts but does not schedule, measure FP, or
+The #687 adversarial expansion models a manual benign copy followed by a
+delayed inert clipboard rewrite, with an extension-disabled harm baseline, a
+release-extension warning arm, a matched delayed benign formatting rewrite,
+and a mixed OTP control. Its typed sink and pre-launch egress fence are
+browser-only test infrastructure. It does not alter runtime behavior, satisfy
+native/OS coverage, or turn a warning into a block.
+
+Issue #637 is **CLOSED/implemented via #649** and is not an execution route.
+The live candidate and receipt tracker is [`PROGRAM_STATE.md`](PROGRAM_STATE.md).
+There is still no owner Chrome, accessibility, release-signing, store, or
+external-review acceptance recorded. #420 remains a bounded maintainer-headed
+runner: it writes redacted local receipts but does not schedule, measure FP, or
 claim Gate-3.
 
-1. **The runtime queue is parked; do not open another vertical over it.**
-   #572, #599, #600, #608, #609, and #636 are all parked on owner gates, so no
-   agent-side work remains on them beyond keeping them aligned with current
-   `main` and their exact heads. #600 is containment; #601 (PR #608) remains the
-   durable extension-origin authority outcome and must follow #600 rather than
-   overlap its capture and loader seams. New work goes to #637 or the next
-   bounded M0/M1 slice, not across those seams.
-2. **Keep #449 locality bounded and typed.** The twelve evasion, seven core,
-   and two RW fixtures now share a loopback-only target contract; no mapped
-   external-destination holds remain. The Evasion 05 representative now records
-   one control plus four deterministic neighbours across two CSS and two
-   structural axes, each with benign and mixed duals. Every arm now compares
-   both live hrefs with its exact normalized harm and benign target authorities
-   before activation. Retain the MODELLED ceiling: randomized DOM, text, localization,
-   timing, viewport, and holdout robustness remain unproved. Before adding
-   declared adjacent mutation axes for `NS-ADV-UI-004`, keep each sink typed and
-   local rather than building a generic collector.
-3. **Keep PR #572 parked before AI-31.** Resume only from its retained local
-   survivor and exact service-worker lifecycle checkpoint; do not run the manual
-   gate on the current head.
-4. **Close the C-04 release-integrity boundary without manufacturing an attack.**
-   The first #186 model slice is merged, but same-session/pre-page reachability,
-   authenticated recovery, and #175 liveness remain open. Do not force a result
-   with privileged pre-page injection.
-5. **Keep protection-lowering authority extension-owned.** Page text or
-   page-owned UI may warn or cancel; it must not grant allow, trust, proceed,
-   resume, or security-relevant Undo. Use #601 and the worker-owned exact-context
-   capability architecture.
-6. **Finish activation disclosure and valid methodology.** #455 remains the M1
-   activation/consent home. #417 may proceed as the one planned-milestone
-   exception for real-host routing, trusted input, protected-versus-fired
-   outcomes, committed manifests, and invalid-run handling; #416/#426 remain
-   measurement/reporting homes.
-7. **Respect human and external gates.** Resume
-   [ACTION_ITEMS.md](../../ACTION_ITEMS.md) at AI-19. Keep owner Chrome,
-   accessibility, release-signing, store review, and external review open until
-   directly evidenced.
+## Prioritized live cursor
+
+These entries are routing and scope only; none claims implementation, a merge,
+or an acceptance result.
+
+1. **#688 — effective submitter authority.** Reconcile the exact current scope
+   before starting a bounded slice.
+2. **#691 — export privacy/correctness.** Preserve minimized, correct local
+   evidence without inventing collection or sharing claims.
+3. **#684 — receipt integrity.** Keep receipts source-bound and distinguish
+   observed facts from generated or diagnostic output.
+4. **#692 — release clean gate.** Reconcile the exact release-clean conditions;
+   do not infer them from a merge or ordinary CI.
+5. **#686 — pending navigation ordering.** Keep pending-decision order and
+   lifecycle authority explicit.
+6. **#690 — autosave/import ordering.** Preserve explicit import and saved-state
+   ordering across the now-merged #658 conditional-write boundary.
+7. **#689 — export boundary.** Keep privacy and correctness boundaries local and
+   separately evidenced.
+8. **#693 — mutation-observer test determinism.** Make the test seam
+   deterministic without broadening runtime authority.
+9. **CLIP-005 — timing, focus, and ignore-warning mutations.** Keep this
+   adversarial lane `MODELLED`; it does not prove browser efficacy or OS-paste
+   prevention.
+10. **Keep exclusions explicit.** #572 remains parked on SP-F-013 before AI-31;
+    #599 remains outside the one-time browser-queue authorization pending its
+    owner queue-policy choice.
+11. **Close C-04 without manufacturing reachability.** Authenticated recovery
+    and live-port-death work remain open; do not force a result with privileged
+    pre-page injection or an artificial page-reachable actor.
+12. **Respect human and external gates.** Resume
+    [`ACTION_ITEMS.md`](../../ACTION_ITEMS.md) at AI-19, then AI-47. Only Chris
+    may record browser observations; keep owner Chrome, accessibility,
+    release-signing, store review, and external review open until directly
+    evidenced.
+
+Keep the #449 locality suite bounded and typed when a reconciled M0/M1 slice
+reaches it: retain its `MODELLED` ceiling and local typed sinks rather than
+turning it into a generic collector.

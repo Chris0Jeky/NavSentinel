@@ -2,14 +2,17 @@
 
 Post-merge branded-Chrome subprocedure retained by the consolidated AI-47
 check in `ACTION_ITEMS.md`. Under D-2026-09-12-P this is no longer a pre-merge
-human gate for the named PR #643 candidate. The coordinator records this
-sub-result under AI-47; this guide does not assert owner acceptance.
+human gate for merged #643, #655, and #658. Only Chris may perform and record this
+sub-result under AI-47; an agent may only preserve Chris's explicit observation.
+#658's Human result remains **OPEN — not run**; its merge does not assert owner
+acceptance for #658 or any other candidate.
 
 1. Build the then-current `main` head selected for AI-47 with `npm run build`.
    In a disposable Chrome profile, the owner loads/reloads that checkout's
    `extension/dist` from `chrome://extensions`. Record the 40-character head,
    Chrome version, and reload result. Expected build markers: `capture=1`,
-   `bridge=1`, `ui-guard=cab71a431824`.
+   `bridge=1`, and the `ui-guard` revision emitted by that exact build. Do not
+   compare against a hardcoded historical guard revision.
 2. Open Options. **Auto-save changes** starts enabled in a fresh profile.
    Change navigation with the arrow keys and toggle overlay auto-dismiss. Reload
    Options and verify those choices persisted without pressing Save.
@@ -39,9 +42,11 @@ sub-result under AI-47; this guide does not assert owner acceptance.
    returns to disabled. Import intentionally replaces the complete draft.
    Also import a backup with `settings.logLimit` set to `55`. The Log ring
    buffer accepts it without a validation error; change Navigation and save,
-   then export again and confirm `logLimit` remains `55` (#648).
+   then export again and confirm `logLimit` remains `55` (#655).
 
 Automated disposable-Chromium tests cover these storage/UI paths; they do not
-replace the owner's unpacked Chrome reload and visual acceptance. Record pass or
-the exact failing step as the former-AI-43 sub-result under AI-47. No telemetry,
-permissions, or runtime guard changes are part of this slice.
+replace Chris's unpacked Chrome reload and visual acceptance. Only Chris may
+record a #643/#655/#658 pass or the exact failing step as the former-AI-43
+sub-result under AI-47. #658 remains **OPEN — not run** until Chris observes its
+distinct same-field behavior. No telemetry, permissions, or runtime guard
+changes are part of this slice.
