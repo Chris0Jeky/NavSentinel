@@ -11,7 +11,7 @@ import {
 } from "@playwright/test";
 import {
   getGymBaseUrl,
-  readBuiltMainUiGuardRevision,
+  readBuiltUiGuardRevision,
   waitForNavSentinelBridge,
 } from "./extension_test_utils";
 import {
@@ -117,7 +117,7 @@ async function openFixture(fixtureCase: FixtureCase): Promise<FixtureHarness> {
     await expect(page.locator("html")).toHaveAttribute("data-fixture-ready", "1");
     await expect(page.locator("html")).toHaveAttribute(
       "data-navsentinel-ui-guard",
-      readBuiltMainUiGuardRevision(),
+      readBuiltUiGuardRevision(),
     );
     await expect(page.locator("html")).toHaveAttribute("data-navsentinel-capture-ready", "1");
 
