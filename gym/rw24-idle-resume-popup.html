@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>RW-24 - Idle-Resume Popup</title>
+    <script src="local-fixture-targets.js"></script>
     <style>
       body {
         font-family: Arial, sans-serif;
@@ -37,6 +38,10 @@
         font-size: 13px;
         color: #888;
       }
+      .benign-control {
+        display: inline-block;
+        margin-top: 18px;
+      }
     </style>
   </head>
   <body>
@@ -47,19 +52,37 @@
         user gesture has long expired. NavSentinel should block this as stale.
       </p>
       <button id="rw24Trigger" type="button">Check for updates</button>
+      <a
+        id="rw24Benign"
+        class="benign-control"
+        data-navsentinel-local-target="benign"
+        data-navsentinel-scenario="NS-ADV-EVADE-003"
+      >Read the release notes</a>
+      <a
+        id="rw24Harm"
+        data-navsentinel-local-target="harm"
+        data-navsentinel-scenario="NS-ADV-EVADE-003"
+        hidden
+        aria-hidden="true"
+        tabindex="-1"
+      ></a>
       <div id="timer"></div>
     </section>
 
     <script>
       document.getElementById('rw24Trigger').addEventListener('click', () => {
         const timerEl = document.getElementById('timer');
+        const typedEvidence = new URLSearchParams(location.search).get('evidence') === 'typed';
+        const harmTarget = typedEvidence
+          ? document.getElementById('rw24Harm').href
+          : 'rw24-stale-popup.html?step=update';
         timerEl.textContent = 'Waiting for idle period...';
 
         // Fire a popup well after the allow-window has expired
         window.setTimeout(() => {
           timerEl.textContent = 'Idle period elapsed — firing popup now.';
           window.open(
-            'rw24-stale-popup.html?step=update',
+            harmTarget,
             'rw24-stale',
             'popup,width=420,height=620'
           );
