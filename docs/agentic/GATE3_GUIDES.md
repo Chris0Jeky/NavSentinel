@@ -195,11 +195,13 @@ owned-controls sub-result of AI-47, not an open-PR gate and not evidence that
 the check has passed. Only Chris can record this sub-result. It does not close
 AI-47 until every applicable former-AI sub-result is recorded.
 
-1. Use a clean checkout of current `main`. Require
+1. Use a clean checkout of current `main`. Run `git fetch origin main`, then
+   require `git rev-parse HEAD` to exactly equal `git rev-parse origin/main`
+   before building or loading the extension. Also require
    `git merge-base --is-ancestor c8b1a70bef3c92600fdf7af3fb9fdc5e73b236f2 HEAD`
-   to succeed, then record `git rev-parse HEAD`. Do not substitute PR #600's
-   former branch or its historical head. If the known Defender quarantine line
-   ` D tests/clickfix-detector.property.test.ts` appears, leave it untouched;
+   to succeed, then record that shared 40-character SHA. Do not substitute PR
+   #600's former branch or its historical head. If the known Defender quarantine
+   line ` D tests/clickfix-detector.property.test.ts` appears, leave it untouched;
    do not open, restore, stage, execute, or allow that fixture. Stop for any
    other uncommitted product change.
 2. On that current `main` head, run `npm ci`, `npm run build`, and
@@ -701,7 +703,7 @@ Only Chris can record this item complete.
 | AI-13 | #356 MAIN-world compatibility | in [`../../ACTION_ITEMS.md`](../../ACTION_ITEMS.md) |
 | AI-21 | #464 synthetic navigation | [below](#ai-21--pr-464-synthetic-navigation-gate-3) |
 | AI-22 | #466 pending-decision service worker | [below](#ai-22--pr-466-pending-decision-service-worker-gate-3) |
-| AI-38 | #560 inert toast-control repair | [above](#active-guide-ai-38--issue-560-inert-toast-control-repair) |
+| AI-38 | #560 inert toast-control repair | [above](#ai-47-former-ai-38-pr-600-current-main-toast-control-subprocedure) |
 | AI-36 | #558 popup/Options patch-save synchronization | [above](#ai-36--558-popupoptions-patch-save-synchronization-gate-3) |
 | AI-35 | #539 cross-host child-event attribution | [below](#ai-35--539-cross-host-child-event-attribution-gate-3) |
 

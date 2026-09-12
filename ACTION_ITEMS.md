@@ -182,10 +182,12 @@ frame reproduction and repair.
 Each item below is defined **only** inside its own PR branch's `ACTION_ITEMS.md`
 and the procedure named in its entry; `main` carries no procedure for them, so
 this list is a pointer, not the gate. Read that procedure before acting and
-verify the live PR head before building. AI-31 through AI-41 retain their
-2026-09-04 snapshot heads below; AI-42 through AI-46 were checked on 2026-09-10.
-Only Chris can complete these owner checks. This index update does not resolve
-issue #639's owner decision about where future gate procedures should live.
+verify the live PR head before building. Each remaining branch-held entry carries
+its own historical snapshot head where applicable; former AI-38 is instead a
+current-`main` AI-47 subprocedure below. AI-42 through AI-46 were checked on
+2026-09-10. Only Chris can complete these owner checks. This index update does
+not resolve issue #639's owner decision about where future gate procedures should
+live.
 
 - **AI-31** — PR #572 (issue #566), branch `fix/issue566-modifier-authority`,
   exact head `e35a88e0a5ea24cf9c33d97b68ccfbeda57974bf`. Scope: trusted
@@ -274,9 +276,9 @@ or reload that exact `extension/dist` in a fresh branded-Chrome profile. Confirm
 the current page has capture and bridge markers `"1"` and the exact guard
 revision printed by the build, then run this consolidated sequence:
 
-1. **Owned controls (#600 / former AI-38):** complete the exact AI-38 guide,
-   including mouse and keyboard Dismiss and Undo, zero page-owned input
-   reactions, and proof that a later hostile page layer cannot cover the
+1. **Owned controls (#600 / former AI-38):** complete the linked current-`main`
+   subprocedure, including mouse and keyboard Dismiss and Undo, zero page-owned
+   input reactions, and proof that a later hostile page layer cannot cover the
    extension host.
 2. **Proceed authority (#608 / former AI-39):** complete the exact AI-39 guide.
    Page-injected UI remains warn/dismiss only; Proceed once lives in the
