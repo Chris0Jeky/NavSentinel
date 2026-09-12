@@ -35,6 +35,13 @@ This is a fast orientation layer for coding agents. It should point to interface
 
 ## Product Seams
 
+Vision overhaul: `extension/src/evidence/` projects existing bounded events into
+Protection Center and the `navsentinel-evidence` export contract.
+`experiments/vision-lab/shared/evidence.js` validates explicit imports;
+`web/evidence-workspace.js` owns separate imported history and assessments.
+See [the overhaul map](../docs/vision-overhaul/README.md) for renderer, daemon,
+desktop and proving commands. These seams add no detector or proceed authority.
+
 | Domain | Interface files | Meaty files | Verification hints |
 | --- | --- | --- | --- |
 | Navigation capture and CDS/NRS | `capture_isolated.ts`, `scoring.ts`, `nrs.ts`, `nav_anomaly.ts`, `adaptive_scoring.ts` | `dom_builder.ts`, `debug_overlay.ts`, `domain_groups.ts` | scoring/NRS/nav-anomaly/adaptive tests, Gym E2E. |

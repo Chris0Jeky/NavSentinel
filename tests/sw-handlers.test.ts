@@ -656,14 +656,15 @@ describe("service worker handlers", () => {
 
     it("defers ns-get-chain-info until hydration so it reflects restored chains (R1-1)", async () => {
       const mock = createChromeMock();
+      const chainStartedAt = Date.now();
       mock.chrome.storage.session._store["ns_sw:redirectChains"] = {
         "5": {
           // Full RedirectHop shape ({ url, ts, transitionType }) — the #339 restore validator requires it.
           hops: [
-            { url: "https://a.test/", ts: 1, transitionType: "link" },
-            { url: "https://b.test/", ts: 2, transitionType: "link" },
+            { url: "https://a.test/", ts: chainStartedAt, transitionType: "link" },
+            { url: "https://b.test/", ts: chainStartedAt + 1, transitionType: "link" },
           ],
-          startedAt: 1,
+          startedAt: chainStartedAt,
         },
       };
       let releaseGet!: () => void;
@@ -689,7 +690,12 @@ describe("service worker handlers", () => {
       await vi.runAllTimersAsync();
 
       // Full RedirectChainInfo contract (seeded a.test/b.test are non-redirectors).
-      expect(response).toEqual({ depth: 2, viaKnownRedirector: false, knownRedirectorHops: 0 });
+      expect(response).toEqual({
+        depth: 2,
+        viaKnownRedirector: false,
+        knownRedirectorHops: 0,
+        expiresAt: chainStartedAt + 1 + 15_000,
+      });
     });
   });
 
@@ -813,9 +819,16 @@ describe("service worker handlers", () => {
       const res = mock.dispatchRuntimeMessage(
         { type: "ns-get-chain-info" },
         { tab: { id: 10 } },
-      ) as { depth: number; viaKnownRedirector: boolean; knownRedirectorHops: number };
+      ) as {
+        depth: number;
+        viaKnownRedirector: boolean;
+        knownRedirectorHops: number;
+        expiresAt: number;
+      };
 
-      expect(res).toEqual({ depth: 0, viaKnownRedirector: false, knownRedirectorHops: 0 });
+      expect(res).toMatchObject({ depth: 0, viaKnownRedirector: false, knownRedirectorHops: 0 });
+      expect(res.expiresAt).toBeGreaterThanOrEqual(Date.now());
+      expect(res.expiresAt).toBeLessThanOrEqual(Date.now() + 15_000);
     });
 
     it("returns default chain info when no tab context (popup/devtools)", async () => {

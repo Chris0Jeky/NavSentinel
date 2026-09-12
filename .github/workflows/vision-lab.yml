@@ -18,12 +18,18 @@ on:
       - 'package-lock.json'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   vision-lab:
     runs-on: ubuntu-latest
+    # Keep a stuck daemon/browser run from consuming an unbounded hosted job.
+    # The artifact step remains available after the browser step's timeout.
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 24
           cache: npm
@@ -33,8 +39,10 @@ jobs:
       - name: Check generated standalone pages
         run: git diff --exit-code -- experiments/vision-lab/NavSentinel-Browser.html experiments/vision-lab/NavSentinel-Desktop.html experiments/vision-lab/NavSentinel-Intent-Relay.html experiments/vision-lab/extension/shared/core.js
       - run: npx playwright install --with-deps chromium
-      - run: npm run vision:test:browser
-      - uses: actions/upload-artifact@v6
+      - name: Run browser smoke checks
+        timeout-minutes: 15
+        run: npm run vision:test:browser
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: always()
         with:
           name: vision-lab-browser-evidence
