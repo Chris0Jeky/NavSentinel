@@ -5,14 +5,14 @@ export default defineConfig({
   resolve: {
     alias: {
       "@navsentinel/reputation-runtime": resolve(
-        __dirname,
+        import.meta.dirname,
         "extension/src/shared/reputation_runtime.disabled.ts",
       ),
       // Matches the release default: every committed profile leaves
       // `capabilities.jsBehaviorInstrumentation` false. Tests that exercise the
       // instrumentation itself import `content/js_behavior_monitor` by path.
       "@navsentinel/js-behavior-monitor": resolve(
-        __dirname,
+        import.meta.dirname,
         "extension/src/content/js_behavior_monitor.disabled.ts",
       ),
     },
