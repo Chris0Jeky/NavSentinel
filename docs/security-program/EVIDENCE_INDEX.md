@@ -25,7 +25,7 @@ An outcome describes what the independent harm oracle observed. An evidence stat
 | Order | State | Meaning | Canonical scenarios | Existing mappings |
 | --- | --- | --- | --- | --- |
 | 0 | UNMODELLED | Seed only. | 168 | 2 |
-| 1 | MODELLED | Invariant, boundary, malicious, benign, and mixed contracts were reviewed. | 0 | 62 |
+| 1 | MODELLED | Invariant, boundary, malicious, benign, and mixed contracts were reviewed. | 0 | 63 |
 | 2 | FIXTURE_PROVEN | The safe malicious path reaches the local harm sink and controls reproduce. | 0 | 0 |
 | 3 | REGRESSION_PROVEN | The product handles the declared fixture and controls with an independent oracle. | 0 | 2 |
 | 4 | ROBUSTNESS_PROVEN | Declared adjacent mutations and benign duals pass within a recorded budget. | 0 | 0 |
@@ -40,13 +40,13 @@ An outcome describes what the independent harm oracle observed. An evidence stat
 | CURRENT_REGRESSION | 62 |
 | STALE | 1 |
 | INVALID | 1 |
-| UNVERIFIED | 2 |
+| UNVERIFIED | 3 |
 
 ## Fixture safety holds
 
 | Disposition | Mapped records | Fixture paths |
 | --- | --- | --- |
-| CLEAR | 66 | 0 |
+| CLEAR | 67 | 0 |
 | SAFETY_HOLD | 0 | 0 |
 | QUARANTINED | 0 | 0 |
 

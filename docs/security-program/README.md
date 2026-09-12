@@ -10,7 +10,7 @@ All experiments are defensive, local, inert, and synthetic. No programme fixture
 | --- | --- | --- |
 | Release extension | Unchanged | Interaction-only, local-first, zero runtime network calls, and no new powerful permission. |
 | Research extension/profile | Unchanged | Unpacked and non-release. Broader observation remains explicit research work. |
-| Proving Ground | Bounded typed local sinks for UI-004 and one representative evasion journey | Owns safe fixtures, local sinks, oracles, mutation, and evidence receipts. It is test infrastructure, not release code. |
+| Proving Ground | Bounded typed local sinks for UI-004, one representative evasion journey, and CLIP-005 | Owns safe fixtures, local sinks, oracles, mutation, and evidence receipts. It is test infrastructure, not release code. |
 | Optional native companion | Design only | No host, native messaging permission, enforcement, listener, updater, or distribution exists. |
 
 ## Start here
@@ -35,6 +35,7 @@ npm run security:check
 npm run security:check:source
 npm run build
 npm run test:e2e:proving-ground
+npm run test:e2e:clipboard-timebomb
 ```
 
 `security:import` is read-only by default: when the ignored source bundle is mounted, it verifies the tracked scenario, capability, outcome, evidence-state, work-unit, and provenance snapshots against that bundle. `npm run security:import -- --write` creates missing snapshots only. Replacing an existing differing canonical snapshot requires the deliberately explicit `--write --force` mode after review. The live capability, issue, existing-evidence, and fixture-safety maps are curated repository-current inputs and are never overwritten by import or generation.
@@ -43,7 +44,7 @@ npm run test:e2e:proving-ground
 
 Run generation after an intentional registry change, then commit both source registries and generated views. Never edit `extension/dist` for programme work.
 
-The Proving Ground command runs the `NS-ADV-UI-004` attack, benign, and mixed contracts in Playwright-bundled Chromium. The separate `tests/e2e/evasion-locality-evidence.spec.ts` lane runs attack-baseline, protected, benign, and mixed contracts for the composite evasion representative. Both write exact-head evidence receipts only under ignored `test-results/` output. Commit the fixture, oracle, and test, but never commit generated receipts or `extension/dist`.
+The Proving Ground command runs the `NS-ADV-UI-004` attack, benign, and mixed contracts in Playwright-bundled Chromium. The separate `tests/e2e/evasion-locality-evidence.spec.ts` lane runs attack-baseline, protected, benign, and mixed contracts for the composite evasion representative. `test:e2e:clipboard-timebomb` runs the four-arm `NS-ADV-CLIP-005` delayed-rewrite contract against a one-use typed local sink and a pre-launch egress fence, including a matched benign page-originated delayed formatting write. It records `WARNED`, not blocked, for the protected arm because the release extension alerts but does not prevent or restore the rewritten clipboard. CLIP-005 output is an explicitly `UNVERIFIED` diagnostic observation with a machine-readable `MODELLED` ceiling because the runner cannot reject a stale release-eligible `extension/dist`; it is not an exact-head evidence receipt. All lane output stays under ignored `test-results/`. Commit the fixture, oracle, and test, but never commit generated receipts or `extension/dist`.
 
 ## Evidence rule
 

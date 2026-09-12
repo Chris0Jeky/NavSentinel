@@ -10,6 +10,16 @@ has 8; only those two milestones are active. Planned M2/M3/M4, gated M5,
 passive maintenance, and frozen R1 are not fallback queues. The exact receipt is
 [`GITHUB_ADMIN_RECEIPT.md`](../development-architecture/GITHUB_ADMIN_RECEIPT.md).
 
+The 2026-09-12 adversarial expansion adds one bounded M0 test vertical for
+`NS-ADV-CLIP-005`. It models a manual benign copy followed by a delayed inert
+clipboard rewrite, with an extension-disabled harm baseline, a release-extension
+warning arm, a matched delayed benign formatting rewrite, and a mixed OTP
+control. Its typed sink and pre-launch egress fence are browser-only test
+infrastructure. Diagnostic output is explicitly `UNVERIFIED` and capped at
+`MODELLED` because this runner cannot reject a stale release-eligible build. It
+does not alter runtime behavior, satisfy native/OS coverage, or turn a warning
+into a block.
+
 As of 2026-09-04, `origin/main` is `a440e35` and the runtime queue is parked in
 full: **#572** (AI-31, still held on the retained SP-F-013 rollback survivor),
 **#599** (AI-37, reconciled with current `main`; owner queue-design decision and
