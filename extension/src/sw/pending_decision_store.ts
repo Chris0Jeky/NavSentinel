@@ -91,7 +91,7 @@ function defaultOpaqueValue(): string {
   return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-async function defaultFingerprintUrl(exactUrl: string): Promise<string> {
+export async function fingerprintPendingDecisionUrl(exactUrl: string): Promise<string> {
   const encoded = new TextEncoder().encode(exactUrl);
   const digest = await crypto.subtle.digest("SHA-256", encoded);
   return [...new Uint8Array(digest)]
@@ -167,7 +167,7 @@ export class PendingDecisionStore {
     this.storage = dependencies.storage ?? defaultSessionStorage();
     this.now = dependencies.now ?? Date.now;
     this.generateOpaqueValue = dependencies.generateOpaqueValue ?? defaultOpaqueValue;
-    this.fingerprintUrl = dependencies.fingerprintUrl ?? defaultFingerprintUrl;
+    this.fingerprintUrl = dependencies.fingerprintUrl ?? fingerprintPendingDecisionUrl;
   }
 
   hydrate(): Promise<void> {

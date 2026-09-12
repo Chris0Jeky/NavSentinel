@@ -1,5 +1,5 @@
 import type { EventLogEntry, UnscoredThreatKind } from "../shared/storage";
-import { isUnscoredThreatKind, SILENT_DECISION_KINDS } from "../shared/storage";
+import { isUnscoredThreatKind, normalizeEventPageSite, SILENT_DECISION_KINDS } from "../shared/storage";
 import { getRegistrableDomain, normalizeHost } from "../shared/domain";
 import { isRiskReducingReason } from "../shared/reason_codes";
 
@@ -134,7 +134,10 @@ function pickNewestSiteEvent<T extends EventLogEntry>(
     // New entries carry the browser-derived top-level page hostname. Prefer it
     // so child-frame events follow the page the popup is showing; legacy rows
     // have no pageSite and continue matching by their emitting site.
-    const associatedSite = ev.pageSite ?? ev.site;
+    // A malformed/empty imported pageSite must not mask the valid legacy site.
+    // Normalize both fields before reducing them to a registrable domain so a
+    // full URL or path cannot become a popup association by accident.
+    const associatedSite = normalizeEventPageSite(ev.pageSite) ?? normalizeEventPageSite(ev.site);
     const site = associatedSite ? getRegistrableDomain(normalizeHost(associatedSite)) : "";
     if (site && site === registrableDomain) return ev;
   }
