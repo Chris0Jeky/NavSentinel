@@ -28,7 +28,10 @@ sub-result under AI-47; this guide does not assert owner acceptance.
    Set Navigation Off and Save in window B (start both from Smart). Window A
    shows a conflict and keeps its draft. **Use external values** adopts Off;
    unrelated unsaved edits remain. Repeat, choosing **Keep my edits**, then Save:
-   the explicit local choice wins and both windows show it.
+   the explicit local choice wins and both windows show it. Then make differing
+   Navigation edits in both windows and save them without waiting for the first
+   result. The later write must show the same conflict choice rather than silently
+   replacing the already-saved mode.
 7. Keep an unrelated Options field dirty, change popup Navigation/Credential and
    overlay controls, then Save Options. Popup choices must survive. Check both
    mouse and keyboard operation and readable status at a narrow window width.

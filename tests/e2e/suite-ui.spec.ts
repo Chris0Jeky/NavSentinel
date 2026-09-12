@@ -98,6 +98,49 @@ test("Options autosaves validated edits and resolves cross-window conflicts expl
   }
 });
 
+test("Options exposes a conflict for simultaneous same-field saves @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-options-cas-"));
+  const context = await chromium.launchPersistentContext(userDataDir, {
+    headless: false,
+    args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
+  });
+  try {
+    const extensionId = await getExtensionId(context);
+    const first = await context.newPage();
+    const second = await context.newPage();
+    const optionsUrl = `chrome-extension://${extensionId}/src/options/options.html`;
+    await Promise.all([first.goto(optionsUrl), second.goto(optionsUrl)]);
+    await first.locator("#autoSave").uncheck();
+    await expect(second.locator("#autoSave")).not.toBeChecked();
+
+    await first.locator('#navModeSeg .seg-btn[data-value="strict"]').click();
+    await second.locator('#navModeSeg .seg-btn[data-value="off"]').click();
+    await Promise.all([first.locator("#save").click(), second.locator("#save").click()]);
+
+    const firstConflict = await first.locator("#settingsConflict").isVisible();
+    const secondConflict = await second.locator("#settingsConflict").isVisible();
+    expect(Number(firstConflict) + Number(secondConflict)).toBe(1);
+
+    const loser = firstConflict ? first : second;
+    const expectedMode = firstConflict ? "strict" : "off";
+    await expect(loser.locator("#dirtyStatus")).toContainText("Conflicting changes");
+    await expect(loser.locator(`#navModeSeg .seg-btn[data-value="${expectedMode}"]`))
+      .toHaveAttribute("aria-checked", "true");
+
+    await loser.locator("#keepDraft").click();
+    await loser.locator("#save").click();
+    const worker = await getServiceWorker(context);
+    await expect.poll(() => worker.evaluate(async key => {
+      const stored = await chrome.storage.local.get(key);
+      return stored[key]?.nav?.defaultMode;
+    }, SUITE_SETTINGS_KEY)).toBe(expectedMode);
+  } finally {
+    await context.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
 test("Options import cancels a pending autosave before replacing settings @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-import-autosave-"));

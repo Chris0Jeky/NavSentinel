@@ -505,6 +505,40 @@ describe("suite storage and allowlist migration", () => {
     expect(settings.credential.mode).toBe("strict");
   });
 
+  it("rejects a simultaneous conflicting Options patch while preserving disjoint patches (#647)", async () => {
+    const { chrome } = createChromeMock();
+    Object.assign(chrome, {
+      runtime: {
+        id: "suite-test",
+        getURL: (path: string) => `chrome-extension://suite-test/${path}`,
+      },
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { getSuiteSettings, handleSuiteSettingsUpdateMessage } = await import("../extension/src/shared/storage");
+    const options = { id: "suite-test", url: "chrome-extension://suite-test/src/options/options.html" } as chrome.runtime.MessageSender;
+    const baseline = await getSuiteSettings();
+
+    const [first, conflicting] = await Promise.all([
+      handleSuiteSettingsUpdateMessage(
+        { type: "ns-suite-settings-update", patch: { nav: { defaultMode: "off" } }, expected: baseline }, options,
+      ),
+      handleSuiteSettingsUpdateMessage(
+        { type: "ns-suite-settings-update", patch: { nav: { defaultMode: "strict" } }, expected: baseline }, options,
+      ),
+    ]);
+    expect(first.nav.defaultMode).toBe("off");
+    expect(conflicting).toMatchObject({ conflict: true, nav: { defaultMode: "off" } });
+
+    const current = await getSuiteSettings();
+    const disjoint = await handleSuiteSettingsUpdateMessage(
+      { type: "ns-suite-settings-update", patch: { credential: { mode: "strict" } }, expected: baseline }, options,
+    );
+    expect(disjoint.credential.mode).toBe("strict");
+    expect(current.nav.defaultMode).toBe("off");
+    expect((await getSuiteSettings()).credential.mode).toBe("strict");
+  });
+
   it("rejects untrusted and malformed suite-settings worker messages (#558)", async () => {
     const { chrome } = createChromeMock();
     Object.assign(chrome, {
@@ -530,6 +564,9 @@ describe("suite storage and allowlist migration", () => {
     )).rejects.toThrow("invalid");
     await expect(handleSuiteSettingsUpdateMessage(
       { type: "ns-suite-settings-update", patch: JSON.parse('{"__proto__":{}}') }, popup,
+    )).rejects.toThrow("invalid");
+    await expect(handleSuiteSettingsUpdateMessage(
+      { type: "ns-suite-settings-update", patch: { nav: { defaultMode: "off" } }, expected: [] }, popup,
     )).rejects.toThrow("invalid");
     await expect(handleSuiteSettingsUpdateMessage(
       { type: "ns-suite-settings-update", patch: { logLimit: 999999 } }, popup,
