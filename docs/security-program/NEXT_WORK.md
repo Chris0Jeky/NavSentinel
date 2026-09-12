@@ -21,6 +21,13 @@ is **OPEN — not run** until it actually merges. #687 is merged test-only work:
 its evidence stays `MODELLED` and its diagnostic `UNVERIFIED`; it is neither
 owner Chrome evidence nor OS-paste prevention.
 
+The #687 adversarial expansion models a manual benign copy followed by a
+delayed inert clipboard rewrite, with an extension-disabled harm baseline, a
+release-extension warning arm, a matched delayed benign formatting rewrite,
+and a mixed OTP control. Its typed sink and pre-launch egress fence are
+browser-only test infrastructure. It does not alter runtime behavior, satisfy
+native/OS coverage, or turn a warning into a block.
+
 Issue #637 is **CLOSED/implemented via #649** and is not an execution route.
 The live candidate and receipt tracker is [`PROGRAM_STATE.md`](PROGRAM_STATE.md).
 There is still no owner Chrome, accessibility, release-signing, store, or
