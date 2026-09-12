@@ -107,7 +107,7 @@ describe("Protection Center wired UI", () => {
     mocks.getEventLog.mockResolvedValue([row(3000, "late.test"), row(1000, "early.test"), row(NaN, "bad.test"), row(1000, "tie.test")]);
     get("refresh").click();
     await vi.waitFor(() => expect(get("total").textContent).toBe("3"));
-    const routes = [...document.querySelectorAll(".event-route")].map(node => node.textContent);
+    const routes = Array.from(document.querySelectorAll(".event-route")).map(node => node.textContent);
     expect(routes).toEqual(["late.test → Destination unavailable", "tie.test → Destination unavailable", "early.test → Destination unavailable"]);
     get("export").click();
     const payload = JSON.parse(get<HTMLTextAreaElement>("exportPreview").value);
