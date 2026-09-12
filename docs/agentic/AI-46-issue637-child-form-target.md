@@ -1,12 +1,18 @@
-# AI-46 — issue #637 child-form target Gate-3
+# Retained AI-46 — issue #637 child-form target Gate-3
 
-Use this guide only for the pull request that fixes issue #637. The change
-alters shipped MAIN-world form interception, so a maintainer must verify the
-exact built head in branded Chrome before merge. Only Chris can record the
-Gate-3 result.
+> **POST-MERGE QUEUE since 2026-09-12 — read before step 1.** Under
+> [`D-2026-09-12-P`](DECISIONS.md), PR #649 may merge after its non-human gates
+> without completing this branded-Chrome check first. If it merges, preserve
+> every step below as the former AI-46 sub-result inside consolidated AI-47 on
+> current `main`; this guide is neither a renewed pre-merge gate nor evidence
+> that the human check passed.
 
-1. Confirm the pull request is open, ready for review, and still based on PR
-   #636. Record its 40-character head SHA and require exact-head CI to be green.
+Use this guide only after the pull request fixing issue #637 has merged. The
+change alters shipped MAIN-world form interception, so only Chris can record
+the branded-Chrome result.
+
+1. Record the then-current 40-character `main` SHA containing PR #649 and
+   require the reconciled PR head's exact-head CI to have been green.
 2. In that exact checkout, run `npm run build`. Record the emitted
    `ui-guard=<revision>` marker and leave `extension/dist` unchanged afterward.
 3. Open `chrome://extensions`, enable Developer mode, and load or reload that
@@ -26,10 +32,10 @@ Gate-3 result.
 6. Re-open `chrome://extensions` and confirm there are still no new extension
    errors. Record the Chrome version and the exact head SHA.
 
-On a pass, reply:
+On a pass, record:
 
-`AI-46 done; Gate-3 passed on issue #637 PR #<n> at <40-character SHA>; Chrome <version>`
+`AI-47 child-form sub-result (former AI-46) passed on main at <40-character SHA>; Chrome <version>`
 
-On a mismatch, leave AI-46 open and report the failing step, URL class (do not
-include credentials or private query values), expected behavior, observed
-behavior, Chrome version, PR number, and exact head SHA.
+On a mismatch, leave consolidated AI-47 open and report the failing step, URL
+class (do not include credentials or private query values), expected behavior,
+observed behavior, Chrome version, and exact `main` SHA.

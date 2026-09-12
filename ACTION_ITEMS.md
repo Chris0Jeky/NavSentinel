@@ -4,13 +4,6 @@
 
 # ACTION ITEMS — Human-Owned Tasks (NavSentinel)
 
-**OPEN: AI-46 — Child-frame form target allowance.** PR #649 fixes issue #637's
-bare-click to top-frame form-submit allowance path. The owner Chrome procedure
-is [the AI-46 guide](docs/agentic/AI-46-issue637-child-form-target.md).
-Record the candidate head and Chrome version; automated Chromium is not owner
-acceptance. This PR is stacked on #636, whose AI-41 check also remains open.
-This addition does not change the guided-resolution cursor.
-
 **Purpose:** the concise, durable register for human decisions and manual checks.
 It is not a live GitHub snapshot: re-check Git, GitHub, and product checks before
 acting. `docs/Project_Roadmap.md` holds execution work; archive material is
