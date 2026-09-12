@@ -10,9 +10,9 @@ sink.
 
 | Slice | Scenario | Attack vector | Candidate state | Evidence ceiling |
 | --- | --- | --- | --- | --- |
-| RW-21 | `NS-ADV-WIN-005` | one trusted gesture is double-spent across two popup destinations | exact-source head `a666fda4d2593efbb043440ae6c8bede6fcf726e` passed once plus three repeats after full build-input provenance hardening; re-review/CI pending | local bundled-Chromium regression |
-| RW-24 | `NS-ADV-EVADE-003` | delayed time-bomb popup fires after gesture authority expires | exact-source head `a666fda4d2593efbb043440ae6c8bede6fcf726e` passed once plus three repeats after full build-input provenance hardening; re-review/CI pending | one fixed timer boundary |
-| RW-25 | `NS-ADV-STATE-008` | rapid popup close/reopen churn leaks stale authority to a final target | exact-source head `a666fda4d2593efbb043440ae6c8bede6fcf726e` passed once plus three repeats after full build-input provenance hardening; re-review/CI pending | one authored churn ordering |
+| RW-21 | `NS-ADV-WIN-005` | one trusted gesture is double-spent across two popup destinations | behavior passed once plus three repeats at `a666fda4`; PR #681 parked after review found an unresolved HIGH receipt-provenance boundary tracked by #684 | local bundled-Chromium regression |
+| RW-24 | `NS-ADV-EVADE-003` | delayed time-bomb popup fires after gesture authority expires | behavior passed once plus three repeats at `a666fda4`; PR #681 parked after review found an unresolved HIGH receipt-provenance boundary tracked by #684 | one fixed timer boundary |
+| RW-25 | `NS-ADV-STATE-008` | rapid popup close/reopen churn leaks stale authority to a final target | behavior passed once plus three repeats at `a666fda4`; PR #681 parked after review found an unresolved HIGH receipt-provenance boundary tracked by #684 | one authored churn ordering |
 
 The executable receipt emitted by
 `tests/e2e/state-authority-sink.spec.ts` is authoritative for a run. Do not turn
@@ -55,8 +55,13 @@ attempts are recorded separately from authored-fixture traffic.
 - [x] one exact-source-head three-repeat campaign run after provenance hardening
 - [x] legacy RW-21/RW-24/RW-25 stress regressions
 - [x] `npm run security:check` after registry promotion
-- [ ] fresh-context adversarial re-review after the HIGH provenance fix
+- [x] two-round fresh-context adversarial review completed; final verdict BLOCK
 - [ ] hosted CI on the pushed head
+
+PR #681 remains ready-for-review but parked. Resume only through #684: replace
+filter-aware worktree comparison with raw committed-byte comparison or a clean
+isolated checkout, reject untracked/special build inputs, add the clean-filter
+bypass regression, then re-run this campaign and one issue-scoped review.
 
 Any missing attack-baseline receipt, any protected or mixed harm receipt, an
 invalid sink request, a source/hash mismatch, or authored-fixture external
