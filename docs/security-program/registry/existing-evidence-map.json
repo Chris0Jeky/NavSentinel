@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
-  "as_of": "2026-08-30",
-  "mapping_count": 65,
+  "as_of": "2026-09-12",
+  "mapping_count": 66,
   "mappings": [
     {
       "id": "MAP-LEVEL-01",
@@ -685,19 +685,26 @@
       "primary_scenario_id": "NS-ADV-WIN-005",
       "supporting_scenario_ids": [],
       "primary_harm_boundary": "One scoped allowance is consumed twice for separate browsing-context consequences.",
-      "role": "attack",
-      "current_oracle": "Playwright observes the browser consequence and the corresponding product state in a local synthetic journey.",
-      "oracle_type": "mixed",
-      "evidence_state": "MODELLED",
+      "role": "mixed",
+      "current_oracle": "With native popup blocking disabled, a typed loopback sink records the extension-disabled double-spend harm; protected and mixed release-extension arms require zero harm receipts while the legitimate first destination or native-keyboard benign control remains usable.",
+      "oracle_type": "independent_harm",
+      "evidence_state": "REGRESSION_PROVEN",
       "evidence_validity": "CURRENT_REGRESSION",
-      "known_limitation": "This is one timing sequence and not proof for every authority token or consequence type.",
-      "issue_refs": [],
+      "known_limitation": "One authored 80 ms double-spend sequence in Playwright-bundled Chromium does not prove every authority token, target relationship, browser policy, or branded-Chrome behavior.",
+      "issue_refs": [
+        "#449",
+        "#466",
+        "#175"
+      ],
       "pr_refs": [],
       "paths": [
         "gym/rw21-allow-once-double-spend.html",
         "gym/rw21-settings-popup.html",
         "gym/rw21-exfil-popup.html",
-        "tests/e2e/navsentinel.stress.spec.ts"
+        "tests/e2e/navsentinel.stress.spec.ts",
+        "tests/e2e/state-authority-sink.spec.ts",
+        "tests/e2e/proving_ground_fake_sink.ts",
+        "docs/security-program/STATE_AUTHORITY_CAMPAIGN.md"
       ]
     },
     {
@@ -759,18 +766,27 @@
         "NS-ADV-STATE-004"
       ],
       "primary_harm_boundary": "A popup fires after the initiating authority has expired during idle time.",
-      "role": "attack",
-      "current_oracle": "Playwright observes the browser consequence and the corresponding product state in a local synthetic journey.",
-      "oracle_type": "mixed",
-      "evidence_state": "MODELLED",
+      "role": "mixed",
+      "current_oracle": "With native popup blocking disabled, a typed loopback sink records the extension-disabled delayed harm; protected and mixed release-extension arms require zero harm receipts while a native-keyboard benign control remains usable.",
+      "oracle_type": "independent_harm",
+      "evidence_state": "REGRESSION_PROVEN",
       "evidence_validity": "CURRENT_REGRESSION",
-      "known_limitation": "One timer boundary does not establish robustness across throttling, sleep, or BFCache.",
-      "issue_refs": [],
+      "known_limitation": "One authored six-second timer in Playwright-bundled Chromium does not establish robustness across real sleep/resume, background throttling, BFCache, calendar gates, worker suspension, or branded Chrome.",
+      "issue_refs": [
+        "#449",
+        "#175",
+        "#389",
+        "#420",
+        "#443"
+      ],
       "pr_refs": [],
       "paths": [
         "gym/rw24-idle-resume-popup.html",
         "gym/rw24-stale-popup.html",
-        "tests/e2e/navsentinel.stress.spec.ts"
+        "tests/e2e/navsentinel.stress.spec.ts",
+        "tests/e2e/state-authority-sink.spec.ts",
+        "tests/e2e/proving_ground_fake_sink.ts",
+        "docs/security-program/STATE_AUTHORITY_CAMPAIGN.md"
       ]
     },
     {
@@ -780,19 +796,26 @@
       "primary_scenario_id": "NS-ADV-STATE-008",
       "supporting_scenario_ids": [],
       "primary_harm_boundary": "Stale authority must not survive rapid popup close/reopen churn to reach an exfiltration sink.",
-      "role": "attack",
-      "current_oracle": "Playwright observes the browser consequence and the corresponding product state in a local synthetic journey.",
-      "oracle_type": "mixed",
-      "evidence_state": "MODELLED",
+      "role": "mixed",
+      "current_oracle": "With native popup blocking disabled, a typed loopback sink records the extension-disabled post-churn harm; protected and mixed release-extension arms require zero harm receipts while a native-keyboard benign control remains usable.",
+      "oracle_type": "independent_harm",
+      "evidence_state": "REGRESSION_PROVEN",
       "evidence_validity": "CURRENT_REGRESSION",
-      "known_limitation": "The local churn sequence does not cover browser crashes, profile restart, or every reuse ordering.",
-      "issue_refs": [],
+      "known_limitation": "One authored close/reopen ordering with inert about:blank intermediates in Playwright-bundled Chromium does not cover crashes, profile restart, tab-id reuse, every named-window ordering, or branded Chrome.",
+      "issue_refs": [
+        "#449",
+        "#175",
+        "#443"
+      ],
       "pr_refs": [],
       "paths": [
         "gym/rw25-rapid-close-reopen.html",
         "gym/rw25-churn-popup.html",
         "gym/rw25-exfil-popup.html",
-        "tests/e2e/navsentinel.stress.spec.ts"
+        "tests/e2e/navsentinel.stress.spec.ts",
+        "tests/e2e/state-authority-sink.spec.ts",
+        "tests/e2e/proving_ground_fake_sink.ts",
+        "docs/security-program/STATE_AUTHORITY_CAMPAIGN.md"
       ]
     },
     {
@@ -1312,20 +1335,59 @@
       "primary_scenario_id": "NS-ADV-STATE-001",
       "supporting_scenario_ids": [
         "NS-ADV-STATE-007",
-        "NS-ADV-STATE-008"
+        "NS-ADV-STATE-008",
+        "NS-ADV-WIN-005",
+        "NS-ADV-EVADE-003"
       ],
       "primary_harm_boundary": "Timing, restart, or tab churn causes stale authority, state leakage, or an unauthorized browsing context.",
       "role": "mixed",
-      "current_oracle": "Serial Playwright journeys inspect browser consequences across five authored stress sequences.",
-      "oracle_type": "browser_outcome",
+      "current_oracle": "Serial Playwright journeys inspect five authored stress sequences; RW-21, RW-24, and RW-25 additionally compare typed local harm receipts across attack-baseline, protected, benign, and mixed arms.",
+      "oracle_type": "mixed",
       "evidence_state": "MODELLED",
       "evidence_validity": "CURRENT_REGRESSION",
-      "known_limitation": "Five fixed journeys are regression cases, not a distributional robustness campaign.",
-      "issue_refs": [],
+      "known_limitation": "The five fixed journeys are not a distributional robustness campaign; RW-22 does not force a real service-worker restart, and RW-23 retains a browser-outcome rather than independent-harm oracle.",
+      "issue_refs": [
+        "#449",
+        "#175"
+      ],
       "pr_refs": [],
       "paths": [
         "playwright.stress.config.ts",
-        "tests/e2e/navsentinel.stress.spec.ts"
+        "tests/e2e/navsentinel.stress.spec.ts",
+        "tests/e2e/state-authority-sink.spec.ts",
+        "docs/security-program/STATE_AUTHORITY_CAMPAIGN.md"
+      ]
+    },
+    {
+      "id": "MAP-LANE-STATE-AUTHORITY-SINK",
+      "kind": "evidence_lane",
+      "label": "State-authority independent-sink campaign",
+      "primary_scenario_id": "NS-ADV-STATE-008",
+      "supporting_scenario_ids": [
+        "NS-ADV-WIN-005",
+        "NS-ADV-EVADE-003"
+      ],
+      "primary_harm_boundary": "An expired, duplicated, or stale browsing-context authority reaches a typed wrong-target navigation sink.",
+      "role": "mixed",
+      "current_oracle": "An extension-disabled adverse-popup-policy baseline must reach the typed loopback harm sink; the release extension must keep protected and mixed arms at zero harm receipts while native-keyboard benign controls still complete.",
+      "oracle_type": "independent_harm",
+      "evidence_state": "REGRESSION_PROVEN",
+      "evidence_validity": "CURRENT_REGRESSION",
+      "known_limitation": "Three deterministic authored journeys in Playwright-bundled Chromium do not prove branded Chrome, open-web efficacy, real sleep or worker restart, crash recovery, randomized concurrency, or every authority consumer.",
+      "issue_refs": [
+        "#449",
+        "#175"
+      ],
+      "pr_refs": [],
+      "paths": [
+        "gym/rw21-allow-once-double-spend.html",
+        "gym/rw24-idle-resume-popup.html",
+        "gym/rw25-rapid-close-reopen.html",
+        "gym/local-fixture-targets.js",
+        "playwright.stress.config.ts",
+        "tests/e2e/state-authority-sink.spec.ts",
+        "tests/e2e/proving_ground_fake_sink.ts",
+        "docs/security-program/STATE_AUTHORITY_CAMPAIGN.md"
       ]
     },
     {

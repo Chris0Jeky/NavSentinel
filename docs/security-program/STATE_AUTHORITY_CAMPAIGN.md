@@ -10,9 +10,9 @@ sink.
 
 | Slice | Scenario | Attack vector | Candidate state | Evidence ceiling |
 | --- | --- | --- | --- | --- |
-| RW-21 | `NS-ADV-WIN-005` | one trusted gesture is double-spent across two popup destinations | implementation complete; exact-head qualification pending | local bundled-Chromium regression |
-| RW-24 | `NS-ADV-EVADE-003` | delayed time-bomb popup fires after gesture authority expires | implementation complete; exact-head qualification pending | one fixed timer boundary |
-| RW-25 | `NS-ADV-STATE-008` | rapid popup close/reopen churn leaks stale authority to a final target | implementation complete; exact-head qualification pending | one authored churn ordering |
+| RW-21 | `NS-ADV-WIN-005` | one trusted gesture is double-spent across two popup destinations | exact-source head `b4d0b44bab1dc759a63d3f04c89220563ec7f2ae` passed once plus three repeats; review/CI pending | local bundled-Chromium regression |
+| RW-24 | `NS-ADV-EVADE-003` | delayed time-bomb popup fires after gesture authority expires | exact-source head `b4d0b44bab1dc759a63d3f04c89220563ec7f2ae` passed once plus three repeats; review/CI pending | one fixed timer boundary |
+| RW-25 | `NS-ADV-STATE-008` | rapid popup close/reopen churn leaks stale authority to a final target | exact-source head `b4d0b44bab1dc759a63d3f04c89220563ec7f2ae` passed once plus three repeats; review/CI pending | one authored churn ordering |
 
 The executable receipt emitted by
 `tests/e2e/state-authority-sink.spec.ts` is authoritative for a run. Do not turn
@@ -43,14 +43,14 @@ attempts are recorded separately from authored-fixture traffic.
 
 ## Qualification checklist
 
-- [ ] `npm run typecheck`
-- [ ] focused ESLint for the changed test files
-- [ ] `npm run test -- --run tests/gym-local-fixture-contract.test.ts`
-- [ ] `npm run build`
-- [ ] one exact-head focused campaign run
-- [ ] one exact-head three-repeat campaign run
-- [ ] legacy RW-21/RW-24/RW-25 stress regressions
-- [ ] `npm run security:check` after any registry promotion
+- [x] `npm run typecheck`
+- [x] focused ESLint for the changed test files
+- [x] `npm run test -- --run tests/gym-local-fixture-contract.test.ts`
+- [x] `npm run build`
+- [x] one exact-source-head focused campaign run
+- [x] one exact-source-head three-repeat campaign run
+- [x] legacy RW-21/RW-24/RW-25 stress regressions
+- [x] `npm run security:check` after registry promotion
 - [ ] fresh-context adversarial review
 - [ ] hosted CI on the pushed head
 
