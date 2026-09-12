@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Issue 593 modelled hidden-media child</title>
+  <style>
+    html, body, #hidden-interactive-layer, #declared-top-link { width: 100%; height: 100%; margin: 0; }
+    #hidden-interactive-layer { display: block; border: 0; background: transparent; color: transparent; cursor: pointer; }
+    #declared-top-link { display: grid; place-items: center; color: #eaf4ff; background: #1d3550; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <!-- MODELLED: non-anchor layer deliberately covers the visible parent player. -->
+  <div id="hidden-interactive-layer" role="button" tabindex="0" aria-label="Playback surface"></div>
+  <!-- MODELLED: the same layer, but wrapped in a fragment-only anchor so it
+       falsely *declares* a navigation intent it never uses. -->
+  <a id="forged-intent-layer" href="#" hidden aria-label="Playback surface"></a>
+  <!-- Benign control: a child frame that DECLARES where it sends the tab. -->
+  <a id="declared-top-link" hidden target="_top">Open the linked page</a>
+  <script>
+    (() => {
+      const params = new URLSearchParams(location.search);
+      const arm = params.get("arm") || "unarmed";
+      const primitive = params.get("primitive") || "child-assign";
+      const delayMs = Number(params.get("delay") || "100");
+      const input = params.get("input") || "physical-click";
+      const role = params.get("role") || "attack";
+      const rawSink = params.get("sink") || "";
+      const layer = document.getElementById("hidden-interactive-layer");
+      const declaredLink = document.getElementById("declared-top-link");
+      let armed = false;
+      const scenarioId = "issue-593-hidden-media-layer-modelled";
+      const consequence = "modelled-hidden-media-navigation";
+      const sentinel = "NAVSENTINEL_SENTINEL_DO_NOT_RUN";
+      const allowedArms = new Map([
+        ["child-assign-100", { primitive: "child-assign", delayMs: 100 }],
+        ["child-assign-1600", { primitive: "child-assign", delayMs: 1600 }],
+        ["child-assign-no-input", { primitive: "child-assign", delayMs: 100 }],
+        ["top-assign-100", { primitive: "top-assign", delayMs: 100 }],
+        ["forged-anchor-top-100", { primitive: "forged-anchor-top", delayMs: 100 }],
+        ["top-assign-1600", { primitive: "top-assign", delayMs: 1600 }],
+        ["window-open-100", { primitive: "window-open", delayMs: 100 }],
+        ["benign-anchor-top-keyboard", { primitive: "anchor-top", delayMs: 0 }],
+        ["benign-top-script-100", { primitive: "top-script", delayMs: 100 }],
+      ]);
+      const expectedArm = allowedArms.get(arm);
+      const armIsAllowed = !!expectedArm && expectedArm.primitive === primitive &&
+        expectedArm.delayMs === delayMs && (role === "attack" || role === "benign");
+
+      const safeSink = (() => {
+        try {
+          const target = new URL(rawSink);
+          const targetId = target.searchParams.get("target_id") || "";
+          const expectedRun = `${scenarioId}-${arm}`;
+          const expectedTarget = /^(baseline|protected)-[a-z0-9-]{2,48}$/u;
+          const exactKeys = ["run_id", "scenario_id", "role", "consequence", "target_id", "sentinel"];
+          const exactContract = target.searchParams.size === exactKeys.length && exactKeys.every((key) =>
+            target.searchParams.getAll(key).length === 1
+          );
+          return armIsAllowed && target.protocol === "http:" && target.hostname === "127.0.0.1" &&
+            Number(target.port) >= 46100 && Number(target.port) <= 46124 &&
+            !target.username && !target.password && !target.hash &&
+            target.pathname === "/__navsentinel_fake_sink" && exactContract &&
+            target.searchParams.get("run_id") === expectedRun &&
+            target.searchParams.get("scenario_id") === scenarioId &&
+            target.searchParams.get("role") === role &&
+            target.searchParams.get("consequence") === consequence &&
+            target.searchParams.get("sentinel") === sentinel &&
+            expectedTarget.test(targetId) && targetId.endsWith(`-${arm}`) ? target.href : "";
+        } catch {
+          return "";
+        }
+      })();
+
+      function report(entry) {
+        const complete = { arm, frame: "child", at: Math.round(performance.now()), ...entry };
+        window.parent.postMessage({ source: "navsentinel-issue593", entry: complete }, location.origin);
+        console.info(`NAVSENTINEL_ISSUE593:${JSON.stringify(complete)}`);
+      }
+
+      function execute() {
+        report({ phase: "executing", primitive, delayMs, sinkArmed: !!safeSink });
+        if (!safeSink) return;
+        if (primitive === "child-assign") {
+          window.location.assign(safeSink);
+          return;
+        }
+        if (primitive === "top-assign" || primitive === "forged-anchor-top") {
+          window.top.location.assign(safeSink);
+          return;
+        }
+        if (primitive === "window-open") {
+          const opened = window.open(safeSink, "_blank", "noopener");
+          report({ phase: "open-returned", primitive, delayMs, popupHandle: opened ? "present" : "null" });
+        }
+      }
+
+      function armAction(event, observedInput) {
+        if (armed) return;
+        armed = true;
+        const modifiers = {
+          alt: !!event.altKey,
+          ctrl: !!event.ctrlKey,
+          meta: !!event.metaKey,
+          shift: !!event.shiftKey,
+        };
+        report({
+          phase: "armed",
+          primitive,
+          delayMs,
+          input: observedInput,
+          trusted: event.isTrusted,
+          detail: event.detail,
+          modifiers,
+          sinkArmed: !!safeSink,
+        });
+        window.setTimeout(execute, delayMs);
+      }
+
+      if (primitive === "forged-anchor-top") {
+        // The layer is an anchor whose href goes nowhere; its click handler
+        // suppresses the default action and drives the top frame by script.
+        const forged = document.getElementById("forged-intent-layer");
+        forged.hidden = false;
+        forged.style.cssText = "position:absolute;inset:0;width:100%;height:100%;display:block";
+        layer.hidden = true;
+        forged.addEventListener("click", (event) => {
+          event.preventDefault();
+          armAction(event, "physical-click");
+        });
+      } else if (primitive === "anchor-top") {
+        // The benign control declares its destination in the DOM: a real anchor
+        // with an href and target="_top". The extension can see this intent, so
+        // the frame keeps its navigation authority.
+        if (safeSink) declaredLink.href = safeSink;
+        declaredLink.hidden = false;
+        layer.hidden = true;
+        declaredLink.addEventListener("click", (event) => {
+          report({
+            phase: "armed",
+            primitive,
+            delayMs,
+            input: event.detail === 0 ? "keyboard" : "physical-click",
+            trusted: event.isTrusted,
+            detail: event.detail,
+            modifiers: { alt: !!event.altKey, ctrl: !!event.ctrlKey, meta: !!event.metaKey, shift: !!event.shiftKey },
+            sinkArmed: !!safeSink,
+          });
+        });
+      } else if (primitive !== "top-script") {
+        layer.addEventListener("pointerdown", (event) => report({
+          phase: "pointerdown",
+          primitive,
+          trusted: event.isTrusted,
+          button: event.button,
+          modifiers: { alt: event.altKey, ctrl: event.ctrlKey, meta: event.metaKey, shift: event.shiftKey },
+        }));
+        layer.addEventListener("click", (event) => armAction(event, "physical-click"));
+        layer.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") armAction(event, "keyboard");
+        });
+      }
+
+      document.documentElement.dataset.fixtureReady = "1";
+      report({ phase: "child-ready", primitive, delayMs, input, role, armAllowed: !!armIsAllowed, sinkArmed: !!safeSink, nonAnchor: primitive !== "anchor-top" });
+
+      if (input === "none") {
+        // MODELLED CONTROL: no user input at all. A child frame can already load
+        // any URL it likes (its own `src`), so a hidden frame navigating ITSELF
+        // is not a click-deception bypass — this control proves the click adds
+        // nothing to that primitive.
+        report({ phase: "armed", primitive, delayMs, input: "none", trusted: false, detail: -1, modifiers: {}, sinkArmed: !!safeSink });
+        // Fire well after the harness has finished its readiness checks, so the
+        // frame is still observable when they run.
+        window.setTimeout(execute, delayMs + 8000);
+      }
+    })();
+  </script>
+</body>
+</html>
