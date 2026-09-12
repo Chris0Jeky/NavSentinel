@@ -8,9 +8,11 @@ the next interaction, Protection Center explains retained observations, and Inte
 Relay demonstrates bounded authority for a cooperative client. The original guard
 remains the source of browser protection. Experimental scoring is not promoted.
 
-The owner's request activates implementation of this experimental evidence and
-prototype programme. It does not approve a public release, native system hooks,
-telemetry, detector efficacy claims, or the outstanding browser gates.
+The owner's request activated implementation of this experimental evidence and
+prototype programme. It did not approve a public release, native system hooks,
+telemetry, or detector efficacy claims. D-2026-09-12-P later moved the named
+#640 browser check into the consolidated post-merge AI-47 queue without waiving
+its acceptance criteria.
 
 ## Map of the supplied bundle
 
@@ -75,7 +77,7 @@ No existing issue is closed solely because a prototype or fixture passes.
 See [VALIDATION.md](VALIDATION.md) for current checks, failures and evidence limits,
 and [BROWSER_ACCEPTANCE.md](BROWSER_ACCEPTANCE.md) for the small owner-owned
 extension acceptance procedure. [ACTION_ITEMS.md](../../ACTION_ITEMS.md) remains
-the human-action queue. Existing six browser-gated PRs were left untouched.
+the human-action queue and the authority for current merge/check timing.
 
 Primary native references: Electron's [security guidance](https://www.electronjs.org/docs/latest/tutorial/security),
 [context isolation](https://www.electronjs.org/docs/latest/tutorial/context-isolation),

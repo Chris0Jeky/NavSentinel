@@ -16,12 +16,12 @@ The owner requested an ambitious implementation programme from
 `RESOURCES/NavSentinel-Vision-Lab`, including prototypes, consistent styles,
 testing and delivery. The [overhaul map](vision-overhaul/README.md) records the
 62-file inventory, retained/rejected ideas, issue reuse and current checks.
-The candidate adds a local Protection Center over existing event storage,
+The programme adds a local Protection Center over existing event storage,
 explicit minimized evidence export/import, three presentation themes, a native
-lab shell and one measured cooperative fixture consequence. It is development
-work on `codex/vision-overhaul`; it is not a merged release or promotion of the
-experimental detector. Existing M0/M1 work and the six held browser PRs remain
-unchanged. AI-42 tracks the new visible-UI acceptance boundary.
+lab shell and one measured cooperative fixture consequence. This section records
+programme provenance, not live PR state, and does not promote the experimental
+detector or declare a release. The current #640 visible-UI acceptance boundary is
+retained under AI-47 and the one-time D-2026-09-12-P merge policy.
 
 ## Status Snapshot
 

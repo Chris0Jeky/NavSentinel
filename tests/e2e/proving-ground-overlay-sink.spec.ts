@@ -15,7 +15,7 @@ import {
 import {
   getGymBaseUrl,
   getServiceWorker,
-  readBuiltMainUiGuardRevision,
+  readBuiltUiGuardRevision,
   updateNavigationSettings,
   waitForNavSentinelBridge,
 } from "./extension_test_utils";
@@ -159,7 +159,7 @@ async function childFixtureFrame(page: Page, fixtureCase: string): Promise<Frame
     document.documentElement.getAttribute("data-navsentinel-capture-ready") === "1" &&
     document.documentElement.getAttribute("data-navsentinel-bridge-ready") === "1" &&
     document.documentElement.getAttribute("data-navsentinel-ui-guard") === expectedGuard,
-  readBuiltMainUiGuardRevision(), { timeout: 10_000 });
+  readBuiltUiGuardRevision(), { timeout: 10_000 });
   return frame;
 }
 

@@ -365,11 +365,17 @@ remains with #215.
 - pending rollback and forward-offer state
 - DoubleClickjacking child-window tracking
 - OAuth flow state per tab
-- redirect chain correlation
+- redirect chain correlation with a latest-hop expiry and explicit user-navigation boundaries
 
 All 15 ephemeral Maps/Sets are backed by `chrome.storage.session` via a write-through cache (`extension/src/shared/session_state.ts`). In-memory Maps are the primary sync read path; every write is mirrored to session storage (fire-and-forget). On SW restart, `hydrate()` restores state from session storage before the first event is processed (handlers gate on a hydrate-ready promise). Session storage is cleared when the browser closes.
 
 It listens to `chrome.webNavigation` events to decide when a committed navigation should be treated as legitimate, rolled back, or offered back to the user.
+
+Redirect-chain state is pruned when it is read as well as when a new hop arrives.
+Typed, bookmark, address-bar, Back, and Forward commits clear the prior journey;
+a redirect qualifier on that boundary starts a fresh chain rather than extending
+or discarding the old one. Content-side scoring honors the worker's absolute
+latest-hop expiry and drops its cached answer on a BFCache `pageshow` restore.
 
 ### PushState guard
 
@@ -448,13 +454,17 @@ It listens to `chrome.webNavigation` events to decide when a committed navigatio
 - Excludes only isolated-world-owned NavSentinel UI nodes through WeakSet identity;
   page-created elements cannot gain an exemption by spoofing an extension-like ID
 - Keeps the cleanup Undo card beside unrelated warnings. A synchronous
-  document-start fence in the generated MAIN-world loader consumes trusted
-  pointer, mouse, touch, click, and keyboard input on the extension-owned toast
-  host before page capture listeners can observe it, then relays only a click or
-  keyboard activation's bounded control token through the existing
-  verified MessagePort. The isolated world accepts the token only when it still
-  identifies a live control in the current owned shadow root and invokes its
-  WeakMap-held action; the shadow root remains the fallback boundary in unit DOMs.
+  document-start fence in the generated isolated-world capture loader consumes
+  trusted pointer, mouse, touch, click, and keyboard input whose composed path
+  includes the extension-owned toast host before page capture listeners can
+  observe it, then hands a click or keyboard activation to `ui_toast` in the
+  same isolated world. Activation is accepted only for the host this module
+  created (identity, never id) and only for a control held in its WeakMap, so a
+  page-forged host or attribute cannot activate a real control, and the user's
+  own controls never depend on the MAIN-world bridge. The toast host also lives
+  in the top layer (`popover=manual`) so a page layer inserted later at the
+  same maximum z-index cannot paint above it and swallow clicks; the shadow root
+  remains the fallback boundary in unit DOMs.
 - Records bounded cleanup outcomes in the existing local event log for review;
   no new permission, endpoint, or remote telemetry path is introduced.
 - Feeds mutation alert count into the debug overlay

@@ -85,6 +85,8 @@ Current unit coverage lives in:
 - `tests/nrs-ceiling.test.ts`
 - `tests/nrs-clickfix.test.ts`
 - `tests/redirect-chain.test.ts`
+- `tests/redirect-chain-property.test.ts`
+- `tests/chain-info-cache.test.ts`
 - `tests/oauth-monitor.test.ts`
 - `tests/mutation-monitor.test.ts`
 - `tests/domain-groups.test.ts`
@@ -111,6 +113,9 @@ These currently cover:
 - DoubleClickjacking NRS factor (+40 weight, factor combinations, allowlist interaction)
 - Bloom filter reputation: MurmurHash3, binary format parsing, known-bad domain lookup, false positive verification, and NRS integration (+50 weight)
 - PushState abuse NRS factor (+20 weight, gesture correlation, rapid-fire detection)
+- redirect-chain read-time expiry, explicit address/history boundaries, fresh
+  post-boundary redirects, content-cache/BFCache invalidation, and a real-302
+  Playwright journey that proves factors disappear after Back and Forward
 - NRS scoring ceiling (diminishing returns above 100, compound FP mitigation, opener-allowed factor)
 - ClickFix NRS integration (clickfix score cap at 40, combined scoring with navigation factors)
 - Redirect chain correlation (per-hop scoring, known redirector detection, chain cap, stale pruning)
@@ -142,9 +147,17 @@ Representative E2E coverage lives in:
 - `tests/e2e/navsentinel.stress.spec.ts`
 - `tests/e2e/corpus-validation.spec.ts`
 - `tests/e2e/phase2-detections.spec.ts`
+- `tests/e2e/bridge-reload-recovery.spec.ts`
 
 This list is intentionally representative because spec counts move. Use
 `rg --files tests/e2e -g '*.spec.ts'` for current inventory.
+
+The issue #175 bridge-reload regression has a no-reload native benign control and
+a second arm that calls `page.reload()`, requires fresh capture and bridge
+readiness, and repeats the control once against a typed loopback sink. The sink
+arms no harmful role and the browser route denies unexpected HTTP(S) origins.
+This is automated reload/reinitialization evidence only; it does not simulate
+periodic heartbeat or recovery from a live `MessagePort` death.
 
 It currently covers:
 
@@ -199,6 +212,10 @@ It currently covers:
 - a dedicated rollback lane for redirect recovery affordances
 - RW-15 bank/security alert redirect recovery
 - a dedicated live-web sanity lane
+- a neutral local browser-platform opener contract that records source/child
+  provenance and parent-tab sink commits across HTTP opener methods; it loads no
+  NavSentinel artifact and is therefore attribution evidence only (see
+  [browser boundary report](security-program/reports/DOUBLECLICK_BROWSER_BOUNDARY.md))
 
 `playwright.config.ts` intentionally scopes Playwright discovery to `tests/e2e/**/*.spec.ts`. This keeps Vitest files out of the Playwright runner.
 
@@ -386,10 +403,15 @@ off-screen frames that Chromium throttles, and attach the complete JSON timeline
 layers that remain connected: one grouped Undo, Dismiss-without-restoration,
 page-owned display changes, cleanup-disabled behavior, and Navigation Off.
 
-The final synchronous MAIN-world loader is content-addressed **after** its
-post-build guard is installed. `npm run check:content-loader` verifies that the
-manifest URL matches those final bytes and contains the current UI-guard
-revision. CI reports this as a named contract before browser tests, while every
+The final synchronous isolated-world capture loader is content-addressed
+**after** its post-build input fence is installed. `npm run check:content-loader`
+verifies that the manifest URL matches those final bytes and contains the
+current UI-guard revision. The MAIN-world loader is the unmodified
+CRXJS-generated stub again and carries no post-build bytes, so it is no longer
+part of this contract. `tests/e2e/toast-input-fence.spec.ts` drives the
+toast controls with real mouse and keyboard input (not synthetic `.click()`),
+including a maximum-z-index layer inserted after the host and a page-forged
+host that must never activate a real control. CI reports this as a named contract before browser tests, while every
 shared Playwright page and nested overlay frame also requires that runtime
 revision. A disk-identity failure therefore points to packaging; a missing or
 old runtime marker points to extension initialization or an artifact that the
@@ -570,6 +592,9 @@ CI currently runs on every PR:
 
 The CI E2E job runs serially (`workers: 1`, `fullyParallel: false`); see
 "Worker topology" above for why local runs now match it.
+Hosted E2E tests have a 30-minute test-step timeout inside a 60-minute job
+budget; a timeout fails the check while leaving setup and the following
+evidence-upload step time to run with `if: always()`.
 
 The stress lane (`npm run test:e2e:stress`) runs on a nightly schedule.
 The corpus and FP measurement lanes run manually (they require local data).

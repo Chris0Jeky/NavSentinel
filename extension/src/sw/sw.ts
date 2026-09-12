@@ -28,7 +28,7 @@ import {
   isBehaviouralResetMessage,
   resumeInterruptedBehaviouralReset,
 } from "../shared/behavioural_reset";
-import { RedirectChainTracker } from "../shared/redirect_chain";
+import { CHAIN_STALE_MS, RedirectChainTracker } from "../shared/redirect_chain";
 import type { PendingDecisionRuntimeMessage } from "../shared/pending_decision";
 import {
   isOAuthUrl,
@@ -965,12 +965,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return runWhenHydrated(() => {
       const tabId = sender.tab?.id;
       if (typeof tabId === "number") {
-        const info = redirectChainTracker.getChainInfo(tabId);
-        sendResponse?.(info ?? { depth: 0, viaKnownRedirector: false, knownRedirectorHops: 0 });
+        const info = redirectChainTracker.getChainInfo(tabId, Date.now());
+        sendResponse?.(info ?? {
+          depth: 0,
+          viaKnownRedirector: false,
+          knownRedirectorHops: 0,
+          expiresAt: Date.now() + CHAIN_STALE_MS,
+        });
       } else {
         // No tab context (popup, devtools, etc.) -- return default to avoid
         // hanging the caller's message port.
-        sendResponse?.({ depth: 0, viaKnownRedirector: false, knownRedirectorHops: 0 });
+        sendResponse?.({
+          depth: 0,
+          viaKnownRedirector: false,
+          knownRedirectorHops: 0,
+          expiresAt: Date.now() + CHAIN_STALE_MS,
+        });
       }
     });
   }
@@ -1127,6 +1137,15 @@ function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitio
     qualifiers.includes("from_address_bar");
   const isLinkish = details.transitionType === "link";
 
+  // These are explicit user-navigation boundaries. Clear the previous chain
+  // before any processing so a restored or unrelated redirect sequence cannot
+  // add stale NRS points to a benign click. Do not clear in onBeforeNavigate:
+  // that event also precedes genuine redirect commits, which must remain part
+  // of the active chain.
+  if (isHistoryTraversal || isUserTyped) {
+    redirectChainTracker.deleteTab(details.tabId);
+  }
+
   // --- OAuth flow tracking ---
   // Pass prevUrl (captured above, before the lastUrlByTab overwrite) so a new flow's
   // initiatorUrl is the initiating page, not the consent URL; and whether this commit
@@ -1136,6 +1155,18 @@ function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitio
   // ?code= page from tripping a false redirect-mismatch, while still accepting
   // link-click and gesture-driven JS callbacks (which carry no redirect qualifier). (#207)
   processOAuthNavigation(details.tabId, details.url, prevUrl ?? "", isUserTyped);
+
+  // Record a redirect commit after any explicit-boundary clear and before the
+  // history-traversal early return. A forward_back redirect begins a fresh
+  // chain; it must not inherit the previous journey or disappear entirely.
+  if (isRedirect || redirectChainTracker.hasActiveChain(details.tabId, now)) {
+    redirectChainTracker.recordHop(
+      details.tabId,
+      details.url,
+      now,
+      details.transitionType
+    );
+  }
 
   // Back/Forward is explicit browser UI intent. The transitionType describes how the
   // history entry was originally created (often "link"), so evaluating it as a fresh
@@ -1151,19 +1182,6 @@ function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitio
     lastCommittedByTab.delete(details.tabId);
     swState.persistAll();
     return;
-  }
-
-  // Only record hops that are redirect-driven OR that extend an existing
-  // chain (a non-redirect commit arriving within the chain window).
-  // Plain user-typed and same-domain navigations should NOT inflate chain
-  // depth -- they are benign and would cause false positives.
-  if (isRedirect || redirectChainTracker.hasActiveChain(details.tabId, now)) {
-    redirectChainTracker.recordHop(
-      details.tabId,
-      details.url,
-      now,
-      details.transitionType
-    );
   }
 
   const typedOriginEntry = typedOriginByTab.get(details.tabId);

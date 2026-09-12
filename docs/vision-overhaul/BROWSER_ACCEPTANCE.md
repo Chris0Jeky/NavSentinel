@@ -2,8 +2,10 @@
 
 This check covers the new visible extension UI only. The Lab's experimental
 extension is a different artifact. It does not substitute for the existing guard.
+Under D-2026-09-12-P, this procedure remains required as the #640 sub-result of
+the consolidated post-merge AI-47 check; the waiver changes timing, not scope.
 
-1. Build the PR's exact head with `npm ci`, `npm run build`. Record
+1. Build the then-current `main` exact head with `npm ci`, `npm run build`. Record
    `git rev-parse HEAD` and the Chrome version. Use a dedicated testing profile.
 2. The owner loads/reloads this checkout's `extension/dist` at
    `chrome://extensions`. Agents must not operate that page or infer acceptance
@@ -25,5 +27,6 @@ extension is a different artifact. It does not substitute for the existing guard
 7. Open existing Options and popup controls. Confirm navigation/credential mode
    and trust settings continue to behave as before.
 
-Return acceptance/rejection, exact head, Chrome version, and any failed step.
+Record this as the #640/AI-42 sub-result under AI-47, including
+acceptance/rejection, exact head, Chrome version, and any failed step.
 Automated Chromium and native-shell checks do not close this owner check.
