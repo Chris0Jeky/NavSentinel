@@ -4,14 +4,6 @@
 
 # ACTION ITEMS — Human-Owned Tasks (NavSentinel)
 
-**OPEN: AI-43 — Settings autosave and conflict choices.** The #558 follow-up
-adds default autosave, explicit same-field conflict choices, and persisted
-cleanup status. The owner Chrome check is
-[the AI-43 procedure](docs/agentic/GATE3_558_SETTINGS_AUTOSAVE.md). Automated
-tests do not establish owner acceptance. Record the candidate Git head and
-Chrome version with the result. This item does not change the guided-resolution
-cursor.
-
 **Purpose:** the concise, durable register for human decisions and manual checks.
 It is not a live GitHub snapshot: re-check Git, GitHub, and product checks before
 acting. `docs/Project_Roadmap.md` holds execution work; archive material is
@@ -299,7 +291,8 @@ revision printed by the build, then run this consolidated sequence:
    keyboard operation, cancel paths, preview/download byte parity, minimized
    export privacy, and the absence of page-injected Allow/Proceed controls.
 6. **Settings concurrency (#643/#655/#658 / former AI-43):** complete the exact
-   AI-43 guide and the child-PR additions. Default autosave,
+   [AI-43 settings guide](docs/agentic/GATE3_558_SETTINGS_AUTOSAVE.md) and the
+   child-PR additions. Default autosave,
    explicit conflicts, imported integer log limit `55`, same-field collision,
    disjoint-window merge, and preservation of the losing draft all match the
    active guide.

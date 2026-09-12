@@ -1,12 +1,15 @@
-# AI-43 — Settings autosave and conflict choices (#558)
+# AI-43 subprocedure — Settings autosave and conflict choices (#558)
 
-Human-owned Chrome Gate-3 for the settings UI. The coordinator records the
-result in `ACTION_ITEMS.md`; this guide does not assert owner acceptance.
+Post-merge branded-Chrome subprocedure retained by the consolidated AI-47
+check in `ACTION_ITEMS.md`. Under D-2026-09-12-P this is no longer a pre-merge
+human gate for the named PR #643 candidate. The coordinator records this
+sub-result under AI-47; this guide does not assert owner acceptance.
 
-1. Build the reviewed PR head with `npm run build`. In a disposable Chrome
-   profile, the owner loads/reloads that checkout's `extension/dist` from
-   `chrome://extensions`. Record the head, Chrome version, and the reload result.
-   Expected build markers: `capture=1`, `bridge=1`, `ui-guard=cab71a431824`.
+1. Build the then-current `main` head selected for AI-47 with `npm run build`.
+   In a disposable Chrome profile, the owner loads/reloads that checkout's
+   `extension/dist` from `chrome://extensions`. Record the 40-character head,
+   Chrome version, and reload result. Expected build markers: `capture=1`,
+   `bridge=1`, `ui-guard=cab71a431824`.
 2. Open Options. **Auto-save changes** starts enabled in a fresh profile.
    Change navigation with the arrow keys and toggle overlay auto-dismiss. Reload
    Options and verify those choices persisted without pressing Save.
@@ -34,5 +37,5 @@ result in `ACTION_ITEMS.md`; this guide does not assert owner acceptance.
 
 Automated disposable-Chromium tests cover these storage/UI paths; they do not
 replace the owner's unpacked Chrome reload and visual acceptance. Record pass or
-the exact failing step under AI-43. No telemetry, permissions, or runtime guard
-changes are part of this slice.
+the exact failing step as the former-AI-43 sub-result under AI-47. No telemetry,
+permissions, or runtime guard changes are part of this slice.
