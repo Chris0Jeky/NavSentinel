@@ -1932,7 +1932,7 @@ window.addEventListener(
                 ? "Blocked: navigation + fake dialog"
                 : "Suspicious navigation + fake dialog detected")
               : decision === "block" ? "Blocked new tab" : "Suspicious new tab";
-            showAllowPrompt({
+            const prompt = {
               title,
               url: parsed.href,
               host: parsed.host,
@@ -1940,7 +1940,24 @@ window.addEventListener(
               promptScore: nrs,
               outcomeFeatures: navFeatures,
               ...(overlaySuppression ? { overlaySuppression } : {}),
-            });
+            } satisfies AllowPromptParams;
+            if (/^https?:\/\//i.test(parsed.href) && parsed.host && !overlaySuppression) {
+              // Reuse the exact-URL bridge correlation already used by the
+              // injected prompt path. It suppresses a duplicate MAIN shadow
+              // action without adding a second always-on correlation model.
+              // Overlay-cleanup recovery remains on the legacy prompt until
+              // its security-relevant Undo action moves extension-side too.
+              recentLocalBlankPrompt = { params: prompt, shownAt: Date.now() };
+              void import("./pending_navigation_decision")
+                .then(({ default: showPendingBlankNavigationPrompt }) =>
+                  showPendingBlankNavigationPrompt(prompt),
+                )
+                .catch(() => {
+                  showToast({ message: "NavSentinel blocked a suspicious new tab." });
+                });
+            } else {
+              showAllowPrompt(prompt);
+            }
             // Suppress standalone ClickFix toast — unified prompt covers it
             if (hasClickfix) clickFixAlertedAt = Date.now();
           } else {
