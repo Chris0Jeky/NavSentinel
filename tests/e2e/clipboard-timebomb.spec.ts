@@ -34,6 +34,7 @@ const HARM_CONSEQUENCE = "inert-shell-paste";
 const BENIGN_CONSEQUENCE = "benign-navigation";
 const MANUAL_TOKEN = "CASE-48-DELTA";
 const OTP_TOKEN = "847293";
+const BENIGN_REWRITE = "CASE-48-DELTA | formatted locally";
 const extensionPath = process.env.EXTENSION_PATH
   ? path.resolve(process.env.EXTENSION_PATH)
   : path.resolve(process.cwd(), "extension", "dist");
@@ -269,13 +270,22 @@ async function copySelected(page: Page, selector: string, expectedValue: string)
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(expectedValue);
 }
 
-async function runDelayedRewrite(page: Page): Promise<void> {
+async function runDelayedRewrite(
+  page: Page,
+  expectedValue = PROVING_GROUND_SENTINEL,
+  expectedState = "rewrite-complete",
+  expectOverlay = true,
+): Promise<void> {
   await copySelected(page, "#manual-copy-source", MANUAL_TOKEN);
   await expect(page.locator("#attack-status")).toHaveAttribute("data-state", "manual-copy-observed");
   await expect(page.locator("#activity-log li")).toHaveCount(3, { timeout: 3_000 });
-  await expect(page.locator("#rewrite-overlay")).toHaveAttribute("data-active", "1");
-  await expect(page.locator("#attack-status")).toHaveAttribute("data-state", "rewrite-complete");
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(PROVING_GROUND_SENTINEL);
+  if (expectOverlay) {
+    await expect(page.locator("#rewrite-overlay")).toHaveAttribute("data-active", "1");
+  } else {
+    await expect(page.locator("#rewrite-overlay")).toHaveCount(0);
+  }
+  await expect(page.locator("#attack-status")).toHaveAttribute("data-state", expectedState);
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(expectedValue);
 }
 
 async function pasteInto(page: Page, selector: string, expectedValue: string): Promise<void> {
@@ -296,17 +306,26 @@ function assertNoHarnessViolation(arm: ClipboardArm): void {
   expect(arm.sink.snapshot().invalidAttempts, `${arm.id} sink must reject no attempted consequence`).toEqual([]);
 }
 
-async function attachEvidence(
+async function attachUnverifiedObservation(
   testInfo: TestInfo,
   arm: ClipboardArm,
   outcome: "HARM_REACHED" | "WARNED" | "OBSERVED",
   productSignal: string | null,
 ): Promise<void> {
-  await testInfo.attach(`${SCENARIO_ID}-${arm.id}.json`, {
+  await testInfo.attach(`${SCENARIO_ID}-${arm.id}-unverified-observation.json`, {
     body: Buffer.from(JSON.stringify({
       scenarioId: SCENARIO_ID,
       arm: arm.id,
       outcome,
+      evidenceValidity: "UNVERIFIED",
+      promotionCeiling: "MODELLED",
+      provenanceBound: false,
+      missingProvenance: [
+        "repository_head",
+        "extension_build_hash",
+        "fixture_hash",
+        "worktree_cleanliness",
+      ],
       profile: arm.productReady ? "release_extension" : "extension_disabled",
       browserVersion: arm.browserVersion,
       fixture: `gym/${FIXTURE_NAME}`,
@@ -317,6 +336,7 @@ async function attachEvidence(
       fixtureNetworkViolations: arm.networkViolations,
       blockedExternalAttempts: arm.blockedExternalAttempts,
       limitations: [
+        "This diagnostic attachment is not bound to exact build and fixture provenance and cannot support evidence promotion beyond MODELLED.",
         "The release extension warns but does not block or restore the rewritten clipboard value.",
         "The simulated terminal is a browser-only local fixture; no native or OS execution occurs.",
         "Bundled Chromium regression is not branded-Chrome, open-web, or efficacy evidence.",
@@ -343,7 +363,7 @@ test.describe("NS-ADV-CLIP-005 delayed clipboard rewrite", () => {
         targetId: "baseline-harm",
       });
       assertNoHarnessViolation(arm);
-      await attachEvidence(testInfo, arm, "HARM_REACHED", null);
+      await attachUnverifiedObservation(testInfo, arm, "HARM_REACHED", null);
     } finally {
       await arm.cleanup();
     }
@@ -365,17 +385,25 @@ test.describe("NS-ADV-CLIP-005 delayed clipboard rewrite", () => {
       // This is intentionally a warning result, not a clipboard-block claim.
       expect(await arm.page.evaluate(() => navigator.clipboard.readText())).toBe(PROVING_GROUND_SENTINEL);
       assertNoHarnessViolation(arm);
-      await attachEvidence(testInfo, arm, "WARNED", warning);
+      await attachUnverifiedObservation(testInfo, arm, "WARNED", warning);
     } finally {
       await arm.cleanup();
     }
   });
 
-  test("benign manual OTP copy and paste succeeds without a ClickFix alert @regression", async ({}, testInfo) => {
+  test("benign delayed formatting rewrite succeeds without a ClickFix alert @regression", async ({}, testInfo) => {
     requireReleaseBuild();
     const arm = await openArm("benign", "benign", true);
     try {
-      await completeOtp(arm.page);
+      await Promise.all([
+        assertNoToastFor(arm.page, 3_000),
+        (async () => {
+          await runDelayedRewrite(arm.page, BENIGN_REWRITE, "benign-rewrite-complete", false);
+          await pasteInto(arm.page, "#formatted-copy-input", BENIGN_REWRITE);
+          await arm.page.locator("#accept-formatted-copy").click();
+          await expect(arm.page.locator("#formatted-copy-status")).toHaveAttribute("data-state", "verified");
+        })(),
+      ]);
       await expect.poll(() => arm.sink.snapshot().receipts).toHaveLength(1);
       expect(arm.sink.snapshot().receipts[0]).toMatchObject({
         scenarioId: SCENARIO_ID,
@@ -383,9 +411,8 @@ test.describe("NS-ADV-CLIP-005 delayed clipboard rewrite", () => {
         consequence: BENIGN_CONSEQUENCE,
         targetId: "benign-benign",
       });
-      await assertNoToastFor(arm.page, 1_500);
       assertNoHarnessViolation(arm);
-      await attachEvidence(testInfo, arm, "OBSERVED", null);
+      await attachUnverifiedObservation(testInfo, arm, "OBSERVED", null);
     } finally {
       await arm.cleanup();
     }
@@ -413,7 +440,7 @@ test.describe("NS-ADV-CLIP-005 delayed clipboard rewrite", () => {
       ]);
       await expect(arm.page.locator("#shell-status")).toHaveAttribute("data-state", "ready");
       assertNoHarnessViolation(arm);
-      await attachEvidence(testInfo, arm, "WARNED", warning);
+      await attachUnverifiedObservation(testInfo, arm, "WARNED", warning);
     } finally {
       await arm.cleanup();
     }

@@ -3,7 +3,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-const gymRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "gym");
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const gymRoot = path.join(repositoryRoot, "gym");
 
 const fixtures = [
   { file: "level1-basic-opacity.html", scenarioId: "NS-ADV-UI-001", kind: "static-harm" },
@@ -114,11 +115,31 @@ describe("clipboard time-bomb Gym fixture contract", () => {
     expect(source).toContain('<script src="local-fixture-targets.js"></script>');
     expect(source).not.toMatch(/https?:\/\//u);
     expect(source).toContain("NAVSENTINEL_SENTINEL_DO_NOT_RUN");
+    expect(source).toContain("CASE-48-DELTA | formatted locally");
+    expect(source).toContain('let rewriteArmed = MODE !== "invalid"');
+    expect(source).toMatch(/navigator\.clipboard\.writeText\(benignRewrite \? BENIGN_REWRITE : INERT_REWRITE\)/u);
+    expect(source).toContain('if (MODE === "benign") overlay.remove()');
     expect(source).not.toMatch(/\b(?:powershell|pwsh)(?:\.exe)?\s+(?:-|\/)\w/iu);
     expect(source).not.toMatch(/\bcmd(?:\.exe)?\s+\/[ck]\b/iu);
     expect(harmAnchor).toContain(`data-navsentinel-scenario="${clipboardFixture.scenarioId}"`);
     expect(benignAnchor).toContain(`data-navsentinel-scenario="${clipboardFixture.scenarioId}"`);
     expect(harmAnchor).not.toMatch(/\bhref\s*=/iu);
     expect(benignAnchor).not.toMatch(/\bhref\s*=/iu);
+  });
+
+  it("caps unbound CLIP-005 observations at the machine-checked MODELLED ceiling", () => {
+    const registry = JSON.parse(fs.readFileSync(
+      path.join(repositoryRoot, "docs", "security-program", "registry", "existing-evidence-map.json"),
+      "utf8",
+    )) as {
+      mappings: Array<{ id: string; evidence_state: string; evidence_validity: string }>;
+    };
+    const mapping = registry.mappings.find(({ id }) => id === "MAP-CLICKFIX-05");
+    const spec = fs.readFileSync(path.join(repositoryRoot, "tests", "e2e", "clipboard-timebomb.spec.ts"), "utf8");
+
+    expect(mapping).toMatchObject({ evidence_state: "MODELLED", evidence_validity: "UNVERIFIED" });
+    expect(spec).toContain('evidenceValidity: "UNVERIFIED"');
+    expect(spec).toContain('promotionCeiling: "MODELLED"');
+    expect(spec).toContain("provenanceBound: false");
   });
 });

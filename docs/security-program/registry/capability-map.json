@@ -27,7 +27,7 @@
       "release_status": "FOUNDATION",
       "permission_privacy": "The typed UI sink binds to loopback, can enforce run-scoped one-use target authorities, accepts only synthetic sentinels, stores only their digest, and fails on unexpected egress.",
       "failure_mode": "Unexpected egress, an unarmed or exhausted target, or non-sentinel input makes the run TEST_INVALID.",
-      "known_limitation": "Typed wrong-target UI and inert shell-paste consequences now exist; there is no general reserved-origin router, profile reset service, fake download target, or native execution sink.",
+      "known_limitation": "Typed wrong-target UI and inert shell-paste consequences now exist; CLIP-005 remains MODELLED because its runner does not bind exact repository, build, fixture, and cleanliness provenance. There is no general reserved-origin router, profile reset service, fake download target, or native execution sink.",
       "issue_refs": ["#417", "#439", "#449"],
       "pr_refs": ["#598", "#605"]
     },
@@ -40,8 +40,8 @@
       "evidence_state": "REGRESSION_PROVEN",
       "release_status": "FOUNDATION",
       "permission_privacy": "The UI-004, evasion-locality, and CLIP-005 lanes use disposable persistent profiles, trusted Playwright input, typed loopback sinks, and a loopback-only request fence; loading or reloading owner Chrome remains owner-owned.",
-      "failure_mode": "Missing readiness, stale artifacts, or untrusted input makes the run TEST_INVALID.",
-      "known_limitation": "The bounded lanes use Playwright-bundled Chromium. Evasion covers one representative composite journey; CLIP-005 covers one deterministic delay and a browser-only paste sink. Neither is mutation-robust, and #420/#439 still do not establish an operational branded-Chrome Gate-3 lane.",
+      "failure_mode": "Missing readiness or untrusted input makes a run TEST_INVALID; a lane that cannot reject stale artifacts stays UNVERIFIED and may not advance beyond MODELLED.",
+      "known_limitation": "The bounded lanes use Playwright-bundled Chromium. Evasion covers one representative composite journey; CLIP-005 covers one deterministic attack delay, one matched benign delayed write, and a browser-only paste sink, but remains MODELLED because exact build and fixture provenance is not bound. Neither is mutation-robust, and #420/#439 still do not establish an operational branded-Chrome Gate-3 lane.",
       "issue_refs": ["#420", "#439", "#449", "#460", "#498", "#565"],
       "pr_refs": ["#598", "#605"]
     },
@@ -55,7 +55,7 @@
       "release_status": "FOUNDATION",
       "permission_privacy": "Oracles must store outcome metadata rather than secrets or page content.",
       "failure_mode": "A product event without independent harm fields cannot advance evidence.",
-      "known_limitation": "Independent receipts cover UI-004, one representative evasion journey, and CLIP-005's inert browser-only paste consequence; the other eleven evasion fixtures, RW journeys, native paste destinations, and other consequence types do not yet use one.",
+      "known_limitation": "Independent receipts cover UI-004 and one representative evasion journey. CLIP-005 has an inert browser-only paste consequence receipt but remains MODELLED because its diagnostic output is not bound to exact build and fixture provenance; the other eleven evasion fixtures, RW journeys, native paste destinations, and other consequence types do not yet use one.",
       "issue_refs": ["#417", "#449"],
       "pr_refs": ["#598", "#605"]
     },

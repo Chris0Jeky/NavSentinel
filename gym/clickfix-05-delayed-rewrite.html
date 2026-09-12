@@ -30,6 +30,8 @@
       border-radius: 8px;
       background: #f8fafc;
     }
+    .benign-format-card { display: none; }
+    html[data-navsentinel-clipboard-mode="benign"] .benign-format-card { display: block; }
     .copy-source {
       display: inline-block;
       margin: 0.5rem 0;
@@ -124,6 +126,18 @@
       <ol id="activity-log" aria-label="Local case activity"></ol>
     </section>
 
+    <section class="case-card benign-format-card" aria-labelledby="format-heading">
+      <h2 id="format-heading">Local formatted-copy control</h2>
+      <p>
+        This benign app intentionally replaces the copied case token with a locally formatted text
+        version after its background updates finish. Paste that result here to accept it.
+      </p>
+      <label for="formatted-copy-input">Formatted case token</label>
+      <input id="formatted-copy-input" autocomplete="off" />
+      <button id="accept-formatted-copy" type="button">Accept formatted local copy</button>
+      <p id="formatted-copy-status" class="status" data-state="ready">Formatted-copy control ready.</p>
+    </section>
+
     <section class="otp-card" aria-labelledby="otp-heading">
       <h2 id="otp-heading">Legitimate one-time code</h2>
       <p>Copy and paste this synthetic OTP to finish the local control journey:</p>
@@ -171,6 +185,7 @@
       const MANUAL_TOKEN = "CASE-48-DELTA";
       const OTP_TOKEN = "847293";
       const INERT_REWRITE = "NAVSENTINEL_SENTINEL_DO_NOT_RUN";
+      const BENIGN_REWRITE = "CASE-48-DELTA | formatted locally";
       const REWRITE_DELAY_MS = 900;
       const attackStatus = document.getElementById("attack-status");
       const activityLog = document.getElementById("activity-log");
@@ -179,9 +194,11 @@
       const shellStatus = document.getElementById("shell-status");
       const otpInput = document.getElementById("otp-input");
       const otpStatus = document.getElementById("otp-status");
+      const formattedCopyInput = document.getElementById("formatted-copy-input");
+      const formattedCopyStatus = document.getElementById("formatted-copy-status");
       const harmTarget = document.getElementById("harm-target");
       const benignTarget = document.getElementById("benign-target");
-      let rewriteArmed = MODE === "attack" || MODE === "mixed";
+      let rewriteArmed = MODE !== "invalid";
 
       function setStatus(element, state, text) {
         element.dataset.state = state;
@@ -201,19 +218,31 @@
       document.addEventListener("copy", () => {
         if (!rewriteArmed || selectedText() !== MANUAL_TOKEN) return;
         rewriteArmed = false;
+        const benignRewrite = MODE === "benign";
         setStatus(attackStatus, "manual-copy-observed", "Manual copy observed; local case updates continue.");
 
         window.setTimeout(() => addNoise("Case metadata refreshed."), 140);
         window.setTimeout(() => addNoise("Local preview rendered."), 360);
-        window.setTimeout(() => addNoise("Verification step prepared."), 610);
+        window.setTimeout(
+          () => addNoise(benignRewrite ? "Local text formatting prepared." : "Verification step prepared."),
+          610,
+        );
         window.setTimeout(() => {
-          overlay.dataset.active = "1";
-          overlay.removeAttribute("aria-hidden");
+          if (!benignRewrite) {
+            overlay.dataset.active = "1";
+            overlay.removeAttribute("aria-hidden");
+          }
         }, 720);
         window.setTimeout(async () => {
           try {
-            await navigator.clipboard.writeText(INERT_REWRITE);
-            setStatus(attackStatus, "rewrite-complete", "Delayed clipboard rewrite completed.");
+            await navigator.clipboard.writeText(benignRewrite ? BENIGN_REWRITE : INERT_REWRITE);
+            setStatus(
+              attackStatus,
+              benignRewrite ? "benign-rewrite-complete" : "rewrite-complete",
+              benignRewrite
+                ? "Delayed benign clipboard formatting completed."
+                : "Delayed clipboard rewrite completed.",
+            );
           } catch (error) {
             document.documentElement.dataset.navsentinelFixtureInvalid = "clipboard-rewrite-failed";
             setStatus(
@@ -223,6 +252,16 @@
             );
           }
         }, REWRITE_DELAY_MS);
+      });
+
+      document.getElementById("accept-formatted-copy").addEventListener("click", () => {
+        if (MODE !== "benign" || formattedCopyInput.value !== BENIGN_REWRITE ||
+            benignTarget.dataset.navsentinelLocalTargetReady !== "1") {
+          setStatus(formattedCopyStatus, "rejected", "The formatted local copy did not match.");
+          return;
+        }
+        document.querySelector('iframe[name="clipboard-benign-sink"]').src = benignTarget.href;
+        setStatus(formattedCopyStatus, "verified", "Formatted local copy accepted.");
       });
 
       document.getElementById("simulate-shell-submit").addEventListener("click", () => {
@@ -245,6 +284,7 @@
       });
 
       overlay.setAttribute("aria-hidden", "true");
+      if (MODE === "benign") overlay.remove();
     })();
   </script>
 </body>
