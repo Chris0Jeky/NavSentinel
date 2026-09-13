@@ -69,3 +69,33 @@ reconciliation with the open #698 defense branch. Synthetic receipt timing is a
 collector observation, not cryptographic authenticity or real secret extraction.
 The standalone source checker is still bounded campaign provenance, not a complete
 solution of #684/#692 or dependency/supply-chain reproducibility.
+
+## First hosted attempt and repairs
+
+Run 34776627781 on head `a9374e824f5dea1117133bd00fcb1e18297c9836`
+exercised all six real faults: five passed; the worker restart trial failed after
+an observed CDP stop/start because the initial-worker helper returned the old
+Playwright Worker handle before teardown had retired it. Its subsequent evaluate
+reported a destroyed context, and the run remained invalid. The repair selects
+exactly one new object identity for the same worker script before checking loss
+of the in-memory epoch marker; missing or ambiguous replacement still fails.
+
+The same run's wide challenge passed, while the narrow baseline failed during a
+geometry sample: nested-frame replacement happened between locator count and
+anchor evaluation. The attack timers/viewport/input schedule were not changed.
+The sampler now reads known control/overlay geometry and same-origin nested anchor
+metadata in a single primary-document JavaScript turn, avoiding stale nested Frame
+handles. The static parent-frame viewport offset is still measured separately;
+this is not an atomic arbitrary-cross-origin-page snapshot. Primary-document
+replacement during sampling still invalidates the run. Five actual-DOM unit tests
+cover synchronous sampling, coordinate offsets, hidden/absent states, missing nested
+documents and category-only target projection.
+
+An additional review tightened fault qualification: a detected expected fault
+cannot conceal an incomplete run or another unexpected runner/page fault; detached
+and replaced documents must match the injection's primary frame identity; callback
+loss requires a new consequence after injection. New regressions first failed
+before these changes. The repaired local candidate passes 144 Observatory Node
+contracts plus the five scene-sampler Vitest cases, and repository lint/typecheck.
+Hosted reruns must qualify the repaired candidate independently; the first failures
+remain part of this record and are not discarded as passing retries.

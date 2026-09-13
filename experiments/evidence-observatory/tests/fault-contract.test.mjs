@@ -12,7 +12,7 @@ function fixture(faultId) {
   const context = { pageId: 'fixture-page', frameId: 'primary', documentId: 'doc-1', parentFrameId: 'top' };
   r.record('browser', 'navigation.committed', { context, frame: 'child' });
   r.record('page', 'attack.attempt'); r.record('runner', 'input.dispatched');
-  now = 100; r.record('runner', 'fault.injected', { code: faultId });
+  now = 100; r.record('runner', 'fault.injected', { code: faultId, context, frame: 'child' });
   const end = structuredClone(health); end.healthSequence++;
   if (faultId === 'receiver-unavailable') end.healthy = false;
   if (faultId === 'primary-frame-detached') { r.record('browser', 'frame.detached', { context, frame: 'child' }); r.gap('PRIMARY_FRAME_DETACHED'); }
@@ -76,5 +76,27 @@ test('full matrix requires exactly one trial per fault and rejects duplication',
 test('unknown fault identifiers and malformed traces are explicit failures', () => {
   assert.equal(check({}).status, 'FAULT_NOT_ESTABLISHED');
   const raw = fixture('receiver-unavailable'); raw.variantId = 'fault-arbitrary';
+  assert.equal(check(raw).status, 'FAULT_NOT_ESTABLISHED');
+});
+
+for (const [name, mutate] of [
+  ['runner failure after the intended fault', raw => { raw.runs[0].completed = false; raw.runs[0].declaredOutcome = 'TEST_INVALID'; }],
+  ['unrelated runner fault category', raw => raw.runs[0].capture.faults.push('RUNNER_FAILED')],
+  ['additional unexpected page error', raw => raw.runs[0].capture.faults.push('PAGE_ERROR')],
+]) test(`${name} prevents fault qualification`, () => {
+  const raw = fixture('primary-frame-detached'); mutate(raw);
+  assert.equal(check(raw).status, 'FAULT_NOT_ESTABLISHED');
+});
+test('a known sibling frame cannot stand in for the injected primary target', () => {
+  const raw = fixture('primary-frame-detached');
+  raw.runs[0].events.find(e => e.kind === 'fault.injected').context.frameId = 'different-primary';
+  assert.equal(check(raw).status, 'FAULT_NOT_ESTABLISHED');
+});
+test('callback failure requires a consequence after this injection', () => {
+  const raw = fixture('receiver-observer-error'), events = raw.runs[0].events;
+  const injection = events.find(e => e.kind === 'fault.injected'), receipt = events.find(e => e.kind === 'sink.receipt');
+  const i = events.indexOf(injection), j = events.indexOf(receipt);
+  [events[i], events[j]] = [receipt, injection];
+  events.forEach((e, index) => { e.sequence = index + 1; });
   assert.equal(check(raw).status, 'FAULT_NOT_ESTABLISHED');
 });

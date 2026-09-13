@@ -9,6 +9,7 @@ for (const faultId of FAULT_IDS) test(`Observer fault ${faultId} remains inconcl
   const arm = ["page-report-flood", "receiver-observer-error"].includes(faultId) ? "baseline" : "protected";
   const result = await runOverlayArm(arm, false, "full", { fault: faultId });
   const trace = await attachOverlayTrace(testInfo, start, [result.run], result.browserVersion, `fault-${faultId}`, "fault-trace.json");
+  expect(result.error, "Unexpected runner failures cannot be hidden by a detected fault").toBeNull();
   const assessment = assessFaultTrace(trace);
   expect(assessment.status, JSON.stringify(assessment)).toBe("FAULT_DETECTED");
   expect(assessment.preventionSupported).toBe(false);

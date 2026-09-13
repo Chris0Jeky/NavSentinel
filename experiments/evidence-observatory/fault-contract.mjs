@@ -18,6 +18,14 @@ export function assessFaultTrace(trace) {
     sourceDigest: report?.sources?.[0]?.sha256 ?? null,
     evidencePolicy: 'OBSERVER_FAULT_CHECK_NOT_PROTECTION_EVIDENCE' });
   if (reasons.length) return output();
+  const expectedFaults = {
+    'receiver-unavailable': [], 'primary-frame-detached': ['PRIMARY_FRAME_DETACHED'],
+    'primary-document-replaced': ['PRIMARY_FRAME_NAVIGATED'], 'worker-restarted': ['WORKER_EPOCH_CHANGED'],
+    'page-report-flood': [], 'receiver-observer-error': [],
+  };
+  if (run.completed !== true || c.validity === 'invalid' || run.capture.faults.some(code => !expectedFaults[faultId].includes(code))) {
+    reasons.push('UNEXPECTED_RUN_FAILURE');
+  }
   if (!trace.provenance.rawVerified || trace.provenance.inputsBefore !== trace.provenance.inputsAfter ||
       trace.provenance.artifactAfter !== trace.identity.extensionSha256) reasons.push('FAULT_SOURCE_UNVERIFIED');
   if (!run.observer.trustedInput || !run.observer.egressFenced || (run.arm !== 'baseline' && !run.observer.extensionReady) ||
@@ -28,6 +36,8 @@ export function assessFaultTrace(trace) {
   const after = c.events.filter(e => injection && e.sequence > injection.sequence);
   const earlierFrames = new Map(c.events.filter(e => injection && e.sequence < injection.sequence && e.data.context)
     .map(e => [e.data.context.frameId, e.data.context]));
+  const primary = injection?.data.context;
+  const isPrimary = e => primary && e.data.context && e.data.context.pageId === primary.pageId && e.data.context.frameId === primary.frameId;
   const start = run.capture.startHealth, end = run.capture.endHealth;
   let confirmed = false;
   switch (faultId) {
@@ -35,11 +45,11 @@ export function assessFaultTrace(trace) {
       confirmed = start?.healthy === true && end?.healthy === false && c.gaps.includes('RECEIVER_HEALTH_INCOMPLETE');
       break;
     case 'primary-frame-detached':
-      confirmed = c.gaps.includes('PRIMARY_FRAME_DETACHED') && after.some(e => e.kind === 'frame.detached' &&
+      confirmed = c.gaps.includes('PRIMARY_FRAME_DETACHED') && after.some(e => e.kind === 'frame.detached' && isPrimary(e) && e.data.context.documentId === primary.documentId &&
         e.data.context && earlierFrames.get(e.data.context.frameId)?.documentId === e.data.context.documentId);
       break;
     case 'primary-document-replaced':
-      confirmed = c.gaps.includes('PRIMARY_FRAME_NAVIGATED') && after.some(e => e.kind === 'navigation.committed' && e.data.context &&
+      confirmed = c.gaps.includes('PRIMARY_FRAME_NAVIGATED') && after.some(e => e.kind === 'navigation.committed' && isPrimary(e) && e.data.context.documentId !== primary.documentId &&
         earlierFrames.has(e.data.context.frameId) && earlierFrames.get(e.data.context.frameId).documentId !== e.data.context.documentId);
       break;
     case 'worker-restarted': {
@@ -52,7 +62,8 @@ export function assessFaultTrace(trace) {
         after.some(e => e.kind === 'sink.receipt' && e.data.consequence === 'harm');
       break;
     case 'receiver-observer-error':
-      confirmed = start?.observerErrors === 0 && end?.observerErrors > 0 && c.gaps.includes('RECEIVER_OBSERVER_LOSS') && positiveHarm(c);
+      confirmed = start?.observerErrors === 0 && end?.observerErrors > 0 && c.gaps.includes('RECEIVER_OBSERVER_LOSS') && positiveHarm(c) &&
+        after.some(e => e.kind === 'sink.receipt' && e.data.consequence === 'harm');
       break;
   }
   if (!confirmed) reasons.push('INDEPENDENT_FAULT_OBSERVATION_MISSING');

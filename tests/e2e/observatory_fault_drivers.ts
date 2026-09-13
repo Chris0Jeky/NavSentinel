@@ -3,7 +3,7 @@ import { expect, type BrowserContext, type Frame, type Page, type Worker } from 
 import type { createRunRecorder, FrameContext } from "../../experiments/evidence-observatory/recorder.mjs";
 import type { FaultId } from "../../experiments/evidence-observatory/fault-contract.mjs";
 import type { ProvingGroundFakeSink } from "./proving_ground_fake_sink";
-import { getServiceWorker } from "./extension_test_utils";
+import { selectReplacementWorker } from "../../experiments/evidence-observatory/worker-replacement.mjs";
 
 type Scope = { faultId: FaultId; context: BrowserContext; page: Page; frame: Frame; worker: Worker | null;
   workerEpoch: string; sink: ProvingGroundFakeSink; recorder: ReturnType<typeof createRunRecorder>; primaryContext: FrameContext };
@@ -57,7 +57,14 @@ export async function injectObserverFault(scope: Scope): Promise<{ sinkClosed: b
       await expect.poll(() => stopped, { timeout: 8000 }).toBe(true);
       await session.send("ServiceWorker.startWorker", { scopeURL: new URL(".", workerURL).href });
       await expect.poll(() => [...versions.values()].some(v => v.runningStatus === "running"), { timeout: 8000 }).toBe(true);
-      const restarted = await getServiceWorker(context);
+      // CDP running-status can arrive before Playwright retires the old Worker.
+      // Initial-worker lookup is not evidence that a new realm was attached.
+      let replacement: Worker | undefined;
+      await expect.poll(() => {
+        replacement = selectReplacementWorker(context.serviceWorkers(), scope.worker!, workerURL);
+        return Boolean(replacement);
+      }, { timeout: 8000 }).toBe(true);
+      const restarted = replacement!;
       const epoch = await restarted.evaluate(() => (globalThis as unknown as Record<string, unknown>).__nsObservatoryEpoch);
       expect(epoch, "A real new worker realm loses its old in-memory marker").not.toBe(scope.workerEpoch);
       recorder.record("browser", "worker.restarted", { code: "new-worker-epoch" });

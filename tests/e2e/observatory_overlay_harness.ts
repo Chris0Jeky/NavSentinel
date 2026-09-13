@@ -13,6 +13,7 @@ import { installFixtureTargetBootstrap } from "./local_fixture_target_bootstrap"
 import { startProvingGroundEgressFence, startProvingGroundFakeSink, type ProvingGroundEgressAttempt, type ProvingGroundFakeSink, type ProvingGroundEgressFence } from "./proving_ground_fake_sink";
 
 import { injectObserverFault } from "./observatory_fault_drivers";
+import { samplePrimaryScene } from "./observatory_scene_sampler";
 import type { FaultId } from "../../experiments/evidence-observatory/fault-contract.mjs";
 export type OverlayOptions = { fault?: FaultId; viewport?: { width: number; height: number }; clickDelayMs?: number };
 const SCENARIO = "NS-ADV-UI-004";
@@ -68,29 +69,16 @@ function attachFrameObserver(page: Page, recorder: Recorder, active: () => boole
 }
 async function sampleScene(page: Page, frame: Frame, contextOf: (frame: Frame) => FrameContext, harmUrl: string, benignUrl: string): Promise<{ width: number; height: number; boxes: SceneBox[] }> {
   const viewport = page.viewportSize(); if (!viewport) throw new Error("Viewport unavailable");
-  const boxes: SceneBox[] = [];
-  const add = async (owner: Page | Frame, id: string, kind: SceneBox["kind"], context: FrameContext): Promise<void> => {
-    const locator = owner.locator(`#${id}`), exists = await locator.count() > 0;
-    const rect = exists ? await locator.boundingBox() : null;
-    let declaredTarget: SceneBox["declaredTarget"] = "none", effectiveTarget: SceneBox["effectiveTarget"] = "none", targetScope: SceneBox["targetScope"] = "none";
-    const classify = (url: string | null): SceneBox["effectiveTarget"] => url === harmUrl ? "harm-receiver" : url === benignUrl ? "benign-receiver" : url === "#" ? "same-document" : url ? "unknown" : "none";
-    let linkFrame: Frame | null = null;
-    if (exists && kind === "attack") { const handle = await locator.elementHandle(); linkFrame = await handle?.contentFrame() ?? null; }
-    const anchor = kind === "attack" ? linkFrame?.locator("#container") : id === "observatory-benign-receiver" ? locator : null;
-    if (anchor && await anchor.count()) {
-      const values = await anchor.evaluate(node => ({ declared: node.getAttribute("href"), effective: node instanceof HTMLAnchorElement ? node.href : "", scope: node.getAttribute("target") }));
-      declaredTarget = classify(values.declared); effectiveTarget = classify(values.effective);
-      targetScope = values.scope === "_blank" ? "new-context" : !values.scope || values.scope === "_self" ? "current-context" : "unknown";
-    }
-    boxes.push({ id, ...context, kind, state: !exists ? "absent" : rect ? "visible" : "hidden",
-      x: Math.round(rect?.x ?? 0), y: Math.round(rect?.y ?? 0), width: Math.round(rect?.width ?? 0), height: Math.round(rect?.height ?? 0),
-      declaredTarget, effectiveTarget, targetScope });
-  };
-  await add(page, "media-frame", "frame", contextOf(frame));
-  for (const id of ["outside-toast-target", "programme-benign-control", "observatory-benign-receiver"]) await add(frame, id, "control", contextOf(frame));
-  for (const id of ["programme-overlay-a", "programme-overlay-b"]) await add(frame, id, "attack", contextOf(frame));
-  // pageId is not part of scene geometry: only frame/document identities are rendered.
-  return { ...viewport, boxes: boxes.map(({ ...box }) => { delete (box as SceneBox & { pageId?: string }).pageId; return box; }) };
+  const identity = contextOf(frame);
+  const outer = await page.locator("#media-frame").evaluate(node => {
+    const rect = node.getBoundingClientRect();
+    return { frameRect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+      contentOffset: { x: rect.x + node.clientLeft, y: rect.y + node.clientTop } };
+  });
+  const scene = await frame.evaluate(samplePrimaryScene, { context: { frameId: identity.frameId,
+    documentId: identity.documentId, parentFrameId: identity.parentFrameId }, ...outer, viewport, harmUrl, benignUrl });
+  if (contextOf(frame).documentId !== identity.documentId) throw new Error("SCENE_DOCUMENT_CHANGED");
+  return scene;
 }
 async function readProduct(worker: Worker): Promise<Array<{ code: string }>> {
   return worker.evaluate(async () => {
