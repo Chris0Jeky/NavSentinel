@@ -54,7 +54,8 @@ try {
   assert.ok(await page.locator('.form-changed').count() >= 3);
   await page.locator('#form-panel').screenshot({ path: path.join(output, 'action-substitution.png') });
   await page.getByRole('button', { name: 'Open baseline run', exact: true }).click();
-  assert.match(await page.locator('#case-subtitle').innerText(), /baseline/);
+  // CSS uppercases the visible subtitle; assert the underlying semantic label.
+  assert.match(await page.locator('#case-subtitle').textContent(), /\/ baseline$/);
   await page.locator('.event').last().click();
   assert.equal(await page.locator('.receipt-link').count(), 1);
   assert.match(await page.locator('#verdict').innerText(), /HARM OBSERVED/);
