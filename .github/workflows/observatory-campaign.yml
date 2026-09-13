@@ -44,6 +44,7 @@ jobs:
           const walk = p => fs.readdirSync(p,{withFileTypes:true}).flatMap(e=>e.isDirectory()?walk(path.join(p,e.name)):[path.join(p,e.name)]);
           const files=fs.existsSync('test-results/observatory-campaign')?walk('test-results/observatory-campaign').filter(p=>p.endsWith('/full-trace.json')):[];
           const report=buildReport(files.map(f=>fs.readFileSync(f)));
+          fs.mkdirSync('test-results', {recursive: true});
           fs.writeFileSync('test-results/observatory-full-validation.json',JSON.stringify(report,null,2));
           console.log(JSON.stringify({summary:report.summary,rejected:report.rejected,comparisons:report.comparisons}));
           if(files.length!==2 || !supportsCompleteSet(report)) process.exitCode=1;
