@@ -1,0 +1,38 @@
+name: Publish exact reviewed Observatory candidate
+on:
+  push:
+    branches: [feat/observatory-campaign-20260913]
+permissions:
+  contents: write
+jobs:
+  publish:
+    if: github.repository == 'Chris0Jeky/NavSentinel' && github.ref == 'refs/heads/feat/observatory-campaign-20260913'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/observatory-campaign-20260913
+          fetch-depth: 2
+      - name: Verify transport, apply exact local candidate, remove publication helpers
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD^)" = '361712f454a20e9b651866990a4e46143d1869c4'
+          python3 - <<'PY'
+          import base64,gzip,hashlib,pathlib
+          data=''.join(pathlib.Path(f'.observatory-publish-{i}').read_text() for i in range(1,5))
+          patch=gzip.decompress(base64.b64decode(data,validate=True))
+          assert hashlib.sha256(patch).hexdigest()=='118a9d9ec366fbb8c47b00fb761d31c6a8eaecdababd2d3f7130ed14efd6f098'
+          pathlib.Path('/tmp/observatory.patch').write_bytes(patch)
+          PY
+          git apply --index /tmp/observatory.patch
+          git rm .observatory-publish-1 .observatory-publish-2 .observatory-publish-3 .observatory-publish-4 .github/workflows/observatory-publish-once.yml
+          test "$(git write-tree)" = '6a7bd5343cf32ac081bc439352dbcb6e91ae8210'
+          git diff --cached --check
+          git config user.name 'NavSentinel Development'
+          git config user.email 'noreply@openai.com'
+          git commit -m 'feat(observability): record exact-input four-arm overlay campaigns and receiver health'
+          test "$(git rev-parse HEAD^{tree})" = '6a7bd5343cf32ac081bc439352dbcb6e91ae8210'
+          git push origin HEAD:refs/heads/feat/observatory-campaign-20260913
+          git rev-parse HEAD HEAD^{tree}
