@@ -163,3 +163,11 @@ unknown, stale-source or unconfirmed trials fail qualification. Receiver errors
 must be present in receiver-owned health counters; page floods must retain a harm
 receipt after injection. Frame/worker transitions require actual browser events.
 The same producer-authenticity and dependency-trust limits continue to apply.
+
+## Separate child-form diagnostics
+
+The form adapter accepts `navsentinel.observatory.form.v1`, not an alternative way
+to mint native v2 proof. It retains strict enum-only intent snapshots, independent
+accepted/rejected receiver attempts and health observations. The report adds
+`cases[].formEvidence` and `formComparisons`; it leaves `proof` null and native
+`supportsCompleteSet` false for form-only inputs. See `FORM_TRACE_INSPECTION.md`.

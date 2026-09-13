@@ -37,8 +37,10 @@ test('a clean filter cannot launder different executed bytes', t => {
 });
 test('symlinks in executed source are rejected', t => {
   const { root } = repo(t); assert.equal(typeof source.captureInputs, 'function');
-  fs.renameSync(path.join(root, 'gym', 'fixture.html'), path.join(root, 'other.html'));
-  fs.symlinkSync('../other.html', path.join(root, 'gym', 'fixture.html'));
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'observatory-link-target-'));
+  t.after(() => fs.rmSync(outside, { recursive: true, force: true }));
+  fs.renameSync(path.join(root, 'gym', 'fixture.html'), path.join(outside, 'other.html'));
+  fs.symlinkSync(path.join(outside, 'other.html'), path.join(root, 'gym', 'fixture.html'));
   assert.throws(() => source.captureInputs(root), /LINKED_INPUT/);
 });
 test('inherited Git index/object/worktree overrides are not honored', t => {
