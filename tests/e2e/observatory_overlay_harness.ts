@@ -13,6 +13,7 @@ import { installFixtureTargetBootstrap } from "./local_fixture_target_bootstrap"
 import { startProvingGroundEgressFence, startProvingGroundFakeSink, type ProvingGroundEgressAttempt, type ProvingGroundFakeSink, type ProvingGroundEgressFence } from "./proving_ground_fake_sink";
 
 import { injectObserverFault } from "./observatory_fault_drivers";
+import type { WorkerSnapshot } from "../../experiments/evidence-observatory/worker-snapshot.mjs";
 import { samplePrimaryScene } from "./observatory_scene_sampler";
 import type { FaultId } from "../../experiments/evidence-observatory/fault-contract.mjs";
 export type OverlayOptions = { fault?: FaultId; viewport?: { width: number; height: number }; clickDelayMs?: number };
@@ -97,6 +98,7 @@ export async function runOverlayArm(arm: Arm, churn: boolean, instrumentation: "
   let context: BrowserContext | null = null, browserVersion = "unknown", extensionReady = false, trustedInput = false, collecting = true, egressFenced = false;
   let error: string | null = null, sinkClosed = false, skipScene = false;
   let removeFaultObserver = (): void => {};
+  let readRestartedWorker: (() => Promise<WorkerSnapshot>) | undefined;
   try {
     sink = await startProvingGroundFakeSink({ runId, scenarioId: SCENARIO, allowedRoles: ["attack", "benign", "mixed"], allowedConsequences: ["wrong-target-navigation", "benign-navigation"],
       targetAuthorities: [{ id: harmId, role: harmRole, consequence: "wrong-target-navigation", maxUses: 1 }, { id: benignId, role: benignRole, consequence: "benign-navigation", maxUses: 1 }] });
@@ -170,7 +172,7 @@ export async function runOverlayArm(arm: Arm, churn: boolean, instrumentation: "
       const result = await injectObserverFault({ faultId: options.fault, context: context!, page, frame,
         worker, workerEpoch, sink: liveSink, recorder, primaryContext: frameContext(frame) });
       sinkClosed = result.sinkClosed; skipScene = result.skipScene; removeFaultObserver = result.cleanup;
-      if (result.worker) worker = result.worker;
+      if (result.readWorkerState) readRestartedWorker = result.readWorkerState;
     };
     if (options.fault === "page-report-flood" || options.fault === "receiver-observer-error") await inject();
     const target = await frame.locator("#outside-toast-target").boundingBox();
@@ -195,9 +197,10 @@ export async function runOverlayArm(arm: Arm, churn: boolean, instrumentation: "
     const end = Date.now() + REQUIRED_MS + 100;
     while (Date.now() < end) { await page.waitForTimeout(Math.min(250, Math.max(1, end - Date.now()))); await sample(); }
     if (worker) {
-      const epoch = await worker.evaluate(() => (globalThis as unknown as Record<string, unknown>).__nsObservatoryEpoch);
+      const restartedState = readRestartedWorker ? await readRestartedWorker() : null;
+      const epoch = restartedState ? restartedState.epoch : await worker.evaluate(() => (globalThis as unknown as Record<string, unknown>).__nsObservatoryEpoch);
       if (epoch !== workerEpoch) recorder.gap("WORKER_EPOCH_CHANGED");
-      const decisions = await readProduct(worker);
+      const decisions = restartedState ? restartedState.decisions : await readProduct(worker);
       for (const d of decisions) recorder.record("extension", "decision.block", { code: d.code });
       if (arm === "protected" || arm === "mixed") expect(decisions.length).toBeGreaterThan(0);
       else expect(decisions).toHaveLength(0);

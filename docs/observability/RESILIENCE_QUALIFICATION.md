@@ -99,3 +99,33 @@ before these changes. The repaired local candidate passes 144 Observatory Node
 contracts plus the five scene-sampler Vitest cases, and repository lint/typecheck.
 Hosted reruns must qualify the repaired candidate independently; the first failures
 remain part of this record and are not discarded as passing retries.
+
+## Second hosted attempt: correct scene sampling, unresolved Worker-handle assumption
+
+Run 34777293262 at `63284d5a23a970b63431ce0e653c7ae1657c8b44` passed
+both challenge campaigns and their actual-data scene smoke. Five fault trials
+passed again. The worker trial observed CDP stop/running status, but no new matching
+Playwright Worker object arrived during the bounded eight-second wait. This remained
+an invalid trial; no object-identity workaround or longer timeout made it pass.
+The pinned Playwright `CRServiceWorker` listens to the initial execution-context
+creation once, so assuming object replacement is not a sound general restart oracle.
+
+The next candidate reads a fixed, bounded metadata snapshot through a separately
+attached CDP worker session, addressed by the exact extension script target. It
+requires exactly one service-worker target, matching runtime extension/script
+identity, disappearance of the prior in-memory epoch marker, and independently
+observed stop/running transitions. It reads the persistent product decisions again
+at the end of observation through that current realm; no stale Worker evaluation
+is used after restart. The reader detaches its own session on success/failure and
+rejects missing, ambiguous, misbound, exception, disconnected and timed-out replies.
+Thirteen isolated protocol-contract tests were red before implementation and pass
+now (153 Observatory contracts total, replacing the superseded four object-identity
+selector tests). These tests do not replace actual browser qualification.
+
+This reader uses the non-flattened Target session transport supported by the pinned
+Chromium protocol, because public Playwright CDPSession.send does not expose a child
+session argument. It is a test-only adapter with an explicit migration boundary;
+future removal must fail visibly. No imported expression is executed and no raw
+product event contents are returned. Protocol references:
+https://chromedevtools.github.io/devtools-protocol/tot/Target/
+https://playwright.dev/docs/api/class-cdpsession

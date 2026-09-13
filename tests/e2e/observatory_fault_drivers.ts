@@ -3,11 +3,11 @@ import { expect, type BrowserContext, type Frame, type Page, type Worker } from 
 import type { createRunRecorder, FrameContext } from "../../experiments/evidence-observatory/recorder.mjs";
 import type { FaultId } from "../../experiments/evidence-observatory/fault-contract.mjs";
 import type { ProvingGroundFakeSink } from "./proving_ground_fake_sink";
-import { selectReplacementWorker } from "../../experiments/evidence-observatory/worker-replacement.mjs";
+import { readWorkerSnapshot, type WorkerSnapshot } from "../../experiments/evidence-observatory/worker-snapshot.mjs";
 
 type Scope = { faultId: FaultId; context: BrowserContext; page: Page; frame: Frame; worker: Worker | null;
   workerEpoch: string; sink: ProvingGroundFakeSink; recorder: ReturnType<typeof createRunRecorder>; primaryContext: FrameContext };
-export async function injectObserverFault(scope: Scope): Promise<{ sinkClosed: boolean; skipScene: boolean; cleanup: () => void; worker?: Worker }> {
+export async function injectObserverFault(scope: Scope): Promise<{ sinkClosed: boolean; skipScene: boolean; cleanup: () => void; readWorkerState?: () => Promise<WorkerSnapshot> }> {
   const { faultId, context, page, frame, sink, recorder } = scope;
   const result = { sinkClosed: false, skipScene: false, cleanup: (): void => {} };
   recorder.record("runner", "fault.injected", { code: faultId, frame: "child", context: scope.primaryContext });
@@ -57,18 +57,17 @@ export async function injectObserverFault(scope: Scope): Promise<{ sinkClosed: b
       await expect.poll(() => stopped, { timeout: 8000 }).toBe(true);
       await session.send("ServiceWorker.startWorker", { scopeURL: new URL(".", workerURL).href });
       await expect.poll(() => [...versions.values()].some(v => v.runningStatus === "running"), { timeout: 8000 }).toBe(true);
-      // CDP running-status can arrive before Playwright retires the old Worker.
-      // Initial-worker lookup is not evidence that a new realm was attached.
-      let replacement: Worker | undefined;
-      await expect.poll(() => {
-        replacement = selectReplacementWorker(context.serviceWorkers(), scope.worker!, workerURL);
-        return Boolean(replacement);
-      }, { timeout: 8000 }).toBe(true);
-      const restarted = replacement!;
-      const epoch = await restarted.evaluate(() => (globalThis as unknown as Record<string, unknown>).__nsObservatoryEpoch);
-      expect(epoch, "A real new worker realm loses its old in-memory marker").not.toBe(scope.workerEpoch);
+      const browser = context.browser();
+      if (!browser) throw new Error("FAULT_BROWSER_MISSING");
+      const readWorkerState = async (): Promise<WorkerSnapshot> => {
+        const root = await browser.newBrowserCDPSession();
+        try { return await readWorkerSnapshot(root, workerURL); }
+        finally { await root.detach(); }
+      };
+      const state = await readWorkerState();
+      expect(state.epoch, "A real new worker realm loses its old in-memory marker").toBeNull();
       recorder.record("browser", "worker.restarted", { code: "new-worker-epoch" });
-      return { ...result, worker: restarted };
+      return { ...result, readWorkerState };
     } finally { armed = false; await session.detach(); }
   }
   return result;
