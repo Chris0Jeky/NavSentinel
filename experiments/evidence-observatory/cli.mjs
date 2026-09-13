@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { buildReport, supportsCompleteSet } from './model.mjs';
-import { demonstration } from './demo.mjs';
+import { sceneDemonstration } from './scene-demo.mjs';
 import { collectInputs, writeReport } from './io.mjs';
 
 const help = `Evidence Observatory (offline, diagnostic only)
@@ -25,7 +25,7 @@ try {
     }
     if (command === 'demo' && options['--input'] || command === 'check' && options['--out']) throw new Error('INVALID_ARGUMENTS');
     if (command !== 'demo' && !options['--input'] || command !== 'check' && !options['--out']) throw new Error('MISSING_ARGUMENTS');
-    const report = buildReport(command === 'demo' ? [JSON.stringify(demonstration())] : collectInputs(options['--input']));
+    const report = buildReport(command === 'demo' ? [JSON.stringify(sceneDemonstration())] : collectInputs(options['--input']));
     if (command === 'check') {
       console.log(JSON.stringify(report));
       process.exitCode = report.rejected.length ? 2 : supportsCompleteSet(report) ? 0 : 1;

@@ -49,20 +49,24 @@ scrubber, source lanes, causal links where supplied, explanatory text, phase-loc
 versus cumulative receiver counts, claim-versus-assessment, explicit gaps, artifact
 identity and projected JSON download. It works without an external asset/CDN.
 
-Three explicit input contracts are supported:
+Four explicit input contracts are supported:
 
 | Producer | Treatment |
 | --- | --- |
 | `NS-ADV-UI-004` overlay receipt v1 | Separate cumulative sink history from the phase-local count; verify the existing self-hash for consistency; retain incomplete provenance/health warnings. |
 | Hidden-media #593 diagnostics | Show page reports in capture order, phase counter differences, product reason and observed recovery. Expected outcomes never become measured outcomes. |
-| `navsentinel.observatory.trace.v1` | Validate bounded typed events and four-arm comparison prerequisites. The complete browser producer is follow-up #700. |
+| `navsentinel.observatory.trace.v1` | Validate the original bounded typed events and four-arm comparison prerequisites. |
+| `navsentinel.observatory.trace.v2` | Recorded campaign producer (#704): raw-input binding, receiver health, frame/document/source-clock metadata and optional geometry. Remaining #700 qualification is tracked explicitly. |
 
 `HARM_THEN_RECOVERY` is not prevention. Zero receiver receipts without a working,
 fresh receiver and complete observation window is inconclusive. A benign task
 completion is not a general statement that the page is safe.
 
-The current timeline is evidence playback, **not recorded DOM/video replay**. The
-richer geometry/frame/target visual layer is #701. There is no everyday-browsing
+The current timeline includes **sampled geometry inspection**, frame/document identity,
+declared/effective target categories and an event-linked receiver inbox for v2 traces.
+It is not continuous DOM/video replay. Samples show their age, are never interpolated,
+and are invalidated by observed frame/document replacement. The expanded realism
+and held-out variant matrix remains #701. There is no everyday-browsing
 collector yet; that separately gated expansion is #702, reusing #591.
 
 ## Optional Playwright attachment reporter
@@ -81,8 +85,9 @@ such execution gap conservatively invalidates the imported set. Unsupported JSON
 attachments remain visible rejections. Do not attach the reporter to the whole
 suite and interpret uninstrumented tests as proof. It is an optional evidence
 consumer, not a replacement for the repository's test runner or retired agent
-lifecycle system. The callback adapter has unit coverage; full campaign integration
-needs hosted qualification and the producer work in #700.
+lifecycle system. The callback adapter has unit coverage and is exercised by the dedicated #704
+campaign. Read that campaign’s exact-head qualification, rather than assuming every
+legacy attachment supplies its complete evidence contract.
 
 With the repository's existing locked Playwright dependencies and browser installed:
 
@@ -108,3 +113,26 @@ See [architecture](../../docs/observability/ARCHITECTURE.md),
 [trace contract](../../docs/observability/TRACE_CONTRACT.md), and
 [qualification](../../docs/observability/QUALIFICATION.md) for the trust boundary,
 implementation roadmap, current limitations and reproducible checks.
+
+## Recorded campaign and measured scenes
+
+The first native producer is now implemented for two bounded overlay variants:
+
+```bash
+node experiments/evidence-observatory/run-campaign.mjs
+```
+
+It requires a clean committed checkout and locked browser tooling, builds from
+verified raw inputs, and emits full/minimal detailed-instrumentation traces. Read
+[the campaign contract](../../docs/observability/CAMPAIGN_700.md) before interpreting
+results. A committed campaign is not evidence of a passing execution.
+
+[Measured scene inspection](../../docs/observability/SCENE_INSPECTION_701.md) explains
+what the diagram shows, sample age, receiver links and the retained realism limits.
+The `demo` command now includes explicitly authored scene samples; these remain
+illustrations, never executed security evidence.
+
+`smoke-recorded.mjs` also opens the actual full-capture report after a successful
+campaign, checks all eight case scenes and receiver links, and records screenshots
+and an immutable projected report in `test-results/observatory-recorded-scenes/`.
+This runs after capture and cannot affect the attack or protection decision.

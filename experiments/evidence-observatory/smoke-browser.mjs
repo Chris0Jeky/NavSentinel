@@ -6,7 +6,7 @@ import os from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { chromium } from 'playwright';
 import { buildReport } from './model.mjs';
-import { demonstration } from './demo.mjs';
+import { sceneDemonstration } from './scene-demo.mjs';
 import { writeReport } from './io.mjs';
 
 const work = fs.mkdtempSync(path.join(os.tmpdir(), 'observatory-browser-'));
@@ -14,7 +14,7 @@ const screenshots = path.resolve('test-results', 'observatory-viewer-smoke');
 fs.mkdirSync(screenshots, { recursive: true });
 let browser;
 try {
-  const report = buildReport([JSON.stringify(demonstration())]);
+  const report = buildReport([JSON.stringify(sceneDemonstration())]);
   const output = writeReport(path.join(work, 'demo'), report);
   browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ acceptDownloads: true });
@@ -27,6 +27,10 @@ try {
   await page.locator('.case-button').first().waitFor();
   assert.equal(await page.locator('.case-button').count(), 4);
   assert.match(await page.locator('#verdict').innerText(), /HARM OBSERVED/);
+  assert.equal(await page.locator('#scene-panel svg').count(), 0, 'no future geometry at run start');
+  await page.locator('.event').filter({hasText:'scene.sample'}).first().click();
+  assert.equal(await page.locator('#scene-panel svg .scene-attack').count(), 1);
+  assert.match(await page.locator('#scene-panel').innerText(), /harm receiver/);
   await page.locator('#arm-filter').selectOption('protected');
   assert.equal(await page.locator('.case-button').count(), 1);
   await page.locator('.case-button').click();
@@ -34,6 +38,9 @@ try {
   await page.locator('#next').click(); assert.match(await page.locator('#step-label').innerText(), /Event 2/);
   await page.locator('#scrub').focus(); await page.keyboard.press('ArrowRight');
   assert.match(await page.locator('#step-label').innerText(), /Event 3/);
+  await page.locator('.event').filter({hasText:'scene.sample'}).last().click();
+  assert.equal(await page.locator('#scene-panel svg .scene-attack').count(), 0);
+  assert.match(await page.locator('#scene-panel').innerText(), /hidden/);
   await page.locator('#arm-filter').selectOption('');
   for (const [name, width, height] of [['desktop', 1440, 1000], ['tablet', 900, 1000], ['mobile', 390, 844]]) {
     await page.setViewportSize({ width, height });
