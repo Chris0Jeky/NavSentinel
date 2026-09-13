@@ -49,7 +49,7 @@ scrubber, source lanes, causal links where supplied, explanatory text, phase-loc
 versus cumulative receiver counts, claim-versus-assessment, explicit gaps, artifact
 identity and projected JSON download. It works without an external asset/CDN.
 
-Four explicit input contracts are supported:
+Five explicit input contracts are supported:
 
 | Producer | Treatment |
 | --- | --- |
@@ -57,6 +57,7 @@ Four explicit input contracts are supported:
 | Hidden-media #593 diagnostics | Show page reports in capture order, phase counter differences, product reason and observed recovery. Expected outcomes never become measured outcomes. |
 | `navsentinel.observatory.trace.v1` | Validate the original bounded typed events and four-arm comparison prerequisites. |
 | `navsentinel.observatory.trace.v2` | Recorded campaign producer (#704): raw-input binding, receiver health, frame/document/source-clock metadata and optional geometry. Remaining #700 qualification is tracked explicitly. |
+| `navsentinel.observatory.form.v1` | Separate child-form diagnostics from #707: minimized intent changes, independent receiver attempts and paired comparisons without native four-arm certification. |
 
 `HARM_THEN_RECOVERY` is not prevention. Zero receiver receipts without a working,
 fresh receiver and complete observation window is inconclusive. A benign task
@@ -174,3 +175,14 @@ and `docs/observability/RESILIENCE_QUALIFICATION.md` for exact evidence and limi
 The `Observatory fault and challenge checks` workflow qualifies each lane separately
 and retains artifacts for seven days. Live recording (#702) and child-form policy
 integration (#698/#700) are not activated by these commands.
+
+## Child-form intent receipts
+
+The independently stacked #707 producer adds `navsentinel.observatory.form.v1`
+diagnostics from #698's existing form matrix. Import its `*.form-trace.json` files
+to inspect clicked versus reported-operation submitter/action/target categories, receiver
+acceptance/rejection and post-request recovery. The form panel links paired runs
+without promoting them to native four-arm prevention evidence. See
+[form inspection](../../docs/observability/FORM_TRACE_INSPECTION.md) for commands,
+source provenance, qualification and remaining limits. Everyday browsing capture
+is still separately gated; this does not activate #702.
