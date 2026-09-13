@@ -14,9 +14,12 @@ const SOURCES = {
   'decision.hold': 'extension', 'decision.rollback': 'extension',
   'navigation.committed': 'browser', 'navigation.restored': 'browser', 'request.observed': 'browser',
   'control.completed': 'browser', 'sink.receipt': 'sink',
-  'observer.health': 'runner', 'scene.sample': 'browser', 'frame.attached': 'browser', 'frame.detached': 'browser',
+  'observer.health': 'runner', 'fault.injected': 'runner', 'worker.stopped': 'browser', 'worker.restarted': 'browser', 'scene.sample': 'browser', 'frame.attached': 'browser', 'frame.detached': 'browser',
 };
 const EXPLANATIONS = {
+  'fault.injected': 'The test runner deliberately requested an observer fault. This announcement does not establish that the fault occurred.',
+  'worker.stopped': 'Chromium reported the extension worker stopped. The observation interval is incomplete even if protection later resumes.',
+  'worker.restarted': 'The browser worker resumed with a different in-memory epoch. This is recovery, not continuous observation.',
   'observer.health': 'The runner checked the independent receiver using a separate non-consuming health challenge.',
   'scene.sample': 'The browser harness sampled these element rectangles. This is a snapshot, not continuous video.',
   'frame.attached': 'The browser observed a frame/document context; IDs are local to this fresh run.',
@@ -232,6 +235,7 @@ function nativeTrace(raw, source) {
       if (input.kind === 'navigation.restored' && harmSequence >= 0) c.facts.recovered = true;
       if (input.kind === 'control.completed') c.facts.legitimateCompletions++;
       if (input.kind === 'observer.gap') c.gaps.push('OBSERVER_GAP_EVENT');
+      if (input.kind === 'fault.injected') c.gaps.push('INTENTIONAL_FAULT_EXPERIMENT');
       c.events.push(e); ids.add(id);
     }
     if (c.events[0]?.kind !== 'run.start' || c.events[0]?.elapsedMs !== o.startedMs || c.events.at(-1)?.kind !== 'observation.end' || c.events.at(-1)?.elapsedMs !== o.endedMs) c.gaps.push('WINDOW_BOUNDARIES_MISSING');

@@ -144,3 +144,22 @@ This is scoped synthetic evidence, not general native initiator attestation.
 
 For executable contracts, faults and commands see `CAMPAIGN_700.md`; for the visual
 measurement boundary see `SCENE_INSPECTION_701.md`.
+
+## Deliberate observer faults (v2 additive events)
+
+`fault.injected` (runner) announces a deliberate experiment and always adds
+`INTENTIONAL_FAULT_EXPERIMENT`, excluding that run from prevention support.
+`worker.stopped` / `worker.restarted` (browser) record CDP-observed stop and a
+subsequent new in-memory epoch. They do not mean the worker continuously observed
+anything while stopped. `observer.gap` carries the first timestamped occurrence
+of a strictly allowlisted fault; identical repeats are coalesced, with the full
+category retained at the terminal boundary even if event capacity is exhausted.
+
+`navsentinel.observatory.fault-check.v1` is a separate **test-system** summary,
+not a replacement trace or a prevention outcome. Its six fixed trials require
+native v2 synthetic records, exact-input attestations, ready preconditions, one
+identified injection and its corresponding observed effect. Missing, duplicated,
+unknown, stale-source or unconfirmed trials fail qualification. Receiver errors
+must be present in receiver-owned health counters; page floods must retain a harm
+receipt after injection. Frame/worker transitions require actual browser events.
+The same producer-authenticity and dependency-trust limits continue to apply.
