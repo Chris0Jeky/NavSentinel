@@ -6,6 +6,9 @@ on:
       - 'tests/e2e/issue688-form-intent.spec.ts'
       - 'tests/e2e/form_observatory*'
       - 'tests/form-observatory*'
+      - 'tests/form-document*'
+      - 'tests/e2e/form_document*'
+      - 'tests/e2e/form-document*'
       - 'experiments/form-observatory/**'
       - 'docs/observability/FORM*'
       - '.github/workflows/observatory-form-evidence.yml'
@@ -34,12 +37,14 @@ jobs:
       - run: npm run typecheck && npm run lint
       - name: Test probe, health, recorder and parity boundaries
         run: |
-          npx vitest run tests/form-observatory.test.ts tests/form-observatory-health.test.ts
+          npx vitest run tests/form-observatory.test.ts tests/form-observatory-health.test.ts tests/form-document-registry.test.ts tests/form-document-transport.test.ts tests/form-document-recorder.test.ts
           node --test experiments/form-observatory/compare.test.mjs
       - id: build
         run: npm run build
       - id: browser
         run: npx playwright install --with-deps chromium
+      - name: Actual browser document lifecycle attribution (not prevention)
+        run: npx playwright test tests/e2e/form-document-lifecycle.spec.ts --project=regression --workers=1 --retries=0 --output=test-results/form-documents
       - name: Existing form assertions with detailed observation
         env:
           NAVSENTINEL_FORM_OBSERVATORY: '1'
@@ -58,5 +63,6 @@ jobs:
             form-evidence/
             test-results/form-full/
             test-results/form-control/
+            test-results/form-documents/
             playwright-report/
           retention-days: 7
