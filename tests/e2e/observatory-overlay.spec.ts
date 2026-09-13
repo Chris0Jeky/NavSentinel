@@ -234,7 +234,8 @@ for (const churn of [false, true]) test(`Observatory ${churn ? "reinsertion" : "
         const result = await runArm(arm, churn, instrumentation); runs.push(result.run); browserVersion = result.browserVersion;
       }
     } finally {
-      let after = start.source, artifactAfter = start.artifact, rawVerified = true;
+      let after = start.source, artifactAfter = start.artifact;
+      let rawVerified: boolean;
       try { after = captureInputs(); artifactAfter = hashArtifact(extensionPath); rawVerified = after.head === start.source.head && after.digest === start.source.digest && artifactAfter === start.artifact; } catch { rawVerified = false; }
       const trace = { schema: TRACE_V2, mode: "synthetic", campaignId: `${testInfo.testId.replace(/[^a-zA-Z0-9._-]/g, "-")}-${instrumentation}`, scenarioId: SCENARIO,
         variantId: `${churn ? "reinsertion" : "stable"}-${instrumentation}`,
