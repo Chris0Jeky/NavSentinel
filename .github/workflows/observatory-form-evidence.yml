@@ -1,0 +1,46 @@
+name: Observatory form evidence
+on:
+  pull_request:
+    paths:
+      - 'tests/e2e/form_intent_lab.ts'
+      - 'tests/e2e/issue688-form-intent.spec.ts'
+      - 'tests/e2e/form_observatory*'
+      - 'tests/form-observatory*'
+      - 'docs/observability/FORM*'
+      - '.github/workflows/observatory-form-evidence.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  form-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Preserve exact source with evidence
+        run: |
+          mkdir -p form-evidence
+          git rev-parse HEAD HEAD^{tree} > form-evidence/source-identity.txt
+          git archive --format=tar.gz HEAD > form-evidence/source.tar.gz
+          sha256sum form-evidence/source.tar.gz > form-evidence/source.sha256
+      - run: npm ci --ignore-scripts
+      - run: npm run typecheck && npm run lint
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: Existing independent form consequence assertions, no retries
+        run: npx playwright test tests/e2e/issue688-form-intent.spec.ts --project=regression --workers=2 --fully-parallel --retries=0 --output=test-results/form-observatory
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: observatory-form-evidence
+          path: |
+            form-evidence/
+            test-results/form-observatory/
+            playwright-report/
+          retention-days: 7
