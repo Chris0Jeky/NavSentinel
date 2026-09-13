@@ -1,6 +1,6 @@
 /** Bounded runner-side recorder. No browser globals, persistence or policy writes. */
 import { performance } from 'node:perf_hooks';
-import { EVENT_SOURCES, TRACE_V2, validateEventMetadata } from './capture-v2.mjs';
+import { EVENT_SOURCES, FAULT_CODES, TRACE_V2, validateEventMetadata } from './capture-v2.mjs';
 
 export { TRACE_V2 };
 export function createRunRecorder({ runId, arm, contextId, harmTargetId, benignTargetId,
@@ -21,7 +21,7 @@ export function createRunRecorder({ runId, arm, contextId, harmTargetId, benignT
     const allowed = ['frame', 'causes', 'code', 'consequence', 'sinkSequence', 'context', 'sourceClock', 'scene', 'receiver'];
     if (!extra || Object.keys(extra).some(k => !allowed.includes(k))) throw new Error('EVENT_FIELDS_INVALID');
     validateEventMetadata(extra);
-    const critical = ['sink.receipt', 'observation.end', 'observer.health'].includes(kind);
+    const critical = ['sink.receipt', 'observation.end', 'observer.health', 'observer.gap'].includes(kind);
     const reserve = Math.min(8, Math.floor(maxEvents / 2));
     if (events.length >= maxEvents - (critical ? 1 : reserve) && kind !== 'observation.end') {
       dropped++; if (critical) faults.add('CRITICAL_EVENT_OVERFLOW'); return null;
@@ -33,7 +33,14 @@ export function createRunRecorder({ runId, arm, contextId, harmTargetId, benignT
   record('runner', 'run.start');
   return {
     record,
-    gap(code) { if (closed) throw new Error('RECORDER_CLOSED'); faults.add(code); },
+    gap(code) {
+      if (closed) throw new Error('RECORDER_CLOSED');
+      if (!FAULT_CODES.includes(code)) throw new Error('FAULT_CODE_INVALID');
+      if (!faults.has(code)) {
+        faults.add(code);
+        record('runner', 'observer.gap', { code });
+      }
+    },
     health(phase, value) {
       if (closed) throw new Error('RECORDER_CLOSED');
       if (!['start', 'end'].includes(phase) || (phase === 'start' ? startHealth : endHealth)) throw new Error('HEALTH_PHASE_INVALID');

@@ -184,3 +184,10 @@ test('cross-source run reuse is not a fresh independent arm', () => {
   const r = buildReport([JSON.stringify(a), JSON.stringify(b)]); assert.ok(r.comparisons[0].reasons.includes('DUPLICATE_RUN_ID_ACROSS_INPUTS'));
 });
 test('declared harm without receipts makes a native comparison incomplete', () => { const r = fixture(); r.runs[1].declaredOutcome = 'HARM_REACHED'; assert.equal(report(r).summary.boundedSupportedComparisons, 0); });
+
+test('a fault injection excludes an otherwise complete four-arm set from prevention support', () => {
+  const raw = fixture(); add(raw.runs[1], 'fault.injected', 'runner', { code: 'receiver-unavailable' });
+  const result = report(raw);
+  assert.equal(result.rejected.length, 0);
+  assert.equal(result.summary.boundedSupportedComparisons, 0);
+});
