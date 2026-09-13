@@ -1,0 +1,36 @@
+name: Observatory exact-base development snapshot
+on:
+  push:
+    branches: [work/observatory-source-snapshot-20260913]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 361712f454a20e9b651866990a4e46143d1869c4
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Archive exact existing source for offline implementation
+        run: |
+          mkdir -p /tmp/observatory-development-snapshot
+          git bundle create /tmp/observatory-development-snapshot/source.bundle HEAD
+          git rev-parse HEAD HEAD^{tree} > /tmp/observatory-development-snapshot/identity.txt
+      - name: Install existing lockfile without lifecycle scripts
+        run: npm ci --ignore-scripts
+      - name: Archive locked test tooling
+        run: |
+          tar -czf /tmp/observatory-development-snapshot/node_modules.tar.gz node_modules
+          cd /tmp/observatory-development-snapshot
+          sha256sum source.bundle node_modules.tar.gz > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: observatory-exact-base-and-locked-tooling
+          path: /tmp/observatory-development-snapshot/
+          retention-days: 2
