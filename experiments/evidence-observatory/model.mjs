@@ -1,5 +1,6 @@
 /** Offline diagnostic projection. Never imports code or promotes registry evidence. */
 import { createHash } from 'node:crypto';
+import { FORM_DOCUMENT_SCHEMA } from './form-documents.mjs';
 import { FORM_SCHEMA, parseFormTrace, compareFormCases } from './form-trace.mjs';
 import { TRACE_V2, validateEventMetadata, validateRunCapture, validateProvenance } from './capture-v2.mjs';
 
@@ -271,7 +272,7 @@ export function parseSource(bytes, id = 'source-1') {
   if (!object(raw)) throw new Error('ROOT_NOT_OBJECT');
   const source = { id, sha256: sha256(bytes), bytes: bytes.length, format: 'unknown' };
   let cases;
-  if (raw.schema === FORM_SCHEMA) { source.format = 'form-observatory-v1'; cases = parseFormTrace(raw, source, baseCase); }
+  if (raw.schema === FORM_SCHEMA || raw.schema === FORM_DOCUMENT_SCHEMA) { source.format = raw.schema === FORM_DOCUMENT_SCHEMA ? 'form-observatory-v2' : 'form-observatory-v1'; cases = parseFormTrace(raw, source, baseCase); }
   else if (raw.schema === TRACE_SCHEMA || raw.schema === TRACE_V2) { source.format = raw.schema === TRACE_V2 ? 'observatory-trace-v2' : 'observatory-trace-v1'; cases = nativeTrace(raw, source); }
   else if (raw.scenario_id === 'NS-ADV-UI-004') { source.format = 'overlay-receipt-v1'; cases = overlay(raw, source); }
   else if (raw.arm && Array.isArray(raw.sinkReceipts) && Array.isArray(raw.diagnostics)) { source.format = 'hidden-media-diagnostic-v1'; cases = hiddenMedia(raw, source); }
