@@ -171,3 +171,20 @@ to mint native v2 proof. It retains strict enum-only intent snapshots, independe
 accepted/rejected receiver attempts and health observations. The report adds
 `cases[].formEvidence` and `formComparisons`; it leaves `proof` null and native
 `supportsCompleteSet` false for form-only inputs. See `FORM_TRACE_INSPECTION.md`.
+
+## Form v2 reporting documents
+
+`navsentinel.observatory.form.v2` requires `bindingPolicy: CDP_DEFAULT_WORLD_DOCUMENT`.
+It retains the diagnostic-only form contract, adding `binding` to page intent and
+browser document-start/end events only. Binding keys are exactly frameId,
+documentId and scope, with fixed local token syntax. No lifecycle token is
+accepted from page payloads by the producer. On import, these are still supplied
+producer attestations, not authenticated evidence.
+
+An optional fixed `experiment` enum distinguishes form-campaign from the six
+observed lifecycle cases. Legacy v2 without this field denotes form-campaign;
+unknown prose is rejected. `formEvidence.documents` records indexed intervals;
+missing ends produce a gap. The temporal selector requires the same active
+reporting document and returns an explicit unanchored state when input is absent.
+V1 has no synthetic document identity added. Receiver facts remain unbound rather
+than inheriting the last reporting document. See FORM_DOCUMENT_INSPECTION.md.

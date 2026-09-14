@@ -186,3 +186,17 @@ without promoting them to native four-arm prevention evidence. See
 [form inspection](../../docs/observability/FORM_TRACE_INSPECTION.md) for commands,
 source provenance, qualification and remaining limits. Everyday browsing capture
 is still separately gated; this does not activate #702.
+
+## Document-bound form diagnostics
+
+Form trace v2 adds browser-supplied reporting-realm lifetimes from the separately
+stacked producer #709. The form viewer shows document start/end links and only
+compares snapshots within the same active reporting document. Same-URL reloads and
+siblings cannot borrow one another's inputs. Reporting realm is not proof of the
+native initiator: same-origin scripts can call another frame's exposed function.
+Legacy v1 stays visibly unbound. See
+[document inspection](../../docs/observability/FORM_DOCUMENT_INSPECTION.md).
+
+`node experiments/evidence-observatory/smoke-documents.mjs` exercises this viewer
+against pinned recorded lifecycle and form cases. Lifecycle records are separately
+labelled observer tests, not additional protection cases or four-arm certificates.
