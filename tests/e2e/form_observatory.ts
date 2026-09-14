@@ -43,6 +43,8 @@ export class FormObservation {
   }
   private add(source: FormEvent["source"], kind: string, data: Record<string, unknown>, ordinary = false, binding?: DocumentBinding): void {
     if (this.finished) throw new Error("FORM_RECORDER_FINISHED");
+    // Lifecycle churn is observation traffic, not a receiver consequence.
+    ordinary ||= kind === "document.started" || kind === "document.ended";
     if (this.events.length >= this.options.maxEvents - (ordinary ? 32 : kind === "observation.end" ? 0 : 1)) { this.dropped = Math.min(1000000, this.dropped + 1); this.gaps.add("EVENTS_DROPPED"); return; }
     const now = kind === "run.start" ? 0 : this.options.clock() - this.start;
     if (!Number.isFinite(now) || now < this.lastTime || now > 86400000) this.gaps.add("CLOCK_INVALID");

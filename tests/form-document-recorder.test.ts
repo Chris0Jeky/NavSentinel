@@ -33,3 +33,14 @@ it("lifecycle exercises are explicitly labeled and never masquerade as form camp
   expect(r.finish(true).experiment).toBe("same-url-siblings");
   expect(bound().finish(true).experiment).toBe("form-campaign");
 });
+it("document churn cannot consume the receiver and terminal reserve", () => {
+  const r = new FormObservation({ variant: "exact-request", pairId: "e".repeat(64), protectedArm: false, identity, documentBound: true, maxEvents: 40 });
+  for (let i = 1; i <= 30; i++) {
+    const b = { frameId: "frame-1", documentId: `document-${i}`, scope: "child" as const };
+    r.documentStarted(b); r.documentEnded(b, "navigation");
+  }
+  r.receiver({ role: "harm", method: "POST", ordinal: 1, accepted: true });
+  const t = r.finish(true);
+  expect(t.events.some(e => e.kind === "receiver.attempt" && e.data.role === "harm")).toBe(true);
+  expect(t.events.at(-1)?.kind).toBe("observation.end"); expect(t.gaps).toContain("EVENTS_DROPPED");
+});
