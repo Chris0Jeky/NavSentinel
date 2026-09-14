@@ -3,7 +3,7 @@ import { chromium, expect, test, type Page, type Frame, type TestInfo } from "@p
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
-import { FormObservation } from "./form_observatory";
+import { FormObservation, type FormDocumentExperiment } from "./form_observatory";
 import { attachFormDocumentObserver } from "./form_document_observer";
 import { startFormIntentLab } from "./form_intent_lab";
 import { startProvingGroundEgressFence } from "./proving_ground_fake_sink";
@@ -14,10 +14,10 @@ async function report(frame: Frame, phase: "input" | "operation") {
     api.__nsFormObservation({ phase, primitive: "native", intent: { form: "f", submitter: "a", action: "benign", declaredAction: "benign", actionSource: "form", method: "POST", encoding: "urlencoded", target: "top", targetSource: "form", targetOverride: "absent", methodOverride: "absent", ownerMatches: true } });
   }, phase);
 }
-async function run(info: TestInfo, action: (page: Page, trace: FormObservation, origin: string, observer: Awaited<ReturnType<typeof attachFormDocumentObserver>>) => Promise<void>) {
+async function run(info: TestInfo, documentExperiment: FormDocumentExperiment, action: (page: Page, trace: FormObservation, origin: string, observer: Awaited<ReturnType<typeof attachFormDocumentObserver>>) => Promise<void>) {
   const lab = await startFormIntentLab("exact-request");
   const fence = await startProvingGroundEgressFence([], new Set([lab.fixtureOrigin, lab.sinkOrigin]));
-  const trace = new FormObservation({ variant: "exact-request", protectedArm: false, documentBound: true, identity, pairId: createHash("sha256").update(info.testId).digest("hex") });
+  const trace = new FormObservation({ variant: "exact-request", protectedArm: false, documentBound: true, documentExperiment, identity, pairId: createHash("sha256").update(info.testId).digest("hex") });
   let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined, observer: Awaited<ReturnType<typeof attachFormDocumentObserver>> | undefined, completed = false;
   try {
     browser = await chromium.launch({ channel: "chromium", proxy: { server: fence.proxyServer }, args: ["--disable-extensions", "--host-resolver-rules=MAP localhost 127.0.0.1"] });
@@ -29,10 +29,12 @@ async function run(info: TestInfo, action: (page: Page, trace: FormObservation, 
   finally {
     observer?.prepareToClose();
     try { await browser?.close(); } finally { try { await observer?.dispose(); } finally { await fence.close(); await lab.close(); } }
-    await info.attach("document-lifecycle-diagnostic-not-prevention", { contentType: "application/json", body: Buffer.from(JSON.stringify(trace.finish(completed), null, 2)) });
+    const file = info.outputPath("document-lifecycle.form-trace.json");
+    fs.writeFileSync(file, JSON.stringify(trace.finish(completed), null, 2));
+    await info.attach("document-lifecycle-diagnostic-not-prevention", { contentType: "application/json", path: file });
   }
 }
-test("@regression document attribution keeps same-URL sibling reports separate", async ({}, info) => run(info, async (page, trace, origin) => {
+test("@regression document attribution keeps same-URL sibling reports separate", async ({}, info) => run(info, "same-url-siblings", async (page, trace, origin) => {
   const first = page.frames().find(f => f.url() === origin + "/child")!;
   await report(first, "input");
   await page.evaluate(() => { const frame = document.createElement("iframe"); frame.id = "sibling"; frame.src = "/child"; document.body.append(frame); });
@@ -44,7 +46,7 @@ test("@regression document attribution keeps same-URL sibling reports separate",
   const [a, b] = trace.currentEvents().filter(e => e.kind === "form.intent");
   expect(a!.binding!.frameId).not.toBe(b!.binding!.frameId); expect(a!.binding!.documentId).not.toBe(b!.binding!.documentId);
 }));
-test("@regression document attribution retires a same-frame same-URL reload", async ({}, info) => run(info, async (page, trace, origin) => {
+test("@regression document attribution retires a same-frame same-URL reload", async ({}, info) => run(info, "same-frame-reload", async (page, trace, origin) => {
   const frame = page.frames().find(f => f.url() === origin + "/child")!;
   await report(frame, "input"); await frame.goto(origin + "/child"); await report(frame, "operation");
   await expect.poll(() => trace.currentEvents().filter(e => e.kind === "form.intent").length).toBe(2);
@@ -53,13 +55,13 @@ test("@regression document attribution retires a same-frame same-URL reload", as
   const end = trace.currentEvents().find(e => e.kind === "document.ended" && e.binding?.documentId === a!.binding!.documentId);
   expect(end?.sequence).toBeLessThan(b!.sequence);
 }));
-test("@regression same-document navigation keeps its observed realm", async ({}, info) => run(info, async (page, trace, origin) => {
+test("@regression same-document navigation keeps its observed realm", async ({}, info) => run(info, "same-document-navigation", async (page, trace, origin) => {
   const frame = page.frames().find(f => f.url() === origin + "/child")!;
   await report(frame, "input"); await frame.evaluate(() => { location.hash = "local-step"; }); await report(frame, "operation");
   await expect.poll(() => trace.currentEvents().filter(e => e.kind === "form.intent").length).toBe(2);
   const events = trace.currentEvents().filter(e => e.kind === "form.intent"); expect(events[0]!.binding).toEqual(events[1]!.binding);
 }));
-test("@regression removed child and fresh replacement never share document identity", async ({}, info) => run(info, async (page, trace, origin) => {
+test("@regression removed child and fresh replacement never share document identity", async ({}, info) => run(info, "frame-replacement", async (page, trace, origin) => {
   await report(page.frames().find(f => f.url() === origin + "/child")!, "input");
   await page.evaluate(() => { document.querySelector("iframe")!.remove(); const f = document.createElement("iframe"); f.src = "/child"; document.body.append(f); });
   await expect.poll(() => trace.currentEvents().filter(e => e.kind === "document.started").length).toBe(3);
@@ -67,7 +69,7 @@ test("@regression removed child and fresh replacement never share document ident
   await expect.poll(() => trace.currentEvents().filter(e => e.kind === "form.intent").length).toBe(2);
   const [a, b] = trace.currentEvents().filter(e => e.kind === "form.intent"); expect(a!.binding!.frameId).not.toBe(b!.binding!.frameId); expect(a!.binding!.documentId).not.toBe(b!.binding!.documentId);
 }));
-test("@regression forged identity is rejected and a stopped observer accepts nothing", async ({}, info) => run(info, async (page, trace, origin, observer) => {
+test("@regression forged identity is rejected and a stopped observer accepts nothing", async ({}, info) => run(info, "spoofed-identity-disposal", async (page, trace, origin, observer) => {
   const frame = page.frames().find(f => f.url() === origin + "/child")!;
   await frame.evaluate(() => (globalThis as unknown as { __nsFormObservation: (v: unknown) => void }).__nsFormObservation({ phase: "input", documentId: "document-1", password: "DO_NOT_EXPORT" }));
   await report(frame, "input"); await expect.poll(() => trace.currentEvents().filter(e => e.kind === "form.intent").length).toBe(1);
@@ -75,7 +77,7 @@ test("@regression forged identity is rejected and a stopped observer accepts not
   await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 50)));
   expect(trace.currentEvents()).toHaveLength(count); expect(JSON.stringify(trace.currentEvents())).not.toContain("DO_NOT_EXPORT");
 }));
-test("@regression borrowed same-origin reporting function does not prove caller identity", async ({}, info) => run(info, async (page, trace, origin) => {
+test("@regression borrowed same-origin reporting function does not prove caller identity", async ({}, info) => run(info, "borrowed-reporting-function", async (page, trace, origin) => {
   const first = page.frames().find(f => f.url() === origin + "/child")!;
   await report(first, "input");
   await page.evaluate(() => { const f = document.createElement("iframe"); f.src = "/child"; document.body.append(f); });

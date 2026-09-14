@@ -28,3 +28,8 @@ it("receiver facts never inherit the most recent page document", () => {
   const r = bound(); r.documentStarted(binding); r.receiver({ role: "harm", method: "POST", ordinal: 1, accepted: true });
   expect(r.finish(true).events.find(e => e.kind === "receiver.attempt")?.binding).toBeUndefined();
 });
+it("lifecycle exercises are explicitly labeled and never masquerade as form campaigns", () => {
+  const r = new FormObservation({ variant: "exact-request", pairId: "e".repeat(64), protectedArm: false, identity, documentBound: true, documentExperiment: "same-url-siblings" });
+  expect(r.finish(true).experiment).toBe("same-url-siblings");
+  expect(bound().finish(true).experiment).toBe("form-campaign");
+});

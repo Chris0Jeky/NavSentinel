@@ -27,12 +27,12 @@ native initiator. Receiver receipts stay independent and have no invented docume
 
 ## Implementation / verification
 
-- [ ] Registry unit tests: sibling documents, top navigation, replacement, context
+- [x] Registry unit tests: sibling documents, top navigation, replacement, context
   destruction/clear, numeric-ID reuse, unknown worlds/origins, bounds and copying.
-- [ ] Fixed CDP binding adapter and v2 producer, default-off with the existing
+- [x] Fixed CDP binding adapter and v2 producer, default-off with the existing
   instrumentation switch. Preserve original thirty-case assertions byte-for-byte.
-- [ ] Actual-browser lifecycle tests: same-URL siblings, same-frame reload,
-  same-document navigation, removal, spoofed metadata and absent MAIN binding
+- [x] Actual-browser lifecycle tests: same-URL siblings, same-frame reload,
+  same-document navigation, removal, spoofed metadata and inactive reporting
   after observer shutdown. Run existing full/control parity with retries disabled.
 - [ ] Strict v2 reader and document-scoped comparison/temporal selector, plus
   lifecycle information and links in the offline viewer. Legacy records never
@@ -58,3 +58,23 @@ https://chromedevtools.github.io/devtools-protocol/tot/Page/
 `addBinding` accepts one string and reports the calling executionContextId.
 Numeric context IDs are not global document IDs. `executionContextsCleared` must
 invalidate associations; no timestamps or page fields can repair a lost binding.
+
+## First exact-head qualification and artifact repair
+
+Head `2fd7b9d62c6b891d1e904516301757ecd0c74ae6` passed all six
+browser lifecycle tests and the thirty-case matrix with observation on and off
+in workflow 34791245486. All 45 corresponding arm outcomes agreed; the 45 actual
+v2 form traces imported without gaps or rejection. This is 90 matrix profiles
+plus six lifecycle contexts, not an efficacy percentage.
+
+The lifecycle tests originally attached JSON bodies only. The later matrix HTML
+report overwrote their sole persisted representation, although the tests passed.
+The correction writes per-test JSON files before attaching them and requires all
+six durable receipts before advancing. It also labels each lifecycle experiment
+explicitly, separate from `form-campaign`. Absence of that optional v2 label denotes
+the initial campaign format, not an additional evidence class.
+
+`Runtime.removeBinding` stops delivery to the CDP agent but leaves the callable
+JavaScript function in the page. The disposal test requires no further records,
+not deletion of that function. Observer-on/off comparisons still require the same
+original consequences; no retry, timeout extension or protection assertion change.

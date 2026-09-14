@@ -34,17 +34,19 @@ jobs:
           git archive --format=tar.gz HEAD > form-evidence/source.tar.gz
           sha256sum form-evidence/source.tar.gz > form-evidence/source.sha256
       - run: npm ci --ignore-scripts
-      - run: npm run typecheck && npm run lint
       - name: Test probe, health, recorder and parity boundaries
         run: |
           npx vitest run tests/form-observatory.test.ts tests/form-observatory-health.test.ts tests/form-document-registry.test.ts tests/form-document-transport.test.ts tests/form-document-recorder.test.ts
           node --test experiments/form-observatory/compare.test.mjs
+      - run: npm run typecheck && npm run lint
       - id: build
         run: npm run build
       - id: browser
         run: npx playwright install --with-deps chromium
       - name: Actual browser document lifecycle attribution (not prevention)
         run: npx playwright test tests/e2e/form-document-lifecycle.spec.ts --project=regression --workers=1 --retries=0 --output=test-results/form-documents
+      - name: Require six durable lifecycle receipts before other reports replace HTML
+        run: node -e 'const fs=require("node:fs"); const files=fs.readdirSync("test-results/form-documents",{recursive:true}).filter(p=>p.endsWith("document-lifecycle.form-trace.json")); if(files.length!==6)throw Error("LIFECYCLE_RECEIPTS_MISSING");'
       - name: Existing form assertions with detailed observation
         env:
           NAVSENTINEL_FORM_OBSERVATORY: '1'

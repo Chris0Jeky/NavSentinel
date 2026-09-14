@@ -2,6 +2,8 @@
 import { randomUUID } from "node:crypto";
 import type { DocumentBinding, DocumentEndReason } from "./form_document_registry";
 import type { FormIntentSample } from "./form_observatory_probe";
+export const FORM_DOCUMENT_EXPERIMENTS = ["form-campaign", "same-url-siblings", "same-frame-reload", "same-document-navigation", "frame-replacement", "spoofed-identity-disposal", "borrowed-reporting-function"] as const;
+export type FormDocumentExperiment = typeof FORM_DOCUMENT_EXPERIMENTS[number];
 export const FORM_TRACE_SCHEMA = "navsentinel.observatory.form.v1";
 export const FORM_VARIANTS = ["alternate-submitter", "action-substitution", "target-mutation", "method-mutation", "enctype-mutation", "base-href", "base-target", "reassociation", "expired", "mismatch-burn", "synthetic", "location-same", "location-different", "late-submit", "exact-submit", "exact-request", "native", "server-redirect", "slow-response", "empty-target", "inherited-target", "empty-method", "invalid-method", "self", "dialog", "validation", "replay", "allow-once", "allow-mutated", "mixed"] as const;
 export interface FormIdentity { head: string; tree: string; extensionSha256: string; fixtureSha256: string }
@@ -29,8 +31,9 @@ export class FormObservation {
   private browserVersion = "not-recorded";
   private start: number;
   private finished: ReturnType<FormObservation["snapshot"]> | null = null;
-  private options: { variant: string; pairId: string; protectedArm: boolean; identity: FormIdentity; documentBound?: boolean; clock: () => number; maxEvents: number };
-  constructor(options: { variant: string; pairId: string; protectedArm: boolean; identity: FormIdentity; documentBound?: boolean; clock?: () => number; maxEvents?: number }) {
+  private options: { variant: string; pairId: string; protectedArm: boolean; identity: FormIdentity; documentBound?: boolean; documentExperiment?: FormDocumentExperiment; clock: () => number; maxEvents: number };
+  constructor(options: { variant: string; pairId: string; protectedArm: boolean; identity: FormIdentity; documentBound?: boolean; documentExperiment?: FormDocumentExperiment; clock?: () => number; maxEvents?: number }) {
+    if (options.documentExperiment && (!options.documentBound || !FORM_DOCUMENT_EXPERIMENTS.includes(options.documentExperiment))) throw new Error("FORM_EXPERIMENT_INVALID");
     const maxEvents = options.maxEvents ?? 256;
     if (!FORM_VARIANTS.includes(options.variant as typeof FORM_VARIANTS[number]) || !/^[a-f0-9]{64}$/.test(options.pairId) || typeof options.protectedArm !== "boolean" || !Number.isInteger(maxEvents) || maxEvents < 40 || maxEvents > 512) throw new Error("FORM_RECORDER_OPTIONS");
     if (![options.identity.head, options.identity.tree].every(v => /^[a-f0-9]{40}$/.test(v)) || ![options.identity.extensionSha256, options.identity.fixtureSha256].every(v => /^[a-f0-9]{64}$/.test(v))) throw new Error("FORM_IDENTITY_INVALID");
@@ -83,7 +86,7 @@ export class FormObservation {
   fail(code: string): void { if (this.finished) throw new Error("FORM_RECORDER_FINISHED"); if (!FAULTS.includes(code)) throw new Error("UNKNOWN_FORM_FAULT"); this.gaps.add(code); }
   currentEvents(): FormEvent[] { return structuredClone(this.events); }
   private snapshot(completed: boolean) {
-    return { schema: this.options.documentBound ? "navsentinel.observatory.form.v2" : FORM_TRACE_SCHEMA, ...(this.options.documentBound ? { bindingPolicy: "CDP_DEFAULT_WORLD_DOCUMENT" } : {}), mode: "synthetic", scenarioId: "issue688-form-intent", variant: this.options.variant, pairId: this.options.pairId,
+    return { schema: this.options.documentBound ? "navsentinel.observatory.form.v2" : FORM_TRACE_SCHEMA, ...(this.options.documentBound ? { bindingPolicy: "CDP_DEFAULT_WORLD_DOCUMENT", experiment: this.options.documentExperiment ?? "form-campaign" } : {}), mode: "synthetic", scenarioId: "issue688-form-intent", variant: this.options.variant, pairId: this.options.pairId,
       runId: this.runId, protectedArm: this.options.protectedArm, identity: { ...this.options.identity }, completed, browserVersion: this.browserVersion,
       requiredObservationMs: 2300, dropped: this.dropped, gaps: [...this.gaps], events: structuredClone(this.events), evidencePolicy: "FORM_DIAGNOSTIC_NOT_FOUR_ARM_CERTIFICATION" };
   }
