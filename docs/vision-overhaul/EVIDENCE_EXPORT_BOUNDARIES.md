@@ -22,7 +22,9 @@ format and this change does not claim a whole-backup privacy audit.
 than maintaining a second hostname grammar. The portable boundary additionally
 rejects surrounding whitespace. IPv4 and IPv6 are validated and canonicalized
 using browser-compatible URL host parsing only after a hostname/IP lexical fence.
-IPv6 is serialized without brackets, matching the stored hostname contract. The
+Short, integer and hexadecimal WHATWG IPv4 spellings are canonicalized by the
+extension and rejected on imported evidence unless already dotted-decimal. IPv6
+is serialized without brackets, matching the stored hostname contract. The
 Lab and desktop's shared importer accepts that canonical spelling, but rejects
 URLs, user information, ports, bracketed/noncanonical IPv6 and zone identifiers.
 Schema 1, the allowlist, reason caps and `recorded` outcome do not change. Neither

@@ -696,9 +696,10 @@ const EVENT_HOST_LABEL_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i;
  *
  * `pageSite` is a hostname-only field. In particular, do not prepend a scheme
  * and parse arbitrary input here: doing that would turn a persisted path,
- * query, or fragment into an apparently valid host. IP literals are passed
- * through the URL parser only after they have been identified as addresses so
- * accepted values get the same canonical hostname spelling as the browser.
+ * query, or fragment into an apparently valid host. URL parsing is used only
+ * after strict IP recognition or hostname lexical validation, never to extract
+ * a hostname from arbitrary input. Accepted IP values use browser-canonical
+ * spelling, including WHATWG short, integer, and hexadecimal IPv4 forms.
  */
 export function normalizeEventPageSite(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
@@ -724,6 +725,17 @@ export function normalizeEventPageSite(value: unknown): string | undefined {
   if (normalized.includes(":")) return undefined;
   const labels = normalized.split(".");
   if (labels.some((label) => !EVENT_HOST_LABEL_RE.test(label))) return undefined;
+
+  // WHATWG host parsing also accepts short, integer, and hexadecimal IPv4
+  // spellings that the strict address classifier intentionally leaves alone.
+  // Probe only after hostname lexical validation, then retain canonical IP
+  // output so equivalent page associations cannot split into distinct sites.
+  try {
+    const canonical = normalizeHost(new URL(`https://${normalized}/`).hostname);
+    if (isIPAddress(canonical)) return canonical;
+  } catch {
+    // The value already passed hostname grammar. This probe is IPv4-only.
+  }
   return normalized;
 }
 

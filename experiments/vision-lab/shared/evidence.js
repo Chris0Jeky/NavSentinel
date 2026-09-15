@@ -22,10 +22,10 @@ function site(value){
     return value;
   }
   if(!value.split('.').every(label=>/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label)))return invalid();
-  if(/^\d+(?:\.\d+){3}$/.test(value)){
-    try{if(new URL('https://'+value+'/').hostname!==value)return invalid();}
-    catch{return invalid();}
-  }
+  let parsed;
+  try{parsed=new URL('https://'+value+'/').hostname;}
+  catch{if(/^\d+(?:\.\d+){3}$/.test(value))return invalid();return value;}
+  if(/^\d+(?:\.\d+){3}$/.test(parsed)&&parsed!==value)return invalid();
   return value;
 }
 function event(value){keys(value,['id','timestamp','kind','sourceSite','destinationSite','outcome','reasons','score'],'Observation');if(!KINDS.includes(value.kind)||value.outcome!=='recorded')throw Error('Unsupported event kind or outcome.');if(!Array.isArray(value.reasons)||value.reasons.length>16||value.reasons.some(reason=>!REASONS.includes(reason)))throw Error('Unsupported or excessive reason codes.');const result={id:opaque(value.id),timestamp:iso(value.timestamp),kind:value.kind,sourceSite:site(value.sourceSite),destinationSite:site(value.destinationSite),outcome:'recorded',reasons:[...new Set(value.reasons)]};if(Object.hasOwn(value,'score')){if(typeof value.score!=='number'||!Number.isFinite(value.score)||value.score<0||value.score>100)throw Error('Score must be between 0 and 100.');result.score=value.score;}return result;}
