@@ -206,6 +206,7 @@ function activeContextsEqual(left: ActiveTabContext, right: ActiveTabContext): b
 
 export class PendingDecisionRuntimeBroker {
   private readonly dependencies: PendingDecisionRuntimeBrokerDependencies;
+  private readonly createTailsByScope = new Map<string, Promise<void>>();
 
   constructor(
     private readonly store: PendingDecisionStore,
@@ -258,28 +259,52 @@ export class PendingDecisionRuntimeBroker {
     const tabId = sender.tab?.id;
     if (!isBrowserId(tabId)) return failure("create", "unauthorized");
     const lifecycleGeneration = this.dependencies.getLifecycleGeneration(tabId);
+    const scopeKey = JSON.stringify([
+      tabId,
+      sender.frameId,
+      sender.documentId,
+      semantics.kind,
+    ]);
 
-    const verifiedContext = await this.resolveContentContext(sender);
-    if (!verifiedContext) return failure("create", "context-changed");
-    const created = await this.store.create(
-      verifiedContext,
-      semantics,
-      () => this.dependencies.getLifecycleGeneration(tabId) === lifecycleGeneration,
+    return this.runCreateInScopeOrder(scopeKey, async () => {
+      const verifiedContext = await this.resolveContentContext(sender);
+      if (!verifiedContext) return failure("create", "context-changed");
+      const created = await this.store.create(
+        verifiedContext,
+        semantics,
+        () => this.dependencies.getLifecycleGeneration(tabId) === lifecycleGeneration,
+      );
+      if (created.status === "context-changed") {
+        return failure("create", "context-changed");
+      }
+      if (created.status === "rejected-capacity") {
+        return failure("create", "rejected-capacity");
+      }
+      return {
+        ok: true,
+        operation: "create",
+        status: "created",
+        id: created.decision.id,
+        expiresAt: created.decision.expiresAt,
+        ...(created.replacedDecisionId ? { replacedDecisionId: created.replacedDecisionId } : {}),
+      };
+    });
+  }
+
+  private runCreateInScopeOrder<T>(scopeKey: string, operation: () => Promise<T>): Promise<T> {
+    const previous = this.createTailsByScope.get(scopeKey) ?? Promise.resolve();
+    const result = previous.then(operation);
+    const tail = result.then(
+      () => undefined,
+      () => undefined,
     );
-    if (created.status === "context-changed") {
-      return failure("create", "context-changed");
-    }
-    if (created.status === "rejected-capacity") {
-      return failure("create", "rejected-capacity");
-    }
-    return {
-      ok: true,
-      operation: "create",
-      status: "created",
-      id: created.decision.id,
-      expiresAt: created.decision.expiresAt,
-      ...(created.replacedDecisionId ? { replacedDecisionId: created.replacedDecisionId } : {}),
-    };
+    this.createTailsByScope.set(scopeKey, tail);
+    void tail.then(() => {
+      if (this.createTailsByScope.get(scopeKey) === tail) {
+        this.createTailsByScope.delete(scopeKey);
+      }
+    });
+    return result;
   }
 
   private async handleList(
