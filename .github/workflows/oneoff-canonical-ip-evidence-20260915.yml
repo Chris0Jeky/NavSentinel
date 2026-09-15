@@ -80,8 +80,8 @@ jobs:
           replace_once(
               "experiments/vision-lab/shared/evidence.js",
               '''  if(/^\\d+(?:\\.\\d+){3}$/.test(value)){
-            try{if(new URL('https://'+value+'/').hostname!==value)return invalid();}
-            catch{return invalid();}
+              try{if(new URL('https://'+value+'/').hostname!==value)return invalid();}
+              catch{return invalid();}
             }
             return value;
           ''',
