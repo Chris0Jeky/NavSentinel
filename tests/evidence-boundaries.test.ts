@@ -17,6 +17,11 @@ describe("portable evidence hostname and ordering boundaries (#691, #689)", () =
     ["::1", "::1"],
     ["::ffff:192.0.2.128", "::ffff:c000:280"],
     ["127.000.000.001", "127.0.0.1"],
+    ["127.1", "127.0.0.1"],
+    ["2130706433", "127.0.0.1"],
+    ["0x7f000001", "127.0.0.1"],
+    ["0x7f.0.0.1", "127.0.0.1"],
+    ["1.2.3", "1.2.0.3"],
     ["PORTAL.Example.Test.", "portal.example.test"],
   ])("canonicalizes hostname-only metadata %s", (value, expected) => {
     expect(evidenceHostname(value)).toBe(expected);
